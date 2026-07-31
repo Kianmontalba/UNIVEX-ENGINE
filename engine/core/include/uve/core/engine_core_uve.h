@@ -13,6 +13,7 @@
 #include <memory>
 #include <optional>
 
+#include "uve/asset/i_asset_database_uve.h"
 #include "uve/commandline/i_command_line_uve.h"
 #include "uve/config/i_config_manager_uve.h"
 #include "uve/core/engine_config_uve.h"
@@ -23,13 +24,18 @@
 #include "uve/debug/i_logger_uve.h"
 #include "uve/events/i_event_system_uve.h"
 #include "uve/memory/i_memory_manager_uve.h"
+#include "uve/scene/i_entity_manager_uve.h"
+#include "uve/scene/i_prefab_system_uve.h"
+#include "uve/scene/i_scene_graph_uve.h"
+#include "uve/scene/i_scene_serializer_uve.h"
 #include "uve/threading/i_thread_pool_uve.h"
 #include "uve/utilities/i_timer_uve.h"
 
 namespace UVE::Core {
 
 /// EngineCoreUVE owns the foundational engine services (CommandLine, Logger,
-/// MemoryManager, ThreadPool, Timer, EventSystem, ConfigManager) and drives
+/// MemoryManager, ThreadPool, Timer, EventSystem, EntityManager, SceneGraph,
+/// AssetDatabase, SceneSerializer, PrefabSystem, ConfigManager) and drives
 /// the canonical engine lifecycle: Init -> Load -> N x (BeginFrame -> Update
 /// -> LateUpdate -> Render -> EndFrame) -> Shutdown. This increment has no
 /// windowing/rendering backend yet, so Render() is the documented, working
@@ -49,13 +55,19 @@ public:
     EngineCoreUVE& operator=(const EngineCoreUVE&) = delete;
 
     /// Constructs and initializes CommandLine, Logger, MemoryManager,
-    /// ThreadPool, Timer, EventSystem, and ConfigManager in that order
-    /// (CommandLine first — it has no dependencies of its own; Logger
-    /// second — every later step and every other system may need to log or
-    /// UVE_ASSERT during its own setup; ConfigManager last, so its
-    /// LoadUVE() call can log through the already-initialized Logger), then
-    /// builds EngineServicesUVE from all seven. Transitions Uninitialized
-    /// -> Initializing -> Running.
+    /// ThreadPool, Timer, EventSystem, EntityManager, SceneGraph,
+    /// AssetDatabase, SceneSerializer, PrefabSystem, and ConfigManager in
+    /// that order (CommandLine first — it has no dependencies of its own;
+    /// Logger second — every later step and every other system may need to
+    /// log or UVE_ASSERT during its own setup; EntityManager right after
+    /// EventSystem, since it needs MemoryManager for allocation and
+    /// EventSystem for entity lifecycle events; SceneGraph immediately
+    /// after, though it has no dependencies of its own; AssetDatabase right
+    /// after SceneGraph, needing only Logger; SceneSerializer and
+    /// PrefabSystem grouped immediately after, both stateless; ConfigManager
+    /// last, so its LoadUVE() call can log through the already-initialized
+    /// Logger), then builds EngineServicesUVE from all twelve. Transitions
+    /// Uninitialized -> Initializing -> Running.
     void Init();
 
     /// The engine's asset/subsystem loading hook. This increment has
@@ -82,21 +94,25 @@ public:
     void RequestQuitUVE() noexcept;
 
     /// Transitions Running -> ShuttingDown -> Shutdown, tearing down
-    /// ConfigManager, then EventSystem, then Timer, then ThreadPool (its
-    /// destructor blocks until every worker drains and joins), then
-    /// MemoryManager (logging its leak report — and, in debug builds,
-    /// UVE_ASSERTing zero active allocations — before it is destroyed),
-    /// then Logger, then CommandLine — the exact reverse of Init()'s
-    /// construction order — logging the final message before the logger
-    /// itself is torn down.
+    /// ConfigManager, then PrefabSystem, then SceneSerializer, then
+    /// AssetDatabase, then SceneGraph, then EntityManager (its destructor
+    /// frees every remaining live entity's component memory, which must
+    /// happen before MemoryManager's leak check below), then EventSystem,
+    /// then Timer, then ThreadPool (its destructor blocks until every
+    /// worker drains and joins), then MemoryManager (logging its leak
+    /// report — and, in debug builds, UVE_ASSERTing zero active
+    /// allocations — before it is destroyed), then Logger, then
+    /// CommandLine — the exact reverse of Init()'s construction order —
+    /// logging the final message before the logger itself is torn down.
     void Shutdown();
 
     [[nodiscard]] EngineStateUVE GetStateUVE() const noexcept;
     [[nodiscard]] const FrameStatsUVE& GetFrameStatsUVE() const noexcept;
 
     /// Returns the service container bundling Logger/Timer/EventSystem/
-    /// MemoryManager/ThreadPool references. Valid only between Init() and
-    /// Shutdown().
+    /// MemoryManager/ThreadPool/CommandLine/ConfigManager/EntityManager/
+    /// SceneGraph/AssetDatabase/SceneSerializer/PrefabSystem references.
+    /// Valid only between Init() and Shutdown().
     [[nodiscard]] EngineServicesUVE& GetServicesUVE();
 
     /// Returns this build's engine version — the single source of truth
@@ -109,8 +125,13 @@ private:
     /// frame's start instant (used by EndFrame() to compute frameTime).
     void BeginFrame();
 
-    /// Advances the fixed-timestep accumulator and dispatches every event
-    /// queued via IEventSystemUVE::QueueEvent() since the last dispatch.
+    /// Advances the fixed-timestep accumulator, dispatches every event
+    /// queued via IEventSystemUVE::QueueEvent() since the last dispatch,
+    /// then runs SceneGraphUVE::UpdateUVE() (transform-dirty-flag
+    /// propagation) — after event dispatch, so reparenting done by an
+    /// event handler that frame is picked up, and before LateUpdate()/
+    /// Render(), so anything reading world transforms later in the frame
+    /// sees up-to-date values.
     void Update();
 
     /// Recomputes FrameStatsUVE::fps (an exponential moving average of
@@ -138,6 +159,11 @@ private:
     std::unique_ptr<Threading::IThreadPoolUVE> m_threadPool;
     std::unique_ptr<Utilities::ITimerUVE> m_timer;
     std::unique_ptr<Events::IEventSystemUVE> m_eventSystem;
+    std::unique_ptr<Scene::IEntityManagerUVE> m_entityManager;
+    std::unique_ptr<Scene::ISceneGraphUVE> m_sceneGraph;
+    std::unique_ptr<Asset::IAssetDatabaseUVE> m_assetDatabase;
+    std::unique_ptr<Scene::ISceneSerializerUVE> m_sceneSerializer;
+    std::unique_ptr<Scene::IPrefabSystemUVE> m_prefabSystem;
     std::unique_ptr<Config::IConfigManagerUVE> m_configManager;
     std::optional<EngineServicesUVE> m_services;
 

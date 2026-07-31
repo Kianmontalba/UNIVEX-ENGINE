@@ -18,9 +18,12 @@ subsystem area — **never** flat inside `UVE` directly:
 | `UVE::Threading`  | `engine/threading/`  | `ThreadPoolUVE`, `JobCounterUVE`, `JobUVE`                       |
 | `UVE::CommandLine`| `engine/commandline/`| `CommandLineUVE` — startup argument parsing                    |
 | `UVE::Config`     | `engine/config/`     | `ConfigManagerUVE` — JSON-based `.uvesettings` key-value store  |
+| `UVE::Math`       | `engine/math/`       | `Vector3UVE`, `QuaternionUVE`                                   |
+| `UVE::Asset`      | `engine/asset/`      | `AssetGuidUVE`, `AssetDatabaseUVE` — minimal GUID<->path registry |
+| `UVE::Scene`      | `engine/scene/`      | `EntityManagerUVE`, `SceneGraphUVE`, `ComponentUVE` + built-ins, `SceneSerializerUVE`, `PrefabSystemUVE` |
 | `UVE::Core`       | `engine/core/`       | `EngineCoreUVE`, config, state, frame stats, version, services |
 
-Future systems (Rendering, Physics, Animation, Audio, ECS, AI, Networking, Editor, ...) become
+Future systems (Rendering, Physics, Animation, Audio, AI, Networking, Editor, ...) become
 sibling namespaces/folders (`UVE::Render` in `engine/render/`, etc.) without restructuring
 anything listed above.
 
@@ -82,6 +85,42 @@ dependency (`nlohmann::json`, pulled in via `FetchContent`). It is confined behi
 `engine/config/src/` ever includes the JSON library, and `uve_config` links it `PRIVATE` — copy
 this pattern for any future module that pulls in a similar third-party dependency.
 
+`EntityManagerUVE` (`engine/scene/`) identifies component types via `std::type_index(typeid(T))`
+rather than a new global type-id registry — reusing the exact type-erasure pattern
+`IEventSystemUVE` already established (`SubscribeErased`/`PublishErased` taking
+`std::type_index`). Copy this pattern for any future system that needs to dispatch by C++ type
+at runtime, instead of inventing a parallel dense-integer type-id scheme.
+
+`AssetDatabaseUVE` (`engine/asset/`) and `SceneSerializerUVE` (`engine/scene/src/`) follow
+`ConfigManagerUVE`'s exact PIMPL-confinement pattern for `nlohmann::json` — the JSON library
+never appears in a public header, only inside each type's own `.cpp` (`AssetDatabaseUVE::ImplUVE`,
+or free functions local to `scene_serializer_uve.cpp`), and the owning `CMakeLists.txt` links
+`nlohmann_json::nlohmann_json` `PRIVATE`. Copy this pattern for any future module that needs the
+JSON library internally.
+
+## The universal `.uve*` binary envelope
+
+Every `.uve*` asset file on disk (`.uvescene`, `.uveprefab`, and any future binary asset format
+such as `.uvemodel`/`.uvetex`) shares one binary header, written/read as individual fixed-width
+field writes — **never** a single `.write()`/`.read()` of a struct, since C++ struct padding and
+alignment are implementation-defined and unsafe to persist:
+
+```
+magic:              char[4] = "UVE\0"
+version:            uint32   (payload schema version for this asset type)
+assetType:          uint32   (meaning is asset-type-specific, e.g. SceneAssetTypeUVE)
+compressionMethod:  uint32   (0 = None — the only value implemented so far)
+payloadLength:      uint64   (byte length of the payload that follows)
+payload:            payloadLength bytes
+```
+
+Files are always opened with `std::ios::binary`. A malformed header (bad magic, truncated file,
+unsupported version/asset-type/compression method) or a corrupt payload must never crash — log a
+detailed `UVE_ERROR` (path + reason) and return a failure value, mirroring `ConfigManagerUVE`'s
+error-handling contract. `SceneSerializerUVE` (`engine/scene/src/scene_serializer_uve.cpp`) is
+the reference implementation of this envelope; copy its header read/write helpers for any future
+`.uve*` binary format instead of reinventing them.
+
 ## Allocator boundary
 
 `PoolAllocatorUVE`, `StackAllocatorUVE`, and `HeapAllocatorUVE` (`engine/memory/`) are the
@@ -92,6 +131,15 @@ explicit destructor call at the call site. Track allocations by requesting an
 `IMemoryTrackerUVE*` at construction (e.g. `MemoryManagerUVE::GetDefaultAllocatorUVE()` for the
 shared, tracked default) rather than allocating untracked unless there's a specific, documented
 reason not to.
+
+`ChunkUVE` (`engine/scene/src/`, never exposed under `engine/scene/include/`) is a second,
+narrowly-scoped exception: it type-erasedly placement-constructs/moves/destroys arbitrary
+component types inside byte buffers it allocates via `IAllocatorUVE` — the raw buffer itself
+still always comes from an allocator, never `new[]`/`delete[]`. This is required because a
+chunk is built generically across component types only known at runtime (via
+`std::type_index`), which a compile-time-templated `ConstructUVE<T>()` call site can't express;
+it is the type-erased analog of what `ConstructUVE`/`DestroyUVE` already do for the
+single-known-`T` case, not a loophole for ad hoc placement-new elsewhere.
 
 ## Real OS threads
 

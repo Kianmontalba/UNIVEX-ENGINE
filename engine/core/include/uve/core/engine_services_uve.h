@@ -9,11 +9,16 @@
 
 #pragma once
 
+#include "uve/asset/i_asset_database_uve.h"
 #include "uve/commandline/i_command_line_uve.h"
 #include "uve/config/i_config_manager_uve.h"
 #include "uve/debug/i_logger_uve.h"
 #include "uve/events/i_event_system_uve.h"
 #include "uve/memory/i_memory_manager_uve.h"
+#include "uve/scene/i_entity_manager_uve.h"
+#include "uve/scene/i_prefab_system_uve.h"
+#include "uve/scene/i_scene_graph_uve.h"
+#include "uve/scene/i_scene_serializer_uve.h"
 #include "uve/threading/i_thread_pool_uve.h"
 #include "uve/utilities/i_timer_uve.h"
 
@@ -22,16 +27,18 @@ namespace UVE::Core {
 /// EngineServicesUVE is the engine's central dependency-provider / service
 /// container: a small bundle of references to the core engine services
 /// (Logger, Timer, EventSystem, MemoryManager, ThreadPool, CommandLine,
-/// ConfigManager), built once EngineCoreUVE has constructed all seven. Any
+/// ConfigManager, EntityManager, SceneGraph, AssetDatabase, SceneSerializer,
+/// PrefabSystem), built once EngineCoreUVE has constructed all twelve. Any
 /// future subsystem that needs access to one of these should receive an
-/// EngineServicesUVE& (obtained from EngineCoreUVE::GetServicesUVE())
-/// rather than a raw global pointer — the logging macros' internal
-/// active-instance pointer remains the one intentional exception to that
-/// rule (see docs/CODING_STANDARDS.md). Referenced through the
+/// EngineServicesUVE& (obtained from EngineCoreUVE::GetServicesUVE()) rather
+/// than a raw global pointer — the logging macros' internal active-instance
+/// pointer remains the one intentional exception to that rule (see
+/// docs/CODING_STANDARDS.md). Referenced through the
 /// ILoggerUVE/ITimerUVE/IEventSystemUVE/IMemoryManagerUVE/IThreadPoolUVE/
-/// ICommandLineUVE/IConfigManagerUVE interfaces, not the concrete types, so
-/// a future substitute implementation of any of the seven requires no
-/// change here.
+/// ICommandLineUVE/IConfigManagerUVE/IEntityManagerUVE/ISceneGraphUVE/
+/// IAssetDatabaseUVE/ISceneSerializerUVE/IPrefabSystemUVE interfaces, not the
+/// concrete types, so a future substitute implementation of any of the
+/// twelve requires no change here.
 /// Thread-safety: EngineServicesUVE itself holds only non-owning pointers
 /// and has no mutable state of its own; the thread-safety of each accessor
 /// is whatever the referenced service documents.
@@ -42,7 +49,12 @@ public:
                        Memory::IMemoryManagerUVE& memoryManager,
                        Threading::IThreadPoolUVE& threadPool,
                        CommandLine::ICommandLineUVE& commandLine,
-                       Config::IConfigManagerUVE& configManager) noexcept;
+                       Config::IConfigManagerUVE& configManager,
+                       Scene::IEntityManagerUVE& entityManager,
+                       Scene::ISceneGraphUVE& sceneGraph,
+                       Asset::IAssetDatabaseUVE& assetDatabase,
+                       Scene::ISceneSerializerUVE& sceneSerializer,
+                       Scene::IPrefabSystemUVE& prefabSystem) noexcept;
 
     [[nodiscard]] Debug::ILoggerUVE& GetLoggerUVE() const noexcept;
     [[nodiscard]] Utilities::ITimerUVE& GetTimerUVE() const noexcept;
@@ -51,6 +63,11 @@ public:
     [[nodiscard]] Threading::IThreadPoolUVE& GetThreadPoolUVE() const noexcept;
     [[nodiscard]] CommandLine::ICommandLineUVE& GetCommandLineUVE() const noexcept;
     [[nodiscard]] Config::IConfigManagerUVE& GetConfigManagerUVE() const noexcept;
+    [[nodiscard]] Scene::IEntityManagerUVE& GetEntityManagerUVE() const noexcept;
+    [[nodiscard]] Scene::ISceneGraphUVE& GetSceneGraphUVE() const noexcept;
+    [[nodiscard]] Asset::IAssetDatabaseUVE& GetAssetDatabaseUVE() const noexcept;
+    [[nodiscard]] Scene::ISceneSerializerUVE& GetSceneSerializerUVE() const noexcept;
+    [[nodiscard]] Scene::IPrefabSystemUVE& GetPrefabSystemUVE() const noexcept;
 
 private:
     Debug::ILoggerUVE* m_logger;
@@ -60,6 +77,11 @@ private:
     Threading::IThreadPoolUVE* m_threadPool;
     CommandLine::ICommandLineUVE* m_commandLine;
     Config::IConfigManagerUVE* m_configManager;
+    Scene::IEntityManagerUVE* m_entityManager;
+    Scene::ISceneGraphUVE* m_sceneGraph;
+    Asset::IAssetDatabaseUVE* m_assetDatabase;
+    Scene::ISceneSerializerUVE* m_sceneSerializer;
+    Scene::IPrefabSystemUVE* m_prefabSystem;
 };
 
 } // namespace UVE::Core

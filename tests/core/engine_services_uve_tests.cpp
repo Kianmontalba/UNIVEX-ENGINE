@@ -19,21 +19,29 @@
 
 #include <gtest/gtest.h>
 
+#include "uve/asset/i_asset_database_uve.h"
 #include "uve/commandline/i_command_line_uve.h"
 #include "uve/config/i_config_manager_uve.h"
 #include "uve/debug/i_logger_uve.h"
 #include "uve/events/i_event_system_uve.h"
 #include "uve/memory/i_memory_manager_uve.h"
+#include "uve/scene/i_entity_manager_uve.h"
+#include "uve/scene/i_prefab_system_uve.h"
+#include "uve/scene/i_scene_graph_uve.h"
+#include "uve/scene/i_scene_serializer_uve.h"
 #include "uve/threading/i_thread_pool_uve.h"
 #include "uve/utilities/i_timer_uve.h"
 
 // These hand-written fakes exist to prove that EngineServicesUVE (and, by
 // extension, anything that consumes ILoggerUVE/ITimerUVE/IEventSystemUVE/
-// IMemoryManagerUVE/IThreadPoolUVE/ICommandLineUVE/IConfigManagerUVE) works
-// against ANY conforming implementation, independent of the concrete
-// LoggerUVE/TimerUVE/EventSystemUVE/MemoryManagerUVE/ThreadPoolUVE/
-// CommandLineUVE/ConfigManagerUVE classes used by EngineCoreUVE — this is
-// the whole point of introducing the interfaces.
+// IMemoryManagerUVE/IThreadPoolUVE/ICommandLineUVE/IConfigManagerUVE/
+// IEntityManagerUVE/ISceneGraphUVE/IAssetDatabaseUVE/ISceneSerializerUVE/
+// IPrefabSystemUVE) works against ANY conforming implementation,
+// independent of the concrete LoggerUVE/TimerUVE/EventSystemUVE/
+// MemoryManagerUVE/ThreadPoolUVE/CommandLineUVE/ConfigManagerUVE/
+// EntityManagerUVE/SceneGraphUVE/AssetDatabaseUVE/SceneSerializerUVE/
+// PrefabSystemUVE classes used by EngineCoreUVE — this is the whole point
+// of introducing the interfaces.
 
 namespace UVE::Core::Tests {
 namespace {
@@ -179,6 +187,102 @@ public:
     int saveCallCount = 0;
 };
 
+class FakeEntityManagerUVE final : public Scene::IEntityManagerUVE {
+public:
+    [[nodiscard]] Scene::EntityUVE CreateEntityUVE() override {
+        ++createEntityCallCount;
+        return Scene::EntityUVE{0, 0};
+    }
+    void DestroyEntityUVE(Scene::EntityUVE) override { ++destroyEntityCallCount; }
+    [[nodiscard]] bool IsAliveUVE(Scene::EntityUVE) const noexcept override { return true; }
+    [[nodiscard]] std::size_t GetEntityCountUVE() const noexcept override { return 0; }
+    [[nodiscard]] std::vector<std::type_index> GetComponentTypesUVE(Scene::EntityUVE) const override {
+        return {};
+    }
+
+    int createEntityCallCount = 0;
+    int destroyEntityCallCount = 0;
+
+protected:
+    [[nodiscard]] void* AddComponentErased(Scene::EntityUVE, std::type_index,
+                                            const Scene::ComponentTypeInfoUVE&) override {
+        return nullptr;
+    }
+    void RemoveComponentErased(Scene::EntityUVE, std::type_index) override {}
+    [[nodiscard]] bool HasComponentErased(Scene::EntityUVE, std::type_index) const override { return false; }
+    [[nodiscard]] void* GetComponentErased(Scene::EntityUVE, std::type_index) override { return nullptr; }
+    void ForEachErased(const std::vector<std::type_index>&,
+                        const std::function<void(Scene::EntityUVE, const std::vector<void*>&)>&) override {}
+};
+
+class FakeSceneGraphUVE final : public Scene::ISceneGraphUVE {
+public:
+    void AttachTransformUVE(Scene::IEntityManagerUVE&, Scene::EntityUVE,
+                             const Scene::TransformComponentUVE&) override {}
+    void SetLocalTransformUVE(Scene::IEntityManagerUVE&, Scene::EntityUVE,
+                               const Scene::TransformComponentUVE&) override {}
+    void SetParentUVE(Scene::IEntityManagerUVE&, Scene::EntityUVE, Scene::EntityUVE) override {}
+    void UpdateUVE(Scene::IEntityManagerUVE&) override { ++updateCallCount; }
+    [[nodiscard]] std::vector<Scene::EntityUVE> GetChildrenUVE(Scene::IEntityManagerUVE&,
+                                                                Scene::EntityUVE) override {
+        return {};
+    }
+
+    int updateCallCount = 0;
+};
+
+class FakeAssetDatabaseUVE final : public Asset::IAssetDatabaseUVE {
+public:
+    bool LoadUVE(const std::filesystem::path&) override { return true; }
+    bool SaveUVE() override {
+        ++saveCallCount;
+        return true;
+    }
+    bool SaveUVE(const std::filesystem::path&) override {
+        ++saveCallCount;
+        return true;
+    }
+    [[nodiscard]] Asset::AssetGuidUVE RegisterUVE(const std::filesystem::path&) override {
+        return Asset::AssetGuidUVE{1};
+    }
+    [[nodiscard]] std::filesystem::path ResolveUVE(Asset::AssetGuidUVE) const override { return {}; }
+    [[nodiscard]] bool HasGuidUVE(Asset::AssetGuidUVE) const override { return false; }
+
+    int saveCallCount = 0;
+};
+
+class FakeSceneSerializerUVE final : public Scene::ISceneSerializerUVE {
+public:
+    [[nodiscard]] bool SaveUVE(Scene::IEntityManagerUVE&, const std::vector<Scene::EntityUVE>&,
+                                const std::filesystem::path&, Scene::SceneAssetTypeUVE) override {
+        ++saveCallCount;
+        return true;
+    }
+    [[nodiscard]] std::vector<Scene::EntityUVE> LoadUVE(Scene::IEntityManagerUVE&,
+                                                          const std::filesystem::path&) override {
+        return {};
+    }
+
+    int saveCallCount = 0;
+};
+
+class FakePrefabSystemUVE final : public Scene::IPrefabSystemUVE {
+public:
+    [[nodiscard]] Asset::AssetGuidUVE SavePrefabUVE(Scene::IEntityManagerUVE&,
+                                                     Asset::IAssetDatabaseUVE&, Scene::EntityUVE,
+                                                     const std::filesystem::path&) override {
+        ++savePrefabCallCount;
+        return Asset::AssetGuidUVE{1};
+    }
+    [[nodiscard]] Scene::EntityUVE InstantiateUVE(Scene::IEntityManagerUVE&, Scene::ISceneGraphUVE&,
+                                                   Asset::IAssetDatabaseUVE&, Asset::AssetGuidUVE,
+                                                   Scene::EntityUVE) override {
+        return Scene::kInvalidEntityUVE;
+    }
+
+    int savePrefabCallCount = 0;
+};
+
 TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     FakeLoggerUVE logger;
     FakeTimerUVE timer;
@@ -187,9 +291,15 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     FakeThreadPoolUVE threadPool;
     FakeCommandLineUVE commandLine;
     FakeConfigManagerUVE configManager;
+    FakeEntityManagerUVE entityManager;
+    FakeSceneGraphUVE sceneGraph;
+    FakeAssetDatabaseUVE assetDatabase;
+    FakeSceneSerializerUVE sceneSerializer;
+    FakePrefabSystemUVE prefabSystem;
 
     const EngineServicesUVE services(logger, timer, eventSystem, memoryManager, threadPool,
-                                      commandLine, configManager);
+                                      commandLine, configManager, entityManager, sceneGraph,
+                                      assetDatabase, sceneSerializer, prefabSystem);
 
     EXPECT_EQ(&services.GetLoggerUVE(), &logger);
     EXPECT_EQ(&services.GetTimerUVE(), &timer);
@@ -198,6 +308,11 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     EXPECT_EQ(&services.GetThreadPoolUVE(), &threadPool);
     EXPECT_EQ(&services.GetCommandLineUVE(), &commandLine);
     EXPECT_EQ(&services.GetConfigManagerUVE(), &configManager);
+    EXPECT_EQ(&services.GetEntityManagerUVE(), &entityManager);
+    EXPECT_EQ(&services.GetSceneGraphUVE(), &sceneGraph);
+    EXPECT_EQ(&services.GetAssetDatabaseUVE(), &assetDatabase);
+    EXPECT_EQ(&services.GetSceneSerializerUVE(), &sceneSerializer);
+    EXPECT_EQ(&services.GetPrefabSystemUVE(), &prefabSystem);
 }
 
 TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) {
@@ -208,8 +323,14 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     FakeThreadPoolUVE threadPool;
     FakeCommandLineUVE commandLine;
     FakeConfigManagerUVE configManager;
+    FakeEntityManagerUVE entityManager;
+    FakeSceneGraphUVE sceneGraph;
+    FakeAssetDatabaseUVE assetDatabase;
+    FakeSceneSerializerUVE sceneSerializer;
+    FakePrefabSystemUVE prefabSystem;
     const EngineServicesUVE services(logger, timer, eventSystem, memoryManager, threadPool,
-                                      commandLine, configManager);
+                                      commandLine, configManager, entityManager, sceneGraph,
+                                      assetDatabase, sceneSerializer, prefabSystem);
 
     services.GetTimerUVE().Tick();
     services.GetEventSystemUVE().DispatchQueuedUVE();
@@ -217,6 +338,14 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     services.GetThreadPoolUVE().SubmitUVE([] {});
     static_cast<void>(services.GetCommandLineUVE().HasFlagUVE("server"));
     services.GetConfigManagerUVE().SaveUVE();
+    static_cast<void>(services.GetEntityManagerUVE().CreateEntityUVE());
+    services.GetSceneGraphUVE().UpdateUVE(services.GetEntityManagerUVE());
+    services.GetAssetDatabaseUVE().SaveUVE();
+    static_cast<void>(services.GetSceneSerializerUVE().SaveUVE(
+        services.GetEntityManagerUVE(), {}, "unused.uvescene", Scene::SceneAssetTypeUVE::Scene));
+    static_cast<void>(services.GetPrefabSystemUVE().SavePrefabUVE(
+        services.GetEntityManagerUVE(), services.GetAssetDatabaseUVE(), Scene::kInvalidEntityUVE,
+        "unused.uveprefab"));
 
     EXPECT_EQ(timer.tickCount, 1);
     EXPECT_EQ(eventSystem.dispatchCount, 1);
@@ -224,6 +353,11 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     EXPECT_EQ(threadPool.submitCount, 1);
     EXPECT_EQ(commandLine.hasFlagCallCount, 1);
     EXPECT_EQ(configManager.saveCallCount, 1);
+    EXPECT_EQ(entityManager.createEntityCallCount, 1);
+    EXPECT_EQ(sceneGraph.updateCallCount, 1);
+    EXPECT_EQ(assetDatabase.saveCallCount, 1);
+    EXPECT_EQ(sceneSerializer.saveCallCount, 1);
+    EXPECT_EQ(prefabSystem.savePrefabCallCount, 1);
 }
 
 } // namespace

@@ -11,6 +11,7 @@
 
 #include <utility>
 
+#include "uve/asset/asset_database_uve.h"
 #include "uve/commandline/command_line_uve.h"
 #include "uve/config/config_manager_uve.h"
 #include "uve/debug/assert_uve.h"
@@ -20,6 +21,10 @@
 #include "uve/events/event_system_uve.h"
 #include "uve/memory/memory_manager_uve.h"
 #include "uve/platform/platform_uve.h"
+#include "uve/scene/entity_manager_uve.h"
+#include "uve/scene/prefab_system_uve.h"
+#include "uve/scene/scene_graph_uve.h"
+#include "uve/scene/scene_serializer_uve.h"
 #include "uve/threading/thread_pool_uve.h"
 #include "uve/utilities/timer_uve.h"
 
@@ -85,9 +90,31 @@ void EngineCoreUVE::Init() {
     // EventSystem sixth: it is the piece most likely to gain future
     // dependents (systems subscribing during their own Init()), so it is
     // constructed after every other foundational service except
-    // ConfigManager, once it is guaranteed nothing else in this list still
-    // needs to be built.
+    // EntityManager/SceneGraph/ConfigManager, once it is guaranteed nothing
+    // else in this list still needs to be built.
     m_eventSystem = std::make_unique<Events::EventSystemUVE>();
+
+    // EntityManager seventh: needs MemoryManager (for chunk allocation) and
+    // EventSystem (for entity lifecycle events), so it is built right after
+    // both exist.
+    m_entityManager = std::make_unique<Scene::EntityManagerUVE>(
+        m_memoryManager->GetDefaultAllocatorUVE(), *m_eventSystem);
+
+    // SceneGraph eighth: has no dependencies of its own; grouped
+    // immediately after EntityManager for readability.
+    m_sceneGraph = std::make_unique<Scene::SceneGraphUVE>();
+
+    // AssetDatabase ninth: needs only Logger, which already exists. Its
+    // LoadUVE() call logs its outcome (missing/malformed/success) the same
+    // way ConfigManager's does below.
+    auto assetDatabase = std::make_unique<Asset::AssetDatabaseUVE>();
+    assetDatabase->LoadUVE(m_config.assetDatabaseFilePath);
+    m_assetDatabase = std::move(assetDatabase);
+
+    // SceneSerializer and PrefabSystem tenth/eleventh: both stateless,
+    // grouped immediately after AssetDatabase for readability.
+    m_sceneSerializer = std::make_unique<Scene::SceneSerializerUVE>();
+    m_prefabSystem = std::make_unique<Scene::PrefabSystemUVE>();
 
     // ConfigManager last: it immediately calls LoadUVE(), which logs its
     // outcome (missing/malformed/success) through the Logger constructed
@@ -97,7 +124,8 @@ void EngineCoreUVE::Init() {
     m_configManager = std::move(configManager);
 
     m_services.emplace(*m_logger, *m_timer, *m_eventSystem, *m_memoryManager, *m_threadPool,
-                        *m_commandLine, *m_configManager);
+                        *m_commandLine, *m_configManager, *m_entityManager, *m_sceneGraph,
+                        *m_assetDatabase, *m_sceneSerializer, *m_prefabSystem);
 
     TransitionStateUVE(EngineStateUVE::Running);
     UVE_INFO("EngineCoreUVE: initialized");
@@ -121,6 +149,7 @@ void EngineCoreUVE::Update() {
     const Utilities::FixedStepResultUVE fixedStep = m_timer->AdvanceFixedStepUVE();
     UVE_TRACE("Update: {} fixed step(s), alpha={}", fixedStep.stepsToRun, fixedStep.alpha);
     m_eventSystem->DispatchQueuedUVE();
+    m_sceneGraph->UpdateUVE(*m_entityManager);
 }
 
 void EngineCoreUVE::LateUpdate() {
@@ -182,11 +211,24 @@ void EngineCoreUVE::Shutdown() {
     UVE_INFO("EngineCoreUVE: shutting down");
 
     // Exact reverse of Init()'s construction order: ConfigManager, then
-    // EventSystem, then Timer, then ThreadPool, then MemoryManager, then
-    // Logger, then CommandLine. The final log message is emitted before
-    // the logger itself is torn down, so it is guaranteed to be recorded.
+    // PrefabSystem, then SceneSerializer, then AssetDatabase, then
+    // SceneGraph, then EntityManager, then EventSystem, then Timer, then
+    // ThreadPool, then MemoryManager, then Logger, then CommandLine. The
+    // final log message is emitted before the logger itself is torn down,
+    // so it is guaranteed to be recorded.
     m_services.reset();
     m_configManager.reset();
+    m_prefabSystem.reset();
+    m_sceneSerializer.reset();
+    m_assetDatabase.reset();
+    m_sceneGraph.reset();
+
+    // EntityManagerUVE's destructor frees every remaining live entity's
+    // component memory — this must happen before MemoryManager's leak
+    // report below, or a perfectly correct program would show false-
+    // positive leaks for every still-alive entity at shutdown.
+    m_entityManager.reset();
+
     m_eventSystem->Clear();
     m_eventSystem.reset();
     m_timer.reset();

@@ -7,16 +7,11 @@
 # Violators will be prosecuted to the fullest extent of the law.
 #------------------------------------------------------------------------------
 
-add_subdirectory(platform)
-add_subdirectory(debug)
-add_subdirectory(utilities)
-add_subdirectory(events)
-add_subdirectory(memory)
-add_subdirectory(threading)
-add_subdirectory(math)
-add_subdirectory(commandline)
-add_subdirectory(config)
-add_subdirectory(asset)
-add_subdirectory(scene)
-add_subdirectory(core)
-add_subdirectory(app)
+add_library(uve_math STATIC
+    src/vector3_uve.cpp
+    src/quaternion_uve.cpp
+)
+target_include_directories(uve_math PUBLIC include)
+target_link_libraries(uve_math PUBLIC uve_platform)
+target_compile_features(uve_math PUBLIC cxx_std_20)
+uve_set_warnings(uve_math)

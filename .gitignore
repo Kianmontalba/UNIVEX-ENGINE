@@ -9,6 +9,11 @@ cmake-build-*/
 # Runtime-generated settings
 *.uvesettings
 
+# Runtime-generated asset registry and scene/prefab files
+*.uveassetdb
+*.uvescene
+*.uveprefab
+
 # IDE
 .vs/
 .vscode/
