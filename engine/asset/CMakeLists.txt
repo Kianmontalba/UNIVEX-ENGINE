@@ -20,6 +20,7 @@ add_library(uve_asset STATIC
     src/asset_importer_uve.cpp
     src/hot_reload_uve.cpp
     src/asset_bundle_uve.cpp
+    src/file_system_uve.cpp
 )
 target_include_directories(uve_asset PUBLIC include)
 target_link_libraries(uve_asset

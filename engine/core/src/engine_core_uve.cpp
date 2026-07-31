@@ -15,6 +15,7 @@
 #include "uve/asset/asset_database_uve.h"
 #include "uve/asset/asset_importer_uve.h"
 #include "uve/asset/asset_manager_uve.h"
+#include "uve/asset/file_system_uve.h"
 #include "uve/asset/hot_reload_uve.h"
 #include "uve/commandline/command_line_uve.h"
 #include "uve/config/config_manager_uve.h"
@@ -138,6 +139,10 @@ void EngineCoreUVE::Init() {
     m_assetImporter = std::make_unique<Asset::AssetImporterUVE>();
     m_assetBundle = std::make_unique<Asset::AssetBundleUVE>();
 
+    // FileSystem sixteenth: needs AssetBundle, since its bundle-backed
+    // mounts read entries through IAssetBundleUVE.
+    m_fileSystem = std::make_unique<Asset::FileSystemUVE>(*m_assetBundle);
+
     // ConfigManager last: it immediately calls LoadUVE(), which logs its
     // outcome (missing/malformed/success) through the Logger constructed
     // above — so Logger must already exist by this point.
@@ -148,7 +153,7 @@ void EngineCoreUVE::Init() {
     m_services.emplace(*m_logger, *m_timer, *m_eventSystem, *m_memoryManager, *m_threadPool,
                         *m_commandLine, *m_configManager, *m_entityManager, *m_sceneGraph,
                         *m_assetDatabase, *m_sceneSerializer, *m_prefabSystem, *m_hotReload,
-                        *m_assetManager, *m_assetImporter, *m_assetBundle);
+                        *m_assetManager, *m_assetImporter, *m_assetBundle, *m_fileSystem);
 
     TransitionStateUVE(EngineStateUVE::Running);
     UVE_INFO("EngineCoreUVE: initialized");
@@ -239,15 +244,16 @@ void EngineCoreUVE::Shutdown() {
     UVE_INFO("EngineCoreUVE: shutting down");
 
     // Exact reverse of Init()'s construction order: ConfigManager, then
-    // AssetBundle, then AssetImporter, then AssetManager (its destructor
-    // blocks until every in-flight load job finishes), then HotReload, then
-    // PrefabSystem, then SceneSerializer, then AssetDatabase, then
-    // SceneGraph, then EntityManager, then EventSystem, then Timer, then
-    // ThreadPool, then MemoryManager, then Logger, then CommandLine. The
-    // final log message is emitted before the logger itself is torn down,
-    // so it is guaranteed to be recorded.
+    // FileSystem, then AssetBundle, then AssetImporter, then AssetManager
+    // (its destructor blocks until every in-flight load job finishes), then
+    // HotReload, then PrefabSystem, then SceneSerializer, then
+    // AssetDatabase, then SceneGraph, then EntityManager, then EventSystem,
+    // then Timer, then ThreadPool, then MemoryManager, then Logger, then
+    // CommandLine. The final log message is emitted before the logger
+    // itself is torn down, so it is guaranteed to be recorded.
     m_services.reset();
     m_configManager.reset();
+    m_fileSystem.reset();
     m_assetBundle.reset();
     m_assetImporter.reset();
     m_assetManager.reset();

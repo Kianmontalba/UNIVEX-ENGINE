@@ -14,6 +14,7 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -354,6 +355,31 @@ TEST(EngineCoreUVETest, AssetManagerImporterHotReloadBundle_ReachableAndRoundTri
 
     std::filesystem::remove(sourcePath);
     std::filesystem::remove(destinationPath);
+    engine.Shutdown();
+}
+
+TEST(EngineCoreUVETest, FileSystem_ReachableAndReadWriteRoundTripAfterInit) {
+    EngineCoreUVE engine(MakeTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    Asset::IFileSystemUVE& fileSystem = engine.GetServicesUVE().GetFileSystemUVE();
+
+    const std::filesystem::path mountDirectory = "uve_engine_core_tests_vfs_mount";
+    std::filesystem::remove_all(mountDirectory);
+    std::filesystem::create_directories(mountDirectory);
+    fileSystem.MountDirectoryUVE("", mountDirectory, 0);
+
+    const std::string text = "engine core vfs round trip";
+    const auto* const textBytes = reinterpret_cast<const std::byte*>(text.data());
+    const std::vector<std::byte> data(textBytes, textBytes + text.size());
+    ASSERT_TRUE(fileSystem.WriteFileUVE("notes.txt", data));
+
+    const std::optional<std::vector<std::byte>> readBack = fileSystem.ReadFileUVE("notes.txt");
+    ASSERT_TRUE(readBack.has_value());
+    EXPECT_EQ(std::string(reinterpret_cast<const char*>(readBack->data()), readBack->size()), text);
+
+    std::filesystem::remove_all(mountDirectory);
     engine.Shutdown();
 }
 

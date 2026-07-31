@@ -17,6 +17,7 @@
 #include "uve/asset/i_asset_database_uve.h"
 #include "uve/asset/i_asset_importer_uve.h"
 #include "uve/asset/i_asset_manager_uve.h"
+#include "uve/asset/i_file_system_uve.h"
 #include "uve/asset/i_hot_reload_uve.h"
 #include "uve/commandline/i_command_line_uve.h"
 #include "uve/config/i_config_manager_uve.h"
@@ -40,12 +41,12 @@ namespace UVE::Core {
 /// EngineCoreUVE owns the foundational engine services (CommandLine, Logger,
 /// MemoryManager, ThreadPool, Timer, EventSystem, EntityManager, SceneGraph,
 /// AssetDatabase, SceneSerializer, PrefabSystem, HotReload, AssetManager,
-/// AssetImporter, AssetBundle, ConfigManager) and drives the canonical
-/// engine lifecycle: Init -> Load -> N x (BeginFrame -> Update -> LateUpdate
-/// -> Render -> EndFrame) -> Shutdown. This increment has no windowing/
-/// rendering backend yet, so Render() is the documented, working no-op seam
-/// where RenderSystemUVE will plug in once one exists — every stage does
-/// something real today, none are placeholders.
+/// AssetImporter, AssetBundle, FileSystem, ConfigManager) and drives the
+/// canonical engine lifecycle: Init -> Load -> N x (BeginFrame -> Update ->
+/// LateUpdate -> Render -> EndFrame) -> Shutdown. This increment has no
+/// windowing/rendering backend yet, so Render() is the documented, working
+/// no-op seam where RenderSystemUVE will plug in once one exists — every
+/// stage does something real today, none are placeholders.
 /// Thread-safety: not thread-safe. Every method here is intended to be
 /// called from a single "engine" thread. The services EngineCoreUVE owns
 /// each document their own thread-safety contract independently (e.g.
@@ -62,8 +63,8 @@ public:
     /// Constructs and initializes CommandLine, Logger, MemoryManager,
     /// ThreadPool, Timer, EventSystem, EntityManager, SceneGraph,
     /// AssetDatabase, SceneSerializer, PrefabSystem, HotReload, AssetManager,
-    /// AssetImporter, AssetBundle, and ConfigManager in that order
-    /// (CommandLine first — it has no dependencies of its own; Logger
+    /// AssetImporter, AssetBundle, FileSystem, and ConfigManager in that
+    /// order (CommandLine first — it has no dependencies of its own; Logger
     /// second — every later step and every other system may need to log or
     /// UVE_ASSERT during its own setup; EntityManager right after
     /// EventSystem, since it needs MemoryManager for allocation and
@@ -76,10 +77,11 @@ public:
     /// ordering might suggest) because AssetManager takes a HotReload*
     /// constructor argument and construction must stay strictly forward-
     /// dependency; AssetImporter and AssetBundle grouped immediately after,
-    /// both stateless; ConfigManager last, so its LoadUVE() call can log
-    /// through the already-initialized Logger), then builds
-    /// EngineServicesUVE from all sixteen. Transitions Uninitialized ->
-    /// Initializing -> Running.
+    /// both stateless; FileSystem right after, needing AssetBundle (its
+    /// bundle-backed mounts read entries through it); ConfigManager last, so
+    /// its LoadUVE() call can log through the already-initialized Logger),
+    /// then builds EngineServicesUVE from all seventeen. Transitions
+    /// Uninitialized -> Initializing -> Running.
     void Init();
 
     /// The engine's asset/subsystem loading hook. This increment has
@@ -106,18 +108,19 @@ public:
     void RequestQuitUVE() noexcept;
 
     /// Transitions Running -> ShuttingDown -> Shutdown, tearing down
-    /// ConfigManager, then AssetBundle, then AssetImporter, then
-    /// AssetManager (its destructor blocks until every in-flight load job
-    /// finishes), then HotReload, then PrefabSystem, then SceneSerializer,
-    /// then AssetDatabase, then SceneGraph, then EntityManager (its
-    /// destructor frees every remaining live entity's component memory,
-    /// which must happen before MemoryManager's leak check below), then
-    /// EventSystem, then Timer, then ThreadPool (its destructor blocks
-    /// until every worker drains and joins), then MemoryManager (logging
-    /// its leak report — and, in debug builds, UVE_ASSERTing zero active
-    /// allocations — before it is destroyed), then Logger, then
-    /// CommandLine — the exact reverse of Init()'s construction order —
-    /// logging the final message before the logger itself is torn down.
+    /// ConfigManager, then FileSystem, then AssetBundle, then AssetImporter,
+    /// then AssetManager (its destructor blocks until every in-flight load
+    /// job finishes), then HotReload, then PrefabSystem, then
+    /// SceneSerializer, then AssetDatabase, then SceneGraph, then
+    /// EntityManager (its destructor frees every remaining live entity's
+    /// component memory, which must happen before MemoryManager's leak
+    /// check below), then EventSystem, then Timer, then ThreadPool (its
+    /// destructor blocks until every worker drains and joins), then
+    /// MemoryManager (logging its leak report — and, in debug builds,
+    /// UVE_ASSERTing zero active allocations — before it is destroyed),
+    /// then Logger, then CommandLine — the exact reverse of Init()'s
+    /// construction order — logging the final message before the logger
+    /// itself is torn down.
     void Shutdown();
 
     [[nodiscard]] EngineStateUVE GetStateUVE() const noexcept;
@@ -126,8 +129,8 @@ public:
     /// Returns the service container bundling Logger/Timer/EventSystem/
     /// MemoryManager/ThreadPool/CommandLine/ConfigManager/EntityManager/
     /// SceneGraph/AssetDatabase/SceneSerializer/PrefabSystem/HotReload/
-    /// AssetManager/AssetImporter/AssetBundle references. Valid only
-    /// between Init() and Shutdown().
+    /// AssetManager/AssetImporter/AssetBundle/FileSystem references. Valid
+    /// only between Init() and Shutdown().
     [[nodiscard]] EngineServicesUVE& GetServicesUVE();
 
     /// Returns this build's engine version — the single source of truth
@@ -183,6 +186,7 @@ private:
     std::unique_ptr<Asset::IAssetManagerUVE> m_assetManager;
     std::unique_ptr<Asset::IAssetImporterUVE> m_assetImporter;
     std::unique_ptr<Asset::IAssetBundleUVE> m_assetBundle;
+    std::unique_ptr<Asset::IFileSystemUVE> m_fileSystem;
     std::unique_ptr<Config::IConfigManagerUVE> m_configManager;
     std::optional<EngineServicesUVE> m_services;
 

@@ -25,6 +25,10 @@ public:
                                 const std::filesystem::path& bundlePath) override;
     [[nodiscard]] bool UnpackUVE(const std::filesystem::path& bundlePath,
                                   const std::filesystem::path& outputDirectory) override;
+    [[nodiscard]] bool HasEntryUVE(const std::filesystem::path& bundlePath,
+                                    std::string_view entryName) const override;
+    [[nodiscard]] std::optional<std::vector<std::byte>>
+    ReadEntryUVE(const std::filesystem::path& bundlePath, std::string_view entryName) const override;
 };
 
 } // namespace UVE::Asset

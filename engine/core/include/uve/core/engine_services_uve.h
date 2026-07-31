@@ -13,6 +13,7 @@
 #include "uve/asset/i_asset_database_uve.h"
 #include "uve/asset/i_asset_importer_uve.h"
 #include "uve/asset/i_asset_manager_uve.h"
+#include "uve/asset/i_file_system_uve.h"
 #include "uve/asset/i_hot_reload_uve.h"
 #include "uve/commandline/i_command_line_uve.h"
 #include "uve/config/i_config_manager_uve.h"
@@ -32,9 +33,9 @@ namespace UVE::Core {
 /// container: a small bundle of references to the core engine services
 /// (Logger, Timer, EventSystem, MemoryManager, ThreadPool, CommandLine,
 /// ConfigManager, EntityManager, SceneGraph, AssetDatabase, SceneSerializer,
-/// PrefabSystem, HotReload, AssetManager, AssetImporter, AssetBundle),
-/// built once EngineCoreUVE has constructed all sixteen. Any future
-/// subsystem that needs access to one of these should receive an
+/// PrefabSystem, HotReload, AssetManager, AssetImporter, AssetBundle,
+/// FileSystem), built once EngineCoreUVE has constructed all seventeen. Any
+/// future subsystem that needs access to one of these should receive an
 /// EngineServicesUVE& (obtained from EngineCoreUVE::GetServicesUVE()) rather
 /// than a raw global pointer — the logging macros' internal active-instance
 /// pointer remains the one intentional exception to that rule (see
@@ -42,9 +43,9 @@ namespace UVE::Core {
 /// ILoggerUVE/ITimerUVE/IEventSystemUVE/IMemoryManagerUVE/IThreadPoolUVE/
 /// ICommandLineUVE/IConfigManagerUVE/IEntityManagerUVE/ISceneGraphUVE/
 /// IAssetDatabaseUVE/ISceneSerializerUVE/IPrefabSystemUVE/IHotReloadUVE/
-/// IAssetManagerUVE/IAssetImporterUVE/IAssetBundleUVE interfaces, not the
-/// concrete types, so a future substitute implementation of any of the
-/// sixteen requires no change here.
+/// IAssetManagerUVE/IAssetImporterUVE/IAssetBundleUVE/IFileSystemUVE
+/// interfaces, not the concrete types, so a future substitute implementation
+/// of any of the seventeen requires no change here.
 /// Thread-safety: EngineServicesUVE itself holds only non-owning pointers
 /// and has no mutable state of its own; the thread-safety of each accessor
 /// is whatever the referenced service documents.
@@ -64,7 +65,8 @@ public:
                        Asset::IHotReloadUVE& hotReload,
                        Asset::IAssetManagerUVE& assetManager,
                        Asset::IAssetImporterUVE& assetImporter,
-                       Asset::IAssetBundleUVE& assetBundle) noexcept;
+                       Asset::IAssetBundleUVE& assetBundle,
+                       Asset::IFileSystemUVE& fileSystem) noexcept;
 
     [[nodiscard]] Debug::ILoggerUVE& GetLoggerUVE() const noexcept;
     [[nodiscard]] Utilities::ITimerUVE& GetTimerUVE() const noexcept;
@@ -82,6 +84,7 @@ public:
     [[nodiscard]] Asset::IAssetManagerUVE& GetAssetManagerUVE() const noexcept;
     [[nodiscard]] Asset::IAssetImporterUVE& GetAssetImporterUVE() const noexcept;
     [[nodiscard]] Asset::IAssetBundleUVE& GetAssetBundleUVE() const noexcept;
+    [[nodiscard]] Asset::IFileSystemUVE& GetFileSystemUVE() const noexcept;
 
 private:
     Debug::ILoggerUVE* m_logger;
@@ -100,6 +103,7 @@ private:
     Asset::IAssetManagerUVE* m_assetManager;
     Asset::IAssetImporterUVE* m_assetImporter;
     Asset::IAssetBundleUVE* m_assetBundle;
+    Asset::IFileSystemUVE* m_fileSystem;
 };
 
 } // namespace UVE::Core
