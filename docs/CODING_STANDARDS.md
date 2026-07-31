@@ -18,7 +18,7 @@ subsystem area — **never** flat inside `UVE` directly:
 | `UVE::Threading`  | `engine/threading/`  | `ThreadPoolUVE`, `JobCounterUVE`, `JobUVE`                       |
 | `UVE::CommandLine`| `engine/commandline/`| `CommandLineUVE` — startup argument parsing                    |
 | `UVE::Config`     | `engine/config/`     | `ConfigManagerUVE` — JSON-based `.uvesettings` key-value store  |
-| `UVE::Math`       | `engine/math/`       | `Vector3UVE`, `QuaternionUVE`                                   |
+| `UVE::Math`       | `engine/math/`       | `Vector3UVE`, `QuaternionUVE`, `Matrix4x4UVE`, `AabbUVE`, `PlaneUVE`, `FrustumUVE` |
 | `UVE::Asset`      | `engine/asset/`      | `AssetGuidUVE`, `AssetDatabaseUVE`, `AssetManagerUVE`, `AssetImporterUVE`, `HotReloadUVE`, `AssetBundleUVE`, `FileSystemUVE`, the `.uve*` binary envelope |
 | `UVE::Scene`      | `engine/scene/`      | `EntityManagerUVE`, `SceneGraphUVE`, `ComponentUVE` + built-ins, `SceneSerializerUVE`, `PrefabSystemUVE` |
 | `UVE::Core`       | `engine/core/`       | `EngineCoreUVE`, config, state, frame stats, version, services |
@@ -136,6 +136,28 @@ the registered destroy function) happens in `CollectGarbageUVE()`, called once p
 bounces to zero and back within a single frame. Copy this deferred-collection pattern for any
 future ref-counted resource system instead of unloading synchronously the instant a refcount
 reaches zero.
+
+## Matrix convention (`Matrix4x4UVE`)
+
+`Matrix4x4UVE` (`engine/math/`) is row-major storage (`m[row][col]`) under a **column-vector**
+convention: a point transforms as `M * [x, y, z, 1]^T`, and composing `lhs * rhs` means "apply
+`rhs` first, then `lhs`" — so a view-projection matrix is `PerspectiveUVE(...) *
+ViewFromPositionAndRotationUVE(...)`. `PerspectiveUVE` targets Vulkan's `[0, 1]` depth range but
+Y-up NDC (matching this engine's Y-up convention everywhere else, e.g.
+`WorldTransformComponentUVE`) rather than Vulkan's native Y-down NDC — reconciling that (negating
+a row, or a negative-height viewport) is deferred to whichever future increment implements a real
+Vulkan backend; it has no effect on any CPU-side math today. There is deliberately no generic 4x4
+`InverseUVE()` — the one place an inverse is conceptually needed (world-to-view) has a cheaper
+closed form via `ViewFromPositionAndRotationUVE`, since a camera is never non-uniformly scaled in
+practice. Follow the same "only what the current consumer needs, not a general-purpose library"
+discipline `Vector3UVE`/`QuaternionUVE` already established for any future addition to this
+matrix type.
+
+`AabbUVE`/`PlaneUVE`/`FrustumUVE` (also `engine/math/`) are the minimal culling primitives Part
+7.2's `CameraSystemUVE`/`MeshRendererUVE` need: an axis-aligned box, a `normal . point + distance
+= 0` plane, and 6 planes extracted from a view-projection matrix via the standard Gribb-Hartmann
+technique. They live in `engine/math`, not `engine/render`, specifically so a future
+`PhysicsSystemUVE` broad-phase can reuse them without depending on rendering at all.
 
 ## Virtual paths (`IFileSystemUVE`)
 

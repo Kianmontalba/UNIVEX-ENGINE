@@ -34,6 +34,10 @@ add_executable(uve_tests
     config/config_manager_uve_tests.cpp
     math/vector3_uve_tests.cpp
     math/quaternion_uve_tests.cpp
+    math/matrix4x4_uve_tests.cpp
+    math/aabb_uve_tests.cpp
+    math/plane_uve_tests.cpp
+    math/frustum_uve_tests.cpp
     asset/asset_database_uve_tests.cpp
     asset/uve_file_envelope_uve_tests.cpp
     asset/asset_manager_uve_tests.cpp
