@@ -27,6 +27,8 @@
 #include "uve/debug/logger_uve.h"
 #include "uve/math/vector3_uve.h"
 #include "uve/platform/platform_uve.h"
+#include "uve/render/i_render_device_uve.h"
+#include "uve/render/i_render_system_uve.h"
 #include "uve/scene/components/mesh_component_uve.h"
 #include "uve/scene/components/transform_component_uve.h"
 #include "uve/scene/components/world_transform_component_uve.h"
@@ -380,6 +382,26 @@ TEST(EngineCoreUVETest, FileSystem_ReachableAndReadWriteRoundTripAfterInit) {
     EXPECT_EQ(std::string(reinterpret_cast<const char*>(readBack->data()), readBack->size()), text);
 
     std::filesystem::remove_all(mountDirectory);
+    engine.Shutdown();
+}
+
+TEST(EngineCoreUVETest, RenderSystem_ReachableAndFrameLifecycleWorksAfterInit) {
+    EngineCoreUVE engine(MakeTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    Render::IRenderSystemUVE& renderSystem = engine.GetServicesUVE().GetRenderSystemUVE();
+    EXPECT_EQ(renderSystem.GetFrameIndexUVE(), 0U);
+
+    renderSystem.BeginFrameUVE();
+    static_cast<void>(renderSystem.GetFrameCommandBufferUVE());
+    renderSystem.EndFrameUVE();
+
+    EXPECT_EQ(renderSystem.GetFrameIndexUVE(), 1U);
+
+    Render::IRenderDeviceUVE& renderDevice = engine.GetServicesUVE().GetRenderDeviceUVE();
+    EXPECT_EQ(renderDevice.GetBackendNameUVE(), "Null");
+
     engine.Shutdown();
 }
 

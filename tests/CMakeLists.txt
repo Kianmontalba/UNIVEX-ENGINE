@@ -45,6 +45,8 @@ add_executable(uve_tests
     asset/hot_reload_uve_tests.cpp
     asset/asset_bundle_uve_tests.cpp
     asset/file_system_uve_tests.cpp
+    render/null_render_device_uve_tests.cpp
+    render/render_system_uve_tests.cpp
     scene/entity_manager_uve_tests.cpp
     scene/scene_graph_uve_tests.cpp
     scene/scene_serializer_uve_tests.cpp
@@ -66,6 +68,7 @@ target_link_libraries(uve_tests PRIVATE
     uve_math
     uve_asset
     uve_scene
+    uve_render
     uve_core
     GTest::gtest
     GTest::gtest_main

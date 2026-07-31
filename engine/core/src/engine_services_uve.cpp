@@ -26,13 +26,16 @@ EngineServicesUVE::EngineServicesUVE(Debug::ILoggerUVE& logger, Utilities::ITime
                                       Asset::IAssetManagerUVE& assetManager,
                                       Asset::IAssetImporterUVE& assetImporter,
                                       Asset::IAssetBundleUVE& assetBundle,
-                                      Asset::IFileSystemUVE& fileSystem) noexcept
+                                      Asset::IFileSystemUVE& fileSystem,
+                                      Render::IRenderDeviceUVE& renderDevice,
+                                      Render::IRenderSystemUVE& renderSystem) noexcept
     : m_logger(&logger), m_timer(&timer), m_eventSystem(&eventSystem),
       m_memoryManager(&memoryManager), m_threadPool(&threadPool), m_commandLine(&commandLine),
       m_configManager(&configManager), m_entityManager(&entityManager), m_sceneGraph(&sceneGraph),
       m_assetDatabase(&assetDatabase), m_sceneSerializer(&sceneSerializer),
       m_prefabSystem(&prefabSystem), m_hotReload(&hotReload), m_assetManager(&assetManager),
-      m_assetImporter(&assetImporter), m_assetBundle(&assetBundle), m_fileSystem(&fileSystem) {}
+      m_assetImporter(&assetImporter), m_assetBundle(&assetBundle), m_fileSystem(&fileSystem),
+      m_renderDevice(&renderDevice), m_renderSystem(&renderSystem) {}
 
 Debug::ILoggerUVE& EngineServicesUVE::GetLoggerUVE() const noexcept {
     return *m_logger;
@@ -100,6 +103,14 @@ Asset::IAssetBundleUVE& EngineServicesUVE::GetAssetBundleUVE() const noexcept {
 
 Asset::IFileSystemUVE& EngineServicesUVE::GetFileSystemUVE() const noexcept {
     return *m_fileSystem;
+}
+
+Render::IRenderDeviceUVE& EngineServicesUVE::GetRenderDeviceUVE() const noexcept {
+    return *m_renderDevice;
+}
+
+Render::IRenderSystemUVE& EngineServicesUVE::GetRenderSystemUVE() const noexcept {
+    return *m_renderSystem;
 }
 
 } // namespace UVE::Core

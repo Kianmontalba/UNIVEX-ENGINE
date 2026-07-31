@@ -26,6 +26,8 @@
 #include "uve/events/event_system_uve.h"
 #include "uve/memory/memory_manager_uve.h"
 #include "uve/platform/platform_uve.h"
+#include "uve/render/null_render_device_uve.h"
+#include "uve/render/render_system_uve.h"
 #include "uve/scene/entity_manager_uve.h"
 #include "uve/scene/prefab_system_uve.h"
 #include "uve/scene/scene_graph_uve.h"
@@ -143,6 +145,16 @@ void EngineCoreUVE::Init() {
     // mounts read entries through IAssetBundleUVE.
     m_fileSystem = std::make_unique<Asset::FileSystemUVE>(*m_assetBundle);
 
+    // RenderDevice seventeenth: no dependencies of its own. Always a
+    // NullRenderDeviceUVE — no real GPU/windowing backend is buildable in
+    // this sandbox (no display server, GPU device node, or graphics SDK
+    // headers; see docs/CODING_STANDARDS.md).
+    m_renderDevice = std::make_unique<Render::NullRenderDeviceUVE>();
+
+    // RenderSystem eighteenth: needs RenderDevice, since it records and
+    // submits command buffers through it.
+    m_renderSystem = std::make_unique<Render::RenderSystemUVE>(*m_renderDevice);
+
     // ConfigManager last: it immediately calls LoadUVE(), which logs its
     // outcome (missing/malformed/success) through the Logger constructed
     // above — so Logger must already exist by this point.
@@ -153,7 +165,8 @@ void EngineCoreUVE::Init() {
     m_services.emplace(*m_logger, *m_timer, *m_eventSystem, *m_memoryManager, *m_threadPool,
                         *m_commandLine, *m_configManager, *m_entityManager, *m_sceneGraph,
                         *m_assetDatabase, *m_sceneSerializer, *m_prefabSystem, *m_hotReload,
-                        *m_assetManager, *m_assetImporter, *m_assetBundle, *m_fileSystem);
+                        *m_assetManager, *m_assetImporter, *m_assetBundle, *m_fileSystem,
+                        *m_renderDevice, *m_renderSystem);
 
     TransitionStateUVE(EngineStateUVE::Running);
     UVE_INFO("EngineCoreUVE: initialized");
@@ -198,9 +211,10 @@ void EngineCoreUVE::LateUpdate() {
 }
 
 void EngineCoreUVE::Render() {
-    // No-op render seam: RenderSystemUVE will plug in here once windowing
-    // and a graphics backend exist. Complete and correct as the render
-    // stage for a build with no rendering backend.
+    // No-op render seam: RenderSystemUVE exists (backed by NullRenderDeviceUVE)
+    // but nothing above the RHI — a camera system, a mesh renderer — is wired
+    // in yet, so there is nothing meaningful to record into a frame's command
+    // buffer. Complete and correct as the render stage until those exist.
     UVE_TRACE("Render (no-op)");
 }
 
@@ -244,15 +258,18 @@ void EngineCoreUVE::Shutdown() {
     UVE_INFO("EngineCoreUVE: shutting down");
 
     // Exact reverse of Init()'s construction order: ConfigManager, then
-    // FileSystem, then AssetBundle, then AssetImporter, then AssetManager
-    // (its destructor blocks until every in-flight load job finishes), then
-    // HotReload, then PrefabSystem, then SceneSerializer, then
-    // AssetDatabase, then SceneGraph, then EntityManager, then EventSystem,
-    // then Timer, then ThreadPool, then MemoryManager, then Logger, then
-    // CommandLine. The final log message is emitted before the logger
-    // itself is torn down, so it is guaranteed to be recorded.
+    // RenderSystem, then RenderDevice, then FileSystem, then AssetBundle,
+    // then AssetImporter, then AssetManager (its destructor blocks until
+    // every in-flight load job finishes), then HotReload, then
+    // PrefabSystem, then SceneSerializer, then AssetDatabase, then
+    // SceneGraph, then EntityManager, then EventSystem, then Timer, then
+    // ThreadPool, then MemoryManager, then Logger, then CommandLine. The
+    // final log message is emitted before the logger itself is torn down,
+    // so it is guaranteed to be recorded.
     m_services.reset();
     m_configManager.reset();
+    m_renderSystem.reset();
+    m_renderDevice.reset();
     m_fileSystem.reset();
     m_assetBundle.reset();
     m_assetImporter.reset();

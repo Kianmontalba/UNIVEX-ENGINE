@@ -7,17 +7,12 @@
 # Violators will be prosecuted to the fullest extent of the law.
 #------------------------------------------------------------------------------
 
-add_subdirectory(platform)
-add_subdirectory(debug)
-add_subdirectory(utilities)
-add_subdirectory(events)
-add_subdirectory(memory)
-add_subdirectory(threading)
-add_subdirectory(math)
-add_subdirectory(commandline)
-add_subdirectory(config)
-add_subdirectory(asset)
-add_subdirectory(scene)
-add_subdirectory(render)
-add_subdirectory(core)
-add_subdirectory(app)
+add_library(uve_render STATIC
+    src/null_command_buffer_uve.cpp
+    src/null_render_device_uve.cpp
+    src/render_system_uve.cpp
+)
+target_include_directories(uve_render PUBLIC include)
+target_link_libraries(uve_render PUBLIC uve_platform uve_debug)
+target_compile_features(uve_render PUBLIC cxx_std_20)
+uve_set_warnings(uve_render)

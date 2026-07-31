@@ -21,11 +21,12 @@ subsystem area — **never** flat inside `UVE` directly:
 | `UVE::Math`       | `engine/math/`       | `Vector3UVE`, `QuaternionUVE`, `Matrix4x4UVE`, `AabbUVE`, `PlaneUVE`, `FrustumUVE` |
 | `UVE::Asset`      | `engine/asset/`      | `AssetGuidUVE`, `AssetDatabaseUVE`, `AssetManagerUVE`, `AssetImporterUVE`, `HotReloadUVE`, `AssetBundleUVE`, `FileSystemUVE`, the `.uve*` binary envelope |
 | `UVE::Scene`      | `engine/scene/`      | `EntityManagerUVE`, `SceneGraphUVE`, `ComponentUVE` + built-ins, `SceneSerializerUVE`, `PrefabSystemUVE` |
+| `UVE::Render`     | `engine/render/`     | `IRenderDeviceUVE`, `NullRenderDeviceUVE`, `ICommandBufferUVE`, `RenderSystemUVE`, resource handles/descriptors |
 | `UVE::Core`       | `engine/core/`       | `EngineCoreUVE`, config, state, frame stats, version, services |
 
-Future systems (Rendering, Physics, Animation, Audio, AI, Networking, Editor, ...) become
-sibling namespaces/folders (`UVE::Render` in `engine/render/`, etc.) without restructuring
-anything listed above.
+Future systems (Physics, Animation, Audio, AI, Networking, Editor, ...) become sibling
+namespaces/folders without restructuring anything listed above — exactly how `UVE::Render` in
+`engine/render/` was added.
 
 ## Naming conventions
 
@@ -183,6 +184,47 @@ take a raw `std::filesystem::path` directly; only `AssetBundleUVE` gained the
 `HasEntryUVE()`/`ReadEntryUVE()` primitives `FileSystemUVE`'s bundle-backed mounts need. Wider
 adoption (e.g. routing `WriteUveFileUVE`/`ReadUveFileUVE` through the VFS) is future-increment
 work once a concrete consumer needs it.
+
+## The render hardware interface (`engine/render/`)
+
+`IRenderDeviceUVE` is a **modern explicit RHI** (pipeline state objects, explicit render passes,
+resources created/destroyed by handle) mirroring Vulkan/D3D12/Metal directly, paired with a
+**retained** `ICommandBufferUVE`: a caller records a sequence of calls into it, then submits it as
+a batch via `IRenderDeviceUVE::SubmitUVE()`, rather than issuing draw calls immediately as the
+scene is walked. Both were explicit architecture decisions (not spec-derived — the master spec's
+own intro flags "immediate or retained command buffers?" as a question to ask, not guess).
+
+**Resource handles are small wrapper structs, not bare integer aliases** —
+`BufferHandleUVE`/`TextureHandleUVE`/`ShaderHandleUVE`/`PipelineHandleUVE` each wrap a single
+`std::uint32_t value`, exactly like `AssetGuidUVE`. This differs from `IFileSystemUVE`'s
+`MountHandleUVE` (a bare alias) because the RHI has four distinct resource kinds where mixing one
+up for another is a real risk; `MountHandleUVE` only ever has one kind of handle in play. Follow
+whichever precedent fits: a bare alias when there's only one handle kind in a system, a wrapper
+struct when there are several that must never be confused.
+
+**`NullRenderDeviceUVE` is the only backend this codebase can build and test today** — there is no
+display server, GPU device node, or graphics SDK (Vulkan/GL headers, GLFW3/SDL3, a shader
+compiler) available in this environment (confirmed the same way `WindowManagerUVE`'s infeasibility
+was confirmed for Increment 8). It performs zero real GPU work: it bookkeeps every resource
+handle and validates call correctness (paired render passes, no draw calls outside a pass, no
+binding to an unknown handle), and its command buffer is a "spy" that records the exact call
+sequence a real backend would have received, for tests to assert against
+(`NullRenderDeviceUVE::GetLastSubmittedCommandsUVE()`). A real Vulkan/Metal/D3D12 backend is
+future work once this environment has the SDK headers, GPU, and windowing it currently lacks —
+nothing above `IRenderDeviceUVE` needs to change when one arrives.
+
+**Module-private vs. public concrete classes**: `NullRenderDeviceUVE` is public
+(`engine/render/include/`) because `EngineCoreUVE` constructs it directly, matching
+`FileSystemUVE`/`AssetBundleUVE`'s precedent for concrete classes `EngineCoreUVE` names by type.
+`NullCommandBufferUVE`, by contrast, is module-private (`engine/render/src/`, never in
+`include/`) because nothing outside `engine/render/src/null_render_device_uve.cpp` ever names it
+— callers only ever see the `ICommandBufferUVE&` returned from `CreateCommandBufferUVE()`,
+matching `ArchetypeUVE`/`ChunkUVE`'s precedent for types that are genuinely internal to one
+translation unit. `RecordedCommandUVE` (the tagged-union type describing one recorded call) is
+public even though `NullCommandBufferUVE` isn't, because test code needs to name it to assert
+against `GetLastSubmittedCommandsUVE()`'s result — a data type consumed externally is public even
+when the class that produces it stays private, the same way `Debug::LogMessageUVE` is public
+while `MemorySinkUVE`'s own internals aren't inspected directly.
 
 ## Allocator boundary
 
