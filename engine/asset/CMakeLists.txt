@@ -11,6 +11,8 @@
 # FetchContent_Declare/MakeAvailable(nlohmann_json) — this module deliberately does not repeat
 # that declaration. The parent engine/CMakeLists.txt must add_subdirectory(config) before
 # add_subdirectory(asset) for the nlohmann_json::nlohmann_json target to already exist here.
+# Similarly, add_subdirectory(math) must come before add_subdirectory(asset) for uve_math to
+# already exist — MeshAssetUVE/MaterialAssetUVE's public headers use Vector3UVE/AabbUVE.
 
 add_library(uve_asset STATIC
     src/asset_guid_uve.cpp
@@ -21,10 +23,14 @@ add_library(uve_asset STATIC
     src/hot_reload_uve.cpp
     src/asset_bundle_uve.cpp
     src/file_system_uve.cpp
+    src/mesh_asset_uve.cpp
+    src/texture_asset_uve.cpp
+    src/shader_asset_uve.cpp
+    src/material_asset_uve.cpp
 )
 target_include_directories(uve_asset PUBLIC include)
 target_link_libraries(uve_asset
-    PUBLIC uve_platform uve_debug uve_threading uve_events
+    PUBLIC uve_platform uve_debug uve_threading uve_events uve_math
     PRIVATE nlohmann_json::nlohmann_json
 )
 target_compile_features(uve_asset PUBLIC cxx_std_20)

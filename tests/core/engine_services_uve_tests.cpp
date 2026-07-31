@@ -14,7 +14,9 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string>
+#include <string_view>
 #include <typeindex>
 #include <vector>
 
@@ -30,7 +32,12 @@
 #include "uve/config/i_config_manager_uve.h"
 #include "uve/debug/i_logger_uve.h"
 #include "uve/events/i_event_system_uve.h"
+#include "uve/math/frustum_uve.h"
+#include "uve/math/matrix4x4_uve.h"
 #include "uve/memory/i_memory_manager_uve.h"
+#include "uve/render/i_camera_system_uve.h"
+#include "uve/render/i_render_device_uve.h"
+#include "uve/render/i_render_system_uve.h"
 #include "uve/scene/i_entity_manager_uve.h"
 #include "uve/scene/i_prefab_system_uve.h"
 #include "uve/scene/i_scene_graph_uve.h"
@@ -43,13 +50,15 @@
 // IMemoryManagerUVE/IThreadPoolUVE/ICommandLineUVE/IConfigManagerUVE/
 // IEntityManagerUVE/ISceneGraphUVE/IAssetDatabaseUVE/ISceneSerializerUVE/
 // IPrefabSystemUVE/IHotReloadUVE/IAssetManagerUVE/IAssetImporterUVE/
-// IAssetBundleUVE/IFileSystemUVE) works against ANY conforming
-// implementation, independent of the concrete LoggerUVE/TimerUVE/
-// EventSystemUVE/MemoryManagerUVE/ThreadPoolUVE/CommandLineUVE/
-// ConfigManagerUVE/EntityManagerUVE/SceneGraphUVE/AssetDatabaseUVE/
-// SceneSerializerUVE/PrefabSystemUVE/HotReloadUVE/AssetManagerUVE/
-// AssetImporterUVE/AssetBundleUVE/FileSystemUVE classes used by
-// EngineCoreUVE — this is the whole point of introducing the interfaces.
+// IAssetBundleUVE/IFileSystemUVE/IRenderDeviceUVE/IRenderSystemUVE/
+// ICameraSystemUVE) works against ANY conforming implementation,
+// independent of the concrete LoggerUVE/TimerUVE/EventSystemUVE/
+// MemoryManagerUVE/ThreadPoolUVE/CommandLineUVE/ConfigManagerUVE/
+// EntityManagerUVE/SceneGraphUVE/AssetDatabaseUVE/SceneSerializerUVE/
+// PrefabSystemUVE/HotReloadUVE/AssetManagerUVE/AssetImporterUVE/
+// AssetBundleUVE/FileSystemUVE/NullRenderDeviceUVE/RenderSystemUVE/
+// CameraSystemUVE classes used by EngineCoreUVE — this is the whole point
+// of introducing the interfaces.
 
 namespace UVE::Core::Tests {
 namespace {
@@ -378,6 +387,81 @@ public:
     int writeCallCount = 0;
 };
 
+class FakeCommandBufferUVE final : public Render::ICommandBufferUVE {
+public:
+    void BeginRenderPassUVE(const Render::RenderPassDescUVE&) override {}
+    void EndRenderPassUVE() override {}
+    void BindPipelineUVE(Render::PipelineHandleUVE) override {}
+    void BindVertexBufferUVE(Render::BufferHandleUVE, std::uint32_t) override {}
+    void BindIndexBufferUVE(Render::BufferHandleUVE) override {}
+    void BindTextureUVE(Render::TextureHandleUVE, std::uint32_t) override {}
+    void BindUniformBufferUVE(Render::BufferHandleUVE, std::uint32_t) override {}
+    void DrawIndexedUVE(std::uint32_t, std::uint32_t) override {}
+    void DrawUVE(std::uint32_t, std::uint32_t) override {}
+};
+
+class FakeRenderDeviceUVE final : public Render::IRenderDeviceUVE {
+public:
+    [[nodiscard]] Render::BufferHandleUVE CreateBufferUVE(const Render::BufferDescUVE&,
+                                                            std::span<const std::byte>) override {
+        ++createBufferCallCount;
+        return Render::BufferHandleUVE{1};
+    }
+    void DestroyBufferUVE(Render::BufferHandleUVE) override {}
+    [[nodiscard]] bool UpdateBufferUVE(Render::BufferHandleUVE, std::span<const std::byte>, std::uint64_t) override {
+        return true;
+    }
+    [[nodiscard]] Render::TextureHandleUVE CreateTextureUVE(const Render::TextureDescUVE&,
+                                                              std::span<const std::byte>) override {
+        return Render::TextureHandleUVE{1};
+    }
+    void DestroyTextureUVE(Render::TextureHandleUVE) override {}
+    [[nodiscard]] Render::ShaderHandleUVE CreateShaderUVE(const Render::ShaderDescUVE&) override {
+        return Render::ShaderHandleUVE{1};
+    }
+    void DestroyShaderUVE(Render::ShaderHandleUVE) override {}
+    [[nodiscard]] Render::PipelineHandleUVE CreatePipelineUVE(const Render::PipelineDescUVE&) override {
+        return Render::PipelineHandleUVE{1};
+    }
+    void DestroyPipelineUVE(Render::PipelineHandleUVE) override {}
+    [[nodiscard]] std::unique_ptr<Render::ICommandBufferUVE> CreateCommandBufferUVE() override { return nullptr; }
+    void SubmitUVE(std::unique_ptr<Render::ICommandBufferUVE>) override {}
+    [[nodiscard]] std::string_view GetBackendNameUVE() const noexcept override { return "Fake"; }
+
+    int createBufferCallCount = 0;
+};
+
+class FakeRenderSystemUVE final : public Render::IRenderSystemUVE {
+public:
+    void BeginFrameUVE() override { ++beginFrameCallCount; }
+    [[nodiscard]] Render::ICommandBufferUVE& GetFrameCommandBufferUVE() override { return commandBuffer; }
+    void EndFrameUVE() override {}
+    [[nodiscard]] std::uint64_t GetFrameIndexUVE() const noexcept override { return 0; }
+
+    FakeCommandBufferUVE commandBuffer;
+    int beginFrameCallCount = 0;
+};
+
+class FakeCameraSystemUVE final : public Render::ICameraSystemUVE {
+public:
+    [[nodiscard]] Math::Matrix4x4UVE ComputeViewMatrixUVE(const Scene::IEntityManagerUVE&,
+                                                            Scene::EntityUVE) const override {
+        ++computeViewCallCount;
+        return Math::Matrix4x4UVE::IdentityUVE();
+    }
+    [[nodiscard]] Math::Matrix4x4UVE ComputeProjectionMatrixUVE(const Scene::IEntityManagerUVE&, Scene::EntityUVE,
+                                                                 float) const override {
+        return Math::Matrix4x4UVE::IdentityUVE();
+    }
+    [[nodiscard]] Math::Matrix4x4UVE ComputeViewProjectionUVE(const Scene::IEntityManagerUVE&, Scene::EntityUVE,
+                                                               float) const override {
+        return Math::Matrix4x4UVE::IdentityUVE();
+    }
+    [[nodiscard]] Math::FrustumUVE ExtractFrustumUVE(const Math::Matrix4x4UVE&) const override { return {}; }
+
+    mutable int computeViewCallCount = 0;
+};
+
 TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     FakeLoggerUVE logger;
     FakeTimerUVE timer;
@@ -396,11 +480,15 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     FakeAssetImporterUVE assetImporter;
     FakeAssetBundleUVE assetBundle;
     FakeFileSystemUVE fileSystem;
+    FakeRenderDeviceUVE renderDevice;
+    FakeRenderSystemUVE renderSystem;
+    FakeCameraSystemUVE cameraSystem;
 
     const EngineServicesUVE services(logger, timer, eventSystem, memoryManager, threadPool,
                                       commandLine, configManager, entityManager, sceneGraph,
                                       assetDatabase, sceneSerializer, prefabSystem, hotReload,
-                                      assetManager, assetImporter, assetBundle, fileSystem);
+                                      assetManager, assetImporter, assetBundle, fileSystem,
+                                      renderDevice, renderSystem, cameraSystem);
 
     EXPECT_EQ(&services.GetLoggerUVE(), &logger);
     EXPECT_EQ(&services.GetTimerUVE(), &timer);
@@ -419,6 +507,9 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     EXPECT_EQ(&services.GetAssetImporterUVE(), &assetImporter);
     EXPECT_EQ(&services.GetAssetBundleUVE(), &assetBundle);
     EXPECT_EQ(&services.GetFileSystemUVE(), &fileSystem);
+    EXPECT_EQ(&services.GetRenderDeviceUVE(), &renderDevice);
+    EXPECT_EQ(&services.GetRenderSystemUVE(), &renderSystem);
+    EXPECT_EQ(&services.GetCameraSystemUVE(), &cameraSystem);
 }
 
 TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) {
@@ -439,10 +530,14 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     FakeAssetImporterUVE assetImporter;
     FakeAssetBundleUVE assetBundle;
     FakeFileSystemUVE fileSystem;
+    FakeRenderDeviceUVE renderDevice;
+    FakeRenderSystemUVE renderSystem;
+    FakeCameraSystemUVE cameraSystem;
     const EngineServicesUVE services(logger, timer, eventSystem, memoryManager, threadPool,
                                       commandLine, configManager, entityManager, sceneGraph,
                                       assetDatabase, sceneSerializer, prefabSystem, hotReload,
-                                      assetManager, assetImporter, assetBundle, fileSystem);
+                                      assetManager, assetImporter, assetBundle, fileSystem,
+                                      renderDevice, renderSystem, cameraSystem);
 
     services.GetTimerUVE().Tick();
     services.GetEventSystemUVE().DispatchQueuedUVE();
@@ -464,6 +559,10 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
         services.GetAssetImporterUVE().ImportUVE("unused_source", "unused_dest", services.GetAssetDatabaseUVE()));
     static_cast<void>(services.GetAssetBundleUVE().PackUVE({}, "unused.uvebundle"));
     static_cast<void>(services.GetFileSystemUVE().WriteFileUVE("unused.txt", {}));
+    static_cast<void>(services.GetRenderDeviceUVE().CreateBufferUVE(Render::BufferDescUVE{}));
+    services.GetRenderSystemUVE().BeginFrameUVE();
+    static_cast<void>(
+        services.GetCameraSystemUVE().ComputeViewMatrixUVE(services.GetEntityManagerUVE(), Scene::kInvalidEntityUVE));
 
     EXPECT_EQ(timer.tickCount, 1);
     EXPECT_EQ(eventSystem.dispatchCount, 1);
@@ -481,6 +580,9 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     EXPECT_EQ(assetImporter.importCallCount, 1);
     EXPECT_EQ(assetBundle.packCallCount, 1);
     EXPECT_EQ(fileSystem.writeCallCount, 1);
+    EXPECT_EQ(renderDevice.createBufferCallCount, 1);
+    EXPECT_EQ(renderSystem.beginFrameCallCount, 1);
+    EXPECT_EQ(cameraSystem.computeViewCallCount, 1);
 }
 
 } // namespace

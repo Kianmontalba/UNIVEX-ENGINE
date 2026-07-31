@@ -29,6 +29,9 @@
 #include "uve/debug/i_logger_uve.h"
 #include "uve/events/i_event_system_uve.h"
 #include "uve/memory/i_memory_manager_uve.h"
+#include "uve/render/i_camera_system_uve.h"
+#include "uve/render/i_render_device_uve.h"
+#include "uve/render/i_render_system_uve.h"
 #include "uve/scene/i_entity_manager_uve.h"
 #include "uve/scene/i_prefab_system_uve.h"
 #include "uve/scene/i_scene_graph_uve.h"
@@ -41,12 +44,15 @@ namespace UVE::Core {
 /// EngineCoreUVE owns the foundational engine services (CommandLine, Logger,
 /// MemoryManager, ThreadPool, Timer, EventSystem, EntityManager, SceneGraph,
 /// AssetDatabase, SceneSerializer, PrefabSystem, HotReload, AssetManager,
-/// AssetImporter, AssetBundle, FileSystem, ConfigManager) and drives the
-/// canonical engine lifecycle: Init -> Load -> N x (BeginFrame -> Update ->
-/// LateUpdate -> Render -> EndFrame) -> Shutdown. This increment has no
-/// windowing/rendering backend yet, so Render() is the documented, working
-/// no-op seam where RenderSystemUVE will plug in once one exists — every
-/// stage does something real today, none are placeholders.
+/// AssetImporter, AssetBundle, FileSystem, RenderDevice, RenderSystem,
+/// CameraSystem, ConfigManager) and drives the canonical engine lifecycle:
+/// Init -> Load -> N x (BeginFrame -> Update -> LateUpdate -> Render ->
+/// EndFrame) -> Shutdown. RenderSystemUVE and CameraSystemUVE both exist
+/// now (the latter backed entirely by CPU-side math — Increment 9/10's
+/// Matrix4x4UVE/FrustumUVE), but nothing yet extracts a scene into draw
+/// calls (a mesh renderer), so Render() is still the documented, working
+/// no-op seam — every stage does something real today, none are
+/// placeholders.
 /// Thread-safety: not thread-safe. Every method here is intended to be
 /// called from a single "engine" thread. The services EngineCoreUVE owns
 /// each document their own thread-safety contract independently (e.g.
@@ -63,25 +69,32 @@ public:
     /// Constructs and initializes CommandLine, Logger, MemoryManager,
     /// ThreadPool, Timer, EventSystem, EntityManager, SceneGraph,
     /// AssetDatabase, SceneSerializer, PrefabSystem, HotReload, AssetManager,
-    /// AssetImporter, AssetBundle, FileSystem, and ConfigManager in that
-    /// order (CommandLine first — it has no dependencies of its own; Logger
-    /// second — every later step and every other system may need to log or
-    /// UVE_ASSERT during its own setup; EntityManager right after
-    /// EventSystem, since it needs MemoryManager for allocation and
-    /// EventSystem for entity lifecycle events; SceneGraph immediately
-    /// after, though it has no dependencies of its own; AssetDatabase right
-    /// after SceneGraph, needing only Logger; SceneSerializer and
-    /// PrefabSystem grouped immediately after, both stateless; HotReload
-    /// right after, needing only EventSystem — constructed before
-    /// AssetManager (rather than after, as its own Part 7.4 doc-comment
-    /// ordering might suggest) because AssetManager takes a HotReload*
-    /// constructor argument and construction must stay strictly forward-
-    /// dependency; AssetImporter and AssetBundle grouped immediately after,
-    /// both stateless; FileSystem right after, needing AssetBundle (its
-    /// bundle-backed mounts read entries through it); ConfigManager last, so
-    /// its LoadUVE() call can log through the already-initialized Logger),
-    /// then builds EngineServicesUVE from all seventeen. Transitions
-    /// Uninitialized -> Initializing -> Running.
+    /// AssetImporter, AssetBundle, FileSystem, RenderDevice, RenderSystem,
+    /// CameraSystem, and ConfigManager in that order (CommandLine first — it
+    /// has no dependencies of its own; Logger second — every later step and
+    /// every other system may need to log or UVE_ASSERT during its own
+    /// setup; EntityManager right after EventSystem, since it needs
+    /// MemoryManager for allocation and EventSystem for entity lifecycle
+    /// events; SceneGraph immediately after, though it has no dependencies
+    /// of its own; AssetDatabase right after SceneGraph, needing only
+    /// Logger; SceneSerializer and PrefabSystem grouped immediately after,
+    /// both stateless; HotReload right after, needing only EventSystem —
+    /// constructed before AssetManager (rather than after, as its own Part
+    /// 7.4 doc-comment ordering might suggest) because AssetManager takes a
+    /// HotReload* constructor argument and construction must stay strictly
+    /// forward-dependency (immediately after, RegisterBuiltInAssetLoadersUVE()
+    /// registers the built-in MeshAssetUVE/TextureAssetUVE/ShaderAssetUVE/
+    /// MaterialAssetUVE loaders with it); AssetImporter and AssetBundle grouped immediately
+    /// after, both stateless; FileSystem right after, needing AssetBundle
+    /// (its bundle-backed mounts read entries through it); RenderDevice
+    /// right after, with no dependencies of its own (a NullRenderDeviceUVE —
+    /// no real GPU backend is buildable in this sandbox); RenderSystem right
+    /// after, needing RenderDevice (it records and submits command buffers
+    /// through it); CameraSystem right after, stateless with no
+    /// dependencies of its own (grouped with the rest of engine/render);
+    /// ConfigManager last, so its LoadUVE() call can log through the
+    /// already-initialized Logger), then builds EngineServicesUVE from all
+    /// twenty. Transitions Uninitialized -> Initializing -> Running.
     void Init();
 
     /// The engine's asset/subsystem loading hook. This increment has
@@ -108,7 +121,8 @@ public:
     void RequestQuitUVE() noexcept;
 
     /// Transitions Running -> ShuttingDown -> Shutdown, tearing down
-    /// ConfigManager, then FileSystem, then AssetBundle, then AssetImporter,
+    /// ConfigManager, then CameraSystem, then RenderSystem, then
+    /// RenderDevice, then FileSystem, then AssetBundle, then AssetImporter,
     /// then AssetManager (its destructor blocks until every in-flight load
     /// job finishes), then HotReload, then PrefabSystem, then
     /// SceneSerializer, then AssetDatabase, then SceneGraph, then
@@ -129,8 +143,9 @@ public:
     /// Returns the service container bundling Logger/Timer/EventSystem/
     /// MemoryManager/ThreadPool/CommandLine/ConfigManager/EntityManager/
     /// SceneGraph/AssetDatabase/SceneSerializer/PrefabSystem/HotReload/
-    /// AssetManager/AssetImporter/AssetBundle/FileSystem references. Valid
-    /// only between Init() and Shutdown().
+    /// AssetManager/AssetImporter/AssetBundle/FileSystem/RenderDevice/
+    /// RenderSystem/CameraSystem references. Valid only between Init() and
+    /// Shutdown().
     [[nodiscard]] EngineServicesUVE& GetServicesUVE();
 
     /// Returns this build's engine version — the single source of truth
@@ -139,6 +154,13 @@ public:
     [[nodiscard]] static VersionUVE GetEngineVersionUVE() noexcept;
 
 private:
+    /// Registers the built-in MeshAssetUVE/TextureAssetUVE/ShaderAssetUVE/MaterialAssetUVE
+    /// loaders with AssetManagerUVE (Part 7.2's rendering-facing asset types). Called once from
+    /// Init(), immediately after AssetManagerUVE is constructed. A private orchestration step,
+    /// not a new service — AssetManagerUVE itself stays generic and unaware of these concrete
+    /// asset types; only EngineCoreUVE's composition root knows about both.
+    void RegisterBuiltInAssetLoadersUVE();
+
     /// Ticks the timer, advances the frame counter, and records this
     /// frame's start instant (used by EndFrame() to compute frameTime).
     void BeginFrame();
@@ -187,6 +209,9 @@ private:
     std::unique_ptr<Asset::IAssetImporterUVE> m_assetImporter;
     std::unique_ptr<Asset::IAssetBundleUVE> m_assetBundle;
     std::unique_ptr<Asset::IFileSystemUVE> m_fileSystem;
+    std::unique_ptr<Render::IRenderDeviceUVE> m_renderDevice;
+    std::unique_ptr<Render::IRenderSystemUVE> m_renderSystem;
+    std::unique_ptr<Render::ICameraSystemUVE> m_cameraSystem;
     std::unique_ptr<Config::IConfigManagerUVE> m_configManager;
     std::optional<EngineServicesUVE> m_services;
 
