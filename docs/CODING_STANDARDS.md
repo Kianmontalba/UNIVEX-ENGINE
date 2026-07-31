@@ -16,6 +16,8 @@ subsystem area — **never** flat inside `UVE` directly:
 | `UVE::Events`     | `engine/events/`     | `EventSystemUVE`, priorities, subscriptions                    |
 | `UVE::Memory`     | `engine/memory/`     | `MemoryManagerUVE`, `PoolAllocatorUVE`, `StackAllocatorUVE`, `HeapAllocatorUVE` |
 | `UVE::Threading`  | `engine/threading/`  | `ThreadPoolUVE`, `JobCounterUVE`, `JobUVE`                       |
+| `UVE::CommandLine`| `engine/commandline/`| `CommandLineUVE` — startup argument parsing                    |
+| `UVE::Config`     | `engine/config/`     | `ConfigManagerUVE` — JSON-based `.uvesettings` key-value store  |
 | `UVE::Core`       | `engine/core/`       | `EngineCoreUVE`, config, state, frame stats, version, services |
 
 Future systems (Rendering, Physics, Animation, Audio, ECS, AI, Networking, Editor, ...) become
@@ -73,6 +75,12 @@ Systems should receive `Logger`/`Timer`/`EventSystem` access through `EngineServ
 solely so the `UVE_LOG`/`UVE_TRACE`/etc. macros work from anywhere without a service reference
 in scope. Do not add further global/static state without a documented reason as strong as that
 one.
+
+`ConfigManagerUVE` (`engine/config/`) is the first module with a third-party data-format
+dependency (`nlohmann::json`, pulled in via `FetchContent`). It is confined behind a PIMPL
+(`ConfigManagerUVE::ImplUVE`, defined only in `config_manager_uve.cpp`) so no header outside
+`engine/config/src/` ever includes the JSON library, and `uve_config` links it `PRIVATE` — copy
+this pattern for any future module that pulls in a similar third-party dependency.
 
 ## Allocator boundary
 

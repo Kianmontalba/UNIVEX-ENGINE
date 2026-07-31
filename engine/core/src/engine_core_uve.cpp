@@ -11,6 +11,8 @@
 
 #include <utility>
 
+#include "uve/commandline/command_line_uve.h"
+#include "uve/config/config_manager_uve.h"
 #include "uve/debug/assert_uve.h"
 #include "uve/debug/log_sink_uve.h"
 #include "uve/debug/logger_uve.h"
@@ -39,8 +41,14 @@ void EngineCoreUVE::TransitionStateUVE(EngineStateUVE newState) {
 void EngineCoreUVE::Init() {
     TransitionStateUVE(EngineStateUVE::Initializing);
 
-    // Logger first: every later step below, and every other engine system,
-    // may need to log or UVE_ASSERT during its own setup. See
+    // CommandLine first: it has zero dependencies (pure parsing of the
+    // args already captured in EngineConfigUVE), and its parsed flags are
+    // the kind of thing a later step could plausibly want during its own
+    // setup in a future increment.
+    m_commandLine = std::make_unique<CommandLine::CommandLineUVE>(m_config.commandLineArgs);
+
+    // Logger second: every later step below, and every other engine
+    // system, may need to log or UVE_ASSERT during its own setup. See
     // docs/CODING_STANDARDS.md for the full init/shutdown ordering
     // rationale.
     auto logger = std::make_unique<Debug::LoggerUVE>();
@@ -53,20 +61,20 @@ void EngineCoreUVE::Init() {
 
     UVE_INFO("EngineCoreUVE: initializing UniVex Engine {}", GetEngineVersionUVE().ToStringUVE());
 
-    // MemoryManager second: the next most foundational service after
+    // MemoryManager third: the next most foundational service after
     // logging — nothing constructed here has a hard dependency on it yet,
     // but future systems will, mirroring the rationale for Logger's own
     // position.
     m_memoryManager = std::make_unique<Memory::MemoryManagerUVE>();
 
-    // ThreadPool third: sits alongside Logger/MemoryManager as a
+    // ThreadPool fourth: sits alongside Logger/MemoryManager as a
     // foundational service (matching the spec's own Part 7.1 ordering,
     // which lists ThreadPoolUVE before EventSystemUVE/TimerUVE) and after
     // Logger/MemoryManager since its workers may immediately want to log
     // or allocate once real jobs start flowing through it.
     m_threadPool = std::make_unique<Threading::ThreadPoolUVE>(m_config.threadPoolWorkerCount);
 
-    // Timer fourth: Update()/LateUpdate() depend on it; nothing constructed
+    // Timer fifth: Update()/LateUpdate() depend on it; nothing constructed
     // here depends on EventSystem existing yet.
     auto timer = std::make_unique<Utilities::TimerUVE>();
     timer->Reset();
@@ -74,13 +82,22 @@ void EngineCoreUVE::Init() {
     timer->SetFixedTimestepUVE(m_config.fixedUpdateFps > 0.0 ? (1.0 / m_config.fixedUpdateFps) : 0.0);
     m_timer = std::move(timer);
 
-    // EventSystem fifth: it is the piece most likely to gain future
+    // EventSystem sixth: it is the piece most likely to gain future
     // dependents (systems subscribing during their own Init()), so it is
-    // constructed last among the five, once it is guaranteed nothing else
-    // in this list still needs to be built.
+    // constructed after every other foundational service except
+    // ConfigManager, once it is guaranteed nothing else in this list still
+    // needs to be built.
     m_eventSystem = std::make_unique<Events::EventSystemUVE>();
 
-    m_services.emplace(*m_logger, *m_timer, *m_eventSystem, *m_memoryManager, *m_threadPool);
+    // ConfigManager last: it immediately calls LoadUVE(), which logs its
+    // outcome (missing/malformed/success) through the Logger constructed
+    // above — so Logger must already exist by this point.
+    auto configManager = std::make_unique<Config::ConfigManagerUVE>();
+    configManager->LoadUVE(m_config.settingsFilePath);
+    m_configManager = std::move(configManager);
+
+    m_services.emplace(*m_logger, *m_timer, *m_eventSystem, *m_memoryManager, *m_threadPool,
+                        *m_commandLine, *m_configManager);
 
     TransitionStateUVE(EngineStateUVE::Running);
     UVE_INFO("EngineCoreUVE: initialized");
@@ -164,11 +181,12 @@ void EngineCoreUVE::Shutdown() {
     TransitionStateUVE(EngineStateUVE::ShuttingDown);
     UVE_INFO("EngineCoreUVE: shutting down");
 
-    // Exact reverse of Init()'s construction order: EventSystem, then
-    // Timer, then ThreadPool, then MemoryManager, then Logger. The final
-    // log message is emitted before the logger itself is torn down, so it
-    // is guaranteed to be recorded.
+    // Exact reverse of Init()'s construction order: ConfigManager, then
+    // EventSystem, then Timer, then ThreadPool, then MemoryManager, then
+    // Logger, then CommandLine. The final log message is emitted before
+    // the logger itself is torn down, so it is guaranteed to be recorded.
     m_services.reset();
+    m_configManager.reset();
     m_eventSystem->Clear();
     m_eventSystem.reset();
     m_timer.reset();
@@ -189,6 +207,7 @@ void EngineCoreUVE::Shutdown() {
     UVE_INFO("EngineCoreUVE: shutdown complete");
     m_logger->Shutdown();
     m_logger.reset();
+    m_commandLine.reset();
 
     TransitionStateUVE(EngineStateUVE::Shutdown);
 }

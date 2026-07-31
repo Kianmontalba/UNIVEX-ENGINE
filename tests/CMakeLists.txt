@@ -30,6 +30,8 @@ add_executable(uve_tests
     memory/memory_alignment_uve_tests.cpp
     threading/job_counter_uve_tests.cpp
     threading/thread_pool_uve_tests.cpp
+    commandline/command_line_uve_tests.cpp
+    config/config_manager_uve_tests.cpp
     core/engine_state_uve_tests.cpp
     core/engine_core_uve_tests.cpp
     core/engine_services_uve_tests.cpp
@@ -42,6 +44,8 @@ target_link_libraries(uve_tests PRIVATE
     uve_events
     uve_memory
     uve_threading
+    uve_commandline
+    uve_config
     uve_core
     GTest::gtest
     GTest::gtest_main

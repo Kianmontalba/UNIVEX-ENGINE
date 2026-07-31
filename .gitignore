@@ -6,6 +6,9 @@ cmake-build-*/
 # Runtime logs
 *.log
 
+# Runtime-generated settings
+*.uvesettings
+
 # IDE
 .vs/
 .vscode/

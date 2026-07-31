@@ -19,6 +19,8 @@
 
 #include <gtest/gtest.h>
 
+#include "uve/commandline/i_command_line_uve.h"
+#include "uve/config/i_config_manager_uve.h"
 #include "uve/debug/i_logger_uve.h"
 #include "uve/events/i_event_system_uve.h"
 #include "uve/memory/i_memory_manager_uve.h"
@@ -27,10 +29,11 @@
 
 // These hand-written fakes exist to prove that EngineServicesUVE (and, by
 // extension, anything that consumes ILoggerUVE/ITimerUVE/IEventSystemUVE/
-// IMemoryManagerUVE/IThreadPoolUVE) works against ANY conforming
-// implementation, independent of the concrete LoggerUVE/TimerUVE/
-// EventSystemUVE/MemoryManagerUVE/ThreadPoolUVE classes used by
-// EngineCoreUVE — this is the whole point of introducing the interfaces.
+// IMemoryManagerUVE/IThreadPoolUVE/ICommandLineUVE/IConfigManagerUVE) works
+// against ANY conforming implementation, independent of the concrete
+// LoggerUVE/TimerUVE/EventSystemUVE/MemoryManagerUVE/ThreadPoolUVE/
+// CommandLineUVE/ConfigManagerUVE classes used by EngineCoreUVE — this is
+// the whole point of introducing the interfaces.
 
 namespace UVE::Core::Tests {
 namespace {
@@ -129,20 +132,72 @@ public:
     int submitCount = 0;
 };
 
+class FakeCommandLineUVE final : public CommandLine::ICommandLineUVE {
+public:
+    [[nodiscard]] bool HasFlagUVE(std::string_view name) const noexcept override {
+        ++hasFlagCallCount;
+        return name == "server";
+    }
+    [[nodiscard]] std::string GetValueUVE(std::string_view /*name*/,
+                                           std::string_view defaultValue) const override {
+        return std::string(defaultValue);
+    }
+
+    mutable int hasFlagCallCount = 0;
+};
+
+class FakeConfigManagerUVE final : public Config::IConfigManagerUVE {
+public:
+    bool LoadUVE(const std::filesystem::path&) override { return true; }
+    bool SaveUVE() override {
+        ++saveCallCount;
+        return true;
+    }
+    bool SaveUVE(const std::filesystem::path&) override {
+        ++saveCallCount;
+        return true;
+    }
+    [[nodiscard]] std::string GetStringUVE(std::string_view,
+                                            std::string_view defaultValue) const override {
+        return std::string(defaultValue);
+    }
+    [[nodiscard]] std::int64_t GetIntUVE(std::string_view, std::int64_t defaultValue) const override {
+        return defaultValue;
+    }
+    [[nodiscard]] double GetDoubleUVE(std::string_view, double defaultValue) const override {
+        return defaultValue;
+    }
+    [[nodiscard]] bool GetBoolUVE(std::string_view, bool defaultValue) const override {
+        return defaultValue;
+    }
+    void SetStringUVE(std::string_view, std::string) override {}
+    void SetIntUVE(std::string_view, std::int64_t) override {}
+    void SetDoubleUVE(std::string_view, double) override {}
+    void SetBoolUVE(std::string_view, bool) override {}
+    [[nodiscard]] bool HasKeyUVE(std::string_view) const override { return false; }
+
+    int saveCallCount = 0;
+};
+
 TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     FakeLoggerUVE logger;
     FakeTimerUVE timer;
     FakeEventSystemUVE eventSystem;
     FakeMemoryManagerUVE memoryManager;
     FakeThreadPoolUVE threadPool;
+    FakeCommandLineUVE commandLine;
+    FakeConfigManagerUVE configManager;
 
-    const EngineServicesUVE services(logger, timer, eventSystem, memoryManager, threadPool);
+    const EngineServicesUVE services(logger, timer, eventSystem, memoryManager, threadPool,
+                                      commandLine, configManager);
 
     EXPECT_EQ(&services.GetLoggerUVE(), &logger);
     EXPECT_EQ(&services.GetTimerUVE(), &timer);
     EXPECT_EQ(&services.GetEventSystemUVE(), &eventSystem);
     EXPECT_EQ(&services.GetMemoryManagerUVE(), &memoryManager);
     EXPECT_EQ(&services.GetThreadPoolUVE(), &threadPool);
+    EXPECT_EQ(&services.GetCommandLineUVE(), &commandLine);
+    EXPECT_EQ(&services.GetConfigManagerUVE(), &configManager);
 }
 
 TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) {
@@ -151,17 +206,24 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     FakeEventSystemUVE eventSystem;
     FakeMemoryManagerUVE memoryManager;
     FakeThreadPoolUVE threadPool;
-    const EngineServicesUVE services(logger, timer, eventSystem, memoryManager, threadPool);
+    FakeCommandLineUVE commandLine;
+    FakeConfigManagerUVE configManager;
+    const EngineServicesUVE services(logger, timer, eventSystem, memoryManager, threadPool,
+                                      commandLine, configManager);
 
     services.GetTimerUVE().Tick();
     services.GetEventSystemUVE().DispatchQueuedUVE();
     services.GetMemoryManagerUVE().LogLeakReportUVE();
     services.GetThreadPoolUVE().SubmitUVE([] {});
+    static_cast<void>(services.GetCommandLineUVE().HasFlagUVE("server"));
+    services.GetConfigManagerUVE().SaveUVE();
 
     EXPECT_EQ(timer.tickCount, 1);
     EXPECT_EQ(eventSystem.dispatchCount, 1);
     EXPECT_EQ(memoryManager.logLeakReportCallCount, 1);
     EXPECT_EQ(threadPool.submitCount, 1);
+    EXPECT_EQ(commandLine.hasFlagCallCount, 1);
+    EXPECT_EQ(configManager.saveCallCount, 1);
 }
 
 } // namespace

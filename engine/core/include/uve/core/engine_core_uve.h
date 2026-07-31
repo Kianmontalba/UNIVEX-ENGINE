@@ -13,6 +13,8 @@
 #include <memory>
 #include <optional>
 
+#include "uve/commandline/i_command_line_uve.h"
+#include "uve/config/i_config_manager_uve.h"
 #include "uve/core/engine_config_uve.h"
 #include "uve/core/engine_services_uve.h"
 #include "uve/core/engine_state_uve.h"
@@ -26,13 +28,13 @@
 
 namespace UVE::Core {
 
-/// EngineCoreUVE owns the foundational engine services (Logger, MemoryManager,
-/// ThreadPool, Timer, EventSystem) and drives the canonical engine lifecycle: Init ->
-/// Load -> N x (BeginFrame -> Update -> LateUpdate -> Render -> EndFrame) ->
-/// Shutdown. This increment has no windowing/rendering backend yet, so
-/// Render() is the documented, working no-op seam where RenderSystemUVE
-/// will plug in once one exists — every stage does something real today,
-/// none are placeholders.
+/// EngineCoreUVE owns the foundational engine services (CommandLine, Logger,
+/// MemoryManager, ThreadPool, Timer, EventSystem, ConfigManager) and drives
+/// the canonical engine lifecycle: Init -> Load -> N x (BeginFrame -> Update
+/// -> LateUpdate -> Render -> EndFrame) -> Shutdown. This increment has no
+/// windowing/rendering backend yet, so Render() is the documented, working
+/// no-op seam where RenderSystemUVE will plug in once one exists — every
+/// stage does something real today, none are placeholders.
 /// Thread-safety: not thread-safe. Every method here is intended to be
 /// called from a single "engine" thread. The services EngineCoreUVE owns
 /// each document their own thread-safety contract independently (e.g.
@@ -46,13 +48,14 @@ public:
     EngineCoreUVE(const EngineCoreUVE&) = delete;
     EngineCoreUVE& operator=(const EngineCoreUVE&) = delete;
 
-    /// Constructs and initializes Logger, MemoryManager, ThreadPool, Timer,
-    /// and EventSystem in that order (Logger first — every later step and
-    /// every other system may need to log or UVE_ASSERT during its own
-    /// setup; MemoryManager and ThreadPool next, as the next most
-    /// foundational services future systems will depend on), then builds
-    /// EngineServicesUVE from all five. Transitions Uninitialized ->
-    /// Initializing -> Running.
+    /// Constructs and initializes CommandLine, Logger, MemoryManager,
+    /// ThreadPool, Timer, EventSystem, and ConfigManager in that order
+    /// (CommandLine first — it has no dependencies of its own; Logger
+    /// second — every later step and every other system may need to log or
+    /// UVE_ASSERT during its own setup; ConfigManager last, so its
+    /// LoadUVE() call can log through the already-initialized Logger), then
+    /// builds EngineServicesUVE from all seven. Transitions Uninitialized
+    /// -> Initializing -> Running.
     void Init();
 
     /// The engine's asset/subsystem loading hook. This increment has
@@ -79,12 +82,13 @@ public:
     void RequestQuitUVE() noexcept;
 
     /// Transitions Running -> ShuttingDown -> Shutdown, tearing down
-    /// EventSystem, then Timer, then ThreadPool (its destructor blocks
-    /// until every worker drains and joins), then MemoryManager (logging
-    /// its leak report — and, in debug builds, UVE_ASSERTing zero active
-    /// allocations — before it is destroyed), then Logger — the exact
-    /// reverse of Init()'s construction order — logging the final message
-    /// before the logger itself is torn down last.
+    /// ConfigManager, then EventSystem, then Timer, then ThreadPool (its
+    /// destructor blocks until every worker drains and joins), then
+    /// MemoryManager (logging its leak report — and, in debug builds,
+    /// UVE_ASSERTing zero active allocations — before it is destroyed),
+    /// then Logger, then CommandLine — the exact reverse of Init()'s
+    /// construction order — logging the final message before the logger
+    /// itself is torn down.
     void Shutdown();
 
     [[nodiscard]] EngineStateUVE GetStateUVE() const noexcept;
@@ -128,11 +132,13 @@ private:
     EngineConfigUVE m_config;
     EngineStateUVE m_state = EngineStateUVE::Uninitialized;
 
+    std::unique_ptr<CommandLine::ICommandLineUVE> m_commandLine;
     std::unique_ptr<Debug::ILoggerUVE> m_logger;
     std::unique_ptr<Memory::IMemoryManagerUVE> m_memoryManager;
     std::unique_ptr<Threading::IThreadPoolUVE> m_threadPool;
     std::unique_ptr<Utilities::ITimerUVE> m_timer;
     std::unique_ptr<Events::IEventSystemUVE> m_eventSystem;
+    std::unique_ptr<Config::IConfigManagerUVE> m_configManager;
     std::optional<EngineServicesUVE> m_services;
 
     FrameStatsUVE m_frameStats;

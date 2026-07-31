@@ -7,13 +7,10 @@
 # Violators will be prosecuted to the fullest extent of the law.
 #------------------------------------------------------------------------------
 
-add_subdirectory(platform)
-add_subdirectory(debug)
-add_subdirectory(utilities)
-add_subdirectory(events)
-add_subdirectory(memory)
-add_subdirectory(threading)
-add_subdirectory(commandline)
-add_subdirectory(config)
-add_subdirectory(core)
-add_subdirectory(app)
+add_library(uve_commandline STATIC
+    src/command_line_uve.cpp
+)
+target_include_directories(uve_commandline PUBLIC include)
+target_link_libraries(uve_commandline PUBLIC uve_platform)
+target_compile_features(uve_commandline PUBLIC cxx_std_20)
+uve_set_warnings(uve_commandline)
