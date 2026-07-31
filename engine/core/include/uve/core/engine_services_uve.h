@@ -9,6 +9,8 @@
 
 #pragma once
 
+#include "uve/commandline/i_command_line_uve.h"
+#include "uve/config/i_config_manager_uve.h"
 #include "uve/debug/i_logger_uve.h"
 #include "uve/events/i_event_system_uve.h"
 #include "uve/memory/i_memory_manager_uve.h"
@@ -19,16 +21,17 @@ namespace UVE::Core {
 
 /// EngineServicesUVE is the engine's central dependency-provider / service
 /// container: a small bundle of references to the core engine services
-/// (Logger, Timer, EventSystem, MemoryManager, ThreadPool), built once
-/// EngineCoreUVE has constructed all five. Any future subsystem that needs
-/// Logger/Timer/EventSystem/MemoryManager/ThreadPool access should receive
-/// an EngineServicesUVE& (obtained from EngineCoreUVE::GetServicesUVE())
+/// (Logger, Timer, EventSystem, MemoryManager, ThreadPool, CommandLine,
+/// ConfigManager), built once EngineCoreUVE has constructed all seven. Any
+/// future subsystem that needs access to one of these should receive an
+/// EngineServicesUVE& (obtained from EngineCoreUVE::GetServicesUVE())
 /// rather than a raw global pointer — the logging macros' internal
 /// active-instance pointer remains the one intentional exception to that
 /// rule (see docs/CODING_STANDARDS.md). Referenced through the
-/// ILoggerUVE/ITimerUVE/IEventSystemUVE/IMemoryManagerUVE/IThreadPoolUVE
-/// interfaces, not the concrete types, so a future substitute
-/// implementation of any of the five requires no change here.
+/// ILoggerUVE/ITimerUVE/IEventSystemUVE/IMemoryManagerUVE/IThreadPoolUVE/
+/// ICommandLineUVE/IConfigManagerUVE interfaces, not the concrete types, so
+/// a future substitute implementation of any of the seven requires no
+/// change here.
 /// Thread-safety: EngineServicesUVE itself holds only non-owning pointers
 /// and has no mutable state of its own; the thread-safety of each accessor
 /// is whatever the referenced service documents.
@@ -37,13 +40,17 @@ public:
     EngineServicesUVE(Debug::ILoggerUVE& logger, Utilities::ITimerUVE& timer,
                        Events::IEventSystemUVE& eventSystem,
                        Memory::IMemoryManagerUVE& memoryManager,
-                       Threading::IThreadPoolUVE& threadPool) noexcept;
+                       Threading::IThreadPoolUVE& threadPool,
+                       CommandLine::ICommandLineUVE& commandLine,
+                       Config::IConfigManagerUVE& configManager) noexcept;
 
     [[nodiscard]] Debug::ILoggerUVE& GetLoggerUVE() const noexcept;
     [[nodiscard]] Utilities::ITimerUVE& GetTimerUVE() const noexcept;
     [[nodiscard]] Events::IEventSystemUVE& GetEventSystemUVE() const noexcept;
     [[nodiscard]] Memory::IMemoryManagerUVE& GetMemoryManagerUVE() const noexcept;
     [[nodiscard]] Threading::IThreadPoolUVE& GetThreadPoolUVE() const noexcept;
+    [[nodiscard]] CommandLine::ICommandLineUVE& GetCommandLineUVE() const noexcept;
+    [[nodiscard]] Config::IConfigManagerUVE& GetConfigManagerUVE() const noexcept;
 
 private:
     Debug::ILoggerUVE* m_logger;
@@ -51,6 +58,8 @@ private:
     Events::IEventSystemUVE* m_eventSystem;
     Memory::IMemoryManagerUVE* m_memoryManager;
     Threading::IThreadPoolUVE* m_threadPool;
+    CommandLine::ICommandLineUVE* m_commandLine;
+    Config::IConfigManagerUVE* m_configManager;
 };
 
 } // namespace UVE::Core

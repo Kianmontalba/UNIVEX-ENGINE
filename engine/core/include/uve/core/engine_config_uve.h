@@ -11,6 +11,8 @@
 
 #include <cstddef>
 #include <filesystem>
+#include <string>
+#include <vector>
 
 #include "uve/debug/log_level_uve.h"
 
@@ -53,6 +55,18 @@ struct EngineConfigUVE {
     /// UVE::Threading::ThreadPoolUVE::ThreadPoolUVE() for the exact
     /// resolution policy.
     std::size_t threadPoolWorkerCount = 0;
+
+    /// Path ConfigManagerUVE::LoadUVE() is called with during Init(). A
+    /// missing file at this path is not an error (see
+    /// IConfigManagerUVE::LoadUVE()) — a first-run engine has no settings
+    /// file yet.
+    std::filesystem::path settingsFilePath = ".uvesettings";
+
+    /// Raw startup argument tokens (excluding the program path) that
+    /// CommandLineUVE parses during Init(). Populated by main() from
+    /// argv[1..argc); left empty by default so tests can construct an
+    /// EngineConfigUVE without a real process argv.
+    std::vector<std::string> commandLineArgs = {};
 };
 
 } // namespace UVE::Core

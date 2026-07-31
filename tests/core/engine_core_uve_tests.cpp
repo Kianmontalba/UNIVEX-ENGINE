@@ -28,6 +28,7 @@ EngineConfigUVE MakeTestConfigUVE() {
     config.enableConsoleLogging = false;
     config.logFilePath = "uve_engine_core_tests.log";
     config.threadPoolWorkerCount = 2; // keep the whole suite's thread churn small and fast
+    config.settingsFilePath = "uve_engine_core_tests.uvesettings"; // never touch a real settings file
     return config;
 }
 
@@ -202,6 +203,22 @@ TEST(EngineCoreUVETest, ThreadPool_ReachableAndFunctionalAfterInit) {
     threadPool.SubmitUVE([&jobRan] { jobRan = true; }, counter);
     counter.WaitUVE();
     EXPECT_TRUE(jobRan);
+
+    engine.Shutdown();
+}
+
+TEST(EngineCoreUVETest, CommandLineAndConfigManager_ReachableAndFunctionalAfterInit) {
+    EngineConfigUVE config = MakeTestConfigUVE();
+    config.commandLineArgs = {"--server"};
+    EngineCoreUVE engine(config);
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    EXPECT_TRUE(engine.GetServicesUVE().GetCommandLineUVE().HasFlagUVE("server"));
+
+    Config::IConfigManagerUVE& configManager = engine.GetServicesUVE().GetConfigManagerUVE();
+    configManager.SetStringUVE("editor.theme", "dark");
+    EXPECT_EQ(configManager.GetStringUVE("editor.theme", ""), "dark");
 
     engine.Shutdown();
 }
