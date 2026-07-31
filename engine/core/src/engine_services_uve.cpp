@@ -21,12 +21,17 @@ EngineServicesUVE::EngineServicesUVE(Debug::ILoggerUVE& logger, Utilities::ITime
                                       Scene::ISceneGraphUVE& sceneGraph,
                                       Asset::IAssetDatabaseUVE& assetDatabase,
                                       Scene::ISceneSerializerUVE& sceneSerializer,
-                                      Scene::IPrefabSystemUVE& prefabSystem) noexcept
+                                      Scene::IPrefabSystemUVE& prefabSystem,
+                                      Asset::IHotReloadUVE& hotReload,
+                                      Asset::IAssetManagerUVE& assetManager,
+                                      Asset::IAssetImporterUVE& assetImporter,
+                                      Asset::IAssetBundleUVE& assetBundle) noexcept
     : m_logger(&logger), m_timer(&timer), m_eventSystem(&eventSystem),
       m_memoryManager(&memoryManager), m_threadPool(&threadPool), m_commandLine(&commandLine),
       m_configManager(&configManager), m_entityManager(&entityManager), m_sceneGraph(&sceneGraph),
       m_assetDatabase(&assetDatabase), m_sceneSerializer(&sceneSerializer),
-      m_prefabSystem(&prefabSystem) {}
+      m_prefabSystem(&prefabSystem), m_hotReload(&hotReload), m_assetManager(&assetManager),
+      m_assetImporter(&assetImporter), m_assetBundle(&assetBundle) {}
 
 Debug::ILoggerUVE& EngineServicesUVE::GetLoggerUVE() const noexcept {
     return *m_logger;
@@ -74,6 +79,22 @@ Scene::ISceneSerializerUVE& EngineServicesUVE::GetSceneSerializerUVE() const noe
 
 Scene::IPrefabSystemUVE& EngineServicesUVE::GetPrefabSystemUVE() const noexcept {
     return *m_prefabSystem;
+}
+
+Asset::IHotReloadUVE& EngineServicesUVE::GetHotReloadUVE() const noexcept {
+    return *m_hotReload;
+}
+
+Asset::IAssetManagerUVE& EngineServicesUVE::GetAssetManagerUVE() const noexcept {
+    return *m_assetManager;
+}
+
+Asset::IAssetImporterUVE& EngineServicesUVE::GetAssetImporterUVE() const noexcept {
+    return *m_assetImporter;
+}
+
+Asset::IAssetBundleUVE& EngineServicesUVE::GetAssetBundleUVE() const noexcept {
+    return *m_assetBundle;
 }
 
 } // namespace UVE::Core

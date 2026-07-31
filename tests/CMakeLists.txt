@@ -35,6 +35,11 @@ add_executable(uve_tests
     math/vector3_uve_tests.cpp
     math/quaternion_uve_tests.cpp
     asset/asset_database_uve_tests.cpp
+    asset/uve_file_envelope_uve_tests.cpp
+    asset/asset_manager_uve_tests.cpp
+    asset/asset_importer_uve_tests.cpp
+    asset/hot_reload_uve_tests.cpp
+    asset/asset_bundle_uve_tests.cpp
     scene/entity_manager_uve_tests.cpp
     scene/scene_graph_uve_tests.cpp
     scene/scene_serializer_uve_tests.cpp

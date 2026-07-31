@@ -13,6 +13,7 @@
 #include <filesystem>
 #include <vector>
 
+#include "uve/asset/uve_file_envelope_uve.h"
 #include "uve/scene/entity_uve.h"
 #include "uve/scene/i_entity_manager_uve.h"
 
@@ -20,11 +21,12 @@ namespace UVE::Scene {
 
 /// The `assetType` field of the universal .uve* binary envelope (see ISceneSerializerUVE),
 /// distinguishing a whole-scene save from a single-prefab-subtree save. The saved JSON payload
-/// shape is identical either way — this is purely a file-type marker for tooling.
-enum class SceneAssetTypeUVE : std::uint32_t {
-    Scene = 1,
-    Prefab = 2,
-};
+/// shape is identical either way — this is purely a file-type marker for tooling. An alias for
+/// `Asset::AssetKindUVE` rather than its own enum: every `.uve*` file shares one global asset-
+/// kind numbering (see `engine/asset/include/uve/asset/uve_file_envelope_uve.h`), so `Scene`/
+/// `Prefab` can never collide with a value some other asset kind (e.g. `AssetBundleUVE`'s
+/// `Bundle`) also uses.
+using SceneAssetTypeUVE = Asset::AssetKindUVE;
 
 /// ISceneSerializerUVE saves/loads entity subtrees (an entity plus every descendant reachable
 /// via HierarchyComponentUVE) to/from the universal `.uve*` binary envelope: magic `"UVE\0"`,

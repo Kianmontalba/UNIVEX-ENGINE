@@ -15,10 +15,15 @@
 add_library(uve_asset STATIC
     src/asset_guid_uve.cpp
     src/asset_database_uve.cpp
+    src/uve_file_envelope_uve.cpp
+    src/asset_manager_uve.cpp
+    src/asset_importer_uve.cpp
+    src/hot_reload_uve.cpp
+    src/asset_bundle_uve.cpp
 )
 target_include_directories(uve_asset PUBLIC include)
 target_link_libraries(uve_asset
-    PUBLIC uve_platform uve_debug
+    PUBLIC uve_platform uve_debug uve_threading uve_events
     PRIVATE nlohmann_json::nlohmann_json
 )
 target_compile_features(uve_asset PUBLIC cxx_std_20)

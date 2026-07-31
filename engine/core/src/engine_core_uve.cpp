@@ -11,7 +11,11 @@
 
 #include <utility>
 
+#include "uve/asset/asset_bundle_uve.h"
 #include "uve/asset/asset_database_uve.h"
+#include "uve/asset/asset_importer_uve.h"
+#include "uve/asset/asset_manager_uve.h"
+#include "uve/asset/hot_reload_uve.h"
 #include "uve/commandline/command_line_uve.h"
 #include "uve/config/config_manager_uve.h"
 #include "uve/debug/assert_uve.h"
@@ -116,6 +120,24 @@ void EngineCoreUVE::Init() {
     m_sceneSerializer = std::make_unique<Scene::SceneSerializerUVE>();
     m_prefabSystem = std::make_unique<Scene::PrefabSystemUVE>();
 
+    // HotReload twelfth: needs only EventSystem. Constructed before
+    // AssetManager (not after, as its Part 7.4 spec-listing order might
+    // suggest) purely because AssetManager's constructor takes a
+    // HotReloadUVE* — construction must stay strictly forward-dependency.
+    m_hotReload = std::make_unique<Asset::HotReloadUVE>(*m_eventSystem, m_config.hotReloadPollIntervalSecondsUVE);
+
+    // AssetManager thirteenth: needs ThreadPool (to run loads) and
+    // EventSystem (to publish AssetLoadCompletedEventUVE), and is always
+    // given a real HotReloadUVE* (never null) — EngineConfigUVE::
+    // hotReloadEnabledUVE only gates whether Update() calls PollUVE(), not
+    // whether HotReloadUVE exists at all.
+    m_assetManager = std::make_unique<Asset::AssetManagerUVE>(*m_threadPool, *m_eventSystem, m_hotReload.get());
+
+    // AssetImporter and AssetBundle fourteenth/fifteenth: both stateless,
+    // grouped immediately after AssetManager for readability.
+    m_assetImporter = std::make_unique<Asset::AssetImporterUVE>();
+    m_assetBundle = std::make_unique<Asset::AssetBundleUVE>();
+
     // ConfigManager last: it immediately calls LoadUVE(), which logs its
     // outcome (missing/malformed/success) through the Logger constructed
     // above — so Logger must already exist by this point.
@@ -125,7 +147,8 @@ void EngineCoreUVE::Init() {
 
     m_services.emplace(*m_logger, *m_timer, *m_eventSystem, *m_memoryManager, *m_threadPool,
                         *m_commandLine, *m_configManager, *m_entityManager, *m_sceneGraph,
-                        *m_assetDatabase, *m_sceneSerializer, *m_prefabSystem);
+                        *m_assetDatabase, *m_sceneSerializer, *m_prefabSystem, *m_hotReload,
+                        *m_assetManager, *m_assetImporter, *m_assetBundle);
 
     TransitionStateUVE(EngineStateUVE::Running);
     UVE_INFO("EngineCoreUVE: initialized");
@@ -150,6 +173,11 @@ void EngineCoreUVE::Update() {
     UVE_TRACE("Update: {} fixed step(s), alpha={}", fixedStep.stepsToRun, fixedStep.alpha);
     m_eventSystem->DispatchQueuedUVE();
     m_sceneGraph->UpdateUVE(*m_entityManager);
+
+    if (m_config.hotReloadEnabledUVE) {
+        m_hotReload->PollUVE(*m_assetManager, *m_assetDatabase, m_timer->GetDeltaTimeUVE());
+    }
+    m_assetManager->CollectGarbageUVE();
 }
 
 void EngineCoreUVE::LateUpdate() {
@@ -211,6 +239,8 @@ void EngineCoreUVE::Shutdown() {
     UVE_INFO("EngineCoreUVE: shutting down");
 
     // Exact reverse of Init()'s construction order: ConfigManager, then
+    // AssetBundle, then AssetImporter, then AssetManager (its destructor
+    // blocks until every in-flight load job finishes), then HotReload, then
     // PrefabSystem, then SceneSerializer, then AssetDatabase, then
     // SceneGraph, then EntityManager, then EventSystem, then Timer, then
     // ThreadPool, then MemoryManager, then Logger, then CommandLine. The
@@ -218,6 +248,10 @@ void EngineCoreUVE::Shutdown() {
     // so it is guaranteed to be recorded.
     m_services.reset();
     m_configManager.reset();
+    m_assetBundle.reset();
+    m_assetImporter.reset();
+    m_assetManager.reset();
+    m_hotReload.reset();
     m_prefabSystem.reset();
     m_sceneSerializer.reset();
     m_assetDatabase.reset();
