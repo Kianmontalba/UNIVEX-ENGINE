@@ -19,7 +19,7 @@ subsystem area — **never** flat inside `UVE` directly:
 | `UVE::CommandLine`| `engine/commandline/`| `CommandLineUVE` — startup argument parsing                    |
 | `UVE::Config`     | `engine/config/`     | `ConfigManagerUVE` — JSON-based `.uvesettings` key-value store  |
 | `UVE::Math`       | `engine/math/`       | `Vector3UVE`, `QuaternionUVE`                                   |
-| `UVE::Asset`      | `engine/asset/`      | `AssetGuidUVE`, `AssetDatabaseUVE`, `AssetManagerUVE`, `AssetImporterUVE`, `HotReloadUVE`, `AssetBundleUVE`, the `.uve*` binary envelope |
+| `UVE::Asset`      | `engine/asset/`      | `AssetGuidUVE`, `AssetDatabaseUVE`, `AssetManagerUVE`, `AssetImporterUVE`, `HotReloadUVE`, `AssetBundleUVE`, `FileSystemUVE`, the `.uve*` binary envelope |
 | `UVE::Scene`      | `engine/scene/`      | `EntityManagerUVE`, `SceneGraphUVE`, `ComponentUVE` + built-ins, `SceneSerializerUVE`, `PrefabSystemUVE` |
 | `UVE::Core`       | `engine/core/`       | `EngineCoreUVE`, config, state, frame stats, version, services |
 
@@ -136,6 +136,31 @@ the registered destroy function) happens in `CollectGarbageUVE()`, called once p
 bounces to zero and back within a single frame. Copy this deferred-collection pattern for any
 future ref-counted resource system instead of unloading synchronously the instant a refcount
 reaches zero.
+
+## Virtual paths (`IFileSystemUVE`)
+
+`FileSystemUVE` (`engine/asset/`) resolves a **virtual path** — a forward-slash-separated
+string with no leading slash (e.g. `"textures/rock.uvetex"`) — against zero or more mounts (a
+real directory, or a `.uvebundle` archive), searched in descending-priority order. Mount
+prefixes use the same shape (`""` = root). A virtual path matches a mount iff it equals the
+prefix or starts with `prefix + "/"` — matching is always on whole path segments, never a naive
+substring check (a mount at `"tex"` must never match `"textures/rock.uvetex"`). This lets a
+loose directory mount transparently override (or be overridden by) a bundle mount at the same or
+a covering prefix, purely by priority — the classic PAK-file/mod-override pattern. Copy this
+convention (forward-slash-only strings, segment-boundary prefix matching, descending-priority
+mount search) for any future code that resolves paths against more than one possible source.
+`AssetBundleEntryUVE::virtualName` (`engine/asset/include/uve/asset/i_asset_bundle_uve.h`) is the
+bridge between `AssetBundleUVE`'s GUID-centric world (every entry always has a GUID) and
+`FileSystemUVE`'s path-centric one (a bundle-backed mount looks entries up by `virtualName`,
+falling back to the GUID's hex string if an entry has none — so older code that never sets
+`virtualName` keeps working unchanged).
+
+`FileSystemUVE` is deliberately standalone this increment — `AssetDatabaseUVE`,
+`uve_file_envelope_uve`, `AssetImporterUVE`, and `SceneSerializerUVE` are all unaffected and still
+take a raw `std::filesystem::path` directly; only `AssetBundleUVE` gained the
+`HasEntryUVE()`/`ReadEntryUVE()` primitives `FileSystemUVE`'s bundle-backed mounts need. Wider
+adoption (e.g. routing `WriteUveFileUVE`/`ReadUveFileUVE` through the VFS) is future-increment
+work once a concrete consumer needs it.
 
 ## Allocator boundary
 

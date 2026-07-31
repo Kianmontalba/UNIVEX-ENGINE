@@ -9,13 +9,16 @@
 
 #include "uve/asset/asset_bundle_uve.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
+#include <functional>
 #include <iterator>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <utility>
 
@@ -65,53 +68,30 @@ void AppendUint64UVE(std::vector<std::byte>& buffer, std::uint64_t value) {
     return true;
 }
 
-} // namespace
-
-bool AssetBundleUVE::PackUVE(const std::vector<AssetBundleEntryUVE>& entries,
-                              const std::filesystem::path& bundlePath) {
-    std::vector<std::byte> payload;
-    AppendUint32UVE(payload, static_cast<std::uint32_t>(entries.size()));
-
-    for (const AssetBundleEntryUVE& entry : entries) {
-        std::ifstream file(entry.sourcePath, std::ios::binary);
-        if (!file.is_open()) {
-            UVE_ERROR("AssetBundleUVE: failed to open \"{}\" for packing", entry.sourcePath.string());
-            return false;
-        }
-        const std::vector<char> data((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-
-        const std::string name = ToHexStringUVE(entry.guid.value);
-        AppendUint64UVE(payload, entry.guid.value);
-        AppendUint32UVE(payload, static_cast<std::uint32_t>(name.size()));
-        AppendBytesUVE(payload, name.data(), name.size());
-        AppendUint64UVE(payload, data.size());
-        AppendBytesUVE(payload, data.data(), data.size());
+/// Reads and validates `bundlePath` as a `.uve*` envelope with `AssetKindUVE::Bundle`, returning
+/// its payload bytes. Returns `std::nullopt` (already logged, by `ReadUveFileUVE` or this
+/// function) if the file is invalid, unreadable, or not actually a bundle.
+[[nodiscard]] std::optional<std::vector<std::byte>> LoadBundlePayloadUVE(const std::filesystem::path& bundlePath) {
+    std::optional<std::pair<UveFileHeaderUVE, std::vector<std::byte>>> file = ReadUveFileUVE(bundlePath);
+    if (!file.has_value()) {
+        return std::nullopt; // ReadUveFileUVE already logged the specific reason.
     }
-
-    return WriteUveFileUVE(bundlePath, AssetKindUVE::Bundle, payload);
+    if (file->first.assetType != AssetKindUVE::Bundle) {
+        UVE_ERROR("AssetBundleUVE: \"{}\" is not a bundle file (asset type {})", bundlePath.string(),
+                   static_cast<std::uint32_t>(file->first.assetType));
+        return std::nullopt;
+    }
+    return std::move(file->second);
 }
 
-bool AssetBundleUVE::UnpackUVE(const std::filesystem::path& bundlePath,
-                                const std::filesystem::path& outputDirectory) {
-    const std::optional<std::pair<UveFileHeaderUVE, std::vector<std::byte>>> file = ReadUveFileUVE(bundlePath);
-    if (!file.has_value()) {
-        return false; // ReadUveFileUVE already logged the specific reason.
-    }
-    const auto& [header, payload] = file.value();
-    if (header.assetType != AssetKindUVE::Bundle) {
-        UVE_ERROR("AssetBundleUVE: \"{}\" is not a bundle file (asset type {})", bundlePath.string(),
-                   static_cast<std::uint32_t>(header.assetType));
-        return false;
-    }
-
-    std::error_code errorCode;
-    std::filesystem::create_directories(outputDirectory, errorCode);
-    if (errorCode && !std::filesystem::exists(outputDirectory)) {
-        UVE_ERROR("AssetBundleUVE: failed to create output directory \"{}\": {}", outputDirectory.string(),
-                   errorCode.message());
-        return false;
-    }
-
+/// Scans `payload`'s entry table (as written by PackUVE), calling `visitor(name, dataOffset,
+/// dataLength)` for each entry in order. `visitor` returns true to keep scanning, false to stop
+/// early (e.g. once a name match is found or a write fails) — stopping early is not itself an
+/// error. Returns false only if the payload's own structure is truncated/malformed (already
+/// logged, naming `bundlePath` for context).
+[[nodiscard]] bool ScanBundleEntriesUVE(
+    const std::filesystem::path& bundlePath, const std::vector<std::byte>& payload,
+    const std::function<bool(std::string_view name, std::size_t dataOffset, std::uint64_t dataLength)>& visitor) {
     std::size_t offset = 0;
     std::uint32_t entryCount = 0;
     if (!ReadUint32FromBufferUVE(payload, offset, entryCount)) {
@@ -127,11 +107,12 @@ bool AssetBundleUVE::UnpackUVE(const std::filesystem::path& bundlePath,
             UVE_ERROR("AssetBundleUVE: \"{}\" has a truncated entry header", bundlePath.string());
             return false;
         }
+        static_cast<void>(guidValue); // not needed for scanning/lookup, only the name/data ranges are
         if (offset + nameLength > payload.size()) {
             UVE_ERROR("AssetBundleUVE: \"{}\" has a truncated entry name", bundlePath.string());
             return false;
         }
-        const std::string name(reinterpret_cast<const char*>(payload.data() + offset), nameLength);
+        const std::string_view name(reinterpret_cast<const char*>(payload.data() + offset), nameLength);
         offset += nameLength;
 
         std::uint64_t dataLength = 0;
@@ -144,22 +125,121 @@ bool AssetBundleUVE::UnpackUVE(const std::filesystem::path& bundlePath,
             return false;
         }
 
-        const std::filesystem::path outputPath = outputDirectory / name;
-        std::ofstream outFile(outputPath, std::ios::binary);
-        if (!outFile.is_open()) {
-            UVE_ERROR("AssetBundleUVE: failed to open \"{}\" for writing", outputPath.string());
-            return false;
+        if (!visitor(name, offset, dataLength)) {
+            return true; // visitor found what it needed and asked to stop - not an error
         }
-        outFile.write(reinterpret_cast<const char*>(payload.data() + offset),
-                       static_cast<std::streamsize>(dataLength));
         offset += dataLength;
-        if (!outFile.good()) {
-            UVE_ERROR("AssetBundleUVE: failed to write \"{}\"", outputPath.string());
+    }
+    return true;
+}
+
+} // namespace
+
+bool AssetBundleUVE::PackUVE(const std::vector<AssetBundleEntryUVE>& entries,
+                              const std::filesystem::path& bundlePath) {
+    std::vector<std::byte> payload;
+    AppendUint32UVE(payload, static_cast<std::uint32_t>(entries.size()));
+
+    for (const AssetBundleEntryUVE& entry : entries) {
+        std::ifstream file(entry.sourcePath, std::ios::binary);
+        if (!file.is_open()) {
+            UVE_ERROR("AssetBundleUVE: failed to open \"{}\" for packing", entry.sourcePath.string());
             return false;
         }
+        const std::vector<char> data((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+
+        const std::string name = entry.virtualName.empty() ? ToHexStringUVE(entry.guid.value) : entry.virtualName;
+        AppendUint64UVE(payload, entry.guid.value);
+        AppendUint32UVE(payload, static_cast<std::uint32_t>(name.size()));
+        AppendBytesUVE(payload, name.data(), name.size());
+        AppendUint64UVE(payload, data.size());
+        AppendBytesUVE(payload, data.data(), data.size());
     }
 
-    return true;
+    return WriteUveFileUVE(bundlePath, AssetKindUVE::Bundle, payload);
+}
+
+bool AssetBundleUVE::UnpackUVE(const std::filesystem::path& bundlePath,
+                                const std::filesystem::path& outputDirectory) {
+    const std::optional<std::vector<std::byte>> payload = LoadBundlePayloadUVE(bundlePath);
+    if (!payload.has_value()) {
+        return false; // already logged
+    }
+
+    std::error_code errorCode;
+    std::filesystem::create_directories(outputDirectory, errorCode);
+    if (errorCode && !std::filesystem::exists(outputDirectory)) {
+        UVE_ERROR("AssetBundleUVE: failed to create output directory \"{}\": {}", outputDirectory.string(),
+                   errorCode.message());
+        return false;
+    }
+
+    bool writeFailed = false;
+    const bool scanOk = ScanBundleEntriesUVE(
+        bundlePath, *payload,
+        [&](std::string_view name, std::size_t dataOffset, std::uint64_t dataLength) -> bool {
+            const std::filesystem::path outputPath = outputDirectory / std::string(name);
+            std::ofstream outFile(outputPath, std::ios::binary);
+            if (!outFile.is_open()) {
+                UVE_ERROR("AssetBundleUVE: failed to open \"{}\" for writing", outputPath.string());
+                writeFailed = true;
+                return false;
+            }
+            outFile.write(reinterpret_cast<const char*>(payload->data() + dataOffset),
+                          static_cast<std::streamsize>(dataLength));
+            if (!outFile.good()) {
+                UVE_ERROR("AssetBundleUVE: failed to write \"{}\"", outputPath.string());
+                writeFailed = true;
+                return false;
+            }
+            return true; // keep extracting the rest of the entries
+        });
+
+    return scanOk && !writeFailed;
+}
+
+bool AssetBundleUVE::HasEntryUVE(const std::filesystem::path& bundlePath, std::string_view entryName) const {
+    const std::optional<std::vector<std::byte>> payload = LoadBundlePayloadUVE(bundlePath);
+    if (!payload.has_value()) {
+        return false; // already logged
+    }
+
+    bool found = false;
+    static_cast<void>(ScanBundleEntriesUVE(
+        bundlePath, *payload,
+        [&](std::string_view name, std::size_t /*dataOffset*/, std::uint64_t /*dataLength*/) -> bool {
+            if (name == entryName) {
+                found = true;
+                return false; // stop scanning
+            }
+            return true;
+        }));
+    return found;
+}
+
+std::optional<std::vector<std::byte>> AssetBundleUVE::ReadEntryUVE(const std::filesystem::path& bundlePath,
+                                                                     std::string_view entryName) const {
+    const std::optional<std::vector<std::byte>> payload = LoadBundlePayloadUVE(bundlePath);
+    if (!payload.has_value()) {
+        return std::nullopt; // already logged
+    }
+
+    std::optional<std::vector<std::byte>> result;
+    static_cast<void>(ScanBundleEntriesUVE(
+        bundlePath, *payload,
+        [&](std::string_view name, std::size_t dataOffset, std::uint64_t dataLength) -> bool {
+            if (name != entryName) {
+                return true;
+            }
+            result = std::vector<std::byte>(payload->begin() + static_cast<std::ptrdiff_t>(dataOffset),
+                                             payload->begin() + static_cast<std::ptrdiff_t>(dataOffset + dataLength));
+            return false; // stop scanning
+        }));
+
+    if (!result.has_value()) {
+        UVE_ERROR("AssetBundleUVE: \"{}\" has no entry named \"{}\"", bundlePath.string(), entryName);
+    }
+    return result;
 }
 
 } // namespace UVE::Asset

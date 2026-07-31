@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
 #include <typeindex>
 #include <vector>
@@ -23,6 +24,7 @@
 #include "uve/asset/i_asset_database_uve.h"
 #include "uve/asset/i_asset_importer_uve.h"
 #include "uve/asset/i_asset_manager_uve.h"
+#include "uve/asset/i_file_system_uve.h"
 #include "uve/asset/i_hot_reload_uve.h"
 #include "uve/commandline/i_command_line_uve.h"
 #include "uve/config/i_config_manager_uve.h"
@@ -41,13 +43,13 @@
 // IMemoryManagerUVE/IThreadPoolUVE/ICommandLineUVE/IConfigManagerUVE/
 // IEntityManagerUVE/ISceneGraphUVE/IAssetDatabaseUVE/ISceneSerializerUVE/
 // IPrefabSystemUVE/IHotReloadUVE/IAssetManagerUVE/IAssetImporterUVE/
-// IAssetBundleUVE) works against ANY conforming implementation,
-// independent of the concrete LoggerUVE/TimerUVE/EventSystemUVE/
-// MemoryManagerUVE/ThreadPoolUVE/CommandLineUVE/ConfigManagerUVE/
-// EntityManagerUVE/SceneGraphUVE/AssetDatabaseUVE/SceneSerializerUVE/
-// PrefabSystemUVE/HotReloadUVE/AssetManagerUVE/AssetImporterUVE/
-// AssetBundleUVE classes used by EngineCoreUVE — this is the whole point of
-// introducing the interfaces.
+// IAssetBundleUVE/IFileSystemUVE) works against ANY conforming
+// implementation, independent of the concrete LoggerUVE/TimerUVE/
+// EventSystemUVE/MemoryManagerUVE/ThreadPoolUVE/CommandLineUVE/
+// ConfigManagerUVE/EntityManagerUVE/SceneGraphUVE/AssetDatabaseUVE/
+// SceneSerializerUVE/PrefabSystemUVE/HotReloadUVE/AssetManagerUVE/
+// AssetImporterUVE/AssetBundleUVE/FileSystemUVE classes used by
+// EngineCoreUVE — this is the whole point of introducing the interfaces.
 
 namespace UVE::Core::Tests {
 namespace {
@@ -343,8 +345,37 @@ public:
     [[nodiscard]] bool UnpackUVE(const std::filesystem::path&, const std::filesystem::path&) override {
         return true;
     }
+    [[nodiscard]] bool HasEntryUVE(const std::filesystem::path&, std::string_view) const override {
+        return false;
+    }
+    [[nodiscard]] std::optional<std::vector<std::byte>> ReadEntryUVE(const std::filesystem::path&,
+                                                                       std::string_view) const override {
+        return std::nullopt;
+    }
 
     int packCallCount = 0;
+};
+
+class FakeFileSystemUVE final : public Asset::IFileSystemUVE {
+public:
+    [[nodiscard]] Asset::MountHandleUVE MountDirectoryUVE(std::string, std::filesystem::path, int) override {
+        return 1;
+    }
+    [[nodiscard]] Asset::MountHandleUVE MountBundleUVE(std::string, std::filesystem::path, int) override {
+        return 1;
+    }
+    void UnmountUVE(Asset::MountHandleUVE) override {}
+    [[nodiscard]] bool HasFileUVE(std::string_view) const override { return false; }
+    [[nodiscard]] std::optional<std::vector<std::byte>> ReadFileUVE(std::string_view) const override {
+        return std::nullopt;
+    }
+    [[nodiscard]] bool WriteFileUVE(std::string_view, const std::vector<std::byte>&) override {
+        ++writeCallCount;
+        return true;
+    }
+    [[nodiscard]] std::filesystem::path ResolveRealPathUVE(std::string_view) const override { return {}; }
+
+    int writeCallCount = 0;
 };
 
 TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
@@ -364,11 +395,12 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     FakeAssetManagerUVE assetManager;
     FakeAssetImporterUVE assetImporter;
     FakeAssetBundleUVE assetBundle;
+    FakeFileSystemUVE fileSystem;
 
     const EngineServicesUVE services(logger, timer, eventSystem, memoryManager, threadPool,
                                       commandLine, configManager, entityManager, sceneGraph,
                                       assetDatabase, sceneSerializer, prefabSystem, hotReload,
-                                      assetManager, assetImporter, assetBundle);
+                                      assetManager, assetImporter, assetBundle, fileSystem);
 
     EXPECT_EQ(&services.GetLoggerUVE(), &logger);
     EXPECT_EQ(&services.GetTimerUVE(), &timer);
@@ -386,6 +418,7 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     EXPECT_EQ(&services.GetAssetManagerUVE(), &assetManager);
     EXPECT_EQ(&services.GetAssetImporterUVE(), &assetImporter);
     EXPECT_EQ(&services.GetAssetBundleUVE(), &assetBundle);
+    EXPECT_EQ(&services.GetFileSystemUVE(), &fileSystem);
 }
 
 TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) {
@@ -405,10 +438,11 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     FakeAssetManagerUVE assetManager;
     FakeAssetImporterUVE assetImporter;
     FakeAssetBundleUVE assetBundle;
+    FakeFileSystemUVE fileSystem;
     const EngineServicesUVE services(logger, timer, eventSystem, memoryManager, threadPool,
                                       commandLine, configManager, entityManager, sceneGraph,
                                       assetDatabase, sceneSerializer, prefabSystem, hotReload,
-                                      assetManager, assetImporter, assetBundle);
+                                      assetManager, assetImporter, assetBundle, fileSystem);
 
     services.GetTimerUVE().Tick();
     services.GetEventSystemUVE().DispatchQueuedUVE();
@@ -429,6 +463,7 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     static_cast<void>(
         services.GetAssetImporterUVE().ImportUVE("unused_source", "unused_dest", services.GetAssetDatabaseUVE()));
     static_cast<void>(services.GetAssetBundleUVE().PackUVE({}, "unused.uvebundle"));
+    static_cast<void>(services.GetFileSystemUVE().WriteFileUVE("unused.txt", {}));
 
     EXPECT_EQ(timer.tickCount, 1);
     EXPECT_EQ(eventSystem.dispatchCount, 1);
@@ -445,6 +480,7 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     EXPECT_EQ(assetManager.collectGarbageCallCount, 1);
     EXPECT_EQ(assetImporter.importCallCount, 1);
     EXPECT_EQ(assetBundle.packCallCount, 1);
+    EXPECT_EQ(fileSystem.writeCallCount, 1);
 }
 
 } // namespace
