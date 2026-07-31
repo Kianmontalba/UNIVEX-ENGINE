@@ -9,23 +9,27 @@
 
 #include "uve/core/engine_services_uve.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
 #include <string>
 #include <typeindex>
+#include <vector>
 
 #include <gtest/gtest.h>
 
 #include "uve/debug/i_logger_uve.h"
 #include "uve/events/i_event_system_uve.h"
+#include "uve/memory/i_memory_manager_uve.h"
 #include "uve/utilities/i_timer_uve.h"
 
 // These hand-written fakes exist to prove that EngineServicesUVE (and, by
-// extension, anything that consumes ILoggerUVE/ITimerUVE/IEventSystemUVE)
-// works against ANY conforming implementation, independent of the concrete
-// LoggerUVE/TimerUVE/EventSystemUVE classes used by EngineCoreUVE — this is
-// the whole point of introducing the interfaces.
+// extension, anything that consumes ILoggerUVE/ITimerUVE/IEventSystemUVE/
+// IMemoryManagerUVE) works against ANY conforming implementation,
+// independent of the concrete LoggerUVE/TimerUVE/EventSystemUVE/
+// MemoryManagerUVE classes used by EngineCoreUVE — this is the whole point
+// of introducing the interfaces.
 
 namespace UVE::Core::Tests {
 namespace {
@@ -70,29 +74,67 @@ protected:
     void QueueErased(std::type_index, Events::EventPriorityUVE, std::function<void()>) override {}
 };
 
+class FakeAllocatorUVE final : public Memory::IAllocatorUVE {
+public:
+    [[nodiscard]] void* AllocateUVE(std::size_t, std::size_t, const char*, int) override {
+        return nullptr;
+    }
+    void DeallocateUVE(void*) override {}
+    [[nodiscard]] std::size_t GetAllocatedBytesUVE() const override { return 0; }
+};
+
+class FakeMemoryManagerUVE final : public Memory::IMemoryManagerUVE {
+public:
+    void RecordAllocationUVE(void*, std::size_t, std::size_t, std::string_view, const char*,
+                              int) override {
+        ++recordAllocationCount;
+    }
+    void RecordDeallocationUVE(void*) override { ++recordDeallocationCount; }
+    [[nodiscard]] Memory::IAllocatorUVE& GetDefaultAllocatorUVE() override { return allocator; }
+    [[nodiscard]] std::size_t GetActiveAllocationCountUVE() const override { return 0; }
+    [[nodiscard]] std::size_t GetActiveBytesUVE() const override { return 0; }
+    [[nodiscard]] std::size_t GetPeakBytesUVE() const override { return 0; }
+    [[nodiscard]] std::uint64_t GetTotalAllocationsEverUVE() const override { return 0; }
+    [[nodiscard]] bool HasLeaksUVE() const override { return false; }
+    [[nodiscard]] std::vector<Memory::AllocationRecordUVE> GetLeakedAllocationsUVE() const override {
+        return {};
+    }
+    void LogLeakReportUVE() override { ++logLeakReportCallCount; }
+
+    FakeAllocatorUVE allocator;
+    int recordAllocationCount = 0;
+    int recordDeallocationCount = 0;
+    int logLeakReportCallCount = 0;
+};
+
 TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     FakeLoggerUVE logger;
     FakeTimerUVE timer;
     FakeEventSystemUVE eventSystem;
+    FakeMemoryManagerUVE memoryManager;
 
-    const EngineServicesUVE services(logger, timer, eventSystem);
+    const EngineServicesUVE services(logger, timer, eventSystem, memoryManager);
 
     EXPECT_EQ(&services.GetLoggerUVE(), &logger);
     EXPECT_EQ(&services.GetTimerUVE(), &timer);
     EXPECT_EQ(&services.GetEventSystemUVE(), &eventSystem);
+    EXPECT_EQ(&services.GetMemoryManagerUVE(), &memoryManager);
 }
 
 TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) {
     FakeLoggerUVE logger;
     FakeTimerUVE timer;
     FakeEventSystemUVE eventSystem;
-    const EngineServicesUVE services(logger, timer, eventSystem);
+    FakeMemoryManagerUVE memoryManager;
+    const EngineServicesUVE services(logger, timer, eventSystem, memoryManager);
 
     services.GetTimerUVE().Tick();
     services.GetEventSystemUVE().DispatchQueuedUVE();
+    services.GetMemoryManagerUVE().LogLeakReportUVE();
 
     EXPECT_EQ(timer.tickCount, 1);
     EXPECT_EQ(eventSystem.dispatchCount, 1);
+    EXPECT_EQ(memoryManager.logLeakReportCallCount, 1);
 }
 
 } // namespace

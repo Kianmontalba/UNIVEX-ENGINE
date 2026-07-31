@@ -14,6 +14,7 @@ subsystem area — **never** flat inside `UVE` directly:
 | `UVE::Debug`      | `engine/debug/`      | `LoggerUVE`, log sinks, `UVE_ASSERT`, logging macros           |
 | `UVE::Utilities`  | `engine/utilities/`  | `TimerUVE`                                                    |
 | `UVE::Events`     | `engine/events/`     | `EventSystemUVE`, priorities, subscriptions                    |
+| `UVE::Memory`     | `engine/memory/`     | `MemoryManagerUVE`, `PoolAllocatorUVE`, `StackAllocatorUVE`, `HeapAllocatorUVE` |
 | `UVE::Core`       | `engine/core/`       | `EngineCoreUVE`, config, state, frame stats, version, services |
 
 Future systems (Rendering, Physics, Animation, Audio, ECS, AI, Networking, Editor, ...) become
@@ -72,9 +73,20 @@ solely so the `UVE_LOG`/`UVE_TRACE`/etc. macros work from anywhere without a ser
 in scope. Do not add further global/static state without a documented reason as strong as that
 one.
 
+## Allocator boundary
+
+`PoolAllocatorUVE`, `StackAllocatorUVE`, and `HeapAllocatorUVE` (`engine/memory/`) are the
+engine's low-level allocation primitives — the intentional, sole place raw aligned-new/
+aligned-delete are invoked directly. Everything else builds objects on top of them via
+`ConstructUVE<T>()`/`DestroyUVE<T>()` (`allocator_utils_uve.h`), never placement-new or an
+explicit destructor call at the call site. Track allocations by requesting an
+`IMemoryTrackerUVE*` at construction (e.g. `MemoryManagerUVE::GetDefaultAllocatorUVE()` for the
+shared, tracked default) rather than allocating untracked unless there's a specific, documented
+reason not to.
+
 ## General rules
 
-- Modern C++20. RAII everywhere — no raw `new`/`delete`.
+- Modern C++20. RAII everywhere — no raw `new`/`delete` (outside the allocator boundary above).
 - No STL containers in hot paths (not applicable yet — no hot paths exist in this increment).
 - No stub functions, no TODO comments, no half-implemented classes. Every method delivered does
   something real and correct.

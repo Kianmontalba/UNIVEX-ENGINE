@@ -20,13 +20,14 @@
 #include "uve/core/version_uve.h"
 #include "uve/debug/i_logger_uve.h"
 #include "uve/events/i_event_system_uve.h"
+#include "uve/memory/i_memory_manager_uve.h"
 #include "uve/utilities/i_timer_uve.h"
 
 namespace UVE::Core {
 
-/// EngineCoreUVE owns the foundational engine services (Logger, Timer,
-/// EventSystem) and drives the canonical engine lifecycle: Init -> Load ->
-/// N x (BeginFrame -> Update -> LateUpdate -> Render -> EndFrame) ->
+/// EngineCoreUVE owns the foundational engine services (Logger, MemoryManager,
+/// Timer, EventSystem) and drives the canonical engine lifecycle: Init ->
+/// Load -> N x (BeginFrame -> Update -> LateUpdate -> Render -> EndFrame) ->
 /// Shutdown. This increment has no windowing/rendering backend yet, so
 /// Render() is the documented, working no-op seam where RenderSystemUVE
 /// will plug in once one exists — every stage does something real today,
@@ -44,11 +45,12 @@ public:
     EngineCoreUVE(const EngineCoreUVE&) = delete;
     EngineCoreUVE& operator=(const EngineCoreUVE&) = delete;
 
-    /// Constructs and initializes Logger, Timer, and EventSystem in that
-    /// order (Logger first — every later step and every other system may
-    /// need to log or UVE_ASSERT during its own setup), then builds
-    /// EngineServicesUVE from all three. Transitions Uninitialized ->
-    /// Initializing -> Running.
+    /// Constructs and initializes Logger, MemoryManager, Timer, and
+    /// EventSystem in that order (Logger first — every later step and every
+    /// other system may need to log or UVE_ASSERT during its own setup;
+    /// MemoryManager next, since it is the next most foundational service
+    /// future systems will depend on), then builds EngineServicesUVE from
+    /// all four. Transitions Uninitialized -> Initializing -> Running.
     void Init();
 
     /// The engine's asset/subsystem loading hook. This increment has
@@ -75,16 +77,18 @@ public:
     void RequestQuitUVE() noexcept;
 
     /// Transitions Running -> ShuttingDown -> Shutdown, tearing down
-    /// EventSystem, then Timer, then Logger — the exact reverse of Init()'s
-    /// construction order — logging the final message before the logger
-    /// itself is torn down last.
+    /// EventSystem, then Timer, then MemoryManager (logging its leak
+    /// report — and, in debug builds, UVE_ASSERTing zero active
+    /// allocations — before it is destroyed), then Logger — the exact
+    /// reverse of Init()'s construction order — logging the final message
+    /// before the logger itself is torn down last.
     void Shutdown();
 
     [[nodiscard]] EngineStateUVE GetStateUVE() const noexcept;
     [[nodiscard]] const FrameStatsUVE& GetFrameStatsUVE() const noexcept;
 
-    /// Returns the service container bundling Logger/Timer/EventSystem
-    /// references. Valid only between Init() and Shutdown().
+    /// Returns the service container bundling Logger/Timer/EventSystem/
+    /// MemoryManager references. Valid only between Init() and Shutdown().
     [[nodiscard]] EngineServicesUVE& GetServicesUVE();
 
     /// Returns this build's engine version — the single source of truth
@@ -121,6 +125,7 @@ private:
     EngineStateUVE m_state = EngineStateUVE::Uninitialized;
 
     std::unique_ptr<Debug::ILoggerUVE> m_logger;
+    std::unique_ptr<Memory::IMemoryManagerUVE> m_memoryManager;
     std::unique_ptr<Utilities::ITimerUVE> m_timer;
     std::unique_ptr<Events::IEventSystemUVE> m_eventSystem;
     std::optional<EngineServicesUVE> m_services;
