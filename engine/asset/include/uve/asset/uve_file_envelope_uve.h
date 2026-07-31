@@ -22,12 +22,18 @@ namespace UVE::Asset {
 /// shared by every `.uve*` file on disk, so no two asset kinds can ever collide on the same
 /// value. `Scene`/`Prefab` are consumed by `Scene::SceneSerializerUVE`; `Blob` is the reference
 /// "raw bytes" asset kind `AssetManagerUVE`'s tests/demonstration loader uses; `Bundle` is
-/// `AssetBundleUVE`'s packed-multi-asset format.
+/// `AssetBundleUVE`'s packed-multi-asset format; `Mesh`/`Texture`/`Shader`/`Material` are
+/// `MeshAssetUVE`/`TextureAssetUVE`/`ShaderAssetUVE`/`MaterialAssetUVE`'s native `.uve*` formats
+/// (Part 7.2's rendering-facing asset types).
 enum class AssetKindUVE : std::uint32_t {
     Scene = 1,
     Prefab = 2,
     Blob = 3,
     Bundle = 4,
+    Mesh = 5,
+    Texture = 6,
+    Shader = 7,
+    Material = 8,
 };
 
 /// The fixed-size portion of a `.uve*` file's header, returned by ReadUveFileUVE() alongside the

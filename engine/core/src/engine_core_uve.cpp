@@ -17,6 +17,10 @@
 #include "uve/asset/asset_manager_uve.h"
 #include "uve/asset/file_system_uve.h"
 #include "uve/asset/hot_reload_uve.h"
+#include "uve/asset/material_asset_uve.h"
+#include "uve/asset/mesh_asset_uve.h"
+#include "uve/asset/shader_asset_uve.h"
+#include "uve/asset/texture_asset_uve.h"
 #include "uve/commandline/command_line_uve.h"
 #include "uve/config/config_manager_uve.h"
 #include "uve/debug/assert_uve.h"
@@ -49,6 +53,13 @@ EngineCoreUVE::~EngineCoreUVE() {
 void EngineCoreUVE::TransitionStateUVE(EngineStateUVE newState) {
     UVE_ASSERT(IsValidTransitionUVE(m_state, newState));
     m_state = newState;
+}
+
+void EngineCoreUVE::RegisterBuiltInAssetLoadersUVE() {
+    m_assetManager->RegisterLoaderUVE<Asset::MeshAssetUVE>(&Asset::LoadMeshAssetUVE);
+    m_assetManager->RegisterLoaderUVE<Asset::TextureAssetUVE>(&Asset::LoadTextureAssetUVE);
+    m_assetManager->RegisterLoaderUVE<Asset::ShaderAssetUVE>(&Asset::LoadShaderAssetUVE);
+    m_assetManager->RegisterLoaderUVE<Asset::MaterialAssetUVE>(&Asset::LoadMaterialAssetUVE);
 }
 
 void EngineCoreUVE::Init() {
@@ -136,6 +147,7 @@ void EngineCoreUVE::Init() {
     // hotReloadEnabledUVE only gates whether Update() calls PollUVE(), not
     // whether HotReloadUVE exists at all.
     m_assetManager = std::make_unique<Asset::AssetManagerUVE>(*m_threadPool, *m_eventSystem, m_hotReload.get());
+    RegisterBuiltInAssetLoadersUVE();
 
     // AssetImporter and AssetBundle fourteenth/fifteenth: both stateless,
     // grouped immediately after AssetManager for readability.

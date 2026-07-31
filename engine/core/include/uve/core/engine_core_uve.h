@@ -82,7 +82,9 @@ public:
     /// constructed before AssetManager (rather than after, as its own Part
     /// 7.4 doc-comment ordering might suggest) because AssetManager takes a
     /// HotReload* constructor argument and construction must stay strictly
-    /// forward-dependency; AssetImporter and AssetBundle grouped immediately
+    /// forward-dependency (immediately after, RegisterBuiltInAssetLoadersUVE()
+    /// registers the built-in MeshAssetUVE/TextureAssetUVE/ShaderAssetUVE/
+    /// MaterialAssetUVE loaders with it); AssetImporter and AssetBundle grouped immediately
     /// after, both stateless; FileSystem right after, needing AssetBundle
     /// (its bundle-backed mounts read entries through it); RenderDevice
     /// right after, with no dependencies of its own (a NullRenderDeviceUVE —
@@ -152,6 +154,13 @@ public:
     [[nodiscard]] static VersionUVE GetEngineVersionUVE() noexcept;
 
 private:
+    /// Registers the built-in MeshAssetUVE/TextureAssetUVE/ShaderAssetUVE/MaterialAssetUVE
+    /// loaders with AssetManagerUVE (Part 7.2's rendering-facing asset types). Called once from
+    /// Init(), immediately after AssetManagerUVE is constructed. A private orchestration step,
+    /// not a new service — AssetManagerUVE itself stays generic and unaware of these concrete
+    /// asset types; only EngineCoreUVE's composition root knows about both.
+    void RegisterBuiltInAssetLoadersUVE();
+
     /// Ticks the timer, advances the frame counter, and records this
     /// frame's start instant (used by EndFrame() to compute frameTime).
     void BeginFrame();
