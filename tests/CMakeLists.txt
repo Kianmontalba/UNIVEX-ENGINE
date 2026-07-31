@@ -22,6 +22,14 @@ add_executable(uve_tests
     debug/log_format_uve_tests.cpp
     utilities/timer_uve_tests.cpp
     events/event_system_uve_tests.cpp
+    memory/heap_allocator_uve_tests.cpp
+    memory/pool_allocator_uve_tests.cpp
+    memory/stack_allocator_uve_tests.cpp
+    memory/memory_manager_uve_tests.cpp
+    memory/allocator_utils_uve_tests.cpp
+    memory/memory_alignment_uve_tests.cpp
+    threading/job_counter_uve_tests.cpp
+    threading/thread_pool_uve_tests.cpp
     core/engine_state_uve_tests.cpp
     core/engine_core_uve_tests.cpp
     core/engine_services_uve_tests.cpp
@@ -32,6 +40,8 @@ target_link_libraries(uve_tests PRIVATE
     uve_debug
     uve_utilities
     uve_events
+    uve_memory
+    uve_threading
     uve_core
     GTest::gtest
     GTest::gtest_main

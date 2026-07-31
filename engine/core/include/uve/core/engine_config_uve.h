@@ -9,6 +9,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <filesystem>
 
 #include "uve/debug/log_level_uve.h"
@@ -46,6 +47,12 @@ struct EngineConfigUVE {
     /// Whether a ConsoleSinkUVE is attached during Init(), in addition to
     /// the FileSinkUVE (which is always attached regardless of this flag).
     bool enableConsoleLogging = true;
+
+    /// Number of ThreadPoolUVE worker threads to spawn during Init(). `0`
+    /// (the default) means "auto" — see
+    /// UVE::Threading::ThreadPoolUVE::ThreadPoolUVE() for the exact
+    /// resolution policy.
+    std::size_t threadPoolWorkerCount = 0;
 };
 
 } // namespace UVE::Core

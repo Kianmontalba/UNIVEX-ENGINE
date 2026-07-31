@@ -16,6 +16,9 @@
 #include "uve/debug/logger_uve.h"
 #include "uve/debug/logging_macros_uve.h"
 #include "uve/events/event_system_uve.h"
+#include "uve/memory/memory_manager_uve.h"
+#include "uve/platform/platform_uve.h"
+#include "uve/threading/thread_pool_uve.h"
 #include "uve/utilities/timer_uve.h"
 
 namespace UVE::Core {
@@ -50,7 +53,20 @@ void EngineCoreUVE::Init() {
 
     UVE_INFO("EngineCoreUVE: initializing UniVex Engine {}", GetEngineVersionUVE().ToStringUVE());
 
-    // Timer second: Update()/LateUpdate() depend on it; nothing constructed
+    // MemoryManager second: the next most foundational service after
+    // logging — nothing constructed here has a hard dependency on it yet,
+    // but future systems will, mirroring the rationale for Logger's own
+    // position.
+    m_memoryManager = std::make_unique<Memory::MemoryManagerUVE>();
+
+    // ThreadPool third: sits alongside Logger/MemoryManager as a
+    // foundational service (matching the spec's own Part 7.1 ordering,
+    // which lists ThreadPoolUVE before EventSystemUVE/TimerUVE) and after
+    // Logger/MemoryManager since its workers may immediately want to log
+    // or allocate once real jobs start flowing through it.
+    m_threadPool = std::make_unique<Threading::ThreadPoolUVE>(m_config.threadPoolWorkerCount);
+
+    // Timer fourth: Update()/LateUpdate() depend on it; nothing constructed
     // here depends on EventSystem existing yet.
     auto timer = std::make_unique<Utilities::TimerUVE>();
     timer->Reset();
@@ -58,13 +74,13 @@ void EngineCoreUVE::Init() {
     timer->SetFixedTimestepUVE(m_config.fixedUpdateFps > 0.0 ? (1.0 / m_config.fixedUpdateFps) : 0.0);
     m_timer = std::move(timer);
 
-    // EventSystem third: it is the piece most likely to gain future
+    // EventSystem fifth: it is the piece most likely to gain future
     // dependents (systems subscribing during their own Init()), so it is
-    // constructed last among the three, once it is guaranteed nothing else
+    // constructed last among the five, once it is guaranteed nothing else
     // in this list still needs to be built.
     m_eventSystem = std::make_unique<Events::EventSystemUVE>();
 
-    m_services.emplace(*m_logger, *m_timer, *m_eventSystem);
+    m_services.emplace(*m_logger, *m_timer, *m_eventSystem, *m_memoryManager, *m_threadPool);
 
     TransitionStateUVE(EngineStateUVE::Running);
     UVE_INFO("EngineCoreUVE: initialized");
@@ -149,12 +165,26 @@ void EngineCoreUVE::Shutdown() {
     UVE_INFO("EngineCoreUVE: shutting down");
 
     // Exact reverse of Init()'s construction order: EventSystem, then
-    // Timer, then Logger. The final log message is emitted before the
-    // logger itself is torn down, so it is guaranteed to be recorded.
+    // Timer, then ThreadPool, then MemoryManager, then Logger. The final
+    // log message is emitted before the logger itself is torn down, so it
+    // is guaranteed to be recorded.
     m_services.reset();
     m_eventSystem->Clear();
     m_eventSystem.reset();
     m_timer.reset();
+
+    // ThreadPoolUVE's destructor blocks until every worker has drained its
+    // queue and joined — no jobs are silently dropped on shutdown.
+    m_threadPool.reset();
+
+    // Leak report must run while the logger is still alive; the debug-only
+    // assertion turns a leak into an immediate development-time failure
+    // without ever affecting Release builds.
+    m_memoryManager->LogLeakReportUVE();
+#if UVE_DEBUG
+    UVE_ASSERT(m_memoryManager->GetActiveAllocationCountUVE() == 0);
+#endif
+    m_memoryManager.reset();
 
     UVE_INFO("EngineCoreUVE: shutdown complete");
     m_logger->Shutdown();

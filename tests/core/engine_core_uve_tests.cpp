@@ -27,6 +27,7 @@ EngineConfigUVE MakeTestConfigUVE() {
     EngineConfigUVE config{};
     config.enableConsoleLogging = false;
     config.logFilePath = "uve_engine_core_tests.log";
+    config.threadPoolWorkerCount = 2; // keep the whole suite's thread churn small and fast
     return config;
 }
 
@@ -151,6 +152,56 @@ TEST(EngineCoreUVETest, LoopStages_ExecuteInDocumentedOrder) {
 
     const std::vector<std::string> expectedOrder{"BeginFrame", "Update", "LateUpdate", "Render", "EndFrame"};
     EXPECT_EQ(stageOrder, expectedOrder);
+
+    engine.Shutdown();
+}
+
+TEST(EngineCoreUVETest, MemoryManager_ReachableAndFunctionalAfterInit) {
+    EngineCoreUVE engine(MakeTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    Memory::IMemoryManagerUVE& memoryManager = engine.GetServicesUVE().GetMemoryManagerUVE();
+    Memory::IAllocatorUVE& allocator = memoryManager.GetDefaultAllocatorUVE();
+
+    void* const pointer = allocator.AllocateUVE(32, 8, __FILE__, __LINE__);
+    ASSERT_NE(pointer, nullptr);
+    EXPECT_TRUE(memoryManager.HasLeaksUVE());
+    allocator.DeallocateUVE(pointer);
+    EXPECT_FALSE(memoryManager.HasLeaksUVE());
+
+    engine.Shutdown();
+}
+
+TEST(EngineCoreUVETest, NormalRun_ReportsNoLeaks) {
+    EngineCoreUVE engine(MakeTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    engine.TickFrameUVE();
+    engine.TickFrameUVE();
+
+    // Nothing allocates through MemoryManagerUVE on Increment 1's behalf yet, so a normal run
+    // must report zero leaks — this also implicitly exercises the debug-only shutdown leak
+    // assertion on the happy path (zero leaks, assertion never fires).
+    EXPECT_FALSE(engine.GetServicesUVE().GetMemoryManagerUVE().HasLeaksUVE());
+
+    engine.Shutdown();
+}
+
+TEST(EngineCoreUVETest, ThreadPool_ReachableAndFunctionalAfterInit) {
+    EngineCoreUVE engine(MakeTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    Threading::IThreadPoolUVE& threadPool = engine.GetServicesUVE().GetThreadPoolUVE();
+    EXPECT_GE(threadPool.GetWorkerCountUVE(), 1U);
+
+    Threading::JobCounterUVE counter;
+    bool jobRan = false;
+    threadPool.SubmitUVE([&jobRan] { jobRan = true; }, counter);
+    counter.WaitUVE();
+    EXPECT_TRUE(jobRan);
 
     engine.Shutdown();
 }
