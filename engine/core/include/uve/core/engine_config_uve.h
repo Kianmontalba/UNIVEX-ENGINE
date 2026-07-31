@@ -67,6 +67,12 @@ struct EngineConfigUVE {
     /// argv[1..argc); left empty by default so tests can construct an
     /// EngineConfigUVE without a real process argv.
     std::vector<std::string> commandLineArgs = {};
+
+    /// Path AssetDatabaseUVE::LoadUVE() is called with during Init(). A
+    /// missing file at this path is not an error (see
+    /// IAssetDatabaseUVE::LoadUVE()) — a first-run project has no asset
+    /// registry yet.
+    std::filesystem::path assetDatabaseFilePath = ".uveassetdb";
 };
 
 } // namespace UVE::Core

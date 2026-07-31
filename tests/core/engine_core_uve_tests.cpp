@@ -10,6 +10,7 @@
 #include "uve/core/engine_core_uve.h"
 
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <string>
 #include <vector>
@@ -20,6 +21,7 @@
 #include "uve/debug/logger_uve.h"
 #include "uve/math/vector3_uve.h"
 #include "uve/platform/platform_uve.h"
+#include "uve/scene/components/mesh_component_uve.h"
 #include "uve/scene/components/transform_component_uve.h"
 #include "uve/scene/components/world_transform_component_uve.h"
 
@@ -32,6 +34,7 @@ EngineConfigUVE MakeTestConfigUVE() {
     config.logFilePath = "uve_engine_core_tests.log";
     config.threadPoolWorkerCount = 2; // keep the whole suite's thread churn small and fast
     config.settingsFilePath = "uve_engine_core_tests.uvesettings"; // never touch a real settings file
+    config.assetDatabaseFilePath = "uve_engine_core_tests.uveassetdb"; // never touch a real asset db
     return config;
 }
 
@@ -245,6 +248,37 @@ TEST(EngineCoreUVETest, EntityManagerAndSceneGraph_ReachableAndFunctionalAfterIn
         entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(entity);
     EXPECT_FALSE(world.dirty);
     EXPECT_EQ(world.worldPosition, local.localPosition);
+
+    engine.Shutdown();
+}
+
+TEST(EngineCoreUVETest, AssetDatabaseSceneSerializerPrefabSystem_ReachableAndRoundTripAfterInit) {
+    EngineCoreUVE engine(MakeTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    Scene::IEntityManagerUVE& entityManager = engine.GetServicesUVE().GetEntityManagerUVE();
+    Scene::ISceneGraphUVE& sceneGraph = engine.GetServicesUVE().GetSceneGraphUVE();
+    Asset::IAssetDatabaseUVE& assetDatabase = engine.GetServicesUVE().GetAssetDatabaseUVE();
+    Scene::IPrefabSystemUVE& prefabSystem = engine.GetServicesUVE().GetPrefabSystemUVE();
+
+    const Scene::EntityUVE source = entityManager.CreateEntityUVE();
+    entityManager.AddComponentUVE<Scene::MeshComponentUVE>(source,
+                                                            Scene::MeshComponentUVE{"props/crate.uvemodel"});
+
+    const std::filesystem::path prefabPath = "uve_engine_core_tests.uveprefab";
+    std::filesystem::remove(prefabPath);
+    const Asset::AssetGuidUVE guid = prefabSystem.SavePrefabUVE(entityManager, assetDatabase, source, prefabPath);
+    ASSERT_NE(guid, Asset::kInvalidAssetGuidUVE);
+
+    const Scene::EntityUVE instance =
+        prefabSystem.InstantiateUVE(entityManager, sceneGraph, assetDatabase, guid, Scene::kInvalidEntityUVE);
+    ASSERT_NE(instance, Scene::kInvalidEntityUVE);
+    EXPECT_EQ(entityManager.GetComponentUVE<Scene::MeshComponentUVE>(instance).meshAssetPath,
+              "props/crate.uvemodel");
+
+    std::filesystem::remove(prefabPath);
+    std::filesystem::remove(MakeTestConfigUVE().assetDatabaseFilePath);
 
     engine.Shutdown();
 }

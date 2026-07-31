@@ -122,6 +122,11 @@ std::size_t EntityManagerUVE::GetEntityCountUVE() const noexcept {
     return count;
 }
 
+std::vector<std::type_index> EntityManagerUVE::GetComponentTypesUVE(EntityUVE entity) const {
+    UVE_ASSERT(IsAliveUVE(entity));
+    return m_impl->records[entity.index].archetype->GetSignatureUVE().GetTypesUVE();
+}
+
 void* EntityManagerUVE::AddComponentErased(EntityUVE entity, std::type_index componentType,
                                             const ComponentTypeInfoUVE& typeInfo) {
     UVE_ASSERT(IsAliveUVE(entity));

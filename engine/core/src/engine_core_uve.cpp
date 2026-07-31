@@ -11,6 +11,7 @@
 
 #include <utility>
 
+#include "uve/asset/asset_database_uve.h"
 #include "uve/commandline/command_line_uve.h"
 #include "uve/config/config_manager_uve.h"
 #include "uve/debug/assert_uve.h"
@@ -21,7 +22,9 @@
 #include "uve/memory/memory_manager_uve.h"
 #include "uve/platform/platform_uve.h"
 #include "uve/scene/entity_manager_uve.h"
+#include "uve/scene/prefab_system_uve.h"
 #include "uve/scene/scene_graph_uve.h"
+#include "uve/scene/scene_serializer_uve.h"
 #include "uve/threading/thread_pool_uve.h"
 #include "uve/utilities/timer_uve.h"
 
@@ -101,6 +104,18 @@ void EngineCoreUVE::Init() {
     // immediately after EntityManager for readability.
     m_sceneGraph = std::make_unique<Scene::SceneGraphUVE>();
 
+    // AssetDatabase ninth: needs only Logger, which already exists. Its
+    // LoadUVE() call logs its outcome (missing/malformed/success) the same
+    // way ConfigManager's does below.
+    auto assetDatabase = std::make_unique<Asset::AssetDatabaseUVE>();
+    assetDatabase->LoadUVE(m_config.assetDatabaseFilePath);
+    m_assetDatabase = std::move(assetDatabase);
+
+    // SceneSerializer and PrefabSystem tenth/eleventh: both stateless,
+    // grouped immediately after AssetDatabase for readability.
+    m_sceneSerializer = std::make_unique<Scene::SceneSerializerUVE>();
+    m_prefabSystem = std::make_unique<Scene::PrefabSystemUVE>();
+
     // ConfigManager last: it immediately calls LoadUVE(), which logs its
     // outcome (missing/malformed/success) through the Logger constructed
     // above — so Logger must already exist by this point.
@@ -109,7 +124,8 @@ void EngineCoreUVE::Init() {
     m_configManager = std::move(configManager);
 
     m_services.emplace(*m_logger, *m_timer, *m_eventSystem, *m_memoryManager, *m_threadPool,
-                        *m_commandLine, *m_configManager, *m_entityManager, *m_sceneGraph);
+                        *m_commandLine, *m_configManager, *m_entityManager, *m_sceneGraph,
+                        *m_assetDatabase, *m_sceneSerializer, *m_prefabSystem);
 
     TransitionStateUVE(EngineStateUVE::Running);
     UVE_INFO("EngineCoreUVE: initialized");
@@ -195,12 +211,16 @@ void EngineCoreUVE::Shutdown() {
     UVE_INFO("EngineCoreUVE: shutting down");
 
     // Exact reverse of Init()'s construction order: ConfigManager, then
+    // PrefabSystem, then SceneSerializer, then AssetDatabase, then
     // SceneGraph, then EntityManager, then EventSystem, then Timer, then
     // ThreadPool, then MemoryManager, then Logger, then CommandLine. The
     // final log message is emitted before the logger itself is torn down,
     // so it is guaranteed to be recorded.
     m_services.reset();
     m_configManager.reset();
+    m_prefabSystem.reset();
+    m_sceneSerializer.reset();
+    m_assetDatabase.reset();
     m_sceneGraph.reset();
 
     // EntityManagerUVE's destructor frees every remaining live entity's

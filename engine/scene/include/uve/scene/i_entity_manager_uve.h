@@ -62,6 +62,12 @@ public:
     /// Number of currently-alive entities.
     [[nodiscard]] virtual std::size_t GetEntityCountUVE() const noexcept = 0;
 
+    /// Returns the std::type_index of every component `entity` (which must be alive) currently
+    /// has, in unspecified order. The generic, runtime-enumerable counterpart to
+    /// HasComponentUVE<T>()/GetComponentUVE<T>() — used by SceneSerializerUVE to walk an
+    /// entity's full component set without knowing the types in advance.
+    [[nodiscard]] virtual std::vector<std::type_index> GetComponentTypesUVE(EntityUVE entity) const = 0;
+
     /// Attaches a `T` (constructed from `args`) to `entity`, migrating it to the archetype
     /// {entity's current components} ∪ {T}. Asserts `entity` is alive and does not already have
     /// a `T`. Returns a reference to the newly-constructed component (valid until the next
@@ -96,6 +102,19 @@ public:
     [[nodiscard]] const T& GetComponentUVE(EntityUVE entity) const {
         return *static_cast<const T*>(
             const_cast<IEntityManagerUVE*>(this)->GetComponentErased(entity, std::type_index(typeid(T))));
+    }
+
+    /// Returns a type-erased pointer to `entity`'s component of type `componentType`. Asserts
+    /// `entity` is alive and currently has one. The runtime-typed counterpart to
+    /// GetComponentUVE<T>(), used together with GetComponentTypesUVE() by SceneSerializerUVE to
+    /// read every component of an entity whose types are only known at runtime.
+    [[nodiscard]] void* GetComponentPointerUVE(EntityUVE entity, std::type_index componentType) {
+        return GetComponentErased(entity, componentType);
+    }
+
+    /// Const overload of GetComponentPointerUVE().
+    [[nodiscard]] const void* GetComponentPointerUVE(EntityUVE entity, std::type_index componentType) const {
+        return const_cast<IEntityManagerUVE*>(this)->GetComponentErased(entity, componentType);
     }
 
     /// Invokes `callback(EntityUVE, TComponents&...)` once for every entity whose current

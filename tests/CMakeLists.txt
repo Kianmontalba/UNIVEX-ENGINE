@@ -34,8 +34,11 @@ add_executable(uve_tests
     config/config_manager_uve_tests.cpp
     math/vector3_uve_tests.cpp
     math/quaternion_uve_tests.cpp
+    asset/asset_database_uve_tests.cpp
     scene/entity_manager_uve_tests.cpp
     scene/scene_graph_uve_tests.cpp
+    scene/scene_serializer_uve_tests.cpp
+    scene/prefab_system_uve_tests.cpp
     core/engine_state_uve_tests.cpp
     core/engine_core_uve_tests.cpp
     core/engine_services_uve_tests.cpp
@@ -51,6 +54,7 @@ target_link_libraries(uve_tests PRIVATE
     uve_commandline
     uve_config
     uve_math
+    uve_asset
     uve_scene
     uve_core
     GTest::gtest

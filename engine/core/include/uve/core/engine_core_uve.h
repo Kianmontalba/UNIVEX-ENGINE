@@ -13,6 +13,7 @@
 #include <memory>
 #include <optional>
 
+#include "uve/asset/i_asset_database_uve.h"
 #include "uve/commandline/i_command_line_uve.h"
 #include "uve/config/i_config_manager_uve.h"
 #include "uve/core/engine_config_uve.h"
@@ -24,7 +25,9 @@
 #include "uve/events/i_event_system_uve.h"
 #include "uve/memory/i_memory_manager_uve.h"
 #include "uve/scene/i_entity_manager_uve.h"
+#include "uve/scene/i_prefab_system_uve.h"
 #include "uve/scene/i_scene_graph_uve.h"
+#include "uve/scene/i_scene_serializer_uve.h"
 #include "uve/threading/i_thread_pool_uve.h"
 #include "uve/utilities/i_timer_uve.h"
 
@@ -32,12 +35,12 @@ namespace UVE::Core {
 
 /// EngineCoreUVE owns the foundational engine services (CommandLine, Logger,
 /// MemoryManager, ThreadPool, Timer, EventSystem, EntityManager, SceneGraph,
-/// ConfigManager) and drives the canonical engine lifecycle: Init -> Load ->
-/// N x (BeginFrame -> Update -> LateUpdate -> Render -> EndFrame) ->
-/// Shutdown. This increment has no windowing/rendering backend yet, so
-/// Render() is the documented, working no-op seam where RenderSystemUVE
-/// will plug in once one exists — every stage does something real today,
-/// none are placeholders.
+/// AssetDatabase, SceneSerializer, PrefabSystem, ConfigManager) and drives
+/// the canonical engine lifecycle: Init -> Load -> N x (BeginFrame -> Update
+/// -> LateUpdate -> Render -> EndFrame) -> Shutdown. This increment has no
+/// windowing/rendering backend yet, so Render() is the documented, working
+/// no-op seam where RenderSystemUVE will plug in once one exists — every
+/// stage does something real today, none are placeholders.
 /// Thread-safety: not thread-safe. Every method here is intended to be
 /// called from a single "engine" thread. The services EngineCoreUVE owns
 /// each document their own thread-safety contract independently (e.g.
@@ -52,16 +55,19 @@ public:
     EngineCoreUVE& operator=(const EngineCoreUVE&) = delete;
 
     /// Constructs and initializes CommandLine, Logger, MemoryManager,
-    /// ThreadPool, Timer, EventSystem, EntityManager, SceneGraph, and
-    /// ConfigManager in that order (CommandLine first — it has no
-    /// dependencies of its own; Logger second — every later step and every
-    /// other system may need to log or UVE_ASSERT during its own setup;
-    /// EntityManager right after EventSystem, since it needs MemoryManager
-    /// for allocation and EventSystem for entity lifecycle events;
-    /// SceneGraph immediately after, though it has no dependencies of its
-    /// own; ConfigManager last, so its LoadUVE() call can log through the
-    /// already-initialized Logger), then builds EngineServicesUVE from all
-    /// nine. Transitions Uninitialized -> Initializing -> Running.
+    /// ThreadPool, Timer, EventSystem, EntityManager, SceneGraph,
+    /// AssetDatabase, SceneSerializer, PrefabSystem, and ConfigManager in
+    /// that order (CommandLine first — it has no dependencies of its own;
+    /// Logger second — every later step and every other system may need to
+    /// log or UVE_ASSERT during its own setup; EntityManager right after
+    /// EventSystem, since it needs MemoryManager for allocation and
+    /// EventSystem for entity lifecycle events; SceneGraph immediately
+    /// after, though it has no dependencies of its own; AssetDatabase right
+    /// after SceneGraph, needing only Logger; SceneSerializer and
+    /// PrefabSystem grouped immediately after, both stateless; ConfigManager
+    /// last, so its LoadUVE() call can log through the already-initialized
+    /// Logger), then builds EngineServicesUVE from all twelve. Transitions
+    /// Uninitialized -> Initializing -> Running.
     void Init();
 
     /// The engine's asset/subsystem loading hook. This increment has
@@ -88,7 +94,8 @@ public:
     void RequestQuitUVE() noexcept;
 
     /// Transitions Running -> ShuttingDown -> Shutdown, tearing down
-    /// ConfigManager, then SceneGraph, then EntityManager (its destructor
+    /// ConfigManager, then PrefabSystem, then SceneSerializer, then
+    /// AssetDatabase, then SceneGraph, then EntityManager (its destructor
     /// frees every remaining live entity's component memory, which must
     /// happen before MemoryManager's leak check below), then EventSystem,
     /// then Timer, then ThreadPool (its destructor blocks until every
@@ -104,7 +111,8 @@ public:
 
     /// Returns the service container bundling Logger/Timer/EventSystem/
     /// MemoryManager/ThreadPool/CommandLine/ConfigManager/EntityManager/
-    /// SceneGraph references. Valid only between Init() and Shutdown().
+    /// SceneGraph/AssetDatabase/SceneSerializer/PrefabSystem references.
+    /// Valid only between Init() and Shutdown().
     [[nodiscard]] EngineServicesUVE& GetServicesUVE();
 
     /// Returns this build's engine version — the single source of truth
@@ -153,6 +161,9 @@ private:
     std::unique_ptr<Events::IEventSystemUVE> m_eventSystem;
     std::unique_ptr<Scene::IEntityManagerUVE> m_entityManager;
     std::unique_ptr<Scene::ISceneGraphUVE> m_sceneGraph;
+    std::unique_ptr<Asset::IAssetDatabaseUVE> m_assetDatabase;
+    std::unique_ptr<Scene::ISceneSerializerUVE> m_sceneSerializer;
+    std::unique_ptr<Scene::IPrefabSystemUVE> m_prefabSystem;
     std::unique_ptr<Config::IConfigManagerUVE> m_configManager;
     std::optional<EngineServicesUVE> m_services;
 

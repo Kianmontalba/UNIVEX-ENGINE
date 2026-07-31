@@ -44,6 +44,7 @@ public:
     void DestroyEntityUVE(EntityUVE entity) override;
     [[nodiscard]] bool IsAliveUVE(EntityUVE entity) const noexcept override;
     [[nodiscard]] std::size_t GetEntityCountUVE() const noexcept override;
+    [[nodiscard]] std::vector<std::type_index> GetComponentTypesUVE(EntityUVE entity) const override;
 
 protected:
     [[nodiscard]] void* AddComponentErased(EntityUVE entity, std::type_index componentType,
