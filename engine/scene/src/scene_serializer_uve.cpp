@@ -9,10 +9,10 @@
 
 #include "uve/scene/scene_serializer_uve.h"
 
-#include <array>
+#include <cstddef>
 #include <cstdint>
-#include <fstream>
 #include <functional>
+#include <optional>
 #include <string>
 #include <typeindex>
 #include <unordered_map>
@@ -22,6 +22,7 @@
 #include <nlohmann/json.hpp>
 
 #include "uve/asset/asset_guid_uve.h"
+#include "uve/asset/uve_file_envelope_uve.h"
 #include "uve/debug/logging_macros_uve.h"
 #include "uve/math/quaternion_uve.h"
 #include "uve/math/vector3_uve.h"
@@ -41,30 +42,6 @@
 namespace UVE::Scene {
 
 namespace {
-
-// --- Universal .uve* binary envelope -----------------------------------------------------
-
-constexpr std::array<char, 4> kUveMagicUVE{'U', 'V', 'E', '\0'};
-constexpr std::uint32_t kPayloadSchemaVersionUVE = 1;
-constexpr std::uint32_t kCompressionMethodNoneUVE = 0;
-
-void WriteUint32UVE(std::ofstream& file, std::uint32_t value) {
-    file.write(reinterpret_cast<const char*>(&value), sizeof(value));
-}
-
-void WriteUint64UVE(std::ofstream& file, std::uint64_t value) {
-    file.write(reinterpret_cast<const char*>(&value), sizeof(value));
-}
-
-[[nodiscard]] bool ReadUint32UVE(std::ifstream& file, std::uint32_t& outValue) {
-    file.read(reinterpret_cast<char*>(&outValue), sizeof(outValue));
-    return static_cast<bool>(file);
-}
-
-[[nodiscard]] bool ReadUint64UVE(std::ifstream& file, std::uint64_t& outValue) {
-    file.read(reinterpret_cast<char*>(&outValue), sizeof(outValue));
-    return static_cast<bool>(file);
-}
 
 // --- Math JSON helpers ---------------------------------------------------------------------
 
@@ -298,72 +275,27 @@ bool SceneSerializerUVE::SaveUVE(IEntityManagerUVE& entityManager, const std::ve
     nlohmann::json payload;
     payload["entities"] = std::move(entitiesJson);
     const std::string payloadText = payload.dump();
+    const std::byte* const payloadBytes = reinterpret_cast<const std::byte*>(payloadText.data());
+    const std::vector<std::byte> payloadBuffer(payloadBytes, payloadBytes + payloadText.size());
 
-    std::ofstream file(path, std::ios::binary);
-    if (!file.is_open()) {
-        UVE_ERROR("SceneSerializerUVE: failed to open \"{}\" for writing", path.string());
-        return false;
-    }
-    file.write(kUveMagicUVE.data(), static_cast<std::streamsize>(kUveMagicUVE.size()));
-    WriteUint32UVE(file, kPayloadSchemaVersionUVE);
-    WriteUint32UVE(file, static_cast<std::uint32_t>(assetType));
-    WriteUint32UVE(file, kCompressionMethodNoneUVE);
-    WriteUint64UVE(file, payloadText.size());
-    file.write(payloadText.data(), static_cast<std::streamsize>(payloadText.size()));
-
-    if (!file.good()) {
-        UVE_ERROR("SceneSerializerUVE: failed to write \"{}\": stream error after write", path.string());
-        return false;
-    }
-    return true;
+    return Asset::WriteUveFileUVE(path, assetType, payloadBuffer);
 }
 
 std::vector<EntityUVE> SceneSerializerUVE::LoadUVE(IEntityManagerUVE& entityManager,
                                                     const std::filesystem::path& path) {
-    std::ifstream file(path, std::ios::binary);
-    if (!file.is_open()) {
-        UVE_ERROR("SceneSerializerUVE: failed to open \"{}\" for reading", path.string());
+    std::optional<std::pair<Asset::UveFileHeaderUVE, std::vector<std::byte>>> file =
+        Asset::ReadUveFileUVE(path);
+    if (!file.has_value()) {
+        return {}; // ReadUveFileUVE already logged the specific reason.
+    }
+    const auto& [header, payloadBuffer] = file.value();
+    if (header.assetType != SceneAssetTypeUVE::Scene && header.assetType != SceneAssetTypeUVE::Prefab) {
+        UVE_ERROR("SceneSerializerUVE: \"{}\" has unexpected asset type {}", path.string(),
+                  static_cast<std::uint32_t>(header.assetType));
         return {};
     }
 
-    std::array<char, 4> magic{};
-    file.read(magic.data(), static_cast<std::streamsize>(magic.size()));
-    if (!file || magic != kUveMagicUVE) {
-        UVE_ERROR("SceneSerializerUVE: \"{}\" is not a valid .uve file (bad magic)", path.string());
-        return {};
-    }
-
-    std::uint32_t version = 0;
-    std::uint32_t assetType = 0;
-    std::uint32_t compressionMethod = 0;
-    std::uint64_t payloadLength = 0;
-    if (!ReadUint32UVE(file, version) || !ReadUint32UVE(file, assetType) ||
-        !ReadUint32UVE(file, compressionMethod) || !ReadUint64UVE(file, payloadLength)) {
-        UVE_ERROR("SceneSerializerUVE: \"{}\" has a truncated header", path.string());
-        return {};
-    }
-    if (version != kPayloadSchemaVersionUVE) {
-        UVE_ERROR("SceneSerializerUVE: \"{}\" has unsupported payload version {}", path.string(), version);
-        return {};
-    }
-    if (assetType != static_cast<std::uint32_t>(SceneAssetTypeUVE::Scene) &&
-        assetType != static_cast<std::uint32_t>(SceneAssetTypeUVE::Prefab)) {
-        UVE_ERROR("SceneSerializerUVE: \"{}\" has unknown asset type {}", path.string(), assetType);
-        return {};
-    }
-    if (compressionMethod != kCompressionMethodNoneUVE) {
-        UVE_ERROR("SceneSerializerUVE: \"{}\" uses unsupported compression method {}", path.string(),
-                  compressionMethod);
-        return {};
-    }
-
-    std::string payloadText(payloadLength, '\0');
-    file.read(payloadText.data(), static_cast<std::streamsize>(payloadLength));
-    if (!file) {
-        UVE_ERROR("SceneSerializerUVE: \"{}\" has a truncated payload", path.string());
-        return {};
-    }
-
+    const std::string payloadText(reinterpret_cast<const char*>(payloadBuffer.data()), payloadBuffer.size());
     nlohmann::json payload;
     try {
         payload = nlohmann::json::parse(payloadText);

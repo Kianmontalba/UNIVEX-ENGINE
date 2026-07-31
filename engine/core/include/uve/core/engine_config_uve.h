@@ -73,6 +73,19 @@ struct EngineConfigUVE {
     /// IAssetDatabaseUVE::LoadUVE()) — a first-run project has no asset
     /// registry yet.
     std::filesystem::path assetDatabaseFilePath = ".uveassetdb";
+
+    /// Whether Update() calls HotReloadUVE::PollUVE() each frame.
+    /// AssetManagerUVE still tracks/untracks loaded assets with HotReloadUVE
+    /// regardless of this flag — it only gates whether the poll itself
+    /// runs, so flipping it at runtime (by mutating a running
+    /// EngineCoreUVE's config — not currently exposed, but the field itself
+    /// is read fresh every Update()) takes effect immediately.
+    bool hotReloadEnabledUVE = true;
+
+    /// Poll interval, in seconds, HotReloadUVE waits between checking every
+    /// tracked asset's on-disk modification time (see
+    /// IHotReloadUVE::PollUVE()).
+    double hotReloadPollIntervalSecondsUVE = 1.0;
 };
 
 } // namespace UVE::Core

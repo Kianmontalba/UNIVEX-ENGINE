@@ -19,7 +19,7 @@ subsystem area — **never** flat inside `UVE` directly:
 | `UVE::CommandLine`| `engine/commandline/`| `CommandLineUVE` — startup argument parsing                    |
 | `UVE::Config`     | `engine/config/`     | `ConfigManagerUVE` — JSON-based `.uvesettings` key-value store  |
 | `UVE::Math`       | `engine/math/`       | `Vector3UVE`, `QuaternionUVE`                                   |
-| `UVE::Asset`      | `engine/asset/`      | `AssetGuidUVE`, `AssetDatabaseUVE` — minimal GUID<->path registry |
+| `UVE::Asset`      | `engine/asset/`      | `AssetGuidUVE`, `AssetDatabaseUVE`, `AssetManagerUVE`, `AssetImporterUVE`, `HotReloadUVE`, `AssetBundleUVE`, the `.uve*` binary envelope |
 | `UVE::Scene`      | `engine/scene/`      | `EntityManagerUVE`, `SceneGraphUVE`, `ComponentUVE` + built-ins, `SceneSerializerUVE`, `PrefabSystemUVE` |
 | `UVE::Core`       | `engine/core/`       | `EngineCoreUVE`, config, state, frame stats, version, services |
 
@@ -100,26 +100,42 @@ JSON library internally.
 
 ## The universal `.uve*` binary envelope
 
-Every `.uve*` asset file on disk (`.uvescene`, `.uveprefab`, and any future binary asset format
-such as `.uvemodel`/`.uvetex`) shares one binary header, written/read as individual fixed-width
-field writes — **never** a single `.write()`/`.read()` of a struct, since C++ struct padding and
-alignment are implementation-defined and unsafe to persist:
+Every `.uve*` asset file on disk (`.uvescene`, `.uveprefab`, `.uvebundle`, and any future binary
+asset format such as `.uvemodel`/`.uvetex`) shares one binary header, written/read as individual
+fixed-width field writes — **never** a single `.write()`/`.read()` of a struct, since C++ struct
+padding and alignment are implementation-defined and unsafe to persist:
 
 ```
 magic:              char[4] = "UVE\0"
-version:            uint32   (payload schema version for this asset type)
-assetType:          uint32   (meaning is asset-type-specific, e.g. SceneAssetTypeUVE)
+version:            uint32   (envelope schema version, currently 1)
+assetType:          uint32   (Asset::AssetKindUVE — one shared numbering across every .uve* kind)
 compressionMethod:  uint32   (0 = None — the only value implemented so far)
 payloadLength:      uint64   (byte length of the payload that follows)
 payload:            payloadLength bytes
 ```
 
+The payload's own shape is asset-kind-specific and entirely up to the caller — UTF-8 JSON text
+for `Scene`/`Prefab` (`SceneSerializerUVE`), a binary directory-plus-blob table for `Bundle`
+(`AssetBundleUVE`), or raw file bytes for `Blob` (`AssetManagerUVE`'s reference loadable type).
 Files are always opened with `std::ios::binary`. A malformed header (bad magic, truncated file,
-unsupported version/asset-type/compression method) or a corrupt payload must never crash — log a
-detailed `UVE_ERROR` (path + reason) and return a failure value, mirroring `ConfigManagerUVE`'s
-error-handling contract. `SceneSerializerUVE` (`engine/scene/src/scene_serializer_uve.cpp`) is
-the reference implementation of this envelope; copy its header read/write helpers for any future
-`.uve*` binary format instead of reinventing them.
+unsupported version/compression method) or a corrupt payload must never crash — log a detailed
+`UVE_ERROR` (path + reason) and return a failure value, mirroring `ConfigManagerUVE`'s
+error-handling contract. `WriteUveFileUVE`/`ReadUveFileUVE`
+(`engine/asset/include/uve/asset/uve_file_envelope_uve.h`,
+`engine/asset/src/uve_file_envelope_uve.cpp`) are the one shared implementation of this envelope
+— every consumer (`SceneSerializerUVE`, `AssetBundleUVE`, and any future binary asset format)
+calls them rather than reimplementing header read/write logic.
+
+## Deferred garbage collection for ref-counted resources
+
+`AssetManagerUVE` (`engine/asset/`) is the engine's first ref-counted resource system:
+`AssetHandleUVE<T>` releasing its reference only decrements a count — the actual unload (running
+the registered destroy function) happens in `CollectGarbageUVE()`, called once per frame from
+`EngineCoreUVE::Update()` (the same per-frame slot as `SceneGraphUVE::UpdateUVE()`/
+`IEventSystemUVE::DispatchQueuedUVE()`). This avoids load/unload thrashing when a refcount briefly
+bounces to zero and back within a single frame. Copy this deferred-collection pattern for any
+future ref-counted resource system instead of unloading synchronously the instant a refcount
+reaches zero.
 
 ## Allocator boundary
 
@@ -140,6 +156,16 @@ chunk is built generically across component types only known at runtime (via
 `std::type_index`), which a compile-time-templated `ConstructUVE<T>()` call site can't express;
 it is the type-erased analog of what `ConstructUVE`/`DestroyUVE` already do for the
 single-known-`T` case, not a loophole for ad hoc placement-new elsewhere.
+
+`IAssetManagerUVE::RegisterLoaderUVE<T>()` (`engine/asset/include/uve/asset/i_asset_manager_uve.h`)
+is a third, similarly narrow exception: it wraps the caller's typed loader in a closure that does
+a plain `new T()`/`delete static_cast<T*>(ptr)` so a loaded asset's lifetime can be tracked
+type-erased (`void*` + a destroy closure) inside `AssetManagerUVE`'s GUID-keyed record map, the
+same way `ChunkUVE` type-erases component storage for the ECS. Not routed through
+`IAllocatorUVE`/`ConstructUVE` because asset objects are individually heap-allocated,
+long-lived, and never packed into a shared buffer the way components/pool slots are — there is
+no allocator-boundary benefit to gain here, only the type-erasure need `ChunkUVE` already
+established the precedent for.
 
 ## Real OS threads
 

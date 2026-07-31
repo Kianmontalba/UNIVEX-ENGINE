@@ -19,7 +19,11 @@
 
 #include <gtest/gtest.h>
 
+#include "uve/asset/i_asset_bundle_uve.h"
 #include "uve/asset/i_asset_database_uve.h"
+#include "uve/asset/i_asset_importer_uve.h"
+#include "uve/asset/i_asset_manager_uve.h"
+#include "uve/asset/i_hot_reload_uve.h"
 #include "uve/commandline/i_command_line_uve.h"
 #include "uve/config/i_config_manager_uve.h"
 #include "uve/debug/i_logger_uve.h"
@@ -36,12 +40,14 @@
 // extension, anything that consumes ILoggerUVE/ITimerUVE/IEventSystemUVE/
 // IMemoryManagerUVE/IThreadPoolUVE/ICommandLineUVE/IConfigManagerUVE/
 // IEntityManagerUVE/ISceneGraphUVE/IAssetDatabaseUVE/ISceneSerializerUVE/
-// IPrefabSystemUVE) works against ANY conforming implementation,
+// IPrefabSystemUVE/IHotReloadUVE/IAssetManagerUVE/IAssetImporterUVE/
+// IAssetBundleUVE) works against ANY conforming implementation,
 // independent of the concrete LoggerUVE/TimerUVE/EventSystemUVE/
 // MemoryManagerUVE/ThreadPoolUVE/CommandLineUVE/ConfigManagerUVE/
 // EntityManagerUVE/SceneGraphUVE/AssetDatabaseUVE/SceneSerializerUVE/
-// PrefabSystemUVE classes used by EngineCoreUVE — this is the whole point
-// of introducing the interfaces.
+// PrefabSystemUVE/HotReloadUVE/AssetManagerUVE/AssetImporterUVE/
+// AssetBundleUVE classes used by EngineCoreUVE — this is the whole point of
+// introducing the interfaces.
 
 namespace UVE::Core::Tests {
 namespace {
@@ -283,6 +289,64 @@ public:
     int savePrefabCallCount = 0;
 };
 
+class FakeHotReloadUVE final : public Asset::IHotReloadUVE {
+public:
+    void TrackUVE(Asset::AssetGuidUVE) override {}
+    void UntrackUVE(Asset::AssetGuidUVE) override {}
+    void PollUVE(Asset::IAssetManagerUVE&, Asset::IAssetDatabaseUVE&, double) override { ++pollCallCount; }
+
+    int pollCallCount = 0;
+};
+
+class FakeAssetManagerUVE final : public Asset::IAssetManagerUVE {
+public:
+    void CollectGarbageUVE() override { ++collectGarbageCallCount; }
+    void ReloadUVE(Asset::AssetGuidUVE, Asset::IAssetDatabaseUVE&) override { ++reloadCallCount; }
+    [[nodiscard]] std::size_t GetLoadedAssetCountUVE() const override { return 0; }
+
+    int collectGarbageCallCount = 0;
+    int reloadCallCount = 0;
+
+protected:
+    void RegisterLoaderErased(std::type_index, Asset::AssetLoaderInfoUVE) override {}
+    void LoadErased(Asset::AssetGuidUVE, std::type_index, Asset::IAssetDatabaseUVE&) override {}
+    [[nodiscard]] Asset::AssetLoadStateUVE GetStateErased(Asset::AssetGuidUVE) const override {
+        return Asset::AssetLoadStateUVE::NotLoaded;
+    }
+    [[nodiscard]] void* TryGetErased(Asset::AssetGuidUVE) override { return nullptr; }
+    void AddRefErased(Asset::AssetGuidUVE) override {}
+    void ReleaseErased(Asset::AssetGuidUVE) override {}
+};
+
+class FakeAssetImporterUVE final : public Asset::IAssetImporterUVE {
+public:
+    void RegisterImporterUVE(std::string,
+                              std::function<bool(const std::filesystem::path&, const std::filesystem::path&,
+                                                  const Asset::AssetImportSettingsUVE&)>) override {}
+    [[nodiscard]] Asset::AssetGuidUVE ImportUVE(const std::filesystem::path&, const std::filesystem::path&,
+                                                 Asset::IAssetDatabaseUVE&,
+                                                 const Asset::AssetImportSettingsUVE&) override {
+        ++importCallCount;
+        return Asset::AssetGuidUVE{1};
+    }
+
+    int importCallCount = 0;
+};
+
+class FakeAssetBundleUVE final : public Asset::IAssetBundleUVE {
+public:
+    [[nodiscard]] bool PackUVE(const std::vector<Asset::AssetBundleEntryUVE>&,
+                                const std::filesystem::path&) override {
+        ++packCallCount;
+        return true;
+    }
+    [[nodiscard]] bool UnpackUVE(const std::filesystem::path&, const std::filesystem::path&) override {
+        return true;
+    }
+
+    int packCallCount = 0;
+};
+
 TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     FakeLoggerUVE logger;
     FakeTimerUVE timer;
@@ -296,10 +360,15 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     FakeAssetDatabaseUVE assetDatabase;
     FakeSceneSerializerUVE sceneSerializer;
     FakePrefabSystemUVE prefabSystem;
+    FakeHotReloadUVE hotReload;
+    FakeAssetManagerUVE assetManager;
+    FakeAssetImporterUVE assetImporter;
+    FakeAssetBundleUVE assetBundle;
 
     const EngineServicesUVE services(logger, timer, eventSystem, memoryManager, threadPool,
                                       commandLine, configManager, entityManager, sceneGraph,
-                                      assetDatabase, sceneSerializer, prefabSystem);
+                                      assetDatabase, sceneSerializer, prefabSystem, hotReload,
+                                      assetManager, assetImporter, assetBundle);
 
     EXPECT_EQ(&services.GetLoggerUVE(), &logger);
     EXPECT_EQ(&services.GetTimerUVE(), &timer);
@@ -313,6 +382,10 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     EXPECT_EQ(&services.GetAssetDatabaseUVE(), &assetDatabase);
     EXPECT_EQ(&services.GetSceneSerializerUVE(), &sceneSerializer);
     EXPECT_EQ(&services.GetPrefabSystemUVE(), &prefabSystem);
+    EXPECT_EQ(&services.GetHotReloadUVE(), &hotReload);
+    EXPECT_EQ(&services.GetAssetManagerUVE(), &assetManager);
+    EXPECT_EQ(&services.GetAssetImporterUVE(), &assetImporter);
+    EXPECT_EQ(&services.GetAssetBundleUVE(), &assetBundle);
 }
 
 TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) {
@@ -328,9 +401,14 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     FakeAssetDatabaseUVE assetDatabase;
     FakeSceneSerializerUVE sceneSerializer;
     FakePrefabSystemUVE prefabSystem;
+    FakeHotReloadUVE hotReload;
+    FakeAssetManagerUVE assetManager;
+    FakeAssetImporterUVE assetImporter;
+    FakeAssetBundleUVE assetBundle;
     const EngineServicesUVE services(logger, timer, eventSystem, memoryManager, threadPool,
                                       commandLine, configManager, entityManager, sceneGraph,
-                                      assetDatabase, sceneSerializer, prefabSystem);
+                                      assetDatabase, sceneSerializer, prefabSystem, hotReload,
+                                      assetManager, assetImporter, assetBundle);
 
     services.GetTimerUVE().Tick();
     services.GetEventSystemUVE().DispatchQueuedUVE();
@@ -346,6 +424,11 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     static_cast<void>(services.GetPrefabSystemUVE().SavePrefabUVE(
         services.GetEntityManagerUVE(), services.GetAssetDatabaseUVE(), Scene::kInvalidEntityUVE,
         "unused.uveprefab"));
+    services.GetHotReloadUVE().PollUVE(services.GetAssetManagerUVE(), services.GetAssetDatabaseUVE(), 0.0);
+    services.GetAssetManagerUVE().CollectGarbageUVE();
+    static_cast<void>(
+        services.GetAssetImporterUVE().ImportUVE("unused_source", "unused_dest", services.GetAssetDatabaseUVE()));
+    static_cast<void>(services.GetAssetBundleUVE().PackUVE({}, "unused.uvebundle"));
 
     EXPECT_EQ(timer.tickCount, 1);
     EXPECT_EQ(eventSystem.dispatchCount, 1);
@@ -358,6 +441,10 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     EXPECT_EQ(assetDatabase.saveCallCount, 1);
     EXPECT_EQ(sceneSerializer.saveCallCount, 1);
     EXPECT_EQ(prefabSystem.savePrefabCallCount, 1);
+    EXPECT_EQ(hotReload.pollCallCount, 1);
+    EXPECT_EQ(assetManager.collectGarbageCallCount, 1);
+    EXPECT_EQ(assetImporter.importCallCount, 1);
+    EXPECT_EQ(assetBundle.packCallCount, 1);
 }
 
 } // namespace

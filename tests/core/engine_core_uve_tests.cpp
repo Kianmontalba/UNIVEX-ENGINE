@@ -9,14 +9,19 @@
 
 #include "uve/core/engine_core_uve.h"
 
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <fstream>
 #include <memory>
 #include <string>
+#include <thread>
 #include <vector>
 
 #include <gtest/gtest.h>
 
+#include "uve/asset/asset_handle_uve.h"
+#include "uve/asset/blob_asset_uve.h"
 #include "uve/debug/log_sink_uve.h"
 #include "uve/debug/logger_uve.h"
 #include "uve/math/vector3_uve.h"
@@ -280,6 +285,75 @@ TEST(EngineCoreUVETest, AssetDatabaseSceneSerializerPrefabSystem_ReachableAndRou
     std::filesystem::remove(prefabPath);
     std::filesystem::remove(MakeTestConfigUVE().assetDatabaseFilePath);
 
+    engine.Shutdown();
+}
+
+TEST(EngineCoreUVETest, AssetManagerImporterHotReloadBundle_ReachableAndRoundTripAfterInit) {
+    EngineCoreUVE engine(MakeTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    Asset::IAssetDatabaseUVE& assetDatabase = engine.GetServicesUVE().GetAssetDatabaseUVE();
+    Asset::IAssetImporterUVE& importer = engine.GetServicesUVE().GetAssetImporterUVE();
+    Asset::IAssetManagerUVE& assetManager = engine.GetServicesUVE().GetAssetManagerUVE();
+    static_cast<void>(engine.GetServicesUVE().GetHotReloadUVE());
+    static_cast<void>(engine.GetServicesUVE().GetAssetBundleUVE());
+
+    const std::filesystem::path sourcePath = "uve_engine_core_tests_source.txt";
+    const std::filesystem::path destinationPath = "uve_engine_core_tests_dest.txt";
+    std::filesystem::remove(sourcePath);
+    std::filesystem::remove(destinationPath);
+    {
+        std::ofstream file(sourcePath);
+        file << "engine core asset pipeline round trip";
+    }
+
+    const Asset::AssetGuidUVE guid = importer.ImportUVE(sourcePath, destinationPath, assetDatabase);
+    ASSERT_NE(guid, Asset::kInvalidAssetGuidUVE);
+
+    assetManager.RegisterLoaderUVE<Asset::BlobAssetUVE>(
+        [](const std::filesystem::path& path, Asset::BlobAssetUVE& outValue) {
+            std::ifstream file(path, std::ios::binary);
+            if (!file.is_open()) {
+                return false;
+            }
+            const std::vector<char> raw((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+            outValue.assign(reinterpret_cast<const std::byte*>(raw.data()),
+                             reinterpret_cast<const std::byte*>(raw.data()) + raw.size());
+            return true;
+        });
+
+    {
+        // Scoped so the handle releases its reference (and is destroyed) before engine.Shutdown()
+        // tears down the AssetManagerUVE it points into — a handle must never outlive the
+        // manager that produced it, exactly like an IEntityManagerUVE& argument never outliving
+        // its EntityManagerUVE.
+        const Asset::AssetHandleUVE<Asset::BlobAssetUVE> handle =
+            assetManager.LoadUVE<Asset::BlobAssetUVE>(guid, assetDatabase);
+
+        // Ticking a couple of frames exercises HotReloadUVE::PollUVE()/AssetManagerUVE::
+        // CollectGarbageUVE() running from within EngineCoreUVE::Update() while a load is in
+        // flight, proving neither crashes nor prematurely collects the still-referenced asset.
+        engine.TickFrameUVE();
+        engine.TickFrameUVE();
+
+        bool ready = false;
+        for (int poll = 0; poll < 200000 && !ready; ++poll) {
+            ready = handle.IsReadyUVE() || handle.HasFailedUVE();
+            if (!ready) {
+                std::this_thread::yield();
+            }
+        }
+        ASSERT_TRUE(ready);
+        ASSERT_TRUE(handle.IsReadyUVE());
+        const Asset::BlobAssetUVE* const blob = handle.TryGetUVE();
+        ASSERT_NE(blob, nullptr);
+        const std::string content(reinterpret_cast<const char*>(blob->data()), blob->size());
+        EXPECT_EQ(content, "engine core asset pipeline round trip");
+    }
+
+    std::filesystem::remove(sourcePath);
+    std::filesystem::remove(destinationPath);
     engine.Shutdown();
 }
 
