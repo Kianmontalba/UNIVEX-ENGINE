@@ -1,0 +1,16 @@
+# Build output
+build/
+out/
+cmake-build-*/
+
+# Runtime logs
+*.log
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.user
+
+# OS
+.DS_Store
