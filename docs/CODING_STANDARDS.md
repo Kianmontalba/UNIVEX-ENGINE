@@ -21,7 +21,7 @@ subsystem area — **never** flat inside `UVE` directly:
 | `UVE::Math`       | `engine/math/`       | `Vector3UVE`, `QuaternionUVE`, `Matrix4x4UVE`, `AabbUVE`, `PlaneUVE`, `FrustumUVE` |
 | `UVE::Asset`      | `engine/asset/`      | `AssetGuidUVE`, `AssetDatabaseUVE`, `AssetManagerUVE`, `AssetImporterUVE`, `HotReloadUVE`, `AssetBundleUVE`, `FileSystemUVE`, the `.uve*` binary envelope |
 | `UVE::Scene`      | `engine/scene/`      | `EntityManagerUVE`, `SceneGraphUVE`, `ComponentUVE` + built-ins, `SceneSerializerUVE`, `PrefabSystemUVE` |
-| `UVE::Render`     | `engine/render/`     | `IRenderDeviceUVE`, `NullRenderDeviceUVE`, `ICommandBufferUVE`, `RenderSystemUVE`, resource handles/descriptors |
+| `UVE::Render`     | `engine/render/`     | `IRenderDeviceUVE`, `NullRenderDeviceUVE`, `ICommandBufferUVE`, `RenderSystemUVE`, `CameraSystemUVE`, resource handles/descriptors |
 | `UVE::Core`       | `engine/core/`       | `EngineCoreUVE`, config, state, frame stats, version, services |
 
 Future systems (Physics, Animation, Audio, AI, Networking, Editor, ...) become sibling

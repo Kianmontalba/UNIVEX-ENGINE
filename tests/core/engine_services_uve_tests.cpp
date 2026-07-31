@@ -32,7 +32,10 @@
 #include "uve/config/i_config_manager_uve.h"
 #include "uve/debug/i_logger_uve.h"
 #include "uve/events/i_event_system_uve.h"
+#include "uve/math/frustum_uve.h"
+#include "uve/math/matrix4x4_uve.h"
 #include "uve/memory/i_memory_manager_uve.h"
+#include "uve/render/i_camera_system_uve.h"
 #include "uve/render/i_render_device_uve.h"
 #include "uve/render/i_render_system_uve.h"
 #include "uve/scene/i_entity_manager_uve.h"
@@ -47,14 +50,15 @@
 // IMemoryManagerUVE/IThreadPoolUVE/ICommandLineUVE/IConfigManagerUVE/
 // IEntityManagerUVE/ISceneGraphUVE/IAssetDatabaseUVE/ISceneSerializerUVE/
 // IPrefabSystemUVE/IHotReloadUVE/IAssetManagerUVE/IAssetImporterUVE/
-// IAssetBundleUVE/IFileSystemUVE/IRenderDeviceUVE/IRenderSystemUVE) works
-// against ANY conforming implementation, independent of the concrete
-// LoggerUVE/TimerUVE/EventSystemUVE/MemoryManagerUVE/ThreadPoolUVE/
-// CommandLineUVE/ConfigManagerUVE/EntityManagerUVE/SceneGraphUVE/
-// AssetDatabaseUVE/SceneSerializerUVE/PrefabSystemUVE/HotReloadUVE/
-// AssetManagerUVE/AssetImporterUVE/AssetBundleUVE/FileSystemUVE/
-// NullRenderDeviceUVE/RenderSystemUVE classes used by EngineCoreUVE — this
-// is the whole point of introducing the interfaces.
+// IAssetBundleUVE/IFileSystemUVE/IRenderDeviceUVE/IRenderSystemUVE/
+// ICameraSystemUVE) works against ANY conforming implementation,
+// independent of the concrete LoggerUVE/TimerUVE/EventSystemUVE/
+// MemoryManagerUVE/ThreadPoolUVE/CommandLineUVE/ConfigManagerUVE/
+// EntityManagerUVE/SceneGraphUVE/AssetDatabaseUVE/SceneSerializerUVE/
+// PrefabSystemUVE/HotReloadUVE/AssetManagerUVE/AssetImporterUVE/
+// AssetBundleUVE/FileSystemUVE/NullRenderDeviceUVE/RenderSystemUVE/
+// CameraSystemUVE classes used by EngineCoreUVE — this is the whole point
+// of introducing the interfaces.
 
 namespace UVE::Core::Tests {
 namespace {
@@ -438,6 +442,26 @@ public:
     int beginFrameCallCount = 0;
 };
 
+class FakeCameraSystemUVE final : public Render::ICameraSystemUVE {
+public:
+    [[nodiscard]] Math::Matrix4x4UVE ComputeViewMatrixUVE(const Scene::IEntityManagerUVE&,
+                                                            Scene::EntityUVE) const override {
+        ++computeViewCallCount;
+        return Math::Matrix4x4UVE::IdentityUVE();
+    }
+    [[nodiscard]] Math::Matrix4x4UVE ComputeProjectionMatrixUVE(const Scene::IEntityManagerUVE&, Scene::EntityUVE,
+                                                                 float) const override {
+        return Math::Matrix4x4UVE::IdentityUVE();
+    }
+    [[nodiscard]] Math::Matrix4x4UVE ComputeViewProjectionUVE(const Scene::IEntityManagerUVE&, Scene::EntityUVE,
+                                                               float) const override {
+        return Math::Matrix4x4UVE::IdentityUVE();
+    }
+    [[nodiscard]] Math::FrustumUVE ExtractFrustumUVE(const Math::Matrix4x4UVE&) const override { return {}; }
+
+    mutable int computeViewCallCount = 0;
+};
+
 TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     FakeLoggerUVE logger;
     FakeTimerUVE timer;
@@ -458,12 +482,13 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     FakeFileSystemUVE fileSystem;
     FakeRenderDeviceUVE renderDevice;
     FakeRenderSystemUVE renderSystem;
+    FakeCameraSystemUVE cameraSystem;
 
     const EngineServicesUVE services(logger, timer, eventSystem, memoryManager, threadPool,
                                       commandLine, configManager, entityManager, sceneGraph,
                                       assetDatabase, sceneSerializer, prefabSystem, hotReload,
                                       assetManager, assetImporter, assetBundle, fileSystem,
-                                      renderDevice, renderSystem);
+                                      renderDevice, renderSystem, cameraSystem);
 
     EXPECT_EQ(&services.GetLoggerUVE(), &logger);
     EXPECT_EQ(&services.GetTimerUVE(), &timer);
@@ -484,6 +509,7 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     EXPECT_EQ(&services.GetFileSystemUVE(), &fileSystem);
     EXPECT_EQ(&services.GetRenderDeviceUVE(), &renderDevice);
     EXPECT_EQ(&services.GetRenderSystemUVE(), &renderSystem);
+    EXPECT_EQ(&services.GetCameraSystemUVE(), &cameraSystem);
 }
 
 TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) {
@@ -506,11 +532,12 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     FakeFileSystemUVE fileSystem;
     FakeRenderDeviceUVE renderDevice;
     FakeRenderSystemUVE renderSystem;
+    FakeCameraSystemUVE cameraSystem;
     const EngineServicesUVE services(logger, timer, eventSystem, memoryManager, threadPool,
                                       commandLine, configManager, entityManager, sceneGraph,
                                       assetDatabase, sceneSerializer, prefabSystem, hotReload,
                                       assetManager, assetImporter, assetBundle, fileSystem,
-                                      renderDevice, renderSystem);
+                                      renderDevice, renderSystem, cameraSystem);
 
     services.GetTimerUVE().Tick();
     services.GetEventSystemUVE().DispatchQueuedUVE();
@@ -534,6 +561,8 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     static_cast<void>(services.GetFileSystemUVE().WriteFileUVE("unused.txt", {}));
     static_cast<void>(services.GetRenderDeviceUVE().CreateBufferUVE(Render::BufferDescUVE{}));
     services.GetRenderSystemUVE().BeginFrameUVE();
+    static_cast<void>(
+        services.GetCameraSystemUVE().ComputeViewMatrixUVE(services.GetEntityManagerUVE(), Scene::kInvalidEntityUVE));
 
     EXPECT_EQ(timer.tickCount, 1);
     EXPECT_EQ(eventSystem.dispatchCount, 1);
@@ -553,6 +582,7 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     EXPECT_EQ(fileSystem.writeCallCount, 1);
     EXPECT_EQ(renderDevice.createBufferCallCount, 1);
     EXPECT_EQ(renderSystem.beginFrameCallCount, 1);
+    EXPECT_EQ(cameraSystem.computeViewCallCount, 1);
 }
 
 } // namespace

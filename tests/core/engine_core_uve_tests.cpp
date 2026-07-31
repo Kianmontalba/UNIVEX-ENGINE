@@ -25,10 +25,13 @@
 #include "uve/asset/blob_asset_uve.h"
 #include "uve/debug/log_sink_uve.h"
 #include "uve/debug/logger_uve.h"
+#include "uve/math/aabb_uve.h"
 #include "uve/math/vector3_uve.h"
 #include "uve/platform/platform_uve.h"
+#include "uve/render/i_camera_system_uve.h"
 #include "uve/render/i_render_device_uve.h"
 #include "uve/render/i_render_system_uve.h"
+#include "uve/scene/components/camera_component_uve.h"
 #include "uve/scene/components/mesh_component_uve.h"
 #include "uve/scene/components/transform_component_uve.h"
 #include "uve/scene/components/world_transform_component_uve.h"
@@ -401,6 +404,31 @@ TEST(EngineCoreUVETest, RenderSystem_ReachableAndFrameLifecycleWorksAfterInit) {
 
     Render::IRenderDeviceUVE& renderDevice = engine.GetServicesUVE().GetRenderDeviceUVE();
     EXPECT_EQ(renderDevice.GetBackendNameUVE(), "Null");
+
+    engine.Shutdown();
+}
+
+TEST(EngineCoreUVETest, CameraSystem_ReachableAndComputesViewProjectionAfterInit) {
+    EngineCoreUVE engine(MakeTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    Scene::IEntityManagerUVE& entityManager = engine.GetServicesUVE().GetEntityManagerUVE();
+    Scene::ISceneGraphUVE& sceneGraph = engine.GetServicesUVE().GetSceneGraphUVE();
+    const Scene::EntityUVE cameraEntity = entityManager.CreateEntityUVE();
+    Scene::TransformComponentUVE local;
+    local.localPosition = Math::Vector3UVE{0.0F, 0.0F, 5.0F};
+    sceneGraph.AttachTransformUVE(entityManager, cameraEntity, local);
+    sceneGraph.UpdateUVE(entityManager);
+    entityManager.AddComponentUVE<Scene::CameraComponentUVE>(cameraEntity);
+
+    Render::ICameraSystemUVE& cameraSystem = engine.GetServicesUVE().GetCameraSystemUVE();
+    const Math::Matrix4x4UVE viewProjection =
+        cameraSystem.ComputeViewProjectionUVE(entityManager, cameraEntity, 16.0F / 9.0F);
+    const Math::FrustumUVE frustum = cameraSystem.ExtractFrustumUVE(viewProjection);
+
+    EXPECT_TRUE(
+        frustum.IntersectsUVE(Math::AabbUVE::FromCenterExtentsUVE(Math::Vector3UVE{0.0F, 0.0F, 0.0F}, Math::Vector3UVE{1.0F, 1.0F, 1.0F})));
 
     engine.Shutdown();
 }

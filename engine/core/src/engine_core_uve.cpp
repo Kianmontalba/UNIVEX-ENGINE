@@ -26,6 +26,7 @@
 #include "uve/events/event_system_uve.h"
 #include "uve/memory/memory_manager_uve.h"
 #include "uve/platform/platform_uve.h"
+#include "uve/render/camera_system_uve.h"
 #include "uve/render/null_render_device_uve.h"
 #include "uve/render/render_system_uve.h"
 #include "uve/scene/entity_manager_uve.h"
@@ -155,6 +156,10 @@ void EngineCoreUVE::Init() {
     // submits command buffers through it.
     m_renderSystem = std::make_unique<Render::RenderSystemUVE>(*m_renderDevice);
 
+    // CameraSystem nineteenth: stateless, no dependencies of its own —
+    // grouped with the rest of engine/render.
+    m_cameraSystem = std::make_unique<Render::CameraSystemUVE>();
+
     // ConfigManager last: it immediately calls LoadUVE(), which logs its
     // outcome (missing/malformed/success) through the Logger constructed
     // above — so Logger must already exist by this point.
@@ -166,7 +171,7 @@ void EngineCoreUVE::Init() {
                         *m_commandLine, *m_configManager, *m_entityManager, *m_sceneGraph,
                         *m_assetDatabase, *m_sceneSerializer, *m_prefabSystem, *m_hotReload,
                         *m_assetManager, *m_assetImporter, *m_assetBundle, *m_fileSystem,
-                        *m_renderDevice, *m_renderSystem);
+                        *m_renderDevice, *m_renderSystem, *m_cameraSystem);
 
     TransitionStateUVE(EngineStateUVE::Running);
     UVE_INFO("EngineCoreUVE: initialized");
@@ -258,16 +263,17 @@ void EngineCoreUVE::Shutdown() {
     UVE_INFO("EngineCoreUVE: shutting down");
 
     // Exact reverse of Init()'s construction order: ConfigManager, then
-    // RenderSystem, then RenderDevice, then FileSystem, then AssetBundle,
-    // then AssetImporter, then AssetManager (its destructor blocks until
-    // every in-flight load job finishes), then HotReload, then
-    // PrefabSystem, then SceneSerializer, then AssetDatabase, then
-    // SceneGraph, then EntityManager, then EventSystem, then Timer, then
-    // ThreadPool, then MemoryManager, then Logger, then CommandLine. The
-    // final log message is emitted before the logger itself is torn down,
-    // so it is guaranteed to be recorded.
+    // CameraSystem, then RenderSystem, then RenderDevice, then FileSystem,
+    // then AssetBundle, then AssetImporter, then AssetManager (its
+    // destructor blocks until every in-flight load job finishes), then
+    // HotReload, then PrefabSystem, then SceneSerializer, then
+    // AssetDatabase, then SceneGraph, then EntityManager, then EventSystem,
+    // then Timer, then ThreadPool, then MemoryManager, then Logger, then
+    // CommandLine. The final log message is emitted before the logger
+    // itself is torn down, so it is guaranteed to be recorded.
     m_services.reset();
     m_configManager.reset();
+    m_cameraSystem.reset();
     m_renderSystem.reset();
     m_renderDevice.reset();
     m_fileSystem.reset();

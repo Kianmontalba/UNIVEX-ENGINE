@@ -47,6 +47,7 @@ add_executable(uve_tests
     asset/file_system_uve_tests.cpp
     render/null_render_device_uve_tests.cpp
     render/render_system_uve_tests.cpp
+    render/camera_system_uve_tests.cpp
     scene/entity_manager_uve_tests.cpp
     scene/scene_graph_uve_tests.cpp
     scene/scene_serializer_uve_tests.cpp
