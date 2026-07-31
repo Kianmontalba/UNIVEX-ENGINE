@@ -13,9 +13,10 @@ namespace UVE::Core {
 
 EngineServicesUVE::EngineServicesUVE(Debug::ILoggerUVE& logger, Utilities::ITimerUVE& timer,
                                       Events::IEventSystemUVE& eventSystem,
-                                      Memory::IMemoryManagerUVE& memoryManager) noexcept
+                                      Memory::IMemoryManagerUVE& memoryManager,
+                                      Threading::IThreadPoolUVE& threadPool) noexcept
     : m_logger(&logger), m_timer(&timer), m_eventSystem(&eventSystem),
-      m_memoryManager(&memoryManager) {}
+      m_memoryManager(&memoryManager), m_threadPool(&threadPool) {}
 
 Debug::ILoggerUVE& EngineServicesUVE::GetLoggerUVE() const noexcept {
     return *m_logger;
@@ -31,6 +32,10 @@ Events::IEventSystemUVE& EngineServicesUVE::GetEventSystemUVE() const noexcept {
 
 Memory::IMemoryManagerUVE& EngineServicesUVE::GetMemoryManagerUVE() const noexcept {
     return *m_memoryManager;
+}
+
+Threading::IThreadPoolUVE& EngineServicesUVE::GetThreadPoolUVE() const noexcept {
+    return *m_threadPool;
 }
 
 } // namespace UVE::Core

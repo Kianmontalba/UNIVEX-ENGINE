@@ -27,6 +27,7 @@ EngineConfigUVE MakeTestConfigUVE() {
     EngineConfigUVE config{};
     config.enableConsoleLogging = false;
     config.logFilePath = "uve_engine_core_tests.log";
+    config.threadPoolWorkerCount = 2; // keep the whole suite's thread churn small and fast
     return config;
 }
 
@@ -184,6 +185,23 @@ TEST(EngineCoreUVETest, NormalRun_ReportsNoLeaks) {
     // must report zero leaks — this also implicitly exercises the debug-only shutdown leak
     // assertion on the happy path (zero leaks, assertion never fires).
     EXPECT_FALSE(engine.GetServicesUVE().GetMemoryManagerUVE().HasLeaksUVE());
+
+    engine.Shutdown();
+}
+
+TEST(EngineCoreUVETest, ThreadPool_ReachableAndFunctionalAfterInit) {
+    EngineCoreUVE engine(MakeTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    Threading::IThreadPoolUVE& threadPool = engine.GetServicesUVE().GetThreadPoolUVE();
+    EXPECT_GE(threadPool.GetWorkerCountUVE(), 1U);
+
+    Threading::JobCounterUVE counter;
+    bool jobRan = false;
+    threadPool.SubmitUVE([&jobRan] { jobRan = true; }, counter);
+    counter.WaitUVE();
+    EXPECT_TRUE(jobRan);
 
     engine.Shutdown();
 }

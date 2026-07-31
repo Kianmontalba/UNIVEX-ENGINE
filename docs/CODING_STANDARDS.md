@@ -15,6 +15,7 @@ subsystem area — **never** flat inside `UVE` directly:
 | `UVE::Utilities`  | `engine/utilities/`  | `TimerUVE`                                                    |
 | `UVE::Events`     | `engine/events/`     | `EventSystemUVE`, priorities, subscriptions                    |
 | `UVE::Memory`     | `engine/memory/`     | `MemoryManagerUVE`, `PoolAllocatorUVE`, `StackAllocatorUVE`, `HeapAllocatorUVE` |
+| `UVE::Threading`  | `engine/threading/`  | `ThreadPoolUVE`, `JobCounterUVE`, `JobUVE`                       |
 | `UVE::Core`       | `engine/core/`       | `EngineCoreUVE`, config, state, frame stats, version, services |
 
 Future systems (Rendering, Physics, Animation, Audio, ECS, AI, Networking, Editor, ...) become
@@ -83,6 +84,16 @@ explicit destructor call at the call site. Track allocations by requesting an
 `IMemoryTrackerUVE*` at construction (e.g. `MemoryManagerUVE::GetDefaultAllocatorUVE()` for the
 shared, tracked default) rather than allocating untracked unless there's a specific, documented
 reason not to.
+
+## Real OS threads
+
+`ThreadPoolUVE` (`engine/threading/`) is the first module that spawns actual `std::thread`s, so
+its `CMakeLists.txt` is the first to call `find_package(Threads REQUIRED)` and link
+`Threads::Threads` explicitly — copy that pattern for any future module that spawns real OS
+threads rather than relying on implicit linkage. The established locking idiom applies here too:
+`mutable std::mutex m_mutex;` plus `const std::lock_guard<std::mutex> lock(m_mutex);` at the top
+of a critical section; use `std::atomic<T>` only for counters/flags meant to be read or updated
+without taking that lock (e.g. debug/query stats).
 
 ## General rules
 
