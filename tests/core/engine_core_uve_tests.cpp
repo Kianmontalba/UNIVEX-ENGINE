@@ -18,7 +18,10 @@
 
 #include "uve/debug/log_sink_uve.h"
 #include "uve/debug/logger_uve.h"
+#include "uve/math/vector3_uve.h"
 #include "uve/platform/platform_uve.h"
+#include "uve/scene/components/transform_component_uve.h"
+#include "uve/scene/components/world_transform_component_uve.h"
 
 namespace UVE::Core::Tests {
 namespace {
@@ -219,6 +222,29 @@ TEST(EngineCoreUVETest, CommandLineAndConfigManager_ReachableAndFunctionalAfterI
     Config::IConfigManagerUVE& configManager = engine.GetServicesUVE().GetConfigManagerUVE();
     configManager.SetStringUVE("editor.theme", "dark");
     EXPECT_EQ(configManager.GetStringUVE("editor.theme", ""), "dark");
+
+    engine.Shutdown();
+}
+
+TEST(EngineCoreUVETest, EntityManagerAndSceneGraph_ReachableAndFunctionalAfterInit) {
+    EngineCoreUVE engine(MakeTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    Scene::IEntityManagerUVE& entityManager = engine.GetServicesUVE().GetEntityManagerUVE();
+    Scene::ISceneGraphUVE& sceneGraph = engine.GetServicesUVE().GetSceneGraphUVE();
+
+    const Scene::EntityUVE entity = entityManager.CreateEntityUVE();
+    Scene::TransformComponentUVE local;
+    local.localPosition = Math::Vector3UVE{1.0F, 2.0F, 3.0F};
+    sceneGraph.AttachTransformUVE(entityManager, entity, local);
+
+    engine.TickFrameUVE();
+
+    const Scene::WorldTransformComponentUVE& world =
+        entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(entity);
+    EXPECT_FALSE(world.dirty);
+    EXPECT_EQ(world.worldPosition, local.localPosition);
 
     engine.Shutdown();
 }

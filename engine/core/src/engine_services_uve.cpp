@@ -16,10 +16,12 @@ EngineServicesUVE::EngineServicesUVE(Debug::ILoggerUVE& logger, Utilities::ITime
                                       Memory::IMemoryManagerUVE& memoryManager,
                                       Threading::IThreadPoolUVE& threadPool,
                                       CommandLine::ICommandLineUVE& commandLine,
-                                      Config::IConfigManagerUVE& configManager) noexcept
+                                      Config::IConfigManagerUVE& configManager,
+                                      Scene::IEntityManagerUVE& entityManager,
+                                      Scene::ISceneGraphUVE& sceneGraph) noexcept
     : m_logger(&logger), m_timer(&timer), m_eventSystem(&eventSystem),
       m_memoryManager(&memoryManager), m_threadPool(&threadPool), m_commandLine(&commandLine),
-      m_configManager(&configManager) {}
+      m_configManager(&configManager), m_entityManager(&entityManager), m_sceneGraph(&sceneGraph) {}
 
 Debug::ILoggerUVE& EngineServicesUVE::GetLoggerUVE() const noexcept {
     return *m_logger;
@@ -47,6 +49,14 @@ CommandLine::ICommandLineUVE& EngineServicesUVE::GetCommandLineUVE() const noexc
 
 Config::IConfigManagerUVE& EngineServicesUVE::GetConfigManagerUVE() const noexcept {
     return *m_configManager;
+}
+
+Scene::IEntityManagerUVE& EngineServicesUVE::GetEntityManagerUVE() const noexcept {
+    return *m_entityManager;
+}
+
+Scene::ISceneGraphUVE& EngineServicesUVE::GetSceneGraphUVE() const noexcept {
+    return *m_sceneGraph;
 }
 
 } // namespace UVE::Core
