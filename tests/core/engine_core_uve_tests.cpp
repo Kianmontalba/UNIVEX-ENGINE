@@ -26,6 +26,7 @@
 #include "uve/asset/blob_asset_uve.h"
 #include "uve/debug/log_sink_uve.h"
 #include "uve/debug/logger_uve.h"
+#include "uve/input/i_input_system_uve.h"
 #include "uve/math/aabb_uve.h"
 #include "uve/math/vector3_uve.h"
 #include "uve/physics/i_collision_system_uve.h"
@@ -548,6 +549,31 @@ TEST(EngineCoreUVETest, RaycastSystem_ReachableAndFunctionalAfterInit) {
 
     ASSERT_TRUE(hit.has_value());
     EXPECT_EQ(hit->entity, entity);
+
+    engine.Shutdown();
+}
+
+TEST(EngineCoreUVETest, InputSystem_ReachableAndFunctionalAfterInit) {
+    EngineCoreUVE engine(MakeTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    Input::IInputSystemUVE& inputSystem = engine.GetServicesUVE().GetInputSystemUVE();
+
+    inputSystem.SetKeyStateUVE(Input::KeyCodeUVE::Space, true);
+    engine.TickFrameUVE();
+
+    EXPECT_TRUE(inputSystem.IsKeyDownUVE(Input::KeyCodeUVE::Space));
+    EXPECT_TRUE(inputSystem.WasKeyPressedThisFrameUVE(Input::KeyCodeUVE::Space));
+
+    engine.TickFrameUVE();
+    EXPECT_TRUE(inputSystem.IsKeyDownUVE(Input::KeyCodeUVE::Space));
+    EXPECT_FALSE(inputSystem.WasKeyPressedThisFrameUVE(Input::KeyCodeUVE::Space));
+
+    inputSystem.SetKeyStateUVE(Input::KeyCodeUVE::Space, false);
+    engine.TickFrameUVE();
+    EXPECT_FALSE(inputSystem.IsKeyDownUVE(Input::KeyCodeUVE::Space));
+    EXPECT_TRUE(inputSystem.WasKeyReleasedThisFrameUVE(Input::KeyCodeUVE::Space));
 
     engine.Shutdown();
 }

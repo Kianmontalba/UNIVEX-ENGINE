@@ -7,12 +7,10 @@
 # Violators will be prosecuted to the fullest extent of the law.
 #------------------------------------------------------------------------------
 
-add_library(uve_core STATIC
-    src/version_uve.cpp
-    src/engine_services_uve.cpp
-    src/engine_core_uve.cpp
+add_library(uve_input STATIC
+    src/input_system_uve.cpp
 )
-target_include_directories(uve_core PUBLIC include)
-target_link_libraries(uve_core PUBLIC uve_platform uve_debug uve_utilities uve_events uve_memory uve_threading uve_commandline uve_config uve_asset uve_scene uve_physics uve_render uve_input)
-target_compile_features(uve_core PUBLIC cxx_std_20)
-uve_set_warnings(uve_core)
+target_include_directories(uve_input PUBLIC include)
+target_link_libraries(uve_input PUBLIC uve_platform uve_debug uve_math uve_events)
+target_compile_features(uve_input PUBLIC cxx_std_20)
+uve_set_warnings(uve_input)

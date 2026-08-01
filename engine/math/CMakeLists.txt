@@ -8,6 +8,7 @@
 #------------------------------------------------------------------------------
 
 add_library(uve_math STATIC
+    src/vector2_uve.cpp
     src/vector3_uve.cpp
     src/quaternion_uve.cpp
     src/matrix4x4_uve.cpp

@@ -34,7 +34,8 @@ EngineServicesUVE::EngineServicesUVE(Debug::ILoggerUVE& logger, Utilities::ITime
                                       Render::IRenderer3DUVE& renderer3D,
                                       Physics::ICollisionSystemUVE& collisionSystem,
                                       Physics::IPhysicsSystemUVE& physicsSystem,
-                                      Physics::IRaycastSystemUVE& raycastSystem) noexcept
+                                      Physics::IRaycastSystemUVE& raycastSystem,
+                                      Input::IInputSystemUVE& inputSystem) noexcept
     : m_logger(&logger), m_timer(&timer), m_eventSystem(&eventSystem),
       m_memoryManager(&memoryManager), m_threadPool(&threadPool), m_commandLine(&commandLine),
       m_configManager(&configManager), m_entityManager(&entityManager), m_sceneGraph(&sceneGraph),
@@ -43,7 +44,7 @@ EngineServicesUVE::EngineServicesUVE(Debug::ILoggerUVE& logger, Utilities::ITime
       m_assetImporter(&assetImporter), m_assetBundle(&assetBundle), m_fileSystem(&fileSystem),
       m_renderDevice(&renderDevice), m_renderSystem(&renderSystem), m_cameraSystem(&cameraSystem),
       m_meshRenderer(&meshRenderer), m_renderer3D(&renderer3D), m_collisionSystem(&collisionSystem),
-      m_physicsSystem(&physicsSystem), m_raycastSystem(&raycastSystem) {}
+      m_physicsSystem(&physicsSystem), m_raycastSystem(&raycastSystem), m_inputSystem(&inputSystem) {}
 
 Debug::ILoggerUVE& EngineServicesUVE::GetLoggerUVE() const noexcept {
     return *m_logger;
@@ -143,6 +144,10 @@ Physics::IPhysicsSystemUVE& EngineServicesUVE::GetPhysicsSystemUVE() const noexc
 
 Physics::IRaycastSystemUVE& EngineServicesUVE::GetRaycastSystemUVE() const noexcept {
     return *m_raycastSystem;
+}
+
+Input::IInputSystemUVE& EngineServicesUVE::GetInputSystemUVE() const noexcept {
+    return *m_inputSystem;
 }
 
 } // namespace UVE::Core
