@@ -47,6 +47,8 @@
 #include "uve/render/i_render_device_uve.h"
 #include "uve/render/i_render_system_uve.h"
 #include "uve/render/i_renderer_3d_uve.h"
+#include "uve/save/i_checkpoint_manager_uve.h"
+#include "uve/save/i_save_game_system_uve.h"
 #include "uve/scene/i_entity_manager_uve.h"
 #include "uve/scene/i_prefab_system_uve.h"
 #include "uve/scene/i_scene_graph_uve.h"
@@ -593,6 +595,40 @@ public:
     int syncCallCount = 0;
 };
 
+class FakeSaveGameSystemUVE final : public Save::ISaveGameSystemUVE {
+public:
+    [[nodiscard]] bool SaveUVE(int, Scene::IEntityManagerUVE&, const std::vector<Scene::EntityUVE>&,
+                                const Save::GameStateMetadataUVE&) override {
+        ++saveCallCount;
+        return true;
+    }
+    [[nodiscard]] std::vector<Scene::EntityUVE> LoadUVE(int, Scene::IEntityManagerUVE&) override { return {}; }
+    [[nodiscard]] bool DeleteSaveUVE(int) override { return false; }
+    [[nodiscard]] bool HasSaveUVE(int) const override { return false; }
+    [[nodiscard]] std::optional<Save::GameStateMetadataUVE> GetSaveMetadataUVE(int) const override {
+        return std::nullopt;
+    }
+    [[nodiscard]] std::vector<int> ListUsedSlotsUVE() const override { return {}; }
+
+    int saveCallCount = 0;
+};
+
+class FakeCheckpointManagerUVE final : public Save::ICheckpointManagerUVE {
+public:
+    void UpdateUVE(double, Scene::IEntityManagerUVE&, const std::vector<Scene::EntityUVE>&) override {
+        ++updateCallCount;
+    }
+    [[nodiscard]] bool CheckpointUVE(Scene::IEntityManagerUVE&, const std::vector<Scene::EntityUVE>&) override {
+        return true;
+    }
+    void SetAutoSaveIntervalSecondsUVE(double) noexcept override {}
+    [[nodiscard]] double GetAutoSaveIntervalSecondsUVE() const noexcept override { return 0.0; }
+    [[nodiscard]] double GetElapsedSinceLastSaveSecondsUVE() const noexcept override { return 0.0; }
+    [[nodiscard]] double GetTotalPlaytimeSecondsUVE() const noexcept override { return 0.0; }
+
+    int updateCallCount = 0;
+};
+
 TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     FakeLoggerUVE logger;
     FakeTimerUVE timer;
@@ -623,6 +659,8 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     FakeAudioDeviceUVE audioDevice;
     FakeAudioSystemUVE audioSystem;
     FakeAudioSourceSystemUVE audioSourceSystem;
+    FakeSaveGameSystemUVE saveGameSystem;
+    FakeCheckpointManagerUVE checkpointManager;
 
     const EngineServicesUVE services(logger, timer, eventSystem, memoryManager, threadPool,
                                       commandLine, configManager, entityManager, sceneGraph,
@@ -630,7 +668,8 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
                                       assetManager, assetImporter, assetBundle, fileSystem,
                                       renderDevice, renderSystem, cameraSystem, meshRenderer,
                                       renderer3D, collisionSystem, physicsSystem, raycastSystem,
-                                      inputSystem, audioDevice, audioSystem, audioSourceSystem);
+                                      inputSystem, audioDevice, audioSystem, audioSourceSystem,
+                                      saveGameSystem, checkpointManager);
 
     EXPECT_EQ(&services.GetLoggerUVE(), &logger);
     EXPECT_EQ(&services.GetTimerUVE(), &timer);
@@ -661,6 +700,8 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     EXPECT_EQ(&services.GetAudioDeviceUVE(), &audioDevice);
     EXPECT_EQ(&services.GetAudioSystemUVE(), &audioSystem);
     EXPECT_EQ(&services.GetAudioSourceSystemUVE(), &audioSourceSystem);
+    EXPECT_EQ(&services.GetSaveGameSystemUVE(), &saveGameSystem);
+    EXPECT_EQ(&services.GetCheckpointManagerUVE(), &checkpointManager);
 }
 
 TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) {
@@ -693,13 +734,16 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     FakeAudioDeviceUVE audioDevice;
     FakeAudioSystemUVE audioSystem;
     FakeAudioSourceSystemUVE audioSourceSystem;
+    FakeSaveGameSystemUVE saveGameSystem;
+    FakeCheckpointManagerUVE checkpointManager;
     const EngineServicesUVE services(logger, timer, eventSystem, memoryManager, threadPool,
                                       commandLine, configManager, entityManager, sceneGraph,
                                       assetDatabase, sceneSerializer, prefabSystem, hotReload,
                                       assetManager, assetImporter, assetBundle, fileSystem,
                                       renderDevice, renderSystem, cameraSystem, meshRenderer,
                                       renderer3D, collisionSystem, physicsSystem, raycastSystem,
-                                      inputSystem, audioDevice, audioSystem, audioSourceSystem);
+                                      inputSystem, audioDevice, audioSystem, audioSourceSystem,
+                                      saveGameSystem, checkpointManager);
 
     services.GetTimerUVE().Tick();
     services.GetEventSystemUVE().DispatchQueuedUVE();
@@ -733,6 +777,9 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     services.GetInputSystemUVE().UpdateUVE();
     services.GetAudioSystemUVE().UpdateUVE();
     services.GetAudioSourceSystemUVE().SyncUVE(services.GetEntityManagerUVE(), services.GetAudioSystemUVE());
+    static_cast<void>(services.GetSaveGameSystemUVE().SaveUVE(0, services.GetEntityManagerUVE(), {},
+                                                                Save::GameStateMetadataUVE{}));
+    services.GetCheckpointManagerUVE().UpdateUVE(0.0, services.GetEntityManagerUVE(), {});
 
     EXPECT_EQ(timer.tickCount, 1);
     EXPECT_EQ(eventSystem.dispatchCount, 1);
@@ -759,6 +806,8 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     EXPECT_EQ(inputSystem.updateCallCount, 1);
     EXPECT_EQ(audioSystem.updateCallCount, 1);
     EXPECT_EQ(audioSourceSystem.syncCallCount, 1);
+    EXPECT_EQ(saveGameSystem.saveCallCount, 1);
+    EXPECT_EQ(checkpointManager.updateCallCount, 1);
 }
 
 } // namespace

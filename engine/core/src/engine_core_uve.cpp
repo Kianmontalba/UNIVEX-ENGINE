@@ -43,6 +43,8 @@
 #include "uve/render/null_render_device_uve.h"
 #include "uve/render/render_system_uve.h"
 #include "uve/render/renderer_3d_uve.h"
+#include "uve/save/checkpoint_manager_uve.h"
+#include "uve/save/save_game_system_uve.h"
 #include "uve/scene/components/world_transform_component_uve.h"
 #include "uve/scene/entity_manager_uve.h"
 #include "uve/scene/prefab_system_uve.h"
@@ -222,6 +224,15 @@ void EngineCoreUVE::Init() {
     // MeshRendererUVE::ExtractRenderQueueUVE().
     m_audioSourceSystem = std::make_unique<Audio::AudioSourceSystemUVE>();
 
+    // SaveGameSystem twenty-ninth: needs SceneSerializer (composed by reference) and
+    // EngineConfigUVE::saveDirectoryPath.
+    m_saveGameSystem = std::make_unique<Save::SaveGameSystemUVE>(*m_sceneSerializer, m_config.saveDirectoryPath);
+
+    // CheckpointManager thirtieth: needs SaveGameSystem (composed by reference) and
+    // EngineConfigUVE::autoSaveIntervalSecondsUVE.
+    m_checkpointManager =
+        std::make_unique<Save::CheckpointManagerUVE>(*m_saveGameSystem, m_config.autoSaveIntervalSecondsUVE);
+
     // ConfigManager last: it immediately calls LoadUVE(), which logs its
     // outcome (missing/malformed/success) through the Logger constructed
     // above — so Logger must already exist by this point.
@@ -235,7 +246,8 @@ void EngineCoreUVE::Init() {
                         *m_assetManager, *m_assetImporter, *m_assetBundle, *m_fileSystem,
                         *m_renderDevice, *m_renderSystem, *m_cameraSystem, *m_meshRenderer,
                         *m_renderer3D, *m_collisionSystem, *m_physicsSystem, *m_raycastSystem,
-                        *m_inputSystem, *m_audioDevice, *m_audioSystem, *m_audioSourceSystem);
+                        *m_inputSystem, *m_audioDevice, *m_audioSystem, *m_audioSourceSystem,
+                        *m_saveGameSystem, *m_checkpointManager);
 
     TransitionStateUVE(EngineStateUVE::Running);
     UVE_INFO("EngineCoreUVE: initialized");
@@ -274,6 +286,9 @@ void EngineCoreUVE::Update() {
         m_hotReload->PollUVE(*m_assetManager, *m_assetDatabase, m_timer->GetDeltaTimeUVE());
     }
     m_assetManager->CollectGarbageUVE();
+
+    m_checkpointManager->UpdateUVE(m_timer->GetDeltaTimeUVE(), *m_entityManager,
+                                    m_sceneGraph->GetChildrenUVE(*m_entityManager, Scene::kInvalidEntityUVE));
 }
 
 void EngineCoreUVE::LateUpdate() {
@@ -347,7 +362,7 @@ void EngineCoreUVE::Shutdown() {
     UVE_INFO("EngineCoreUVE: shutting down");
 
     // Exact reverse of Init()'s construction order: ConfigManager, then
-    // AudioSourceSystem, then AudioSystem, then AudioDevice, then
+    // CheckpointManager, then SaveGameSystem, then AudioSourceSystem, then AudioSystem, then AudioDevice, then
     // InputSystem, then RaycastSystem, then PhysicsSystem, then CollisionSystem, then Renderer3D, then MeshRenderer, then CameraSystem, then RenderSystem, then RenderDevice,
     // then FileSystem, then AssetBundle, then AssetImporter, then
     // AssetManager (its destructor blocks until every in-flight load job
@@ -358,6 +373,8 @@ void EngineCoreUVE::Shutdown() {
     // logger itself is torn down, so it is guaranteed to be recorded.
     m_services.reset();
     m_configManager.reset();
+    m_checkpointManager.reset();
+    m_saveGameSystem.reset();
     m_audioSourceSystem.reset();
     m_audioSystem.reset();
     m_audioDevice.reset();

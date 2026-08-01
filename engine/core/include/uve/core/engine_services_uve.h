@@ -32,6 +32,8 @@
 #include "uve/render/i_render_device_uve.h"
 #include "uve/render/i_render_system_uve.h"
 #include "uve/render/i_renderer_3d_uve.h"
+#include "uve/save/i_checkpoint_manager_uve.h"
+#include "uve/save/i_save_game_system_uve.h"
 #include "uve/scene/i_entity_manager_uve.h"
 #include "uve/scene/i_prefab_system_uve.h"
 #include "uve/scene/i_scene_graph_uve.h"
@@ -48,9 +50,10 @@ namespace UVE::Core {
 /// PrefabSystem, HotReload, AssetManager, AssetImporter, AssetBundle,
 /// FileSystem, RenderDevice, RenderSystem, CameraSystem, MeshRenderer,
 /// Renderer3D, CollisionSystem, PhysicsSystem, RaycastSystem, InputSystem,
-/// AudioDevice, AudioSystem, AudioSourceSystem), built once EngineCoreUVE has
-/// constructed all twenty-nine. Any future subsystem that needs access to one
-/// of these should receive an EngineServicesUVE& (obtained from
+/// AudioDevice, AudioSystem, AudioSourceSystem, SaveGameSystem,
+/// CheckpointManager), built once EngineCoreUVE has constructed all
+/// thirty-one. Any future subsystem that needs access to one of these should
+/// receive an EngineServicesUVE& (obtained from
 /// EngineCoreUVE::GetServicesUVE()) rather than a raw global pointer — the
 /// logging macros' internal active-instance pointer remains the one
 /// intentional exception to that rule (see docs/CODING_STANDARDS.md).
@@ -61,9 +64,10 @@ namespace UVE::Core {
 /// IAssetManagerUVE/IAssetImporterUVE/IAssetBundleUVE/IFileSystemUVE/
 /// IRenderDeviceUVE/IRenderSystemUVE/ICameraSystemUVE/IMeshRendererUVE/
 /// IRenderer3DUVE/ICollisionSystemUVE/IPhysicsSystemUVE/IRaycastSystemUVE/
-/// IInputSystemUVE/IAudioDeviceUVE/IAudioSystemUVE/IAudioSourceSystemUVE
-/// interfaces, not the concrete types, so a future substitute implementation
-/// of any of the twenty-nine requires no change here.
+/// IInputSystemUVE/IAudioDeviceUVE/IAudioSystemUVE/IAudioSourceSystemUVE/
+/// ISaveGameSystemUVE/ICheckpointManagerUVE interfaces, not the concrete
+/// types, so a future substitute implementation of any of the thirty-one
+/// requires no change here.
 /// Thread-safety: EngineServicesUVE itself holds only non-owning pointers
 /// and has no mutable state of its own; the thread-safety of each accessor
 /// is whatever the referenced service documents.
@@ -96,7 +100,9 @@ public:
                        Input::IInputSystemUVE& inputSystem,
                        Audio::IAudioDeviceUVE& audioDevice,
                        Audio::IAudioSystemUVE& audioSystem,
-                       Audio::IAudioSourceSystemUVE& audioSourceSystem) noexcept;
+                       Audio::IAudioSourceSystemUVE& audioSourceSystem,
+                       Save::ISaveGameSystemUVE& saveGameSystem,
+                       Save::ICheckpointManagerUVE& checkpointManager) noexcept;
 
     [[nodiscard]] Debug::ILoggerUVE& GetLoggerUVE() const noexcept;
     [[nodiscard]] Utilities::ITimerUVE& GetTimerUVE() const noexcept;
@@ -127,6 +133,8 @@ public:
     [[nodiscard]] Audio::IAudioDeviceUVE& GetAudioDeviceUVE() const noexcept;
     [[nodiscard]] Audio::IAudioSystemUVE& GetAudioSystemUVE() const noexcept;
     [[nodiscard]] Audio::IAudioSourceSystemUVE& GetAudioSourceSystemUVE() const noexcept;
+    [[nodiscard]] Save::ISaveGameSystemUVE& GetSaveGameSystemUVE() const noexcept;
+    [[nodiscard]] Save::ICheckpointManagerUVE& GetCheckpointManagerUVE() const noexcept;
 
 private:
     Debug::ILoggerUVE* m_logger;
@@ -158,6 +166,8 @@ private:
     Audio::IAudioDeviceUVE* m_audioDevice;
     Audio::IAudioSystemUVE* m_audioSystem;
     Audio::IAudioSourceSystemUVE* m_audioSourceSystem;
+    Save::ISaveGameSystemUVE* m_saveGameSystem;
+    Save::ICheckpointManagerUVE* m_checkpointManager;
 };
 
 } // namespace UVE::Core

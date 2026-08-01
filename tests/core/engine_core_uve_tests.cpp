@@ -37,6 +37,8 @@
 #include "uve/render/i_camera_system_uve.h"
 #include "uve/render/i_render_device_uve.h"
 #include "uve/render/i_render_system_uve.h"
+#include "uve/save/i_checkpoint_manager_uve.h"
+#include "uve/save/i_save_game_system_uve.h"
 #include "uve/scene/components/audio_source_component_uve.h"
 #include "uve/scene/components/camera_component_uve.h"
 #include "uve/scene/components/collider_component_uve.h"
@@ -657,6 +659,53 @@ TEST(EngineCoreUVETest, FallingRigidBody_TickFrameUVEDrivenPhysicsStep_MovesEnti
     EXPECT_LT(world.worldPosition.y, 10.0F);
 
     engine.Shutdown();
+}
+
+TEST(EngineCoreUVETest, SaveGameSystemAndCheckpointManager_ReachableAndFunctionalAfterInit) {
+    EngineConfigUVE config = MakeTestConfigUVE();
+    config.saveDirectoryPath = "uve_engine_core_tests_saves";
+    std::filesystem::remove_all(config.saveDirectoryPath);
+
+    EngineCoreUVE engine(config);
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    Save::ISaveGameSystemUVE& saveGameSystem = engine.GetServicesUVE().GetSaveGameSystemUVE();
+    Save::ICheckpointManagerUVE& checkpointManager = engine.GetServicesUVE().GetCheckpointManagerUVE();
+
+    Scene::IEntityManagerUVE& entityManager = engine.GetServicesUVE().GetEntityManagerUVE();
+    const Scene::EntityUVE entity = entityManager.CreateEntityUVE();
+    ASSERT_TRUE(saveGameSystem.SaveUVE(0, entityManager, {entity}, Save::GameStateMetadataUVE{}));
+    EXPECT_TRUE(saveGameSystem.HasSaveUVE(0));
+
+    EXPECT_TRUE(checkpointManager.CheckpointUVE(entityManager, {entity}));
+    EXPECT_TRUE(saveGameSystem.HasSaveUVE(Save::kAutoSaveSlotIndexUVE));
+
+    engine.Shutdown();
+    std::filesystem::remove_all(config.saveDirectoryPath);
+}
+
+TEST(EngineCoreUVETest, CheckpointManager_AutoSavesAfterConfiguredInterval_TickFrameUVEDriven) {
+    EngineConfigUVE config = MakeTestConfigUVE();
+    config.saveDirectoryPath = "uve_engine_core_tests_autosave_saves";
+    config.autoSaveIntervalSecondsUVE = 0.0; // fires on the very first CheckpointManagerUVE::UpdateUVE() call
+    std::filesystem::remove_all(config.saveDirectoryPath);
+
+    EngineCoreUVE engine(config);
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    Save::ISaveGameSystemUVE& saveGameSystem = engine.GetServicesUVE().GetSaveGameSystemUVE();
+
+    for (int frame = 0; frame < 3; ++frame) {
+        engine.TickFrameUVE();
+    }
+
+    EXPECT_TRUE(saveGameSystem.HasSaveUVE(Save::kAutoSaveSlotIndexUVE));
+    EXPECT_TRUE(saveGameSystem.ListUsedSlotsUVE().empty());
+
+    engine.Shutdown();
+    std::filesystem::remove_all(config.saveDirectoryPath);
 }
 
 #if UVE_DEBUG

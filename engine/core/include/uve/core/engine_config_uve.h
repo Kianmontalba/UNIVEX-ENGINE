@@ -100,6 +100,17 @@ struct EngineConfigUVE {
     /// non-kinematic RigidBodyComponentUVE each fixed step, scaled by its own gravityScale.
     /// Earth-like default, Y-up (matching this engine's convention throughout).
     Math::Vector3UVE gravity{0.0F, -9.81F, 0.0F};
+
+    /// Directory Save::SaveGameSystemUVE reads/writes numbered save slots (and
+    /// Save::CheckpointManagerUVE's reserved auto-save/checkpoint slot) under. Created lazily on
+    /// first write — a first-run engine has no save directory yet, mirroring
+    /// settingsFilePath/assetDatabaseFilePath's own "missing is not an error" contract.
+    std::filesystem::path saveDirectoryPath = "saves/";
+
+    /// Auto-save interval, in seconds, CheckpointManagerUVE::UpdateUVE() waits between writes to
+    /// its reserved auto-save slot (see Save::kAutoSaveSlotIndexUVE). The spec's "every 5
+    /// minutes" example; test suites override this to a small value to avoid a real wait.
+    double autoSaveIntervalSecondsUVE = 300.0;
 };
 
 } // namespace UVE::Core
