@@ -59,6 +59,21 @@ TEST(UveFileEnvelopeUVETest, WriteThenRead_EmptyPayload_RoundTrips) {
     std::filesystem::remove(path);
 }
 
+TEST(UveFileEnvelopeUVETest, WriteThenRead_SaveAssetKind_RoundTrips) {
+    const std::filesystem::path path = "uve_file_envelope_tests_save.uvesave";
+    std::filesystem::remove(path);
+
+    const std::vector<std::byte> payload = MakePayloadUVE("save payload bytes");
+    ASSERT_TRUE(WriteUveFileUVE(path, AssetKindUVE::Save, payload));
+
+    const auto result = ReadUveFileUVE(path);
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(result->first.assetType, AssetKindUVE::Save);
+    EXPECT_EQ(result->second, payload);
+
+    std::filesystem::remove(path);
+}
+
 TEST(UveFileEnvelopeUVETest, ReadUveFileUVE_MissingFile_ReturnsNulloptAndLogsError) {
     Debug::LoggerUVE logger;
     logger.Init(Debug::LogLevelUVE::Trace);

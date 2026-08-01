@@ -25,6 +25,7 @@ subsystem area — **never** flat inside `UVE` directly:
 | `UVE::Physics`    | `engine/physics/`    | `CollisionSystemUVE`, `PhysicsSystemUVE`, `PhysicsMaterialUVE`, `RaycastSystemUVE`, `RaycastQueryUVE`/`RaycastHitUVE` |
 | `UVE::Input`      | `engine/input/`      | `InputSystemUVE`, `InputActionUVE`, `InputBindingUVE`, `KeyCodeUVE`, `MouseButtonUVE` |
 | `UVE::Audio`      | `engine/audio/`      | `IAudioDeviceUVE`, `NullAudioDeviceUVE`, `AudioSystemUVE`, `AudioSourceSystemUVE`, `AudioAttenuationModelUVE` |
+| `UVE::Save`       | `engine/save/`       | `SaveGameSystemUVE`, `CheckpointManagerUVE`, `GameStateMetadataUVE`, the `.uvesave` format |
 | `UVE::Core`       | `engine/core/`       | `EngineCoreUVE`, config, state, frame stats, version, services |
 
 Future systems (Physics, Animation, Audio, AI, Networking, Editor, ...) become sibling
@@ -95,10 +96,11 @@ rather than a new global type-id registry — reusing the exact type-erasure pat
 `std::type_index`). Copy this pattern for any future system that needs to dispatch by C++ type
 at runtime, instead of inventing a parallel dense-integer type-id scheme.
 
-`AssetDatabaseUVE` (`engine/asset/`) and `SceneSerializerUVE` (`engine/scene/src/`) follow
-`ConfigManagerUVE`'s exact PIMPL-confinement pattern for `nlohmann::json` — the JSON library
-never appears in a public header, only inside each type's own `.cpp` (`AssetDatabaseUVE::ImplUVE`,
-or free functions local to `scene_serializer_uve.cpp`), and the owning `CMakeLists.txt` links
+`AssetDatabaseUVE` (`engine/asset/`), `SceneSerializerUVE` (`engine/scene/src/`), and
+`SaveGameSystemUVE` (`engine/save/src/`) follow `ConfigManagerUVE`'s exact PIMPL-confinement
+pattern for `nlohmann::json` — the JSON library never appears in a public header, only inside each
+type's own `.cpp` (`AssetDatabaseUVE::ImplUVE`, or free functions local to
+`scene_serializer_uve.cpp`/`save_game_system_uve.cpp`), and the owning `CMakeLists.txt` links
 `nlohmann_json::nlohmann_json` `PRIVATE`. Copy this pattern for any future module that needs the
 JSON library internally.
 
@@ -120,8 +122,12 @@ payload:            payloadLength bytes
 
 The payload's own shape is asset-kind-specific and entirely up to the caller — UTF-8 JSON text
 for `Scene`/`Prefab` (`SceneSerializerUVE`), a binary directory-plus-blob table for `Bundle`
-(`AssetBundleUVE`), or raw file bytes for `Blob` (`AssetManagerUVE`'s reference loadable type).
-Files are always opened with `std::ios::binary`. A malformed header (bad magic, truncated file,
+(`AssetBundleUVE`), raw file bytes for `Blob` (`AssetManagerUVE`'s reference loadable type), or a
+**fixed** two-section, length-prefixed metadata-then-world layout for `Save`
+(`SaveGameSystemUVE`) — deliberately distinct in shape from `Bundle`'s variable-length,
+name-indexed entry table, since a save file always has exactly two sections, never an arbitrary
+named set. See "Save/Load (`engine/save/`)" below for the full `.uvesave` layout. Files are always
+opened with `std::ios::binary`. A malformed header (bad magic, truncated file,
 unsupported version/compression method) or a corrupt payload must never crash — log a detailed
 `UVE_ERROR` (path + reason) and return a failure value, mirroring `ConfigManagerUVE`'s
 error-handling contract. `WriteUveFileUVE`/`ReadUveFileUVE`
@@ -193,6 +199,78 @@ internal helper under `include/uve/<module>/detail/` (see
 the same loop, not left duplicated. Anything under a `detail/` path is an implementation detail,
 not a stable public contract: it may be replaced wholesale (e.g. once a real BVH broad-phase
 lands) without that being a breaking change for anything outside the module that owns it.
+
+## Save/Load (`engine/save/`)
+
+`SaveGameSystemUVE` persists an explicit root-entity list (the same "explicit roots" contract
+`Scene::ISceneSerializerUVE` already exposes) to a slot-based `.uvesave` file, backed by
+`AssetKindUVE::Save`. `engine/save` depends on `engine/scene` and `engine/asset`; the dependency
+never runs the other way — `engine/scene`/`engine/asset` must never gain a dependency on
+`uve_save`, matching every other module's one-way dependency discipline in this codebase (compare:
+`engine/physics`/`engine/render` depend on `engine/scene`, never the reverse).
+
+**`.uvesave` payload layout** — a fixed two-section structure, written inside the standard `.uve*`
+envelope with `assetType = AssetKindUVE::Save`:
+
+```
+metadataJsonLength: uint32
+metadataJson:       metadataJsonLength bytes (UTF-8 JSON — GameStateMetadataUVE)
+worldJsonLength:    uint64
+worldJson:          worldJsonLength bytes (UTF-8 JSON — the embedded Scene payload)
+```
+
+Unlike `Bundle`'s variable-length, name-indexed entry table, this shape is intentionally fixed —
+always exactly a metadata section followed by a world section, never an arbitrary named set.
+
+**The scratch-file bounce**: `ISceneSerializerUVE::SaveUVE()`/`LoadUVE()` only take/produce a real
+`std::filesystem::path` — there is no in-memory byte-buffer entry point, and its per-component
+JSON table is deliberately private to `scene_serializer_uve.cpp` (not part of its public
+contract). Rather than growing `ISceneSerializerUVE`'s API surface for one caller,
+`SaveGameSystemUVE::SaveUVE()` calls `SceneSerializerUVE::SaveUVE()` against a scratch path, reads
+the raw bytes back via `Asset::ReadUveFileUVE()`, deletes the scratch file, and embeds those bytes
+verbatim as the world section of its own payload; `LoadUVE()` does the reverse (write the embedded
+world bytes to a scratch path, call `SceneSerializerUVE::LoadUVE()`, delete the scratch file).
+Copy this pattern — write to scratch, read the bytes back, delete the scratch file — for any
+future caller that needs to embed a file-based service's output inside another format without
+widening that service's public contract.
+
+**Payload layer isolation**: `BuildSavePayloadUVE()`/`SplitSavePayloadUVE()`
+(`save_game_system_uve.cpp`) are the *only* functions that touch the raw metadata+world byte
+layout above; every other function in the module (slot path resolution, the scratch-file bounce,
+the atomic write) treats the payload as an opaque `std::vector<std::byte>`. This is a deliberate
+seam: a future compression or encryption increment can wrap `BuildSavePayloadUVE()`'s output
+(and, symmetrically, `SplitSavePayloadUVE()`'s input) without touching `SaveGameSystemUVE`'s
+public API or any other internal function. `GameStateMetadataUVE::payloadSchemaVersion` is a
+similar forward-looking hook — a dedicated, documented field a future migration system can key
+off of, distinct from the four `engineVersion*` fields, without this increment implementing any
+actual migration logic.
+
+**Atomic save writes**: `SaveUVE()` writes to a `.uvesave.tmp` staging path in the save directory
+via the existing (non-atomic) `WriteUveFileUVE()`, then `std::filesystem::rename()`s it over the
+final slot path only after a fully successful write — removing the `.tmp` file on any failure
+path. No half-written `.uvesave` file is ever visible at a slot's real path, and a failed save
+never leaves a stray temp file behind. This wraps `WriteUveFileUVE()` rather than modifying it —
+`Asset::uve_file_envelope_uve.*` itself stays non-atomic for every other caller.
+
+**Reserved auto-save slot**: `kAutoSaveSlotIndexUVE = -1` is deliberately outside
+`[0, kSaveSlotCountUVE)`, so `CheckpointManagerUVE`'s writes can never collide with, or be
+enumerated alongside, a player's own numbered saves (`ListUsedSlotsUVE()` never returns it).
+Auto-save and manual checkpoint currently share this one reserved slot — this is temporary,
+foundation-only architecture, flagged with an explicit
+`TODO(Increment 19+): Future versions may separate autosave and manual checkpoint into independent
+reserved slots.` doc comment on `ICheckpointManagerUVE`. Do not remove that TODO without actually
+splitting the slots.
+
+**Explicitly deferred** (`docs/MASTER_SPEC.md` Part 17 items with no buildable path yet, same
+"Foundations increment" discipline as every prior module): LZ4 compression
+(`compressionMethod` stays `0 = None` — no LZ4 library exists in the repo), AES-256 encryption (no
+crypto library exists), cloud sync hooks (not even a Null-backend stub — unlike
+`NullAudioDeviceUVE`'s recorded gain/position state, a `NullCloudSyncUVE` would have no
+interesting behavior to bookkeep), screenshot thumbnails (needs a real render-to-texture/readback
+path, no GPU backend exists), save migration/versioning logic (no old format exists yet to migrate
+from — `payloadSchemaVersion` above is the hook a future increment keys off of), and Player
+State/Inventory/Quest Progress sections (no gameplay component types exist anywhere in the repo —
+"world state" is exactly the generic ECS/component data `SceneSerializerUVE` already round-trips).
 
 ## Virtual paths (`IFileSystemUVE`)
 

@@ -1,0 +1,344 @@
+//------------------------------------------------------------------------------
+// UniVex Engine (UVE) — Proprietary Game Engine
+// Copyright (c) 2026 UniVex Studios. All Rights Reserved.
+// Unauthorized copying, modification, distribution, or use of this code
+// in whole or in part is strictly prohibited without express written
+// permission from UniVex Studios.
+// Violators will be prosecuted to the fullest extent of the law.
+//------------------------------------------------------------------------------
+
+#include "uve/save/save_game_system_uve.h"
+
+#include <chrono>
+#include <cstdio>
+#include <cstring>
+#include <system_error>
+#include <utility>
+
+#include <nlohmann/json.hpp>
+
+#include "uve/debug/logging_macros_uve.h"
+
+namespace UVE::Save {
+
+namespace {
+
+[[nodiscard]] bool IsValidSlotIndexUVE(int slotIndex) noexcept {
+    return slotIndex == kAutoSaveSlotIndexUVE || (slotIndex >= 0 && slotIndex < kSaveSlotCountUVE);
+}
+
+/// The filename stem (no extension) for `slotIndex` — `"autosave"` for the reserved slot,
+/// `"slot_07"`-style (zero-padded to 2 digits) for a numbered slot.
+[[nodiscard]] std::string SlotFileStemUVE(int slotIndex) {
+    if (slotIndex == kAutoSaveSlotIndexUVE) {
+        return "autosave";
+    }
+    char buffer[16];
+    std::snprintf(buffer, sizeof(buffer), "slot_%02d", slotIndex);
+    return std::string(buffer);
+}
+
+[[nodiscard]] std::filesystem::path SlotFilePathUVE(const std::filesystem::path& saveDirectory, int slotIndex) {
+    return saveDirectory / (SlotFileStemUVE(slotIndex) + ".uvesave");
+}
+
+/// The atomic-write staging path SaveUVE() writes to before renaming over SlotFilePathUVE().
+[[nodiscard]] std::filesystem::path TempSaveFilePathUVE(const std::filesystem::path& saveDirectory, int slotIndex) {
+    return saveDirectory / (SlotFileStemUVE(slotIndex) + ".uvesave.tmp");
+}
+
+/// The scratch `.uvescene`-shaped file SaveUVE()/LoadUVE() bounce world-state JSON through, to
+/// reuse Scene::ISceneSerializerUVE without exposing its private per-component JSON table.
+[[nodiscard]] std::filesystem::path ScratchScenePathUVE(const std::filesystem::path& saveDirectory, int slotIndex) {
+    return saveDirectory / ("." + SlotFileStemUVE(slotIndex) + "_scratch.uvescene");
+}
+
+void AppendBytesUVE(std::vector<std::byte>& buffer, const void* data, std::size_t size) {
+    const auto* const bytes = static_cast<const std::byte*>(data);
+    buffer.insert(buffer.end(), bytes, bytes + size);
+}
+
+void AppendUint32UVE(std::vector<std::byte>& buffer, std::uint32_t value) {
+    AppendBytesUVE(buffer, &value, sizeof(value));
+}
+
+void AppendUint64UVE(std::vector<std::byte>& buffer, std::uint64_t value) {
+    AppendBytesUVE(buffer, &value, sizeof(value));
+}
+
+[[nodiscard]] bool ReadUint32FromBufferUVE(const std::vector<std::byte>& buffer, std::size_t& offset,
+                                            std::uint32_t& outValue) {
+    if (offset + sizeof(outValue) > buffer.size()) {
+        return false;
+    }
+    std::memcpy(&outValue, buffer.data() + offset, sizeof(outValue));
+    offset += sizeof(outValue);
+    return true;
+}
+
+[[nodiscard]] bool ReadUint64FromBufferUVE(const std::vector<std::byte>& buffer, std::size_t& offset,
+                                            std::uint64_t& outValue) {
+    if (offset + sizeof(outValue) > buffer.size()) {
+        return false;
+    }
+    std::memcpy(&outValue, buffer.data() + offset, sizeof(outValue));
+    offset += sizeof(outValue);
+    return true;
+}
+
+[[nodiscard]] bool ReadBytesFromBufferUVE(const std::vector<std::byte>& buffer, std::size_t& offset,
+                                           std::size_t length, std::vector<std::byte>& outBytes) {
+    if (offset + length > buffer.size()) {
+        return false;
+    }
+    outBytes.assign(buffer.begin() + static_cast<std::ptrdiff_t>(offset),
+                     buffer.begin() + static_cast<std::ptrdiff_t>(offset + length));
+    offset += length;
+    return true;
+}
+
+[[nodiscard]] std::vector<std::byte> EncodeMetadataJsonUVE(const GameStateMetadataUVE& metadata) {
+    nlohmann::json json;
+    json["savedAtUnixSecondsUVE"] = metadata.savedAtUnixSecondsUVE;
+    json["engineVersionMajor"] = metadata.engineVersionMajor;
+    json["engineVersionMinor"] = metadata.engineVersionMinor;
+    json["engineVersionPatch"] = metadata.engineVersionPatch;
+    json["engineVersionBuild"] = metadata.engineVersionBuild;
+    json["payloadSchemaVersion"] = metadata.payloadSchemaVersion;
+    json["playtimeSeconds"] = metadata.playtimeSeconds;
+    json["slotIndex"] = metadata.slotIndex;
+    json["saveName"] = metadata.saveName;
+
+    const std::string text = json.dump();
+    const auto* const bytes = reinterpret_cast<const std::byte*>(text.data());
+    return std::vector<std::byte>(bytes, bytes + text.size());
+}
+
+[[nodiscard]] std::optional<GameStateMetadataUVE> DecodeMetadataJsonUVE(const std::vector<std::byte>& bytes) {
+    const std::string text(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+    try {
+        const nlohmann::json json = nlohmann::json::parse(text);
+        GameStateMetadataUVE metadata;
+        metadata.savedAtUnixSecondsUVE = json.at("savedAtUnixSecondsUVE").get<std::int64_t>();
+        metadata.engineVersionMajor = json.at("engineVersionMajor").get<std::uint32_t>();
+        metadata.engineVersionMinor = json.at("engineVersionMinor").get<std::uint32_t>();
+        metadata.engineVersionPatch = json.at("engineVersionPatch").get<std::uint32_t>();
+        metadata.engineVersionBuild = json.at("engineVersionBuild").get<std::uint32_t>();
+        metadata.payloadSchemaVersion = json.value("payloadSchemaVersion", std::uint32_t{1});
+        metadata.playtimeSeconds = json.at("playtimeSeconds").get<double>();
+        metadata.slotIndex = json.at("slotIndex").get<int>();
+        metadata.saveName = json.value("saveName", std::string{});
+        return metadata;
+    } catch (const nlohmann::json::exception& jsonError) {
+        UVE_ERROR("SaveGameSystemUVE: failed to parse save metadata: {}", jsonError.what());
+        return std::nullopt;
+    }
+}
+
+/// Builds a `.uvesave` payload: `metadataJsonLength uint32`, `metadataJsonBytes`,
+/// `worldJsonLength uint64`, `worldJsonBytes` — the *only* function that touches this fixed
+/// layout, so a future increment can wrap this function's output (and SplitSavePayloadUVE's
+/// input) through a compressor/encryptor without touching anything else in this file.
+[[nodiscard]] std::vector<std::byte> BuildSavePayloadUVE(const std::vector<std::byte>& metadataJsonBytes,
+                                                          const std::vector<std::byte>& worldJsonBytes) {
+    std::vector<std::byte> payload;
+    AppendUint32UVE(payload, static_cast<std::uint32_t>(metadataJsonBytes.size()));
+    AppendBytesUVE(payload, metadataJsonBytes.data(), metadataJsonBytes.size());
+    AppendUint64UVE(payload, worldJsonBytes.size());
+    AppendBytesUVE(payload, worldJsonBytes.data(), worldJsonBytes.size());
+    return payload;
+}
+
+/// Splits a `.uvesave` payload back into its metadata and world JSON byte sections. Returns
+/// false (no logging — callers attach path/slot context) on any truncation/bounds failure.
+[[nodiscard]] bool SplitSavePayloadUVE(const std::vector<std::byte>& payload,
+                                        std::vector<std::byte>& outMetadataJsonBytes,
+                                        std::vector<std::byte>& outWorldJsonBytes) {
+    std::size_t offset = 0;
+    std::uint32_t metadataLength = 0;
+    if (!ReadUint32FromBufferUVE(payload, offset, metadataLength) ||
+        !ReadBytesFromBufferUVE(payload, offset, metadataLength, outMetadataJsonBytes)) {
+        return false;
+    }
+    std::uint64_t worldLength = 0;
+    if (!ReadUint64FromBufferUVE(payload, offset, worldLength) ||
+        !ReadBytesFromBufferUVE(payload, offset, worldLength, outWorldJsonBytes)) {
+        return false;
+    }
+    return true;
+}
+
+/// Reads only the metadata section of a `.uvesave` payload — never copies the (potentially much
+/// larger) world JSON bytes, keeping GetSaveMetadataUVE() cheap relative to a full LoadUVE().
+[[nodiscard]] bool SplitSaveMetadataOnlyUVE(const std::vector<std::byte>& payload,
+                                             std::vector<std::byte>& outMetadataJsonBytes) {
+    std::size_t offset = 0;
+    std::uint32_t metadataLength = 0;
+    return ReadUint32FromBufferUVE(payload, offset, metadataLength) &&
+           ReadBytesFromBufferUVE(payload, offset, metadataLength, outMetadataJsonBytes);
+}
+
+} // namespace
+
+SaveGameSystemUVE::SaveGameSystemUVE(Scene::ISceneSerializerUVE& sceneSerializer, std::filesystem::path saveDirectory)
+    : m_sceneSerializer(&sceneSerializer), m_saveDirectory(std::move(saveDirectory)) {}
+
+bool SaveGameSystemUVE::SaveUVE(int slotIndex, Scene::IEntityManagerUVE& entityManager,
+                                 const std::vector<Scene::EntityUVE>& rootEntities,
+                                 const GameStateMetadataUVE& metadata) {
+    if (!IsValidSlotIndexUVE(slotIndex)) {
+        UVE_ERROR("SaveGameSystemUVE: SaveUVE called with an out-of-range slot index ({})", slotIndex);
+        return false;
+    }
+
+    std::error_code errorCode;
+    std::filesystem::create_directories(m_saveDirectory, errorCode);
+
+    const std::filesystem::path scratchPath = ScratchScenePathUVE(m_saveDirectory, slotIndex);
+    if (!m_sceneSerializer->SaveUVE(entityManager, rootEntities, scratchPath, Scene::SceneAssetTypeUVE::Scene)) {
+        UVE_ERROR("SaveGameSystemUVE: SaveUVE failed to serialize world state for slot {}", slotIndex);
+        return false;
+    }
+
+    std::optional<std::pair<Asset::UveFileHeaderUVE, std::vector<std::byte>>> scratchFile =
+        Asset::ReadUveFileUVE(scratchPath);
+    std::filesystem::remove(scratchPath, errorCode);
+    if (!scratchFile.has_value()) {
+        UVE_ERROR("SaveGameSystemUVE: SaveUVE failed to re-read scratch world file for slot {}", slotIndex);
+        return false;
+    }
+
+    GameStateMetadataUVE finalMetadata = metadata;
+    finalMetadata.savedAtUnixSecondsUVE =
+        static_cast<std::int64_t>(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
+    finalMetadata.slotIndex = slotIndex;
+    finalMetadata.payloadSchemaVersion = 1;
+
+    const std::vector<std::byte> metadataJsonBytes = EncodeMetadataJsonUVE(finalMetadata);
+    const std::vector<std::byte> payload = BuildSavePayloadUVE(metadataJsonBytes, scratchFile->second);
+
+    const std::filesystem::path tempPath = TempSaveFilePathUVE(m_saveDirectory, slotIndex);
+    if (!Asset::WriteUveFileUVE(tempPath, Asset::AssetKindUVE::Save, payload)) {
+        UVE_ERROR("SaveGameSystemUVE: SaveUVE failed to write temporary save file for slot {}", slotIndex);
+        std::filesystem::remove(tempPath, errorCode);
+        return false;
+    }
+
+    const std::filesystem::path finalPath = SlotFilePathUVE(m_saveDirectory, slotIndex);
+    std::filesystem::rename(tempPath, finalPath, errorCode);
+    if (errorCode) {
+        UVE_ERROR("SaveGameSystemUVE: SaveUVE failed to finalize save file for slot {}: {}", slotIndex,
+                   errorCode.message());
+        std::filesystem::remove(tempPath, errorCode);
+        return false;
+    }
+
+    return true;
+}
+
+std::vector<Scene::EntityUVE> SaveGameSystemUVE::LoadUVE(int slotIndex, Scene::IEntityManagerUVE& entityManager) {
+    if (!IsValidSlotIndexUVE(slotIndex)) {
+        UVE_ERROR("SaveGameSystemUVE: LoadUVE called with an out-of-range slot index ({})", slotIndex);
+        return {};
+    }
+
+    const std::filesystem::path finalPath = SlotFilePathUVE(m_saveDirectory, slotIndex);
+    std::optional<std::pair<Asset::UveFileHeaderUVE, std::vector<std::byte>>> file = Asset::ReadUveFileUVE(finalPath);
+    if (!file.has_value()) {
+        return {}; // ReadUveFileUVE already logged the specific reason.
+    }
+    const auto& [header, payload] = file.value();
+    if (header.assetType != Asset::AssetKindUVE::Save) {
+        UVE_ERROR("SaveGameSystemUVE: \"{}\" has unexpected asset type {}", finalPath.string(),
+                   static_cast<std::uint32_t>(header.assetType));
+        return {};
+    }
+
+    std::vector<std::byte> metadataJsonBytes;
+    std::vector<std::byte> worldJsonBytes;
+    if (!SplitSavePayloadUVE(payload, metadataJsonBytes, worldJsonBytes)) {
+        UVE_ERROR("SaveGameSystemUVE: \"{}\" has a corrupt or truncated save payload", finalPath.string());
+        return {};
+    }
+
+    const std::filesystem::path scratchPath = ScratchScenePathUVE(m_saveDirectory, slotIndex);
+    if (!Asset::WriteUveFileUVE(scratchPath, Asset::AssetKindUVE::Scene, worldJsonBytes)) {
+        UVE_ERROR("SaveGameSystemUVE: LoadUVE failed to write scratch world file for slot {}", slotIndex);
+        return {};
+    }
+
+    std::vector<Scene::EntityUVE> roots = m_sceneSerializer->LoadUVE(entityManager, scratchPath);
+
+    std::error_code errorCode;
+    std::filesystem::remove(scratchPath, errorCode);
+
+    return roots;
+}
+
+bool SaveGameSystemUVE::DeleteSaveUVE(int slotIndex) {
+    if (!IsValidSlotIndexUVE(slotIndex)) {
+        UVE_ERROR("SaveGameSystemUVE: DeleteSaveUVE called with an out-of-range slot index ({})", slotIndex);
+        return false;
+    }
+
+    std::error_code errorCode;
+    const bool removed = std::filesystem::remove(SlotFilePathUVE(m_saveDirectory, slotIndex), errorCode);
+    if (errorCode) {
+        UVE_ERROR("SaveGameSystemUVE: DeleteSaveUVE failed for slot {}: {}", slotIndex, errorCode.message());
+        return false;
+    }
+    return removed;
+}
+
+bool SaveGameSystemUVE::HasSaveUVE(int slotIndex) const {
+    if (!IsValidSlotIndexUVE(slotIndex)) {
+        return false;
+    }
+    std::error_code errorCode;
+    const bool exists = std::filesystem::exists(SlotFilePathUVE(m_saveDirectory, slotIndex), errorCode);
+    return exists && !errorCode;
+}
+
+std::optional<GameStateMetadataUVE> SaveGameSystemUVE::GetSaveMetadataUVE(int slotIndex) const {
+    if (!IsValidSlotIndexUVE(slotIndex)) {
+        UVE_ERROR("SaveGameSystemUVE: GetSaveMetadataUVE called with an out-of-range slot index ({})", slotIndex);
+        return std::nullopt;
+    }
+
+    const std::filesystem::path finalPath = SlotFilePathUVE(m_saveDirectory, slotIndex);
+    std::optional<std::pair<Asset::UveFileHeaderUVE, std::vector<std::byte>>> file = Asset::ReadUveFileUVE(finalPath);
+    if (!file.has_value()) {
+        return std::nullopt;
+    }
+    const auto& [header, payload] = file.value();
+    if (header.assetType != Asset::AssetKindUVE::Save) {
+        UVE_ERROR("SaveGameSystemUVE: \"{}\" has unexpected asset type {}", finalPath.string(),
+                   static_cast<std::uint32_t>(header.assetType));
+        return std::nullopt;
+    }
+
+    std::vector<std::byte> metadataJsonBytes;
+    if (!SplitSaveMetadataOnlyUVE(payload, metadataJsonBytes)) {
+        UVE_ERROR("SaveGameSystemUVE: \"{}\" has a corrupt or truncated save payload", finalPath.string());
+        return std::nullopt;
+    }
+
+    return DecodeMetadataJsonUVE(metadataJsonBytes);
+}
+
+std::vector<int> SaveGameSystemUVE::ListUsedSlotsUVE() const {
+    std::vector<int> slots;
+    std::error_code errorCode;
+    if (!std::filesystem::exists(m_saveDirectory, errorCode) || errorCode) {
+        return slots;
+    }
+
+    for (int slotIndex = 0; slotIndex < kSaveSlotCountUVE; ++slotIndex) {
+        if (HasSaveUVE(slotIndex)) {
+            slots.push_back(slotIndex);
+        }
+    }
+    return slots;
+}
+
+} // namespace UVE::Save

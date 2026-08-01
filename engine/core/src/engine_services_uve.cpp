@@ -38,7 +38,9 @@ EngineServicesUVE::EngineServicesUVE(Debug::ILoggerUVE& logger, Utilities::ITime
                                       Input::IInputSystemUVE& inputSystem,
                                       Audio::IAudioDeviceUVE& audioDevice,
                                       Audio::IAudioSystemUVE& audioSystem,
-                                      Audio::IAudioSourceSystemUVE& audioSourceSystem) noexcept
+                                      Audio::IAudioSourceSystemUVE& audioSourceSystem,
+                                      Save::ISaveGameSystemUVE& saveGameSystem,
+                                      Save::ICheckpointManagerUVE& checkpointManager) noexcept
     : m_logger(&logger), m_timer(&timer), m_eventSystem(&eventSystem),
       m_memoryManager(&memoryManager), m_threadPool(&threadPool), m_commandLine(&commandLine),
       m_configManager(&configManager), m_entityManager(&entityManager), m_sceneGraph(&sceneGraph),
@@ -48,7 +50,8 @@ EngineServicesUVE::EngineServicesUVE(Debug::ILoggerUVE& logger, Utilities::ITime
       m_renderDevice(&renderDevice), m_renderSystem(&renderSystem), m_cameraSystem(&cameraSystem),
       m_meshRenderer(&meshRenderer), m_renderer3D(&renderer3D), m_collisionSystem(&collisionSystem),
       m_physicsSystem(&physicsSystem), m_raycastSystem(&raycastSystem), m_inputSystem(&inputSystem),
-      m_audioDevice(&audioDevice), m_audioSystem(&audioSystem), m_audioSourceSystem(&audioSourceSystem) {}
+      m_audioDevice(&audioDevice), m_audioSystem(&audioSystem), m_audioSourceSystem(&audioSourceSystem),
+      m_saveGameSystem(&saveGameSystem), m_checkpointManager(&checkpointManager) {}
 
 Debug::ILoggerUVE& EngineServicesUVE::GetLoggerUVE() const noexcept {
     return *m_logger;
@@ -164,6 +167,14 @@ Audio::IAudioSystemUVE& EngineServicesUVE::GetAudioSystemUVE() const noexcept {
 
 Audio::IAudioSourceSystemUVE& EngineServicesUVE::GetAudioSourceSystemUVE() const noexcept {
     return *m_audioSourceSystem;
+}
+
+Save::ISaveGameSystemUVE& EngineServicesUVE::GetSaveGameSystemUVE() const noexcept {
+    return *m_saveGameSystem;
+}
+
+Save::ICheckpointManagerUVE& EngineServicesUVE::GetCheckpointManagerUVE() const noexcept {
+    return *m_checkpointManager;
 }
 
 } // namespace UVE::Core

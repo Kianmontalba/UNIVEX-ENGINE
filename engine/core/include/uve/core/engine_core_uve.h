@@ -41,6 +41,8 @@
 #include "uve/render/i_render_device_uve.h"
 #include "uve/render/i_render_system_uve.h"
 #include "uve/render/i_renderer_3d_uve.h"
+#include "uve/save/i_checkpoint_manager_uve.h"
+#include "uve/save/i_save_game_system_uve.h"
 #include "uve/scene/i_entity_manager_uve.h"
 #include "uve/scene/i_prefab_system_uve.h"
 #include "uve/scene/i_scene_graph_uve.h"
@@ -56,9 +58,9 @@ namespace UVE::Core {
 /// AssetImporter, AssetBundle, FileSystem, RenderDevice, RenderSystem,
 /// CameraSystem, MeshRenderer, Renderer3D, CollisionSystem, PhysicsSystem,
 /// RaycastSystem, InputSystem, AudioDevice, AudioSystem, AudioSourceSystem,
-/// ConfigManager) and drives the canonical engine lifecycle: Init -> Load ->
-/// N x (BeginFrame -> Update -> LateUpdate -> Render -> EndFrame) ->
-/// Shutdown. Render() calls Renderer3DUVE::RenderFrameUVE()
+/// SaveGameSystem, CheckpointManager, ConfigManager) and drives the canonical
+/// engine lifecycle: Init -> Load -> N x (BeginFrame -> Update -> LateUpdate
+/// -> Render -> EndFrame) -> Shutdown. Render() calls Renderer3DUVE::RenderFrameUVE()
 /// (extract -> cull -> sort -> record -> submit) whenever
 /// SetActiveCameraUVE() has set a valid camera entity; with no active camera
 /// set (the default, and every test/sample app predating Increment 14), it
@@ -83,7 +85,13 @@ namespace UVE::Core {
 /// WorldTransformComponentUVE + AudioSourceComponentUVE entity (entirely
 /// data-driven, like PhysicsSystemUVE — a scene with none is a cheap no-op);
 /// then AudioSystemUVE::UpdateUVE() recomputes attenuated gain for every live
-/// source.
+/// source. CheckpointManagerUVE (Increment 19) is driven from Update()'s final statement:
+/// UpdateUVE(deltaTime, entityManager, every SceneGraphUVE::GetChildrenUVE(kInvalidEntityUVE)
+/// root) accumulates elapsed time and, once the configured
+/// EngineConfigUVE::autoSaveIntervalSecondsUVE elapses, saves the whole scene to
+/// Save::kAutoSaveSlotIndexUVE via the composed SaveGameSystemUVE — entirely data-driven, like
+/// PhysicsSystemUVE/AudioSourceSystemUVE, so an empty scene with the default 300-second interval
+/// never actually writes to disk during a short test run.
 /// Thread-safety: not thread-safe. Every method here is intended to be
 /// called from a single "engine" thread. The services EngineCoreUVE owns
 /// each document their own thread-safety contract independently (e.g.
@@ -101,7 +109,7 @@ public:
     /// ThreadPool, Timer, EventSystem, EntityManager, SceneGraph,
     /// AssetDatabase, SceneSerializer, PrefabSystem, HotReload, AssetManager,
     /// AssetImporter, AssetBundle, FileSystem, RenderDevice, RenderSystem,
-    /// CameraSystem, MeshRenderer, Renderer3D, CollisionSystem, PhysicsSystem, RaycastSystem, InputSystem, AudioDevice, AudioSystem, AudioSourceSystem, and ConfigManager in that order (CommandLine first — it
+    /// CameraSystem, MeshRenderer, Renderer3D, CollisionSystem, PhysicsSystem, RaycastSystem, InputSystem, AudioDevice, AudioSystem, AudioSourceSystem, SaveGameSystem, CheckpointManager, and ConfigManager in that order (CommandLine first — it
     /// has no dependencies of its own; Logger second — every later step and
     /// every other system may need to log or UVE_ASSERT during its own
     /// setup; EntityManager right after EventSystem, since it needs
@@ -139,9 +147,12 @@ public:
     /// computed gain/position through it); AudioSourceSystem right after,
     /// stateful but taking no constructor dependencies (EntityManager and
     /// AudioSystem are passed to SyncUVE() per call, like
-    /// MeshRendererUVE::ExtractRenderQueueUVE()); ConfigManager last, so
+    /// MeshRendererUVE::ExtractRenderQueueUVE()); SaveGameSystem right after, needing
+    /// SceneSerializer (composed by reference) and EngineConfigUVE::saveDirectoryPath;
+    /// CheckpointManager right after, needing SaveGameSystem (composed by reference) and
+    /// EngineConfigUVE::autoSaveIntervalSecondsUVE; ConfigManager last, so
     /// its LoadUVE() call can log through the already-initialized Logger),
-    /// then builds EngineServicesUVE from all twenty-nine. Transitions
+    /// then builds EngineServicesUVE from all thirty-one. Transitions
     /// Uninitialized -> Initializing -> Running.
     void Init();
 
@@ -169,7 +180,7 @@ public:
     void RequestQuitUVE() noexcept;
 
     /// Transitions Running -> ShuttingDown -> Shutdown, tearing down
-    /// ConfigManager, then AudioSourceSystem, then AudioSystem, then AudioDevice, then InputSystem, then RaycastSystem, then PhysicsSystem, then CollisionSystem, then Renderer3D, then MeshRenderer, then CameraSystem, then RenderSystem, then
+    /// ConfigManager, then CheckpointManager, then SaveGameSystem, then AudioSourceSystem, then AudioSystem, then AudioDevice, then InputSystem, then RaycastSystem, then PhysicsSystem, then CollisionSystem, then Renderer3D, then MeshRenderer, then CameraSystem, then RenderSystem, then
     /// RenderDevice, then FileSystem, then AssetBundle, then AssetImporter,
     /// then AssetManager (its destructor blocks until every in-flight load
     /// job finishes), then HotReload, then PrefabSystem, then
@@ -205,7 +216,8 @@ public:
     /// AssetManager/AssetImporter/AssetBundle/FileSystem/RenderDevice/
     /// RenderSystem/CameraSystem/MeshRenderer/Renderer3D/CollisionSystem/
     /// PhysicsSystem/RaycastSystem/InputSystem/AudioDevice/AudioSystem/
-    /// AudioSourceSystem references. Valid only between Init() and Shutdown().
+    /// AudioSourceSystem/SaveGameSystem/CheckpointManager references. Valid only between Init()
+    /// and Shutdown().
     [[nodiscard]] EngineServicesUVE& GetServicesUVE();
 
     /// Returns this build's engine version — the single source of truth
@@ -240,7 +252,10 @@ private:
     /// later in the frame sees up-to-date values. Each PhysicsSystemUVE::StepUVE()
     /// call already propagates its own intermediate world-transform updates
     /// internally, so this final UpdateUVE() call only needs to catch
-    /// anything non-physics that moved this frame.
+    /// anything non-physics that moved this frame. Finally drives
+    /// CheckpointManagerUVE::UpdateUVE() with every current scene-graph root (see
+    /// Save::ICheckpointManagerUVE), so any auto-save this frame captures the just-updated world
+    /// state, not last frame's.
     void Update();
 
     /// Recomputes FrameStatsUVE::fps (an exponential moving average of
@@ -297,6 +312,8 @@ private:
     std::unique_ptr<Audio::IAudioDeviceUVE> m_audioDevice;
     std::unique_ptr<Audio::IAudioSystemUVE> m_audioSystem;
     std::unique_ptr<Audio::IAudioSourceSystemUVE> m_audioSourceSystem;
+    std::unique_ptr<Save::ISaveGameSystemUVE> m_saveGameSystem;
+    std::unique_ptr<Save::ICheckpointManagerUVE> m_checkpointManager;
     std::unique_ptr<Config::IConfigManagerUVE> m_configManager;
     std::optional<EngineServicesUVE> m_services;
 
