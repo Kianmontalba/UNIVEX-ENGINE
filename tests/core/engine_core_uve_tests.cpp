@@ -24,6 +24,7 @@
 
 #include "uve/asset/asset_handle_uve.h"
 #include "uve/asset/blob_asset_uve.h"
+#include "uve/audio/i_audio_system_uve.h"
 #include "uve/debug/log_sink_uve.h"
 #include "uve/debug/logger_uve.h"
 #include "uve/input/i_input_system_uve.h"
@@ -36,6 +37,7 @@
 #include "uve/render/i_camera_system_uve.h"
 #include "uve/render/i_render_device_uve.h"
 #include "uve/render/i_render_system_uve.h"
+#include "uve/scene/components/audio_source_component_uve.h"
 #include "uve/scene/components/camera_component_uve.h"
 #include "uve/scene/components/collider_component_uve.h"
 #include "uve/scene/components/mesh_component_uve.h"
@@ -574,6 +576,49 @@ TEST(EngineCoreUVETest, InputSystem_ReachableAndFunctionalAfterInit) {
     engine.TickFrameUVE();
     EXPECT_FALSE(inputSystem.IsKeyDownUVE(Input::KeyCodeUVE::Space));
     EXPECT_TRUE(inputSystem.WasKeyReleasedThisFrameUVE(Input::KeyCodeUVE::Space));
+
+    engine.Shutdown();
+}
+
+TEST(EngineCoreUVETest, AudioSystem_ReachableAndFunctionalAfterInit) {
+    EngineCoreUVE engine(MakeTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    Audio::IAudioSystemUVE& audioSystem = engine.GetServicesUVE().GetAudioSystemUVE();
+
+    Audio::AudioSourceDescUVE desc;
+    desc.spatial = false;
+    const Audio::VoiceHandleUVE source = audioSystem.CreateSourceUVE(desc);
+    ASSERT_NE(source, Audio::kInvalidVoiceHandleUVE);
+    ASSERT_TRUE(audioSystem.PlayUVE(source));
+
+    engine.TickFrameUVE();
+
+    EXPECT_EQ(audioSystem.GetSourceStateUVE(source), Audio::VoicePlaybackStateUVE::Playing);
+
+    engine.Shutdown();
+}
+
+TEST(EngineCoreUVETest, AudioListener_TracksActiveCameraWorldPosition) {
+    EngineCoreUVE engine(MakeTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    Scene::IEntityManagerUVE& entityManager = engine.GetServicesUVE().GetEntityManagerUVE();
+    Scene::ISceneGraphUVE& sceneGraph = engine.GetServicesUVE().GetSceneGraphUVE();
+    const Scene::EntityUVE cameraEntity = entityManager.CreateEntityUVE();
+    Scene::TransformComponentUVE local;
+    local.localPosition = Math::Vector3UVE{3.0F, 4.0F, 5.0F};
+    sceneGraph.AttachTransformUVE(entityManager, cameraEntity, local);
+    sceneGraph.UpdateUVE(entityManager);
+    entityManager.AddComponentUVE<Scene::CameraComponentUVE>(cameraEntity);
+
+    engine.SetActiveCameraUVE(cameraEntity);
+    engine.TickFrameUVE();
+
+    Audio::IAudioSystemUVE& audioSystem = engine.GetServicesUVE().GetAudioSystemUVE();
+    EXPECT_EQ(audioSystem.GetListenerPositionUVE(), (Math::Vector3UVE{3.0F, 4.0F, 5.0F}));
 
     engine.Shutdown();
 }

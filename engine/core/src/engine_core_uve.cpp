@@ -21,6 +21,9 @@
 #include "uve/asset/mesh_asset_uve.h"
 #include "uve/asset/shader_asset_uve.h"
 #include "uve/asset/texture_asset_uve.h"
+#include "uve/audio/audio_source_system_uve.h"
+#include "uve/audio/audio_system_uve.h"
+#include "uve/audio/null_audio_device_uve.h"
 #include "uve/commandline/command_line_uve.h"
 #include "uve/config/config_manager_uve.h"
 #include "uve/debug/assert_uve.h"
@@ -29,6 +32,7 @@
 #include "uve/debug/logging_macros_uve.h"
 #include "uve/events/event_system_uve.h"
 #include "uve/input/input_system_uve.h"
+#include "uve/math/quaternion_uve.h"
 #include "uve/memory/memory_manager_uve.h"
 #include "uve/physics/collision_system_uve.h"
 #include "uve/physics/physics_system_uve.h"
@@ -39,6 +43,7 @@
 #include "uve/render/null_render_device_uve.h"
 #include "uve/render/render_system_uve.h"
 #include "uve/render/renderer_3d_uve.h"
+#include "uve/scene/components/world_transform_component_uve.h"
 #include "uve/scene/entity_manager_uve.h"
 #include "uve/scene/prefab_system_uve.h"
 #include "uve/scene/scene_graph_uve.h"
@@ -205,6 +210,18 @@ void EngineCoreUVE::Init() {
     // InputActionTriggeredEventUVE), already available.
     m_inputSystem = std::make_unique<Input::InputSystemUVE>(*m_eventSystem);
 
+    // AudioDevice twenty-sixth: no dependencies of its own (a NullAudioDeviceUVE — no real audio
+    // hardware/SDK is buildable in this sandbox).
+    m_audioDevice = std::make_unique<Audio::NullAudioDeviceUVE>();
+
+    // AudioSystem twenty-seventh: needs AudioDevice (it pushes computed gain/position through it).
+    m_audioSystem = std::make_unique<Audio::AudioSystemUVE>(*m_audioDevice);
+
+    // AudioSourceSystem twenty-eighth: stateful but takes no constructor dependencies —
+    // EntityManager and AudioSystem are passed to SyncUVE() per call, like
+    // MeshRendererUVE::ExtractRenderQueueUVE().
+    m_audioSourceSystem = std::make_unique<Audio::AudioSourceSystemUVE>();
+
     // ConfigManager last: it immediately calls LoadUVE(), which logs its
     // outcome (missing/malformed/success) through the Logger constructed
     // above — so Logger must already exist by this point.
@@ -218,7 +235,7 @@ void EngineCoreUVE::Init() {
                         *m_assetManager, *m_assetImporter, *m_assetBundle, *m_fileSystem,
                         *m_renderDevice, *m_renderSystem, *m_cameraSystem, *m_meshRenderer,
                         *m_renderer3D, *m_collisionSystem, *m_physicsSystem, *m_raycastSystem,
-                        *m_inputSystem);
+                        *m_inputSystem, *m_audioDevice, *m_audioSystem, *m_audioSourceSystem);
 
     TransitionStateUVE(EngineStateUVE::Running);
     UVE_INFO("EngineCoreUVE: initialized");
@@ -269,6 +286,17 @@ void EngineCoreUVE::LateUpdate() {
                                    instantaneousFps * kFpsSmoothingFactor);
     }
     UVE_TRACE("LateUpdate: fps={}", m_frameStats.fps);
+
+    if (m_activeCamera != Scene::kInvalidEntityUVE) {
+        const auto& worldTransform =
+            m_entityManager->GetComponentUVE<Scene::WorldTransformComponentUVE>(m_activeCamera);
+        m_audioSystem->SetListenerPositionUVE(worldTransform.worldPosition);
+        m_audioSystem->SetListenerOrientationUVE(
+            Math::RotateVectorUVE(worldTransform.worldRotation, Math::Vector3UVE{0.0F, 0.0F, -1.0F}),
+            Math::RotateVectorUVE(worldTransform.worldRotation, Math::Vector3UVE{0.0F, 1.0F, 0.0F}));
+    }
+    m_audioSourceSystem->SyncUVE(*m_entityManager, *m_audioSystem);
+    m_audioSystem->UpdateUVE();
 }
 
 void EngineCoreUVE::Render() {
@@ -319,6 +347,7 @@ void EngineCoreUVE::Shutdown() {
     UVE_INFO("EngineCoreUVE: shutting down");
 
     // Exact reverse of Init()'s construction order: ConfigManager, then
+    // AudioSourceSystem, then AudioSystem, then AudioDevice, then
     // InputSystem, then RaycastSystem, then PhysicsSystem, then CollisionSystem, then Renderer3D, then MeshRenderer, then CameraSystem, then RenderSystem, then RenderDevice,
     // then FileSystem, then AssetBundle, then AssetImporter, then
     // AssetManager (its destructor blocks until every in-flight load job
@@ -329,6 +358,9 @@ void EngineCoreUVE::Shutdown() {
     // logger itself is torn down, so it is guaranteed to be recorded.
     m_services.reset();
     m_configManager.reset();
+    m_audioSourceSystem.reset();
+    m_audioSystem.reset();
+    m_audioDevice.reset();
     m_inputSystem.reset();
     m_raycastSystem.reset();
     m_physicsSystem.reset();

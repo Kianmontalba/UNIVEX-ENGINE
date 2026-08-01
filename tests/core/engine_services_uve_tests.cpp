@@ -28,6 +28,9 @@
 #include "uve/asset/i_asset_manager_uve.h"
 #include "uve/asset/i_file_system_uve.h"
 #include "uve/asset/i_hot_reload_uve.h"
+#include "uve/audio/i_audio_device_uve.h"
+#include "uve/audio/i_audio_source_system_uve.h"
+#include "uve/audio/i_audio_system_uve.h"
 #include "uve/commandline/i_command_line_uve.h"
 #include "uve/config/i_config_manager_uve.h"
 #include "uve/debug/i_logger_uve.h"
@@ -544,6 +547,52 @@ public:
     int updateCallCount = 0;
 };
 
+class FakeAudioDeviceUVE final : public Audio::IAudioDeviceUVE {
+public:
+    [[nodiscard]] Audio::VoiceHandleUVE CreateVoiceUVE(const Audio::AudioVoiceDescUVE&) override {
+        return Audio::VoiceHandleUVE{1};
+    }
+    void DestroyVoiceUVE(Audio::VoiceHandleUVE) override {}
+    [[nodiscard]] bool PlayUVE(Audio::VoiceHandleUVE) override { return true; }
+    [[nodiscard]] bool StopUVE(Audio::VoiceHandleUVE) override { return true; }
+    [[nodiscard]] bool SetVoiceParamsUVE(Audio::VoiceHandleUVE, const Audio::AudioVoiceParamsUVE&) override {
+        return true;
+    }
+    [[nodiscard]] Audio::VoicePlaybackStateUVE GetVoiceStateUVE(Audio::VoiceHandleUVE) const override {
+        return Audio::VoicePlaybackStateUVE::Stopped;
+    }
+    [[nodiscard]] std::string_view GetBackendNameUVE() const noexcept override { return "Fake"; }
+};
+
+class FakeAudioSystemUVE final : public Audio::IAudioSystemUVE {
+public:
+    void SetListenerPositionUVE(Math::Vector3UVE) override {}
+    void SetListenerOrientationUVE(Math::Vector3UVE, Math::Vector3UVE) override {}
+    [[nodiscard]] Math::Vector3UVE GetListenerPositionUVE() const noexcept override { return {}; }
+    [[nodiscard]] Audio::VoiceHandleUVE CreateSourceUVE(const Audio::AudioSourceDescUVE&) override {
+        return Audio::VoiceHandleUVE{1};
+    }
+    void DestroySourceUVE(Audio::VoiceHandleUVE) override {}
+    [[nodiscard]] bool PlayUVE(Audio::VoiceHandleUVE) override { return true; }
+    [[nodiscard]] bool StopUVE(Audio::VoiceHandleUVE) override { return true; }
+    [[nodiscard]] Audio::VoicePlaybackStateUVE GetSourceStateUVE(Audio::VoiceHandleUVE) const override {
+        return Audio::VoicePlaybackStateUVE::Stopped;
+    }
+    void SetSourcePositionUVE(Audio::VoiceHandleUVE, Math::Vector3UVE) override {}
+    void SetSourceVolumeUVE(Audio::VoiceHandleUVE, float) override {}
+    void SetSourcePitchUVE(Audio::VoiceHandleUVE, float) override {}
+    void UpdateUVE() override { ++updateCallCount; }
+
+    int updateCallCount = 0;
+};
+
+class FakeAudioSourceSystemUVE final : public Audio::IAudioSourceSystemUVE {
+public:
+    void SyncUVE(Scene::IEntityManagerUVE&, Audio::IAudioSystemUVE&) override { ++syncCallCount; }
+
+    int syncCallCount = 0;
+};
+
 TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     FakeLoggerUVE logger;
     FakeTimerUVE timer;
@@ -571,6 +620,9 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     FakePhysicsSystemUVE physicsSystem;
     FakeRaycastSystemUVE raycastSystem;
     FakeInputSystemUVE inputSystem;
+    FakeAudioDeviceUVE audioDevice;
+    FakeAudioSystemUVE audioSystem;
+    FakeAudioSourceSystemUVE audioSourceSystem;
 
     const EngineServicesUVE services(logger, timer, eventSystem, memoryManager, threadPool,
                                       commandLine, configManager, entityManager, sceneGraph,
@@ -578,7 +630,7 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
                                       assetManager, assetImporter, assetBundle, fileSystem,
                                       renderDevice, renderSystem, cameraSystem, meshRenderer,
                                       renderer3D, collisionSystem, physicsSystem, raycastSystem,
-                                      inputSystem);
+                                      inputSystem, audioDevice, audioSystem, audioSourceSystem);
 
     EXPECT_EQ(&services.GetLoggerUVE(), &logger);
     EXPECT_EQ(&services.GetTimerUVE(), &timer);
@@ -606,6 +658,9 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     EXPECT_EQ(&services.GetPhysicsSystemUVE(), &physicsSystem);
     EXPECT_EQ(&services.GetRaycastSystemUVE(), &raycastSystem);
     EXPECT_EQ(&services.GetInputSystemUVE(), &inputSystem);
+    EXPECT_EQ(&services.GetAudioDeviceUVE(), &audioDevice);
+    EXPECT_EQ(&services.GetAudioSystemUVE(), &audioSystem);
+    EXPECT_EQ(&services.GetAudioSourceSystemUVE(), &audioSourceSystem);
 }
 
 TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) {
@@ -635,13 +690,16 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     FakePhysicsSystemUVE physicsSystem;
     FakeRaycastSystemUVE raycastSystem;
     FakeInputSystemUVE inputSystem;
+    FakeAudioDeviceUVE audioDevice;
+    FakeAudioSystemUVE audioSystem;
+    FakeAudioSourceSystemUVE audioSourceSystem;
     const EngineServicesUVE services(logger, timer, eventSystem, memoryManager, threadPool,
                                       commandLine, configManager, entityManager, sceneGraph,
                                       assetDatabase, sceneSerializer, prefabSystem, hotReload,
                                       assetManager, assetImporter, assetBundle, fileSystem,
                                       renderDevice, renderSystem, cameraSystem, meshRenderer,
                                       renderer3D, collisionSystem, physicsSystem, raycastSystem,
-                                      inputSystem);
+                                      inputSystem, audioDevice, audioSystem, audioSourceSystem);
 
     services.GetTimerUVE().Tick();
     services.GetEventSystemUVE().DispatchQueuedUVE();
@@ -673,6 +731,8 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     services.GetRenderer3DUVE().RenderFrameUVE(services.GetEntityManagerUVE(), Scene::kInvalidEntityUVE);
     static_cast<void>(services.GetRaycastSystemUVE().RaycastUVE(services.GetEntityManagerUVE(), Physics::RaycastQueryUVE{}));
     services.GetInputSystemUVE().UpdateUVE();
+    services.GetAudioSystemUVE().UpdateUVE();
+    services.GetAudioSourceSystemUVE().SyncUVE(services.GetEntityManagerUVE(), services.GetAudioSystemUVE());
 
     EXPECT_EQ(timer.tickCount, 1);
     EXPECT_EQ(eventSystem.dispatchCount, 1);
@@ -697,6 +757,8 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     EXPECT_EQ(renderer3D.renderFrameCallCount, 1);
     EXPECT_EQ(raycastSystem.raycastCallCount, 1);
     EXPECT_EQ(inputSystem.updateCallCount, 1);
+    EXPECT_EQ(audioSystem.updateCallCount, 1);
+    EXPECT_EQ(audioSourceSystem.syncCallCount, 1);
 }
 
 } // namespace

@@ -19,6 +19,9 @@
 #include "uve/asset/i_asset_manager_uve.h"
 #include "uve/asset/i_file_system_uve.h"
 #include "uve/asset/i_hot_reload_uve.h"
+#include "uve/audio/i_audio_device_uve.h"
+#include "uve/audio/i_audio_source_system_uve.h"
+#include "uve/audio/i_audio_system_uve.h"
 #include "uve/commandline/i_command_line_uve.h"
 #include "uve/config/i_config_manager_uve.h"
 #include "uve/core/engine_config_uve.h"
@@ -52,9 +55,10 @@ namespace UVE::Core {
 /// AssetDatabase, SceneSerializer, PrefabSystem, HotReload, AssetManager,
 /// AssetImporter, AssetBundle, FileSystem, RenderDevice, RenderSystem,
 /// CameraSystem, MeshRenderer, Renderer3D, CollisionSystem, PhysicsSystem,
-/// RaycastSystem, InputSystem, ConfigManager) and drives the canonical engine
-/// lifecycle: Init -> Load -> N x (BeginFrame -> Update -> LateUpdate ->
-/// Render -> EndFrame) -> Shutdown. Render() calls Renderer3DUVE::RenderFrameUVE()
+/// RaycastSystem, InputSystem, AudioDevice, AudioSystem, AudioSourceSystem,
+/// ConfigManager) and drives the canonical engine lifecycle: Init -> Load ->
+/// N x (BeginFrame -> Update -> LateUpdate -> Render -> EndFrame) ->
+/// Shutdown. Render() calls Renderer3DUVE::RenderFrameUVE()
 /// (extract -> cull -> sort -> record -> submit) whenever
 /// SetActiveCameraUVE() has set a valid camera entity; with no active camera
 /// set (the default, and every test/sample app predating Increment 14), it
@@ -71,7 +75,15 @@ namespace UVE::Core {
 /// Update()'s very first statement is InputSystemUVE::UpdateUVE(), so this
 /// frame's key/mouse edge state and action-triggered events are settled
 /// before the fixed-timestep accumulator, event dispatch, or physics steps
-/// that follow it in the same call.
+/// that follow it in the same call. AudioSourceSystemUVE/AudioSystemUVE
+/// (Increment 18) are driven from LateUpdate(): if SetActiveCameraUVE() has
+/// set a valid camera, the audio listener is synced to that camera entity's
+/// WorldTransformComponentUVE first (the spec's "AudioListenerUVE — Attached
+/// to Camera3D by default"); then AudioSourceSystemUVE::SyncUVE() walks every
+/// WorldTransformComponentUVE + AudioSourceComponentUVE entity (entirely
+/// data-driven, like PhysicsSystemUVE — a scene with none is a cheap no-op);
+/// then AudioSystemUVE::UpdateUVE() recomputes attenuated gain for every live
+/// source.
 /// Thread-safety: not thread-safe. Every method here is intended to be
 /// called from a single "engine" thread. The services EngineCoreUVE owns
 /// each document their own thread-safety contract independently (e.g.
@@ -89,7 +101,7 @@ public:
     /// ThreadPool, Timer, EventSystem, EntityManager, SceneGraph,
     /// AssetDatabase, SceneSerializer, PrefabSystem, HotReload, AssetManager,
     /// AssetImporter, AssetBundle, FileSystem, RenderDevice, RenderSystem,
-    /// CameraSystem, MeshRenderer, Renderer3D, CollisionSystem, PhysicsSystem, RaycastSystem, InputSystem, and ConfigManager in that order (CommandLine first — it
+    /// CameraSystem, MeshRenderer, Renderer3D, CollisionSystem, PhysicsSystem, RaycastSystem, InputSystem, AudioDevice, AudioSystem, AudioSourceSystem, and ConfigManager in that order (CommandLine first — it
     /// has no dependencies of its own; Logger second — every later step and
     /// every other system may need to log or UVE_ASSERT during its own
     /// setup; EntityManager right after EventSystem, since it needs
@@ -121,9 +133,15 @@ public:
     /// after, stateless with no dependencies of its own (grouped with the
     /// rest of engine/physics); InputSystem right after, needing only
     /// EventSystem (composed by reference, to queue InputActionTriggeredEventUVE);
-    /// ConfigManager last, so
+    /// AudioDevice right after, with no dependencies of its own (a
+    /// NullAudioDeviceUVE — no real audio hardware/SDK is buildable in this
+    /// sandbox); AudioSystem right after, needing AudioDevice (it pushes
+    /// computed gain/position through it); AudioSourceSystem right after,
+    /// stateful but taking no constructor dependencies (EntityManager and
+    /// AudioSystem are passed to SyncUVE() per call, like
+    /// MeshRendererUVE::ExtractRenderQueueUVE()); ConfigManager last, so
     /// its LoadUVE() call can log through the already-initialized Logger),
-    /// then builds EngineServicesUVE from all twenty-six. Transitions
+    /// then builds EngineServicesUVE from all twenty-nine. Transitions
     /// Uninitialized -> Initializing -> Running.
     void Init();
 
@@ -151,7 +169,7 @@ public:
     void RequestQuitUVE() noexcept;
 
     /// Transitions Running -> ShuttingDown -> Shutdown, tearing down
-    /// ConfigManager, then InputSystem, then RaycastSystem, then PhysicsSystem, then CollisionSystem, then Renderer3D, then MeshRenderer, then CameraSystem, then RenderSystem, then
+    /// ConfigManager, then AudioSourceSystem, then AudioSystem, then AudioDevice, then InputSystem, then RaycastSystem, then PhysicsSystem, then CollisionSystem, then Renderer3D, then MeshRenderer, then CameraSystem, then RenderSystem, then
     /// RenderDevice, then FileSystem, then AssetBundle, then AssetImporter,
     /// then AssetManager (its destructor blocks until every in-flight load
     /// job finishes), then HotReload, then PrefabSystem, then
@@ -186,7 +204,8 @@ public:
     /// SceneGraph/AssetDatabase/SceneSerializer/PrefabSystem/HotReload/
     /// AssetManager/AssetImporter/AssetBundle/FileSystem/RenderDevice/
     /// RenderSystem/CameraSystem/MeshRenderer/Renderer3D/CollisionSystem/
-    /// PhysicsSystem/RaycastSystem/InputSystem references. Valid only between Init() and Shutdown().
+    /// PhysicsSystem/RaycastSystem/InputSystem/AudioDevice/AudioSystem/
+    /// AudioSourceSystem references. Valid only between Init() and Shutdown().
     [[nodiscard]] EngineServicesUVE& GetServicesUVE();
 
     /// Returns this build's engine version — the single source of truth
@@ -225,7 +244,13 @@ private:
     void Update();
 
     /// Recomputes FrameStatsUVE::fps (an exponential moving average of
-    /// 1/deltaTime). The documented hook point for future post-Update,
+    /// 1/deltaTime). Then, if SetActiveCameraUVE() has set a valid camera entity, syncs the audio
+    /// listener to that entity's WorldTransformComponentUVE (the spec's "AudioListenerUVE —
+    /// Attached to Camera3D by default"); with no active camera set, the listener simply stays
+    /// wherever it was last set manually. Then runs AudioSourceSystemUVE::SyncUVE() (entirely
+    /// data-driven off which entities have a WorldTransformComponentUVE + AudioSourceComponentUVE,
+    /// so a scene with none is a cheap no-op) followed by AudioSystemUVE::UpdateUVE() (recomputing
+    /// attenuated gain for every live source). The documented hook point for future post-Update,
     /// pre-Render systems (camera follow, animation retargeting).
     void LateUpdate();
 
@@ -269,6 +294,9 @@ private:
     std::unique_ptr<Physics::IPhysicsSystemUVE> m_physicsSystem;
     std::unique_ptr<Physics::IRaycastSystemUVE> m_raycastSystem;
     std::unique_ptr<Input::IInputSystemUVE> m_inputSystem;
+    std::unique_ptr<Audio::IAudioDeviceUVE> m_audioDevice;
+    std::unique_ptr<Audio::IAudioSystemUVE> m_audioSystem;
+    std::unique_ptr<Audio::IAudioSourceSystemUVE> m_audioSourceSystem;
     std::unique_ptr<Config::IConfigManagerUVE> m_configManager;
     std::optional<EngineServicesUVE> m_services;
 
