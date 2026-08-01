@@ -28,6 +28,7 @@ struct NullRenderDeviceUVE::ImplUVE {
     std::unordered_map<std::uint32_t, PipelineDescUVE> pipelines;
     std::uint32_t nextPipelineHandle = 1;
     std::vector<RecordedCommandUVE> lastSubmittedCommands;
+    std::uint64_t presentCallCount = 0;
 };
 
 NullRenderDeviceUVE::NullRenderDeviceUVE() : m_impl(std::make_unique<ImplUVE>()) {}
@@ -120,6 +121,10 @@ void NullRenderDeviceUVE::SubmitUVE(std::unique_ptr<ICommandBufferUVE> commandBu
     m_impl->lastSubmittedCommands = nullCommandBuffer->GetRecordedCommandsUVE();
 }
 
+void NullRenderDeviceUVE::PresentUVE() {
+    ++m_impl->presentCallCount;
+}
+
 std::string_view NullRenderDeviceUVE::GetBackendNameUVE() const noexcept {
     return "Null";
 }
@@ -130,6 +135,10 @@ const std::vector<RecordedCommandUVE>& NullRenderDeviceUVE::GetLastSubmittedComm
 
 std::size_t NullRenderDeviceUVE::GetLiveResourceCountUVE() const noexcept {
     return m_impl->buffers.size() + m_impl->textures.size() + m_impl->shaders.size() + m_impl->pipelines.size();
+}
+
+std::uint64_t NullRenderDeviceUVE::GetPresentCallCountUVE() const noexcept {
+    return m_impl->presentCallCount;
 }
 
 } // namespace UVE::Render

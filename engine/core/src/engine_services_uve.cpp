@@ -40,7 +40,8 @@ EngineServicesUVE::EngineServicesUVE(Debug::ILoggerUVE& logger, Utilities::ITime
                                       Audio::IAudioSystemUVE& audioSystem,
                                       Audio::IAudioSourceSystemUVE& audioSourceSystem,
                                       Save::ISaveGameSystemUVE& saveGameSystem,
-                                      Save::ICheckpointManagerUVE& checkpointManager) noexcept
+                                      Save::ICheckpointManagerUVE& checkpointManager,
+                                      Window::IWindowManagerUVE& windowManager) noexcept
     : m_logger(&logger), m_timer(&timer), m_eventSystem(&eventSystem),
       m_memoryManager(&memoryManager), m_threadPool(&threadPool), m_commandLine(&commandLine),
       m_configManager(&configManager), m_entityManager(&entityManager), m_sceneGraph(&sceneGraph),
@@ -51,7 +52,8 @@ EngineServicesUVE::EngineServicesUVE(Debug::ILoggerUVE& logger, Utilities::ITime
       m_meshRenderer(&meshRenderer), m_renderer3D(&renderer3D), m_collisionSystem(&collisionSystem),
       m_physicsSystem(&physicsSystem), m_raycastSystem(&raycastSystem), m_inputSystem(&inputSystem),
       m_audioDevice(&audioDevice), m_audioSystem(&audioSystem), m_audioSourceSystem(&audioSourceSystem),
-      m_saveGameSystem(&saveGameSystem), m_checkpointManager(&checkpointManager) {}
+      m_saveGameSystem(&saveGameSystem), m_checkpointManager(&checkpointManager),
+      m_windowManager(&windowManager) {}
 
 Debug::ILoggerUVE& EngineServicesUVE::GetLoggerUVE() const noexcept {
     return *m_logger;
@@ -175,6 +177,10 @@ Save::ISaveGameSystemUVE& EngineServicesUVE::GetSaveGameSystemUVE() const noexce
 
 Save::ICheckpointManagerUVE& EngineServicesUVE::GetCheckpointManagerUVE() const noexcept {
     return *m_checkpointManager;
+}
+
+Window::IWindowManagerUVE& EngineServicesUVE::GetWindowManagerUVE() const noexcept {
+    return *m_windowManager;
 }
 
 } // namespace UVE::Core

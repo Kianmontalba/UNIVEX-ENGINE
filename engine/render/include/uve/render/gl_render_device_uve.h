@@ -9,33 +9,35 @@
 
 #pragma once
 
-#include <cstddef>
-#include <cstdint>
 #include <memory>
 
 #include "uve/render/i_render_device_uve.h"
-#include "uve/render/recorded_command_uve.h"
+#include "uve/window/i_window_manager_uve.h"
 
 namespace UVE::Render {
 
-/// NullRenderDeviceUVE is the only IRenderDeviceUVE backend this sandbox can build and test: it
-/// performs zero real GPU work — there is no display server, GPU device node, or graphics SDK
-/// available here (confirmed and documented in docs/CODING_STANDARDS.md) — and instead validates
-/// and bookkeeps every call, handing out a NullCommandBufferUVE "spy" (engine/render/src/,
-/// module-private) that records the exact sequence of RHI calls a real backend would have
-/// received. Existing solely so the rest of the rendering pipeline (CameraSystemUVE,
-/// MeshRendererUVE, Renderer3DUVE — later increments) can be built and unit-tested against a real
-/// IRenderDeviceUVE& today; a genuine Vulkan/Metal/D3D12 backend is future work once this
-/// environment has the SDK headers, GPU, and windowing it currently lacks.
-/// Thread-safety: not thread-safe. Every method is intended to be called only from the main
-/// engine/render thread, matching RenderSystemUVE's own single-threaded frame contract.
-class NullRenderDeviceUVE final : public IRenderDeviceUVE {
+/// GlRenderDeviceUVE is the real, OpenGL 4.6 Core Profile-targeting implementation of
+/// IRenderDeviceUVE. Constructed strictly *after* an IWindowManagerUVE& that has already created
+/// its window and made its GL context current — GlRenderDeviceUVE never creates, destroys, or
+/// activates a GL context itself (see docs/CODING_STANDARDS.md, "WindowManagerUVE owns the GL
+/// context lifecycle"); it only loads GL function pointers (via a small hand-rolled loader —
+/// gl_functions_uve.h/.cpp, module-private) and issues GL calls against the context that already
+/// exists. Every GL header (`<GL/gl.h>`, `<GL/glext.h>`) and every GLuint/GLenum type is confined
+/// to engine/render/src/ — this header, like every other public IRenderDeviceUVE consumer's, only
+/// ever sees the same backend-agnostic RHI types NullRenderDeviceUVE does.
+/// Thread-safety: not thread-safe, matching IRenderDeviceUVE's own documented contract; every
+/// method is intended to be called only from the main engine/render thread.
+class GlRenderDeviceUVE final : public IRenderDeviceUVE {
 public:
-    NullRenderDeviceUVE();
-    ~NullRenderDeviceUVE() override;
+    /// `windowManager` must outlive this GlRenderDeviceUVE, must already have a current GL
+    /// context (IsValidUVE() == true), and its window must never be destroyed before this
+    /// GlRenderDeviceUVE is — every GL object this device owns must be destroyed while the
+    /// context windowManager owns is still valid.
+    explicit GlRenderDeviceUVE(Window::IWindowManagerUVE& windowManager);
+    ~GlRenderDeviceUVE() override;
 
-    NullRenderDeviceUVE(const NullRenderDeviceUVE&) = delete;
-    NullRenderDeviceUVE& operator=(const NullRenderDeviceUVE&) = delete;
+    GlRenderDeviceUVE(const GlRenderDeviceUVE&) = delete;
+    GlRenderDeviceUVE& operator=(const GlRenderDeviceUVE&) = delete;
 
     [[nodiscard]] BufferHandleUVE CreateBufferUVE(const BufferDescUVE& desc,
                                                    std::span<const std::byte> initialData = {}) override;
@@ -59,16 +61,10 @@ public:
 
     [[nodiscard]] std::string_view GetBackendNameUVE() const noexcept override;
 
-    /// Test-only hook (not part of IRenderDeviceUVE): the command list from the most recently
-    /// submitted command buffer, in recorded order. Empty until the first SubmitUVE() call.
-    [[nodiscard]] const std::vector<RecordedCommandUVE>& GetLastSubmittedCommandsUVE() const noexcept;
-
-    /// Test-only hook: how many buffer/texture/shader/pipeline resources are currently alive
-    /// (created but not yet destroyed) — lets tests confirm cleanup without a GPU to inspect.
+    /// Test-only hook (not part of IRenderDeviceUVE): how many buffer/texture/shader/pipeline
+    /// resources are currently alive — mirrors NullRenderDeviceUVE::GetLiveResourceCountUVE()'s
+    /// role so tests can confirm cleanup the same way regardless of backend.
     [[nodiscard]] std::size_t GetLiveResourceCountUVE() const noexcept;
-
-    /// Test-only hook: how many times PresentUVE() has been called since construction.
-    [[nodiscard]] std::uint64_t GetPresentCallCountUVE() const noexcept;
 
 private:
     struct ImplUVE;

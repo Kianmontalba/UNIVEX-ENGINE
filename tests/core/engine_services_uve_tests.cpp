@@ -55,6 +55,7 @@
 #include "uve/scene/i_scene_serializer_uve.h"
 #include "uve/threading/i_thread_pool_uve.h"
 #include "uve/utilities/i_timer_uve.h"
+#include "uve/window/i_window_manager_uve.h"
 
 // These hand-written fakes exist to prove that EngineServicesUVE (and, by
 // extension, anything that consumes ILoggerUVE/ITimerUVE/IEventSystemUVE/
@@ -437,9 +438,11 @@ public:
     void DestroyPipelineUVE(Render::PipelineHandleUVE) override {}
     [[nodiscard]] std::unique_ptr<Render::ICommandBufferUVE> CreateCommandBufferUVE() override { return nullptr; }
     void SubmitUVE(std::unique_ptr<Render::ICommandBufferUVE>) override {}
+    void PresentUVE() override { ++presentCallCount; }
     [[nodiscard]] std::string_view GetBackendNameUVE() const noexcept override { return "Fake"; }
 
     int createBufferCallCount = 0;
+    int presentCallCount = 0;
 };
 
 class FakeRenderSystemUVE final : public Render::IRenderSystemUVE {
@@ -629,6 +632,25 @@ public:
     int updateCallCount = 0;
 };
 
+class FakeWindowManagerUVE final : public Window::IWindowManagerUVE {
+public:
+    [[nodiscard]] bool IsValidUVE() const noexcept override { return true; }
+    void PollEventsUVE() override { ++pollEventsCallCount; }
+    void SwapBuffersUVE() override {}
+    [[nodiscard]] bool IsCloseRequestedUVE() const noexcept override { return false; }
+    void SetVSyncEnabledUVE(bool) override {}
+    [[nodiscard]] bool IsVSyncEnabledUVE() const noexcept override { return true; }
+    void SetFullscreenUVE(bool) override {}
+    [[nodiscard]] bool IsFullscreenUVE() const noexcept override { return false; }
+    [[nodiscard]] std::uint32_t GetWidthUVE() const noexcept override { return 0; }
+    [[nodiscard]] std::uint32_t GetHeightUVE() const noexcept override { return 0; }
+    [[nodiscard]] std::vector<Window::MonitorInfoUVE> EnumerateMonitorsUVE() const override { return {}; }
+    [[nodiscard]] void* GetNativeWindowHandleUVE() const noexcept override { return nullptr; }
+    [[nodiscard]] std::string_view GetBackendNameUVE() const noexcept override { return "Fake"; }
+
+    int pollEventsCallCount = 0;
+};
+
 TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     FakeLoggerUVE logger;
     FakeTimerUVE timer;
@@ -661,6 +683,7 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     FakeAudioSourceSystemUVE audioSourceSystem;
     FakeSaveGameSystemUVE saveGameSystem;
     FakeCheckpointManagerUVE checkpointManager;
+    FakeWindowManagerUVE windowManager;
 
     const EngineServicesUVE services(logger, timer, eventSystem, memoryManager, threadPool,
                                       commandLine, configManager, entityManager, sceneGraph,
@@ -669,7 +692,7 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
                                       renderDevice, renderSystem, cameraSystem, meshRenderer,
                                       renderer3D, collisionSystem, physicsSystem, raycastSystem,
                                       inputSystem, audioDevice, audioSystem, audioSourceSystem,
-                                      saveGameSystem, checkpointManager);
+                                      saveGameSystem, checkpointManager, windowManager);
 
     EXPECT_EQ(&services.GetLoggerUVE(), &logger);
     EXPECT_EQ(&services.GetTimerUVE(), &timer);
@@ -702,6 +725,7 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     EXPECT_EQ(&services.GetAudioSourceSystemUVE(), &audioSourceSystem);
     EXPECT_EQ(&services.GetSaveGameSystemUVE(), &saveGameSystem);
     EXPECT_EQ(&services.GetCheckpointManagerUVE(), &checkpointManager);
+    EXPECT_EQ(&services.GetWindowManagerUVE(), &windowManager);
 }
 
 TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) {
@@ -736,6 +760,7 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     FakeAudioSourceSystemUVE audioSourceSystem;
     FakeSaveGameSystemUVE saveGameSystem;
     FakeCheckpointManagerUVE checkpointManager;
+    FakeWindowManagerUVE windowManager;
     const EngineServicesUVE services(logger, timer, eventSystem, memoryManager, threadPool,
                                       commandLine, configManager, entityManager, sceneGraph,
                                       assetDatabase, sceneSerializer, prefabSystem, hotReload,
@@ -743,7 +768,7 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
                                       renderDevice, renderSystem, cameraSystem, meshRenderer,
                                       renderer3D, collisionSystem, physicsSystem, raycastSystem,
                                       inputSystem, audioDevice, audioSystem, audioSourceSystem,
-                                      saveGameSystem, checkpointManager);
+                                      saveGameSystem, checkpointManager, windowManager);
 
     services.GetTimerUVE().Tick();
     services.GetEventSystemUVE().DispatchQueuedUVE();
@@ -780,6 +805,7 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     static_cast<void>(services.GetSaveGameSystemUVE().SaveUVE(0, services.GetEntityManagerUVE(), {},
                                                                 Save::GameStateMetadataUVE{}));
     services.GetCheckpointManagerUVE().UpdateUVE(0.0, services.GetEntityManagerUVE(), {});
+    services.GetWindowManagerUVE().PollEventsUVE();
 
     EXPECT_EQ(timer.tickCount, 1);
     EXPECT_EQ(eventSystem.dispatchCount, 1);
@@ -808,6 +834,7 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     EXPECT_EQ(audioSourceSystem.syncCallCount, 1);
     EXPECT_EQ(saveGameSystem.saveCallCount, 1);
     EXPECT_EQ(checkpointManager.updateCallCount, 1);
+    EXPECT_EQ(windowManager.pollEventsCallCount, 1);
 }
 
 } // namespace

@@ -81,6 +81,14 @@ public:
     /// used again after this call.
     virtual void SubmitUVE(std::unique_ptr<ICommandBufferUVE> commandBuffer) = 0;
 
+    /// Presents the backend's default framebuffer (the window's back buffer), analogous to a
+    /// real Vulkan/D3D12 swapchain's present call — a distinct, explicit step after command
+    /// buffer submission, matching this RHI's own "modern explicit" design. Call once per frame,
+    /// after SubmitUVE(). NullRenderDeviceUVE's implementation is a bookkeeping no-op (see
+    /// GetPresentCallCountUVE()); a windowless backend that never renders to a window has nothing
+    /// meaningful to do here either.
+    virtual void PresentUVE() = 0;
+
     /// A short human-readable backend name (e.g. `"Null"`), for logging/diagnostics.
     [[nodiscard]] virtual std::string_view GetBackendNameUVE() const noexcept = 0;
 };

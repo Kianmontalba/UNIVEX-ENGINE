@@ -67,6 +67,9 @@ add_executable(uve_tests
     audio/audio_source_system_uve_tests.cpp
     save/save_game_system_uve_tests.cpp
     save/checkpoint_manager_uve_tests.cpp
+    window/null_window_manager_uve_tests.cpp
+    window/window_manager_uve_tests.cpp
+    render/gl_render_device_uve_tests.cpp
     scene/entity_manager_uve_tests.cpp
     scene/scene_graph_uve_tests.cpp
     scene/scene_serializer_uve_tests.cpp
@@ -93,6 +96,7 @@ target_link_libraries(uve_tests PRIVATE
     uve_input
     uve_audio
     uve_save
+    uve_window
     uve_core
     GTest::gtest
     GTest::gtest_main

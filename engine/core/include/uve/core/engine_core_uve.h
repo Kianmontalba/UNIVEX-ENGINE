@@ -49,13 +49,14 @@
 #include "uve/scene/i_scene_serializer_uve.h"
 #include "uve/threading/i_thread_pool_uve.h"
 #include "uve/utilities/i_timer_uve.h"
+#include "uve/window/i_window_manager_uve.h"
 
 namespace UVE::Core {
 
 /// EngineCoreUVE owns the foundational engine services (CommandLine, Logger,
 /// MemoryManager, ThreadPool, Timer, EventSystem, EntityManager, SceneGraph,
 /// AssetDatabase, SceneSerializer, PrefabSystem, HotReload, AssetManager,
-/// AssetImporter, AssetBundle, FileSystem, RenderDevice, RenderSystem,
+/// AssetImporter, AssetBundle, FileSystem, WindowManager, RenderDevice, RenderSystem,
 /// CameraSystem, MeshRenderer, Renderer3D, CollisionSystem, PhysicsSystem,
 /// RaycastSystem, InputSystem, AudioDevice, AudioSystem, AudioSourceSystem,
 /// SaveGameSystem, CheckpointManager, ConfigManager) and drives the canonical
@@ -85,7 +86,19 @@ namespace UVE::Core {
 /// WorldTransformComponentUVE + AudioSourceComponentUVE entity (entirely
 /// data-driven, like PhysicsSystemUVE — a scene with none is a cheap no-op);
 /// then AudioSystemUVE::UpdateUVE() recomputes attenuated gain for every live
-/// source. CheckpointManagerUVE (Increment 19) is driven from Update()'s final statement:
+/// source. WindowManagerUVE/GlRenderDeviceUVE (Increment 20): unless
+/// EngineConfigUVE::headlessUVE is true (also settable via the `--headless` CLI flag), Init()
+/// creates a real GLFW3 window and OpenGL 4.6 Core render device; Update()'s first statement
+/// (after InputSystemUVE::UpdateUVE()) pumps window events and checks
+/// IWindowManagerUVE::IsCloseRequestedUVE(), calling RequestQuitUVE() if the user closed the
+/// window; Render() additionally records and presents a small, explicitly temporary hardcoded
+/// triangle proving the window/GL pipeline end-to-end — deliberately outside Renderer3DUVE, which
+/// still only ever renders into its own offscreen target regardless of windowed mode (see
+/// docs/CODING_STANDARDS.md for the full rendering-evolution roadmap this triangle is the first
+/// milestone of). If real window/context creation fails, Init() logs UVE_FATAL and falls back to
+/// NullWindowManagerUVE/NullRenderDeviceUVE for the rest of this run, and Load() reports failure
+/// so RunUVE() shuts down cleanly instead of proceeding into a broken windowed session.
+/// CheckpointManagerUVE (Increment 19) is driven from Update()'s final statement:
 /// UpdateUVE(deltaTime, entityManager, every SceneGraphUVE::GetChildrenUVE(kInvalidEntityUVE)
 /// root) accumulates elapsed time and, once the configured
 /// EngineConfigUVE::autoSaveIntervalSecondsUVE elapses, saves the whole scene to
@@ -108,9 +121,11 @@ public:
     /// Constructs and initializes CommandLine, Logger, MemoryManager,
     /// ThreadPool, Timer, EventSystem, EntityManager, SceneGraph,
     /// AssetDatabase, SceneSerializer, PrefabSystem, HotReload, AssetManager,
-    /// AssetImporter, AssetBundle, FileSystem, RenderDevice, RenderSystem,
+    /// AssetImporter, AssetBundle, FileSystem, WindowManager, RenderDevice, RenderSystem,
     /// CameraSystem, MeshRenderer, Renderer3D, CollisionSystem, PhysicsSystem, RaycastSystem, InputSystem, AudioDevice, AudioSystem, AudioSourceSystem, SaveGameSystem, CheckpointManager, and ConfigManager in that order (CommandLine first — it
-    /// has no dependencies of its own; Logger second — every later step and
+    /// has no dependencies of its own; immediately after, reads the `--headless` CLI flag via
+    /// CommandLineUVE::HasFlagUVE("headless"), OR'd into EngineConfigUVE::headlessUVE; Logger
+    /// second — every later step and
     /// every other system may need to log or UVE_ASSERT during its own
     /// setup; EntityManager right after EventSystem, since it needs
     /// MemoryManager for allocation and EventSystem for entity lifecycle
@@ -125,9 +140,15 @@ public:
     /// registers the built-in MeshAssetUVE/TextureAssetUVE/ShaderAssetUVE/
     /// MaterialAssetUVE loaders with it); AssetImporter and AssetBundle grouped immediately
     /// after, both stateless; FileSystem right after, needing AssetBundle
-    /// (its bundle-backed mounts read entries through it); RenderDevice
-    /// right after, with no dependencies of its own (a NullRenderDeviceUVE —
-    /// no real GPU backend is buildable in this sandbox); RenderSystem right
+    /// (its bundle-backed mounts read entries through it); WindowManager right after — a real
+    /// Window::WindowManagerUVE (owning the entire GLFW/GL context lifecycle) unless
+    /// EngineConfigUVE::headlessUVE, in which case Window::NullWindowManagerUVE; a real window
+    /// that fails to create sets a private failure flag Load() checks (see Load()'s own doc
+    /// comment) rather than aborting Init() mid-construction (EngineStateUVE's transition table
+    /// forbids jumping straight from Initializing to ShuttingDown); RenderDevice
+    /// right after — Render::GlRenderDeviceUVE when a real, valid window exists, otherwise
+    /// Render::NullRenderDeviceUVE (headless mode, or a real window that failed to create — never
+    /// constructs GlRenderDeviceUVE against an invalid window); RenderSystem right
     /// after, needing RenderDevice (it records and submits command buffers
     /// through it); CameraSystem right after, stateless with no
     /// dependencies of its own (grouped with the rest of engine/render);
@@ -152,14 +173,15 @@ public:
     /// CheckpointManager right after, needing SaveGameSystem (composed by reference) and
     /// EngineConfigUVE::autoSaveIntervalSecondsUVE; ConfigManager last, so
     /// its LoadUVE() call can log through the already-initialized Logger),
-    /// then builds EngineServicesUVE from all thirty-one. Transitions
+    /// then builds EngineServicesUVE from all thirty-two. Transitions
     /// Uninitialized -> Initializing -> Running.
     void Init();
 
-    /// The engine's asset/subsystem loading hook. This increment has
-    /// nothing to load, so it always succeeds — that is the complete,
-    /// correct behavior for the one thing this stage owns today (state
-    /// bookkeeping and logging), not a placeholder for a future one.
+    /// The engine's asset/subsystem loading hook. Also the point where a real
+    /// window/GL-context creation failure detected during Init() (see Init()'s own doc comment)
+    /// is surfaced: if so, logs UVE_FATAL and returns false — nothing else needed loading this
+    /// increment, so this is otherwise the complete, correct behavior for the one thing this
+    /// stage owns today (a fatal-startup check plus logging), not a placeholder for a future one.
     [[nodiscard]] bool Load();
 
     /// Runs Init() -> Load() -> up to `frameCount` frames (stopping early
@@ -181,7 +203,9 @@ public:
 
     /// Transitions Running -> ShuttingDown -> Shutdown, tearing down
     /// ConfigManager, then CheckpointManager, then SaveGameSystem, then AudioSourceSystem, then AudioSystem, then AudioDevice, then InputSystem, then RaycastSystem, then PhysicsSystem, then CollisionSystem, then Renderer3D, then MeshRenderer, then CameraSystem, then RenderSystem, then
-    /// RenderDevice, then FileSystem, then AssetBundle, then AssetImporter,
+    /// RenderDevice, then WindowManager (in that order — every GL object RenderDevice owns must
+    /// be destroyed while WindowManager's context is still valid, before WindowManager's own
+    /// destructor tears the context itself down), then FileSystem, then AssetBundle, then AssetImporter,
     /// then AssetManager (its destructor blocks until every in-flight load
     /// job finishes), then HotReload, then PrefabSystem, then
     /// SceneSerializer, then AssetDatabase, then SceneGraph, then
@@ -216,8 +240,8 @@ public:
     /// AssetManager/AssetImporter/AssetBundle/FileSystem/RenderDevice/
     /// RenderSystem/CameraSystem/MeshRenderer/Renderer3D/CollisionSystem/
     /// PhysicsSystem/RaycastSystem/InputSystem/AudioDevice/AudioSystem/
-    /// AudioSourceSystem/SaveGameSystem/CheckpointManager references. Valid only between Init()
-    /// and Shutdown().
+    /// AudioSourceSystem/SaveGameSystem/CheckpointManager/WindowManager references. Valid only
+    /// between Init() and Shutdown().
     [[nodiscard]] EngineServicesUVE& GetServicesUVE();
 
     /// Returns this build's engine version — the single source of truth
@@ -239,7 +263,11 @@ private:
 
     /// First calls InputSystemUVE::UpdateUVE() — settling this frame's key/mouse edge state and
     /// queueing any newly-triggered action's InputActionTriggeredEventUVE — before anything else,
-    /// so the event dispatch that follows in this same call delivers it same-frame. Then advances
+    /// so the event dispatch that follows in this same call delivers it same-frame. Immediately
+    /// after, calls IWindowManagerUVE::PollEventsUVE() (a no-op for NullWindowManagerUVE) and, if
+    /// IsCloseRequestedUVE() is now true, calls RequestQuitUVE() — so a real window's OS close
+    /// button drives the exact same graceful-shutdown path RunUVE() already uses for any other
+    /// quit request. Then advances
     /// the fixed-timestep accumulator, dispatches every event
     /// queued via IEventSystemUVE::QueueEvent() since the last dispatch,
     /// runs zero or more PhysicsSystemUVE::StepUVE() calls (one per whole
@@ -271,7 +299,12 @@ private:
 
     /// Calls Renderer3DUVE::RenderFrameUVE(*m_entityManager, m_activeCamera) when
     /// m_activeCamera is valid; otherwise logs the original no-op trace line, preserving every
-    /// pre-Increment-14 frame-loop test's behavior unless SetActiveCameraUVE() was called.
+    /// pre-Increment-14 frame-loop test's behavior unless SetActiveCameraUVE() was called. When a
+    /// real window/GL device is active (see m_windowedRenderingActiveUVE), additionally records
+    /// and submits the temporary demo triangle (BeginFrameUVE/bind/draw/EndFrameUVE against the
+    /// default framebuffer) and calls IRenderDeviceUVE::PresentUVE() — entirely independent of
+    /// m_activeCamera/Renderer3DUVE, proving the window/GL pipeline end-to-end without touching
+    /// the ECS. See SetupDemoTriangleUVE()'s doc comment for why this is deliberately temporary.
     void Render();
 
     /// Computes this frame's wall-clock frameTimeSeconds and records it
@@ -280,6 +313,21 @@ private:
 
     /// Asserts IsValidTransitionUVE(m_state, newState), then applies it.
     void TransitionStateUVE(EngineStateUVE newState);
+
+    /// Builds the hardcoded triangle resources (buffer, vertex/fragment shaders, pipeline) via
+    /// m_renderDevice — called once from Init(), only when m_windowedRenderingActiveUVE. This is
+    /// explicitly temporary proof-of-life scaffold for Increment 20 ("the bridge from headless
+    /// foundation to visual engine"), deliberately bypassing Renderer3DUVE/MeshRendererUVE/the
+    /// asset pipeline/the ECS entirely — it must never grow into a real content path. The
+    /// intended long-term rendering flow is Scene -> Renderer3DUVE -> RenderGraph -> RenderDevice
+    /// -> Present, not EngineCore -> Triangle (see docs/CODING_STANDARDS.md's rendering-evolution
+    /// roadmap); this scaffold is deleted, not extended, once that bridge is built.
+    void SetupDemoTriangleUVE();
+
+    /// Records and submits the demo triangle built by SetupDemoTriangleUVE(), then calls
+    /// IRenderDeviceUVE::PresentUVE(). Called from Render() only when
+    /// m_windowedRenderingActiveUVE.
+    void RenderDemoTriangleUVE();
 
     EngineConfigUVE m_config;
     EngineStateUVE m_state = EngineStateUVE::Uninitialized;
@@ -300,6 +348,7 @@ private:
     std::unique_ptr<Asset::IAssetImporterUVE> m_assetImporter;
     std::unique_ptr<Asset::IAssetBundleUVE> m_assetBundle;
     std::unique_ptr<Asset::IFileSystemUVE> m_fileSystem;
+    std::unique_ptr<Window::IWindowManagerUVE> m_windowManager;
     std::unique_ptr<Render::IRenderDeviceUVE> m_renderDevice;
     std::unique_ptr<Render::IRenderSystemUVE> m_renderSystem;
     std::unique_ptr<Render::ICameraSystemUVE> m_cameraSystem;
@@ -321,6 +370,22 @@ private:
     std::chrono::steady_clock::time_point m_frameStartTime;
     bool m_quitRequested = false;
     Scene::EntityUVE m_activeCamera = Scene::kInvalidEntityUVE;
+
+    /// True iff Init() constructed a real, valid WindowManagerUVE + GlRenderDeviceUVE pair (i.e.
+    /// !EngineConfigUVE::headlessUVE and window/context creation succeeded). Gates
+    /// Update()'s window-event pump/close-check and Render()'s demo-triangle present — both stay
+    /// exact no-ops when this is false, matching every prior increment's headless behavior.
+    bool m_windowedRenderingActiveUVE = false;
+
+    /// Set by Init() if a real (non-headless) window/GL-context creation attempt failed. Checked
+    /// by Load(), which fails in that case so RunUVE() shuts the engine down cleanly rather than
+    /// proceeding into a broken windowed session.
+    bool m_windowCreationFailedUVE = false;
+
+    Render::BufferHandleUVE m_demoTriangleVertexBuffer;
+    Render::ShaderHandleUVE m_demoTriangleVertexShader;
+    Render::ShaderHandleUVE m_demoTriangleFragmentShader;
+    Render::PipelineHandleUVE m_demoTrianglePipeline;
 };
 
 } // namespace UVE::Core

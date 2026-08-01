@@ -81,6 +81,12 @@ struct PipelineDescUVE {
     PrimitiveTopologyUVE topology = PrimitiveTopologyUVE::Triangles;
     bool depthTestEnabled = true;
     bool depthWriteEnabled = true;
+
+    /// Byte distance between consecutive vertices in the bound vertex buffer — required by a real
+    /// backend to interleave `vertexLayout`'s attributes correctly (e.g. GL's
+    /// `glVertexAttribPointer` stride parameter). `0` (the default) is only ever valid for
+    /// `NullRenderDeviceUVE`, which ignores this field like every other one it merely bookkeeps.
+    std::uint32_t vertexStride = 0;
 };
 
 /// What happens to a render pass attachment's existing contents at the start of the pass.
@@ -88,6 +94,10 @@ enum class LoadOpUVE : std::uint8_t { Clear, Load, DontCare };
 
 /// Describes one BeginRenderPassUVE() call: which color/depth textures are rendered into and how
 /// they're cleared. `depthAttachment` may be `kInvalidTextureHandleUVE` for a color-only pass.
+/// `colorAttachment` itself may also be `kInvalidTextureHandleUVE`, meaning "render into the
+/// backend's default framebuffer" (the window's back buffer) rather than an offscreen texture —
+/// a backend-specific meaning `GlRenderDeviceUVE` acts on (binding GL framebuffer object `0`);
+/// `NullRenderDeviceUVE` ignores it like every other field it bookkeeps without interpreting.
 struct RenderPassDescUVE {
     TextureHandleUVE colorAttachment;
     TextureHandleUVE depthAttachment;

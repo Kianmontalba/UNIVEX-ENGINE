@@ -111,6 +111,37 @@ struct EngineConfigUVE {
     /// its reserved auto-save slot (see Save::kAutoSaveSlotIndexUVE). The spec's "every 5
     /// minutes" example; test suites override this to a small value to avoid a real wait.
     double autoSaveIntervalSecondsUVE = 300.0;
+
+    /// When true, EngineCoreUVE::Init() constructs Window::NullWindowManagerUVE and
+    /// Render::NullRenderDeviceUVE instead of the real GLFW3/OpenGL backends — no window, no GL
+    /// context, safe to run with no display attached (CI, this project's own test suite). Also
+    /// settable via the `--headless` CLI flag (CommandLineUVE::HasFlagUVE("headless")), read and
+    /// OR'd into this field during Init() right after CommandLineUVE is constructed.
+    bool headlessUVE = false;
+
+    /// Title bar text WindowManagerUVE's real backend creates its window with. Unused when
+    /// headlessUVE is true.
+    std::string windowTitle = "UniVex Engine";
+
+    /// Requested window size, in pixels, at creation time (the OS/window manager may still clamp
+    /// or override it). Unused when headlessUVE is true.
+    std::uint32_t windowWidth = 1280;
+    std::uint32_t windowHeight = 720;
+
+    /// Whether the real window is user-resizable.
+    bool windowResizableUVE = true;
+
+    /// Whether the real window's GL context starts with vertical sync enabled.
+    bool vsyncEnabledUVE = true;
+
+    /// Requested OpenGL context version, forwarded to Window::WindowDescUVE::glVersionMajor/Minor.
+    /// The production default is OpenGL 4.6 Core, per the approved architecture decision.
+    /// Configurable (not hardcoded) because GL context availability is a real driver/platform
+    /// fact — this project's own development sandbox (Mesa llvmpipe under Xvfb) caps at 4.5 Core
+    /// and fails to create a 4.6 context; overriding these two fields is how a caller targets
+    /// that sandbox specifically without changing what real hardware/CI requests by default.
+    std::uint32_t windowGlVersionMajor = 4;
+    std::uint32_t windowGlVersionMinor = 6;
 };
 
 } // namespace UVE::Core

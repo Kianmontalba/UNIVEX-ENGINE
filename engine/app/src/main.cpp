@@ -12,16 +12,16 @@
 
 #include "uve/core/engine_core_uve.h"
 
-/// Headless proof-of-life entry point for the UniVex Engine. There is no
-/// windowing/rendering backend yet (this build environment has no display
-/// or GPU), so "running the engine" here means driving a full Init -> Load
-/// -> N x (BeginFrame/Update/LateUpdate/Render/EndFrame) -> Shutdown cycle
-/// cleanly through EngineCoreUVE and exiting 0 — the adapted, headless form
-/// of the "initializes the engine and runs a blank frame" proof-of-life.
-/// `argv[1..argc)` (the program path at argv[0] excluded) is forwarded to
+/// Proof-of-life entry point for the UniVex Engine. By default opens a real GLFW3 window with an
+/// OpenGL 4.6 Core render device (Increment 20) and drives a full Init -> Load -> N x
+/// (BeginFrame/Update/LateUpdate/Render/EndFrame) -> Shutdown cycle through EngineCoreUVE,
+/// exiting 0 — the demo triangle Render() draws each frame is the "initializes the engine and
+/// renders a frame" proof-of-life. Pass `--headless` to fall back to NullWindowManagerUVE/
+/// NullRenderDeviceUVE instead (no display required — the mode CI and this project's own test
+/// suite use). `argv[1..argc)` (the program path at argv[0] excluded) is forwarded to
 /// EngineConfigUVE::commandLineArgs, so real invocations like
-/// `uve_runtime --project <path>` or `uve_runtime --server` (the shapes
-/// the Hub launches this executable with) are parsed by CommandLineUVE.
+/// `uve_runtime --project <path>`, `uve_runtime --server`, or `uve_runtime --headless` (the
+/// shapes the Hub launches this executable with) are parsed by CommandLineUVE.
 int main(int argc, char** argv) {
     UVE::Core::EngineConfigUVE config{};
     config.logFilePath = "uve_engine.log";

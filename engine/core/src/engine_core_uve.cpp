@@ -9,6 +9,9 @@
 
 #include "uve/core/engine_core_uve.h"
 
+#include <cstddef>
+#include <span>
+#include <string>
 #include <utility>
 
 #include "uve/asset/asset_bundle_uve.h"
@@ -39,6 +42,7 @@
 #include "uve/physics/raycast_system_uve.h"
 #include "uve/platform/platform_uve.h"
 #include "uve/render/camera_system_uve.h"
+#include "uve/render/gl_render_device_uve.h"
 #include "uve/render/mesh_renderer_uve.h"
 #include "uve/render/null_render_device_uve.h"
 #include "uve/render/render_system_uve.h"
@@ -52,6 +56,8 @@
 #include "uve/scene/scene_serializer_uve.h"
 #include "uve/threading/thread_pool_uve.h"
 #include "uve/utilities/timer_uve.h"
+#include "uve/window/null_window_manager_uve.h"
+#include "uve/window/window_manager_uve.h"
 
 namespace UVE::Core {
 
@@ -75,6 +81,69 @@ void EngineCoreUVE::RegisterBuiltInAssetLoadersUVE() {
     m_assetManager->RegisterLoaderUVE<Asset::MaterialAssetUVE>(&Asset::LoadMaterialAssetUVE);
 }
 
+void EngineCoreUVE::SetupDemoTriangleUVE() {
+    // clang-format off
+    constexpr float kVertices[] = {
+        0.0F, 0.5F, 0.0F,
+        -0.5F, -0.5F, 0.0F,
+        0.5F, -0.5F, 0.0F,
+    };
+    // clang-format on
+    const std::span<const std::byte> vertexBytes = std::as_bytes(std::span<const float>(kVertices));
+    m_demoTriangleVertexBuffer = m_renderDevice->CreateBufferUVE(
+        Render::BufferDescUVE{vertexBytes.size(), Render::BufferUsageUVE::Vertex}, vertexBytes);
+
+    // #0D0D0D background / #00D4FF triangle are the approved design decision's exact colors.
+    static constexpr std::string_view kVertexShaderSource = R"(#version 330 core
+layout(location = 0) in vec3 aPosition;
+void main() {
+    gl_Position = vec4(aPosition, 1.0);
+}
+)";
+    static constexpr std::string_view kFragmentShaderSource = R"(#version 330 core
+out vec4 FragColor;
+void main() {
+    FragColor = vec4(0.0, 0.83137255, 1.0, 1.0);
+}
+)";
+
+    m_demoTriangleVertexShader = m_renderDevice->CreateShaderUVE(
+        Render::ShaderDescUVE{Render::ShaderStageUVE::Vertex, std::string(kVertexShaderSource)});
+    m_demoTriangleFragmentShader = m_renderDevice->CreateShaderUVE(
+        Render::ShaderDescUVE{Render::ShaderStageUVE::Fragment, std::string(kFragmentShaderSource)});
+
+    Render::PipelineDescUVE pipelineDesc;
+    pipelineDesc.vertexShader = m_demoTriangleVertexShader;
+    pipelineDesc.fragmentShader = m_demoTriangleFragmentShader;
+    pipelineDesc.vertexLayout = {
+        Render::VertexAttributeUVE{"POSITION", Render::VertexAttributeFormatUVE::Float3, 0}};
+    pipelineDesc.vertexStride = 3U * static_cast<std::uint32_t>(sizeof(float));
+    pipelineDesc.depthTestEnabled = false;
+    pipelineDesc.depthWriteEnabled = false;
+    m_demoTrianglePipeline = m_renderDevice->CreatePipelineUVE(pipelineDesc);
+}
+
+void EngineCoreUVE::RenderDemoTriangleUVE() {
+    m_renderSystem->BeginFrameUVE();
+    Render::ICommandBufferUVE& commandBuffer = m_renderSystem->GetFrameCommandBufferUVE();
+
+    Render::RenderPassDescUVE passDesc;
+    passDesc.colorAttachment = Render::kInvalidTextureHandleUVE; // the window's default framebuffer
+    passDesc.depthAttachment = Render::kInvalidTextureHandleUVE;
+    passDesc.colorLoadOp = Render::LoadOpUVE::Clear;
+    passDesc.clearColor = {0x0D / 255.0F, 0x0D / 255.0F, 0x0D / 255.0F, 1.0F};
+    passDesc.depthLoadOp = Render::LoadOpUVE::DontCare;
+
+    commandBuffer.BeginRenderPassUVE(passDesc);
+    commandBuffer.BindPipelineUVE(m_demoTrianglePipeline);
+    commandBuffer.BindVertexBufferUVE(m_demoTriangleVertexBuffer);
+    commandBuffer.DrawUVE(3);
+    commandBuffer.EndRenderPassUVE();
+
+    m_renderSystem->EndFrameUVE();
+    m_renderDevice->PresentUVE();
+}
+
 void EngineCoreUVE::Init() {
     TransitionStateUVE(EngineStateUVE::Initializing);
 
@@ -83,6 +152,12 @@ void EngineCoreUVE::Init() {
     // the kind of thing a later step could plausibly want during its own
     // setup in a future increment.
     m_commandLine = std::make_unique<CommandLine::CommandLineUVE>(m_config.commandLineArgs);
+
+    // --headless overrides EngineConfigUVE::headlessUVE the moment CommandLine exists, before
+    // anything below reads it.
+    if (m_commandLine->HasFlagUVE("headless")) {
+        m_config.headlessUVE = true;
+    }
 
     // Logger second: every later step below, and every other engine
     // system, may need to log or UVE_ASSERT during its own setup. See
@@ -171,64 +246,103 @@ void EngineCoreUVE::Init() {
     // mounts read entries through IAssetBundleUVE.
     m_fileSystem = std::make_unique<Asset::FileSystemUVE>(*m_assetBundle);
 
-    // RenderDevice seventeenth: no dependencies of its own. Always a
-    // NullRenderDeviceUVE — no real GPU/windowing backend is buildable in
-    // this sandbox (no display server, GPU device node, or graphics SDK
-    // headers; see docs/CODING_STANDARDS.md).
-    m_renderDevice = std::make_unique<Render::NullRenderDeviceUVE>();
+    // WindowManager seventeenth: a real Window::WindowManagerUVE (owning the entire GLFW/GL
+    // context lifecycle — init, create, activate, destroy, terminate) unless
+    // EngineConfigUVE::headlessUVE, in which case Window::NullWindowManagerUVE. A real window
+    // that fails to create logs UVE_FATAL and sets m_windowCreationFailedUVE rather than aborting
+    // Init() mid-construction — EngineStateUVE's transition table forbids jumping straight from
+    // Initializing to ShuttingDown, so every remaining service below still finishes constructing
+    // normally; Load() checks the flag afterward (see Load()'s doc comment).
+    if (m_config.headlessUVE) {
+        m_windowManager = std::make_unique<Window::NullWindowManagerUVE>();
+    } else {
+        Window::WindowDescUVE windowDesc;
+        windowDesc.title = m_config.windowTitle;
+        windowDesc.width = m_config.windowWidth;
+        windowDesc.height = m_config.windowHeight;
+        windowDesc.resizable = m_config.windowResizableUVE;
+        windowDesc.vsyncEnabled = m_config.vsyncEnabledUVE;
+        windowDesc.glVersionMajor = m_config.windowGlVersionMajor;
+        windowDesc.glVersionMinor = m_config.windowGlVersionMinor;
+        m_windowManager = std::make_unique<Window::WindowManagerUVE>(*m_eventSystem, windowDesc);
+        if (!m_windowManager->IsValidUVE()) {
+            UVE_FATAL("EngineCoreUVE: window creation failed - this run will not proceed past Load()");
+            m_windowCreationFailedUVE = true;
+        }
+    }
+    m_windowedRenderingActiveUVE = !m_config.headlessUVE && m_windowManager->IsValidUVE();
 
-    // RenderSystem eighteenth: needs RenderDevice, since it records and
+    // RenderDevice eighteenth: Render::GlRenderDeviceUVE when m_windowedRenderingActiveUVE (a
+    // real, valid window/GL context exists), otherwise Render::NullRenderDeviceUVE — headless
+    // mode, or a real window that failed to create above. Never constructs GlRenderDeviceUVE
+    // against an invalid window (there is no current GL context to build one against).
+    if (m_windowedRenderingActiveUVE) {
+        m_renderDevice = std::make_unique<Render::GlRenderDeviceUVE>(*m_windowManager);
+    } else {
+        m_renderDevice = std::make_unique<Render::NullRenderDeviceUVE>();
+    }
+
+    // RenderSystem nineteenth: needs RenderDevice, since it records and
     // submits command buffers through it.
     m_renderSystem = std::make_unique<Render::RenderSystemUVE>(*m_renderDevice);
 
-    // CameraSystem nineteenth: stateless, no dependencies of its own —
+    // CameraSystem twentieth: stateless, no dependencies of its own —
     // grouped with the rest of engine/render.
     m_cameraSystem = std::make_unique<Render::CameraSystemUVE>();
 
-    // MeshRenderer twentieth: stateless, no dependencies of its own —
+    // MeshRenderer twenty-first: stateless, no dependencies of its own —
     // grouped with the rest of engine/render.
     m_meshRenderer = std::make_unique<Render::MeshRendererUVE>();
 
-    // Renderer3D twenty-first: needs RenderDevice, RenderSystem, MeshRenderer, CameraSystem,
+    // Renderer3D twenty-second: needs RenderDevice, RenderSystem, MeshRenderer, CameraSystem,
     // AssetManager, AssetDatabase, and EventSystem — every one of which already exists by this
     // point. Its offscreen render target is fixed at EngineConfigUVE::renderTargetWidth/Height
-    // for this EngineCoreUVE's lifetime (no WindowManagerUVE exists yet to resize against).
+    // for this EngineCoreUVE's lifetime, entirely independent of WindowManagerUVE/the real window
+    // size — Renderer3DUVE never renders into the window itself (see docs/CODING_STANDARDS.md's
+    // rendering-evolution roadmap for how these two eventually connect).
     m_renderer3D = std::make_unique<Render::Renderer3DUVE>(*m_renderDevice, *m_renderSystem, *m_meshRenderer,
                                                              *m_cameraSystem, *m_assetManager, *m_assetDatabase,
                                                              *m_eventSystem, m_config.renderTargetWidth,
                                                              m_config.renderTargetHeight);
 
-    // CollisionSystem twenty-second: stateless, no dependencies of its own.
+    // The demo triangle is set up right after Renderer3D, only when windowed rendering is
+    // active — see SetupDemoTriangleUVE()'s own doc comment for why this is deliberately
+    // temporary scaffold, entirely independent of Renderer3D/the ECS.
+    if (m_windowedRenderingActiveUVE) {
+        SetupDemoTriangleUVE();
+    }
+
+    // CollisionSystem twenty-third: stateless, no dependencies of its own.
     m_collisionSystem = std::make_unique<Physics::CollisionSystemUVE>();
 
-    // PhysicsSystem twenty-third: needs only CollisionSystem (composed by reference) and
+    // PhysicsSystem twenty-fourth: needs only CollisionSystem (composed by reference) and
     // EngineConfigUVE::gravity, both already available.
     m_physicsSystem = std::make_unique<Physics::PhysicsSystemUVE>(*m_collisionSystem, m_config.gravity);
 
-    // RaycastSystem twenty-fourth: stateless, no dependencies of its own.
+    // RaycastSystem twenty-fifth: stateless, no dependencies of its own.
     m_raycastSystem = std::make_unique<Physics::RaycastSystemUVE>();
 
-    // InputSystem twenty-fifth: needs only EventSystem (composed by reference, to queue
+    // InputSystem twenty-sixth: needs only EventSystem (composed by reference, to queue
     // InputActionTriggeredEventUVE), already available.
     m_inputSystem = std::make_unique<Input::InputSystemUVE>(*m_eventSystem);
 
-    // AudioDevice twenty-sixth: no dependencies of its own (a NullAudioDeviceUVE — no real audio
+    // AudioDevice twenty-seventh: no dependencies of its own (a NullAudioDeviceUVE — no real audio
     // hardware/SDK is buildable in this sandbox).
     m_audioDevice = std::make_unique<Audio::NullAudioDeviceUVE>();
 
-    // AudioSystem twenty-seventh: needs AudioDevice (it pushes computed gain/position through it).
+    // AudioSystem twenty-eighth: needs AudioDevice (it pushes computed gain/position through it).
     m_audioSystem = std::make_unique<Audio::AudioSystemUVE>(*m_audioDevice);
 
-    // AudioSourceSystem twenty-eighth: stateful but takes no constructor dependencies —
+    // AudioSourceSystem twenty-ninth: stateful but takes no constructor dependencies —
     // EntityManager and AudioSystem are passed to SyncUVE() per call, like
     // MeshRendererUVE::ExtractRenderQueueUVE().
     m_audioSourceSystem = std::make_unique<Audio::AudioSourceSystemUVE>();
 
-    // SaveGameSystem twenty-ninth: needs SceneSerializer (composed by reference) and
+    // SaveGameSystem thirtieth: needs SceneSerializer (composed by reference) and
     // EngineConfigUVE::saveDirectoryPath.
     m_saveGameSystem = std::make_unique<Save::SaveGameSystemUVE>(*m_sceneSerializer, m_config.saveDirectoryPath);
 
-    // CheckpointManager thirtieth: needs SaveGameSystem (composed by reference) and
+    // CheckpointManager thirty-first: needs SaveGameSystem (composed by reference) and
     // EngineConfigUVE::autoSaveIntervalSecondsUVE.
     m_checkpointManager =
         std::make_unique<Save::CheckpointManagerUVE>(*m_saveGameSystem, m_config.autoSaveIntervalSecondsUVE);
@@ -247,13 +361,17 @@ void EngineCoreUVE::Init() {
                         *m_renderDevice, *m_renderSystem, *m_cameraSystem, *m_meshRenderer,
                         *m_renderer3D, *m_collisionSystem, *m_physicsSystem, *m_raycastSystem,
                         *m_inputSystem, *m_audioDevice, *m_audioSystem, *m_audioSourceSystem,
-                        *m_saveGameSystem, *m_checkpointManager);
+                        *m_saveGameSystem, *m_checkpointManager, *m_windowManager);
 
     TransitionStateUVE(EngineStateUVE::Running);
     UVE_INFO("EngineCoreUVE: initialized");
 }
 
 bool EngineCoreUVE::Load() {
+    if (m_windowCreationFailedUVE) {
+        UVE_FATAL("EngineCoreUVE: Load() aborting - window/GL context creation failed during Init()");
+        return false;
+    }
     UVE_INFO("EngineCoreUVE: Load() - nothing to load this increment");
     return true;
 }
@@ -269,6 +387,11 @@ void EngineCoreUVE::BeginFrame() {
 
 void EngineCoreUVE::Update() {
     m_inputSystem->UpdateUVE();
+
+    m_windowManager->PollEventsUVE();
+    if (m_windowManager->IsCloseRequestedUVE()) {
+        RequestQuitUVE();
+    }
 
     const Utilities::FixedStepResultUVE fixedStep = m_timer->AdvanceFixedStepUVE();
     UVE_TRACE("Update: {} fixed step(s), alpha={}", fixedStep.stepsToRun, fixedStep.alpha);
@@ -320,6 +443,10 @@ void EngineCoreUVE::Render() {
     } else {
         UVE_TRACE("Render (no-op)");
     }
+
+    if (m_windowedRenderingActiveUVE) {
+        RenderDemoTriangleUVE();
+    }
 }
 
 void EngineCoreUVE::EndFrame() {
@@ -363,7 +490,8 @@ void EngineCoreUVE::Shutdown() {
 
     // Exact reverse of Init()'s construction order: ConfigManager, then
     // CheckpointManager, then SaveGameSystem, then AudioSourceSystem, then AudioSystem, then AudioDevice, then
-    // InputSystem, then RaycastSystem, then PhysicsSystem, then CollisionSystem, then Renderer3D, then MeshRenderer, then CameraSystem, then RenderSystem, then RenderDevice,
+    // InputSystem, then RaycastSystem, then PhysicsSystem, then CollisionSystem, then Renderer3D, then MeshRenderer, then CameraSystem, then RenderSystem, then RenderDevice
+    // (destroying the demo triangle's GL objects first, if windowed rendering was active), then WindowManager,
     // then FileSystem, then AssetBundle, then AssetImporter, then
     // AssetManager (its destructor blocks until every in-flight load job
     // finishes), then HotReload, then PrefabSystem, then SceneSerializer,
@@ -386,7 +514,22 @@ void EngineCoreUVE::Shutdown() {
     m_meshRenderer.reset();
     m_cameraSystem.reset();
     m_renderSystem.reset();
+
+    // The demo triangle's GL objects must be destroyed while m_renderDevice (and the GL context
+    // m_windowManager owns) is still valid — before either is reset below.
+    if (m_windowedRenderingActiveUVE) {
+        m_renderDevice->DestroyPipelineUVE(m_demoTrianglePipeline);
+        m_renderDevice->DestroyShaderUVE(m_demoTriangleFragmentShader);
+        m_renderDevice->DestroyShaderUVE(m_demoTriangleVertexShader);
+        m_renderDevice->DestroyBufferUVE(m_demoTriangleVertexBuffer);
+    }
     m_renderDevice.reset();
+
+    // WindowManager right after RenderDevice — every GL object RenderDevice owned is already
+    // destroyed above, so it's safe for WindowManager's destructor to tear down the GL context
+    // (and, for the real backend, terminate GLFW) now.
+    m_windowManager.reset();
+
     m_fileSystem.reset();
     m_assetBundle.reset();
     m_assetImporter.reset();
