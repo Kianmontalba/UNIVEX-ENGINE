@@ -29,9 +29,13 @@
 #include "uve/debug/i_logger_uve.h"
 #include "uve/events/i_event_system_uve.h"
 #include "uve/memory/i_memory_manager_uve.h"
+#include "uve/physics/i_collision_system_uve.h"
+#include "uve/physics/i_physics_system_uve.h"
 #include "uve/render/i_camera_system_uve.h"
+#include "uve/render/i_mesh_renderer_uve.h"
 #include "uve/render/i_render_device_uve.h"
 #include "uve/render/i_render_system_uve.h"
+#include "uve/render/i_renderer_3d_uve.h"
 #include "uve/scene/i_entity_manager_uve.h"
 #include "uve/scene/i_prefab_system_uve.h"
 #include "uve/scene/i_scene_graph_uve.h"
@@ -45,14 +49,19 @@ namespace UVE::Core {
 /// MemoryManager, ThreadPool, Timer, EventSystem, EntityManager, SceneGraph,
 /// AssetDatabase, SceneSerializer, PrefabSystem, HotReload, AssetManager,
 /// AssetImporter, AssetBundle, FileSystem, RenderDevice, RenderSystem,
-/// CameraSystem, ConfigManager) and drives the canonical engine lifecycle:
-/// Init -> Load -> N x (BeginFrame -> Update -> LateUpdate -> Render ->
-/// EndFrame) -> Shutdown. RenderSystemUVE and CameraSystemUVE both exist
-/// now (the latter backed entirely by CPU-side math — Increment 9/10's
-/// Matrix4x4UVE/FrustumUVE), but nothing yet extracts a scene into draw
-/// calls (a mesh renderer), so Render() is still the documented, working
-/// no-op seam — every stage does something real today, none are
-/// placeholders.
+/// CameraSystem, MeshRenderer, Renderer3D, CollisionSystem, PhysicsSystem,
+/// ConfigManager) and drives the canonical engine lifecycle: Init -> Load ->
+/// N x (BeginFrame -> Update -> LateUpdate -> Render -> EndFrame) ->
+/// Shutdown. Render() calls Renderer3DUVE::RenderFrameUVE() (extract -> cull
+/// -> sort -> record -> submit) whenever SetActiveCameraUVE() has set a
+/// valid camera entity; with no active camera set (the default, and every
+/// test/sample app predating Increment 14), it still logs the original
+/// no-op trace line, so existing frame-loop behavior is byte-identical
+/// unless a caller opts in. Update() runs zero or more fixed PhysicsSystemUVE
+/// steps (via Utilities::FixedStepResultUVE) before SceneGraphUVE::UpdateUVE()
+/// each frame — entirely data-driven off which entities have a
+/// RigidBodyComponentUVE/ColliderComponentUVE, so a scene with none behaves
+/// exactly as it did before Increment 15, no opt-in needed.
 /// Thread-safety: not thread-safe. Every method here is intended to be
 /// called from a single "engine" thread. The services EngineCoreUVE owns
 /// each document their own thread-safety contract independently (e.g.
@@ -70,7 +79,7 @@ public:
     /// ThreadPool, Timer, EventSystem, EntityManager, SceneGraph,
     /// AssetDatabase, SceneSerializer, PrefabSystem, HotReload, AssetManager,
     /// AssetImporter, AssetBundle, FileSystem, RenderDevice, RenderSystem,
-    /// CameraSystem, and ConfigManager in that order (CommandLine first — it
+    /// CameraSystem, MeshRenderer, Renderer3D, CollisionSystem, PhysicsSystem, and ConfigManager in that order (CommandLine first — it
     /// has no dependencies of its own; Logger second — every later step and
     /// every other system may need to log or UVE_ASSERT during its own
     /// setup; EntityManager right after EventSystem, since it needs
@@ -92,9 +101,16 @@ public:
     /// after, needing RenderDevice (it records and submits command buffers
     /// through it); CameraSystem right after, stateless with no
     /// dependencies of its own (grouped with the rest of engine/render);
-    /// ConfigManager last, so its LoadUVE() call can log through the
-    /// already-initialized Logger), then builds EngineServicesUVE from all
-    /// twenty. Transitions Uninitialized -> Initializing -> Running.
+    /// MeshRenderer right after, likewise stateless (grouped with the rest
+    /// of engine/render); Renderer3D right after, needing RenderDevice,
+    /// RenderSystem, MeshRenderer, CameraSystem, AssetManager, AssetDatabase,
+    /// and EventSystem — every one of which already exists by this point;
+    /// CollisionSystem right after, stateless with no dependencies of its
+    /// own; PhysicsSystem right after, needing only CollisionSystem (and
+    /// EngineConfigUVE::gravity, already available); ConfigManager last, so
+    /// its LoadUVE() call can log through the already-initialized Logger),
+    /// then builds EngineServicesUVE from all twenty-four. Transitions
+    /// Uninitialized -> Initializing -> Running.
     void Init();
 
     /// The engine's asset/subsystem loading hook. This increment has
@@ -121,7 +137,7 @@ public:
     void RequestQuitUVE() noexcept;
 
     /// Transitions Running -> ShuttingDown -> Shutdown, tearing down
-    /// ConfigManager, then CameraSystem, then RenderSystem, then
+    /// ConfigManager, then PhysicsSystem, then CollisionSystem, then Renderer3D, then MeshRenderer, then CameraSystem, then RenderSystem, then
     /// RenderDevice, then FileSystem, then AssetBundle, then AssetImporter,
     /// then AssetManager (its destructor blocks until every in-flight load
     /// job finishes), then HotReload, then PrefabSystem, then
@@ -140,12 +156,23 @@ public:
     [[nodiscard]] EngineStateUVE GetStateUVE() const noexcept;
     [[nodiscard]] const FrameStatsUVE& GetFrameStatsUVE() const noexcept;
 
+    /// Sets the entity Render() passes to Renderer3DUVE::RenderFrameUVE() as the camera to render
+    /// from, starting with the next frame. Passing Scene::kInvalidEntityUVE (the default) reverts
+    /// Render() to its original no-op trace — this is the sole opt-in switch that keeps every
+    /// frame-loop test/sample app predating this increment byte-identical unless it explicitly
+    /// calls this.
+    void SetActiveCameraUVE(Scene::EntityUVE cameraEntity) noexcept;
+
+    /// The entity most recently passed to SetActiveCameraUVE(), or Scene::kInvalidEntityUVE if
+    /// never called.
+    [[nodiscard]] Scene::EntityUVE GetActiveCameraUVE() const noexcept;
+
     /// Returns the service container bundling Logger/Timer/EventSystem/
     /// MemoryManager/ThreadPool/CommandLine/ConfigManager/EntityManager/
     /// SceneGraph/AssetDatabase/SceneSerializer/PrefabSystem/HotReload/
     /// AssetManager/AssetImporter/AssetBundle/FileSystem/RenderDevice/
-    /// RenderSystem/CameraSystem references. Valid only between Init() and
-    /// Shutdown().
+    /// RenderSystem/CameraSystem/MeshRenderer/Renderer3D/CollisionSystem/
+    /// PhysicsSystem references. Valid only between Init() and Shutdown().
     [[nodiscard]] EngineServicesUVE& GetServicesUVE();
 
     /// Returns this build's engine version — the single source of truth
@@ -167,11 +194,17 @@ private:
 
     /// Advances the fixed-timestep accumulator, dispatches every event
     /// queued via IEventSystemUVE::QueueEvent() since the last dispatch,
-    /// then runs SceneGraphUVE::UpdateUVE() (transform-dirty-flag
-    /// propagation) — after event dispatch, so reparenting done by an
-    /// event handler that frame is picked up, and before LateUpdate()/
-    /// Render(), so anything reading world transforms later in the frame
-    /// sees up-to-date values.
+    /// runs zero or more PhysicsSystemUVE::StepUVE() calls (one per whole
+    /// fixed step FixedStepResultUVE::stepsToRun reports this frame — zero
+    /// on a fast frame that hasn't accumulated a full step yet), then runs
+    /// SceneGraphUVE::UpdateUVE() (transform-dirty-flag propagation) — after
+    /// event dispatch and physics, so reparenting done by an event handler
+    /// and positions moved by physics this frame are both picked up, and
+    /// before LateUpdate()/Render(), so anything reading world transforms
+    /// later in the frame sees up-to-date values. Each PhysicsSystemUVE::StepUVE()
+    /// call already propagates its own intermediate world-transform updates
+    /// internally, so this final UpdateUVE() call only needs to catch
+    /// anything non-physics that moved this frame.
     void Update();
 
     /// Recomputes FrameStatsUVE::fps (an exponential moving average of
@@ -179,8 +212,9 @@ private:
     /// pre-Render systems (camera follow, animation retargeting).
     void LateUpdate();
 
-    /// No-op render seam: RenderSystemUVE will plug in here once windowing
-    /// and a graphics backend exist.
+    /// Calls Renderer3DUVE::RenderFrameUVE(*m_entityManager, m_activeCamera) when
+    /// m_activeCamera is valid; otherwise logs the original no-op trace line, preserving every
+    /// pre-Increment-14 frame-loop test's behavior unless SetActiveCameraUVE() was called.
     void Render();
 
     /// Computes this frame's wall-clock frameTimeSeconds and records it
@@ -212,12 +246,17 @@ private:
     std::unique_ptr<Render::IRenderDeviceUVE> m_renderDevice;
     std::unique_ptr<Render::IRenderSystemUVE> m_renderSystem;
     std::unique_ptr<Render::ICameraSystemUVE> m_cameraSystem;
+    std::unique_ptr<Render::IMeshRendererUVE> m_meshRenderer;
+    std::unique_ptr<Render::IRenderer3DUVE> m_renderer3D;
+    std::unique_ptr<Physics::ICollisionSystemUVE> m_collisionSystem;
+    std::unique_ptr<Physics::IPhysicsSystemUVE> m_physicsSystem;
     std::unique_ptr<Config::IConfigManagerUVE> m_configManager;
     std::optional<EngineServicesUVE> m_services;
 
     FrameStatsUVE m_frameStats;
     std::chrono::steady_clock::time_point m_frameStartTime;
     bool m_quitRequested = false;
+    Scene::EntityUVE m_activeCamera = Scene::kInvalidEntityUVE;
 };
 
 } // namespace UVE::Core

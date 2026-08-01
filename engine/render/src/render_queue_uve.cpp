@@ -7,23 +7,17 @@
 // Violators will be prosecuted to the fullest extent of the law.
 //------------------------------------------------------------------------------
 
-#include "uve/math/vector3_uve.h"
+#include "uve/render/render_queue_uve.h"
 
-#include <cmath>
+#include <algorithm>
 
-namespace UVE::Math {
+namespace UVE::Render {
 
-float LengthUVE(const Vector3UVE& v) noexcept {
-    return std::sqrt(LengthSquaredUVE(v));
+void RenderQueueUVE::SortUVE() {
+    std::sort(opaqueItems.begin(), opaqueItems.end(),
+              [](const RenderItemUVE& lhs, const RenderItemUVE& rhs) { return lhs.sortDepth < rhs.sortDepth; });
+    std::sort(transparentItems.begin(), transparentItems.end(),
+              [](const RenderItemUVE& lhs, const RenderItemUVE& rhs) { return lhs.sortDepth > rhs.sortDepth; });
 }
 
-Vector3UVE NormalizeUVE(const Vector3UVE& v) noexcept {
-    return v * (1.0F / LengthUVE(v));
-}
-
-std::string ToStringUVE(const Vector3UVE& vector) {
-    return "(" + std::to_string(vector.x) + ", " + std::to_string(vector.y) + ", " +
-           std::to_string(vector.z) + ")";
-}
-
-} // namespace UVE::Math
+} // namespace UVE::Render

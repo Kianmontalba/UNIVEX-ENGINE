@@ -9,16 +9,23 @@
 
 #pragma once
 
+#include <cstdint>
+
 #include "uve/math/vector3_uve.h"
 
 namespace UVE::Scene {
 
-/// One of the master spec's named built-in components (Part 7.3). Deliberately minimal
-/// placeholder data: the simplest possible collider shape (an axis-aligned box half-extent). A
-/// real shape-type enum (box/sphere/capsule/mesh) is PhysicsSystemUVE's job (Part 7.5), not
-/// invented ahead of it.
+/// One of the master spec's named built-in components (Part 7.3). Increment 15
+/// (CollisionSystemUVE, Part 7.5) keeps the shape itself minimal — an axis-aligned box
+/// half-extent; a real shape-type enum (box/sphere/capsule/mesh) is future work, not invented
+/// ahead of a second shape actually existing. `collisionLayer`/`collisionMask` are reserved:
+/// present so a future collision-filtering feature never has to make a breaking change to this
+/// component's serialized shape, but CollisionSystemUVE::DetectCollisionsUVE() does not yet
+/// consult them.
 struct ColliderComponentUVE final {
     Math::Vector3UVE halfExtents{0.5F, 0.5F, 0.5F};
+    std::uint32_t collisionLayer = 1;
+    std::uint32_t collisionMask = 0xFFFFFFFFU;
 };
 
 } // namespace UVE::Scene

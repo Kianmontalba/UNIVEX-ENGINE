@@ -9,6 +9,7 @@
 
 #include "uve/core/engine_core_uve.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -27,12 +28,15 @@
 #include "uve/debug/logger_uve.h"
 #include "uve/math/aabb_uve.h"
 #include "uve/math/vector3_uve.h"
+#include "uve/physics/i_collision_system_uve.h"
+#include "uve/physics/i_physics_system_uve.h"
 #include "uve/platform/platform_uve.h"
 #include "uve/render/i_camera_system_uve.h"
 #include "uve/render/i_render_device_uve.h"
 #include "uve/render/i_render_system_uve.h"
 #include "uve/scene/components/camera_component_uve.h"
 #include "uve/scene/components/mesh_component_uve.h"
+#include "uve/scene/components/rigid_body_component_uve.h"
 #include "uve/scene/components/transform_component_uve.h"
 #include "uve/scene/components/world_transform_component_uve.h"
 
@@ -274,8 +278,8 @@ TEST(EngineCoreUVETest, AssetDatabaseSceneSerializerPrefabSystem_ReachableAndRou
     Scene::IPrefabSystemUVE& prefabSystem = engine.GetServicesUVE().GetPrefabSystemUVE();
 
     const Scene::EntityUVE source = entityManager.CreateEntityUVE();
-    entityManager.AddComponentUVE<Scene::MeshComponentUVE>(source,
-                                                            Scene::MeshComponentUVE{"props/crate.uvemodel"});
+    entityManager.AddComponentUVE<Scene::MeshComponentUVE>(
+        source, Scene::MeshComponentUVE{Asset::AssetGuidUVE{51}, Asset::AssetGuidUVE{52}});
 
     const std::filesystem::path prefabPath = "uve_engine_core_tests.uveprefab";
     std::filesystem::remove(prefabPath);
@@ -285,8 +289,7 @@ TEST(EngineCoreUVETest, AssetDatabaseSceneSerializerPrefabSystem_ReachableAndRou
     const Scene::EntityUVE instance =
         prefabSystem.InstantiateUVE(entityManager, sceneGraph, assetDatabase, guid, Scene::kInvalidEntityUVE);
     ASSERT_NE(instance, Scene::kInvalidEntityUVE);
-    EXPECT_EQ(entityManager.GetComponentUVE<Scene::MeshComponentUVE>(instance).meshAssetPath,
-              "props/crate.uvemodel");
+    EXPECT_EQ(entityManager.GetComponentUVE<Scene::MeshComponentUVE>(instance).meshGuid, Asset::AssetGuidUVE{51});
 
     std::filesystem::remove(prefabPath);
     std::filesystem::remove(MakeTestConfigUVE().assetDatabaseFilePath);
@@ -429,6 +432,129 @@ TEST(EngineCoreUVETest, CameraSystem_ReachableAndComputesViewProjectionAfterInit
 
     EXPECT_TRUE(
         frustum.IntersectsUVE(Math::AabbUVE::FromCenterExtentsUVE(Math::Vector3UVE{0.0F, 0.0F, 0.0F}, Math::Vector3UVE{1.0F, 1.0F, 1.0F})));
+
+    engine.Shutdown();
+}
+
+TEST(EngineCoreUVETest, Renderer3D_ReachableAfterInit_NoActiveCameraStillNoOps) {
+    EngineCoreUVE engine(MakeTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    static_cast<void>(engine.GetServicesUVE().GetRenderer3DUVE());
+    EXPECT_EQ(engine.GetActiveCameraUVE(), Scene::kInvalidEntityUVE);
+
+    auto memorySink = std::make_unique<Debug::MemorySinkUVE>();
+    Debug::MemorySinkUVE* const memorySinkPtr = memorySink.get();
+    engine.GetServicesUVE().GetLoggerUVE().AddSink(std::move(memorySink));
+
+    engine.TickFrameUVE();
+
+    const std::vector<Debug::LogMessageUVE> messages = memorySinkPtr->GetMessagesUVE();
+    const bool foundNoOpTrace =
+        std::any_of(messages.begin(), messages.end(), [](const Debug::LogMessageUVE& message) {
+            return message.message.starts_with("Render (no-op)");
+        });
+    EXPECT_TRUE(foundNoOpTrace);
+
+    engine.Shutdown();
+}
+
+TEST(EngineCoreUVETest, Renderer3D_ActiveCameraSet_RendersWithoutCrashing) {
+    EngineCoreUVE engine(MakeTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    Scene::IEntityManagerUVE& entityManager = engine.GetServicesUVE().GetEntityManagerUVE();
+    Scene::ISceneGraphUVE& sceneGraph = engine.GetServicesUVE().GetSceneGraphUVE();
+    const Scene::EntityUVE cameraEntity = entityManager.CreateEntityUVE();
+    Scene::TransformComponentUVE local;
+    local.localPosition = Math::Vector3UVE{0.0F, 0.0F, 5.0F};
+    sceneGraph.AttachTransformUVE(entityManager, cameraEntity, local);
+    sceneGraph.UpdateUVE(entityManager);
+    entityManager.AddComponentUVE<Scene::CameraComponentUVE>(cameraEntity);
+
+    engine.SetActiveCameraUVE(cameraEntity);
+    EXPECT_EQ(engine.GetActiveCameraUVE(), cameraEntity);
+
+    auto memorySink = std::make_unique<Debug::MemorySinkUVE>();
+    Debug::MemorySinkUVE* const memorySinkPtr = memorySink.get();
+    engine.GetServicesUVE().GetLoggerUVE().AddSink(std::move(memorySink));
+
+    engine.TickFrameUVE();
+
+    // With an active camera set, Render() no longer takes the no-op trace path — proves
+    // RenderFrameUVE() actually ran instead (an empty scene still begins+ends a render pass).
+    const std::vector<Debug::LogMessageUVE> messages = memorySinkPtr->GetMessagesUVE();
+    const bool foundNoOpTrace =
+        std::any_of(messages.begin(), messages.end(), [](const Debug::LogMessageUVE& message) {
+            return message.message.starts_with("Render (no-op)");
+        });
+    EXPECT_FALSE(foundNoOpTrace);
+
+    engine.Shutdown();
+}
+
+TEST(EngineCoreUVETest, PhysicsSystemAndCollisionSystem_ReachableAndFunctionalAfterInit) {
+    EngineCoreUVE engine(MakeTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    Scene::IEntityManagerUVE& entityManager = engine.GetServicesUVE().GetEntityManagerUVE();
+    Physics::ICollisionSystemUVE& collisionSystem = engine.GetServicesUVE().GetCollisionSystemUVE();
+    Physics::IPhysicsSystemUVE& physicsSystem = engine.GetServicesUVE().GetPhysicsSystemUVE();
+
+    EXPECT_TRUE(collisionSystem.DetectCollisionsUVE(entityManager).empty());
+
+    Scene::ISceneGraphUVE& sceneGraph = engine.GetServicesUVE().GetSceneGraphUVE();
+    const Scene::EntityUVE entity = entityManager.CreateEntityUVE();
+    Scene::TransformComponentUVE local;
+    local.localPosition = Math::Vector3UVE{0.0F, 10.0F, 0.0F};
+    sceneGraph.AttachTransformUVE(entityManager, entity, local);
+    entityManager.AddComponentUVE<Scene::RigidBodyComponentUVE>(entity);
+    sceneGraph.UpdateUVE(entityManager);
+
+    physicsSystem.StepUVE(entityManager, sceneGraph, 1.0F / 60.0F);
+
+    const Scene::WorldTransformComponentUVE& world =
+        entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(entity);
+    EXPECT_LT(world.worldPosition.y, 10.0F);
+
+    engine.Shutdown();
+}
+
+TEST(EngineCoreUVETest, FallingRigidBody_TickFrameUVEDrivenPhysicsStep_MovesEntityDownward) {
+    // A 1kHz fixed-update rate (1ms fixed step) paired with a short real sleep before each
+    // TickFrameUVE() call guarantees the ITimerUVE accumulator crosses at least one fixed step
+    // almost every frame — an excessively high fixedUpdateFps would trigger steps just as
+    // reliably but make each step's position delta too small to be representable in float at
+    // this entity's starting magnitude (10.0), silently rounding to no visible movement. This
+    // test only proves EngineCoreUVE::Update()'s physics-step wiring moves an entity end-to-end;
+    // PhysicsSystemUVE's exact per-step math is already covered by
+    // tests/physics/physics_system_uve_tests.cpp.
+    EngineConfigUVE config = MakeTestConfigUVE();
+    config.fixedUpdateFps = 1000.0;
+    EngineCoreUVE engine(config);
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    Scene::IEntityManagerUVE& entityManager = engine.GetServicesUVE().GetEntityManagerUVE();
+    Scene::ISceneGraphUVE& sceneGraph = engine.GetServicesUVE().GetSceneGraphUVE();
+
+    const Scene::EntityUVE entity = entityManager.CreateEntityUVE();
+    Scene::TransformComponentUVE local;
+    local.localPosition = Math::Vector3UVE{0.0F, 10.0F, 0.0F};
+    sceneGraph.AttachTransformUVE(entityManager, entity, local);
+    entityManager.AddComponentUVE<Scene::RigidBodyComponentUVE>(entity);
+
+    for (int frame = 0; frame < 30; ++frame) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+        engine.TickFrameUVE();
+    }
+
+    const Scene::WorldTransformComponentUVE& world =
+        entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(entity);
+    EXPECT_LT(world.worldPosition.y, 10.0F);
 
     engine.Shutdown();
 }

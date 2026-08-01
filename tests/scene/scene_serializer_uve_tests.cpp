@@ -19,6 +19,7 @@
 
 #include <gtest/gtest.h>
 
+#include "uve/asset/asset_guid_uve.h"
 #include "uve/debug/log_sink_uve.h"
 #include "uve/debug/logger_uve.h"
 #include "uve/events/event_system_uve.h"
@@ -46,7 +47,8 @@ protected:
 
 TEST_F(SceneSerializerUVETest, SaveThenLoad_SingleEntityWithMultipleComponents_RoundTripsExactly) {
     const EntityUVE entity = entityManager.CreateEntityUVE();
-    entityManager.AddComponentUVE<MeshComponentUVE>(entity, MeshComponentUVE{"meshes/cube.uvemodel"});
+    entityManager.AddComponentUVE<MeshComponentUVE>(
+        entity, MeshComponentUVE{Asset::AssetGuidUVE{111}, Asset::AssetGuidUVE{222}});
     entityManager.AddComponentUVE<LightComponentUVE>(
         entity, LightComponentUVE{Math::Vector3UVE{0.2F, 0.4F, 0.6F}, 2.5F});
     entityManager.AddComponentUVE<RigidBodyComponentUVE>(entity, RigidBodyComponentUVE{5.0F, true});
@@ -60,7 +62,8 @@ TEST_F(SceneSerializerUVETest, SaveThenLoad_SingleEntityWithMultipleComponents_R
     ASSERT_EQ(roots.size(), 1U);
     const EntityUVE loaded = roots[0];
 
-    EXPECT_EQ(loadedManager.GetComponentUVE<MeshComponentUVE>(loaded).meshAssetPath, "meshes/cube.uvemodel");
+    EXPECT_EQ(loadedManager.GetComponentUVE<MeshComponentUVE>(loaded).meshGuid, Asset::AssetGuidUVE{111});
+    EXPECT_EQ(loadedManager.GetComponentUVE<MeshComponentUVE>(loaded).materialGuid, Asset::AssetGuidUVE{222});
     EXPECT_FLOAT_EQ(loadedManager.GetComponentUVE<LightComponentUVE>(loaded).intensity, 2.5F);
     const Math::Vector3UVE expectedColor{0.2F, 0.4F, 0.6F};
     EXPECT_TRUE(loadedManager.GetComponentUVE<LightComponentUVE>(loaded).color == expectedColor);
@@ -99,9 +102,9 @@ TEST_F(SceneSerializerUVETest, SaveThenLoad_Hierarchy_RemapsParentCorrectly) {
 
 TEST_F(SceneSerializerUVETest, SaveThenLoad_MultipleRoots_AllPresentInFileOrder) {
     const EntityUVE rootA = entityManager.CreateEntityUVE();
-    entityManager.AddComponentUVE<MeshComponentUVE>(rootA, MeshComponentUVE{"a.uvemodel"});
+    entityManager.AddComponentUVE<MeshComponentUVE>(rootA, MeshComponentUVE{Asset::AssetGuidUVE{1}, Asset::AssetGuidUVE{2}});
     const EntityUVE rootB = entityManager.CreateEntityUVE();
-    entityManager.AddComponentUVE<MeshComponentUVE>(rootB, MeshComponentUVE{"b.uvemodel"});
+    entityManager.AddComponentUVE<MeshComponentUVE>(rootB, MeshComponentUVE{Asset::AssetGuidUVE{3}, Asset::AssetGuidUVE{4}});
 
     const std::filesystem::path path = "uve_scene_serializer_tests_multi_root.uvescene";
     std::filesystem::remove(path);
@@ -110,8 +113,8 @@ TEST_F(SceneSerializerUVETest, SaveThenLoad_MultipleRoots_AllPresentInFileOrder)
     EntityManagerUVE loadedManager(memoryManager.GetDefaultAllocatorUVE(), eventSystem);
     const std::vector<EntityUVE> roots = serializer.LoadUVE(loadedManager, path);
     ASSERT_EQ(roots.size(), 2U);
-    EXPECT_EQ(loadedManager.GetComponentUVE<MeshComponentUVE>(roots[0]).meshAssetPath, "a.uvemodel");
-    EXPECT_EQ(loadedManager.GetComponentUVE<MeshComponentUVE>(roots[1]).meshAssetPath, "b.uvemodel");
+    EXPECT_EQ(loadedManager.GetComponentUVE<MeshComponentUVE>(roots[0]).meshGuid, Asset::AssetGuidUVE{1});
+    EXPECT_EQ(loadedManager.GetComponentUVE<MeshComponentUVE>(roots[1]).meshGuid, Asset::AssetGuidUVE{3});
 
     std::filesystem::remove(path);
 }

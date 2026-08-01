@@ -38,6 +38,8 @@ add_executable(uve_tests
     math/aabb_uve_tests.cpp
     math/plane_uve_tests.cpp
     math/frustum_uve_tests.cpp
+    physics/collision_system_uve_tests.cpp
+    physics/physics_system_uve_tests.cpp
     asset/asset_database_uve_tests.cpp
     asset/uve_file_envelope_uve_tests.cpp
     asset/asset_manager_uve_tests.cpp
@@ -52,6 +54,9 @@ add_executable(uve_tests
     render/null_render_device_uve_tests.cpp
     render/render_system_uve_tests.cpp
     render/camera_system_uve_tests.cpp
+    render/render_queue_uve_tests.cpp
+    render/mesh_renderer_uve_tests.cpp
+    render/renderer_3d_uve_tests.cpp
     scene/entity_manager_uve_tests.cpp
     scene/scene_graph_uve_tests.cpp
     scene/scene_serializer_uve_tests.cpp
@@ -73,6 +78,7 @@ target_link_libraries(uve_tests PRIVATE
     uve_math
     uve_asset
     uve_scene
+    uve_physics
     uve_render
     uve_core
     GTest::gtest

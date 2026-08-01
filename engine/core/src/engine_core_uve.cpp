@@ -29,10 +29,14 @@
 #include "uve/debug/logging_macros_uve.h"
 #include "uve/events/event_system_uve.h"
 #include "uve/memory/memory_manager_uve.h"
+#include "uve/physics/collision_system_uve.h"
+#include "uve/physics/physics_system_uve.h"
 #include "uve/platform/platform_uve.h"
 #include "uve/render/camera_system_uve.h"
+#include "uve/render/mesh_renderer_uve.h"
 #include "uve/render/null_render_device_uve.h"
 #include "uve/render/render_system_uve.h"
+#include "uve/render/renderer_3d_uve.h"
 #include "uve/scene/entity_manager_uve.h"
 #include "uve/scene/prefab_system_uve.h"
 #include "uve/scene/scene_graph_uve.h"
@@ -172,6 +176,26 @@ void EngineCoreUVE::Init() {
     // grouped with the rest of engine/render.
     m_cameraSystem = std::make_unique<Render::CameraSystemUVE>();
 
+    // MeshRenderer twentieth: stateless, no dependencies of its own —
+    // grouped with the rest of engine/render.
+    m_meshRenderer = std::make_unique<Render::MeshRendererUVE>();
+
+    // Renderer3D twenty-first: needs RenderDevice, RenderSystem, MeshRenderer, CameraSystem,
+    // AssetManager, AssetDatabase, and EventSystem — every one of which already exists by this
+    // point. Its offscreen render target is fixed at EngineConfigUVE::renderTargetWidth/Height
+    // for this EngineCoreUVE's lifetime (no WindowManagerUVE exists yet to resize against).
+    m_renderer3D = std::make_unique<Render::Renderer3DUVE>(*m_renderDevice, *m_renderSystem, *m_meshRenderer,
+                                                             *m_cameraSystem, *m_assetManager, *m_assetDatabase,
+                                                             *m_eventSystem, m_config.renderTargetWidth,
+                                                             m_config.renderTargetHeight);
+
+    // CollisionSystem twenty-second: stateless, no dependencies of its own.
+    m_collisionSystem = std::make_unique<Physics::CollisionSystemUVE>();
+
+    // PhysicsSystem twenty-third: needs only CollisionSystem (composed by reference) and
+    // EngineConfigUVE::gravity, both already available.
+    m_physicsSystem = std::make_unique<Physics::PhysicsSystemUVE>(*m_collisionSystem, m_config.gravity);
+
     // ConfigManager last: it immediately calls LoadUVE(), which logs its
     // outcome (missing/malformed/success) through the Logger constructed
     // above — so Logger must already exist by this point.
@@ -183,7 +207,8 @@ void EngineCoreUVE::Init() {
                         *m_commandLine, *m_configManager, *m_entityManager, *m_sceneGraph,
                         *m_assetDatabase, *m_sceneSerializer, *m_prefabSystem, *m_hotReload,
                         *m_assetManager, *m_assetImporter, *m_assetBundle, *m_fileSystem,
-                        *m_renderDevice, *m_renderSystem, *m_cameraSystem);
+                        *m_renderDevice, *m_renderSystem, *m_cameraSystem, *m_meshRenderer,
+                        *m_renderer3D, *m_collisionSystem, *m_physicsSystem);
 
     TransitionStateUVE(EngineStateUVE::Running);
     UVE_INFO("EngineCoreUVE: initialized");
@@ -207,6 +232,13 @@ void EngineCoreUVE::Update() {
     const Utilities::FixedStepResultUVE fixedStep = m_timer->AdvanceFixedStepUVE();
     UVE_TRACE("Update: {} fixed step(s), alpha={}", fixedStep.stepsToRun, fixedStep.alpha);
     m_eventSystem->DispatchQueuedUVE();
+
+    const float fixedDeltaTimeSeconds =
+        m_config.fixedUpdateFps > 0.0 ? static_cast<float>(1.0 / m_config.fixedUpdateFps) : 0.0F;
+    for (int step = 0; step < fixedStep.stepsToRun; ++step) {
+        m_physicsSystem->StepUVE(*m_entityManager, *m_sceneGraph, fixedDeltaTimeSeconds);
+    }
+
     m_sceneGraph->UpdateUVE(*m_entityManager);
 
     if (m_config.hotReloadEnabledUVE) {
@@ -228,11 +260,11 @@ void EngineCoreUVE::LateUpdate() {
 }
 
 void EngineCoreUVE::Render() {
-    // No-op render seam: RenderSystemUVE exists (backed by NullRenderDeviceUVE)
-    // but nothing above the RHI — a camera system, a mesh renderer — is wired
-    // in yet, so there is nothing meaningful to record into a frame's command
-    // buffer. Complete and correct as the render stage until those exist.
-    UVE_TRACE("Render (no-op)");
+    if (m_activeCamera != Scene::kInvalidEntityUVE) {
+        m_renderer3D->RenderFrameUVE(*m_entityManager, m_activeCamera);
+    } else {
+        UVE_TRACE("Render (no-op)");
+    }
 }
 
 void EngineCoreUVE::EndFrame() {
@@ -275,16 +307,20 @@ void EngineCoreUVE::Shutdown() {
     UVE_INFO("EngineCoreUVE: shutting down");
 
     // Exact reverse of Init()'s construction order: ConfigManager, then
-    // CameraSystem, then RenderSystem, then RenderDevice, then FileSystem,
-    // then AssetBundle, then AssetImporter, then AssetManager (its
-    // destructor blocks until every in-flight load job finishes), then
-    // HotReload, then PrefabSystem, then SceneSerializer, then
-    // AssetDatabase, then SceneGraph, then EntityManager, then EventSystem,
-    // then Timer, then ThreadPool, then MemoryManager, then Logger, then
-    // CommandLine. The final log message is emitted before the logger
-    // itself is torn down, so it is guaranteed to be recorded.
+    // PhysicsSystem, then CollisionSystem, then Renderer3D, then MeshRenderer, then CameraSystem, then RenderSystem, then RenderDevice,
+    // then FileSystem, then AssetBundle, then AssetImporter, then
+    // AssetManager (its destructor blocks until every in-flight load job
+    // finishes), then HotReload, then PrefabSystem, then SceneSerializer,
+    // then AssetDatabase, then SceneGraph, then EntityManager, then
+    // EventSystem, then Timer, then ThreadPool, then MemoryManager, then
+    // Logger, then CommandLine. The final log message is emitted before the
+    // logger itself is torn down, so it is guaranteed to be recorded.
     m_services.reset();
     m_configManager.reset();
+    m_physicsSystem.reset();
+    m_collisionSystem.reset();
+    m_renderer3D.reset();
+    m_meshRenderer.reset();
     m_cameraSystem.reset();
     m_renderSystem.reset();
     m_renderDevice.reset();
@@ -335,6 +371,14 @@ EngineStateUVE EngineCoreUVE::GetStateUVE() const noexcept {
 
 const FrameStatsUVE& EngineCoreUVE::GetFrameStatsUVE() const noexcept {
     return m_frameStats;
+}
+
+void EngineCoreUVE::SetActiveCameraUVE(Scene::EntityUVE cameraEntity) noexcept {
+    m_activeCamera = cameraEntity;
+}
+
+Scene::EntityUVE EngineCoreUVE::GetActiveCameraUVE() const noexcept {
+    return m_activeCamera;
 }
 
 EngineServicesUVE& EngineCoreUVE::GetServicesUVE() {
