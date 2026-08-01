@@ -44,8 +44,12 @@ struct TextureDescUVE {
 };
 
 /// Which programmable stage a ShaderDescUVE belongs to. `Compute` is reserved for the future
-/// ComputeSystemUVE (Part 7.2) — unused by anything built so far.
-enum class ShaderStageUVE : std::uint8_t { Vertex, Fragment, Compute };
+/// ComputeSystemUVE (Part 7.2) — unused by anything built so far. `Geometry` (Increment 21) is
+/// compilable standalone via Shader::ShaderSourceUVE but, like Compute, has no pipeline slot yet
+/// — PipelineDescUVE still only links a vertex+fragment pair; growing it with a geometry slot is
+/// deferred future work, not built this increment. Append-only: never renumber existing values,
+/// since ShaderStageUVE crosses the RHI boundary.
+enum class ShaderStageUVE : std::uint8_t { Vertex, Fragment, Compute, Geometry };
 
 /// Describes a shader to create via IRenderDeviceUVE::CreateShaderUVE(). `sourceCode` is stored
 /// and validated as-is; NullRenderDeviceUVE never compiles it — no glslang/shaderc/DXC is
@@ -87,6 +91,18 @@ struct PipelineDescUVE {
     /// `glVertexAttribPointer` stride parameter). `0` (the default) is only ever valid for
     /// `NullRenderDeviceUVE`, which ignores this field like every other one it merely bookkeeps.
     std::uint32_t vertexStride = 0;
+};
+
+/// Fixed-function state accompanying a pre-compiled GL program binary passed to
+/// IRenderDeviceUVE::CreatePipelineFromBinaryUVE() (Increment 21's program-binary cache). Deliberately
+/// has no shader-handle fields — loading from binary skips shader-object attachment entirely, so
+/// there is nothing analogous to PipelineDescUVE::vertexShader/fragmentShader here.
+struct PipelineBinaryDescUVE {
+    std::vector<VertexAttributeUVE> vertexLayout;
+    std::uint32_t vertexStride = 0;
+    PrimitiveTopologyUVE topology = PrimitiveTopologyUVE::Triangles;
+    bool depthTestEnabled = true;
+    bool depthWriteEnabled = true;
 };
 
 /// What happens to a render pass attachment's existing contents at the start of the pass.

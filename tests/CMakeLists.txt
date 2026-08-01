@@ -70,6 +70,11 @@ add_executable(uve_tests
     window/null_window_manager_uve_tests.cpp
     window/window_manager_uve_tests.cpp
     render/gl_render_device_uve_tests.cpp
+    render/shader/shader_preprocessor_uve_tests.cpp
+    render/shader/shader_diagnostics_parser_uve_tests.cpp
+    render/shader/shader_binary_cache_uve_tests.cpp
+    render/shader/shader_program_uve_tests.cpp
+    render/shader/shader_manager_uve_tests.cpp
     scene/entity_manager_uve_tests.cpp
     scene/scene_graph_uve_tests.cpp
     scene/scene_serializer_uve_tests.cpp
@@ -103,6 +108,13 @@ target_link_libraries(uve_tests PRIVATE
 )
 target_compile_features(uve_tests PRIVATE cxx_std_20)
 uve_set_warnings(uve_tests)
+
+# render/shader/shader_preprocessor_uve_tests.cpp and shader_diagnostics_parser_uve_tests.cpp and
+# shader_binary_cache_uve_tests.cpp unit-test module-private Detail:: helpers directly (each is
+# pure text/data logic with no GL or threading involved, so each one's own doc comment says it is
+# "independently unit-testable") - this include path exposes only those module-private headers,
+# never anything from engine/render/shader/src as part of uve_render's own public interface.
+target_include_directories(uve_tests PRIVATE ${CMAKE_SOURCE_DIR}/engine/render/shader/src)
 
 include(GoogleTest)
 gtest_discover_tests(uve_tests)

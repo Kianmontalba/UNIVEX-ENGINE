@@ -20,6 +20,8 @@
 #include "uve/debug/log_sink_uve.h"
 #include "uve/debug/logger_uve.h"
 #include "uve/events/event_system_uve.h"
+#include "uve/math/matrix4x4_uve.h"
+#include "uve/math/vector3_uve.h"
 #include "uve/window/window_manager_uve.h"
 
 namespace UVE::Render::Tests {
@@ -55,6 +57,22 @@ void main() {
 constexpr std::string_view kBrokenShaderSource = R"(#version 330 core
 void main() {
     this is not valid glsl :(
+}
+)";
+
+constexpr std::string_view kUniformVertexShaderSource = R"(#version 330 core
+layout(location = 0) in vec3 aPosition;
+uniform mat4 uModel;
+void main() {
+    gl_Position = uModel * vec4(aPosition, 1.0);
+}
+)";
+
+constexpr std::string_view kUniformFragmentShaderSource = R"(#version 330 core
+out vec4 FragColor;
+uniform vec3 uColor;
+void main() {
+    FragColor = vec4(uColor, 1.0);
 }
 )";
 
@@ -227,6 +245,133 @@ TEST_F(GlRenderDeviceUVETest, RepeatedPresentCalls_DoNotChangeLiveResourceCount)
         renderDevice->PresentUVE();
     }
     EXPECT_EQ(renderDevice->GetLiveResourceCountUVE(), 0U);
+}
+
+TEST_F(GlRenderDeviceUVETest, CreateShaderUVE_OutInfoLogParameter_CapturesLogOnBothSuccessAndFailure) {
+    std::string successLog = "unset";
+    const ShaderHandleUVE shader = renderDevice->CreateShaderUVE(
+        ShaderDescUVE{ShaderStageUVE::Vertex, std::string(kValidVertexShaderSource)}, &successLog);
+    EXPECT_NE(shader, kInvalidShaderHandleUVE);
+    renderDevice->DestroyShaderUVE(shader);
+
+    std::string failureLog;
+    const ShaderHandleUVE broken = renderDevice->CreateShaderUVE(
+        ShaderDescUVE{ShaderStageUVE::Fragment, std::string(kBrokenShaderSource)}, &failureLog);
+    EXPECT_EQ(broken, kInvalidShaderHandleUVE);
+    EXPECT_FALSE(failureLog.empty());
+}
+
+TEST_F(GlRenderDeviceUVETest, GetPipelineUniformsUVE_ReflectsDeclaredUniforms) {
+    const ShaderHandleUVE vertexShader = renderDevice->CreateShaderUVE(
+        ShaderDescUVE{ShaderStageUVE::Vertex, std::string(kUniformVertexShaderSource)});
+    const ShaderHandleUVE fragmentShader = renderDevice->CreateShaderUVE(
+        ShaderDescUVE{ShaderStageUVE::Fragment, std::string(kUniformFragmentShaderSource)});
+    ASSERT_NE(vertexShader, kInvalidShaderHandleUVE);
+    ASSERT_NE(fragmentShader, kInvalidShaderHandleUVE);
+
+    PipelineDescUVE pipelineDesc;
+    pipelineDesc.vertexShader = vertexShader;
+    pipelineDesc.fragmentShader = fragmentShader;
+    pipelineDesc.vertexLayout = {VertexAttributeUVE{"POSITION", VertexAttributeFormatUVE::Float3, 0}};
+    pipelineDesc.vertexStride = 3U * static_cast<std::uint32_t>(sizeof(float));
+    const PipelineHandleUVE pipeline = renderDevice->CreatePipelineUVE(pipelineDesc);
+    ASSERT_NE(pipeline, kInvalidPipelineHandleUVE);
+
+    const std::vector<UniformReflectionUVE> uniforms = renderDevice->GetPipelineUniformsUVE(pipeline);
+    const bool foundModel = std::any_of(uniforms.begin(), uniforms.end(), [](const UniformReflectionUVE& uniform) {
+        return uniform.name == "uModel" && uniform.type == ShaderDataTypeUVE::Mat4;
+    });
+    const bool foundColor = std::any_of(uniforms.begin(), uniforms.end(), [](const UniformReflectionUVE& uniform) {
+        return uniform.name == "uColor" && uniform.type == ShaderDataTypeUVE::Vec3;
+    });
+    EXPECT_TRUE(foundModel);
+    EXPECT_TRUE(foundColor);
+
+    renderDevice->DestroyPipelineUVE(pipeline);
+    renderDevice->DestroyShaderUVE(vertexShader);
+    renderDevice->DestroyShaderUVE(fragmentShader);
+}
+
+TEST_F(GlRenderDeviceUVETest, GetPipelineUniformsUVE_UnknownHandle_ReturnsEmpty) {
+    EXPECT_TRUE(renderDevice->GetPipelineUniformsUVE(PipelineHandleUVE{999}).empty());
+}
+
+TEST_F(GlRenderDeviceUVETest, PipelineBinaryRoundTrip_CreatePipelineFromBinaryUVE_ProducesValidPipeline) {
+    const ShaderHandleUVE vertexShader =
+        renderDevice->CreateShaderUVE(ShaderDescUVE{ShaderStageUVE::Vertex, std::string(kValidVertexShaderSource)});
+    const ShaderHandleUVE fragmentShader = renderDevice->CreateShaderUVE(
+        ShaderDescUVE{ShaderStageUVE::Fragment, std::string(kValidFragmentShaderSource)});
+
+    PipelineDescUVE pipelineDesc;
+    pipelineDesc.vertexShader = vertexShader;
+    pipelineDesc.fragmentShader = fragmentShader;
+    pipelineDesc.vertexLayout = {VertexAttributeUVE{"POSITION", VertexAttributeFormatUVE::Float3, 0}};
+    pipelineDesc.vertexStride = 3U * static_cast<std::uint32_t>(sizeof(float));
+    const PipelineHandleUVE pipeline = renderDevice->CreatePipelineUVE(pipelineDesc);
+    ASSERT_NE(pipeline, kInvalidPipelineHandleUVE);
+
+    std::vector<std::byte> binary;
+    std::uint32_t format = 0;
+    const bool gotBinary = renderDevice->GetPipelineBinaryUVE(pipeline, binary, format);
+    renderDevice->DestroyPipelineUVE(pipeline);
+    renderDevice->DestroyShaderUVE(vertexShader);
+    renderDevice->DestroyShaderUVE(fragmentShader);
+
+    if (!gotBinary || binary.empty()) {
+        GTEST_SKIP() << "This sandbox's Mesa/llvmpipe driver did not return a usable program "
+                        "binary (GL_PROGRAM_BINARY_LENGTH <= 0) - documented as a plain cache "
+                        "miss, not a failure, so skip the round-trip assertion here.";
+    }
+
+    PipelineBinaryDescUVE binaryDesc;
+    binaryDesc.vertexLayout = pipelineDesc.vertexLayout;
+    binaryDesc.vertexStride = pipelineDesc.vertexStride;
+    const PipelineHandleUVE restored = renderDevice->CreatePipelineFromBinaryUVE(binary, format, binaryDesc);
+    EXPECT_NE(restored, kInvalidPipelineHandleUVE);
+    if (restored != kInvalidPipelineHandleUVE) {
+        renderDevice->DestroyPipelineUVE(restored);
+    }
+}
+
+TEST_F(GlRenderDeviceUVETest, GetPipelineBinaryUVE_UnknownHandle_ReturnsFalse) {
+    std::vector<std::byte> binary;
+    std::uint32_t format = 0;
+    EXPECT_FALSE(renderDevice->GetPipelineBinaryUVE(PipelineHandleUVE{999}, binary, format));
+}
+
+TEST_F(GlRenderDeviceUVETest, CommandBuffer_SetUniformCalls_OnBoundPipeline_DoNotCrash) {
+    const ShaderHandleUVE vertexShader = renderDevice->CreateShaderUVE(
+        ShaderDescUVE{ShaderStageUVE::Vertex, std::string(kUniformVertexShaderSource)});
+    const ShaderHandleUVE fragmentShader = renderDevice->CreateShaderUVE(
+        ShaderDescUVE{ShaderStageUVE::Fragment, std::string(kUniformFragmentShaderSource)});
+
+    PipelineDescUVE pipelineDesc;
+    pipelineDesc.vertexShader = vertexShader;
+    pipelineDesc.fragmentShader = fragmentShader;
+    pipelineDesc.vertexLayout = {VertexAttributeUVE{"POSITION", VertexAttributeFormatUVE::Float3, 0}};
+    pipelineDesc.vertexStride = 3U * static_cast<std::uint32_t>(sizeof(float));
+    const PipelineHandleUVE pipeline = renderDevice->CreatePipelineUVE(pipelineDesc);
+    ASSERT_NE(pipeline, kInvalidPipelineHandleUVE);
+
+    std::unique_ptr<ICommandBufferUVE> commandBuffer = renderDevice->CreateCommandBufferUVE();
+    RenderPassDescUVE passDesc;
+    passDesc.colorAttachment = kInvalidTextureHandleUVE;
+    passDesc.colorLoadOp = LoadOpUVE::DontCare;
+    passDesc.depthLoadOp = LoadOpUVE::DontCare;
+
+    commandBuffer->BeginRenderPassUVE(passDesc);
+    commandBuffer->BindPipelineUVE(pipeline);
+    commandBuffer->SetUniformMatrix4x4UVE("uModel", Math::Matrix4x4UVE::IdentityUVE());
+    commandBuffer->SetUniformVector3UVE("uColor", Math::Vector3UVE{1.0F, 0.0F, 0.0F});
+    commandBuffer->EndRenderPassUVE();
+
+    renderDevice->SubmitUVE(std::move(commandBuffer));
+
+    renderDevice->DestroyPipelineUVE(pipeline);
+    renderDevice->DestroyShaderUVE(vertexShader);
+    renderDevice->DestroyShaderUVE(fragmentShader);
+
+    SUCCEED();
 }
 
 } // namespace

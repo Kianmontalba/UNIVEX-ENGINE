@@ -13,7 +13,9 @@
 #include <cstdint>
 #include <memory>
 #include <span>
+#include <string>
 #include <string_view>
+#include <vector>
 
 #include "uve/render/buffer_handle_uve.h"
 #include "uve/render/i_command_buffer_uve.h"
@@ -21,6 +23,7 @@
 #include "uve/render/render_resource_descs_uve.h"
 #include "uve/render/shader_handle_uve.h"
 #include "uve/render/texture_handle_uve.h"
+#include "uve/render/uniform_reflection_uve.h"
 
 namespace UVE::Render {
 
@@ -61,18 +64,52 @@ public:
     /// Destroys `texture`. A handle already destroyed (or never valid) is a safe no-op (logged).
     virtual void DestroyTextureUVE(TextureHandleUVE texture) = 0;
 
-    /// Creates a shader per `desc`. Never returns kInvalidShaderHandleUVE on success.
-    [[nodiscard]] virtual ShaderHandleUVE CreateShaderUVE(const ShaderDescUVE& desc) = 0;
+    /// Creates a shader per `desc`. Never returns kInvalidShaderHandleUVE on success. If
+    /// `outInfoLog` is non-null, the backend's raw compile info log is written to it regardless
+    /// of success/failure (Increment 21 — Shader::ShaderManagerUVE parses this into structured,
+    /// line-numbered diagnostics; a successful compile can still produce non-fatal warning text).
+    /// NullRenderDeviceUVE never populates `outInfoLog` (leaves it untouched) — it never really
+    /// compiles anything, so it has no log to give.
+    [[nodiscard]] virtual ShaderHandleUVE CreateShaderUVE(const ShaderDescUVE& desc,
+                                                           std::string* outInfoLog = nullptr) = 0;
 
     /// Destroys `shader`. A handle already destroyed (or never valid) is a safe no-op (logged).
     virtual void DestroyShaderUVE(ShaderHandleUVE shader) = 0;
 
     /// Creates a pipeline state object per `desc`. Returns kInvalidPipelineHandleUVE (logging the
-    /// reason) if `desc.vertexShader`/`desc.fragmentShader` don't reference live shaders.
-    [[nodiscard]] virtual PipelineHandleUVE CreatePipelineUVE(const PipelineDescUVE& desc) = 0;
+    /// reason) if `desc.vertexShader`/`desc.fragmentShader` don't reference live shaders. Same
+    /// `outInfoLog` contract as CreateShaderUVE(), but for the link step's info log.
+    [[nodiscard]] virtual PipelineHandleUVE CreatePipelineUVE(const PipelineDescUVE& desc,
+                                                               std::string* outInfoLog = nullptr) = 0;
 
     /// Destroys `pipeline`. A handle already destroyed (or never valid) is a safe no-op (logged).
     virtual void DestroyPipelineUVE(PipelineHandleUVE pipeline) = 0;
+
+    /// Returns every uniform `pipeline`'s shaders declare, reflected once at link time (Increment
+    /// 21). Empty for an unknown handle. NullRenderDeviceUVE always returns empty — it never
+    /// really links anything, so it has nothing to reflect.
+    [[nodiscard]] virtual std::vector<UniformReflectionUVE> GetPipelineUniformsUVE(
+        PipelineHandleUVE pipeline) const = 0;
+
+    /// Retrieves `pipeline`'s compiled GL program binary (Increment 21's on-disk shader cache),
+    /// writing it to `outBinary` and the backend-specific binary format to `outFormat`. Returns
+    /// false (leaving both out-params untouched) if `pipeline` is unknown or the backend/driver
+    /// can't produce a binary — always false for NullRenderDeviceUVE, since it never compiles
+    /// anything real.
+    [[nodiscard]] virtual bool GetPipelineBinaryUVE(PipelineHandleUVE pipeline, std::vector<std::byte>& outBinary,
+                                                     std::uint32_t& outFormat) const = 0;
+
+    /// Creates a pipeline directly from a previously retrieved GetPipelineBinaryUVE() blob and
+    /// its `format`, skipping shader compilation/linking entirely — the fast path Shader::
+    /// ShaderManagerUVE's on-disk cache uses on a cache hit. Returns kInvalidPipelineHandleUVE
+    /// (logging the reason) if the backend/driver rejects `binary` — e.g. a stale cache entry
+    /// from before a driver update — which callers must treat as an ordinary cache miss, never a
+    /// hard failure. NullRenderDeviceUVE always succeeds, bookkeeping `desc`'s fixed-function
+    /// state exactly like CreatePipelineUVE() does (with invalid shader handles, since none was
+    /// ever compiled).
+    [[nodiscard]] virtual PipelineHandleUVE CreatePipelineFromBinaryUVE(std::span<const std::byte> binary,
+                                                                         std::uint32_t format,
+                                                                         const PipelineBinaryDescUVE& desc) = 0;
 
     /// Creates a new, empty ICommandBufferUVE ready for recording.
     [[nodiscard]] virtual std::unique_ptr<ICommandBufferUVE> CreateCommandBufferUVE() = 0;

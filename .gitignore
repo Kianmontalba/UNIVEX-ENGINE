@@ -15,6 +15,10 @@ cmake-build-*/
 *.uveprefab
 *.uvebundle
 
+# Runtime-generated shader program-binary cache (ShaderManagerUVE)
+/shader_cache/
+*.uveshadercache
+
 # IDE
 .vs/
 .vscode/

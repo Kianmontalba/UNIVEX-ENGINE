@@ -63,6 +63,17 @@ struct GlFunctionsUVE {
 
     PFNGLACTIVETEXTUREPROC glActiveTexture = nullptr;
 
+    // Uniform-related (Increment 21: ShaderManagerUVE's reflection + ICommandBufferUVE's
+    // SetUniform*UVE calls) and program-binary-cache (Increment 21's on-disk shader cache).
+    PFNGLGETUNIFORMLOCATIONPROC glGetUniformLocation = nullptr;
+    PFNGLUNIFORM1FPROC glUniform1f = nullptr;
+    PFNGLUNIFORM1IPROC glUniform1i = nullptr;
+    PFNGLUNIFORM3FVPROC glUniform3fv = nullptr;
+    PFNGLUNIFORMMATRIX4FVPROC glUniformMatrix4fv = nullptr;
+    PFNGLGETACTIVEUNIFORMPROC glGetActiveUniform = nullptr;
+    PFNGLGETPROGRAMBINARYPROC glGetProgramBinary = nullptr;
+    PFNGLPROGRAMBINARYPROC glProgramBinary = nullptr;
+
     /// True iff every function pointer above loaded successfully (non-null).
     [[nodiscard]] bool IsCompleteUVE() const noexcept;
 };

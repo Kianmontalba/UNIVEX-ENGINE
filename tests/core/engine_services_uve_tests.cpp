@@ -47,6 +47,7 @@
 #include "uve/render/i_render_device_uve.h"
 #include "uve/render/i_render_system_uve.h"
 #include "uve/render/i_renderer_3d_uve.h"
+#include "uve/render/shader/i_shader_manager_uve.h"
 #include "uve/save/i_checkpoint_manager_uve.h"
 #include "uve/save/i_save_game_system_uve.h"
 #include "uve/scene/i_entity_manager_uve.h"
@@ -62,7 +63,7 @@
 // IMemoryManagerUVE/IThreadPoolUVE/ICommandLineUVE/IConfigManagerUVE/
 // IEntityManagerUVE/ISceneGraphUVE/IAssetDatabaseUVE/ISceneSerializerUVE/
 // IPrefabSystemUVE/IHotReloadUVE/IAssetManagerUVE/IAssetImporterUVE/
-// IAssetBundleUVE/IFileSystemUVE/IRenderDeviceUVE/IRenderSystemUVE/
+// IAssetBundleUVE/IFileSystemUVE/IRenderDeviceUVE/Shader::IShaderManagerUVE/IRenderSystemUVE/
 // ICameraSystemUVE/IMeshRendererUVE) works against ANY conforming
 // implementation, independent of the concrete LoggerUVE/TimerUVE/
 // EventSystemUVE/MemoryManagerUVE/ThreadPoolUVE/CommandLineUVE/
@@ -410,6 +411,11 @@ public:
     void BindUniformBufferUVE(Render::BufferHandleUVE, std::uint32_t) override {}
     void DrawIndexedUVE(std::uint32_t, std::uint32_t) override {}
     void DrawUVE(std::uint32_t, std::uint32_t) override {}
+    void SetUniformFloatUVE(std::string_view, float) override {}
+    void SetUniformIntUVE(std::string_view, std::int32_t) override {}
+    void SetUniformBoolUVE(std::string_view, bool) override {}
+    void SetUniformVector3UVE(std::string_view, const Math::Vector3UVE&) override {}
+    void SetUniformMatrix4x4UVE(std::string_view, const Math::Matrix4x4UVE&) override {}
 };
 
 class FakeRenderDeviceUVE final : public Render::IRenderDeviceUVE {
@@ -428,14 +434,26 @@ public:
         return Render::TextureHandleUVE{1};
     }
     void DestroyTextureUVE(Render::TextureHandleUVE) override {}
-    [[nodiscard]] Render::ShaderHandleUVE CreateShaderUVE(const Render::ShaderDescUVE&) override {
+    [[nodiscard]] Render::ShaderHandleUVE CreateShaderUVE(const Render::ShaderDescUVE&, std::string*) override {
         return Render::ShaderHandleUVE{1};
     }
     void DestroyShaderUVE(Render::ShaderHandleUVE) override {}
-    [[nodiscard]] Render::PipelineHandleUVE CreatePipelineUVE(const Render::PipelineDescUVE&) override {
+    [[nodiscard]] Render::PipelineHandleUVE CreatePipelineUVE(const Render::PipelineDescUVE&, std::string*) override {
         return Render::PipelineHandleUVE{1};
     }
     void DestroyPipelineUVE(Render::PipelineHandleUVE) override {}
+    [[nodiscard]] std::vector<Render::UniformReflectionUVE> GetPipelineUniformsUVE(
+        Render::PipelineHandleUVE) const override {
+        return {};
+    }
+    [[nodiscard]] bool GetPipelineBinaryUVE(Render::PipelineHandleUVE, std::vector<std::byte>&,
+                                             std::uint32_t&) const override {
+        return false;
+    }
+    [[nodiscard]] Render::PipelineHandleUVE CreatePipelineFromBinaryUVE(
+        std::span<const std::byte>, std::uint32_t, const Render::PipelineBinaryDescUVE&) override {
+        return Render::PipelineHandleUVE{1};
+    }
     [[nodiscard]] std::unique_ptr<Render::ICommandBufferUVE> CreateCommandBufferUVE() override { return nullptr; }
     void SubmitUVE(std::unique_ptr<Render::ICommandBufferUVE>) override {}
     void PresentUVE() override { ++presentCallCount; }
@@ -443,6 +461,21 @@ public:
 
     int createBufferCallCount = 0;
     int presentCallCount = 0;
+};
+
+class FakeShaderManagerUVE final : public Render::Shader::IShaderManagerUVE {
+public:
+    [[nodiscard]] std::shared_ptr<Render::Shader::ShaderSourceUVE> CreateSourceUVE(
+        const Render::Shader::ShaderSourceCompileDescUVE&) override {
+        return nullptr;
+    }
+    [[nodiscard]] std::shared_ptr<Render::Shader::ShaderProgramUVE> CreateProgramUVE(
+        const Render::Shader::ShaderProgramDescUVE&) override {
+        return nullptr;
+    }
+    void UpdateUVE(double) override { ++updateCallCount; }
+
+    int updateCallCount = 0;
 };
 
 class FakeRenderSystemUVE final : public Render::IRenderSystemUVE {
@@ -670,6 +703,7 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     FakeAssetBundleUVE assetBundle;
     FakeFileSystemUVE fileSystem;
     FakeRenderDeviceUVE renderDevice;
+    FakeShaderManagerUVE shaderManager;
     FakeRenderSystemUVE renderSystem;
     FakeCameraSystemUVE cameraSystem;
     FakeMeshRendererUVE meshRenderer;
@@ -689,10 +723,11 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
                                       commandLine, configManager, entityManager, sceneGraph,
                                       assetDatabase, sceneSerializer, prefabSystem, hotReload,
                                       assetManager, assetImporter, assetBundle, fileSystem,
-                                      renderDevice, renderSystem, cameraSystem, meshRenderer,
-                                      renderer3D, collisionSystem, physicsSystem, raycastSystem,
-                                      inputSystem, audioDevice, audioSystem, audioSourceSystem,
-                                      saveGameSystem, checkpointManager, windowManager);
+                                      renderDevice, shaderManager, renderSystem, cameraSystem,
+                                      meshRenderer, renderer3D, collisionSystem, physicsSystem,
+                                      raycastSystem, inputSystem, audioDevice, audioSystem,
+                                      audioSourceSystem, saveGameSystem, checkpointManager,
+                                      windowManager);
 
     EXPECT_EQ(&services.GetLoggerUVE(), &logger);
     EXPECT_EQ(&services.GetTimerUVE(), &timer);
@@ -712,6 +747,7 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     EXPECT_EQ(&services.GetAssetBundleUVE(), &assetBundle);
     EXPECT_EQ(&services.GetFileSystemUVE(), &fileSystem);
     EXPECT_EQ(&services.GetRenderDeviceUVE(), &renderDevice);
+    EXPECT_EQ(&services.GetShaderManagerUVE(), &shaderManager);
     EXPECT_EQ(&services.GetRenderSystemUVE(), &renderSystem);
     EXPECT_EQ(&services.GetCameraSystemUVE(), &cameraSystem);
     EXPECT_EQ(&services.GetMeshRendererUVE(), &meshRenderer);
@@ -747,6 +783,7 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     FakeAssetBundleUVE assetBundle;
     FakeFileSystemUVE fileSystem;
     FakeRenderDeviceUVE renderDevice;
+    FakeShaderManagerUVE shaderManager;
     FakeRenderSystemUVE renderSystem;
     FakeCameraSystemUVE cameraSystem;
     FakeMeshRendererUVE meshRenderer;
@@ -765,10 +802,11 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
                                       commandLine, configManager, entityManager, sceneGraph,
                                       assetDatabase, sceneSerializer, prefabSystem, hotReload,
                                       assetManager, assetImporter, assetBundle, fileSystem,
-                                      renderDevice, renderSystem, cameraSystem, meshRenderer,
-                                      renderer3D, collisionSystem, physicsSystem, raycastSystem,
-                                      inputSystem, audioDevice, audioSystem, audioSourceSystem,
-                                      saveGameSystem, checkpointManager, windowManager);
+                                      renderDevice, shaderManager, renderSystem, cameraSystem,
+                                      meshRenderer, renderer3D, collisionSystem, physicsSystem,
+                                      raycastSystem, inputSystem, audioDevice, audioSystem,
+                                      audioSourceSystem, saveGameSystem, checkpointManager,
+                                      windowManager);
 
     services.GetTimerUVE().Tick();
     services.GetEventSystemUVE().DispatchQueuedUVE();
@@ -791,6 +829,7 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     static_cast<void>(services.GetAssetBundleUVE().PackUVE({}, "unused.uvebundle"));
     static_cast<void>(services.GetFileSystemUVE().WriteFileUVE("unused.txt", {}));
     static_cast<void>(services.GetRenderDeviceUVE().CreateBufferUVE(Render::BufferDescUVE{}));
+    services.GetShaderManagerUVE().UpdateUVE(0.0);
     services.GetRenderSystemUVE().BeginFrameUVE();
     static_cast<void>(
         services.GetCameraSystemUVE().ComputeViewMatrixUVE(services.GetEntityManagerUVE(), Scene::kInvalidEntityUVE));
@@ -824,6 +863,7 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     EXPECT_EQ(assetBundle.packCallCount, 1);
     EXPECT_EQ(fileSystem.writeCallCount, 1);
     EXPECT_EQ(renderDevice.createBufferCallCount, 1);
+    EXPECT_EQ(shaderManager.updateCallCount, 1);
     EXPECT_EQ(renderSystem.beginFrameCallCount, 1);
     EXPECT_EQ(cameraSystem.computeViewCallCount, 1);
     EXPECT_EQ(meshRenderer.extractRenderQueueCallCount, 1);

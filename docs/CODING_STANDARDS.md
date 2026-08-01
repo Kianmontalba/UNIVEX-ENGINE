@@ -21,7 +21,8 @@ subsystem area — **never** flat inside `UVE` directly:
 | `UVE::Math`       | `engine/math/`       | `Vector2UVE`, `Vector3UVE`, `QuaternionUVE`, `Matrix4x4UVE`, `AabbUVE`, `PlaneUVE`, `FrustumUVE`, `RayUVE` |
 | `UVE::Asset`      | `engine/asset/`      | `AssetGuidUVE`, `AssetDatabaseUVE`, `AssetManagerUVE`, `AssetImporterUVE`, `HotReloadUVE`, `AssetBundleUVE`, `FileSystemUVE`, the `.uve*` binary envelope |
 | `UVE::Scene`      | `engine/scene/`      | `EntityManagerUVE`, `SceneGraphUVE`, `ComponentUVE` + built-ins, `SceneSerializerUVE`, `PrefabSystemUVE` |
-| `UVE::Render`     | `engine/render/`     | `IRenderDeviceUVE`, `NullRenderDeviceUVE`, `ICommandBufferUVE`, `RenderSystemUVE`, `CameraSystemUVE`, resource handles/descriptors |
+| `UVE::Render`     | `engine/render/`     | `IRenderDeviceUVE`, `NullRenderDeviceUVE`, `GlRenderDeviceUVE`, `ICommandBufferUVE`, `RenderSystemUVE`, `CameraSystemUVE`, resource handles/descriptors |
+| `UVE::Render::Shader` | `engine/render/shader/` | `IShaderManagerUVE`, `ShaderManagerUVE`, `ShaderSourceUVE`, `ShaderProgramUVE`, built-in `.glsl` shaders |
 | `UVE::Physics`    | `engine/physics/`    | `CollisionSystemUVE`, `PhysicsSystemUVE`, `PhysicsMaterialUVE`, `RaycastSystemUVE`, `RaycastQueryUVE`/`RaycastHitUVE` |
 | `UVE::Input`      | `engine/input/`      | `InputSystemUVE`, `InputActionUVE`, `InputBindingUVE`, `KeyCodeUVE`, `MouseButtonUVE` |
 | `UVE::Audio`      | `engine/audio/`      | `IAudioDeviceUVE`, `NullAudioDeviceUVE`, `AudioSystemUVE`, `AudioSourceSystemUVE`, `AudioAttenuationModelUVE` |
@@ -348,6 +349,25 @@ accessor. `NullRenderDeviceUVE` ignores it like every other field it doesn't act
 `glVertexAttribPointer`; `VertexAttributeUVE::offset` alone was insufficient (a real RHI gap
 found and fixed during Increment 20, not present in the original design).
 
+**Increment 21 RHI extensions** (all following the same real-in-Gl/no-op-in-Null pattern as every
+prior RHI addition): `IRenderDeviceUVE::GetPipelineUniformsUVE()` reflects a linked pipeline's
+active uniforms (name/type/location/array size) after link — `GlRenderDeviceUVE` populates this via
+`glGetActiveUniform`/`glGetUniformLocation` right after a successful `CreatePipelineUVE()`/
+`CreatePipelineFromBinaryUVE()`; `NullRenderDeviceUVE` returns an empty list (there is nothing to
+reflect against). `IRenderDeviceUVE::GetPipelineBinaryUVE()`/`CreatePipelineFromBinaryUVE()` are
+the program-binary cache's only GL-facing surface — `NullRenderDeviceUVE`'s versions return
+`false`/a synthetic always-valid handle respectively, so `ShaderManagerUVE` never needs a
+Null-specific branch. `ICommandBufferUVE::SetUniformFloatUVE`/`SetUniformIntUVE`/
+`SetUniformBoolUVE`/`SetUniformVector3UVE`/`SetUniformMatrix4x4UVE` set one named uniform on the
+currently-bound pipeline — real `glUniform*` calls in `GlCommandBufferUVE` (looked up against the
+bound pipeline's reflected uniform table; an unknown name logs a low-severity warning rather than
+asserting, since a `ShaderProgramUVE` caller may legitimately set a uniform a particular built
+variant of a shader doesn't declare), recorded into `NullCommandBufferUVE`'s command-sequence spy
+otherwise. `CreateShaderUVE`/`CreatePipelineUVE` also gained a trailing `std::string* outInfoLog =
+nullptr` parameter (matching `CreateBufferUVE`'s existing optional-out-parameter precedent) so
+`ShaderManagerUVE` can capture the raw compile/link log without `GlRenderDeviceUVE` duplicating
+its own info-log-fetching logic anywhere else.
+
 **GL symbol confinement**: no public header under `engine/render/include/` or
 `engine/window/include/` ever names a GLFW or raw OpenGL type. `IWindowManagerUVE::
 GetNativeWindowHandleUVE()` returns type-erased `void*` (matching `ChunkUVE`/`IAssetManagerUVE::
@@ -374,14 +394,17 @@ reset `m_renderDevice` strictly before `m_windowManager` — every GL object die
 is still valid, and the context/GLFW itself is only torn down after.
 
 **The demo triangle** (`EngineCoreUVE::SetupDemoTriangleUVE()`/`RenderDemoTriangleUVE()`) is
-explicitly temporary scaffold proving `CreateBuffer → CreateShader → CreatePipeline → Bind/Draw →
-Present` end-to-end with hardcoded vertex data and inline GLSL — it deliberately bypasses
-`Renderer3DUVE`/`MeshRendererUVE`/asset loading/the ECS entirely and must never grow into a real
-content path. The intended long-term rendering roadmap is: `NullRenderDeviceUVE →
-GlRenderDeviceUVE (Increment 20) → Renderer3DUVE scene integration → Materials → PBR →
-RenderGraph → Editor viewport` — the demo triangle is only the first visible milestone on that
-path, not the final architecture, and should be deleted (not extended) once a real
-scene-to-window bridge exists.
+explicitly temporary scaffold proving `CreateBuffer → CreateProgram (via ShaderManagerUVE) →
+Bind/SetUniforms/Draw → Present` end-to-end — it deliberately bypasses `Renderer3DUVE`/
+`MeshRendererUVE`/the asset pipeline/the ECS entirely and must never grow into a real content
+path. Since Increment 21 its shader program is loaded through `ShaderManagerUVE::CreateProgramUVE()`
+from the `basic_3d.glsl` built-in (no more inline GLSL string literals in `EngineCoreUVE` itself);
+compilation is asynchronous, so `RenderDemoTriangleUVE()` always clears the framebuffer but only
+issues the draw call once `ShaderProgramUVE::IsValidUVE()` is true. The intended long-term
+rendering roadmap is: `NullRenderDeviceUVE → GlRenderDeviceUVE (Increment 20) → ShaderManagerUVE
+(Increment 21) → Renderer3DUVE scene integration → Materials → PBR → RenderGraph → Editor
+viewport` — the demo triangle is only the first visible milestone on that path, not the final
+architecture, and should be deleted (not extended) once a real scene-to-window bridge exists.
 
 ### Windowing/OpenGL environment prerequisites
 
@@ -408,6 +431,90 @@ public even though `NullCommandBufferUVE` isn't, because test code needs to name
 against `GetLastSubmittedCommandsUVE()`'s result — a data type consumed externally is public even
 when the class that produces it stays private, the same way `Debug::LogMessageUVE` is public
 while `MemorySinkUVE`'s own internals aren't inspected directly.
+
+## Shader loading and hot-reload (`engine/render/shader/`, Increment 21)
+
+`ShaderManagerUVE` is **one backend-agnostic implementation**, not a `GlShaderManagerUVE`/
+`NullShaderManagerUVE` pair — it is built entirely on top of `IRenderDeviceUVE`
+(`CreateShaderUVE`/`CreatePipelineUVE`/the uniform-reflection and binary-cache RHI extensions
+below), so it works identically against `NullRenderDeviceUVE` (headless) and `GlRenderDeviceUVE`
+(real GL) with zero duplicated compile/link logic. This directly extends this codebase's
+established "grow the RHI for a genuine gap, don't fork the consumer" precedent from Increment 20
+(`PresentUVE`, `vertexStride`, the `colorAttachment` sentinel): the new capabilities this increment
+needed (uniform reflection, uniform setting, a program-binary cache) all became new
+`IRenderDeviceUVE`/`ICommandBufferUVE` methods (real in `GlRenderDeviceUVE`/`GlCommandBufferUVE`,
+no-op/empty/false in the Null backends) rather than a second shader-manager hierarchy.
+
+**Threading model**: `CreateSourceUVE()`/`CreateProgramUVE()` submit file I/O + `#include`
+resolution + macro preprocessing to a background `IThreadPoolUVE` worker (mirroring
+`AssetManagerUVE`'s own "background job → mutex-guarded record → `QueueEvent`" pattern) and return
+immediately with a not-yet-`IsReadyUVE()` `ShaderSourceUVE`/`ShaderProgramUVE`. The actual GL
+compile/link only ever happens inside `ShaderManagerUVE::UpdateUVE()`, called once per frame from
+`EngineCoreUVE::Update()` on the main thread — `GlRenderDeviceUVE` has no shared GL context (only
+`WindowManagerUVE`'s constructor ever calls `glfwMakeContextCurrent`), so real compilation is
+inherently main-thread-only; background work is confined to everything that doesn't touch GL.
+
+**Ownership**: `ShaderSourceUVE`/`ShaderProgramUVE` have private constructors (only
+`ShaderManagerUVE` may build one, via `friend`) and are always handed out as
+`std::shared_ptr<...>` whose custom deleter captures only `IRenderDeviceUVE&` — not the manager
+itself — so an object's lifetime never depends on `ShaderManagerUVE` outliving it. A hot-reload
+swap mutates the *same* object's fields in place (never replaces the `shared_ptr`), so every
+holder observes the reload automatically with no re-lookup.
+
+**The `#include`/preprocessor** (`Detail::PreprocessShaderSourceUVE`, module-private,
+`engine/render/shader/src/shader_preprocessor_uve.h/.cpp`) is a deliberately simplified, hand-rolled
+line-based pass — not a full C preprocessor: absolute virtual `#include "path"` paths only (no
+relative resolution, no `<...>` form), object-like `#define`/`#undef`/`#ifdef`/`#ifndef`/`#else`/
+`#endif` only (no function-like macros, no line continuation), token-boundary-aware macro
+substitution via manual character scanning. An `#include` cycle is detected via a visited-file
+stack and fails cleanly (never infinite-loops); a file already expanded once this compile is
+silently skipped on a second `#include` (a once-per-compile include-guard convenience, since GLSL
+itself has no `#pragma once`). Every recursive `#include` is wrapped in GL-native `#line`
+directives so both the driver's own compile errors and `Detail::ParseGlInfoLogUVE()`
+(`shader_diagnostics_parser_uve.h/.cpp`) map back to the *originally authored* file/line, never the
+flattened blob actually hitting `glCompileShader`. Both modules are pure text/data logic with zero
+GL or threading involved, so both are independently unit-tested directly (see
+`tests/render/shader/shader_preprocessor_uve_tests.cpp`/`shader_diagnostics_parser_uve_tests.cpp`,
+which reach these module-private headers via a test-only `target_include_directories` entry in
+`tests/CMakeLists.txt` — the only test files in this codebase that `#include` anything from an
+`engine/*/src/` directory, since these two are explicitly documented as unit-testable in isolation).
+
+**Built-in shaders** (`engine/render/shader/built_in/*.glsl`) each hold *both* stages in one
+physical file, split via `#ifdef VERTEX_SHADER`/`#ifdef FRAGMENT_SHADER` — `ShaderManagerUVE::
+CreateProgramUVE()` compiles the same resolved source twice, injecting the matching stage macro
+each time, reusing the same conditional-compilation mechanism `UVE_DEBUG`/`UVE_MOBILE` already
+need rather than inventing a second file-splitting convention. Every built-in also has a byte-
+identical embedded `std::string_view` fallback in `built_in_shaders_uve.cpp` (generated
+programmatically from the physical `.glsl` files to guarantee parity by construction) —
+`ShaderSourceCompileDescUVE`/`ShaderProgramDescUVE` always carry both a `virtualFilePath` and an
+`embeddedFallbackSourceCode`; `ShaderManagerUVE` tries the virtual file first (enabling hot-reload
+tracking) and transparently falls back to the embedded string when `IFileSystemUVE::HasFileUVE()`
+is false, so the engine still renders correctly even launched from a working directory where the
+source tree isn't reachable. `tests/render/shader/shader_manager_uve_tests.cpp`'s
+`BuiltInShaderParityUVETest` enforces this byte-parity by reading the physical files directly
+(assumes the process's working directory is the repository root, matching every other relative
+default path in this codebase — `EngineConfigUVE::shaderSourceRealDirectoryUVE`,
+`assetDatabaseFilePath`, `logFilePath`, ...).
+
+**Hot-reload is its own independent mtime-polling loop**, not a reuse of `IHotReloadUVE` —
+`IHotReloadUVE` is hard-keyed to one `AssetGuidUVE` ↔ one registered loader with no
+dependency-graph concept, so it cannot express "an `#include`d fragment changed, therefore every
+program that includes it must reload." `ShaderManagerUVE` tracks each program's full `#include`
+dependency closure itself and copies `HotReloadUVE`'s *pattern* (its own accumulator, its own
+default poll interval, `std::error_code`-based `last_write_time` calls) independently. A failed
+hot-reload recompile leaves the last-known-good program running untouched — the new
+shader/pipeline is only destroyed-and-swapped-in after the replacement compiles and links
+successfully, so a typo in a live-edited `.glsl` file never blanks the screen.
+
+**The on-disk program-binary cache** (`Detail::ReadCacheEntryUVE`/`WriteCacheEntryUVE`,
+`shader_binary_cache_uve.h/.cpp`) is its own tiny binary format — 8-byte magic + format version +
+GL binary format + payload, at `<shaderCachePath>/<platform>/<contentHash-as-hex>.uveshadercache`
+— deliberately **not** the engine's `.uve*` asset envelope, since this is pure derived data
+(reproducible from source), never a shippable asset. A driver-rejected binary (e.g. after a driver
+update, or `GL_PROGRAM_BINARY_LENGTH <= 0` as some Mesa/llvmpipe configurations legitimately
+report) is treated as an ordinary cache miss — logged at `WARNING`, never `ERROR` — falling back to
+a normal from-source compile; a cache *write* failure is equally non-fatal (also `WARNING`), since
+the worst case is just a slower next startup, never a broken one.
 
 ## Allocator boundary
 

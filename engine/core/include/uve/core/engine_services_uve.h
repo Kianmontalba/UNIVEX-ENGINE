@@ -32,6 +32,7 @@
 #include "uve/render/i_render_device_uve.h"
 #include "uve/render/i_render_system_uve.h"
 #include "uve/render/i_renderer_3d_uve.h"
+#include "uve/render/shader/i_shader_manager_uve.h"
 #include "uve/save/i_checkpoint_manager_uve.h"
 #include "uve/save/i_save_game_system_uve.h"
 #include "uve/scene/i_entity_manager_uve.h"
@@ -49,12 +50,12 @@ namespace UVE::Core {
 /// (Logger, Timer, EventSystem, MemoryManager, ThreadPool, CommandLine,
 /// ConfigManager, EntityManager, SceneGraph, AssetDatabase, SceneSerializer,
 /// PrefabSystem, HotReload, AssetManager, AssetImporter, AssetBundle,
-/// FileSystem, RenderDevice, RenderSystem, CameraSystem, MeshRenderer,
-/// Renderer3D, CollisionSystem, PhysicsSystem, RaycastSystem, InputSystem,
-/// AudioDevice, AudioSystem, AudioSourceSystem, SaveGameSystem,
+/// FileSystem, RenderDevice, ShaderManager, RenderSystem, CameraSystem,
+/// MeshRenderer, Renderer3D, CollisionSystem, PhysicsSystem, RaycastSystem,
+/// InputSystem, AudioDevice, AudioSystem, AudioSourceSystem, SaveGameSystem,
 /// CheckpointManager, WindowManager), built once EngineCoreUVE has
-/// constructed all thirty-two. Any future subsystem that needs access to one
-/// of these should receive an EngineServicesUVE& (obtained from
+/// constructed all thirty-three. Any future subsystem that needs access to
+/// one of these should receive an EngineServicesUVE& (obtained from
 /// EngineCoreUVE::GetServicesUVE()) rather than a raw global pointer — the
 /// logging macros' internal active-instance pointer remains the one
 /// intentional exception to that rule (see docs/CODING_STANDARDS.md).
@@ -63,12 +64,13 @@ namespace UVE::Core {
 /// ICommandLineUVE/IConfigManagerUVE/IEntityManagerUVE/ISceneGraphUVE/
 /// IAssetDatabaseUVE/ISceneSerializerUVE/IPrefabSystemUVE/IHotReloadUVE/
 /// IAssetManagerUVE/IAssetImporterUVE/IAssetBundleUVE/IFileSystemUVE/
-/// IRenderDeviceUVE/IRenderSystemUVE/ICameraSystemUVE/IMeshRendererUVE/
+/// IRenderDeviceUVE/Shader::IShaderManagerUVE/IRenderSystemUVE/
+/// ICameraSystemUVE/IMeshRendererUVE/
 /// IRenderer3DUVE/ICollisionSystemUVE/IPhysicsSystemUVE/IRaycastSystemUVE/
 /// IInputSystemUVE/IAudioDeviceUVE/IAudioSystemUVE/IAudioSourceSystemUVE/
 /// ISaveGameSystemUVE/ICheckpointManagerUVE/IWindowManagerUVE interfaces,
 /// not the concrete types, so a future substitute implementation of any of
-/// the thirty-two requires no change here.
+/// the thirty-three requires no change here.
 /// Thread-safety: EngineServicesUVE itself holds only non-owning pointers
 /// and has no mutable state of its own; the thread-safety of each accessor
 /// is whatever the referenced service documents.
@@ -91,6 +93,7 @@ public:
                        Asset::IAssetBundleUVE& assetBundle,
                        Asset::IFileSystemUVE& fileSystem,
                        Render::IRenderDeviceUVE& renderDevice,
+                       Render::Shader::IShaderManagerUVE& shaderManager,
                        Render::IRenderSystemUVE& renderSystem,
                        Render::ICameraSystemUVE& cameraSystem,
                        Render::IMeshRendererUVE& meshRenderer,
@@ -124,6 +127,7 @@ public:
     [[nodiscard]] Asset::IAssetBundleUVE& GetAssetBundleUVE() const noexcept;
     [[nodiscard]] Asset::IFileSystemUVE& GetFileSystemUVE() const noexcept;
     [[nodiscard]] Render::IRenderDeviceUVE& GetRenderDeviceUVE() const noexcept;
+    [[nodiscard]] Render::Shader::IShaderManagerUVE& GetShaderManagerUVE() const noexcept;
     [[nodiscard]] Render::IRenderSystemUVE& GetRenderSystemUVE() const noexcept;
     [[nodiscard]] Render::ICameraSystemUVE& GetCameraSystemUVE() const noexcept;
     [[nodiscard]] Render::IMeshRendererUVE& GetMeshRendererUVE() const noexcept;
@@ -158,6 +162,7 @@ private:
     Asset::IAssetBundleUVE* m_assetBundle;
     Asset::IFileSystemUVE* m_fileSystem;
     Render::IRenderDeviceUVE* m_renderDevice;
+    Render::Shader::IShaderManagerUVE* m_shaderManager;
     Render::IRenderSystemUVE* m_renderSystem;
     Render::ICameraSystemUVE* m_cameraSystem;
     Render::IMeshRendererUVE* m_meshRenderer;

@@ -10,7 +10,10 @@
 #pragma once
 
 #include <cstdint>
+#include <string_view>
 
+#include "uve/math/matrix4x4_uve.h"
+#include "uve/math/vector3_uve.h"
 #include "uve/render/buffer_handle_uve.h"
 #include "uve/render/pipeline_handle_uve.h"
 #include "uve/render/render_resource_descs_uve.h"
@@ -58,6 +61,18 @@ public:
     /// Binds `buffer` as a uniform buffer at `slot` for the active pipeline's shaders. Must be
     /// called inside a render pass.
     virtual void BindUniformBufferUVE(BufferHandleUVE buffer, std::uint32_t slot) = 0;
+
+    /// Sets a scalar/vector/matrix uniform on the currently bound pipeline by name (Increment 21
+    /// — a lighter-weight alternative to BindUniformBufferUVE()'s UBO path, for the common case
+    /// of a handful of loose uniforms). Must be called inside a render pass, after
+    /// BindPipelineUVE(). A `name` the bound pipeline doesn't declare (e.g. optimized out by the
+    /// shader compiler) is a safe no-op, logged at a low severity — not every uniform a caller
+    /// might set is guaranteed to still be active after linking.
+    virtual void SetUniformFloatUVE(std::string_view name, float value) = 0;
+    virtual void SetUniformIntUVE(std::string_view name, std::int32_t value) = 0;
+    virtual void SetUniformBoolUVE(std::string_view name, bool value) = 0;
+    virtual void SetUniformVector3UVE(std::string_view name, const Math::Vector3UVE& value) = 0;
+    virtual void SetUniformMatrix4x4UVE(std::string_view name, const Math::Matrix4x4UVE& value) = 0;
 
     /// Draws using the currently bound index buffer. Must be called inside a render pass, after
     /// a pipeline and the buffers it needs are bound.

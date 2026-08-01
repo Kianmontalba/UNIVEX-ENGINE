@@ -35,6 +35,7 @@
 #include "uve/debug/logging_macros_uve.h"
 #include "uve/events/event_system_uve.h"
 #include "uve/input/input_system_uve.h"
+#include "uve/math/matrix4x4_uve.h"
 #include "uve/math/quaternion_uve.h"
 #include "uve/memory/memory_manager_uve.h"
 #include "uve/physics/collision_system_uve.h"
@@ -47,6 +48,8 @@
 #include "uve/render/null_render_device_uve.h"
 #include "uve/render/render_system_uve.h"
 #include "uve/render/renderer_3d_uve.h"
+#include "uve/render/shader/built_in_shaders_uve.h"
+#include "uve/render/shader/shader_manager_uve.h"
 #include "uve/save/checkpoint_manager_uve.h"
 #include "uve/save/save_game_system_uve.h"
 #include "uve/scene/components/world_transform_component_uve.h"
@@ -93,34 +96,19 @@ void EngineCoreUVE::SetupDemoTriangleUVE() {
     m_demoTriangleVertexBuffer = m_renderDevice->CreateBufferUVE(
         Render::BufferDescUVE{vertexBytes.size(), Render::BufferUsageUVE::Vertex}, vertexBytes);
 
-    // #0D0D0D background / #00D4FF triangle are the approved design decision's exact colors.
-    static constexpr std::string_view kVertexShaderSource = R"(#version 330 core
-layout(location = 0) in vec3 aPosition;
-void main() {
-    gl_Position = vec4(aPosition, 1.0);
-}
-)";
-    static constexpr std::string_view kFragmentShaderSource = R"(#version 330 core
-out vec4 FragColor;
-void main() {
-    FragColor = vec4(0.0, 0.83137255, 1.0, 1.0);
-}
-)";
-
-    m_demoTriangleVertexShader = m_renderDevice->CreateShaderUVE(
-        Render::ShaderDescUVE{Render::ShaderStageUVE::Vertex, std::string(kVertexShaderSource)});
-    m_demoTriangleFragmentShader = m_renderDevice->CreateShaderUVE(
-        Render::ShaderDescUVE{Render::ShaderStageUVE::Fragment, std::string(kFragmentShaderSource)});
-
-    Render::PipelineDescUVE pipelineDesc;
-    pipelineDesc.vertexShader = m_demoTriangleVertexShader;
-    pipelineDesc.fragmentShader = m_demoTriangleFragmentShader;
-    pipelineDesc.vertexLayout = {
+    // basic_3d.glsl (see Render::Shader::BuiltIn) declares uModel/uViewProjection/uColor, set each
+    // frame in RenderDemoTriangleUVE() — #0D0D0D background / #00D4FF triangle are the approved
+    // design decision's exact colors.
+    Render::Shader::ShaderProgramDescUVE programDesc;
+    programDesc.virtualFilePath = std::string(Render::Shader::BuiltIn::kBasic3DVirtualPath);
+    programDesc.embeddedFallbackSourceCode = std::string(Render::Shader::BuiltIn::kBasic3DSource);
+    programDesc.vertexLayout = {
         Render::VertexAttributeUVE{"POSITION", Render::VertexAttributeFormatUVE::Float3, 0}};
-    pipelineDesc.vertexStride = 3U * static_cast<std::uint32_t>(sizeof(float));
-    pipelineDesc.depthTestEnabled = false;
-    pipelineDesc.depthWriteEnabled = false;
-    m_demoTrianglePipeline = m_renderDevice->CreatePipelineUVE(pipelineDesc);
+    programDesc.vertexStride = 3U * static_cast<std::uint32_t>(sizeof(float));
+    programDesc.depthTestEnabled = false;
+    programDesc.depthWriteEnabled = false;
+    programDesc.debugNameUVE = "DemoTriangle";
+    m_demoTriangleProgram = m_shaderManager->CreateProgramUVE(programDesc);
 }
 
 void EngineCoreUVE::RenderDemoTriangleUVE() {
@@ -135,9 +123,17 @@ void EngineCoreUVE::RenderDemoTriangleUVE() {
     passDesc.depthLoadOp = Render::LoadOpUVE::DontCare;
 
     commandBuffer.BeginRenderPassUVE(passDesc);
-    commandBuffer.BindPipelineUVE(m_demoTrianglePipeline);
-    commandBuffer.BindVertexBufferUVE(m_demoTriangleVertexBuffer);
-    commandBuffer.DrawUVE(3);
+    // The program may still be asynchronously compiling (see ShaderManagerUVE's threading model)
+    // — the framebuffer clear above still runs every frame regardless, so the window never shows
+    // undefined content; only the draw call itself is gated on readiness.
+    if (m_demoTriangleProgram->IsValidUVE()) {
+        m_demoTriangleProgram->SetMatrix4x4UVE("uModel", Math::Matrix4x4UVE::IdentityUVE());
+        m_demoTriangleProgram->SetMatrix4x4UVE("uViewProjection", Math::Matrix4x4UVE::IdentityUVE());
+        m_demoTriangleProgram->SetVector3UVE("uColor", Math::Vector3UVE{0.0F, 0.83137255F, 1.0F});
+        m_demoTriangleProgram->ApplyToUVE(commandBuffer);
+        commandBuffer.BindVertexBufferUVE(m_demoTriangleVertexBuffer);
+        commandBuffer.DrawUVE(3);
+    }
     commandBuffer.EndRenderPassUVE();
 
     m_renderSystem->EndFrameUVE();
@@ -282,19 +278,40 @@ void EngineCoreUVE::Init() {
         m_renderDevice = std::make_unique<Render::NullRenderDeviceUVE>();
     }
 
-    // RenderSystem nineteenth: needs RenderDevice, since it records and
+    // ShaderManager nineteenth: needs ThreadPool, EventSystem, RenderDevice, and FileSystem — all
+    // already constructed by this point. Mounts EngineConfigUVE::shaderSourceRealDirectoryUVE
+    // under shaderSourceMountPrefixUVE first, so the built-in .glsl files (and any #include
+    // closure among them) resolve through the VFS and participate in hot-reload; a
+    // missing/unreachable directory is not an error here either — every built-in also carries an
+    // embedded string fallback (see Render::Shader::BuiltIn::kBasic3DSource) ShaderManagerUVE uses
+    // automatically when the mount doesn't resolve. Works identically in headless mode (against
+    // NullRenderDeviceUVE) and windowed mode (against GlRenderDeviceUVE).
+    m_fileSystem->MountDirectoryUVE(m_config.shaderSourceMountPrefixUVE, m_config.shaderSourceRealDirectoryUVE, 0);
+    Render::Shader::ShaderManagerConfigUVE shaderManagerConfig;
+    shaderManagerConfig.cachePath = m_config.shaderCachePath;
+    shaderManagerConfig.hotReloadEnabledUVE = m_config.shaderHotReloadEnabledUVE;
+    shaderManagerConfig.hotReloadPollIntervalSecondsUVE = m_config.shaderHotReloadPollIntervalSecondsUVE;
+#if UVE_DEBUG
+    shaderManagerConfig.injectDebugDefineUVE = true;
+#else
+    shaderManagerConfig.injectDebugDefineUVE = false;
+#endif
+    m_shaderManager = std::make_unique<Render::Shader::ShaderManagerUVE>(
+        *m_threadPool, *m_eventSystem, *m_renderDevice, *m_fileSystem, shaderManagerConfig);
+
+    // RenderSystem twentieth: needs RenderDevice, since it records and
     // submits command buffers through it.
     m_renderSystem = std::make_unique<Render::RenderSystemUVE>(*m_renderDevice);
 
-    // CameraSystem twentieth: stateless, no dependencies of its own —
+    // CameraSystem twenty-first: stateless, no dependencies of its own —
     // grouped with the rest of engine/render.
     m_cameraSystem = std::make_unique<Render::CameraSystemUVE>();
 
-    // MeshRenderer twenty-first: stateless, no dependencies of its own —
+    // MeshRenderer twenty-second: stateless, no dependencies of its own —
     // grouped with the rest of engine/render.
     m_meshRenderer = std::make_unique<Render::MeshRendererUVE>();
 
-    // Renderer3D twenty-second: needs RenderDevice, RenderSystem, MeshRenderer, CameraSystem,
+    // Renderer3D twenty-third: needs RenderDevice, RenderSystem, MeshRenderer, CameraSystem,
     // AssetManager, AssetDatabase, and EventSystem — every one of which already exists by this
     // point. Its offscreen render target is fixed at EngineConfigUVE::renderTargetWidth/Height
     // for this EngineCoreUVE's lifetime, entirely independent of WindowManagerUVE/the real window
@@ -312,37 +329,37 @@ void EngineCoreUVE::Init() {
         SetupDemoTriangleUVE();
     }
 
-    // CollisionSystem twenty-third: stateless, no dependencies of its own.
+    // CollisionSystem twenty-fourth: stateless, no dependencies of its own.
     m_collisionSystem = std::make_unique<Physics::CollisionSystemUVE>();
 
-    // PhysicsSystem twenty-fourth: needs only CollisionSystem (composed by reference) and
+    // PhysicsSystem twenty-fifth: needs only CollisionSystem (composed by reference) and
     // EngineConfigUVE::gravity, both already available.
     m_physicsSystem = std::make_unique<Physics::PhysicsSystemUVE>(*m_collisionSystem, m_config.gravity);
 
-    // RaycastSystem twenty-fifth: stateless, no dependencies of its own.
+    // RaycastSystem twenty-sixth: stateless, no dependencies of its own.
     m_raycastSystem = std::make_unique<Physics::RaycastSystemUVE>();
 
-    // InputSystem twenty-sixth: needs only EventSystem (composed by reference, to queue
+    // InputSystem twenty-seventh: needs only EventSystem (composed by reference, to queue
     // InputActionTriggeredEventUVE), already available.
     m_inputSystem = std::make_unique<Input::InputSystemUVE>(*m_eventSystem);
 
-    // AudioDevice twenty-seventh: no dependencies of its own (a NullAudioDeviceUVE — no real audio
+    // AudioDevice twenty-eighth: no dependencies of its own (a NullAudioDeviceUVE — no real audio
     // hardware/SDK is buildable in this sandbox).
     m_audioDevice = std::make_unique<Audio::NullAudioDeviceUVE>();
 
-    // AudioSystem twenty-eighth: needs AudioDevice (it pushes computed gain/position through it).
+    // AudioSystem twenty-ninth: needs AudioDevice (it pushes computed gain/position through it).
     m_audioSystem = std::make_unique<Audio::AudioSystemUVE>(*m_audioDevice);
 
-    // AudioSourceSystem twenty-ninth: stateful but takes no constructor dependencies —
+    // AudioSourceSystem thirtieth: stateful but takes no constructor dependencies —
     // EntityManager and AudioSystem are passed to SyncUVE() per call, like
     // MeshRendererUVE::ExtractRenderQueueUVE().
     m_audioSourceSystem = std::make_unique<Audio::AudioSourceSystemUVE>();
 
-    // SaveGameSystem thirtieth: needs SceneSerializer (composed by reference) and
+    // SaveGameSystem thirty-first: needs SceneSerializer (composed by reference) and
     // EngineConfigUVE::saveDirectoryPath.
     m_saveGameSystem = std::make_unique<Save::SaveGameSystemUVE>(*m_sceneSerializer, m_config.saveDirectoryPath);
 
-    // CheckpointManager thirty-first: needs SaveGameSystem (composed by reference) and
+    // CheckpointManager thirty-second: needs SaveGameSystem (composed by reference) and
     // EngineConfigUVE::autoSaveIntervalSecondsUVE.
     m_checkpointManager =
         std::make_unique<Save::CheckpointManagerUVE>(*m_saveGameSystem, m_config.autoSaveIntervalSecondsUVE);
@@ -358,10 +375,11 @@ void EngineCoreUVE::Init() {
                         *m_commandLine, *m_configManager, *m_entityManager, *m_sceneGraph,
                         *m_assetDatabase, *m_sceneSerializer, *m_prefabSystem, *m_hotReload,
                         *m_assetManager, *m_assetImporter, *m_assetBundle, *m_fileSystem,
-                        *m_renderDevice, *m_renderSystem, *m_cameraSystem, *m_meshRenderer,
-                        *m_renderer3D, *m_collisionSystem, *m_physicsSystem, *m_raycastSystem,
-                        *m_inputSystem, *m_audioDevice, *m_audioSystem, *m_audioSourceSystem,
-                        *m_saveGameSystem, *m_checkpointManager, *m_windowManager);
+                        *m_renderDevice, *m_shaderManager, *m_renderSystem, *m_cameraSystem,
+                        *m_meshRenderer, *m_renderer3D, *m_collisionSystem, *m_physicsSystem,
+                        *m_raycastSystem, *m_inputSystem, *m_audioDevice, *m_audioSystem,
+                        *m_audioSourceSystem, *m_saveGameSystem, *m_checkpointManager,
+                        *m_windowManager);
 
     TransitionStateUVE(EngineStateUVE::Running);
     UVE_INFO("EngineCoreUVE: initialized");
@@ -409,6 +427,8 @@ void EngineCoreUVE::Update() {
         m_hotReload->PollUVE(*m_assetManager, *m_assetDatabase, m_timer->GetDeltaTimeUVE());
     }
     m_assetManager->CollectGarbageUVE();
+
+    m_shaderManager->UpdateUVE(m_timer->GetDeltaTimeUVE());
 
     m_checkpointManager->UpdateUVE(m_timer->GetDeltaTimeUVE(), *m_entityManager,
                                     m_sceneGraph->GetChildrenUVE(*m_entityManager, Scene::kInvalidEntityUVE));
@@ -490,8 +510,9 @@ void EngineCoreUVE::Shutdown() {
 
     // Exact reverse of Init()'s construction order: ConfigManager, then
     // CheckpointManager, then SaveGameSystem, then AudioSourceSystem, then AudioSystem, then AudioDevice, then
-    // InputSystem, then RaycastSystem, then PhysicsSystem, then CollisionSystem, then Renderer3D, then MeshRenderer, then CameraSystem, then RenderSystem, then RenderDevice
-    // (destroying the demo triangle's GL objects first, if windowed rendering was active), then WindowManager,
+    // InputSystem, then RaycastSystem, then PhysicsSystem, then CollisionSystem, then Renderer3D, then MeshRenderer, then CameraSystem, then RenderSystem, then ShaderManager, then RenderDevice
+    // (destroying the demo triangle's shader program and vertex buffer first, if windowed rendering
+    // was active), then WindowManager,
     // then FileSystem, then AssetBundle, then AssetImporter, then
     // AssetManager (its destructor blocks until every in-flight load job
     // finishes), then HotReload, then PrefabSystem, then SceneSerializer,
@@ -515,14 +536,14 @@ void EngineCoreUVE::Shutdown() {
     m_cameraSystem.reset();
     m_renderSystem.reset();
 
-    // The demo triangle's GL objects must be destroyed while m_renderDevice (and the GL context
+    // The demo triangle's shader program (owned via a ShaderManagerUVE-supplied shared_ptr
+    // deleter) and vertex buffer must be destroyed while m_renderDevice (and the GL context
     // m_windowManager owns) is still valid — before either is reset below.
     if (m_windowedRenderingActiveUVE) {
-        m_renderDevice->DestroyPipelineUVE(m_demoTrianglePipeline);
-        m_renderDevice->DestroyShaderUVE(m_demoTriangleFragmentShader);
-        m_renderDevice->DestroyShaderUVE(m_demoTriangleVertexShader);
+        m_demoTriangleProgram.reset();
         m_renderDevice->DestroyBufferUVE(m_demoTriangleVertexBuffer);
     }
+    m_shaderManager.reset();
     m_renderDevice.reset();
 
     // WindowManager right after RenderDevice — every GL object RenderDevice owned is already

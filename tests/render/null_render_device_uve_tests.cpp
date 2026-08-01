@@ -20,6 +20,8 @@
 
 #include "uve/debug/log_sink_uve.h"
 #include "uve/debug/logger_uve.h"
+#include "uve/math/matrix4x4_uve.h"
+#include "uve/math/vector3_uve.h"
 #include "uve/platform/platform_uve.h"
 
 namespace UVE::Render::Tests {
@@ -230,6 +232,81 @@ TEST(NullRenderDeviceUVETest, CommandBufferRecordingThenSubmit_ProducesExpectedC
 TEST(NullRenderDeviceUVETest, GetLastSubmittedCommandsUVE_BeforeAnySubmit_IsEmpty) {
     NullRenderDeviceUVE device;
     EXPECT_TRUE(device.GetLastSubmittedCommandsUVE().empty());
+}
+
+TEST(NullRenderDeviceUVETest, CreateShaderUVE_OutInfoLogParameter_IsAcceptedAndUnused) {
+    NullRenderDeviceUVE device;
+    std::string infoLog = "unset";
+    const ShaderHandleUVE handle = device.CreateShaderUVE(ShaderDescUVE{ShaderStageUVE::Vertex, "vs"}, &infoLog);
+    EXPECT_NE(handle, kInvalidShaderHandleUVE);
+}
+
+TEST(NullRenderDeviceUVETest, CreatePipelineUVE_OutInfoLogParameter_IsAcceptedAndUnused) {
+    NullRenderDeviceUVE device;
+    const ShaderHandleUVE vertexShader = device.CreateShaderUVE(ShaderDescUVE{ShaderStageUVE::Vertex, "vs"});
+    const ShaderHandleUVE fragmentShader = device.CreateShaderUVE(ShaderDescUVE{ShaderStageUVE::Fragment, "fs"});
+    PipelineDescUVE desc;
+    desc.vertexShader = vertexShader;
+    desc.fragmentShader = fragmentShader;
+
+    std::string infoLog = "unset";
+    EXPECT_NE(device.CreatePipelineUVE(desc, &infoLog), kInvalidPipelineHandleUVE);
+}
+
+TEST(NullRenderDeviceUVETest, GetPipelineUniformsUVE_AnyHandle_ReturnsEmpty) {
+    NullRenderDeviceUVE device;
+    EXPECT_TRUE(device.GetPipelineUniformsUVE(PipelineHandleUVE{1}).empty());
+}
+
+TEST(NullRenderDeviceUVETest, GetPipelineBinaryUVE_AnyHandle_ReturnsFalse) {
+    NullRenderDeviceUVE device;
+    std::vector<std::byte> outBinary;
+    std::uint32_t outFormat = 0;
+    EXPECT_FALSE(device.GetPipelineBinaryUVE(PipelineHandleUVE{1}, outBinary, outFormat));
+    EXPECT_TRUE(outBinary.empty());
+}
+
+TEST(NullRenderDeviceUVETest, CreatePipelineFromBinaryUVE_AlwaysSucceeds) {
+    NullRenderDeviceUVE device;
+    const std::array<std::byte, 4> binary{};
+    const PipelineHandleUVE pipeline = device.CreatePipelineFromBinaryUVE(binary, 0, PipelineBinaryDescUVE{});
+    EXPECT_NE(pipeline, kInvalidPipelineHandleUVE);
+    EXPECT_EQ(device.GetLiveResourceCountUVE(), 1U);
+
+    device.DestroyPipelineUVE(pipeline);
+    EXPECT_EQ(device.GetLiveResourceCountUVE(), 0U);
+}
+
+TEST(NullRenderDeviceUVETest, CommandBuffer_SetUniformCalls_AreRecordedInOrderWithValues) {
+    NullRenderDeviceUVE device;
+    std::unique_ptr<ICommandBufferUVE> commandBuffer = device.CreateCommandBufferUVE();
+    commandBuffer->BeginRenderPassUVE(RenderPassDescUVE{});
+    commandBuffer->SetUniformFloatUVE("uFloat", 1.5F);
+    commandBuffer->SetUniformIntUVE("uInt", 7);
+    commandBuffer->SetUniformBoolUVE("uBool", true);
+    commandBuffer->SetUniformVector3UVE("uVec3", Math::Vector3UVE{1.0F, 2.0F, 3.0F});
+    commandBuffer->SetUniformMatrix4x4UVE("uMat4", Math::Matrix4x4UVE::IdentityUVE());
+    commandBuffer->EndRenderPassUVE();
+    device.SubmitUVE(std::move(commandBuffer));
+
+    const std::vector<RecordedCommandUVE>& recorded = device.GetLastSubmittedCommandsUVE();
+    ASSERT_EQ(recorded.size(), 7U);
+    ASSERT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(recorded[0]));
+    ASSERT_TRUE(std::holds_alternative<SetUniformFloatCommandUVE>(recorded[1]));
+    EXPECT_EQ(std::get<SetUniformFloatCommandUVE>(recorded[1]).name, "uFloat");
+    EXPECT_FLOAT_EQ(std::get<SetUniformFloatCommandUVE>(recorded[1]).value, 1.5F);
+
+    ASSERT_TRUE(std::holds_alternative<SetUniformIntCommandUVE>(recorded[2]));
+    EXPECT_EQ(std::get<SetUniformIntCommandUVE>(recorded[2]).value, 7);
+
+    ASSERT_TRUE(std::holds_alternative<SetUniformBoolCommandUVE>(recorded[3]));
+    EXPECT_TRUE(std::get<SetUniformBoolCommandUVE>(recorded[3]).value);
+
+    ASSERT_TRUE(std::holds_alternative<SetUniformVector3CommandUVE>(recorded[4]));
+    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(recorded[4]).value.y, 2.0F);
+
+    ASSERT_TRUE(std::holds_alternative<SetUniformMatrix4x4CommandUVE>(recorded[5]));
+    ASSERT_TRUE(std::holds_alternative<EndRenderPassCommandUVE>(recorded[6]));
 }
 
 #if UVE_DEBUG
