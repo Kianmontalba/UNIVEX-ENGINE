@@ -213,6 +213,42 @@ TEST_F(PhysicsSystemUVETest, StepUVE_StackedDynamicBoxesOnStaticGround_SettleToF
     EXPECT_GE(upperPosition.y, lowerPosition.y + 1.0F - 0.05F); // resting on lower box, not sunk into it
 }
 
+TEST_F(PhysicsSystemUVETest, StepUVE_RestitutionHalf_ReflectsAndScalesNormalVelocity) {
+    PhysicsSystemUVE physicsSystem(collisionSystem, Math::Vector3UVE{0.0F, 0.0F, 0.0F}); // isolate collision response
+    const Scene::EntityUVE ground = MakeStaticColliderEntityUVE(Math::Vector3UVE{2.0F, 0.0F, 0.0F}, Math::Vector3UVE{0.5F, 10.0F, 10.0F});
+    entityManager.GetComponentUVE<Scene::ColliderComponentUVE>(ground).restitution = 0.5F;
+    Scene::RigidBodyComponentUVE rigidBody;
+    rigidBody.velocity = Math::Vector3UVE{5.0F, 0.0F, 0.0F}; // moving straight into the wall (+x)
+    const Scene::EntityUVE body =
+        MakeBodyEntityUVE(Math::Vector3UVE{1.6F, 0.0F, 0.0F}, rigidBody, Math::Vector3UVE{0.5F, 0.5F, 0.5F});
+    entityManager.GetComponentUVE<Scene::ColliderComponentUVE>(body).restitution = 0.5F;
+
+    physicsSystem.StepUVE(entityManager, sceneGraph, 0.01F);
+
+    // Combined restitution = average(0.5, 0.5) = 0.5. New normal velocity = -restitution *
+    // intoSurface = -0.5 * 5.0 = -2.5 (reflected, scaled — not simply zeroed).
+    const float finalVelocityX = entityManager.GetComponentUVE<Scene::RigidBodyComponentUVE>(body).velocity.x;
+    EXPECT_NEAR(finalVelocityX, -2.5F, kEpsilon);
+}
+
+TEST_F(PhysicsSystemUVETest, StepUVE_FrictionOne_FullyDampsTangentialVelocity) {
+    PhysicsSystemUVE physicsSystem(collisionSystem, Math::Vector3UVE{0.0F, 0.0F, 0.0F}); // isolate collision response
+    const Scene::EntityUVE ground = MakeStaticColliderEntityUVE(Math::Vector3UVE{2.0F, 0.0F, 0.0F}, Math::Vector3UVE{0.5F, 10.0F, 10.0F});
+    entityManager.GetComponentUVE<Scene::ColliderComponentUVE>(ground).friction = 1.0F;
+    Scene::RigidBodyComponentUVE rigidBody;
+    rigidBody.velocity = Math::Vector3UVE{5.0F, 3.0F, 0.0F}; // moving into the wall (+x) and sliding (+y)
+    const Scene::EntityUVE body =
+        MakeBodyEntityUVE(Math::Vector3UVE{1.6F, 0.0F, 0.0F}, rigidBody, Math::Vector3UVE{0.5F, 0.5F, 0.5F});
+    entityManager.GetComponentUVE<Scene::ColliderComponentUVE>(body).friction = 1.0F;
+
+    physicsSystem.StepUVE(entityManager, sceneGraph, 0.01F);
+
+    // Combined friction = average(1.0, 1.0) = 1.0 -> frictionFactor = 0 -> tangential fully damped.
+    const Math::Vector3UVE finalVelocity = entityManager.GetComponentUVE<Scene::RigidBodyComponentUVE>(body).velocity;
+    EXPECT_NEAR(finalVelocity.x, 0.0F, kEpsilon);
+    EXPECT_NEAR(finalVelocity.y, 0.0F, kEpsilon);
+}
+
 TEST_F(PhysicsSystemUVETest, StepUVE_StaticVsStaticOverlap_NeitherMovesAndNoDivideByZero) {
     PhysicsSystemUVE physicsSystem(collisionSystem);
     const Scene::EntityUVE a = MakeStaticColliderEntityUVE(Math::Vector3UVE{0.0F, 0.0F, 0.0F}, Math::Vector3UVE{1.0F, 1.0F, 1.0F});

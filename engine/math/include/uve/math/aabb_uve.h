@@ -13,6 +13,7 @@
 #include <string>
 
 #include "uve/math/matrix4x4_uve.h"
+#include "uve/math/ray_uve.h"
 #include "uve/math/vector3_uve.h"
 
 namespace UVE::Math {
@@ -81,6 +82,23 @@ struct PenetrationUVE {
 /// (`a.IntersectsUVE(b)` is false). When multiple axes tie for the smallest overlap, the first
 /// in x/y/z order is returned — deterministic, not an arbitrary implementation detail.
 [[nodiscard]] std::optional<PenetrationUVE> ComputePenetrationUVE(const AabbUVE& a, const AabbUVE& b) noexcept;
+
+/// The result of a ray hitting an AabbUVE: `distance` along `ray.direction` (i.e. the hit point
+/// is `ray.origin + ray.direction * distance`), and the unit-length face `normal` that was hit —
+/// except when the ray's origin is already inside the box, in which case `distance = 0` and
+/// `normal` is the zero vector (no face was actually crossed to reach it).
+struct RayHitUVE {
+    float distance = 0.0F;
+    Vector3UVE normal;
+};
+
+/// Returns the closest hit of `ray` against `aabb` within `[0, maxDistance]`, or std::nullopt if
+/// the ray misses or the box is beyond `maxDistance`. Standard slab method — pure AABB geometry,
+/// so it lives here next to ComputePenetrationUVE rather than inside RaycastSystemUVE (Part 7.5,
+/// Increment 16). A ray origin already inside the box reports `distance = 0` (hits immediately,
+/// rather than "behind" the ray), matching common engine convention.
+[[nodiscard]] std::optional<RayHitUVE> IntersectRayUVE(const RayUVE& ray, const AabbUVE& aabb,
+                                                         float maxDistance) noexcept;
 
 [[nodiscard]] constexpr bool operator==(const AabbUVE& lhs, const AabbUVE& rhs) noexcept {
     return lhs.min == rhs.min && lhs.max == rhs.max;

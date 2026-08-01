@@ -18,14 +18,20 @@ namespace UVE::Scene {
 /// One of the master spec's named built-in components (Part 7.3). Increment 15
 /// (CollisionSystemUVE, Part 7.5) keeps the shape itself minimal — an axis-aligned box
 /// half-extent; a real shape-type enum (box/sphere/capsule/mesh) is future work, not invented
-/// ahead of a second shape actually existing. `collisionLayer`/`collisionMask` are reserved:
-/// present so a future collision-filtering feature never has to make a breaking change to this
+/// ahead of a second shape actually existing. `collisionLayer` is consulted by RaycastSystemUVE
+/// (Increment 16) via a query's layer mask; `collisionMask` remains reserved — present so a
+/// future collider-vs-collider filtering feature never has to make a breaking change to this
 /// component's serialized shape, but CollisionSystemUVE::DetectCollisionsUVE() does not yet
-/// consult them.
+/// consult it. `friction`/`restitution` (Increment 16) are consumed by PhysicsSystemUVE's
+/// collision resolution; `density` remains reserved (captured for spec completeness, not yet
+/// wired to mass).
 struct ColliderComponentUVE final {
     Math::Vector3UVE halfExtents{0.5F, 0.5F, 0.5F};
     std::uint32_t collisionLayer = 1;
     std::uint32_t collisionMask = 0xFFFFFFFFU;
+    float friction = 0.0F;
+    float restitution = 0.0F;
+    float density = 1.0F;
 };
 
 } // namespace UVE::Scene

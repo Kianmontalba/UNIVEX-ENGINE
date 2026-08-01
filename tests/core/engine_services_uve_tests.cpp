@@ -37,6 +37,7 @@
 #include "uve/memory/i_memory_manager_uve.h"
 #include "uve/physics/i_collision_system_uve.h"
 #include "uve/physics/i_physics_system_uve.h"
+#include "uve/physics/i_raycast_system_uve.h"
 #include "uve/render/i_camera_system_uve.h"
 #include "uve/render/i_mesh_renderer_uve.h"
 #include "uve/render/i_render_device_uve.h"
@@ -503,6 +504,17 @@ public:
     int stepCallCount = 0;
 };
 
+class FakeRaycastSystemUVE final : public Physics::IRaycastSystemUVE {
+public:
+    [[nodiscard]] std::optional<Physics::RaycastHitUVE> RaycastUVE(
+        Scene::IEntityManagerUVE&, const Physics::RaycastQueryUVE&) const override {
+        ++raycastCallCount;
+        return std::nullopt;
+    }
+
+    mutable int raycastCallCount = 0;
+};
+
 TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     FakeLoggerUVE logger;
     FakeTimerUVE timer;
@@ -528,13 +540,14 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     FakeRenderer3DUVE renderer3D;
     FakeCollisionSystemUVE collisionSystem;
     FakePhysicsSystemUVE physicsSystem;
+    FakeRaycastSystemUVE raycastSystem;
 
     const EngineServicesUVE services(logger, timer, eventSystem, memoryManager, threadPool,
                                       commandLine, configManager, entityManager, sceneGraph,
                                       assetDatabase, sceneSerializer, prefabSystem, hotReload,
                                       assetManager, assetImporter, assetBundle, fileSystem,
                                       renderDevice, renderSystem, cameraSystem, meshRenderer,
-                                      renderer3D, collisionSystem, physicsSystem);
+                                      renderer3D, collisionSystem, physicsSystem, raycastSystem);
 
     EXPECT_EQ(&services.GetLoggerUVE(), &logger);
     EXPECT_EQ(&services.GetTimerUVE(), &timer);
@@ -560,6 +573,7 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     EXPECT_EQ(&services.GetRenderer3DUVE(), &renderer3D);
     EXPECT_EQ(&services.GetCollisionSystemUVE(), &collisionSystem);
     EXPECT_EQ(&services.GetPhysicsSystemUVE(), &physicsSystem);
+    EXPECT_EQ(&services.GetRaycastSystemUVE(), &raycastSystem);
 }
 
 TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) {
@@ -587,12 +601,13 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     FakeRenderer3DUVE renderer3D;
     FakeCollisionSystemUVE collisionSystem;
     FakePhysicsSystemUVE physicsSystem;
+    FakeRaycastSystemUVE raycastSystem;
     const EngineServicesUVE services(logger, timer, eventSystem, memoryManager, threadPool,
                                       commandLine, configManager, entityManager, sceneGraph,
                                       assetDatabase, sceneSerializer, prefabSystem, hotReload,
                                       assetManager, assetImporter, assetBundle, fileSystem,
                                       renderDevice, renderSystem, cameraSystem, meshRenderer,
-                                      renderer3D, collisionSystem, physicsSystem);
+                                      renderer3D, collisionSystem, physicsSystem, raycastSystem);
 
     services.GetTimerUVE().Tick();
     services.GetEventSystemUVE().DispatchQueuedUVE();
@@ -622,6 +637,7 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
         services.GetEntityManagerUVE(), services.GetAssetManagerUVE(), services.GetAssetDatabaseUVE(),
         Math::FrustumUVE{}));
     services.GetRenderer3DUVE().RenderFrameUVE(services.GetEntityManagerUVE(), Scene::kInvalidEntityUVE);
+    static_cast<void>(services.GetRaycastSystemUVE().RaycastUVE(services.GetEntityManagerUVE(), Physics::RaycastQueryUVE{}));
 
     EXPECT_EQ(timer.tickCount, 1);
     EXPECT_EQ(eventSystem.dispatchCount, 1);
@@ -644,6 +660,7 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     EXPECT_EQ(cameraSystem.computeViewCallCount, 1);
     EXPECT_EQ(meshRenderer.extractRenderQueueCallCount, 1);
     EXPECT_EQ(renderer3D.renderFrameCallCount, 1);
+    EXPECT_EQ(raycastSystem.raycastCallCount, 1);
 }
 
 } // namespace

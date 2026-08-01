@@ -31,6 +31,7 @@
 #include "uve/memory/memory_manager_uve.h"
 #include "uve/physics/collision_system_uve.h"
 #include "uve/physics/physics_system_uve.h"
+#include "uve/physics/raycast_system_uve.h"
 #include "uve/platform/platform_uve.h"
 #include "uve/render/camera_system_uve.h"
 #include "uve/render/mesh_renderer_uve.h"
@@ -196,6 +197,9 @@ void EngineCoreUVE::Init() {
     // EngineConfigUVE::gravity, both already available.
     m_physicsSystem = std::make_unique<Physics::PhysicsSystemUVE>(*m_collisionSystem, m_config.gravity);
 
+    // RaycastSystem twenty-fourth: stateless, no dependencies of its own.
+    m_raycastSystem = std::make_unique<Physics::RaycastSystemUVE>();
+
     // ConfigManager last: it immediately calls LoadUVE(), which logs its
     // outcome (missing/malformed/success) through the Logger constructed
     // above — so Logger must already exist by this point.
@@ -208,7 +212,7 @@ void EngineCoreUVE::Init() {
                         *m_assetDatabase, *m_sceneSerializer, *m_prefabSystem, *m_hotReload,
                         *m_assetManager, *m_assetImporter, *m_assetBundle, *m_fileSystem,
                         *m_renderDevice, *m_renderSystem, *m_cameraSystem, *m_meshRenderer,
-                        *m_renderer3D, *m_collisionSystem, *m_physicsSystem);
+                        *m_renderer3D, *m_collisionSystem, *m_physicsSystem, *m_raycastSystem);
 
     TransitionStateUVE(EngineStateUVE::Running);
     UVE_INFO("EngineCoreUVE: initialized");
@@ -307,7 +311,7 @@ void EngineCoreUVE::Shutdown() {
     UVE_INFO("EngineCoreUVE: shutting down");
 
     // Exact reverse of Init()'s construction order: ConfigManager, then
-    // PhysicsSystem, then CollisionSystem, then Renderer3D, then MeshRenderer, then CameraSystem, then RenderSystem, then RenderDevice,
+    // RaycastSystem, then PhysicsSystem, then CollisionSystem, then Renderer3D, then MeshRenderer, then CameraSystem, then RenderSystem, then RenderDevice,
     // then FileSystem, then AssetBundle, then AssetImporter, then
     // AssetManager (its destructor blocks until every in-flight load job
     // finishes), then HotReload, then PrefabSystem, then SceneSerializer,
@@ -317,6 +321,7 @@ void EngineCoreUVE::Shutdown() {
     // logger itself is torn down, so it is guaranteed to be recorded.
     m_services.reset();
     m_configManager.reset();
+    m_raycastSystem.reset();
     m_physicsSystem.reset();
     m_collisionSystem.reset();
     m_renderer3D.reset();

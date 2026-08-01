@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "uve/physics/collision_pair_uve.h"
+#include "uve/physics/physics_material_uve.h"
 #include "uve/scene/components/collider_component_uve.h"
 #include "uve/scene/components/rigid_body_component_uve.h"
 #include "uve/scene/components/transform_component_uve.h"
@@ -28,11 +29,16 @@ namespace {
 }
 
 /// Moves `entity` by `positionDelta` (via SetLocalTransformUVE, so dirty-flag propagation stays
-/// correct) and, if it has a non-kinematic RigidBodyComponentUVE, removes only the velocity
-/// component pointing toward `towardOtherBody` (vector rejection — preserves tangential/sliding
-/// velocity, never touches velocity that's already separating).
+/// correct) and, if it has a non-kinematic RigidBodyComponentUVE, applies `material`'s combined
+/// friction/restitution to the velocity component pointing toward `towardOtherBody`: the
+/// tangential (sliding) component is damped by `1 - friction`, and the into-surface component is
+/// reflected and scaled by `restitution` rather than simply zeroed. With `friction = 0,
+/// restitution = 0` (every collider's default), this reduces to exactly `velocity -=
+/// towardOtherBody * intoSurface` — bit-identical to Increment 15's pure vector-rejection formula
+/// — never touches velocity that's already separating.
 void MoveAndDeflectUVE(Scene::IEntityManagerUVE& entityManager, Scene::ISceneGraphUVE& sceneGraph,
-                       Scene::EntityUVE entity, Math::Vector3UVE positionDelta, Math::Vector3UVE towardOtherBody) {
+                       Scene::EntityUVE entity, Math::Vector3UVE positionDelta, Math::Vector3UVE towardOtherBody,
+                       const PhysicsMaterialUVE& material) {
     Scene::TransformComponentUVE transform = entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity);
     transform.localPosition += positionDelta;
     sceneGraph.SetLocalTransformUVE(entityManager, entity, transform);
@@ -46,13 +52,16 @@ void MoveAndDeflectUVE(Scene::IEntityManagerUVE& entityManager, Scene::ISceneGra
     }
     const float intoSurface = Math::DotUVE(rigidBody.velocity, towardOtherBody);
     if (intoSurface > 0.0F) {
-        rigidBody.velocity -= towardOtherBody * intoSurface;
+        const Math::Vector3UVE normalVelocity = towardOtherBody * intoSurface;
+        const Math::Vector3UVE tangentialVelocity = rigidBody.velocity - normalVelocity;
+        const float frictionFactor = std::clamp(1.0F - material.friction, 0.0F, 1.0F);
+        rigidBody.velocity = tangentialVelocity * frictionFactor - normalVelocity * material.restitution;
     }
 }
 
 /// Resolves one overlapping pair: mass-weighted positional correction (a kinematic or
 /// collider-only-static side gets 0% of the correction; two dynamic bodies split proportionally
-/// to inverse mass) plus per-body velocity deflection.
+/// to inverse mass) plus per-body velocity deflection using both sides' combined material.
 void ResolvePairUVE(Scene::IEntityManagerUVE& entityManager, Scene::ISceneGraphUVE& sceneGraph,
                     const CollisionPairUVE& pair) {
     const auto InverseMassOfUVE = [&entityManager](Scene::EntityUVE entity) {
@@ -74,13 +83,21 @@ void ResolvePairUVE(Scene::IEntityManagerUVE& entityManager, Scene::ISceneGraphU
     const float firstShare = firstInverseMass / totalInverseMass;
     const float secondShare = secondInverseMass / totalInverseMass;
 
+    // Both entities in `pair` are guaranteed to have ColliderComponentUVE — DetectCollisionsUVE
+    // only ever returns pairs where both sides have one.
+    const PhysicsMaterialUVE combinedMaterial = CombineMaterialsUVE(
+        MaterialOfUVE(entityManager.GetComponentUVE<Scene::ColliderComponentUVE>(pair.first)),
+        MaterialOfUVE(entityManager.GetComponentUVE<Scene::ColliderComponentUVE>(pair.second)));
+
     if (firstShare > 0.0F) {
         MoveAndDeflectUVE(entityManager, sceneGraph, pair.first,
-                          -pair.separationAxis * (pair.penetrationDepth * firstShare), pair.separationAxis);
+                          -pair.separationAxis * (pair.penetrationDepth * firstShare), pair.separationAxis,
+                          combinedMaterial);
     }
     if (secondShare > 0.0F) {
         MoveAndDeflectUVE(entityManager, sceneGraph, pair.second,
-                          pair.separationAxis * (pair.penetrationDepth * secondShare), -pair.separationAxis);
+                          pair.separationAxis * (pair.penetrationDepth * secondShare), -pair.separationAxis,
+                          combinedMaterial);
     }
 }
 

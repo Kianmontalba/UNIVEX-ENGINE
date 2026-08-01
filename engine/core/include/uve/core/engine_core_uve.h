@@ -31,6 +31,7 @@
 #include "uve/memory/i_memory_manager_uve.h"
 #include "uve/physics/i_collision_system_uve.h"
 #include "uve/physics/i_physics_system_uve.h"
+#include "uve/physics/i_raycast_system_uve.h"
 #include "uve/render/i_camera_system_uve.h"
 #include "uve/render/i_mesh_renderer_uve.h"
 #include "uve/render/i_render_device_uve.h"
@@ -50,18 +51,21 @@ namespace UVE::Core {
 /// AssetDatabase, SceneSerializer, PrefabSystem, HotReload, AssetManager,
 /// AssetImporter, AssetBundle, FileSystem, RenderDevice, RenderSystem,
 /// CameraSystem, MeshRenderer, Renderer3D, CollisionSystem, PhysicsSystem,
-/// ConfigManager) and drives the canonical engine lifecycle: Init -> Load ->
-/// N x (BeginFrame -> Update -> LateUpdate -> Render -> EndFrame) ->
-/// Shutdown. Render() calls Renderer3DUVE::RenderFrameUVE() (extract -> cull
-/// -> sort -> record -> submit) whenever SetActiveCameraUVE() has set a
-/// valid camera entity; with no active camera set (the default, and every
-/// test/sample app predating Increment 14), it still logs the original
-/// no-op trace line, so existing frame-loop behavior is byte-identical
-/// unless a caller opts in. Update() runs zero or more fixed PhysicsSystemUVE
-/// steps (via Utilities::FixedStepResultUVE) before SceneGraphUVE::UpdateUVE()
-/// each frame — entirely data-driven off which entities have a
-/// RigidBodyComponentUVE/ColliderComponentUVE, so a scene with none behaves
-/// exactly as it did before Increment 15, no opt-in needed.
+/// RaycastSystem, ConfigManager) and drives the canonical engine lifecycle:
+/// Init -> Load -> N x (BeginFrame -> Update -> LateUpdate -> Render ->
+/// EndFrame) -> Shutdown. Render() calls Renderer3DUVE::RenderFrameUVE()
+/// (extract -> cull -> sort -> record -> submit) whenever
+/// SetActiveCameraUVE() has set a valid camera entity; with no active camera
+/// set (the default, and every test/sample app predating Increment 14), it
+/// still logs the original no-op trace line, so existing frame-loop
+/// behavior is byte-identical unless a caller opts in. Update() runs zero or
+/// more fixed PhysicsSystemUVE steps (via Utilities::FixedStepResultUVE)
+/// before SceneGraphUVE::UpdateUVE() each frame — entirely data-driven off
+/// which entities have a RigidBodyComponentUVE/ColliderComponentUVE, so a
+/// scene with none behaves exactly as it did before Increment 15, no opt-in
+/// needed. RaycastSystemUVE (Increment 16) is a stateless, on-demand query
+/// service — like CameraSystem/MeshRenderer, it has no Update()-loop hook
+/// of its own; callers reach it via GetServicesUVE().GetRaycastSystemUVE().
 /// Thread-safety: not thread-safe. Every method here is intended to be
 /// called from a single "engine" thread. The services EngineCoreUVE owns
 /// each document their own thread-safety contract independently (e.g.
@@ -79,7 +83,7 @@ public:
     /// ThreadPool, Timer, EventSystem, EntityManager, SceneGraph,
     /// AssetDatabase, SceneSerializer, PrefabSystem, HotReload, AssetManager,
     /// AssetImporter, AssetBundle, FileSystem, RenderDevice, RenderSystem,
-    /// CameraSystem, MeshRenderer, Renderer3D, CollisionSystem, PhysicsSystem, and ConfigManager in that order (CommandLine first — it
+    /// CameraSystem, MeshRenderer, Renderer3D, CollisionSystem, PhysicsSystem, RaycastSystem, and ConfigManager in that order (CommandLine first — it
     /// has no dependencies of its own; Logger second — every later step and
     /// every other system may need to log or UVE_ASSERT during its own
     /// setup; EntityManager right after EventSystem, since it needs
@@ -107,9 +111,11 @@ public:
     /// and EventSystem — every one of which already exists by this point;
     /// CollisionSystem right after, stateless with no dependencies of its
     /// own; PhysicsSystem right after, needing only CollisionSystem (and
-    /// EngineConfigUVE::gravity, already available); ConfigManager last, so
+    /// EngineConfigUVE::gravity, already available); RaycastSystem right
+    /// after, stateless with no dependencies of its own (grouped with the
+    /// rest of engine/physics); ConfigManager last, so
     /// its LoadUVE() call can log through the already-initialized Logger),
-    /// then builds EngineServicesUVE from all twenty-four. Transitions
+    /// then builds EngineServicesUVE from all twenty-five. Transitions
     /// Uninitialized -> Initializing -> Running.
     void Init();
 
@@ -137,7 +143,7 @@ public:
     void RequestQuitUVE() noexcept;
 
     /// Transitions Running -> ShuttingDown -> Shutdown, tearing down
-    /// ConfigManager, then PhysicsSystem, then CollisionSystem, then Renderer3D, then MeshRenderer, then CameraSystem, then RenderSystem, then
+    /// ConfigManager, then RaycastSystem, then PhysicsSystem, then CollisionSystem, then Renderer3D, then MeshRenderer, then CameraSystem, then RenderSystem, then
     /// RenderDevice, then FileSystem, then AssetBundle, then AssetImporter,
     /// then AssetManager (its destructor blocks until every in-flight load
     /// job finishes), then HotReload, then PrefabSystem, then
@@ -172,7 +178,7 @@ public:
     /// SceneGraph/AssetDatabase/SceneSerializer/PrefabSystem/HotReload/
     /// AssetManager/AssetImporter/AssetBundle/FileSystem/RenderDevice/
     /// RenderSystem/CameraSystem/MeshRenderer/Renderer3D/CollisionSystem/
-    /// PhysicsSystem references. Valid only between Init() and Shutdown().
+    /// PhysicsSystem/RaycastSystem references. Valid only between Init() and Shutdown().
     [[nodiscard]] EngineServicesUVE& GetServicesUVE();
 
     /// Returns this build's engine version — the single source of truth
@@ -250,6 +256,7 @@ private:
     std::unique_ptr<Render::IRenderer3DUVE> m_renderer3D;
     std::unique_ptr<Physics::ICollisionSystemUVE> m_collisionSystem;
     std::unique_ptr<Physics::IPhysicsSystemUVE> m_physicsSystem;
+    std::unique_ptr<Physics::IRaycastSystemUVE> m_raycastSystem;
     std::unique_ptr<Config::IConfigManagerUVE> m_configManager;
     std::optional<EngineServicesUVE> m_services;
 
