@@ -21,6 +21,7 @@
 #include "uve/events/i_event_system_uve.h"
 #include "uve/memory/i_memory_manager_uve.h"
 #include "uve/render/i_camera_system_uve.h"
+#include "uve/render/i_mesh_renderer_uve.h"
 #include "uve/render/i_render_device_uve.h"
 #include "uve/render/i_render_system_uve.h"
 #include "uve/scene/i_entity_manager_uve.h"
@@ -37,9 +38,9 @@ namespace UVE::Core {
 /// (Logger, Timer, EventSystem, MemoryManager, ThreadPool, CommandLine,
 /// ConfigManager, EntityManager, SceneGraph, AssetDatabase, SceneSerializer,
 /// PrefabSystem, HotReload, AssetManager, AssetImporter, AssetBundle,
-/// FileSystem, RenderDevice, RenderSystem, CameraSystem), built once
-/// EngineCoreUVE has constructed all twenty. Any future subsystem that
-/// needs access to one of these should receive an EngineServicesUVE&
+/// FileSystem, RenderDevice, RenderSystem, CameraSystem, MeshRenderer), built
+/// once EngineCoreUVE has constructed all twenty-one. Any future subsystem
+/// that needs access to one of these should receive an EngineServicesUVE&
 /// (obtained from EngineCoreUVE::GetServicesUVE()) rather than a raw global
 /// pointer — the logging macros' internal active-instance pointer remains
 /// the one intentional exception to that rule (see
@@ -48,9 +49,9 @@ namespace UVE::Core {
 /// ICommandLineUVE/IConfigManagerUVE/IEntityManagerUVE/ISceneGraphUVE/
 /// IAssetDatabaseUVE/ISceneSerializerUVE/IPrefabSystemUVE/IHotReloadUVE/
 /// IAssetManagerUVE/IAssetImporterUVE/IAssetBundleUVE/IFileSystemUVE/
-/// IRenderDeviceUVE/IRenderSystemUVE/ICameraSystemUVE interfaces, not the
-/// concrete types, so a future substitute implementation of any of the
-/// twenty requires no change here.
+/// IRenderDeviceUVE/IRenderSystemUVE/ICameraSystemUVE/IMeshRendererUVE
+/// interfaces, not the concrete types, so a future substitute implementation
+/// of any of the twenty-one requires no change here.
 /// Thread-safety: EngineServicesUVE itself holds only non-owning pointers
 /// and has no mutable state of its own; the thread-safety of each accessor
 /// is whatever the referenced service documents.
@@ -74,7 +75,8 @@ public:
                        Asset::IFileSystemUVE& fileSystem,
                        Render::IRenderDeviceUVE& renderDevice,
                        Render::IRenderSystemUVE& renderSystem,
-                       Render::ICameraSystemUVE& cameraSystem) noexcept;
+                       Render::ICameraSystemUVE& cameraSystem,
+                       Render::IMeshRendererUVE& meshRenderer) noexcept;
 
     [[nodiscard]] Debug::ILoggerUVE& GetLoggerUVE() const noexcept;
     [[nodiscard]] Utilities::ITimerUVE& GetTimerUVE() const noexcept;
@@ -96,6 +98,7 @@ public:
     [[nodiscard]] Render::IRenderDeviceUVE& GetRenderDeviceUVE() const noexcept;
     [[nodiscard]] Render::IRenderSystemUVE& GetRenderSystemUVE() const noexcept;
     [[nodiscard]] Render::ICameraSystemUVE& GetCameraSystemUVE() const noexcept;
+    [[nodiscard]] Render::IMeshRendererUVE& GetMeshRendererUVE() const noexcept;
 
 private:
     Debug::ILoggerUVE* m_logger;
@@ -118,6 +121,7 @@ private:
     Render::IRenderDeviceUVE* m_renderDevice;
     Render::IRenderSystemUVE* m_renderSystem;
     Render::ICameraSystemUVE* m_cameraSystem;
+    Render::IMeshRendererUVE* m_meshRenderer;
 };
 
 } // namespace UVE::Core

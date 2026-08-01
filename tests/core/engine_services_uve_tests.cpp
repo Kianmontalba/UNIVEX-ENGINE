@@ -36,6 +36,7 @@
 #include "uve/math/matrix4x4_uve.h"
 #include "uve/memory/i_memory_manager_uve.h"
 #include "uve/render/i_camera_system_uve.h"
+#include "uve/render/i_mesh_renderer_uve.h"
 #include "uve/render/i_render_device_uve.h"
 #include "uve/render/i_render_system_uve.h"
 #include "uve/scene/i_entity_manager_uve.h"
@@ -51,14 +52,14 @@
 // IEntityManagerUVE/ISceneGraphUVE/IAssetDatabaseUVE/ISceneSerializerUVE/
 // IPrefabSystemUVE/IHotReloadUVE/IAssetManagerUVE/IAssetImporterUVE/
 // IAssetBundleUVE/IFileSystemUVE/IRenderDeviceUVE/IRenderSystemUVE/
-// ICameraSystemUVE) works against ANY conforming implementation,
-// independent of the concrete LoggerUVE/TimerUVE/EventSystemUVE/
-// MemoryManagerUVE/ThreadPoolUVE/CommandLineUVE/ConfigManagerUVE/
-// EntityManagerUVE/SceneGraphUVE/AssetDatabaseUVE/SceneSerializerUVE/
-// PrefabSystemUVE/HotReloadUVE/AssetManagerUVE/AssetImporterUVE/
-// AssetBundleUVE/FileSystemUVE/NullRenderDeviceUVE/RenderSystemUVE/
-// CameraSystemUVE classes used by EngineCoreUVE — this is the whole point
-// of introducing the interfaces.
+// ICameraSystemUVE/IMeshRendererUVE) works against ANY conforming
+// implementation, independent of the concrete LoggerUVE/TimerUVE/
+// EventSystemUVE/MemoryManagerUVE/ThreadPoolUVE/CommandLineUVE/
+// ConfigManagerUVE/EntityManagerUVE/SceneGraphUVE/AssetDatabaseUVE/
+// SceneSerializerUVE/PrefabSystemUVE/HotReloadUVE/AssetManagerUVE/
+// AssetImporterUVE/AssetBundleUVE/FileSystemUVE/NullRenderDeviceUVE/
+// RenderSystemUVE/CameraSystemUVE/MeshRendererUVE classes used by
+// EngineCoreUVE — this is the whole point of introducing the interfaces.
 
 namespace UVE::Core::Tests {
 namespace {
@@ -462,6 +463,18 @@ public:
     mutable int computeViewCallCount = 0;
 };
 
+class FakeMeshRendererUVE final : public Render::IMeshRendererUVE {
+public:
+    [[nodiscard]] Render::RenderQueueUVE ExtractRenderQueueUVE(Scene::IEntityManagerUVE&, Asset::IAssetManagerUVE&,
+                                                                 Asset::IAssetDatabaseUVE&,
+                                                                 const Math::FrustumUVE&) const override {
+        ++extractRenderQueueCallCount;
+        return {};
+    }
+
+    mutable int extractRenderQueueCallCount = 0;
+};
+
 TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     FakeLoggerUVE logger;
     FakeTimerUVE timer;
@@ -483,12 +496,13 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     FakeRenderDeviceUVE renderDevice;
     FakeRenderSystemUVE renderSystem;
     FakeCameraSystemUVE cameraSystem;
+    FakeMeshRendererUVE meshRenderer;
 
     const EngineServicesUVE services(logger, timer, eventSystem, memoryManager, threadPool,
                                       commandLine, configManager, entityManager, sceneGraph,
                                       assetDatabase, sceneSerializer, prefabSystem, hotReload,
                                       assetManager, assetImporter, assetBundle, fileSystem,
-                                      renderDevice, renderSystem, cameraSystem);
+                                      renderDevice, renderSystem, cameraSystem, meshRenderer);
 
     EXPECT_EQ(&services.GetLoggerUVE(), &logger);
     EXPECT_EQ(&services.GetTimerUVE(), &timer);
@@ -510,6 +524,7 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     EXPECT_EQ(&services.GetRenderDeviceUVE(), &renderDevice);
     EXPECT_EQ(&services.GetRenderSystemUVE(), &renderSystem);
     EXPECT_EQ(&services.GetCameraSystemUVE(), &cameraSystem);
+    EXPECT_EQ(&services.GetMeshRendererUVE(), &meshRenderer);
 }
 
 TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) {
@@ -533,11 +548,12 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     FakeRenderDeviceUVE renderDevice;
     FakeRenderSystemUVE renderSystem;
     FakeCameraSystemUVE cameraSystem;
+    FakeMeshRendererUVE meshRenderer;
     const EngineServicesUVE services(logger, timer, eventSystem, memoryManager, threadPool,
                                       commandLine, configManager, entityManager, sceneGraph,
                                       assetDatabase, sceneSerializer, prefabSystem, hotReload,
                                       assetManager, assetImporter, assetBundle, fileSystem,
-                                      renderDevice, renderSystem, cameraSystem);
+                                      renderDevice, renderSystem, cameraSystem, meshRenderer);
 
     services.GetTimerUVE().Tick();
     services.GetEventSystemUVE().DispatchQueuedUVE();
@@ -563,6 +579,9 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     services.GetRenderSystemUVE().BeginFrameUVE();
     static_cast<void>(
         services.GetCameraSystemUVE().ComputeViewMatrixUVE(services.GetEntityManagerUVE(), Scene::kInvalidEntityUVE));
+    static_cast<void>(services.GetMeshRendererUVE().ExtractRenderQueueUVE(
+        services.GetEntityManagerUVE(), services.GetAssetManagerUVE(), services.GetAssetDatabaseUVE(),
+        Math::FrustumUVE{}));
 
     EXPECT_EQ(timer.tickCount, 1);
     EXPECT_EQ(eventSystem.dispatchCount, 1);
@@ -583,6 +602,7 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     EXPECT_EQ(renderDevice.createBufferCallCount, 1);
     EXPECT_EQ(renderSystem.beginFrameCallCount, 1);
     EXPECT_EQ(cameraSystem.computeViewCallCount, 1);
+    EXPECT_EQ(meshRenderer.extractRenderQueueCallCount, 1);
 }
 
 } // namespace

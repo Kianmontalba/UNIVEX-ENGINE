@@ -45,7 +45,7 @@ protected:
 
 TEST_F(PrefabSystemUVETest, SaveThenInstantiate_ProducesEntityWithSameComponentValues) {
     const EntityUVE source = entityManager.CreateEntityUVE();
-    entityManager.AddComponentUVE<MeshComponentUVE>(source, MeshComponentUVE{"trees/oak.uvemodel"});
+    entityManager.AddComponentUVE<MeshComponentUVE>(source, MeshComponentUVE{Asset::AssetGuidUVE{11}, Asset::AssetGuidUVE{12}});
 
     const std::filesystem::path prefabPath = "uve_prefab_tests_oak.uveprefab";
     std::filesystem::remove(prefabPath);
@@ -57,7 +57,7 @@ TEST_F(PrefabSystemUVETest, SaveThenInstantiate_ProducesEntityWithSameComponentV
     ASSERT_NE(instance, kInvalidEntityUVE);
     ASSERT_NE(instance, source);
 
-    EXPECT_EQ(entityManager.GetComponentUVE<MeshComponentUVE>(instance).meshAssetPath, "trees/oak.uvemodel");
+    EXPECT_EQ(entityManager.GetComponentUVE<MeshComponentUVE>(instance).meshGuid, Asset::AssetGuidUVE{11});
     ASSERT_TRUE(entityManager.HasComponentUVE<PrefabInstanceComponentUVE>(instance));
     EXPECT_EQ(entityManager.GetComponentUVE<PrefabInstanceComponentUVE>(instance).sourcePrefabGuid, guid);
 
@@ -89,7 +89,7 @@ TEST_F(PrefabSystemUVETest, InstantiateUVE_WithParent_ReparentsNewRoot) {
     sceneGraph.AttachTransformUVE(entityManager, parent, TransformComponentUVE{});
 
     const EntityUVE source = entityManager.CreateEntityUVE();
-    entityManager.AddComponentUVE<MeshComponentUVE>(source, MeshComponentUVE{"props/box.uvemodel"});
+    entityManager.AddComponentUVE<MeshComponentUVE>(source, MeshComponentUVE{Asset::AssetGuidUVE{21}, Asset::AssetGuidUVE{22}});
     sceneGraph.AttachTransformUVE(entityManager, source, TransformComponentUVE{});
 
     const std::filesystem::path prefabPath = "uve_prefab_tests_reparent.uveprefab";
@@ -127,7 +127,7 @@ TEST_F(PrefabSystemUVETest, InstantiateUVE_UnknownGuid_ReturnsInvalidAndLogsErro
 
 TEST_F(PrefabSystemUVETest, NestedPrefab_PreservesSourceGuidWithoutRecursiveReinstantiation) {
     const EntityUVE innerSource = entityManager.CreateEntityUVE();
-    entityManager.AddComponentUVE<MeshComponentUVE>(innerSource, MeshComponentUVE{"props/lamp.uvemodel"});
+    entityManager.AddComponentUVE<MeshComponentUVE>(innerSource, MeshComponentUVE{Asset::AssetGuidUVE{31}, Asset::AssetGuidUVE{32}});
     sceneGraph.AttachTransformUVE(entityManager, innerSource, TransformComponentUVE{});
     const std::filesystem::path innerPath = "uve_prefab_tests_inner.uveprefab";
     std::filesystem::remove(innerPath);
@@ -160,7 +160,7 @@ TEST_F(PrefabSystemUVETest, NestedPrefab_PreservesSourceGuidWithoutRecursiveRein
         });
     ASSERT_NE(nestedChild, kInvalidEntityUVE);
     ASSERT_TRUE(freshManager.HasComponentUVE<MeshComponentUVE>(nestedChild));
-    EXPECT_EQ(freshManager.GetComponentUVE<MeshComponentUVE>(nestedChild).meshAssetPath, "props/lamp.uvemodel");
+    EXPECT_EQ(freshManager.GetComponentUVE<MeshComponentUVE>(nestedChild).meshGuid, Asset::AssetGuidUVE{31});
     ASSERT_TRUE(freshManager.HasComponentUVE<PrefabInstanceComponentUVE>(nestedChild));
     EXPECT_EQ(freshManager.GetComponentUVE<PrefabInstanceComponentUVE>(nestedChild).sourcePrefabGuid, innerGuid);
 
@@ -170,7 +170,7 @@ TEST_F(PrefabSystemUVETest, NestedPrefab_PreservesSourceGuidWithoutRecursiveRein
 
 TEST_F(PrefabSystemUVETest, SavePrefabUVE_SamePathTwice_KeepsGuidStable) {
     const EntityUVE source = entityManager.CreateEntityUVE();
-    entityManager.AddComponentUVE<MeshComponentUVE>(source, MeshComponentUVE{"props/crate.uvemodel"});
+    entityManager.AddComponentUVE<MeshComponentUVE>(source, MeshComponentUVE{Asset::AssetGuidUVE{41}, Asset::AssetGuidUVE{42}});
 
     const std::filesystem::path path = "uve_prefab_tests_stable_guid.uveprefab";
     std::filesystem::remove(path);

@@ -274,8 +274,8 @@ TEST(EngineCoreUVETest, AssetDatabaseSceneSerializerPrefabSystem_ReachableAndRou
     Scene::IPrefabSystemUVE& prefabSystem = engine.GetServicesUVE().GetPrefabSystemUVE();
 
     const Scene::EntityUVE source = entityManager.CreateEntityUVE();
-    entityManager.AddComponentUVE<Scene::MeshComponentUVE>(source,
-                                                            Scene::MeshComponentUVE{"props/crate.uvemodel"});
+    entityManager.AddComponentUVE<Scene::MeshComponentUVE>(
+        source, Scene::MeshComponentUVE{Asset::AssetGuidUVE{51}, Asset::AssetGuidUVE{52}});
 
     const std::filesystem::path prefabPath = "uve_engine_core_tests.uveprefab";
     std::filesystem::remove(prefabPath);
@@ -285,8 +285,7 @@ TEST(EngineCoreUVETest, AssetDatabaseSceneSerializerPrefabSystem_ReachableAndRou
     const Scene::EntityUVE instance =
         prefabSystem.InstantiateUVE(entityManager, sceneGraph, assetDatabase, guid, Scene::kInvalidEntityUVE);
     ASSERT_NE(instance, Scene::kInvalidEntityUVE);
-    EXPECT_EQ(entityManager.GetComponentUVE<Scene::MeshComponentUVE>(instance).meshAssetPath,
-              "props/crate.uvemodel");
+    EXPECT_EQ(entityManager.GetComponentUVE<Scene::MeshComponentUVE>(instance).meshGuid, Asset::AssetGuidUVE{51});
 
     std::filesystem::remove(prefabPath);
     std::filesystem::remove(MakeTestConfigUVE().assetDatabaseFilePath);

@@ -30,6 +30,7 @@
 #include "uve/events/i_event_system_uve.h"
 #include "uve/memory/i_memory_manager_uve.h"
 #include "uve/render/i_camera_system_uve.h"
+#include "uve/render/i_mesh_renderer_uve.h"
 #include "uve/render/i_render_device_uve.h"
 #include "uve/render/i_render_system_uve.h"
 #include "uve/scene/i_entity_manager_uve.h"
@@ -45,14 +46,14 @@ namespace UVE::Core {
 /// MemoryManager, ThreadPool, Timer, EventSystem, EntityManager, SceneGraph,
 /// AssetDatabase, SceneSerializer, PrefabSystem, HotReload, AssetManager,
 /// AssetImporter, AssetBundle, FileSystem, RenderDevice, RenderSystem,
-/// CameraSystem, ConfigManager) and drives the canonical engine lifecycle:
-/// Init -> Load -> N x (BeginFrame -> Update -> LateUpdate -> Render ->
-/// EndFrame) -> Shutdown. RenderSystemUVE and CameraSystemUVE both exist
-/// now (the latter backed entirely by CPU-side math — Increment 9/10's
-/// Matrix4x4UVE/FrustumUVE), but nothing yet extracts a scene into draw
-/// calls (a mesh renderer), so Render() is still the documented, working
-/// no-op seam — every stage does something real today, none are
-/// placeholders.
+/// CameraSystem, MeshRenderer, ConfigManager) and drives the canonical engine
+/// lifecycle: Init -> Load -> N x (BeginFrame -> Update -> LateUpdate ->
+/// Render -> EndFrame) -> Shutdown. RenderSystemUVE, CameraSystemUVE, and now
+/// MeshRendererUVE all exist (the latter extracting a culled, sorted
+/// RenderQueueUVE from the ECS, but nothing yet consumes that queue to
+/// record real draw calls — that's Renderer3DUVE, Increment 14), so
+/// Render() is still the documented, working no-op seam — every stage does
+/// something real today, none are placeholders.
 /// Thread-safety: not thread-safe. Every method here is intended to be
 /// called from a single "engine" thread. The services EngineCoreUVE owns
 /// each document their own thread-safety contract independently (e.g.
@@ -70,7 +71,7 @@ public:
     /// ThreadPool, Timer, EventSystem, EntityManager, SceneGraph,
     /// AssetDatabase, SceneSerializer, PrefabSystem, HotReload, AssetManager,
     /// AssetImporter, AssetBundle, FileSystem, RenderDevice, RenderSystem,
-    /// CameraSystem, and ConfigManager in that order (CommandLine first — it
+    /// CameraSystem, MeshRenderer, and ConfigManager in that order (CommandLine first — it
     /// has no dependencies of its own; Logger second — every later step and
     /// every other system may need to log or UVE_ASSERT during its own
     /// setup; EntityManager right after EventSystem, since it needs
@@ -92,9 +93,11 @@ public:
     /// after, needing RenderDevice (it records and submits command buffers
     /// through it); CameraSystem right after, stateless with no
     /// dependencies of its own (grouped with the rest of engine/render);
-    /// ConfigManager last, so its LoadUVE() call can log through the
-    /// already-initialized Logger), then builds EngineServicesUVE from all
-    /// twenty. Transitions Uninitialized -> Initializing -> Running.
+    /// MeshRenderer right after, likewise stateless (grouped with the rest
+    /// of engine/render); ConfigManager last, so its LoadUVE() call can log
+    /// through the already-initialized Logger), then builds
+    /// EngineServicesUVE from all twenty-one. Transitions
+    /// Uninitialized -> Initializing -> Running.
     void Init();
 
     /// The engine's asset/subsystem loading hook. This increment has
@@ -121,7 +124,7 @@ public:
     void RequestQuitUVE() noexcept;
 
     /// Transitions Running -> ShuttingDown -> Shutdown, tearing down
-    /// ConfigManager, then CameraSystem, then RenderSystem, then
+    /// ConfigManager, then MeshRenderer, then CameraSystem, then RenderSystem, then
     /// RenderDevice, then FileSystem, then AssetBundle, then AssetImporter,
     /// then AssetManager (its destructor blocks until every in-flight load
     /// job finishes), then HotReload, then PrefabSystem, then
@@ -144,8 +147,8 @@ public:
     /// MemoryManager/ThreadPool/CommandLine/ConfigManager/EntityManager/
     /// SceneGraph/AssetDatabase/SceneSerializer/PrefabSystem/HotReload/
     /// AssetManager/AssetImporter/AssetBundle/FileSystem/RenderDevice/
-    /// RenderSystem/CameraSystem references. Valid only between Init() and
-    /// Shutdown().
+    /// RenderSystem/CameraSystem/MeshRenderer references. Valid only between
+    /// Init() and Shutdown().
     [[nodiscard]] EngineServicesUVE& GetServicesUVE();
 
     /// Returns this build's engine version — the single source of truth
@@ -212,6 +215,7 @@ private:
     std::unique_ptr<Render::IRenderDeviceUVE> m_renderDevice;
     std::unique_ptr<Render::IRenderSystemUVE> m_renderSystem;
     std::unique_ptr<Render::ICameraSystemUVE> m_cameraSystem;
+    std::unique_ptr<Render::IMeshRendererUVE> m_meshRenderer;
     std::unique_ptr<Config::IConfigManagerUVE> m_configManager;
     std::optional<EngineServicesUVE> m_services;
 

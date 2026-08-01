@@ -80,7 +80,7 @@ namespace {
 }
 
 [[nodiscard]] nlohmann::json ToJsonUVE(const MeshComponentUVE& component) {
-    return {{"meshAssetPath", component.meshAssetPath}};
+    return {{"meshGuid", component.meshGuid.value}, {"materialGuid", component.materialGuid.value}};
 }
 
 [[nodiscard]] nlohmann::json ToJsonUVE(const LightComponentUVE& component) {
@@ -151,7 +151,8 @@ template <typename T, typename FromJsonFunc>
                                                         Vector3FromJsonUVE(json.at("localScale"))};
                       }));
         table.emplace("MeshComponentUVE", MakeRegistrationUVE<MeshComponentUVE>([](const nlohmann::json& json) {
-                          return MeshComponentUVE{json.at("meshAssetPath").get<std::string>()};
+                          return MeshComponentUVE{Asset::AssetGuidUVE{json.at("meshGuid").get<std::uint64_t>()},
+                                                   Asset::AssetGuidUVE{json.at("materialGuid").get<std::uint64_t>()}};
                       }));
         table.emplace("LightComponentUVE", MakeRegistrationUVE<LightComponentUVE>([](const nlohmann::json& json) {
                           return LightComponentUVE{Vector3FromJsonUVE(json.at("color")),
