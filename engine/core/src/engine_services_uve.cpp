@@ -30,7 +30,8 @@ EngineServicesUVE::EngineServicesUVE(Debug::ILoggerUVE& logger, Utilities::ITime
                                       Render::IRenderDeviceUVE& renderDevice,
                                       Render::IRenderSystemUVE& renderSystem,
                                       Render::ICameraSystemUVE& cameraSystem,
-                                      Render::IMeshRendererUVE& meshRenderer) noexcept
+                                      Render::IMeshRendererUVE& meshRenderer,
+                                      Render::IRenderer3DUVE& renderer3D) noexcept
     : m_logger(&logger), m_timer(&timer), m_eventSystem(&eventSystem),
       m_memoryManager(&memoryManager), m_threadPool(&threadPool), m_commandLine(&commandLine),
       m_configManager(&configManager), m_entityManager(&entityManager), m_sceneGraph(&sceneGraph),
@@ -38,7 +39,7 @@ EngineServicesUVE::EngineServicesUVE(Debug::ILoggerUVE& logger, Utilities::ITime
       m_prefabSystem(&prefabSystem), m_hotReload(&hotReload), m_assetManager(&assetManager),
       m_assetImporter(&assetImporter), m_assetBundle(&assetBundle), m_fileSystem(&fileSystem),
       m_renderDevice(&renderDevice), m_renderSystem(&renderSystem), m_cameraSystem(&cameraSystem),
-      m_meshRenderer(&meshRenderer) {}
+      m_meshRenderer(&meshRenderer), m_renderer3D(&renderer3D) {}
 
 Debug::ILoggerUVE& EngineServicesUVE::GetLoggerUVE() const noexcept {
     return *m_logger;
@@ -122,6 +123,10 @@ Render::ICameraSystemUVE& EngineServicesUVE::GetCameraSystemUVE() const noexcept
 
 Render::IMeshRendererUVE& EngineServicesUVE::GetMeshRendererUVE() const noexcept {
     return *m_meshRenderer;
+}
+
+Render::IRenderer3DUVE& EngineServicesUVE::GetRenderer3DUVE() const noexcept {
+    return *m_renderer3D;
 }
 
 } // namespace UVE::Core

@@ -14,6 +14,7 @@ add_library(uve_render STATIC
     src/camera_system_uve.cpp
     src/render_queue_uve.cpp
     src/mesh_renderer_uve.cpp
+    src/renderer_3d_uve.cpp
 )
 target_include_directories(uve_render PUBLIC include)
 # uve_asset: IMeshRendererUVE/RenderItemUVE reference Asset::IAssetManagerUVE/IAssetDatabaseUVE/

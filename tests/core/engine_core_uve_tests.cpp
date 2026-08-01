@@ -9,6 +9,7 @@
 
 #include "uve/core/engine_core_uve.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -428,6 +429,65 @@ TEST(EngineCoreUVETest, CameraSystem_ReachableAndComputesViewProjectionAfterInit
 
     EXPECT_TRUE(
         frustum.IntersectsUVE(Math::AabbUVE::FromCenterExtentsUVE(Math::Vector3UVE{0.0F, 0.0F, 0.0F}, Math::Vector3UVE{1.0F, 1.0F, 1.0F})));
+
+    engine.Shutdown();
+}
+
+TEST(EngineCoreUVETest, Renderer3D_ReachableAfterInit_NoActiveCameraStillNoOps) {
+    EngineCoreUVE engine(MakeTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    static_cast<void>(engine.GetServicesUVE().GetRenderer3DUVE());
+    EXPECT_EQ(engine.GetActiveCameraUVE(), Scene::kInvalidEntityUVE);
+
+    auto memorySink = std::make_unique<Debug::MemorySinkUVE>();
+    Debug::MemorySinkUVE* const memorySinkPtr = memorySink.get();
+    engine.GetServicesUVE().GetLoggerUVE().AddSink(std::move(memorySink));
+
+    engine.TickFrameUVE();
+
+    const std::vector<Debug::LogMessageUVE> messages = memorySinkPtr->GetMessagesUVE();
+    const bool foundNoOpTrace =
+        std::any_of(messages.begin(), messages.end(), [](const Debug::LogMessageUVE& message) {
+            return message.message.starts_with("Render (no-op)");
+        });
+    EXPECT_TRUE(foundNoOpTrace);
+
+    engine.Shutdown();
+}
+
+TEST(EngineCoreUVETest, Renderer3D_ActiveCameraSet_RendersWithoutCrashing) {
+    EngineCoreUVE engine(MakeTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    Scene::IEntityManagerUVE& entityManager = engine.GetServicesUVE().GetEntityManagerUVE();
+    Scene::ISceneGraphUVE& sceneGraph = engine.GetServicesUVE().GetSceneGraphUVE();
+    const Scene::EntityUVE cameraEntity = entityManager.CreateEntityUVE();
+    Scene::TransformComponentUVE local;
+    local.localPosition = Math::Vector3UVE{0.0F, 0.0F, 5.0F};
+    sceneGraph.AttachTransformUVE(entityManager, cameraEntity, local);
+    sceneGraph.UpdateUVE(entityManager);
+    entityManager.AddComponentUVE<Scene::CameraComponentUVE>(cameraEntity);
+
+    engine.SetActiveCameraUVE(cameraEntity);
+    EXPECT_EQ(engine.GetActiveCameraUVE(), cameraEntity);
+
+    auto memorySink = std::make_unique<Debug::MemorySinkUVE>();
+    Debug::MemorySinkUVE* const memorySinkPtr = memorySink.get();
+    engine.GetServicesUVE().GetLoggerUVE().AddSink(std::move(memorySink));
+
+    engine.TickFrameUVE();
+
+    // With an active camera set, Render() no longer takes the no-op trace path — proves
+    // RenderFrameUVE() actually ran instead (an empty scene still begins+ends a render pass).
+    const std::vector<Debug::LogMessageUVE> messages = memorySinkPtr->GetMessagesUVE();
+    const bool foundNoOpTrace =
+        std::any_of(messages.begin(), messages.end(), [](const Debug::LogMessageUVE& message) {
+            return message.message.starts_with("Render (no-op)");
+        });
+    EXPECT_FALSE(foundNoOpTrace);
 
     engine.Shutdown();
 }

@@ -54,6 +54,7 @@ add_executable(uve_tests
     render/camera_system_uve_tests.cpp
     render/render_queue_uve_tests.cpp
     render/mesh_renderer_uve_tests.cpp
+    render/renderer_3d_uve_tests.cpp
     scene/entity_manager_uve_tests.cpp
     scene/scene_graph_uve_tests.cpp
     scene/scene_serializer_uve_tests.cpp

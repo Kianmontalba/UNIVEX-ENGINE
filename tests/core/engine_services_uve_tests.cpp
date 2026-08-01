@@ -39,6 +39,7 @@
 #include "uve/render/i_mesh_renderer_uve.h"
 #include "uve/render/i_render_device_uve.h"
 #include "uve/render/i_render_system_uve.h"
+#include "uve/render/i_renderer_3d_uve.h"
 #include "uve/scene/i_entity_manager_uve.h"
 #include "uve/scene/i_prefab_system_uve.h"
 #include "uve/scene/i_scene_graph_uve.h"
@@ -475,6 +476,13 @@ public:
     mutable int extractRenderQueueCallCount = 0;
 };
 
+class FakeRenderer3DUVE final : public Render::IRenderer3DUVE {
+public:
+    void RenderFrameUVE(Scene::IEntityManagerUVE&, Scene::EntityUVE) override { ++renderFrameCallCount; }
+
+    int renderFrameCallCount = 0;
+};
+
 TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     FakeLoggerUVE logger;
     FakeTimerUVE timer;
@@ -497,12 +505,14 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     FakeRenderSystemUVE renderSystem;
     FakeCameraSystemUVE cameraSystem;
     FakeMeshRendererUVE meshRenderer;
+    FakeRenderer3DUVE renderer3D;
 
     const EngineServicesUVE services(logger, timer, eventSystem, memoryManager, threadPool,
                                       commandLine, configManager, entityManager, sceneGraph,
                                       assetDatabase, sceneSerializer, prefabSystem, hotReload,
                                       assetManager, assetImporter, assetBundle, fileSystem,
-                                      renderDevice, renderSystem, cameraSystem, meshRenderer);
+                                      renderDevice, renderSystem, cameraSystem, meshRenderer,
+                                      renderer3D);
 
     EXPECT_EQ(&services.GetLoggerUVE(), &logger);
     EXPECT_EQ(&services.GetTimerUVE(), &timer);
@@ -525,6 +535,7 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     EXPECT_EQ(&services.GetRenderSystemUVE(), &renderSystem);
     EXPECT_EQ(&services.GetCameraSystemUVE(), &cameraSystem);
     EXPECT_EQ(&services.GetMeshRendererUVE(), &meshRenderer);
+    EXPECT_EQ(&services.GetRenderer3DUVE(), &renderer3D);
 }
 
 TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) {
@@ -549,11 +560,13 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     FakeRenderSystemUVE renderSystem;
     FakeCameraSystemUVE cameraSystem;
     FakeMeshRendererUVE meshRenderer;
+    FakeRenderer3DUVE renderer3D;
     const EngineServicesUVE services(logger, timer, eventSystem, memoryManager, threadPool,
                                       commandLine, configManager, entityManager, sceneGraph,
                                       assetDatabase, sceneSerializer, prefabSystem, hotReload,
                                       assetManager, assetImporter, assetBundle, fileSystem,
-                                      renderDevice, renderSystem, cameraSystem, meshRenderer);
+                                      renderDevice, renderSystem, cameraSystem, meshRenderer,
+                                      renderer3D);
 
     services.GetTimerUVE().Tick();
     services.GetEventSystemUVE().DispatchQueuedUVE();
@@ -582,6 +595,7 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     static_cast<void>(services.GetMeshRendererUVE().ExtractRenderQueueUVE(
         services.GetEntityManagerUVE(), services.GetAssetManagerUVE(), services.GetAssetDatabaseUVE(),
         Math::FrustumUVE{}));
+    services.GetRenderer3DUVE().RenderFrameUVE(services.GetEntityManagerUVE(), Scene::kInvalidEntityUVE);
 
     EXPECT_EQ(timer.tickCount, 1);
     EXPECT_EQ(eventSystem.dispatchCount, 1);
@@ -603,6 +617,7 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     EXPECT_EQ(renderSystem.beginFrameCallCount, 1);
     EXPECT_EQ(cameraSystem.computeViewCallCount, 1);
     EXPECT_EQ(meshRenderer.extractRenderQueueCallCount, 1);
+    EXPECT_EQ(renderer3D.renderFrameCallCount, 1);
 }
 
 } // namespace

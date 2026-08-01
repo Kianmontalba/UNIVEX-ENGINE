@@ -10,6 +10,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -86,6 +87,13 @@ struct EngineConfigUVE {
     /// tracked asset's on-disk modification time (see
     /// IHotReloadUVE::PollUVE()).
     double hotReloadPollIntervalSecondsUVE = 1.0;
+
+    /// Fixed dimensions, in pixels, of Renderer3DUVE's offscreen color/depth render target
+    /// (see Render::Renderer3DUVE). No WindowManagerUVE/swapchain exists yet in this sandbox to
+    /// resize against, so these are set once at Init() and cannot change for a running
+    /// EngineCoreUVE's lifetime.
+    std::uint32_t renderTargetWidth = 1280;
+    std::uint32_t renderTargetHeight = 720;
 };
 
 } // namespace UVE::Core
