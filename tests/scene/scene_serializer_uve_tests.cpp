@@ -25,6 +25,7 @@
 #include "uve/events/event_system_uve.h"
 #include "uve/math/vector3_uve.h"
 #include "uve/memory/memory_manager_uve.h"
+#include "uve/scene/components/audio_source_component_uve.h"
 #include "uve/scene/components/collider_component_uve.h"
 #include "uve/scene/components/hierarchy_component_uve.h"
 #include "uve/scene/components/light_component_uve.h"
@@ -98,6 +99,69 @@ TEST_F(SceneSerializerUVETest, SaveThenLoad_ColliderComponentUVE_RoundTripsFrict
     EXPECT_FLOAT_EQ(loaded.friction, 0.4F);
     EXPECT_FLOAT_EQ(loaded.restitution, 0.9F);
     EXPECT_FLOAT_EQ(loaded.density, 2.5F);
+
+    std::filesystem::remove(path);
+}
+
+TEST_F(SceneSerializerUVETest, SaveThenLoad_AudioSourceComponentUVE_RoundTripsAllFields) {
+    const EntityUVE entity = entityManager.CreateEntityUVE();
+    AudioSourceComponentUVE audioSource;
+    audioSource.audioAssetPath = "sounds/explosion.wav";
+    audioSource.volume = 0.6F;
+    audioSource.looping = true;
+    audioSource.pitch = 1.5F;
+    audioSource.spatial = false;
+    audioSource.minDistance = 2.0F;
+    audioSource.maxDistance = 50.0F;
+    audioSource.attenuationCurve = AudioAttenuationCurveUVE::InverseSquare;
+    audioSource.playOnAwake = false;
+    entityManager.AddComponentUVE<AudioSourceComponentUVE>(entity, audioSource);
+
+    const std::filesystem::path path = "uve_scene_serializer_tests_audio_source.uvescene";
+    std::filesystem::remove(path);
+    ASSERT_TRUE(serializer.SaveUVE(entityManager, {entity}, path, SceneAssetTypeUVE::Scene));
+
+    EntityManagerUVE loadedManager(memoryManager.GetDefaultAllocatorUVE(), eventSystem);
+    const std::vector<EntityUVE> roots = serializer.LoadUVE(loadedManager, path);
+    ASSERT_EQ(roots.size(), 1U);
+    const AudioSourceComponentUVE& loaded = loadedManager.GetComponentUVE<AudioSourceComponentUVE>(roots[0]);
+
+    EXPECT_EQ(loaded.audioAssetPath, "sounds/explosion.wav");
+    EXPECT_FLOAT_EQ(loaded.volume, 0.6F);
+    EXPECT_TRUE(loaded.looping);
+    EXPECT_FLOAT_EQ(loaded.pitch, 1.5F);
+    EXPECT_FALSE(loaded.spatial);
+    EXPECT_FLOAT_EQ(loaded.minDistance, 2.0F);
+    EXPECT_FLOAT_EQ(loaded.maxDistance, 50.0F);
+    EXPECT_EQ(loaded.attenuationCurve, AudioAttenuationCurveUVE::InverseSquare);
+    EXPECT_FALSE(loaded.playOnAwake);
+
+    std::filesystem::remove(path);
+}
+
+TEST_F(SceneSerializerUVETest, SaveThenLoad_AudioSourceComponentUVE_DefaultsRoundTripCorrectly) {
+    // Confirms every new field's default survives a save/load cycle, matching what a scene
+    // serialized before this increment's fields existed would fall back to on load, via the
+    // json.value(key, default) idiom in the fromJson registration.
+    const EntityUVE entity = entityManager.CreateEntityUVE();
+    entityManager.AddComponentUVE<AudioSourceComponentUVE>(entity, AudioSourceComponentUVE{});
+
+    const std::filesystem::path path = "uve_scene_serializer_tests_audio_source_defaults.uvescene";
+    std::filesystem::remove(path);
+    ASSERT_TRUE(serializer.SaveUVE(entityManager, {entity}, path, SceneAssetTypeUVE::Scene));
+
+    EntityManagerUVE loadedManager(memoryManager.GetDefaultAllocatorUVE(), eventSystem);
+    const std::vector<EntityUVE> roots = serializer.LoadUVE(loadedManager, path);
+    ASSERT_EQ(roots.size(), 1U);
+    const AudioSourceComponentUVE& loaded = loadedManager.GetComponentUVE<AudioSourceComponentUVE>(roots[0]);
+
+    EXPECT_FALSE(loaded.looping);
+    EXPECT_FLOAT_EQ(loaded.pitch, 1.0F);
+    EXPECT_TRUE(loaded.spatial);
+    EXPECT_FLOAT_EQ(loaded.minDistance, 1.0F);
+    EXPECT_FLOAT_EQ(loaded.maxDistance, 25.0F);
+    EXPECT_EQ(loaded.attenuationCurve, AudioAttenuationCurveUVE::Linear);
+    EXPECT_TRUE(loaded.playOnAwake);
 
     std::filesystem::remove(path);
 }

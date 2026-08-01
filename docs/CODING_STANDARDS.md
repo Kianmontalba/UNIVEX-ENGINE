@@ -24,6 +24,7 @@ subsystem area — **never** flat inside `UVE` directly:
 | `UVE::Render`     | `engine/render/`     | `IRenderDeviceUVE`, `NullRenderDeviceUVE`, `ICommandBufferUVE`, `RenderSystemUVE`, `CameraSystemUVE`, resource handles/descriptors |
 | `UVE::Physics`    | `engine/physics/`    | `CollisionSystemUVE`, `PhysicsSystemUVE`, `PhysicsMaterialUVE`, `RaycastSystemUVE`, `RaycastQueryUVE`/`RaycastHitUVE` |
 | `UVE::Input`      | `engine/input/`      | `InputSystemUVE`, `InputActionUVE`, `InputBindingUVE`, `KeyCodeUVE`, `MouseButtonUVE` |
+| `UVE::Audio`      | `engine/audio/`      | `IAudioDeviceUVE`, `NullAudioDeviceUVE`, `AudioSystemUVE`, `AudioSourceSystemUVE`, `AudioAttenuationModelUVE` |
 | `UVE::Core`       | `engine/core/`       | `EngineCoreUVE`, config, state, frame stats, version, services |
 
 Future systems (Physics, Animation, Audio, AI, Networking, Editor, ...) become sibling

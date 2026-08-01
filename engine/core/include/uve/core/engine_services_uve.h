@@ -15,6 +15,9 @@
 #include "uve/asset/i_asset_manager_uve.h"
 #include "uve/asset/i_file_system_uve.h"
 #include "uve/asset/i_hot_reload_uve.h"
+#include "uve/audio/i_audio_device_uve.h"
+#include "uve/audio/i_audio_source_system_uve.h"
+#include "uve/audio/i_audio_system_uve.h"
 #include "uve/commandline/i_command_line_uve.h"
 #include "uve/config/i_config_manager_uve.h"
 #include "uve/debug/i_logger_uve.h"
@@ -44,13 +47,13 @@ namespace UVE::Core {
 /// ConfigManager, EntityManager, SceneGraph, AssetDatabase, SceneSerializer,
 /// PrefabSystem, HotReload, AssetManager, AssetImporter, AssetBundle,
 /// FileSystem, RenderDevice, RenderSystem, CameraSystem, MeshRenderer,
-/// Renderer3D, CollisionSystem, PhysicsSystem, RaycastSystem, InputSystem),
-/// built once EngineCoreUVE has constructed all twenty-six. Any future
-/// subsystem that needs access to one of these should receive an
-/// EngineServicesUVE& (obtained from EngineCoreUVE::GetServicesUVE()) rather
-/// than a raw global pointer — the logging macros' internal active-instance
-/// pointer remains the one intentional exception to that rule (see
-/// docs/CODING_STANDARDS.md).
+/// Renderer3D, CollisionSystem, PhysicsSystem, RaycastSystem, InputSystem,
+/// AudioDevice, AudioSystem, AudioSourceSystem), built once EngineCoreUVE has
+/// constructed all twenty-nine. Any future subsystem that needs access to one
+/// of these should receive an EngineServicesUVE& (obtained from
+/// EngineCoreUVE::GetServicesUVE()) rather than a raw global pointer — the
+/// logging macros' internal active-instance pointer remains the one
+/// intentional exception to that rule (see docs/CODING_STANDARDS.md).
 /// Referenced through the
 /// ILoggerUVE/ITimerUVE/IEventSystemUVE/IMemoryManagerUVE/IThreadPoolUVE/
 /// ICommandLineUVE/IConfigManagerUVE/IEntityManagerUVE/ISceneGraphUVE/
@@ -58,8 +61,9 @@ namespace UVE::Core {
 /// IAssetManagerUVE/IAssetImporterUVE/IAssetBundleUVE/IFileSystemUVE/
 /// IRenderDeviceUVE/IRenderSystemUVE/ICameraSystemUVE/IMeshRendererUVE/
 /// IRenderer3DUVE/ICollisionSystemUVE/IPhysicsSystemUVE/IRaycastSystemUVE/
-/// IInputSystemUVE interfaces, not the concrete types, so a future
-/// substitute implementation of any of the twenty-six requires no change here.
+/// IInputSystemUVE/IAudioDeviceUVE/IAudioSystemUVE/IAudioSourceSystemUVE
+/// interfaces, not the concrete types, so a future substitute implementation
+/// of any of the twenty-nine requires no change here.
 /// Thread-safety: EngineServicesUVE itself holds only non-owning pointers
 /// and has no mutable state of its own; the thread-safety of each accessor
 /// is whatever the referenced service documents.
@@ -89,7 +93,10 @@ public:
                        Physics::ICollisionSystemUVE& collisionSystem,
                        Physics::IPhysicsSystemUVE& physicsSystem,
                        Physics::IRaycastSystemUVE& raycastSystem,
-                       Input::IInputSystemUVE& inputSystem) noexcept;
+                       Input::IInputSystemUVE& inputSystem,
+                       Audio::IAudioDeviceUVE& audioDevice,
+                       Audio::IAudioSystemUVE& audioSystem,
+                       Audio::IAudioSourceSystemUVE& audioSourceSystem) noexcept;
 
     [[nodiscard]] Debug::ILoggerUVE& GetLoggerUVE() const noexcept;
     [[nodiscard]] Utilities::ITimerUVE& GetTimerUVE() const noexcept;
@@ -117,6 +124,9 @@ public:
     [[nodiscard]] Physics::IPhysicsSystemUVE& GetPhysicsSystemUVE() const noexcept;
     [[nodiscard]] Physics::IRaycastSystemUVE& GetRaycastSystemUVE() const noexcept;
     [[nodiscard]] Input::IInputSystemUVE& GetInputSystemUVE() const noexcept;
+    [[nodiscard]] Audio::IAudioDeviceUVE& GetAudioDeviceUVE() const noexcept;
+    [[nodiscard]] Audio::IAudioSystemUVE& GetAudioSystemUVE() const noexcept;
+    [[nodiscard]] Audio::IAudioSourceSystemUVE& GetAudioSourceSystemUVE() const noexcept;
 
 private:
     Debug::ILoggerUVE* m_logger;
@@ -145,6 +155,9 @@ private:
     Physics::IPhysicsSystemUVE* m_physicsSystem;
     Physics::IRaycastSystemUVE* m_raycastSystem;
     Input::IInputSystemUVE* m_inputSystem;
+    Audio::IAudioDeviceUVE* m_audioDevice;
+    Audio::IAudioSystemUVE* m_audioSystem;
+    Audio::IAudioSourceSystemUVE* m_audioSourceSystem;
 };
 
 } // namespace UVE::Core

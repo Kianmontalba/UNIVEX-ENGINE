@@ -113,7 +113,15 @@ namespace {
 }
 
 [[nodiscard]] nlohmann::json ToJsonUVE(const AudioSourceComponentUVE& component) {
-    return {{"audioAssetPath", component.audioAssetPath}, {"volume", component.volume}};
+    return {{"audioAssetPath", component.audioAssetPath},
+            {"volume", component.volume},
+            {"looping", component.looping},
+            {"pitch", component.pitch},
+            {"spatial", component.spatial},
+            {"minDistance", component.minDistance},
+            {"maxDistance", component.maxDistance},
+            {"attenuationCurve", static_cast<std::uint8_t>(component.attenuationCurve)},
+            {"playOnAwake", component.playOnAwake}};
 }
 
 [[nodiscard]] nlohmann::json ToJsonUVE(const ScriptComponentUVE& component) {
@@ -194,8 +202,18 @@ template <typename T, typename FromJsonFunc>
                       }));
         table.emplace("AudioSourceComponentUVE",
                       MakeRegistrationUVE<AudioSourceComponentUVE>([](const nlohmann::json& json) {
-                          return AudioSourceComponentUVE{json.at("audioAssetPath").get<std::string>(),
-                                                          json.at("volume").get<float>()};
+                          AudioSourceComponentUVE source;
+                          source.audioAssetPath = json.at("audioAssetPath").get<std::string>();
+                          source.volume = json.at("volume").get<float>();
+                          source.looping = json.value("looping", false);
+                          source.pitch = json.value("pitch", 1.0F);
+                          source.spatial = json.value("spatial", true);
+                          source.minDistance = json.value("minDistance", 1.0F);
+                          source.maxDistance = json.value("maxDistance", 25.0F);
+                          source.attenuationCurve = static_cast<AudioAttenuationCurveUVE>(
+                              json.value("attenuationCurve", std::uint8_t{0}));
+                          source.playOnAwake = json.value("playOnAwake", true);
+                          return source;
                       }));
         table.emplace("ScriptComponentUVE", MakeRegistrationUVE<ScriptComponentUVE>([](const nlohmann::json& json) {
                           return ScriptComponentUVE{json.at("scriptAssetPath").get<std::string>()};

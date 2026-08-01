@@ -35,7 +35,10 @@ EngineServicesUVE::EngineServicesUVE(Debug::ILoggerUVE& logger, Utilities::ITime
                                       Physics::ICollisionSystemUVE& collisionSystem,
                                       Physics::IPhysicsSystemUVE& physicsSystem,
                                       Physics::IRaycastSystemUVE& raycastSystem,
-                                      Input::IInputSystemUVE& inputSystem) noexcept
+                                      Input::IInputSystemUVE& inputSystem,
+                                      Audio::IAudioDeviceUVE& audioDevice,
+                                      Audio::IAudioSystemUVE& audioSystem,
+                                      Audio::IAudioSourceSystemUVE& audioSourceSystem) noexcept
     : m_logger(&logger), m_timer(&timer), m_eventSystem(&eventSystem),
       m_memoryManager(&memoryManager), m_threadPool(&threadPool), m_commandLine(&commandLine),
       m_configManager(&configManager), m_entityManager(&entityManager), m_sceneGraph(&sceneGraph),
@@ -44,7 +47,8 @@ EngineServicesUVE::EngineServicesUVE(Debug::ILoggerUVE& logger, Utilities::ITime
       m_assetImporter(&assetImporter), m_assetBundle(&assetBundle), m_fileSystem(&fileSystem),
       m_renderDevice(&renderDevice), m_renderSystem(&renderSystem), m_cameraSystem(&cameraSystem),
       m_meshRenderer(&meshRenderer), m_renderer3D(&renderer3D), m_collisionSystem(&collisionSystem),
-      m_physicsSystem(&physicsSystem), m_raycastSystem(&raycastSystem), m_inputSystem(&inputSystem) {}
+      m_physicsSystem(&physicsSystem), m_raycastSystem(&raycastSystem), m_inputSystem(&inputSystem),
+      m_audioDevice(&audioDevice), m_audioSystem(&audioSystem), m_audioSourceSystem(&audioSourceSystem) {}
 
 Debug::ILoggerUVE& EngineServicesUVE::GetLoggerUVE() const noexcept {
     return *m_logger;
@@ -148,6 +152,18 @@ Physics::IRaycastSystemUVE& EngineServicesUVE::GetRaycastSystemUVE() const noexc
 
 Input::IInputSystemUVE& EngineServicesUVE::GetInputSystemUVE() const noexcept {
     return *m_inputSystem;
+}
+
+Audio::IAudioDeviceUVE& EngineServicesUVE::GetAudioDeviceUVE() const noexcept {
+    return *m_audioDevice;
+}
+
+Audio::IAudioSystemUVE& EngineServicesUVE::GetAudioSystemUVE() const noexcept {
+    return *m_audioSystem;
+}
+
+Audio::IAudioSourceSystemUVE& EngineServicesUVE::GetAudioSourceSystemUVE() const noexcept {
+    return *m_audioSourceSystem;
 }
 
 } // namespace UVE::Core
