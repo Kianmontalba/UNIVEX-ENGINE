@@ -160,6 +160,37 @@ matrix type.
 technique. They live in `engine/math`, not `engine/render`, specifically so a future
 `PhysicsSystemUVE` broad-phase can reuse them without depending on rendering at all.
 
+## Physics (`engine/physics/`)
+
+`engine/physics` links `uve_scene` (it needs `IEntityManagerUVE`, `ISceneGraphUVE`, and the
+built-in components); `engine/scene` must never link back to `uve_physics` — that would be a
+circular module dependency this codebase has never had (compare: `engine/render`/`engine/asset`
+depend on `engine/scene`, never the reverse). This has a concrete consequence for component
+design: physics-related data that needs to live on an ECS component (`RigidBodyComponentUVE`'s
+`velocity`/`drag`/`gravityScale`, `ColliderComponentUVE`'s `friction`/`restitution`/`density`) is
+always stored as **plain fields** (`float`, `Math::Vector3UVE`, ...) directly on the
+`UVE::Scene`-namespaced component — never as a `UVE::Physics`-namespaced type embedded by value,
+since that would force `engine/scene` to include an `engine/physics` header.
+
+When a `UVE::Physics` type is still useful for bundling that data outside the ECS (an internal
+combine/read helper, a query result a caller wants handed back to them), the resolving pattern is:
+a small, **derived, read-only value type that is constructed on demand from the component's plain
+fields and never written back to the ECS**. `PhysicsMaterialUVE` (Increment 16) is the concrete
+example — `ColliderComponentUVE.friction`/`.restitution`/`.density` are the actual stored data;
+`Physics::PhysicsMaterialUVE` (built via `MaterialOfUVE()`) is a transient snapshot used by
+`PhysicsSystemUVE`'s resolution math and returned to raycast callers via `RaycastHitUVE::material`
+— never the field type on `ColliderComponentUVE` itself. Reuse this shape for any future type
+(in `engine/render`, `engine/audio`, ...) that wants to summarize `engine/scene` data without
+`engine/scene` depending back on it.
+
+Iteration logic shared by more than one system in the same module (`CollisionSystemUVE` and
+`RaycastSystemUVE` both need "every entity's world-space AABB, cached once") belongs in a small
+internal helper under `include/uve/<module>/detail/` (see
+`Physics::Detail::BuildColliderWorldAabbCacheUVE`) — extracted the moment a second caller needs
+the same loop, not left duplicated. Anything under a `detail/` path is an implementation detail,
+not a stable public contract: it may be replaced wholesale (e.g. once a real BVH broad-phase
+lands) without that being a breaking change for anything outside the module that owns it.
+
 ## Virtual paths (`IFileSystemUVE`)
 
 `FileSystemUVE` (`engine/asset/`) resolves a **virtual path** — a forward-slash-separated

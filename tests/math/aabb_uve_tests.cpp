@@ -150,6 +150,75 @@ TEST(AabbUVETest, ComputePenetrationUVE_AxisPointsFromFirstTowardSecond) {
     EXPECT_NEAR(penetration->axis.x, -1.0F, kEpsilon);
 }
 
+TEST(AabbUVETest, IntersectRayUVE_DirectHitFromOutside_ReturnsDistanceAndNormal) {
+    const AabbUVE box{Vector3UVE{-1.0F, -1.0F, -1.0F}, Vector3UVE{1.0F, 1.0F, 1.0F}};
+    const RayUVE ray{Vector3UVE{-5.0F, 0.0F, 0.0F}, Vector3UVE{1.0F, 0.0F, 0.0F}};
+
+    const std::optional<RayHitUVE> hit = IntersectRayUVE(ray, box, 100.0F);
+
+    ASSERT_TRUE(hit.has_value());
+    EXPECT_NEAR(hit->distance, 4.0F, kEpsilon);
+    EXPECT_NEAR(hit->normal.x, -1.0F, kEpsilon);
+    EXPECT_NEAR(hit->normal.y, 0.0F, kEpsilon);
+    EXPECT_NEAR(hit->normal.z, 0.0F, kEpsilon);
+}
+
+TEST(AabbUVETest, IntersectRayUVE_HitFromBelow_ReturnsMinusYNormal) {
+    const AabbUVE box{Vector3UVE{-1.0F, -1.0F, -1.0F}, Vector3UVE{1.0F, 1.0F, 1.0F}};
+    const RayUVE ray{Vector3UVE{0.0F, -5.0F, 0.0F}, Vector3UVE{0.0F, 1.0F, 0.0F}};
+
+    const std::optional<RayHitUVE> hit = IntersectRayUVE(ray, box, 100.0F);
+
+    ASSERT_TRUE(hit.has_value());
+    EXPECT_NEAR(hit->distance, 4.0F, kEpsilon);
+    EXPECT_NEAR(hit->normal.y, -1.0F, kEpsilon);
+}
+
+TEST(AabbUVETest, IntersectRayUVE_PointingAwayFromBox_ReturnsNullopt) {
+    const AabbUVE box{Vector3UVE{-1.0F, -1.0F, -1.0F}, Vector3UVE{1.0F, 1.0F, 1.0F}};
+    const RayUVE ray{Vector3UVE{-5.0F, 0.0F, 0.0F}, Vector3UVE{-1.0F, 0.0F, 0.0F}};
+
+    EXPECT_FALSE(IntersectRayUVE(ray, box, 100.0F).has_value());
+}
+
+TEST(AabbUVETest, IntersectRayUVE_OriginInsideBox_ReturnsZeroDistance) {
+    const AabbUVE box{Vector3UVE{-1.0F, -1.0F, -1.0F}, Vector3UVE{1.0F, 1.0F, 1.0F}};
+    const RayUVE ray{Vector3UVE{0.0F, 0.0F, 0.0F}, Vector3UVE{1.0F, 0.0F, 0.0F}};
+
+    const std::optional<RayHitUVE> hit = IntersectRayUVE(ray, box, 100.0F);
+
+    ASSERT_TRUE(hit.has_value());
+    EXPECT_NEAR(hit->distance, 0.0F, kEpsilon);
+}
+
+TEST(AabbUVETest, IntersectRayUVE_ParallelToTwoSlabsWithinRange_StillHitsWithoutNaN) {
+    // direction.x == 0 and direction.y == 0 — exercises the dir-is-zero branch for two axes.
+    const AabbUVE box{Vector3UVE{-1.0F, -1.0F, -1.0F}, Vector3UVE{1.0F, 1.0F, 1.0F}};
+    const RayUVE ray{Vector3UVE{0.0F, 0.0F, -10.0F}, Vector3UVE{0.0F, 0.0F, 1.0F}};
+
+    const std::optional<RayHitUVE> hit = IntersectRayUVE(ray, box, 100.0F);
+
+    ASSERT_TRUE(hit.has_value());
+    EXPECT_TRUE(std::isfinite(hit->distance));
+    EXPECT_NEAR(hit->distance, 9.0F, kEpsilon);
+    EXPECT_NEAR(hit->normal.z, -1.0F, kEpsilon);
+}
+
+TEST(AabbUVETest, IntersectRayUVE_ParallelToSlabOutsideRange_ReturnsNulloptWithoutNaN) {
+    // direction.x == 0, but origin.x is outside the box's x-slab entirely — must miss cleanly.
+    const AabbUVE box{Vector3UVE{-1.0F, -1.0F, -1.0F}, Vector3UVE{1.0F, 1.0F, 1.0F}};
+    const RayUVE ray{Vector3UVE{5.0F, 0.0F, -10.0F}, Vector3UVE{0.0F, 0.0F, 1.0F}};
+
+    EXPECT_FALSE(IntersectRayUVE(ray, box, 100.0F).has_value());
+}
+
+TEST(AabbUVETest, IntersectRayUVE_HitBeyondMaxDistance_ReturnsNullopt) {
+    const AabbUVE box{Vector3UVE{-1.0F, -1.0F, -1.0F}, Vector3UVE{1.0F, 1.0F, 1.0F}};
+    const RayUVE ray{Vector3UVE{-5.0F, 0.0F, 0.0F}, Vector3UVE{1.0F, 0.0F, 0.0F}};
+
+    EXPECT_FALSE(IntersectRayUVE(ray, box, 2.0F).has_value()); // box starts at distance 4
+}
+
 TEST(AabbUVETest, ToStringUVE_ContainsMinAndMax) {
     const AabbUVE box{Vector3UVE{0.0F, 0.0F, 0.0F}, Vector3UVE{1.0F, 2.0F, 3.0F}};
     const std::string text = ToStringUVE(box);

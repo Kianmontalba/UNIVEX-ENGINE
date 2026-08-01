@@ -40,6 +40,8 @@ add_executable(uve_tests
     math/frustum_uve_tests.cpp
     physics/collision_system_uve_tests.cpp
     physics/physics_system_uve_tests.cpp
+    physics/physics_material_uve_tests.cpp
+    physics/raycast_system_uve_tests.cpp
     asset/asset_database_uve_tests.cpp
     asset/uve_file_envelope_uve_tests.cpp
     asset/asset_manager_uve_tests.cpp

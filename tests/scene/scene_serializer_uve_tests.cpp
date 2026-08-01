@@ -25,6 +25,7 @@
 #include "uve/events/event_system_uve.h"
 #include "uve/math/vector3_uve.h"
 #include "uve/memory/memory_manager_uve.h"
+#include "uve/scene/components/collider_component_uve.h"
 #include "uve/scene/components/hierarchy_component_uve.h"
 #include "uve/scene/components/light_component_uve.h"
 #include "uve/scene/components/mesh_component_uve.h"
@@ -69,6 +70,34 @@ TEST_F(SceneSerializerUVETest, SaveThenLoad_SingleEntityWithMultipleComponents_R
     EXPECT_TRUE(loadedManager.GetComponentUVE<LightComponentUVE>(loaded).color == expectedColor);
     EXPECT_FLOAT_EQ(loadedManager.GetComponentUVE<RigidBodyComponentUVE>(loaded).mass, 5.0F);
     EXPECT_TRUE(loadedManager.GetComponentUVE<RigidBodyComponentUVE>(loaded).isKinematic);
+
+    std::filesystem::remove(path);
+}
+
+TEST_F(SceneSerializerUVETest, SaveThenLoad_ColliderComponentUVE_RoundTripsFrictionRestitutionDensity) {
+    const EntityUVE entity = entityManager.CreateEntityUVE();
+    ColliderComponentUVE collider{Math::Vector3UVE{0.5F, 0.5F, 0.5F}};
+    collider.collisionLayer = 2;
+    collider.collisionMask = 0x0000FFFFU;
+    collider.friction = 0.4F;
+    collider.restitution = 0.9F;
+    collider.density = 2.5F;
+    entityManager.AddComponentUVE<ColliderComponentUVE>(entity, collider);
+
+    const std::filesystem::path path = "uve_scene_serializer_tests_collider.uvescene";
+    std::filesystem::remove(path);
+    ASSERT_TRUE(serializer.SaveUVE(entityManager, {entity}, path, SceneAssetTypeUVE::Scene));
+
+    EntityManagerUVE loadedManager(memoryManager.GetDefaultAllocatorUVE(), eventSystem);
+    const std::vector<EntityUVE> roots = serializer.LoadUVE(loadedManager, path);
+    ASSERT_EQ(roots.size(), 1U);
+    const ColliderComponentUVE& loaded = loadedManager.GetComponentUVE<ColliderComponentUVE>(roots[0]);
+
+    EXPECT_EQ(loaded.collisionLayer, 2U);
+    EXPECT_EQ(loaded.collisionMask, 0x0000FFFFU);
+    EXPECT_FLOAT_EQ(loaded.friction, 0.4F);
+    EXPECT_FLOAT_EQ(loaded.restitution, 0.9F);
+    EXPECT_FLOAT_EQ(loaded.density, 2.5F);
 
     std::filesystem::remove(path);
 }

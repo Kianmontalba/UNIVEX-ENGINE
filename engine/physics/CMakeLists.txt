@@ -8,8 +8,10 @@
 #------------------------------------------------------------------------------
 
 add_library(uve_physics STATIC
+    src/collider_world_aabb_cache_uve.cpp
     src/collision_system_uve.cpp
     src/physics_system_uve.cpp
+    src/raycast_system_uve.cpp
 )
 target_include_directories(uve_physics PUBLIC include)
 target_link_libraries(uve_physics PUBLIC uve_platform uve_debug uve_math uve_scene)

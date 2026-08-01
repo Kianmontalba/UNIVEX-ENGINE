@@ -98,7 +98,10 @@ namespace {
 [[nodiscard]] nlohmann::json ToJsonUVE(const ColliderComponentUVE& component) {
     return {{"halfExtents", ToJsonUVE(component.halfExtents)},
             {"collisionLayer", component.collisionLayer},
-            {"collisionMask", component.collisionMask}};
+            {"collisionMask", component.collisionMask},
+            {"friction", component.friction},
+            {"restitution", component.restitution},
+            {"density", component.density}};
 }
 
 [[nodiscard]] nlohmann::json ToJsonUVE(const RigidBodyComponentUVE& component) {
@@ -174,6 +177,9 @@ template <typename T, typename FromJsonFunc>
                           collider.halfExtents = Vector3FromJsonUVE(json.at("halfExtents"));
                           collider.collisionLayer = json.value("collisionLayer", std::uint32_t{1});
                           collider.collisionMask = json.value("collisionMask", std::uint32_t{0xFFFFFFFFU});
+                          collider.friction = json.value("friction", 0.0F);
+                          collider.restitution = json.value("restitution", 0.0F);
+                          collider.density = json.value("density", 1.0F);
                           return collider;
                       }));
         table.emplace("RigidBodyComponentUVE", MakeRegistrationUVE<RigidBodyComponentUVE>([](const nlohmann::json& json) {

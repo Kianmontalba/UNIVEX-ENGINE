@@ -30,11 +30,13 @@
 #include "uve/math/vector3_uve.h"
 #include "uve/physics/i_collision_system_uve.h"
 #include "uve/physics/i_physics_system_uve.h"
+#include "uve/physics/i_raycast_system_uve.h"
 #include "uve/platform/platform_uve.h"
 #include "uve/render/i_camera_system_uve.h"
 #include "uve/render/i_render_device_uve.h"
 #include "uve/render/i_render_system_uve.h"
 #include "uve/scene/components/camera_component_uve.h"
+#include "uve/scene/components/collider_component_uve.h"
 #include "uve/scene/components/mesh_component_uve.h"
 #include "uve/scene/components/rigid_body_component_uve.h"
 #include "uve/scene/components/transform_component_uve.h"
@@ -519,6 +521,33 @@ TEST(EngineCoreUVETest, PhysicsSystemAndCollisionSystem_ReachableAndFunctionalAf
     const Scene::WorldTransformComponentUVE& world =
         entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(entity);
     EXPECT_LT(world.worldPosition.y, 10.0F);
+
+    engine.Shutdown();
+}
+
+TEST(EngineCoreUVETest, RaycastSystem_ReachableAndFunctionalAfterInit) {
+    EngineCoreUVE engine(MakeTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    Scene::IEntityManagerUVE& entityManager = engine.GetServicesUVE().GetEntityManagerUVE();
+    Scene::ISceneGraphUVE& sceneGraph = engine.GetServicesUVE().GetSceneGraphUVE();
+    Physics::IRaycastSystemUVE& raycastSystem = engine.GetServicesUVE().GetRaycastSystemUVE();
+
+    const Scene::EntityUVE entity = entityManager.CreateEntityUVE();
+    Scene::TransformComponentUVE local;
+    local.localPosition = Math::Vector3UVE{5.0F, 0.0F, 0.0F};
+    sceneGraph.AttachTransformUVE(entityManager, entity, local);
+    sceneGraph.UpdateUVE(entityManager);
+    entityManager.AddComponentUVE<Scene::ColliderComponentUVE>(entity, Scene::ColliderComponentUVE{Math::Vector3UVE{1.0F, 1.0F, 1.0F}});
+
+    Physics::RaycastQueryUVE query;
+    query.ray = Math::RayUVE{Math::Vector3UVE{0.0F, 0.0F, 0.0F}, Math::Vector3UVE{1.0F, 0.0F, 0.0F}};
+    query.maxDistance = 100.0F;
+    const std::optional<Physics::RaycastHitUVE> hit = raycastSystem.RaycastUVE(entityManager, query);
+
+    ASSERT_TRUE(hit.has_value());
+    EXPECT_EQ(hit->entity, entity);
 
     engine.Shutdown();
 }

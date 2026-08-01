@@ -59,4 +59,50 @@ std::optional<PenetrationUVE> ComputePenetrationUVE(const AabbUVE& a, const Aabb
     return PenetrationUVE{Vector3UVE{0.0F, 0.0F, centerB.z >= centerA.z ? 1.0F : -1.0F}, overlapZ};
 }
 
+std::optional<RayHitUVE> IntersectRayUVE(const RayUVE& ray, const AabbUVE& aabb, float maxDistance) noexcept {
+    const std::array<float, 3> origin{ray.origin.x, ray.origin.y, ray.origin.z};
+    const std::array<float, 3> direction{ray.direction.x, ray.direction.y, ray.direction.z};
+    const std::array<float, 3> boxMin{aabb.min.x, aabb.min.y, aabb.min.z};
+    const std::array<float, 3> boxMax{aabb.max.x, aabb.max.y, aabb.max.z};
+
+    float tmin = 0.0F;
+    float tmax = maxDistance;
+    Vector3UVE normal{0.0F, 0.0F, 0.0F};
+
+    for (std::size_t axis = 0; axis < 3; ++axis) {
+        if (direction[axis] == 0.0F) {
+            if (origin[axis] < boxMin[axis] || origin[axis] > boxMax[axis]) {
+                return std::nullopt;
+            }
+            continue;
+        }
+
+        float tNear = (boxMin[axis] - origin[axis]) / direction[axis];
+        float tFar = (boxMax[axis] - origin[axis]) / direction[axis];
+        float nearSign = -1.0F;
+        if (tNear > tFar) {
+            std::swap(tNear, tFar);
+            nearSign = 1.0F;
+        }
+
+        if (tNear > tmin) {
+            tmin = tNear;
+            normal = Vector3UVE{0.0F, 0.0F, 0.0F};
+            if (axis == 0) {
+                normal.x = nearSign;
+            } else if (axis == 1) {
+                normal.y = nearSign;
+            } else {
+                normal.z = nearSign;
+            }
+        }
+        tmax = std::min(tmax, tFar);
+        if (tmin > tmax) {
+            return std::nullopt;
+        }
+    }
+
+    return RayHitUVE{tmin, normal};
+}
+
 } // namespace UVE::Math

@@ -13,39 +13,21 @@
 #include <optional>
 
 #include "uve/math/aabb_uve.h"
-#include "uve/scene/components/collider_component_uve.h"
-#include "uve/scene/components/world_transform_component_uve.h"
+#include "uve/physics/detail/collider_world_aabb_cache_uve.h"
 
 namespace UVE::Physics {
 
-namespace {
-
-/// One entity's world-space AABB, computed once per DetectCollisionsUVE() call and reused across
-/// every pairwise comparison — avoids recomputing the same AABB O(n) times per entity.
-struct EntityAabbUVE {
-    Scene::EntityUVE entity;
-    Math::AabbUVE worldAabb;
-};
-
-} // namespace
-
 std::vector<CollisionPairUVE> CollisionSystemUVE::DetectCollisionsUVE(Scene::IEntityManagerUVE& entityManager) const {
-    std::vector<EntityAabbUVE> entityAabbs;
-    entityManager.ForEachUVE<Scene::WorldTransformComponentUVE, Scene::ColliderComponentUVE>(
-        [&entityAabbs](Scene::EntityUVE entity, const Scene::WorldTransformComponentUVE& worldTransform,
-                       const Scene::ColliderComponentUVE& collider) {
-            entityAabbs.push_back(EntityAabbUVE{
-                entity, Math::AabbUVE::FromCenterExtentsUVE(worldTransform.worldPosition, collider.halfExtents)});
-        });
+    const std::vector<Detail::ColliderWorldAabbUVE> colliders = Detail::BuildColliderWorldAabbCacheUVE(entityManager);
 
     std::vector<CollisionPairUVE> pairs;
-    for (std::size_t i = 0; i < entityAabbs.size(); ++i) {
-        for (std::size_t j = i + 1; j < entityAabbs.size(); ++j) {
+    for (std::size_t i = 0; i < colliders.size(); ++i) {
+        for (std::size_t j = i + 1; j < colliders.size(); ++j) {
             const std::optional<Math::PenetrationUVE> penetration =
-                Math::ComputePenetrationUVE(entityAabbs[i].worldAabb, entityAabbs[j].worldAabb);
+                Math::ComputePenetrationUVE(colliders[i].worldAabb, colliders[j].worldAabb);
             if (penetration.has_value()) {
-                pairs.push_back(CollisionPairUVE{entityAabbs[i].entity, entityAabbs[j].entity, penetration->axis,
-                                                  penetration->depth});
+                pairs.push_back(
+                    CollisionPairUVE{colliders[i].entity, colliders[j].entity, penetration->axis, penetration->depth});
             }
         }
     }
