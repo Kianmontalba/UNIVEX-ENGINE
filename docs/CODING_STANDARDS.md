@@ -18,10 +18,12 @@ subsystem area — **never** flat inside `UVE` directly:
 | `UVE::Threading`  | `engine/threading/`  | `ThreadPoolUVE`, `JobCounterUVE`, `JobUVE`                       |
 | `UVE::CommandLine`| `engine/commandline/`| `CommandLineUVE` — startup argument parsing                    |
 | `UVE::Config`     | `engine/config/`     | `ConfigManagerUVE` — JSON-based `.uvesettings` key-value store  |
-| `UVE::Math`       | `engine/math/`       | `Vector3UVE`, `QuaternionUVE`, `Matrix4x4UVE`, `AabbUVE`, `PlaneUVE`, `FrustumUVE` |
+| `UVE::Math`       | `engine/math/`       | `Vector2UVE`, `Vector3UVE`, `QuaternionUVE`, `Matrix4x4UVE`, `AabbUVE`, `PlaneUVE`, `FrustumUVE`, `RayUVE` |
 | `UVE::Asset`      | `engine/asset/`      | `AssetGuidUVE`, `AssetDatabaseUVE`, `AssetManagerUVE`, `AssetImporterUVE`, `HotReloadUVE`, `AssetBundleUVE`, `FileSystemUVE`, the `.uve*` binary envelope |
 | `UVE::Scene`      | `engine/scene/`      | `EntityManagerUVE`, `SceneGraphUVE`, `ComponentUVE` + built-ins, `SceneSerializerUVE`, `PrefabSystemUVE` |
 | `UVE::Render`     | `engine/render/`     | `IRenderDeviceUVE`, `NullRenderDeviceUVE`, `ICommandBufferUVE`, `RenderSystemUVE`, `CameraSystemUVE`, resource handles/descriptors |
+| `UVE::Physics`    | `engine/physics/`    | `CollisionSystemUVE`, `PhysicsSystemUVE`, `PhysicsMaterialUVE`, `RaycastSystemUVE`, `RaycastQueryUVE`/`RaycastHitUVE` |
+| `UVE::Input`      | `engine/input/`      | `InputSystemUVE`, `InputActionUVE`, `InputBindingUVE`, `KeyCodeUVE`, `MouseButtonUVE` |
 | `UVE::Core`       | `engine/core/`       | `EngineCoreUVE`, config, state, frame stats, version, services |
 
 Future systems (Physics, Animation, Audio, AI, Networking, Editor, ...) become sibling

@@ -32,6 +32,7 @@ add_executable(uve_tests
     threading/thread_pool_uve_tests.cpp
     commandline/command_line_uve_tests.cpp
     config/config_manager_uve_tests.cpp
+    math/vector2_uve_tests.cpp
     math/vector3_uve_tests.cpp
     math/quaternion_uve_tests.cpp
     math/matrix4x4_uve_tests.cpp
@@ -42,6 +43,7 @@ add_executable(uve_tests
     physics/physics_system_uve_tests.cpp
     physics/physics_material_uve_tests.cpp
     physics/raycast_system_uve_tests.cpp
+    input/input_system_uve_tests.cpp
     asset/asset_database_uve_tests.cpp
     asset/uve_file_envelope_uve_tests.cpp
     asset/asset_manager_uve_tests.cpp
@@ -82,6 +84,7 @@ target_link_libraries(uve_tests PRIVATE
     uve_scene
     uve_physics
     uve_render
+    uve_input
     uve_core
     GTest::gtest
     GTest::gtest_main

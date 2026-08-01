@@ -32,6 +32,7 @@
 #include "uve/config/i_config_manager_uve.h"
 #include "uve/debug/i_logger_uve.h"
 #include "uve/events/i_event_system_uve.h"
+#include "uve/input/i_input_system_uve.h"
 #include "uve/math/frustum_uve.h"
 #include "uve/math/matrix4x4_uve.h"
 #include "uve/memory/i_memory_manager_uve.h"
@@ -515,6 +516,34 @@ public:
     mutable int raycastCallCount = 0;
 };
 
+class FakeInputSystemUVE final : public Input::IInputSystemUVE {
+public:
+    void SetKeyStateUVE(Input::KeyCodeUVE, bool) override {}
+    void SetMouseButtonStateUVE(Input::MouseButtonUVE, bool) override {}
+    void SetMousePositionUVE(Math::Vector2UVE) override {}
+    void SetMouseScrollDeltaUVE(float) override {}
+    void UpdateUVE() override { ++updateCallCount; }
+
+    [[nodiscard]] bool IsKeyDownUVE(Input::KeyCodeUVE) const override { return false; }
+    [[nodiscard]] bool WasKeyPressedThisFrameUVE(Input::KeyCodeUVE) const override { return false; }
+    [[nodiscard]] bool WasKeyReleasedThisFrameUVE(Input::KeyCodeUVE) const override { return false; }
+    [[nodiscard]] bool IsMouseButtonDownUVE(Input::MouseButtonUVE) const override { return false; }
+    [[nodiscard]] bool WasMouseButtonPressedThisFrameUVE(Input::MouseButtonUVE) const override { return false; }
+    [[nodiscard]] bool WasMouseButtonReleasedThisFrameUVE(Input::MouseButtonUVE) const override { return false; }
+    [[nodiscard]] Math::Vector2UVE GetMousePositionUVE() const override { return {}; }
+    [[nodiscard]] Math::Vector2UVE GetMouseDeltaUVE() const override { return {}; }
+    [[nodiscard]] float GetMouseScrollDeltaUVE() const override { return 0.0F; }
+
+    void RegisterActionUVE(Input::InputActionUVE&&) override {}
+    bool UnregisterActionUVE(std::string_view) override { return false; }
+    [[nodiscard]] bool IsActionTriggeredUVE(std::string_view) const override { return false; }
+    [[nodiscard]] bool IsActionHeldUVE(std::string_view) const override { return false; }
+    [[nodiscard]] bool IsActionReleasedUVE(std::string_view) const override { return false; }
+    [[nodiscard]] float GetAxisValueUVE(std::string_view) const override { return 0.0F; }
+
+    int updateCallCount = 0;
+};
+
 TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     FakeLoggerUVE logger;
     FakeTimerUVE timer;
@@ -541,13 +570,15 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     FakeCollisionSystemUVE collisionSystem;
     FakePhysicsSystemUVE physicsSystem;
     FakeRaycastSystemUVE raycastSystem;
+    FakeInputSystemUVE inputSystem;
 
     const EngineServicesUVE services(logger, timer, eventSystem, memoryManager, threadPool,
                                       commandLine, configManager, entityManager, sceneGraph,
                                       assetDatabase, sceneSerializer, prefabSystem, hotReload,
                                       assetManager, assetImporter, assetBundle, fileSystem,
                                       renderDevice, renderSystem, cameraSystem, meshRenderer,
-                                      renderer3D, collisionSystem, physicsSystem, raycastSystem);
+                                      renderer3D, collisionSystem, physicsSystem, raycastSystem,
+                                      inputSystem);
 
     EXPECT_EQ(&services.GetLoggerUVE(), &logger);
     EXPECT_EQ(&services.GetTimerUVE(), &timer);
@@ -574,6 +605,7 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     EXPECT_EQ(&services.GetCollisionSystemUVE(), &collisionSystem);
     EXPECT_EQ(&services.GetPhysicsSystemUVE(), &physicsSystem);
     EXPECT_EQ(&services.GetRaycastSystemUVE(), &raycastSystem);
+    EXPECT_EQ(&services.GetInputSystemUVE(), &inputSystem);
 }
 
 TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) {
@@ -602,12 +634,14 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     FakeCollisionSystemUVE collisionSystem;
     FakePhysicsSystemUVE physicsSystem;
     FakeRaycastSystemUVE raycastSystem;
+    FakeInputSystemUVE inputSystem;
     const EngineServicesUVE services(logger, timer, eventSystem, memoryManager, threadPool,
                                       commandLine, configManager, entityManager, sceneGraph,
                                       assetDatabase, sceneSerializer, prefabSystem, hotReload,
                                       assetManager, assetImporter, assetBundle, fileSystem,
                                       renderDevice, renderSystem, cameraSystem, meshRenderer,
-                                      renderer3D, collisionSystem, physicsSystem, raycastSystem);
+                                      renderer3D, collisionSystem, physicsSystem, raycastSystem,
+                                      inputSystem);
 
     services.GetTimerUVE().Tick();
     services.GetEventSystemUVE().DispatchQueuedUVE();
@@ -638,6 +672,7 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
         Math::FrustumUVE{}));
     services.GetRenderer3DUVE().RenderFrameUVE(services.GetEntityManagerUVE(), Scene::kInvalidEntityUVE);
     static_cast<void>(services.GetRaycastSystemUVE().RaycastUVE(services.GetEntityManagerUVE(), Physics::RaycastQueryUVE{}));
+    services.GetInputSystemUVE().UpdateUVE();
 
     EXPECT_EQ(timer.tickCount, 1);
     EXPECT_EQ(eventSystem.dispatchCount, 1);
@@ -661,6 +696,7 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     EXPECT_EQ(meshRenderer.extractRenderQueueCallCount, 1);
     EXPECT_EQ(renderer3D.renderFrameCallCount, 1);
     EXPECT_EQ(raycastSystem.raycastCallCount, 1);
+    EXPECT_EQ(inputSystem.updateCallCount, 1);
 }
 
 } // namespace

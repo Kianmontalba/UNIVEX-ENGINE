@@ -28,6 +28,7 @@
 #include "uve/debug/logger_uve.h"
 #include "uve/debug/logging_macros_uve.h"
 #include "uve/events/event_system_uve.h"
+#include "uve/input/input_system_uve.h"
 #include "uve/memory/memory_manager_uve.h"
 #include "uve/physics/collision_system_uve.h"
 #include "uve/physics/physics_system_uve.h"
@@ -200,6 +201,10 @@ void EngineCoreUVE::Init() {
     // RaycastSystem twenty-fourth: stateless, no dependencies of its own.
     m_raycastSystem = std::make_unique<Physics::RaycastSystemUVE>();
 
+    // InputSystem twenty-fifth: needs only EventSystem (composed by reference, to queue
+    // InputActionTriggeredEventUVE), already available.
+    m_inputSystem = std::make_unique<Input::InputSystemUVE>(*m_eventSystem);
+
     // ConfigManager last: it immediately calls LoadUVE(), which logs its
     // outcome (missing/malformed/success) through the Logger constructed
     // above — so Logger must already exist by this point.
@@ -212,7 +217,8 @@ void EngineCoreUVE::Init() {
                         *m_assetDatabase, *m_sceneSerializer, *m_prefabSystem, *m_hotReload,
                         *m_assetManager, *m_assetImporter, *m_assetBundle, *m_fileSystem,
                         *m_renderDevice, *m_renderSystem, *m_cameraSystem, *m_meshRenderer,
-                        *m_renderer3D, *m_collisionSystem, *m_physicsSystem, *m_raycastSystem);
+                        *m_renderer3D, *m_collisionSystem, *m_physicsSystem, *m_raycastSystem,
+                        *m_inputSystem);
 
     TransitionStateUVE(EngineStateUVE::Running);
     UVE_INFO("EngineCoreUVE: initialized");
@@ -233,6 +239,8 @@ void EngineCoreUVE::BeginFrame() {
 }
 
 void EngineCoreUVE::Update() {
+    m_inputSystem->UpdateUVE();
+
     const Utilities::FixedStepResultUVE fixedStep = m_timer->AdvanceFixedStepUVE();
     UVE_TRACE("Update: {} fixed step(s), alpha={}", fixedStep.stepsToRun, fixedStep.alpha);
     m_eventSystem->DispatchQueuedUVE();
@@ -311,7 +319,7 @@ void EngineCoreUVE::Shutdown() {
     UVE_INFO("EngineCoreUVE: shutting down");
 
     // Exact reverse of Init()'s construction order: ConfigManager, then
-    // RaycastSystem, then PhysicsSystem, then CollisionSystem, then Renderer3D, then MeshRenderer, then CameraSystem, then RenderSystem, then RenderDevice,
+    // InputSystem, then RaycastSystem, then PhysicsSystem, then CollisionSystem, then Renderer3D, then MeshRenderer, then CameraSystem, then RenderSystem, then RenderDevice,
     // then FileSystem, then AssetBundle, then AssetImporter, then
     // AssetManager (its destructor blocks until every in-flight load job
     // finishes), then HotReload, then PrefabSystem, then SceneSerializer,
@@ -321,6 +329,7 @@ void EngineCoreUVE::Shutdown() {
     // logger itself is torn down, so it is guaranteed to be recorded.
     m_services.reset();
     m_configManager.reset();
+    m_inputSystem.reset();
     m_raycastSystem.reset();
     m_physicsSystem.reset();
     m_collisionSystem.reset();

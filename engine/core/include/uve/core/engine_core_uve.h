@@ -28,6 +28,7 @@
 #include "uve/core/version_uve.h"
 #include "uve/debug/i_logger_uve.h"
 #include "uve/events/i_event_system_uve.h"
+#include "uve/input/i_input_system_uve.h"
 #include "uve/memory/i_memory_manager_uve.h"
 #include "uve/physics/i_collision_system_uve.h"
 #include "uve/physics/i_physics_system_uve.h"
@@ -51,9 +52,9 @@ namespace UVE::Core {
 /// AssetDatabase, SceneSerializer, PrefabSystem, HotReload, AssetManager,
 /// AssetImporter, AssetBundle, FileSystem, RenderDevice, RenderSystem,
 /// CameraSystem, MeshRenderer, Renderer3D, CollisionSystem, PhysicsSystem,
-/// RaycastSystem, ConfigManager) and drives the canonical engine lifecycle:
-/// Init -> Load -> N x (BeginFrame -> Update -> LateUpdate -> Render ->
-/// EndFrame) -> Shutdown. Render() calls Renderer3DUVE::RenderFrameUVE()
+/// RaycastSystem, InputSystem, ConfigManager) and drives the canonical engine
+/// lifecycle: Init -> Load -> N x (BeginFrame -> Update -> LateUpdate ->
+/// Render -> EndFrame) -> Shutdown. Render() calls Renderer3DUVE::RenderFrameUVE()
 /// (extract -> cull -> sort -> record -> submit) whenever
 /// SetActiveCameraUVE() has set a valid camera entity; with no active camera
 /// set (the default, and every test/sample app predating Increment 14), it
@@ -66,6 +67,11 @@ namespace UVE::Core {
 /// needed. RaycastSystemUVE (Increment 16) is a stateless, on-demand query
 /// service — like CameraSystem/MeshRenderer, it has no Update()-loop hook
 /// of its own; callers reach it via GetServicesUVE().GetRaycastSystemUVE().
+/// InputSystemUVE (Increment 17) is stateful and IS driven every frame —
+/// Update()'s very first statement is InputSystemUVE::UpdateUVE(), so this
+/// frame's key/mouse edge state and action-triggered events are settled
+/// before the fixed-timestep accumulator, event dispatch, or physics steps
+/// that follow it in the same call.
 /// Thread-safety: not thread-safe. Every method here is intended to be
 /// called from a single "engine" thread. The services EngineCoreUVE owns
 /// each document their own thread-safety contract independently (e.g.
@@ -83,7 +89,7 @@ public:
     /// ThreadPool, Timer, EventSystem, EntityManager, SceneGraph,
     /// AssetDatabase, SceneSerializer, PrefabSystem, HotReload, AssetManager,
     /// AssetImporter, AssetBundle, FileSystem, RenderDevice, RenderSystem,
-    /// CameraSystem, MeshRenderer, Renderer3D, CollisionSystem, PhysicsSystem, RaycastSystem, and ConfigManager in that order (CommandLine first — it
+    /// CameraSystem, MeshRenderer, Renderer3D, CollisionSystem, PhysicsSystem, RaycastSystem, InputSystem, and ConfigManager in that order (CommandLine first — it
     /// has no dependencies of its own; Logger second — every later step and
     /// every other system may need to log or UVE_ASSERT during its own
     /// setup; EntityManager right after EventSystem, since it needs
@@ -113,9 +119,11 @@ public:
     /// own; PhysicsSystem right after, needing only CollisionSystem (and
     /// EngineConfigUVE::gravity, already available); RaycastSystem right
     /// after, stateless with no dependencies of its own (grouped with the
-    /// rest of engine/physics); ConfigManager last, so
+    /// rest of engine/physics); InputSystem right after, needing only
+    /// EventSystem (composed by reference, to queue InputActionTriggeredEventUVE);
+    /// ConfigManager last, so
     /// its LoadUVE() call can log through the already-initialized Logger),
-    /// then builds EngineServicesUVE from all twenty-five. Transitions
+    /// then builds EngineServicesUVE from all twenty-six. Transitions
     /// Uninitialized -> Initializing -> Running.
     void Init();
 
@@ -143,7 +151,7 @@ public:
     void RequestQuitUVE() noexcept;
 
     /// Transitions Running -> ShuttingDown -> Shutdown, tearing down
-    /// ConfigManager, then RaycastSystem, then PhysicsSystem, then CollisionSystem, then Renderer3D, then MeshRenderer, then CameraSystem, then RenderSystem, then
+    /// ConfigManager, then InputSystem, then RaycastSystem, then PhysicsSystem, then CollisionSystem, then Renderer3D, then MeshRenderer, then CameraSystem, then RenderSystem, then
     /// RenderDevice, then FileSystem, then AssetBundle, then AssetImporter,
     /// then AssetManager (its destructor blocks until every in-flight load
     /// job finishes), then HotReload, then PrefabSystem, then
@@ -178,7 +186,7 @@ public:
     /// SceneGraph/AssetDatabase/SceneSerializer/PrefabSystem/HotReload/
     /// AssetManager/AssetImporter/AssetBundle/FileSystem/RenderDevice/
     /// RenderSystem/CameraSystem/MeshRenderer/Renderer3D/CollisionSystem/
-    /// PhysicsSystem/RaycastSystem references. Valid only between Init() and Shutdown().
+    /// PhysicsSystem/RaycastSystem/InputSystem references. Valid only between Init() and Shutdown().
     [[nodiscard]] EngineServicesUVE& GetServicesUVE();
 
     /// Returns this build's engine version — the single source of truth
@@ -198,7 +206,10 @@ private:
     /// frame's start instant (used by EndFrame() to compute frameTime).
     void BeginFrame();
 
-    /// Advances the fixed-timestep accumulator, dispatches every event
+    /// First calls InputSystemUVE::UpdateUVE() — settling this frame's key/mouse edge state and
+    /// queueing any newly-triggered action's InputActionTriggeredEventUVE — before anything else,
+    /// so the event dispatch that follows in this same call delivers it same-frame. Then advances
+    /// the fixed-timestep accumulator, dispatches every event
     /// queued via IEventSystemUVE::QueueEvent() since the last dispatch,
     /// runs zero or more PhysicsSystemUVE::StepUVE() calls (one per whole
     /// fixed step FixedStepResultUVE::stepsToRun reports this frame — zero
@@ -257,6 +268,7 @@ private:
     std::unique_ptr<Physics::ICollisionSystemUVE> m_collisionSystem;
     std::unique_ptr<Physics::IPhysicsSystemUVE> m_physicsSystem;
     std::unique_ptr<Physics::IRaycastSystemUVE> m_raycastSystem;
+    std::unique_ptr<Input::IInputSystemUVE> m_inputSystem;
     std::unique_ptr<Config::IConfigManagerUVE> m_configManager;
     std::optional<EngineServicesUVE> m_services;
 
