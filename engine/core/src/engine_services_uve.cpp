@@ -28,6 +28,7 @@ EngineServicesUVE::EngineServicesUVE(Debug::ILoggerUVE& logger, Utilities::ITime
                                       Asset::IAssetBundleUVE& assetBundle,
                                       Asset::IFileSystemUVE& fileSystem,
                                       Render::IRenderDeviceUVE& renderDevice,
+                                      Render::Shader::IShaderManagerUVE& shaderManager,
                                       Render::IRenderSystemUVE& renderSystem,
                                       Render::ICameraSystemUVE& cameraSystem,
                                       Render::IMeshRendererUVE& meshRenderer,
@@ -48,7 +49,8 @@ EngineServicesUVE::EngineServicesUVE(Debug::ILoggerUVE& logger, Utilities::ITime
       m_assetDatabase(&assetDatabase), m_sceneSerializer(&sceneSerializer),
       m_prefabSystem(&prefabSystem), m_hotReload(&hotReload), m_assetManager(&assetManager),
       m_assetImporter(&assetImporter), m_assetBundle(&assetBundle), m_fileSystem(&fileSystem),
-      m_renderDevice(&renderDevice), m_renderSystem(&renderSystem), m_cameraSystem(&cameraSystem),
+      m_renderDevice(&renderDevice), m_shaderManager(&shaderManager), m_renderSystem(&renderSystem),
+      m_cameraSystem(&cameraSystem),
       m_meshRenderer(&meshRenderer), m_renderer3D(&renderer3D), m_collisionSystem(&collisionSystem),
       m_physicsSystem(&physicsSystem), m_raycastSystem(&raycastSystem), m_inputSystem(&inputSystem),
       m_audioDevice(&audioDevice), m_audioSystem(&audioSystem), m_audioSourceSystem(&audioSourceSystem),
@@ -125,6 +127,10 @@ Asset::IFileSystemUVE& EngineServicesUVE::GetFileSystemUVE() const noexcept {
 
 Render::IRenderDeviceUVE& EngineServicesUVE::GetRenderDeviceUVE() const noexcept {
     return *m_renderDevice;
+}
+
+Render::Shader::IShaderManagerUVE& EngineServicesUVE::GetShaderManagerUVE() const noexcept {
+    return *m_shaderManager;
 }
 
 Render::IRenderSystemUVE& EngineServicesUVE::GetRenderSystemUVE() const noexcept {

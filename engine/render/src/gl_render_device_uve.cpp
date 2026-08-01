@@ -71,8 +71,73 @@ struct GlTextureFormatUVE {
             return GL_FRAGMENT_SHADER;
         case ShaderStageUVE::Compute:
             return GL_COMPUTE_SHADER;
+        case ShaderStageUVE::Geometry:
+            return GL_GEOMETRY_SHADER;
     }
     return GL_VERTEX_SHADER;
+}
+
+/// Maps a GLenum uniform type (as reported by glGetActiveUniform) to the engine-native
+/// ShaderDataTypeUVE. Every sampler type (2D, cube, array, ...) reports as Int, since a sampler
+/// uniform is always set the same way as a plain int - the texture unit index (glUniform1i) -
+/// regardless of which concrete sampler type it is; this engine has no per-sampler-type SetUVE
+/// overload to distinguish them anyway (matches basic_3d_textured.glsl's placeholder-only role
+/// this increment - no real texture binding exists yet for this to matter in practice).
+[[nodiscard]] ShaderDataTypeUVE GlUniformTypeToShaderDataTypeUVE(GLenum glType) noexcept {
+    switch (glType) {
+        case GL_FLOAT:
+            return ShaderDataTypeUVE::Float;
+        case GL_FLOAT_VEC2:
+            return ShaderDataTypeUVE::Vec2;
+        case GL_FLOAT_VEC3:
+            return ShaderDataTypeUVE::Vec3;
+        case GL_FLOAT_VEC4:
+            return ShaderDataTypeUVE::Vec4;
+        case GL_FLOAT_MAT3:
+            return ShaderDataTypeUVE::Mat3;
+        case GL_FLOAT_MAT4:
+            return ShaderDataTypeUVE::Mat4;
+        case GL_BOOL:
+            return ShaderDataTypeUVE::Bool;
+        case GL_INT:
+        default:
+            return ShaderDataTypeUVE::Int;
+    }
+}
+
+/// Reflects every active uniform in `glProgram` (already linked) into `outUniforms`, keyed by
+/// name with a trailing "[0]" (glGetActiveUniform's own convention for the first element of an
+/// array uniform) stripped so callers can address an array uniform by its bare declared name.
+void ReflectPipelineUniformsUVE(
+    const Detail::GlFunctionsUVE& gl, GLuint glProgram,
+    std::unordered_map<std::string, Detail::GlDeviceStateUVE::PipelineRecordUVE::UniformRecordUVE>& outUniforms) {
+    outUniforms.clear();
+
+    GLint activeUniformCount = 0;
+    gl.glGetProgramiv(glProgram, GL_ACTIVE_UNIFORMS, &activeUniformCount);
+    GLint maxNameLength = 0;
+    gl.glGetProgramiv(glProgram, GL_ACTIVE_UNIFORM_MAX_LENGTH, &maxNameLength);
+    if (activeUniformCount <= 0 || maxNameLength <= 0) {
+        return;
+    }
+
+    std::string nameBuffer(static_cast<std::size_t>(maxNameLength), '\0');
+    for (GLint index = 0; index < activeUniformCount; ++index) {
+        GLsizei writtenLength = 0;
+        GLint arraySize = 0;
+        GLenum glType = 0;
+        gl.glGetActiveUniform(glProgram, static_cast<GLuint>(index), maxNameLength, &writtenLength, &arraySize,
+                               &glType, nameBuffer.data());
+        std::string name(nameBuffer.data(), static_cast<std::size_t>(writtenLength));
+        if (name.size() > 3 && name.compare(name.size() - 3, 3, "[0]") == 0) {
+            name.resize(name.size() - 3);
+        }
+
+        const GLint location = gl.glGetUniformLocation(glProgram, name.c_str());
+        outUniforms.emplace(std::move(name), Detail::GlDeviceStateUVE::PipelineRecordUVE::UniformRecordUVE{
+                                                  GlUniformTypeToShaderDataTypeUVE(glType), location,
+                                                  static_cast<std::uint32_t>(arraySize)});
+    }
 }
 
 [[nodiscard]] std::string GetShaderInfoLogUVE(const Detail::GlFunctionsUVE& gl, GLuint shader) {
@@ -197,7 +262,7 @@ void GlRenderDeviceUVE::DestroyTextureUVE(TextureHandleUVE texture) {
     m_impl->state.textures.erase(it);
 }
 
-ShaderHandleUVE GlRenderDeviceUVE::CreateShaderUVE(const ShaderDescUVE& desc) {
+ShaderHandleUVE GlRenderDeviceUVE::CreateShaderUVE(const ShaderDescUVE& desc, std::string* outInfoLog) {
     const GLenum stage = ShaderStageToGlUVE(desc.stage);
     const GLuint glShader = m_impl->state.gl.glCreateShader(stage);
 
@@ -206,11 +271,15 @@ ShaderHandleUVE GlRenderDeviceUVE::CreateShaderUVE(const ShaderDescUVE& desc) {
     m_impl->state.gl.glShaderSource(glShader, 1, &sourcePointer, &sourceLength);
     m_impl->state.gl.glCompileShader(glShader);
 
+    const std::string infoLog = GetShaderInfoLogUVE(m_impl->state.gl, glShader);
+    if (outInfoLog != nullptr) {
+        *outInfoLog = infoLog;
+    }
+
     GLint compiled = GL_FALSE;
     m_impl->state.gl.glGetShaderiv(glShader, GL_COMPILE_STATUS, &compiled);
     if (compiled == GL_FALSE) {
-        UVE_ERROR("GlRenderDeviceUVE: CreateShaderUVE compilation failed: {}",
-                   GetShaderInfoLogUVE(m_impl->state.gl, glShader));
+        UVE_ERROR("GlRenderDeviceUVE: CreateShaderUVE compilation failed: {}", infoLog);
         m_impl->state.gl.glDeleteShader(glShader);
         return kInvalidShaderHandleUVE;
     }
@@ -231,7 +300,7 @@ void GlRenderDeviceUVE::DestroyShaderUVE(ShaderHandleUVE shader) {
     m_impl->state.shaders.erase(it);
 }
 
-PipelineHandleUVE GlRenderDeviceUVE::CreatePipelineUVE(const PipelineDescUVE& desc) {
+PipelineHandleUVE GlRenderDeviceUVE::CreatePipelineUVE(const PipelineDescUVE& desc, std::string* outInfoLog) {
     const auto vertexIt = m_impl->state.shaders.find(desc.vertexShader.value);
     const auto fragmentIt = m_impl->state.shaders.find(desc.fragmentShader.value);
     if (vertexIt == m_impl->state.shaders.end() || fragmentIt == m_impl->state.shaders.end()) {
@@ -244,11 +313,15 @@ PipelineHandleUVE GlRenderDeviceUVE::CreatePipelineUVE(const PipelineDescUVE& de
     m_impl->state.gl.glAttachShader(glProgram, fragmentIt->second.glShader);
     m_impl->state.gl.glLinkProgram(glProgram);
 
+    const std::string infoLog = GetProgramInfoLogUVE(m_impl->state.gl, glProgram);
+    if (outInfoLog != nullptr) {
+        *outInfoLog = infoLog;
+    }
+
     GLint linked = GL_FALSE;
     m_impl->state.gl.glGetProgramiv(glProgram, GL_LINK_STATUS, &linked);
     if (linked == GL_FALSE) {
-        UVE_ERROR("GlRenderDeviceUVE: CreatePipelineUVE link failed: {}",
-                   GetProgramInfoLogUVE(m_impl->state.gl, glProgram));
+        UVE_ERROR("GlRenderDeviceUVE: CreatePipelineUVE link failed: {}", infoLog);
         m_impl->state.gl.glDeleteProgram(glProgram);
         return kInvalidPipelineHandleUVE;
     }
@@ -256,10 +329,12 @@ PipelineHandleUVE GlRenderDeviceUVE::CreatePipelineUVE(const PipelineDescUVE& de
     GLuint glVao = 0;
     m_impl->state.gl.glGenVertexArrays(1, &glVao);
 
+    Detail::GlDeviceStateUVE::PipelineRecordUVE record{
+        glProgram, glVao, desc.vertexLayout, desc.vertexStride, desc.depthTestEnabled, desc.depthWriteEnabled, {}};
+    ReflectPipelineUniformsUVE(m_impl->state.gl, glProgram, record.uniforms);
+
     const std::uint32_t handleValue = m_impl->state.nextPipelineHandle++;
-    m_impl->state.pipelines.emplace(handleValue, Detail::GlDeviceStateUVE::PipelineRecordUVE{
-                                                       glProgram, glVao, desc.vertexLayout, desc.vertexStride,
-                                                       desc.depthTestEnabled, desc.depthWriteEnabled});
+    m_impl->state.pipelines.emplace(handleValue, std::move(record));
     return PipelineHandleUVE{handleValue};
 }
 
@@ -273,6 +348,79 @@ void GlRenderDeviceUVE::DestroyPipelineUVE(PipelineHandleUVE pipeline) {
     m_impl->state.gl.glDeleteProgram(it->second.glProgram);
     m_impl->state.gl.glDeleteVertexArrays(1, &it->second.glVao);
     m_impl->state.pipelines.erase(it);
+}
+
+std::vector<UniformReflectionUVE> GlRenderDeviceUVE::GetPipelineUniformsUVE(PipelineHandleUVE pipeline) const {
+    const auto it = m_impl->state.pipelines.find(pipeline.value);
+    if (it == m_impl->state.pipelines.end()) {
+        return {};
+    }
+    std::vector<UniformReflectionUVE> result;
+    result.reserve(it->second.uniforms.size());
+    for (const auto& [name, record] : it->second.uniforms) {
+        result.push_back(UniformReflectionUVE{name, record.type, record.location, record.arraySize});
+    }
+    return result;
+}
+
+bool GlRenderDeviceUVE::GetPipelineBinaryUVE(PipelineHandleUVE pipeline, std::vector<std::byte>& outBinary,
+                                              std::uint32_t& outFormat) const {
+    const auto it = m_impl->state.pipelines.find(pipeline.value);
+    if (it == m_impl->state.pipelines.end()) {
+        UVE_ERROR("GlRenderDeviceUVE: GetPipelineBinaryUVE called with an unknown handle ({})", pipeline.value);
+        return false;
+    }
+
+    GLint binaryLength = 0;
+    m_impl->state.gl.glGetProgramiv(it->second.glProgram, GL_PROGRAM_BINARY_LENGTH, &binaryLength);
+    if (binaryLength <= 0) {
+        UVE_WARNING("GlRenderDeviceUVE: GetPipelineBinaryUVE - driver reports no binary available for pipeline {}",
+                     pipeline.value);
+        return false;
+    }
+
+    outBinary.resize(static_cast<std::size_t>(binaryLength));
+    GLsizei writtenLength = 0;
+    GLenum glBinaryFormat = 0;
+    m_impl->state.gl.glGetProgramBinary(it->second.glProgram, binaryLength, &writtenLength, &glBinaryFormat,
+                                          outBinary.data());
+    outBinary.resize(static_cast<std::size_t>(writtenLength));
+    outFormat = static_cast<std::uint32_t>(glBinaryFormat);
+    return true;
+}
+
+PipelineHandleUVE GlRenderDeviceUVE::CreatePipelineFromBinaryUVE(std::span<const std::byte> binary,
+                                                                  std::uint32_t format,
+                                                                  const PipelineBinaryDescUVE& desc) {
+    const GLuint glProgram = m_impl->state.gl.glCreateProgram();
+    m_impl->state.gl.glProgramBinary(glProgram, static_cast<GLenum>(format), binary.data(),
+                                       static_cast<GLsizei>(binary.size()));
+
+    GLint linked = GL_FALSE;
+    m_impl->state.gl.glGetProgramiv(glProgram, GL_LINK_STATUS, &linked);
+    if (linked == GL_FALSE) {
+        // A driver-rejected binary (e.g. stale after a driver/GPU update) is an expected,
+        // recoverable condition - callers must treat this exactly like a cache miss, never a
+        // hard compile failure, so this logs at WARNING rather than ERROR.
+        UVE_WARNING("GlRenderDeviceUVE: CreatePipelineFromBinaryUVE - driver rejected the supplied binary: {}",
+                     GetProgramInfoLogUVE(m_impl->state.gl, glProgram));
+        m_impl->state.gl.glDeleteProgram(glProgram);
+        return kInvalidPipelineHandleUVE;
+    }
+
+    GLuint glVao = 0;
+    m_impl->state.gl.glGenVertexArrays(1, &glVao);
+
+    Detail::GlDeviceStateUVE::PipelineRecordUVE record{
+        glProgram, glVao, desc.vertexLayout, desc.vertexStride, desc.depthTestEnabled, desc.depthWriteEnabled, {}};
+    // Uniform locations are not guaranteed portable across a binary load even though behavior
+    // is - reflection must always be re-run here, never assumed inherited from the original
+    // compile that produced this binary.
+    ReflectPipelineUniformsUVE(m_impl->state.gl, glProgram, record.uniforms);
+
+    const std::uint32_t handleValue = m_impl->state.nextPipelineHandle++;
+    m_impl->state.pipelines.emplace(handleValue, std::move(record));
+    return PipelineHandleUVE{handleValue};
 }
 
 std::unique_ptr<ICommandBufferUVE> GlRenderDeviceUVE::CreateCommandBufferUVE() {

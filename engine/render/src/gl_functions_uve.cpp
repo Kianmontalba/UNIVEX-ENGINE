@@ -30,7 +30,10 @@ bool GlFunctionsUVE::IsCompleteUVE() const noexcept {
            glDeleteProgram != nullptr && glAttachShader != nullptr && glLinkProgram != nullptr &&
            glGetProgramiv != nullptr && glGetProgramInfoLog != nullptr && glUseProgram != nullptr &&
            glGenFramebuffers != nullptr && glDeleteFramebuffers != nullptr && glBindFramebuffer != nullptr &&
-           glFramebufferTexture2D != nullptr && glCheckFramebufferStatus != nullptr && glActiveTexture != nullptr;
+           glFramebufferTexture2D != nullptr && glCheckFramebufferStatus != nullptr && glActiveTexture != nullptr &&
+           glGetUniformLocation != nullptr && glUniform1f != nullptr && glUniform1i != nullptr &&
+           glUniform3fv != nullptr && glUniformMatrix4fv != nullptr && glGetActiveUniform != nullptr &&
+           glGetProgramBinary != nullptr && glProgramBinary != nullptr;
 }
 
 GlFunctionsUVE LoadGlFunctionsUVE(void* (*getProcAddress)(const char*)) {
@@ -75,6 +78,15 @@ GlFunctionsUVE LoadGlFunctionsUVE(void* (*getProcAddress)(const char*)) {
         LoadOneUVE<PFNGLCHECKFRAMEBUFFERSTATUSPROC>(getProcAddress, "glCheckFramebufferStatus");
 
     functions.glActiveTexture = LoadOneUVE<PFNGLACTIVETEXTUREPROC>(getProcAddress, "glActiveTexture");
+
+    functions.glGetUniformLocation = LoadOneUVE<PFNGLGETUNIFORMLOCATIONPROC>(getProcAddress, "glGetUniformLocation");
+    functions.glUniform1f = LoadOneUVE<PFNGLUNIFORM1FPROC>(getProcAddress, "glUniform1f");
+    functions.glUniform1i = LoadOneUVE<PFNGLUNIFORM1IPROC>(getProcAddress, "glUniform1i");
+    functions.glUniform3fv = LoadOneUVE<PFNGLUNIFORM3FVPROC>(getProcAddress, "glUniform3fv");
+    functions.glUniformMatrix4fv = LoadOneUVE<PFNGLUNIFORMMATRIX4FVPROC>(getProcAddress, "glUniformMatrix4fv");
+    functions.glGetActiveUniform = LoadOneUVE<PFNGLGETACTIVEUNIFORMPROC>(getProcAddress, "glGetActiveUniform");
+    functions.glGetProgramBinary = LoadOneUVE<PFNGLGETPROGRAMBINARYPROC>(getProcAddress, "glGetProgramBinary");
+    functions.glProgramBinary = LoadOneUVE<PFNGLPROGRAMBINARYPROC>(getProcAddress, "glProgramBinary");
 
     return functions;
 }

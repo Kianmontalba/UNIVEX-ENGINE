@@ -80,7 +80,8 @@ void NullRenderDeviceUVE::DestroyTextureUVE(TextureHandleUVE texture) {
     }
 }
 
-ShaderHandleUVE NullRenderDeviceUVE::CreateShaderUVE(const ShaderDescUVE& desc) {
+ShaderHandleUVE NullRenderDeviceUVE::CreateShaderUVE(const ShaderDescUVE& desc, std::string* outInfoLog) {
+    static_cast<void>(outInfoLog); // NullRenderDeviceUVE never compiles anything real - nothing to log.
     const std::uint32_t handleValue = m_impl->nextShaderHandle++;
     m_impl->shaders.emplace(handleValue, desc);
     return ShaderHandleUVE{handleValue};
@@ -93,7 +94,8 @@ void NullRenderDeviceUVE::DestroyShaderUVE(ShaderHandleUVE shader) {
     }
 }
 
-PipelineHandleUVE NullRenderDeviceUVE::CreatePipelineUVE(const PipelineDescUVE& desc) {
+PipelineHandleUVE NullRenderDeviceUVE::CreatePipelineUVE(const PipelineDescUVE& desc, std::string* outInfoLog) {
+    static_cast<void>(outInfoLog); // NullRenderDeviceUVE never links anything real - nothing to log.
     if (!m_impl->shaders.contains(desc.vertexShader.value) || !m_impl->shaders.contains(desc.fragmentShader.value)) {
         UVE_ERROR("NullRenderDeviceUVE: CreatePipelineUVE referenced an unknown vertex or fragment shader handle");
         return kInvalidPipelineHandleUVE;
@@ -108,6 +110,38 @@ void NullRenderDeviceUVE::DestroyPipelineUVE(PipelineHandleUVE pipeline) {
         UVE_ERROR("NullRenderDeviceUVE: DestroyPipelineUVE called with an unknown or already-destroyed handle ({})",
                    pipeline.value);
     }
+}
+
+std::vector<UniformReflectionUVE> NullRenderDeviceUVE::GetPipelineUniformsUVE(PipelineHandleUVE pipeline) const {
+    static_cast<void>(pipeline); // NullRenderDeviceUVE never really links anything, so nothing to reflect.
+    return {};
+}
+
+bool NullRenderDeviceUVE::GetPipelineBinaryUVE(PipelineHandleUVE pipeline, std::vector<std::byte>& outBinary,
+                                                std::uint32_t& outFormat) const {
+    static_cast<void>(pipeline);
+    static_cast<void>(outBinary);
+    static_cast<void>(outFormat);
+    return false; // NullRenderDeviceUVE never compiles anything real, so it has no binary to give.
+}
+
+PipelineHandleUVE NullRenderDeviceUVE::CreatePipelineFromBinaryUVE(std::span<const std::byte> binary,
+                                                                    std::uint32_t format,
+                                                                    const PipelineBinaryDescUVE& desc) {
+    static_cast<void>(binary); // NullRenderDeviceUVE never inspects binary contents.
+    static_cast<void>(format);
+    PipelineDescUVE bookkeepingDesc;
+    bookkeepingDesc.vertexShader = kInvalidShaderHandleUVE; // no shader was ever compiled for this pipeline
+    bookkeepingDesc.fragmentShader = kInvalidShaderHandleUVE;
+    bookkeepingDesc.vertexLayout = desc.vertexLayout;
+    bookkeepingDesc.topology = desc.topology;
+    bookkeepingDesc.depthTestEnabled = desc.depthTestEnabled;
+    bookkeepingDesc.depthWriteEnabled = desc.depthWriteEnabled;
+    bookkeepingDesc.vertexStride = desc.vertexStride;
+
+    const std::uint32_t handleValue = m_impl->nextPipelineHandle++;
+    m_impl->pipelines.emplace(handleValue, bookkeepingDesc);
+    return PipelineHandleUVE{handleValue};
 }
 
 std::unique_ptr<ICommandBufferUVE> NullRenderDeviceUVE::CreateCommandBufferUVE() {

@@ -49,11 +49,19 @@ public:
                                                      std::span<const std::byte> initialData = {}) override;
     void DestroyTextureUVE(TextureHandleUVE texture) override;
 
-    [[nodiscard]] ShaderHandleUVE CreateShaderUVE(const ShaderDescUVE& desc) override;
+    [[nodiscard]] ShaderHandleUVE CreateShaderUVE(const ShaderDescUVE& desc, std::string* outInfoLog = nullptr) override;
     void DestroyShaderUVE(ShaderHandleUVE shader) override;
 
-    [[nodiscard]] PipelineHandleUVE CreatePipelineUVE(const PipelineDescUVE& desc) override;
+    [[nodiscard]] PipelineHandleUVE CreatePipelineUVE(const PipelineDescUVE& desc,
+                                                       std::string* outInfoLog = nullptr) override;
     void DestroyPipelineUVE(PipelineHandleUVE pipeline) override;
+
+    [[nodiscard]] std::vector<UniformReflectionUVE> GetPipelineUniformsUVE(PipelineHandleUVE pipeline) const override;
+    [[nodiscard]] bool GetPipelineBinaryUVE(PipelineHandleUVE pipeline, std::vector<std::byte>& outBinary,
+                                             std::uint32_t& outFormat) const override;
+    [[nodiscard]] PipelineHandleUVE CreatePipelineFromBinaryUVE(std::span<const std::byte> binary,
+                                                                 std::uint32_t format,
+                                                                 const PipelineBinaryDescUVE& desc) override;
 
     [[nodiscard]] std::unique_ptr<ICommandBufferUVE> CreateCommandBufferUVE() override;
     void SubmitUVE(std::unique_ptr<ICommandBufferUVE> commandBuffer) override;

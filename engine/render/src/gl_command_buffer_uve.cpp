@@ -110,6 +110,7 @@ void GlCommandBufferUVE::BindPipelineUVE(PipelineHandleUVE pipeline) {
     m_currentVao = pipelineIt->second.glVao;
     m_currentVertexLayout = &pipelineIt->second.vertexLayout;
     m_currentVertexStride = pipelineIt->second.vertexStride;
+    m_currentUniforms = &pipelineIt->second.uniforms;
 
     m_state->gl.glUseProgram(m_currentProgram);
     m_state->gl.glBindVertexArray(m_currentVao);
@@ -174,6 +175,63 @@ void GlCommandBufferUVE::BindUniformBufferUVE(BufferHandleUVE buffer, std::uint3
         return;
     }
     m_state->gl.glBindBufferBase(GL_UNIFORM_BUFFER, slot, bufferIt->second.glBuffer);
+}
+
+const GlCommandBufferUVE::UniformRecordUVE* GlCommandBufferUVE::FindUniformUVE(std::string_view name) const {
+    if (m_currentUniforms == nullptr) {
+        UVE_WARNING("GlCommandBufferUVE: SetUniform*UVE called without a bound pipeline (uniform \"{}\")", name);
+        return nullptr;
+    }
+    const auto it = m_currentUniforms->find(std::string(name));
+    if (it == m_currentUniforms->end()) {
+        UVE_WARNING("GlCommandBufferUVE: SetUniform*UVE - \"{}\" is not an active uniform on the bound pipeline",
+                     name);
+        return nullptr;
+    }
+    return &it->second;
+}
+
+void GlCommandBufferUVE::SetUniformFloatUVE(std::string_view name, float value) {
+    const UniformRecordUVE* const uniform = FindUniformUVE(name);
+    if (uniform == nullptr) {
+        return;
+    }
+    m_state->gl.glUniform1f(uniform->location, value);
+}
+
+void GlCommandBufferUVE::SetUniformIntUVE(std::string_view name, std::int32_t value) {
+    const UniformRecordUVE* const uniform = FindUniformUVE(name);
+    if (uniform == nullptr) {
+        return;
+    }
+    m_state->gl.glUniform1i(uniform->location, static_cast<GLint>(value));
+}
+
+void GlCommandBufferUVE::SetUniformBoolUVE(std::string_view name, bool value) {
+    const UniformRecordUVE* const uniform = FindUniformUVE(name);
+    if (uniform == nullptr) {
+        return;
+    }
+    m_state->gl.glUniform1i(uniform->location, value ? 1 : 0);
+}
+
+void GlCommandBufferUVE::SetUniformVector3UVE(std::string_view name, const Math::Vector3UVE& value) {
+    const UniformRecordUVE* const uniform = FindUniformUVE(name);
+    if (uniform == nullptr) {
+        return;
+    }
+    m_state->gl.glUniform3fv(uniform->location, 1, &value.x);
+}
+
+void GlCommandBufferUVE::SetUniformMatrix4x4UVE(std::string_view name, const Math::Matrix4x4UVE& value) {
+    const UniformRecordUVE* const uniform = FindUniformUVE(name);
+    if (uniform == nullptr) {
+        return;
+    }
+    // Matrix4x4UVE is row-major storage (docs/CODING_STANDARDS.md, "Matrix convention") while GL's
+    // native layout is column-major - GL_TRUE tells the driver to transpose our data into its own
+    // layout rather than requiring a manual transpose copy here.
+    m_state->gl.glUniformMatrix4fv(uniform->location, 1, GL_TRUE, &value.m[0][0]);
 }
 
 void GlCommandBufferUVE::DrawIndexedUVE(std::uint32_t indexCount, std::uint32_t instanceCount) {

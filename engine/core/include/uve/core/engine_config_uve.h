@@ -17,6 +17,7 @@
 
 #include "uve/debug/log_level_uve.h"
 #include "uve/math/vector3_uve.h"
+#include "uve/platform/platform_uve.h"
 
 namespace UVE::Core {
 
@@ -142,6 +143,39 @@ struct EngineConfigUVE {
     /// that sandbox specifically without changing what real hardware/CI requests by default.
     std::uint32_t windowGlVersionMajor = 4;
     std::uint32_t windowGlVersionMinor = 6;
+
+    /// Directory Shader::ShaderManagerUVE persists compiled GL program binaries under (see its
+    /// on-disk cache, keyed by a hash of each program's fully resolved — post-#include,
+    /// post-macro — source). A per-platform subdirectory is appended automatically. Created
+    /// lazily on first write, mirroring saveDirectoryPath's own "missing is not an error"
+    /// contract.
+    std::filesystem::path shaderCachePath = "shader_cache/";
+
+    /// Whether ShaderManagerUVE::UpdateUVE() polls loaded shader programs' source file (and
+    /// #include closure) modification times each frame and hot-swaps a recompiled program when
+    /// one changed. Debug builds default to on (iteration speed); Release defaults to off (no
+    /// reason a shipped build ever re-reads shader source off disk).
+#if UVE_DEBUG
+    bool shaderHotReloadEnabledUVE = true;
+#else
+    bool shaderHotReloadEnabledUVE = false;
+#endif
+
+    /// Poll interval, in seconds, ShaderManagerUVE waits between checking every hot-reload-tracked
+    /// program's dependency closure for an on-disk modification time change — the shader-specific
+    /// analogue of hotReloadPollIntervalSecondsUVE (kept as its own field since the two subsystems
+    /// are otherwise unrelated and may want independent tuning later).
+    double shaderHotReloadPollIntervalSecondsUVE = 1.0;
+
+    /// Virtual-filesystem mount prefix ShaderManagerUVE's #include resolver and built-in shader
+    /// loader resolve paths against (e.g. "shaders/basic_3d.glsl"), and the real directory it's
+    /// mounted from during Init(). A shader file missing at this location is not an error — every
+    /// built-in also carries an embedded C++ string fallback (see
+    /// Render::Shader::BuiltIn::kBasic3DSource) used automatically when the mount doesn't
+    /// resolve, so the engine still runs (without hot-reload) if launched from a working
+    /// directory where the source tree isn't reachable.
+    std::string shaderSourceMountPrefixUVE = "shaders";
+    std::filesystem::path shaderSourceRealDirectoryUVE = "engine/render/shader/built_in/";
 };
 
 } // namespace UVE::Core

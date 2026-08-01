@@ -9,6 +9,8 @@
 
 #include "null_command_buffer_uve.h"
 
+#include <string>
+
 #include "uve/debug/assert_uve.h"
 
 namespace UVE::Render {
@@ -48,6 +50,31 @@ void NullCommandBufferUVE::BindTextureUVE(TextureHandleUVE texture, std::uint32_
 void NullCommandBufferUVE::BindUniformBufferUVE(BufferHandleUVE buffer, std::uint32_t slot) {
     UVE_ASSERT(m_insideRenderPass);
     m_commands.emplace_back(BindUniformBufferCommandUVE{buffer, slot});
+}
+
+void NullCommandBufferUVE::SetUniformFloatUVE(std::string_view name, float value) {
+    UVE_ASSERT(m_insideRenderPass);
+    m_commands.emplace_back(SetUniformFloatCommandUVE{std::string(name), value});
+}
+
+void NullCommandBufferUVE::SetUniformIntUVE(std::string_view name, std::int32_t value) {
+    UVE_ASSERT(m_insideRenderPass);
+    m_commands.emplace_back(SetUniformIntCommandUVE{std::string(name), value});
+}
+
+void NullCommandBufferUVE::SetUniformBoolUVE(std::string_view name, bool value) {
+    UVE_ASSERT(m_insideRenderPass);
+    m_commands.emplace_back(SetUniformBoolCommandUVE{std::string(name), value});
+}
+
+void NullCommandBufferUVE::SetUniformVector3UVE(std::string_view name, const Math::Vector3UVE& value) {
+    UVE_ASSERT(m_insideRenderPass);
+    m_commands.emplace_back(SetUniformVector3CommandUVE{std::string(name), value});
+}
+
+void NullCommandBufferUVE::SetUniformMatrix4x4UVE(std::string_view name, const Math::Matrix4x4UVE& value) {
+    UVE_ASSERT(m_insideRenderPass);
+    m_commands.emplace_back(SetUniformMatrix4x4CommandUVE{std::string(name), value});
 }
 
 void NullCommandBufferUVE::DrawIndexedUVE(std::uint32_t indexCount, std::uint32_t instanceCount) {

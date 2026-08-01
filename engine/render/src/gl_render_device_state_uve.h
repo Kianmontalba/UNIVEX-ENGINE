@@ -10,11 +10,13 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 #include <unordered_map>
 #include <vector>
 
 #include "gl_functions_uve.h"
 #include "uve/render/render_resource_descs_uve.h"
+#include "uve/render/shader_data_type_uve.h"
 #include "uve/window/i_window_manager_uve.h"
 
 namespace UVE::Render::Detail {
@@ -61,6 +63,17 @@ struct GlDeviceStateUVE {
         std::uint32_t vertexStride = 0;
         bool depthTestEnabled = true;
         bool depthWriteEnabled = true;
+
+        /// Every uniform reflected right after this pipeline's program successfully linked
+        /// (Increment 21) — GlCommandBufferUVE's SetUniform*UVE calls look a name up here instead
+        /// of calling glGetUniformLocation per draw. Empty for a pipeline created via
+        /// CreatePipelineFromBinaryUVE() before its own post-load reflection pass runs.
+        struct UniformRecordUVE {
+            ShaderDataTypeUVE type = ShaderDataTypeUVE::Float;
+            GLint location = -1;
+            std::uint32_t arraySize = 1;
+        };
+        std::unordered_map<std::string, UniformRecordUVE> uniforms;
     };
     std::unordered_map<std::uint32_t, PipelineRecordUVE> pipelines;
     std::uint32_t nextPipelineHandle = 1;
