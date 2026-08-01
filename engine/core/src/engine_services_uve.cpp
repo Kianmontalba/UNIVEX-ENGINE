@@ -31,7 +31,9 @@ EngineServicesUVE::EngineServicesUVE(Debug::ILoggerUVE& logger, Utilities::ITime
                                       Render::IRenderSystemUVE& renderSystem,
                                       Render::ICameraSystemUVE& cameraSystem,
                                       Render::IMeshRendererUVE& meshRenderer,
-                                      Render::IRenderer3DUVE& renderer3D) noexcept
+                                      Render::IRenderer3DUVE& renderer3D,
+                                      Physics::ICollisionSystemUVE& collisionSystem,
+                                      Physics::IPhysicsSystemUVE& physicsSystem) noexcept
     : m_logger(&logger), m_timer(&timer), m_eventSystem(&eventSystem),
       m_memoryManager(&memoryManager), m_threadPool(&threadPool), m_commandLine(&commandLine),
       m_configManager(&configManager), m_entityManager(&entityManager), m_sceneGraph(&sceneGraph),
@@ -39,7 +41,8 @@ EngineServicesUVE::EngineServicesUVE(Debug::ILoggerUVE& logger, Utilities::ITime
       m_prefabSystem(&prefabSystem), m_hotReload(&hotReload), m_assetManager(&assetManager),
       m_assetImporter(&assetImporter), m_assetBundle(&assetBundle), m_fileSystem(&fileSystem),
       m_renderDevice(&renderDevice), m_renderSystem(&renderSystem), m_cameraSystem(&cameraSystem),
-      m_meshRenderer(&meshRenderer), m_renderer3D(&renderer3D) {}
+      m_meshRenderer(&meshRenderer), m_renderer3D(&renderer3D), m_collisionSystem(&collisionSystem),
+      m_physicsSystem(&physicsSystem) {}
 
 Debug::ILoggerUVE& EngineServicesUVE::GetLoggerUVE() const noexcept {
     return *m_logger;
@@ -127,6 +130,14 @@ Render::IMeshRendererUVE& EngineServicesUVE::GetMeshRendererUVE() const noexcept
 
 Render::IRenderer3DUVE& EngineServicesUVE::GetRenderer3DUVE() const noexcept {
     return *m_renderer3D;
+}
+
+Physics::ICollisionSystemUVE& EngineServicesUVE::GetCollisionSystemUVE() const noexcept {
+    return *m_collisionSystem;
+}
+
+Physics::IPhysicsSystemUVE& EngineServicesUVE::GetPhysicsSystemUVE() const noexcept {
+    return *m_physicsSystem;
 }
 
 } // namespace UVE::Core

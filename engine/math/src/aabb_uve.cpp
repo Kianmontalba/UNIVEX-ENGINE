@@ -39,4 +39,24 @@ std::string ToStringUVE(const AabbUVE& box) {
     return "[" + ToStringUVE(box.min) + " .. " + ToStringUVE(box.max) + "]";
 }
 
+std::optional<PenetrationUVE> ComputePenetrationUVE(const AabbUVE& a, const AabbUVE& b) noexcept {
+    if (!a.IntersectsUVE(b)) {
+        return std::nullopt;
+    }
+
+    const float overlapX = std::min(a.max.x, b.max.x) - std::max(a.min.x, b.min.x);
+    const float overlapY = std::min(a.max.y, b.max.y) - std::max(a.min.y, b.min.y);
+    const float overlapZ = std::min(a.max.z, b.max.z) - std::max(a.min.z, b.min.z);
+    const Vector3UVE centerA = a.GetCenterUVE();
+    const Vector3UVE centerB = b.GetCenterUVE();
+
+    if (overlapX <= overlapY && overlapX <= overlapZ) {
+        return PenetrationUVE{Vector3UVE{centerB.x >= centerA.x ? 1.0F : -1.0F, 0.0F, 0.0F}, overlapX};
+    }
+    if (overlapY <= overlapZ) {
+        return PenetrationUVE{Vector3UVE{0.0F, centerB.y >= centerA.y ? 1.0F : -1.0F, 0.0F}, overlapY};
+    }
+    return PenetrationUVE{Vector3UVE{0.0F, 0.0F, centerB.z >= centerA.z ? 1.0F : -1.0F}, overlapZ};
+}
+
 } // namespace UVE::Math

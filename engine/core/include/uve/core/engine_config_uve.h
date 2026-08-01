@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "uve/debug/log_level_uve.h"
+#include "uve/math/vector3_uve.h"
 
 namespace UVE::Core {
 
@@ -94,6 +95,11 @@ struct EngineConfigUVE {
     /// EngineCoreUVE's lifetime.
     std::uint32_t renderTargetWidth = 1280;
     std::uint32_t renderTargetHeight = 720;
+
+    /// Acceleration PhysicsSystemUVE (see Physics::PhysicsSystemUVE) applies to every
+    /// non-kinematic RigidBodyComponentUVE each fixed step, scaled by its own gravityScale.
+    /// Earth-like default, Y-up (matching this engine's convention throughout).
+    Math::Vector3UVE gravity{0.0F, -9.81F, 0.0F};
 };
 
 } // namespace UVE::Core

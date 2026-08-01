@@ -96,11 +96,17 @@ namespace {
 }
 
 [[nodiscard]] nlohmann::json ToJsonUVE(const ColliderComponentUVE& component) {
-    return {{"halfExtents", ToJsonUVE(component.halfExtents)}};
+    return {{"halfExtents", ToJsonUVE(component.halfExtents)},
+            {"collisionLayer", component.collisionLayer},
+            {"collisionMask", component.collisionMask}};
 }
 
 [[nodiscard]] nlohmann::json ToJsonUVE(const RigidBodyComponentUVE& component) {
-    return {{"mass", component.mass}, {"isKinematic", component.isKinematic}};
+    return {{"mass", component.mass},
+            {"isKinematic", component.isKinematic},
+            {"velocity", ToJsonUVE(component.velocity)},
+            {"drag", component.drag},
+            {"gravityScale", component.gravityScale}};
 }
 
 [[nodiscard]] nlohmann::json ToJsonUVE(const AudioSourceComponentUVE& component) {
@@ -164,11 +170,21 @@ template <typename T, typename FromJsonFunc>
                                                      json.at("farPlane").get<float>()};
                       }));
         table.emplace("ColliderComponentUVE", MakeRegistrationUVE<ColliderComponentUVE>([](const nlohmann::json& json) {
-                          return ColliderComponentUVE{Vector3FromJsonUVE(json.at("halfExtents"))};
+                          ColliderComponentUVE collider;
+                          collider.halfExtents = Vector3FromJsonUVE(json.at("halfExtents"));
+                          collider.collisionLayer = json.value("collisionLayer", std::uint32_t{1});
+                          collider.collisionMask = json.value("collisionMask", std::uint32_t{0xFFFFFFFFU});
+                          return collider;
                       }));
         table.emplace("RigidBodyComponentUVE", MakeRegistrationUVE<RigidBodyComponentUVE>([](const nlohmann::json& json) {
-                          return RigidBodyComponentUVE{json.at("mass").get<float>(),
-                                                        json.at("isKinematic").get<bool>()};
+                          RigidBodyComponentUVE rigidBody;
+                          rigidBody.mass = json.at("mass").get<float>();
+                          rigidBody.isKinematic = json.at("isKinematic").get<bool>();
+                          rigidBody.velocity =
+                              json.contains("velocity") ? Vector3FromJsonUVE(json.at("velocity")) : Math::Vector3UVE{};
+                          rigidBody.drag = json.value("drag", 0.0F);
+                          rigidBody.gravityScale = json.value("gravityScale", 1.0F);
+                          return rigidBody;
                       }));
         table.emplace("AudioSourceComponentUVE",
                       MakeRegistrationUVE<AudioSourceComponentUVE>([](const nlohmann::json& json) {

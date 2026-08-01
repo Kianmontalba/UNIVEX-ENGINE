@@ -35,6 +35,8 @@
 #include "uve/math/frustum_uve.h"
 #include "uve/math/matrix4x4_uve.h"
 #include "uve/memory/i_memory_manager_uve.h"
+#include "uve/physics/i_collision_system_uve.h"
+#include "uve/physics/i_physics_system_uve.h"
 #include "uve/render/i_camera_system_uve.h"
 #include "uve/render/i_mesh_renderer_uve.h"
 #include "uve/render/i_render_device_uve.h"
@@ -483,6 +485,24 @@ public:
     int renderFrameCallCount = 0;
 };
 
+class FakeCollisionSystemUVE final : public Physics::ICollisionSystemUVE {
+public:
+    [[nodiscard]] std::vector<Physics::CollisionPairUVE> DetectCollisionsUVE(
+        Scene::IEntityManagerUVE&) const override {
+        ++detectCollisionsCallCount;
+        return {};
+    }
+
+    mutable int detectCollisionsCallCount = 0;
+};
+
+class FakePhysicsSystemUVE final : public Physics::IPhysicsSystemUVE {
+public:
+    void StepUVE(Scene::IEntityManagerUVE&, Scene::ISceneGraphUVE&, float) override { ++stepCallCount; }
+
+    int stepCallCount = 0;
+};
+
 TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     FakeLoggerUVE logger;
     FakeTimerUVE timer;
@@ -506,13 +526,15 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     FakeCameraSystemUVE cameraSystem;
     FakeMeshRendererUVE meshRenderer;
     FakeRenderer3DUVE renderer3D;
+    FakeCollisionSystemUVE collisionSystem;
+    FakePhysicsSystemUVE physicsSystem;
 
     const EngineServicesUVE services(logger, timer, eventSystem, memoryManager, threadPool,
                                       commandLine, configManager, entityManager, sceneGraph,
                                       assetDatabase, sceneSerializer, prefabSystem, hotReload,
                                       assetManager, assetImporter, assetBundle, fileSystem,
                                       renderDevice, renderSystem, cameraSystem, meshRenderer,
-                                      renderer3D);
+                                      renderer3D, collisionSystem, physicsSystem);
 
     EXPECT_EQ(&services.GetLoggerUVE(), &logger);
     EXPECT_EQ(&services.GetTimerUVE(), &timer);
@@ -536,6 +558,8 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     EXPECT_EQ(&services.GetCameraSystemUVE(), &cameraSystem);
     EXPECT_EQ(&services.GetMeshRendererUVE(), &meshRenderer);
     EXPECT_EQ(&services.GetRenderer3DUVE(), &renderer3D);
+    EXPECT_EQ(&services.GetCollisionSystemUVE(), &collisionSystem);
+    EXPECT_EQ(&services.GetPhysicsSystemUVE(), &physicsSystem);
 }
 
 TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) {
@@ -561,12 +585,14 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     FakeCameraSystemUVE cameraSystem;
     FakeMeshRendererUVE meshRenderer;
     FakeRenderer3DUVE renderer3D;
+    FakeCollisionSystemUVE collisionSystem;
+    FakePhysicsSystemUVE physicsSystem;
     const EngineServicesUVE services(logger, timer, eventSystem, memoryManager, threadPool,
                                       commandLine, configManager, entityManager, sceneGraph,
                                       assetDatabase, sceneSerializer, prefabSystem, hotReload,
                                       assetManager, assetImporter, assetBundle, fileSystem,
                                       renderDevice, renderSystem, cameraSystem, meshRenderer,
-                                      renderer3D);
+                                      renderer3D, collisionSystem, physicsSystem);
 
     services.GetTimerUVE().Tick();
     services.GetEventSystemUVE().DispatchQueuedUVE();

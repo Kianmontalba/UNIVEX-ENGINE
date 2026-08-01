@@ -10,6 +10,7 @@
 #include "uve/math/aabb_uve.h"
 
 #include <cmath>
+#include <optional>
 #include <string>
 
 #include <gtest/gtest.h>
@@ -93,6 +94,60 @@ TEST(AabbUVETest, EqualityOperators_CompareMinAndMax) {
 
     EXPECT_TRUE(a == b);
     EXPECT_TRUE(a != c);
+}
+
+TEST(AabbUVETest, IntersectsUVE_OverlappingBoxes_ReturnsTrue) {
+    const AabbUVE a{Vector3UVE{0.0F, 0.0F, 0.0F}, Vector3UVE{2.0F, 2.0F, 2.0F}};
+    const AabbUVE b{Vector3UVE{1.0F, 1.0F, 1.0F}, Vector3UVE{3.0F, 3.0F, 3.0F}};
+
+    EXPECT_TRUE(a.IntersectsUVE(b));
+    EXPECT_TRUE(b.IntersectsUVE(a));
+}
+
+TEST(AabbUVETest, IntersectsUVE_DisjointBoxes_ReturnsFalse) {
+    const AabbUVE a{Vector3UVE{0.0F, 0.0F, 0.0F}, Vector3UVE{1.0F, 1.0F, 1.0F}};
+    const AabbUVE b{Vector3UVE{10.0F, 10.0F, 10.0F}, Vector3UVE{11.0F, 11.0F, 11.0F}};
+
+    EXPECT_FALSE(a.IntersectsUVE(b));
+    EXPECT_FALSE(b.IntersectsUVE(a));
+}
+
+TEST(AabbUVETest, IntersectsUVE_TouchingEdges_ReturnsFalse) {
+    const AabbUVE a{Vector3UVE{0.0F, 0.0F, 0.0F}, Vector3UVE{1.0F, 1.0F, 1.0F}};
+    const AabbUVE b{Vector3UVE{1.0F, 0.0F, 0.0F}, Vector3UVE{2.0F, 1.0F, 1.0F}};
+
+    EXPECT_FALSE(a.IntersectsUVE(b));
+}
+
+TEST(AabbUVETest, ComputePenetrationUVE_DisjointBoxes_ReturnsNullopt) {
+    const AabbUVE a{Vector3UVE{0.0F, 0.0F, 0.0F}, Vector3UVE{1.0F, 1.0F, 1.0F}};
+    const AabbUVE b{Vector3UVE{10.0F, 10.0F, 10.0F}, Vector3UVE{11.0F, 11.0F, 11.0F}};
+
+    EXPECT_FALSE(ComputePenetrationUVE(a, b).has_value());
+}
+
+TEST(AabbUVETest, ComputePenetrationUVE_OverlappingAlongX_ReturnsXAxisAndCorrectDepth) {
+    // a spans x[0,2], b spans x[1,3] (both y/z identical and much larger, so x is the
+    // shallowest, correct MTV axis) — overlap along x is [1,2], depth 1.
+    const AabbUVE a{Vector3UVE{0.0F, 0.0F, 0.0F}, Vector3UVE{2.0F, 10.0F, 10.0F}};
+    const AabbUVE b{Vector3UVE{1.0F, 0.0F, 0.0F}, Vector3UVE{3.0F, 10.0F, 10.0F}};
+
+    const std::optional<PenetrationUVE> penetration = ComputePenetrationUVE(a, b);
+    ASSERT_TRUE(penetration.has_value());
+    EXPECT_NEAR(penetration->depth, 1.0F, kEpsilon);
+    EXPECT_NEAR(penetration->axis.x, 1.0F, kEpsilon); // points from a's center toward b's center
+    EXPECT_NEAR(penetration->axis.y, 0.0F, kEpsilon);
+    EXPECT_NEAR(penetration->axis.z, 0.0F, kEpsilon);
+}
+
+TEST(AabbUVETest, ComputePenetrationUVE_AxisPointsFromFirstTowardSecond) {
+    const AabbUVE a{Vector3UVE{1.0F, 0.0F, 0.0F}, Vector3UVE{3.0F, 10.0F, 10.0F}};
+    const AabbUVE b{Vector3UVE{0.0F, 0.0F, 0.0F}, Vector3UVE{2.0F, 10.0F, 10.0F}};
+
+    const std::optional<PenetrationUVE> penetration = ComputePenetrationUVE(a, b);
+    ASSERT_TRUE(penetration.has_value());
+    // b's center.x < a's center.x, so the axis (from a toward b) points in -x.
+    EXPECT_NEAR(penetration->axis.x, -1.0F, kEpsilon);
 }
 
 TEST(AabbUVETest, ToStringUVE_ContainsMinAndMax) {

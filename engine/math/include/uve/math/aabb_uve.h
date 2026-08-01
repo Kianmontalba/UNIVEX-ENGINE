@@ -9,6 +9,7 @@
 
 #pragma once
 
+#include <optional>
 #include <string>
 
 #include "uve/math/matrix4x4_uve.h"
@@ -17,9 +18,9 @@
 namespace UVE::Math {
 
 /// An axis-aligned bounding box, used for mesh bounds and frustum culling (Part 7.2,
-/// Increments 11-14). Deliberately minimal, matching Vector3UVE/QuaternionUVE's precedent: no
-/// ray intersection, no sphere bounds, no oriented bounding box — not needed by anything built
-/// so far.
+/// Increments 11-14) and AABB broad/narrow-phase collision (Part 7.5, Increment 15).
+/// Deliberately minimal, matching Vector3UVE/QuaternionUVE's precedent: no ray intersection, no
+/// sphere bounds, no oriented bounding box — not needed by anything built so far.
 /// Thread-safety: value type; safe to copy/pass freely, no shared state.
 struct AabbUVE {
     Vector3UVE min{0.0F, 0.0F, 0.0F};
@@ -56,7 +57,30 @@ struct AabbUVE {
     /// deliberately the simplest obviously-correct approach (not Arvo's faster analytical
     /// method); revisit only if profiling ever shows it matters.
     [[nodiscard]] AabbUVE TransformUVE(const Matrix4x4UVE& matrix) const noexcept;
+
+    /// True iff `*this` and `other` overlap on all three axes (touching-but-not-overlapping
+    /// edges count as not intersecting). The broad-phase (and, for an axis-aligned-box-only
+    /// world, narrow-phase) overlap test CollisionSystemUVE (Part 7.5) is built on.
+    [[nodiscard]] constexpr bool IntersectsUVE(const AabbUVE& other) const noexcept {
+        return min.x < other.max.x && max.x > other.min.x && min.y < other.max.y && max.y > other.min.y &&
+               min.z < other.max.z && max.z > other.min.z;
+    }
 };
+
+/// The minimum-translation-vector (MTV) between two overlapping AABBs: the shortest
+/// single-axis push that separates them. `axis` is a unit vector pointing from `a` toward `b`;
+/// `depth` is the overlap distance along that axis. Pure AABB geometry (same category as
+/// FrustumUVE's plane math), so it lives here rather than being duplicated inside
+/// CollisionSystemUVE (Part 7.5).
+struct PenetrationUVE {
+    Vector3UVE axis;
+    float depth = 0.0F;
+};
+
+/// Returns the MTV separating `a` and `b`, or std::nullopt if they don't overlap
+/// (`a.IntersectsUVE(b)` is false). When multiple axes tie for the smallest overlap, the first
+/// in x/y/z order is returned — deterministic, not an arbitrary implementation detail.
+[[nodiscard]] std::optional<PenetrationUVE> ComputePenetrationUVE(const AabbUVE& a, const AabbUVE& b) noexcept;
 
 [[nodiscard]] constexpr bool operator==(const AabbUVE& lhs, const AabbUVE& rhs) noexcept {
     return lhs.min == rhs.min && lhs.max == rhs.max;

@@ -15,10 +15,6 @@ namespace UVE::Math {
 
 namespace {
 
-[[nodiscard]] float DotUVE(const Vector3UVE& lhs, const Vector3UVE& rhs) noexcept {
-    return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z;
-}
-
 [[nodiscard]] Vector3UVE ScaleVectorUVE(const Vector3UVE& vector, float scalar) noexcept {
     return Vector3UVE{vector.x * scalar, vector.y * scalar, vector.z * scalar};
 }

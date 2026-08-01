@@ -29,6 +29,8 @@
 #include "uve/debug/logging_macros_uve.h"
 #include "uve/events/event_system_uve.h"
 #include "uve/memory/memory_manager_uve.h"
+#include "uve/physics/collision_system_uve.h"
+#include "uve/physics/physics_system_uve.h"
 #include "uve/platform/platform_uve.h"
 #include "uve/render/camera_system_uve.h"
 #include "uve/render/mesh_renderer_uve.h"
@@ -187,6 +189,13 @@ void EngineCoreUVE::Init() {
                                                              *m_eventSystem, m_config.renderTargetWidth,
                                                              m_config.renderTargetHeight);
 
+    // CollisionSystem twenty-second: stateless, no dependencies of its own.
+    m_collisionSystem = std::make_unique<Physics::CollisionSystemUVE>();
+
+    // PhysicsSystem twenty-third: needs only CollisionSystem (composed by reference) and
+    // EngineConfigUVE::gravity, both already available.
+    m_physicsSystem = std::make_unique<Physics::PhysicsSystemUVE>(*m_collisionSystem, m_config.gravity);
+
     // ConfigManager last: it immediately calls LoadUVE(), which logs its
     // outcome (missing/malformed/success) through the Logger constructed
     // above — so Logger must already exist by this point.
@@ -199,7 +208,7 @@ void EngineCoreUVE::Init() {
                         *m_assetDatabase, *m_sceneSerializer, *m_prefabSystem, *m_hotReload,
                         *m_assetManager, *m_assetImporter, *m_assetBundle, *m_fileSystem,
                         *m_renderDevice, *m_renderSystem, *m_cameraSystem, *m_meshRenderer,
-                        *m_renderer3D);
+                        *m_renderer3D, *m_collisionSystem, *m_physicsSystem);
 
     TransitionStateUVE(EngineStateUVE::Running);
     UVE_INFO("EngineCoreUVE: initialized");
@@ -223,6 +232,13 @@ void EngineCoreUVE::Update() {
     const Utilities::FixedStepResultUVE fixedStep = m_timer->AdvanceFixedStepUVE();
     UVE_TRACE("Update: {} fixed step(s), alpha={}", fixedStep.stepsToRun, fixedStep.alpha);
     m_eventSystem->DispatchQueuedUVE();
+
+    const float fixedDeltaTimeSeconds =
+        m_config.fixedUpdateFps > 0.0 ? static_cast<float>(1.0 / m_config.fixedUpdateFps) : 0.0F;
+    for (int step = 0; step < fixedStep.stepsToRun; ++step) {
+        m_physicsSystem->StepUVE(*m_entityManager, *m_sceneGraph, fixedDeltaTimeSeconds);
+    }
+
     m_sceneGraph->UpdateUVE(*m_entityManager);
 
     if (m_config.hotReloadEnabledUVE) {
@@ -291,7 +307,7 @@ void EngineCoreUVE::Shutdown() {
     UVE_INFO("EngineCoreUVE: shutting down");
 
     // Exact reverse of Init()'s construction order: ConfigManager, then
-    // Renderer3D, then MeshRenderer, then CameraSystem, then RenderSystem, then RenderDevice,
+    // PhysicsSystem, then CollisionSystem, then Renderer3D, then MeshRenderer, then CameraSystem, then RenderSystem, then RenderDevice,
     // then FileSystem, then AssetBundle, then AssetImporter, then
     // AssetManager (its destructor blocks until every in-flight load job
     // finishes), then HotReload, then PrefabSystem, then SceneSerializer,
@@ -301,6 +317,8 @@ void EngineCoreUVE::Shutdown() {
     // logger itself is torn down, so it is guaranteed to be recorded.
     m_services.reset();
     m_configManager.reset();
+    m_physicsSystem.reset();
+    m_collisionSystem.reset();
     m_renderer3D.reset();
     m_meshRenderer.reset();
     m_cameraSystem.reset();
