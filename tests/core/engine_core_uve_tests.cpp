@@ -10,6 +10,7 @@
 #include "uve/core/engine_core_uve.h"
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -20,6 +21,7 @@
 #include <thread>
 #include <vector>
 
+#include <GL/gl.h>
 #include <gtest/gtest.h>
 
 #include "uve/asset/asset_handle_uve.h"
@@ -46,6 +48,7 @@
 #include "uve/scene/components/rigid_body_component_uve.h"
 #include "uve/scene/components/transform_component_uve.h"
 #include "uve/scene/components/world_transform_component_uve.h"
+#include "uve/window/i_window_manager_uve.h"
 
 namespace UVE::Core::Tests {
 namespace {
@@ -57,6 +60,10 @@ EngineConfigUVE MakeTestConfigUVE() {
     config.threadPoolWorkerCount = 2; // keep the whole suite's thread churn small and fast
     config.settingsFilePath = "uve_engine_core_tests.uvesettings"; // never touch a real settings file
     config.assetDatabaseFilePath = "uve_engine_core_tests.uveassetdb"; // never touch a real asset db
+    config.headlessUVE = true; // NullWindowManagerUVE/NullRenderDeviceUVE - no display required;
+                                // every pre-Increment-20 test opts into this by default, matching
+                                // its exact prior (headless-only) behavior. Tests that specifically
+                                // exercise the real window/GL backend override this explicitly.
     return config;
 }
 
@@ -706,6 +713,81 @@ TEST(EngineCoreUVETest, CheckpointManager_AutoSavesAfterConfiguredInterval_TickF
 
     engine.Shutdown();
     std::filesystem::remove_all(config.saveDirectoryPath);
+}
+
+TEST(EngineCoreUVETest, HeadlessCommandLineFlag_ForcesHeadlessAndUsesNullWindowManager) {
+    // headlessUVE starts false here specifically to prove the --headless CLI flag itself forces
+    // it (Init() reads CommandLineUVE before anything else consults the flag), not that the
+    // config's own default already happened to be headless.
+    EngineConfigUVE config = MakeTestConfigUVE();
+    config.headlessUVE = false;
+    config.commandLineArgs = {"--headless"};
+
+    EngineCoreUVE engine(config);
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    EXPECT_EQ(engine.GetServicesUVE().GetWindowManagerUVE().GetBackendNameUVE(), "Null");
+
+    for (int frame = 0; frame < 3; ++frame) {
+        engine.TickFrameUVE();
+    }
+    EXPECT_EQ(engine.GetFrameStatsUVE().frameNumber, 3U);
+
+    engine.Shutdown();
+}
+
+// Needs a real (possibly virtual, e.g. Xvfb) X display and GL context. Skips cleanly with a clear
+// message when unavailable, so the same uve_tests binary runs cleanly with or without a display -
+// same GTEST_SKIP() pattern as WindowManagerUVETest/GlRenderDeviceUVETest.
+TEST(EngineCoreUVETest, WindowedMode_ReachesRunningAndRendersApprovedDemoTriangleColors) {
+    EngineConfigUVE config = MakeTestConfigUVE();
+    config.headlessUVE = false;
+    config.windowWidth = 64;
+    config.windowHeight = 64;
+    config.vsyncEnabledUVE = false;
+    // This sandbox's Mesa/llvmpipe GLX stack caps at OpenGL 4.5 Core (confirmed by direct
+    // testing - 4.6 fails with GLXBadFBConfig); see the identical override + rationale in
+    // tests/window/window_manager_uve_tests.cpp. The shipped production default (4, 6) is
+    // untouched.
+    config.windowGlVersionMajor = 4;
+    config.windowGlVersionMinor = 5;
+
+    EngineCoreUVE engine(config);
+    engine.Init();
+    if (!engine.GetServicesUVE().GetWindowManagerUVE().IsValidUVE()) {
+        GTEST_SKIP() << "No display available for windowed EngineCoreUVE - skipping (run under "
+                        "xvfb-run to exercise this test)";
+    }
+    ASSERT_TRUE(engine.Load());
+    EXPECT_EQ(engine.GetServicesUVE().GetWindowManagerUVE().GetBackendNameUVE(), "GLFW3");
+
+    // A few frames so the same triangle image has settled into both the front and back buffers.
+    for (int frame = 0; frame < 3; ++frame) {
+        engine.TickFrameUVE();
+    }
+    EXPECT_EQ(engine.GetStateUVE(), EngineStateUVE::Running);
+
+    const auto readPixelUVE = [](int x, int y) {
+        std::array<unsigned char, 3> pixel{};
+        glReadPixels(x, y, 1, 1, GL_RGB, GL_UNSIGNED_BYTE, pixel.data());
+        return pixel;
+    };
+
+    // Corner: background clear color #0D0D0D (the approved design decision).
+    const std::array<unsigned char, 3> backgroundPixel = readPixelUVE(2, 2);
+    EXPECT_NEAR(static_cast<int>(backgroundPixel[0]), 0x0D, 10);
+    EXPECT_NEAR(static_cast<int>(backgroundPixel[1]), 0x0D, 10);
+    EXPECT_NEAR(static_cast<int>(backgroundPixel[2]), 0x0D, 10);
+
+    // Centroid of the demo triangle (NDC origin maps to the window's center pixel regardless of
+    // the read buffer's Y-axis convention): #00D4FF (the approved design decision).
+    const std::array<unsigned char, 3> trianglePixel = readPixelUVE(32, 32);
+    EXPECT_NEAR(static_cast<int>(trianglePixel[0]), 0x00, 10);
+    EXPECT_NEAR(static_cast<int>(trianglePixel[1]), 0xD4, 10);
+    EXPECT_NEAR(static_cast<int>(trianglePixel[2]), 0xFF, 10);
+
+    engine.Shutdown();
 }
 
 #if UVE_DEBUG

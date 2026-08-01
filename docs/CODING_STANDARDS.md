@@ -26,6 +26,7 @@ subsystem area — **never** flat inside `UVE` directly:
 | `UVE::Input`      | `engine/input/`      | `InputSystemUVE`, `InputActionUVE`, `InputBindingUVE`, `KeyCodeUVE`, `MouseButtonUVE` |
 | `UVE::Audio`      | `engine/audio/`      | `IAudioDeviceUVE`, `NullAudioDeviceUVE`, `AudioSystemUVE`, `AudioSourceSystemUVE`, `AudioAttenuationModelUVE` |
 | `UVE::Save`       | `engine/save/`       | `SaveGameSystemUVE`, `CheckpointManagerUVE`, `GameStateMetadataUVE`, the `.uvesave` format |
+| `UVE::Window`     | `engine/window/`     | `IWindowManagerUVE`, `WindowManagerUVE` (real GLFW3 backend), `NullWindowManagerUVE`, window events, `MonitorInfoUVE` |
 | `UVE::Core`       | `engine/core/`       | `EngineCoreUVE`, config, state, frame stats, version, services |
 
 Future systems (Physics, Animation, Audio, AI, Networking, Editor, ...) become sibling
@@ -314,16 +315,86 @@ up for another is a real risk; `MountHandleUVE` only ever has one kind of handle
 whichever precedent fits: a bare alias when there's only one handle kind in a system, a wrapper
 struct when there are several that must never be confused.
 
-**`NullRenderDeviceUVE` is the only backend this codebase can build and test today** — there is no
-display server, GPU device node, or graphics SDK (Vulkan/GL headers, GLFW3/SDL3, a shader
-compiler) available in this environment (confirmed the same way `WindowManagerUVE`'s infeasibility
-was confirmed for Increment 8). It performs zero real GPU work: it bookkeeps every resource
-handle and validates call correctness (paired render passes, no draw calls outside a pass, no
-binding to an unknown handle), and its command buffer is a "spy" that records the exact call
-sequence a real backend would have received, for tests to assert against
-(`NullRenderDeviceUVE::GetLastSubmittedCommandsUVE()`). A real Vulkan/Metal/D3D12 backend is
-future work once this environment has the SDK headers, GPU, and windowing it currently lacks —
-nothing above `IRenderDeviceUVE` needs to change when one arrives.
+**`NullRenderDeviceUVE`** performs zero real GPU work: it bookkeeps every resource handle and
+validates call correctness (paired render passes, no draw calls outside a pass, no binding to an
+unknown handle), and its command buffer is a "spy" that records the exact call sequence a real
+backend would have received, for tests to assert against
+(`NullRenderDeviceUVE::GetLastSubmittedCommandsUVE()`). Used whenever `EngineConfigUVE::headlessUVE`
+is true (or `--headless` is passed) — no display, GPU device node, or graphics SDK is required.
+
+**`GlRenderDeviceUVE`** (`engine/render/`, Increment 20) is the first *real* backend: a genuine
+OpenGL 4.6 Core implementation of `IRenderDeviceUVE`, used whenever a real window exists. Unlike
+`NullCommandBufferUVE`'s record-then-never-replay spy pattern, `GlCommandBufferUVE` issues actual
+GL calls immediately as each method executes — there is no secondary "submit" replay step in
+OpenGL's immediate execution model, so `GlRenderDeviceUVE::SubmitUVE()` does no replay work at
+all, just asserts the command buffer's dynamic type and releases it. A future Vulkan/Metal/D3D12
+backend is still future work; nothing above `IRenderDeviceUVE` needs to change when one arrives —
+`GlRenderDeviceUVE` already proves the interface is renderer-agnostic in practice, not just in
+theory.
+
+**`IRenderDeviceUVE::PresentUVE()`** is a distinct, explicit step after `SubmitUVE()`, mirroring a
+real Vulkan/D3D12 swapchain present call rather than folding presentation into submission.
+`GlRenderDeviceUVE::PresentUVE()` delegates to the window manager's `SwapBuffersUVE()`;
+`NullRenderDeviceUVE::PresentUVE()` is a bookkeeping no-op with a `GetPresentCallCountUVE()` test
+hook — every backend must implement the complete RHI contract, no exceptions.
+
+**`RenderPassDescUVE::colorAttachment == kInvalidTextureHandleUVE`** means "render into the
+backend's default framebuffer" (the window's swapchain image) — this reuses the exact
+sentinel-handle convention the struct already established for `depthAttachment` ("no depth
+attachment") rather than growing the interface with a separate `GetSwapchainColorTargetUVE()`
+accessor. `NullRenderDeviceUVE` ignores it like every other field it doesn't act on.
+
+**`PipelineDescUVE::vertexStride`** is the byte distance between consecutive vertices, required by
+`glVertexAttribPointer`; `VertexAttributeUVE::offset` alone was insufficient (a real RHI gap
+found and fixed during Increment 20, not present in the original design).
+
+**GL symbol confinement**: no public header under `engine/render/include/` or
+`engine/window/include/` ever names a GLFW or raw OpenGL type. `IWindowManagerUVE::
+GetNativeWindowHandleUVE()` returns type-erased `void*` (matching `ChunkUVE`/`IAssetManagerUVE::
+RegisterLoaderUVE<T>`'s established type-erasure precedent), which `GlRenderDeviceUVE.cpp`
+`reinterpret_cast`s back to `GLFWwindow*` internally — it already needs the GLFW header itself for
+`glfwGetProcAddress`, so this leaks nothing new into `engine/render`'s public surface. Modern GL
+entry points (`glCreateShader`, `glGenVertexArrays`, `glBufferData`, ...) are loaded at runtime via
+a **hand-rolled minimal function-pointer loader** (`engine/render/src/gl_functions_uve.h/.cpp`,
+module-private — never in `include/`): a plain struct of `PFNGL*PROC` members populated via
+`glfwGetProcAddress`, chosen over pulling in GLEW/glad because this backend only ever needs the
+~30 functions Increment 20 actually uses — the same "only build what the current consumer needs"
+discipline as `Matrix4x4UVE`'s minimal API. Legacy GL 1.1 functions (`glViewport`, `glClear`,
+`glClearColor`, `glReadPixels`) need no loading — the system's `<GL/gl.h>` already declares them.
+
+**`WindowManagerUVE`/`NullWindowManagerUVE`** extend the `NullRenderDeviceUVE`/`NullAudioDeviceUVE`
+Null-backend pairing convention to windowing: `EngineServicesUVE`'s "every service is a live,
+non-null reference" invariant needs zero headless-mode exceptions because `NullWindowManagerUVE`
+satisfies `IWindowManagerUVE` exactly as faithfully as `WindowManagerUVE`'s real GLFW3 backend
+does, just without touching any OS window. `WindowManagerUVE` owns the *entire* GL context
+lifecycle — `glfwInit`/`glfwCreateWindow`/`glfwMakeContextCurrent`/`glfwDestroyWindow`/
+`glfwTerminate` — never `GlRenderDeviceUVE`, which only ever loads function pointers and issues GL
+calls against a context it assumes is already current. `EngineCoreUVE::Shutdown()` must therefore
+reset `m_renderDevice` strictly before `m_windowManager` — every GL object dies while the context
+is still valid, and the context/GLFW itself is only torn down after.
+
+**The demo triangle** (`EngineCoreUVE::SetupDemoTriangleUVE()`/`RenderDemoTriangleUVE()`) is
+explicitly temporary scaffold proving `CreateBuffer → CreateShader → CreatePipeline → Bind/Draw →
+Present` end-to-end with hardcoded vertex data and inline GLSL — it deliberately bypasses
+`Renderer3DUVE`/`MeshRendererUVE`/asset loading/the ECS entirely and must never grow into a real
+content path. The intended long-term rendering roadmap is: `NullRenderDeviceUVE →
+GlRenderDeviceUVE (Increment 20) → Renderer3DUVE scene integration → Materials → PBR →
+RenderGraph → Editor viewport` — the demo triangle is only the first visible milestone on that
+path, not the final architecture, and should be deleted (not extended) once a real
+scene-to-window bridge exists.
+
+### Windowing/OpenGL environment prerequisites
+
+`engine/window/CMakeLists.txt` fetches GLFW3 via `FetchContent` (mirroring `nlohmann_json`'s
+precedent in `engine/config/CMakeLists.txt` — git-based fetches work even where raw HTTPS to
+GitHub doesn't). `engine/render/CMakeLists.txt` is the first `engine/render` consumer of
+`find_package(OpenGL REQUIRED)`, mirroring `engine/threading`'s `find_package(Threads REQUIRED)`
+precedent (see "Real OS threads" below) — the first module to require a system-provided library
+calls `find_package` for it directly. Building GLFW3's own CMake-driven X11 backend, and
+resolving this codebase's own `#include <GL/gl.h>`, additionally requires the system's X11/OpenGL
+*development* headers already installed (`libgl1-mesa-dev`, `libglfw3-dev`, `libxrandr-dev`,
+`libxinerama-dev`, `libxcursor-dev`, `libxi-dev`, `libxkbcommon-dev` on Ubuntu/Debian) — an
+environment prerequisite, not something `FetchContent` can provide.
 
 **Module-private vs. public concrete classes**: `NullRenderDeviceUVE` is public
 (`engine/render/include/`) because `EngineCoreUVE` constructs it directly, matching
