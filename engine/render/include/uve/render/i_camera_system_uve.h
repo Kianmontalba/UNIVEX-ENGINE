@@ -11,6 +11,7 @@
 
 #include "uve/math/frustum_uve.h"
 #include "uve/math/matrix4x4_uve.h"
+#include "uve/math/vector3_uve.h"
 #include "uve/scene/entity_uve.h"
 #include "uve/scene/i_entity_manager_uve.h"
 
@@ -60,6 +61,13 @@ public:
     /// callers can go straight from a camera entity to a usable frustum without reaching into
     /// `UVE::Math` directly).
     [[nodiscard]] virtual Math::FrustumUVE ExtractFrustumUVE(const Math::Matrix4x4UVE& viewProjection) const = 0;
+
+    /// `cameraEntity`'s raw world position (`WorldTransformComponentUVE::worldPosition`) — the
+    /// view vector callers (e.g. `Renderer3DUVE`'s specular lighting uniform, Increment 24) need
+    /// but that `ComputeViewMatrixUVE`'s returned matrix doesn't expose directly. Same
+    /// missing-component contract as every other method here: no graceful fallback.
+    [[nodiscard]] virtual Math::Vector3UVE GetWorldPositionUVE(const Scene::IEntityManagerUVE& entityManager,
+                                                                 Scene::EntityUVE cameraEntity) const = 0;
 };
 
 } // namespace UVE::Render

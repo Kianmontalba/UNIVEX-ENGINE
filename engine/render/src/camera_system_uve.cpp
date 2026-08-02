@@ -42,4 +42,9 @@ Math::FrustumUVE CameraSystemUVE::ExtractFrustumUVE(const Math::Matrix4x4UVE& vi
     return Math::FrustumUVE::FromViewProjectionUVE(viewProjection);
 }
 
+Math::Vector3UVE CameraSystemUVE::GetWorldPositionUVE(const Scene::IEntityManagerUVE& entityManager,
+                                                         Scene::EntityUVE cameraEntity) const {
+    return entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(cameraEntity).worldPosition;
+}
+
 } // namespace UVE::Render

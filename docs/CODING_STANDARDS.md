@@ -577,7 +577,8 @@ reused to tell the shader which slot a `sampler2D` uniform should read from — 
 uniform is just an int uniform holding a texture unit index. `Renderer3DUVE` uses three fixed
 slots: albedo=0, normal=1, ao=2 (`kAlbedoTextureSlotUVE`/`kNormalTextureSlotUVE`/
 `kAoTextureSlotUVE`), and a fixed uniform-name convention every material shader is expected to
-declare: `uModel`, `uViewProjection`, `uAlbedoColor`, `uMetallic`, `uRoughness`,
+declare: `uModel`, `uViewProjection`, `uViewPosition` (the rendering camera's world position, see
+the Lighting section's specular formula, Increment 24), `uAlbedoColor`, `uMetallic`, `uRoughness`,
 `uEmissiveColor`, `uAlbedoTexture`, `uNormalTexture`, `uAOTexture`. A shader that doesn't declare
 one of these is a safe no-op per `SetUniform*UVE`'s own documented contract (unknown/optimized-out
 name), not an error.
@@ -621,11 +622,14 @@ render module without adding new, unplanned RHI surface).
 
 ## Lighting (`LightSystemUVE`, Increment 23)
 
-**Scope, deliberately narrow.** At most one active directional light, no point/spot lights, no
-light culling, no shadows, no specular/Blinn-Phong — diffuse-only Lambertian (N·L) plus a flat
-ambient term. `metallic`/`roughness` (bound as uniforms since Increment 22) stay visually inert;
-consuming them is future PBR work. `LightSystemUVE` is the spec's Part 7.2 entry ("Light culling,
-IBL") with culling/IBL explicitly deferred.
+**Scope, deliberately narrow, as of Increment 23.** At most one active directional light, no
+point/spot lights, no light culling, no shadows, no specular/Blinn-Phong — diffuse-only
+Lambertian (N·L) plus a flat ambient term. `metallic`/`roughness` (bound as uniforms since
+Increment 22) stayed visually inert; consuming them was future PBR work. `LightSystemUVE` is the
+spec's Part 7.2 entry ("Light culling, IBL") with culling/IBL still explicitly deferred.
+**Increment 24 (see the Specular / Metallic-Workflow PBR section below) adds the specular term** —
+`metallic`/`roughness` are no longer inert; point/spot lights, culling, and shadows remain future
+work.
 
 **`LightComponentUVE` needed no changes.** It already carried `color`/`intensity` (an
 Increment-5-era placeholder) and was already fully wired through `SceneSerializerUVE`. A
@@ -677,6 +681,74 @@ change was needed. No real GLSL was authored for tests, matching Increment 22:
 compute or push a normal matrix (inverse-transpose of the model matrix) this increment — correct
 world-space normal transform under non-uniform scale needs one; using `uModel` directly to
 transform normals is only correct under uniform scale. Deferred, not forgotten.
+
+## Specular / Metallic-Workflow PBR (Increment 24)
+
+**Makes `metallic`/`roughness` finally meaningful.** Increment 23 deliberately left them inert
+(diffuse-only Lambertian + ambient). This increment documents a metallic-workflow specular term
+(Fresnel-Schlick `F0 = mix(0.04, albedo, metallic)` + a roughness-driven distribution) and threads
+the one piece of data that formula needs but wasn't available yet: the rendering camera's world
+position (the view vector `V`, and the half-vector `H = normalize(V + L)`). `N`, `L`, `albedo`,
+`metallic`, `roughness` were already available.
+
+**Still zero C++-side lighting math**, matching Increment 23's own precedent exactly: this
+codebase has never computed N·L, Fresnel, or any other lighting term in C++ — every formula here
+is a documented expected-GLSL-usage comment, never compiled or executed by any test
+(`NullRenderDeviceUVE` never validates shader source; the material test fixture's shader loader
+returns literal garbage `"void main() { }"`). The only actual code change is plumbing one new
+`Math::Vector3UVE` uniform through.
+
+**`ICameraSystemUVE` gains `GetWorldPositionUVE(entityManager, cameraEntity)`** — a thin wrapper
+returning `WorldTransformComponentUVE::worldPosition`, added specifically so `Renderer3DUVE`
+keeps funneling every camera-related read through `ICameraSystemUVE` (it never reads
+`WorldTransformComponentUVE` directly for the camera; adding a direct `GetComponentUVE` call
+there instead would have broken that boundary). Same missing-component contract as
+`ComputeViewMatrixUVE`: no graceful fallback, asserts in debug builds.
+
+**`Renderer3DUVE` wiring.** No constructor signature change (no new dependency — `ICameraSystemUVE`
+was already injected). `FrameUniformsUVE` gains `Math::Vector3UVE viewPosition`, computed once per
+frame in `RenderFrameUVE()` alongside `viewProjection`/the light data, and pushed as a new
+`uViewPosition` uniform in `RecordItemsUVE()` — grouped with the other frame-constant pushes
+(`uModel`, `uViewProjection`, `uLightDirection`, `uLightColor`, `uLightIntensity`,
+`uAmbientColor`, `uViewPosition`, then the material-uniform group). Per-item command count rises
+from 20 to 21 (22 → 23 total per render, including Begin/EndRenderPass).
+
+**Expected GLSL usage** (documented only, not implemented/compiled this increment, same as
+Increment 23's diffuse formula):
+```glsl
+// Simplified metallic-workflow specular (no geometry/visibility term — a real Smith G term
+// is deferred, not forgotten; see the known-simplification note below).
+vec3 N = normalize(vNormal);
+vec3 L = normalize(-uLightDirection);
+vec3 V = normalize(uViewPosition - vWorldPos);
+vec3 H = normalize(V + L);
+
+vec3 F0 = mix(vec3(0.04), albedo, uMetallic);
+float NdotH = max(dot(N, H), 0.0);
+float roughness2 = uRoughness * uRoughness;
+float denom = NdotH * NdotH * (roughness2 - 1.0) + 1.0;
+float D = roughness2 / (3.14159265 * denom * denom);
+vec3 F = F0 + (1.0 - F0) * pow(1.0 - max(dot(V, H), 0.0), 5.0);
+
+float NdotL = max(dot(N, L), 0.0);
+vec3 diffuse = albedo * (1.0 - uMetallic) * uLightColor * uLightIntensity * NdotL;
+vec3 specular = D * F * uLightColor * uLightIntensity * NdotL; // NdotL stands in for the
+                                                                // omitted geometry term
+vec3 ambient = albedo * uAmbientColor;
+vec3 color = ambient + diffuse + specular + emissive;
+```
+`vWorldPos` is a vertex-shader-interpolated varying, not a uniform — out of scope to define since
+no real shader is authored this increment, exactly like Increment 23.
+
+**Out of scope, deliberately**: point/spot lights, multi-light support, shadows, real GLSL
+authoring / live-GL visual proof (same GL-symbol-confinement rationale as Increments 22–23),
+`ShaderManagerUVE`↔materials bridging, built-in `.glsl` file updates. No new `Vector3UVE` math
+helpers (`ReflectUVE`, scalar-on-left `operator*`, `PowUVE`) — since no C++-side lighting math
+exists to need them, only GLSL-side (documented, not compiled).
+
+**Known simplifications carried over/added**: the normal-matrix gap from Increment 23 (still
+unaddressed). New this increment: the documented specular formula omits a real geometry/visibility
+term (no Smith-GGX `G`), using `NdotL` as a stand-in approximation — deferred, not forgotten.
 
 ## Allocator boundary
 
