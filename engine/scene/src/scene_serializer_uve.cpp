@@ -84,7 +84,11 @@ namespace {
 }
 
 [[nodiscard]] nlohmann::json ToJsonUVE(const LightComponentUVE& component) {
-    return {{"color", ToJsonUVE(component.color)}, {"intensity", component.intensity}};
+    return {{"color", ToJsonUVE(component.color)},
+            {"intensity", component.intensity},
+            {"type", static_cast<std::uint8_t>(component.type)},
+            {"range", component.range},
+            {"spotAngleDegrees", component.spotAngleDegrees}};
 }
 
 [[nodiscard]] nlohmann::json ToJsonUVE(const CameraComponentUVE& component) {
@@ -172,8 +176,14 @@ template <typename T, typename FromJsonFunc>
                                                    Asset::AssetGuidUVE{json.at("materialGuid").get<std::uint64_t>()}};
                       }));
         table.emplace("LightComponentUVE", MakeRegistrationUVE<LightComponentUVE>([](const nlohmann::json& json) {
-                          return LightComponentUVE{Vector3FromJsonUVE(json.at("color")),
-                                                    json.at("intensity").get<float>()};
+                          LightComponentUVE light;
+                          light.color = Vector3FromJsonUVE(json.at("color"));
+                          light.intensity = json.at("intensity").get<float>();
+                          light.type = static_cast<LightTypeUVE>(
+                              json.value("type", static_cast<std::uint8_t>(LightTypeUVE::Directional)));
+                          light.range = json.value("range", 10.0F);
+                          light.spotAngleDegrees = json.value("spotAngleDegrees", 45.0F);
+                          return light;
                       }));
         table.emplace("CameraComponentUVE", MakeRegistrationUVE<CameraComponentUVE>([](const nlohmann::json& json) {
                           return CameraComponentUVE{json.at("fieldOfViewDegrees").get<float>(),

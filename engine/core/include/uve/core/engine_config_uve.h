@@ -105,6 +105,24 @@ struct EngineConfigUVE {
     /// for a whole-scene tunable. Low, desaturated default so an unlit scene isn't pitch black.
     Math::Vector3UVE ambientColor{0.05F, 0.05F, 0.05F};
 
+    /// Width/height, in texels, of the persistent depth-only texture Renderer3DUVE renders its
+    /// directional-light shadow depth pre-pass into (see Render::Renderer3DUVE, Increment 26). A
+    /// square texture, sized once at construction — like renderTargetWidth/Height above, this
+    /// can't change for a running EngineCoreUVE's lifetime.
+    std::uint32_t shadowMapResolution = 2048;
+
+    /// Half-size, in world units, of the fixed orthographic box Renderer3DUVE's shadow depth
+    /// pre-pass projects through, centered on the shadow-casting light entity's world position.
+    /// Not fitted to the camera's visible frustum (that's future work, e.g. cascaded shadow
+    /// maps) — a fixed box is the simplest choice that needs no new frustum-fitting/AABB math,
+    /// matching this engine's "no unnecessary new math" precedent.
+    float shadowMapHalfExtent = 20.0F;
+
+    /// Near/far planes of that same orthographic shadow projection, in world units measured from
+    /// the shadow-casting light entity along its forward direction.
+    float shadowMapNearPlane = 0.1F;
+    float shadowMapFarPlane = 100.0F;
+
     /// Acceleration PhysicsSystemUVE (see Physics::PhysicsSystemUVE) applies to every
     /// non-kinematic RigidBodyComponentUVE each fixed step, scaled by its own gravityScale.
     /// Earth-like default, Y-up (matching this engine's convention throughout).

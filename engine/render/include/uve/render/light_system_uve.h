@@ -19,8 +19,7 @@ namespace UVE::Render {
 /// parameter rather than owning a reference to one.
 class LightSystemUVE final : public ILightSystemUVE {
 public:
-    [[nodiscard]] DirectionalLightDataUVE ExtractActiveLightUVE(
-        Scene::IEntityManagerUVE& entityManager) const override;
+    [[nodiscard]] LightListUVE ExtractActiveLightsUVE(Scene::IEntityManagerUVE& entityManager) const override;
 };
 
 } // namespace UVE::Render

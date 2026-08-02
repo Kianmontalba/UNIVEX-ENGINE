@@ -13,7 +13,8 @@
 
 namespace UVE::Render::Shader::BuiltIn {
 
-/// The 4 built-in shaders (Increment 21), each a single physical `.glsl` file under
+/// The built-in shaders (4 from Increment 21, plus shadow_depth from Increment 26), each a single
+/// physical `.glsl` file under
 /// engine/render/shader/built_in/ containing both stages, split via `#ifdef VERTEX_SHADER` /
 /// `#ifdef FRAGMENT_SHADER` (ShaderManagerUVE::CreateProgramUVE() compiles the same resolved
 /// source twice, injecting the matching macro each time). Every constant here is the embedded
@@ -32,5 +33,8 @@ extern const std::string_view kBasic3DTexturedSource;
 
 inline constexpr std::string_view kFullscreenQuadVirtualPath = "shaders/fullscreen_quad.glsl";
 extern const std::string_view kFullscreenQuadSource;
+
+inline constexpr std::string_view kShadowDepthVirtualPath = "shaders/shadow_depth.glsl";
+extern const std::string_view kShadowDepthSource;
 
 } // namespace UVE::Render::Shader::BuiltIn

@@ -750,6 +750,253 @@ exists to need them, only GLSL-side (documented, not compiled).
 unaddressed). New this increment: the documented specular formula omits a real geometry/visibility
 term (no Smith-GGX `G`), using `NdotL` as a stand-in approximation — deferred, not forgotten.
 
+## Point/Spot Lights + Multi-Light (Increment 25)
+
+**Replaces the single-directional-light limit with up to `kMaxLightsUVE = 4` simultaneous lights of
+any mix of types.** Increments 23-24 deliberately scoped down to one active directional light —
+both increments' own doc comments flagged point/spot lights and multi-light support as the
+anticipated next step. This increment is that step: it extends `LightComponentUVE` with a light
+type plus type-specific falloff data, and reworks `ILightSystemUVE`/`Renderer3DUVE` to gather and
+push a fixed-size array of lights per frame instead of just one.
+
+**Two scope decisions, confirmed before implementation, not inferred:**
+- **Fixed max of 4 simultaneous lights** (`Render::kMaxLightsUVE`), a compile-time constant, not
+  `EngineConfigUVE`-driven — no request for runtime configurability, matching the existing
+  fixed-texture-slot-constant precedent from Increment 22.
+- **Selection policy when more than 4 lights exist in a scene: first-N-encountered, not
+  closest-to-camera.** This is a direct extension of the v1 "arbitrary/unspecified, deterministic
+  only within one archetype" precedent — it requires zero new C++ math (no distance computation or
+  sorting), keeping this increment's C++ surface limited to data plumbing, exactly like
+  Increments 23-24's own "no C++ lighting math" discipline. A closest-N-to-camera policy is
+  explicitly deferred, not implemented — no "bounded-N-with-sort-policy" precedent exists anywhere
+  else in this engine (the closest analog, `RaycastSystemUVE::RaycastUVE()`, selects exactly one
+  closest hit, not N).
+
+**`Scene::LightComponentUVE` extended, field order deliberately preserving backward compatibility:**
+```cpp
+enum class LightTypeUVE : std::uint8_t { Directional = 0, Point = 1, Spot = 2 };
+
+struct LightComponentUVE final {
+    // color/intensity stay first (their original Increment-5 position) so every existing 2-arg
+    // aggregate-init call site (LightComponentUVE{color, intensity}) keeps compiling unmodified
+    Math::Vector3UVE color{1.0F, 1.0F, 1.0F};
+    float intensity = 1.0F;
+    LightTypeUVE type = LightTypeUVE::Directional;
+    float range = 10.0F;            // Point/Spot only; ignored for Directional
+    float spotAngleDegrees = 45.0F; // Spot only (cone half-angle); ignored otherwise
+};
+```
+The approved plan originally put `type` first; before touching any code, `grep -rn
+"LightComponentUVE{"` turned up 8 existing 2-arg positional aggregate-init call sites across the
+codebase (including one test file not even in the task list). Reordering to keep `color`/
+`intensity` first — appending the 3 new fields after — was the fix, applied before any build was
+attempted. **When adding fields to any existing aggregate-init'd component struct, grep for
+existing positional-init call sites first and append new fields after the original ones**, unless
+every call site is being updated to designated/named initialization in the same change.
+
+Position/direction stay derived from the entity's `WorldTransformComponentUVE`
+(`worldPosition`/`worldRotation` via `RotateVectorUVE(rotation, {0,0,-1})`) — not stored on the
+component, preserving the Increment 23 convention.
+
+**`SceneSerializerUVE` backward compatibility** follows the established `ColliderComponentUVE`/
+`AudioSourceComponentUVE` pattern exactly: `color`/`intensity` (the original fields) stay
+`json.at(...)` (required); `type`/`range`/`spotAngleDegrees` (the new fields) use
+`json.value("fieldName", defaultValue)` with defaults matching the struct's in-class defaults, so
+old saves without those keys silently get normal defaults. `type` serializes via
+`static_cast<std::uint8_t>` to/from JSON (matching the `AudioSourceComponentUVE::attenuationCurve`
+precedent), never as a string.
+
+**`DirectionalLightDataUVE` renamed to `LightDataUVE`** — "Directional" stopped being accurate once
+Point/Spot exist. Always a full record per slot (every field populated regardless of type),
+preserving the established "no shader-side branching on optional data" philosophy from the
+fallback-texture/zero-intensity-sentinel precedents: a Directional slot's irrelevant `position`/
+`range`/`spotAngleDegrees` are simply unused by the (documented, not implemented) GLSL type-branch.
+```cpp
+constexpr std::size_t kMaxLightsUVE = 4;
+struct LightDataUVE {
+    Scene::LightTypeUVE type = Scene::LightTypeUVE::Directional;
+    Math::Vector3UVE position{};                    // Point/Spot: world position
+    Math::Vector3UVE direction{0.0F, 0.0F, -1.0F};   // Directional/Spot
+    Math::Vector3UVE color{1.0F, 1.0F, 1.0F};
+    float intensity = 0.0F;   // 0.0F sentinel: this slot is empty — extends the v1 "no light"
+                               // sentinel to a per-slot basis, still zero shader branching needed
+    float range = 10.0F;
+    float spotAngleDegrees = 45.0F;
+};
+using LightListUVE = std::array<LightDataUVE, kMaxLightsUVE>;
+```
+
+**`ILightSystemUVE::ExtractActiveLightsUVE`** (renamed from `ExtractActiveLightUVE`) returns a
+`LightListUVE` instead of a single `LightDataUVE`. `LightSystemUVE`'s implementation walks
+`ForEachUVE<WorldTransformComponentUVE, LightComponentUVE>` filling the array in encounter order,
+skipping further writes once `kMaxLightsUVE` slots are filled (a simple count guard — first-N-
+encountered, no sorting, no distance math). Trailing unfilled slots keep the default `LightDataUVE{}`
+sentinel (`intensity == 0.0F`).
+
+**`Renderer3DUVE` wiring.** `FrameUniformsUVE::light` (single) becomes `FrameUniformsUVE::lights`
+(`LightListUVE`). `RecordItemsUVE()`'s old 3-uniform light block becomes a `for` loop over
+`kMaxLightsUVE` slots, pushing GLSL array-of-struct-named uniforms — `"uLights[i].type"`,
+`.position`, `.direction`, `.color`, `.intensity`, `.range`, `.spotAngleDegrees` (7 calls × 4 slots
+= 28 total, replacing the old 3). This works with zero RHI changes: `GlCommandBufferUVE`'s uniform
+lookup (`FindUniformUVE`) is a plain string-keyed `std::unordered_map` lookup built once at
+pipeline-link time — an array-of-struct name like `"uLights[0].color"` is just another string key,
+identical in cost and mechanism to a flat name. Chosen over flat indexed names (`uLightColor0`) as
+the more idiomatic, scalable convention for real multi-light shader authors. Per-render command
+count for the single-mesh/no-light test scenario rises from 23 to 48 (Begin/EndRenderPass
+unaffected); see `RenderFrameUVE_VisibleMesh_RecordsExpectedCommandSequence` in
+`renderer_3d_uve_tests.cpp` for the exact indexed layout.
+
+**Expected GLSL usage** (documented only, not implemented/compiled this increment, same as every
+prior lighting increment):
+```glsl
+struct LightUVE {
+    int type;             // 0 = Directional, 1 = Point, 2 = Spot
+    vec3 position;
+    vec3 direction;
+    vec3 color;
+    float intensity;
+    float range;
+    float spotAngleDegrees;
+};
+uniform LightUVE uLights[4];
+
+vec3 lighting = ambient;
+for (int i = 0; i < 4; ++i) {
+    if (uLights[i].intensity <= 0.0) { continue; } // empty-slot sentinel, same idiom as v1
+
+    vec3 L;
+    float attenuation = 1.0;
+    if (uLights[i].type == 0) { // Directional
+        L = normalize(-uLights[i].direction);
+    } else { // Point or Spot
+        vec3 toLight = uLights[i].position - vWorldPos;
+        float dist = length(toLight);
+        L = toLight / dist;
+        attenuation = 1.0 / max(dist * dist, 0.0001); // inverse-square falloff
+        if (uLights[i].type == 2) { // Spot: hard cone cutoff, no soft edge
+            float cosAngle = dot(-L, normalize(uLights[i].direction));
+            if (cosAngle < cos(radians(uLights[i].spotAngleDegrees))) { attenuation = 0.0; }
+        }
+    }
+
+    // ...N·L diffuse + metallic-workflow specular from Increment 24, each term multiplied by
+    // uLights[i].color * uLights[i].intensity * attenuation, accumulated into `lighting`
+}
+```
+
+**Out of scope, deliberately**: light culling/prioritization beyond first-N-encountered, shadows,
+IBL, soft/smoothstep spot cone edges (hard cutoff only), real GLSL authoring or live-GL visual
+proof (same GL-symbol-confinement rationale as Increments 22-24), `ShaderManagerUVE`↔materials
+bridging, configurable `kMaxLightsUVE`, any new `Vector3UVE`/math helpers — `range`/
+`spotAngleDegrees` are stored/passed through as plain data, never computed on in C++. **Still zero
+C++-side lighting math** — this codebase has never computed N·L, Fresnel, attenuation, or any other
+lighting term in C++; every formula remains a documented expected-GLSL-usage comment, never
+compiled or executed by any test.
+
+## Directional Shadow Mapping (Increment 26)
+
+**Delivers real shadow mapping for the primary use case: a single sun/directional light.**
+Increments 23-25 built lighting but nothing occludes it — every surface stays fully lit. Two
+scope-defining decisions were confirmed with the user before implementation:
+
+1. **Only Directional lights cast shadows.** Point/Spot shadows need cubemap/perspective shadow
+   maps and multiple render passes per light — explicitly deferred, matching every prior
+   increment's "start with the simple case" precedent.
+2. **The shadow frustum is a fixed-half-extent orthographic box centered on the shadow-casting
+   light entity's world position** (`EngineConfigUVE::shadowMapHalfExtent`/`shadowMapNearPlane`/
+   `shadowMapFarPlane`), not a camera-frustum-fitted box. No new frustum-fitting/AABB math —
+   consistent with this codebase's running "no unnecessary new math" discipline.
+
+**This increment departs from 23-25's testing philosophy in one specific place.** Those increments
+kept literally all lighting math as documented-only GLSL, never compiled or GL-verified. Shadow
+mapping's *depth pre-pass* is not a lighting formula — it's RHI/pipeline mechanics (a second render
+pass, a new pipeline, a position-only vertex shader), the same category of work as the demo
+triangle and the built-in-shader system from Increment 21. So the depth pre-pass is **real,
+compiled, tested** code — a new built-in shader (`engine/render/shader/built_in/shadow_depth.glsl`,
+following the established physical-file + embedded-fallback + parity-test convention). Only the
+shadow-map *sampling/comparison* inside the main lighting fragment shader stays documented-only
+GLSL, exactly like the specular/attenuation formulas already there — because that still lives
+inside the un-authored per-material fragment shader.
+
+**`Matrix4x4UVE::OrthographicUVE`** — a new factory matching `PerspectiveUVE`'s existing Vulkan-
+depth-range `[0,1]`/Y-up-NDC convention. Real, tested math (`tests/math/matrix4x4_uve_tests.cpp`).
+
+**`LightDataUVE` gains `Math::QuaternionUVE rotation`**, populated from
+`worldTransform.worldRotation` — the same source `direction` is already derived from. This reuses
+`Matrix4x4UVE::ViewFromPositionAndRotationUVE` directly for a light's view matrix with zero new
+view-matrix math, instead of inventing a `LookAtUVE` from a direction vector.
+
+**`GlCommandBufferUVE::BeginRenderPassUVE` depth-only FBO path.** Previously,
+`colorAttachment == kInvalidTextureHandleUVE` unconditionally routed to the *default* framebuffer,
+silently ignoring any `depthAttachment` — there was no depth-only (no color) FBO path. Fixed by
+restructuring the branch to "`colorAttachment == invalid && depthAttachment == invalid` → default
+framebuffer; otherwise build a real FBO", attaching color only if present, depth only if present,
+calling `glDrawBuffer(GL_NONE)`/`glReadBuffer(GL_NONE)` when there's no color attachment (a
+core-profile completeness requirement for a depth-only FBO — both are legacy OpenGL 1.1 entry
+points `<GL/gl.h>` already declares directly, no loader entry needed, same as the bare
+`glViewport`/`glClear` calls already in that function), and deriving the viewport size from
+whichever attachment is actually present.
+
+**`Renderer3DUVE` wiring** — the largest piece:
+- Constructor gains `Shader::IShaderManagerUVE& shaderManager` (positioned after `lightSystem`,
+  matching `EngineCoreUVE`'s existing construction order — `ShaderManagerUVE` is already
+  constructed before `Renderer3D`) plus `shadowMapResolution`/`shadowMapHalfExtent`/
+  `shadowMapNearPlane`/`shadowMapFarPlane`.
+- New members: `shadowMapTarget` (a persistent `Depth32Float` texture sized
+  `shadowMapResolution × shadowMapResolution` — unlike the main pass's own `depthTarget`, which is
+  written and never sampled, this is later bound as a sampled texture input during the main pass)
+  and `shadowProgram` (a `std::shared_ptr<Shader::ShaderProgramUVE>` created once via
+  `shaderManager.CreateProgramUVE(...)`, reusing `MeshVertexLayoutUVE()` — the exact same vertex
+  layout materials use, since the shadow pass draws the same mesh vertex buffers even though its
+  vertex shader only reads `POSITION`). This is the exact same pattern `EngineCoreUVE`'s demo
+  triangle already established for a built-in (non-material) shader: compile via
+  `IShaderManagerUVE`, hold the `ShaderProgramUVE`, `ApplyToUVE(commandBuffer)` binds the pipeline
+  and flushes queued uniforms.
+- `kShadowMapTextureSlotUVE = 3`, the next slot after the three material texture slots.
+- `RenderFrameUVE()` finds the first slot where `type == Directional && intensity > 0.0F` (a
+  simple linear scan via `FindShadowCasterUVE` — no sorting, same first-N-encountered spirit as
+  Increment 25). If found, computes `lightSpaceMatrix = OrthographicUVE(...) *
+  ViewFromPositionAndRotationUVE(caster.position, caster.rotation)`; otherwise
+  `Matrix4x4UVE::IdentityUVE()`.
+- **`RecordShadowPassUVE`, called before the existing main pass, always runs exactly once per
+  frame** — `BeginRenderPassUVE{colorAttachment: invalid, depthAttachment: shadowMapTarget,
+  depthLoadOp: Clear, clearDepth: 1.0}`, draws every opaque item only if a caster was found *and*
+  `shadowProgram->IsValidUVE()`, then `EndRenderPassUVE`. When there's no caster or the program
+  isn't ready yet, the pass still begins/ends but draws nothing, leaving the shadow map cleared to
+  `1.0` (far plane). **No C++-side branching or sentinel flag is needed for the "no shadow caster"
+  case** — a shadow-comparison formula (`sampledDepth >= currentDepth → lit`) against an all-`1.0`
+  map naturally always evaluates "not in shadow," composing for free with the existing clear-value
+  default. Matches this codebase's established sentinel philosophy (zero-intensity light slots,
+  fallback textures). No light-frustum culling this increment — reuses the same
+  camera-frustum-culled opaque list the main pass already extracts (a documented known limitation).
+- The main pass gains, per item: `uLightSpaceMatrix` (Matrix4x4), then `BindTextureUVE` +
+  `uShadowMapTexture` (int) for the shadow map at slot 3 — 3 new commands per item, appended after
+  the light-uniform loop.
+
+**Expected GLSL usage** (documented only, not implemented/compiled this increment, same as every
+prior lighting increment) — the main fragment shader samples `uShadowMapTexture` with a simple
+constant bias:
+```glsl
+uniform sampler2D uShadowMapTexture;
+uniform mat4 uLightSpaceMatrix;
+
+float ComputeShadowFactorUVE(vec3 worldPos) {
+    vec4 lightSpacePos = uLightSpaceMatrix * vec4(worldPos, 1.0);
+    vec3 projected = lightSpacePos.xyz / lightSpacePos.w;
+    projected = projected * 0.5 + 0.5; // NDC [-1,1] -> texture [0,1]
+    float sampledDepth = texture(uShadowMapTexture, projected.xy).r;
+    float currentDepth = projected.z;
+    return (currentDepth - 0.005 > sampledDepth) ? 0.0 : 1.0; // 0.0 = in shadow
+}
+// ...multiply the Increment 25 diffuse+specular accumulation (for the shadow-casting Directional
+// light's contribution only) by ComputeShadowFactorUVE(vWorldPos) before adding it to `lighting`
+```
+
+**Out of scope, deliberately**: Point/Spot shadows, cascaded/multiple shadow maps, PCF/soft shadow
+edges (hard cutoff only), camera-frustum-fitted shadow bounds, shadow-casting culled against the
+light's own frustum (reuses the camera-culled list instead), real GLSL authoring or live-GL visual
+proof for the sampling/comparison step (same GL-symbol-confinement rationale as Increments 22-25).
+
 ## Allocator boundary
 
 `PoolAllocatorUVE`, `StackAllocatorUVE`, and `HeapAllocatorUVE` (`engine/memory/`) are the

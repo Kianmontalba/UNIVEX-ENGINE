@@ -239,6 +239,64 @@ TEST_F(GlRenderDeviceUVETest, FullTriangleDrawAndPresent_DoesNotCrash) {
     SUCCEED();
 }
 
+// Depth-only render pass (Increment 26, shadow mapping's depth pre-pass): colorAttachment left
+// invalid, depthAttachment a real Depth32Float texture — exercises GlCommandBufferUVE's
+// depth-only FBO branch (glDrawBuffer(GL_NONE)/glReadBuffer(GL_NONE), viewport derived from the
+// depth texture's own size since no color attachment is present to derive it from). Like
+// FullTriangleDrawAndPresent_DoesNotCrash above, this codebase's public RHI surface doesn't expose
+// glCheckFramebufferStatus/glGetError results directly, so "doesn't crash and produces a usable
+// texture handle" is this test's proof, matching every other live-GL test's verification style.
+TEST_F(GlRenderDeviceUVETest, DepthOnlyRenderPass_NoColorAttachment_DoesNotCrash) {
+    const ShaderHandleUVE vertexShader =
+        renderDevice->CreateShaderUVE(ShaderDescUVE{ShaderStageUVE::Vertex, std::string(kValidVertexShaderSource)});
+    const ShaderHandleUVE fragmentShader = renderDevice->CreateShaderUVE(
+        ShaderDescUVE{ShaderStageUVE::Fragment, std::string(kValidFragmentShaderSource)});
+
+    PipelineDescUVE pipelineDesc;
+    pipelineDesc.vertexShader = vertexShader;
+    pipelineDesc.fragmentShader = fragmentShader;
+    pipelineDesc.vertexLayout = {VertexAttributeUVE{"POSITION", VertexAttributeFormatUVE::Float3, 0}};
+    pipelineDesc.vertexStride = 3U * static_cast<std::uint32_t>(sizeof(float));
+    pipelineDesc.depthTestEnabled = true;
+    pipelineDesc.depthWriteEnabled = true;
+    const PipelineHandleUVE pipeline = renderDevice->CreatePipelineUVE(pipelineDesc);
+    ASSERT_NE(pipeline, kInvalidPipelineHandleUVE);
+
+    const TextureHandleUVE depthTexture =
+        renderDevice->CreateTextureUVE(TextureDescUVE{64, 64, TextureFormatUVE::Depth32Float, 1});
+    ASSERT_NE(depthTexture, kInvalidTextureHandleUVE);
+
+    constexpr float kVertices[] = {0.0F, 0.5F, 0.0F, -0.5F, -0.5F, 0.0F, 0.5F, -0.5F, 0.0F};
+    const std::span<const std::byte> vertexBytes = std::as_bytes(std::span<const float>(kVertices));
+    const BufferHandleUVE vertexBuffer =
+        renderDevice->CreateBufferUVE(BufferDescUVE{vertexBytes.size(), BufferUsageUVE::Vertex}, vertexBytes);
+
+    std::unique_ptr<ICommandBufferUVE> commandBuffer = renderDevice->CreateCommandBufferUVE();
+    ASSERT_NE(commandBuffer, nullptr);
+
+    RenderPassDescUVE passDesc;
+    passDesc.colorAttachment = kInvalidTextureHandleUVE;
+    passDesc.depthAttachment = depthTexture;
+    passDesc.depthLoadOp = LoadOpUVE::Clear;
+    passDesc.clearDepth = 1.0F;
+
+    commandBuffer->BeginRenderPassUVE(passDesc);
+    commandBuffer->BindPipelineUVE(pipeline);
+    commandBuffer->BindVertexBufferUVE(vertexBuffer);
+    commandBuffer->DrawUVE(3);
+    commandBuffer->EndRenderPassUVE();
+
+    renderDevice->SubmitUVE(std::move(commandBuffer));
+
+    renderDevice->DestroyBufferUVE(vertexBuffer);
+    renderDevice->DestroyTextureUVE(depthTexture);
+    renderDevice->DestroyPipelineUVE(pipeline);
+    renderDevice->DestroyShaderUVE(vertexShader);
+    renderDevice->DestroyShaderUVE(fragmentShader);
+
+    SUCCEED();
+}
+
 TEST_F(GlRenderDeviceUVETest, RepeatedPresentCalls_DoNotChangeLiveResourceCount) {
     ASSERT_EQ(renderDevice->GetLiveResourceCountUVE(), 0U);
     for (int i = 0; i < 5; ++i) {

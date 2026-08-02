@@ -54,6 +54,14 @@ struct Matrix4x4UVE {
     [[nodiscard]] static Matrix4x4UVE PerspectiveUVE(float fovYRadians, float aspectRatio, float nearPlane,
                                                       float farPlane) noexcept;
 
+    /// Builds a right-handed orthographic projection matrix with the same Vulkan-style depth range
+    /// `[0, 1]` and Y-up NDC as PerspectiveUVE (near plane maps to depth 0, far plane maps to depth
+    /// 1). `left`/`right`/`bottom`/`top` describe the projection box in view space. Introduced for
+    /// directional-light shadow mapping (Increment 26), where a light has no meaningful field of
+    /// view to derive a perspective frustum from.
+    [[nodiscard]] static Matrix4x4UVE OrthographicUVE(float left, float right, float bottom, float top,
+                                                       float nearPlane, float farPlane) noexcept;
+
     /// Builds a camera view matrix directly from world position and rotation (equivalent to,
     /// but cheaper than, inverting a TRS world matrix with unit scale). The camera's local
     /// forward is `-Z`, local up is `+Y`, local right is `+X`, matching this matrix's
