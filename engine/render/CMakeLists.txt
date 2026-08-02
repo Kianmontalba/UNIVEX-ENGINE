@@ -20,6 +20,7 @@ add_library(uve_render STATIC
     src/camera_system_uve.cpp
     src/render_queue_uve.cpp
     src/mesh_renderer_uve.cpp
+    src/light_system_uve.cpp
     src/renderer_3d_uve.cpp
     src/gl_functions_uve.cpp
     src/gl_command_buffer_uve.cpp

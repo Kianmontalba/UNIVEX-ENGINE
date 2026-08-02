@@ -26,6 +26,7 @@
 #include "uve/debug/logging_macros_uve.h"
 #include "uve/math/frustum_uve.h"
 #include "uve/math/matrix4x4_uve.h"
+#include "uve/render/i_light_system_uve.h"
 #include "uve/render/render_queue_uve.h"
 
 namespace UVE::Render {
@@ -96,6 +97,18 @@ const std::vector<VertexAttributeUVE>& MeshVertexLayoutUVE() {
     return layout;
 }
 
+/// Frame-constant uniform data threaded into RecordItemsUVE() for every item this frame: the
+/// view-projection matrix plus this frame's single active directional light (or the "no light"
+/// sentinel from ILightSystemUVE::ExtractActiveLightUVE()) and the global ambient term. Bundled
+/// into one struct — mirroring PipelineDescUVE's/RenderPassDescUVE's own precedent for grouping
+/// related descriptor data — rather than growing RecordItemsUVE's parameter list to five
+/// positional parameters. Module-private: never crosses the RHI boundary, unlike PipelineDescUVE.
+struct FrameUniformsUVE {
+    Math::Matrix4x4UVE viewProjection;
+    DirectionalLightDataUVE light;
+    Math::Vector3UVE ambientColor;
+};
+
 } // namespace
 
 struct Renderer3DUVE::ImplUVE {
@@ -103,11 +116,17 @@ struct Renderer3DUVE::ImplUVE {
     IRenderSystemUVE& renderSystem;
     IMeshRendererUVE& meshRenderer;
     ICameraSystemUVE& cameraSystem;
+    ILightSystemUVE& lightSystem;
     Asset::IAssetManagerUVE& assetManager;
     Asset::IAssetDatabaseUVE& assetDatabase;
     Events::IEventSystemUVE& eventSystem;
     std::uint32_t targetWidth;
     std::uint32_t targetHeight;
+
+    /// Flat ambient term added to every rendered item every frame, regardless of whether an
+    /// active light exists this frame (see EngineConfigUVE::ambientColor, Increment 23).
+    Math::Vector3UVE ambientColor;
+
     TextureHandleUVE colorTarget;
     TextureHandleUVE depthTarget;
 
@@ -134,12 +153,13 @@ struct Renderer3DUVE::ImplUVE {
     Events::EventSubscriptionUVE reloadSubscription;
 
     ImplUVE(IRenderDeviceUVE& renderDeviceIn, IRenderSystemUVE& renderSystemIn, IMeshRendererUVE& meshRendererIn,
-            ICameraSystemUVE& cameraSystemIn, Asset::IAssetManagerUVE& assetManagerIn,
+            ICameraSystemUVE& cameraSystemIn, ILightSystemUVE& lightSystemIn, Asset::IAssetManagerUVE& assetManagerIn,
             Asset::IAssetDatabaseUVE& assetDatabaseIn, Events::IEventSystemUVE& eventSystemIn,
-            std::uint32_t targetWidthIn, std::uint32_t targetHeightIn)
+            std::uint32_t targetWidthIn, std::uint32_t targetHeightIn, Math::Vector3UVE ambientColorIn)
         : renderDevice(renderDeviceIn), renderSystem(renderSystemIn), meshRenderer(meshRendererIn),
-          cameraSystem(cameraSystemIn), assetManager(assetManagerIn), assetDatabase(assetDatabaseIn),
-          eventSystem(eventSystemIn), targetWidth(targetWidthIn), targetHeight(targetHeightIn) {}
+          cameraSystem(cameraSystemIn), lightSystem(lightSystemIn), assetManager(assetManagerIn),
+          assetDatabase(assetDatabaseIn), eventSystem(eventSystemIn), targetWidth(targetWidthIn),
+          targetHeight(targetHeightIn), ambientColor(ambientColorIn) {}
 
     void OnAssetReloadedUVE(const Asset::AssetReloadedEventUVE& event) {
         const auto meshIt = meshCache.find(event.guid);
@@ -290,7 +310,7 @@ struct Renderer3DUVE::ImplUVE {
         return &insertResult.first->second;
     }
 
-    void RecordItemsUVE(const std::vector<RenderItemUVE>& items, const Math::Matrix4x4UVE& viewProjection,
+    void RecordItemsUVE(const std::vector<RenderItemUVE>& items, const FrameUniformsUVE& frameUniforms,
                         ICommandBufferUVE& commandBuffer) {
         for (const RenderItemUVE& item : items) {
             const MaterialGpuResourcesUVE* const materialResources = ResolveMaterialGpuResourcesUVE(item);
@@ -302,7 +322,11 @@ struct Renderer3DUVE::ImplUVE {
 
             commandBuffer.BindPipelineUVE(materialResources->pipeline);
             commandBuffer.SetUniformMatrix4x4UVE("uModel", item.worldMatrix);
-            commandBuffer.SetUniformMatrix4x4UVE("uViewProjection", viewProjection);
+            commandBuffer.SetUniformMatrix4x4UVE("uViewProjection", frameUniforms.viewProjection);
+            commandBuffer.SetUniformVector3UVE("uLightDirection", frameUniforms.light.direction);
+            commandBuffer.SetUniformVector3UVE("uLightColor", frameUniforms.light.color);
+            commandBuffer.SetUniformFloatUVE("uLightIntensity", frameUniforms.light.intensity);
+            commandBuffer.SetUniformVector3UVE("uAmbientColor", frameUniforms.ambientColor);
             commandBuffer.SetUniformVector3UVE("uAlbedoColor", material->albedoColor);
             commandBuffer.SetUniformFloatUVE("uMetallic", material->metallic);
             commandBuffer.SetUniformFloatUVE("uRoughness", material->roughness);
@@ -322,11 +346,12 @@ struct Renderer3DUVE::ImplUVE {
 
 Renderer3DUVE::Renderer3DUVE(IRenderDeviceUVE& renderDevice, IRenderSystemUVE& renderSystem,
                               IMeshRendererUVE& meshRenderer, ICameraSystemUVE& cameraSystem,
-                              Asset::IAssetManagerUVE& assetManager, Asset::IAssetDatabaseUVE& assetDatabase,
-                              Events::IEventSystemUVE& eventSystem, std::uint32_t targetWidth,
-                              std::uint32_t targetHeight)
-    : m_impl(std::make_unique<ImplUVE>(renderDevice, renderSystem, meshRenderer, cameraSystem, assetManager,
-                                        assetDatabase, eventSystem, targetWidth, targetHeight)) {
+                              ILightSystemUVE& lightSystem, Asset::IAssetManagerUVE& assetManager,
+                              Asset::IAssetDatabaseUVE& assetDatabase, Events::IEventSystemUVE& eventSystem,
+                              std::uint32_t targetWidth, std::uint32_t targetHeight, Math::Vector3UVE ambientColor)
+    : m_impl(std::make_unique<ImplUVE>(renderDevice, renderSystem, meshRenderer, cameraSystem, lightSystem,
+                                        assetManager, assetDatabase, eventSystem, targetWidth, targetHeight,
+                                        ambientColor)) {
     m_impl->colorTarget = renderDevice.CreateTextureUVE(
         TextureDescUVE{targetWidth, targetHeight, TextureFormatUVE::RGBA8Unorm, 1});
     m_impl->depthTarget = renderDevice.CreateTextureUVE(
@@ -364,6 +389,8 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
     const Math::Matrix4x4UVE viewProjection =
         m_impl->cameraSystem.ComputeViewProjectionUVE(entityManager, cameraEntity, aspectRatio);
     const Math::FrustumUVE frustum = m_impl->cameraSystem.ExtractFrustumUVE(viewProjection);
+    const DirectionalLightDataUVE lightData = m_impl->lightSystem.ExtractActiveLightUVE(entityManager);
+    const FrameUniformsUVE frameUniforms{viewProjection, lightData, m_impl->ambientColor};
 
     RenderQueueUVE queue =
         m_impl->meshRenderer.ExtractRenderQueueUVE(entityManager, m_impl->assetManager, m_impl->assetDatabase, frustum);
@@ -377,8 +404,8 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
     passDesc.depthAttachment = m_impl->depthTarget;
     commandBuffer.BeginRenderPassUVE(passDesc);
 
-    m_impl->RecordItemsUVE(queue.opaqueItems, viewProjection, commandBuffer);
-    m_impl->RecordItemsUVE(queue.transparentItems, viewProjection, commandBuffer);
+    m_impl->RecordItemsUVE(queue.opaqueItems, frameUniforms, commandBuffer);
+    m_impl->RecordItemsUVE(queue.transparentItems, frameUniforms, commandBuffer);
 
     commandBuffer.EndRenderPassUVE();
     m_impl->renderSystem.EndFrameUVE();

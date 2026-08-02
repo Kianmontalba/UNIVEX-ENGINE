@@ -28,10 +28,12 @@
 #include "uve/events/event_system_uve.h"
 #include "uve/memory/memory_manager_uve.h"
 #include "uve/render/camera_system_uve.h"
+#include "uve/render/light_system_uve.h"
 #include "uve/render/mesh_renderer_uve.h"
 #include "uve/render/null_render_device_uve.h"
 #include "uve/render/render_system_uve.h"
 #include "uve/scene/components/camera_component_uve.h"
+#include "uve/scene/components/light_component_uve.h"
 #include "uve/scene/components/mesh_component_uve.h"
 #include "uve/scene/components/transform_component_uve.h"
 #include "uve/scene/entity_manager_uve.h"
@@ -44,6 +46,7 @@ namespace {
 constexpr int kMaxPollIterationsUVE = 200000;
 constexpr std::uint32_t kTargetWidthUVE = 64;
 constexpr std::uint32_t kTargetHeightUVE = 64;
+constexpr Math::Vector3UVE kTestAmbientColorUVE{0.1F, 0.2F, 0.3F};
 
 class Renderer3DUVETest : public ::testing::Test {
 protected:
@@ -58,6 +61,7 @@ protected:
     RenderSystemUVE renderSystem{renderDevice};
     CameraSystemUVE cameraSystem;
     MeshRendererUVE meshRenderer;
+    LightSystemUVE lightSystem;
 
     Asset::AssetGuidUVE vertexShaderGuid;
     Asset::AssetGuidUVE fragmentShaderGuid;
@@ -111,8 +115,8 @@ protected:
             });
 
         renderer3D = std::make_unique<Renderer3DUVE>(renderDevice, renderSystem, meshRenderer, cameraSystem,
-                                                       assetManager, assetDatabase, eventSystem, kTargetWidthUVE,
-                                                       kTargetHeightUVE);
+                                                       lightSystem, assetManager, assetDatabase, eventSystem,
+                                                       kTargetWidthUVE, kTargetHeightUVE, kTestAmbientColorUVE);
     }
 
     Scene::EntityUVE MakeCameraEntityUVE() {
@@ -131,6 +135,14 @@ protected:
         sceneGraph.AttachTransformUVE(entityManager, entity, local);
         sceneGraph.UpdateUVE(entityManager);
         entityManager.AddComponentUVE<Scene::MeshComponentUVE>(entity, Scene::MeshComponentUVE{meshGuid, materialGuid});
+        return entity;
+    }
+
+    Scene::EntityUVE MakeLightEntityUVE(Scene::LightComponentUVE light) {
+        const Scene::EntityUVE entity = entityManager.CreateEntityUVE();
+        sceneGraph.AttachTransformUVE(entityManager, entity, Scene::TransformComponentUVE{});
+        sceneGraph.UpdateUVE(entityManager);
+        entityManager.AddComponentUVE<Scene::LightComponentUVE>(entity, light);
         return entity;
     }
 
@@ -204,7 +216,7 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_VisibleMesh_RecordsExpectedCommandSeque
     renderer3D->RenderFrameUVE(entityManager, cameraEntity);
 
     const std::vector<RecordedCommandUVE>& commands = renderDevice.GetLastSubmittedCommandsUVE();
-    ASSERT_EQ(commands.size(), 18U);
+    ASSERT_EQ(commands.size(), 22U);
     EXPECT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commands[0]));
     EXPECT_TRUE(std::holds_alternative<BindPipelineCommandUVE>(commands[1]));
 
@@ -213,45 +225,127 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_VisibleMesh_RecordsExpectedCommandSeque
     ASSERT_TRUE(std::holds_alternative<SetUniformMatrix4x4CommandUVE>(commands[3]));
     EXPECT_EQ(std::get<SetUniformMatrix4x4CommandUVE>(commands[3]).name, "uViewProjection");
 
+    // No light entity exists in this scene, so LightSystemUVE::ExtractActiveLightUVE() returns
+    // the "no active light" sentinel (default DirectionalLightDataUVE{}, intensity 0.0F) — pushed
+    // unconditionally, same as a real light would be, per the no-shader-branching philosophy.
     ASSERT_TRUE(std::holds_alternative<SetUniformVector3CommandUVE>(commands[4]));
-    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commands[4]).name, "uAlbedoColor");
-    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commands[4]).value, (Math::Vector3UVE{0.2F, 0.4F, 0.6F}));
+    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commands[4]).name, "uLightDirection");
+    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commands[4]).value, (Math::Vector3UVE{0.0F, 0.0F, -1.0F}));
 
-    ASSERT_TRUE(std::holds_alternative<SetUniformFloatCommandUVE>(commands[5]));
-    EXPECT_EQ(std::get<SetUniformFloatCommandUVE>(commands[5]).name, "uMetallic");
-    EXPECT_FLOAT_EQ(std::get<SetUniformFloatCommandUVE>(commands[5]).value, 0.25F);
+    ASSERT_TRUE(std::holds_alternative<SetUniformVector3CommandUVE>(commands[5]));
+    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commands[5]).name, "uLightColor");
+    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commands[5]).value, (Math::Vector3UVE{1.0F, 1.0F, 1.0F}));
 
     ASSERT_TRUE(std::holds_alternative<SetUniformFloatCommandUVE>(commands[6]));
-    EXPECT_EQ(std::get<SetUniformFloatCommandUVE>(commands[6]).name, "uRoughness");
-    EXPECT_FLOAT_EQ(std::get<SetUniformFloatCommandUVE>(commands[6]).value, 0.75F);
+    EXPECT_EQ(std::get<SetUniformFloatCommandUVE>(commands[6]).name, "uLightIntensity");
+    EXPECT_FLOAT_EQ(std::get<SetUniformFloatCommandUVE>(commands[6]).value, 0.0F);
 
     ASSERT_TRUE(std::holds_alternative<SetUniformVector3CommandUVE>(commands[7]));
-    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commands[7]).name, "uEmissiveColor");
-    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commands[7]).value, (Math::Vector3UVE{0.1F, 0.0F, 0.0F}));
+    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commands[7]).name, "uAmbientColor");
+    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commands[7]).value, kTestAmbientColorUVE);
 
-    ASSERT_TRUE(std::holds_alternative<BindTextureCommandUVE>(commands[8]));
-    EXPECT_EQ(std::get<BindTextureCommandUVE>(commands[8]).slot, 0U);
-    ASSERT_TRUE(std::holds_alternative<SetUniformIntCommandUVE>(commands[9]));
-    EXPECT_EQ(std::get<SetUniformIntCommandUVE>(commands[9]).name, "uAlbedoTexture");
-    EXPECT_EQ(std::get<SetUniformIntCommandUVE>(commands[9]).value, 0);
+    ASSERT_TRUE(std::holds_alternative<SetUniformVector3CommandUVE>(commands[8]));
+    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commands[8]).name, "uAlbedoColor");
+    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commands[8]).value, (Math::Vector3UVE{0.2F, 0.4F, 0.6F}));
 
-    ASSERT_TRUE(std::holds_alternative<BindTextureCommandUVE>(commands[10]));
-    EXPECT_EQ(std::get<BindTextureCommandUVE>(commands[10]).slot, 1U);
-    ASSERT_TRUE(std::holds_alternative<SetUniformIntCommandUVE>(commands[11]));
-    EXPECT_EQ(std::get<SetUniformIntCommandUVE>(commands[11]).name, "uNormalTexture");
-    EXPECT_EQ(std::get<SetUniformIntCommandUVE>(commands[11]).value, 1);
+    ASSERT_TRUE(std::holds_alternative<SetUniformFloatCommandUVE>(commands[9]));
+    EXPECT_EQ(std::get<SetUniformFloatCommandUVE>(commands[9]).name, "uMetallic");
+    EXPECT_FLOAT_EQ(std::get<SetUniformFloatCommandUVE>(commands[9]).value, 0.25F);
+
+    ASSERT_TRUE(std::holds_alternative<SetUniformFloatCommandUVE>(commands[10]));
+    EXPECT_EQ(std::get<SetUniformFloatCommandUVE>(commands[10]).name, "uRoughness");
+    EXPECT_FLOAT_EQ(std::get<SetUniformFloatCommandUVE>(commands[10]).value, 0.75F);
+
+    ASSERT_TRUE(std::holds_alternative<SetUniformVector3CommandUVE>(commands[11]));
+    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commands[11]).name, "uEmissiveColor");
+    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commands[11]).value, (Math::Vector3UVE{0.1F, 0.0F, 0.0F}));
 
     ASSERT_TRUE(std::holds_alternative<BindTextureCommandUVE>(commands[12]));
-    EXPECT_EQ(std::get<BindTextureCommandUVE>(commands[12]).slot, 2U);
+    EXPECT_EQ(std::get<BindTextureCommandUVE>(commands[12]).slot, 0U);
     ASSERT_TRUE(std::holds_alternative<SetUniformIntCommandUVE>(commands[13]));
-    EXPECT_EQ(std::get<SetUniformIntCommandUVE>(commands[13]).name, "uAOTexture");
-    EXPECT_EQ(std::get<SetUniformIntCommandUVE>(commands[13]).value, 2);
+    EXPECT_EQ(std::get<SetUniformIntCommandUVE>(commands[13]).name, "uAlbedoTexture");
+    EXPECT_EQ(std::get<SetUniformIntCommandUVE>(commands[13]).value, 0);
 
-    EXPECT_TRUE(std::holds_alternative<BindVertexBufferCommandUVE>(commands[14]));
-    EXPECT_TRUE(std::holds_alternative<BindIndexBufferCommandUVE>(commands[15]));
-    ASSERT_TRUE(std::holds_alternative<DrawIndexedCommandUVE>(commands[16]));
-    EXPECT_EQ(std::get<DrawIndexedCommandUVE>(commands[16]).indexCount, 3U);
-    EXPECT_TRUE(std::holds_alternative<EndRenderPassCommandUVE>(commands[17]));
+    ASSERT_TRUE(std::holds_alternative<BindTextureCommandUVE>(commands[14]));
+    EXPECT_EQ(std::get<BindTextureCommandUVE>(commands[14]).slot, 1U);
+    ASSERT_TRUE(std::holds_alternative<SetUniformIntCommandUVE>(commands[15]));
+    EXPECT_EQ(std::get<SetUniformIntCommandUVE>(commands[15]).name, "uNormalTexture");
+    EXPECT_EQ(std::get<SetUniformIntCommandUVE>(commands[15]).value, 1);
+
+    ASSERT_TRUE(std::holds_alternative<BindTextureCommandUVE>(commands[16]));
+    EXPECT_EQ(std::get<BindTextureCommandUVE>(commands[16]).slot, 2U);
+    ASSERT_TRUE(std::holds_alternative<SetUniformIntCommandUVE>(commands[17]));
+    EXPECT_EQ(std::get<SetUniformIntCommandUVE>(commands[17]).name, "uAOTexture");
+    EXPECT_EQ(std::get<SetUniformIntCommandUVE>(commands[17]).value, 2);
+
+    EXPECT_TRUE(std::holds_alternative<BindVertexBufferCommandUVE>(commands[18]));
+    EXPECT_TRUE(std::holds_alternative<BindIndexBufferCommandUVE>(commands[19]));
+    ASSERT_TRUE(std::holds_alternative<DrawIndexedCommandUVE>(commands[20]));
+    EXPECT_EQ(std::get<DrawIndexedCommandUVE>(commands[20]).indexCount, 3U);
+    EXPECT_TRUE(std::holds_alternative<EndRenderPassCommandUVE>(commands[21]));
+}
+
+TEST_F(Renderer3DUVETest, RenderFrameUVE_ActiveLightEntity_PushesComputedLightUniforms) {
+    const Scene::EntityUVE cameraEntity = MakeCameraEntityUVE();
+    const Asset::AssetGuidUVE meshGuid = assetDatabase.RegisterUVE("renderer3d_tests_lit_mesh.uvemodel");
+    const Asset::AssetGuidUVE materialGuid = assetDatabase.RegisterUVE("renderer3d_tests_lit_material.uvemat");
+    MakeMeshEntityUVE(Math::Vector3UVE{0.0F, 0.0F, -10.0F}, meshGuid, materialGuid);
+    // Identity rotation, so LightSystemUVE derives direction {0,0,-1} (see
+    // LightSystemUVETest's own RotateVectorUVE-based coverage for the rotated case).
+    const Scene::LightComponentUVE light{Math::Vector3UVE{0.9F, 0.8F, 0.7F}, 4.5F};
+    MakeLightEntityUVE(light);
+    WaitUntilAssetsReadyUVE(meshGuid, materialGuid);
+
+    renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+
+    const std::vector<RecordedCommandUVE>& commands = renderDevice.GetLastSubmittedCommandsUVE();
+    ASSERT_TRUE(std::holds_alternative<SetUniformVector3CommandUVE>(commands[4]));
+    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commands[4]).name, "uLightDirection");
+    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commands[4]).value, (Math::Vector3UVE{0.0F, 0.0F, -1.0F}));
+
+    ASSERT_TRUE(std::holds_alternative<SetUniformVector3CommandUVE>(commands[5]));
+    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commands[5]).name, "uLightColor");
+    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commands[5]).value, light.color);
+
+    ASSERT_TRUE(std::holds_alternative<SetUniformFloatCommandUVE>(commands[6]));
+    EXPECT_EQ(std::get<SetUniformFloatCommandUVE>(commands[6]).name, "uLightIntensity");
+    EXPECT_FLOAT_EQ(std::get<SetUniformFloatCommandUVE>(commands[6]).value, light.intensity);
+}
+
+TEST_F(Renderer3DUVETest, RenderFrameUVE_NoLightEntity_PushesZeroIntensitySentinelUniforms) {
+    const Scene::EntityUVE cameraEntity = MakeCameraEntityUVE();
+    const Asset::AssetGuidUVE meshGuid = assetDatabase.RegisterUVE("renderer3d_tests_unlit_mesh.uvemodel");
+    const Asset::AssetGuidUVE materialGuid = assetDatabase.RegisterUVE("renderer3d_tests_unlit_material.uvemat");
+    MakeMeshEntityUVE(Math::Vector3UVE{0.0F, 0.0F, -10.0F}, meshGuid, materialGuid);
+    WaitUntilAssetsReadyUVE(meshGuid, materialGuid);
+
+    renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+
+    const std::vector<RecordedCommandUVE>& commands = renderDevice.GetLastSubmittedCommandsUVE();
+    ASSERT_TRUE(std::holds_alternative<SetUniformFloatCommandUVE>(commands[6]));
+    EXPECT_EQ(std::get<SetUniformFloatCommandUVE>(commands[6]).name, "uLightIntensity");
+    EXPECT_FLOAT_EQ(std::get<SetUniformFloatCommandUVE>(commands[6]).value, 0.0F);
+}
+
+TEST_F(Renderer3DUVETest, RenderFrameUVE_AmbientColorFromConstructor_AlwaysPushedRegardlessOfLight) {
+    const Scene::EntityUVE cameraEntity = MakeCameraEntityUVE();
+    const Asset::AssetGuidUVE meshGuid = assetDatabase.RegisterUVE("renderer3d_tests_ambient_mesh.uvemodel");
+    const Asset::AssetGuidUVE materialGuid = assetDatabase.RegisterUVE("renderer3d_tests_ambient_material.uvemat");
+    MakeMeshEntityUVE(Math::Vector3UVE{0.0F, 0.0F, -10.0F}, meshGuid, materialGuid);
+    WaitUntilAssetsReadyUVE(meshGuid, materialGuid);
+
+    renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+    const std::vector<RecordedCommandUVE>& commandsWithoutLight = renderDevice.GetLastSubmittedCommandsUVE();
+    ASSERT_TRUE(std::holds_alternative<SetUniformVector3CommandUVE>(commandsWithoutLight[7]));
+    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commandsWithoutLight[7]).name, "uAmbientColor");
+    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commandsWithoutLight[7]).value, kTestAmbientColorUVE);
+
+    MakeLightEntityUVE(Scene::LightComponentUVE{Math::Vector3UVE{1.0F, 1.0F, 1.0F}, 1.0F});
+    renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+    const std::vector<RecordedCommandUVE>& commandsWithLight = renderDevice.GetLastSubmittedCommandsUVE();
+    ASSERT_TRUE(std::holds_alternative<SetUniformVector3CommandUVE>(commandsWithLight[7]));
+    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commandsWithLight[7]).name, "uAmbientColor");
+    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commandsWithLight[7]).value, kTestAmbientColorUVE);
 }
 
 TEST_F(Renderer3DUVETest, RenderFrameUVE_MaterialWithoutTextures_UsesFallbackTexturesForAllThreeSlots) {
@@ -338,7 +432,7 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_Rgba16FloatAlbedoTexture_UploadsSuccess
     EXPECT_EQ(renderDevice.GetLiveResourceCountUVE(), baselineLiveResources + 6U);
 
     const std::vector<RecordedCommandUVE>& commands = renderDevice.GetLastSubmittedCommandsUVE();
-    EXPECT_EQ(commands.size(), 18U);
+    EXPECT_EQ(commands.size(), 22U);
 }
 
 TEST_F(Renderer3DUVETest, RenderFrameUVE_TextureAssetNotYetReady_SkipsItemUntilLoaded) {
@@ -377,7 +471,7 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_TextureAssetNotYetReady_SkipsItemUntilL
 
     renderer3D->RenderFrameUVE(entityManager, cameraEntity);
     const std::vector<RecordedCommandUVE>& commandsAfterReady = renderDevice.GetLastSubmittedCommandsUVE();
-    EXPECT_EQ(commandsAfterReady.size(), 18U);
+    EXPECT_EQ(commandsAfterReady.size(), 22U);
 }
 
 TEST_F(Renderer3DUVETest, RenderFrameUVE_CalledTwiceWithSameScene_ReusesGpuResourceCache) {

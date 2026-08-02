@@ -525,12 +525,14 @@ ever consumed the two shader GUIDs and `isTransparent`; every other field sat lo
 untouched. This increment wires the rest through to the GPU. **Two scope-defining decisions,
 worth restating for anyone extending this later:**
 
-1. **Unlit textured output only.** The engine has no lighting system at all (no
-   `LightComponentUVE`, no light data anywhere). `Renderer3DUVE` renders
-   `albedoColor * albedoTexture` (white 1×1 fallback when unset), modulated by AO, with emissive
-   added — but `metallic`/`roughness`/`normalTexture` are only *captured, uploaded, bound, and
-   pushed as uniforms*, never consumed by any lighting equation. That's explicit future work once
-   a light system exists — do not assume metallic/roughness currently do anything visually.
+1. **Unlit textured output only, as of Increment 22.** At the time this section was written, the
+   engine had no lighting system at all. `Renderer3DUVE` rendered `albedoColor * albedoTexture`
+   (white 1×1 fallback when unset), modulated by AO, with emissive added — but
+   `metallic`/`roughness`/`normalTexture` were only *captured, uploaded, bound, and pushed as
+   uniforms*, never consumed by any lighting equation. **Increment 23 (see the Lighting section
+   below) adds a single directional light + flat ambient Lambertian term** —
+   `metallic`/`roughness`/`normalTexture` remain visually inert even after Increment 23; consuming
+   them is explicit future PBR work.
 2. **Materials still use the older `ShaderAssetUVE`/raw-`CreateShaderUVE` path, not
    `ShaderManagerUVE`.** `Renderer3DUVE::ResolveMaterialGpuResourcesUVE()` loads a material's
    `vertexShader`/`fragmentShader` `Asset::ShaderAssetUVE`s and calls
@@ -616,6 +618,65 @@ framebuffer, so reading it back would need an FBO-bound `glReadPixels` and — s
 deliberately never exposes a raw GL texture/FBO id outside `gl_render_device_uve.cpp`, per this
 document's own GL-symbol-confinement rule — no straightforward way to do that from outside the
 render module without adding new, unplanned RHI surface).
+
+## Lighting (`LightSystemUVE`, Increment 23)
+
+**Scope, deliberately narrow.** At most one active directional light, no point/spot lights, no
+light culling, no shadows, no specular/Blinn-Phong — diffuse-only Lambertian (N·L) plus a flat
+ambient term. `metallic`/`roughness` (bound as uniforms since Increment 22) stay visually inert;
+consuming them is future PBR work. `LightSystemUVE` is the spec's Part 7.2 entry ("Light culling,
+IBL") with culling/IBL explicitly deferred.
+
+**`LightComponentUVE` needed no changes.** It already carried `color`/`intensity` (an
+Increment-5-era placeholder) and was already fully wired through `SceneSerializerUVE`. A
+directional light's *direction* is deliberately not a component field — it's derived from the
+light entity's `WorldTransformComponentUVE::worldRotation` via `RotateVectorUVE(rotation,
+{0,0,-1})`, the same "forward" convention `CameraSystemUVE`'s view matrix and `EngineCoreUVE`'s
+audio-listener code already use. Rotate the light entity (e.g. via its `TransformComponentUVE`) to
+aim it.
+
+**`ILightSystemUVE`/`LightSystemUVE`** (`engine/render/`) is stateless, mirroring
+`ICameraSystemUVE`/`IMeshRendererUVE`. `ExtractActiveLightUVE(Scene::IEntityManagerUVE&)` — note:
+non-`const`, unlike `ICameraSystemUVE`'s methods, because it goes through
+`IEntityManagerUVE::ForEachUVE`, which has no `const` overload (same reason
+`IMeshRendererUVE::ExtractRenderQueueUVE` takes a non-`const` reference) — returns the first
+matching entity `ForEachUVE` encounters, or a default `DirectionalLightDataUVE{}` (`intensity ==
+0.0F`, the deliberate "no light" sentinel — no `std::optional`, no shader branching, matching
+Increment 22's fallback-texture philosophy). Which entity "wins" when multiple lights exist is
+unspecified this v1; deterministic only when all light entities share one archetype (within a
+single archetype, iteration order is chunk/row creation order; across different archetypes it's
+`std::unordered_map`-hash-dependent).
+
+**`Renderer3DUVE` wiring.** Gains an injected `ILightSystemUVE&` and a plain `Math::Vector3UVE
+ambientColor` constructor parameter (from `EngineConfigUVE::ambientColor`, following the exact
+`gravity` precedent — no "scene settings" component/system exists in this engine, so an
+engine-config constant is the only existing whole-scene-tunable pattern). `RenderFrameUVE()`
+computes `ExtractActiveLightUVE()` once per frame (like `viewProjection`) and bundles it with
+`viewProjection`/`ambientColor` into a module-private `FrameUniformsUVE` struct — mirroring
+`PipelineDescUVE`/`RenderPassDescUVE`'s own precedent for grouping related descriptor data, rather
+than growing `RecordItemsUVE`'s parameter list to five positional parameters.
+
+**Four new fixed uniform names**, added to the Materials section's convention list: `uLightDirection`,
+`uLightColor`, `uLightIntensity`, `uAmbientColor` — pushed unconditionally every item, right after
+`uViewProjection`. A shader that declares none of them is an unaffected no-op per `SetUniform*UVE`'s
+existing contract. Expected GLSL usage (not implemented this increment — see below):
+```glsl
+vec3 diffuse = albedo * uLightColor * uLightIntensity * max(dot(normalize(N), normalize(-uLightDirection)), 0.0);
+vec3 ambient = albedo * uAmbientColor;
+vec3 color = ambient + diffuse + emissive;
+```
+
+**Out of scope, deliberately.** The four built-in `.glsl` files (`engine/render/shader/built_in/`)
+are untouched — they're `ShaderManagerUVE`'s demo-triangle scaffold only, already stale since
+Increment 22 (`uColor`/`uTexture` naming, no lighting math, no `aNormal`), and updating them is
+unrelated pre-existing staleness, not this increment's job. `MeshVertexUVE` already uploads normals
+(`NORMAL` attribute in `MeshVertexLayoutUVE()`, since before this increment) — no vertex-layout
+change was needed. No real GLSL was authored for tests, matching Increment 22:
+`Renderer3DUVE`'s tests use `NullRenderDeviceUVE`, which never compiles/validates shader source.
+**Known simplification for whoever eventually authors a real lit shader**: `Renderer3DUVE` does not
+compute or push a normal matrix (inverse-transpose of the model matrix) this increment — correct
+world-space normal transform under non-uniform scale needs one; using `uModel` directly to
+transform normals is only correct under uniform scale. Deferred, not forgotten.
 
 ## Allocator boundary
 

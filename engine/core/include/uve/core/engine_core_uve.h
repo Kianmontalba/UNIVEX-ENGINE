@@ -37,6 +37,7 @@
 #include "uve/physics/i_physics_system_uve.h"
 #include "uve/physics/i_raycast_system_uve.h"
 #include "uve/render/i_camera_system_uve.h"
+#include "uve/render/i_light_system_uve.h"
 #include "uve/render/i_mesh_renderer_uve.h"
 #include "uve/render/i_render_device_uve.h"
 #include "uve/render/i_render_system_uve.h"
@@ -58,7 +59,7 @@ namespace UVE::Core {
 /// MemoryManager, ThreadPool, Timer, EventSystem, EntityManager, SceneGraph,
 /// AssetDatabase, SceneSerializer, PrefabSystem, HotReload, AssetManager,
 /// AssetImporter, AssetBundle, FileSystem, WindowManager, RenderDevice, ShaderManager,
-/// RenderSystem, CameraSystem, MeshRenderer, Renderer3D, CollisionSystem, PhysicsSystem,
+/// RenderSystem, CameraSystem, MeshRenderer, LightSystem, Renderer3D, CollisionSystem, PhysicsSystem,
 /// RaycastSystem, InputSystem, AudioDevice, AudioSystem, AudioSourceSystem,
 /// SaveGameSystem, CheckpointManager, ConfigManager) and drives the canonical
 /// engine lifecycle: Init -> Load -> N x (BeginFrame -> Update -> LateUpdate
@@ -134,7 +135,7 @@ public:
     /// ThreadPool, Timer, EventSystem, EntityManager, SceneGraph,
     /// AssetDatabase, SceneSerializer, PrefabSystem, HotReload, AssetManager,
     /// AssetImporter, AssetBundle, FileSystem, WindowManager, RenderDevice, ShaderManager, RenderSystem,
-    /// CameraSystem, MeshRenderer, Renderer3D, CollisionSystem, PhysicsSystem, RaycastSystem, InputSystem, AudioDevice, AudioSystem, AudioSourceSystem, SaveGameSystem, CheckpointManager, and ConfigManager in that order (CommandLine first — it
+    /// CameraSystem, MeshRenderer, LightSystem, Renderer3D, CollisionSystem, PhysicsSystem, RaycastSystem, InputSystem, AudioDevice, AudioSystem, AudioSourceSystem, SaveGameSystem, CheckpointManager, and ConfigManager in that order (CommandLine first — it
     /// has no dependencies of its own; immediately after, reads the `--headless` CLI flag via
     /// CommandLineUVE::HasFlagUVE("headless"), OR'd into EngineConfigUVE::headlessUVE; Logger
     /// second — every later step and
@@ -171,9 +172,11 @@ public:
     /// through it); CameraSystem right after, stateless with no
     /// dependencies of its own (grouped with the rest of engine/render);
     /// MeshRenderer right after, likewise stateless (grouped with the rest
-    /// of engine/render); Renderer3D right after, needing RenderDevice,
-    /// RenderSystem, MeshRenderer, CameraSystem, AssetManager, AssetDatabase,
-    /// and EventSystem — every one of which already exists by this point;
+    /// of engine/render); LightSystem right after, likewise stateless
+    /// (grouped with the rest of engine/render, constructed right before
+    /// Renderer3D since Renderer3D's constructor needs it); Renderer3D right after, needing RenderDevice,
+    /// RenderSystem, MeshRenderer, CameraSystem, LightSystem, AssetManager, AssetDatabase,
+    /// EventSystem, and EngineConfigUVE::ambientColor — every one of which already exists by this point;
     /// CollisionSystem right after, stateless with no dependencies of its
     /// own; PhysicsSystem right after, needing only CollisionSystem (and
     /// EngineConfigUVE::gravity, already available); RaycastSystem right
@@ -191,7 +194,7 @@ public:
     /// CheckpointManager right after, needing SaveGameSystem (composed by reference) and
     /// EngineConfigUVE::autoSaveIntervalSecondsUVE; ConfigManager last, so
     /// its LoadUVE() call can log through the already-initialized Logger),
-    /// then builds EngineServicesUVE from all thirty-three. Transitions
+    /// then builds EngineServicesUVE from all thirty-four. Transitions
     /// Uninitialized -> Initializing -> Running.
     void Init();
 
@@ -220,7 +223,7 @@ public:
     void RequestQuitUVE() noexcept;
 
     /// Transitions Running -> ShuttingDown -> Shutdown, tearing down
-    /// ConfigManager, then CheckpointManager, then SaveGameSystem, then AudioSourceSystem, then AudioSystem, then AudioDevice, then InputSystem, then RaycastSystem, then PhysicsSystem, then CollisionSystem, then Renderer3D, then MeshRenderer, then CameraSystem, then RenderSystem, then ShaderManager, then
+    /// ConfigManager, then CheckpointManager, then SaveGameSystem, then AudioSourceSystem, then AudioSystem, then AudioDevice, then InputSystem, then RaycastSystem, then PhysicsSystem, then CollisionSystem, then Renderer3D, then LightSystem, then MeshRenderer, then CameraSystem, then RenderSystem, then ShaderManager, then
     /// RenderDevice, then WindowManager (in that order — every GL object RenderDevice owns must
     /// be destroyed while WindowManager's context is still valid, before WindowManager's own
     /// destructor tears the context itself down), then FileSystem, then AssetBundle, then AssetImporter,
@@ -256,7 +259,7 @@ public:
     /// MemoryManager/ThreadPool/CommandLine/ConfigManager/EntityManager/
     /// SceneGraph/AssetDatabase/SceneSerializer/PrefabSystem/HotReload/
     /// AssetManager/AssetImporter/AssetBundle/FileSystem/RenderDevice/ShaderManager/
-    /// RenderSystem/CameraSystem/MeshRenderer/Renderer3D/CollisionSystem/
+    /// RenderSystem/CameraSystem/MeshRenderer/LightSystem/Renderer3D/CollisionSystem/
     /// PhysicsSystem/RaycastSystem/InputSystem/AudioDevice/AudioSystem/
     /// AudioSourceSystem/SaveGameSystem/CheckpointManager/WindowManager references. Valid only
     /// between Init() and Shutdown().
@@ -381,6 +384,7 @@ private:
     std::unique_ptr<Render::IRenderSystemUVE> m_renderSystem;
     std::unique_ptr<Render::ICameraSystemUVE> m_cameraSystem;
     std::unique_ptr<Render::IMeshRendererUVE> m_meshRenderer;
+    std::unique_ptr<Render::ILightSystemUVE> m_lightSystem;
     std::unique_ptr<Render::IRenderer3DUVE> m_renderer3D;
     std::unique_ptr<Physics::ICollisionSystemUVE> m_collisionSystem;
     std::unique_ptr<Physics::IPhysicsSystemUVE> m_physicsSystem;

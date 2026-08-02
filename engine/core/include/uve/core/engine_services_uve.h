@@ -28,6 +28,7 @@
 #include "uve/physics/i_physics_system_uve.h"
 #include "uve/physics/i_raycast_system_uve.h"
 #include "uve/render/i_camera_system_uve.h"
+#include "uve/render/i_light_system_uve.h"
 #include "uve/render/i_mesh_renderer_uve.h"
 #include "uve/render/i_render_device_uve.h"
 #include "uve/render/i_render_system_uve.h"
@@ -51,26 +52,27 @@ namespace UVE::Core {
 /// ConfigManager, EntityManager, SceneGraph, AssetDatabase, SceneSerializer,
 /// PrefabSystem, HotReload, AssetManager, AssetImporter, AssetBundle,
 /// FileSystem, RenderDevice, ShaderManager, RenderSystem, CameraSystem,
-/// MeshRenderer, Renderer3D, CollisionSystem, PhysicsSystem, RaycastSystem,
-/// InputSystem, AudioDevice, AudioSystem, AudioSourceSystem, SaveGameSystem,
-/// CheckpointManager, WindowManager), built once EngineCoreUVE has
-/// constructed all thirty-three. Any future subsystem that needs access to
-/// one of these should receive an EngineServicesUVE& (obtained from
-/// EngineCoreUVE::GetServicesUVE()) rather than a raw global pointer — the
-/// logging macros' internal active-instance pointer remains the one
-/// intentional exception to that rule (see docs/CODING_STANDARDS.md).
+/// MeshRenderer, LightSystem, Renderer3D, CollisionSystem, PhysicsSystem,
+/// RaycastSystem, InputSystem, AudioDevice, AudioSystem, AudioSourceSystem,
+/// SaveGameSystem, CheckpointManager, WindowManager), built once
+/// EngineCoreUVE has constructed all thirty-four. Any future subsystem that
+/// needs access to one of these should receive an EngineServicesUVE&
+/// (obtained from EngineCoreUVE::GetServicesUVE()) rather than a raw global
+/// pointer — the logging macros' internal active-instance pointer remains
+/// the one intentional exception to that rule (see
+/// docs/CODING_STANDARDS.md).
 /// Referenced through the
 /// ILoggerUVE/ITimerUVE/IEventSystemUVE/IMemoryManagerUVE/IThreadPoolUVE/
 /// ICommandLineUVE/IConfigManagerUVE/IEntityManagerUVE/ISceneGraphUVE/
 /// IAssetDatabaseUVE/ISceneSerializerUVE/IPrefabSystemUVE/IHotReloadUVE/
 /// IAssetManagerUVE/IAssetImporterUVE/IAssetBundleUVE/IFileSystemUVE/
 /// IRenderDeviceUVE/Shader::IShaderManagerUVE/IRenderSystemUVE/
-/// ICameraSystemUVE/IMeshRendererUVE/
+/// ICameraSystemUVE/IMeshRendererUVE/ILightSystemUVE/
 /// IRenderer3DUVE/ICollisionSystemUVE/IPhysicsSystemUVE/IRaycastSystemUVE/
 /// IInputSystemUVE/IAudioDeviceUVE/IAudioSystemUVE/IAudioSourceSystemUVE/
 /// ISaveGameSystemUVE/ICheckpointManagerUVE/IWindowManagerUVE interfaces,
 /// not the concrete types, so a future substitute implementation of any of
-/// the thirty-three requires no change here.
+/// the thirty-four requires no change here.
 /// Thread-safety: EngineServicesUVE itself holds only non-owning pointers
 /// and has no mutable state of its own; the thread-safety of each accessor
 /// is whatever the referenced service documents.
@@ -97,6 +99,7 @@ public:
                        Render::IRenderSystemUVE& renderSystem,
                        Render::ICameraSystemUVE& cameraSystem,
                        Render::IMeshRendererUVE& meshRenderer,
+                       Render::ILightSystemUVE& lightSystem,
                        Render::IRenderer3DUVE& renderer3D,
                        Physics::ICollisionSystemUVE& collisionSystem,
                        Physics::IPhysicsSystemUVE& physicsSystem,
@@ -131,6 +134,7 @@ public:
     [[nodiscard]] Render::IRenderSystemUVE& GetRenderSystemUVE() const noexcept;
     [[nodiscard]] Render::ICameraSystemUVE& GetCameraSystemUVE() const noexcept;
     [[nodiscard]] Render::IMeshRendererUVE& GetMeshRendererUVE() const noexcept;
+    [[nodiscard]] Render::ILightSystemUVE& GetLightSystemUVE() const noexcept;
     [[nodiscard]] Render::IRenderer3DUVE& GetRenderer3DUVE() const noexcept;
     [[nodiscard]] Physics::ICollisionSystemUVE& GetCollisionSystemUVE() const noexcept;
     [[nodiscard]] Physics::IPhysicsSystemUVE& GetPhysicsSystemUVE() const noexcept;
@@ -166,6 +170,7 @@ private:
     Render::IRenderSystemUVE* m_renderSystem;
     Render::ICameraSystemUVE* m_cameraSystem;
     Render::IMeshRendererUVE* m_meshRenderer;
+    Render::ILightSystemUVE* m_lightSystem;
     Render::IRenderer3DUVE* m_renderer3D;
     Physics::ICollisionSystemUVE* m_collisionSystem;
     Physics::IPhysicsSystemUVE* m_physicsSystem;
