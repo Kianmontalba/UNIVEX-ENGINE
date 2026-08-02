@@ -32,6 +32,7 @@ EngineServicesUVE::EngineServicesUVE(Debug::ILoggerUVE& logger, Utilities::ITime
                                       Render::IRenderSystemUVE& renderSystem,
                                       Render::ICameraSystemUVE& cameraSystem,
                                       Render::IMeshRendererUVE& meshRenderer,
+                                      Render::ILightSystemUVE& lightSystem,
                                       Render::IRenderer3DUVE& renderer3D,
                                       Physics::ICollisionSystemUVE& collisionSystem,
                                       Physics::IPhysicsSystemUVE& physicsSystem,
@@ -51,7 +52,8 @@ EngineServicesUVE::EngineServicesUVE(Debug::ILoggerUVE& logger, Utilities::ITime
       m_assetImporter(&assetImporter), m_assetBundle(&assetBundle), m_fileSystem(&fileSystem),
       m_renderDevice(&renderDevice), m_shaderManager(&shaderManager), m_renderSystem(&renderSystem),
       m_cameraSystem(&cameraSystem),
-      m_meshRenderer(&meshRenderer), m_renderer3D(&renderer3D), m_collisionSystem(&collisionSystem),
+      m_meshRenderer(&meshRenderer), m_lightSystem(&lightSystem), m_renderer3D(&renderer3D),
+      m_collisionSystem(&collisionSystem),
       m_physicsSystem(&physicsSystem), m_raycastSystem(&raycastSystem), m_inputSystem(&inputSystem),
       m_audioDevice(&audioDevice), m_audioSystem(&audioSystem), m_audioSourceSystem(&audioSourceSystem),
       m_saveGameSystem(&saveGameSystem), m_checkpointManager(&checkpointManager),
@@ -143,6 +145,10 @@ Render::ICameraSystemUVE& EngineServicesUVE::GetCameraSystemUVE() const noexcept
 
 Render::IMeshRendererUVE& EngineServicesUVE::GetMeshRendererUVE() const noexcept {
     return *m_meshRenderer;
+}
+
+Render::ILightSystemUVE& EngineServicesUVE::GetLightSystemUVE() const noexcept {
+    return *m_lightSystem;
 }
 
 Render::IRenderer3DUVE& EngineServicesUVE::GetRenderer3DUVE() const noexcept {

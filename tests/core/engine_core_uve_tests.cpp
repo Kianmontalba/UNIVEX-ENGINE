@@ -37,6 +37,7 @@
 #include "uve/physics/i_raycast_system_uve.h"
 #include "uve/platform/platform_uve.h"
 #include "uve/render/i_camera_system_uve.h"
+#include "uve/render/i_light_system_uve.h"
 #include "uve/render/i_render_device_uve.h"
 #include "uve/render/i_render_system_uve.h"
 #include "uve/save/i_checkpoint_manager_uve.h"
@@ -446,6 +447,19 @@ TEST(EngineCoreUVETest, CameraSystem_ReachableAndComputesViewProjectionAfterInit
 
     EXPECT_TRUE(
         frustum.IntersectsUVE(Math::AabbUVE::FromCenterExtentsUVE(Math::Vector3UVE{0.0F, 0.0F, 0.0F}, Math::Vector3UVE{1.0F, 1.0F, 1.0F})));
+
+    engine.Shutdown();
+}
+
+TEST(EngineCoreUVETest, LightSystem_ReachableAndReturnsSentinelWithNoLightEntityAfterInit) {
+    EngineCoreUVE engine(MakeTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    Render::ILightSystemUVE& lightSystem = engine.GetServicesUVE().GetLightSystemUVE();
+    const Render::DirectionalLightDataUVE light =
+        lightSystem.ExtractActiveLightUVE(engine.GetServicesUVE().GetEntityManagerUVE());
+    EXPECT_FLOAT_EQ(light.intensity, 0.0F);
 
     engine.Shutdown();
 }

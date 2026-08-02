@@ -97,6 +97,14 @@ struct EngineConfigUVE {
     std::uint32_t renderTargetWidth = 1280;
     std::uint32_t renderTargetHeight = 720;
 
+    /// Global flat ambient light term Renderer3DUVE adds to every rendered item's final color
+    /// (Render::Renderer3DUVE's `ambientColor` constructor parameter), independent of whether any
+    /// LightComponentUVE-bearing entity exists this frame (see Render::LightSystemUVE, Increment
+    /// 23). No "scene settings" component/system exists in this engine yet, so — exactly like
+    /// `gravity` below — an engine-config-level constant is this engine's only existing precedent
+    /// for a whole-scene tunable. Low, desaturated default so an unlit scene isn't pitch black.
+    Math::Vector3UVE ambientColor{0.05F, 0.05F, 0.05F};
+
     /// Acceleration PhysicsSystemUVE (see Physics::PhysicsSystemUVE) applies to every
     /// non-kinematic RigidBodyComponentUVE each fixed step, scaled by its own gravityScale.
     /// Earth-like default, Y-up (matching this engine's convention throughout).

@@ -516,6 +516,168 @@ report) is treated as an ordinary cache miss — logged at `WARNING`, never `ERR
 a normal from-source compile; a cache *write* failure is equally non-fatal (also `WARNING`), since
 the worst case is just a slower next startup, never a broken one.
 
+## Materials (`Renderer3DUVE`, Increment 22)
+
+`MaterialAssetUVE` (Increment 12) has always had a full PBR-shaped field set — `albedoColor`,
+`albedoTexture`, `normalTexture`, `metallic`, `roughness`, `aoTexture`, `emissiveColor`,
+`vertexShader`, `fragmentShader`, `isTransparent` — but until this increment `Renderer3DUVE` only
+ever consumed the two shader GUIDs and `isTransparent`; every other field sat loaded in memory and
+untouched. This increment wires the rest through to the GPU. **Two scope-defining decisions,
+worth restating for anyone extending this later:**
+
+1. **Unlit textured output only, as of Increment 22.** At the time this section was written, the
+   engine had no lighting system at all. `Renderer3DUVE` rendered `albedoColor * albedoTexture`
+   (white 1×1 fallback when unset), modulated by AO, with emissive added — but
+   `metallic`/`roughness`/`normalTexture` were only *captured, uploaded, bound, and pushed as
+   uniforms*, never consumed by any lighting equation. **Increment 23 (see the Lighting section
+   below) adds a single directional light + flat ambient Lambertian term** —
+   `metallic`/`roughness`/`normalTexture` remain visually inert even after Increment 23; consuming
+   them is explicit future PBR work.
+2. **Materials still use the older `ShaderAssetUVE`/raw-`CreateShaderUVE` path, not
+   `ShaderManagerUVE`.** `Renderer3DUVE::ResolveMaterialGpuResourcesUVE()` loads a material's
+   `vertexShader`/`fragmentShader` `Asset::ShaderAssetUVE`s and calls
+   `IRenderDeviceUVE::CreateShaderUVE()`/`CreatePipelineUVE()` directly, exactly as it did before
+   Increment 21 existed — it deliberately does **not** route through `ShaderManagerUVE`/
+   `ShaderProgramUVE`. Bridging the two (hot-reload/`#include` support for material shaders) is
+   real, valuable, separate future work, not done here.
+
+**`Render::ToRenderTextureFormatUVE(Asset::TextureFormatUVE)`** (module-private, anonymous
+namespace in `renderer_3d_uve.cpp`) bridges `Asset::TextureFormatUVE` (the CPU-side loadable-asset
+enum) to `Render::TextureFormatUVE` (the RHI's own, deliberately separate enum — see
+`Asset::TextureFormatUVE`'s own doc comment for why engine/asset can't just reuse
+`Render::TextureFormatUVE` directly). An exhaustive 2-case switch with a
+`UVE_ASSERT(false && "Unhandled ...")` fallback, matching `shader_data_type_uve.cpp`'s existing
+idiom — kept module-private (not exported) since `Renderer3DUVE` is its only consumer, mirroring
+how `MeshAssetUVE → BufferDescUVE` conversion is already inlined in the same file rather than
+factored into public API.
+
+**Two 1×1 fallback textures** (`ImplUVE::fallbackWhiteTexture`/`fallbackNormalTexture`), created
+once per `Renderer3DUVE` instance alongside its offscreen color/depth render targets, and
+destroyed alongside them too. A material's unset (`kInvalidAssetGuidUVE`) `albedoTexture`/
+`aoTexture` resolves to the white texture (`sample * albedoColor == albedoColor`,
+`sample.r == 1.0` i.e. no occlusion); unset `normalTexture` resolves to a flat tangent-space "up"
+normal (`{128,128,255}` → decodes to `(0,0,1)`) — captured for forward compatibility with a future
+lighting increment, unused in this increment's color output. This avoids any shader-side branching
+on "does this material have a texture" — every material always has three real, bound textures.
+
+**Texture GPU-upload has its own cache** (`ImplUVE::textureCache`, keyed by the texture's own
+`AssetGuidUVE`, independent of `materialCache`) so two materials sharing an albedo texture upload
+it once. `ResolveTextureGpuHandleUVE()` follows the *exact* same async-readiness contract every
+other cache resolver in this file already established (mesh/material/shader): unset GUID → the
+fallback immediately, cache hit → the cached handle, still-loading → `std::nullopt` (caller aborts
+this material's resolution for the frame without caching anything, retried next frame — this is
+why `ResolveMaterialGpuResourcesUVE()` only builds and caches `MaterialGpuResourcesUVE` once
+*both* shaders *and* all three textures are ready), and — new to this increment — a genuinely
+*failed* load (`AssetHandleUVE::HasFailedUVE()`) resolves to the fallback permanently (logged
+once), since retrying a load that will never succeed would spin forever.
+
+**Texture-to-sampler binding is pure convention, no new RHI.** `ICommandBufferUVE::BindTextureUVE`
+binds a texture at a raw integer slot; `SetUniformIntUVE` (already existing since Increment 21) is
+reused to tell the shader which slot a `sampler2D` uniform should read from — a GLSL sampler
+uniform is just an int uniform holding a texture unit index. `Renderer3DUVE` uses three fixed
+slots: albedo=0, normal=1, ao=2 (`kAlbedoTextureSlotUVE`/`kNormalTextureSlotUVE`/
+`kAoTextureSlotUVE`), and a fixed uniform-name convention every material shader is expected to
+declare: `uModel`, `uViewProjection`, `uAlbedoColor`, `uMetallic`, `uRoughness`,
+`uEmissiveColor`, `uAlbedoTexture`, `uNormalTexture`, `uAOTexture`. A shader that doesn't declare
+one of these is a safe no-op per `SetUniform*UVE`'s own documented contract (unknown/optimized-out
+name), not an error.
+
+**A real, pre-existing gap this increment also had to close**: `RecordItemsUVE()` never pushed
+`worldMatrix`/`viewProjection` to the shader at all before this increment — `Renderer3DUVE`'s real
+scene-rendering path had never actually transformed a mesh correctly end-to-end, independent of
+materials/textures. Fixed alongside the material work since nothing about texture binding would
+have been meaningfully testable without it.
+
+**Cache eviction on texture reload is deliberately coarse.** `MaterialGpuResourcesUVE` doesn't
+track which texture GUIDs it resolved from (only the resolved `TextureHandleUVE`s), so
+`OnAssetReloadedUVE()` can't cheaply tell which cached materials referenced a specific reloaded
+texture. Instead, a texture-GUID reload event destroys+evicts that one `textureCache` entry *and*
+clears the entire `materialCache` (destroying every cached pipeline) — every material's pipeline
+and resolved texture handles get recomputed lazily next frame they're drawn (mostly cache hits
+against `textureCache` for anything unaffected by the reload). This matches this codebase's
+existing preference for simple, obviously-correct whole-unit invalidation over fine-grained
+dependency tracking — compare `ShaderManagerUVE`'s own hot-reload, which similarly recompiles a
+whole affected program rather than partial state. One documented consequence: `Renderer3DUVE`
+never destroys a `ShaderHandleUVE` once created (pre-existing behavior, not introduced by this
+increment — shader handles were never tracked anywhere destructible), so a texture-triggered
+`materialCache` clear leaves the old pipeline's two shader handles orphaned, and re-recording
+compiles two new ones — `Renderer3DUVE`'s live GPU-resource count settles two *higher* than before
+such a reload, not back to the exact original baseline. See
+`tests/render/renderer_3d_uve_tests.cpp`'s `AssetReloadedEventUVE_ForCachedTexture_...` test for
+the exact accounting.
+
+**Testing stays within `Renderer3DUVE`'s existing Null-backend-only convention.** Its test fixture
+registers a `ShaderAssetUVE` loader that returns fixed garbage source
+(`"void main() { }"`) — this has always worked because `NullRenderDeviceUVE::CreateShaderUVE()`
+never actually compiles/validates source content, so no real GLSL needs to be authored for these
+tests; the `uModel`/`uAlbedoTexture`/etc. names above are simply the string literals
+`Renderer3DUVE`'s C++ passes to `SetUniform*UVE()`, asserted against via
+`NullRenderDeviceUVE::GetLastSubmittedCommandsUVE()`'s command-spy — `Renderer3DUVE` has never had
+a live-GL visual test (its color target is an offscreen texture, not the window's default
+framebuffer, so reading it back would need an FBO-bound `glReadPixels` and — since the RHI
+deliberately never exposes a raw GL texture/FBO id outside `gl_render_device_uve.cpp`, per this
+document's own GL-symbol-confinement rule — no straightforward way to do that from outside the
+render module without adding new, unplanned RHI surface).
+
+## Lighting (`LightSystemUVE`, Increment 23)
+
+**Scope, deliberately narrow.** At most one active directional light, no point/spot lights, no
+light culling, no shadows, no specular/Blinn-Phong — diffuse-only Lambertian (N·L) plus a flat
+ambient term. `metallic`/`roughness` (bound as uniforms since Increment 22) stay visually inert;
+consuming them is future PBR work. `LightSystemUVE` is the spec's Part 7.2 entry ("Light culling,
+IBL") with culling/IBL explicitly deferred.
+
+**`LightComponentUVE` needed no changes.** It already carried `color`/`intensity` (an
+Increment-5-era placeholder) and was already fully wired through `SceneSerializerUVE`. A
+directional light's *direction* is deliberately not a component field — it's derived from the
+light entity's `WorldTransformComponentUVE::worldRotation` via `RotateVectorUVE(rotation,
+{0,0,-1})`, the same "forward" convention `CameraSystemUVE`'s view matrix and `EngineCoreUVE`'s
+audio-listener code already use. Rotate the light entity (e.g. via its `TransformComponentUVE`) to
+aim it.
+
+**`ILightSystemUVE`/`LightSystemUVE`** (`engine/render/`) is stateless, mirroring
+`ICameraSystemUVE`/`IMeshRendererUVE`. `ExtractActiveLightUVE(Scene::IEntityManagerUVE&)` — note:
+non-`const`, unlike `ICameraSystemUVE`'s methods, because it goes through
+`IEntityManagerUVE::ForEachUVE`, which has no `const` overload (same reason
+`IMeshRendererUVE::ExtractRenderQueueUVE` takes a non-`const` reference) — returns the first
+matching entity `ForEachUVE` encounters, or a default `DirectionalLightDataUVE{}` (`intensity ==
+0.0F`, the deliberate "no light" sentinel — no `std::optional`, no shader branching, matching
+Increment 22's fallback-texture philosophy). Which entity "wins" when multiple lights exist is
+unspecified this v1; deterministic only when all light entities share one archetype (within a
+single archetype, iteration order is chunk/row creation order; across different archetypes it's
+`std::unordered_map`-hash-dependent).
+
+**`Renderer3DUVE` wiring.** Gains an injected `ILightSystemUVE&` and a plain `Math::Vector3UVE
+ambientColor` constructor parameter (from `EngineConfigUVE::ambientColor`, following the exact
+`gravity` precedent — no "scene settings" component/system exists in this engine, so an
+engine-config constant is the only existing whole-scene-tunable pattern). `RenderFrameUVE()`
+computes `ExtractActiveLightUVE()` once per frame (like `viewProjection`) and bundles it with
+`viewProjection`/`ambientColor` into a module-private `FrameUniformsUVE` struct — mirroring
+`PipelineDescUVE`/`RenderPassDescUVE`'s own precedent for grouping related descriptor data, rather
+than growing `RecordItemsUVE`'s parameter list to five positional parameters.
+
+**Four new fixed uniform names**, added to the Materials section's convention list: `uLightDirection`,
+`uLightColor`, `uLightIntensity`, `uAmbientColor` — pushed unconditionally every item, right after
+`uViewProjection`. A shader that declares none of them is an unaffected no-op per `SetUniform*UVE`'s
+existing contract. Expected GLSL usage (not implemented this increment — see below):
+```glsl
+vec3 diffuse = albedo * uLightColor * uLightIntensity * max(dot(normalize(N), normalize(-uLightDirection)), 0.0);
+vec3 ambient = albedo * uAmbientColor;
+vec3 color = ambient + diffuse + emissive;
+```
+
+**Out of scope, deliberately.** The four built-in `.glsl` files (`engine/render/shader/built_in/`)
+are untouched — they're `ShaderManagerUVE`'s demo-triangle scaffold only, already stale since
+Increment 22 (`uColor`/`uTexture` naming, no lighting math, no `aNormal`), and updating them is
+unrelated pre-existing staleness, not this increment's job. `MeshVertexUVE` already uploads normals
+(`NORMAL` attribute in `MeshVertexLayoutUVE()`, since before this increment) — no vertex-layout
+change was needed. No real GLSL was authored for tests, matching Increment 22:
+`Renderer3DUVE`'s tests use `NullRenderDeviceUVE`, which never compiles/validates shader source.
+**Known simplification for whoever eventually authors a real lit shader**: `Renderer3DUVE` does not
+compute or push a normal matrix (inverse-transpose of the model matrix) this increment — correct
+world-space normal transform under non-uniform scale needs one; using `uModel` directly to
+transform normals is only correct under uniform scale. Deferred, not forgotten.
+
 ## Allocator boundary
 
 `PoolAllocatorUVE`, `StackAllocatorUVE`, and `HeapAllocatorUVE` (`engine/memory/`) are the

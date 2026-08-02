@@ -43,6 +43,7 @@
 #include "uve/physics/i_physics_system_uve.h"
 #include "uve/physics/i_raycast_system_uve.h"
 #include "uve/render/i_camera_system_uve.h"
+#include "uve/render/i_light_system_uve.h"
 #include "uve/render/i_mesh_renderer_uve.h"
 #include "uve/render/i_render_device_uve.h"
 #include "uve/render/i_render_system_uve.h"
@@ -521,6 +522,16 @@ public:
     mutable int extractRenderQueueCallCount = 0;
 };
 
+class FakeLightSystemUVE final : public Render::ILightSystemUVE {
+public:
+    [[nodiscard]] Render::DirectionalLightDataUVE ExtractActiveLightUVE(Scene::IEntityManagerUVE&) const override {
+        ++extractActiveLightCallCount;
+        return {};
+    }
+
+    mutable int extractActiveLightCallCount = 0;
+};
+
 class FakeRenderer3DUVE final : public Render::IRenderer3DUVE {
 public:
     void RenderFrameUVE(Scene::IEntityManagerUVE&, Scene::EntityUVE) override { ++renderFrameCallCount; }
@@ -707,6 +718,7 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     FakeRenderSystemUVE renderSystem;
     FakeCameraSystemUVE cameraSystem;
     FakeMeshRendererUVE meshRenderer;
+    FakeLightSystemUVE lightSystem;
     FakeRenderer3DUVE renderer3D;
     FakeCollisionSystemUVE collisionSystem;
     FakePhysicsSystemUVE physicsSystem;
@@ -724,7 +736,7 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
                                       assetDatabase, sceneSerializer, prefabSystem, hotReload,
                                       assetManager, assetImporter, assetBundle, fileSystem,
                                       renderDevice, shaderManager, renderSystem, cameraSystem,
-                                      meshRenderer, renderer3D, collisionSystem, physicsSystem,
+                                      meshRenderer, lightSystem, renderer3D, collisionSystem, physicsSystem,
                                       raycastSystem, inputSystem, audioDevice, audioSystem,
                                       audioSourceSystem, saveGameSystem, checkpointManager,
                                       windowManager);
@@ -751,6 +763,7 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     EXPECT_EQ(&services.GetRenderSystemUVE(), &renderSystem);
     EXPECT_EQ(&services.GetCameraSystemUVE(), &cameraSystem);
     EXPECT_EQ(&services.GetMeshRendererUVE(), &meshRenderer);
+    EXPECT_EQ(&services.GetLightSystemUVE(), &lightSystem);
     EXPECT_EQ(&services.GetRenderer3DUVE(), &renderer3D);
     EXPECT_EQ(&services.GetCollisionSystemUVE(), &collisionSystem);
     EXPECT_EQ(&services.GetPhysicsSystemUVE(), &physicsSystem);
@@ -787,6 +800,7 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     FakeRenderSystemUVE renderSystem;
     FakeCameraSystemUVE cameraSystem;
     FakeMeshRendererUVE meshRenderer;
+    FakeLightSystemUVE lightSystem;
     FakeRenderer3DUVE renderer3D;
     FakeCollisionSystemUVE collisionSystem;
     FakePhysicsSystemUVE physicsSystem;
@@ -803,7 +817,7 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
                                       assetDatabase, sceneSerializer, prefabSystem, hotReload,
                                       assetManager, assetImporter, assetBundle, fileSystem,
                                       renderDevice, shaderManager, renderSystem, cameraSystem,
-                                      meshRenderer, renderer3D, collisionSystem, physicsSystem,
+                                      meshRenderer, lightSystem, renderer3D, collisionSystem, physicsSystem,
                                       raycastSystem, inputSystem, audioDevice, audioSystem,
                                       audioSourceSystem, saveGameSystem, checkpointManager,
                                       windowManager);
@@ -836,6 +850,7 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     static_cast<void>(services.GetMeshRendererUVE().ExtractRenderQueueUVE(
         services.GetEntityManagerUVE(), services.GetAssetManagerUVE(), services.GetAssetDatabaseUVE(),
         Math::FrustumUVE{}));
+    static_cast<void>(services.GetLightSystemUVE().ExtractActiveLightUVE(services.GetEntityManagerUVE()));
     services.GetRenderer3DUVE().RenderFrameUVE(services.GetEntityManagerUVE(), Scene::kInvalidEntityUVE);
     static_cast<void>(services.GetRaycastSystemUVE().RaycastUVE(services.GetEntityManagerUVE(), Physics::RaycastQueryUVE{}));
     services.GetInputSystemUVE().UpdateUVE();
@@ -867,6 +882,7 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     EXPECT_EQ(renderSystem.beginFrameCallCount, 1);
     EXPECT_EQ(cameraSystem.computeViewCallCount, 1);
     EXPECT_EQ(meshRenderer.extractRenderQueueCallCount, 1);
+    EXPECT_EQ(lightSystem.extractActiveLightCallCount, 1);
     EXPECT_EQ(renderer3D.renderFrameCallCount, 1);
     EXPECT_EQ(raycastSystem.raycastCallCount, 1);
     EXPECT_EQ(inputSystem.updateCallCount, 1);

@@ -44,6 +44,7 @@
 #include "uve/platform/platform_uve.h"
 #include "uve/render/camera_system_uve.h"
 #include "uve/render/gl_render_device_uve.h"
+#include "uve/render/light_system_uve.h"
 #include "uve/render/mesh_renderer_uve.h"
 #include "uve/render/null_render_device_uve.h"
 #include "uve/render/render_system_uve.h"
@@ -311,16 +312,23 @@ void EngineCoreUVE::Init() {
     // grouped with the rest of engine/render.
     m_meshRenderer = std::make_unique<Render::MeshRendererUVE>();
 
-    // Renderer3D twenty-third: needs RenderDevice, RenderSystem, MeshRenderer, CameraSystem,
-    // AssetManager, AssetDatabase, and EventSystem — every one of which already exists by this
-    // point. Its offscreen render target is fixed at EngineConfigUVE::renderTargetWidth/Height
-    // for this EngineCoreUVE's lifetime, entirely independent of WindowManagerUVE/the real window
-    // size — Renderer3DUVE never renders into the window itself (see docs/CODING_STANDARDS.md's
-    // rendering-evolution roadmap for how these two eventually connect).
+    // LightSystem twenty-third: stateless, no dependencies of its own — grouped with the rest
+    // of engine/render, constructed right before Renderer3D since Renderer3D's constructor
+    // needs it.
+    m_lightSystem = std::make_unique<Render::LightSystemUVE>();
+
+    // Renderer3D twenty-fourth: needs RenderDevice, RenderSystem, MeshRenderer, CameraSystem,
+    // LightSystem, AssetManager, AssetDatabase, EventSystem, and EngineConfigUVE::ambientColor —
+    // every one of which already exists by this point. Its offscreen render target is fixed at
+    // EngineConfigUVE::renderTargetWidth/Height for this EngineCoreUVE's lifetime, entirely
+    // independent of WindowManagerUVE/the real window size — Renderer3DUVE never renders into the
+    // window itself (see docs/CODING_STANDARDS.md's rendering-evolution roadmap for how these two
+    // eventually connect).
     m_renderer3D = std::make_unique<Render::Renderer3DUVE>(*m_renderDevice, *m_renderSystem, *m_meshRenderer,
-                                                             *m_cameraSystem, *m_assetManager, *m_assetDatabase,
-                                                             *m_eventSystem, m_config.renderTargetWidth,
-                                                             m_config.renderTargetHeight);
+                                                             *m_cameraSystem, *m_lightSystem, *m_assetManager,
+                                                             *m_assetDatabase, *m_eventSystem,
+                                                             m_config.renderTargetWidth, m_config.renderTargetHeight,
+                                                             m_config.ambientColor);
 
     // The demo triangle is set up right after Renderer3D, only when windowed rendering is
     // active — see SetupDemoTriangleUVE()'s own doc comment for why this is deliberately
@@ -329,37 +337,37 @@ void EngineCoreUVE::Init() {
         SetupDemoTriangleUVE();
     }
 
-    // CollisionSystem twenty-fourth: stateless, no dependencies of its own.
+    // CollisionSystem twenty-fifth: stateless, no dependencies of its own.
     m_collisionSystem = std::make_unique<Physics::CollisionSystemUVE>();
 
-    // PhysicsSystem twenty-fifth: needs only CollisionSystem (composed by reference) and
+    // PhysicsSystem twenty-sixth: needs only CollisionSystem (composed by reference) and
     // EngineConfigUVE::gravity, both already available.
     m_physicsSystem = std::make_unique<Physics::PhysicsSystemUVE>(*m_collisionSystem, m_config.gravity);
 
-    // RaycastSystem twenty-sixth: stateless, no dependencies of its own.
+    // RaycastSystem twenty-seventh: stateless, no dependencies of its own.
     m_raycastSystem = std::make_unique<Physics::RaycastSystemUVE>();
 
-    // InputSystem twenty-seventh: needs only EventSystem (composed by reference, to queue
+    // InputSystem twenty-eighth: needs only EventSystem (composed by reference, to queue
     // InputActionTriggeredEventUVE), already available.
     m_inputSystem = std::make_unique<Input::InputSystemUVE>(*m_eventSystem);
 
-    // AudioDevice twenty-eighth: no dependencies of its own (a NullAudioDeviceUVE — no real audio
+    // AudioDevice twenty-ninth: no dependencies of its own (a NullAudioDeviceUVE — no real audio
     // hardware/SDK is buildable in this sandbox).
     m_audioDevice = std::make_unique<Audio::NullAudioDeviceUVE>();
 
-    // AudioSystem twenty-ninth: needs AudioDevice (it pushes computed gain/position through it).
+    // AudioSystem thirtieth: needs AudioDevice (it pushes computed gain/position through it).
     m_audioSystem = std::make_unique<Audio::AudioSystemUVE>(*m_audioDevice);
 
-    // AudioSourceSystem thirtieth: stateful but takes no constructor dependencies —
+    // AudioSourceSystem thirty-first: stateful but takes no constructor dependencies —
     // EntityManager and AudioSystem are passed to SyncUVE() per call, like
     // MeshRendererUVE::ExtractRenderQueueUVE().
     m_audioSourceSystem = std::make_unique<Audio::AudioSourceSystemUVE>();
 
-    // SaveGameSystem thirty-first: needs SceneSerializer (composed by reference) and
+    // SaveGameSystem thirty-second: needs SceneSerializer (composed by reference) and
     // EngineConfigUVE::saveDirectoryPath.
     m_saveGameSystem = std::make_unique<Save::SaveGameSystemUVE>(*m_sceneSerializer, m_config.saveDirectoryPath);
 
-    // CheckpointManager thirty-second: needs SaveGameSystem (composed by reference) and
+    // CheckpointManager thirty-third: needs SaveGameSystem (composed by reference) and
     // EngineConfigUVE::autoSaveIntervalSecondsUVE.
     m_checkpointManager =
         std::make_unique<Save::CheckpointManagerUVE>(*m_saveGameSystem, m_config.autoSaveIntervalSecondsUVE);
@@ -376,7 +384,7 @@ void EngineCoreUVE::Init() {
                         *m_assetDatabase, *m_sceneSerializer, *m_prefabSystem, *m_hotReload,
                         *m_assetManager, *m_assetImporter, *m_assetBundle, *m_fileSystem,
                         *m_renderDevice, *m_shaderManager, *m_renderSystem, *m_cameraSystem,
-                        *m_meshRenderer, *m_renderer3D, *m_collisionSystem, *m_physicsSystem,
+                        *m_meshRenderer, *m_lightSystem, *m_renderer3D, *m_collisionSystem, *m_physicsSystem,
                         *m_raycastSystem, *m_inputSystem, *m_audioDevice, *m_audioSystem,
                         *m_audioSourceSystem, *m_saveGameSystem, *m_checkpointManager,
                         *m_windowManager);
@@ -510,7 +518,7 @@ void EngineCoreUVE::Shutdown() {
 
     // Exact reverse of Init()'s construction order: ConfigManager, then
     // CheckpointManager, then SaveGameSystem, then AudioSourceSystem, then AudioSystem, then AudioDevice, then
-    // InputSystem, then RaycastSystem, then PhysicsSystem, then CollisionSystem, then Renderer3D, then MeshRenderer, then CameraSystem, then RenderSystem, then ShaderManager, then RenderDevice
+    // InputSystem, then RaycastSystem, then PhysicsSystem, then CollisionSystem, then Renderer3D, then LightSystem, then MeshRenderer, then CameraSystem, then RenderSystem, then ShaderManager, then RenderDevice
     // (destroying the demo triangle's shader program and vertex buffer first, if windowed rendering
     // was active), then WindowManager,
     // then FileSystem, then AssetBundle, then AssetImporter, then
@@ -532,6 +540,7 @@ void EngineCoreUVE::Shutdown() {
     m_physicsSystem.reset();
     m_collisionSystem.reset();
     m_renderer3D.reset();
+    m_lightSystem.reset();
     m_meshRenderer.reset();
     m_cameraSystem.reset();
     m_renderSystem.reset();
