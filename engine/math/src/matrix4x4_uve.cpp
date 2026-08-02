@@ -66,6 +66,28 @@ Matrix4x4UVE Matrix4x4UVE::PerspectiveUVE(float fovYRadians, float aspectRatio, 
     return result;
 }
 
+Matrix4x4UVE Matrix4x4UVE::OrthographicUVE(float left, float right, float bottom, float top, float nearPlane,
+                                            float farPlane) noexcept {
+    Matrix4x4UVE result{};
+    result.m[0][0] = 2.0F / (right - left);
+    result.m[0][1] = 0.0F;
+    result.m[0][2] = 0.0F;
+    result.m[0][3] = -(right + left) / (right - left);
+    result.m[1][0] = 0.0F;
+    result.m[1][1] = 2.0F / (top - bottom);
+    result.m[1][2] = 0.0F;
+    result.m[1][3] = -(top + bottom) / (top - bottom);
+    result.m[2][0] = 0.0F;
+    result.m[2][1] = 0.0F;
+    result.m[2][2] = -1.0F / (farPlane - nearPlane);
+    result.m[2][3] = -nearPlane / (farPlane - nearPlane);
+    result.m[3][0] = 0.0F;
+    result.m[3][1] = 0.0F;
+    result.m[3][2] = 0.0F;
+    result.m[3][3] = 1.0F;
+    return result;
+}
+
 Matrix4x4UVE Matrix4x4UVE::ViewFromPositionAndRotationUVE(Vector3UVE position, QuaternionUVE rotation) noexcept {
     const Vector3UVE right = RotateVectorUVE(rotation, Vector3UVE{1.0F, 0.0F, 0.0F});
     const Vector3UVE up = RotateVectorUVE(rotation, Vector3UVE{0.0F, 1.0F, 0.0F});

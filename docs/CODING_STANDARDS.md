@@ -893,6 +893,110 @@ C++-side lighting math** — this codebase has never computed N·L, Fresnel, att
 lighting term in C++; every formula remains a documented expected-GLSL-usage comment, never
 compiled or executed by any test.
 
+## Directional Shadow Mapping (Increment 26)
+
+**Delivers real shadow mapping for the primary use case: a single sun/directional light.**
+Increments 23-25 built lighting but nothing occludes it — every surface stays fully lit. Two
+scope-defining decisions were confirmed with the user before implementation:
+
+1. **Only Directional lights cast shadows.** Point/Spot shadows need cubemap/perspective shadow
+   maps and multiple render passes per light — explicitly deferred, matching every prior
+   increment's "start with the simple case" precedent.
+2. **The shadow frustum is a fixed-half-extent orthographic box centered on the shadow-casting
+   light entity's world position** (`EngineConfigUVE::shadowMapHalfExtent`/`shadowMapNearPlane`/
+   `shadowMapFarPlane`), not a camera-frustum-fitted box. No new frustum-fitting/AABB math —
+   consistent with this codebase's running "no unnecessary new math" discipline.
+
+**This increment departs from 23-25's testing philosophy in one specific place.** Those increments
+kept literally all lighting math as documented-only GLSL, never compiled or GL-verified. Shadow
+mapping's *depth pre-pass* is not a lighting formula — it's RHI/pipeline mechanics (a second render
+pass, a new pipeline, a position-only vertex shader), the same category of work as the demo
+triangle and the built-in-shader system from Increment 21. So the depth pre-pass is **real,
+compiled, tested** code — a new built-in shader (`engine/render/shader/built_in/shadow_depth.glsl`,
+following the established physical-file + embedded-fallback + parity-test convention). Only the
+shadow-map *sampling/comparison* inside the main lighting fragment shader stays documented-only
+GLSL, exactly like the specular/attenuation formulas already there — because that still lives
+inside the un-authored per-material fragment shader.
+
+**`Matrix4x4UVE::OrthographicUVE`** — a new factory matching `PerspectiveUVE`'s existing Vulkan-
+depth-range `[0,1]`/Y-up-NDC convention. Real, tested math (`tests/math/matrix4x4_uve_tests.cpp`).
+
+**`LightDataUVE` gains `Math::QuaternionUVE rotation`**, populated from
+`worldTransform.worldRotation` — the same source `direction` is already derived from. This reuses
+`Matrix4x4UVE::ViewFromPositionAndRotationUVE` directly for a light's view matrix with zero new
+view-matrix math, instead of inventing a `LookAtUVE` from a direction vector.
+
+**`GlCommandBufferUVE::BeginRenderPassUVE` depth-only FBO path.** Previously,
+`colorAttachment == kInvalidTextureHandleUVE` unconditionally routed to the *default* framebuffer,
+silently ignoring any `depthAttachment` — there was no depth-only (no color) FBO path. Fixed by
+restructuring the branch to "`colorAttachment == invalid && depthAttachment == invalid` → default
+framebuffer; otherwise build a real FBO", attaching color only if present, depth only if present,
+calling `glDrawBuffer(GL_NONE)`/`glReadBuffer(GL_NONE)` when there's no color attachment (a
+core-profile completeness requirement for a depth-only FBO — both are legacy OpenGL 1.1 entry
+points `<GL/gl.h>` already declares directly, no loader entry needed, same as the bare
+`glViewport`/`glClear` calls already in that function), and deriving the viewport size from
+whichever attachment is actually present.
+
+**`Renderer3DUVE` wiring** — the largest piece:
+- Constructor gains `Shader::IShaderManagerUVE& shaderManager` (positioned after `lightSystem`,
+  matching `EngineCoreUVE`'s existing construction order — `ShaderManagerUVE` is already
+  constructed before `Renderer3D`) plus `shadowMapResolution`/`shadowMapHalfExtent`/
+  `shadowMapNearPlane`/`shadowMapFarPlane`.
+- New members: `shadowMapTarget` (a persistent `Depth32Float` texture sized
+  `shadowMapResolution × shadowMapResolution` — unlike the main pass's own `depthTarget`, which is
+  written and never sampled, this is later bound as a sampled texture input during the main pass)
+  and `shadowProgram` (a `std::shared_ptr<Shader::ShaderProgramUVE>` created once via
+  `shaderManager.CreateProgramUVE(...)`, reusing `MeshVertexLayoutUVE()` — the exact same vertex
+  layout materials use, since the shadow pass draws the same mesh vertex buffers even though its
+  vertex shader only reads `POSITION`). This is the exact same pattern `EngineCoreUVE`'s demo
+  triangle already established for a built-in (non-material) shader: compile via
+  `IShaderManagerUVE`, hold the `ShaderProgramUVE`, `ApplyToUVE(commandBuffer)` binds the pipeline
+  and flushes queued uniforms.
+- `kShadowMapTextureSlotUVE = 3`, the next slot after the three material texture slots.
+- `RenderFrameUVE()` finds the first slot where `type == Directional && intensity > 0.0F` (a
+  simple linear scan via `FindShadowCasterUVE` — no sorting, same first-N-encountered spirit as
+  Increment 25). If found, computes `lightSpaceMatrix = OrthographicUVE(...) *
+  ViewFromPositionAndRotationUVE(caster.position, caster.rotation)`; otherwise
+  `Matrix4x4UVE::IdentityUVE()`.
+- **`RecordShadowPassUVE`, called before the existing main pass, always runs exactly once per
+  frame** — `BeginRenderPassUVE{colorAttachment: invalid, depthAttachment: shadowMapTarget,
+  depthLoadOp: Clear, clearDepth: 1.0}`, draws every opaque item only if a caster was found *and*
+  `shadowProgram->IsValidUVE()`, then `EndRenderPassUVE`. When there's no caster or the program
+  isn't ready yet, the pass still begins/ends but draws nothing, leaving the shadow map cleared to
+  `1.0` (far plane). **No C++-side branching or sentinel flag is needed for the "no shadow caster"
+  case** — a shadow-comparison formula (`sampledDepth >= currentDepth → lit`) against an all-`1.0`
+  map naturally always evaluates "not in shadow," composing for free with the existing clear-value
+  default. Matches this codebase's established sentinel philosophy (zero-intensity light slots,
+  fallback textures). No light-frustum culling this increment — reuses the same
+  camera-frustum-culled opaque list the main pass already extracts (a documented known limitation).
+- The main pass gains, per item: `uLightSpaceMatrix` (Matrix4x4), then `BindTextureUVE` +
+  `uShadowMapTexture` (int) for the shadow map at slot 3 — 3 new commands per item, appended after
+  the light-uniform loop.
+
+**Expected GLSL usage** (documented only, not implemented/compiled this increment, same as every
+prior lighting increment) — the main fragment shader samples `uShadowMapTexture` with a simple
+constant bias:
+```glsl
+uniform sampler2D uShadowMapTexture;
+uniform mat4 uLightSpaceMatrix;
+
+float ComputeShadowFactorUVE(vec3 worldPos) {
+    vec4 lightSpacePos = uLightSpaceMatrix * vec4(worldPos, 1.0);
+    vec3 projected = lightSpacePos.xyz / lightSpacePos.w;
+    projected = projected * 0.5 + 0.5; // NDC [-1,1] -> texture [0,1]
+    float sampledDepth = texture(uShadowMapTexture, projected.xy).r;
+    float currentDepth = projected.z;
+    return (currentDepth - 0.005 > sampledDepth) ? 0.0 : 1.0; // 0.0 = in shadow
+}
+// ...multiply the Increment 25 diffuse+specular accumulation (for the shadow-casting Directional
+// light's contribution only) by ComputeShadowFactorUVE(vWorldPos) before adding it to `lighting`
+```
+
+**Out of scope, deliberately**: Point/Spot shadows, cascaded/multiple shadow maps, PCF/soft shadow
+edges (hard cutoff only), camera-frustum-fitted shadow bounds, shadow-casting culled against the
+light's own frustum (reuses the camera-culled list instead), real GLSL authoring or live-GL visual
+proof for the sampling/comparison step (same GL-symbol-confinement rationale as Increments 22-25).
+
 ## Allocator boundary
 
 `PoolAllocatorUVE`, `StackAllocatorUVE`, and `HeapAllocatorUVE` (`engine/memory/`) are the

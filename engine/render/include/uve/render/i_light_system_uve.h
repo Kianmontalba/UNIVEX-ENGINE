@@ -12,6 +12,7 @@
 #include <array>
 #include <cstddef>
 
+#include "uve/math/quaternion_uve.h"
 #include "uve/math/vector3_uve.h"
 #include "uve/scene/components/light_component_uve.h"
 #include "uve/scene/i_entity_manager_uve.h"
@@ -46,6 +47,14 @@ struct LightDataUVE {
     // toward the surface, N·L needs the surface-to-light vector). Meaningful for
     // Directional/Spot; unused for Point (radiates in all directions).
     Math::Vector3UVE direction{0.0F, 0.0F, -1.0F};
+
+    /// The light entity's world rotation, carried alongside `direction` (which is already the
+    /// rotated forward vector derived from this same rotation). Introduced for directional-light
+    /// shadow mapping (Increment 26): `Matrix4x4UVE::ViewFromPositionAndRotationUVE(position,
+    /// rotation)` needs a quaternion, not a direction vector, so this reuses that existing factory
+    /// directly for a shadow-casting light's view matrix instead of inventing a new
+    /// direction-to-view-matrix construction.
+    Math::QuaternionUVE rotation{};
 
     Math::Vector3UVE color{1.0F, 1.0F, 1.0F};
     float intensity = 0.0F;

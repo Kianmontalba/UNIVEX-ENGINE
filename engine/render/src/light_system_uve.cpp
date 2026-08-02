@@ -31,6 +31,7 @@ LightListUVE LightSystemUVE::ExtractActiveLightsUVE(Scene::IEntityManagerUVE& en
             slot.type = light.type;
             slot.position = worldTransform.worldPosition;
             slot.direction = Math::RotateVectorUVE(worldTransform.worldRotation, Math::Vector3UVE{0.0F, 0.0F, -1.0F});
+            slot.rotation = worldTransform.worldRotation;
             slot.color = light.color;
             slot.intensity = light.intensity;
             slot.range = light.range;

@@ -37,30 +37,51 @@ GlCommandBufferUVE::GlCommandBufferUVE(Detail::GlDeviceStateUVE& state) : m_stat
 void GlCommandBufferUVE::BeginRenderPassUVE(const RenderPassDescUVE& renderPassDesc) {
     UVE_ASSERT(!m_insideRenderPass);
 
-    if (renderPassDesc.colorAttachment == kInvalidTextureHandleUVE) {
+    if (renderPassDesc.colorAttachment == kInvalidTextureHandleUVE &&
+        renderPassDesc.depthAttachment == kInvalidTextureHandleUVE) {
         m_state->gl.glBindFramebuffer(GL_FRAMEBUFFER, 0);
         m_tempFramebuffer = 0;
         const std::uint32_t width = m_state->windowManager->GetWidthUVE();
         const std::uint32_t height = m_state->windowManager->GetHeightUVE();
         glViewport(0, 0, static_cast<GLsizei>(width), static_cast<GLsizei>(height));
     } else {
-        const auto colorIt = m_state->textures.find(renderPassDesc.colorAttachment.value);
-        if (colorIt == m_state->textures.end()) {
-            UVE_ERROR("GlCommandBufferUVE: BeginRenderPassUVE referenced an unknown colorAttachment handle");
-            return;
-        }
-
         GLuint framebuffer = 0;
         m_state->gl.glGenFramebuffers(1, &framebuffer);
         m_state->gl.glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
-        m_state->gl.glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
-                                            colorIt->second.glTexture, 0);
+
+        std::uint32_t attachmentWidth = 0;
+        std::uint32_t attachmentHeight = 0;
+
+        if (renderPassDesc.colorAttachment != kInvalidTextureHandleUVE) {
+            const auto colorIt = m_state->textures.find(renderPassDesc.colorAttachment.value);
+            if (colorIt == m_state->textures.end()) {
+                UVE_ERROR("GlCommandBufferUVE: BeginRenderPassUVE referenced an unknown colorAttachment handle");
+                return;
+            }
+            m_state->gl.glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+                                                colorIt->second.glTexture, 0);
+            attachmentWidth = colorIt->second.desc.width;
+            attachmentHeight = colorIt->second.desc.height;
+        } else {
+            // Depth-only pass (e.g. a shadow map's depth pre-pass, Increment 26): a core-profile
+            // FBO with no color attachment must explicitly declare it has none, or
+            // glCheckFramebufferStatus reports GL_FRAMEBUFFER_INCOMPLETE_DRAW/READ_BUFFER.
+            // glDrawBuffer/glReadBuffer are legacy OpenGL 1.1 entry points <GL/gl.h> already
+            // declares directly (see gl_functions_uve.h's own doc comment) - no loader entry
+            // needed, same as the bare glViewport/glClear calls already used in this function.
+            glDrawBuffer(GL_NONE);
+            glReadBuffer(GL_NONE);
+        }
 
         if (renderPassDesc.depthAttachment != kInvalidTextureHandleUVE) {
             const auto depthIt = m_state->textures.find(renderPassDesc.depthAttachment.value);
             if (depthIt != m_state->textures.end()) {
                 m_state->gl.glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D,
                                                     depthIt->second.glTexture, 0);
+                if (attachmentWidth == 0) {
+                    attachmentWidth = depthIt->second.desc.width;
+                    attachmentHeight = depthIt->second.desc.height;
+                }
             }
         }
 
@@ -68,8 +89,7 @@ void GlCommandBufferUVE::BeginRenderPassUVE(const RenderPassDescUVE& renderPassD
             UVE_ERROR("GlCommandBufferUVE: BeginRenderPassUVE built an incomplete framebuffer");
         }
 
-        glViewport(0, 0, static_cast<GLsizei>(colorIt->second.desc.width),
-                   static_cast<GLsizei>(colorIt->second.desc.height));
+        glViewport(0, 0, static_cast<GLsizei>(attachmentWidth), static_cast<GLsizei>(attachmentHeight));
         m_tempFramebuffer = framebuffer;
     }
 

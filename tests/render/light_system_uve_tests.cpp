@@ -61,6 +61,7 @@ TEST_F(LightSystemUVETest, ExtractActiveLightsUVE_OneDirectionalLight_PopulatesS
 
     EXPECT_EQ(result[0].type, Scene::LightTypeUVE::Directional);
     EXPECT_EQ(result[0].direction, (Math::Vector3UVE{0.0F, 0.0F, -1.0F}));
+    EXPECT_EQ(result[0].rotation, Math::QuaternionUVE{});
     EXPECT_FLOAT_EQ(result[0].intensity, 2.0F);
     for (std::size_t i = 1; i < kMaxLightsUVE; ++i) {
         EXPECT_FLOAT_EQ(result[i].intensity, 0.0F);
@@ -77,6 +78,7 @@ TEST_F(LightSystemUVETest, ExtractActiveLightsUVE_RotatedDirectionalLight_Direct
     const LightListUVE result = lightSystem.ExtractActiveLightsUVE(entityManager);
 
     EXPECT_EQ(result[0].direction, (Math::Vector3UVE{0.0F, 0.0F, 1.0F}));
+    EXPECT_EQ(result[0].rotation, rotation);
     EXPECT_EQ(result[0].color, light.color);
     EXPECT_FLOAT_EQ(result[0].intensity, light.intensity);
 }
@@ -92,6 +94,7 @@ TEST_F(LightSystemUVETest, ExtractActiveLightsUVE_OnePointLight_PositionTypeAndR
 
     EXPECT_EQ(result[0].type, Scene::LightTypeUVE::Point);
     EXPECT_EQ(result[0].position, position);
+    EXPECT_EQ(result[0].rotation, Math::QuaternionUVE{});
     EXPECT_FLOAT_EQ(result[0].range, 25.0F);
 }
 
@@ -108,6 +111,7 @@ TEST_F(LightSystemUVETest, ExtractActiveLightsUVE_OneSpotLight_PositionDirection
     EXPECT_EQ(result[0].type, Scene::LightTypeUVE::Spot);
     EXPECT_EQ(result[0].position, position);
     EXPECT_EQ(result[0].direction, (Math::Vector3UVE{0.0F, 0.0F, -1.0F}));
+    EXPECT_EQ(result[0].rotation, Math::QuaternionUVE{});
     EXPECT_FLOAT_EQ(result[0].range, 12.0F);
     EXPECT_FLOAT_EQ(result[0].spotAngleDegrees, 20.0F);
 }

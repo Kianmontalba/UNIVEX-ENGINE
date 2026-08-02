@@ -318,17 +318,20 @@ void EngineCoreUVE::Init() {
     m_lightSystem = std::make_unique<Render::LightSystemUVE>();
 
     // Renderer3D twenty-fourth: needs RenderDevice, RenderSystem, MeshRenderer, CameraSystem,
-    // LightSystem, AssetManager, AssetDatabase, EventSystem, and EngineConfigUVE::ambientColor —
-    // every one of which already exists by this point. Its offscreen render target is fixed at
+    // LightSystem, ShaderManager (Increment 26 — compiles the built-in shadow-depth program),
+    // AssetManager, AssetDatabase, EventSystem, EngineConfigUVE::ambientColor, and
+    // EngineConfigUVE::shadowMapResolution/shadowMapHalfExtent/shadowMapNearPlane/
+    // shadowMapFarPlane — every one of which already exists by this point (ShaderManager is
+    // constructed twentieth, above). Its offscreen render target is fixed at
     // EngineConfigUVE::renderTargetWidth/Height for this EngineCoreUVE's lifetime, entirely
     // independent of WindowManagerUVE/the real window size — Renderer3DUVE never renders into the
     // window itself (see docs/CODING_STANDARDS.md's rendering-evolution roadmap for how these two
     // eventually connect).
-    m_renderer3D = std::make_unique<Render::Renderer3DUVE>(*m_renderDevice, *m_renderSystem, *m_meshRenderer,
-                                                             *m_cameraSystem, *m_lightSystem, *m_assetManager,
-                                                             *m_assetDatabase, *m_eventSystem,
-                                                             m_config.renderTargetWidth, m_config.renderTargetHeight,
-                                                             m_config.ambientColor);
+    m_renderer3D = std::make_unique<Render::Renderer3DUVE>(
+        *m_renderDevice, *m_renderSystem, *m_meshRenderer, *m_cameraSystem, *m_lightSystem, *m_shaderManager,
+        *m_assetManager, *m_assetDatabase, *m_eventSystem, m_config.renderTargetWidth, m_config.renderTargetHeight,
+        m_config.ambientColor, m_config.shadowMapResolution, m_config.shadowMapHalfExtent,
+        m_config.shadowMapNearPlane, m_config.shadowMapFarPlane);
 
     // The demo triangle is set up right after Renderer3D, only when windowed rendering is
     // active — see SetupDemoTriangleUVE()'s own doc comment for why this is deliberately

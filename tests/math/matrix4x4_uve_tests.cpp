@@ -102,6 +102,47 @@ TEST(Matrix4x4UVETest, PerspectiveUVE_MapsFarPlaneToDepthOne) {
     EXPECT_NEAR(clip.z / clip.w, 1.0F, kEpsilon);
 }
 
+TEST(Matrix4x4UVETest, OrthographicUVE_MapsNearPlaneToDepthZero) {
+    const Matrix4x4UVE projection = Matrix4x4UVE::OrthographicUVE(-10.0F, 10.0F, -10.0F, 10.0F, 1.0F, 100.0F);
+
+    const Vec4UVE clip = MultiplyHomogeneousUVE(projection, Vec4UVE{0.0F, 0.0F, -1.0F, 1.0F});
+
+    EXPECT_NEAR(clip.z / clip.w, 0.0F, kEpsilon);
+}
+
+TEST(Matrix4x4UVETest, OrthographicUVE_MapsFarPlaneToDepthOne) {
+    const Matrix4x4UVE projection = Matrix4x4UVE::OrthographicUVE(-10.0F, 10.0F, -10.0F, 10.0F, 1.0F, 100.0F);
+
+    const Vec4UVE clip = MultiplyHomogeneousUVE(projection, Vec4UVE{0.0F, 0.0F, -100.0F, 1.0F});
+
+    EXPECT_NEAR(clip.z / clip.w, 1.0F, kEpsilon);
+}
+
+TEST(Matrix4x4UVETest, OrthographicUVE_MapsBoxCornersToPlusMinusOne) {
+    const Matrix4x4UVE projection = Matrix4x4UVE::OrthographicUVE(-10.0F, 10.0F, -5.0F, 5.0F, 1.0F, 100.0F);
+
+    const Vec4UVE minCorner = MultiplyHomogeneousUVE(projection, Vec4UVE{-10.0F, -5.0F, -50.0F, 1.0F});
+    const Vec4UVE maxCorner = MultiplyHomogeneousUVE(projection, Vec4UVE{10.0F, 5.0F, -50.0F, 1.0F});
+
+    EXPECT_NEAR(minCorner.x / minCorner.w, -1.0F, kEpsilon);
+    EXPECT_NEAR(minCorner.y / minCorner.w, -1.0F, kEpsilon);
+    EXPECT_NEAR(maxCorner.x / maxCorner.w, 1.0F, kEpsilon);
+    EXPECT_NEAR(maxCorner.y / maxCorner.w, 1.0F, kEpsilon);
+}
+
+TEST(Matrix4x4UVETest, OrthographicUVE_UnlikePerspective_DoesNotScaleWithDepth) {
+    // Orthographic projection is depth-independent: a point directly above the origin maps to the
+    // same NDC x/y regardless of how far along -Z it sits (no perspective divide changes the ratio).
+    const Matrix4x4UVE projection = Matrix4x4UVE::OrthographicUVE(-10.0F, 10.0F, -10.0F, 10.0F, 1.0F, 100.0F);
+
+    const Vec4UVE near = MultiplyHomogeneousUVE(projection, Vec4UVE{5.0F, 0.0F, -1.0F, 1.0F});
+    const Vec4UVE far = MultiplyHomogeneousUVE(projection, Vec4UVE{5.0F, 0.0F, -99.0F, 1.0F});
+
+    EXPECT_NEAR(near.x / near.w, far.x / far.w, kEpsilon);
+    EXPECT_NEAR(near.w, 1.0F, kEpsilon);
+    EXPECT_NEAR(far.w, 1.0F, kEpsilon);
+}
+
 TEST(Matrix4x4UVETest, ViewFromPositionAndRotationUVE_IdentityRotation_TransformsWorldPointRelativeToEye) {
     const Matrix4x4UVE view = Matrix4x4UVE::ViewFromPositionAndRotationUVE(Vector3UVE{0.0F, 0.0F, 5.0F}, QuaternionUVE{});
 

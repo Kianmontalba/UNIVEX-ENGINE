@@ -22,6 +22,7 @@
 #include "uve/render/i_render_device_uve.h"
 #include "uve/render/i_render_system_uve.h"
 #include "uve/render/i_renderer_3d_uve.h"
+#include "uve/render/shader/i_shader_manager_uve.h"
 
 namespace UVE::Render {
 
@@ -37,11 +38,18 @@ public:
     /// against) and subscribes to Asset::AssetReloadedEventUVE for GPU-resource-cache
     /// invalidation. `ambientColor` is the flat ambient term added to every item's final color
     /// every frame regardless of whether an active light exists (see EngineConfigUVE::ambientColor,
-    /// Increment 23). Every reference must outlive this Renderer3DUVE.
+    /// Increment 23). `shaderManager` compiles the built-in shadow-depth program used by the
+    /// directional-light shadow pre-pass (Increment 26); `shadowMapResolution`/
+    /// `shadowMapHalfExtent`/`shadowMapNearPlane`/`shadowMapFarPlane` size and bound that
+    /// pre-pass's orthographic projection (see EngineConfigUVE's matching fields). Every reference
+    /// must outlive this Renderer3DUVE.
     Renderer3DUVE(IRenderDeviceUVE& renderDevice, IRenderSystemUVE& renderSystem, IMeshRendererUVE& meshRenderer,
-                  ICameraSystemUVE& cameraSystem, ILightSystemUVE& lightSystem, Asset::IAssetManagerUVE& assetManager,
+                  ICameraSystemUVE& cameraSystem, ILightSystemUVE& lightSystem,
+                  Shader::IShaderManagerUVE& shaderManager, Asset::IAssetManagerUVE& assetManager,
                   Asset::IAssetDatabaseUVE& assetDatabase, Events::IEventSystemUVE& eventSystem,
-                  std::uint32_t targetWidth, std::uint32_t targetHeight, Math::Vector3UVE ambientColor);
+                  std::uint32_t targetWidth, std::uint32_t targetHeight, Math::Vector3UVE ambientColor,
+                  std::uint32_t shadowMapResolution, float shadowMapHalfExtent, float shadowMapNearPlane,
+                  float shadowMapFarPlane);
     ~Renderer3DUVE() override;
 
     Renderer3DUVE(const Renderer3DUVE&) = delete;
