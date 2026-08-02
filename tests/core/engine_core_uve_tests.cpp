@@ -457,9 +457,11 @@ TEST(EngineCoreUVETest, LightSystem_ReachableAndReturnsSentinelWithNoLightEntity
     ASSERT_TRUE(engine.Load());
 
     Render::ILightSystemUVE& lightSystem = engine.GetServicesUVE().GetLightSystemUVE();
-    const Render::DirectionalLightDataUVE light =
-        lightSystem.ExtractActiveLightUVE(engine.GetServicesUVE().GetEntityManagerUVE());
-    EXPECT_FLOAT_EQ(light.intensity, 0.0F);
+    const Render::LightListUVE lights =
+        lightSystem.ExtractActiveLightsUVE(engine.GetServicesUVE().GetEntityManagerUVE());
+    for (const Render::LightDataUVE& slot : lights) {
+        EXPECT_FLOAT_EQ(slot.intensity, 0.0F);
+    }
 
     engine.Shutdown();
 }

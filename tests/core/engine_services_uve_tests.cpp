@@ -530,7 +530,7 @@ public:
 
 class FakeLightSystemUVE final : public Render::ILightSystemUVE {
 public:
-    [[nodiscard]] Render::DirectionalLightDataUVE ExtractActiveLightUVE(Scene::IEntityManagerUVE&) const override {
+    [[nodiscard]] Render::LightListUVE ExtractActiveLightsUVE(Scene::IEntityManagerUVE&) const override {
         ++extractActiveLightCallCount;
         return {};
     }
@@ -858,7 +858,7 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     static_cast<void>(services.GetMeshRendererUVE().ExtractRenderQueueUVE(
         services.GetEntityManagerUVE(), services.GetAssetManagerUVE(), services.GetAssetDatabaseUVE(),
         Math::FrustumUVE{}));
-    static_cast<void>(services.GetLightSystemUVE().ExtractActiveLightUVE(services.GetEntityManagerUVE()));
+    static_cast<void>(services.GetLightSystemUVE().ExtractActiveLightsUVE(services.GetEntityManagerUVE()));
     services.GetRenderer3DUVE().RenderFrameUVE(services.GetEntityManagerUVE(), Scene::kInvalidEntityUVE);
     static_cast<void>(services.GetRaycastSystemUVE().RaycastUVE(services.GetEntityManagerUVE(), Physics::RaycastQueryUVE{}));
     services.GetInputSystemUVE().UpdateUVE();

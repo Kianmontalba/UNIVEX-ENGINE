@@ -20,6 +20,7 @@
 #include <gtest/gtest.h>
 
 #include "uve/asset/asset_guid_uve.h"
+#include "uve/asset/uve_file_envelope_uve.h"
 #include "uve/debug/log_sink_uve.h"
 #include "uve/debug/logger_uve.h"
 #include "uve/events/event_system_uve.h"
@@ -99,6 +100,62 @@ TEST_F(SceneSerializerUVETest, SaveThenLoad_ColliderComponentUVE_RoundTripsFrict
     EXPECT_FLOAT_EQ(loaded.friction, 0.4F);
     EXPECT_FLOAT_EQ(loaded.restitution, 0.9F);
     EXPECT_FLOAT_EQ(loaded.density, 2.5F);
+
+    std::filesystem::remove(path);
+}
+
+TEST_F(SceneSerializerUVETest, SaveThenLoad_LightComponentUVE_RoundTripsTypeRangeSpotAngle) {
+    const EntityUVE entity = entityManager.CreateEntityUVE();
+    LightComponentUVE light;
+    light.color = Math::Vector3UVE{0.9F, 0.8F, 0.7F};
+    light.intensity = 3.5F;
+    light.type = LightTypeUVE::Spot;
+    light.range = 15.0F;
+    light.spotAngleDegrees = 30.0F;
+    entityManager.AddComponentUVE<LightComponentUVE>(entity, light);
+
+    const std::filesystem::path path = "uve_scene_serializer_tests_light.uvescene";
+    std::filesystem::remove(path);
+    ASSERT_TRUE(serializer.SaveUVE(entityManager, {entity}, path, SceneAssetTypeUVE::Scene));
+
+    EntityManagerUVE loadedManager(memoryManager.GetDefaultAllocatorUVE(), eventSystem);
+    const std::vector<EntityUVE> roots = serializer.LoadUVE(loadedManager, path);
+    ASSERT_EQ(roots.size(), 1U);
+    const LightComponentUVE& loaded = loadedManager.GetComponentUVE<LightComponentUVE>(roots[0]);
+
+    EXPECT_TRUE(loaded.color == light.color);
+    EXPECT_FLOAT_EQ(loaded.intensity, 3.5F);
+    EXPECT_EQ(loaded.type, LightTypeUVE::Spot);
+    EXPECT_FLOAT_EQ(loaded.range, 15.0F);
+    EXPECT_FLOAT_EQ(loaded.spotAngleDegrees, 30.0F);
+
+    std::filesystem::remove(path);
+}
+
+TEST_F(SceneSerializerUVETest, LoadUVE_OldFormatLightComponentUVEMissingNewFields_FillsInDefaults) {
+    // Hand-built payload matching the pre-Increment-25 LightComponentUVE JSON shape (only
+    // "color"/"intensity" - no "type"/"range"/"spotAngleDegrees" keys), proving old saves still
+    // load correctly via the fromJson lambda's json.value(...) backward-compat defaults. Written
+    // as a raw string literal (not nlohmann::json) since nlohmann_json is deliberately linked
+    // PRIVATE to uve_scene, confined to scene_serializer_uve.cpp - not available to test code.
+    const std::string payloadText =
+        R"({"entities":[{"localId":0,"components":{"LightComponentUVE":{"color":[0.1,0.2,0.3],"intensity":4.0}}}]})";
+    const auto* const payloadBytesPtr = reinterpret_cast<const std::byte*>(payloadText.data());
+    const std::vector<std::byte> payloadBytes(payloadBytesPtr, payloadBytesPtr + payloadText.size());
+
+    const std::filesystem::path path = "uve_scene_serializer_tests_light_old_format.uvescene";
+    std::filesystem::remove(path);
+    ASSERT_TRUE(Asset::WriteUveFileUVE(path, SceneAssetTypeUVE::Scene, payloadBytes));
+
+    const std::vector<EntityUVE> roots = serializer.LoadUVE(entityManager, path);
+    ASSERT_EQ(roots.size(), 1U);
+    const LightComponentUVE& loaded = entityManager.GetComponentUVE<LightComponentUVE>(roots[0]);
+
+    EXPECT_TRUE(loaded.color == (Math::Vector3UVE{0.1F, 0.2F, 0.3F}));
+    EXPECT_FLOAT_EQ(loaded.intensity, 4.0F);
+    EXPECT_EQ(loaded.type, LightTypeUVE::Directional); // default
+    EXPECT_FLOAT_EQ(loaded.range, 10.0F);               // default
+    EXPECT_FLOAT_EQ(loaded.spotAngleDegrees, 45.0F);     // default
 
     std::filesystem::remove(path);
 }
