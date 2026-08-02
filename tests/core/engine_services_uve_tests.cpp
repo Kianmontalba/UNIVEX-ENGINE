@@ -506,8 +506,14 @@ public:
         return Math::Matrix4x4UVE::IdentityUVE();
     }
     [[nodiscard]] Math::FrustumUVE ExtractFrustumUVE(const Math::Matrix4x4UVE&) const override { return {}; }
+    [[nodiscard]] Math::Vector3UVE GetWorldPositionUVE(const Scene::IEntityManagerUVE&,
+                                                          Scene::EntityUVE) const override {
+        ++getWorldPositionCallCount;
+        return {};
+    }
 
     mutable int computeViewCallCount = 0;
+    mutable int getWorldPositionCallCount = 0;
 };
 
 class FakeMeshRendererUVE final : public Render::IMeshRendererUVE {
@@ -847,6 +853,8 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     services.GetRenderSystemUVE().BeginFrameUVE();
     static_cast<void>(
         services.GetCameraSystemUVE().ComputeViewMatrixUVE(services.GetEntityManagerUVE(), Scene::kInvalidEntityUVE));
+    static_cast<void>(
+        services.GetCameraSystemUVE().GetWorldPositionUVE(services.GetEntityManagerUVE(), Scene::kInvalidEntityUVE));
     static_cast<void>(services.GetMeshRendererUVE().ExtractRenderQueueUVE(
         services.GetEntityManagerUVE(), services.GetAssetManagerUVE(), services.GetAssetDatabaseUVE(),
         Math::FrustumUVE{}));
@@ -881,6 +889,7 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     EXPECT_EQ(shaderManager.updateCallCount, 1);
     EXPECT_EQ(renderSystem.beginFrameCallCount, 1);
     EXPECT_EQ(cameraSystem.computeViewCallCount, 1);
+    EXPECT_EQ(cameraSystem.getWorldPositionCallCount, 1);
     EXPECT_EQ(meshRenderer.extractRenderQueueCallCount, 1);
     EXPECT_EQ(lightSystem.extractActiveLightCallCount, 1);
     EXPECT_EQ(renderer3D.renderFrameCallCount, 1);

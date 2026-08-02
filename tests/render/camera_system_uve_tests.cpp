@@ -120,6 +120,14 @@ TEST_F(CameraSystemUVETest, ExtractFrustumUVE_EndToEnd_ClassifiesKnownBoxesCorre
     EXPECT_FALSE(frustum.IntersectsUVE(offToTheSideBox));
 }
 
+TEST_F(CameraSystemUVETest, GetWorldPositionUVE_ReturnsEntityWorldPosition) {
+    const Math::Vector3UVE position{3.0F, -2.0F, 7.5F};
+    const Scene::EntityUVE cameraEntity =
+        MakeCameraEntityUVE(position, Math::QuaternionUVE{}, Scene::CameraComponentUVE{});
+
+    EXPECT_EQ(cameraSystem.GetWorldPositionUVE(entityManager, cameraEntity), position);
+}
+
 #if UVE_DEBUG
 TEST_F(CameraSystemUVETest, ComputeViewMatrixUVE_EntityWithoutWorldTransform_Asserts) {
     const Scene::EntityUVE entity = entityManager.CreateEntityUVE();
@@ -130,6 +138,11 @@ TEST_F(CameraSystemUVETest, ComputeProjectionMatrixUVE_EntityWithoutCameraCompon
     const Scene::EntityUVE entity = entityManager.CreateEntityUVE();
     sceneGraph.AttachTransformUVE(entityManager, entity, Scene::TransformComponentUVE{});
     EXPECT_DEATH({ static_cast<void>(cameraSystem.ComputeProjectionMatrixUVE(entityManager, entity, 1.0F)); }, "");
+}
+
+TEST_F(CameraSystemUVETest, GetWorldPositionUVE_EntityWithoutWorldTransform_Asserts) {
+    const Scene::EntityUVE entity = entityManager.CreateEntityUVE();
+    EXPECT_DEATH({ static_cast<void>(cameraSystem.GetWorldPositionUVE(entityManager, entity)); }, "");
 }
 #endif
 

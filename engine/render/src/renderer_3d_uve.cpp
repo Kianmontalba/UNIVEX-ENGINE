@@ -98,13 +98,15 @@ const std::vector<VertexAttributeUVE>& MeshVertexLayoutUVE() {
 }
 
 /// Frame-constant uniform data threaded into RecordItemsUVE() for every item this frame: the
-/// view-projection matrix plus this frame's single active directional light (or the "no light"
-/// sentinel from ILightSystemUVE::ExtractActiveLightUVE()) and the global ambient term. Bundled
+/// view-projection matrix, the rendering camera's world position (Increment 24 — the view vector
+/// a specular term needs), this frame's single active directional light (or the "no light"
+/// sentinel from ILightSystemUVE::ExtractActiveLightUVE()), and the global ambient term. Bundled
 /// into one struct — mirroring PipelineDescUVE's/RenderPassDescUVE's own precedent for grouping
-/// related descriptor data — rather than growing RecordItemsUVE's parameter list to five
+/// related descriptor data — rather than growing RecordItemsUVE's parameter list to six
 /// positional parameters. Module-private: never crosses the RHI boundary, unlike PipelineDescUVE.
 struct FrameUniformsUVE {
     Math::Matrix4x4UVE viewProjection;
+    Math::Vector3UVE viewPosition;
     DirectionalLightDataUVE light;
     Math::Vector3UVE ambientColor;
 };
@@ -327,6 +329,7 @@ struct Renderer3DUVE::ImplUVE {
             commandBuffer.SetUniformVector3UVE("uLightColor", frameUniforms.light.color);
             commandBuffer.SetUniformFloatUVE("uLightIntensity", frameUniforms.light.intensity);
             commandBuffer.SetUniformVector3UVE("uAmbientColor", frameUniforms.ambientColor);
+            commandBuffer.SetUniformVector3UVE("uViewPosition", frameUniforms.viewPosition);
             commandBuffer.SetUniformVector3UVE("uAlbedoColor", material->albedoColor);
             commandBuffer.SetUniformFloatUVE("uMetallic", material->metallic);
             commandBuffer.SetUniformFloatUVE("uRoughness", material->roughness);
@@ -389,8 +392,9 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
     const Math::Matrix4x4UVE viewProjection =
         m_impl->cameraSystem.ComputeViewProjectionUVE(entityManager, cameraEntity, aspectRatio);
     const Math::FrustumUVE frustum = m_impl->cameraSystem.ExtractFrustumUVE(viewProjection);
+    const Math::Vector3UVE viewPosition = m_impl->cameraSystem.GetWorldPositionUVE(entityManager, cameraEntity);
     const DirectionalLightDataUVE lightData = m_impl->lightSystem.ExtractActiveLightUVE(entityManager);
-    const FrameUniformsUVE frameUniforms{viewProjection, lightData, m_impl->ambientColor};
+    const FrameUniformsUVE frameUniforms{viewProjection, viewPosition, lightData, m_impl->ambientColor};
 
     RenderQueueUVE queue =
         m_impl->meshRenderer.ExtractRenderQueueUVE(entityManager, m_impl->assetManager, m_impl->assetDatabase, frustum);
