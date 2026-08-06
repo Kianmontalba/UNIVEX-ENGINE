@@ -3,6 +3,7 @@
 
 #include "uve/asset/asset_bundle_uve.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -40,6 +41,16 @@ void AppendUint32UVE(std::vector<std::byte>& buffer, std::uint32_t value) {
 
 void AppendUint64UVE(std::vector<std::byte>& buffer, std::uint64_t value) {
     AppendBytesUVE(buffer, &value, sizeof(value));
+}
+
+[[nodiscard]] bool IsSafeRelativePathUVE(std::string_view name) {
+    const std::filesystem::path path{std::string(name)};
+    if (name.empty() || path.is_absolute() || path.has_root_name() || path.has_root_directory()) {
+        return false;
+    }
+    return std::none_of(path.begin(), path.end(), [](const std::filesystem::path& component) {
+        return component == "." || component == "..";
+    });
 }
 
 [[nodiscard]] bool ReadUint32FromBufferUVE(const std::vector<std::byte>& buffer, std::size_t& offset,
@@ -114,7 +125,7 @@ void AppendUint64UVE(std::vector<std::byte>& buffer, std::uint64_t value) {
             UVE_ERROR("AssetBundleUVE: \"{}\" has a truncated entry data length", bundlePath.string());
             return false;
         }
-        if (offset + dataLength > payload.size()) {
+        if (dataLength > static_cast<std::uint64_t>(payload.size() - offset)) {
             UVE_ERROR("AssetBundleUVE: \"{}\" has truncated entry data", bundlePath.string());
             return false;
         }
@@ -143,6 +154,10 @@ bool AssetBundleUVE::PackUVE(const std::vector<AssetBundleEntryUVE>& entries,
         const std::vector<char> data((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
 
         const std::string name = entry.virtualName.empty() ? ToHexStringUVE(entry.guid.value) : entry.virtualName;
+        if (!IsSafeRelativePathUVE(name)) {
+            UVE_ERROR("AssetBundleUVE: entry name \"{}\" is not a safe relative path", name);
+            return false;
+        }
         AppendUint64UVE(payload, entry.guid.value);
         AppendUint32UVE(payload, static_cast<std::uint32_t>(name.size()));
         AppendBytesUVE(payload, name.data(), name.size());
@@ -172,6 +187,11 @@ bool AssetBundleUVE::UnpackUVE(const std::filesystem::path& bundlePath,
     const bool scanOk = ScanBundleEntriesUVE(
         bundlePath, *payload,
         [&](std::string_view name, std::size_t dataOffset, std::uint64_t dataLength) -> bool {
+            if (!IsSafeRelativePathUVE(name)) {
+                UVE_ERROR("AssetBundleUVE: entry name \"{}\" is not a safe relative path", name);
+                writeFailed = true;
+                return false;
+            }
             const std::filesystem::path outputPath = outputDirectory / std::string(name);
             std::ofstream outFile(outputPath, std::ios::binary);
             if (!outFile.is_open()) {

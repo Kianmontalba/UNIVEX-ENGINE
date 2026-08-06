@@ -5,8 +5,10 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <memory>
 #include <string>
 #include <vector>
@@ -149,6 +151,23 @@ TEST(UveFileEnvelopeUVETest, ReadUveFileUVE_UnsupportedCompression_ReturnsNullop
     EXPECT_TRUE(foundError);
 
     logger.Shutdown();
+    std::filesystem::remove(path);
+}
+
+TEST(UveFileEnvelopeUVETest, ReadUveFileUVE_OversizedDeclaredPayload_ReturnsNulloptWithoutAllocating) {
+    const std::filesystem::path path = "uve_file_envelope_tests_oversized_payload.uveblob";
+    std::filesystem::remove(path);
+    ASSERT_TRUE(WriteUveFileUVE(path, AssetKindUVE::Blob, {}));
+
+    {
+        std::fstream file(path, std::ios::binary | std::ios::in | std::ios::out);
+        ASSERT_TRUE(file.is_open());
+        const std::uint64_t oversizedPayload = std::numeric_limits<std::uint64_t>::max();
+        file.seekp(16);
+        file.write(reinterpret_cast<const char*>(&oversizedPayload), sizeof(oversizedPayload));
+    }
+
+    EXPECT_FALSE(ReadUveFileUVE(path).has_value());
     std::filesystem::remove(path);
 }
 

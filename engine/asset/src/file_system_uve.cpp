@@ -51,6 +51,16 @@ struct MountRecordUVE {
     return remainder;
 }
 
+[[nodiscard]] bool IsSafeVirtualRemainderUVE(std::string_view remainder) {
+    const std::filesystem::path path{std::string(remainder)};
+    if (remainder.empty() || path.is_absolute() || path.has_root_name() || path.has_root_directory()) {
+        return false;
+    }
+    return std::none_of(path.begin(), path.end(), [](const std::filesystem::path& component) {
+        return component == "." || component == "..";
+    });
+}
+
 /// Every mount whose prefix matches `virtualPath` (optionally restricted to `kindFilter`),
 /// copied out and sorted by descending priority (ties broken by most-recently-mounted first).
 [[nodiscard]] std::vector<MountRecordUVE> FindMatchingMountsUVE(const std::vector<MountRecordUVE>& mounts,
@@ -143,6 +153,9 @@ bool FileSystemUVE::HasFileUVE(std::string_view virtualPath) const {
 
     for (const MountRecordUVE& record : matches) {
         const std::string_view remainder = StripPrefixUVE(virtualPath, record.prefix);
+        if (!IsSafeVirtualRemainderUVE(remainder)) {
+            continue;
+        }
         if (record.kind == MountKindUVE::Directory) {
             const std::filesystem::path realPath = record.realPathOrBundlePath / std::string(remainder);
             if (std::filesystem::exists(realPath)) {
@@ -164,6 +177,9 @@ std::optional<std::vector<std::byte>> FileSystemUVE::ReadFileUVE(std::string_vie
 
     for (const MountRecordUVE& record : matches) {
         const std::string_view remainder = StripPrefixUVE(virtualPath, record.prefix);
+        if (!IsSafeVirtualRemainderUVE(remainder)) {
+            continue;
+        }
         if (record.kind == MountKindUVE::Directory) {
             const std::filesystem::path realPath = record.realPathOrBundlePath / std::string(remainder);
             std::optional<std::vector<std::byte>> data = ReadRealFileUVE(realPath);
@@ -196,6 +212,10 @@ bool FileSystemUVE::WriteFileUVE(std::string_view virtualPath, const std::vector
 
     const MountRecordUVE& target = matches.front();
     const std::string_view remainder = StripPrefixUVE(virtualPath, target.prefix);
+    if (!IsSafeVirtualRemainderUVE(remainder)) {
+        UVE_ERROR("FileSystemUVE: virtual path \"{}\" escapes its mount", virtualPath);
+        return false;
+    }
     const std::filesystem::path realPath = target.realPathOrBundlePath / std::string(remainder);
 
     if (realPath.has_parent_path()) {
@@ -232,6 +252,9 @@ std::filesystem::path FileSystemUVE::ResolveRealPathUVE(std::string_view virtual
 
     for (const MountRecordUVE& record : matches) {
         const std::string_view remainder = StripPrefixUVE(virtualPath, record.prefix);
+        if (!IsSafeVirtualRemainderUVE(remainder)) {
+            continue;
+        }
         const std::filesystem::path realPath = record.realPathOrBundlePath / std::string(remainder);
         if (std::filesystem::exists(realPath)) {
             return realPath;

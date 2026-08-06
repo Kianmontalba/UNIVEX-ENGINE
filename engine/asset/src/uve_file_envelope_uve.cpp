@@ -5,6 +5,7 @@
 
 #include <array>
 #include <fstream>
+#include <limits>
 
 #include "uve/debug/logging_macros_uve.h"
 
@@ -15,6 +16,7 @@ namespace {
 constexpr std::array<char, 4> kUveMagicUVE{'U', 'V', 'E', '\0'};
 constexpr std::uint32_t kEnvelopeVersionUVE = 1;
 constexpr std::uint32_t kCompressionMethodNoneUVE = 0;
+constexpr std::uint64_t kMaximumPayloadBytesUVE = 512ULL * 1024ULL * 1024ULL;
 
 void WriteUint32UVE(std::ofstream& file, std::uint32_t value) {
     file.write(reinterpret_cast<const char*>(&value), sizeof(value));
@@ -97,7 +99,18 @@ ReadUveFileUVE(const std::filesystem::path& path) {
         return std::nullopt;
     }
 
-    std::vector<std::byte> payload(payloadLength);
+    const std::streamoff payloadStart = file.tellg();
+    file.seekg(0, std::ios::end);
+    const std::streamoff fileEnd = file.tellg();
+    if (payloadStart < 0 || fileEnd < payloadStart ||
+        payloadLength > static_cast<std::uint64_t>(fileEnd - payloadStart) ||
+        payloadLength > kMaximumPayloadBytesUVE || payloadLength > std::numeric_limits<std::size_t>::max()) {
+        UVE_ERROR("UveFileEnvelopeUVE: \"{}\" has an invalid or oversized payload length", path.string());
+        return std::nullopt;
+    }
+    file.seekg(payloadStart, std::ios::beg);
+
+    std::vector<std::byte> payload(static_cast<std::size_t>(payloadLength));
     if (payloadLength > 0) {
         file.read(reinterpret_cast<char*>(payload.data()), static_cast<std::streamsize>(payloadLength));
         if (!file) {
