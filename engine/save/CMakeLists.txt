@@ -1,11 +1,5 @@
-#------------------------------------------------------------------------------
-# UniVex Engine (UVE) — Proprietary Game Engine
 # Copyright (c) 2026 UniVex Studios. All Rights Reserved.
-# Unauthorized copying, modification, distribution, or use of this code
-# in whole or in part is strictly prohibited without express written
-# permission from UniVex Studios.
-# Violators will be prosecuted to the fullest extent of the law.
-#------------------------------------------------------------------------------
+
 #
 # nlohmann_json is linked PRIVATE (confined to save_game_system_uve.cpp, exactly like
 # SceneSerializerUVE's/ConfigManagerUVE's own PIMPL-confinement pattern) and relies on

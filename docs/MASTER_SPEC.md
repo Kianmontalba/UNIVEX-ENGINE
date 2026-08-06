@@ -226,16 +226,11 @@ Importer Requirements:
 PART 3 — COPYRIGHT HEADER (REQUIRED IN EVERY FILE)
 ================================================================================
 
-Every .cpp, .h, .hpp, .cs, .mm file MUST start with:
+Every .cpp, .h, .hpp, .cs, .mm file outside `engine/core` MUST start with:
 
-//------------------------------------------------------------------------------
-// UniVex Engine (UVE) — Proprietary Game Engine
 // Copyright (c) 2026 UniVex Studios. All Rights Reserved.
-// Unauthorized copying, modification, distribution, or use of this code
-// in whole or in part is strictly prohibited without express written
-// permission from UniVex Studios.
-// Violators will be prosecuted to the fullest extent of the law.
-//------------------------------------------------------------------------------
+
+Only files in `engine/core` carry the complete proprietary notice, with the centered UVE / UniVex Engine title and no decorative separator lines.
 
 ================================================================================
 PART 4 — NAMING CONVENTIONS

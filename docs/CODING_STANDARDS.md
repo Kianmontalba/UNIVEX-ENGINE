@@ -46,20 +46,15 @@ namespaces/folders without restructuring anything listed above — exactly how `
 - User-facing node names (future `Node3D`, `Mesh3D`, etc.) do **not** get the `UVE` suffix —
   not applicable to this increment, noted here for future consistency.
 
-## Required copyright header
+## Copyright headers
 
-Every `.h`/`.hpp`/`.cpp` file starts with this exact block:
+Use this short header in every source file outside `engine/core`:
 
 ```
-//------------------------------------------------------------------------------
-// UniVex Engine (UVE) — Proprietary Game Engine
 // Copyright (c) 2026 UniVex Studios. All Rights Reserved.
-// Unauthorized copying, modification, distribution, or use of this code
-// in whole or in part is strictly prohibited without express written
-// permission from UniVex Studios.
-// Violators will be prosecuted to the fullest extent of the law.
-//------------------------------------------------------------------------------
 ```
+
+Files in `engine/core` use the complete proprietary notice. Keep it undecorated: no separator lines or triple-slash comments.
 
 ## Documentation & thread safety
 
