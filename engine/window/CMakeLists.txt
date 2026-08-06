@@ -1,11 +1,5 @@
-#------------------------------------------------------------------------------
-# UniVex Engine (UVE) — Proprietary Game Engine
 # Copyright (c) 2026 UniVex Studios. All Rights Reserved.
-# Unauthorized copying, modification, distribution, or use of this code
-# in whole or in part is strictly prohibited without express written
-# permission from UniVex Studios.
-# Violators will be prosecuted to the fullest extent of the law.
-#------------------------------------------------------------------------------
+
 #
 # WindowManagerUVE is the first module to pull in GLFW3, fetched here exactly like
 # nlohmann_json in engine/config/CMakeLists.txt (git-based FetchContent works in this sandbox

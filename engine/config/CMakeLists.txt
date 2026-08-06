@@ -1,11 +1,5 @@
-#------------------------------------------------------------------------------
-# UniVex Engine (UVE) — Proprietary Game Engine
 # Copyright (c) 2026 UniVex Studios. All Rights Reserved.
-# Unauthorized copying, modification, distribution, or use of this code
-# in whole or in part is strictly prohibited without express written
-# permission from UniVex Studios.
-# Violators will be prosecuted to the fullest extent of the law.
-#------------------------------------------------------------------------------
+
 #
 # ConfigManagerUVE is the first module with a third-party data-format
 # dependency: nlohmann::json, fetched here and confined behind

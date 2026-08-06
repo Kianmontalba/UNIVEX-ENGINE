@@ -1,11 +1,5 @@
-#------------------------------------------------------------------------------
-# UniVex Engine (UVE) — Proprietary Game Engine
 # Copyright (c) 2026 UniVex Studios. All Rights Reserved.
-# Unauthorized copying, modification, distribution, or use of this code
-# in whole or in part is strictly prohibited without express written
-# permission from UniVex Studios.
-# Violators will be prosecuted to the fullest extent of the law.
-#------------------------------------------------------------------------------
+
 
 # find_package(OpenGL REQUIRED) mirrors engine/threading's find_package(Threads REQUIRED)
 # precedent (docs/CODING_STANDARDS.md, "Real OS threads") — GlRenderDeviceUVE is the first module
