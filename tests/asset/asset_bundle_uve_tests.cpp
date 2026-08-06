@@ -96,6 +96,19 @@ TEST(AssetBundleUVETest, PackUVE_MissingSourceFile_ReturnsFalseAndLogsError) {
     logger.Shutdown();
 }
 
+TEST(AssetBundleUVETest, PackUVE_TraversalVirtualName_ReturnsFalse) {
+    const std::filesystem::path source = "uve_asset_bundle_tests_unsafe_name.txt";
+    const std::filesystem::path bundlePath = "uve_asset_bundle_tests_unsafe_name.uvebundle";
+    WriteFixtureFileUVE(source, "data");
+    std::filesystem::remove(bundlePath);
+
+    AssetBundleUVE bundle;
+    EXPECT_FALSE(bundle.PackUVE({{AssetGuidUVE{99}, source, "../outside.txt"}}, bundlePath));
+    EXPECT_FALSE(std::filesystem::exists(bundlePath));
+
+    std::filesystem::remove(source);
+}
+
 TEST(AssetBundleUVETest, UnpackUVE_NonBundleAssetType_FailsCleanlyAndLogsError) {
     const std::filesystem::path path = "uve_asset_bundle_tests_not_a_bundle.uveblob";
     std::filesystem::remove(path);

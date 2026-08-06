@@ -196,6 +196,20 @@ TEST_F(FileSystemUVETest, WriteFileUVE_WritesIntoHighestPriorityDirectoryMount) 
     std::filesystem::remove_all(highDir);
 }
 
+TEST_F(FileSystemUVETest, WriteFileUVE_TraversalPath_ReturnsFalseWithoutEscapingMount) {
+    const std::filesystem::path directory = "uve_file_system_tests_traversal";
+    const std::filesystem::path escapedPath = "uve_file_system_tests_escaped.txt";
+    std::filesystem::remove_all(directory);
+    std::filesystem::remove(escapedPath);
+    std::filesystem::create_directories(directory);
+    fileSystem.MountDirectoryUVE("", directory, 0);
+
+    EXPECT_FALSE(fileSystem.WriteFileUVE("../uve_file_system_tests_escaped.txt", ToBytesUVE("blocked")));
+    EXPECT_FALSE(std::filesystem::exists(escapedPath));
+
+    std::filesystem::remove_all(directory);
+}
+
 TEST_F(FileSystemUVETest, WriteFileUVE_OnlyBundleMountMatches_ReturnsFalseAndLogsError) {
     const std::filesystem::path source = "uve_file_system_tests_write_bundle_source.txt";
     WriteFixtureFileUVE(source, "data");
