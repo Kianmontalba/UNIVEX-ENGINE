@@ -148,10 +148,12 @@ out vec3 vWorldPosition;
 out vec3 vWorldNormal;
 out vec2 vTexCoord;
 out vec4 vLightSpacePosition;
+out vec4 vLightSpacePositions[3];
 
 uniform mat4 uModel;
 uniform mat4 uViewProjection;
 uniform mat4 uLightSpaceMatrix;
+uniform mat4 uLightSpaceMatrices[3];
 
 void main() {
     vec4 worldPosition = uModel * vec4(aPosition, 1.0);
@@ -159,6 +161,9 @@ void main() {
     vWorldNormal = mat3(uModel) * aNormal;
     vTexCoord = aTexCoord;
     vLightSpacePosition = uLightSpaceMatrix * worldPosition;
+    for (int cascadeIndex = 0; cascadeIndex < 3; ++cascadeIndex) {
+        vLightSpacePositions[cascadeIndex] = uLightSpaceMatrices[cascadeIndex] * worldPosition;
+    }
     gl_Position = uViewProjection * worldPosition;
 }
 #endif
@@ -168,6 +173,7 @@ in vec3 vWorldPosition;
 in vec3 vWorldNormal;
 in vec2 vTexCoord;
 in vec4 vLightSpacePosition;
+in vec4 vLightSpacePositions[3];
 out vec4 FragColor;
 
 struct LightUVE {
@@ -190,19 +196,55 @@ uniform vec3 uEmissiveColor;
 uniform sampler2D uAlbedoTexture;
 uniform sampler2D uNormalTexture;
 uniform sampler2D uAOTexture;
+// Legacy Increment 27 pair retained for project-authored shaders and direct single-map tests.
 uniform sampler2D uShadowMapTexture;
+uniform mat4 uLightSpaceMatrix;
 uniform int uShadowPcfKernelRadius;
+// Increment 30 fixed three-cascade directional shadow contract.
+uniform sampler2D uShadowMapTextures[3];
+uniform float uShadowCascadeSplits[3];
+uniform int uShadowCascadeCount;
 
 vec3 SafeNormalizeUVE(vec3 value) {
     return value / max(length(value), 0.0001);
 }
 
-float DirectionalShadowFactorUVE(vec3 normal, vec3 lightDirection) {
-    if (abs(vLightSpacePosition.w) <= 0.0001) {
+float SampleCascadeDepthUVE(int cascadeIndex, vec2 texCoord) {
+    if (cascadeIndex == 0) {
+        return texture(uShadowMapTextures[0], texCoord).r;
+    }
+    if (cascadeIndex == 1) {
+        return texture(uShadowMapTextures[1], texCoord).r;
+    }
+    return texture(uShadowMapTextures[2], texCoord).r;
+}
+
+vec2 CascadeTexelSizeUVE(int cascadeIndex) {
+    if (cascadeIndex == 0) {
+        return 1.0 / vec2(textureSize(uShadowMapTextures[0], 0));
+    }
+    if (cascadeIndex == 1) {
+        return 1.0 / vec2(textureSize(uShadowMapTextures[1], 0));
+    }
+    return 1.0 / vec2(textureSize(uShadowMapTextures[2], 0));
+}
+
+vec4 CascadeLightSpacePositionUVE(int cascadeIndex) {
+    if (cascadeIndex == 0) {
+        return vLightSpacePositions[0];
+    }
+    if (cascadeIndex == 1) {
+        return vLightSpacePositions[1];
+    }
+    return vLightSpacePositions[2];
+}
+
+float ShadowFactorFromPositionUVE(vec4 lightSpacePosition, vec3 normal, vec3 lightDirection, int cascadeIndex) {
+    if (abs(lightSpacePosition.w) <= 0.0001) {
         return 1.0;
     }
 
-    vec3 projected = vLightSpacePosition.xyz / vLightSpacePosition.w;
+    vec3 projected = lightSpacePosition.xyz / lightSpacePosition.w;
     projected = projected * 0.5 + 0.5;
     if (projected.x <= 0.0 || projected.x >= 1.0 || projected.y <= 0.0 || projected.y >= 1.0 ||
         projected.z <= 0.0 || projected.z >= 1.0) {
@@ -210,7 +252,8 @@ float DirectionalShadowFactorUVE(vec3 normal, vec3 lightDirection) {
     }
 
     int kernelRadius = clamp(uShadowPcfKernelRadius, 0, 2);
-    vec2 texelSize = 1.0 / vec2(textureSize(uShadowMapTexture, 0));
+    vec2 texelSize = cascadeIndex < 0 ? 1.0 / vec2(textureSize(uShadowMapTexture, 0))
+                                      : CascadeTexelSizeUVE(cascadeIndex);
     float currentDepth = projected.z;
     float bias = max(0.0025 * (1.0 - max(dot(normal, lightDirection), 0.0)), 0.0005);
     float visibleSamples = 0.0;
@@ -221,13 +264,32 @@ float DirectionalShadowFactorUVE(vec3 normal, vec3 lightDirection) {
             if (abs(offsetX) > kernelRadius || abs(offsetY) > kernelRadius) {
                 continue;
             }
-            float sampledDepth = texture(uShadowMapTexture, projected.xy + vec2(offsetX, offsetY) * texelSize).r;
+            vec2 sampleCoord = projected.xy + vec2(offsetX, offsetY) * texelSize;
+            float sampledDepth = cascadeIndex < 0 ? texture(uShadowMapTexture, sampleCoord).r
+                                                  : SampleCascadeDepthUVE(cascadeIndex, sampleCoord);
             visibleSamples += currentDepth - bias > sampledDepth ? 0.0 : 1.0;
             ++sampleCount;
         }
     }
 
     return visibleSamples / float(sampleCount);
+}
+
+float DirectionalShadowFactorUVE(vec3 normal, vec3 lightDirection) {
+    if (uShadowCascadeCount <= 0) {
+        return ShadowFactorFromPositionUVE(vLightSpacePosition, normal, lightDirection, -1);
+    }
+
+    float viewDepth = length(vWorldPosition - uViewPosition);
+    int cascadeIndex = clamp(uShadowCascadeCount - 1, 0, 2);
+    for (int candidateIndex = 0; candidateIndex < 2; ++candidateIndex) {
+        if (candidateIndex < uShadowCascadeCount && viewDepth <= uShadowCascadeSplits[candidateIndex]) {
+            cascadeIndex = candidateIndex;
+            break;
+        }
+    }
+    return ShadowFactorFromPositionUVE(CascadeLightSpacePositionUVE(cascadeIndex), normal, lightDirection,
+                                       cascadeIndex);
 }
 
 void main() {

@@ -130,6 +130,12 @@ struct EngineConfigUVE {
     /// negative caller values are clamped to zero by Renderer3DUVE.
     float shadowFrustumPadding = 1.0F;
 
+    /// Practical-split blend for the fixed three directional shadow cascades. `0` distributes
+    /// splits uniformly over the camera depth range, `1` uses fully logarithmic spacing, and
+    /// Renderer3DUVE clamps caller values to `[0, 1]`. The default favors near-camera detail
+    /// without starving the far cascade.
+    float shadowCascadeSplitLambda = 0.5F;
+
     /// Radius, in shadow-map texels, of the square percentage-closer-filtering kernel the
     /// canonical directional-shadow material shader uses. `0` preserves a single hard comparison;
     /// `1` (the default) produces a 3x3 soft-shadow kernel. Renderer3DUVE clamps larger values to

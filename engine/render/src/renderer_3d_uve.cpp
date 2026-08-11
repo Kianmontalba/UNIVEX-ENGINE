@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <cmath>
 #include <cstdint>
 #include <optional>
 #include <span>
@@ -28,6 +29,7 @@
 #include "uve/render/shader/built_in_shaders_uve.h"
 #include "uve/render/shader/shader_program_desc_uve.h"
 #include "uve/render/shader/shader_program_uve.h"
+#include "uve/scene/components/camera_component_uve.h"
 
 namespace UVE::Render {
 
@@ -85,6 +87,36 @@ constexpr std::uint32_t kAoTextureSlotUVE = 2;
 /// the next slot after the three material texture slots above, following the same fixed-constant
 /// convention.
 constexpr std::uint32_t kShadowMapTextureSlotUVE = 3;
+constexpr std::size_t kShadowCascadeCountUVE = 3;
+constexpr std::uint32_t kShadowCascadeFirstTextureSlotUVE = kShadowMapTextureSlotUVE;
+
+using ShadowCascadeMatricesUVE = std::array<Math::Matrix4x4UVE, kShadowCascadeCountUVE>;
+using ShadowCascadeSplitsUVE = std::array<float, kShadowCascadeCountUVE>;
+
+[[nodiscard]] ShadowCascadeSplitsUVE ComputeCascadeSplitsUVE(float nearPlane, float farPlane,
+                                                              float splitLambda) noexcept {
+    ShadowCascadeSplitsUVE splits{};
+    const float clampedLambda = std::clamp(splitLambda, 0.0F, 1.0F);
+    for (std::size_t cascadeIndex = 0; cascadeIndex < kShadowCascadeCountUVE; ++cascadeIndex) {
+        const float progress = static_cast<float>(cascadeIndex + 1U) / static_cast<float>(kShadowCascadeCountUVE);
+        const float uniformSplit = nearPlane + (farPlane - nearPlane) * progress;
+        const float logarithmicSplit = nearPlane * std::pow(farPlane / nearPlane, progress);
+        splits[cascadeIndex] = uniformSplit * (1.0F - clampedLambda) + logarithmicSplit * clampedLambda;
+    }
+    return splits;
+}
+
+[[nodiscard]] CameraFrustumCornersUVE ComputeCascadeFrustumCornersUVE(
+    const CameraFrustumCornersUVE& fullCameraCorners, float nearRatio, float farRatio) noexcept {
+    CameraFrustumCornersUVE cascadeCorners{};
+    for (std::size_t cornerIndex = 0; cornerIndex < 4; ++cornerIndex) {
+        const Math::Vector3UVE nearCorner = fullCameraCorners[cornerIndex];
+        const Math::Vector3UVE farCorner = fullCameraCorners[cornerIndex + 4U];
+        cascadeCorners[cornerIndex] = nearCorner + (farCorner - nearCorner) * nearRatio;
+        cascadeCorners[cornerIndex + 4U] = nearCorner + (farCorner - nearCorner) * farRatio;
+    }
+    return cascadeCorners;
+}
 
 /// 1x1 RGBA8Unorm pixel data for the two fallback textures created once per Renderer3DUVE
 /// instance (see ImplUVE::fallbackWhiteTexture/fallbackNormalTexture's own doc comments).
@@ -146,13 +178,11 @@ struct FrameUniformsUVE {
     LightListUVE lights;
     Math::Vector3UVE ambientColor;
 
-    /// The shadow-casting light's projection*view matrix (Increment 26) — Matrix4x4UVE::
-    /// IdentityUVE() when no active Directional light exists this frame, which is a safe
-    /// no-op sentinel: the shadow depth pre-pass never draws anything into the shadow map in that
-    /// case either (see RecordShadowPassUVE), so the map stays cleared to 1.0 and every shadow
-    /// comparison in the main pass naturally evaluates "not in shadow" regardless of what this
-    /// matrix is.
-    Math::Matrix4x4UVE lightSpaceMatrix;
+    /// Fixed three-cascade directional-shadow contract. A zero cascadeCount is the no-directional
+    /// light sentinel; all maps remain cleared to 1.0 and material shaders naturally evaluate lit.
+    ShadowCascadeMatricesUVE lightSpaceMatrices{};
+    ShadowCascadeSplitsUVE cascadeSplits{};
+    std::int32_t cascadeCount = 0;
 };
 
 } // namespace
@@ -181,6 +211,7 @@ struct Renderer3DUVE::ImplUVE {
     float shadowMapNearPlane;
     float shadowMapFarPlane;
     float shadowFrustumPadding;
+    float shadowCascadeSplitLambda;
 
     /// Bounded per-fragment PCF radius supplied to the canonical directional-shadow material
     /// shader. Zero keeps a hard comparison; the constructor clamps larger requested values to 2.
@@ -192,7 +223,7 @@ struct Renderer3DUVE::ImplUVE {
     /// Persistent depth-only render target the shadow depth pre-pass renders into every frame
     /// (Increment 26) — unlike depthTarget above (the main pass's own depth buffer, written and
     /// never sampled), this is later bound as a sampled texture input during the main color pass.
-    TextureHandleUVE shadowMapTarget;
+    std::array<TextureHandleUVE, kShadowCascadeCountUVE> shadowMapTargets{};
 
     /// The built-in shadow-depth vertex+fragment program (engine/render/shader/built_in/
     /// shadow_depth.glsl), compiled once via shaderManager at construction — not tied to any
@@ -230,7 +261,8 @@ struct Renderer3DUVE::ImplUVE {
             Asset::IAssetDatabaseUVE& assetDatabaseIn, Events::IEventSystemUVE& eventSystemIn,
             std::uint32_t targetWidthIn, std::uint32_t targetHeightIn, Math::Vector3UVE ambientColorIn,
             std::uint32_t shadowMapResolutionIn, float shadowMapHalfExtentIn, float shadowMapNearPlaneIn,
-            float shadowMapFarPlaneIn, float shadowFrustumPaddingIn, std::uint32_t shadowPcfKernelRadiusIn)
+            float shadowMapFarPlaneIn, float shadowFrustumPaddingIn, float shadowCascadeSplitLambdaIn,
+            std::uint32_t shadowPcfKernelRadiusIn)
         : renderDevice(renderDeviceIn), renderSystem(renderSystemIn), meshRenderer(meshRendererIn),
           cameraSystem(cameraSystemIn), lightSystem(lightSystemIn), shaderManager(shaderManagerIn),
           assetManager(assetManagerIn), assetDatabase(assetDatabaseIn), eventSystem(eventSystemIn),
@@ -238,6 +270,7 @@ struct Renderer3DUVE::ImplUVE {
           shadowMapResolution(shadowMapResolutionIn), shadowMapHalfExtent(shadowMapHalfExtentIn),
           shadowMapNearPlane(shadowMapNearPlaneIn), shadowMapFarPlane(shadowMapFarPlaneIn),
           shadowFrustumPadding(std::max(shadowFrustumPaddingIn, 0.0F)),
+          shadowCascadeSplitLambda(std::clamp(shadowCascadeSplitLambdaIn, 0.0F, 1.0F)),
           shadowPcfKernelRadius(static_cast<std::int32_t>(std::min(shadowPcfKernelRadiusIn, 2U))) {}
 
     void OnAssetReloadedUVE(const Asset::AssetReloadedEventUVE& event) {
@@ -398,7 +431,7 @@ struct Renderer3DUVE::ImplUVE {
     /// culling this increment — a documented known limitation, reusing the camera-frustum-culled
     /// list the main pass already computed).
     void RecordShadowPassUVE(const std::vector<RenderItemUVE>& items, const Math::Matrix4x4UVE& lightSpaceMatrix,
-                              bool hasCaster, ICommandBufferUVE& commandBuffer) {
+                              TextureHandleUVE shadowMapTarget, bool hasCaster, ICommandBufferUVE& commandBuffer) {
         RenderPassDescUVE passDesc;
         passDesc.colorAttachment = kInvalidTextureHandleUVE;
         passDesc.depthAttachment = shadowMapTarget;
@@ -447,9 +480,24 @@ struct Renderer3DUVE::ImplUVE {
                 commandBuffer.SetUniformFloatUVE(prefix + "range", light.range);
                 commandBuffer.SetUniformFloatUVE(prefix + "spotAngleDegrees", light.spotAngleDegrees);
             }
-            commandBuffer.SetUniformMatrix4x4UVE("uLightSpaceMatrix", frameUniforms.lightSpaceMatrix);
-            commandBuffer.BindTextureUVE(shadowMapTarget, kShadowMapTextureSlotUVE);
+            // Preserve the Increment 27 single-map names for project-authored legacy shaders;
+            // the canonical Increment 30 shader consumes the bounded array uniforms below.
+            commandBuffer.SetUniformMatrix4x4UVE("uLightSpaceMatrix", frameUniforms.lightSpaceMatrices[0]);
+            commandBuffer.BindTextureUVE(shadowMapTargets[0], kShadowMapTextureSlotUVE);
             commandBuffer.SetUniformIntUVE("uShadowMapTexture", static_cast<std::int32_t>(kShadowMapTextureSlotUVE));
+            commandBuffer.SetUniformIntUVE("uShadowCascadeCount", frameUniforms.cascadeCount);
+            for (std::size_t cascadeIndex = 0; cascadeIndex < kShadowCascadeCountUVE; ++cascadeIndex) {
+                const std::string index = std::to_string(cascadeIndex);
+                const std::uint32_t textureSlot = kShadowCascadeFirstTextureSlotUVE +
+                                                  static_cast<std::uint32_t>(cascadeIndex);
+                commandBuffer.SetUniformMatrix4x4UVE("uLightSpaceMatrices[" + index + "]",
+                                                      frameUniforms.lightSpaceMatrices[cascadeIndex]);
+                commandBuffer.SetUniformFloatUVE("uShadowCascadeSplits[" + index + "]",
+                                                  frameUniforms.cascadeSplits[cascadeIndex]);
+                commandBuffer.BindTextureUVE(shadowMapTargets[cascadeIndex], textureSlot);
+                commandBuffer.SetUniformIntUVE("uShadowMapTextures[" + index + "]",
+                                                static_cast<std::int32_t>(textureSlot));
+            }
             commandBuffer.SetUniformIntUVE("uShadowPcfKernelRadius", shadowPcfKernelRadius);
             commandBuffer.SetUniformVector3UVE("uAlbedoColor", material->albedoColor);
             commandBuffer.SetUniformFloatUVE("uMetallic", material->metallic);
@@ -476,12 +524,12 @@ Renderer3DUVE::Renderer3DUVE(IRenderDeviceUVE& renderDevice, IRenderSystemUVE& r
                               std::uint32_t targetHeight, Math::Vector3UVE ambientColor,
                               std::uint32_t shadowMapResolution, float shadowMapHalfExtent,
                               float shadowMapNearPlane, float shadowMapFarPlane, float shadowFrustumPadding,
-                              std::uint32_t shadowPcfKernelRadius)
+                              float shadowCascadeSplitLambda, std::uint32_t shadowPcfKernelRadius)
     : m_impl(std::make_unique<ImplUVE>(renderDevice, renderSystem, meshRenderer, cameraSystem, lightSystem,
                                         shaderManager, assetManager, assetDatabase, eventSystem, targetWidth,
                                         targetHeight, ambientColor, shadowMapResolution, shadowMapHalfExtent,
                                         shadowMapNearPlane, shadowMapFarPlane, shadowFrustumPadding,
-                                        shadowPcfKernelRadius)) {
+                                        shadowCascadeSplitLambda, shadowPcfKernelRadius)) {
     m_impl->colorTarget = renderDevice.CreateTextureUVE(
         TextureDescUVE{targetWidth, targetHeight, TextureFormatUVE::RGBA8Unorm, 1});
     m_impl->depthTarget = renderDevice.CreateTextureUVE(
@@ -490,8 +538,10 @@ Renderer3DUVE::Renderer3DUVE(IRenderDeviceUVE& renderDevice, IRenderSystemUVE& r
         TextureDescUVE{1, 1, TextureFormatUVE::RGBA8Unorm, 1}, std::as_bytes(std::span(kWhitePixelUVE)));
     m_impl->fallbackNormalTexture = renderDevice.CreateTextureUVE(
         TextureDescUVE{1, 1, TextureFormatUVE::RGBA8Unorm, 1}, std::as_bytes(std::span(kFlatNormalPixelUVE)));
-    m_impl->shadowMapTarget = renderDevice.CreateTextureUVE(
-        TextureDescUVE{shadowMapResolution, shadowMapResolution, TextureFormatUVE::Depth32Float, 1});
+    for (TextureHandleUVE& shadowMapTarget : m_impl->shadowMapTargets) {
+        shadowMapTarget = renderDevice.CreateTextureUVE(
+            TextureDescUVE{shadowMapResolution, shadowMapResolution, TextureFormatUVE::Depth32Float, 1});
+    }
 
     Shader::ShaderProgramDescUVE shadowProgramDesc;
     shadowProgramDesc.virtualFilePath = std::string(Shader::BuiltIn::kShadowDepthVirtualPath);
@@ -523,7 +573,9 @@ Renderer3DUVE::~Renderer3DUVE() {
     m_impl->renderDevice.DestroyTextureUVE(m_impl->depthTarget);
     m_impl->renderDevice.DestroyTextureUVE(m_impl->fallbackWhiteTexture);
     m_impl->renderDevice.DestroyTextureUVE(m_impl->fallbackNormalTexture);
-    m_impl->renderDevice.DestroyTextureUVE(m_impl->shadowMapTarget);
+    for (const TextureHandleUVE shadowMapTarget : m_impl->shadowMapTargets) {
+        m_impl->renderDevice.DestroyTextureUVE(shadowMapTarget);
+    }
 }
 
 void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scene::EntityUVE cameraEntity) {
@@ -535,27 +587,43 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
     const LightListUVE lights = m_impl->lightSystem.ExtractActiveLightsUVE(entityManager);
 
     const LightDataUVE* const shadowCaster = FindShadowCasterUVE(lights);
-    Math::Matrix4x4UVE lightSpaceMatrix = Math::Matrix4x4UVE::IdentityUVE();
-    RenderQueueUVE shadowQueue;
+    ShadowCascadeMatricesUVE lightSpaceMatrices{};
+    ShadowCascadeSplitsUVE cascadeSplits{};
+    std::array<RenderQueueUVE, kShadowCascadeCountUVE> shadowQueues{};
+    std::int32_t cascadeCount = 0;
     if (shadowCaster != nullptr) {
+        const Scene::CameraComponentUVE& camera =
+            entityManager.GetComponentUVE<Scene::CameraComponentUVE>(cameraEntity);
+        cascadeSplits = ComputeCascadeSplitsUVE(camera.nearPlane, camera.farPlane, m_impl->shadowCascadeSplitLambda);
         const Math::Matrix4x4UVE lightView =
             Math::Matrix4x4UVE::ViewFromPositionAndRotationUVE(shadowCaster->position, shadowCaster->rotation);
         const CameraFrustumCornersUVE cameraCorners =
             m_impl->cameraSystem.ComputeFrustumCornersUVE(entityManager, cameraEntity, aspectRatio);
-        const Math::AabbUVE fittedBounds = ComputeLightSpaceCameraBoundsUVE(cameraCorners, lightView);
-        const float padding = m_impl->shadowFrustumPadding;
-        const Math::Matrix4x4UVE lightProjection = Math::Matrix4x4UVE::OrthographicUVE(
-            fittedBounds.min.x - padding, fittedBounds.max.x + padding, fittedBounds.min.y - padding,
-            fittedBounds.max.y + padding, -fittedBounds.max.z - padding, -fittedBounds.min.z + padding);
-        lightSpaceMatrix = lightProjection * lightView;
-        const Math::FrustumUVE lightFrustum = m_impl->cameraSystem.ExtractFrustumUVE(lightSpaceMatrix);
-        shadowQueue = m_impl->meshRenderer.ExtractRenderQueueUVE(entityManager, m_impl->assetManager,
-                                                                   m_impl->assetDatabase, lightFrustum);
-        shadowQueue.SortUVE();
+        float cascadeNearPlane = camera.nearPlane;
+        for (std::size_t cascadeIndex = 0; cascadeIndex < kShadowCascadeCountUVE; ++cascadeIndex) {
+            const float cascadeFarPlane = cascadeSplits[cascadeIndex];
+            const float nearRatio = (cascadeNearPlane - camera.nearPlane) / (camera.farPlane - camera.nearPlane);
+            const float farRatio = (cascadeFarPlane - camera.nearPlane) / (camera.farPlane - camera.nearPlane);
+            const CameraFrustumCornersUVE cascadeCorners =
+                ComputeCascadeFrustumCornersUVE(cameraCorners, nearRatio, farRatio);
+            const Math::AabbUVE fittedBounds = ComputeLightSpaceCameraBoundsUVE(cascadeCorners, lightView);
+            const float padding = m_impl->shadowFrustumPadding;
+            const Math::Matrix4x4UVE lightProjection = Math::Matrix4x4UVE::OrthographicUVE(
+                fittedBounds.min.x - padding, fittedBounds.max.x + padding, fittedBounds.min.y - padding,
+                fittedBounds.max.y + padding, -fittedBounds.max.z - padding, -fittedBounds.min.z + padding);
+            lightSpaceMatrices[cascadeIndex] = lightProjection * lightView;
+            const Math::FrustumUVE lightFrustum =
+                m_impl->cameraSystem.ExtractFrustumUVE(lightSpaceMatrices[cascadeIndex]);
+            shadowQueues[cascadeIndex] = m_impl->meshRenderer.ExtractRenderQueueUVE(
+                entityManager, m_impl->assetManager, m_impl->assetDatabase, lightFrustum);
+            shadowQueues[cascadeIndex].SortUVE();
+            cascadeNearPlane = cascadeFarPlane;
+        }
+        cascadeCount = static_cast<std::int32_t>(kShadowCascadeCountUVE);
     }
 
     const FrameUniformsUVE frameUniforms{viewProjection, viewPosition, lights, m_impl->ambientColor,
-                                          lightSpaceMatrix};
+                                          lightSpaceMatrices, cascadeSplits, cascadeCount};
 
     RenderQueueUVE queue =
         m_impl->meshRenderer.ExtractRenderQueueUVE(entityManager, m_impl->assetManager, m_impl->assetDatabase, frustum);
@@ -564,7 +632,10 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
     m_impl->renderSystem.BeginFrameUVE();
     ICommandBufferUVE& commandBuffer = m_impl->renderSystem.GetFrameCommandBufferUVE();
 
-    m_impl->RecordShadowPassUVE(shadowQueue.opaqueItems, lightSpaceMatrix, shadowCaster != nullptr, commandBuffer);
+    for (std::size_t cascadeIndex = 0; cascadeIndex < kShadowCascadeCountUVE; ++cascadeIndex) {
+        m_impl->RecordShadowPassUVE(shadowQueues[cascadeIndex].opaqueItems, lightSpaceMatrices[cascadeIndex],
+                                    m_impl->shadowMapTargets[cascadeIndex], shadowCaster != nullptr, commandBuffer);
+    }
 
     RenderPassDescUVE passDesc;
     passDesc.colorAttachment = m_impl->colorTarget;

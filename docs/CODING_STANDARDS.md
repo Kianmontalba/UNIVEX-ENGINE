@@ -933,6 +933,16 @@ second `RenderQueueUVE` against the fitted light frustum. The main pass retains 
 camera-culled queue, while off-camera opaque objects inside the shadow volume can still cast into
 view. This is exercised by a regression test with two shadow draws and only one main-pass draw.
 
+**Increment 30 adds bounded cascaded directional shadow maps.** The renderer owns exactly three
+separate `Depth32Float` cascade textures, avoiding a texture-array RHI expansion. It divides the
+active camera depth range with a practical uniform/logarithmic blend controlled by clamped
+`EngineConfigUVE::shadowCascadeSplitLambda`, reconstructs a fitted light frustum for each slice,
+and records one depth pass per cascade. The canonical material shader selects the first cascade
+whose split contains the fragment's camera distance, then performs the existing bounded PCF sampling
+against that cascade's depth texture. Legacy `uLightSpaceMatrix`/`uShadowMapTexture` uniforms remain
+bound so existing project-authored single-map material shaders and direct shader tests retain their
+prior contract.
+
 **`Matrix4x4UVE::OrthographicUVE`** — a new factory matching `PerspectiveUVE`'s existing Vulkan-
 depth-range `[0,1]`/Y-up-NDC convention. Real, tested math (`tests/math/matrix4x4_uve_tests.cpp`).
 
@@ -956,10 +966,11 @@ whichever attachment is actually present.
 - Constructor gains `Shader::IShaderManagerUVE& shaderManager` (positioned after `lightSystem`,
   matching `EngineCoreUVE`'s existing construction order — `ShaderManagerUVE` is already
   constructed before `Renderer3D`) plus `shadowMapResolution`/`shadowMapHalfExtent`/
-  `shadowMapNearPlane`/`shadowMapFarPlane`, then `shadowFrustumPadding` and the bounded PCF radius.
-- New members: `shadowMapTarget` (a persistent `Depth32Float` texture sized
+  `shadowMapNearPlane`/`shadowMapFarPlane`, then `shadowFrustumPadding`,
+  `shadowCascadeSplitLambda`, and the bounded PCF radius.
+- New members: `shadowMapTargets[3]` (three persistent `Depth32Float` textures sized
   `shadowMapResolution × shadowMapResolution` — unlike the main pass's own `depthTarget`, which is
-  written and never sampled, this is later bound as a sampled texture input during the main pass)
+  written and never sampled, each is later bound as a sampled cascade input during the main pass)
   and `shadowProgram` (a `std::shared_ptr<Shader::ShaderProgramUVE>` created once via
   `shaderManager.CreateProgramUVE(...)`, reusing `MeshVertexLayoutUVE()` — the exact same vertex
   layout materials use, since the shadow pass draws the same mesh vertex buffers even though its
@@ -967,16 +978,17 @@ whichever attachment is actually present.
   triangle already established for a built-in (non-material) shader: compile via
   `IShaderManagerUVE`, hold the `ShaderProgramUVE`, `ApplyToUVE(commandBuffer)` binds the pipeline
   and flushes queued uniforms.
-- `kShadowMapTextureSlotUVE = 3`, the next slot after the three material texture slots.
+- `kShadowMapTextureSlotUVE = 3`, the first of three consecutive cascade slots after the three
+  material texture slots.
 - `RenderFrameUVE()` finds the first slot where `type == Directional && intensity > 0.0F` (a
   simple linear scan via `FindShadowCasterUVE` — no sorting, same first-N-encountered spirit as
   Increment 25). If found, transforms the active camera's eight perspective corners into the
-  light's view space, fits `OrthographicUVE(...)` to their min/max extent plus
-  `shadowFrustumPadding`, and composes that projection with
-  `ViewFromPositionAndRotationUVE(caster.position, caster.rotation)`; otherwise it retains the
-  `Matrix4x4UVE::IdentityUVE()` sentinel.
-- **`RecordShadowPassUVE`, called before the existing main pass, always runs exactly once per
-  frame** — `BeginRenderPassUVE{colorAttachment: invalid, depthAttachment: shadowMapTarget,
+  light's view space, divides the camera range into three practical cascade slices, fits each
+  `OrthographicUVE(...)` to its min/max extent plus `shadowFrustumPadding`, and composes every
+  projection with `ViewFromPositionAndRotationUVE(caster.position, caster.rotation)`; otherwise it
+  retains a zero cascade-count sentinel and identity matrices.
+- **`RecordShadowPassUVE`, called before the existing main pass, runs once per fixed cascade per
+  frame** — `BeginRenderPassUVE{colorAttachment: invalid, depthAttachment: shadowMapTargets[i],
   depthLoadOp: Clear, clearDepth: 1.0}`, draws every opaque item only if a caster was found *and*
   `shadowProgram->IsValidUVE()`, then `EndRenderPassUVE`. When there's no caster or the program
   isn't ready yet, the pass still begins/ends but draws nothing, leaving the shadow map cleared to
@@ -987,22 +999,25 @@ whichever attachment is actually present.
   fallback textures). Increment 29 provides the pass a separately extracted opaque queue culled by
   the fitted light frustum, so valid off-camera casters are retained without submitting meshes that
   cannot intersect the shadow volume.
-- The main pass gains, per item: `uLightSpaceMatrix` (Matrix4x4), then `BindTextureUVE` +
-  `uShadowMapTexture` (int) for the shadow map at slot 3, followed by
-  `uShadowPcfKernelRadius` (int) — 4 new commands per item, appended after the light-uniform loop.
+- The main pass retains the legacy `uLightSpaceMatrix`/`uShadowMapTexture` pair, and also uploads
+  `uShadowCascadeCount`, `uLightSpaceMatrices[3]`, `uShadowCascadeSplits[3]`, and
+  `uShadowMapTextures[3]` on slots 3-5 before `uShadowPcfKernelRadius`. Unknown extra uniforms are
+  harmless no-ops for project-authored shaders that retain the older single-map contract.
 
-**Canonical material shader contract (Increments 27-29).** `lit_shadowed_3d.glsl` declares the
-existing renderer-owned `uLights[4]`, material color/scalar uniforms, texture samplers, and
-`uLightSpaceMatrix`/`uShadowMapTexture` pair. Increment 28 adds `uShadowPcfKernelRadius`, which
-`Renderer3DUVE::RecordItemsUVE()` supplies from a bounded engine-level configuration value. The
-`uNormalTexture` binding remains available for a future tangent-space normal-mapping increment; the
-canonical shader currently uses the mesh world normal directly.
+**Canonical material shader contract (Increments 27-30).** `lit_shadowed_3d.glsl` declares the
+existing renderer-owned `uLights[4]`, material color/scalar uniforms, texture samplers, and the
+legacy `uLightSpaceMatrix`/`uShadowMapTexture` pair. Increment 28 adds
+`uShadowPcfKernelRadius`; Increment 30 adds the fixed three-element
+`uLightSpaceMatrices`/`uShadowMapTextures`/`uShadowCascadeSplits` arrays plus
+`uShadowCascadeCount`. `Renderer3DUVE::RecordItemsUVE()` supplies all of these from bounded
+engine-level configuration. The `uNormalTexture` binding remains available for a future
+normal-mapping increment; the canonical shader currently uses the mesh world normal directly.
 
-**Out of scope, deliberately**: Point/Spot shadows, cascaded/multiple shadow maps, variable or
-larger-than-5x5 PCF kernels, texel-grid stabilization of fitted bounds, tangent-space normal
-mapping, and material-default substitution for arbitrary `ShaderAssetUVE` sources. The canonical
-shader is a reference implementation, not an automatic override of project-authored material
-shaders.
+**Out of scope, deliberately**: Point/Spot shadows, variable cascade counts, texture-array
+shadow maps, cascade blend regions, texel-grid stabilization of fitted bounds, variable or
+larger-than-5x5 PCF kernels, tangent-space normal mapping, and material-default substitution for
+arbitrary `ShaderAssetUVE` sources. The canonical shader is a reference implementation, not an
+automatic override of project-authored material shaders.
 
 ## Allocator boundary
 
