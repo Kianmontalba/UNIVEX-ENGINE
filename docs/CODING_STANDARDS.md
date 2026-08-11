@@ -943,6 +943,15 @@ against that cascade's depth texture. Legacy `uLightSpaceMatrix`/`uShadowMapText
 bound so existing project-authored single-map material shaders and direct shader tests retain their
 prior contract.
 
+**Increment 31 adds bounded cascade transition blending.** `EngineConfigUVE::shadowCascadeBlendRatio`
+defaults to `0.1` and `Renderer3DUVE` clamps it to `[0, 0.25]`. The canonical material shader always
+receives `uShadowCascadeBlendRatio`; when a fragment falls in the final configured fraction of a
+non-final cascade's view-depth interval, it evaluates both that cascade and the following cascade
+and smoothly cross-fades their PCF shadow factors. A ratio of `0` preserves Increment 30's hard
+transition, while the upper bound limits overlap work to a quarter of each cascade. The final
+cascade never samples beyond its fixed three-map contract, and the no-directional-light legacy
+single-map fallback stays unchanged.
+
 **`Matrix4x4UVE::OrthographicUVE`** — a new factory matching `PerspectiveUVE`'s existing Vulkan-
 depth-range `[0,1]`/Y-up-NDC convention. Real, tested math (`tests/math/matrix4x4_uve_tests.cpp`).
 
@@ -1000,24 +1009,26 @@ whichever attachment is actually present.
   the fitted light frustum, so valid off-camera casters are retained without submitting meshes that
   cannot intersect the shadow volume.
 - The main pass retains the legacy `uLightSpaceMatrix`/`uShadowMapTexture` pair, and also uploads
-  `uShadowCascadeCount`, `uLightSpaceMatrices[3]`, `uShadowCascadeSplits[3]`, and
-  `uShadowMapTextures[3]` on slots 3-5 before `uShadowPcfKernelRadius`. Unknown extra uniforms are
-  harmless no-ops for project-authored shaders that retain the older single-map contract.
+  `uShadowCascadeCount`, `uShadowCascadeBlendRatio`, `uLightSpaceMatrices[3]`,
+  `uShadowCascadeSplits[3]`, and `uShadowMapTextures[3]` on slots 3-5 before
+  `uShadowPcfKernelRadius`. Unknown extra uniforms are harmless no-ops for project-authored shaders
+  that retain the older single-map contract.
 
-**Canonical material shader contract (Increments 27-30).** `lit_shadowed_3d.glsl` declares the
+**Canonical material shader contract (Increments 27-31).** `lit_shadowed_3d.glsl` declares the
 existing renderer-owned `uLights[4]`, material color/scalar uniforms, texture samplers, and the
 legacy `uLightSpaceMatrix`/`uShadowMapTexture` pair. Increment 28 adds
 `uShadowPcfKernelRadius`; Increment 30 adds the fixed three-element
 `uLightSpaceMatrices`/`uShadowMapTextures`/`uShadowCascadeSplits` arrays plus
-`uShadowCascadeCount`. `Renderer3DUVE::RecordItemsUVE()` supplies all of these from bounded
-engine-level configuration. The `uNormalTexture` binding remains available for a future
+`uShadowCascadeCount`; Increment 31 adds `uShadowCascadeBlendRatio` for a bounded cross-fade
+near non-final cascade splits. `Renderer3DUVE::RecordItemsUVE()` supplies all of these from
+bounded engine-level configuration. The `uNormalTexture` binding remains available for a future
 normal-mapping increment; the canonical shader currently uses the mesh world normal directly.
 
 **Out of scope, deliberately**: Point/Spot shadows, variable cascade counts, texture-array
-shadow maps, cascade blend regions, texel-grid stabilization of fitted bounds, variable or
-larger-than-5x5 PCF kernels, tangent-space normal mapping, and material-default substitution for
-arbitrary `ShaderAssetUVE` sources. The canonical shader is a reference implementation, not an
-automatic override of project-authored material shaders.
+shadow maps, texel-grid stabilization of fitted bounds, variable or larger-than-5x5 PCF kernels,
+tangent-space normal mapping, and material-default substitution for arbitrary `ShaderAssetUVE`
+sources. The canonical shader is a reference implementation, not an automatic override of
+project-authored material shaders.
 
 ## Allocator boundary
 

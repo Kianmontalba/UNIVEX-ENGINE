@@ -183,6 +183,7 @@ struct FrameUniformsUVE {
     ShadowCascadeMatricesUVE lightSpaceMatrices{};
     ShadowCascadeSplitsUVE cascadeSplits{};
     std::int32_t cascadeCount = 0;
+    float cascadeBlendRatio = 0.0F;
 };
 
 } // namespace
@@ -212,6 +213,10 @@ struct Renderer3DUVE::ImplUVE {
     float shadowMapFarPlane;
     float shadowFrustumPadding;
     float shadowCascadeSplitLambda;
+
+    /// Fraction of each non-final cascade range that cross-fades into the following cascade.
+    /// The constructor keeps it bounded so canonical shader sampling has a predictable cost.
+    float shadowCascadeBlendRatio;
 
     /// Bounded per-fragment PCF radius supplied to the canonical directional-shadow material
     /// shader. Zero keeps a hard comparison; the constructor clamps larger requested values to 2.
@@ -262,7 +267,7 @@ struct Renderer3DUVE::ImplUVE {
             std::uint32_t targetWidthIn, std::uint32_t targetHeightIn, Math::Vector3UVE ambientColorIn,
             std::uint32_t shadowMapResolutionIn, float shadowMapHalfExtentIn, float shadowMapNearPlaneIn,
             float shadowMapFarPlaneIn, float shadowFrustumPaddingIn, float shadowCascadeSplitLambdaIn,
-            std::uint32_t shadowPcfKernelRadiusIn)
+            float shadowCascadeBlendRatioIn, std::uint32_t shadowPcfKernelRadiusIn)
         : renderDevice(renderDeviceIn), renderSystem(renderSystemIn), meshRenderer(meshRendererIn),
           cameraSystem(cameraSystemIn), lightSystem(lightSystemIn), shaderManager(shaderManagerIn),
           assetManager(assetManagerIn), assetDatabase(assetDatabaseIn), eventSystem(eventSystemIn),
@@ -271,6 +276,7 @@ struct Renderer3DUVE::ImplUVE {
           shadowMapNearPlane(shadowMapNearPlaneIn), shadowMapFarPlane(shadowMapFarPlaneIn),
           shadowFrustumPadding(std::max(shadowFrustumPaddingIn, 0.0F)),
           shadowCascadeSplitLambda(std::clamp(shadowCascadeSplitLambdaIn, 0.0F, 1.0F)),
+          shadowCascadeBlendRatio(std::clamp(shadowCascadeBlendRatioIn, 0.0F, 0.25F)),
           shadowPcfKernelRadius(static_cast<std::int32_t>(std::min(shadowPcfKernelRadiusIn, 2U))) {}
 
     void OnAssetReloadedUVE(const Asset::AssetReloadedEventUVE& event) {
@@ -486,6 +492,7 @@ struct Renderer3DUVE::ImplUVE {
             commandBuffer.BindTextureUVE(shadowMapTargets[0], kShadowMapTextureSlotUVE);
             commandBuffer.SetUniformIntUVE("uShadowMapTexture", static_cast<std::int32_t>(kShadowMapTextureSlotUVE));
             commandBuffer.SetUniformIntUVE("uShadowCascadeCount", frameUniforms.cascadeCount);
+            commandBuffer.SetUniformFloatUVE("uShadowCascadeBlendRatio", frameUniforms.cascadeBlendRatio);
             for (std::size_t cascadeIndex = 0; cascadeIndex < kShadowCascadeCountUVE; ++cascadeIndex) {
                 const std::string index = std::to_string(cascadeIndex);
                 const std::uint32_t textureSlot = kShadowCascadeFirstTextureSlotUVE +
@@ -524,12 +531,13 @@ Renderer3DUVE::Renderer3DUVE(IRenderDeviceUVE& renderDevice, IRenderSystemUVE& r
                               std::uint32_t targetHeight, Math::Vector3UVE ambientColor,
                               std::uint32_t shadowMapResolution, float shadowMapHalfExtent,
                               float shadowMapNearPlane, float shadowMapFarPlane, float shadowFrustumPadding,
-                              float shadowCascadeSplitLambda, std::uint32_t shadowPcfKernelRadius)
+                              float shadowCascadeSplitLambda, float shadowCascadeBlendRatio,
+                              std::uint32_t shadowPcfKernelRadius)
     : m_impl(std::make_unique<ImplUVE>(renderDevice, renderSystem, meshRenderer, cameraSystem, lightSystem,
                                         shaderManager, assetManager, assetDatabase, eventSystem, targetWidth,
                                         targetHeight, ambientColor, shadowMapResolution, shadowMapHalfExtent,
                                         shadowMapNearPlane, shadowMapFarPlane, shadowFrustumPadding,
-                                        shadowCascadeSplitLambda, shadowPcfKernelRadius)) {
+                                        shadowCascadeSplitLambda, shadowCascadeBlendRatio, shadowPcfKernelRadius)) {
     m_impl->colorTarget = renderDevice.CreateTextureUVE(
         TextureDescUVE{targetWidth, targetHeight, TextureFormatUVE::RGBA8Unorm, 1});
     m_impl->depthTarget = renderDevice.CreateTextureUVE(
@@ -623,7 +631,8 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
     }
 
     const FrameUniformsUVE frameUniforms{viewProjection, viewPosition, lights, m_impl->ambientColor,
-                                          lightSpaceMatrices, cascadeSplits, cascadeCount};
+                                          lightSpaceMatrices, cascadeSplits, cascadeCount,
+                                          m_impl->shadowCascadeBlendRatio};
 
     RenderQueueUVE queue =
         m_impl->meshRenderer.ExtractRenderQueueUVE(entityManager, m_impl->assetManager, m_impl->assetDatabase, frustum);
