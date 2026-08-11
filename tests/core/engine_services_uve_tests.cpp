@@ -500,6 +500,10 @@ public:
         return Math::Matrix4x4UVE::IdentityUVE();
     }
     [[nodiscard]] Math::FrustumUVE ExtractFrustumUVE(const Math::Matrix4x4UVE&) const override { return {}; }
+    [[nodiscard]] Render::CameraFrustumCornersUVE ComputeFrustumCornersUVE(
+        const Scene::IEntityManagerUVE&, Scene::EntityUVE, float) const override {
+        return {};
+    }
     [[nodiscard]] Math::Vector3UVE GetWorldPositionUVE(const Scene::IEntityManagerUVE&,
                                                           Scene::EntityUVE) const override {
         ++getWorldPositionCallCount;

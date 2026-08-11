@@ -19,6 +19,7 @@
 #include "uve/asset/shader_asset_uve.h"
 #include "uve/asset/texture_asset_uve.h"
 #include "uve/debug/assert_uve.h"
+#include "uve/math/aabb_uve.h"
 #include "uve/debug/logging_macros_uve.h"
 #include "uve/math/frustum_uve.h"
 #include "uve/math/matrix4x4_uve.h"
@@ -31,6 +32,22 @@
 namespace UVE::Render {
 
 namespace {
+
+[[nodiscard]] Math::AabbUVE ComputeLightSpaceCameraBoundsUVE(const CameraFrustumCornersUVE& cameraCorners,
+                                                              const Math::Matrix4x4UVE& lightView) noexcept {
+    Math::Vector3UVE minimum = Math::TransformPointUVE(lightView, cameraCorners[0]);
+    Math::Vector3UVE maximum = minimum;
+    for (std::size_t cornerIndex = 1; cornerIndex < cameraCorners.size(); ++cornerIndex) {
+        const Math::Vector3UVE corner = Math::TransformPointUVE(lightView, cameraCorners[cornerIndex]);
+        minimum.x = std::min(minimum.x, corner.x);
+        minimum.y = std::min(minimum.y, corner.y);
+        minimum.z = std::min(minimum.z, corner.z);
+        maximum.x = std::max(maximum.x, corner.x);
+        maximum.y = std::max(maximum.y, corner.y);
+        maximum.z = std::max(maximum.z, corner.z);
+    }
+    return Math::AabbUVE{minimum, maximum};
+}
 
 /// A mesh's uploaded GPU buffers, cached by MeshAssetUVE's AssetGuidUVE.
 struct MeshGpuResourcesUVE {
@@ -163,6 +180,7 @@ struct Renderer3DUVE::ImplUVE {
     float shadowMapHalfExtent;
     float shadowMapNearPlane;
     float shadowMapFarPlane;
+    float shadowFrustumPadding;
 
     /// Bounded per-fragment PCF radius supplied to the canonical directional-shadow material
     /// shader. Zero keeps a hard comparison; the constructor clamps larger requested values to 2.
@@ -212,13 +230,14 @@ struct Renderer3DUVE::ImplUVE {
             Asset::IAssetDatabaseUVE& assetDatabaseIn, Events::IEventSystemUVE& eventSystemIn,
             std::uint32_t targetWidthIn, std::uint32_t targetHeightIn, Math::Vector3UVE ambientColorIn,
             std::uint32_t shadowMapResolutionIn, float shadowMapHalfExtentIn, float shadowMapNearPlaneIn,
-            float shadowMapFarPlaneIn, std::uint32_t shadowPcfKernelRadiusIn)
+            float shadowMapFarPlaneIn, float shadowFrustumPaddingIn, std::uint32_t shadowPcfKernelRadiusIn)
         : renderDevice(renderDeviceIn), renderSystem(renderSystemIn), meshRenderer(meshRendererIn),
           cameraSystem(cameraSystemIn), lightSystem(lightSystemIn), shaderManager(shaderManagerIn),
           assetManager(assetManagerIn), assetDatabase(assetDatabaseIn), eventSystem(eventSystemIn),
           targetWidth(targetWidthIn), targetHeight(targetHeightIn), ambientColor(ambientColorIn),
           shadowMapResolution(shadowMapResolutionIn), shadowMapHalfExtent(shadowMapHalfExtentIn),
           shadowMapNearPlane(shadowMapNearPlaneIn), shadowMapFarPlane(shadowMapFarPlaneIn),
+          shadowFrustumPadding(std::max(shadowFrustumPaddingIn, 0.0F)),
           shadowPcfKernelRadius(static_cast<std::int32_t>(std::min(shadowPcfKernelRadiusIn, 2U))) {}
 
     void OnAssetReloadedUVE(const Asset::AssetReloadedEventUVE& event) {
@@ -456,11 +475,13 @@ Renderer3DUVE::Renderer3DUVE(IRenderDeviceUVE& renderDevice, IRenderSystemUVE& r
                               Events::IEventSystemUVE& eventSystem, std::uint32_t targetWidth,
                               std::uint32_t targetHeight, Math::Vector3UVE ambientColor,
                               std::uint32_t shadowMapResolution, float shadowMapHalfExtent,
-                              float shadowMapNearPlane, float shadowMapFarPlane, std::uint32_t shadowPcfKernelRadius)
+                              float shadowMapNearPlane, float shadowMapFarPlane, float shadowFrustumPadding,
+                              std::uint32_t shadowPcfKernelRadius)
     : m_impl(std::make_unique<ImplUVE>(renderDevice, renderSystem, meshRenderer, cameraSystem, lightSystem,
                                         shaderManager, assetManager, assetDatabase, eventSystem, targetWidth,
                                         targetHeight, ambientColor, shadowMapResolution, shadowMapHalfExtent,
-                                        shadowMapNearPlane, shadowMapFarPlane, shadowPcfKernelRadius)) {
+                                        shadowMapNearPlane, shadowMapFarPlane, shadowFrustumPadding,
+                                        shadowPcfKernelRadius)) {
     m_impl->colorTarget = renderDevice.CreateTextureUVE(
         TextureDescUVE{targetWidth, targetHeight, TextureFormatUVE::RGBA8Unorm, 1});
     m_impl->depthTarget = renderDevice.CreateTextureUVE(
@@ -515,14 +536,22 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
 
     const LightDataUVE* const shadowCaster = FindShadowCasterUVE(lights);
     Math::Matrix4x4UVE lightSpaceMatrix = Math::Matrix4x4UVE::IdentityUVE();
+    RenderQueueUVE shadowQueue;
     if (shadowCaster != nullptr) {
-        const Math::Matrix4x4UVE lightProjection =
-            Math::Matrix4x4UVE::OrthographicUVE(-m_impl->shadowMapHalfExtent, m_impl->shadowMapHalfExtent,
-                                                 -m_impl->shadowMapHalfExtent, m_impl->shadowMapHalfExtent,
-                                                 m_impl->shadowMapNearPlane, m_impl->shadowMapFarPlane);
         const Math::Matrix4x4UVE lightView =
             Math::Matrix4x4UVE::ViewFromPositionAndRotationUVE(shadowCaster->position, shadowCaster->rotation);
+        const CameraFrustumCornersUVE cameraCorners =
+            m_impl->cameraSystem.ComputeFrustumCornersUVE(entityManager, cameraEntity, aspectRatio);
+        const Math::AabbUVE fittedBounds = ComputeLightSpaceCameraBoundsUVE(cameraCorners, lightView);
+        const float padding = m_impl->shadowFrustumPadding;
+        const Math::Matrix4x4UVE lightProjection = Math::Matrix4x4UVE::OrthographicUVE(
+            fittedBounds.min.x - padding, fittedBounds.max.x + padding, fittedBounds.min.y - padding,
+            fittedBounds.max.y + padding, -fittedBounds.max.z - padding, -fittedBounds.min.z + padding);
         lightSpaceMatrix = lightProjection * lightView;
+        const Math::FrustumUVE lightFrustum = m_impl->cameraSystem.ExtractFrustumUVE(lightSpaceMatrix);
+        shadowQueue = m_impl->meshRenderer.ExtractRenderQueueUVE(entityManager, m_impl->assetManager,
+                                                                   m_impl->assetDatabase, lightFrustum);
+        shadowQueue.SortUVE();
     }
 
     const FrameUniformsUVE frameUniforms{viewProjection, viewPosition, lights, m_impl->ambientColor,
@@ -535,7 +564,7 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
     m_impl->renderSystem.BeginFrameUVE();
     ICommandBufferUVE& commandBuffer = m_impl->renderSystem.GetFrameCommandBufferUVE();
 
-    m_impl->RecordShadowPassUVE(queue.opaqueItems, lightSpaceMatrix, shadowCaster != nullptr, commandBuffer);
+    m_impl->RecordShadowPassUVE(shadowQueue.opaqueItems, lightSpaceMatrix, shadowCaster != nullptr, commandBuffer);
 
     RenderPassDescUVE passDesc;
     passDesc.colorAttachment = m_impl->colorTarget;

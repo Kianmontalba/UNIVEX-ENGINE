@@ -91,6 +91,22 @@ TEST_F(CameraSystemUVETest, ComputeViewProjectionUVE_EqualsProjectionTimesView) 
     EXPECT_EQ(actual, expected);
 }
 
+TEST_F(CameraSystemUVETest, ComputeFrustumCornersUVE_IdentityCamera_ReturnsExpectedWorldCorners) {
+    Scene::CameraComponentUVE camera;
+    camera.fieldOfViewDegrees = 90.0F;
+    camera.nearPlane = 1.0F;
+    camera.farPlane = 3.0F;
+    const Scene::EntityUVE cameraEntity =
+        MakeCameraEntityUVE(Math::Vector3UVE{0.0F, 0.0F, 0.0F}, Math::QuaternionUVE{}, camera);
+
+    const CameraFrustumCornersUVE corners = cameraSystem.ComputeFrustumCornersUVE(entityManager, cameraEntity, 2.0F);
+
+    EXPECT_EQ(corners[0], (Math::Vector3UVE{-2.0F, -1.0F, -1.0F}));
+    EXPECT_EQ(corners[3], (Math::Vector3UVE{2.0F, 1.0F, -1.0F}));
+    EXPECT_EQ(corners[4], (Math::Vector3UVE{-6.0F, -3.0F, -3.0F}));
+    EXPECT_EQ(corners[7], (Math::Vector3UVE{6.0F, 3.0F, -3.0F}));
+}
+
 TEST_F(CameraSystemUVETest, ExtractFrustumUVE_EndToEnd_ClassifiesKnownBoxesCorrectly) {
     Scene::CameraComponentUVE camera;
     camera.fieldOfViewDegrees = 90.0F;
