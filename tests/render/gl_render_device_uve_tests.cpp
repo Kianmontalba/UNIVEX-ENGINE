@@ -513,6 +513,7 @@ TEST_F(GlRenderDeviceUVETest, LitShadowed3DShader_DepthPrepassDarkensOccludedFra
     colorCommandBuffer->SetUniformFloatUVE("uLights[0].intensity", 1.0F);
     colorCommandBuffer->BindTextureUVE(shadowMap, 0U);
     colorCommandBuffer->SetUniformIntUVE("uShadowMapTexture", 0);
+    colorCommandBuffer->SetUniformIntUVE("uShadowPcfKernelRadius", 1);
     colorCommandBuffer->BindTextureUVE(whiteTexture, 1U);
     colorCommandBuffer->SetUniformIntUVE("uAlbedoTexture", 1);
     colorCommandBuffer->BindTextureUVE(whiteTexture, 2U);
@@ -523,10 +524,13 @@ TEST_F(GlRenderDeviceUVETest, LitShadowed3DShader_DepthPrepassDarkensOccludedFra
     renderDevice->SubmitUVE(std::move(colorCommandBuffer));
 
     std::array<std::uint8_t, 4> shadowedPixel{};
+    std::array<std::uint8_t, 4> softEdgePixel{};
     std::array<std::uint8_t, 4> litPixel{};
     glReadPixels(32, 32, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, shadowedPixel.data());
+    glReadPixels(44, 36, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, softEdgePixel.data());
     glReadPixels(60, 60, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, litPixel.data());
-    EXPECT_GT(static_cast<int>(litPixel[0]), static_cast<int>(shadowedPixel[0]) + 32);
+    EXPECT_GT(static_cast<int>(softEdgePixel[0]), static_cast<int>(shadowedPixel[0]) + 16);
+    EXPECT_GT(static_cast<int>(litPixel[0]), static_cast<int>(softEdgePixel[0]) + 16);
 
     renderDevice->DestroyTextureUVE(whiteTexture);
     renderDevice->DestroyTextureUVE(shadowMap);

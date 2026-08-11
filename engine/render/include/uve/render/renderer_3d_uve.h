@@ -35,15 +35,17 @@ public:
     /// Increment 23). `shaderManager` compiles the built-in shadow-depth program used by the
     /// directional-light shadow pre-pass (Increment 26); `shadowMapResolution`/
     /// `shadowMapHalfExtent`/`shadowMapNearPlane`/`shadowMapFarPlane` size and bound that
-    /// pre-pass's orthographic projection (see EngineConfigUVE's matching fields). Every reference
-    /// must outlive this Renderer3DUVE.
+    /// pre-pass's orthographic projection (see EngineConfigUVE's matching fields).
+    /// `shadowPcfKernelRadius` controls the canonical material shader's bounded PCF filter: zero
+    /// retains a hard shadow and one produces a 3x3 kernel. Every reference must outlive this
+    /// Renderer3DUVE.
     Renderer3DUVE(IRenderDeviceUVE& renderDevice, IRenderSystemUVE& renderSystem, IMeshRendererUVE& meshRenderer,
                   ICameraSystemUVE& cameraSystem, ILightSystemUVE& lightSystem,
                   Shader::IShaderManagerUVE& shaderManager, Asset::IAssetManagerUVE& assetManager,
                   Asset::IAssetDatabaseUVE& assetDatabase, Events::IEventSystemUVE& eventSystem,
                   std::uint32_t targetWidth, std::uint32_t targetHeight, Math::Vector3UVE ambientColor,
                   std::uint32_t shadowMapResolution, float shadowMapHalfExtent, float shadowMapNearPlane,
-                  float shadowMapFarPlane);
+                  float shadowMapFarPlane, std::uint32_t shadowPcfKernelRadius);
     ~Renderer3DUVE() override;
 
     Renderer3DUVE(const Renderer3DUVE&) = delete;

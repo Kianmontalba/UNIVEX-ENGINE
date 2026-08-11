@@ -333,7 +333,7 @@ void EngineCoreUVE::Init() {
         *m_renderDevice, *m_renderSystem, *m_meshRenderer, *m_cameraSystem, *m_lightSystem, *m_shaderManager,
         *m_assetManager, *m_assetDatabase, *m_eventSystem, m_config.renderTargetWidth, m_config.renderTargetHeight,
         m_config.ambientColor, m_config.shadowMapResolution, m_config.shadowMapHalfExtent,
-        m_config.shadowMapNearPlane, m_config.shadowMapFarPlane);
+        m_config.shadowMapNearPlane, m_config.shadowMapFarPlane, m_config.shadowPcfKernelRadius);
 
     // The demo triangle is set up right after Renderer3D, only when windowed rendering is
     // active — see SetupDemoTriangleUVE()'s own doc comment for why this is deliberately

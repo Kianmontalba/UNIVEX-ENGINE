@@ -912,10 +912,17 @@ for `ShaderAssetUVE` authors. Its vertex stage emits world position, world norma
 coordinates, and light-space position. Its fragment stage samples the renderer-bound
 `uShadowMapTexture`, converts light-space clip coordinates to `[0,1]` texture coordinates, treats
 fragments outside the shadow map as lit, and applies a slope-scaled depth bias before comparing
-depths. The resulting hard shadow factor multiplies only the direct contribution of Directional
-lights; ambient, point-light, and spot-light contributions are unaffected. The shader has a
-byte-identical embedded fallback and is compiled in a real OpenGL test that confirms an occluded
-receiver sample is darker than a lit control sample.
+depths. The shadow factor multiplies only the direct contribution of Directional lights; ambient,
+point-light, and spot-light contributions are unaffected. The shader has a byte-identical embedded
+fallback and is compiled in a real OpenGL test.
+
+**Increment 28 replaces the hard comparison with bounded percentage-closer filtering (PCF).**
+`EngineConfigUVE::shadowPcfKernelRadius` controls the canonical shader's square filter radius in
+shadow-map texels. `0` preserves a single hard comparison, `1` (the default) samples a 3x3 kernel,
+and values above `2` clamp to a bounded 5x5 kernel. The shader derives texel size directly from
+`textureSize(uShadowMapTexture, 0)`, so no resolution-specific uniform is needed. The real OpenGL
+test now proves three ordered samples: an occluded center is darkest, a filter-boundary sample is
+intermediate, and an unoccluded sample is brightest.
 
 **`Matrix4x4UVE::OrthographicUVE`** — a new factory matching `PerspectiveUVE`'s existing Vulkan-
 depth-range `[0,1]`/Y-up-NDC convention. Real, tested math (`tests/math/matrix4x4_uve_tests.cpp`).
@@ -969,18 +976,18 @@ whichever attachment is actually present.
   fallback textures). No light-frustum culling this increment — reuses the same
   camera-frustum-culled opaque list the main pass already extracts (a documented known limitation).
 - The main pass gains, per item: `uLightSpaceMatrix` (Matrix4x4), then `BindTextureUVE` +
-  `uShadowMapTexture` (int) for the shadow map at slot 3 — 3 new commands per item, appended after
-  the light-uniform loop.
+  `uShadowMapTexture` (int) for the shadow map at slot 3, followed by
+  `uShadowPcfKernelRadius` (int) — 4 new commands per item, appended after the light-uniform loop.
 
-**Canonical material shader contract (Increment 27).** `lit_shadowed_3d.glsl` declares the
+**Canonical material shader contract (Increments 27-28).** `lit_shadowed_3d.glsl` declares the
 existing renderer-owned `uLights[4]`, material color/scalar uniforms, texture samplers, and
-`uLightSpaceMatrix`/`uShadowMapTexture` pair. It does not introduce any new C++-side lighting
-math or render commands: `Renderer3DUVE::RecordItemsUVE()` already supplies the complete contract.
-The `uNormalTexture` binding remains available for a future tangent-space normal-mapping increment;
-the canonical shader currently uses the mesh world normal directly.
+`uLightSpaceMatrix`/`uShadowMapTexture` pair. Increment 28 adds `uShadowPcfKernelRadius`, which
+`Renderer3DUVE::RecordItemsUVE()` supplies from a bounded engine-level configuration value. The
+`uNormalTexture` binding remains available for a future tangent-space normal-mapping increment; the
+canonical shader currently uses the mesh world normal directly.
 
-**Out of scope, deliberately**: Point/Spot shadows, cascaded/multiple shadow maps, PCF/soft shadow
-edges (hard cutoff only), camera-frustum-fitted shadow bounds, shadow-casting culled against the
+**Out of scope, deliberately**: Point/Spot shadows, cascaded/multiple shadow maps, variable or
+larger-than-5x5 PCF kernels, camera-frustum-fitted shadow bounds, shadow-casting culled against the
 light's own frustum (reuses the camera-culled list instead), tangent-space normal mapping, and
 material-default substitution for arbitrary `ShaderAssetUVE` sources. The canonical shader is a
 reference implementation, not an automatic override of project-authored material shaders.
