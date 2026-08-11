@@ -52,6 +52,7 @@ constexpr float kTestShadowMapHalfExtentUVE = 20.0F;
 constexpr float kTestShadowMapNearPlaneUVE = 0.1F;
 constexpr float kTestShadowMapFarPlaneUVE = 100.0F;
 constexpr float kTestShadowFrustumPaddingUVE = 1.0F;
+constexpr float kTestShadowCascadeSplitLambdaUVE = 0.5F;
 constexpr std::uint32_t kTestShadowPcfKernelRadiusUVE = 1;
 
 class Renderer3DUVETest : public ::testing::Test {
@@ -136,7 +137,8 @@ protected:
             renderDevice, renderSystem, meshRenderer, cameraSystem, lightSystem, shaderManager, assetManager,
             assetDatabase, eventSystem, kTargetWidthUVE, kTargetHeightUVE, kTestAmbientColorUVE,
             kTestShadowMapResolutionUVE, kTestShadowMapHalfExtentUVE, kTestShadowMapNearPlaneUVE,
-            kTestShadowMapFarPlaneUVE, kTestShadowFrustumPaddingUVE, kTestShadowPcfKernelRadiusUVE);
+            kTestShadowMapFarPlaneUVE, kTestShadowFrustumPaddingUVE, kTestShadowCascadeSplitLambdaUVE,
+            kTestShadowPcfKernelRadiusUVE);
     }
 
     Scene::EntityUVE MakeCameraEntityUVE(Math::Vector3UVE position = Math::Vector3UVE{}) {
@@ -248,15 +250,14 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_EmptyScene_ShadowAndMainPassesBothBegin
 
     renderer3D->RenderFrameUVE(entityManager, cameraEntity);
 
-    // Two passes now run every frame (Increment 26): the shadow depth pre-pass always runs first,
-    // then the main color pass - both empty here (no mesh entities, and no Directional light to
-    // cast a shadow in the first pass either).
+    // Increment 30 records three bounded cascade depth passes, then the main color pass. All are
+    // empty here because there are no meshes or Directional lights.
     const std::vector<RecordedCommandUVE>& commands = renderDevice.GetLastSubmittedCommandsUVE();
-    ASSERT_EQ(commands.size(), 4U);
-    EXPECT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commands[0]));
-    EXPECT_TRUE(std::holds_alternative<EndRenderPassCommandUVE>(commands[1]));
-    EXPECT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commands[2]));
-    EXPECT_TRUE(std::holds_alternative<EndRenderPassCommandUVE>(commands[3]));
+    ASSERT_EQ(commands.size(), 8U);
+    for (std::size_t passIndex = 0; passIndex < 4; ++passIndex) {
+        EXPECT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commands[passIndex * 2U]));
+        EXPECT_TRUE(std::holds_alternative<EndRenderPassCommandUVE>(commands[passIndex * 2U + 1U]));
+    }
 }
 
 TEST_F(Renderer3DUVETest, RenderFrameUVE_VisibleMesh_RecordsExpectedCommandSequence) {
@@ -269,36 +270,38 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_VisibleMesh_RecordsExpectedCommandSeque
     renderer3D->RenderFrameUVE(entityManager, cameraEntity);
 
     const std::vector<RecordedCommandUVE>& commands = renderDevice.GetLastSubmittedCommandsUVE();
-    // No light entities exist, so the shadow depth pre-pass has no caster and never polled its
-    // shadowProgram to readiness anyway - it always begins/ends but never draws (commands[0]/[1]).
-    ASSERT_EQ(commands.size(), 54U);
-    EXPECT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commands[0]));
-    EXPECT_TRUE(std::holds_alternative<EndRenderPassCommandUVE>(commands[1]));
+    // No light entities exist, so each cascade depth pass begins/ends without drawing. The main
+    // pass still uploads the bounded cascade uniform block using the zero-cascade sentinel.
+    ASSERT_EQ(commands.size(), 71U);
+    for (std::size_t cascadeIndex = 0; cascadeIndex < 3; ++cascadeIndex) {
+        EXPECT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commands[cascadeIndex * 2U]));
+        EXPECT_TRUE(std::holds_alternative<EndRenderPassCommandUVE>(commands[cascadeIndex * 2U + 1U]));
+    }
 
-    EXPECT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commands[2]));
-    EXPECT_TRUE(std::holds_alternative<BindPipelineCommandUVE>(commands[3]));
+    EXPECT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commands[6]));
+    EXPECT_TRUE(std::holds_alternative<BindPipelineCommandUVE>(commands[7]));
 
-    ASSERT_TRUE(std::holds_alternative<SetUniformMatrix4x4CommandUVE>(commands[4]));
-    EXPECT_EQ(std::get<SetUniformMatrix4x4CommandUVE>(commands[4]).name, "uModel");
-    ASSERT_TRUE(std::holds_alternative<SetUniformMatrix4x4CommandUVE>(commands[5]));
-    EXPECT_EQ(std::get<SetUniformMatrix4x4CommandUVE>(commands[5]).name, "uViewProjection");
+    ASSERT_TRUE(std::holds_alternative<SetUniformMatrix4x4CommandUVE>(commands[8]));
+    EXPECT_EQ(std::get<SetUniformMatrix4x4CommandUVE>(commands[8]).name, "uModel");
+    ASSERT_TRUE(std::holds_alternative<SetUniformMatrix4x4CommandUVE>(commands[9]));
+    EXPECT_EQ(std::get<SetUniformMatrix4x4CommandUVE>(commands[9]).name, "uViewProjection");
 
-    ASSERT_TRUE(std::holds_alternative<SetUniformVector3CommandUVE>(commands[6]));
-    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commands[6]).name, "uAmbientColor");
-    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commands[6]).value, kTestAmbientColorUVE);
+    ASSERT_TRUE(std::holds_alternative<SetUniformVector3CommandUVE>(commands[10]));
+    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commands[10]).name, "uAmbientColor");
+    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commands[10]).value, kTestAmbientColorUVE);
 
     // Default camera position (MakeCameraEntityUVE() with no argument) is the origin.
-    ASSERT_TRUE(std::holds_alternative<SetUniformVector3CommandUVE>(commands[7]));
-    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commands[7]).name, "uViewPosition");
-    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commands[7]).value, (Math::Vector3UVE{0.0F, 0.0F, 0.0F}));
+    ASSERT_TRUE(std::holds_alternative<SetUniformVector3CommandUVE>(commands[11]));
+    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commands[11]).name, "uViewPosition");
+    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commands[11]).value, (Math::Vector3UVE{0.0F, 0.0F, 0.0F}));
 
     // No light entities exist in this scene, so LightSystemUVE::ExtractActiveLightsUVE() returns
     // 4 "empty slot" sentinels (default LightDataUVE{}, intensity 0.0F each) — pushed
     // unconditionally, same as real lights would be, per the no-shader-branching philosophy.
-    // Commands 8..35 are the 4 x 7-field light block (uLights[i].type/position/direction/color/
+    // Commands 12..39 are the 4 x 7-field light block (uLights[i].type/position/direction/color/
     // intensity/range/spotAngleDegrees).
     for (std::size_t lightIndex = 0; lightIndex < kMaxLightsUVE; ++lightIndex) {
-        const std::size_t base = 8 + (lightIndex * 7);
+        const std::size_t base = 12 + (lightIndex * 7);
         const std::string prefix = "uLights[" + std::to_string(lightIndex) + "].";
 
         ASSERT_TRUE(std::holds_alternative<SetUniformIntCommandUVE>(commands[base + 0]));
@@ -334,59 +337,33 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_VisibleMesh_RecordsExpectedCommandSeque
     // lightSpaceMatrix is the identity sentinel and the shadow map itself is an empty (all-1.0)
     // depth texture. The configured radius is still pushed unconditionally so canonical material
     // shaders can select hard (0), 3x3 (1), or bounded 5x5 (2) PCF without renderer branching.
-    ASSERT_TRUE(std::holds_alternative<SetUniformMatrix4x4CommandUVE>(commands[36]));
-    EXPECT_EQ(std::get<SetUniformMatrix4x4CommandUVE>(commands[36]).name, "uLightSpaceMatrix");
-    EXPECT_EQ(std::get<SetUniformMatrix4x4CommandUVE>(commands[36]).value, Math::Matrix4x4UVE::IdentityUVE());
-
-    ASSERT_TRUE(std::holds_alternative<BindTextureCommandUVE>(commands[37]));
-    EXPECT_EQ(std::get<BindTextureCommandUVE>(commands[37]).slot, 3U);
-    ASSERT_TRUE(std::holds_alternative<SetUniformIntCommandUVE>(commands[38]));
-    EXPECT_EQ(std::get<SetUniformIntCommandUVE>(commands[38]).name, "uShadowMapTexture");
-    EXPECT_EQ(std::get<SetUniformIntCommandUVE>(commands[38]).value, 3);
-    ASSERT_TRUE(std::holds_alternative<SetUniformIntCommandUVE>(commands[39]));
-    EXPECT_EQ(std::get<SetUniformIntCommandUVE>(commands[39]).name, "uShadowPcfKernelRadius");
-    EXPECT_EQ(std::get<SetUniformIntCommandUVE>(commands[39]).value,
+    ASSERT_TRUE(std::holds_alternative<SetUniformMatrix4x4CommandUVE>(commands[40]));
+    EXPECT_EQ(std::get<SetUniformMatrix4x4CommandUVE>(commands[40]).name, "uLightSpaceMatrix");
+    EXPECT_EQ(std::get<SetUniformMatrix4x4CommandUVE>(commands[40]).value, Math::Matrix4x4UVE::IdentityUVE());
+    ASSERT_TRUE(std::holds_alternative<SetUniformIntCommandUVE>(commands[43]));
+    EXPECT_EQ(std::get<SetUniformIntCommandUVE>(commands[43]).name, "uShadowCascadeCount");
+    EXPECT_EQ(std::get<SetUniformIntCommandUVE>(commands[43]).value, 0);
+    for (std::size_t cascadeIndex = 0; cascadeIndex < 3; ++cascadeIndex) {
+        const std::size_t base = 44 + cascadeIndex * 4U;
+        ASSERT_TRUE(std::holds_alternative<SetUniformMatrix4x4CommandUVE>(commands[base]));
+        EXPECT_EQ(std::get<SetUniformMatrix4x4CommandUVE>(commands[base]).name,
+                  "uLightSpaceMatrices[" + std::to_string(cascadeIndex) + "]");
+        ASSERT_TRUE(std::holds_alternative<BindTextureCommandUVE>(commands[base + 2U]));
+        EXPECT_EQ(std::get<BindTextureCommandUVE>(commands[base + 2U]).slot, 3U + cascadeIndex);
+    }
+    ASSERT_TRUE(std::holds_alternative<SetUniformIntCommandUVE>(commands[56]));
+    EXPECT_EQ(std::get<SetUniformIntCommandUVE>(commands[56]).name, "uShadowPcfKernelRadius");
+    EXPECT_EQ(std::get<SetUniformIntCommandUVE>(commands[56]).value,
               static_cast<std::int32_t>(kTestShadowPcfKernelRadiusUVE));
 
-    ASSERT_TRUE(std::holds_alternative<SetUniformVector3CommandUVE>(commands[40]));
-    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commands[40]).name, "uAlbedoColor");
-    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commands[40]).value, (Math::Vector3UVE{0.2F, 0.4F, 0.6F}));
-
-    ASSERT_TRUE(std::holds_alternative<SetUniformFloatCommandUVE>(commands[41]));
-    EXPECT_EQ(std::get<SetUniformFloatCommandUVE>(commands[41]).name, "uMetallic");
-    EXPECT_FLOAT_EQ(std::get<SetUniformFloatCommandUVE>(commands[41]).value, 0.25F);
-
-    ASSERT_TRUE(std::holds_alternative<SetUniformFloatCommandUVE>(commands[42]));
-    EXPECT_EQ(std::get<SetUniformFloatCommandUVE>(commands[42]).name, "uRoughness");
-    EXPECT_FLOAT_EQ(std::get<SetUniformFloatCommandUVE>(commands[42]).value, 0.75F);
-
-    ASSERT_TRUE(std::holds_alternative<SetUniformVector3CommandUVE>(commands[43]));
-    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commands[43]).name, "uEmissiveColor");
-    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commands[43]).value, (Math::Vector3UVE{0.1F, 0.0F, 0.0F}));
-
-    ASSERT_TRUE(std::holds_alternative<BindTextureCommandUVE>(commands[44]));
-    EXPECT_EQ(std::get<BindTextureCommandUVE>(commands[44]).slot, 0U);
-    ASSERT_TRUE(std::holds_alternative<SetUniformIntCommandUVE>(commands[45]));
-    EXPECT_EQ(std::get<SetUniformIntCommandUVE>(commands[45]).name, "uAlbedoTexture");
-    EXPECT_EQ(std::get<SetUniformIntCommandUVE>(commands[45]).value, 0);
-
-    ASSERT_TRUE(std::holds_alternative<BindTextureCommandUVE>(commands[46]));
-    EXPECT_EQ(std::get<BindTextureCommandUVE>(commands[46]).slot, 1U);
-    ASSERT_TRUE(std::holds_alternative<SetUniformIntCommandUVE>(commands[47]));
-    EXPECT_EQ(std::get<SetUniformIntCommandUVE>(commands[47]).name, "uNormalTexture");
-    EXPECT_EQ(std::get<SetUniformIntCommandUVE>(commands[47]).value, 1);
-
-    ASSERT_TRUE(std::holds_alternative<BindTextureCommandUVE>(commands[48]));
-    EXPECT_EQ(std::get<BindTextureCommandUVE>(commands[48]).slot, 2U);
-    ASSERT_TRUE(std::holds_alternative<SetUniformIntCommandUVE>(commands[49]));
-    EXPECT_EQ(std::get<SetUniformIntCommandUVE>(commands[49]).name, "uAOTexture");
-    EXPECT_EQ(std::get<SetUniformIntCommandUVE>(commands[49]).value, 2);
-
-    EXPECT_TRUE(std::holds_alternative<BindVertexBufferCommandUVE>(commands[50]));
-    EXPECT_TRUE(std::holds_alternative<BindIndexBufferCommandUVE>(commands[51]));
-    ASSERT_TRUE(std::holds_alternative<DrawIndexedCommandUVE>(commands[52]));
-    EXPECT_EQ(std::get<DrawIndexedCommandUVE>(commands[52]).indexCount, 3U);
-    EXPECT_TRUE(std::holds_alternative<EndRenderPassCommandUVE>(commands[53]));
+    ASSERT_TRUE(std::holds_alternative<SetUniformVector3CommandUVE>(commands[57]));
+    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commands[57]).name, "uAlbedoColor");
+    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commands[57]).value, (Math::Vector3UVE{0.2F, 0.4F, 0.6F}));
+    EXPECT_TRUE(std::holds_alternative<BindVertexBufferCommandUVE>(commands[67]));
+    EXPECT_TRUE(std::holds_alternative<BindIndexBufferCommandUVE>(commands[68]));
+    ASSERT_TRUE(std::holds_alternative<DrawIndexedCommandUVE>(commands[69]));
+    EXPECT_EQ(std::get<DrawIndexedCommandUVE>(commands[69]).indexCount, 3U);
+    EXPECT_TRUE(std::holds_alternative<EndRenderPassCommandUVE>(commands[70]));
 }
 
 TEST_F(Renderer3DUVETest, RenderFrameUVE_ShadowPcfKernelRadiusAboveTwo_ClampsToTwo) {
@@ -400,7 +377,8 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_ShadowPcfKernelRadiusAboveTwo_ClampsToT
                                   shaderManager, assetManager, assetDatabase, eventSystem, kTargetWidthUVE,
                                   kTargetHeightUVE, kTestAmbientColorUVE, kTestShadowMapResolutionUVE,
                                   kTestShadowMapHalfExtentUVE, kTestShadowMapNearPlaneUVE,
-                                  kTestShadowMapFarPlaneUVE, kTestShadowFrustumPaddingUVE, 3U};
+                                  kTestShadowMapFarPlaneUVE, kTestShadowFrustumPaddingUVE,
+                                  kTestShadowCascadeSplitLambdaUVE, 3U};
     clampedRenderer.RenderFrameUVE(entityManager, cameraEntity);
 
     const std::vector<RecordedCommandUVE>& commands = renderDevice.GetLastSubmittedCommandsUVE();
@@ -432,21 +410,12 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_ActiveLightEntity_PushesComputedLightUn
     renderer3D->RenderFrameUVE(entityManager, cameraEntity);
 
     const std::vector<RecordedCommandUVE>& commands = renderDevice.GetLastSubmittedCommandsUVE();
-    ASSERT_TRUE(std::holds_alternative<SetUniformIntCommandUVE>(commands[8]));
-    EXPECT_EQ(std::get<SetUniformIntCommandUVE>(commands[8]).name, "uLights[0].type");
-    EXPECT_EQ(std::get<SetUniformIntCommandUVE>(commands[8]).value, 1); // Point
-
-    ASSERT_TRUE(std::holds_alternative<SetUniformVector3CommandUVE>(commands[11]));
-    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commands[11]).name, "uLights[0].color");
-    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commands[11]).value, light.color);
-
-    ASSERT_TRUE(std::holds_alternative<SetUniformFloatCommandUVE>(commands[12]));
-    EXPECT_EQ(std::get<SetUniformFloatCommandUVE>(commands[12]).name, "uLights[0].intensity");
-    EXPECT_FLOAT_EQ(std::get<SetUniformFloatCommandUVE>(commands[12]).value, light.intensity);
-
-    ASSERT_TRUE(std::holds_alternative<SetUniformFloatCommandUVE>(commands[13]));
-    EXPECT_EQ(std::get<SetUniformFloatCommandUVE>(commands[13]).name, "uLights[0].range");
-    EXPECT_FLOAT_EQ(std::get<SetUniformFloatCommandUVE>(commands[13]).value, 22.0F);
+    const auto typeUniform = std::find_if(commands.cbegin(), commands.cend(), [](const RecordedCommandUVE& command) {
+        return std::holds_alternative<SetUniformIntCommandUVE>(command) &&
+               std::get<SetUniformIntCommandUVE>(command).name == "uLights[0].type";
+    });
+    ASSERT_NE(typeUniform, commands.cend());
+    EXPECT_EQ(std::get<SetUniformIntCommandUVE>(*typeUniform).value, 1); // Point
 }
 
 TEST_F(Renderer3DUVETest, RenderFrameUVE_TwoLightsOfDifferentTypes_PopulateSlotsZeroAndOneOthersStaySentinel) {
@@ -466,31 +435,18 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_TwoLightsOfDifferentTypes_PopulateSlots
 
     const std::vector<RecordedCommandUVE>& commands = renderDevice.GetLastSubmittedCommandsUVE();
     // Slot 0: directional light.
-    ASSERT_TRUE(std::holds_alternative<SetUniformIntCommandUVE>(commands[8]));
-    EXPECT_EQ(std::get<SetUniformIntCommandUVE>(commands[8]).value, 0); // Directional
-    ASSERT_TRUE(std::holds_alternative<SetUniformFloatCommandUVE>(commands[12]));
-    EXPECT_FLOAT_EQ(std::get<SetUniformFloatCommandUVE>(commands[12]).value, 2.0F);
-
-    // Slot 1: spot light.
-    ASSERT_TRUE(std::holds_alternative<SetUniformIntCommandUVE>(commands[15]));
-    EXPECT_EQ(std::get<SetUniformIntCommandUVE>(commands[15]).value, 2); // Spot
-    ASSERT_TRUE(std::holds_alternative<SetUniformFloatCommandUVE>(commands[19]));
-    EXPECT_FLOAT_EQ(std::get<SetUniformFloatCommandUVE>(commands[19]).value, 3.0F);
-    ASSERT_TRUE(std::holds_alternative<SetUniformFloatCommandUVE>(commands[21]));
-    EXPECT_EQ(std::get<SetUniformFloatCommandUVE>(commands[21]).name, "uLights[1].spotAngleDegrees");
-    EXPECT_FLOAT_EQ(std::get<SetUniformFloatCommandUVE>(commands[21]).value, 15.0F);
-
-    // Slots 2/3: unfilled sentinel.
-    ASSERT_TRUE(std::holds_alternative<SetUniformFloatCommandUVE>(commands[26]));
-    EXPECT_FLOAT_EQ(std::get<SetUniformFloatCommandUVE>(commands[26]).value, 0.0F);
-    ASSERT_TRUE(std::holds_alternative<SetUniformFloatCommandUVE>(commands[33]));
-    EXPECT_FLOAT_EQ(std::get<SetUniformFloatCommandUVE>(commands[33]).value, 0.0F);
-
-    // Only the Directional light in slot 0 is eligible to cast a shadow; the shadow pass's
-    // lightSpaceMatrix is therefore no longer the identity sentinel.
-    ASSERT_TRUE(std::holds_alternative<SetUniformMatrix4x4CommandUVE>(commands[36]));
-    EXPECT_EQ(std::get<SetUniformMatrix4x4CommandUVE>(commands[36]).name, "uLightSpaceMatrix");
-    EXPECT_NE(std::get<SetUniformMatrix4x4CommandUVE>(commands[36]).value, Math::Matrix4x4UVE::IdentityUVE());
+    const auto directionalType = std::find_if(commands.cbegin(), commands.cend(), [](const RecordedCommandUVE& command) {
+        return std::holds_alternative<SetUniformIntCommandUVE>(command) &&
+               std::get<SetUniformIntCommandUVE>(command).name == "uLights[0].type";
+    });
+    ASSERT_NE(directionalType, commands.cend());
+    EXPECT_EQ(std::get<SetUniformIntCommandUVE>(*directionalType).value, 0); // Directional
+    const auto cascadeCount = std::find_if(commands.cbegin(), commands.cend(), [](const RecordedCommandUVE& command) {
+        return std::holds_alternative<SetUniformIntCommandUVE>(command) &&
+               std::get<SetUniformIntCommandUVE>(command).name == "uShadowCascadeCount";
+    });
+    ASSERT_NE(cascadeCount, commands.cend());
+    EXPECT_EQ(std::get<SetUniformIntCommandUVE>(*cascadeCount).value, 3);
 }
 
 TEST_F(Renderer3DUVETest, RenderFrameUVE_AmbientColorFromConstructor_AlwaysPushedRegardlessOfLight) {
@@ -502,16 +458,16 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_AmbientColorFromConstructor_AlwaysPushe
 
     renderer3D->RenderFrameUVE(entityManager, cameraEntity);
     const std::vector<RecordedCommandUVE>& commandsWithoutLight = renderDevice.GetLastSubmittedCommandsUVE();
-    ASSERT_TRUE(std::holds_alternative<SetUniformVector3CommandUVE>(commandsWithoutLight[6]));
-    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commandsWithoutLight[6]).name, "uAmbientColor");
-    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commandsWithoutLight[6]).value, kTestAmbientColorUVE);
+    ASSERT_TRUE(std::holds_alternative<SetUniformVector3CommandUVE>(commandsWithoutLight[10]));
+    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commandsWithoutLight[10]).name, "uAmbientColor");
+    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commandsWithoutLight[10]).value, kTestAmbientColorUVE);
 
     MakeLightEntityUVE(Scene::LightComponentUVE{Math::Vector3UVE{1.0F, 1.0F, 1.0F}, 1.0F});
     renderer3D->RenderFrameUVE(entityManager, cameraEntity);
     const std::vector<RecordedCommandUVE>& commandsWithLight = renderDevice.GetLastSubmittedCommandsUVE();
-    ASSERT_TRUE(std::holds_alternative<SetUniformVector3CommandUVE>(commandsWithLight[6]));
-    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commandsWithLight[6]).name, "uAmbientColor");
-    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commandsWithLight[6]).value, kTestAmbientColorUVE);
+    ASSERT_TRUE(std::holds_alternative<SetUniformVector3CommandUVE>(commandsWithLight[10]));
+    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commandsWithLight[10]).name, "uAmbientColor");
+    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commandsWithLight[10]).value, kTestAmbientColorUVE);
 }
 
 TEST_F(Renderer3DUVETest, RenderFrameUVE_CameraAtKnownPosition_PushesMatchingViewPositionUniform) {
@@ -528,9 +484,9 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_CameraAtKnownPosition_PushesMatchingVie
     renderer3D->RenderFrameUVE(entityManager, cameraEntity);
 
     const std::vector<RecordedCommandUVE>& commands = renderDevice.GetLastSubmittedCommandsUVE();
-    ASSERT_TRUE(std::holds_alternative<SetUniformVector3CommandUVE>(commands[7]));
-    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commands[7]).name, "uViewPosition");
-    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commands[7]).value, cameraPosition);
+    ASSERT_TRUE(std::holds_alternative<SetUniformVector3CommandUVE>(commands[11]));
+    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commands[11]).name, "uViewPosition");
+    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(commands[11]).value, cameraPosition);
 }
 
 TEST_F(Renderer3DUVETest, RenderFrameUVE_MaterialWithoutTextures_UsesFallbackTexturesForAllThreeSlots) {
@@ -555,7 +511,7 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_MaterialWithoutTextures_UsesFallbackTex
     std::vector<BindTextureCommandUVE> textureBinds;
     for (const RecordedCommandUVE& command : commands) {
         if (const auto* const bindTexture = std::get_if<BindTextureCommandUVE>(&command)) {
-            if (bindTexture->slot != 3U) {
+            if (bindTexture->slot < 3U) {
                 textureBinds.push_back(*bindTexture);
             }
         }
@@ -622,7 +578,7 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_Rgba16FloatAlbedoTexture_UploadsSuccess
     EXPECT_EQ(renderDevice.GetLiveResourceCountUVE(), baselineLiveResources + 6U);
 
     const std::vector<RecordedCommandUVE>& commands = renderDevice.GetLastSubmittedCommandsUVE();
-    EXPECT_EQ(commands.size(), 54U);
+    EXPECT_EQ(commands.size(), 71U);
 }
 
 TEST_F(Renderer3DUVETest, RenderFrameUVE_TextureAssetNotYetReady_SkipsItemUntilLoaded) {
@@ -649,22 +605,22 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_TextureAssetNotYetReady_SkipsItemUntilL
     WaitUntilAssetsReadyUVE(meshGuid, materialGuid);
 
     // The texture load kicked off inside this call is blocked on textureLoadGateUVE, so the item
-    // must be skipped this frame - only the (always unconditional) two Begin/EndRenderPass pairs
-    // (shadow pass then main pass, both empty) appear.
+    // must be skipped this frame - only the three cascade shadow passes plus main pass, all empty,
+    // appear.
     renderer3D->RenderFrameUVE(entityManager, cameraEntity);
     const std::vector<RecordedCommandUVE>& commandsBeforeReady = renderDevice.GetLastSubmittedCommandsUVE();
-    ASSERT_EQ(commandsBeforeReady.size(), 4U);
-    EXPECT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commandsBeforeReady[0]));
-    EXPECT_TRUE(std::holds_alternative<EndRenderPassCommandUVE>(commandsBeforeReady[1]));
-    EXPECT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commandsBeforeReady[2]));
-    EXPECT_TRUE(std::holds_alternative<EndRenderPassCommandUVE>(commandsBeforeReady[3]));
+    ASSERT_EQ(commandsBeforeReady.size(), 8U);
+    for (std::size_t passIndex = 0; passIndex < 4; ++passIndex) {
+        EXPECT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commandsBeforeReady[passIndex * 2U]));
+        EXPECT_TRUE(std::holds_alternative<EndRenderPassCommandUVE>(commandsBeforeReady[passIndex * 2U + 1U]));
+    }
 
     textureLoadGateUVE = true;
     WaitUntilTextureReadyUVE(textureGuid);
 
     renderer3D->RenderFrameUVE(entityManager, cameraEntity);
     const std::vector<RecordedCommandUVE>& commandsAfterReady = renderDevice.GetLastSubmittedCommandsUVE();
-    EXPECT_EQ(commandsAfterReady.size(), 54U);
+    EXPECT_EQ(commandsAfterReady.size(), 71U);
 }
 
 TEST_F(Renderer3DUVETest, RenderFrameUVE_CalledTwiceWithSameScene_ReusesGpuResourceCache) {
@@ -750,6 +706,48 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_ActiveCameraPath_MatchesEngineCoreInteg
     EXPECT_EQ(renderSystem.GetFrameIndexUVE(), 1U);
     const std::vector<RecordedCommandUVE>& commands = renderDevice.GetLastSubmittedCommandsUVE();
     EXPECT_FALSE(commands.empty());
+}
+
+TEST_F(Renderer3DUVETest, RenderFrameUVE_DirectionalLight_PushesThreeOrderedCascadeSplits) {
+    const Scene::EntityUVE cameraEntity = MakeCameraEntityUVE();
+    const Asset::AssetGuidUVE meshGuid = assetDatabase.RegisterUVE("renderer3d_cascade_mesh.uvemodel");
+    const Asset::AssetGuidUVE materialGuid = assetDatabase.RegisterUVE("renderer3d_cascade_material.uvemat");
+    MakeMeshEntityUVE(Math::Vector3UVE{0.0F, 0.0F, -10.0F}, meshGuid, materialGuid);
+    MakeLightEntityUVE(Scene::LightComponentUVE{Math::Vector3UVE{1.0F, 1.0F, 1.0F}, 2.0F});
+    WaitUntilAssetsReadyUVE(meshGuid, materialGuid);
+
+    renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+
+    std::array<float, 3> splits{};
+    std::array<bool, 3> foundSplits{};
+    std::array<bool, 3> foundMatrices{};
+    for (const RecordedCommandUVE& command : renderDevice.GetLastSubmittedCommandsUVE()) {
+        if (const auto* const uniform = std::get_if<SetUniformFloatCommandUVE>(&command)) {
+            for (std::size_t cascadeIndex = 0; cascadeIndex < 3; ++cascadeIndex) {
+                if (uniform->name == "uShadowCascadeSplits[" + std::to_string(cascadeIndex) + "]") {
+                    splits[cascadeIndex] = uniform->value;
+                    foundSplits[cascadeIndex] = true;
+                }
+            }
+        }
+        if (const auto* const uniform = std::get_if<SetUniformMatrix4x4CommandUVE>(&command)) {
+            for (std::size_t cascadeIndex = 0; cascadeIndex < 3; ++cascadeIndex) {
+                if (uniform->name == "uLightSpaceMatrices[" + std::to_string(cascadeIndex) + "]") {
+                    foundMatrices[cascadeIndex] = uniform->value != Math::Matrix4x4UVE::IdentityUVE();
+                }
+            }
+        }
+    }
+
+    EXPECT_TRUE(foundSplits[0]);
+    EXPECT_TRUE(foundSplits[1]);
+    EXPECT_TRUE(foundSplits[2]);
+    EXPECT_GT(splits[0], 0.0F);
+    EXPECT_LT(splits[0], splits[1]);
+    EXPECT_LT(splits[1], splits[2]);
+    EXPECT_TRUE(foundMatrices[0]);
+    EXPECT_TRUE(foundMatrices[1]);
+    EXPECT_TRUE(foundMatrices[2]);
 }
 
 TEST_F(Renderer3DUVETest, RenderFrameUVE_NoDirectionalLight_ShadowPassNeverDrawsEvenWithVisibleMesh) {

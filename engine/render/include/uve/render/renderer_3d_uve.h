@@ -37,8 +37,9 @@ public:
     /// `shadowMapHalfExtent`/`shadowMapNearPlane`/`shadowMapFarPlane` size and bound that
     /// pre-pass's orthographic projection (see EngineConfigUVE's matching fields). Increment 29
     /// derives the projection's actual bounds from the active camera frustum and applies
-    /// `shadowFrustumPadding` to protect against edge clipping. `shadowPcfKernelRadius` controls
-    /// the canonical material shader's bounded PCF filter: zero
+    /// `shadowFrustumPadding` to protect against edge clipping. `shadowCascadeSplitLambda`
+    /// controls the bounded three-cascade practical split distribution. `shadowPcfKernelRadius`
+    /// controls the canonical material shader's bounded PCF filter: zero
     /// retains a hard shadow and one produces a 3x3 kernel. Every reference must outlive this
     /// Renderer3DUVE.
     Renderer3DUVE(IRenderDeviceUVE& renderDevice, IRenderSystemUVE& renderSystem, IMeshRendererUVE& meshRenderer,
@@ -47,7 +48,8 @@ public:
                   Asset::IAssetDatabaseUVE& assetDatabase, Events::IEventSystemUVE& eventSystem,
                   std::uint32_t targetWidth, std::uint32_t targetHeight, Math::Vector3UVE ambientColor,
                   std::uint32_t shadowMapResolution, float shadowMapHalfExtent, float shadowMapNearPlane,
-                  float shadowMapFarPlane, float shadowFrustumPadding, std::uint32_t shadowPcfKernelRadius);
+                  float shadowMapFarPlane, float shadowFrustumPadding, float shadowCascadeSplitLambda,
+                  std::uint32_t shadowPcfKernelRadius);
     ~Renderer3DUVE() override;
 
     Renderer3DUVE(const Renderer3DUVE&) = delete;
