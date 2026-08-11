@@ -235,7 +235,9 @@ INSTANTIATE_TEST_SUITE_P(
                        std::pair<std::string_view, std::string_view>{"fullscreen_quad.glsl",
                                                                       BuiltIn::kFullscreenQuadSource},
                        std::pair<std::string_view, std::string_view>{"shadow_depth.glsl",
-                                                                      BuiltIn::kShadowDepthSource}));
+                                                                      BuiltIn::kShadowDepthSource},
+                       std::pair<std::string_view, std::string_view>{"lit_shadowed_3d.glsl",
+                                                                      BuiltIn::kLitShadowed3DSource}));
 
 } // namespace
 } // namespace UVE::Render::Shader::Tests

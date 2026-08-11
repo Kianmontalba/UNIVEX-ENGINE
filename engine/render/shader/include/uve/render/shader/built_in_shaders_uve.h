@@ -31,4 +31,7 @@ extern const std::string_view kFullscreenQuadSource;
 inline constexpr std::string_view kShadowDepthVirtualPath = "shaders/shadow_depth.glsl";
 extern const std::string_view kShadowDepthSource;
 
+inline constexpr std::string_view kLitShadowed3DVirtualPath = "shaders/lit_shadowed_3d.glsl";
+extern const std::string_view kLitShadowed3DSource;
+
 } // namespace UVE::Render::Shader::BuiltIn
