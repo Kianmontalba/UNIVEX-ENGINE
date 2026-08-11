@@ -125,6 +125,12 @@ struct EngineConfigUVE {
     float shadowMapNearPlane = 0.1F;
     float shadowMapFarPlane = 100.0F;
 
+    /// Radius, in shadow-map texels, of the square percentage-closer-filtering kernel the
+    /// canonical directional-shadow material shader uses. `0` preserves a single hard comparison;
+    /// `1` (the default) produces a 3x3 soft-shadow kernel. Renderer3DUVE clamps larger values to
+    /// `2` so the per-fragment sampling cost remains bounded at 25 depth comparisons.
+    std::uint32_t shadowPcfKernelRadius = 1;
+
     /// Acceleration PhysicsSystemUVE (see Physics::PhysicsSystemUVE) applies to every
     /// non-kinematic RigidBodyComponentUVE each fixed step, scaled by its own gravityScale.
     /// Earth-like default, Y-up (matching this engine's convention throughout).

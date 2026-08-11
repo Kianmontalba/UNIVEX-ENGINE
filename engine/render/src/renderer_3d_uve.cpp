@@ -3,6 +3,7 @@
 
 #include "uve/render/renderer_3d_uve.h"
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -163,6 +164,10 @@ struct Renderer3DUVE::ImplUVE {
     float shadowMapNearPlane;
     float shadowMapFarPlane;
 
+    /// Bounded per-fragment PCF radius supplied to the canonical directional-shadow material
+    /// shader. Zero keeps a hard comparison; the constructor clamps larger requested values to 2.
+    std::int32_t shadowPcfKernelRadius;
+
     TextureHandleUVE colorTarget;
     TextureHandleUVE depthTarget;
 
@@ -207,13 +212,14 @@ struct Renderer3DUVE::ImplUVE {
             Asset::IAssetDatabaseUVE& assetDatabaseIn, Events::IEventSystemUVE& eventSystemIn,
             std::uint32_t targetWidthIn, std::uint32_t targetHeightIn, Math::Vector3UVE ambientColorIn,
             std::uint32_t shadowMapResolutionIn, float shadowMapHalfExtentIn, float shadowMapNearPlaneIn,
-            float shadowMapFarPlaneIn)
+            float shadowMapFarPlaneIn, std::uint32_t shadowPcfKernelRadiusIn)
         : renderDevice(renderDeviceIn), renderSystem(renderSystemIn), meshRenderer(meshRendererIn),
           cameraSystem(cameraSystemIn), lightSystem(lightSystemIn), shaderManager(shaderManagerIn),
           assetManager(assetManagerIn), assetDatabase(assetDatabaseIn), eventSystem(eventSystemIn),
           targetWidth(targetWidthIn), targetHeight(targetHeightIn), ambientColor(ambientColorIn),
           shadowMapResolution(shadowMapResolutionIn), shadowMapHalfExtent(shadowMapHalfExtentIn),
-          shadowMapNearPlane(shadowMapNearPlaneIn), shadowMapFarPlane(shadowMapFarPlaneIn) {}
+          shadowMapNearPlane(shadowMapNearPlaneIn), shadowMapFarPlane(shadowMapFarPlaneIn),
+          shadowPcfKernelRadius(static_cast<std::int32_t>(std::min(shadowPcfKernelRadiusIn, 2U))) {}
 
     void OnAssetReloadedUVE(const Asset::AssetReloadedEventUVE& event) {
         const auto meshIt = meshCache.find(event.guid);
@@ -425,6 +431,7 @@ struct Renderer3DUVE::ImplUVE {
             commandBuffer.SetUniformMatrix4x4UVE("uLightSpaceMatrix", frameUniforms.lightSpaceMatrix);
             commandBuffer.BindTextureUVE(shadowMapTarget, kShadowMapTextureSlotUVE);
             commandBuffer.SetUniformIntUVE("uShadowMapTexture", static_cast<std::int32_t>(kShadowMapTextureSlotUVE));
+            commandBuffer.SetUniformIntUVE("uShadowPcfKernelRadius", shadowPcfKernelRadius);
             commandBuffer.SetUniformVector3UVE("uAlbedoColor", material->albedoColor);
             commandBuffer.SetUniformFloatUVE("uMetallic", material->metallic);
             commandBuffer.SetUniformFloatUVE("uRoughness", material->roughness);
@@ -449,11 +456,11 @@ Renderer3DUVE::Renderer3DUVE(IRenderDeviceUVE& renderDevice, IRenderSystemUVE& r
                               Events::IEventSystemUVE& eventSystem, std::uint32_t targetWidth,
                               std::uint32_t targetHeight, Math::Vector3UVE ambientColor,
                               std::uint32_t shadowMapResolution, float shadowMapHalfExtent,
-                              float shadowMapNearPlane, float shadowMapFarPlane)
+                              float shadowMapNearPlane, float shadowMapFarPlane, std::uint32_t shadowPcfKernelRadius)
     : m_impl(std::make_unique<ImplUVE>(renderDevice, renderSystem, meshRenderer, cameraSystem, lightSystem,
                                         shaderManager, assetManager, assetDatabase, eventSystem, targetWidth,
                                         targetHeight, ambientColor, shadowMapResolution, shadowMapHalfExtent,
-                                        shadowMapNearPlane, shadowMapFarPlane)) {
+                                        shadowMapNearPlane, shadowMapFarPlane, shadowPcfKernelRadius)) {
     m_impl->colorTarget = renderDevice.CreateTextureUVE(
         TextureDescUVE{targetWidth, targetHeight, TextureFormatUVE::RGBA8Unorm, 1});
     m_impl->depthTarget = renderDevice.CreateTextureUVE(

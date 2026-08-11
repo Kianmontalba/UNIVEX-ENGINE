@@ -191,6 +191,7 @@ uniform sampler2D uAlbedoTexture;
 uniform sampler2D uNormalTexture;
 uniform sampler2D uAOTexture;
 uniform sampler2D uShadowMapTexture;
+uniform int uShadowPcfKernelRadius;
 
 vec3 SafeNormalizeUVE(vec3 value) {
     return value / max(length(value), 0.0001);
@@ -208,10 +209,25 @@ float DirectionalShadowFactorUVE(vec3 normal, vec3 lightDirection) {
         return 1.0;
     }
 
-    float sampledDepth = texture(uShadowMapTexture, projected.xy).r;
+    int kernelRadius = clamp(uShadowPcfKernelRadius, 0, 2);
+    vec2 texelSize = 1.0 / vec2(textureSize(uShadowMapTexture, 0));
     float currentDepth = projected.z;
     float bias = max(0.0025 * (1.0 - max(dot(normal, lightDirection), 0.0)), 0.0005);
-    return currentDepth - bias > sampledDepth ? 0.0 : 1.0;
+    float visibleSamples = 0.0;
+    int sampleCount = 0;
+
+    for (int offsetY = -2; offsetY <= 2; ++offsetY) {
+        for (int offsetX = -2; offsetX <= 2; ++offsetX) {
+            if (abs(offsetX) > kernelRadius || abs(offsetY) > kernelRadius) {
+                continue;
+            }
+            float sampledDepth = texture(uShadowMapTexture, projected.xy + vec2(offsetX, offsetY) * texelSize).r;
+            visibleSamples += currentDepth - bias > sampledDepth ? 0.0 : 1.0;
+            ++sampleCount;
+        }
+    }
+
+    return visibleSamples / float(sampleCount);
 }
 
 void main() {
