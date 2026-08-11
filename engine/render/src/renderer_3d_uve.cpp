@@ -51,6 +51,39 @@ namespace {
     return Math::AabbUVE{minimum, maximum};
 }
 
+/// Expands and snaps the XY center of a light-space orthographic box to the shadow-map texel grid.
+/// The half extents are widened by one texel on each side before snapping, so the resulting box
+/// remains conservative even when the snapped center moves by up to half a texel.
+/// Z remains fitted exactly: directional-shadow resolution is only two-dimensional, while the
+/// existing padded near/far bounds already protect depth coverage.
+[[nodiscard]] Math::AabbUVE StabilizeLightSpaceShadowBoundsUVE(const Math::AabbUVE& fittedBounds, float padding,
+                                                               std::uint32_t shadowMapResolution) noexcept {
+    const float clampedPadding = std::max(padding, 0.0F);
+    const float minimumX = fittedBounds.min.x - clampedPadding;
+    const float maximumX = fittedBounds.max.x + clampedPadding;
+    const float minimumY = fittedBounds.min.y - clampedPadding;
+    const float maximumY = fittedBounds.max.y + clampedPadding;
+
+    const auto stabilizeAxis = [shadowMapResolution](float minimum, float maximum) noexcept {
+        const float center = (minimum + maximum) * 0.5F;
+        const float halfExtent = (maximum - minimum) * 0.5F;
+        if (shadowMapResolution <= 2U || halfExtent <= 0.0F) {
+            return std::array<float, 2>{minimum, maximum};
+        }
+
+        const float resolution = static_cast<float>(shadowMapResolution);
+        const float stabilizedHalfExtent = halfExtent * resolution / (resolution - 2.0F);
+        const float texelExtent = (stabilizedHalfExtent * 2.0F) / resolution;
+        const float snappedCenter = std::floor(center / texelExtent) * texelExtent;
+        return std::array<float, 2>{snappedCenter - stabilizedHalfExtent, snappedCenter + stabilizedHalfExtent};
+    };
+
+    const std::array<float, 2> stabilizedX = stabilizeAxis(minimumX, maximumX);
+    const std::array<float, 2> stabilizedY = stabilizeAxis(minimumY, maximumY);
+    return Math::AabbUVE{{stabilizedX[0], stabilizedY[0], fittedBounds.min.z - clampedPadding},
+                         {stabilizedX[1], stabilizedY[1], fittedBounds.max.z + clampedPadding}};
+}
+
 /// A mesh's uploaded GPU buffers, cached by MeshAssetUVE's AssetGuidUVE.
 struct MeshGpuResourcesUVE {
     BufferHandleUVE vertexBuffer;
@@ -615,10 +648,11 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
             const CameraFrustumCornersUVE cascadeCorners =
                 ComputeCascadeFrustumCornersUVE(cameraCorners, nearRatio, farRatio);
             const Math::AabbUVE fittedBounds = ComputeLightSpaceCameraBoundsUVE(cascadeCorners, lightView);
-            const float padding = m_impl->shadowFrustumPadding;
+            const Math::AabbUVE stabilizedBounds = StabilizeLightSpaceShadowBoundsUVE(
+                fittedBounds, m_impl->shadowFrustumPadding, m_impl->shadowMapResolution);
             const Math::Matrix4x4UVE lightProjection = Math::Matrix4x4UVE::OrthographicUVE(
-                fittedBounds.min.x - padding, fittedBounds.max.x + padding, fittedBounds.min.y - padding,
-                fittedBounds.max.y + padding, -fittedBounds.max.z - padding, -fittedBounds.min.z + padding);
+                stabilizedBounds.min.x, stabilizedBounds.max.x, stabilizedBounds.min.y, stabilizedBounds.max.y,
+                -stabilizedBounds.max.z, -stabilizedBounds.min.z);
             lightSpaceMatrices[cascadeIndex] = lightProjection * lightView;
             const Math::FrustumUVE lightFrustum =
                 m_impl->cameraSystem.ExtractFrustumUVE(lightSpaceMatrices[cascadeIndex]);

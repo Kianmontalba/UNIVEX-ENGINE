@@ -4,6 +4,7 @@
 #include "uve/render/renderer_3d_uve.h"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -787,6 +788,57 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_DirectionalLight_PushesThreeOrderedCasc
     EXPECT_TRUE(foundMatrices[0]);
     EXPECT_TRUE(foundMatrices[1]);
     EXPECT_TRUE(foundMatrices[2]);
+}
+
+TEST_F(Renderer3DUVETest, RenderFrameUVE_DirectionalCascadeMatrices_SnapToShadowTexelGrid) {
+    const Asset::AssetGuidUVE meshGuid = assetDatabase.RegisterUVE("renderer3d_stabilization_mesh.uvemodel");
+    const Asset::AssetGuidUVE materialGuid = assetDatabase.RegisterUVE("renderer3d_stabilization_material.uvemat");
+    MakeMeshEntityUVE(Math::Vector3UVE{0.0F, 0.0F, -10.0F}, meshGuid, materialGuid);
+    MakeLightEntityUVE(Scene::LightComponentUVE{Math::Vector3UVE{1.0F, 1.0F, 1.0F}, 2.0F});
+    WaitUntilAssetsReadyUVE(meshGuid, materialGuid);
+
+    const auto captureCascadeMatrices = [this]() {
+        std::array<Math::Matrix4x4UVE, 3> matrices{};
+        std::array<bool, 3> foundMatrices{};
+        for (const RecordedCommandUVE& command : renderDevice.GetLastSubmittedCommandsUVE()) {
+            const auto* const uniform = std::get_if<SetUniformMatrix4x4CommandUVE>(&command);
+            if (uniform == nullptr) {
+                continue;
+            }
+            for (std::size_t cascadeIndex = 0; cascadeIndex < matrices.size(); ++cascadeIndex) {
+                if (uniform->name == "uLightSpaceMatrices[" + std::to_string(cascadeIndex) + "]") {
+                    matrices[cascadeIndex] = uniform->value;
+                    foundMatrices[cascadeIndex] = true;
+                }
+            }
+        }
+        for (const bool foundMatrix : foundMatrices) {
+            EXPECT_TRUE(foundMatrix);
+        }
+        return matrices;
+    };
+
+    const Scene::EntityUVE initialCamera = MakeCameraEntityUVE();
+    renderer3D->RenderFrameUVE(entityManager, initialCamera);
+    const std::array<Math::Matrix4x4UVE, 3> initialMatrices = captureCascadeMatrices();
+    const float cascadeZeroTexelWidth =
+        2.0F / (static_cast<float>(kTestShadowMapResolutionUVE) * initialMatrices[0].m[0][0]);
+    ASSERT_GT(cascadeZeroTexelWidth, 0.0F);
+
+    const Scene::EntityUVE subTexelCamera =
+        MakeCameraEntityUVE(Math::Vector3UVE{cascadeZeroTexelWidth * 0.25F, 0.0F, 0.0F});
+    renderer3D->RenderFrameUVE(entityManager, subTexelCamera);
+    const std::array<Math::Matrix4x4UVE, 3> subTexelMatrices = captureCascadeMatrices();
+    EXPECT_EQ(subTexelMatrices, initialMatrices);
+
+    const Scene::EntityUVE nextTexelCamera =
+        MakeCameraEntityUVE(Math::Vector3UVE{cascadeZeroTexelWidth * 1.25F, 0.0F, 0.0F});
+    renderer3D->RenderFrameUVE(entityManager, nextTexelCamera);
+    const std::array<Math::Matrix4x4UVE, 3> nextTexelMatrices = captureCascadeMatrices();
+    EXPECT_NE(nextTexelMatrices[0], initialMatrices[0]);
+    EXPECT_FLOAT_EQ(nextTexelMatrices[0].m[0][0], initialMatrices[0].m[0][0]);
+    EXPECT_FLOAT_EQ(nextTexelMatrices[0].m[0][3] - initialMatrices[0].m[0][3],
+                    -2.0F / static_cast<float>(kTestShadowMapResolutionUVE));
 }
 
 TEST_F(Renderer3DUVETest, RenderFrameUVE_NoDirectionalLight_ShadowPassNeverDrawsEvenWithVisibleMesh) {
