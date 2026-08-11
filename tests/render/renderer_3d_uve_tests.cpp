@@ -51,6 +51,7 @@ constexpr std::uint32_t kTestShadowMapResolutionUVE = 64;
 constexpr float kTestShadowMapHalfExtentUVE = 20.0F;
 constexpr float kTestShadowMapNearPlaneUVE = 0.1F;
 constexpr float kTestShadowMapFarPlaneUVE = 100.0F;
+constexpr float kTestShadowFrustumPaddingUVE = 1.0F;
 constexpr std::uint32_t kTestShadowPcfKernelRadiusUVE = 1;
 
 class Renderer3DUVETest : public ::testing::Test {
@@ -135,7 +136,7 @@ protected:
             renderDevice, renderSystem, meshRenderer, cameraSystem, lightSystem, shaderManager, assetManager,
             assetDatabase, eventSystem, kTargetWidthUVE, kTargetHeightUVE, kTestAmbientColorUVE,
             kTestShadowMapResolutionUVE, kTestShadowMapHalfExtentUVE, kTestShadowMapNearPlaneUVE,
-            kTestShadowMapFarPlaneUVE, kTestShadowPcfKernelRadiusUVE);
+            kTestShadowMapFarPlaneUVE, kTestShadowFrustumPaddingUVE, kTestShadowPcfKernelRadiusUVE);
     }
 
     Scene::EntityUVE MakeCameraEntityUVE(Math::Vector3UVE position = Math::Vector3UVE{}) {
@@ -399,7 +400,7 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_ShadowPcfKernelRadiusAboveTwo_ClampsToT
                                   shaderManager, assetManager, assetDatabase, eventSystem, kTargetWidthUVE,
                                   kTargetHeightUVE, kTestAmbientColorUVE, kTestShadowMapResolutionUVE,
                                   kTestShadowMapHalfExtentUVE, kTestShadowMapNearPlaneUVE,
-                                  kTestShadowMapFarPlaneUVE, 3U};
+                                  kTestShadowMapFarPlaneUVE, kTestShadowFrustumPaddingUVE, 3U};
     clampedRenderer.RenderFrameUVE(entityManager, cameraEntity);
 
     const std::vector<RecordedCommandUVE>& commands = renderDevice.GetLastSubmittedCommandsUVE();
@@ -767,6 +768,41 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_NoDirectionalLight_ShadowPassNeverDraws
     const std::vector<RecordedCommandUVE>& commands = renderDevice.GetLastSubmittedCommandsUVE();
     EXPECT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commands[0]));
     EXPECT_TRUE(std::holds_alternative<EndRenderPassCommandUVE>(commands[1]));
+}
+
+TEST_F(Renderer3DUVETest, RenderFrameUVE_FittedLightFrustum_CastsOffCameraOccluderWithoutMainPassDraw) {
+    const Scene::EntityUVE cameraEntity = MakeCameraEntityUVE();
+    const Asset::AssetGuidUVE visibleMeshGuid = assetDatabase.RegisterUVE("renderer3d_fitted_visible.uvemodel");
+    const Asset::AssetGuidUVE visibleMaterialGuid = assetDatabase.RegisterUVE("renderer3d_fitted_visible.uvemat");
+    const Asset::AssetGuidUVE offCameraMeshGuid = assetDatabase.RegisterUVE("renderer3d_fitted_offcamera.uvemodel");
+    const Asset::AssetGuidUVE offCameraMaterialGuid = assetDatabase.RegisterUVE("renderer3d_fitted_offcamera.uvemat");
+    MakeMeshEntityUVE(Math::Vector3UVE{0.0F, 0.0F, -10.0F}, visibleMeshGuid, visibleMaterialGuid);
+    // At z=-10 the default camera's 60-degree view only reaches roughly +/-5.8 on X, while the
+    // fitted directional-light frustum includes this potential caster across its far-range width.
+    MakeMeshEntityUVE(Math::Vector3UVE{50.0F, 0.0F, -10.0F}, offCameraMeshGuid, offCameraMaterialGuid);
+    MakeLightEntityUVE(Scene::LightComponentUVE{Math::Vector3UVE{1.0F, 1.0F, 1.0F}, 3.0F});
+    WaitUntilAssetsReadyUVE(visibleMeshGuid, visibleMaterialGuid);
+    WaitUntilAssetsReadyUVE(offCameraMeshGuid, offCameraMaterialGuid);
+    WaitUntilShadowProgramReadyUVE();
+
+    renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+
+    const std::vector<RecordedCommandUVE>& commands = renderDevice.GetLastSubmittedCommandsUVE();
+    const auto shadowPassEnd = std::find_if(commands.cbegin(), commands.cend(), [](const RecordedCommandUVE& command) {
+        return std::holds_alternative<EndRenderPassCommandUVE>(command);
+    });
+    ASSERT_NE(shadowPassEnd, commands.cend());
+    const std::size_t shadowDrawCount = static_cast<std::size_t>(std::count_if(
+        commands.cbegin(), shadowPassEnd, [](const RecordedCommandUVE& command) {
+            return std::holds_alternative<DrawIndexedCommandUVE>(command);
+        }));
+    const std::size_t mainDrawCount = static_cast<std::size_t>(std::count_if(
+        std::next(shadowPassEnd), commands.cend(), [](const RecordedCommandUVE& command) {
+            return std::holds_alternative<DrawIndexedCommandUVE>(command);
+        }));
+
+    EXPECT_EQ(shadowDrawCount, 2U);
+    EXPECT_EQ(mainDrawCount, 1U);
 }
 
 TEST_F(Renderer3DUVETest, RenderFrameUVE_DirectionalLightAndReadyShadowProgram_ShadowPassDrawsOpaqueItem) {

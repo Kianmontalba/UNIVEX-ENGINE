@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <array>
+
 #include "uve/math/frustum_uve.h"
 #include "uve/math/matrix4x4_uve.h"
 #include "uve/math/vector3_uve.h"
@@ -10,6 +12,11 @@
 #include "uve/scene/i_entity_manager_uve.h"
 
 namespace UVE::Render {
+
+/// The eight world-space corners of a perspective camera frustum, ordered as near-plane
+/// bottom-left/bottom-right/top-left/top-right followed by the matching far-plane corners.
+/// This is a value type shared by camera-frustum fitting and directional-shadow culling.
+using CameraFrustumCornersUVE = std::array<Math::Vector3UVE, 8>;
 
 /// ICameraSystemUVE computes view/projection matrices from a camera entity's ECS data and
 /// extracts a culling frustum from them (the spec's `CameraSystemUVE`, Part 7.2 — "Camera
@@ -55,6 +62,13 @@ public:
     /// callers can go straight from a camera entity to a usable frustum without reaching into
     /// `UVE::Math` directly).
     [[nodiscard]] virtual Math::FrustumUVE ExtractFrustumUVE(const Math::Matrix4x4UVE& viewProjection) const = 0;
+
+    /// Reconstructs `cameraEntity`'s eight world-space perspective-frustum corners directly from
+    /// its transform, FOV, near/far planes, and the caller-supplied render-target aspect ratio.
+    /// This avoids a generic projection-matrix inverse while retaining the exact camera convention
+    /// used by ComputeProjectionMatrixUVE().
+    [[nodiscard]] virtual CameraFrustumCornersUVE ComputeFrustumCornersUVE(
+        const Scene::IEntityManagerUVE& entityManager, Scene::EntityUVE cameraEntity, float aspectRatio) const = 0;
 
     /// `cameraEntity`'s raw world position (`WorldTransformComponentUVE::worldPosition`) — the
     /// view vector callers (e.g. `Renderer3DUVE`'s specular lighting uniform, Increment 24) need
