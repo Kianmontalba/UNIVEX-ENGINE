@@ -899,8 +899,8 @@ scope-defining decisions were confirmed with the user before implementation:
    increment's "start with the simple case" precedent.
 2. **The shadow frustum is a fixed-half-extent orthographic box centered on the shadow-casting
    light entity's world position** (`EngineConfigUVE::shadowMapHalfExtent`/`shadowMapNearPlane`/
-   `shadowMapFarPlane`), not a camera-frustum-fitted box. No new frustum-fitting/AABB math —
-   consistent with this codebase's running "no unnecessary new math" discipline.
+   `shadowMapFarPlane`) before the Increment 29 fitted-frustum follow-up. That fixed box was a
+   deliberate minimal baseline, not the final quality target.
 
 **Increment 26 makes the depth pre-pass real, compiled, and tested.** The position-only
 `engine/render/shader/built_in/shadow_depth.glsl` shader follows the established physical-file +
@@ -923,6 +923,15 @@ and values above `2` clamp to a bounded 5x5 kernel. The shader derives texel siz
 `textureSize(uShadowMapTexture, 0)`, so no resolution-specific uniform is needed. The real OpenGL
 test now proves three ordered samples: an occluded center is darkest, a filter-boundary sample is
 intermediate, and an unoccluded sample is brightest.
+
+**Increment 29 fits the directional shadow volume to the active camera and culls shadow casters
+against that light volume.** `ICameraSystemUVE::ComputeFrustumCornersUVE()` reconstructs the eight
+world-space perspective corners from the camera transform, FOV, near/far planes, and render-target
+aspect ratio, avoiding a generic 4x4 inverse. `Renderer3DUVE` transforms those corners into light
+view space, builds the orthographic bounds with non-negative `shadowFrustumPadding`, and extracts a
+second `RenderQueueUVE` against the fitted light frustum. The main pass retains its independently
+camera-culled queue, while off-camera opaque objects inside the shadow volume can still cast into
+view. This is exercised by a regression test with two shadow draws and only one main-pass draw.
 
 **`Matrix4x4UVE::OrthographicUVE`** — a new factory matching `PerspectiveUVE`'s existing Vulkan-
 depth-range `[0,1]`/Y-up-NDC convention. Real, tested math (`tests/math/matrix4x4_uve_tests.cpp`).
@@ -947,7 +956,7 @@ whichever attachment is actually present.
 - Constructor gains `Shader::IShaderManagerUVE& shaderManager` (positioned after `lightSystem`,
   matching `EngineCoreUVE`'s existing construction order — `ShaderManagerUVE` is already
   constructed before `Renderer3D`) plus `shadowMapResolution`/`shadowMapHalfExtent`/
-  `shadowMapNearPlane`/`shadowMapFarPlane`.
+  `shadowMapNearPlane`/`shadowMapFarPlane`, then `shadowFrustumPadding` and the bounded PCF radius.
 - New members: `shadowMapTarget` (a persistent `Depth32Float` texture sized
   `shadowMapResolution × shadowMapResolution` — unlike the main pass's own `depthTarget`, which is
   written and never sampled, this is later bound as a sampled texture input during the main pass)
@@ -961,9 +970,11 @@ whichever attachment is actually present.
 - `kShadowMapTextureSlotUVE = 3`, the next slot after the three material texture slots.
 - `RenderFrameUVE()` finds the first slot where `type == Directional && intensity > 0.0F` (a
   simple linear scan via `FindShadowCasterUVE` — no sorting, same first-N-encountered spirit as
-  Increment 25). If found, computes `lightSpaceMatrix = OrthographicUVE(...) *
-  ViewFromPositionAndRotationUVE(caster.position, caster.rotation)`; otherwise
-  `Matrix4x4UVE::IdentityUVE()`.
+  Increment 25). If found, transforms the active camera's eight perspective corners into the
+  light's view space, fits `OrthographicUVE(...)` to their min/max extent plus
+  `shadowFrustumPadding`, and composes that projection with
+  `ViewFromPositionAndRotationUVE(caster.position, caster.rotation)`; otherwise it retains the
+  `Matrix4x4UVE::IdentityUVE()` sentinel.
 - **`RecordShadowPassUVE`, called before the existing main pass, always runs exactly once per
   frame** — `BeginRenderPassUVE{colorAttachment: invalid, depthAttachment: shadowMapTarget,
   depthLoadOp: Clear, clearDepth: 1.0}`, draws every opaque item only if a caster was found *and*
@@ -973,13 +984,14 @@ whichever attachment is actually present.
   case** — a shadow-comparison formula (`sampledDepth >= currentDepth → lit`) against an all-`1.0`
   map naturally always evaluates "not in shadow," composing for free with the existing clear-value
   default. Matches this codebase's established sentinel philosophy (zero-intensity light slots,
-  fallback textures). No light-frustum culling this increment — reuses the same
-  camera-frustum-culled opaque list the main pass already extracts (a documented known limitation).
+  fallback textures). Increment 29 provides the pass a separately extracted opaque queue culled by
+  the fitted light frustum, so valid off-camera casters are retained without submitting meshes that
+  cannot intersect the shadow volume.
 - The main pass gains, per item: `uLightSpaceMatrix` (Matrix4x4), then `BindTextureUVE` +
   `uShadowMapTexture` (int) for the shadow map at slot 3, followed by
   `uShadowPcfKernelRadius` (int) — 4 new commands per item, appended after the light-uniform loop.
 
-**Canonical material shader contract (Increments 27-28).** `lit_shadowed_3d.glsl` declares the
+**Canonical material shader contract (Increments 27-29).** `lit_shadowed_3d.glsl` declares the
 existing renderer-owned `uLights[4]`, material color/scalar uniforms, texture samplers, and
 `uLightSpaceMatrix`/`uShadowMapTexture` pair. Increment 28 adds `uShadowPcfKernelRadius`, which
 `Renderer3DUVE::RecordItemsUVE()` supplies from a bounded engine-level configuration value. The
@@ -987,10 +999,10 @@ existing renderer-owned `uLights[4]`, material color/scalar uniforms, texture sa
 canonical shader currently uses the mesh world normal directly.
 
 **Out of scope, deliberately**: Point/Spot shadows, cascaded/multiple shadow maps, variable or
-larger-than-5x5 PCF kernels, camera-frustum-fitted shadow bounds, shadow-casting culled against the
-light's own frustum (reuses the camera-culled list instead), tangent-space normal mapping, and
-material-default substitution for arbitrary `ShaderAssetUVE` sources. The canonical shader is a
-reference implementation, not an automatic override of project-authored material shaders.
+larger-than-5x5 PCF kernels, texel-grid stabilization of fitted bounds, tangent-space normal
+mapping, and material-default substitution for arbitrary `ShaderAssetUVE` sources. The canonical
+shader is a reference implementation, not an automatic override of project-authored material
+shaders.
 
 ## Allocator boundary
 

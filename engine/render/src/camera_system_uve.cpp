@@ -3,6 +3,7 @@
 
 #include "uve/render/camera_system_uve.h"
 
+#include <cmath>
 #include <numbers>
 
 #include "uve/scene/components/camera_component_uve.h"
@@ -34,6 +35,36 @@ Math::Matrix4x4UVE CameraSystemUVE::ComputeViewProjectionUVE(const Scene::IEntit
 
 Math::FrustumUVE CameraSystemUVE::ExtractFrustumUVE(const Math::Matrix4x4UVE& viewProjection) const {
     return Math::FrustumUVE::FromViewProjectionUVE(viewProjection);
+}
+
+CameraFrustumCornersUVE CameraSystemUVE::ComputeFrustumCornersUVE(const Scene::IEntityManagerUVE& entityManager,
+                                                                    Scene::EntityUVE cameraEntity,
+                                                                    float aspectRatio) const {
+    const Scene::WorldTransformComponentUVE& worldTransform =
+        entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(cameraEntity);
+    const Scene::CameraComponentUVE& camera = entityManager.GetComponentUVE<Scene::CameraComponentUVE>(cameraEntity);
+    const float tangent = std::tan(camera.fieldOfViewDegrees * (std::numbers::pi_v<float> / 360.0F));
+    const float nearHalfHeight = camera.nearPlane * tangent;
+    const float nearHalfWidth = nearHalfHeight * aspectRatio;
+    const float farHalfHeight = camera.farPlane * tangent;
+    const float farHalfWidth = farHalfHeight * aspectRatio;
+
+    const Math::Vector3UVE forward = Math::RotateVectorUVE(worldTransform.worldRotation, {0.0F, 0.0F, -1.0F});
+    const Math::Vector3UVE right = Math::RotateVectorUVE(worldTransform.worldRotation, {1.0F, 0.0F, 0.0F});
+    const Math::Vector3UVE up = Math::RotateVectorUVE(worldTransform.worldRotation, {0.0F, 1.0F, 0.0F});
+    const Math::Vector3UVE nearCenter = worldTransform.worldPosition + forward * camera.nearPlane;
+    const Math::Vector3UVE farCenter = worldTransform.worldPosition + forward * camera.farPlane;
+
+    return {
+        nearCenter - right * nearHalfWidth - up * nearHalfHeight,
+        nearCenter + right * nearHalfWidth - up * nearHalfHeight,
+        nearCenter - right * nearHalfWidth + up * nearHalfHeight,
+        nearCenter + right * nearHalfWidth + up * nearHalfHeight,
+        farCenter - right * farHalfWidth - up * farHalfHeight,
+        farCenter + right * farHalfWidth - up * farHalfHeight,
+        farCenter - right * farHalfWidth + up * farHalfHeight,
+        farCenter + right * farHalfWidth + up * farHalfHeight,
+    };
 }
 
 Math::Vector3UVE CameraSystemUVE::GetWorldPositionUVE(const Scene::IEntityManagerUVE& entityManager,

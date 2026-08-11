@@ -22,6 +22,9 @@ public:
                                                                 Scene::EntityUVE cameraEntity,
                                                                 float aspectRatio) const override;
     [[nodiscard]] Math::FrustumUVE ExtractFrustumUVE(const Math::Matrix4x4UVE& viewProjection) const override;
+    [[nodiscard]] CameraFrustumCornersUVE ComputeFrustumCornersUVE(const Scene::IEntityManagerUVE& entityManager,
+                                                                     Scene::EntityUVE cameraEntity,
+                                                                     float aspectRatio) const override;
     [[nodiscard]] Math::Vector3UVE GetWorldPositionUVE(const Scene::IEntityManagerUVE& entityManager,
                                                           Scene::EntityUVE cameraEntity) const override;
 };
