@@ -2,13 +2,16 @@
 
 
 #include "uve/render/gl_render_device_uve.h"
+#include "uve/render/shader/built_in_shaders_uve.h"
 
 #include <algorithm>
 #include <array>
+#include <cstdint>
 #include <memory>
 #include <span>
 #include <string>
 
+#include <GL/gl.h>
 #include <gtest/gtest.h>
 
 #include "uve/debug/log_sink_uve.h"
@@ -69,6 +72,16 @@ void main() {
     FragColor = vec4(uColor, 1.0);
 }
 )";
+
+[[nodiscard]] std::string WithShaderStageDefineUVE(std::string_view source, std::string_view stageDefine) {
+    std::string resolvedSource(source);
+    const std::size_t firstLineEnd = resolvedSource.find('\n');
+    if (firstLineEnd == std::string::npos) {
+        return resolvedSource;
+    }
+    resolvedSource.insert(firstLineEnd + 1U, "#define " + std::string(stageDefine) + "\n");
+    return resolvedSource;
+}
 
 // Needs a real (possibly virtual, e.g. Xvfb) GL context. Every test's fixture checks this at
 // SetUp() and calls GTEST_SKIP() with a clear message if unavailable, so the same uve_tests
@@ -389,6 +402,142 @@ TEST_F(GlRenderDeviceUVETest, GetPipelineBinaryUVE_UnknownHandle_ReturnsFalse) {
     std::vector<std::byte> binary;
     std::uint32_t format = 0;
     EXPECT_FALSE(renderDevice->GetPipelineBinaryUVE(PipelineHandleUVE{999}, binary, format));
+}
+
+TEST_F(GlRenderDeviceUVETest, LitShadowed3DShader_DepthPrepassDarkensOccludedFragment) {
+    const ShaderHandleUVE shadowVertexShader = renderDevice->CreateShaderUVE(
+        ShaderDescUVE{ShaderStageUVE::Vertex,
+                      WithShaderStageDefineUVE(Shader::BuiltIn::kShadowDepthSource, "VERTEX_SHADER")});
+    const ShaderHandleUVE shadowFragmentShader = renderDevice->CreateShaderUVE(
+        ShaderDescUVE{ShaderStageUVE::Fragment,
+                      WithShaderStageDefineUVE(Shader::BuiltIn::kShadowDepthSource, "FRAGMENT_SHADER")});
+    const ShaderHandleUVE litVertexShader = renderDevice->CreateShaderUVE(
+        ShaderDescUVE{ShaderStageUVE::Vertex,
+                      WithShaderStageDefineUVE(Shader::BuiltIn::kLitShadowed3DSource, "VERTEX_SHADER")});
+    const ShaderHandleUVE litFragmentShader = renderDevice->CreateShaderUVE(
+        ShaderDescUVE{ShaderStageUVE::Fragment,
+                      WithShaderStageDefineUVE(Shader::BuiltIn::kLitShadowed3DSource, "FRAGMENT_SHADER")});
+    ASSERT_NE(shadowVertexShader, kInvalidShaderHandleUVE);
+    ASSERT_NE(shadowFragmentShader, kInvalidShaderHandleUVE);
+    ASSERT_NE(litVertexShader, kInvalidShaderHandleUVE);
+    ASSERT_NE(litFragmentShader, kInvalidShaderHandleUVE);
+
+    PipelineDescUVE shadowPipelineDesc;
+    shadowPipelineDesc.vertexShader = shadowVertexShader;
+    shadowPipelineDesc.fragmentShader = shadowFragmentShader;
+    shadowPipelineDesc.vertexLayout = {VertexAttributeUVE{"POSITION", VertexAttributeFormatUVE::Float3, 0}};
+    shadowPipelineDesc.vertexStride = 3U * static_cast<std::uint32_t>(sizeof(float));
+    shadowPipelineDesc.depthTestEnabled = true;
+    shadowPipelineDesc.depthWriteEnabled = true;
+    const PipelineHandleUVE shadowPipeline = renderDevice->CreatePipelineUVE(shadowPipelineDesc);
+    ASSERT_NE(shadowPipeline, kInvalidPipelineHandleUVE);
+
+    PipelineDescUVE litPipelineDesc;
+    litPipelineDesc.vertexShader = litVertexShader;
+    litPipelineDesc.fragmentShader = litFragmentShader;
+    litPipelineDesc.vertexLayout = {VertexAttributeUVE{"POSITION", VertexAttributeFormatUVE::Float3, 0},
+                                    VertexAttributeUVE{"NORMAL", VertexAttributeFormatUVE::Float3,
+                                                       3U * static_cast<std::uint32_t>(sizeof(float))},
+                                    VertexAttributeUVE{"TEXCOORD0", VertexAttributeFormatUVE::Float2,
+                                                       6U * static_cast<std::uint32_t>(sizeof(float))}};
+    litPipelineDesc.vertexStride = 8U * static_cast<std::uint32_t>(sizeof(float));
+    litPipelineDesc.depthTestEnabled = false;
+    litPipelineDesc.depthWriteEnabled = false;
+    const PipelineHandleUVE litPipeline = renderDevice->CreatePipelineUVE(litPipelineDesc);
+    ASSERT_NE(litPipeline, kInvalidPipelineHandleUVE);
+
+    constexpr std::array<float, 9> kShadowCasterVertices{
+        -0.9F, -0.9F, -0.5F,
+        0.9F, -0.9F, -0.5F,
+        0.0F, 0.9F, -0.5F,
+    };
+    constexpr std::array<float, 24> kReceiverVertices{
+        -1.0F, -1.0F, 0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F,
+        3.0F, -1.0F, 0.0F, 0.0F, 0.0F, 1.0F, 2.0F, 0.0F,
+        -1.0F, 3.0F, 0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 2.0F,
+    };
+    constexpr std::array<std::uint8_t, 4> kWhitePixel{255U, 255U, 255U, 255U};
+
+    const BufferHandleUVE shadowVertexBuffer = renderDevice->CreateBufferUVE(
+        BufferDescUVE{std::as_bytes(std::span(kShadowCasterVertices)).size(), BufferUsageUVE::Vertex},
+        std::as_bytes(std::span(kShadowCasterVertices)));
+    const BufferHandleUVE receiverVertexBuffer = renderDevice->CreateBufferUVE(
+        BufferDescUVE{std::as_bytes(std::span(kReceiverVertices)).size(), BufferUsageUVE::Vertex},
+        std::as_bytes(std::span(kReceiverVertices)));
+    const TextureHandleUVE shadowMap =
+        renderDevice->CreateTextureUVE(TextureDescUVE{64, 64, TextureFormatUVE::Depth32Float, 1});
+    const TextureHandleUVE whiteTexture = renderDevice->CreateTextureUVE(
+        TextureDescUVE{1, 1, TextureFormatUVE::RGBA8Unorm, 1}, std::as_bytes(std::span(kWhitePixel)));
+    ASSERT_NE(shadowVertexBuffer, kInvalidBufferHandleUVE);
+    ASSERT_NE(receiverVertexBuffer, kInvalidBufferHandleUVE);
+    ASSERT_NE(shadowMap, kInvalidTextureHandleUVE);
+    ASSERT_NE(whiteTexture, kInvalidTextureHandleUVE);
+
+    std::unique_ptr<ICommandBufferUVE> shadowCommandBuffer = renderDevice->CreateCommandBufferUVE();
+    ASSERT_NE(shadowCommandBuffer, nullptr);
+    RenderPassDescUVE shadowPassDesc;
+    shadowPassDesc.colorAttachment = kInvalidTextureHandleUVE;
+    shadowPassDesc.depthAttachment = shadowMap;
+    shadowPassDesc.depthLoadOp = LoadOpUVE::Clear;
+    shadowPassDesc.clearDepth = 1.0F;
+    shadowCommandBuffer->BeginRenderPassUVE(shadowPassDesc);
+    shadowCommandBuffer->BindPipelineUVE(shadowPipeline);
+    shadowCommandBuffer->SetUniformMatrix4x4UVE("uModel", Math::Matrix4x4UVE::IdentityUVE());
+    shadowCommandBuffer->SetUniformMatrix4x4UVE("uLightSpaceMatrix", Math::Matrix4x4UVE::IdentityUVE());
+    shadowCommandBuffer->BindVertexBufferUVE(shadowVertexBuffer);
+    shadowCommandBuffer->DrawUVE(3);
+    shadowCommandBuffer->EndRenderPassUVE();
+    renderDevice->SubmitUVE(std::move(shadowCommandBuffer));
+
+    std::unique_ptr<ICommandBufferUVE> colorCommandBuffer = renderDevice->CreateCommandBufferUVE();
+    ASSERT_NE(colorCommandBuffer, nullptr);
+    RenderPassDescUVE colorPassDesc;
+    colorPassDesc.colorAttachment = kInvalidTextureHandleUVE;
+    colorPassDesc.colorLoadOp = LoadOpUVE::Clear;
+    colorPassDesc.clearColor = {0.0F, 0.0F, 0.0F, 1.0F};
+    colorPassDesc.depthLoadOp = LoadOpUVE::DontCare;
+    colorCommandBuffer->BeginRenderPassUVE(colorPassDesc);
+    colorCommandBuffer->BindPipelineUVE(litPipeline);
+    colorCommandBuffer->SetUniformMatrix4x4UVE("uModel", Math::Matrix4x4UVE::IdentityUVE());
+    colorCommandBuffer->SetUniformMatrix4x4UVE("uViewProjection", Math::Matrix4x4UVE::IdentityUVE());
+    colorCommandBuffer->SetUniformMatrix4x4UVE("uLightSpaceMatrix", Math::Matrix4x4UVE::IdentityUVE());
+    colorCommandBuffer->SetUniformVector3UVE("uAmbientColor", Math::Vector3UVE{0.0F, 0.0F, 0.0F});
+    colorCommandBuffer->SetUniformVector3UVE("uViewPosition", Math::Vector3UVE{0.0F, 0.0F, 1.0F});
+    colorCommandBuffer->SetUniformVector3UVE("uAlbedoColor", Math::Vector3UVE{1.0F, 1.0F, 1.0F});
+    colorCommandBuffer->SetUniformFloatUVE("uMetallic", 0.0F);
+    colorCommandBuffer->SetUniformFloatUVE("uRoughness", 1.0F);
+    colorCommandBuffer->SetUniformVector3UVE("uEmissiveColor", Math::Vector3UVE{0.0F, 0.0F, 0.0F});
+    colorCommandBuffer->SetUniformIntUVE("uLights[0].type", 0);
+    colorCommandBuffer->SetUniformVector3UVE("uLights[0].direction", Math::Vector3UVE{0.0F, 0.0F, -1.0F});
+    colorCommandBuffer->SetUniformVector3UVE("uLights[0].color", Math::Vector3UVE{1.0F, 1.0F, 1.0F});
+    colorCommandBuffer->SetUniformFloatUVE("uLights[0].intensity", 1.0F);
+    colorCommandBuffer->BindTextureUVE(shadowMap, 0U);
+    colorCommandBuffer->SetUniformIntUVE("uShadowMapTexture", 0);
+    colorCommandBuffer->BindTextureUVE(whiteTexture, 1U);
+    colorCommandBuffer->SetUniformIntUVE("uAlbedoTexture", 1);
+    colorCommandBuffer->BindTextureUVE(whiteTexture, 2U);
+    colorCommandBuffer->SetUniformIntUVE("uAOTexture", 2);
+    colorCommandBuffer->BindVertexBufferUVE(receiverVertexBuffer);
+    colorCommandBuffer->DrawUVE(3);
+    colorCommandBuffer->EndRenderPassUVE();
+    renderDevice->SubmitUVE(std::move(colorCommandBuffer));
+
+    std::array<std::uint8_t, 4> shadowedPixel{};
+    std::array<std::uint8_t, 4> litPixel{};
+    glReadPixels(32, 32, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, shadowedPixel.data());
+    glReadPixels(60, 60, 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, litPixel.data());
+    EXPECT_GT(static_cast<int>(litPixel[0]), static_cast<int>(shadowedPixel[0]) + 32);
+
+    renderDevice->DestroyTextureUVE(whiteTexture);
+    renderDevice->DestroyTextureUVE(shadowMap);
+    renderDevice->DestroyBufferUVE(receiverVertexBuffer);
+    renderDevice->DestroyBufferUVE(shadowVertexBuffer);
+    renderDevice->DestroyPipelineUVE(litPipeline);
+    renderDevice->DestroyPipelineUVE(shadowPipeline);
+    renderDevice->DestroyShaderUVE(litFragmentShader);
+    renderDevice->DestroyShaderUVE(litVertexShader);
+    renderDevice->DestroyShaderUVE(shadowFragmentShader);
+    renderDevice->DestroyShaderUVE(shadowVertexShader);
 }
 
 TEST_F(GlRenderDeviceUVETest, CommandBuffer_SetUniformCalls_OnBoundPipeline_DoNotCrash) {

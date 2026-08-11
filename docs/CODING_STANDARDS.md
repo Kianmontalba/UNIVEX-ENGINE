@@ -902,16 +902,20 @@ scope-defining decisions were confirmed with the user before implementation:
    `shadowMapFarPlane`), not a camera-frustum-fitted box. No new frustum-fitting/AABB math —
    consistent with this codebase's running "no unnecessary new math" discipline.
 
-**This increment departs from 23-25's testing philosophy in one specific place.** Those increments
-kept literally all lighting math as documented-only GLSL, never compiled or GL-verified. Shadow
-mapping's *depth pre-pass* is not a lighting formula — it's RHI/pipeline mechanics (a second render
-pass, a new pipeline, a position-only vertex shader), the same category of work as the demo
-triangle and the built-in-shader system from Increment 21. So the depth pre-pass is **real,
-compiled, tested** code — a new built-in shader (`engine/render/shader/built_in/shadow_depth.glsl`,
-following the established physical-file + embedded-fallback + parity-test convention). Only the
-shadow-map *sampling/comparison* inside the main lighting fragment shader stays documented-only
-GLSL, exactly like the specular/attenuation formulas already there — because that still lives
-inside the un-authored per-material fragment shader.
+**Increment 26 makes the depth pre-pass real, compiled, and tested.** The position-only
+`engine/render/shader/built_in/shadow_depth.glsl` shader follows the established physical-file +
+embedded-fallback + parity-test convention and produces the directional-light depth texture.
+
+**Increment 27 completes the material-side vertical slice.**
+`engine/render/shader/built_in/lit_shadowed_3d.glsl` is the canonical reference material shader
+for `ShaderAssetUVE` authors. Its vertex stage emits world position, world normal, texture
+coordinates, and light-space position. Its fragment stage samples the renderer-bound
+`uShadowMapTexture`, converts light-space clip coordinates to `[0,1]` texture coordinates, treats
+fragments outside the shadow map as lit, and applies a slope-scaled depth bias before comparing
+depths. The resulting hard shadow factor multiplies only the direct contribution of Directional
+lights; ambient, point-light, and spot-light contributions are unaffected. The shader has a
+byte-identical embedded fallback and is compiled in a real OpenGL test that confirms an occluded
+receiver sample is darker than a lit control sample.
 
 **`Matrix4x4UVE::OrthographicUVE`** — a new factory matching `PerspectiveUVE`'s existing Vulkan-
 depth-range `[0,1]`/Y-up-NDC convention. Real, tested math (`tests/math/matrix4x4_uve_tests.cpp`).
@@ -968,29 +972,18 @@ whichever attachment is actually present.
   `uShadowMapTexture` (int) for the shadow map at slot 3 — 3 new commands per item, appended after
   the light-uniform loop.
 
-**Expected GLSL usage** (documented only, not implemented/compiled this increment, same as every
-prior lighting increment) — the main fragment shader samples `uShadowMapTexture` with a simple
-constant bias:
-```glsl
-uniform sampler2D uShadowMapTexture;
-uniform mat4 uLightSpaceMatrix;
-
-float ComputeShadowFactorUVE(vec3 worldPos) {
-    vec4 lightSpacePos = uLightSpaceMatrix * vec4(worldPos, 1.0);
-    vec3 projected = lightSpacePos.xyz / lightSpacePos.w;
-    projected = projected * 0.5 + 0.5; // NDC [-1,1] -> texture [0,1]
-    float sampledDepth = texture(uShadowMapTexture, projected.xy).r;
-    float currentDepth = projected.z;
-    return (currentDepth - 0.005 > sampledDepth) ? 0.0 : 1.0; // 0.0 = in shadow
-}
-// ...multiply the Increment 25 diffuse+specular accumulation (for the shadow-casting Directional
-// light's contribution only) by ComputeShadowFactorUVE(vWorldPos) before adding it to `lighting`
-```
+**Canonical material shader contract (Increment 27).** `lit_shadowed_3d.glsl` declares the
+existing renderer-owned `uLights[4]`, material color/scalar uniforms, texture samplers, and
+`uLightSpaceMatrix`/`uShadowMapTexture` pair. It does not introduce any new C++-side lighting
+math or render commands: `Renderer3DUVE::RecordItemsUVE()` already supplies the complete contract.
+The `uNormalTexture` binding remains available for a future tangent-space normal-mapping increment;
+the canonical shader currently uses the mesh world normal directly.
 
 **Out of scope, deliberately**: Point/Spot shadows, cascaded/multiple shadow maps, PCF/soft shadow
 edges (hard cutoff only), camera-frustum-fitted shadow bounds, shadow-casting culled against the
-light's own frustum (reuses the camera-culled list instead), real GLSL authoring or live-GL visual
-proof for the sampling/comparison step (same GL-symbol-confinement rationale as Increments 22-25).
+light's own frustum (reuses the camera-culled list instead), tangent-space normal mapping, and
+material-default substitution for arbitrary `ShaderAssetUVE` sources. The canonical shader is a
+reference implementation, not an automatic override of project-authored material shaders.
 
 ## Allocator boundary
 
