@@ -136,6 +136,10 @@ struct EngineConfigUVE {
     /// without starving the far cascade.
     float shadowCascadeSplitLambda = 0.5F;
 
+    /// Fraction of each non-final cascade range used to cross-fade into the next cascade. The
+    /// renderer clamps this to `[0, 0.25]`; zero preserves the Increment 30 hard cascade boundary.
+    float shadowCascadeBlendRatio = 0.1F;
+
     /// Radius, in shadow-map texels, of the square percentage-closer-filtering kernel the
     /// canonical directional-shadow material shader uses. `0` preserves a single hard comparison;
     /// `1` (the default) produces a 3x3 soft-shadow kernel. Renderer3DUVE clamps larger values to

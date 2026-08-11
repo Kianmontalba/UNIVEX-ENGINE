@@ -943,6 +943,26 @@ against that cascade's depth texture. Legacy `uLightSpaceMatrix`/`uShadowMapText
 bound so existing project-authored single-map material shaders and direct shader tests retain their
 prior contract.
 
+**Increment 31 adds bounded cascade transition blending.** `EngineConfigUVE::shadowCascadeBlendRatio`
+defaults to `0.1` and `Renderer3DUVE` clamps it to `[0, 0.25]`. The canonical material shader always
+receives `uShadowCascadeBlendRatio`; when a fragment falls in the final configured fraction of a
+non-final cascade's view-depth interval, it evaluates both that cascade and the following cascade
+and smoothly cross-fades their PCF shadow factors. A ratio of `0` preserves Increment 30's hard
+transition, while the upper bound limits overlap work to a quarter of each cascade. The final
+cascade never samples beyond its fixed three-map contract, and the no-directional-light legacy
+single-map fallback stays unchanged.
+
+**Increment 32 adds texel-grid stabilization for fitted cascade bounds.** After deriving each
+camera-slice AABB in directional-light view space, `Renderer3DUVE` expands its XY extents by
+`shadowFrustumPadding`, widens each half extent by one shadow texel on each side, and snaps the
+XY center down to that cascade texture's grid. The widening keeps the snapped projection
+conservative for camera-frustum coverage; the same stabilized matrix then drives both shadow-pass
+rendering and light-frustum caster culling. Z remains fitted with the existing padding because
+shadow resolution is two-dimensional. This is always enabled for the fixed three-cascade contract;
+there is no public toggle or cascade-count change. A regression test proves sub-texel camera motion
+leaves all cascade matrices unchanged and a crossed near-cascade texel boundary produces its
+bounded single-texel projection translation.
+
 **`Matrix4x4UVE::OrthographicUVE`** — a new factory matching `PerspectiveUVE`'s existing Vulkan-
 depth-range `[0,1]`/Y-up-NDC convention. Real, tested math (`tests/math/matrix4x4_uve_tests.cpp`).
 
@@ -967,7 +987,7 @@ whichever attachment is actually present.
   matching `EngineCoreUVE`'s existing construction order — `ShaderManagerUVE` is already
   constructed before `Renderer3D`) plus `shadowMapResolution`/`shadowMapHalfExtent`/
   `shadowMapNearPlane`/`shadowMapFarPlane`, then `shadowFrustumPadding`,
-  `shadowCascadeSplitLambda`, and the bounded PCF radius.
+  `shadowCascadeSplitLambda`, `shadowCascadeBlendRatio`, and the bounded PCF radius.
 - New members: `shadowMapTargets[3]` (three persistent `Depth32Float` textures sized
   `shadowMapResolution × shadowMapResolution` — unlike the main pass's own `depthTarget`, which is
   written and never sampled, each is later bound as a sampled cascade input during the main pass)
@@ -984,9 +1004,10 @@ whichever attachment is actually present.
   simple linear scan via `FindShadowCasterUVE` — no sorting, same first-N-encountered spirit as
   Increment 25). If found, transforms the active camera's eight perspective corners into the
   light's view space, divides the camera range into three practical cascade slices, fits each
-  `OrthographicUVE(...)` to its min/max extent plus `shadowFrustumPadding`, and composes every
-  projection with `ViewFromPositionAndRotationUVE(caster.position, caster.rotation)`; otherwise it
-  retains a zero cascade-count sentinel and identity matrices.
+  light-space box plus `shadowFrustumPadding`, widens and snaps its XY center to the corresponding
+  shadow-map texel grid, then composes every `OrthographicUVE(...)` projection with
+  `ViewFromPositionAndRotationUVE(caster.position, caster.rotation)`; otherwise it retains a zero
+  cascade-count sentinel and identity matrices.
 - **`RecordShadowPassUVE`, called before the existing main pass, runs once per fixed cascade per
   frame** — `BeginRenderPassUVE{colorAttachment: invalid, depthAttachment: shadowMapTargets[i],
   depthLoadOp: Clear, clearDepth: 1.0}`, draws every opaque item only if a caster was found *and*
@@ -1000,24 +1021,25 @@ whichever attachment is actually present.
   the fitted light frustum, so valid off-camera casters are retained without submitting meshes that
   cannot intersect the shadow volume.
 - The main pass retains the legacy `uLightSpaceMatrix`/`uShadowMapTexture` pair, and also uploads
-  `uShadowCascadeCount`, `uLightSpaceMatrices[3]`, `uShadowCascadeSplits[3]`, and
-  `uShadowMapTextures[3]` on slots 3-5 before `uShadowPcfKernelRadius`. Unknown extra uniforms are
-  harmless no-ops for project-authored shaders that retain the older single-map contract.
+  `uShadowCascadeCount`, `uShadowCascadeBlendRatio`, `uLightSpaceMatrices[3]`,
+  `uShadowCascadeSplits[3]`, and `uShadowMapTextures[3]` on slots 3-5 before
+  `uShadowPcfKernelRadius`. Unknown extra uniforms are harmless no-ops for project-authored shaders
+  that retain the older single-map contract.
 
-**Canonical material shader contract (Increments 27-30).** `lit_shadowed_3d.glsl` declares the
+**Canonical material shader contract (Increments 27-32).** `lit_shadowed_3d.glsl` declares the
 existing renderer-owned `uLights[4]`, material color/scalar uniforms, texture samplers, and the
 legacy `uLightSpaceMatrix`/`uShadowMapTexture` pair. Increment 28 adds
 `uShadowPcfKernelRadius`; Increment 30 adds the fixed three-element
 `uLightSpaceMatrices`/`uShadowMapTextures`/`uShadowCascadeSplits` arrays plus
-`uShadowCascadeCount`. `Renderer3DUVE::RecordItemsUVE()` supplies all of these from bounded
-engine-level configuration. The `uNormalTexture` binding remains available for a future
+`uShadowCascadeCount`; Increment 31 adds `uShadowCascadeBlendRatio` for a bounded cross-fade
+near non-final cascade splits. `Renderer3DUVE::RecordItemsUVE()` supplies all of these from
+bounded engine-level configuration. The `uNormalTexture` binding remains available for a future
 normal-mapping increment; the canonical shader currently uses the mesh world normal directly.
 
 **Out of scope, deliberately**: Point/Spot shadows, variable cascade counts, texture-array
-shadow maps, cascade blend regions, texel-grid stabilization of fitted bounds, variable or
-larger-than-5x5 PCF kernels, tangent-space normal mapping, and material-default substitution for
-arbitrary `ShaderAssetUVE` sources. The canonical shader is a reference implementation, not an
-automatic override of project-authored material shaders.
+shadow maps, variable or larger-than-5x5 PCF kernels, tangent-space normal mapping, and
+material-default substitution for arbitrary `ShaderAssetUVE` sources. The canonical shader is a
+reference implementation, not an automatic override of project-authored material shaders.
 
 ## Allocator boundary
 

@@ -204,6 +204,8 @@ uniform int uShadowPcfKernelRadius;
 uniform sampler2D uShadowMapTextures[3];
 uniform float uShadowCascadeSplits[3];
 uniform int uShadowCascadeCount;
+// Increment 31: fraction of each non-final cascade depth interval used to cross-fade into the next.
+uniform float uShadowCascadeBlendRatio;
 
 vec3 SafeNormalizeUVE(vec3 value) {
     return value / max(length(value), 0.0001);
@@ -288,8 +290,26 @@ float DirectionalShadowFactorUVE(vec3 normal, vec3 lightDirection) {
             break;
         }
     }
-    return ShadowFactorFromPositionUVE(CascadeLightSpacePositionUVE(cascadeIndex), normal, lightDirection,
-                                       cascadeIndex);
+    float shadowFactor = ShadowFactorFromPositionUVE(CascadeLightSpacePositionUVE(cascadeIndex), normal,
+                                                      lightDirection, cascadeIndex);
+    int finalCascadeIndex = clamp(uShadowCascadeCount - 1, 0, 2);
+    if (cascadeIndex >= finalCascadeIndex) {
+        return shadowFactor;
+    }
+
+    float cascadeNearDepth = cascadeIndex == 0 ? 0.0 : uShadowCascadeSplits[cascadeIndex - 1];
+    float cascadeFarDepth = uShadowCascadeSplits[cascadeIndex];
+    float cascadeDepthRange = max(cascadeFarDepth - cascadeNearDepth, 0.0001);
+    float blendWidth = cascadeDepthRange * clamp(uShadowCascadeBlendRatio, 0.0, 0.25);
+    float blendStartDepth = cascadeFarDepth - blendWidth;
+    if (blendWidth <= 0.0 || viewDepth <= blendStartDepth) {
+        return shadowFactor;
+    }
+
+    float nextCascadeShadowFactor = ShadowFactorFromPositionUVE(
+        CascadeLightSpacePositionUVE(cascadeIndex + 1), normal, lightDirection, cascadeIndex + 1);
+    float blendWeight = smoothstep(blendStartDepth, cascadeFarDepth, viewDepth);
+    return mix(shadowFactor, nextCascadeShadowFactor, blendWeight);
 }
 
 void main() {
