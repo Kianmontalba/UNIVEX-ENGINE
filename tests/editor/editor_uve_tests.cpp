@@ -1,6 +1,7 @@
 // Copyright (c) 2026 UniVex Studios. All Rights Reserved.
 
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <limits>
 #include <numbers>
@@ -1394,6 +1395,105 @@ TEST(EditorUVETest, ScaleSelectedAlongAxis_RejectsUnsafeInputWithoutMutation) {
         EXPECT_FALSE(editor.IsSceneDirtyUVE());
         editor.ShutdownUVE();
     }
+    engine.Shutdown();
+}
+
+TEST(EditorUVETest, TransformSnappingSettings_ExposeSafeDefaultsAndRejectInvalidValues) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_snapping_settings.uvescene");
+        editor.InitUVE();
+
+        const EditorTransformSnappingSettingsUVE defaults = editor.GetTransformSnappingSettingsUVE();
+        EXPECT_FALSE(defaults.enabled);
+        EXPECT_FLOAT_EQ(defaults.translateStep, 1.0F);
+        EXPECT_FLOAT_EQ(defaults.rotateStepDegrees, 15.0F);
+        EXPECT_FLOAT_EQ(defaults.scaleStep, 0.1F);
+
+        EditorTransformSnappingSettingsUVE configured{true, 0.5F, 45.0F, 0.25F};
+        ASSERT_TRUE(editor.SetTransformSnappingSettingsUVE(configured));
+        EXPECT_EQ(editor.GetTransformSnappingSettingsUVE().enabled, configured.enabled);
+        EXPECT_FLOAT_EQ(editor.GetTransformSnappingSettingsUVE().translateStep, configured.translateStep);
+        EXPECT_FLOAT_EQ(editor.GetTransformSnappingSettingsUVE().rotateStepDegrees, configured.rotateStepDegrees);
+        EXPECT_FLOAT_EQ(editor.GetTransformSnappingSettingsUVE().scaleStep, configured.scaleStep);
+
+        EditorTransformSnappingSettingsUVE invalid = configured;
+        invalid.translateStep = 0.0F;
+        EXPECT_FALSE(editor.SetTransformSnappingSettingsUVE(invalid));
+        invalid = configured;
+        invalid.rotateStepDegrees = std::numeric_limits<float>::infinity();
+        EXPECT_FALSE(editor.SetTransformSnappingSettingsUVE(invalid));
+        invalid = configured;
+        invalid.scaleStep = std::numeric_limits<float>::quiet_NaN();
+        EXPECT_FALSE(editor.SetTransformSnappingSettingsUVE(invalid));
+        EXPECT_FLOAT_EQ(editor.GetTransformSnappingSettingsUVE().translateStep, configured.translateStep);
+        EXPECT_FLOAT_EQ(editor.GetTransformSnappingSettingsUVE().rotateStepDegrees, configured.rotateStepDegrees);
+        EXPECT_FLOAT_EQ(editor.GetTransformSnappingSettingsUVE().scaleStep, configured.scaleStep);
+
+        editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
+}
+
+TEST(EditorUVETest, TransformSnapping_QuantizesCommandsWithoutHistoryDriftAndReplaysRotation) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_snapping_commands.uvescene");
+        editor.InitUVE();
+        Scene::IEntityManagerUVE& entityManager = engine.GetServicesUVE().GetEntityManagerUVE();
+        const Scene::EntityUVE entity = entityManager.CreateEntityUVE();
+        Scene::TransformComponentUVE initial{};
+        initial.localPosition = Math::Vector3UVE{1.0F, 2.0F, 3.0F};
+        AttachRootUVE(engine, entity, initial);
+        editor.SelectEntityUVE(entity);
+
+        ASSERT_TRUE(editor.SetTransformSnappingSettingsUVE(
+            EditorTransformSnappingSettingsUVE{true, 0.5F, 15.0F, 0.25F}));
+        EXPECT_FALSE(editor.TranslateSelectedAlongAxisUVE(EditorTranslateAxisUVE::X, 0.1F));
+        EXPECT_FALSE(editor.IsSceneDirtyUVE());
+        EXPECT_FALSE(editor.CanUndoUVE());
+
+        ASSERT_TRUE(editor.TranslateSelectedAlongAxisUVE(EditorTranslateAxisUVE::X, 0.74F));
+        EXPECT_NEAR(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity).localPosition.x,
+                    1.5F, 0.0001F);
+        ASSERT_TRUE(editor.TranslateSelectedAlongAxisUVE(EditorTranslateAxisUVE::X, -0.74F));
+        EXPECT_NEAR(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity).localPosition.x,
+                    initial.localPosition.x, 0.0001F);
+
+        ASSERT_TRUE(editor.ScaleSelectedAlongAxisUVE(EditorTranslateAxisUVE::X, 0.37F));
+        EXPECT_NEAR(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity).localScale.x,
+                    1.25F, 0.0001F);
+        EXPECT_FALSE(editor.ScaleSelectedAlongAxisUVE(EditorTranslateAxisUVE::X, -1.24F));
+        EXPECT_NEAR(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity).localScale.x,
+                    1.25F, 0.0001F);
+
+        const float twentyDegreesRadians = (20.0F * std::numbers::pi_v<float>) / 180.0F;
+        ASSERT_TRUE(editor.RotateSelectedAroundWorldAxisUVE(EditorTranslateAxisUVE::Z, twentyDegreesRadians));
+        const Math::Vector3UVE rotatedXAxis = Math::RotateVectorUVE(
+            entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity).localRotation,
+            Math::Vector3UVE{1.0F, 0.0F, 0.0F});
+        EXPECT_NEAR(rotatedXAxis.x, std::cos(std::numbers::pi_v<float> / 12.0F), 0.0001F);
+        EXPECT_NEAR(rotatedXAxis.y, std::sin(std::numbers::pi_v<float> / 12.0F), 0.0001F);
+        ASSERT_TRUE(editor.UndoUVE());
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity).localRotation,
+                  initial.localRotation);
+        ASSERT_TRUE(editor.RedoUVE());
+        const Math::Vector3UVE replayedXAxis = Math::RotateVectorUVE(
+            entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity).localRotation,
+            Math::Vector3UVE{1.0F, 0.0F, 0.0F});
+        EXPECT_NEAR(replayedXAxis.x, rotatedXAxis.x, 0.0001F);
+        EXPECT_NEAR(replayedXAxis.y, rotatedXAxis.y, 0.0001F);
+
+        editor.ShutdownUVE();
+    }
+
     engine.Shutdown();
 }
 
