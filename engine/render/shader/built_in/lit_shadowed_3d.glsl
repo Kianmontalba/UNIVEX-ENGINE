@@ -4,9 +4,12 @@
 layout(location = 0) in vec3 aPosition;
 layout(location = 1) in vec3 aNormal;
 layout(location = 2) in vec2 aTexCoord;
+layout(location = 3) in vec4 aTangent;
 
 out vec3 vWorldPosition;
 out vec3 vWorldNormal;
+out vec3 vWorldTangent;
+out float vTangentHandedness;
 out vec2 vTexCoord;
 out vec4 vLightSpacePosition;
 out vec4 vLightSpacePositions[3];
@@ -20,6 +23,8 @@ void main() {
     vec4 worldPosition = uModel * vec4(aPosition, 1.0);
     vWorldPosition = worldPosition.xyz;
     vWorldNormal = mat3(uModel) * aNormal;
+    vWorldTangent = mat3(uModel) * aTangent.xyz;
+    vTangentHandedness = aTangent.w;
     vTexCoord = aTexCoord;
     vLightSpacePosition = uLightSpaceMatrix * worldPosition;
     for (int cascadeIndex = 0; cascadeIndex < 3; ++cascadeIndex) {
@@ -32,6 +37,8 @@ void main() {
 #ifdef FRAGMENT_SHADER
 in vec3 vWorldPosition;
 in vec3 vWorldNormal;
+in vec3 vWorldTangent;
+in float vTangentHandedness;
 in vec2 vTexCoord;
 in vec4 vLightSpacePosition;
 in vec4 vLightSpacePositions[3];
@@ -177,6 +184,16 @@ void main() {
     vec3 albedo = texture(uAlbedoTexture, vTexCoord).rgb * uAlbedoColor;
     float ambientOcclusion = texture(uAOTexture, vTexCoord).r;
     vec3 normal = SafeNormalizeUVE(vWorldNormal);
+    vec3 tangent = vWorldTangent - normal * dot(normal, vWorldTangent);
+    if (dot(tangent, tangent) <= 0.00000001) {
+        vec3 fallbackAxis = abs(normal.y) < 0.999 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+        tangent = cross(fallbackAxis, normal);
+    }
+    tangent = SafeNormalizeUVE(tangent);
+    vec3 bitangent = SafeNormalizeUVE(cross(normal, tangent));
+    bitangent *= vTangentHandedness < 0.0 ? -1.0 : 1.0;
+    vec3 tangentSpaceNormal = texture(uNormalTexture, vTexCoord).xyz * 2.0 - 1.0;
+    normal = SafeNormalizeUVE(mat3(tangent, bitangent, normal) * tangentSpaceNormal);
     vec3 viewDirection = SafeNormalizeUVE(uViewPosition - vWorldPosition);
     float metallic = clamp(uMetallic, 0.0, 1.0);
     float roughness = clamp(uRoughness, 0.04, 1.0);

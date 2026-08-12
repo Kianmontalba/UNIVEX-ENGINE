@@ -536,6 +536,16 @@ worth restating for anyone extending this later:**
    `ShaderProgramUVE`. Bridging the two (hot-reload/`#include` support for material shaders) is
    real, valuable, separate future work, not done here.
 
+**Increment 33 activates tangent-space normal mapping in the canonical lit shader.** `MeshVertexUVE`
+now carries a runtime-derived normalized tangent plus handedness; the serialized `.uvemodel` payload
+remains position/normal/UV compatible, and `GenerateMeshTangentsUVE()` derives its TBN input from
+indexed triangles after loading. `Renderer3DUVE` repeats this deterministic derivation into its
+one-time GPU-upload copy for custom runtime mesh loaders that bypass the standard asset loader. The
+canonical vertex layout adds `TANGENT` as a `Float4`, and the fragment shader orthonormalizes the
+TBN basis before decoding `uNormalTexture` from `[0,1]` to `[-1,1]`. Degenerate UVs and direct
+legacy draws without a tangent stream receive a deterministic orthogonal fallback rather than
+passing an invalid basis to lighting.
+
 **`Render::ToRenderTextureFormatUVE(Asset::TextureFormatUVE)`** (module-private, anonymous
 namespace in `renderer_3d_uve.cpp`) bridges `Asset::TextureFormatUVE` (the CPU-side loadable-asset
 enum) to `Render::TextureFormatUVE` (the RHI's own, deliberately separate enum — see
@@ -551,9 +561,10 @@ once per `Renderer3DUVE` instance alongside its offscreen color/depth render tar
 destroyed alongside them too. A material's unset (`kInvalidAssetGuidUVE`) `albedoTexture`/
 `aoTexture` resolves to the white texture (`sample * albedoColor == albedoColor`,
 `sample.r == 1.0` i.e. no occlusion); unset `normalTexture` resolves to a flat tangent-space "up"
-normal (`{128,128,255}` → decodes to `(0,0,1)`) — captured for forward compatibility with a future
-lighting increment, unused in this increment's color output. This avoids any shader-side branching
-on "does this material have a texture" — every material always has three real, bound textures.
+normal (`{128,128,255}` → decodes to `(0,0,1)`) — a neutral TBN-space normal that preserves the
+geometric normal under Increment 33's canonical normal-map decode. This avoids any shader-side
+branching on "does this material have a texture" — every material always has three real, bound
+textures.
 
 **Texture GPU-upload has its own cache** (`ImplUVE::textureCache`, keyed by the texture's own
 `AssetGuidUVE`, independent of `materialCache`) so two materials sharing an albedo texture upload
@@ -1026,18 +1037,20 @@ whichever attachment is actually present.
   `uShadowPcfKernelRadius`. Unknown extra uniforms are harmless no-ops for project-authored shaders
   that retain the older single-map contract.
 
-**Canonical material shader contract (Increments 27-32).** `lit_shadowed_3d.glsl` declares the
+**Canonical material shader contract (Increments 27-33).** `lit_shadowed_3d.glsl` declares the
 existing renderer-owned `uLights[4]`, material color/scalar uniforms, texture samplers, and the
 legacy `uLightSpaceMatrix`/`uShadowMapTexture` pair. Increment 28 adds
 `uShadowPcfKernelRadius`; Increment 30 adds the fixed three-element
 `uLightSpaceMatrices`/`uShadowMapTextures`/`uShadowCascadeSplits` arrays plus
 `uShadowCascadeCount`; Increment 31 adds `uShadowCascadeBlendRatio` for a bounded cross-fade
-near non-final cascade splits. `Renderer3DUVE::RecordItemsUVE()` supplies all of these from
-bounded engine-level configuration. The `uNormalTexture` binding remains available for a future
-normal-mapping increment; the canonical shader currently uses the mesh world normal directly.
+near non-final cascade splits; and Increment 33 consumes `uNormalTexture` through a tangent-space
+basis built from the renderer-provided `TANGENT` vertex attribute. `Renderer3DUVE::RecordItemsUVE()`
+supplies these material and shadow inputs from bounded engine-level configuration. Project-authored
+shaders retain their own source and uniform contracts; unknown renderer-provided uniforms remain
+safe no-ops.
 
 **Out of scope, deliberately**: Point/Spot shadows, variable cascade counts, texture-array
-shadow maps, variable or larger-than-5x5 PCF kernels, tangent-space normal mapping, and
+shadow maps, variable or larger-than-5x5 PCF kernels, skinning/animated tangents, and
 material-default substitution for arbitrary `ShaderAssetUVE` sources. The canonical shader is a
 reference implementation, not an automatic override of project-authored material shaders.
 

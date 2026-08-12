@@ -185,14 +185,16 @@ constexpr std::array<std::uint8_t, 4> kFlatNormalPixelUVE{0x80, 0x80, 0xFF, 0xFF
     return nullptr;
 }
 
-/// MeshVertexUVE's binary layout (position, normal, u, v — see mesh_asset_uve.h), described once
-/// here for CreatePipelineUVE(). MeshVertexUVE is a standard-layout aggregate of Math::Vector3UVE
-/// (itself standard-layout) and two floats, so offsetof() is well-defined.
+/// MeshVertexUVE's binary layout (position, normal, UV, tangent, handedness — see
+/// mesh_asset_uve.h), described once here for CreatePipelineUVE(). MeshVertexUVE is a
+/// standard-layout aggregate of Math::Vector3UVE (itself standard-layout) and floats, so offsetof()
+/// is well-defined.
 const std::vector<VertexAttributeUVE>& MeshVertexLayoutUVE() {
     static const std::vector<VertexAttributeUVE> layout = {
         VertexAttributeUVE{"POSITION", VertexAttributeFormatUVE::Float3, offsetof(Asset::MeshVertexUVE, position)},
         VertexAttributeUVE{"NORMAL", VertexAttributeFormatUVE::Float3, offsetof(Asset::MeshVertexUVE, normal)},
         VertexAttributeUVE{"TEXCOORD0", VertexAttributeFormatUVE::Float2, offsetof(Asset::MeshVertexUVE, u)},
+        VertexAttributeUVE{"TANGENT", VertexAttributeFormatUVE::Float4, offsetof(Asset::MeshVertexUVE, tangent)},
     };
     return layout;
 }
@@ -355,7 +357,12 @@ struct Renderer3DUVE::ImplUVE {
         }
 
         const Asset::MeshAssetUVE* const mesh = item.meshHandle.TryGetUVE();
-        const std::span<const Asset::MeshVertexUVE> vertexSpan(mesh->vertices);
+        // Asset loaders derive tangents for legacy `.uvemodel` payloads, but runtime/custom mesh
+        // loaders may construct MeshAssetUVE directly. Regenerate into this one-time GPU-upload copy
+        // so every material draw has the canonical TBN input without mutating shared asset data.
+        std::vector<Asset::MeshVertexUVE> vertices = mesh->vertices;
+        Asset::GenerateMeshTangentsUVE(vertices, mesh->indices);
+        const std::span<const Asset::MeshVertexUVE> vertexSpan(vertices);
         const std::span<const std::uint32_t> indexSpan(mesh->indices);
         const std::span<const std::byte> vertexBytes = std::as_bytes(vertexSpan);
         const std::span<const std::byte> indexBytes = std::as_bytes(indexSpan);
@@ -448,6 +455,7 @@ struct Renderer3DUVE::ImplUVE {
         pipelineDesc.vertexShader = vertexShader;
         pipelineDesc.fragmentShader = fragmentShader;
         pipelineDesc.vertexLayout = MeshVertexLayoutUVE();
+        pipelineDesc.vertexStride = static_cast<std::uint32_t>(sizeof(Asset::MeshVertexUVE));
         pipelineDesc.depthTestEnabled = true;
         pipelineDesc.depthWriteEnabled = !material->isTransparent;
 
@@ -588,6 +596,7 @@ Renderer3DUVE::Renderer3DUVE(IRenderDeviceUVE& renderDevice, IRenderSystemUVE& r
     shadowProgramDesc.virtualFilePath = std::string(Shader::BuiltIn::kShadowDepthVirtualPath);
     shadowProgramDesc.embeddedFallbackSourceCode = std::string(Shader::BuiltIn::kShadowDepthSource);
     shadowProgramDesc.vertexLayout = MeshVertexLayoutUVE();
+    shadowProgramDesc.vertexStride = static_cast<std::uint32_t>(sizeof(Asset::MeshVertexUVE));
     shadowProgramDesc.depthTestEnabled = true;
     shadowProgramDesc.depthWriteEnabled = true;
     shadowProgramDesc.debugNameUVE = "ShadowDepth";
