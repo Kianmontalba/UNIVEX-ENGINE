@@ -752,15 +752,26 @@ vec3 color = ambient + diffuse + specular + emissive;
 `vWorldPos` is a vertex-shader-interpolated varying, not a uniform — out of scope to define since
 no real shader is authored this increment, exactly like Increment 23.
 
-**Out of scope, deliberately**: point/spot lights, multi-light support, shadows, real GLSL
-authoring / live-GL visual proof (same GL-symbol-confinement rationale as Increments 22–23),
-`ShaderManagerUVE`↔materials bridging, built-in `.glsl` file updates. No new `Vector3UVE` math
-helpers (`ReflectUVE`, scalar-on-left `operator*`, `PowUVE`) — since no C++-side lighting math
-exists to need them, only GLSL-side (documented, not compiled).
+**Increment 35 upgrades canonical direct lighting to a GGX/Smith microfacet BRDF.** The physical
+`lit_shadowed_3d.glsl` file and its byte-identical embedded fallback now evaluate Trowbridge-Reitz
+GGX distribution, Schlick-GGX/Smith visibility, and Schlick Fresnel for every active direct light.
+No material asset or renderer-uniform contract changes: `uMetallic`, `uRoughness`, albedo, normal,
+AO, emissive, view position, and the existing light records are reused. With `F0 = mix(0.04,
+albedo, metallic)`, the direct term is `specular = D*G*F / max(4*NdotV*NdotL, epsilon)` and the
+energy split is `diffuse = (1-F)*(1-metallic)*albedo/PI`. Roughness remains clamped to `[0.04,1]`
+and every normalization/BRDF denominator has an epsilon guard. Directional cascaded PCF/blended
+shadow visibility multiplies only the completed direct contribution; AO-modulated flat ambient and
+emissive stay outside the direct-light loop.
 
-**Known simplifications carried over/added**: the normal-matrix gap from Increment 23 (still
-unaddressed). New this increment: the documented specular formula omits a real geometry/visibility
-term (no Smith-GGX `G`), using `NdotL` as a stand-in approximation — deferred, not forgotten.
+**Still deliberately deferred:** image-based lighting, irradiance/prefiltered environment maps,
+BRDF lookup integration, HDR/tone mapping, normal-matrix support for non-uniform model scaling, and
+any material-format change. Point, spot, multi-light, normal-map, and directional-shadow inputs are
+already supported by the same direct path and are retained by this increment.
+
+**Known simplification retained:** the normal-matrix gap from Increment 23 remains
+unaddressed; transforming normals with `mat3(uModel)` is not correct under non-uniform scale. GGX
+visibility is no longer deferred, but normal-matrix support belongs to a separate mesh-transform
+increment.
 
 ## Point/Spot Lights + Multi-Light (Increment 25)
 
