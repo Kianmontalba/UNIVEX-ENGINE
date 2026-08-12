@@ -53,7 +53,12 @@ preserves the moved subtree and the authored local Transform of its root; self-p
 stale handles, and the editor camera are rejected safely. The Edit menu provides disabled-state
 **Duplicate** (`Ctrl+D`) and **Delete** (`Delete`) controls for
 one selected live document entity, in addition to focus-safe `Ctrl+Z`, `Ctrl+Y`, and
-`Ctrl+Shift+Z`. Duplicate and delete capture the complete selected subtree in memory through the
+`Ctrl+Shift+Z`. The View menu also provides session-only **Transform Snapping** with guarded enable
+and increment controls: Translate uses 0.25/0.5/1.0/5.0 world-unit steps, Rotate uses 5/15/45-degree
+steps, and Scale uses 0.05/0.1/0.25 local-scale-unit steps. When enabled, direct commands and gizmo
+drags round their signed delta from the captured initial Transform, so a changed drag remains one
+Undo/Redo transaction while an increment-rounded zero does not dirty the document or add history.
+Duplicate and delete capture the complete selected subtree in memory through the
 same registered-component envelope used by `.uvescene`, preserving hierarchy and restoring fresh
 entity handles during Undo/Redo; they cannot affect the editor-only camera. Shortcut actions are
 suppressed while a text field owns input or an active viewport gesture is in progress. One completed
@@ -66,7 +71,7 @@ These navigation controls never alter the document, dirty state, scene file, or 
 The Assets panel lists only deterministic snapshots of `AssetDatabaseUVE` registered records and
 offers a case-insensitive path filter; it does not scan filesystems, import assets, or load previews.
 Viewport picking intentionally selects only live document entities with the existing box collider
-component. Mesh picking, uniform/negative scale, local-axis and plane handles, trackball rotation, snapping, fly navigation, camera bookmarks, cinematic
+component. Mesh picking, uniform/negative scale, local-axis and plane handles, trackball rotation, fly navigation, camera bookmarks, cinematic
 camera tools, play mode, filesystem browsing, import/reimport, asset drag-and-drop, thumbnails,
 layout persistence, hierarchy search, world-transform-preserving reparenting, child ordering,
 multi-entity lifecycle operations, and OS clipboard copy/paste remain future increments.

@@ -1,10 +1,4 @@
-//
-// UniVex Engine (UVE) — Proprietary Game Engine
 // Copyright (c) 2026 UniVex Studios. All Rights Reserved.
-// Unauthorized copying, modification, distribution, or use of this code
-// in whole or in part is strictly prohibited without express written
-// permission from UniVex Studios.
-// Violators will be prosecuted to the fullest extent of the law.
 
 #pragma once
 
@@ -58,6 +52,15 @@ enum class EditorGizmoModeUVE {
     Translate,
     Rotate,
     Scale,
+};
+
+/// Session-local transform snapping settings. These values are editor-only and are not serialized
+/// into scene documents or runtime state.
+struct EditorTransformSnappingSettingsUVE final {
+    bool enabled = false;
+    float translateStep = 1.0F;
+    float rotateStepDegrees = 15.0F;
+    float scaleStep = 0.1F;
 };
 
 /// The supported first-pass Scene menu archetypes. Each created entity is a document root with a
@@ -165,6 +168,11 @@ public:
     /// navigation gesture is active, preserving the transaction currently in progress.
     void SetGizmoModeUVE(EditorGizmoModeUVE mode) noexcept;
     [[nodiscard]] EditorGizmoModeUVE GetGizmoModeUVE() const noexcept;
+
+    /// Replaces session-local snapping settings only when every increment is finite and strictly
+    /// positive and no transform/navigation gesture is active. Returns false without mutation otherwise.
+    [[nodiscard]] bool SetTransformSnappingSettingsUVE(const EditorTransformSnappingSettingsUVE& settings);
+    [[nodiscard]] const EditorTransformSnappingSettingsUVE& GetTransformSnappingSettingsUVE() const noexcept;
 
     /// Moves the editor-only focus point to the selected live document entity's derived world position
     /// and reapplies the current orbit camera state. It never changes selection, dirty state, or history.
@@ -322,6 +330,9 @@ private:
     [[nodiscard]] bool IsViewportRectValidUVE(const EditorViewportRectUVE& viewportRect) const noexcept;
     [[nodiscard]] bool IsFiniteVectorUVE(const Math::Vector3UVE& vector) const noexcept;
     [[nodiscard]] bool IsQuaternionFiniteUVE(const Math::QuaternionUVE& quaternion) const noexcept;
+    [[nodiscard]] bool AreTransformSnappingSettingsValidUVE(
+        const EditorTransformSnappingSettingsUVE& settings) const noexcept;
+    [[nodiscard]] float SnapScalarUVE(float value, float increment) const noexcept;
     [[nodiscard]] Math::Vector3UVE GetAxisVectorUVE(EditorTranslateAxisUVE axis) const noexcept;
     [[nodiscard]] bool ProjectWorldPointUVE(const EditorViewportRectUVE& viewportRect,
                                              const Math::Vector3UVE& worldPoint,
@@ -388,6 +399,7 @@ private:
     std::filesystem::path m_activeScenePath;
     std::size_t m_historyCapacity = 100U;
     EditorGizmoModeUVE m_gizmoMode = EditorGizmoModeUVE::Translate;
+    EditorTransformSnappingSettingsUVE m_transformSnappingSettings{};
     GizmoDragUVE m_gizmoDrag{};
     Math::Vector3UVE m_viewportFocusPoint{0.0F, 1.5F, 0.0F};
     float m_viewportYawRadians = 0.0F;

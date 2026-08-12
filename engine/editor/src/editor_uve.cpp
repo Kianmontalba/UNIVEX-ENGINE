@@ -1,10 +1,4 @@
-//
-// UniVex Engine (UVE) — Proprietary Game Engine
 // Copyright (c) 2026 UniVex Studios. All Rights Reserved.
-// Unauthorized copying, modification, distribution, or use of this code
-// in whole or in part is strictly prohibited without express written
-// permission from UniVex Studios.
-// Violators will be prosecuted to the fullest extent of the law.
 
 #include "uve/editor/editor_uve.h"
 
@@ -468,8 +462,11 @@ bool EditorUVE::TranslateSelectedAlongAxisUVE(const EditorTranslateAxisUVE axis,
         return false;
     }
 
+    const float snappedDistance = m_transformSnappingSettings.enabled
+                                      ? SnapScalarUVE(worldDistance, m_transformSnappingSettings.translateStep)
+                                      : worldDistance;
     Math::Vector3UVE localDelta{};
-    const Math::Vector3UVE worldDelta = GetAxisVectorUVE(axis) * worldDistance;
+    const Math::Vector3UVE worldDelta = GetAxisVectorUVE(axis) * snappedDistance;
     if (!ComputeLocalDeltaForWorldDeltaUVE(m_selectedEntity, worldDelta, localDelta)) {
         return false;
     }
@@ -493,10 +490,15 @@ bool EditorUVE::RotateSelectedAroundWorldAxisUVE(const EditorTranslateAxisUVE ax
         return false;
     }
 
+    const float rotateStepRadians =
+        (m_transformSnappingSettings.rotateStepDegrees * std::numbers::pi_v<float>) / 180.0F;
+    const float snappedRadians = m_transformSnappingSettings.enabled
+                                     ? SnapScalarUVE(radians, rotateStepRadians)
+                                     : radians;
     Scene::TransformComponentUVE updated =
         entityManager.GetComponentUVE<Scene::TransformComponentUVE>(m_selectedEntity);
     Math::QuaternionUVE localRotation{};
-    if (!ComputeLocalRotationForWorldAxisUVE(m_selectedEntity, updated.localRotation, axis, radians, localRotation)) {
+    if (!ComputeLocalRotationForWorldAxisUVE(m_selectedEntity, updated.localRotation, axis, snappedRadians, localRotation)) {
         return false;
     }
     updated.localRotation = localRotation;
@@ -533,7 +535,10 @@ bool EditorUVE::ScaleSelectedAlongAxisUVE(const EditorTranslateAxisUVE axis,
         case EditorTranslateAxisUVE::None:
             return false;
     }
-    *component += localScaleDelta;
+    const float snappedScaleDelta = m_transformSnappingSettings.enabled
+                                        ? SnapScalarUVE(localScaleDelta, m_transformSnappingSettings.scaleStep)
+                                        : localScaleDelta;
+    *component += snappedScaleDelta;
     if (!IsFiniteUVE(*component) || *component < kMinimumLocalScaleUVE) {
         return false;
     }
@@ -550,6 +555,20 @@ void EditorUVE::SetGizmoModeUVE(const EditorGizmoModeUVE mode) noexcept {
 
 EditorGizmoModeUVE EditorUVE::GetGizmoModeUVE() const noexcept {
     return m_gizmoMode;
+}
+
+bool EditorUVE::SetTransformSnappingSettingsUVE(const EditorTransformSnappingSettingsUVE& settings) {
+    if (m_gizmoDrag.axis != EditorTranslateAxisUVE::None ||
+        m_viewportNavigationMode != EditorViewportNavigationModeUVE::None ||
+        !AreTransformSnappingSettingsValidUVE(settings)) {
+        return false;
+    }
+    m_transformSnappingSettings = settings;
+    return true;
+}
+
+const EditorTransformSnappingSettingsUVE& EditorUVE::GetTransformSnappingSettingsUVE() const noexcept {
+    return m_transformSnappingSettings;
 }
 
 bool EditorUVE::FocusSelectedEntityUVE() {
@@ -1344,6 +1363,21 @@ bool EditorUVE::IsQuaternionFiniteUVE(const Math::QuaternionUVE& quaternion) con
     return Math::IsFiniteUVE(quaternion);
 }
 
+bool EditorUVE::AreTransformSnappingSettingsValidUVE(
+    const EditorTransformSnappingSettingsUVE& settings) const noexcept {
+    return IsFiniteUVE(settings.translateStep) && settings.translateStep > kVectorEpsilonUVE &&
+           IsFiniteUVE(settings.rotateStepDegrees) && settings.rotateStepDegrees > kVectorEpsilonUVE &&
+           IsFiniteUVE(settings.scaleStep) && settings.scaleStep > kVectorEpsilonUVE;
+}
+
+float EditorUVE::SnapScalarUVE(const float value, const float increment) const noexcept {
+    if (!IsFiniteUVE(value) || !IsFiniteUVE(increment) || increment <= kVectorEpsilonUVE) {
+        return value;
+    }
+    const float snapped = std::round(value / increment) * increment;
+    return IsFiniteUVE(snapped) ? snapped : value;
+}
+
 bool EditorUVE::IsViewportRectValidUVE(const EditorViewportRectUVE& viewportRect) const noexcept {
     return IsFiniteUVE(viewportRect.origin.x) && IsFiniteUVE(viewportRect.origin.y) &&
            IsFiniteUVE(viewportRect.size.x) && IsFiniteUVE(viewportRect.size.y) &&
@@ -1762,11 +1796,16 @@ void EditorUVE::UpdateGizmoDragUVE(const Math::Vector2UVE pointerPosition) {
         }
         const float deltaRadians = std::remainder(
             currentParameterRadians - m_gizmoDrag.initialRingParameterRadians, std::numbers::pi_v<float> * 2.0F);
+        const float rotateStepRadians =
+            (m_transformSnappingSettings.rotateStepDegrees * std::numbers::pi_v<float>) / 180.0F;
+        const float snappedDeltaRadians = m_transformSnappingSettings.enabled
+                                              ? SnapScalarUVE(deltaRadians, rotateStepRadians)
+                                              : deltaRadians;
         Math::QuaternionUVE localRotation{};
-        if (!IsFiniteUVE(deltaRadians) ||
+        if (!IsFiniteUVE(snappedDeltaRadians) ||
             !ComputeLocalRotationForWorldAxisUVE(m_gizmoDrag.entity,
                                                  m_gizmoDrag.initialLocalTransform.localRotation,
-                                                 m_gizmoDrag.axis, deltaRadians, localRotation)) {
+                                                 m_gizmoDrag.axis, snappedDeltaRadians, localRotation)) {
             CancelGizmoDragUVE();
             return;
         }
@@ -1791,6 +1830,9 @@ void EditorUVE::UpdateGizmoDragUVE(const Math::Vector2UVE pointerPosition) {
     }
 
     if (m_gizmoDrag.mode == EditorGizmoModeUVE::Scale) {
+        const float snappedWorldDistance = m_transformSnappingSettings.enabled
+                                               ? SnapScalarUVE(worldDistance, m_transformSnappingSettings.scaleStep)
+                                               : worldDistance;
         Scene::TransformComponentUVE updated = m_gizmoDrag.initialLocalTransform;
         float* component = nullptr;
         switch (m_gizmoDrag.axis) {
@@ -1807,7 +1849,7 @@ void EditorUVE::UpdateGizmoDragUVE(const Math::Vector2UVE pointerPosition) {
                 CancelGizmoDragUVE();
                 return;
         }
-        *component += worldDistance;
+        *component += snappedWorldDistance;
         if (!IsFiniteUVE(*component) || *component < kMinimumLocalScaleUVE ||
             !ApplyLocalTransformUVE(m_gizmoDrag.entity, updated)) {
             CancelGizmoDragUVE();
@@ -1817,9 +1859,12 @@ void EditorUVE::UpdateGizmoDragUVE(const Math::Vector2UVE pointerPosition) {
         return;
     }
 
+    const float snappedWorldDistance = m_transformSnappingSettings.enabled
+                                           ? SnapScalarUVE(worldDistance, m_transformSnappingSettings.translateStep)
+                                           : worldDistance;
     Math::Vector3UVE localDelta{};
     if (!ComputeLocalDeltaForWorldDeltaUVE(
-            m_gizmoDrag.entity, GetAxisVectorUVE(m_gizmoDrag.axis) * worldDistance, localDelta)) {
+            m_gizmoDrag.entity, GetAxisVectorUVE(m_gizmoDrag.axis) * snappedWorldDistance, localDelta)) {
         CancelGizmoDragUVE();
         return;
     }
@@ -2109,6 +2154,41 @@ void EditorUVE::DrawMenuBarUVE() {
         if (ImGui::MenuItem("Scale Gizmo", "R", m_gizmoMode == EditorGizmoModeUVE::Scale,
                             gizmoModeChangeAllowed)) {
             SetGizmoModeUVE(EditorGizmoModeUVE::Scale);
+        }
+        if (ImGui::BeginMenu("Transform Snapping", gizmoModeChangeAllowed)) {
+            EditorTransformSnappingSettingsUVE settings = m_transformSnappingSettings;
+            if (ImGui::MenuItem("Enabled", nullptr, settings.enabled)) {
+                settings.enabled = !settings.enabled;
+                static_cast<void>(SetTransformSnappingSettingsUVE(settings));
+            }
+            ImGui::Separator();
+            ImGui::TextDisabled("Translate Step");
+            for (const float step : std::array{0.25F, 0.5F, 1.0F, 5.0F}) {
+                const std::string label = std::to_string(step);
+                if (ImGui::MenuItem(label.c_str(), nullptr, settings.translateStep == step)) {
+                    settings.translateStep = step;
+                    static_cast<void>(SetTransformSnappingSettingsUVE(settings));
+                }
+            }
+            ImGui::Separator();
+            ImGui::TextDisabled("Rotate Step");
+            for (const float step : std::array{5.0F, 15.0F, 45.0F}) {
+                const std::string label = std::to_string(static_cast<int>(step)) + " degrees";
+                if (ImGui::MenuItem(label.c_str(), nullptr, settings.rotateStepDegrees == step)) {
+                    settings.rotateStepDegrees = step;
+                    static_cast<void>(SetTransformSnappingSettingsUVE(settings));
+                }
+            }
+            ImGui::Separator();
+            ImGui::TextDisabled("Scale Step");
+            for (const float step : std::array{0.05F, 0.1F, 0.25F}) {
+                const std::string label = std::to_string(step);
+                if (ImGui::MenuItem(label.c_str(), nullptr, settings.scaleStep == step)) {
+                    settings.scaleStep = step;
+                    static_cast<void>(SetTransformSnappingSettingsUVE(settings));
+                }
+            }
+            ImGui::EndMenu();
         }
         ImGui::EndMenu();
     }
