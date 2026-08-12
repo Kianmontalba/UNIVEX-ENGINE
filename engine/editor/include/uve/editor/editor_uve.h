@@ -43,13 +43,20 @@ struct EditorViewportRectUVE final {
     Math::Vector2UVE size{};
 };
 
-/// World-space axes supported by EditorUVE's first transform-gizmo slice. Rotation, scale, planar
-/// handles, snapping, local axes, and multi-selection are intentionally deferred.
+/// World-space axes supported by EditorUVE's first Translate and Rotate gizmo slice. Scale, planar
+/// handles, snapping, local axes, free/trackball rotation, and multi-selection are intentionally deferred.
 enum class EditorTranslateAxisUVE {
     None,
     X,
     Y,
     Z,
+};
+
+/// Selects the active first-pass transform-gizmo handle family. Both modes use world axes;
+/// local axes, scale, snapping, and trackball rotation remain separate future increments.
+enum class EditorGizmoModeUVE {
+    Translate,
+    Rotate,
 };
 
 /// The supported first-pass Scene menu archetypes. Each created entity is a document root with a
@@ -71,7 +78,7 @@ enum class EditorViewportNavigationModeUVE {
 
 /// EditorUVE composes the existing engine services into a first editor foundation: an editor-owned
 /// camera, deterministic hierarchy and collider-backed viewport selection, a transform inspector
-/// mutation path, a translate-only world-space gizmo, scene-document save/load, and an editor-private
+/// mutation path, world-space Translate and Rotate gizmos, scene-document save/load, and an editor-private
 /// Dear ImGui overlay. No Dear ImGui type appears in this public interface, so the UI backend remains
 /// an implementation detail of engine/editor.
 ///
@@ -142,6 +149,17 @@ public:
     /// entity, parent transform, axis, or distance is invalid.
     [[nodiscard]] bool TranslateSelectedAlongAxisUVE(EditorTranslateAxisUVE axis, float worldDistance);
 
+    /// Rotates the selected document entity around one finite world axis by radians. A parented
+    /// entity receives the equivalent local quaternion delta through the current parent world
+    /// rotation. Returns false without mutation for invalid state, axis, angle, transform, parent,
+    /// or active editor gesture.
+    [[nodiscard]] bool RotateSelectedAroundWorldAxisUVE(EditorTranslateAxisUVE axis, float radians);
+
+    /// Changes the transform handle family. Mode changes are ignored while a gizmo drag or viewport
+    /// navigation gesture is active, preserving the transaction currently in progress.
+    void SetGizmoModeUVE(EditorGizmoModeUVE mode) noexcept;
+    [[nodiscard]] EditorGizmoModeUVE GetGizmoModeUVE() const noexcept;
+
     /// Moves the editor-only focus point to the selected live document entity's derived world position
     /// and reapplies the current orbit camera state. It never changes selection, dirty state, or history.
     [[nodiscard]] bool FocusSelectedEntityUVE();
@@ -205,12 +223,15 @@ public:
 
 private:
     struct GizmoDragUVE final {
+        EditorGizmoModeUVE mode = EditorGizmoModeUVE::Translate;
         EditorTranslateAxisUVE axis = EditorTranslateAxisUVE::None;
         Scene::EntityUVE entity = Scene::kInvalidEntityUVE;
         Scene::TransformComponentUVE initialLocalTransform{};
         Math::Vector2UVE initialPointer{};
         Math::Vector2UVE screenAxisDirection{};
+        EditorViewportRectUVE viewportRect{};
         float pixelsPerWorldUnit = 0.0F;
+        float initialRingParameterRadians = 0.0F;
         bool initialDirty = false;
     };
 
@@ -294,6 +315,7 @@ private:
     [[nodiscard]] std::string MakeUniqueDocumentEntityNameUVE(std::string_view baseName) const;
     [[nodiscard]] bool IsViewportRectValidUVE(const EditorViewportRectUVE& viewportRect) const noexcept;
     [[nodiscard]] bool IsFiniteVectorUVE(const Math::Vector3UVE& vector) const noexcept;
+    [[nodiscard]] bool IsQuaternionFiniteUVE(const Math::QuaternionUVE& quaternion) const noexcept;
     [[nodiscard]] Math::Vector3UVE GetAxisVectorUVE(EditorTranslateAxisUVE axis) const noexcept;
     [[nodiscard]] bool ProjectWorldPointUVE(const EditorViewportRectUVE& viewportRect,
                                              const Math::Vector3UVE& worldPoint,
@@ -301,15 +323,27 @@ private:
     [[nodiscard]] bool ComputeLocalDeltaForWorldDeltaUVE(Scene::EntityUVE entity,
                                                            const Math::Vector3UVE& worldDelta,
                                                            Math::Vector3UVE& outLocalDelta) const;
+    [[nodiscard]] bool ComputeLocalRotationForWorldAxisUVE(Scene::EntityUVE entity,
+                                                            const Math::QuaternionUVE& initialLocalRotation,
+                                                            EditorTranslateAxisUVE axis, float radians,
+                                                            Math::QuaternionUVE& outLocalRotation) const;
     [[nodiscard]] bool ApplyViewportCameraUVE();
     [[nodiscard]] bool IsViewportNavigationFiniteUVE() const noexcept;
     void CancelViewportNavigationUVE() noexcept;
     [[nodiscard]] bool BeginGizmoDragUVE(const EditorViewportRectUVE& viewportRect,
                                           Math::Vector2UVE pointerPosition);
+    [[nodiscard]] bool BeginRotateGizmoDragUVE(const EditorViewportRectUVE& viewportRect,
+                                                Math::Vector2UVE pointerPosition);
+    [[nodiscard]] bool FindClosestRingParameterUVE(const EditorViewportRectUVE& viewportRect,
+                                                    Scene::EntityUVE entity, EditorTranslateAxisUVE axis,
+                                                    Math::Vector2UVE pointerPosition,
+                                                    float& outParameterRadians,
+                                                    float& outDistanceSquared) const;
     void UpdateGizmoDragUVE(Math::Vector2UVE pointerPosition);
     void CommitGizmoDragUVE();
     void CancelGizmoDragUVE() noexcept;
     void DrawTranslateGizmoUVE(const EditorViewportRectUVE& viewportRect);
+    void DrawRotateGizmoUVE(const EditorViewportRectUVE& viewportRect);
     [[nodiscard]] bool ApplyLocalTransformUVE(Scene::EntityUVE entity,
                                                const Scene::TransformComponentUVE& transform);
     [[nodiscard]] bool ApplyEntityNameStateUVE(Scene::EntityUVE entity,
@@ -346,6 +380,7 @@ private:
     Scene::EntityUVE m_selectedEntity = Scene::kInvalidEntityUVE;
     std::filesystem::path m_activeScenePath;
     std::size_t m_historyCapacity = 100U;
+    EditorGizmoModeUVE m_gizmoMode = EditorGizmoModeUVE::Translate;
     GizmoDragUVE m_gizmoDrag{};
     Math::Vector3UVE m_viewportFocusPoint{0.0F, 1.5F, 0.0F};
     float m_viewportYawRadians = 0.0F;

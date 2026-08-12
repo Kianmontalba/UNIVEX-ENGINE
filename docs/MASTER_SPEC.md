@@ -71,7 +71,7 @@ The priority order is crystal clear:
   Phase 2: Custom File Formats (.uve*) with importers/exporters
   Phase 3: Editor Shell (window, viewport, basic UI)
   Phase 4: Core Nodes (Node3D, Mesh3D, Camera3D, etc.)
-  Phase 5: C# Visual Scripting system
+  Phase 5: Native C++ Visual Scripting system
   Phase 6: Plugin architecture
   Phase 7: Sample project
   Phase 8: UniVex Hub desktop app
@@ -153,7 +153,7 @@ DOCUMENT CONTENTS:
   Part 5    — Built-in Core Nodes (Minimal Set)
   Part 6    — Plugin System
   Part 7    — C++ Core Engine Systems
-  Part 8    — C# Visual Scripting System
+  Part 8    — Native C++ Visual Scripting System
   Part 9    — UVE Editor Application (Original Branding)
   Part 10   — Editor Systems Implementation
   Part 11   — Visual Scripting Editor (Detailed)
@@ -166,7 +166,7 @@ DOCUMENT CONTENTS:
   Part 18   — Data Tables / Spreadsheet Import
   Part 19   — Spline System
   Part 20   — Developer Console (In-Game)
-  Part 21   — C# Hot Reload
+  Part 21   — Native Bytecode Program Reload
   Part 22   — Procedural Generation Tools
   Part 23   — Decal System
   Part 24   — Billboard & Impostor System
@@ -183,7 +183,7 @@ PRIMARY FOCUS: 3D Game Development
 TARGET PLATFORMS: Windows PC, Linux PC, Android Mobile, iOS Mobile
 LANGUAGE STACK:
   - Core Engine API: Modern C++ (C++20/23)
-  - In-Editor Visual Scripting: C# (with .NET runtime embedding)
+  - In-Editor Visual Scripting: Native C++ graph compiler, bytecode VM, and C++ node registry
   - Editor UI: Custom immediate-mode/retained-mode hybrid UI built on engine renderer
 
 CORE PHILOSOPHY:
@@ -209,7 +209,7 @@ File Extensions:
   .uveshader    — Shader source (GLSL for OpenGL/Vulkan, HLSL for DirectX, MSL for Metal)
   .uveanim      — Animation (bone tracks, blend curves, events)
   .uveaudio     — Audio (compressed audio data, loop points, 3D spatial settings)
-  .uvescript    — Visual Script Graph (node positions, connections, compiled C# bytecode ref)
+  .uvescript    — Visual Script Graph (node positions, connections, validated native bytecode program)
   .uveplugin    — Plugin manifest (plugin name, version, dependencies, entry points)
   .uvesettings  — Engine/Editor settings (keybinds, theme, layout, platform prefs)
 
@@ -226,7 +226,7 @@ Importer Requirements:
 PART 3 — COPYRIGHT HEADER (REQUIRED IN EVERY FILE)
 ================================================================================
 
-Every .cpp, .h, .hpp, .cs, .mm file outside `engine/core` MUST start with:
+Every .cpp, .h, .hpp, and .mm file outside `engine/core` MUST start with:
 
 // Copyright (c) 2026 UniVex Studios. All Rights Reserved.
 
@@ -246,7 +246,7 @@ C++ ENGINE API (UVE suffix REQUIRED):
   Namespaces:   namespace UVE { ... }
   Files:        render_system_uve.h, asset_manager_uve.cpp
 
-C# VISUAL SCRIPTING (UVE suffix REQUIRED):
+NATIVE C++ VISUAL SCRIPTING (UVE suffix REQUIRED):
   Classes:      ScriptGraphUVE, ScriptNodeUVE, ScriptCompilerUVE
   Methods:      CompileGraphUVE(), ExecuteNodeUVE()
   Events:       OnBeginPlayUVE, OnTickUVE, OnCollisionUVE
@@ -302,7 +302,7 @@ PART 6 — PLUGIN SYSTEM (The Rest Is A Plugin)
 
 Plugin Architecture:
   - PluginManagerUVE loads .uveplugin files at engine startup.
-  - Each plugin is a DLL/.so (C++) or a C# assembly.
+  - Each plugin is a native C++ DLL/.so with an explicit UVE plugin manifest.
   - Plugins can register: new node types, new editor windows, new importers,
     new render features, new visual script nodes.
 
@@ -409,15 +409,17 @@ PART 7 — C++ CORE ENGINE SYSTEMS
   NetworkPredictionUVE  — Client-side prediction + server reconciliation.
 
 ================================================================================
-PART 8 — C# VISUAL SCRIPTING SYSTEM
+PART 8 — NATIVE C++ VISUAL SCRIPTING SYSTEM
 ================================================================================
 
 8.1 VISUAL SCRIPTING EDITOR (Inside UVE Editor)
   VisualScriptEditorUVE   — Node-based graph editor (similar to UE Blueprints).
-  ScriptGraphUVE          — Runtime execution graph (compiled to C# delegate chain).
-  ScriptNodeUVE           — Base node class.
-  ScriptCompilerUVE       — Graph → C# code transpiler (generates .cs at build time).
-  ScriptDebuggerUVE       — Breakpoints, step-through, variable watch, call stack.
+  ScriptGraphUVE          — Authored typed execution graph with nodes, pins, links, and user-facing layout metadata.
+  ScriptNodeUVE           — Base graph-node description; native handlers are registered in C++.
+  VisualScriptCompilerUVE — Validates graph control/data flow and lowers it to a versioned `.uvescript` bytecode program.
+  VisualScriptVMUVE       — Native C++ bytecode executor with bounded instruction dispatch and explicit engine-call bindings.
+  ScriptNodeRegistryUVE   — Registers built-in and plugin-provided C++ node handlers and pin contracts.
+  ScriptDebuggerUVE       — Bytecode breakpoints, step-through, variable watch, call stack, and source-node mapping.
 
 8.2 BUILT-IN VISUAL SCRIPT NODES
 
@@ -460,12 +462,13 @@ UI:
   PlayUIAnimation
 
 NOTE: Visual script node DISPLAY names have NO UVE suffix (user-friendly).
-      Internal C# classes use UVE suffix (e.g., ScriptNodeAddUVE).
+      Internal native C++ classes use the UVE suffix (e.g., ScriptNodeAddUVE).
 
-8.3 C# BRIDGE
-  CSharpBridgeUVE         — P/Invoke or C++/CLI interop between C++ core and C# scripts.
-  MonoRuntimeUVE          — Host .NET runtime inside the editor.
-  ScriptAPIUVE            — Exposed C++ API surface to C# (Transform, Physics, Render calls).
+8.3 NATIVE C++ RUNTIME BOUNDARY
+  ScriptValueUVE          — Tagged, serializable bytecode value model for booleans, numbers, vectors, entities, and assets.
+  ScriptBindingRegistryUVE — Explicit native C++ engine-call bindings for Transform, Physics, Render, Audio, and Input operations.
+  VisualScriptVMUVE       — Executes validated bytecode without an embedded managed runtime or native/managed bridge.
+  ScriptStateUVE          — Versioned script-instance state used for future transactional bytecode reload and migration.
 
 ================================================================================
 PART 9 — UVE EDITOR APPLICATION (ORIGINAL BRANDING, UNREAL-INSPIRED LAYOUT)
@@ -702,8 +705,8 @@ PART 11 — VISUAL SCRIPTING EDITOR (DETAILED)
 
 11.3 Compilation
   - Real-time validation: Red error lines on invalid connections.
-  - Compile button: Transpile graph to C# class.
-  - Generated code is human-readable and editable.
+  - Compile button: Validate graph and lower it to a versioned native `.uvescript` bytecode program.
+  - Generated bytecode remains inspectable through source-node mapping and the script debugger.
   - Debug: Breakpoints on nodes, step execution, variable watch.
 
 ================================================================================
@@ -987,45 +990,42 @@ FEATURES:
   - History: Arrow up/down to recall previous commands.
   - Color-coded output: White=info, Yellow=warning, Red=error.
   - Scrollable log: View full command history.
-  - Scriptable: Register custom commands from C# visual scripts.
+  - Scriptable: Register custom commands from native C++ visual scripts through explicit bindings.
   - Conditional compilation: Stripped out in shipping builds.
 
 ================================================================================
-PART 21 — C# HOT RELOAD
+PART 21 — NATIVE BYTECODE PROGRAM RELOAD
 ================================================================================
 
 PURPOSE:
-  Edit C# scripts at runtime without restarting editor. Instant feedback loop.
+  Recompile a visual-script graph to native `.uvescript` bytecode and reload it without restarting the editor. The initial implementation is deliberately future work; this section defines its safe C++ architecture.
 
 COMPONENTS:
-  ScriptHotReloadUVE      — Detect file changes and auto-reload.
-  AssemblyReloaderUVE     — Unload old assembly, load new one.
-  StatePreserverUVE       — Preserve variable values across reload.
+  ScriptHotReloadUVE       — Detects `.uvescript` or authored graph changes and schedules recompilation.
+  BytecodeProgramReloaderUVE — Validates a replacement program before atomically replacing the active bytecode handle.
+  ScriptStatePreserverUVE  — Preserves versioned script-instance values across compatible program reloads.
 
 HOW IT WORKS:
-  1. User edits .cs file in external editor (VS Code, Visual Studio).
-  2. FileSystemWatcher detects change.
-  3. Compile new assembly in background.
-  4. If compilation succeeds:
+  1. User edits a graph in the native visual-script editor.
+  2. The graph compiler validates types, links, and control flow, then emits a candidate bytecode program.
+  3. The runtime validates bytecode version, instruction bounds, node-binding compatibility, and state schema.
+  4. If validation succeeds:
      - Pause game (if in play mode).
-     - Serialize state of all script instances.
-     - Unload old assembly.
-     - Load new assembly.
-     - Deserialize state back.
-     - Resume game.
-  5. If compilation fails: Show error in console, keep old assembly running.
+     - Serialize compatible script-instance state.
+     - Atomically replace the old bytecode program.
+     - Restore compatible state and resume game.
+  5. If validation fails: show diagnostics and retain the last known-good bytecode program.
 
 FEATURES:
-  - Preserve state: Variables, transforms, and component data are not lost.
-  - Method body edits: Work instantly.
-  - New methods/fields: May require manual state migration.
-  - Breakpoint persistence: Breakpoints survive reload.
-  - Undo reload: Ctrl+Z to revert to previous assembly version.
+  - Preserve compatible variables, transforms, and component data.
+  - Graph edits can recompile without a managed runtime or external C++ compiler invocation.
+  - Source-node mapping keeps breakpoints and diagnostics associated with graph nodes.
+  - Reload history can retain prior validated bytecode programs for future rollback tooling.
 
 LIMITATIONS (documented):
-  - Cannot change base class.
-  - Cannot remove fields (data loss risk).
-  - Cannot change method signatures that are called by engine.
+  - Incompatible pin-type or state-schema changes may require explicit migration.
+  - Removed variables can cause intentional state loss when no migration rule exists.
+  - Native engine-call binding signature changes require bytecode revalidation.
 
 ================================================================================
 PART 22 — PROCEDURAL GENERATION TOOLS
@@ -1698,7 +1698,7 @@ WHAT CLAUDE NEEDS TO BUILD (ENGINE FOCUS):
 
   Priority order for Claude:
     1. C++ Core Engine (Parts 1-15)
-    2. C# Visual Scripting (Part 8)
+    2. Native C++ Visual Scripting (Part 8)
     3. Editor Application (Parts 9-11)
     4. Custom File Formats (Part 2)
     5. Build System (Part 12)
