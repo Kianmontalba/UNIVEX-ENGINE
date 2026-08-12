@@ -1160,3 +1160,22 @@ fullscreen shader sources must remain byte-identical.
 grade/LUTs, post-process chaining, dynamic-resolution resizing, and HDR presentation swapchain
 configuration. Increment 37 establishes only the HDR-scene-to-LDR-presentation graph edge needed
 by those future passes.
+
+
+## Editor Foundation v1 (Increment 38)
+
+**`engine/editor` is an upper-layer composition module.** `EditorUVE` owns editor-session state only: the active document path, dirty flag, one selected entity, an editor-only camera entity, and the editor-private UI backend. It receives `EngineServicesUVE` only during the normal engine lifecycle and never owns or retains lower-layer resources after shutdown. `engine/core`, `engine/scene`, `engine/render`, `engine/window`, and `engine/input` must never depend on `engine/editor`.
+
+The standalone `uve_editor` executable is a sibling of `uve_runtime`. It drives the ordinary `EngineCoreUVE` lifecycle, creates an `EditorUVE` after `EngineCoreUVE::Load()` succeeds, selects the editor camera as the renderer's active camera, and clears/destroys editor state before `EngineCoreUVE::Shutdown()`. `--scene <path>` selects the `.uvescene` document, `--frames <n>` bounds an automated run, `--gl-version <major.minor>` explicitly overrides the desktop context request for a constrained platform such as virtual-display CI, and `--headless` keeps editor logic testable without a native window or GL context.
+
+**Overlay ordering is explicit.** `EngineCoreUVE::SetPostRenderCallbackUVE()` is a generic, non-owning application-overlay seam with no editor or GUI types in the core API. In a windowed frame, `Renderer3DUVE` still performs its own HDR `MainColor -> ToneMapping` graph work first; the legacy proof-of-life default-framebuffer pass then completes; a registered overlay callback draws; and only then does `IRenderDeviceUVE::PresentUVE()` swap the back buffer. The runtime does not register a callback, so its frame behavior remains unchanged. Headless runs never invoke the callback.
+
+**Dear ImGui is a pinned, editor-private dependency.** CMake `FetchContent` retrieves version `v1.91.5` at commit `f401021d5a5d56fe2304056c391e78f81c8d4b8f`, following the repository's established GLFW/GoogleTest dependency pattern. Its GLFW/OpenGL3 backend sources link only into `uve_editor_imgui`; all ImGui headers and types are confined to `engine/editor/src/editor_uve.cpp`. Third-party code is deliberately compiled outside UVE's warning-as-error policy, while all UniVex editor source remains subject to it.
+
+The foundation layout has three panels: **Scene Hierarchy**, **Inspector**, and **Viewport**. Hierarchy labels use stable entity-index/generation fallback text until a real serializable name/tag component is introduced. Selection is intentionally hierarchy-driven in this increment. The inspector supports exactly one live selected entity and writes only its existing local Transform through `ISceneGraphUVE::SetLocalTransformUVE()`, preserving dirty propagation into derived world transforms. Invalid, deleted, non-transform, or non-finite edits are rejected without mutating ECS state.
+
+**Scene documents continue to use only `ISceneSerializerUVE`.** Saving serializes document roots as `.uvescene` with `AssetKindUVE::Scene`; the editor camera is explicitly excluded. Loading first writes a recovery copy through the same serializer, clears document roots only after recovery succeeds, and restores that recovery file if the requested document cannot be deserialized. Successful load clears selection and dirty state; a missing or failed load leaves the current editable document intact. The implementation does not add an editor-specific world format or change serializer payload shape.
+
+**Deliberately deferred:** offscreen texture compositing of the viewport, mouse raycast picking, visual selection outline, transform gizmos, viewport navigation controls, Play/Pause sandboxing, undo/redo, multi-selection, reflection-based/custom inspector drawers, native file dialogs, layout/preferences persistence, autosave policy changes, content browser, asset drag-and-drop, thumbnails, and editor entity naming. These remain separate increments so the first editor shell stays buildable, testable, and compatible with the existing renderer.
+
+**Validation expectation:** every Editor Foundation v1 change must build under GCC and Clang, retain the full headless CTest suite, run `uve_editor --headless --frames <n>` successfully, and exercise the real windowed overlay path under `xvfb-run` where a virtual display is available.

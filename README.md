@@ -24,7 +24,16 @@ cmake --build build/gcc-debug -j"$(nproc)"
 ctest --test-dir build/gcc-debug --output-on-failure
 
 # Run the headless proof-of-life executable
-./build/gcc-debug/engine/app/uve_runtime
+./build/gcc-debug/engine/app/uve_runtime --headless
+
+# Run Editor Foundation v1 without a display (CI smoke test)
+./build/gcc-debug/engine/app/uve_editor --headless --frames 2
+
+# Run the desktop editor with an existing scene document
+./build/gcc-debug/engine/app/uve_editor --scene path/to/level.uvescene
+
+# Virtual-display smoke test on a platform capped at OpenGL 4.5
+xvfb-run -a ./build/gcc-debug/engine/app/uve_editor --gl-version 4.5 --frames 3
 ```
 
 Swap `-DCMAKE_CXX_COMPILER=clang++` to build with Clang instead. `UVE_BUILD_TESTS` (default
@@ -39,7 +48,8 @@ engine/
 ├── utilities/  — UVE::Utilities — TimerUVE
 ├── events/     — UVE::Events    — EventSystemUVE
 ├── core/       — UVE::Core      — EngineCoreUVE and supporting types
-└── app/        — the uve_runtime executable
+├── editor/     — UVE::Editor    — Editor Foundation v1 session and UI composition
+└── app/        — uve_runtime and the standalone uve_editor executables
 tests/          — GoogleTest suite, mirrors the engine/ layout
 docs/           — MASTER_SPEC.md (full design doc), CODING_STANDARDS.md
 ```

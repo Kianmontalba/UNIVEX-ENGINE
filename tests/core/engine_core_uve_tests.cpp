@@ -800,6 +800,22 @@ TEST(EngineCoreUVETest, WindowedMode_ReachesRunningAndRendersApprovedDemoTriangl
     engine.Shutdown();
 }
 
+TEST(EngineCoreUVETest, PostRenderCallback_HeadlessModeDoesNotInvokeOverlay) {
+    EngineConfigUVE config = MakeTestConfigUVE();
+    config.headlessUVE = true;
+    EngineCoreUVE engine(config);
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    int callbackCount = 0;
+    engine.SetPostRenderCallbackUVE([&callbackCount] { ++callbackCount; });
+    engine.TickFrameUVE();
+    EXPECT_EQ(callbackCount, 0);
+
+    engine.SetPostRenderCallbackUVE({});
+    engine.Shutdown();
+}
+
 #if UVE_DEBUG
 TEST(EngineCoreUVEDeathTest, ShutdownBeforeInit_TriggersInvalidTransitionAssert) {
     EngineCoreUVE engine(MakeTestConfigUVE());
