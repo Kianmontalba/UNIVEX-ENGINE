@@ -191,6 +191,14 @@ TEST(ThreadPoolUVETest, DebugStats_PendingCountRisesAndFallsBackToZero) {
 
     canProceed.store(true, std::memory_order_relaxed);
     counter.WaitUVE();
+
+    // JobCounterUVE is notified immediately before ThreadPoolUVE decrements its independent
+    // pending-stat counter. Let that last bookkeeping instruction settle without asserting a
+    // scheduler-dependent ordering between two separate atomics.
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(100);
+    while (pool.GetPendingJobCountUVE() != 0U && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::yield();
+    }
     EXPECT_EQ(pool.GetPendingJobCountUVE(), 0U);
 }
 
