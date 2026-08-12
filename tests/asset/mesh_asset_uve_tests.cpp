@@ -35,6 +35,60 @@ namespace {
     return mesh;
 }
 
+TEST(MeshAssetUVETest, GenerateMeshTangentsUVE_StandardUvTriangle_ProducesOrthonormalPositiveBasis) {
+    std::vector<MeshVertexUVE> vertices = {
+        MeshVertexUVE{Math::Vector3UVE{0.0F, 0.0F, 0.0F}, Math::Vector3UVE{0.0F, 0.0F, 1.0F}, 0.0F, 0.0F},
+        MeshVertexUVE{Math::Vector3UVE{1.0F, 0.0F, 0.0F}, Math::Vector3UVE{0.0F, 0.0F, 1.0F}, 1.0F, 0.0F},
+        MeshVertexUVE{Math::Vector3UVE{0.0F, 1.0F, 0.0F}, Math::Vector3UVE{0.0F, 0.0F, 1.0F}, 0.0F, 1.0F},
+    };
+    const std::vector<std::uint32_t> indices{0, 1, 2};
+
+    GenerateMeshTangentsUVE(vertices, indices);
+
+    for (const MeshVertexUVE& vertex : vertices) {
+        EXPECT_NEAR(vertex.tangent.x, 1.0F, 0.0001F);
+        EXPECT_NEAR(vertex.tangent.y, 0.0F, 0.0001F);
+        EXPECT_NEAR(vertex.tangent.z, 0.0F, 0.0001F);
+        EXPECT_NEAR(Math::DotUVE(vertex.normal, vertex.tangent), 0.0F, 0.0001F);
+        EXPECT_FLOAT_EQ(vertex.tangentHandedness, 1.0F);
+    }
+}
+
+TEST(MeshAssetUVETest, GenerateMeshTangentsUVE_MirroredUvTriangle_ProducesNegativeHandedness) {
+    std::vector<MeshVertexUVE> vertices = {
+        MeshVertexUVE{Math::Vector3UVE{0.0F, 0.0F, 0.0F}, Math::Vector3UVE{0.0F, 0.0F, 1.0F}, 0.0F, 0.0F},
+        MeshVertexUVE{Math::Vector3UVE{1.0F, 0.0F, 0.0F}, Math::Vector3UVE{0.0F, 0.0F, 1.0F}, 0.0F, 1.0F},
+        MeshVertexUVE{Math::Vector3UVE{0.0F, 1.0F, 0.0F}, Math::Vector3UVE{0.0F, 0.0F, 1.0F}, 1.0F, 0.0F},
+    };
+    const std::vector<std::uint32_t> indices{0, 1, 2};
+
+    GenerateMeshTangentsUVE(vertices, indices);
+
+    for (const MeshVertexUVE& vertex : vertices) {
+        EXPECT_NEAR(Math::LengthUVE(vertex.tangent), 1.0F, 0.0001F);
+        EXPECT_NEAR(Math::DotUVE(vertex.normal, vertex.tangent), 0.0F, 0.0001F);
+        EXPECT_FLOAT_EQ(vertex.tangentHandedness, -1.0F);
+    }
+}
+
+TEST(MeshAssetUVETest, GenerateMeshTangentsUVE_DegenerateUvs_UsesDeterministicFallback) {
+    std::vector<MeshVertexUVE> vertices = {
+        MeshVertexUVE{Math::Vector3UVE{0.0F, 0.0F, 0.0F}, Math::Vector3UVE{0.0F, 0.0F, 1.0F}, 0.0F, 0.0F},
+        MeshVertexUVE{Math::Vector3UVE{1.0F, 0.0F, 0.0F}, Math::Vector3UVE{0.0F, 0.0F, 1.0F}, 0.0F, 0.0F},
+        MeshVertexUVE{Math::Vector3UVE{0.0F, 1.0F, 0.0F}, Math::Vector3UVE{0.0F, 0.0F, 1.0F}, 0.0F, 0.0F},
+    };
+    const std::vector<std::uint32_t> indices{0, 1, 2};
+
+    GenerateMeshTangentsUVE(vertices, indices);
+
+    for (const MeshVertexUVE& vertex : vertices) {
+        EXPECT_NEAR(vertex.tangent.x, 1.0F, 0.0001F);
+        EXPECT_NEAR(vertex.tangent.y, 0.0F, 0.0001F);
+        EXPECT_NEAR(vertex.tangent.z, 0.0F, 0.0001F);
+        EXPECT_FLOAT_EQ(vertex.tangentHandedness, 1.0F);
+    }
+}
+
 TEST(MeshAssetUVETest, SaveThenLoad_RoundTripsByteExact) {
     const std::filesystem::path path = "uve_mesh_asset_tests_round_trip.uvemodel";
     std::filesystem::remove(path);
@@ -50,6 +104,10 @@ TEST(MeshAssetUVETest, SaveThenLoad_RoundTripsByteExact) {
         EXPECT_EQ(loaded.vertices[index].normal, original.vertices[index].normal);
         EXPECT_EQ(loaded.vertices[index].u, original.vertices[index].u);
         EXPECT_EQ(loaded.vertices[index].v, original.vertices[index].v);
+        EXPECT_NEAR(Math::LengthUVE(loaded.vertices[index].tangent), 1.0F, 0.0001F);
+        EXPECT_NEAR(Math::DotUVE(loaded.vertices[index].normal, loaded.vertices[index].tangent), 0.0F, 0.0001F);
+        EXPECT_TRUE(loaded.vertices[index].tangentHandedness == -1.0F ||
+                    loaded.vertices[index].tangentHandedness == 1.0F);
     }
     EXPECT_EQ(loaded.indices, original.indices);
     EXPECT_EQ(loaded.localBounds, original.localBounds);

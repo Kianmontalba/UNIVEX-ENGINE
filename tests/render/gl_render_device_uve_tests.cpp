@@ -439,8 +439,10 @@ TEST_F(GlRenderDeviceUVETest, LitShadowed3DShader_DepthPrepassDarkensOccludedFra
                                     VertexAttributeUVE{"NORMAL", VertexAttributeFormatUVE::Float3,
                                                        3U * static_cast<std::uint32_t>(sizeof(float))},
                                     VertexAttributeUVE{"TEXCOORD0", VertexAttributeFormatUVE::Float2,
-                                                       6U * static_cast<std::uint32_t>(sizeof(float))}};
-    litPipelineDesc.vertexStride = 8U * static_cast<std::uint32_t>(sizeof(float));
+                                                       6U * static_cast<std::uint32_t>(sizeof(float))},
+                                    VertexAttributeUVE{"TANGENT", VertexAttributeFormatUVE::Float4,
+                                                       8U * static_cast<std::uint32_t>(sizeof(float))}};
+    litPipelineDesc.vertexStride = 12U * static_cast<std::uint32_t>(sizeof(float));
     litPipelineDesc.depthTestEnabled = false;
     litPipelineDesc.depthWriteEnabled = false;
     const PipelineHandleUVE litPipeline = renderDevice->CreatePipelineUVE(litPipelineDesc);
@@ -451,12 +453,13 @@ TEST_F(GlRenderDeviceUVETest, LitShadowed3DShader_DepthPrepassDarkensOccludedFra
         0.9F, -0.9F, -0.5F,
         0.0F, 0.9F, -0.5F,
     };
-    constexpr std::array<float, 24> kReceiverVertices{
-        -1.0F, -1.0F, 0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F,
-        3.0F, -1.0F, 0.0F, 0.0F, 0.0F, 1.0F, 2.0F, 0.0F,
-        -1.0F, 3.0F, 0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 2.0F,
+    constexpr std::array<float, 36> kReceiverVertices{
+        -1.0F, -1.0F, 0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 1.0F,
+        3.0F, -1.0F, 0.0F, 0.0F, 0.0F, 1.0F, 2.0F, 0.0F, 1.0F, 0.0F, 0.0F, 1.0F,
+        -1.0F, 3.0F, 0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 2.0F, 1.0F, 0.0F, 0.0F, 1.0F,
     };
     constexpr std::array<std::uint8_t, 4> kWhitePixel{255U, 255U, 255U, 255U};
+    constexpr std::array<std::uint8_t, 4> kFlatNormalPixel{128U, 128U, 255U, 255U};
 
     const BufferHandleUVE shadowVertexBuffer = renderDevice->CreateBufferUVE(
         BufferDescUVE{std::as_bytes(std::span(kShadowCasterVertices)).size(), BufferUsageUVE::Vertex},
@@ -468,10 +471,13 @@ TEST_F(GlRenderDeviceUVETest, LitShadowed3DShader_DepthPrepassDarkensOccludedFra
         renderDevice->CreateTextureUVE(TextureDescUVE{64, 64, TextureFormatUVE::Depth32Float, 1});
     const TextureHandleUVE whiteTexture = renderDevice->CreateTextureUVE(
         TextureDescUVE{1, 1, TextureFormatUVE::RGBA8Unorm, 1}, std::as_bytes(std::span(kWhitePixel)));
+    const TextureHandleUVE flatNormalTexture = renderDevice->CreateTextureUVE(
+        TextureDescUVE{1, 1, TextureFormatUVE::RGBA8Unorm, 1}, std::as_bytes(std::span(kFlatNormalPixel)));
     ASSERT_NE(shadowVertexBuffer, kInvalidBufferHandleUVE);
     ASSERT_NE(receiverVertexBuffer, kInvalidBufferHandleUVE);
     ASSERT_NE(shadowMap, kInvalidTextureHandleUVE);
     ASSERT_NE(whiteTexture, kInvalidTextureHandleUVE);
+    ASSERT_NE(flatNormalTexture, kInvalidTextureHandleUVE);
 
     std::unique_ptr<ICommandBufferUVE> shadowCommandBuffer = renderDevice->CreateCommandBufferUVE();
     ASSERT_NE(shadowCommandBuffer, nullptr);
@@ -514,6 +520,8 @@ TEST_F(GlRenderDeviceUVETest, LitShadowed3DShader_DepthPrepassDarkensOccludedFra
     colorCommandBuffer->BindTextureUVE(shadowMap, 0U);
     colorCommandBuffer->SetUniformIntUVE("uShadowMapTexture", 0);
     colorCommandBuffer->SetUniformIntUVE("uShadowPcfKernelRadius", 1);
+    colorCommandBuffer->BindTextureUVE(flatNormalTexture, 3U);
+    colorCommandBuffer->SetUniformIntUVE("uNormalTexture", 3);
     colorCommandBuffer->BindTextureUVE(whiteTexture, 1U);
     colorCommandBuffer->SetUniformIntUVE("uAlbedoTexture", 1);
     colorCommandBuffer->BindTextureUVE(whiteTexture, 2U);
@@ -532,6 +540,7 @@ TEST_F(GlRenderDeviceUVETest, LitShadowed3DShader_DepthPrepassDarkensOccludedFra
     EXPECT_GT(static_cast<int>(softEdgePixel[0]), static_cast<int>(shadowedPixel[0]) + 16);
     EXPECT_GT(static_cast<int>(litPixel[0]), static_cast<int>(softEdgePixel[0]) + 16);
 
+    renderDevice->DestroyTextureUVE(flatNormalTexture);
     renderDevice->DestroyTextureUVE(whiteTexture);
     renderDevice->DestroyTextureUVE(shadowMap);
     renderDevice->DestroyBufferUVE(receiverVertexBuffer);

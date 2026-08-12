@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <span>
 #include <vector>
 
 #include "uve/math/aabb_uve.h"
@@ -12,16 +13,18 @@
 
 namespace UVE::Asset {
 
-/// One vertex of a MeshAssetUVE: position, normal, and a single UV set. Deliberately minimal —
-/// no tangents or skin weights yet, even though the spec's `.uvemodel` format mentions them —
-/// same "will be extended once a real consumer needs it" scope reduction already used for
-/// `Scene::MeshComponentUVE`'s own placeholder doc comment. Skinned meshes/LODs are
+/// One vertex of a MeshAssetUVE: position, normal, one UV set, and a tangent-space basis
+/// direction. `tangent`/`tangentHandedness` are runtime-derived rather than serialized in the
+/// current `.uvemodel` payload, preserving compatibility with existing meshes while providing the
+/// canonical material shader the TBN data normal mapping needs. Skinned meshes/LODs remain
 /// future-increment work.
 struct MeshVertexUVE {
     Math::Vector3UVE position;
     Math::Vector3UVE normal;
     float u = 0.0F;
     float v = 0.0F;
+    Math::Vector3UVE tangent{1.0F, 0.0F, 0.0F};
+    float tangentHandedness = 1.0F;
 };
 
 /// The CPU-side, engine-native representation of a `.uvemodel` asset (Part 2's file-format
@@ -34,6 +37,13 @@ struct MeshAssetUVE {
     std::vector<std::uint32_t> indices;
     Math::AabbUVE localBounds;
 };
+
+/// Derives a normalized tangent and handedness for every vertex from indexed triangles and UVs.
+/// Degenerate triangles/UVs receive a deterministic orthogonal fallback so a malformed tangent
+/// never propagates into the GPU. The function does not serialize data or mutate indices; callers
+/// loading legacy `.uvemodel` payloads and callers creating meshes in memory can use the same
+/// result. Thread-safety: operates only on caller-owned spans.
+void GenerateMeshTangentsUVE(std::span<MeshVertexUVE> vertices, std::span<const std::uint32_t> indices);
 
 /// Loads `path` as a `.uve*` envelope with `AssetKindUVE::Mesh`, filling `outMesh`. Returns false
 /// (logging the reason) if the file is missing/malformed, isn't actually a Mesh asset, or its
