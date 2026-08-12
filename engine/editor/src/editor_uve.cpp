@@ -42,6 +42,7 @@ namespace UVE::Editor {
 namespace {
 
 constexpr float kVectorEpsilonUVE = 0.00001F;
+constexpr float kMinimumLocalScaleUVE = 0.001F;
 constexpr float kGizmoAxisLengthUVE = 1.25F;
 constexpr float kGizmoHandleRadiusPixelsUVE = 12.0F;
 constexpr float kMinimumViewportWidthUVE = 64.0F;
@@ -499,6 +500,43 @@ bool EditorUVE::RotateSelectedAroundWorldAxisUVE(const EditorTranslateAxisUVE ax
         return false;
     }
     updated.localRotation = localRotation;
+    return SetSelectedLocalTransformUVE(updated);
+}
+
+bool EditorUVE::ScaleSelectedAlongAxisUVE(const EditorTranslateAxisUVE axis,
+                                           const float localScaleDelta) {
+    if (m_state != EditorStateUVE::Running || !IsDocumentEntityUVE(m_selectedEntity) ||
+        !IsFiniteUVE(localScaleDelta) || axis == EditorTranslateAxisUVE::None ||
+        m_gizmoDrag.axis != EditorTranslateAxisUVE::None ||
+        m_viewportNavigationMode != EditorViewportNavigationModeUVE::None) {
+        return false;
+    }
+
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    if (!entityManager.HasComponentUVE<Scene::TransformComponentUVE>(m_selectedEntity)) {
+        return false;
+    }
+
+    Scene::TransformComponentUVE updated =
+        entityManager.GetComponentUVE<Scene::TransformComponentUVE>(m_selectedEntity);
+    float* component = nullptr;
+    switch (axis) {
+        case EditorTranslateAxisUVE::X:
+            component = &updated.localScale.x;
+            break;
+        case EditorTranslateAxisUVE::Y:
+            component = &updated.localScale.y;
+            break;
+        case EditorTranslateAxisUVE::Z:
+            component = &updated.localScale.z;
+            break;
+        case EditorTranslateAxisUVE::None:
+            return false;
+    }
+    *component += localScaleDelta;
+    if (!IsFiniteUVE(*component) || *component < kMinimumLocalScaleUVE) {
+        return false;
+    }
     return SetSelectedLocalTransformUVE(updated);
 }
 
@@ -1565,7 +1603,7 @@ bool EditorUVE::BeginGizmoDragUVE(const EditorViewportRectUVE& viewportRect,
         }
 
         const float axisLength = std::sqrt(axisLengthSquared);
-        candidate.mode = EditorGizmoModeUVE::Translate;
+        candidate.mode = m_gizmoMode;
         candidate.axis = axis;
         candidate.entity = m_selectedEntity;
         candidate.initialLocalTransform =
@@ -1752,6 +1790,33 @@ void EditorUVE::UpdateGizmoDragUVE(const Math::Vector2UVE pointerPosition) {
         return;
     }
 
+    if (m_gizmoDrag.mode == EditorGizmoModeUVE::Scale) {
+        Scene::TransformComponentUVE updated = m_gizmoDrag.initialLocalTransform;
+        float* component = nullptr;
+        switch (m_gizmoDrag.axis) {
+            case EditorTranslateAxisUVE::X:
+                component = &updated.localScale.x;
+                break;
+            case EditorTranslateAxisUVE::Y:
+                component = &updated.localScale.y;
+                break;
+            case EditorTranslateAxisUVE::Z:
+                component = &updated.localScale.z;
+                break;
+            case EditorTranslateAxisUVE::None:
+                CancelGizmoDragUVE();
+                return;
+        }
+        *component += worldDistance;
+        if (!IsFiniteUVE(*component) || *component < kMinimumLocalScaleUVE ||
+            !ApplyLocalTransformUVE(m_gizmoDrag.entity, updated)) {
+            CancelGizmoDragUVE();
+            return;
+        }
+        m_sceneDirty = true;
+        return;
+    }
+
     Math::Vector3UVE localDelta{};
     if (!ComputeLocalDeltaForWorldDeltaUVE(
             m_gizmoDrag.entity, GetAxisVectorUVE(m_gizmoDrag.axis) * worldDistance, localDelta)) {
@@ -1857,6 +1922,51 @@ void EditorUVE::DrawTranslateGizmoUVE(const EditorViewportRectUVE& viewportRect)
     }
 }
 
+void EditorUVE::DrawScaleGizmoUVE(const EditorViewportRectUVE& viewportRect) {
+    if (!IsDocumentEntityUVE(m_selectedEntity) || !IsViewportRectValidUVE(viewportRect)) {
+        return;
+    }
+
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    if (!entityManager.HasComponentUVE<Scene::WorldTransformComponentUVE>(m_selectedEntity)) {
+        return;
+    }
+    const Scene::WorldTransformComponentUVE& selectedWorld =
+        entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(m_selectedEntity);
+    if (selectedWorld.dirty || !IsFiniteVectorUVE(selectedWorld.worldPosition)) {
+        return;
+    }
+
+    Math::Vector2UVE center{};
+    if (!ProjectWorldPointUVE(viewportRect, selectedWorld.worldPosition, center)) {
+        return;
+    }
+
+    constexpr std::array<EditorTranslateAxisUVE, 3> axes{
+        EditorTranslateAxisUVE::X,
+        EditorTranslateAxisUVE::Y,
+        EditorTranslateAxisUVE::Z,
+    };
+    ImDrawList* const drawList = ImGui::GetForegroundDrawList();
+    const ImVec2 centerPoint{center.x, center.y};
+    drawList->AddRectFilled(ImVec2{center.x - 4.0F, center.y - 4.0F}, ImVec2{center.x + 4.0F, center.y + 4.0F},
+                            IM_COL32(235, 235, 235, 220));
+    for (const EditorTranslateAxisUVE axis : axes) {
+        Math::Vector2UVE endpoint{};
+        if (!ProjectWorldPointUVE(
+                viewportRect, selectedWorld.worldPosition + GetAxisVectorUVE(axis) * kGizmoAxisLengthUVE, endpoint)) {
+            continue;
+        }
+        const bool active = m_gizmoDrag.mode == EditorGizmoModeUVE::Scale && m_gizmoDrag.axis == axis;
+        const ImU32 color = GizmoAxisColorUVE(axis, active);
+        const ImVec2 endpointPoint{endpoint.x, endpoint.y};
+        const float halfSize = active ? 6.5F : 5.0F;
+        drawList->AddLine(centerPoint, endpointPoint, color, active ? 4.0F : 2.5F);
+        drawList->AddRectFilled(ImVec2{endpoint.x - halfSize, endpoint.y - halfSize},
+                                ImVec2{endpoint.x + halfSize, endpoint.y + halfSize}, color);
+    }
+}
+
 void EditorUVE::DrawRotateGizmoUVE(const EditorViewportRectUVE& viewportRect) {
     if (!IsDocumentEntityUVE(m_selectedEntity) || !IsViewportRectValidUVE(viewportRect)) {
         return;
@@ -1943,6 +2053,8 @@ void EditorUVE::DrawMenuBarUVE() {
         SetGizmoModeUVE(EditorGizmoModeUVE::Translate);
     } else if (!io.WantTextInput && gizmoModeChangeAllowed && ImGui::IsKeyPressed(ImGuiKey_E, false)) {
         SetGizmoModeUVE(EditorGizmoModeUVE::Rotate);
+    } else if (!io.WantTextInput && gizmoModeChangeAllowed && ImGui::IsKeyPressed(ImGuiKey_R, false)) {
+        SetGizmoModeUVE(EditorGizmoModeUVE::Scale);
     } else if (!io.WantTextInput && io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Z, false)) {
         if (io.KeyShift) {
             static_cast<void>(RedoUVE());
@@ -1993,6 +2105,10 @@ void EditorUVE::DrawMenuBarUVE() {
         if (ImGui::MenuItem("Rotate Gizmo", "E", m_gizmoMode == EditorGizmoModeUVE::Rotate,
                             gizmoModeChangeAllowed)) {
             SetGizmoModeUVE(EditorGizmoModeUVE::Rotate);
+        }
+        if (ImGui::MenuItem("Scale Gizmo", "R", m_gizmoMode == EditorGizmoModeUVE::Scale,
+                            gizmoModeChangeAllowed)) {
+            SetGizmoModeUVE(EditorGizmoModeUVE::Scale);
         }
         ImGui::EndMenu();
     }
@@ -2268,12 +2384,16 @@ void EditorUVE::DrawViewportPanelUVE() {
 
         if (m_gizmoMode == EditorGizmoModeUVE::Translate) {
             DrawTranslateGizmoUVE(viewportRect);
-        } else {
+        } else if (m_gizmoMode == EditorGizmoModeUVE::Rotate) {
             DrawRotateGizmoUVE(viewportRect);
+        } else {
+            DrawScaleGizmoUVE(viewportRect);
         }
         ImDrawList* const drawList = ImGui::GetWindowDrawList();
-        const char* const modeLabel =
-            m_gizmoMode == EditorGizmoModeUVE::Translate ? "Translate (W)" : "Rotate (E)";
+        const char* const modeLabel = m_gizmoMode == EditorGizmoModeUVE::Translate
+                                          ? "Translate (W)"
+                                          : (m_gizmoMode == EditorGizmoModeUVE::Rotate ? "Rotate (E)"
+                                                                                       : "Scale (R)");
         drawList->AddText(ImVec2{contentOrigin.x + 10.0F, contentOrigin.y + 10.0F}, IM_COL32(230, 230, 230, 220),
                           "Viewport | LMB select / drag handle | RMB orbit | MMB pan | wheel zoom | F focus");
         drawList->AddText(ImVec2{contentOrigin.x + 10.0F, contentOrigin.y + 30.0F}, IM_COL32(190, 215, 235, 220),
