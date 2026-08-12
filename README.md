@@ -46,8 +46,13 @@ Light, and Collision Box document roots. New archetypes receive deterministic de
 `Camera` and `Camera 2`; the Properties panel can rename one selected live document entity, and
 names persist through `.uvescene` save/load. Legacy scenes without name metadata remain valid and
 fall back to stable entity index/generation labels. The editor also provides a bounded in-session
-Undo/Redo history for successful Transform, rename, and root-creation actions. The Edit menu and
-focus-safe `Ctrl+Z`, `Ctrl+Y`, and `Ctrl+Shift+Z` routes replay these actions; one completed
+Undo/Redo history for successful Transform, rename, root-creation, duplicate, and delete actions.
+The Edit menu provides disabled-state **Duplicate** (`Ctrl+D`) and **Delete** (`Delete`) controls for
+one selected live document entity, in addition to focus-safe `Ctrl+Z`, `Ctrl+Y`, and
+`Ctrl+Shift+Z`. Duplicate and delete capture the complete selected subtree in memory through the
+same registered-component envelope used by `.uvescene`, preserving hierarchy and restoring fresh
+entity handles during Undo/Redo; they cannot affect the editor-only camera. Shortcut actions are
+suppressed while a text field owns input or an active viewport gesture is in progress. One completed
 translate-gizmo drag is recorded as one history step. The editor-only viewport camera now supports
 right-drag orbit, middle-drag pan, wheel zoom, and `F` focus for a selected live document entity.
 These navigation controls never alter the document, dirty state, scene file, or Undo/Redo history.
@@ -56,8 +61,8 @@ offers a case-insensitive path filter; it does not scan filesystems, import asse
 Viewport picking intentionally selects only live document entities with the existing box collider
 component. Mesh picking, rotate/scale gizmos, snapping, fly navigation, camera bookmarks, cinematic
 camera tools, play mode, filesystem browsing, import/reimport, asset drag-and-drop, thumbnails,
-layout persistence, hierarchy search, duplication/deletion history, and reparenting history remain
-future increments.
+layout persistence, hierarchy search, reparenting history, multi-entity lifecycle operations, and
+OS clipboard copy/paste remain future increments.
 
 ## Repository layout
 

@@ -279,6 +279,14 @@ public:
 
 class FakeSceneSerializerUVE final : public Scene::ISceneSerializerUVE {
 public:
+    [[nodiscard]] std::optional<Scene::SceneSnapshotUVE> CaptureUVE(
+        Scene::IEntityManagerUVE&, const std::vector<Scene::EntityUVE>&, Scene::SceneAssetTypeUVE assetType) const override {
+        return Scene::SceneSnapshotUVE{{}, assetType};
+    }
+    [[nodiscard]] std::vector<Scene::EntityUVE> RestoreUVE(Scene::IEntityManagerUVE&,
+                                                            const Scene::SceneSnapshotUVE&) const override {
+        return {};
+    }
     [[nodiscard]] bool SaveUVE(Scene::IEntityManagerUVE&, const std::vector<Scene::EntityUVE>&,
                                 const std::filesystem::path&, Scene::SceneAssetTypeUVE) override {
         ++saveCallCount;
