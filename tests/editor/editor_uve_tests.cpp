@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <limits>
+#include <string>
 
 #include <gtest/gtest.h>
 
@@ -18,6 +19,7 @@
 #include "uve/scene/components/camera_component_uve.h"
 #include "uve/scene/components/collider_component_uve.h"
 #include "uve/scene/components/light_component_uve.h"
+#include "uve/scene/components/name_component_uve.h"
 #include "uve/scene/components/transform_component_uve.h"
 #include "uve/scene/components/world_transform_component_uve.h"
 
@@ -117,6 +119,8 @@ TEST(EditorUVETest, CreateDocumentEntityUVE_CreatesSelectedDirtyRootArchetypes) 
         EXPECT_FALSE(entityManager.HasComponentUVE<Scene::CameraComponentUVE>(empty));
         EXPECT_FALSE(entityManager.HasComponentUVE<Scene::LightComponentUVE>(empty));
         EXPECT_FALSE(entityManager.HasComponentUVE<Scene::ColliderComponentUVE>(empty));
+        ASSERT_TRUE(entityManager.HasComponentUVE<Scene::NameComponentUVE>(empty));
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::NameComponentUVE>(empty).name, "Empty");
         EXPECT_EQ(editor.GetSelectedEntityUVE(), empty);
         EXPECT_TRUE(editor.IsSceneDirtyUVE());
 
@@ -124,6 +128,8 @@ TEST(EditorUVETest, CreateDocumentEntityUVE_CreatesSelectedDirtyRootArchetypes) 
         ASSERT_TRUE(entityManager.IsAliveUVE(camera));
         EXPECT_TRUE(entityManager.HasComponentUVE<Scene::TransformComponentUVE>(camera));
         EXPECT_TRUE(entityManager.HasComponentUVE<Scene::CameraComponentUVE>(camera));
+        ASSERT_TRUE(entityManager.HasComponentUVE<Scene::NameComponentUVE>(camera));
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::NameComponentUVE>(camera).name, "Camera");
         EXPECT_EQ(editor.GetSelectedEntityUVE(), camera);
         EXPECT_TRUE(editor.IsSceneDirtyUVE());
 
@@ -134,6 +140,8 @@ TEST(EditorUVETest, CreateDocumentEntityUVE_CreatesSelectedDirtyRootArchetypes) 
         ASSERT_TRUE(entityManager.HasComponentUVE<Scene::LightComponentUVE>(directionalLight));
         EXPECT_EQ(entityManager.GetComponentUVE<Scene::LightComponentUVE>(directionalLight).type,
                   Scene::LightTypeUVE::Directional);
+        ASSERT_TRUE(entityManager.HasComponentUVE<Scene::NameComponentUVE>(directionalLight));
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::NameComponentUVE>(directionalLight).name, "Directional Light");
         EXPECT_EQ(editor.GetSelectedEntityUVE(), directionalLight);
         EXPECT_TRUE(editor.IsSceneDirtyUVE());
 
@@ -141,6 +149,8 @@ TEST(EditorUVETest, CreateDocumentEntityUVE_CreatesSelectedDirtyRootArchetypes) 
         ASSERT_TRUE(entityManager.IsAliveUVE(collisionBox));
         EXPECT_TRUE(entityManager.HasComponentUVE<Scene::TransformComponentUVE>(collisionBox));
         EXPECT_TRUE(entityManager.HasComponentUVE<Scene::ColliderComponentUVE>(collisionBox));
+        ASSERT_TRUE(entityManager.HasComponentUVE<Scene::NameComponentUVE>(collisionBox));
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::NameComponentUVE>(collisionBox).name, "Collision Box");
         EXPECT_EQ(editor.GetSelectedEntityUVE(), collisionBox);
         EXPECT_TRUE(editor.IsSceneDirtyUVE());
 
@@ -175,6 +185,65 @@ TEST(EditorUVETest, CreateDocumentEntityUVE_RejectsInvalidKindsAndNonRunningStat
 
         editor.ShutdownUVE();
         EXPECT_EQ(editor.CreateDocumentEntityUVE(EditorEntityKindUVE::Empty), Scene::kInvalidEntityUVE);
+    }
+
+    engine.Shutdown();
+}
+
+TEST(EditorUVETest, CreateDocumentEntityUVE_AllocatesUniqueNamesAndKeepsEditorCameraOutOfNamespace) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_create_names.uvescene");
+        editor.InitUVE();
+        Scene::IEntityManagerUVE& entityManager = engine.GetServicesUVE().GetEntityManagerUVE();
+
+        const Scene::EntityUVE firstCamera = editor.CreateDocumentEntityUVE(EditorEntityKindUVE::Camera);
+        const Scene::EntityUVE secondCamera = editor.CreateDocumentEntityUVE(EditorEntityKindUVE::Camera);
+        ASSERT_TRUE(entityManager.HasComponentUVE<Scene::NameComponentUVE>(firstCamera));
+        ASSERT_TRUE(entityManager.HasComponentUVE<Scene::NameComponentUVE>(secondCamera));
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::NameComponentUVE>(firstCamera).name, "Camera");
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::NameComponentUVE>(secondCamera).name, "Camera 2");
+        EXPECT_FALSE(entityManager.HasComponentUVE<Scene::NameComponentUVE>(editor.GetViewportCameraUVE()));
+
+        editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
+}
+
+TEST(EditorUVETest, SetSelectedEntityNameUVE_ValidatesInputAndMarksDocumentDirty) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_rename.uvescene");
+        editor.InitUVE();
+        Core::EngineServicesUVE& services = engine.GetServicesUVE();
+        Scene::IEntityManagerUVE& entityManager = services.GetEntityManagerUVE();
+        const Scene::EntityUVE root = entityManager.CreateEntityUVE();
+        AttachRootUVE(engine, root, Scene::TransformComponentUVE{});
+
+        EXPECT_FALSE(editor.SetSelectedEntityNameUVE("Unselected"));
+        editor.SelectEntityUVE(root);
+        ASSERT_TRUE(editor.SetSelectedEntityNameUVE("Gameplay Root"));
+        ASSERT_TRUE(entityManager.HasComponentUVE<Scene::NameComponentUVE>(root));
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::NameComponentUVE>(root).name, "Gameplay Root");
+        EXPECT_EQ(editor.GetSelectedEntityUVE(), root);
+        EXPECT_TRUE(editor.IsSceneDirtyUVE());
+        EXPECT_FALSE(editor.SetSelectedEntityNameUVE("Gameplay Root"));
+        EXPECT_FALSE(editor.SetSelectedEntityNameUVE(""));
+        EXPECT_FALSE(editor.SetSelectedEntityNameUVE("   \t"));
+        EXPECT_FALSE(editor.SetSelectedEntityNameUVE(std::string(97U, 'n')));
+
+        entityManager.DestroyEntityUVE(root);
+        editor.TickUVE();
+        EXPECT_FALSE(editor.SetSelectedEntityNameUVE("Destroyed"));
+        editor.ShutdownUVE();
+        EXPECT_FALSE(editor.SetSelectedEntityNameUVE("Shutdown"));
     }
 
     engine.Shutdown();

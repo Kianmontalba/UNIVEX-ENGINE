@@ -31,6 +31,7 @@
 #include "uve/scene/components/collider_component_uve.h"
 #include "uve/scene/components/hierarchy_component_uve.h"
 #include "uve/scene/components/light_component_uve.h"
+#include "uve/scene/components/name_component_uve.h"
 #include "uve/scene/components/world_transform_component_uve.h"
 
 namespace UVE::Editor {
@@ -43,6 +44,7 @@ constexpr float kGizmoHandleRadiusPixelsUVE = 12.0F;
 constexpr float kMinimumViewportWidthUVE = 64.0F;
 constexpr float kMinimumViewportHeightUVE = 64.0F;
 constexpr float kAssetsPanelHeightUVE = 150.0F;
+constexpr std::size_t kMaximumEntityNameBytesUVE = 96U;
 
 [[nodiscard]] bool ContainsCaseInsensitiveUVE(const std::string_view text,
                                                const std::string_view query) noexcept {
@@ -58,6 +60,12 @@ constexpr float kAssetsPanelHeightUVE = 150.0F;
 
 [[nodiscard]] std::string EntityLabelUVE(const Scene::EntityUVE entity) {
     return "Entity " + std::to_string(entity.index) + ":" + std::to_string(entity.generation);
+}
+
+[[nodiscard]] bool IsWhitespaceOnlyUVE(const std::string_view value) noexcept {
+    return std::all_of(value.begin(), value.end(), [](const char character) noexcept {
+        return std::isspace(static_cast<unsigned char>(character)) != 0;
+    });
 }
 
 [[nodiscard]] std::filesystem::path MakeRecoveryPathUVE(const std::filesystem::path& scenePath) {
@@ -260,6 +268,29 @@ bool EditorUVE::SetSelectedLocalTransformUVE(const Scene::TransformComponentUVE&
     return true;
 }
 
+bool EditorUVE::SetSelectedEntityNameUVE(std::string name) {
+    if (m_state != EditorStateUVE::Running || !IsDocumentEntityUVE(m_selectedEntity) ||
+        !IsEntityNameValidUVE(name)) {
+        return false;
+    }
+
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    if (entityManager.HasComponentUVE<Scene::NameComponentUVE>(m_selectedEntity)) {
+        Scene::NameComponentUVE& existingName =
+            entityManager.GetComponentUVE<Scene::NameComponentUVE>(m_selectedEntity);
+        if (existingName.name == name) {
+            return false;
+        }
+        existingName.name = std::move(name);
+    } else {
+        entityManager.AddComponentUVE<Scene::NameComponentUVE>(m_selectedEntity,
+                                                                Scene::NameComponentUVE{std::move(name)});
+    }
+
+    m_sceneDirty = true;
+    return true;
+}
+
 std::optional<Math::RayUVE> EditorUVE::MakeViewportRayUVE(const EditorViewportRectUVE& viewportRect,
                                                             const Math::Vector2UVE pointerPosition) const {
     if (m_state != EditorStateUVE::Running || !IsViewportRectValidUVE(viewportRect) ||
@@ -378,6 +409,11 @@ Scene::EntityUVE EditorUVE::CreateDocumentEntityUVE(const EditorEntityKindUVE ki
             return Scene::kInvalidEntityUVE;
     }
 
+    const std::string defaultName = GetDefaultEntityNameUVE(kind);
+    if (defaultName.empty()) {
+        return Scene::kInvalidEntityUVE;
+    }
+
     Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
     Scene::ISceneGraphUVE& sceneGraph = m_services->GetSceneGraphUVE();
     const Scene::EntityUVE entity = entityManager.CreateEntityUVE();
@@ -402,6 +438,8 @@ Scene::EntityUVE EditorUVE::CreateDocumentEntityUVE(const EditorEntityKindUVE ki
             return Scene::kInvalidEntityUVE;
     }
 
+    entityManager.AddComponentUVE<Scene::NameComponentUVE>(
+        entity, Scene::NameComponentUVE{MakeUniqueDocumentEntityNameUVE(defaultName)});
     SelectEntityUVE(entity);
     m_sceneDirty = true;
     return entity;
@@ -474,6 +512,62 @@ void EditorUVE::ShutdownUVE() {
 bool EditorUVE::IsDocumentEntityUVE(const Scene::EntityUVE entity) const noexcept {
     return entity != Scene::kInvalidEntityUVE && entity != m_viewportCamera &&
            m_services->GetEntityManagerUVE().IsAliveUVE(entity);
+}
+
+bool EditorUVE::IsEntityNameValidUVE(const std::string_view name) const noexcept {
+    return !name.empty() && name.size() <= kMaximumEntityNameBytesUVE && !IsWhitespaceOnlyUVE(name);
+}
+
+std::string EditorUVE::GetEntityDisplayLabelUVE(const Scene::EntityUVE entity) const {
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    if (entityManager.IsAliveUVE(entity) && entityManager.HasComponentUVE<Scene::NameComponentUVE>(entity)) {
+        const std::string& name = entityManager.GetComponentUVE<Scene::NameComponentUVE>(entity).name;
+        if (!name.empty()) {
+            return name;
+        }
+    }
+    return EntityLabelUVE(entity);
+}
+
+std::string EditorUVE::GetDefaultEntityNameUVE(const EditorEntityKindUVE kind) const {
+    switch (kind) {
+        case EditorEntityKindUVE::Empty:
+            return "Empty";
+        case EditorEntityKindUVE::Camera:
+            return "Camera";
+        case EditorEntityKindUVE::DirectionalLight:
+            return "Directional Light";
+        case EditorEntityKindUVE::CollisionBox:
+            return "Collision Box";
+    }
+    return {};
+}
+
+std::string EditorUVE::MakeUniqueDocumentEntityNameUVE(const std::string_view baseName) const {
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    std::vector<std::string> names;
+    entityManager.ForEachUVE<Scene::NameComponentUVE>(
+        [this, &names](const Scene::EntityUVE entity, Scene::NameComponentUVE& component) {
+            if (IsDocumentEntityUVE(entity)) {
+                names.push_back(component.name);
+            }
+        });
+
+    const auto isUsed = [&names](const std::string_view candidate) {
+        return std::any_of(names.begin(), names.end(), [candidate](const std::string& name) {
+            return name == candidate;
+        });
+    };
+    if (!isUsed(baseName)) {
+        return std::string{baseName};
+    }
+
+    for (std::size_t suffix = 2U;; ++suffix) {
+        const std::string candidate = std::string{baseName} + " " + std::to_string(suffix);
+        if (!isUsed(candidate)) {
+            return candidate;
+        }
+    }
 }
 
 bool EditorUVE::IsTransformFiniteUVE(const Scene::TransformComponentUVE& transform) const noexcept {
@@ -828,7 +922,9 @@ void EditorUVE::DrawHierarchyNodeUVE(const Scene::EntityUVE entity) {
         flags |= ImGuiTreeNodeFlags_Selected;
     }
 
-    const bool open = ImGui::TreeNodeEx(EntityLabelUVE(entity).c_str(), flags);
+    const std::string nodeLabel = GetEntityDisplayLabelUVE(entity) + "##entity-" +
+                                  std::to_string(entity.index) + ":" + std::to_string(entity.generation);
+    const bool open = ImGui::TreeNodeEx(nodeLabel.c_str(), flags);
     if (ImGui::IsItemClicked()) {
         SelectEntityUVE(entity);
     }
@@ -855,8 +951,20 @@ void EditorUVE::DrawInspectorPanelUVE() {
         return;
     }
 
-    ImGui::Text("%s", EntityLabelUVE(m_selectedEntity).c_str());
+    ImGui::Text("%s", GetEntityDisplayLabelUVE(m_selectedEntity).c_str());
+    ImGui::TextDisabled("%s", EntityLabelUVE(m_selectedEntity).c_str());
+
     Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    std::array<char, kMaximumEntityNameBytesUVE + 1U> nameBuffer{};
+    if (entityManager.HasComponentUVE<Scene::NameComponentUVE>(m_selectedEntity)) {
+        const std::string& currentName =
+            entityManager.GetComponentUVE<Scene::NameComponentUVE>(m_selectedEntity).name;
+        currentName.copy(nameBuffer.data(), std::min(currentName.size(), nameBuffer.size() - 1U));
+    }
+    if (ImGui::InputText("Name", nameBuffer.data(), nameBuffer.size())) {
+        static_cast<void>(SetSelectedEntityNameUVE(nameBuffer.data()));
+    }
+
     if (!entityManager.HasComponentUVE<Scene::TransformComponentUVE>(m_selectedEntity)) {
         ImGui::TextUnformatted("No local Transform component.");
         ImGui::End();
