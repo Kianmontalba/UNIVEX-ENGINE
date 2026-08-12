@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <deque>
 #include <filesystem>
@@ -38,7 +39,7 @@ struct EditorViewportRectUVE final {
 };
 
 /// World-space axes supported by EditorUVE's first Translate, Rotate, and Scale gizmo slice. Planar
-/// handles, snapping, local axes, free/trackball rotation, and multi-selection are intentionally deferred.
+/// handles, local axes, free/trackball rotation, and multi-selection are intentionally deferred.
 enum class EditorTranslateAxisUVE {
     None,
     X,
@@ -47,7 +48,7 @@ enum class EditorTranslateAxisUVE {
 };
 
 /// Selects the active first-pass transform-gizmo handle family. All modes use world axes for
-/// interaction; local axes, snapping, uniform/negative scale, and trackball rotation remain future increments.
+/// interaction; local axes, uniform/negative scale, and trackball rotation remain future increments.
 enum class EditorGizmoModeUVE {
     Translate,
     Rotate,
@@ -61,6 +62,13 @@ struct EditorTransformSnappingSettingsUVE final {
     float translateStep = 1.0F;
     float rotateStepDegrees = 15.0F;
     float scaleStep = 0.1F;
+};
+
+/// A read-only oriented box for the selected collider-backed document entity. All points are in
+/// derived world space and are intended for editor feedback only; this value is never serialized.
+struct EditorSelectionBoundsUVE final {
+    std::array<Math::Vector3UVE, 8> worldCorners{};
+    Math::Vector3UVE worldCenter{};
 };
 
 /// The supported first-pass Scene menu archetypes. Each created entity is a document root with a
@@ -173,6 +181,11 @@ public:
     /// positive and no transform/navigation gesture is active. Returns false without mutation otherwise.
     [[nodiscard]] bool SetTransformSnappingSettingsUVE(const EditorTransformSnappingSettingsUVE& settings);
     [[nodiscard]] const EditorTransformSnappingSettingsUVE& GetTransformSnappingSettingsUVE() const noexcept;
+
+    /// Returns the derived world-space box for the selected live collider-backed document entity.
+    /// It never mutates selection, scene state, dirty state, or Undo/Redo history; unsafe or
+    /// unsupported state returns std::nullopt.
+    [[nodiscard]] std::optional<EditorSelectionBoundsUVE> TryGetSelectedBoundsUVE() const;
 
     /// Moves the editor-only focus point to the selected live document entity's derived world position
     /// and reapplies the current orbit camera state. It never changes selection, dirty state, or history.
@@ -359,6 +372,7 @@ private:
     void UpdateGizmoDragUVE(Math::Vector2UVE pointerPosition);
     void CommitGizmoDragUVE();
     void CancelGizmoDragUVE() noexcept;
+    void DrawSelectionBoundsUVE(const EditorViewportRectUVE& viewportRect);
     void DrawTranslateGizmoUVE(const EditorViewportRectUVE& viewportRect);
     void DrawRotateGizmoUVE(const EditorViewportRectUVE& viewportRect);
     void DrawScaleGizmoUVE(const EditorViewportRectUVE& viewportRect);

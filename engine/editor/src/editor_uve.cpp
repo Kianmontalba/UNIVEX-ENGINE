@@ -571,6 +571,62 @@ const EditorTransformSnappingSettingsUVE& EditorUVE::GetTransformSnappingSetting
     return m_transformSnappingSettings;
 }
 
+std::optional<EditorSelectionBoundsUVE> EditorUVE::TryGetSelectedBoundsUVE() const {
+    if (m_state != EditorStateUVE::Running || !IsDocumentEntityUVE(m_selectedEntity)) {
+        return std::nullopt;
+    }
+
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    if (!entityManager.HasComponentUVE<Scene::TransformComponentUVE>(m_selectedEntity) ||
+        !entityManager.HasComponentUVE<Scene::WorldTransformComponentUVE>(m_selectedEntity) ||
+        !entityManager.HasComponentUVE<Scene::ColliderComponentUVE>(m_selectedEntity)) {
+        return std::nullopt;
+    }
+
+    const Scene::WorldTransformComponentUVE& worldTransform =
+        entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(m_selectedEntity);
+    const Scene::ColliderComponentUVE& collider =
+        entityManager.GetComponentUVE<Scene::ColliderComponentUVE>(m_selectedEntity);
+    if (worldTransform.dirty || !IsFiniteVectorUVE(worldTransform.worldPosition) ||
+        !IsFiniteVectorUVE(worldTransform.worldScale) || !IsFiniteVectorUVE(collider.halfExtents) ||
+        collider.halfExtents.x <= kVectorEpsilonUVE || collider.halfExtents.y <= kVectorEpsilonUVE ||
+        collider.halfExtents.z <= kVectorEpsilonUVE ||
+        std::abs(worldTransform.worldScale.x) <= kVectorEpsilonUVE ||
+        std::abs(worldTransform.worldScale.y) <= kVectorEpsilonUVE ||
+        std::abs(worldTransform.worldScale.z) <= kVectorEpsilonUVE) {
+        return std::nullopt;
+    }
+
+    Math::QuaternionUVE normalizedRotation{};
+    if (!Math::TryNormalizeUVE(worldTransform.worldRotation, normalizedRotation)) {
+        return std::nullopt;
+    }
+
+    constexpr std::array<Math::Vector3UVE, 8> kCornerSignsUVE{
+        Math::Vector3UVE{-1.0F, -1.0F, -1.0F},
+        Math::Vector3UVE{1.0F, -1.0F, -1.0F},
+        Math::Vector3UVE{1.0F, 1.0F, -1.0F},
+        Math::Vector3UVE{-1.0F, 1.0F, -1.0F},
+        Math::Vector3UVE{-1.0F, -1.0F, 1.0F},
+        Math::Vector3UVE{1.0F, -1.0F, 1.0F},
+        Math::Vector3UVE{1.0F, 1.0F, 1.0F},
+        Math::Vector3UVE{-1.0F, 1.0F, 1.0F},
+    };
+
+    EditorSelectionBoundsUVE bounds{};
+    bounds.worldCenter = worldTransform.worldPosition;
+    for (std::size_t index = 0U; index < kCornerSignsUVE.size(); ++index) {
+        const Math::Vector3UVE localCorner = kCornerSignsUVE[index] * collider.halfExtents;
+        const Math::Vector3UVE scaledCorner = localCorner * worldTransform.worldScale;
+        bounds.worldCorners[index] = worldTransform.worldPosition +
+                                     Math::RotateVectorUVE(normalizedRotation, scaledCorner);
+        if (!IsFiniteVectorUVE(bounds.worldCorners[index])) {
+            return std::nullopt;
+        }
+    }
+    return bounds;
+}
+
 bool EditorUVE::FocusSelectedEntityUVE() {
     if (m_state != EditorStateUVE::Running || !IsDocumentEntityUVE(m_selectedEntity)) {
         return false;
@@ -1923,6 +1979,53 @@ void EditorUVE::CancelGizmoDragUVE() noexcept {
     m_sceneDirty = cancelledDrag.initialDirty;
 }
 
+void EditorUVE::DrawSelectionBoundsUVE(const EditorViewportRectUVE& viewportRect) {
+    const std::optional<EditorSelectionBoundsUVE> bounds = TryGetSelectedBoundsUVE();
+    if (!bounds.has_value() || !IsViewportRectValidUVE(viewportRect)) {
+        return;
+    }
+
+    std::array<Math::Vector2UVE, 8> projectedCorners{};
+    for (std::size_t index = 0U; index < bounds->worldCorners.size(); ++index) {
+        if (!ProjectWorldPointUVE(viewportRect, bounds->worldCorners[index], projectedCorners[index])) {
+            return;
+        }
+    }
+
+    Math::Vector2UVE projectedCenter{};
+    if (!ProjectWorldPointUVE(viewportRect, bounds->worldCenter, projectedCenter)) {
+        return;
+    }
+
+    constexpr std::array<std::array<std::size_t, 2>, 12> kBoxEdgesUVE{
+        std::array<std::size_t, 2>{0U, 1U},
+        std::array<std::size_t, 2>{1U, 2U},
+        std::array<std::size_t, 2>{2U, 3U},
+        std::array<std::size_t, 2>{3U, 0U},
+        std::array<std::size_t, 2>{4U, 5U},
+        std::array<std::size_t, 2>{5U, 6U},
+        std::array<std::size_t, 2>{6U, 7U},
+        std::array<std::size_t, 2>{7U, 4U},
+        std::array<std::size_t, 2>{0U, 4U},
+        std::array<std::size_t, 2>{1U, 5U},
+        std::array<std::size_t, 2>{2U, 6U},
+        std::array<std::size_t, 2>{3U, 7U},
+    };
+
+    ImDrawList* const drawList = ImGui::GetWindowDrawList();
+    constexpr ImU32 kBoundsColorUVE = IM_COL32(0, 212, 255, 235);
+    constexpr ImU32 kCornerColorUVE = IM_COL32(185, 248, 255, 245);
+    for (const std::array<std::size_t, 2>& edge : kBoxEdgesUVE) {
+        const Math::Vector2UVE& first = projectedCorners[edge[0]];
+        const Math::Vector2UVE& second = projectedCorners[edge[1]];
+        drawList->AddLine(ImVec2{first.x, first.y}, ImVec2{second.x, second.y}, kBoundsColorUVE, 2.0F);
+    }
+    for (const Math::Vector2UVE& corner : projectedCorners) {
+        drawList->AddCircleFilled(ImVec2{corner.x, corner.y}, 3.0F, kCornerColorUVE, 8);
+    }
+    drawList->AddCircleFilled(ImVec2{projectedCenter.x, projectedCenter.y}, 4.0F, kBoundsColorUVE, 12);
+}
+
 void EditorUVE::DrawTranslateGizmoUVE(const EditorViewportRectUVE& viewportRect) {
     if (!IsDocumentEntityUVE(m_selectedEntity) || !IsViewportRectValidUVE(viewportRect)) {
         return;
@@ -2462,6 +2565,7 @@ void EditorUVE::DrawViewportPanelUVE() {
             }
         }
 
+        DrawSelectionBoundsUVE(viewportRect);
         if (m_gizmoMode == EditorGizmoModeUVE::Translate) {
             DrawTranslateGizmoUVE(viewportRect);
         } else if (m_gizmoMode == EditorGizmoModeUVE::Rotate) {

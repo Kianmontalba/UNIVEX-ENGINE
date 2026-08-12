@@ -1398,6 +1398,123 @@ TEST(EditorUVETest, ScaleSelectedAlongAxis_RejectsUnsafeInputWithoutMutation) {
     engine.Shutdown();
 }
 
+TEST(EditorUVETest, SelectedBoundsQuery_BuildsIdentityWorldBoxWithoutMutatingEditorState) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_selection_bounds_identity.uvescene");
+        editor.InitUVE();
+        Core::EngineServicesUVE& services = engine.GetServicesUVE();
+        Scene::IEntityManagerUVE& entityManager = services.GetEntityManagerUVE();
+        EXPECT_FALSE(editor.TryGetSelectedBoundsUVE().has_value());
+        const Scene::EntityUVE entity = entityManager.CreateEntityUVE();
+        Scene::TransformComponentUVE transform{};
+        transform.localPosition = Math::Vector3UVE{4.0F, -5.0F, 6.0F};
+        AttachRootUVE(engine, entity, transform);
+        editor.SelectEntityUVE(entity);
+        EXPECT_FALSE(editor.TryGetSelectedBoundsUVE().has_value());
+        Scene::ColliderComponentUVE collider{};
+        collider.halfExtents = Math::Vector3UVE{1.0F, 2.0F, 3.0F};
+        entityManager.AddComponentUVE<Scene::ColliderComponentUVE>(entity, collider);
+        services.GetSceneGraphUVE().UpdateUVE(entityManager);
+        editor.SelectEntityUVE(entity);
+
+        const std::optional<EditorSelectionBoundsUVE> bounds = editor.TryGetSelectedBoundsUVE();
+        ASSERT_TRUE(bounds.has_value());
+        EXPECT_EQ(bounds->worldCenter, transform.localPosition);
+        EXPECT_EQ(bounds->worldCorners[0], (Math::Vector3UVE{3.0F, -7.0F, 3.0F}));
+        EXPECT_EQ(bounds->worldCorners[6], (Math::Vector3UVE{5.0F, -3.0F, 9.0F}));
+        const Scene::TransformComponentUVE& afterQuery =
+            entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity);
+        EXPECT_EQ(afterQuery.localPosition, transform.localPosition);
+        EXPECT_EQ(afterQuery.localRotation, transform.localRotation);
+        EXPECT_EQ(afterQuery.localScale, transform.localScale);
+        EXPECT_EQ(editor.GetSelectedEntityUVE(), entity);
+        EXPECT_FALSE(editor.IsSceneDirtyUVE());
+        EXPECT_FALSE(editor.CanUndoUVE());
+        EXPECT_FALSE(editor.CanRedoUVE());
+
+        editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
+}
+
+TEST(EditorUVETest, SelectedBoundsQuery_UsesDerivedParentTransformAndRejectsUnsafeState) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_selection_bounds_parented.uvescene");
+        editor.InitUVE();
+        Core::EngineServicesUVE& services = engine.GetServicesUVE();
+        Scene::IEntityManagerUVE& entityManager = services.GetEntityManagerUVE();
+
+        Math::QuaternionUVE parentRotation{};
+        ASSERT_TRUE(Math::TryMakeAxisAngleUVE(Math::Vector3UVE{0.0F, 0.0F, 1.0F},
+                                              std::numbers::pi_v<float> * 0.5F, parentRotation));
+        const Scene::EntityUVE parent = entityManager.CreateEntityUVE();
+        Scene::TransformComponentUVE parentTransform{};
+        parentTransform.localPosition = Math::Vector3UVE{10.0F, 20.0F, 30.0F};
+        parentTransform.localRotation = parentRotation;
+        parentTransform.localScale = Math::Vector3UVE{2.0F, 3.0F, 4.0F};
+        AttachRootUVE(engine, parent, parentTransform);
+
+        const Scene::EntityUVE child = entityManager.CreateEntityUVE();
+        Scene::TransformComponentUVE childTransform{};
+        childTransform.localPosition = Math::Vector3UVE{1.0F, 0.0F, 0.0F};
+        AttachRootUVE(engine, child, childTransform);
+        Scene::ColliderComponentUVE collider{};
+        collider.halfExtents = Math::Vector3UVE{0.5F, 1.0F, 1.5F};
+        entityManager.AddComponentUVE<Scene::ColliderComponentUVE>(child, collider);
+        services.GetSceneGraphUVE().SetParentUVE(entityManager, child, parent);
+        services.GetSceneGraphUVE().UpdateUVE(entityManager);
+        editor.SelectEntityUVE(child);
+
+        const std::optional<EditorSelectionBoundsUVE> bounds = editor.TryGetSelectedBoundsUVE();
+        ASSERT_TRUE(bounds.has_value());
+        EXPECT_NEAR(bounds->worldCenter.x, 10.0F, 0.0001F);
+        EXPECT_NEAR(bounds->worldCenter.y, 22.0F, 0.0001F);
+        EXPECT_NEAR(bounds->worldCenter.z, 30.0F, 0.0001F);
+        EXPECT_NEAR(bounds->worldCorners[0].x, 13.0F, 0.0001F);
+        EXPECT_NEAR(bounds->worldCorners[0].y, 21.0F, 0.0001F);
+        EXPECT_NEAR(bounds->worldCorners[0].z, 24.0F, 0.0001F);
+        EXPECT_NEAR(bounds->worldCorners[6].x, 7.0F, 0.0001F);
+        EXPECT_NEAR(bounds->worldCorners[6].y, 23.0F, 0.0001F);
+        EXPECT_NEAR(bounds->worldCorners[6].z, 36.0F, 0.0001F);
+
+        entityManager.GetComponentUVE<Scene::ColliderComponentUVE>(child).halfExtents.x = 0.0F;
+        EXPECT_FALSE(editor.TryGetSelectedBoundsUVE().has_value());
+        entityManager.GetComponentUVE<Scene::ColliderComponentUVE>(child).halfExtents = collider.halfExtents;
+        Scene::WorldTransformComponentUVE& worldTransform =
+            entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(child);
+        worldTransform.dirty = true;
+        EXPECT_FALSE(editor.TryGetSelectedBoundsUVE().has_value());
+        worldTransform.dirty = false;
+        const Math::Vector3UVE savedScale = worldTransform.worldScale;
+        worldTransform.worldScale.x = std::numeric_limits<float>::infinity();
+        EXPECT_FALSE(editor.TryGetSelectedBoundsUVE().has_value());
+        worldTransform.worldScale = savedScale;
+        const Math::QuaternionUVE savedRotation = worldTransform.worldRotation;
+        worldTransform.worldRotation = Math::QuaternionUVE{0.0F, 0.0F, 0.0F, 0.0F};
+        EXPECT_FALSE(editor.TryGetSelectedBoundsUVE().has_value());
+        worldTransform.worldRotation = savedRotation;
+        EXPECT_FALSE(editor.IsSceneDirtyUVE());
+        EXPECT_FALSE(editor.CanUndoUVE());
+
+        editor.SelectEntityUVE(editor.GetViewportCameraUVE());
+        EXPECT_FALSE(editor.TryGetSelectedBoundsUVE().has_value());
+
+        editor.ShutdownUVE();
+        EXPECT_FALSE(editor.TryGetSelectedBoundsUVE().has_value());
+    }
+
+    engine.Shutdown();
+}
+
 TEST(EditorUVETest, TransformSnappingSettings_ExposeSafeDefaultsAndRejectInvalidValues) {
     Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
     engine.Init();
