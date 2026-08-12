@@ -20,6 +20,7 @@
 #include "uve/core/engine_services_uve.h"
 #include "uve/math/ray_uve.h"
 #include "uve/math/vector2_uve.h"
+#include "uve/math/vector3_uve.h"
 #include "uve/scene/components/transform_component_uve.h"
 #include "uve/scene/entity_uve.h"
 
@@ -57,6 +58,14 @@ enum class EditorEntityKindUVE {
     Camera,
     DirectionalLight,
     CollisionBox,
+};
+
+/// The active pointer gesture affecting the editor-owned viewport camera. This state never touches
+/// document entities, persistence, or command history.
+enum class EditorViewportNavigationModeUVE {
+    None,
+    Orbit,
+    Pan,
 };
 
 /// EditorUVE composes the existing engine services into a first editor foundation: an editor-owned
@@ -132,6 +141,17 @@ public:
     /// entity, parent transform, axis, or distance is invalid.
     [[nodiscard]] bool TranslateSelectedAlongAxisUVE(EditorTranslateAxisUVE axis, float worldDistance);
 
+    /// Moves the editor-only focus point to the selected live document entity's derived world position
+    /// and reapplies the current orbit camera state. It never changes selection, dirty state, or history.
+    [[nodiscard]] bool FocusSelectedEntityUVE();
+    /// Applies finite yaw and pitch deltas in radians to the editor-only orbit camera. Pitch remains
+    /// clamped to a safe range around the horizon; document state and history remain unchanged.
+    [[nodiscard]] bool OrbitViewportUVE(float yawDeltaRadians, float pitchDeltaRadians);
+    /// Pans the editor-only focus point from a finite pixel delta inside a valid viewport rectangle.
+    [[nodiscard]] bool PanViewportUVE(Math::Vector2UVE pixelDelta, const EditorViewportRectUVE& viewportRect);
+    /// Applies a finite mouse-wheel dolly delta to the editor-only camera distance with safe clamps.
+    [[nodiscard]] bool ZoomViewportUVE(float wheelDelta);
+
     /// Creates one root-level document entity with a TransformComponentUVE and the specialized
     /// component implied by `kind`, selects it, and marks the document dirty. Returns the invalid
     /// entity handle without mutation when the editor is not running or `kind` is unsupported.
@@ -150,6 +170,9 @@ public:
     [[nodiscard]] EditorStateUVE GetStateUVE() const noexcept;
     [[nodiscard]] Scene::EntityUVE GetSelectedEntityUVE() const noexcept;
     [[nodiscard]] Scene::EntityUVE GetViewportCameraUVE() const noexcept;
+    [[nodiscard]] Math::Vector3UVE GetViewportFocusPointUVE() const noexcept;
+    [[nodiscard]] float GetViewportDistanceUVE() const noexcept;
+    [[nodiscard]] EditorViewportNavigationModeUVE GetViewportNavigationModeUVE() const noexcept;
     [[nodiscard]] bool IsSceneDirtyUVE() const noexcept;
     [[nodiscard]] const std::optional<Asset::AssetRecordUVE>& GetSelectedAssetUVE() const noexcept;
     [[nodiscard]] const std::string& GetAssetFilterUVE() const noexcept;
@@ -218,6 +241,9 @@ private:
     [[nodiscard]] bool ComputeLocalDeltaForWorldDeltaUVE(Scene::EntityUVE entity,
                                                            const Math::Vector3UVE& worldDelta,
                                                            Math::Vector3UVE& outLocalDelta) const;
+    [[nodiscard]] bool ApplyViewportCameraUVE();
+    [[nodiscard]] bool IsViewportNavigationFiniteUVE() const noexcept;
+    void CancelViewportNavigationUVE() noexcept;
     [[nodiscard]] bool BeginGizmoDragUVE(const EditorViewportRectUVE& viewportRect,
                                           Math::Vector2UVE pointerPosition);
     void UpdateGizmoDragUVE(Math::Vector2UVE pointerPosition);
@@ -251,6 +277,11 @@ private:
     std::filesystem::path m_activeScenePath;
     std::size_t m_historyCapacity = 100U;
     GizmoDragUVE m_gizmoDrag{};
+    Math::Vector3UVE m_viewportFocusPoint{0.0F, 1.5F, 0.0F};
+    float m_viewportYawRadians = 0.0F;
+    float m_viewportPitchRadians = 0.0F;
+    float m_viewportDistance = 6.0F;
+    EditorViewportNavigationModeUVE m_viewportNavigationMode = EditorViewportNavigationModeUVE::None;
     std::deque<HistoryEntryUVE> m_undoHistory;
     std::deque<HistoryEntryUVE> m_redoHistory;
     std::string m_assetFilter;

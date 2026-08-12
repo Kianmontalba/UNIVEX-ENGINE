@@ -47,6 +47,11 @@ constexpr float kMinimumViewportWidthUVE = 64.0F;
 constexpr float kMinimumViewportHeightUVE = 64.0F;
 constexpr float kAssetsPanelHeightUVE = 150.0F;
 constexpr std::size_t kMaximumEntityNameBytesUVE = 96U;
+constexpr float kMinimumViewportDistanceUVE = 0.5F;
+constexpr float kMaximumViewportDistanceUVE = 500.0F;
+constexpr float kMaximumViewportPitchRadiansUVE = 1.4835299F; // 85 degrees.
+constexpr float kViewportOrbitRadiansPerPixelUVE = 0.008F;
+constexpr float kViewportZoomExponentPerWheelUnitUVE = 0.16F;
 
 [[nodiscard]] bool ContainsCaseInsensitiveUVE(const std::string_view text,
                                                const std::string_view query) noexcept {
@@ -103,6 +108,23 @@ constexpr std::size_t kMaximumEntityNameBytesUVE = 96U;
 
 [[nodiscard]] Math::QuaternionUVE ConjugateUVE(const Math::QuaternionUVE& value) noexcept {
     return Math::QuaternionUVE{-value.x, -value.y, -value.z, value.w};
+}
+
+[[nodiscard]] Math::QuaternionUVE MakeViewportOrientationUVE(const float yawRadians,
+                                                              const float pitchRadians) noexcept {
+    const float halfYaw = yawRadians * 0.5F;
+    const float halfPitch = pitchRadians * 0.5F;
+    const Math::QuaternionUVE yaw{0.0F, std::sin(halfYaw), 0.0F, std::cos(halfYaw)};
+    const Math::QuaternionUVE pitch{std::sin(halfPitch), 0.0F, 0.0F, std::cos(halfPitch)};
+    return Math::MultiplyUVE(yaw, pitch);
+}
+
+[[nodiscard]] Math::Vector3UVE MakeViewportForwardUVE(const float yawRadians,
+                                                        const float pitchRadians) noexcept {
+    const float cosinePitch = std::cos(pitchRadians);
+    return Math::Vector3UVE{-std::sin(yawRadians) * cosinePitch,
+                            std::sin(pitchRadians),
+                            -std::cos(yawRadians) * cosinePitch};
 }
 
 [[nodiscard]] ImU32 GizmoAxisColorUVE(const EditorTranslateAxisUVE axis, const bool active) noexcept {
@@ -426,6 +448,119 @@ bool EditorUVE::TranslateSelectedAlongAxisUVE(const EditorTranslateAxisUVE axis,
     return SetSelectedLocalTransformUVE(updated);
 }
 
+bool EditorUVE::FocusSelectedEntityUVE() {
+    if (m_state != EditorStateUVE::Running || !IsDocumentEntityUVE(m_selectedEntity)) {
+        return false;
+    }
+
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    if (!entityManager.HasComponentUVE<Scene::WorldTransformComponentUVE>(m_selectedEntity)) {
+        return false;
+    }
+
+    const Scene::WorldTransformComponentUVE& selectedWorld =
+        entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(m_selectedEntity);
+    if (selectedWorld.dirty || !IsFiniteVectorUVE(selectedWorld.worldPosition)) {
+        return false;
+    }
+
+    const Math::Vector3UVE previousFocus = m_viewportFocusPoint;
+    const float previousDistance = m_viewportDistance;
+    m_viewportFocusPoint = selectedWorld.worldPosition;
+    m_viewportDistance = std::clamp(m_viewportDistance, kMinimumViewportDistanceUVE, kMaximumViewportDistanceUVE);
+    if (ApplyViewportCameraUVE()) {
+        return true;
+    }
+
+    m_viewportFocusPoint = previousFocus;
+    m_viewportDistance = previousDistance;
+    return false;
+}
+
+bool EditorUVE::OrbitViewportUVE(const float yawDeltaRadians, const float pitchDeltaRadians) {
+    if (m_state != EditorStateUVE::Running || !IsFiniteUVE(yawDeltaRadians) || !IsFiniteUVE(pitchDeltaRadians)) {
+        return false;
+    }
+
+    const float previousYaw = m_viewportYawRadians;
+    const float previousPitch = m_viewportPitchRadians;
+    m_viewportYawRadians += yawDeltaRadians;
+    m_viewportPitchRadians = std::clamp(m_viewportPitchRadians + pitchDeltaRadians,
+                                        -kMaximumViewportPitchRadiansUVE,
+                                        kMaximumViewportPitchRadiansUVE);
+    if (ApplyViewportCameraUVE()) {
+        return true;
+    }
+
+    m_viewportYawRadians = previousYaw;
+    m_viewportPitchRadians = previousPitch;
+    return false;
+}
+
+bool EditorUVE::PanViewportUVE(const Math::Vector2UVE pixelDelta, const EditorViewportRectUVE& viewportRect) {
+    if (m_state != EditorStateUVE::Running || !IsFiniteUVE(pixelDelta.x) || !IsFiniteUVE(pixelDelta.y) ||
+        !IsViewportRectValidUVE(viewportRect) || !IsViewportNavigationFiniteUVE()) {
+        return false;
+    }
+
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    if (!entityManager.IsAliveUVE(m_viewportCamera) ||
+        !entityManager.HasComponentUVE<Scene::CameraComponentUVE>(m_viewportCamera)) {
+        return false;
+    }
+
+    const Scene::CameraComponentUVE& camera =
+        entityManager.GetComponentUVE<Scene::CameraComponentUVE>(m_viewportCamera);
+    const float tanHalfFov = std::tan((camera.fieldOfViewDegrees * std::numbers::pi_v<float>) / 360.0F);
+    if (!IsFiniteUVE(camera.fieldOfViewDegrees) || !IsFiniteUVE(tanHalfFov) || tanHalfFov <= kVectorEpsilonUVE) {
+        return false;
+    }
+
+    const float worldUnitsPerPixel = (2.0F * m_viewportDistance * tanHalfFov) / viewportRect.size.y;
+    const Math::QuaternionUVE orientation =
+        MakeViewportOrientationUVE(m_viewportYawRadians, m_viewportPitchRadians);
+    const Math::Vector3UVE right = Math::RotateVectorUVE(orientation, Math::Vector3UVE{1.0F, 0.0F, 0.0F});
+    const Math::Vector3UVE up = Math::RotateVectorUVE(orientation, Math::Vector3UVE{0.0F, 1.0F, 0.0F});
+    if (!IsFiniteUVE(worldUnitsPerPixel) || !IsFiniteVectorUVE(right) || !IsFiniteVectorUVE(up)) {
+        return false;
+    }
+
+    const Math::Vector3UVE previousFocus = m_viewportFocusPoint;
+    m_viewportFocusPoint += right * (-pixelDelta.x * worldUnitsPerPixel);
+    m_viewportFocusPoint += up * (pixelDelta.y * worldUnitsPerPixel);
+    if (ApplyViewportCameraUVE()) {
+        return true;
+    }
+
+    m_viewportFocusPoint = previousFocus;
+    return false;
+}
+
+bool EditorUVE::ZoomViewportUVE(const float wheelDelta) {
+    if (m_state != EditorStateUVE::Running || !IsFiniteUVE(wheelDelta) || !IsViewportNavigationFiniteUVE()) {
+        return false;
+    }
+
+    const float previousDistance = m_viewportDistance;
+    const float zoomFactor = std::exp(-wheelDelta * kViewportZoomExponentPerWheelUnitUVE);
+    if (!IsFiniteUVE(zoomFactor) || zoomFactor <= 0.0F) {
+        return false;
+    }
+
+    m_viewportDistance = std::clamp(m_viewportDistance * zoomFactor,
+                                    kMinimumViewportDistanceUVE,
+                                    kMaximumViewportDistanceUVE);
+    if (m_viewportDistance == previousDistance) {
+        return false;
+    }
+    if (ApplyViewportCameraUVE()) {
+        return true;
+    }
+
+    m_viewportDistance = previousDistance;
+    return false;
+}
+
 Scene::EntityUVE EditorUVE::CreateDocumentEntityUVE(const EditorEntityKindUVE kind) {
     if (m_state != EditorStateUVE::Running) {
         return Scene::kInvalidEntityUVE;
@@ -679,6 +814,18 @@ Scene::EntityUVE EditorUVE::GetViewportCameraUVE() const noexcept {
     return m_viewportCamera;
 }
 
+Math::Vector3UVE EditorUVE::GetViewportFocusPointUVE() const noexcept {
+    return m_viewportFocusPoint;
+}
+
+float EditorUVE::GetViewportDistanceUVE() const noexcept {
+    return m_viewportDistance;
+}
+
+EditorViewportNavigationModeUVE EditorUVE::GetViewportNavigationModeUVE() const noexcept {
+    return m_viewportNavigationMode;
+}
+
 bool EditorUVE::IsSceneDirtyUVE() const noexcept {
     return m_sceneDirty;
 }
@@ -707,6 +854,7 @@ void EditorUVE::ShutdownUVE() {
     }
 
     CancelGizmoDragUVE();
+    CancelViewportNavigationUVE();
     if (m_uiInitialized) {
         ImGui_ImplOpenGL3_Shutdown();
         ImGui_ImplGlfw_Shutdown();
@@ -795,6 +943,48 @@ bool EditorUVE::IsViewportRectValidUVE(const EditorViewportRectUVE& viewportRect
     return IsFiniteUVE(viewportRect.origin.x) && IsFiniteUVE(viewportRect.origin.y) &&
            IsFiniteUVE(viewportRect.size.x) && IsFiniteUVE(viewportRect.size.y) &&
            viewportRect.size.x >= kMinimumViewportWidthUVE && viewportRect.size.y >= kMinimumViewportHeightUVE;
+}
+
+bool EditorUVE::IsViewportNavigationFiniteUVE() const noexcept {
+    return IsFiniteVectorUVE(m_viewportFocusPoint) && IsFiniteUVE(m_viewportYawRadians) &&
+           IsFiniteUVE(m_viewportPitchRadians) && IsFiniteUVE(m_viewportDistance) &&
+           m_viewportDistance >= kMinimumViewportDistanceUVE &&
+           m_viewportDistance <= kMaximumViewportDistanceUVE;
+}
+
+bool EditorUVE::ApplyViewportCameraUVE() {
+    if (m_state != EditorStateUVE::Running || !IsViewportNavigationFiniteUVE()) {
+        return false;
+    }
+
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    if (!entityManager.IsAliveUVE(m_viewportCamera) ||
+        !entityManager.HasComponentUVE<Scene::TransformComponentUVE>(m_viewportCamera)) {
+        return false;
+    }
+
+    const Math::Vector3UVE forward = MakeViewportForwardUVE(m_viewportYawRadians, m_viewportPitchRadians);
+    const Math::QuaternionUVE orientation =
+        MakeViewportOrientationUVE(m_viewportYawRadians, m_viewportPitchRadians);
+    if (!IsFiniteVectorUVE(forward) || !IsFiniteUVE(orientation.x) || !IsFiniteUVE(orientation.y) ||
+        !IsFiniteUVE(orientation.z) || !IsFiniteUVE(orientation.w)) {
+        return false;
+    }
+
+    Scene::TransformComponentUVE transform =
+        entityManager.GetComponentUVE<Scene::TransformComponentUVE>(m_viewportCamera);
+    transform.localPosition = m_viewportFocusPoint - (forward * m_viewportDistance);
+    transform.localRotation = orientation;
+    if (!IsTransformFiniteUVE(transform)) {
+        return false;
+    }
+
+    m_services->GetSceneGraphUVE().SetLocalTransformUVE(entityManager, m_viewportCamera, transform);
+    return true;
+}
+
+void EditorUVE::CancelViewportNavigationUVE() noexcept {
+    m_viewportNavigationMode = EditorViewportNavigationModeUVE::None;
 }
 
 bool EditorUVE::IsFiniteVectorUVE(const Math::Vector3UVE& vector) const noexcept {
@@ -1366,22 +1556,48 @@ void EditorUVE::DrawViewportPanelUVE() {
         const ImVec2 mousePosition = ImGui::GetMousePos();
         const Math::Vector2UVE pointerPosition{mousePosition.x, mousePosition.y};
 
+        ImGuiIO& io = ImGui::GetIO();
         if (m_gizmoDrag.axis != EditorTranslateAxisUVE::None) {
             if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
                 UpdateGizmoDragUVE(pointerPosition);
             } else {
                 CommitGizmoDragUVE();
             }
-        } else if (viewportClicked) {
-            if (!BeginGizmoDragUVE(viewportRect, pointerPosition)) {
-                static_cast<void>(PickViewportUVE(viewportRect, pointerPosition));
+        } else if (m_viewportNavigationMode != EditorViewportNavigationModeUVE::None) {
+            const ImGuiMouseButton requiredButton =
+                m_viewportNavigationMode == EditorViewportNavigationModeUVE::Orbit
+                    ? ImGuiMouseButton_Right
+                    : ImGuiMouseButton_Middle;
+            if (!ImGui::IsMouseDown(requiredButton)) {
+                CancelViewportNavigationUVE();
+            } else if (m_viewportNavigationMode == EditorViewportNavigationModeUVE::Orbit) {
+                static_cast<void>(OrbitViewportUVE(-io.MouseDelta.x * kViewportOrbitRadiansPerPixelUVE,
+                                                   -io.MouseDelta.y * kViewportOrbitRadiansPerPixelUVE));
+            } else {
+                static_cast<void>(PanViewportUVE(Math::Vector2UVE{io.MouseDelta.x, io.MouseDelta.y}, viewportRect));
+            }
+        } else {
+            if (viewportHovered && !io.WantTextInput && ImGui::IsKeyPressed(ImGuiKey_F, false)) {
+                static_cast<void>(FocusSelectedEntityUVE());
+            }
+            if (viewportHovered && !io.WantTextInput && io.MouseWheel != 0.0F) {
+                static_cast<void>(ZoomViewportUVE(io.MouseWheel));
+            }
+            if (viewportHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+                m_viewportNavigationMode = EditorViewportNavigationModeUVE::Orbit;
+            } else if (viewportHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Middle)) {
+                m_viewportNavigationMode = EditorViewportNavigationModeUVE::Pan;
+            } else if (viewportClicked) {
+                if (!BeginGizmoDragUVE(viewportRect, pointerPosition)) {
+                    static_cast<void>(PickViewportUVE(viewportRect, pointerPosition));
+                }
             }
         }
 
         DrawTranslateGizmoUVE(viewportRect);
         ImDrawList* const drawList = ImGui::GetWindowDrawList();
         drawList->AddText(ImVec2{contentOrigin.x + 10.0F, contentOrigin.y + 10.0F}, IM_COL32(230, 230, 230, 220),
-                          "Viewport  |  click collider to select  |  drag RGB axis to move");
+                          "Viewport | LMB select / drag axis | RMB orbit | MMB pan | wheel zoom | F focus");
     } else {
         ImGui::TextUnformatted("Viewport is too small for picking.");
     }

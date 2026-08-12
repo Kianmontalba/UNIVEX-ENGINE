@@ -480,6 +480,129 @@ TEST(EditorUVETest, SaveThenLoadScene_RoundTripsDocumentRootsWithoutSerializingE
     std::filesystem::remove(scenePath.string() + ".editor-recovery");
 }
 
+TEST(EditorUVETest, ViewportNavigationUVE_FocusOrbitPanZoomPreserveDocumentAndHistoryState) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_navigation.uvescene");
+        editor.InitUVE();
+        Core::EngineServicesUVE& services = engine.GetServicesUVE();
+        Scene::IEntityManagerUVE& entityManager = services.GetEntityManagerUVE();
+        const Scene::EntityUVE root = entityManager.CreateEntityUVE();
+        Scene::TransformComponentUVE rootTransform{};
+        rootTransform.localPosition = Math::Vector3UVE{3.0F, 2.0F, -4.0F};
+        AttachRootUVE(engine, root, rootTransform);
+        services.GetSceneGraphUVE().UpdateUVE(entityManager);
+        editor.SelectEntityUVE(root);
+
+        const Scene::TransformComponentUVE documentBefore =
+            entityManager.GetComponentUVE<Scene::TransformComponentUVE>(root);
+        const Scene::TransformComponentUVE cameraBefore =
+            entityManager.GetComponentUVE<Scene::TransformComponentUVE>(editor.GetViewportCameraUVE());
+        ASSERT_TRUE(editor.FocusSelectedEntityUVE());
+        EXPECT_EQ(editor.GetViewportFocusPointUVE(), rootTransform.localPosition);
+        EXPECT_EQ(editor.GetSelectedEntityUVE(), root);
+        EXPECT_FALSE(editor.IsSceneDirtyUVE());
+        EXPECT_FALSE(editor.CanUndoUVE());
+        EXPECT_FALSE(editor.CanRedoUVE());
+
+        ASSERT_TRUE(editor.OrbitViewportUVE(0.5F, 0.25F));
+        const Scene::TransformComponentUVE cameraAfterOrbit =
+            entityManager.GetComponentUVE<Scene::TransformComponentUVE>(editor.GetViewportCameraUVE());
+        EXPECT_NE(cameraAfterOrbit.localPosition, cameraBefore.localPosition);
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(root).localPosition,
+                  documentBefore.localPosition);
+        EXPECT_FALSE(editor.IsSceneDirtyUVE());
+        EXPECT_FALSE(editor.CanUndoUVE());
+
+        const EditorViewportRectUVE viewportRect{
+            Math::Vector2UVE{0.0F, 0.0F}, Math::Vector2UVE{800.0F, 600.0F}};
+        const Math::Vector3UVE focusBeforePan = editor.GetViewportFocusPointUVE();
+        ASSERT_TRUE(editor.PanViewportUVE(Math::Vector2UVE{120.0F, -40.0F}, viewportRect));
+        EXPECT_NE(editor.GetViewportFocusPointUVE(), focusBeforePan);
+        const float distanceBeforeZoom = editor.GetViewportDistanceUVE();
+        ASSERT_TRUE(editor.ZoomViewportUVE(2.0F));
+        EXPECT_LT(editor.GetViewportDistanceUVE(), distanceBeforeZoom);
+        EXPECT_FALSE(editor.IsSceneDirtyUVE());
+        EXPECT_FALSE(editor.CanUndoUVE());
+        EXPECT_EQ(editor.GetViewportNavigationModeUVE(), EditorViewportNavigationModeUVE::None);
+
+        editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
+}
+
+TEST(EditorUVETest, ViewportNavigationUVE_ValidatesSelectionInputAndDistanceLimits) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_navigation_invalid.uvescene");
+        EXPECT_FALSE(editor.FocusSelectedEntityUVE());
+        EXPECT_FALSE(editor.OrbitViewportUVE(0.0F, 0.0F));
+        editor.InitUVE();
+        const EditorViewportRectUVE validViewport{
+            Math::Vector2UVE{0.0F, 0.0F}, Math::Vector2UVE{800.0F, 600.0F}};
+        EXPECT_FALSE(editor.FocusSelectedEntityUVE());
+        EXPECT_FALSE(editor.OrbitViewportUVE(std::numeric_limits<float>::infinity(), 0.0F));
+        EXPECT_FALSE(editor.PanViewportUVE(Math::Vector2UVE{0.0F, 1.0F},
+                                           EditorViewportRectUVE{Math::Vector2UVE{}, Math::Vector2UVE{1.0F, 1.0F}}));
+        EXPECT_FALSE(editor.ZoomViewportUVE(std::numeric_limits<float>::quiet_NaN()));
+
+        ASSERT_TRUE(editor.ZoomViewportUVE(100.0F));
+        EXPECT_GE(editor.GetViewportDistanceUVE(), 0.5F);
+        EXPECT_LE(editor.GetViewportDistanceUVE(), 500.0F);
+        EXPECT_FALSE(editor.ZoomViewportUVE(100.0F));
+        ASSERT_TRUE(editor.ZoomViewportUVE(-100.0F));
+        EXPECT_GE(editor.GetViewportDistanceUVE(), 0.5F);
+        EXPECT_LE(editor.GetViewportDistanceUVE(), 500.0F);
+        EXPECT_FALSE(editor.ZoomViewportUVE(-100.0F));
+        EXPECT_TRUE(editor.PanViewportUVE(Math::Vector2UVE{0.0F, 0.0F}, validViewport));
+
+        editor.ShutdownUVE();
+        EXPECT_FALSE(editor.OrbitViewportUVE(0.1F, 0.1F));
+        EXPECT_FALSE(editor.ZoomViewportUVE(1.0F));
+    }
+
+    engine.Shutdown();
+}
+
+TEST(EditorUVETest, ViewportNavigationUVE_DoesNotInterfereWithDocumentHistory) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_navigation_history.uvescene");
+        editor.InitUVE();
+        Scene::IEntityManagerUVE& entityManager = engine.GetServicesUVE().GetEntityManagerUVE();
+        const Scene::EntityUVE root = entityManager.CreateEntityUVE();
+        AttachRootUVE(engine, root, Scene::TransformComponentUVE{});
+        editor.SelectEntityUVE(root);
+
+        Scene::TransformComponentUVE edited{};
+        edited.localPosition = Math::Vector3UVE{2.0F, 0.0F, 0.0F};
+        ASSERT_TRUE(editor.SetSelectedLocalTransformUVE(edited));
+        ASSERT_TRUE(editor.CanUndoUVE());
+        ASSERT_TRUE(editor.OrbitViewportUVE(0.3F, -0.2F));
+        ASSERT_TRUE(editor.ZoomViewportUVE(1.0F));
+        EXPECT_TRUE(editor.CanUndoUVE());
+        EXPECT_FALSE(editor.CanRedoUVE());
+        ASSERT_TRUE(editor.UndoUVE());
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(root).localPosition,
+                  Math::Vector3UVE{});
+        EXPECT_FALSE(editor.IsSceneDirtyUVE());
+
+        editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
+}
+
 TEST(EditorUVETest, ViewportRayAndColliderPicking_SelectClosestDocumentEntityAndClearOnMiss) {
     Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
     engine.Init();
