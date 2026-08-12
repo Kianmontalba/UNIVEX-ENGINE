@@ -144,6 +144,35 @@ constexpr const char* kHierarchyEntityPayloadUVE = "UVE_SCENE_HIERARCHY_ENTITY";
     return IM_COL32(190, 190, 190, alpha);
 }
 
+[[nodiscard]] bool GetRingBasisUVE(const EditorTranslateAxisUVE axis, Math::Vector3UVE& outFirst,
+                                   Math::Vector3UVE& outSecond) noexcept {
+    switch (axis) {
+        case EditorTranslateAxisUVE::X:
+            outFirst = Math::Vector3UVE{0.0F, 1.0F, 0.0F};
+            outSecond = Math::Vector3UVE{0.0F, 0.0F, 1.0F};
+            return true;
+        case EditorTranslateAxisUVE::Y:
+            outFirst = Math::Vector3UVE{1.0F, 0.0F, 0.0F};
+            outSecond = Math::Vector3UVE{0.0F, 0.0F, 1.0F};
+            return true;
+        case EditorTranslateAxisUVE::Z:
+            outFirst = Math::Vector3UVE{1.0F, 0.0F, 0.0F};
+            outSecond = Math::Vector3UVE{0.0F, 1.0F, 0.0F};
+            return true;
+        case EditorTranslateAxisUVE::None:
+            return false;
+    }
+    return false;
+}
+
+[[nodiscard]] Math::Vector3UVE MakeRingPointUVE(const Math::Vector3UVE& center,
+                                                 const Math::Vector3UVE& first,
+                                                 const Math::Vector3UVE& second,
+                                                 const float parameterRadians) noexcept {
+    return center + (first * (std::cos(parameterRadians) * kGizmoAxisLengthUVE)) +
+           (second * (std::sin(parameterRadians) * kGizmoAxisLengthUVE));
+}
+
 } // namespace
 
 EditorUVE::EditorUVE(Core::EngineServicesUVE& services, std::filesystem::path activeScenePath,
@@ -448,6 +477,41 @@ bool EditorUVE::TranslateSelectedAlongAxisUVE(const EditorTranslateAxisUVE axis,
         entityManager.GetComponentUVE<Scene::TransformComponentUVE>(m_selectedEntity);
     updated.localPosition += localDelta;
     return SetSelectedLocalTransformUVE(updated);
+}
+
+bool EditorUVE::RotateSelectedAroundWorldAxisUVE(const EditorTranslateAxisUVE axis, const float radians) {
+    if (m_state != EditorStateUVE::Running || !IsDocumentEntityUVE(m_selectedEntity) ||
+        !IsFiniteUVE(radians) || axis == EditorTranslateAxisUVE::None ||
+        m_gizmoDrag.axis != EditorTranslateAxisUVE::None ||
+        m_viewportNavigationMode != EditorViewportNavigationModeUVE::None) {
+        return false;
+    }
+
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    if (!entityManager.HasComponentUVE<Scene::TransformComponentUVE>(m_selectedEntity)) {
+        return false;
+    }
+
+    Scene::TransformComponentUVE updated =
+        entityManager.GetComponentUVE<Scene::TransformComponentUVE>(m_selectedEntity);
+    Math::QuaternionUVE localRotation{};
+    if (!ComputeLocalRotationForWorldAxisUVE(m_selectedEntity, updated.localRotation, axis, radians, localRotation)) {
+        return false;
+    }
+    updated.localRotation = localRotation;
+    return SetSelectedLocalTransformUVE(updated);
+}
+
+void EditorUVE::SetGizmoModeUVE(const EditorGizmoModeUVE mode) noexcept {
+    if (m_gizmoDrag.axis != EditorTranslateAxisUVE::None ||
+        m_viewportNavigationMode != EditorViewportNavigationModeUVE::None) {
+        return;
+    }
+    m_gizmoMode = mode;
+}
+
+EditorGizmoModeUVE EditorUVE::GetGizmoModeUVE() const noexcept {
+    return m_gizmoMode;
 }
 
 bool EditorUVE::FocusSelectedEntityUVE() {
@@ -1238,6 +1302,10 @@ bool EditorUVE::IsTransformFiniteUVE(const Scene::TransformComponentUVE& transfo
            IsFiniteUVE(transform.localRotation.w) && IsFiniteVectorUVE(transform.localScale);
 }
 
+bool EditorUVE::IsQuaternionFiniteUVE(const Math::QuaternionUVE& quaternion) const noexcept {
+    return Math::IsFiniteUVE(quaternion);
+}
+
 bool EditorUVE::IsViewportRectValidUVE(const EditorViewportRectUVE& viewportRect) const noexcept {
     return IsFiniteUVE(viewportRect.origin.x) && IsFiniteUVE(viewportRect.origin.y) &&
            IsFiniteUVE(viewportRect.size.x) && IsFiniteUVE(viewportRect.size.y) &&
@@ -1352,6 +1420,51 @@ bool EditorUVE::ProjectWorldPointUVE(const EditorViewportRectUVE& viewportRect,
     return IsFiniteUVE(outScreenPoint.x) && IsFiniteUVE(outScreenPoint.y);
 }
 
+bool EditorUVE::ComputeLocalRotationForWorldAxisUVE(const Scene::EntityUVE entity,
+                                                        const Math::QuaternionUVE& initialLocalRotation,
+                                                        const EditorTranslateAxisUVE axis, const float radians,
+                                                        Math::QuaternionUVE& outLocalRotation) const {
+    if (!IsDocumentEntityUVE(entity) || !IsQuaternionFiniteUVE(initialLocalRotation) ||
+        !IsFiniteUVE(radians) || axis == EditorTranslateAxisUVE::None) {
+        return false;
+    }
+
+    Math::QuaternionUVE initialNormalized{};
+    Math::QuaternionUVE worldDelta{};
+    if (!Math::TryNormalizeUVE(initialLocalRotation, initialNormalized) ||
+        !Math::TryMakeAxisAngleUVE(GetAxisVectorUVE(axis), radians, worldDelta)) {
+        return false;
+    }
+
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    if (!entityManager.HasComponentUVE<Scene::HierarchyComponentUVE>(entity)) {
+        return false;
+    }
+
+    const Scene::HierarchyComponentUVE& hierarchy =
+        entityManager.GetComponentUVE<Scene::HierarchyComponentUVE>(entity);
+    Math::QuaternionUVE localDelta = worldDelta;
+    if (hierarchy.parent != Scene::kInvalidEntityUVE) {
+        if (!entityManager.IsAliveUVE(hierarchy.parent) ||
+            !entityManager.HasComponentUVE<Scene::WorldTransformComponentUVE>(hierarchy.parent)) {
+            return false;
+        }
+
+        const Scene::WorldTransformComponentUVE& parentWorld =
+            entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(hierarchy.parent);
+        Math::QuaternionUVE parentNormalized{};
+        Math::QuaternionUVE parentInverse{};
+        if (parentWorld.dirty || !Math::TryNormalizeUVE(parentWorld.worldRotation, parentNormalized) ||
+            !Math::TryInverseUVE(parentNormalized, parentInverse)) {
+            return false;
+        }
+        localDelta = Math::MultiplyUVE(
+            Math::MultiplyUVE(parentInverse, worldDelta), parentNormalized);
+    }
+
+    return Math::TryNormalizeUVE(Math::MultiplyUVE(localDelta, initialNormalized), outLocalRotation);
+}
+
 bool EditorUVE::ComputeLocalDeltaForWorldDeltaUVE(const Scene::EntityUVE entity,
                                                    const Math::Vector3UVE& worldDelta,
                                                    Math::Vector3UVE& outLocalDelta) const {
@@ -1397,6 +1510,9 @@ bool EditorUVE::ComputeLocalDeltaForWorldDeltaUVE(const Scene::EntityUVE entity,
 
 bool EditorUVE::BeginGizmoDragUVE(const EditorViewportRectUVE& viewportRect,
                                   const Math::Vector2UVE pointerPosition) {
+    if (m_gizmoMode == EditorGizmoModeUVE::Rotate) {
+        return BeginRotateGizmoDragUVE(viewportRect, pointerPosition);
+    }
     if (!IsDocumentEntityUVE(m_selectedEntity) || !IsViewportRectValidUVE(viewportRect)) {
         return false;
     }
@@ -1449,6 +1565,7 @@ bool EditorUVE::BeginGizmoDragUVE(const EditorViewportRectUVE& viewportRect,
         }
 
         const float axisLength = std::sqrt(axisLengthSquared);
+        candidate.mode = EditorGizmoModeUVE::Translate;
         candidate.axis = axis;
         candidate.entity = m_selectedEntity;
         candidate.initialLocalTransform =
@@ -1470,11 +1587,158 @@ bool EditorUVE::BeginGizmoDragUVE(const EditorViewportRectUVE& viewportRect,
     return true;
 }
 
+bool EditorUVE::FindClosestRingParameterUVE(const EditorViewportRectUVE& viewportRect,
+                                            const Scene::EntityUVE entity,
+                                            const EditorTranslateAxisUVE axis,
+                                            const Math::Vector2UVE pointerPosition,
+                                            float& outParameterRadians,
+                                            float& outDistanceSquared) const {
+    if (!IsDocumentEntityUVE(entity) || !IsViewportRectValidUVE(viewportRect) ||
+        !IsFiniteUVE(pointerPosition.x) || !IsFiniteUVE(pointerPosition.y)) {
+        return false;
+    }
+
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    if (!entityManager.HasComponentUVE<Scene::WorldTransformComponentUVE>(entity)) {
+        return false;
+    }
+    const Scene::WorldTransformComponentUVE& world =
+        entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(entity);
+    if (world.dirty || !IsFiniteVectorUVE(world.worldPosition)) {
+        return false;
+    }
+
+    Math::Vector3UVE first{};
+    Math::Vector3UVE second{};
+    if (!GetRingBasisUVE(axis, first, second)) {
+        return false;
+    }
+
+    constexpr int kRingSegmentCountUVE = 64;
+    constexpr float kFullTurnRadiansUVE = std::numbers::pi_v<float> * 2.0F;
+    const float segmentRadians = kFullTurnRadiansUVE / static_cast<float>(kRingSegmentCountUVE);
+    float bestDistanceSquared = std::numeric_limits<float>::max();
+    float bestParameter = 0.0F;
+    bool found = false;
+    for (int segment = 0; segment < kRingSegmentCountUVE; ++segment) {
+        const float startParameter = static_cast<float>(segment) * segmentRadians;
+        Math::Vector2UVE start{};
+        Math::Vector2UVE end{};
+        if (!ProjectWorldPointUVE(viewportRect, MakeRingPointUVE(world.worldPosition, first, second, startParameter),
+                                  start) ||
+            !ProjectWorldPointUVE(viewportRect,
+                                  MakeRingPointUVE(world.worldPosition, first, second,
+                                                   startParameter + segmentRadians),
+                                  end)) {
+            continue;
+        }
+
+        const Math::Vector2UVE segmentVector{end.x - start.x, end.y - start.y};
+        const float segmentLengthSquared = LengthSquared2UVE(segmentVector);
+        if (segmentLengthSquared <= kVectorEpsilonUVE) {
+            continue;
+        }
+        const Math::Vector2UVE pointerOffset{pointerPosition.x - start.x, pointerPosition.y - start.y};
+        const float parameter = std::clamp(Dot2UVE(pointerOffset, segmentVector) / segmentLengthSquared, 0.0F, 1.0F);
+        const Math::Vector2UVE closest{start.x + segmentVector.x * parameter,
+                                       start.y + segmentVector.y * parameter};
+        const Math::Vector2UVE offset{pointerPosition.x - closest.x, pointerPosition.y - closest.y};
+        const float distanceSquared = LengthSquared2UVE(offset);
+        if (distanceSquared < bestDistanceSquared) {
+            bestDistanceSquared = distanceSquared;
+            bestParameter = startParameter + parameter * segmentRadians;
+            found = true;
+        }
+    }
+
+    if (!found) {
+        return false;
+    }
+    outParameterRadians = bestParameter;
+    outDistanceSquared = bestDistanceSquared;
+    return true;
+}
+
+bool EditorUVE::BeginRotateGizmoDragUVE(const EditorViewportRectUVE& viewportRect,
+                                        const Math::Vector2UVE pointerPosition) {
+    if (!IsDocumentEntityUVE(m_selectedEntity) || !IsViewportRectValidUVE(viewportRect)) {
+        return false;
+    }
+
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    if (!entityManager.HasComponentUVE<Scene::TransformComponentUVE>(m_selectedEntity) ||
+        !entityManager.HasComponentUVE<Scene::WorldTransformComponentUVE>(m_selectedEntity)) {
+        return false;
+    }
+
+    constexpr std::array<EditorTranslateAxisUVE, 3> axes{
+        EditorTranslateAxisUVE::X,
+        EditorTranslateAxisUVE::Y,
+        EditorTranslateAxisUVE::Z,
+    };
+    GizmoDragUVE candidate{};
+    float bestDistanceSquared = std::numeric_limits<float>::max();
+    for (const EditorTranslateAxisUVE axis : axes) {
+        float parameterRadians = 0.0F;
+        float distanceSquared = 0.0F;
+        if (!FindClosestRingParameterUVE(viewportRect, m_selectedEntity, axis, pointerPosition,
+                                         parameterRadians, distanceSquared) ||
+            distanceSquared > (kGizmoHandleRadiusPixelsUVE * kGizmoHandleRadiusPixelsUVE) ||
+            distanceSquared >= bestDistanceSquared) {
+            continue;
+        }
+        candidate.mode = EditorGizmoModeUVE::Rotate;
+        candidate.axis = axis;
+        candidate.entity = m_selectedEntity;
+        candidate.initialLocalTransform =
+            entityManager.GetComponentUVE<Scene::TransformComponentUVE>(m_selectedEntity);
+        candidate.initialPointer = pointerPosition;
+        candidate.viewportRect = viewportRect;
+        candidate.initialRingParameterRadians = parameterRadians;
+        candidate.initialDirty = m_sceneDirty;
+        bestDistanceSquared = distanceSquared;
+    }
+
+    if (candidate.axis == EditorTranslateAxisUVE::None) {
+        return false;
+    }
+    m_gizmoDrag = candidate;
+    return true;
+}
+
 void EditorUVE::UpdateGizmoDragUVE(const Math::Vector2UVE pointerPosition) {
     if (m_gizmoDrag.axis == EditorTranslateAxisUVE::None || !IsDocumentEntityUVE(m_gizmoDrag.entity) ||
         m_gizmoDrag.entity != m_selectedEntity || !IsFiniteUVE(pointerPosition.x) ||
         !IsFiniteUVE(pointerPosition.y)) {
         CancelGizmoDragUVE();
+        return;
+    }
+
+    if (m_gizmoDrag.mode == EditorGizmoModeUVE::Rotate) {
+        float currentParameterRadians = 0.0F;
+        float distanceSquared = 0.0F;
+        if (!FindClosestRingParameterUVE(m_gizmoDrag.viewportRect, m_gizmoDrag.entity, m_gizmoDrag.axis,
+                                         pointerPosition, currentParameterRadians, distanceSquared)) {
+            CancelGizmoDragUVE();
+            return;
+        }
+        const float deltaRadians = std::remainder(
+            currentParameterRadians - m_gizmoDrag.initialRingParameterRadians, std::numbers::pi_v<float> * 2.0F);
+        Math::QuaternionUVE localRotation{};
+        if (!IsFiniteUVE(deltaRadians) ||
+            !ComputeLocalRotationForWorldAxisUVE(m_gizmoDrag.entity,
+                                                 m_gizmoDrag.initialLocalTransform.localRotation,
+                                                 m_gizmoDrag.axis, deltaRadians, localRotation)) {
+            CancelGizmoDragUVE();
+            return;
+        }
+        Scene::TransformComponentUVE updated = m_gizmoDrag.initialLocalTransform;
+        updated.localRotation = localRotation;
+        if (!ApplyLocalTransformUVE(m_gizmoDrag.entity, updated)) {
+            CancelGizmoDragUVE();
+            return;
+        }
+        m_sceneDirty = true;
         return;
     }
 
@@ -1593,6 +1857,59 @@ void EditorUVE::DrawTranslateGizmoUVE(const EditorViewportRectUVE& viewportRect)
     }
 }
 
+void EditorUVE::DrawRotateGizmoUVE(const EditorViewportRectUVE& viewportRect) {
+    if (!IsDocumentEntityUVE(m_selectedEntity) || !IsViewportRectValidUVE(viewportRect)) {
+        return;
+    }
+
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    if (!entityManager.HasComponentUVE<Scene::WorldTransformComponentUVE>(m_selectedEntity)) {
+        return;
+    }
+    const Scene::WorldTransformComponentUVE& selectedWorld =
+        entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(m_selectedEntity);
+    if (selectedWorld.dirty || !IsFiniteVectorUVE(selectedWorld.worldPosition)) {
+        return;
+    }
+
+    constexpr std::array<EditorTranslateAxisUVE, 3> axes{
+        EditorTranslateAxisUVE::X,
+        EditorTranslateAxisUVE::Y,
+        EditorTranslateAxisUVE::Z,
+    };
+    constexpr int kRingSegmentCountUVE = 64;
+    constexpr float kFullTurnRadiansUVE = std::numbers::pi_v<float> * 2.0F;
+    const float segmentRadians = kFullTurnRadiansUVE / static_cast<float>(kRingSegmentCountUVE);
+    ImDrawList* const drawList = ImGui::GetForegroundDrawList();
+
+    for (const EditorTranslateAxisUVE axis : axes) {
+        Math::Vector3UVE first{};
+        Math::Vector3UVE second{};
+        if (!GetRingBasisUVE(axis, first, second)) {
+            continue;
+        }
+
+        const bool active = m_gizmoDrag.mode == EditorGizmoModeUVE::Rotate && m_gizmoDrag.axis == axis;
+        const ImU32 color = GizmoAxisColorUVE(axis, active);
+        for (int segment = 0; segment < kRingSegmentCountUVE; ++segment) {
+            const float startParameter = static_cast<float>(segment) * segmentRadians;
+            Math::Vector2UVE start{};
+            Math::Vector2UVE end{};
+            if (!ProjectWorldPointUVE(
+                    viewportRect,
+                    MakeRingPointUVE(selectedWorld.worldPosition, first, second, startParameter), start) ||
+                !ProjectWorldPointUVE(
+                    viewportRect,
+                    MakeRingPointUVE(selectedWorld.worldPosition, first, second,
+                                     startParameter + segmentRadians),
+                    end)) {
+                continue;
+            }
+            drawList->AddLine(ImVec2{start.x, start.y}, ImVec2{end.x, end.y}, color, active ? 4.0F : 2.5F);
+        }
+    }
+}
+
 void EditorUVE::DestroyDocumentSubtreeUVE(const Scene::EntityUVE root) {
     Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
     const std::vector<Scene::EntityUVE> children =
@@ -1620,7 +1937,13 @@ void EditorUVE::DrawMenuBarUVE() {
 
     ImGuiIO& io = ImGui::GetIO();
     const bool lifecycleCommandAllowed = IsLifecycleCommandAllowedUVE() && IsDocumentEntityUVE(m_selectedEntity);
-    if (!io.WantTextInput && io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Z, false)) {
+    const bool gizmoModeChangeAllowed = m_gizmoDrag.axis == EditorTranslateAxisUVE::None &&
+                                        m_viewportNavigationMode == EditorViewportNavigationModeUVE::None;
+    if (!io.WantTextInput && gizmoModeChangeAllowed && ImGui::IsKeyPressed(ImGuiKey_W, false)) {
+        SetGizmoModeUVE(EditorGizmoModeUVE::Translate);
+    } else if (!io.WantTextInput && gizmoModeChangeAllowed && ImGui::IsKeyPressed(ImGuiKey_E, false)) {
+        SetGizmoModeUVE(EditorGizmoModeUVE::Rotate);
+    } else if (!io.WantTextInput && io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Z, false)) {
         if (io.KeyShift) {
             static_cast<void>(RedoUVE());
         } else {
@@ -1658,6 +1981,18 @@ void EditorUVE::DrawMenuBarUVE() {
         }
         if (ImGui::MenuItem("Delete", "Delete", false, lifecycleCommandAllowed)) {
             static_cast<void>(DeleteSelectedEntityUVE());
+        }
+        ImGui::EndMenu();
+    }
+
+    if (ImGui::BeginMenu("View")) {
+        if (ImGui::MenuItem("Translate Gizmo", "W", m_gizmoMode == EditorGizmoModeUVE::Translate,
+                            gizmoModeChangeAllowed)) {
+            SetGizmoModeUVE(EditorGizmoModeUVE::Translate);
+        }
+        if (ImGui::MenuItem("Rotate Gizmo", "E", m_gizmoMode == EditorGizmoModeUVE::Rotate,
+                            gizmoModeChangeAllowed)) {
+            SetGizmoModeUVE(EditorGizmoModeUVE::Rotate);
         }
         ImGui::EndMenu();
     }
@@ -1931,10 +2266,18 @@ void EditorUVE::DrawViewportPanelUVE() {
             }
         }
 
-        DrawTranslateGizmoUVE(viewportRect);
+        if (m_gizmoMode == EditorGizmoModeUVE::Translate) {
+            DrawTranslateGizmoUVE(viewportRect);
+        } else {
+            DrawRotateGizmoUVE(viewportRect);
+        }
         ImDrawList* const drawList = ImGui::GetWindowDrawList();
+        const char* const modeLabel =
+            m_gizmoMode == EditorGizmoModeUVE::Translate ? "Translate (W)" : "Rotate (E)";
         drawList->AddText(ImVec2{contentOrigin.x + 10.0F, contentOrigin.y + 10.0F}, IM_COL32(230, 230, 230, 220),
-                          "Viewport | LMB select / drag axis | RMB orbit | MMB pan | wheel zoom | F focus");
+                          "Viewport | LMB select / drag handle | RMB orbit | MMB pan | wheel zoom | F focus");
+        drawList->AddText(ImVec2{contentOrigin.x + 10.0F, contentOrigin.y + 30.0F}, IM_COL32(190, 215, 235, 220),
+                          modeLabel);
     } else {
         ImGui::TextUnformatted("Viewport is too small for picking.");
     }

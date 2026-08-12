@@ -80,6 +80,39 @@ TEST(QuaternionUVETest, RotateVectorUVE_NinetyDegreesAboutZ_RotatesXAxisToYAxis)
     EXPECT_NEAR(rotated.z, 0.0F, kEpsilon);
 }
 
+TEST(QuaternionUVETest, CheckedHelpers_NormalizeInvertAndConstructAxisAngle) {
+    QuaternionUVE normalized{};
+    EXPECT_TRUE(TryNormalizeUVE(QuaternionUVE{0.0F, 0.0F, 2.0F, 2.0F}, normalized));
+    EXPECT_NEAR(LengthSquaredUVE(normalized), 1.0F, kEpsilon);
+    EXPECT_TRUE(IsFiniteUVE(normalized));
+
+    QuaternionUVE inverse{};
+    ASSERT_TRUE(TryInverseUVE(normalized, inverse));
+    const QuaternionUVE identity = MultiplyUVE(normalized, inverse);
+    EXPECT_NEAR(identity.x, 0.0F, kEpsilon);
+    EXPECT_NEAR(identity.y, 0.0F, kEpsilon);
+    EXPECT_NEAR(identity.z, 0.0F, kEpsilon);
+    EXPECT_NEAR(identity.w, 1.0F, kEpsilon);
+
+    QuaternionUVE ninetyAboutZ{};
+    ASSERT_TRUE(TryMakeAxisAngleUVE(Vector3UVE{0.0F, 0.0F, 1.0F}, std::numbers::pi_v<float> * 0.5F,
+                                     ninetyAboutZ));
+    const Vector3UVE rotated = RotateVectorUVE(ninetyAboutZ, Vector3UVE{1.0F, 0.0F, 0.0F});
+    EXPECT_NEAR(rotated.x, 0.0F, kEpsilon);
+    EXPECT_NEAR(rotated.y, 1.0F, kEpsilon);
+    EXPECT_NEAR(rotated.z, 0.0F, kEpsilon);
+}
+
+TEST(QuaternionUVETest, CheckedHelpers_RejectNonFiniteOrZeroInputWithoutChangingOutput) {
+    QuaternionUVE preserved{1.0F, 2.0F, 3.0F, 4.0F};
+    EXPECT_FALSE(TryNormalizeUVE(QuaternionUVE{0.0F, 0.0F, 0.0F, 0.0F}, preserved));
+    EXPECT_EQ(preserved, (QuaternionUVE{1.0F, 2.0F, 3.0F, 4.0F}));
+    EXPECT_FALSE(TryInverseUVE(QuaternionUVE{NAN, 0.0F, 0.0F, 1.0F}, preserved));
+    EXPECT_EQ(preserved, (QuaternionUVE{1.0F, 2.0F, 3.0F, 4.0F}));
+    EXPECT_FALSE(TryMakeAxisAngleUVE(Vector3UVE{}, 0.0F, preserved));
+    EXPECT_EQ(preserved, (QuaternionUVE{1.0F, 2.0F, 3.0F, 4.0F}));
+}
+
 TEST(QuaternionUVETest, ToStringUVE_FormatsAllFourComponents) {
     const QuaternionUVE rotation{0.0F, 0.0F, 0.0F, 1.0F};
     const std::string text = ToStringUVE(rotation);
