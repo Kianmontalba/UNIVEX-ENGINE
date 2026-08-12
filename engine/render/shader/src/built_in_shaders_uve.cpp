@@ -214,8 +214,34 @@ uniform int uShadowCascadeCount;
 // Increment 31: fraction of each non-final cascade depth interval used to cross-fade into the next.
 uniform float uShadowCascadeBlendRatio;
 
+const float kPiUVE = 3.14159265359;
+const float kBrdfEpsilonUVE = 0.0001;
+
 vec3 SafeNormalizeUVE(vec3 value) {
-    return value / max(length(value), 0.0001);
+    return value / max(length(value), kBrdfEpsilonUVE);
+}
+
+float DistributionGgxUVE(float normalDotHalf, float roughness) {
+    float alpha = roughness * roughness;
+    float alphaSquared = alpha * alpha;
+    float normalDotHalfSquared = normalDotHalf * normalDotHalf;
+    float denominator = normalDotHalfSquared * (alphaSquared - 1.0) + 1.0;
+    return alphaSquared / max(kPiUVE * denominator * denominator, kBrdfEpsilonUVE);
+}
+
+float GeometrySchlickGgxUVE(float normalDotDirection, float roughness) {
+    float alpha = roughness * roughness;
+    float k = ((alpha + 1.0) * (alpha + 1.0)) * 0.125;
+    return normalDotDirection / max(normalDotDirection * (1.0 - k) + k, kBrdfEpsilonUVE);
+}
+
+float GeometrySmithUVE(float normalDotView, float normalDotLight, float roughness) {
+    return GeometrySchlickGgxUVE(normalDotView, roughness) *
+           GeometrySchlickGgxUVE(normalDotLight, roughness);
+}
+
+vec3 FresnelSchlickUVE(float halfDotView, vec3 baseReflectance) {
+    return baseReflectance + (vec3(1.0) - baseReflectance) * pow(1.0 - halfDotView, 5.0);
 }
 
 float SampleCascadeDepthUVE(int cascadeIndex, vec2 texCoord) {
@@ -364,14 +390,25 @@ void main() {
             }
         }
 
-        float diffuseStrength = max(dot(normal, lightDirection), 0.0);
+        float normalDotLight = max(dot(normal, lightDirection), 0.0);
+        float normalDotView = max(dot(normal, viewDirection), 0.0);
+        if (normalDotLight <= 0.0 || normalDotView <= 0.0 || attenuation <= 0.0) {
+            continue;
+        }
+
         vec3 halfDirection = SafeNormalizeUVE(lightDirection + viewDirection);
-        float shininess = mix(64.0, 4.0, roughness);
-        float specularStrength = pow(max(dot(normal, halfDirection), 0.0), shininess);
+        float normalDotHalf = max(dot(normal, halfDirection), 0.0);
+        float halfDotView = max(dot(halfDirection, viewDirection), 0.0);
         vec3 baseReflectance = mix(vec3(0.04), albedo, metallic);
-        vec3 directContribution =
-            (albedo * diffuseStrength * (1.0 - metallic) + baseReflectance * specularStrength) * light.color *
-            light.intensity * attenuation;
+        vec3 fresnel = FresnelSchlickUVE(halfDotView, baseReflectance);
+        float distribution = DistributionGgxUVE(normalDotHalf, roughness);
+        float geometry = GeometrySmithUVE(normalDotView, normalDotLight, roughness);
+        vec3 specular = (distribution * geometry * fresnel) /
+                        max(4.0 * normalDotView * normalDotLight, kBrdfEpsilonUVE);
+        vec3 diffuseWeight = (vec3(1.0) - fresnel) * (1.0 - metallic);
+        vec3 diffuse = diffuseWeight * albedo / kPiUVE;
+        vec3 radiance = light.color * light.intensity * attenuation;
+        vec3 directContribution = (diffuse + specular) * radiance * normalDotLight;
 
         if (light.type == 0) {
             directContribution *= DirectionalShadowFactorUVE(normal, lightDirection);
