@@ -71,7 +71,9 @@ These navigation controls never alter the document, dirty state, scene file, or 
 The Assets panel lists only deterministic snapshots of `AssetDatabaseUVE` registered records and
 offers a case-insensitive path filter; it does not scan filesystems, import assets, or load previews.
 Viewport picking intentionally selects only live document entities with the existing box collider
-component. Mesh picking, uniform/negative scale, local-axis and plane handles, trackball rotation, fly navigation, camera bookmarks, cinematic
+component. A selected collider-backed document entity receives a read-only cyan oriented bounds overlay with corner
+and center markers; this feedback follows its derived world transform and never changes scene data or history.
+Mesh picking, mesh-derived bounds, uniform/negative scale, local-axis and plane handles, trackball rotation, fly navigation, camera bookmarks, cinematic
 camera tools, play mode, filesystem browsing, import/reimport, asset drag-and-drop, thumbnails,
 layout persistence, hierarchy search, world-transform-preserving reparenting, child ordering,
 multi-entity lifecycle operations, and OS clipboard copy/paste remain future increments.
