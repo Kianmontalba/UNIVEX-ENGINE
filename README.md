@@ -46,8 +46,12 @@ Light, and Collision Box document roots. New archetypes receive deterministic de
 `Camera` and `Camera 2`; the Properties panel can rename one selected live document entity, and
 names persist through `.uvescene` save/load. Legacy scenes without name metadata remain valid and
 fall back to stable entity index/generation labels. The editor also provides a bounded in-session
-Undo/Redo history for successful Transform, rename, root-creation, duplicate, and delete actions.
-The Edit menu provides disabled-state **Duplicate** (`Ctrl+D`) and **Delete** (`Delete`) controls for
+Undo/Redo history for successful Transform, rename, root-creation, duplicate, delete, and hierarchy
+reparent actions. The Scene panel supports drag-and-drop reparenting: drop a document entity onto
+another document entity to make it a child, or onto the root drop target to detach it. Reparenting
+preserves the moved subtree and the authored local Transform of its root; self-parenting, cycles,
+stale handles, and the editor camera are rejected safely. The Edit menu provides disabled-state
+**Duplicate** (`Ctrl+D`) and **Delete** (`Delete`) controls for
 one selected live document entity, in addition to focus-safe `Ctrl+Z`, `Ctrl+Y`, and
 `Ctrl+Shift+Z`. Duplicate and delete capture the complete selected subtree in memory through the
 same registered-component envelope used by `.uvescene`, preserving hierarchy and restoring fresh
@@ -61,8 +65,8 @@ offers a case-insensitive path filter; it does not scan filesystems, import asse
 Viewport picking intentionally selects only live document entities with the existing box collider
 component. Mesh picking, rotate/scale gizmos, snapping, fly navigation, camera bookmarks, cinematic
 camera tools, play mode, filesystem browsing, import/reimport, asset drag-and-drop, thumbnails,
-layout persistence, hierarchy search, reparenting history, multi-entity lifecycle operations, and
-OS clipboard copy/paste remain future increments.
+layout persistence, hierarchy search, world-transform-preserving reparenting, child ordering,
+multi-entity lifecycle operations, and OS clipboard copy/paste remain future increments.
 
 ## Repository layout
 
