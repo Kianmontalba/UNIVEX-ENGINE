@@ -34,6 +34,8 @@ public:
 
     [[nodiscard]] std::shared_ptr<ShaderSourceUVE> CreateSourceUVE(const ShaderSourceCompileDescUVE& desc) override;
     [[nodiscard]] std::shared_ptr<ShaderProgramUVE> CreateProgramUVE(const ShaderProgramDescUVE& desc) override;
+    [[nodiscard]] std::shared_ptr<ShaderProgramUVE> CreateProgramFromStagesUVE(
+        const ShaderProgramStagesDescUVE& desc) override;
     void UpdateUVE(double deltaTimeSeconds) override;
 
     /// Test-only hook (not part of IShaderManagerUVE): how many ShaderSourceUVE/ShaderProgramUVE

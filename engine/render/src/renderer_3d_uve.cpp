@@ -91,16 +91,17 @@ struct MeshGpuResourcesUVE {
     std::uint32_t indexCount = 0;
 };
 
-/// A material's built pipeline state object plus its three resolved texture handles (Increment
-/// 22), cached by MaterialAssetUVE's AssetGuidUVE. Kept separate from MeshGpuResourcesUVE (rather
-/// than one map holding both, as an earlier sketch of this design considered) since a mesh's cache
-/// entry and a material's cache entry have unrelated shapes — conflating them under one per-GUID
-/// record would leave half of every entry meaningless. `albedoTexture`/`normalTexture`/
-/// `aoTexture` are never kInvalidTextureHandleUVE once cached — an unset MaterialAssetUVE texture
-/// GUID resolves to one of Renderer3DUVE's two fallback textures instead (see
-/// ResolveTextureGpuHandleUVE()'s doc comment).
+/// A material's manager-owned linked program plus its resolved texture handles, cached by
+/// MaterialAssetUVE's AssetGuidUVE. `program` owns its linked pipeline through ShaderManagerUVE;
+/// Renderer3DUVE only retains a shared reference and must never destroy that pipeline directly.
+/// The source GUIDs let AssetReloaded events invalidate exactly the materials that reference a
+/// changed vertex or fragment shader. `albedoTexture`/`normalTexture`/`aoTexture` are never
+/// kInvalidTextureHandleUVE once cached — an unset MaterialAssetUVE texture GUID resolves to one
+/// of Renderer3DUVE's two fallback textures (see ResolveTextureGpuHandleUVE()'s doc comment).
 struct MaterialGpuResourcesUVE {
-    PipelineHandleUVE pipeline;
+    std::shared_ptr<Shader::ShaderProgramUVE> program;
+    Asset::AssetGuidUVE vertexShaderGuid;
+    Asset::AssetGuidUVE fragmentShaderGuid;
     TextureHandleUVE albedoTexture;
     TextureHandleUVE normalTexture;
     TextureHandleUVE aoTexture;
@@ -321,10 +322,17 @@ struct Renderer3DUVE::ImplUVE {
             renderDevice.DestroyBufferUVE(meshIt->second.indexBuffer);
             meshCache.erase(meshIt);
         }
-        const auto materialIt = materialCache.find(event.guid);
-        if (materialIt != materialCache.end()) {
-            renderDevice.DestroyPipelineUVE(materialIt->second.pipeline);
-            materialCache.erase(materialIt);
+        // A material asset reload, or a reload of either of its separate shader assets, drops the
+        // renderer cache entry. The shared managed program then releases naturally; ShaderManagerUVE
+        // remains the sole owner of the linked pipeline lifecycle.
+        for (auto materialIt = materialCache.begin(); materialIt != materialCache.end();) {
+            const MaterialGpuResourcesUVE& resources = materialIt->second;
+            if (materialIt->first == event.guid || resources.vertexShaderGuid == event.guid ||
+                resources.fragmentShaderGuid == event.guid) {
+                materialIt = materialCache.erase(materialIt);
+            } else {
+                ++materialIt;
+            }
         }
 
         const auto textureIt = textureCache.find(event.guid);
@@ -339,9 +347,6 @@ struct Renderer3DUVE::ImplUVE {
             // for anything unaffected). Coarse but simple and obviously correct, matching this
             // codebase's existing preference for whole-unit invalidation over fine-grained
             // dependency tracking (compare ShaderManagerUVE's own hot-reload).
-            for (const auto& [materialGuid, materialResources] : materialCache) {
-                renderDevice.DestroyPipelineUVE(materialResources.pipeline);
-            }
             materialCache.clear();
         }
     }
@@ -413,11 +418,12 @@ struct Renderer3DUVE::ImplUVE {
         return handle;
     }
 
-    /// Returns the cached (creating-if-needed) pipeline + resolved textures for `item`'s material,
-    /// or nullptr if the material's vertex/fragment ShaderAssetUVE or any of its set texture GUIDs
-    /// hasn't finished loading yet this frame (silently skipped, same async-non-blocking
-    /// convention MeshRendererUVE uses for mesh/material readiness — it appears once everything is
-    /// ready, no special-casing).
+    /// Returns the cached (creating-if-needed) managed program + resolved textures for `item`'s
+    /// material, or nullptr if the material's source assets/textures have not finished loading yet.
+    /// The cached program may still be preprocessing or linking; RecordItemsUVE checks IsValidUVE()
+    /// and skips that frame without blocking, then renders automatically once ShaderManagerUVE
+    /// completes the request.
+
     [[nodiscard]] const MaterialGpuResourcesUVE* ResolveMaterialGpuResourcesUVE(const RenderItemUVE& item) {
         const Asset::AssetGuidUVE guid = item.materialHandle.GetGuidUVE();
         const auto existingIt = materialCache.find(guid);
@@ -446,26 +452,32 @@ struct Renderer3DUVE::ImplUVE {
 
         const Asset::ShaderAssetUVE* const vertexShaderAsset = vertexShaderHandle.TryGetUVE();
         const Asset::ShaderAssetUVE* const fragmentShaderAsset = fragmentShaderHandle.TryGetUVE();
-        const ShaderHandleUVE vertexShader = renderDevice.CreateShaderUVE(
-            ShaderDescUVE{ShaderStageUVE::Vertex, vertexShaderAsset->sourceCode, vertexShaderAsset->entryPointName});
-        const ShaderHandleUVE fragmentShader = renderDevice.CreateShaderUVE(ShaderDescUVE{
-            ShaderStageUVE::Fragment, fragmentShaderAsset->sourceCode, fragmentShaderAsset->entryPointName});
 
-        PipelineDescUVE pipelineDesc;
-        pipelineDesc.vertexShader = vertexShader;
-        pipelineDesc.fragmentShader = fragmentShader;
-        pipelineDesc.vertexLayout = MeshVertexLayoutUVE();
-        pipelineDesc.vertexStride = static_cast<std::uint32_t>(sizeof(Asset::MeshVertexUVE));
-        pipelineDesc.depthTestEnabled = true;
-        pipelineDesc.depthWriteEnabled = !material->isTransparent;
-
-        const PipelineHandleUVE pipeline = renderDevice.CreatePipelineUVE(pipelineDesc);
-        if (pipeline == kInvalidPipelineHandleUVE) {
-            return nullptr;
-        }
+        // `.uveshader` assets are envelope files rather than raw GLSL files, so their already
+        // decoded source is supplied as the manager fallback and the root virtual path stays empty.
+        // Includes inside that source still use the normal virtual include paths and participate in
+        // program-level dependency tracking; AssetReloaded events invalidate root shader assets.
+        Shader::ShaderProgramStagesDescUVE programDesc;
+        programDesc.vertexSource.stage = ShaderStageUVE::Vertex;
+        programDesc.vertexSource.embeddedFallbackSourceCode = vertexShaderAsset->sourceCode;
+        programDesc.vertexSource.entryPointName = vertexShaderAsset->entryPointName;
+        programDesc.vertexSource.debugNameUVE =
+            "Material vertex " + assetDatabase.ResolveUVE(material->vertexShader).string();
+        programDesc.fragmentSource.stage = ShaderStageUVE::Fragment;
+        programDesc.fragmentSource.embeddedFallbackSourceCode = fragmentShaderAsset->sourceCode;
+        programDesc.fragmentSource.entryPointName = fragmentShaderAsset->entryPointName;
+        programDesc.fragmentSource.debugNameUVE =
+            "Material fragment " + assetDatabase.ResolveUVE(material->fragmentShader).string();
+        programDesc.vertexLayout = MeshVertexLayoutUVE();
+        programDesc.vertexStride = static_cast<std::uint32_t>(sizeof(Asset::MeshVertexUVE));
+        programDesc.depthTestEnabled = true;
+        programDesc.depthWriteEnabled = !material->isTransparent;
+        programDesc.debugNameUVE = "Material " + assetDatabase.ResolveUVE(guid).string();
+        const std::shared_ptr<Shader::ShaderProgramUVE> program = shaderManager.CreateProgramFromStagesUVE(programDesc);
 
         const auto insertResult = materialCache.emplace(
-            guid, MaterialGpuResourcesUVE{pipeline, *albedoTexture, *normalTexture, *aoTexture});
+            guid, MaterialGpuResourcesUVE{program, material->vertexShader, material->fragmentShader, *albedoTexture,
+                                          *normalTexture, *aoTexture});
         return &insertResult.first->second;
     }
 
@@ -510,53 +522,58 @@ struct Renderer3DUVE::ImplUVE {
             }
             const MeshGpuResourcesUVE& meshResources = ResolveMeshGpuResourcesUVE(item);
             const Asset::MaterialAssetUVE* const material = item.materialHandle.TryGetUVE();
+            const std::shared_ptr<Shader::ShaderProgramUVE>& program = materialResources->program;
+            if (!program->IsValidUVE()) {
+                continue; // Still compiling or invalid: never bind a stale raw material pipeline.
+            }
 
-            commandBuffer.BindPipelineUVE(materialResources->pipeline);
-            commandBuffer.SetUniformMatrix4x4UVE("uModel", item.worldMatrix);
-            commandBuffer.SetUniformMatrix4x4UVE("uViewProjection", frameUniforms.viewProjection);
-            commandBuffer.SetUniformVector3UVE("uAmbientColor", frameUniforms.ambientColor);
-            commandBuffer.SetUniformVector3UVE("uViewPosition", frameUniforms.viewPosition);
+            program->SetMatrix4x4UVE("uModel", item.worldMatrix);
+            program->SetMatrix4x4UVE("uViewProjection", frameUniforms.viewProjection);
+            program->SetVector3UVE("uAmbientColor", frameUniforms.ambientColor);
+            program->SetVector3UVE("uViewPosition", frameUniforms.viewPosition);
             for (std::size_t lightIndex = 0; lightIndex < kMaxLightsUVE; ++lightIndex) {
                 const LightDataUVE& light = frameUniforms.lights[lightIndex];
                 const std::string prefix = "uLights[" + std::to_string(lightIndex) + "].";
-                commandBuffer.SetUniformIntUVE(prefix + "type", static_cast<std::int32_t>(light.type));
-                commandBuffer.SetUniformVector3UVE(prefix + "position", light.position);
-                commandBuffer.SetUniformVector3UVE(prefix + "direction", light.direction);
-                commandBuffer.SetUniformVector3UVE(prefix + "color", light.color);
-                commandBuffer.SetUniformFloatUVE(prefix + "intensity", light.intensity);
-                commandBuffer.SetUniformFloatUVE(prefix + "range", light.range);
-                commandBuffer.SetUniformFloatUVE(prefix + "spotAngleDegrees", light.spotAngleDegrees);
+                program->SetIntUVE(prefix + "type", static_cast<std::int32_t>(light.type));
+                program->SetVector3UVE(prefix + "position", light.position);
+                program->SetVector3UVE(prefix + "direction", light.direction);
+                program->SetVector3UVE(prefix + "color", light.color);
+                program->SetFloatUVE(prefix + "intensity", light.intensity);
+                program->SetFloatUVE(prefix + "range", light.range);
+                program->SetFloatUVE(prefix + "spotAngleDegrees", light.spotAngleDegrees);
             }
             // Preserve the Increment 27 single-map names for project-authored legacy shaders;
             // the canonical Increment 30 shader consumes the bounded array uniforms below.
-            commandBuffer.SetUniformMatrix4x4UVE("uLightSpaceMatrix", frameUniforms.lightSpaceMatrices[0]);
-            commandBuffer.BindTextureUVE(shadowMapTargets[0], kShadowMapTextureSlotUVE);
-            commandBuffer.SetUniformIntUVE("uShadowMapTexture", static_cast<std::int32_t>(kShadowMapTextureSlotUVE));
-            commandBuffer.SetUniformIntUVE("uShadowCascadeCount", frameUniforms.cascadeCount);
-            commandBuffer.SetUniformFloatUVE("uShadowCascadeBlendRatio", frameUniforms.cascadeBlendRatio);
+            program->SetMatrix4x4UVE("uLightSpaceMatrix", frameUniforms.lightSpaceMatrices[0]);
+            program->SetIntUVE("uShadowMapTexture", static_cast<std::int32_t>(kShadowMapTextureSlotUVE));
+            program->SetIntUVE("uShadowCascadeCount", frameUniforms.cascadeCount);
+            program->SetFloatUVE("uShadowCascadeBlendRatio", frameUniforms.cascadeBlendRatio);
             for (std::size_t cascadeIndex = 0; cascadeIndex < kShadowCascadeCountUVE; ++cascadeIndex) {
                 const std::string index = std::to_string(cascadeIndex);
                 const std::uint32_t textureSlot = kShadowCascadeFirstTextureSlotUVE +
                                                   static_cast<std::uint32_t>(cascadeIndex);
-                commandBuffer.SetUniformMatrix4x4UVE("uLightSpaceMatrices[" + index + "]",
-                                                      frameUniforms.lightSpaceMatrices[cascadeIndex]);
-                commandBuffer.SetUniformFloatUVE("uShadowCascadeSplits[" + index + "]",
-                                                  frameUniforms.cascadeSplits[cascadeIndex]);
-                commandBuffer.BindTextureUVE(shadowMapTargets[cascadeIndex], textureSlot);
-                commandBuffer.SetUniformIntUVE("uShadowMapTextures[" + index + "]",
-                                                static_cast<std::int32_t>(textureSlot));
+                program->SetMatrix4x4UVE("uLightSpaceMatrices[" + index + "]",
+                                         frameUniforms.lightSpaceMatrices[cascadeIndex]);
+                program->SetFloatUVE("uShadowCascadeSplits[" + index + "]", frameUniforms.cascadeSplits[cascadeIndex]);
+                program->SetIntUVE("uShadowMapTextures[" + index + "]", static_cast<std::int32_t>(textureSlot));
             }
-            commandBuffer.SetUniformIntUVE("uShadowPcfKernelRadius", shadowPcfKernelRadius);
-            commandBuffer.SetUniformVector3UVE("uAlbedoColor", material->albedoColor);
-            commandBuffer.SetUniformFloatUVE("uMetallic", material->metallic);
-            commandBuffer.SetUniformFloatUVE("uRoughness", material->roughness);
-            commandBuffer.SetUniformVector3UVE("uEmissiveColor", material->emissiveColor);
+            program->SetIntUVE("uShadowPcfKernelRadius", shadowPcfKernelRadius);
+            program->SetVector3UVE("uAlbedoColor", material->albedoColor);
+            program->SetFloatUVE("uMetallic", material->metallic);
+            program->SetFloatUVE("uRoughness", material->roughness);
+            program->SetVector3UVE("uEmissiveColor", material->emissiveColor);
+            program->SetIntUVE("uAlbedoTexture", static_cast<std::int32_t>(kAlbedoTextureSlotUVE));
+            program->SetIntUVE("uNormalTexture", static_cast<std::int32_t>(kNormalTextureSlotUVE));
+            program->SetIntUVE("uAOTexture", static_cast<std::int32_t>(kAoTextureSlotUVE));
+            program->ApplyToUVE(commandBuffer);
+            commandBuffer.BindTextureUVE(shadowMapTargets[0], kShadowMapTextureSlotUVE);
+            for (std::size_t cascadeIndex = 0; cascadeIndex < kShadowCascadeCountUVE; ++cascadeIndex) {
+                commandBuffer.BindTextureUVE(shadowMapTargets[cascadeIndex],
+                                              kShadowCascadeFirstTextureSlotUVE + static_cast<std::uint32_t>(cascadeIndex));
+            }
             commandBuffer.BindTextureUVE(materialResources->albedoTexture, kAlbedoTextureSlotUVE);
-            commandBuffer.SetUniformIntUVE("uAlbedoTexture", static_cast<std::int32_t>(kAlbedoTextureSlotUVE));
             commandBuffer.BindTextureUVE(materialResources->normalTexture, kNormalTextureSlotUVE);
-            commandBuffer.SetUniformIntUVE("uNormalTexture", static_cast<std::int32_t>(kNormalTextureSlotUVE));
             commandBuffer.BindTextureUVE(materialResources->aoTexture, kAoTextureSlotUVE);
-            commandBuffer.SetUniformIntUVE("uAOTexture", static_cast<std::int32_t>(kAoTextureSlotUVE));
             commandBuffer.BindVertexBufferUVE(meshResources.vertexBuffer);
             commandBuffer.BindIndexBufferUVE(meshResources.indexBuffer);
             commandBuffer.DrawIndexedUVE(meshResources.indexCount);
@@ -613,9 +630,9 @@ Renderer3DUVE::~Renderer3DUVE() {
         m_impl->renderDevice.DestroyBufferUVE(meshResources.vertexBuffer);
         m_impl->renderDevice.DestroyBufferUVE(meshResources.indexBuffer);
     }
-    for (const auto& [guid, materialResources] : m_impl->materialCache) {
-        m_impl->renderDevice.DestroyPipelineUVE(materialResources.pipeline);
-    }
+    // MaterialGpuResourcesUVE holds shared ShaderProgramUVE references only. Releasing the cache
+    // lets ShaderManagerUVE-owned program deleters retire their pipelines exactly once.
+    m_impl->materialCache.clear();
     for (const auto& [guid, textureHandle] : m_impl->textureCache) {
         m_impl->renderDevice.DestroyTextureUVE(textureHandle);
     }

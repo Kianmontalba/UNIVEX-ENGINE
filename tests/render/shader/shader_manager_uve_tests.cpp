@@ -100,6 +100,79 @@ TEST_F(ShaderManagerUVETest, CreateProgramUVE_BuiltInBasic3D_BecomesReadyAndVali
     EXPECT_NE(program->GetPipelineHandleUVE(), kInvalidPipelineHandleUVE);
 }
 
+TEST_F(ShaderManagerUVETest, CreateProgramFromStagesUVE_SeparateEmbeddedStages_BecomesReadyAndValid) {
+    const std::unique_ptr<ShaderManagerUVE> shaderManager = MakeManagerUVE();
+
+    ShaderProgramStagesDescUVE desc;
+    desc.vertexSource.stage = ShaderStageUVE::Vertex;
+    desc.vertexSource.embeddedFallbackSourceCode =
+        "#version 330 core\nlayout(location = 0) in vec3 aPosition;\nvoid main() { gl_Position = vec4(aPosition, 1.0); }\n";
+    desc.fragmentSource.stage = ShaderStageUVE::Fragment;
+    desc.fragmentSource.embeddedFallbackSourceCode =
+        "#version 330 core\nout vec4 FragColor;\nvoid main() { FragColor = vec4(1.0); }\n";
+    desc.vertexLayout = {VertexAttributeUVE{"POSITION", VertexAttributeFormatUVE::Float3, 0}};
+    desc.vertexStride = 3U * static_cast<std::uint32_t>(sizeof(float));
+    desc.debugNameUVE = "SeparateEmbeddedStages";
+
+    const std::shared_ptr<ShaderProgramUVE> program = shaderManager->CreateProgramFromStagesUVE(desc);
+    ASSERT_TRUE(WaitUntilReadyUVE(*shaderManager, *program));
+    EXPECT_TRUE(program->IsValidUVE());
+    EXPECT_NE(program->GetPipelineHandleUVE(), kInvalidPipelineHandleUVE);
+}
+
+TEST_F(ShaderManagerUVETest, HotReload_SeparateFragmentStage_RebuildsSameProgram) {
+    std::filesystem::remove_all(tempDirectory);
+    std::filesystem::create_directories(tempDirectory);
+    const std::filesystem::path vertexPath = tempDirectory / "material.vert";
+    const std::filesystem::path fragmentPath = tempDirectory / "material.frag";
+    {
+        std::ofstream vertexFile(vertexPath);
+        vertexFile << "#version 330 core\nlayout(location = 0) in vec3 aPosition;\n"
+                      "void main() { gl_Position = vec4(aPosition, 1.0); }\n";
+    }
+    {
+        std::ofstream fragmentFile(fragmentPath);
+        fragmentFile << "#version 330 core\nout vec4 FragColor;\n"
+                        "void main() { FragColor = vec4(1.0); }\n// marker-v1\n";
+    }
+    fileSystem->MountDirectoryUVE("material", tempDirectory, 0);
+
+    ShaderManagerConfigUVE config;
+    config.hotReloadEnabledUVE = true;
+    config.hotReloadPollIntervalSecondsUVE = 0.0;
+    const std::unique_ptr<ShaderManagerUVE> shaderManager = MakeManagerUVE(config);
+
+    ShaderProgramStagesDescUVE desc;
+    desc.vertexSource.virtualFilePath = "material/material.vert";
+    desc.vertexSource.embeddedFallbackSourceCode = "#version 330 core\nvoid main() {}\n";
+    desc.fragmentSource.virtualFilePath = "material/material.frag";
+    desc.fragmentSource.embeddedFallbackSourceCode = "#version 330 core\nout vec4 FragColor;\nvoid main() {}\n";
+    desc.vertexLayout = {VertexAttributeUVE{"POSITION", VertexAttributeFormatUVE::Float3, 0}};
+    desc.vertexStride = 3U * static_cast<std::uint32_t>(sizeof(float));
+
+    const std::shared_ptr<ShaderProgramUVE> program = shaderManager->CreateProgramFromStagesUVE(desc);
+    ASSERT_TRUE(WaitUntilReadyUVE(*shaderManager, *program));
+    ASSERT_TRUE(program->IsValidUVE());
+    const std::uint64_t initialHash = program->GetContentHashUVE();
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    {
+        std::ofstream fragmentFile(fragmentPath, std::ios::trunc);
+        fragmentFile << "#version 330 core\nout vec4 FragColor;\n"
+                        "void main() { FragColor = vec4(0.5); }\n// marker-v2\n";
+    }
+
+    bool reloaded = false;
+    for (int iteration = 0; iteration < 200000 && !reloaded; ++iteration) {
+        shaderManager->UpdateUVE(1.0);
+        reloaded = program->IsValidUVE() && program->GetContentHashUVE() != initialHash;
+        if (!reloaded) {
+            std::this_thread::yield();
+        }
+    }
+    EXPECT_TRUE(reloaded);
+}
+
 TEST_F(ShaderManagerUVETest, CreateSourceUVE_IncludeDirectiveOnRealDisk_ResolvesThroughVfs) {
     std::filesystem::remove_all(tempDirectory);
     std::filesystem::create_directories(tempDirectory / "inc");

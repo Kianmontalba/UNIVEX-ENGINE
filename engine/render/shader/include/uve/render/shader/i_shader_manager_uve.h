@@ -6,6 +6,7 @@
 #include <memory>
 
 #include "uve/render/shader/shader_program_desc_uve.h"
+#include "uve/render/shader/shader_program_stages_desc_uve.h"
 #include "uve/render/shader/shader_program_uve.h"
 #include "uve/render/shader/shader_source_compile_desc_uve.h"
 #include "uve/render/shader/shader_source_uve.h"
@@ -37,6 +38,13 @@ public:
     /// Begins compiling and linking a vertex+fragment program from the same resolved source.
     /// Returns immediately with a not-yet-ready ShaderProgramUVE, exactly like CreateSourceUVE().
     [[nodiscard]] virtual std::shared_ptr<ShaderProgramUVE> CreateProgramUVE(const ShaderProgramDescUVE& desc) = 0;
+
+    /// Begins compiling and linking a vertex+fragment program from two independent source
+    /// descriptors. This is the managed path for MaterialAssetUVE's separate vertexShader and
+    /// fragmentShader assets; it has the same asynchronous readiness and program-level hot-reload
+    /// contract as CreateProgramUVE().
+    [[nodiscard]] virtual std::shared_ptr<ShaderProgramUVE> CreateProgramFromStagesUVE(
+        const ShaderProgramStagesDescUVE& desc) = 0;
 
     /// Drains any completed background preprocessing (running the real GL compile/link/cache
     /// lookup synchronously on the calling thread), and - if hot-reload is enabled - polls every
