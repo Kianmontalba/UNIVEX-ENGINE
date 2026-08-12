@@ -8,6 +8,7 @@ cmake-build-*/
 
 # Runtime-generated settings
 *.uvesettings
+imgui.ini
 
 # Runtime-generated asset registry and scene/prefab/bundle files
 *.uveassetdb

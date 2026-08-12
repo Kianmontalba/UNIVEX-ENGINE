@@ -12,6 +12,7 @@
 #pragma once
 
 #include <chrono>
+#include <functional>
 #include <memory>
 #include <optional>
 
@@ -257,6 +258,12 @@ public:
     /// never called.
     [[nodiscard]] Scene::EntityUVE GetActiveCameraUVE() const noexcept;
 
+    /// Registers a non-owning callback invoked after the renderer has submitted the frame's scene
+    /// work but immediately before the window back buffer is presented. This is a generic
+    /// application-overlay seam: callers own all callback captures and must clear it before their
+    /// captured state is destroyed. Headless runs never invoke the callback.
+    void SetPostRenderCallbackUVE(std::function<void()> callback);
+
     /// Returns the service container bundling Logger/Timer/EventSystem/
     /// MemoryManager/ThreadPool/CommandLine/ConfigManager/EntityManager/
     /// SceneGraph/AssetDatabase/SceneSerializer/PrefabSystem/HotReload/
@@ -417,6 +424,10 @@ private:
     bool m_windowCreationFailedUVE = false;
 
     Render::BufferHandleUVE m_demoTriangleVertexBuffer;
+
+    /// Optional application-owned drawing invoked after the scene and temporary proof-of-life
+    /// triangle but before RenderDeviceUVE::PresentUVE(). No editor/UI type enters core.
+    std::function<void()> m_postRenderCallback;
 
     /// The demo triangle's linked shader program (Increment 21), created via
     /// m_shaderManager->CreateProgramUVE() from the `basic_3d.glsl` built-in. Owns its underlying

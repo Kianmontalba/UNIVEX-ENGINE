@@ -140,7 +140,6 @@ void EngineCoreUVE::RenderDemoTriangleUVE() {
     commandBuffer.EndRenderPassUVE();
 
     m_renderSystem->EndFrameUVE();
-    m_renderDevice->PresentUVE();
 }
 
 void EngineCoreUVE::Init() {
@@ -480,6 +479,10 @@ void EngineCoreUVE::Render() {
 
     if (m_windowedRenderingActiveUVE) {
         RenderDemoTriangleUVE();
+        if (m_postRenderCallback) {
+            m_postRenderCallback();
+        }
+        m_renderDevice->PresentUVE();
     }
 }
 
@@ -621,6 +624,10 @@ void EngineCoreUVE::SetActiveCameraUVE(Scene::EntityUVE cameraEntity) noexcept {
 
 Scene::EntityUVE EngineCoreUVE::GetActiveCameraUVE() const noexcept {
     return m_activeCamera;
+}
+
+void EngineCoreUVE::SetPostRenderCallbackUVE(std::function<void()> callback) {
+    m_postRenderCallback = std::move(callback);
 }
 
 EngineServicesUVE& EngineCoreUVE::GetServicesUVE() {
