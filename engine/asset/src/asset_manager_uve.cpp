@@ -20,7 +20,7 @@ namespace UVE::Asset {
 
 namespace {
 
-struct AssetRecordUVE {
+struct AssetManagerRecordUVE {
     std::type_index type{typeid(void)};
     AssetLoadStateUVE state = AssetLoadStateUVE::Loading;
     void* data = nullptr;
@@ -36,7 +36,7 @@ struct AssetManagerUVE::ImplUVE {
     IHotReloadUVE* hotReload;
     mutable std::mutex mutex;
     std::unordered_map<std::type_index, AssetLoaderInfoUVE> loaders;
-    std::unordered_map<AssetGuidUVE, AssetRecordUVE> records;
+    std::unordered_map<AssetGuidUVE, AssetManagerRecordUVE> records;
     Threading::JobCounterUVE pendingJobs;
 };
 
@@ -67,7 +67,7 @@ void AssetManagerUVE::LoadErased(AssetGuidUVE guid, std::type_index type, IAsset
         const auto loaderIt = m_impl->loaders.find(type);
         UVE_ASSERT(loaderIt != m_impl->loaders.end());
 
-        AssetRecordUVE record;
+        AssetManagerRecordUVE record;
         record.type = type;
         record.state = AssetLoadStateUVE::Loading;
         record.refCount = 1;
@@ -147,11 +147,11 @@ void AssetManagerUVE::ExecuteLoadUVE(AssetGuidUVE guid, std::type_index type, st
 }
 
 void AssetManagerUVE::CollectGarbageUVE() {
-    std::vector<AssetRecordUVE> toDestroy;
+    std::vector<AssetManagerRecordUVE> toDestroy;
     {
         const std::lock_guard<std::mutex> lock(m_impl->mutex);
         for (auto it = m_impl->records.begin(); it != m_impl->records.end();) {
-            AssetRecordUVE& record = it->second;
+            AssetManagerRecordUVE& record = it->second;
             if (record.refCount == 0 && record.state != AssetLoadStateUVE::Loading) {
                 if (m_impl->hotReload != nullptr) {
                     m_impl->hotReload->UntrackUVE(it->first);
@@ -163,7 +163,7 @@ void AssetManagerUVE::CollectGarbageUVE() {
             }
         }
     }
-    for (AssetRecordUVE& record : toDestroy) {
+    for (AssetManagerRecordUVE& record : toDestroy) {
         if (record.data != nullptr && record.destroy) {
             record.destroy(record.data);
         }

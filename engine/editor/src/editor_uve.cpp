@@ -10,11 +10,13 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cmath>
 #include <filesystem>
 #include <limits>
 #include <numbers>
 #include <string>
+#include <string_view>
 #include <system_error>
 #include <utility>
 
@@ -26,7 +28,9 @@
 #include "uve/asset/uve_file_envelope_uve.h"
 #include "uve/physics/raycast_query_uve.h"
 #include "uve/scene/components/camera_component_uve.h"
+#include "uve/scene/components/collider_component_uve.h"
 #include "uve/scene/components/hierarchy_component_uve.h"
+#include "uve/scene/components/light_component_uve.h"
 #include "uve/scene/components/world_transform_component_uve.h"
 
 namespace UVE::Editor {
@@ -38,6 +42,19 @@ constexpr float kGizmoAxisLengthUVE = 1.25F;
 constexpr float kGizmoHandleRadiusPixelsUVE = 12.0F;
 constexpr float kMinimumViewportWidthUVE = 64.0F;
 constexpr float kMinimumViewportHeightUVE = 64.0F;
+constexpr float kAssetsPanelHeightUVE = 150.0F;
+
+[[nodiscard]] bool ContainsCaseInsensitiveUVE(const std::string_view text,
+                                               const std::string_view query) noexcept {
+    if (query.empty()) {
+        return true;
+    }
+
+    const auto equalsCaseInsensitive = [](const char lhs, const char rhs) noexcept {
+        return std::tolower(static_cast<unsigned char>(lhs)) == std::tolower(static_cast<unsigned char>(rhs));
+    };
+    return std::search(text.begin(), text.end(), query.begin(), query.end(), equalsCaseInsensitive) != text.end();
+}
 
 [[nodiscard]] std::string EntityLabelUVE(const Scene::EntityUVE entity) {
     return "Entity " + std::to_string(entity.index) + ":" + std::to_string(entity.generation);
@@ -157,9 +174,11 @@ void EditorUVE::RenderOverlayUVE() {
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
+    DrawMenuBarUVE();
     DrawViewportPanelUVE();
     DrawHierarchyPanelUVE();
     DrawInspectorPanelUVE();
+    DrawAssetsPanelUVE();
 
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -344,6 +363,50 @@ bool EditorUVE::TranslateSelectedAlongAxisUVE(const EditorTranslateAxisUVE axis,
     return SetSelectedLocalTransformUVE(updated);
 }
 
+Scene::EntityUVE EditorUVE::CreateDocumentEntityUVE(const EditorEntityKindUVE kind) {
+    if (m_state != EditorStateUVE::Running) {
+        return Scene::kInvalidEntityUVE;
+    }
+
+    switch (kind) {
+        case EditorEntityKindUVE::Empty:
+        case EditorEntityKindUVE::Camera:
+        case EditorEntityKindUVE::DirectionalLight:
+        case EditorEntityKindUVE::CollisionBox:
+            break;
+        default:
+            return Scene::kInvalidEntityUVE;
+    }
+
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    Scene::ISceneGraphUVE& sceneGraph = m_services->GetSceneGraphUVE();
+    const Scene::EntityUVE entity = entityManager.CreateEntityUVE();
+    sceneGraph.AttachTransformUVE(entityManager, entity, Scene::TransformComponentUVE{});
+
+    switch (kind) {
+        case EditorEntityKindUVE::Empty:
+            break;
+        case EditorEntityKindUVE::Camera:
+            entityManager.AddComponentUVE<Scene::CameraComponentUVE>(entity);
+            break;
+        case EditorEntityKindUVE::DirectionalLight: {
+            Scene::LightComponentUVE light{};
+            light.type = Scene::LightTypeUVE::Directional;
+            entityManager.AddComponentUVE<Scene::LightComponentUVE>(entity, light);
+            break;
+        }
+        case EditorEntityKindUVE::CollisionBox:
+            entityManager.AddComponentUVE<Scene::ColliderComponentUVE>(entity);
+            break;
+        default:
+            return Scene::kInvalidEntityUVE;
+    }
+
+    SelectEntityUVE(entity);
+    m_sceneDirty = true;
+    return entity;
+}
+
 std::vector<Scene::EntityUVE> EditorUVE::GetDocumentRootsUVE() {
     Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
     std::vector<Scene::EntityUVE> roots =
@@ -366,6 +429,14 @@ Scene::EntityUVE EditorUVE::GetViewportCameraUVE() const noexcept {
 
 bool EditorUVE::IsSceneDirtyUVE() const noexcept {
     return m_sceneDirty;
+}
+
+const std::optional<Asset::AssetRecordUVE>& EditorUVE::GetSelectedAssetUVE() const noexcept {
+    return m_selectedAsset;
+}
+
+const std::string& EditorUVE::GetAssetFilterUVE() const noexcept {
+    return m_assetFilter;
 }
 
 const std::filesystem::path& EditorUVE::GetActiveScenePathUVE() const noexcept {
@@ -697,12 +768,46 @@ void EditorUVE::ClearDocumentSceneUVE() {
     ClearSelectionUVE();
 }
 
+void EditorUVE::DrawMenuBarUVE() {
+    if (!ImGui::BeginMainMenuBar()) {
+        return;
+    }
+
+    if (ImGui::BeginMenu("File")) {
+        if (ImGui::MenuItem("Save Scene")) {
+            static_cast<void>(SaveSceneUVE());
+        }
+        if (ImGui::MenuItem("Load Scene")) {
+            static_cast<void>(LoadSceneUVE());
+        }
+        ImGui::EndMenu();
+    }
+
+    if (ImGui::BeginMenu("Scene")) {
+        if (ImGui::MenuItem("Create Empty")) {
+            static_cast<void>(CreateDocumentEntityUVE(EditorEntityKindUVE::Empty));
+        }
+        if (ImGui::MenuItem("Create Camera")) {
+            static_cast<void>(CreateDocumentEntityUVE(EditorEntityKindUVE::Camera));
+        }
+        if (ImGui::MenuItem("Create Directional Light")) {
+            static_cast<void>(CreateDocumentEntityUVE(EditorEntityKindUVE::DirectionalLight));
+        }
+        if (ImGui::MenuItem("Create Collision Box")) {
+            static_cast<void>(CreateDocumentEntityUVE(EditorEntityKindUVE::CollisionBox));
+        }
+        ImGui::EndMenu();
+    }
+
+    ImGui::EndMainMenuBar();
+}
+
 void EditorUVE::DrawHierarchyPanelUVE() {
     const ImGuiViewport* const mainViewport = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(ImVec2{mainViewport->WorkPos.x, mainViewport->WorkPos.y + 28.0F},
+    ImGui::SetNextWindowPos(ImVec2{mainViewport->WorkPos.x, mainViewport->WorkPos.y},
                             ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(
-        ImVec2{250.0F, std::max(kMinimumViewportHeightUVE, mainViewport->WorkSize.y - 178.0F)},
+        ImVec2{250.0F, std::max(kMinimumViewportHeightUVE, mainViewport->WorkSize.y - kAssetsPanelHeightUVE)},
         ImGuiCond_FirstUseEver);
     ImGui::Begin("Scene");
     for (const Scene::EntityUVE root : GetDocumentRootsUVE()) {
@@ -738,10 +843,10 @@ void EditorUVE::DrawHierarchyNodeUVE(const Scene::EntityUVE entity) {
 void EditorUVE::DrawInspectorPanelUVE() {
     const ImGuiViewport* const mainViewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(
-        ImVec2{mainViewport->WorkPos.x + mainViewport->WorkSize.x - 330.0F, mainViewport->WorkPos.y + 28.0F},
+        ImVec2{mainViewport->WorkPos.x + mainViewport->WorkSize.x - 330.0F, mainViewport->WorkPos.y},
         ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(
-        ImVec2{330.0F, std::max(kMinimumViewportHeightUVE, mainViewport->WorkSize.y - 178.0F)},
+        ImVec2{330.0F, std::max(kMinimumViewportHeightUVE, mainViewport->WorkSize.y - kAssetsPanelHeightUVE)},
         ImGuiCond_FirstUseEver);
     ImGui::Begin("Properties");
     if (!IsDocumentEntityUVE(m_selectedEntity)) {
@@ -776,6 +881,66 @@ void EditorUVE::DrawInspectorPanelUVE() {
     ImGui::End();
 }
 
+void EditorUVE::DrawAssetsPanelUVE() {
+    const ImGuiViewport* const mainViewport = ImGui::GetMainViewport();
+    ImGui::SetNextWindowPos(
+        ImVec2{mainViewport->WorkPos.x, mainViewport->WorkPos.y + mainViewport->WorkSize.y - kAssetsPanelHeightUVE},
+        ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2{mainViewport->WorkSize.x, kAssetsPanelHeightUVE}, ImGuiCond_FirstUseEver);
+    ImGui::Begin("Assets");
+
+    std::array<char, 256> filterBuffer{};
+    const std::size_t copiedCharacters = std::min(m_assetFilter.size(), filterBuffer.size() - 1U);
+    m_assetFilter.copy(filterBuffer.data(), copiedCharacters);
+    if (ImGui::InputTextWithHint("Filter", "Filter registered asset paths", filterBuffer.data(), filterBuffer.size())) {
+        m_assetFilter = filterBuffer.data();
+    }
+
+    const std::vector<Asset::AssetRecordUVE> records = m_services->GetAssetDatabaseUVE().GetRegisteredAssetsUVE();
+    if (m_selectedAsset.has_value()) {
+        const auto selectedIt = std::find_if(
+            records.begin(), records.end(), [this](const Asset::AssetRecordUVE& record) {
+                return record.guid == m_selectedAsset->guid;
+            });
+        if (selectedIt == records.end()) {
+            m_selectedAsset.reset();
+        } else {
+            m_selectedAsset = *selectedIt;
+        }
+    }
+
+    ImGui::SameLine();
+    ImGui::Text("%zu registered", records.size());
+    ImGui::BeginChild("##asset-list", ImVec2{0.0F, 64.0F}, true);
+    bool displayedAsset = false;
+    for (const Asset::AssetRecordUVE& record : records) {
+        const std::string pathString = record.path.generic_string();
+        if (!ContainsCaseInsensitiveUVE(pathString, m_assetFilter)) {
+            continue;
+        }
+
+        displayedAsset = true;
+        const bool selected = m_selectedAsset.has_value() && m_selectedAsset->guid == record.guid;
+        const std::string selectableLabel = pathString + "##asset-" + std::to_string(record.guid.value);
+        if (ImGui::Selectable(selectableLabel.c_str(), selected)) {
+            m_selectedAsset = record;
+        }
+    }
+    if (!displayedAsset) {
+        ImGui::TextUnformatted(records.empty() ? "No registered assets." : "No registered assets match the filter.");
+    }
+    ImGui::EndChild();
+
+    if (m_selectedAsset.has_value()) {
+        const std::string selectedPath = m_selectedAsset->path.generic_string();
+        ImGui::TextWrapped("Selected: %s", selectedPath.c_str());
+        ImGui::Text("GUID: %016llX", static_cast<unsigned long long>(m_selectedAsset->guid.value));
+    } else {
+        ImGui::TextUnformatted("Select a registered asset to inspect its registry record.");
+    }
+    ImGui::End();
+}
+
 void EditorUVE::DrawViewportPanelUVE() {
     // Renderer3DUVE still presents to the engine window's default framebuffer. This editor window
     // therefore owns only a transparent interactive input rectangle; it does not duplicate render
@@ -783,11 +948,11 @@ void EditorUVE::DrawViewportPanelUVE() {
     const ImGuiViewport* const mainViewport = ImGui::GetMainViewport();
     const float leftInset = 250.0F;
     const float rightInset = 330.0F;
-    const float bottomInset = 150.0F;
-    const ImVec2 desiredPosition{mainViewport->WorkPos.x + leftInset, mainViewport->WorkPos.y + 28.0F};
+    const float bottomInset = kAssetsPanelHeightUVE;
+    const ImVec2 desiredPosition{mainViewport->WorkPos.x + leftInset, mainViewport->WorkPos.y};
     const ImVec2 desiredSize{
         std::max(kMinimumViewportWidthUVE, mainViewport->WorkSize.x - leftInset - rightInset),
-        std::max(kMinimumViewportHeightUVE, mainViewport->WorkSize.y - bottomInset - 28.0F),
+        std::max(kMinimumViewportHeightUVE, mainViewport->WorkSize.y - bottomInset),
     };
     ImGui::SetNextWindowPos(desiredPosition, ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(desiredSize, ImGuiCond_FirstUseEver);

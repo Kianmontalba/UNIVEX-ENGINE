@@ -7,6 +7,7 @@
 // permission from UniVex Studios.
 // Violators will be prosecuted to the fullest extent of the law.
 
+#include <algorithm>
 #include <filesystem>
 #include <limits>
 
@@ -14,7 +15,9 @@
 
 #include "uve/core/engine_core_uve.h"
 #include "uve/editor/editor_uve.h"
+#include "uve/scene/components/camera_component_uve.h"
 #include "uve/scene/components/collider_component_uve.h"
+#include "uve/scene/components/light_component_uve.h"
 #include "uve/scene/components/transform_component_uve.h"
 #include "uve/scene/components/world_transform_component_uve.h"
 
@@ -92,6 +95,86 @@ TEST(EditorUVETest, SelectionAndInspectorTransformEdit_ValidateLifetimeAndFinite
         EXPECT_EQ(editor.GetSelectedEntityUVE(), Scene::kInvalidEntityUVE);
 
         editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
+}
+
+TEST(EditorUVETest, CreateDocumentEntityUVE_CreatesSelectedDirtyRootArchetypes) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_create_entities.uvescene");
+        editor.InitUVE();
+        Core::EngineServicesUVE& services = engine.GetServicesUVE();
+        Scene::IEntityManagerUVE& entityManager = services.GetEntityManagerUVE();
+
+        const Scene::EntityUVE empty = editor.CreateDocumentEntityUVE(EditorEntityKindUVE::Empty);
+        ASSERT_TRUE(entityManager.IsAliveUVE(empty));
+        EXPECT_TRUE(entityManager.HasComponentUVE<Scene::TransformComponentUVE>(empty));
+        EXPECT_FALSE(entityManager.HasComponentUVE<Scene::CameraComponentUVE>(empty));
+        EXPECT_FALSE(entityManager.HasComponentUVE<Scene::LightComponentUVE>(empty));
+        EXPECT_FALSE(entityManager.HasComponentUVE<Scene::ColliderComponentUVE>(empty));
+        EXPECT_EQ(editor.GetSelectedEntityUVE(), empty);
+        EXPECT_TRUE(editor.IsSceneDirtyUVE());
+
+        const Scene::EntityUVE camera = editor.CreateDocumentEntityUVE(EditorEntityKindUVE::Camera);
+        ASSERT_TRUE(entityManager.IsAliveUVE(camera));
+        EXPECT_TRUE(entityManager.HasComponentUVE<Scene::TransformComponentUVE>(camera));
+        EXPECT_TRUE(entityManager.HasComponentUVE<Scene::CameraComponentUVE>(camera));
+        EXPECT_EQ(editor.GetSelectedEntityUVE(), camera);
+        EXPECT_TRUE(editor.IsSceneDirtyUVE());
+
+        const Scene::EntityUVE directionalLight =
+            editor.CreateDocumentEntityUVE(EditorEntityKindUVE::DirectionalLight);
+        ASSERT_TRUE(entityManager.IsAliveUVE(directionalLight));
+        EXPECT_TRUE(entityManager.HasComponentUVE<Scene::TransformComponentUVE>(directionalLight));
+        ASSERT_TRUE(entityManager.HasComponentUVE<Scene::LightComponentUVE>(directionalLight));
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::LightComponentUVE>(directionalLight).type,
+                  Scene::LightTypeUVE::Directional);
+        EXPECT_EQ(editor.GetSelectedEntityUVE(), directionalLight);
+        EXPECT_TRUE(editor.IsSceneDirtyUVE());
+
+        const Scene::EntityUVE collisionBox = editor.CreateDocumentEntityUVE(EditorEntityKindUVE::CollisionBox);
+        ASSERT_TRUE(entityManager.IsAliveUVE(collisionBox));
+        EXPECT_TRUE(entityManager.HasComponentUVE<Scene::TransformComponentUVE>(collisionBox));
+        EXPECT_TRUE(entityManager.HasComponentUVE<Scene::ColliderComponentUVE>(collisionBox));
+        EXPECT_EQ(editor.GetSelectedEntityUVE(), collisionBox);
+        EXPECT_TRUE(editor.IsSceneDirtyUVE());
+
+        const std::vector<Scene::EntityUVE> roots = editor.GetDocumentRootsUVE();
+        ASSERT_EQ(roots.size(), 4U);
+        EXPECT_NE(std::find(roots.begin(), roots.end(), empty), roots.end());
+        EXPECT_NE(std::find(roots.begin(), roots.end(), camera), roots.end());
+        EXPECT_NE(std::find(roots.begin(), roots.end(), directionalLight), roots.end());
+        EXPECT_NE(std::find(roots.begin(), roots.end(), collisionBox), roots.end());
+        EXPECT_EQ(std::find(roots.begin(), roots.end(), editor.GetViewportCameraUVE()), roots.end());
+
+        editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
+}
+
+TEST(EditorUVETest, CreateDocumentEntityUVE_RejectsInvalidKindsAndNonRunningStates) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_create_invalid.uvescene");
+        EXPECT_EQ(editor.CreateDocumentEntityUVE(EditorEntityKindUVE::Empty), Scene::kInvalidEntityUVE);
+
+        editor.InitUVE();
+        EXPECT_EQ(editor.CreateDocumentEntityUVE(static_cast<EditorEntityKindUVE>(999)),
+                  Scene::kInvalidEntityUVE);
+        EXPECT_TRUE(editor.GetDocumentRootsUVE().empty());
+        EXPECT_FALSE(editor.IsSceneDirtyUVE());
+
+        editor.ShutdownUVE();
+        EXPECT_EQ(editor.CreateDocumentEntityUVE(EditorEntityKindUVE::Empty), Scene::kInvalidEntityUVE);
     }
 
     engine.Shutdown();

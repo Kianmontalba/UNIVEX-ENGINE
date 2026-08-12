@@ -24,6 +24,52 @@ void WriteFixtureFileUVE(const std::filesystem::path& path, std::string_view con
     file << contents;
 }
 
+TEST(AssetDatabaseUVETest, GetRegisteredAssetsUVE_EmptyDatabase_ReturnsEmptySnapshot) {
+    AssetDatabaseUVE database;
+    EXPECT_TRUE(database.GetRegisteredAssetsUVE().empty());
+}
+
+TEST(AssetDatabaseUVETest, GetRegisteredAssetsUVE_SortsLexicallyThenByGuid) {
+    const std::filesystem::path fixturePath = "uve_asset_database_tests_snapshot_sort.uveassetdb";
+    WriteFixtureFileUVE(
+        fixturePath,
+        R"({
+            "0000000000000020": "assets/same.uveprefab",
+            "0000000000000010": "assets/same.uveprefab",
+            "0000000000000030": "assets/zebra.uveprefab",
+            "0000000000000040": "assets/apple.uveprefab"
+        })");
+
+    AssetDatabaseUVE database;
+    ASSERT_TRUE(database.LoadUVE(fixturePath));
+    const std::vector<AssetRecordUVE> records = database.GetRegisteredAssetsUVE();
+
+    ASSERT_EQ(records.size(), 4U);
+    EXPECT_EQ(records[0].path, std::filesystem::path("assets/apple.uveprefab"));
+    EXPECT_EQ(records[0].guid, AssetGuidUVE{0x40U});
+    EXPECT_EQ(records[1].path, std::filesystem::path("assets/same.uveprefab"));
+    EXPECT_EQ(records[1].guid, AssetGuidUVE{0x10U});
+    EXPECT_EQ(records[2].path, std::filesystem::path("assets/same.uveprefab"));
+    EXPECT_EQ(records[2].guid, AssetGuidUVE{0x20U});
+    EXPECT_EQ(records[3].path, std::filesystem::path("assets/zebra.uveprefab"));
+    EXPECT_EQ(records[3].guid, AssetGuidUVE{0x30U});
+
+    std::filesystem::remove(fixturePath);
+}
+
+TEST(AssetDatabaseUVETest, GetRegisteredAssetsUVE_ReturnsSnapshotIsolatedFromLaterRegistration) {
+    AssetDatabaseUVE database;
+    const AssetGuidUVE initialGuid = database.RegisterUVE("assets/initial.uveprefab");
+    const std::vector<AssetRecordUVE> snapshot = database.GetRegisteredAssetsUVE();
+
+    static_cast<void>(database.RegisterUVE("assets/later.uveprefab"));
+
+    ASSERT_EQ(snapshot.size(), 1U);
+    EXPECT_EQ(snapshot.front().guid, initialGuid);
+    EXPECT_EQ(snapshot.front().path, std::filesystem::path("assets/initial.uveprefab"));
+    EXPECT_EQ(database.GetRegisteredAssetsUVE().size(), 2U);
+}
+
 TEST(AssetDatabaseUVETest, RegisterUVE_SamePathTwice_ReturnsSameGuid) {
     AssetDatabaseUVE database;
     const AssetGuidUVE first = database.RegisterUVE("meshes/cube.uvemodel");

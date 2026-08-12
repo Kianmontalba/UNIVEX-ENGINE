@@ -4,10 +4,19 @@
 #pragma once
 
 #include <filesystem>
+#include <vector>
 
 #include "uve/asset/asset_guid_uve.h"
 
 namespace UVE::Asset {
+
+/// An immutable copy of one registered project asset. `path` is normalized for stable editor
+/// presentation; it remains a registry record only and does not imply that the file exists or is
+/// loaded. Value type; safe to retain after the AssetDatabase mutex is released.
+struct AssetRecordUVE final {
+    AssetGuidUVE guid{};
+    std::filesystem::path path{};
+};
 
 /// IAssetDatabaseUVE is the minimal GUID-to-file-path registry the master spec requires scenes
 /// to use instead of embedding file-path dependencies directly ("No file path dependencies in
@@ -43,6 +52,12 @@ public:
 
     /// True iff `guid` is currently registered.
     [[nodiscard]] virtual bool HasGuidUVE(AssetGuidUVE guid) const = 0;
+
+    /// Returns immutable copies of every registered asset in deterministic lexical path order,
+    /// using GUID value as the tie-breaker. The list is a registry snapshot, not a filesystem scan:
+    /// first-run projects may return an empty list, and callers must not infer loading or file
+    /// existence from an entry. Thread-safe.
+    [[nodiscard]] virtual std::vector<AssetRecordUVE> GetRegisteredAssetsUVE() const = 0;
 };
 
 } // namespace UVE::Asset
