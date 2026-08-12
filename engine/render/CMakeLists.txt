@@ -11,6 +11,7 @@ add_library(uve_render STATIC
     src/null_command_buffer_uve.cpp
     src/null_render_device_uve.cpp
     src/render_system_uve.cpp
+    src/render_graph_uve.cpp
     src/camera_system_uve.cpp
     src/render_queue_uve.cpp
     src/mesh_renderer_uve.cpp

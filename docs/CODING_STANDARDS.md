@@ -1120,3 +1120,23 @@ without taking that lock (e.g. debug/query stats).
 - Every system must be unit-testable and unit-tested (GoogleTest, see `tests/`).
 - Build warnings are treated as errors (`-Werror` with a strict flag set — see
   `cmake/UveCompilerWarnings.cmake`); a warning is a build failure, not a suggestion.
+
+
+## Render Graph Foundation (Increment 36)
+
+**`RenderGraphUVE` makes existing pass dependencies explicit without taking RHI resource ownership.**
+The foundation imports persistent texture handles supplied by `Renderer3DUVE`, declares each pass's
+read/write use, validates references before recording, and executes callbacks in deterministic
+insertion order. It does not allocate, resize, alias, or destroy textures; `Renderer3DUVE` remains
+the only owner of its color target, depth target, and three directional shadow-map targets.
+
+The first graph preserves the existing frame shape exactly: three depth-only
+`DirectionalShadowCascadeN` passes write their corresponding shadow map, then `MainColor` writes
+the color/depth targets and reads all three shadows. `RenderSystemUVE` still owns one
+`BeginFrameUVE()`/`EndFrameUVE()` pair and one command buffer per frame; graph callbacks merely
+record the existing `BeginRenderPassUVE`/draw/`EndRenderPassUVE` work into that buffer.
+
+**Deliberately deferred:** transient resource allocation and aliasing, automatic barriers, pass
+parallelism, compute scheduling, pass culling, post-processing nodes, and visual graph inspection.
+New passes must declare imported-resource reads/writes and retain stable ordering until a later
+increment introduces a fuller scheduler.
