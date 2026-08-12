@@ -34,7 +34,11 @@ jobs:
             ninja-build \
             libglfw3-dev \
             libwayland-dev \
-            libxkbcommon-dev
+            libxkbcommon-dev \
+            libxrandr-dev \
+            libxi-dev \
+            libxinerama-dev \
+            libxcursor-dev
 
       - name: Configure Debug build
         run: >-
