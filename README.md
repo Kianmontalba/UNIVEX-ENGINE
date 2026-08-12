@@ -39,6 +39,11 @@ xvfb-run -a ./build/gcc-debug/engine/app/uve_editor --gl-version 4.5 --frames 3
 Swap `-DCMAKE_CXX_COMPILER=clang++` to build with Clang instead. `UVE_BUILD_TESTS` (default
 `ON`) can be set to `OFF` to skip building the GoogleTest suite.
 
+The current editor supports Scene/Properties selection, local Transform editing, collider-backed
+viewport picking, and a world-axis translate gizmo. Viewport picking intentionally selects only
+live document entities with the existing box collider component; mesh picking, rotate/scale gizmos,
+snapping, play mode, asset browsing, and the final docked layout remain future increments.
+
 ## Repository layout
 
 ```

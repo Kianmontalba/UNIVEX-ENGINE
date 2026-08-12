@@ -14,7 +14,9 @@
 
 #include "uve/core/engine_core_uve.h"
 #include "uve/editor/editor_uve.h"
+#include "uve/scene/components/collider_component_uve.h"
 #include "uve/scene/components/transform_component_uve.h"
+#include "uve/scene/components/world_transform_component_uve.h"
 
 namespace UVE::Editor::Tests {
 namespace {
@@ -147,6 +149,95 @@ TEST(EditorUVETest, SaveThenLoadScene_RoundTripsDocumentRootsWithoutSerializingE
     engine.Shutdown();
     std::filesystem::remove(scenePath);
     std::filesystem::remove(scenePath.string() + ".editor-recovery");
+}
+
+TEST(EditorUVETest, ViewportRayAndColliderPicking_SelectClosestDocumentEntityAndClearOnMiss) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_picking.uvescene");
+        editor.InitUVE();
+        Core::EngineServicesUVE& services = engine.GetServicesUVE();
+        Scene::IEntityManagerUVE& entityManager = services.GetEntityManagerUVE();
+
+        const Scene::EntityUVE nearEntity = entityManager.CreateEntityUVE();
+        Scene::TransformComponentUVE nearTransform{};
+        nearTransform.localPosition = Math::Vector3UVE{0.0F, 1.5F, 2.0F};
+        AttachRootUVE(engine, nearEntity, nearTransform);
+        entityManager.AddComponentUVE<Scene::ColliderComponentUVE>(nearEntity);
+
+        const Scene::EntityUVE farEntity = entityManager.CreateEntityUVE();
+        Scene::TransformComponentUVE farTransform{};
+        farTransform.localPosition = Math::Vector3UVE{0.0F, 1.5F, -2.0F};
+        AttachRootUVE(engine, farEntity, farTransform);
+        entityManager.AddComponentUVE<Scene::ColliderComponentUVE>(farEntity);
+        services.GetSceneGraphUVE().UpdateUVE(entityManager);
+
+        const EditorViewportRectUVE viewportRect{
+            Math::Vector2UVE{0.0F, 0.0F}, Math::Vector2UVE{800.0F, 600.0F}};
+        const std::optional<Math::RayUVE> centerRay =
+            editor.MakeViewportRayUVE(viewportRect, Math::Vector2UVE{400.0F, 300.0F});
+        ASSERT_TRUE(centerRay.has_value());
+        EXPECT_NEAR(centerRay->origin.x, 0.0F, 0.0001F);
+        EXPECT_NEAR(centerRay->origin.y, 1.5F, 0.0001F);
+        EXPECT_NEAR(centerRay->origin.z, 6.0F, 0.0001F);
+        EXPECT_NEAR(centerRay->direction.x, 0.0F, 0.0001F);
+        EXPECT_NEAR(centerRay->direction.y, 0.0F, 0.0001F);
+        EXPECT_NEAR(centerRay->direction.z, -1.0F, 0.0001F);
+        EXPECT_FALSE(editor.MakeViewportRayUVE(viewportRect, Math::Vector2UVE{-1.0F, 300.0F}).has_value());
+
+        EXPECT_TRUE(editor.PickViewportUVE(viewportRect, Math::Vector2UVE{400.0F, 300.0F}));
+        EXPECT_EQ(editor.GetSelectedEntityUVE(), nearEntity);
+        EXPECT_FALSE(editor.PickViewportUVE(viewportRect, Math::Vector2UVE{0.0F, 0.0F}));
+        EXPECT_EQ(editor.GetSelectedEntityUVE(), Scene::kInvalidEntityUVE);
+
+        editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
+}
+
+TEST(EditorUVETest, TranslateSelectedAlongAxis_UpdatesLocalTransformAndConvertsParentScale) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_gizmo.uvescene");
+        editor.InitUVE();
+        Core::EngineServicesUVE& services = engine.GetServicesUVE();
+        Scene::IEntityManagerUVE& entityManager = services.GetEntityManagerUVE();
+
+        const Scene::EntityUVE parent = entityManager.CreateEntityUVE();
+        Scene::TransformComponentUVE parentTransform{};
+        parentTransform.localScale = Math::Vector3UVE{2.0F, 3.0F, 4.0F};
+        AttachRootUVE(engine, parent, parentTransform);
+
+        const Scene::EntityUVE child = entityManager.CreateEntityUVE();
+        Scene::TransformComponentUVE childTransform{};
+        childTransform.localPosition = Math::Vector3UVE{1.0F, 2.0F, 3.0F};
+        AttachRootUVE(engine, child, childTransform);
+        services.GetSceneGraphUVE().SetParentUVE(entityManager, child, parent);
+        services.GetSceneGraphUVE().UpdateUVE(entityManager);
+
+        editor.SelectEntityUVE(child);
+        EXPECT_TRUE(editor.TranslateSelectedAlongAxisUVE(EditorTranslateAxisUVE::X, 2.0F));
+        const Scene::TransformComponentUVE& translated =
+            entityManager.GetComponentUVE<Scene::TransformComponentUVE>(child);
+        EXPECT_NEAR(translated.localPosition.x, 2.0F, 0.0001F);
+        EXPECT_NEAR(translated.localPosition.y, 2.0F, 0.0001F);
+        EXPECT_NEAR(translated.localPosition.z, 3.0F, 0.0001F);
+        EXPECT_TRUE(editor.IsSceneDirtyUVE());
+        EXPECT_FALSE(editor.TranslateSelectedAlongAxisUVE(EditorTranslateAxisUVE::None, 1.0F));
+        EXPECT_FALSE(editor.TranslateSelectedAlongAxisUVE(
+            EditorTranslateAxisUVE::Y, std::numeric_limits<float>::infinity()));
+
+        editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
 }
 
 TEST(EditorUVETest, LoadMissingScene_FailsWithoutDestroyingCurrentDocument) {
