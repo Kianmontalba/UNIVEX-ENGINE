@@ -25,6 +25,7 @@
 #include "uve/math/frustum_uve.h"
 #include "uve/math/matrix4x4_uve.h"
 #include "uve/render/i_light_system_uve.h"
+#include "uve/render/render_graph_uve.h"
 #include "uve/render/render_queue_uve.h"
 #include "uve/render/shader/built_in_shaders_uve.h"
 #include "uve/render/shader/shader_program_desc_uve.h"
@@ -698,23 +699,46 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
         m_impl->meshRenderer.ExtractRenderQueueUVE(entityManager, m_impl->assetManager, m_impl->assetDatabase, frustum);
     queue.SortUVE();
 
-    m_impl->renderSystem.BeginFrameUVE();
-    ICommandBufferUVE& commandBuffer = m_impl->renderSystem.GetFrameCommandBufferUVE();
+    RenderGraphUVE renderGraph;
+    std::array<RenderGraphResourceHandleUVE, kShadowCascadeCountUVE> shadowResources{};
+    for (std::size_t cascadeIndex = 0; cascadeIndex < kShadowCascadeCountUVE; ++cascadeIndex) {
+        shadowResources[cascadeIndex] = renderGraph.ImportTextureUVE(
+            m_impl->shadowMapTargets[cascadeIndex], "DirectionalShadowCascade" + std::to_string(cascadeIndex));
+    }
+    const RenderGraphResourceHandleUVE colorResource = renderGraph.ImportTextureUVE(m_impl->colorTarget, "MainColor");
+    const RenderGraphResourceHandleUVE depthResource = renderGraph.ImportTextureUVE(m_impl->depthTarget, "MainDepth");
 
     for (std::size_t cascadeIndex = 0; cascadeIndex < kShadowCascadeCountUVE; ++cascadeIndex) {
-        m_impl->RecordShadowPassUVE(shadowQueues[cascadeIndex].opaqueItems, lightSpaceMatrices[cascadeIndex],
-                                    m_impl->shadowMapTargets[cascadeIndex], shadowCaster != nullptr, commandBuffer);
+        const std::string passName = "DirectionalShadowCascade" + std::to_string(cascadeIndex);
+        renderGraph.AddPassUVE(RenderGraphPassDescUVE{
+            passName, {{shadowResources[cascadeIndex], RenderGraphResourceAccessUVE::Write}},
+            [this, &shadowQueues, &lightSpaceMatrices, shadowCaster, cascadeIndex](ICommandBufferUVE& commandBuffer) {
+                m_impl->RecordShadowPassUVE(shadowQueues[cascadeIndex].opaqueItems, lightSpaceMatrices[cascadeIndex],
+                                            m_impl->shadowMapTargets[cascadeIndex], shadowCaster != nullptr, commandBuffer);
+            }});
     }
 
-    RenderPassDescUVE passDesc;
-    passDesc.colorAttachment = m_impl->colorTarget;
-    passDesc.depthAttachment = m_impl->depthTarget;
-    commandBuffer.BeginRenderPassUVE(passDesc);
+    std::vector<RenderGraphResourceUseUVE> mainResources{{colorResource, RenderGraphResourceAccessUVE::Write},
+                                                          {depthResource, RenderGraphResourceAccessUVE::Write}};
+    for (const RenderGraphResourceHandleUVE shadowResource : shadowResources) {
+        mainResources.push_back(RenderGraphResourceUseUVE{shadowResource, RenderGraphResourceAccessUVE::Read});
+    }
+    renderGraph.AddPassUVE(RenderGraphPassDescUVE{
+        "MainColor", std::move(mainResources),
+        [this, &queue, &frameUniforms](ICommandBufferUVE& commandBuffer) {
+            RenderPassDescUVE passDesc;
+            passDesc.colorAttachment = m_impl->colorTarget;
+            passDesc.depthAttachment = m_impl->depthTarget;
+            commandBuffer.BeginRenderPassUVE(passDesc);
+            m_impl->RecordItemsUVE(queue.opaqueItems, frameUniforms, commandBuffer);
+            m_impl->RecordItemsUVE(queue.transparentItems, frameUniforms, commandBuffer);
+            commandBuffer.EndRenderPassUVE();
+        }});
 
-    m_impl->RecordItemsUVE(queue.opaqueItems, frameUniforms, commandBuffer);
-    m_impl->RecordItemsUVE(queue.transparentItems, frameUniforms, commandBuffer);
-
-    commandBuffer.EndRenderPassUVE();
+    m_impl->renderSystem.BeginFrameUVE();
+    ICommandBufferUVE& commandBuffer = m_impl->renderSystem.GetFrameCommandBufferUVE();
+    const bool graphExecuted = renderGraph.ExecuteUVE(commandBuffer);
+    UVE_ASSERT(graphExecuted && "Renderer3DUVE must build a valid render graph");
     m_impl->renderSystem.EndFrameUVE();
 }
 

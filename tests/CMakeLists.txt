@@ -51,6 +51,7 @@ add_executable(uve_tests
     asset/material_asset_uve_tests.cpp
     render/null_render_device_uve_tests.cpp
     render/render_system_uve_tests.cpp
+    render/render_graph_uve_tests.cpp
     render/camera_system_uve_tests.cpp
     render/render_queue_uve_tests.cpp
     render/mesh_renderer_uve_tests.cpp
