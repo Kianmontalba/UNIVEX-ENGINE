@@ -40,11 +40,26 @@ struct ShaderManagerUVE::ImplUVE {
     };
     std::vector<SourceJobUVE> completedSourceJobs; // guarded by mutex - written from worker threads
 
+    /// Internal normalized representation shared by the legacy unified-source API and the
+    /// Increment 34 separate-stage API. Source hot-reload flags are disabled here because linked
+    /// program tracking owns the union of both stage dependency closures.
+    struct ProgramRequestDescUVE {
+        ShaderSourceCompileDescUVE vertexSource;
+        ShaderSourceCompileDescUVE fragmentSource;
+        std::vector<VertexAttributeUVE> vertexLayout;
+        std::uint32_t vertexStride = 0;
+        PrimitiveTopologyUVE topology = PrimitiveTopologyUVE::Triangles;
+        bool depthTestEnabled = true;
+        bool depthWriteEnabled = true;
+        bool hotReloadEnabledUVE = true;
+        std::string debugNameUVE;
+    };
+
     struct PendingProgramLinkUVE {
         std::shared_ptr<ShaderProgramUVE> program;
         std::shared_ptr<ShaderSourceUVE> vertexSource;
         std::shared_ptr<ShaderSourceUVE> fragmentSource;
-        ShaderProgramDescUVE desc;
+        ProgramRequestDescUVE desc;
     };
     std::vector<PendingProgramLinkUVE> pendingProgramLinks; // main-thread only
 
@@ -59,7 +74,7 @@ struct ShaderManagerUVE::ImplUVE {
     };
     struct TrackedProgramUVE {
         std::weak_ptr<ShaderProgramUVE> target;
-        ShaderProgramDescUVE desc;
+        ProgramRequestDescUVE desc;
         TrackedDependenciesUVE dependencies;
     };
     std::vector<TrackedSourceUVE> trackedSources;   // main-thread only
@@ -132,20 +147,55 @@ namespace {
     return Detail::ComputeFnv1aHashUVE(combined);
 }
 
-[[nodiscard]] ShaderSourceCompileDescUVE BuildChildSourceDescUVE(const ShaderProgramDescUVE& desc,
-                                                                  ShaderStageUVE stage) {
-    ShaderSourceCompileDescUVE childDesc;
-    childDesc.stage = stage;
-    childDesc.virtualFilePath = desc.virtualFilePath;
-    childDesc.embeddedFallbackSourceCode = desc.embeddedFallbackSourceCode;
-    childDesc.extraDefines = desc.extraDefines;
-    childDesc.entryPointName = desc.entryPointName;
-    // Dependency tracking happens at the *program* level (the union of both stages' closures) -
-    // see ShaderManagerUVE::ImplUVE::TrackedProgramUVE - so the individual child sources never
-    // register their own tracking entries.
-    childDesc.hotReloadEnabledUVE = false;
-    childDesc.debugNameUVE = desc.debugNameUVE + (stage == ShaderStageUVE::Vertex ? " (vertex)" : " (fragment)");
-    return childDesc;
+[[nodiscard]] ShaderSourceCompileDescUVE NormalizeProgramStageDescUVE(ShaderSourceCompileDescUVE desc,
+                                                                        ShaderStageUVE stage,
+                                                                        const std::string& programDebugName) {
+    desc.stage = stage;
+    // Dependency tracking happens at the linked-program level (the union of both stage closures),
+    // so individual child sources never create competing tracking entries.
+    desc.hotReloadEnabledUVE = false;
+    if (desc.debugNameUVE.empty()) {
+        desc.debugNameUVE = programDebugName;
+    }
+    desc.debugNameUVE += stage == ShaderStageUVE::Vertex ? " (vertex)" : " (fragment)";
+    return desc;
+}
+
+[[nodiscard]] ShaderManagerUVE::ImplUVE::ProgramRequestDescUVE BuildProgramRequestDescUVE(
+    const ShaderProgramDescUVE& desc) {
+    ShaderManagerUVE::ImplUVE::ProgramRequestDescUVE request;
+    request.debugNameUVE = desc.debugNameUVE;
+    request.vertexSource = NormalizeProgramStageDescUVE(
+        ShaderSourceCompileDescUVE{ShaderStageUVE::Vertex, desc.virtualFilePath, desc.embeddedFallbackSourceCode,
+                                   desc.extraDefines, desc.entryPointName, false, {}},
+        ShaderStageUVE::Vertex, request.debugNameUVE);
+    request.fragmentSource = NormalizeProgramStageDescUVE(
+        ShaderSourceCompileDescUVE{ShaderStageUVE::Fragment, desc.virtualFilePath, desc.embeddedFallbackSourceCode,
+                                   desc.extraDefines, desc.entryPointName, false, {}},
+        ShaderStageUVE::Fragment, request.debugNameUVE);
+    request.vertexLayout = desc.vertexLayout;
+    request.vertexStride = desc.vertexStride;
+    request.topology = desc.topology;
+    request.depthTestEnabled = desc.depthTestEnabled;
+    request.depthWriteEnabled = desc.depthWriteEnabled;
+    request.hotReloadEnabledUVE = desc.hotReloadEnabledUVE;
+    return request;
+}
+
+[[nodiscard]] ShaderManagerUVE::ImplUVE::ProgramRequestDescUVE BuildProgramRequestDescUVE(
+    const ShaderProgramStagesDescUVE& desc) {
+    ShaderManagerUVE::ImplUVE::ProgramRequestDescUVE request;
+    request.debugNameUVE = desc.debugNameUVE;
+    request.vertexSource = NormalizeProgramStageDescUVE(desc.vertexSource, ShaderStageUVE::Vertex, request.debugNameUVE);
+    request.fragmentSource =
+        NormalizeProgramStageDescUVE(desc.fragmentSource, ShaderStageUVE::Fragment, request.debugNameUVE);
+    request.vertexLayout = desc.vertexLayout;
+    request.vertexStride = desc.vertexStride;
+    request.topology = desc.topology;
+    request.depthTestEnabled = desc.depthTestEnabled;
+    request.depthWriteEnabled = desc.depthWriteEnabled;
+    request.hotReloadEnabledUVE = desc.hotReloadEnabledUVE;
+    return request;
 }
 
 } // namespace
@@ -437,9 +487,8 @@ void ShaderManagerUVE::PollHotReloadUVE(ImplUVE& impl) {
             std::shared_ptr<ShaderSourceUVE> vertexSource = MakeSourceUVE(impl.renderDevice, ShaderStageUVE::Vertex);
             std::shared_ptr<ShaderSourceUVE> fragmentSource =
                 MakeSourceUVE(impl.renderDevice, ShaderStageUVE::Fragment);
-            SubmitSourceCompileJobUVE(impl, vertexSource, BuildChildSourceDescUVE(tracked.desc, ShaderStageUVE::Vertex));
-            SubmitSourceCompileJobUVE(impl, fragmentSource,
-                                       BuildChildSourceDescUVE(tracked.desc, ShaderStageUVE::Fragment));
+            SubmitSourceCompileJobUVE(impl, vertexSource, tracked.desc.vertexSource);
+            SubmitSourceCompileJobUVE(impl, fragmentSource, tracked.desc.fragmentSource);
             std::lock_guard<std::mutex> lock(impl.mutex);
             impl.pendingProgramLinks.push_back(
                 ImplUVE::PendingProgramLinkUVE{target, vertexSource, fragmentSource, tracked.desc});
@@ -470,17 +519,36 @@ std::shared_ptr<ShaderSourceUVE> ShaderManagerUVE::CreateSourceUVE(const ShaderS
 }
 
 std::shared_ptr<ShaderProgramUVE> ShaderManagerUVE::CreateProgramUVE(const ShaderProgramDescUVE& desc) {
+    const ImplUVE::ProgramRequestDescUVE request = BuildProgramRequestDescUVE(desc);
     std::shared_ptr<ShaderProgramUVE> program = MakeProgramUVE(m_impl->renderDevice);
     std::shared_ptr<ShaderSourceUVE> vertexSource = MakeSourceUVE(m_impl->renderDevice, ShaderStageUVE::Vertex);
     std::shared_ptr<ShaderSourceUVE> fragmentSource = MakeSourceUVE(m_impl->renderDevice, ShaderStageUVE::Fragment);
 
-    SubmitSourceCompileJobUVE(*m_impl, vertexSource, BuildChildSourceDescUVE(desc, ShaderStageUVE::Vertex));
-    SubmitSourceCompileJobUVE(*m_impl, fragmentSource, BuildChildSourceDescUVE(desc, ShaderStageUVE::Fragment));
+    SubmitSourceCompileJobUVE(*m_impl, vertexSource, request.vertexSource);
+    SubmitSourceCompileJobUVE(*m_impl, fragmentSource, request.fragmentSource);
 
     {
         std::lock_guard<std::mutex> lock(m_impl->mutex);
         m_impl->pendingProgramLinks.push_back(
-            ImplUVE::PendingProgramLinkUVE{program, vertexSource, fragmentSource, desc});
+            ImplUVE::PendingProgramLinkUVE{program, vertexSource, fragmentSource, request});
+    }
+    return program;
+}
+
+std::shared_ptr<ShaderProgramUVE> ShaderManagerUVE::CreateProgramFromStagesUVE(
+    const ShaderProgramStagesDescUVE& desc) {
+    const ImplUVE::ProgramRequestDescUVE request = BuildProgramRequestDescUVE(desc);
+    std::shared_ptr<ShaderProgramUVE> program = MakeProgramUVE(m_impl->renderDevice);
+    std::shared_ptr<ShaderSourceUVE> vertexSource = MakeSourceUVE(m_impl->renderDevice, ShaderStageUVE::Vertex);
+    std::shared_ptr<ShaderSourceUVE> fragmentSource = MakeSourceUVE(m_impl->renderDevice, ShaderStageUVE::Fragment);
+
+    SubmitSourceCompileJobUVE(*m_impl, vertexSource, request.vertexSource);
+    SubmitSourceCompileJobUVE(*m_impl, fragmentSource, request.fragmentSource);
+
+    {
+        std::lock_guard<std::mutex> lock(m_impl->mutex);
+        m_impl->pendingProgramLinks.push_back(
+            ImplUVE::PendingProgramLinkUVE{program, vertexSource, fragmentSource, request});
     }
     return program;
 }

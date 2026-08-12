@@ -468,6 +468,10 @@ public:
         const Render::Shader::ShaderProgramDescUVE&) override {
         return nullptr;
     }
+    [[nodiscard]] std::shared_ptr<Render::Shader::ShaderProgramUVE> CreateProgramFromStagesUVE(
+        const Render::Shader::ShaderProgramStagesDescUVE&) override {
+        return nullptr;
+    }
     void UpdateUVE(double) override { ++updateCallCount; }
 
     int updateCallCount = 0;

@@ -528,13 +528,26 @@ worth restating for anyone extending this later:**
    below) adds a single directional light + flat ambient Lambertian term** —
    `metallic`/`roughness`/`normalTexture` remain visually inert even after Increment 23; consuming
    them is explicit future PBR work.
-2. **Materials still use the older `ShaderAssetUVE`/raw-`CreateShaderUVE` path, not
-   `ShaderManagerUVE`.** `Renderer3DUVE::ResolveMaterialGpuResourcesUVE()` loads a material's
-   `vertexShader`/`fragmentShader` `Asset::ShaderAssetUVE`s and calls
-   `IRenderDeviceUVE::CreateShaderUVE()`/`CreatePipelineUVE()` directly, exactly as it did before
-   Increment 21 existed — it deliberately does **not** route through `ShaderManagerUVE`/
-   `ShaderProgramUVE`. Bridging the two (hot-reload/`#include` support for material shaders) is
-   real, valuable, separate future work, not done here.
+2. **Increment 34 routes materials through `ShaderManagerUVE`.** `MaterialAssetUVE` keeps its
+   existing independent `vertexShader` and `fragmentShader` GUIDs; there is no `.uvemat` format
+   migration. `ShaderProgramStagesDescUVE` gives `ShaderManagerUVE` two source descriptors and
+   links them as one manager-owned `ShaderProgramUVE`, so material programs receive the same async
+   preprocessing, diagnostics, program-binary cache, include dependency tracking, and hot reload
+   lifecycle as built-ins. Existing `.uveshader` assets are decoded envelopes rather than raw GLSL
+   files, so their loaded source text is passed as each stage's embedded fallback; root asset reload
+   events invalidate the referencing material cache entry, while virtual `#include` dependencies
+   remain manager-tracked.
+
+**Increment 34 managed material lifecycle.** `ResolveMaterialGpuResourcesUVE()` submits one
+separate-stage manager request after both shader assets and all referenced textures are ready, then
+caches the shared `ShaderProgramUVE` with its source GUIDs and resolved texture handles. It never
+calls `CreateShaderUVE()`/`CreatePipelineUVE()` directly and never destroys the linked pipeline;
+that remains `ShaderManagerUVE` ownership. The first frame after a request safely skips a material
+until `IsValidUVE()` becomes true, then later frames render automatically. A material, vertex-shader,
+or fragment-shader `AssetReloadedEventUVE` removes only matching material cache entries; a texture
+reload still clears the full material cache because texture dependencies are intentionally not
+stored per entry. Command-order tests must assert named uniforms rather than insertion positions,
+since `ShaderProgramUVE` applies its pending uniform cache without an ordering guarantee.
 
 **Increment 33 activates tangent-space normal mapping in the canonical lit shader.** `MeshVertexUVE`
 now carries a runtime-derived normalized tangent plus handedness; the serialized `.uvemodel` payload
@@ -596,22 +609,15 @@ materials/textures. Fixed alongside the material work since nothing about textur
 have been meaningfully testable without it.
 
 **Cache eviction on texture reload is deliberately coarse.** `MaterialGpuResourcesUVE` doesn't
-track which texture GUIDs it resolved from (only the resolved `TextureHandleUVE`s), so
-`OnAssetReloadedUVE()` can't cheaply tell which cached materials referenced a specific reloaded
-texture. Instead, a texture-GUID reload event destroys+evicts that one `textureCache` entry *and*
-clears the entire `materialCache` (destroying every cached pipeline) — every material's pipeline
-and resolved texture handles get recomputed lazily next frame they're drawn (mostly cache hits
-against `textureCache` for anything unaffected by the reload). This matches this codebase's
-existing preference for simple, obviously-correct whole-unit invalidation over fine-grained
-dependency tracking — compare `ShaderManagerUVE`'s own hot-reload, which similarly recompiles a
-whole affected program rather than partial state. One documented consequence: `Renderer3DUVE`
-never destroys a `ShaderHandleUVE` once created (pre-existing behavior, not introduced by this
-increment — shader handles were never tracked anywhere destructible), so a texture-triggered
-`materialCache` clear leaves the old pipeline's two shader handles orphaned, and re-recording
-compiles two new ones — `Renderer3DUVE`'s live GPU-resource count settles two *higher* than before
-such a reload, not back to the exact original baseline. See
-`tests/render/renderer_3d_uve_tests.cpp`'s `AssetReloadedEventUVE_ForCachedTexture_...` test for
-the exact accounting.
+track which texture GUIDs it resolved from (only resolved `TextureHandleUVE`s), so
+`OnAssetReloadedUVE()` cannot cheaply tell which cached materials referenced a specific reloaded
+texture. It therefore destroys+evicts that one `textureCache` entry and clears `materialCache`.
+The latter only releases `shared_ptr<ShaderProgramUVE>` references; `ShaderManagerUVE` retains sole
+ownership of linked pipelines and temporary stage handles, so renderer tests must not depend on its
+internal retirement timing. Material and shader-asset reloads are more precise: source GUIDs kept in
+each cache entry identify the affected material program. Both paths rebuild lazily and
+non-blockingly on later draws, matching the codebase's preference for simple, obviously-correct
+invalidation over fine-grained texture dependency graphs.
 
 **Testing stays within `Renderer3DUVE`'s existing Null-backend-only convention.** Its test fixture
 registers a `ShaderAssetUVE` loader that returns fixed garbage source
