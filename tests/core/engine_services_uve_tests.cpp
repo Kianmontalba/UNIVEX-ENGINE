@@ -272,6 +272,7 @@ public:
     }
     [[nodiscard]] std::filesystem::path ResolveUVE(Asset::AssetGuidUVE) const override { return {}; }
     [[nodiscard]] bool HasGuidUVE(Asset::AssetGuidUVE) const override { return false; }
+    [[nodiscard]] std::vector<Asset::AssetRecordUVE> GetRegisteredAssetsUVE() const override { return {}; }
 
     int saveCallCount = 0;
 };

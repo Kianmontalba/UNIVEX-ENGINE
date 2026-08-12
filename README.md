@@ -39,10 +39,14 @@ xvfb-run -a ./build/gcc-debug/engine/app/uve_editor --gl-version 4.5 --frames 3
 Swap `-DCMAKE_CXX_COMPILER=clang++` to build with Clang instead. `UVE_BUILD_TESTS` (default
 `ON`) can be set to `OFF` to skip building the GoogleTest suite.
 
-The current editor supports Scene/Properties selection, local Transform editing, collider-backed
-viewport picking, and a world-axis translate gizmo. Viewport picking intentionally selects only
-live document entities with the existing box collider component; mesh picking, rotate/scale gizmos,
-snapping, play mode, asset browsing, and the final docked layout remain future increments.
+The current editor supports a Scene/Viewport/Properties/Assets layout, local Transform editing,
+collider-backed viewport picking, a world-axis translate gizmo, File menu scene save/load actions,
+and Scene menu creation for Empty, Camera, Directional Light, and Collision Box document roots. The
+Assets panel lists only deterministic snapshots of `AssetDatabaseUVE` registered records and offers
+a case-insensitive path filter; it does not scan filesystems, import assets, or load previews.
+Viewport picking intentionally selects only live document entities with the existing box collider
+component. Mesh picking, rotate/scale gizmos, snapping, play mode, filesystem browsing,
+import/reimport, asset drag-and-drop, thumbnails, and layout persistence remain future increments.
 
 ## Repository layout
 

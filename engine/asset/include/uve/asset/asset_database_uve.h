@@ -31,6 +31,7 @@ public:
     [[nodiscard]] AssetGuidUVE RegisterUVE(const std::filesystem::path& assetPath) override;
     [[nodiscard]] std::filesystem::path ResolveUVE(AssetGuidUVE guid) const override;
     [[nodiscard]] bool HasGuidUVE(AssetGuidUVE guid) const override;
+    [[nodiscard]] std::vector<AssetRecordUVE> GetRegisteredAssetsUVE() const override;
 
 private:
     struct ImplUVE;

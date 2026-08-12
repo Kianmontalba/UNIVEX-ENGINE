@@ -10,8 +10,10 @@
 
 #include <filesystem>
 #include <optional>
+#include <string>
 #include <vector>
 
+#include "uve/asset/i_asset_database_uve.h"
 #include "uve/core/engine_services_uve.h"
 #include "uve/math/ray_uve.h"
 #include "uve/math/vector2_uve.h"
@@ -43,6 +45,15 @@ enum class EditorTranslateAxisUVE {
     X,
     Y,
     Z,
+};
+
+/// The supported first-pass Scene menu archetypes. Each created entity is a document root with a
+/// TransformComponentUVE; specialized kinds add only the named gameplay component.
+enum class EditorEntityKindUVE {
+    Empty,
+    Camera,
+    DirectionalLight,
+    CollisionBox,
 };
 
 /// EditorUVE composes the existing engine services into a first editor foundation: an editor-owned
@@ -112,11 +123,18 @@ public:
     /// entity, parent transform, axis, or distance is invalid.
     [[nodiscard]] bool TranslateSelectedAlongAxisUVE(EditorTranslateAxisUVE axis, float worldDistance);
 
+    /// Creates one root-level document entity with a TransformComponentUVE and the specialized
+    /// component implied by `kind`, selects it, and marks the document dirty. Returns the invalid
+    /// entity handle without mutation when the editor is not running or `kind` is unsupported.
+    [[nodiscard]] Scene::EntityUVE CreateDocumentEntityUVE(EditorEntityKindUVE kind);
+
     [[nodiscard]] std::vector<Scene::EntityUVE> GetDocumentRootsUVE();
     [[nodiscard]] EditorStateUVE GetStateUVE() const noexcept;
     [[nodiscard]] Scene::EntityUVE GetSelectedEntityUVE() const noexcept;
     [[nodiscard]] Scene::EntityUVE GetViewportCameraUVE() const noexcept;
     [[nodiscard]] bool IsSceneDirtyUVE() const noexcept;
+    [[nodiscard]] const std::optional<Asset::AssetRecordUVE>& GetSelectedAssetUVE() const noexcept;
+    [[nodiscard]] const std::string& GetAssetFilterUVE() const noexcept;
     [[nodiscard]] const std::filesystem::path& GetActiveScenePathUVE() const noexcept;
     void SetActiveScenePathUVE(std::filesystem::path path);
 
@@ -152,10 +170,12 @@ private:
     void DrawTranslateGizmoUVE(const EditorViewportRectUVE& viewportRect);
     void DestroyDocumentSubtreeUVE(Scene::EntityUVE root);
     void ClearDocumentSceneUVE();
+    void DrawMenuBarUVE();
     void DrawHierarchyPanelUVE();
     void DrawHierarchyNodeUVE(Scene::EntityUVE entity);
     void DrawInspectorPanelUVE();
     void DrawViewportPanelUVE();
+    void DrawAssetsPanelUVE();
 
     Core::EngineServicesUVE* m_services = nullptr;
     EditorStateUVE m_state = EditorStateUVE::Uninitialized;
@@ -163,6 +183,8 @@ private:
     Scene::EntityUVE m_selectedEntity = Scene::kInvalidEntityUVE;
     std::filesystem::path m_activeScenePath;
     GizmoDragUVE m_gizmoDrag{};
+    std::string m_assetFilter;
+    std::optional<Asset::AssetRecordUVE> m_selectedAsset;
     bool m_sceneDirty = false;
     bool m_uiInitialized = false;
 };

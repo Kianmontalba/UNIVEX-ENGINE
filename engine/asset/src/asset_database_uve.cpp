@@ -3,6 +3,7 @@
 
 #include "uve/asset/asset_database_uve.h"
 
+#include <algorithm>
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
@@ -11,6 +12,7 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 #include <nlohmann/json.hpp>
 
@@ -154,6 +156,27 @@ std::filesystem::path AssetDatabaseUVE::ResolveUVE(AssetGuidUVE guid) const {
 bool AssetDatabaseUVE::HasGuidUVE(AssetGuidUVE guid) const {
     const std::lock_guard<std::mutex> lock(m_impl->mutex);
     return m_impl->guidToPath.find(guid) != m_impl->guidToPath.end();
+}
+
+std::vector<AssetRecordUVE> AssetDatabaseUVE::GetRegisteredAssetsUVE() const {
+    const std::lock_guard<std::mutex> lock(m_impl->mutex);
+
+    std::vector<AssetRecordUVE> records;
+    records.reserve(m_impl->guidToPath.size());
+    for (const auto& [guid, path] : m_impl->guidToPath) {
+        records.push_back(AssetRecordUVE{.guid = guid, .path = path.lexically_normal()});
+    }
+
+    std::sort(records.begin(), records.end(), [](const AssetRecordUVE& lhs, const AssetRecordUVE& rhs) {
+        const std::string lhsPath = lhs.path.generic_string();
+        const std::string rhsPath = rhs.path.generic_string();
+        if (lhsPath != rhsPath) {
+            return lhsPath < rhsPath;
+        }
+        return lhs.guid.value < rhs.guid.value;
+    });
+
+    return records;
 }
 
 } // namespace UVE::Asset
