@@ -1140,3 +1140,23 @@ record the existing `BeginRenderPassUVE`/draw/`EndRenderPassUVE` work into that 
 parallelism, compute scheduling, pass culling, post-processing nodes, and visual graph inspection.
 New passes must declare imported-resource reads/writes and retain stable ordering until a later
 increment introduces a fuller scheduler.
+
+
+## Post-Processing Foundation (Increment 37)
+
+**`Renderer3DUVE` now renders its scene pass to an `RGBA16Float` HDR color target before presentation.**
+The graph's `MainColor` pass writes that target, and its following `ToneMapping` pass declares the
+scene color as a graph read before drawing a vertex-ID fullscreen triangle to the default framebuffer.
+The default framebuffer is an external presentation surface rather than a `TextureHandleUVE`; it is
+therefore intentionally not imported or owned by `RenderGraphUVE`.
+
+The managed built-in `fullscreen_quad.glsl` program samples `uSourceTexture` with explicit
+fullscreen UVs and applies an ACES-style fitted tone-map curve. It has no vertex buffer and disables
+depth test/write. The pass safely skips until its `ShaderProgramUVE` is valid, matching existing
+managed-program readiness behavior; later frames present automatically. Both physical and embedded
+fullscreen shader sources must remain byte-identical.
+
+**Deliberately deferred:** exposure controls, gamma/color-space configuration, bloom, SSAO, color
+grade/LUTs, post-process chaining, dynamic-resolution resizing, and HDR presentation swapchain
+configuration. Increment 37 establishes only the HDR-scene-to-LDR-presentation graph edge needed
+by those future passes.
