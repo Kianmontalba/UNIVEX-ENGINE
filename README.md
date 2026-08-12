@@ -48,11 +48,14 @@ names persist through `.uvescene` save/load. Legacy scenes without name metadata
 fall back to stable entity index/generation labels. The editor also provides a bounded in-session
 Undo/Redo history for successful Transform, rename, and root-creation actions. The Edit menu and
 focus-safe `Ctrl+Z`, `Ctrl+Y`, and `Ctrl+Shift+Z` routes replay these actions; one completed
-translate-gizmo drag is recorded as one history step. The Assets panel lists only deterministic
-snapshots of `AssetDatabaseUVE` registered records and offers a case-insensitive path filter; it
-does not scan filesystems, import assets, or load previews. Viewport picking intentionally selects
-only live document entities with the existing box collider component. Mesh picking, rotate/scale
-gizmos, snapping, play mode, filesystem browsing, import/reimport, asset drag-and-drop, thumbnails,
+translate-gizmo drag is recorded as one history step. The editor-only viewport camera now supports
+right-drag orbit, middle-drag pan, wheel zoom, and `F` focus for a selected live document entity.
+These navigation controls never alter the document, dirty state, scene file, or Undo/Redo history.
+The Assets panel lists only deterministic snapshots of `AssetDatabaseUVE` registered records and
+offers a case-insensitive path filter; it does not scan filesystems, import assets, or load previews.
+Viewport picking intentionally selects only live document entities with the existing box collider
+component. Mesh picking, rotate/scale gizmos, snapping, fly navigation, camera bookmarks, cinematic
+camera tools, play mode, filesystem browsing, import/reimport, asset drag-and-drop, thumbnails,
 layout persistence, hierarchy search, duplication/deletion history, and reparenting history remain
 future increments.
 
