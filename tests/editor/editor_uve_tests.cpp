@@ -249,6 +249,181 @@ TEST(EditorUVETest, SetSelectedEntityNameUVE_ValidatesInputAndMarksDocumentDirty
     engine.Shutdown();
 }
 
+TEST(EditorUVETest, EditorHistoryUVE_TransformUndoRedoRestoresSelectionAndDirtyState) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_history_transform.uvescene");
+        editor.InitUVE();
+        Core::EngineServicesUVE& services = engine.GetServicesUVE();
+        Scene::IEntityManagerUVE& entityManager = services.GetEntityManagerUVE();
+        const Scene::EntityUVE root = entityManager.CreateEntityUVE();
+        AttachRootUVE(engine, root, Scene::TransformComponentUVE{});
+        editor.SelectEntityUVE(root);
+
+        Scene::TransformComponentUVE moved{};
+        moved.localPosition = Math::Vector3UVE{4.0F, -3.0F, 2.0F};
+        ASSERT_TRUE(editor.SetSelectedLocalTransformUVE(moved));
+        EXPECT_TRUE(editor.CanUndoUVE());
+        EXPECT_FALSE(editor.CanRedoUVE());
+        EXPECT_TRUE(editor.IsSceneDirtyUVE());
+
+        ASSERT_TRUE(editor.UndoUVE());
+        EXPECT_EQ(editor.GetSelectedEntityUVE(), root);
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(root).localPosition,
+                  Math::Vector3UVE{});
+        EXPECT_FALSE(editor.IsSceneDirtyUVE());
+        EXPECT_FALSE(editor.CanUndoUVE());
+        EXPECT_TRUE(editor.CanRedoUVE());
+
+        ASSERT_TRUE(editor.RedoUVE());
+        EXPECT_EQ(editor.GetSelectedEntityUVE(), root);
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(root).localPosition,
+                  moved.localPosition);
+        EXPECT_TRUE(editor.IsSceneDirtyUVE());
+
+        editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
+}
+
+TEST(EditorUVETest, EditorHistoryUVE_NameUndoRedoRestoresOptionalComponentState) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_history_name.uvescene");
+        editor.InitUVE();
+        Core::EngineServicesUVE& services = engine.GetServicesUVE();
+        Scene::IEntityManagerUVE& entityManager = services.GetEntityManagerUVE();
+        const Scene::EntityUVE root = entityManager.CreateEntityUVE();
+        AttachRootUVE(engine, root, Scene::TransformComponentUVE{});
+        editor.SelectEntityUVE(root);
+
+        ASSERT_TRUE(editor.SetSelectedEntityNameUVE("Level Root"));
+        ASSERT_TRUE(entityManager.HasComponentUVE<Scene::NameComponentUVE>(root));
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::NameComponentUVE>(root).name, "Level Root");
+        ASSERT_TRUE(editor.UndoUVE());
+        EXPECT_FALSE(entityManager.HasComponentUVE<Scene::NameComponentUVE>(root));
+        EXPECT_FALSE(editor.IsSceneDirtyUVE());
+        ASSERT_TRUE(editor.RedoUVE());
+        ASSERT_TRUE(entityManager.HasComponentUVE<Scene::NameComponentUVE>(root));
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::NameComponentUVE>(root).name, "Level Root");
+        EXPECT_TRUE(editor.IsSceneDirtyUVE());
+
+        editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
+}
+
+TEST(EditorUVETest, EditorHistoryUVE_CreationUndoRedoRecreatesArchetypeAndName) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_history_create.uvescene");
+        editor.InitUVE();
+        Scene::IEntityManagerUVE& entityManager = engine.GetServicesUVE().GetEntityManagerUVE();
+
+        const Scene::EntityUVE created = editor.CreateDocumentEntityUVE(EditorEntityKindUVE::CollisionBox);
+        ASSERT_TRUE(entityManager.IsAliveUVE(created));
+        ASSERT_TRUE(editor.CanUndoUVE());
+        ASSERT_TRUE(editor.UndoUVE());
+        EXPECT_FALSE(entityManager.IsAliveUVE(created));
+        EXPECT_TRUE(editor.GetDocumentRootsUVE().empty());
+        EXPECT_EQ(editor.GetSelectedEntityUVE(), Scene::kInvalidEntityUVE);
+        EXPECT_FALSE(editor.IsSceneDirtyUVE());
+
+        ASSERT_TRUE(editor.RedoUVE());
+        const Scene::EntityUVE recreated = editor.GetSelectedEntityUVE();
+        ASSERT_TRUE(entityManager.IsAliveUVE(recreated));
+        EXPECT_TRUE(entityManager.HasComponentUVE<Scene::TransformComponentUVE>(recreated));
+        EXPECT_TRUE(entityManager.HasComponentUVE<Scene::ColliderComponentUVE>(recreated));
+        ASSERT_TRUE(entityManager.HasComponentUVE<Scene::NameComponentUVE>(recreated));
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::NameComponentUVE>(recreated).name, "Collision Box");
+        EXPECT_TRUE(editor.IsSceneDirtyUVE());
+
+        editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
+}
+
+TEST(EditorUVETest, EditorHistoryUVE_NewMutationClearsRedoAndCapacityDiscardsOldestCommand) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_history_capacity.uvescene", 1U);
+        editor.InitUVE();
+        Scene::IEntityManagerUVE& entityManager = engine.GetServicesUVE().GetEntityManagerUVE();
+        const Scene::EntityUVE root = entityManager.CreateEntityUVE();
+        AttachRootUVE(engine, root, Scene::TransformComponentUVE{});
+        editor.SelectEntityUVE(root);
+
+        Scene::TransformComponentUVE first{};
+        first.localPosition = Math::Vector3UVE{1.0F, 0.0F, 0.0F};
+        ASSERT_TRUE(editor.SetSelectedLocalTransformUVE(first));
+        Scene::TransformComponentUVE second = first;
+        second.localPosition = Math::Vector3UVE{2.0F, 0.0F, 0.0F};
+        ASSERT_TRUE(editor.SetSelectedLocalTransformUVE(second));
+        ASSERT_TRUE(editor.UndoUVE());
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(root).localPosition,
+                  first.localPosition);
+        EXPECT_FALSE(editor.CanUndoUVE());
+        EXPECT_TRUE(editor.CanRedoUVE());
+
+        Scene::TransformComponentUVE third = first;
+        third.localPosition = Math::Vector3UVE{3.0F, 0.0F, 0.0F};
+        ASSERT_TRUE(editor.SetSelectedLocalTransformUVE(third));
+        EXPECT_FALSE(editor.CanRedoUVE());
+        EXPECT_FALSE(editor.SetSelectedLocalTransformUVE(third));
+
+        editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
+}
+
+TEST(EditorUVETest, EditorHistoryUVE_StaleTargetsAndNonRunningStateFailWithoutMutation) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_history_stale.uvescene");
+        EXPECT_FALSE(editor.UndoUVE());
+        EXPECT_FALSE(editor.RedoUVE());
+        editor.InitUVE();
+        Scene::IEntityManagerUVE& entityManager = engine.GetServicesUVE().GetEntityManagerUVE();
+        const Scene::EntityUVE root = entityManager.CreateEntityUVE();
+        AttachRootUVE(engine, root, Scene::TransformComponentUVE{});
+        editor.SelectEntityUVE(root);
+
+        Scene::TransformComponentUVE moved{};
+        moved.localPosition = Math::Vector3UVE{1.0F, 2.0F, 3.0F};
+        ASSERT_TRUE(editor.SetSelectedLocalTransformUVE(moved));
+        entityManager.DestroyEntityUVE(root);
+        editor.TickUVE();
+        EXPECT_FALSE(editor.UndoUVE());
+        EXPECT_FALSE(editor.CanUndoUVE());
+        EXPECT_FALSE(editor.CanRedoUVE());
+
+        editor.ShutdownUVE();
+        EXPECT_FALSE(editor.UndoUVE());
+        EXPECT_FALSE(editor.RedoUVE());
+    }
+
+    engine.Shutdown();
+}
+
 TEST(EditorUVETest, SaveThenLoadScene_RoundTripsDocumentRootsWithoutSerializingEditorCamera) {
     const std::filesystem::path scenePath = "uve_editor_tests_round_trip.uvescene";
     std::filesystem::remove(scenePath);
@@ -266,7 +441,7 @@ TEST(EditorUVETest, SaveThenLoadScene_RoundTripsDocumentRootsWithoutSerializingE
         const Scene::EntityUVE root = services.GetEntityManagerUVE().CreateEntityUVE();
         Scene::TransformComponentUVE rootTransform{};
         rootTransform.localPosition = Math::Vector3UVE{1.0F, 2.0F, 3.0F};
-        AttachRootUVE(engine, root, rootTransform);
+        AttachRootUVE(engine, root, Scene::TransformComponentUVE{});
 
         const Scene::EntityUVE child = services.GetEntityManagerUVE().CreateEntityUVE();
         Scene::TransformComponentUVE childTransform{};
@@ -284,6 +459,8 @@ TEST(EditorUVETest, SaveThenLoadScene_RoundTripsDocumentRootsWithoutSerializingE
         modified.localPosition = Math::Vector3UVE{9.0F, 9.0F, 9.0F};
         ASSERT_TRUE(editor.SetSelectedLocalTransformUVE(modified));
         ASSERT_TRUE(editor.LoadSceneUVE());
+        EXPECT_FALSE(editor.CanUndoUVE());
+        EXPECT_FALSE(editor.CanRedoUVE());
 
         const std::vector<Scene::EntityUVE> loadedRoots = editor.GetDocumentRootsUVE();
         ASSERT_EQ(loadedRoots.size(), 1U);
@@ -382,6 +559,12 @@ TEST(EditorUVETest, TranslateSelectedAlongAxis_UpdatesLocalTransformAndConvertsP
         EXPECT_NEAR(translated.localPosition.y, 2.0F, 0.0001F);
         EXPECT_NEAR(translated.localPosition.z, 3.0F, 0.0001F);
         EXPECT_TRUE(editor.IsSceneDirtyUVE());
+        ASSERT_TRUE(editor.UndoUVE());
+        EXPECT_NEAR(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(child).localPosition.x,
+                    1.0F, 0.0001F);
+        ASSERT_TRUE(editor.RedoUVE());
+        EXPECT_NEAR(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(child).localPosition.x,
+                    2.0F, 0.0001F);
         EXPECT_FALSE(editor.TranslateSelectedAlongAxisUVE(EditorTranslateAxisUVE::None, 1.0F));
         EXPECT_FALSE(editor.TranslateSelectedAlongAxisUVE(
             EditorTranslateAxisUVE::Y, std::numeric_limits<float>::infinity()));

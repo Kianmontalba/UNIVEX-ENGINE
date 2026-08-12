@@ -45,12 +45,16 @@ gizmo, File menu scene save/load actions, and Scene menu creation for Empty, Cam
 Light, and Collision Box document roots. New archetypes receive deterministic default names such as
 `Camera` and `Camera 2`; the Properties panel can rename one selected live document entity, and
 names persist through `.uvescene` save/load. Legacy scenes without name metadata remain valid and
-fall back to stable entity index/generation labels. The Assets panel lists only deterministic
+fall back to stable entity index/generation labels. The editor also provides a bounded in-session
+Undo/Redo history for successful Transform, rename, and root-creation actions. The Edit menu and
+focus-safe `Ctrl+Z`, `Ctrl+Y`, and `Ctrl+Shift+Z` routes replay these actions; one completed
+translate-gizmo drag is recorded as one history step. The Assets panel lists only deterministic
 snapshots of `AssetDatabaseUVE` registered records and offers a case-insensitive path filter; it
 does not scan filesystems, import assets, or load previews. Viewport picking intentionally selects
 only live document entities with the existing box collider component. Mesh picking, rotate/scale
 gizmos, snapping, play mode, filesystem browsing, import/reimport, asset drag-and-drop, thumbnails,
-layout persistence, hierarchy search, duplication, and deletion remain future increments.
+layout persistence, hierarchy search, duplication/deletion history, and reparenting history remain
+future increments.
 
 ## Repository layout
 
