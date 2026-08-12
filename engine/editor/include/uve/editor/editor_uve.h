@@ -8,9 +8,12 @@
 
 #pragma once
 
+#include <cstddef>
+#include <deque>
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <variant>
 #include <vector>
 
 #include "uve/asset/i_asset_database_uve.h"
@@ -67,7 +70,8 @@ enum class EditorEntityKindUVE {
 class EditorUVE final {
 public:
     explicit EditorUVE(Core::EngineServicesUVE& services,
-                       std::filesystem::path activeScenePath = "editor_scene.uvescene");
+                       std::filesystem::path activeScenePath = "editor_scene.uvescene",
+                       std::size_t historyCapacity = 100U);
     ~EditorUVE();
 
     EditorUVE(const EditorUVE&) = delete;
@@ -133,6 +137,15 @@ public:
     /// entity handle without mutation when the editor is not running or `kind` is unsupported.
     [[nodiscard]] Scene::EntityUVE CreateDocumentEntityUVE(EditorEntityKindUVE kind);
 
+    /// Replays the most recent supported editor mutation in reverse. It is safe and returns false
+    /// when the editor is not running, history is empty, or a target became stale externally.
+    [[nodiscard]] bool UndoUVE();
+    /// Reapplies the most recently undone supported editor mutation. It follows UndoUVE's lifecycle
+    /// and stale-target safety rules and never records another history entry while replaying.
+    [[nodiscard]] bool RedoUVE();
+    [[nodiscard]] bool CanUndoUVE() const noexcept;
+    [[nodiscard]] bool CanRedoUVE() const noexcept;
+
     [[nodiscard]] std::vector<Scene::EntityUVE> GetDocumentRootsUVE();
     [[nodiscard]] EditorStateUVE GetStateUVE() const noexcept;
     [[nodiscard]] Scene::EntityUVE GetSelectedEntityUVE() const noexcept;
@@ -155,7 +168,40 @@ private:
         Math::Vector2UVE initialPointer{};
         Math::Vector2UVE screenAxisDirection{};
         float pixelsPerWorldUnit = 0.0F;
+        bool initialDirty = false;
     };
+
+    struct TransformHistoryEntryUVE final {
+        Scene::EntityUVE entity = Scene::kInvalidEntityUVE;
+        Scene::TransformComponentUVE before{};
+        Scene::TransformComponentUVE after{};
+        Scene::EntityUVE selectionBefore = Scene::kInvalidEntityUVE;
+        Scene::EntityUVE selectionAfter = Scene::kInvalidEntityUVE;
+        bool dirtyBefore = false;
+        bool dirtyAfter = false;
+    };
+
+    struct NameHistoryEntryUVE final {
+        Scene::EntityUVE entity = Scene::kInvalidEntityUVE;
+        std::optional<std::string> beforeName;
+        std::optional<std::string> afterName;
+        Scene::EntityUVE selectionBefore = Scene::kInvalidEntityUVE;
+        Scene::EntityUVE selectionAfter = Scene::kInvalidEntityUVE;
+        bool dirtyBefore = false;
+        bool dirtyAfter = false;
+    };
+
+    struct CreationHistoryEntryUVE final {
+        EditorEntityKindUVE kind = EditorEntityKindUVE::Empty;
+        std::string name;
+        Scene::EntityUVE activeEntity = Scene::kInvalidEntityUVE;
+        Scene::EntityUVE selectionBefore = Scene::kInvalidEntityUVE;
+        Scene::EntityUVE selectionAfter = Scene::kInvalidEntityUVE;
+        bool dirtyBefore = false;
+        bool dirtyAfter = false;
+    };
+
+    using HistoryEntryUVE = std::variant<TransformHistoryEntryUVE, NameHistoryEntryUVE, CreationHistoryEntryUVE>;
 
     [[nodiscard]] bool IsDocumentEntityUVE(Scene::EntityUVE entity) const noexcept;
     [[nodiscard]] bool IsTransformFiniteUVE(const Scene::TransformComponentUVE& transform) const noexcept;
@@ -175,8 +221,20 @@ private:
     [[nodiscard]] bool BeginGizmoDragUVE(const EditorViewportRectUVE& viewportRect,
                                           Math::Vector2UVE pointerPosition);
     void UpdateGizmoDragUVE(Math::Vector2UVE pointerPosition);
+    void CommitGizmoDragUVE();
     void CancelGizmoDragUVE() noexcept;
     void DrawTranslateGizmoUVE(const EditorViewportRectUVE& viewportRect);
+    [[nodiscard]] bool ApplyLocalTransformUVE(Scene::EntityUVE entity,
+                                               const Scene::TransformComponentUVE& transform);
+    [[nodiscard]] bool ApplyEntityNameStateUVE(Scene::EntityUVE entity,
+                                                const std::optional<std::string>& name);
+    [[nodiscard]] Scene::EntityUVE CreateDocumentEntityInternalUVE(
+        EditorEntityKindUVE kind, const std::optional<std::string>& explicitName);
+    void RecordHistoryUVE(HistoryEntryUVE entry);
+    void ClearHistoryUVE() noexcept;
+    void RestoreSelectionUVE(Scene::EntityUVE selection) noexcept;
+    [[nodiscard]] bool UndoHistoryEntryUVE(HistoryEntryUVE& entry);
+    [[nodiscard]] bool RedoHistoryEntryUVE(HistoryEntryUVE& entry);
     void DestroyDocumentSubtreeUVE(Scene::EntityUVE root);
     void ClearDocumentSceneUVE();
     void DrawMenuBarUVE();
@@ -191,7 +249,10 @@ private:
     Scene::EntityUVE m_viewportCamera = Scene::kInvalidEntityUVE;
     Scene::EntityUVE m_selectedEntity = Scene::kInvalidEntityUVE;
     std::filesystem::path m_activeScenePath;
+    std::size_t m_historyCapacity = 100U;
     GizmoDragUVE m_gizmoDrag{};
+    std::deque<HistoryEntryUVE> m_undoHistory;
+    std::deque<HistoryEntryUVE> m_redoHistory;
     std::string m_assetFilter;
     std::optional<Asset::AssetRecordUVE> m_selectedAsset;
     bool m_sceneDirty = false;

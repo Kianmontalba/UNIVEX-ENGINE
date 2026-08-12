@@ -18,7 +18,9 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <type_traits>
 #include <utility>
+#include <variant>
 
 #include <GLFW/glfw3.h>
 #include <imgui.h>
@@ -68,6 +70,15 @@ constexpr std::size_t kMaximumEntityNameBytesUVE = 96U;
     });
 }
 
+[[nodiscard]] bool AreTransformsEqualUVE(const Scene::TransformComponentUVE& lhs,
+                                         const Scene::TransformComponentUVE& rhs) noexcept {
+    return lhs.localPosition.x == rhs.localPosition.x && lhs.localPosition.y == rhs.localPosition.y &&
+           lhs.localPosition.z == rhs.localPosition.z && lhs.localRotation.x == rhs.localRotation.x &&
+           lhs.localRotation.y == rhs.localRotation.y && lhs.localRotation.z == rhs.localRotation.z &&
+           lhs.localRotation.w == rhs.localRotation.w && lhs.localScale.x == rhs.localScale.x &&
+           lhs.localScale.y == rhs.localScale.y && lhs.localScale.z == rhs.localScale.z;
+}
+
 [[nodiscard]] std::filesystem::path MakeRecoveryPathUVE(const std::filesystem::path& scenePath) {
     std::filesystem::path recoveryPath = scenePath;
     recoveryPath += ".editor-recovery";
@@ -111,8 +122,11 @@ constexpr std::size_t kMaximumEntityNameBytesUVE = 96U;
 
 } // namespace
 
-EditorUVE::EditorUVE(Core::EngineServicesUVE& services, std::filesystem::path activeScenePath)
-    : m_services(&services), m_activeScenePath(std::move(activeScenePath)) {}
+EditorUVE::EditorUVE(Core::EngineServicesUVE& services, std::filesystem::path activeScenePath,
+                     const std::size_t historyCapacity)
+    : m_services(&services),
+      m_activeScenePath(std::move(activeScenePath)),
+      m_historyCapacity(std::max<std::size_t>(std::size_t{1U}, historyCapacity)) {}
 
 EditorUVE::~EditorUVE() {
     ShutdownUVE();
@@ -223,6 +237,7 @@ bool EditorUVE::LoadSceneUVE() {
         return false;
     }
 
+    ClearHistoryUVE();
     ClearDocumentSceneUVE();
     const std::vector<Scene::EntityUVE> loadedRoots =
         m_services->GetSceneSerializerUVE().LoadUVE(entityManager, m_activeScenePath);
@@ -235,6 +250,7 @@ bool EditorUVE::LoadSceneUVE() {
 
     std::filesystem::remove(recoveryPath, error);
     ClearSelectionUVE();
+    ClearHistoryUVE();
     m_sceneDirty = false;
     return true;
 }
@@ -263,8 +279,20 @@ bool EditorUVE::SetSelectedLocalTransformUVE(const Scene::TransformComponentUVE&
         return false;
     }
 
-    m_services->GetSceneGraphUVE().SetLocalTransformUVE(entityManager, m_selectedEntity, transform);
+    const Scene::TransformComponentUVE before =
+        entityManager.GetComponentUVE<Scene::TransformComponentUVE>(m_selectedEntity);
+    if (AreTransformsEqualUVE(before, transform)) {
+        return false;
+    }
+
+    const bool dirtyBefore = m_sceneDirty;
+    if (!ApplyLocalTransformUVE(m_selectedEntity, transform)) {
+        return false;
+    }
+
     m_sceneDirty = true;
+    RecordHistoryUVE(TransformHistoryEntryUVE{
+        m_selectedEntity, before, transform, m_selectedEntity, m_selectedEntity, dirtyBefore, true});
     return true;
 }
 
@@ -275,19 +303,23 @@ bool EditorUVE::SetSelectedEntityNameUVE(std::string name) {
     }
 
     Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    std::optional<std::string> beforeName;
     if (entityManager.HasComponentUVE<Scene::NameComponentUVE>(m_selectedEntity)) {
-        Scene::NameComponentUVE& existingName =
-            entityManager.GetComponentUVE<Scene::NameComponentUVE>(m_selectedEntity);
-        if (existingName.name == name) {
+        beforeName = entityManager.GetComponentUVE<Scene::NameComponentUVE>(m_selectedEntity).name;
+        if (*beforeName == name) {
             return false;
         }
-        existingName.name = std::move(name);
-    } else {
-        entityManager.AddComponentUVE<Scene::NameComponentUVE>(m_selectedEntity,
-                                                                Scene::NameComponentUVE{std::move(name)});
+    }
+
+    const bool dirtyBefore = m_sceneDirty;
+    const std::optional<std::string> afterName{std::move(name)};
+    if (!ApplyEntityNameStateUVE(m_selectedEntity, afterName)) {
+        return false;
     }
 
     m_sceneDirty = true;
+    RecordHistoryUVE(NameHistoryEntryUVE{
+        m_selectedEntity, beforeName, afterName, m_selectedEntity, m_selectedEntity, dirtyBefore, true});
     return true;
 }
 
@@ -399,6 +431,103 @@ Scene::EntityUVE EditorUVE::CreateDocumentEntityUVE(const EditorEntityKindUVE ki
         return Scene::kInvalidEntityUVE;
     }
 
+    const Scene::EntityUVE selectionBefore = m_selectedEntity;
+    const bool dirtyBefore = m_sceneDirty;
+    const Scene::EntityUVE entity = CreateDocumentEntityInternalUVE(kind, std::nullopt);
+    if (entity == Scene::kInvalidEntityUVE) {
+        return Scene::kInvalidEntityUVE;
+    }
+
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    const std::string createdName = entityManager.GetComponentUVE<Scene::NameComponentUVE>(entity).name;
+    SelectEntityUVE(entity);
+    m_sceneDirty = true;
+    RecordHistoryUVE(CreationHistoryEntryUVE{
+        kind, createdName, entity, selectionBefore, entity, dirtyBefore, true});
+    return entity;
+}
+
+bool EditorUVE::UndoUVE() {
+    if (m_state != EditorStateUVE::Running || m_undoHistory.empty()) {
+        return false;
+    }
+
+    HistoryEntryUVE entry = std::move(m_undoHistory.back());
+    m_undoHistory.pop_back();
+    if (!UndoHistoryEntryUVE(entry)) {
+        ClearHistoryUVE();
+        return false;
+    }
+
+    m_redoHistory.push_back(std::move(entry));
+    return true;
+}
+
+bool EditorUVE::RedoUVE() {
+    if (m_state != EditorStateUVE::Running || m_redoHistory.empty()) {
+        return false;
+    }
+
+    HistoryEntryUVE entry = std::move(m_redoHistory.back());
+    m_redoHistory.pop_back();
+    if (!RedoHistoryEntryUVE(entry)) {
+        ClearHistoryUVE();
+        return false;
+    }
+
+    m_undoHistory.push_back(std::move(entry));
+    return true;
+}
+
+bool EditorUVE::CanUndoUVE() const noexcept {
+    return m_state == EditorStateUVE::Running && !m_undoHistory.empty();
+}
+
+bool EditorUVE::CanRedoUVE() const noexcept {
+    return m_state == EditorStateUVE::Running && !m_redoHistory.empty();
+}
+
+bool EditorUVE::ApplyLocalTransformUVE(const Scene::EntityUVE entity,
+                                       const Scene::TransformComponentUVE& transform) {
+    if (!IsDocumentEntityUVE(entity) || !IsTransformFiniteUVE(transform)) {
+        return false;
+    }
+
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    if (!entityManager.HasComponentUVE<Scene::TransformComponentUVE>(entity)) {
+        return false;
+    }
+
+    m_services->GetSceneGraphUVE().SetLocalTransformUVE(entityManager, entity, transform);
+    return true;
+}
+
+bool EditorUVE::ApplyEntityNameStateUVE(const Scene::EntityUVE entity,
+                                        const std::optional<std::string>& name) {
+    if (!IsDocumentEntityUVE(entity) || (name.has_value() && !IsEntityNameValidUVE(*name))) {
+        return false;
+    }
+
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    const bool hasName = entityManager.HasComponentUVE<Scene::NameComponentUVE>(entity);
+    if (!name.has_value()) {
+        if (!hasName) {
+            return false;
+        }
+        entityManager.RemoveComponentUVE<Scene::NameComponentUVE>(entity);
+        return true;
+    }
+
+    if (hasName) {
+        entityManager.GetComponentUVE<Scene::NameComponentUVE>(entity).name = *name;
+    } else {
+        entityManager.AddComponentUVE<Scene::NameComponentUVE>(entity, Scene::NameComponentUVE{*name});
+    }
+    return true;
+}
+
+Scene::EntityUVE EditorUVE::CreateDocumentEntityInternalUVE(
+    const EditorEntityKindUVE kind, const std::optional<std::string>& explicitName) {
     switch (kind) {
         case EditorEntityKindUVE::Empty:
         case EditorEntityKindUVE::Camera:
@@ -410,7 +539,8 @@ Scene::EntityUVE EditorUVE::CreateDocumentEntityUVE(const EditorEntityKindUVE ki
     }
 
     const std::string defaultName = GetDefaultEntityNameUVE(kind);
-    if (defaultName.empty()) {
+    const std::string name = explicitName.has_value() ? *explicitName : MakeUniqueDocumentEntityNameUVE(defaultName);
+    if (defaultName.empty() || !IsEntityNameValidUVE(name)) {
         return Scene::kInvalidEntityUVE;
     }
 
@@ -438,11 +568,95 @@ Scene::EntityUVE EditorUVE::CreateDocumentEntityUVE(const EditorEntityKindUVE ki
             return Scene::kInvalidEntityUVE;
     }
 
-    entityManager.AddComponentUVE<Scene::NameComponentUVE>(
-        entity, Scene::NameComponentUVE{MakeUniqueDocumentEntityNameUVE(defaultName)});
-    SelectEntityUVE(entity);
-    m_sceneDirty = true;
+    entityManager.AddComponentUVE<Scene::NameComponentUVE>(entity, Scene::NameComponentUVE{name});
     return entity;
+}
+
+void EditorUVE::RecordHistoryUVE(HistoryEntryUVE entry) {
+    m_redoHistory.clear();
+    if (m_undoHistory.size() >= m_historyCapacity) {
+        m_undoHistory.pop_front();
+    }
+    m_undoHistory.push_back(std::move(entry));
+}
+
+void EditorUVE::ClearHistoryUVE() noexcept {
+    m_undoHistory.clear();
+    m_redoHistory.clear();
+}
+
+void EditorUVE::RestoreSelectionUVE(const Scene::EntityUVE selection) noexcept {
+    SelectEntityUVE(selection);
+}
+
+bool EditorUVE::UndoHistoryEntryUVE(HistoryEntryUVE& entry) {
+    return std::visit(
+        [this](auto& typedEntry) -> bool {
+            using EntryType = std::decay_t<decltype(typedEntry)>;
+            if constexpr (std::is_same_v<EntryType, TransformHistoryEntryUVE>) {
+                if (!ApplyLocalTransformUVE(typedEntry.entity, typedEntry.before)) {
+                    return false;
+                }
+                RestoreSelectionUVE(typedEntry.selectionBefore);
+                m_sceneDirty = typedEntry.dirtyBefore;
+                return true;
+            } else if constexpr (std::is_same_v<EntryType, NameHistoryEntryUVE>) {
+                if (!ApplyEntityNameStateUVE(typedEntry.entity, typedEntry.beforeName)) {
+                    return false;
+                }
+                RestoreSelectionUVE(typedEntry.selectionBefore);
+                m_sceneDirty = typedEntry.dirtyBefore;
+                return true;
+            } else {
+                if (!IsDocumentEntityUVE(typedEntry.activeEntity)) {
+                    return false;
+                }
+                DestroyDocumentSubtreeUVE(typedEntry.activeEntity);
+                typedEntry.activeEntity = Scene::kInvalidEntityUVE;
+                RestoreSelectionUVE(typedEntry.selectionBefore);
+                m_sceneDirty = typedEntry.dirtyBefore;
+                return true;
+            }
+        },
+        entry);
+}
+
+bool EditorUVE::RedoHistoryEntryUVE(HistoryEntryUVE& entry) {
+    return std::visit(
+        [this](auto& typedEntry) -> bool {
+            using EntryType = std::decay_t<decltype(typedEntry)>;
+            if constexpr (std::is_same_v<EntryType, TransformHistoryEntryUVE>) {
+                if (!ApplyLocalTransformUVE(typedEntry.entity, typedEntry.after)) {
+                    return false;
+                }
+                RestoreSelectionUVE(typedEntry.selectionAfter);
+                m_sceneDirty = typedEntry.dirtyAfter;
+                return true;
+            } else if constexpr (std::is_same_v<EntryType, NameHistoryEntryUVE>) {
+                if (!ApplyEntityNameStateUVE(typedEntry.entity, typedEntry.afterName)) {
+                    return false;
+                }
+                RestoreSelectionUVE(typedEntry.selectionAfter);
+                m_sceneDirty = typedEntry.dirtyAfter;
+                return true;
+            } else {
+                if (typedEntry.activeEntity != Scene::kInvalidEntityUVE &&
+                    m_services->GetEntityManagerUVE().IsAliveUVE(typedEntry.activeEntity)) {
+                    return false;
+                }
+                const Scene::EntityUVE recreated =
+                    CreateDocumentEntityInternalUVE(typedEntry.kind, std::optional<std::string>{typedEntry.name});
+                if (recreated == Scene::kInvalidEntityUVE) {
+                    return false;
+                }
+                typedEntry.activeEntity = recreated;
+                typedEntry.selectionAfter = recreated;
+                RestoreSelectionUVE(recreated);
+                m_sceneDirty = typedEntry.dirtyAfter;
+                return true;
+            }
+        },
+        entry);
 }
 
 std::vector<Scene::EntityUVE> EditorUVE::GetDocumentRootsUVE() {
@@ -506,6 +720,7 @@ void EditorUVE::ShutdownUVE() {
     }
     m_viewportCamera = Scene::kInvalidEntityUVE;
     ClearSelectionUVE();
+    ClearHistoryUVE();
     m_state = EditorStateUVE::Shutdown;
 }
 
@@ -752,6 +967,7 @@ bool EditorUVE::BeginGizmoDragUVE(const EditorViewportRectUVE& viewportRect,
         candidate.initialPointer = pointerPosition;
         candidate.screenAxisDirection = Scale2UVE(screenAxis, 1.0F / axisLength);
         candidate.pixelsPerWorldUnit = axisLength / kGizmoAxisLengthUVE;
+        candidate.initialDirty = m_sceneDirty;
         bestDistanceSquared = distanceSquared;
     }
 
@@ -786,16 +1002,62 @@ void EditorUVE::UpdateGizmoDragUVE(const Math::Vector2UVE pointerPosition) {
     Math::Vector3UVE localDelta{};
     if (!ComputeLocalDeltaForWorldDeltaUVE(
             m_gizmoDrag.entity, GetAxisVectorUVE(m_gizmoDrag.axis) * worldDistance, localDelta)) {
+        CancelGizmoDragUVE();
         return;
     }
 
     Scene::TransformComponentUVE updated = m_gizmoDrag.initialLocalTransform;
     updated.localPosition += localDelta;
-    static_cast<void>(SetSelectedLocalTransformUVE(updated));
+    if (!ApplyLocalTransformUVE(m_gizmoDrag.entity, updated)) {
+        CancelGizmoDragUVE();
+        return;
+    }
+    m_sceneDirty = true;
+}
+
+void EditorUVE::CommitGizmoDragUVE() {
+    const GizmoDragUVE completedDrag = m_gizmoDrag;
+    m_gizmoDrag = GizmoDragUVE{};
+    if (completedDrag.axis == EditorTranslateAxisUVE::None || !IsDocumentEntityUVE(completedDrag.entity)) {
+        return;
+    }
+
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    if (!entityManager.HasComponentUVE<Scene::TransformComponentUVE>(completedDrag.entity)) {
+        return;
+    }
+
+    const Scene::TransformComponentUVE after =
+        entityManager.GetComponentUVE<Scene::TransformComponentUVE>(completedDrag.entity);
+    if (AreTransformsEqualUVE(completedDrag.initialLocalTransform, after)) {
+        m_sceneDirty = completedDrag.initialDirty;
+        return;
+    }
+
+    RecordHistoryUVE(TransformHistoryEntryUVE{completedDrag.entity,
+                                               completedDrag.initialLocalTransform,
+                                               after,
+                                               completedDrag.entity,
+                                               completedDrag.entity,
+                                               completedDrag.initialDirty,
+                                               true});
 }
 
 void EditorUVE::CancelGizmoDragUVE() noexcept {
+    const GizmoDragUVE cancelledDrag = m_gizmoDrag;
     m_gizmoDrag = GizmoDragUVE{};
+    if (cancelledDrag.axis == EditorTranslateAxisUVE::None || !IsDocumentEntityUVE(cancelledDrag.entity)) {
+        return;
+    }
+
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    if (!entityManager.HasComponentUVE<Scene::TransformComponentUVE>(cancelledDrag.entity)) {
+        return;
+    }
+
+    m_services->GetSceneGraphUVE().SetLocalTransformUVE(
+        entityManager, cancelledDrag.entity, cancelledDrag.initialLocalTransform);
+    m_sceneDirty = cancelledDrag.initialDirty;
 }
 
 void EditorUVE::DrawTranslateGizmoUVE(const EditorViewportRectUVE& viewportRect) {
@@ -867,12 +1129,33 @@ void EditorUVE::DrawMenuBarUVE() {
         return;
     }
 
+    ImGuiIO& io = ImGui::GetIO();
+    if (!io.WantTextInput && io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Z, false)) {
+        if (io.KeyShift) {
+            static_cast<void>(RedoUVE());
+        } else {
+            static_cast<void>(UndoUVE());
+        }
+    } else if (!io.WantTextInput && io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Y, false)) {
+        static_cast<void>(RedoUVE());
+    }
+
     if (ImGui::BeginMenu("File")) {
         if (ImGui::MenuItem("Save Scene")) {
             static_cast<void>(SaveSceneUVE());
         }
         if (ImGui::MenuItem("Load Scene")) {
             static_cast<void>(LoadSceneUVE());
+        }
+        ImGui::EndMenu();
+    }
+
+    if (ImGui::BeginMenu("Edit")) {
+        if (ImGui::MenuItem("Undo", "Ctrl+Z", false, CanUndoUVE())) {
+            static_cast<void>(UndoUVE());
+        }
+        if (ImGui::MenuItem("Redo", "Ctrl+Y / Ctrl+Shift+Z", false, CanRedoUVE())) {
+            static_cast<void>(RedoUVE());
         }
         ImGui::EndMenu();
     }
@@ -1087,7 +1370,7 @@ void EditorUVE::DrawViewportPanelUVE() {
             if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
                 UpdateGizmoDragUVE(pointerPosition);
             } else {
-                CancelGizmoDragUVE();
+                CommitGizmoDragUVE();
             }
         } else if (viewportClicked) {
             if (!BeginGizmoDragUVE(viewportRect, pointerPosition)) {
