@@ -43,7 +43,7 @@ struct EditorViewportRectUVE final {
     Math::Vector2UVE size{};
 };
 
-/// World-space axes supported by EditorUVE's first Translate and Rotate gizmo slice. Scale, planar
+/// World-space axes supported by EditorUVE's first Translate, Rotate, and Scale gizmo slice. Planar
 /// handles, snapping, local axes, free/trackball rotation, and multi-selection are intentionally deferred.
 enum class EditorTranslateAxisUVE {
     None,
@@ -52,11 +52,12 @@ enum class EditorTranslateAxisUVE {
     Z,
 };
 
-/// Selects the active first-pass transform-gizmo handle family. Both modes use world axes;
-/// local axes, scale, snapping, and trackball rotation remain separate future increments.
+/// Selects the active first-pass transform-gizmo handle family. All modes use world axes for
+/// interaction; local axes, snapping, uniform/negative scale, and trackball rotation remain future increments.
 enum class EditorGizmoModeUVE {
     Translate,
     Rotate,
+    Scale,
 };
 
 /// The supported first-pass Scene menu archetypes. Each created entity is a document root with a
@@ -78,7 +79,7 @@ enum class EditorViewportNavigationModeUVE {
 
 /// EditorUVE composes the existing engine services into a first editor foundation: an editor-owned
 /// camera, deterministic hierarchy and collider-backed viewport selection, a transform inspector
-/// mutation path, world-space Translate and Rotate gizmos, scene-document save/load, and an editor-private
+/// mutation path, world-space Translate, Rotate, and Scale gizmos, scene-document save/load, and an editor-private
 /// Dear ImGui overlay. No Dear ImGui type appears in this public interface, so the UI backend remains
 /// an implementation detail of engine/editor.
 ///
@@ -154,6 +155,11 @@ public:
     /// rotation. Returns false without mutation for invalid state, axis, angle, transform, parent,
     /// or active editor gesture.
     [[nodiscard]] bool RotateSelectedAroundWorldAxisUVE(EditorTranslateAxisUVE axis, float radians);
+
+    /// Changes one positive authored local-scale component of the selected document entity by a
+    /// finite additive delta. Returns false without mutation for invalid state, axis, delta, active
+    /// gesture, or a proposed zero/negative/non-finite scale result.
+    [[nodiscard]] bool ScaleSelectedAlongAxisUVE(EditorTranslateAxisUVE axis, float localScaleDelta);
 
     /// Changes the transform handle family. Mode changes are ignored while a gizmo drag or viewport
     /// navigation gesture is active, preserving the transaction currently in progress.
@@ -344,6 +350,7 @@ private:
     void CancelGizmoDragUVE() noexcept;
     void DrawTranslateGizmoUVE(const EditorViewportRectUVE& viewportRect);
     void DrawRotateGizmoUVE(const EditorViewportRectUVE& viewportRect);
+    void DrawScaleGizmoUVE(const EditorViewportRectUVE& viewportRect);
     [[nodiscard]] bool ApplyLocalTransformUVE(Scene::EntityUVE entity,
                                                const Scene::TransformComponentUVE& transform);
     [[nodiscard]] bool ApplyEntityNameStateUVE(Scene::EntityUVE entity,

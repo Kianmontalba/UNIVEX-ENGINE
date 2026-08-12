@@ -1333,6 +1333,77 @@ TEST(EditorUVETest, RotateSelectedAroundWorldAxis_RejectsInvalidOrUnsafeStateWit
     engine.Shutdown();
 }
 
+TEST(EditorUVETest, ScaleSelectedAlongAxis_UpdatesOnlyPositiveLocalScaleAndReplaysHistory) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_scale.uvescene");
+        editor.InitUVE();
+        Core::EngineServicesUVE& services = engine.GetServicesUVE();
+        Scene::IEntityManagerUVE& entityManager = services.GetEntityManagerUVE();
+        const Scene::EntityUVE parent = entityManager.CreateEntityUVE();
+        AttachRootUVE(engine, parent, Scene::TransformComponentUVE{});
+        const Scene::EntityUVE child = entityManager.CreateEntityUVE();
+        Scene::TransformComponentUVE initial{};
+        initial.localPosition = Math::Vector3UVE{1.0F, 2.0F, 3.0F};
+        initial.localScale = Math::Vector3UVE{1.0F, 2.0F, 3.0F};
+        AttachRootUVE(engine, child, initial);
+        services.GetSceneGraphUVE().SetParentUVE(entityManager, child, parent);
+        services.GetSceneGraphUVE().UpdateUVE(entityManager);
+
+        editor.SelectEntityUVE(child);
+        EXPECT_EQ(editor.GetGizmoModeUVE(), EditorGizmoModeUVE::Translate);
+        editor.SetGizmoModeUVE(EditorGizmoModeUVE::Scale);
+        EXPECT_EQ(editor.GetGizmoModeUVE(), EditorGizmoModeUVE::Scale);
+        ASSERT_TRUE(editor.ScaleSelectedAlongAxisUVE(EditorTranslateAxisUVE::Y, 1.5F));
+        const Scene::TransformComponentUVE& scaled =
+            entityManager.GetComponentUVE<Scene::TransformComponentUVE>(child);
+        EXPECT_EQ(scaled.localPosition, initial.localPosition);
+        EXPECT_EQ(scaled.localRotation, initial.localRotation);
+        EXPECT_NEAR(scaled.localScale.x, 1.0F, 0.0001F);
+        EXPECT_NEAR(scaled.localScale.y, 3.5F, 0.0001F);
+        EXPECT_NEAR(scaled.localScale.z, 3.0F, 0.0001F);
+        EXPECT_TRUE(editor.IsSceneDirtyUVE());
+        ASSERT_TRUE(editor.UndoUVE());
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(child).localScale,
+                  initial.localScale);
+        ASSERT_TRUE(editor.RedoUVE());
+        EXPECT_NEAR(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(child).localScale.y,
+                    3.5F, 0.0001F);
+
+        editor.ShutdownUVE();
+    }
+    engine.Shutdown();
+}
+
+TEST(EditorUVETest, ScaleSelectedAlongAxis_RejectsUnsafeInputWithoutMutation) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_scale_safety.uvescene");
+        editor.InitUVE();
+        EXPECT_FALSE(editor.ScaleSelectedAlongAxisUVE(EditorTranslateAxisUVE::X, 1.0F));
+        Scene::IEntityManagerUVE& entityManager = engine.GetServicesUVE().GetEntityManagerUVE();
+        const Scene::EntityUVE entity = entityManager.CreateEntityUVE();
+        AttachRootUVE(engine, entity, Scene::TransformComponentUVE{});
+        editor.SelectEntityUVE(entity);
+        const Scene::TransformComponentUVE before = entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity);
+        EXPECT_FALSE(editor.ScaleSelectedAlongAxisUVE(EditorTranslateAxisUVE::None, 1.0F));
+        EXPECT_FALSE(editor.ScaleSelectedAlongAxisUVE(EditorTranslateAxisUVE::X, -1.0F));
+        EXPECT_FALSE(editor.ScaleSelectedAlongAxisUVE(EditorTranslateAxisUVE::Z,
+                                                       std::numeric_limits<float>::infinity()));
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity).localScale,
+                  before.localScale);
+        EXPECT_FALSE(editor.IsSceneDirtyUVE());
+        editor.ShutdownUVE();
+    }
+    engine.Shutdown();
+}
+
 TEST(EditorUVETest, LoadMissingScene_FailsWithoutDestroyingCurrentDocument) {
     const std::filesystem::path missingScenePath = "uve_editor_tests_missing.uvescene";
     std::filesystem::remove(missingScenePath);

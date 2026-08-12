@@ -40,8 +40,8 @@ Swap `-DCMAKE_CXX_COMPILER=clang++` to build with Clang instead. `UVE_BUILD_TEST
 `ON`) can be set to `OFF` to skip building the GoogleTest suite.
 
 The current editor supports a Scene/Viewport/Properties/Assets layout, persistent human-readable
-entity names, local Transform editing, collider-backed viewport picking, world-axis Translate and Rotate
-gizmo modes (`W` / `E`), File menu scene save/load actions, and Scene menu creation for Empty, Camera, Directional
+entity names, local Transform editing, collider-backed viewport picking, world-axis Translate, Rotate, and Scale
+gizmo modes (`W` / `E` / `R`), File menu scene save/load actions, and Scene menu creation for Empty, Camera, Directional
 Light, and Collision Box document roots. New archetypes receive deterministic default names such as
 `Camera` and `Camera 2`; the Properties panel can rename one selected live document entity, and
 names persist through `.uvescene` save/load. Legacy scenes without name metadata remain valid and
@@ -57,15 +57,16 @@ one selected live document entity, in addition to focus-safe `Ctrl+Z`, `Ctrl+Y`,
 same registered-component envelope used by `.uvescene`, preserving hierarchy and restoring fresh
 entity handles during Undo/Redo; they cannot affect the editor-only camera. Shortcut actions are
 suppressed while a text field owns input or an active viewport gesture is in progress. One completed
-Translate or Rotate gizmo drag is recorded as one history step. Rotate mode uses world-axis X/Y/Z rings,
+Translate, Rotate, or Scale gizmo drag is recorded as one history step. Rotate mode uses world-axis X/Y/Z rings,
 converts a parented entity's world-axis delta back to its local quaternion, and preserves local position
-and scale. The editor-only viewport camera now supports
+and scale. Scale mode uses X/Y/Z square handles to edit one strictly positive authored local-scale component,
+preserving local position and rotation. The editor-only viewport camera now supports
 right-drag orbit, middle-drag pan, wheel zoom, and `F` focus for a selected live document entity.
 These navigation controls never alter the document, dirty state, scene file, or Undo/Redo history.
 The Assets panel lists only deterministic snapshots of `AssetDatabaseUVE` registered records and
 offers a case-insensitive path filter; it does not scan filesystems, import assets, or load previews.
 Viewport picking intentionally selects only live document entities with the existing box collider
-component. Mesh picking, scale gizmos, local-axis/trackball rotation, snapping, fly navigation, camera bookmarks, cinematic
+component. Mesh picking, uniform/negative scale, local-axis and plane handles, trackball rotation, snapping, fly navigation, camera bookmarks, cinematic
 camera tools, play mode, filesystem browsing, import/reimport, asset drag-and-drop, thumbnails,
 layout persistence, hierarchy search, world-transform-preserving reparenting, child ordering,
 multi-entity lifecycle operations, and OS clipboard copy/paste remain future increments.
