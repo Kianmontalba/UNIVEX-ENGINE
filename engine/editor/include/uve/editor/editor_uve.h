@@ -171,6 +171,12 @@ public:
     /// DuplicateSelectedEntityUVE().
     [[nodiscard]] bool DeleteSelectedEntityUVE();
 
+    /// Reparents the selected document subtree under newParent, or makes it a document root when
+    /// newParent is invalid. The selected entity retains its authored local Transform and one
+    /// successful move is recorded as an Undo/Redo operation. Returns false without mutation for
+    /// invalid, stale, self-parenting, cyclic, unchanged, or active-gesture state.
+    [[nodiscard]] bool ReparentSelectedEntityUVE(Scene::EntityUVE newParent);
+
     /// Replays the most recent supported editor mutation in reverse. It is safe and returns false
     /// when the editor is not running, history is empty, or a target became stale externally.
     [[nodiscard]] bool UndoUVE();
@@ -263,11 +269,24 @@ private:
         bool dirtyAfter = false;
     };
 
+    /// A hierarchy move keeps its entity handle and local Transform, while its parent changes.
+    /// Replay restores either stored parent and never records nested history.
+    struct ReparentHistoryEntryUVE final {
+        Scene::EntityUVE entity = Scene::kInvalidEntityUVE;
+        Scene::EntityUVE parentBefore = Scene::kInvalidEntityUVE;
+        Scene::EntityUVE parentAfter = Scene::kInvalidEntityUVE;
+        Scene::EntityUVE selectionBefore = Scene::kInvalidEntityUVE;
+        Scene::EntityUVE selectionAfter = Scene::kInvalidEntityUVE;
+        bool dirtyBefore = false;
+        bool dirtyAfter = false;
+    };
+
     using HistoryEntryUVE =
         std::variant<TransformHistoryEntryUVE, NameHistoryEntryUVE, CreationHistoryEntryUVE,
-                     DuplicationHistoryEntryUVE, DeletionHistoryEntryUVE>;
+                     DuplicationHistoryEntryUVE, DeletionHistoryEntryUVE, ReparentHistoryEntryUVE>;
 
     [[nodiscard]] bool IsDocumentEntityUVE(Scene::EntityUVE entity) const noexcept;
+    [[nodiscard]] bool HasSceneGraphNodeUVE(Scene::EntityUVE entity) const noexcept;
     [[nodiscard]] bool IsTransformFiniteUVE(const Scene::TransformComponentUVE& transform) const noexcept;
     [[nodiscard]] bool IsEntityNameValidUVE(std::string_view name) const noexcept;
     [[nodiscard]] std::string GetEntityDisplayLabelUVE(Scene::EntityUVE entity) const;
@@ -295,11 +314,15 @@ private:
                                                const Scene::TransformComponentUVE& transform);
     [[nodiscard]] bool ApplyEntityNameStateUVE(Scene::EntityUVE entity,
                                                 const std::optional<std::string>& name);
+    [[nodiscard]] bool IsDocumentSubtreeUVE(Scene::EntityUVE root) const;
+    [[nodiscard]] bool DoesSubtreeContainEntityUVE(Scene::EntityUVE root,
+                                                    Scene::EntityUVE candidate) const;
     [[nodiscard]] std::optional<Scene::SceneSnapshotUVE> CaptureSubtreeUVE(Scene::EntityUVE root);
     [[nodiscard]] Scene::EntityUVE RestoreSubtreeUnderParentUVE(const Scene::SceneSnapshotUVE& snapshot,
                                                                  Scene::EntityUVE parent);
     [[nodiscard]] bool TryGetDocumentParentUVE(Scene::EntityUVE entity, Scene::EntityUVE& outParent) const;
     [[nodiscard]] bool IsLifecycleCommandAllowedUVE() const noexcept;
+    [[nodiscard]] bool ReparentDocumentEntityUVE(Scene::EntityUVE entity, Scene::EntityUVE newParent);
     [[nodiscard]] Scene::EntityUVE CreateDocumentEntityInternalUVE(
         EditorEntityKindUVE kind, const std::optional<std::string>& explicitName);
     void RecordHistoryUVE(HistoryEntryUVE entry);
@@ -312,6 +335,7 @@ private:
     void DrawMenuBarUVE();
     void DrawHierarchyPanelUVE();
     void DrawHierarchyNodeUVE(Scene::EntityUVE entity);
+    void AcceptHierarchyDropTargetUVE(Scene::EntityUVE targetParent);
     void DrawInspectorPanelUVE();
     void DrawViewportPanelUVE();
     void DrawAssetsPanelUVE();
