@@ -6,10 +6,13 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
+#include <limits>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <typeindex>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -258,30 +261,52 @@ template <typename T, typename FromJsonFunc>
 }
 
 /// Appends `root` and every descendant reachable via HierarchyComponentUVE.parent to
-/// `outEntities`, depth-first. SceneSerializerUVE deliberately doesn't depend on
-/// ISceneGraphUVE (keeping it usable standalone), so this duplicates SceneGraphUVE::
-/// GetChildrenUVE()'s O(n)-scan-per-level approach rather than sharing it.
-void CollectSubtreeUVE(IEntityManagerUVE& entityManager, EntityUVE root, std::vector<EntityUVE>& outEntities) {
+/// `outEntities`, depth-first. The visited set deduplicates overlapping requested roots and makes
+/// malformed hierarchy cycles fail closed rather than recursing indefinitely.
+[[nodiscard]] bool CollectSubtreeUVE(IEntityManagerUVE& entityManager, const EntityUVE root,
+                                     std::unordered_set<EntityUVE>& visited,
+                                     std::vector<EntityUVE>& outEntities) {
+    if (!entityManager.IsAliveUVE(root)) {
+        return false;
+    }
+    if (!visited.emplace(root).second) {
+        return true;
+    }
+
     outEntities.push_back(root);
     std::vector<EntityUVE> children;
     entityManager.ForEachUVE<HierarchyComponentUVE>(
-        [&children, root](EntityUVE entity, HierarchyComponentUVE& hierarchy) {
+        [&children, root](const EntityUVE entity, HierarchyComponentUVE& hierarchy) {
             if (hierarchy.parent == root) {
                 children.push_back(entity);
             }
         });
-    for (EntityUVE child : children) {
-        CollectSubtreeUVE(entityManager, child, outEntities);
+    for (const EntityUVE child : children) {
+        if (!CollectSubtreeUVE(entityManager, child, visited, outEntities)) {
+            return false;
+        }
     }
+    return true;
 }
 
-} // namespace
+[[nodiscard]] bool IsSceneAssetTypeUVE(const SceneAssetTypeUVE assetType) noexcept {
+    return assetType == SceneAssetTypeUVE::Scene || assetType == SceneAssetTypeUVE::Prefab;
+}
 
-bool SceneSerializerUVE::SaveUVE(IEntityManagerUVE& entityManager, const std::vector<EntityUVE>& rootEntities,
-                                  const std::filesystem::path& path, SceneAssetTypeUVE assetType) {
+[[nodiscard]] std::optional<std::vector<std::byte>> EncodeScenePayloadUVE(
+    IEntityManagerUVE& entityManager, const std::vector<EntityUVE>& rootEntities,
+    const std::string_view sourceDescription) {
     std::vector<EntityUVE> allEntities;
-    for (EntityUVE root : rootEntities) {
-        CollectSubtreeUVE(entityManager, root, allEntities);
+    std::unordered_set<EntityUVE> visited;
+    for (const EntityUVE root : rootEntities) {
+        if (!CollectSubtreeUVE(entityManager, root, visited, allEntities)) {
+            UVE_ERROR("SceneSerializerUVE: \"{}\" includes an invalid root entity", sourceDescription);
+            return std::nullopt;
+        }
+    }
+    if (allEntities.size() > std::numeric_limits<std::uint32_t>::max()) {
+        UVE_ERROR("SceneSerializerUVE: \"{}\" contains too many entities to serialize", sourceDescription);
+        return std::nullopt;
     }
 
     std::unordered_map<EntityUVE, std::uint32_t> entityToLocalId;
@@ -291,12 +316,11 @@ bool SceneSerializerUVE::SaveUVE(IEntityManagerUVE& entityManager, const std::ve
     }
 
     nlohmann::json entitiesJson = nlohmann::json::array();
-    for (EntityUVE entity : allEntities) {
+    for (const EntityUVE entity : allEntities) {
         nlohmann::json componentsJson = nlohmann::json::object();
-
-        for (std::type_index type : entityManager.GetComponentTypesUVE(entity)) {
+        for (const std::type_index type : entityManager.GetComponentTypesUVE(entity)) {
             if (type == std::type_index(typeid(WorldTransformComponentUVE))) {
-                continue; // derived/cached, never serialized
+                continue; // Derived/cached state is rebuilt after restore.
             }
             if (type == std::type_index(typeid(HierarchyComponentUVE))) {
                 const HierarchyComponentUVE& hierarchy = entityManager.GetComponentUVE<HierarchyComponentUVE>(entity);
@@ -306,7 +330,7 @@ bool SceneSerializerUVE::SaveUVE(IEntityManagerUVE& entityManager, const std::ve
                     if (parentIt != entityToLocalId.end()) {
                         parentLocalId = static_cast<std::int64_t>(parentIt->second);
                     }
-                    // else: parent lies outside the saved subtree - treat this entity as a root.
+                    // A parent outside the captured subtree intentionally becomes a restored root.
                 }
                 componentsJson["HierarchyComponentUVE"] = {{"parentLocalId", parentLocalId}};
                 continue;
@@ -314,70 +338,88 @@ bool SceneSerializerUVE::SaveUVE(IEntityManagerUVE& entityManager, const std::ve
 
             const std::string* const name = FindNameForTypeIndexUVE(type);
             if (name == nullptr) {
-                UVE_ERROR("SceneSerializerUVE: no registered serializer for a component type on "
-                          "entity index {} - aborting save of \"{}\"",
-                          entity.index, path.string());
-                return false;
+                UVE_ERROR("SceneSerializerUVE: no registered serializer for a component type on entity index {} "
+                          "while encoding \"{}\"",
+                          entity.index, sourceDescription);
+                return std::nullopt;
             }
             componentsJson[*name] = GetRegistrationsByNameUVE().at(*name).toJson(entityManager, entity);
         }
-
         entitiesJson.push_back({{"localId", entityToLocalId.at(entity)}, {"components", std::move(componentsJson)}});
     }
 
     nlohmann::json payload;
     payload["entities"] = std::move(entitiesJson);
     const std::string payloadText = payload.dump();
-    const std::byte* const payloadBytes = reinterpret_cast<const std::byte*>(payloadText.data());
-    const std::vector<std::byte> payloadBuffer(payloadBytes, payloadBytes + payloadText.size());
-
-    return Asset::WriteUveFileUVE(path, assetType, payloadBuffer);
+    const auto* const payloadBytes = reinterpret_cast<const std::byte*>(payloadText.data());
+    return std::vector<std::byte>{payloadBytes, payloadBytes + payloadText.size()};
 }
 
-std::vector<EntityUVE> SceneSerializerUVE::LoadUVE(IEntityManagerUVE& entityManager,
-                                                    const std::filesystem::path& path) {
-    std::optional<std::pair<Asset::UveFileHeaderUVE, std::vector<std::byte>>> file =
-        Asset::ReadUveFileUVE(path);
-    if (!file.has_value()) {
-        return {}; // ReadUveFileUVE already logged the specific reason.
+void RollbackRestoredEntitiesUVE(IEntityManagerUVE& entityManager, std::vector<EntityUVE>& createdEntities) {
+    for (auto entity = createdEntities.rbegin(); entity != createdEntities.rend(); ++entity) {
+        if (entityManager.IsAliveUVE(*entity)) {
+            entityManager.DestroyEntityUVE(*entity);
+        }
     }
-    const auto& [header, payloadBuffer] = file.value();
-    if (header.assetType != SceneAssetTypeUVE::Scene && header.assetType != SceneAssetTypeUVE::Prefab) {
-        UVE_ERROR("SceneSerializerUVE: \"{}\" has unexpected asset type {}", path.string(),
-                  static_cast<std::uint32_t>(header.assetType));
-        return {};
-    }
+}
 
+[[nodiscard]] std::optional<std::vector<EntityUVE>> DecodeScenePayloadUVE(
+    IEntityManagerUVE& entityManager, const std::vector<std::byte>& payloadBuffer,
+    const std::string_view sourceDescription) {
     const std::string payloadText(reinterpret_cast<const char*>(payloadBuffer.data()), payloadBuffer.size());
     nlohmann::json payload;
     try {
         payload = nlohmann::json::parse(payloadText);
     } catch (const nlohmann::json::parse_error& parseError) {
-        UVE_ERROR("SceneSerializerUVE: failed to parse \"{}\": {}", path.string(), parseError.what());
-        return {};
+        UVE_ERROR("SceneSerializerUVE: failed to parse \"{}\": {}", sourceDescription, parseError.what());
+        return std::nullopt;
     }
 
     std::vector<std::pair<std::uint32_t, nlohmann::json>> orderedEntities;
-    std::unordered_map<std::uint32_t, EntityUVE> localIdToEntity;
+    std::unordered_set<std::uint32_t> localIds;
     try {
         for (const nlohmann::json& entityJson : payload.at("entities")) {
             const std::uint32_t localId = entityJson.at("localId").get<std::uint32_t>();
-            const EntityUVE entity = entityManager.CreateEntityUVE();
-            localIdToEntity.emplace(localId, entity);
+            const nlohmann::json& components = entityJson.at("components");
+            if (!components.is_object() || !localIds.emplace(localId).second) {
+                UVE_ERROR("SceneSerializerUVE: malformed entity list in \"{}\"", sourceDescription);
+                return std::nullopt;
+            }
+            for (const auto& [componentName, componentJson] : components.items()) {
+                if (componentName == "HierarchyComponentUVE") {
+                    static_cast<void>(componentJson.at("parentLocalId").get<std::int64_t>());
+                    continue;
+                }
+                if (GetRegistrationsByNameUVE().find(componentName) == GetRegistrationsByNameUVE().end()) {
+                    UVE_ERROR("SceneSerializerUVE: \"{}\" references unknown component type \"{}\"",
+                              sourceDescription, componentName);
+                    return std::nullopt;
+                }
+            }
             orderedEntities.emplace_back(localId, entityJson);
         }
     } catch (const nlohmann::json::exception& jsonError) {
-        UVE_ERROR("SceneSerializerUVE: malformed entity list in \"{}\": {}", path.string(), jsonError.what());
-        return {};
+        UVE_ERROR("SceneSerializerUVE: malformed entity list in \"{}\": {}", sourceDescription, jsonError.what());
+        return std::nullopt;
+    }
+
+    std::unordered_map<std::uint32_t, EntityUVE> localIdToEntity;
+    localIdToEntity.reserve(orderedEntities.size());
+    std::vector<EntityUVE> createdEntities;
+    createdEntities.reserve(orderedEntities.size());
+    for (const auto& [localId, unusedEntityJson] : orderedEntities) {
+        static_cast<void>(unusedEntityJson);
+        const EntityUVE entity = entityManager.CreateEntityUVE();
+        localIdToEntity.emplace(localId, entity);
+        createdEntities.push_back(entity);
     }
 
     std::vector<EntityUVE> roots;
-    for (const auto& [localId, entityJson] : orderedEntities) {
-        const EntityUVE entity = localIdToEntity.at(localId);
-        bool isRoot = true;
-        bool hasTransform = false;
-
-        try {
+    try {
+        for (const auto& [localId, entityJson] : orderedEntities) {
+            const EntityUVE entity = localIdToEntity.at(localId);
+            bool isRoot = true;
+            bool hasTransform = false;
             for (const auto& [componentName, componentJson] : entityJson.at("components").items()) {
                 if (componentName == "HierarchyComponentUVE") {
                     const std::int64_t parentLocalId = componentJson.at("parentLocalId").get<std::int64_t>();
@@ -394,35 +436,94 @@ std::vector<EntityUVE> SceneSerializerUVE::LoadUVE(IEntityManagerUVE& entityMana
                 }
 
                 const auto registrationIt = GetRegistrationsByNameUVE().find(componentName);
-                if (registrationIt == GetRegistrationsByNameUVE().end()) {
-                    UVE_ERROR("SceneSerializerUVE: \"{}\" references unknown component type \"{}\"",
-                              path.string(), componentName);
-                    return {};
-                }
                 registrationIt->second.fromJson(entityManager, entity, componentJson);
-                if (componentName == "TransformComponentUVE") {
-                    hasTransform = true;
-                }
+                hasTransform = hasTransform || componentName == "TransformComponentUVE";
             }
-        } catch (const nlohmann::json::exception& jsonError) {
-            UVE_ERROR("SceneSerializerUVE: malformed component data in \"{}\": {}", path.string(),
-                      jsonError.what());
-            return {};
-        }
 
-        // AttachTransformUVE always adds Transform+World Transform+Hierarchy together; since
-        // WorldTransformComponentUVE is never serialized, restore it here so SceneGraphUVE::
-        // UpdateUVE() picks this entity back up correctly after load.
-        if (hasTransform && !entityManager.HasComponentUVE<WorldTransformComponentUVE>(entity)) {
-            entityManager.AddComponentUVE<WorldTransformComponentUVE>(entity);
+            // AttachTransformUVE creates Transform+WorldTransform+Hierarchy together. Recreate the
+            // derived component here so the next SceneGraphUVE update sees restored transforms.
+            if (hasTransform && !entityManager.HasComponentUVE<WorldTransformComponentUVE>(entity)) {
+                entityManager.AddComponentUVE<WorldTransformComponentUVE>(entity);
+            }
+            if (isRoot) {
+                roots.push_back(entity);
+            }
         }
-
-        if (isRoot) {
-            roots.push_back(entity);
-        }
+    } catch (const nlohmann::json::exception& jsonError) {
+        UVE_ERROR("SceneSerializerUVE: malformed component data in \"{}\": {}", sourceDescription,
+                  jsonError.what());
+        RollbackRestoredEntitiesUVE(entityManager, createdEntities);
+        return std::nullopt;
     }
 
     return roots;
+}
+
+[[nodiscard]] bool ValidateSceneAssetTypeUVE(const SceneAssetTypeUVE assetType,
+                                             const std::string_view sourceDescription) {
+    if (IsSceneAssetTypeUVE(assetType)) {
+        return true;
+    }
+    UVE_ERROR("SceneSerializerUVE: \"{}\" has unexpected asset type {}", sourceDescription,
+              static_cast<std::uint32_t>(assetType));
+    return false;
+}
+
+} // namespace
+
+std::optional<SceneSnapshotUVE> SceneSerializerUVE::CaptureUVE(
+    IEntityManagerUVE& entityManager, const std::vector<EntityUVE>& rootEntities,
+    const SceneAssetTypeUVE assetType) const {
+    if (!ValidateSceneAssetTypeUVE(assetType, "scene snapshot")) {
+        return std::nullopt;
+    }
+    const std::optional<std::vector<std::byte>> payload =
+        EncodeScenePayloadUVE(entityManager, rootEntities, "scene snapshot");
+    if (!payload.has_value()) {
+        return std::nullopt;
+    }
+    return SceneSnapshotUVE{Asset::EncodeUveFileEnvelopeUVE(assetType, *payload), assetType};
+}
+
+std::vector<EntityUVE> SceneSerializerUVE::RestoreUVE(IEntityManagerUVE& entityManager,
+                                                       const SceneSnapshotUVE& snapshot) const {
+    const auto envelope = Asset::DecodeUveFileEnvelopeUVE(snapshot.bytes, "scene snapshot");
+    if (!envelope.has_value()) {
+        return {};
+    }
+    const auto& [header, payload] = *envelope;
+    if (!ValidateSceneAssetTypeUVE(header.assetType, "scene snapshot") || header.assetType != snapshot.assetType) {
+        if (header.assetType != snapshot.assetType) {
+            UVE_ERROR("SceneSerializerUVE: scene snapshot asset type metadata does not match its envelope");
+        }
+        return {};
+    }
+    const std::optional<std::vector<EntityUVE>> restored =
+        DecodeScenePayloadUVE(entityManager, payload, "scene snapshot");
+    return restored.value_or(std::vector<EntityUVE>{});
+}
+
+bool SceneSerializerUVE::SaveUVE(IEntityManagerUVE& entityManager, const std::vector<EntityUVE>& rootEntities,
+                                  const std::filesystem::path& path, const SceneAssetTypeUVE assetType) {
+    if (!ValidateSceneAssetTypeUVE(assetType, path.string())) {
+        return false;
+    }
+    const std::optional<std::vector<std::byte>> payload = EncodeScenePayloadUVE(entityManager, rootEntities, path.string());
+    return payload.has_value() && Asset::WriteUveFileUVE(path, assetType, *payload);
+}
+
+std::vector<EntityUVE> SceneSerializerUVE::LoadUVE(IEntityManagerUVE& entityManager,
+                                                    const std::filesystem::path& path) {
+    const auto file = Asset::ReadUveFileUVE(path);
+    if (!file.has_value()) {
+        return {};
+    }
+    const auto& [header, payload] = *file;
+    if (!ValidateSceneAssetTypeUVE(header.assetType, path.string())) {
+        return {};
+    }
+    const std::optional<std::vector<EntityUVE>> restored = DecodeScenePayloadUVE(entityManager, payload, path.string());
+    return restored.value_or(std::vector<EntityUVE>{});
 }
 
 } // namespace UVE::Scene

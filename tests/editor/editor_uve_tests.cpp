@@ -11,6 +11,7 @@
 #include <filesystem>
 #include <limits>
 #include <string>
+#include <vector>
 
 #include <gtest/gtest.h>
 
@@ -44,6 +45,10 @@ void AttachRootUVE(Core::EngineCoreUVE& engine, const Scene::EntityUVE entity,
     Core::EngineServicesUVE& services = engine.GetServicesUVE();
     services.GetSceneGraphUVE().AttachTransformUVE(services.GetEntityManagerUVE(), entity, transform);
 }
+
+struct UnregisteredEditorLifecycleComponentUVE final {
+    int value = 0;
+};
 
 TEST(EditorUVETest, InitUVE_CreatesCameraOutsideDocumentRootsAndSupportsHeadlessLifecycle) {
     Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
@@ -419,6 +424,309 @@ TEST(EditorUVETest, EditorHistoryUVE_StaleTargetsAndNonRunningStateFailWithoutMu
         editor.ShutdownUVE();
         EXPECT_FALSE(editor.UndoUVE());
         EXPECT_FALSE(editor.RedoUVE());
+    }
+
+    engine.Shutdown();
+}
+
+TEST(EditorUVETest, DuplicateSelectedEntityUVE_RootCreatesNamedSiblingWithCopiedComponents) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_duplicate_root.uvescene");
+        editor.InitUVE();
+        Core::EngineServicesUVE& services = engine.GetServicesUVE();
+        Scene::IEntityManagerUVE& entityManager = services.GetEntityManagerUVE();
+        const Scene::EntityUVE source = entityManager.CreateEntityUVE();
+        Scene::TransformComponentUVE sourceTransform{};
+        sourceTransform.localPosition = Math::Vector3UVE{2.0F, 4.0F, 6.0F};
+        AttachRootUVE(engine, source, sourceTransform);
+        entityManager.AddComponentUVE<Scene::ColliderComponentUVE>(source);
+        entityManager.AddComponentUVE<Scene::NameComponentUVE>(source, Scene::NameComponentUVE{"Lamp"});
+        editor.SelectEntityUVE(source);
+
+        const Scene::EntityUVE duplicate = editor.DuplicateSelectedEntityUVE();
+        ASSERT_TRUE(entityManager.IsAliveUVE(duplicate));
+        EXPECT_NE(duplicate, source);
+        EXPECT_EQ(editor.GetSelectedEntityUVE(), duplicate);
+        EXPECT_TRUE(editor.IsSceneDirtyUVE());
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::NameComponentUVE>(duplicate).name, "Lamp 2");
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(duplicate).localPosition,
+                  sourceTransform.localPosition);
+        EXPECT_TRUE(entityManager.HasComponentUVE<Scene::ColliderComponentUVE>(duplicate));
+
+        const std::vector<Scene::EntityUVE> roots = editor.GetDocumentRootsUVE();
+        ASSERT_EQ(roots.size(), 2U);
+        EXPECT_NE(std::find(roots.begin(), roots.end(), source), roots.end());
+        EXPECT_NE(std::find(roots.begin(), roots.end(), duplicate), roots.end());
+        EXPECT_EQ(std::find(roots.begin(), roots.end(), editor.GetViewportCameraUVE()), roots.end());
+
+        editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
+}
+
+TEST(EditorUVETest, DuplicateSelectedEntityUVE_ChildRestoresAsSiblingUnderSameParent) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_duplicate_child.uvescene");
+        editor.InitUVE();
+        Core::EngineServicesUVE& services = engine.GetServicesUVE();
+        Scene::IEntityManagerUVE& entityManager = services.GetEntityManagerUVE();
+        const Scene::EntityUVE parent = entityManager.CreateEntityUVE();
+        AttachRootUVE(engine, parent, Scene::TransformComponentUVE{});
+        const Scene::EntityUVE child = entityManager.CreateEntityUVE();
+        AttachRootUVE(engine, child, Scene::TransformComponentUVE{});
+        services.GetSceneGraphUVE().SetParentUVE(entityManager, child, parent);
+        entityManager.AddComponentUVE<Scene::NameComponentUVE>(child, Scene::NameComponentUVE{"Child"});
+        editor.SelectEntityUVE(child);
+
+        const Scene::EntityUVE duplicate = editor.DuplicateSelectedEntityUVE();
+        ASSERT_TRUE(entityManager.IsAliveUVE(duplicate));
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::NameComponentUVE>(duplicate).name, "Child 2");
+        const std::vector<Scene::EntityUVE> children =
+            services.GetSceneGraphUVE().GetChildrenUVE(entityManager, parent);
+        ASSERT_EQ(children.size(), 2U);
+        EXPECT_NE(std::find(children.begin(), children.end(), child), children.end());
+        EXPECT_NE(std::find(children.begin(), children.end(), duplicate), children.end());
+        EXPECT_EQ(editor.GetSelectedEntityUVE(), duplicate);
+
+        editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
+}
+
+TEST(EditorUVETest, DeleteSelectedEntityUVE_DeletesSubtreeAndSelectsLiveParent) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_delete_subtree.uvescene");
+        editor.InitUVE();
+        Core::EngineServicesUVE& services = engine.GetServicesUVE();
+        Scene::IEntityManagerUVE& entityManager = services.GetEntityManagerUVE();
+        const Scene::EntityUVE parent = entityManager.CreateEntityUVE();
+        AttachRootUVE(engine, parent, Scene::TransformComponentUVE{});
+        const Scene::EntityUVE child = entityManager.CreateEntityUVE();
+        AttachRootUVE(engine, child, Scene::TransformComponentUVE{});
+        services.GetSceneGraphUVE().SetParentUVE(entityManager, child, parent);
+        const Scene::EntityUVE grandchild = entityManager.CreateEntityUVE();
+        AttachRootUVE(engine, grandchild, Scene::TransformComponentUVE{});
+        services.GetSceneGraphUVE().SetParentUVE(entityManager, grandchild, child);
+        editor.SelectEntityUVE(child);
+
+        ASSERT_TRUE(editor.DeleteSelectedEntityUVE());
+        EXPECT_FALSE(entityManager.IsAliveUVE(child));
+        EXPECT_FALSE(entityManager.IsAliveUVE(grandchild));
+        EXPECT_TRUE(entityManager.IsAliveUVE(parent));
+        EXPECT_EQ(editor.GetSelectedEntityUVE(), parent);
+        EXPECT_TRUE(editor.IsSceneDirtyUVE());
+        EXPECT_TRUE(editor.CanUndoUVE());
+
+        editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
+}
+
+TEST(EditorUVETest, DeleteSelectedEntityUVE_RootClearsSelection) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_delete_root.uvescene");
+        editor.InitUVE();
+        Scene::IEntityManagerUVE& entityManager = engine.GetServicesUVE().GetEntityManagerUVE();
+        const Scene::EntityUVE root = entityManager.CreateEntityUVE();
+        AttachRootUVE(engine, root, Scene::TransformComponentUVE{});
+        editor.SelectEntityUVE(root);
+
+        ASSERT_TRUE(editor.DeleteSelectedEntityUVE());
+        EXPECT_FALSE(entityManager.IsAliveUVE(root));
+        EXPECT_EQ(editor.GetSelectedEntityUVE(), Scene::kInvalidEntityUVE);
+        EXPECT_TRUE(editor.IsSceneDirtyUVE());
+
+        editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
+}
+
+TEST(EditorUVETest, EditorHistoryUVE_DuplicateUndoRedoUsesFreshHandlesAndRestoresDirtySelection) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_duplicate_history.uvescene");
+        editor.InitUVE();
+        Scene::IEntityManagerUVE& entityManager = engine.GetServicesUVE().GetEntityManagerUVE();
+        const Scene::EntityUVE source = entityManager.CreateEntityUVE();
+        AttachRootUVE(engine, source, Scene::TransformComponentUVE{});
+        entityManager.AddComponentUVE<Scene::NameComponentUVE>(source, Scene::NameComponentUVE{"Actor"});
+        editor.SelectEntityUVE(source);
+
+        const Scene::EntityUVE duplicate = editor.DuplicateSelectedEntityUVE();
+        ASSERT_TRUE(entityManager.IsAliveUVE(duplicate));
+        ASSERT_TRUE(editor.UndoUVE());
+        EXPECT_FALSE(entityManager.IsAliveUVE(duplicate));
+        EXPECT_EQ(editor.GetSelectedEntityUVE(), source);
+        EXPECT_FALSE(editor.IsSceneDirtyUVE());
+        ASSERT_TRUE(editor.RedoUVE());
+        const Scene::EntityUVE recreated = editor.GetSelectedEntityUVE();
+        EXPECT_TRUE(entityManager.IsAliveUVE(recreated));
+        EXPECT_NE(recreated, duplicate);
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::NameComponentUVE>(recreated).name, "Actor 2");
+        EXPECT_TRUE(editor.IsSceneDirtyUVE());
+
+        editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
+}
+
+TEST(EditorUVETest, EditorHistoryUVE_DeleteUndoRedoRestoresSubtreeUnderOriginalParentWithFreshHandles) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_delete_history.uvescene");
+        editor.InitUVE();
+        Core::EngineServicesUVE& services = engine.GetServicesUVE();
+        Scene::IEntityManagerUVE& entityManager = services.GetEntityManagerUVE();
+        const Scene::EntityUVE parent = entityManager.CreateEntityUVE();
+        AttachRootUVE(engine, parent, Scene::TransformComponentUVE{});
+        const Scene::EntityUVE child = entityManager.CreateEntityUVE();
+        AttachRootUVE(engine, child, Scene::TransformComponentUVE{});
+        services.GetSceneGraphUVE().SetParentUVE(entityManager, child, parent);
+        entityManager.AddComponentUVE<Scene::NameComponentUVE>(child, Scene::NameComponentUVE{"Deleted Child"});
+        editor.SelectEntityUVE(child);
+
+        ASSERT_TRUE(editor.DeleteSelectedEntityUVE());
+        EXPECT_FALSE(entityManager.IsAliveUVE(child));
+        EXPECT_EQ(editor.GetSelectedEntityUVE(), parent);
+        ASSERT_TRUE(editor.UndoUVE());
+        const Scene::EntityUVE restored = editor.GetSelectedEntityUVE();
+        EXPECT_TRUE(entityManager.IsAliveUVE(restored));
+        EXPECT_NE(restored, child);
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::NameComponentUVE>(restored).name, "Deleted Child");
+        const std::vector<Scene::EntityUVE> children = services.GetSceneGraphUVE().GetChildrenUVE(entityManager, parent);
+        EXPECT_NE(std::find(children.begin(), children.end(), restored), children.end());
+        EXPECT_FALSE(editor.IsSceneDirtyUVE());
+        ASSERT_TRUE(editor.RedoUVE());
+        EXPECT_FALSE(entityManager.IsAliveUVE(restored));
+        EXPECT_EQ(editor.GetSelectedEntityUVE(), parent);
+        EXPECT_TRUE(editor.IsSceneDirtyUVE());
+
+        editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
+}
+
+TEST(EditorUVETest, EditorHistoryUVE_DeleteUndoRejectsStaleParentAndClearsTimeline) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_delete_stale_parent.uvescene");
+        editor.InitUVE();
+        Core::EngineServicesUVE& services = engine.GetServicesUVE();
+        Scene::IEntityManagerUVE& entityManager = services.GetEntityManagerUVE();
+        const Scene::EntityUVE parent = entityManager.CreateEntityUVE();
+        AttachRootUVE(engine, parent, Scene::TransformComponentUVE{});
+        const Scene::EntityUVE child = entityManager.CreateEntityUVE();
+        AttachRootUVE(engine, child, Scene::TransformComponentUVE{});
+        services.GetSceneGraphUVE().SetParentUVE(entityManager, child, parent);
+        editor.SelectEntityUVE(child);
+
+        ASSERT_TRUE(editor.DeleteSelectedEntityUVE());
+        entityManager.DestroyEntityUVE(parent);
+        EXPECT_FALSE(editor.UndoUVE());
+        EXPECT_FALSE(editor.CanUndoUVE());
+        EXPECT_FALSE(editor.CanRedoUVE());
+        EXPECT_EQ(editor.GetDocumentRootsUVE().size(), 0U);
+
+        editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
+}
+
+TEST(EditorUVETest, EditorHistoryUVE_NewMutationAfterDuplicateUndoInvalidatesRedo) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_duplicate_redo_invalidation.uvescene");
+        editor.InitUVE();
+        Scene::IEntityManagerUVE& entityManager = engine.GetServicesUVE().GetEntityManagerUVE();
+        const Scene::EntityUVE source = entityManager.CreateEntityUVE();
+        AttachRootUVE(engine, source, Scene::TransformComponentUVE{});
+        entityManager.AddComponentUVE<Scene::NameComponentUVE>(source, Scene::NameComponentUVE{"Source"});
+        editor.SelectEntityUVE(source);
+
+        ASSERT_NE(editor.DuplicateSelectedEntityUVE(), Scene::kInvalidEntityUVE);
+        ASSERT_TRUE(editor.UndoUVE());
+        ASSERT_TRUE(editor.CanRedoUVE());
+        ASSERT_TRUE(editor.SetSelectedEntityNameUVE("Source Revised"));
+        EXPECT_FALSE(editor.CanRedoUVE());
+
+        editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
+}
+
+TEST(EditorUVETest, EntityLifecycleUVE_RejectsUnselectedCameraStaleNonRunningAndUnsupportedCapture) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_lifecycle_safety.uvescene");
+        EXPECT_EQ(editor.DuplicateSelectedEntityUVE(), Scene::kInvalidEntityUVE);
+        EXPECT_FALSE(editor.DeleteSelectedEntityUVE());
+        editor.InitUVE();
+        EXPECT_EQ(editor.DuplicateSelectedEntityUVE(), Scene::kInvalidEntityUVE);
+        EXPECT_FALSE(editor.DeleteSelectedEntityUVE());
+        editor.SelectEntityUVE(editor.GetViewportCameraUVE());
+        EXPECT_EQ(editor.GetSelectedEntityUVE(), Scene::kInvalidEntityUVE);
+        EXPECT_EQ(editor.DuplicateSelectedEntityUVE(), Scene::kInvalidEntityUVE);
+        EXPECT_FALSE(editor.DeleteSelectedEntityUVE());
+
+        Scene::IEntityManagerUVE& entityManager = engine.GetServicesUVE().GetEntityManagerUVE();
+        const Scene::EntityUVE unsupported = entityManager.CreateEntityUVE();
+        AttachRootUVE(engine, unsupported, Scene::TransformComponentUVE{});
+        entityManager.AddComponentUVE<UnregisteredEditorLifecycleComponentUVE>(
+            unsupported, UnregisteredEditorLifecycleComponentUVE{7});
+        editor.SelectEntityUVE(unsupported);
+        const std::size_t entityCountBefore = entityManager.GetEntityCountUVE();
+        EXPECT_EQ(editor.DuplicateSelectedEntityUVE(), Scene::kInvalidEntityUVE);
+        EXPECT_TRUE(entityManager.IsAliveUVE(unsupported));
+        EXPECT_EQ(entityManager.GetEntityCountUVE(), entityCountBefore);
+        EXPECT_FALSE(editor.DeleteSelectedEntityUVE());
+        EXPECT_TRUE(entityManager.IsAliveUVE(unsupported));
+
+        entityManager.DestroyEntityUVE(unsupported);
+        editor.TickUVE();
+        EXPECT_EQ(editor.DuplicateSelectedEntityUVE(), Scene::kInvalidEntityUVE);
+        EXPECT_FALSE(editor.DeleteSelectedEntityUVE());
+        editor.ShutdownUVE();
+        EXPECT_EQ(editor.DuplicateSelectedEntityUVE(), Scene::kInvalidEntityUVE);
+        EXPECT_FALSE(editor.DeleteSelectedEntityUVE());
     }
 
     engine.Shutdown();

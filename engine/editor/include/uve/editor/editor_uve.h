@@ -23,6 +23,7 @@
 #include "uve/math/vector3_uve.h"
 #include "uve/scene/components/transform_component_uve.h"
 #include "uve/scene/entity_uve.h"
+#include "uve/scene/i_scene_serializer_uve.h"
 
 namespace UVE::Editor {
 
@@ -157,6 +158,19 @@ public:
     /// entity handle without mutation when the editor is not running or `kind` is unsupported.
     [[nodiscard]] Scene::EntityUVE CreateDocumentEntityUVE(EditorEntityKindUVE kind);
 
+    /// Duplicates the selected live document entity and all descendants under the selected root's
+    /// current parent, assigns the duplicate root a deterministic available name when it has name
+    /// metadata, selects the fresh root, marks the scene dirty, and records one Undo/Redo entry.
+    /// Returns the invalid handle without mutation for invalid state, a stale editor camera, an
+    /// active viewport gesture, unsupported snapshot component data, or failed restoration.
+    [[nodiscard]] Scene::EntityUVE DuplicateSelectedEntityUVE();
+
+    /// Deletes the selected live document entity and every descendant after capturing a reversible
+    /// in-memory snapshot. The still-live document parent becomes selected when present; otherwise
+    /// selection is cleared. Returns false without mutation for the same invalid/safety states as
+    /// DuplicateSelectedEntityUVE().
+    [[nodiscard]] bool DeleteSelectedEntityUVE();
+
     /// Replays the most recent supported editor mutation in reverse. It is safe and returns false
     /// when the editor is not running, history is empty, or a target became stale externally.
     [[nodiscard]] bool UndoUVE();
@@ -224,7 +238,34 @@ private:
         bool dirtyAfter = false;
     };
 
-    using HistoryEntryUVE = std::variant<TransformHistoryEntryUVE, NameHistoryEntryUVE, CreationHistoryEntryUVE>;
+    /// A duplicated subtree is restored from a scene-envelope snapshot instead of relying on stale
+    /// ECS handles. `activeEntity` is invalid after Undo and becomes a fresh root after Redo.
+    struct DuplicationHistoryEntryUVE final {
+        Scene::SceneSnapshotUVE snapshot;
+        Scene::EntityUVE originalParent = Scene::kInvalidEntityUVE;
+        Scene::EntityUVE activeEntity = Scene::kInvalidEntityUVE;
+        std::optional<std::string> duplicateRootName;
+        Scene::EntityUVE selectionBefore = Scene::kInvalidEntityUVE;
+        Scene::EntityUVE selectionAfter = Scene::kInvalidEntityUVE;
+        bool dirtyBefore = false;
+        bool dirtyAfter = false;
+    };
+
+    /// A deleted subtree is restored under its original parent with fresh handles on Undo.
+    /// `activeEntity` begins as the deleted root's stale handle and changes to the restored root.
+    struct DeletionHistoryEntryUVE final {
+        Scene::SceneSnapshotUVE snapshot;
+        Scene::EntityUVE originalParent = Scene::kInvalidEntityUVE;
+        Scene::EntityUVE activeEntity = Scene::kInvalidEntityUVE;
+        Scene::EntityUVE selectionBefore = Scene::kInvalidEntityUVE;
+        Scene::EntityUVE selectionAfter = Scene::kInvalidEntityUVE;
+        bool dirtyBefore = false;
+        bool dirtyAfter = false;
+    };
+
+    using HistoryEntryUVE =
+        std::variant<TransformHistoryEntryUVE, NameHistoryEntryUVE, CreationHistoryEntryUVE,
+                     DuplicationHistoryEntryUVE, DeletionHistoryEntryUVE>;
 
     [[nodiscard]] bool IsDocumentEntityUVE(Scene::EntityUVE entity) const noexcept;
     [[nodiscard]] bool IsTransformFiniteUVE(const Scene::TransformComponentUVE& transform) const noexcept;
@@ -254,6 +295,11 @@ private:
                                                const Scene::TransformComponentUVE& transform);
     [[nodiscard]] bool ApplyEntityNameStateUVE(Scene::EntityUVE entity,
                                                 const std::optional<std::string>& name);
+    [[nodiscard]] std::optional<Scene::SceneSnapshotUVE> CaptureSubtreeUVE(Scene::EntityUVE root);
+    [[nodiscard]] Scene::EntityUVE RestoreSubtreeUnderParentUVE(const Scene::SceneSnapshotUVE& snapshot,
+                                                                 Scene::EntityUVE parent);
+    [[nodiscard]] bool TryGetDocumentParentUVE(Scene::EntityUVE entity, Scene::EntityUVE& outParent) const;
+    [[nodiscard]] bool IsLifecycleCommandAllowedUVE() const noexcept;
     [[nodiscard]] Scene::EntityUVE CreateDocumentEntityInternalUVE(
         EditorEntityKindUVE kind, const std::optional<std::string>& explicitName);
     void RecordHistoryUVE(HistoryEntryUVE entry);

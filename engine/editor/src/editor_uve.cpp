@@ -582,6 +582,76 @@ Scene::EntityUVE EditorUVE::CreateDocumentEntityUVE(const EditorEntityKindUVE ki
     return entity;
 }
 
+Scene::EntityUVE EditorUVE::DuplicateSelectedEntityUVE() {
+    if (!IsLifecycleCommandAllowedUVE() || !IsDocumentEntityUVE(m_selectedEntity)) {
+        return Scene::kInvalidEntityUVE;
+    }
+
+    const Scene::EntityUVE source = m_selectedEntity;
+    const std::optional<Scene::SceneSnapshotUVE> snapshot = CaptureSubtreeUVE(source);
+    if (!snapshot.has_value()) {
+        return Scene::kInvalidEntityUVE;
+    }
+
+    Scene::EntityUVE originalParent = Scene::kInvalidEntityUVE;
+    if (!TryGetDocumentParentUVE(source, originalParent)) {
+        return Scene::kInvalidEntityUVE;
+    }
+
+    const Scene::EntityUVE duplicate = RestoreSubtreeUnderParentUVE(*snapshot, originalParent);
+    if (duplicate == Scene::kInvalidEntityUVE) {
+        return Scene::kInvalidEntityUVE;
+    }
+
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    std::optional<std::string> duplicateRootName;
+    if (entityManager.HasComponentUVE<Scene::NameComponentUVE>(source)) {
+        const std::string& sourceName = entityManager.GetComponentUVE<Scene::NameComponentUVE>(source).name;
+        if (IsEntityNameValidUVE(sourceName)) {
+            duplicateRootName = MakeUniqueDocumentEntityNameUVE(sourceName);
+            if (!ApplyEntityNameStateUVE(duplicate, duplicateRootName)) {
+                DestroyDocumentSubtreeUVE(duplicate);
+                return Scene::kInvalidEntityUVE;
+            }
+        }
+    }
+
+    const bool dirtyBefore = m_sceneDirty;
+    SelectEntityUVE(duplicate);
+    m_sceneDirty = true;
+    RecordHistoryUVE(DuplicationHistoryEntryUVE{
+        std::move(*snapshot), originalParent, duplicate, std::move(duplicateRootName), source, duplicate, dirtyBefore, true});
+    return duplicate;
+}
+
+bool EditorUVE::DeleteSelectedEntityUVE() {
+    if (!IsLifecycleCommandAllowedUVE() || !IsDocumentEntityUVE(m_selectedEntity)) {
+        return false;
+    }
+
+    const Scene::EntityUVE target = m_selectedEntity;
+    const std::optional<Scene::SceneSnapshotUVE> snapshot = CaptureSubtreeUVE(target);
+    if (!snapshot.has_value()) {
+        return false;
+    }
+
+    Scene::EntityUVE originalParent = Scene::kInvalidEntityUVE;
+    if (!TryGetDocumentParentUVE(target, originalParent)) {
+        return false;
+    }
+
+    const bool dirtyBefore = m_sceneDirty;
+    DestroyDocumentSubtreeUVE(target);
+    const Scene::EntityUVE selectionAfter = IsDocumentEntityUVE(originalParent)
+                                                ? originalParent
+                                                : Scene::kInvalidEntityUVE;
+    RestoreSelectionUVE(selectionAfter);
+    m_sceneDirty = true;
+    RecordHistoryUVE(DeletionHistoryEntryUVE{
+        std::move(*snapshot), originalParent, target, target, selectionAfter, dirtyBefore, true});
+    return true;
+}
+
 bool EditorUVE::UndoUVE() {
     if (m_state != EditorStateUVE::Running || m_undoHistory.empty()) {
         return false;
@@ -659,6 +729,88 @@ bool EditorUVE::ApplyEntityNameStateUVE(const Scene::EntityUVE entity,
         entityManager.AddComponentUVE<Scene::NameComponentUVE>(entity, Scene::NameComponentUVE{*name});
     }
     return true;
+}
+
+std::optional<Scene::SceneSnapshotUVE> EditorUVE::CaptureSubtreeUVE(const Scene::EntityUVE root) {
+    if (!IsDocumentEntityUVE(root)) {
+        return std::nullopt;
+    }
+
+    // A document subtree must never absorb the editor-owned viewport camera, even if a caller
+    // externally attempts an invalid reparent. Reject before asking the serializer to capture.
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    std::vector<Scene::EntityUVE> pending{root};
+    std::vector<Scene::EntityUVE> visited;
+    while (!pending.empty()) {
+        const Scene::EntityUVE current = pending.back();
+        pending.pop_back();
+        if (!IsDocumentEntityUVE(current)) {
+            return std::nullopt;
+        }
+        if (std::find(visited.begin(), visited.end(), current) != visited.end()) {
+            return std::nullopt;
+        }
+        visited.push_back(current);
+        const std::vector<Scene::EntityUVE> children =
+            m_services->GetSceneGraphUVE().GetChildrenUVE(entityManager, current);
+        pending.insert(pending.end(), children.begin(), children.end());
+    }
+
+    return m_services->GetSceneSerializerUVE().CaptureUVE(entityManager, {root}, Asset::AssetKindUVE::Scene);
+}
+
+Scene::EntityUVE EditorUVE::RestoreSubtreeUnderParentUVE(const Scene::SceneSnapshotUVE& snapshot,
+                                                         const Scene::EntityUVE parent) {
+    if (parent != Scene::kInvalidEntityUVE && !IsDocumentEntityUVE(parent)) {
+        return Scene::kInvalidEntityUVE;
+    }
+
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    std::vector<Scene::EntityUVE> restoredRoots = m_services->GetSceneSerializerUVE().RestoreUVE(entityManager, snapshot);
+    if (restoredRoots.size() != 1U || !IsDocumentEntityUVE(restoredRoots.front())) {
+        for (const Scene::EntityUVE restoredRoot : restoredRoots) {
+            if (IsDocumentEntityUVE(restoredRoot)) {
+                DestroyDocumentSubtreeUVE(restoredRoot);
+            }
+        }
+        return Scene::kInvalidEntityUVE;
+    }
+
+    const Scene::EntityUVE restoredRoot = restoredRoots.front();
+    if (parent != Scene::kInvalidEntityUVE) {
+        if (!entityManager.HasComponentUVE<Scene::HierarchyComponentUVE>(restoredRoot)) {
+            DestroyDocumentSubtreeUVE(restoredRoot);
+            return Scene::kInvalidEntityUVE;
+        }
+        m_services->GetSceneGraphUVE().SetParentUVE(entityManager, restoredRoot, parent);
+    }
+    return restoredRoot;
+}
+
+bool EditorUVE::TryGetDocumentParentUVE(const Scene::EntityUVE entity, Scene::EntityUVE& outParent) const {
+    outParent = Scene::kInvalidEntityUVE;
+    if (!IsDocumentEntityUVE(entity)) {
+        return false;
+    }
+
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    if (!entityManager.HasComponentUVE<Scene::HierarchyComponentUVE>(entity)) {
+        return true;
+    }
+    const Scene::EntityUVE parent = entityManager.GetComponentUVE<Scene::HierarchyComponentUVE>(entity).parent;
+    if (parent == Scene::kInvalidEntityUVE) {
+        return true;
+    }
+    if (!IsDocumentEntityUVE(parent)) {
+        return false;
+    }
+    outParent = parent;
+    return true;
+}
+
+bool EditorUVE::IsLifecycleCommandAllowedUVE() const noexcept {
+    return m_state == EditorStateUVE::Running && m_gizmoDrag.axis == EditorTranslateAxisUVE::None &&
+           m_viewportNavigationMode == EditorViewportNavigationModeUVE::None;
 }
 
 Scene::EntityUVE EditorUVE::CreateDocumentEntityInternalUVE(
@@ -742,13 +894,36 @@ bool EditorUVE::UndoHistoryEntryUVE(HistoryEntryUVE& entry) {
                 RestoreSelectionUVE(typedEntry.selectionBefore);
                 m_sceneDirty = typedEntry.dirtyBefore;
                 return true;
-            } else {
+            } else if constexpr (std::is_same_v<EntryType, CreationHistoryEntryUVE>) {
                 if (!IsDocumentEntityUVE(typedEntry.activeEntity)) {
                     return false;
                 }
                 DestroyDocumentSubtreeUVE(typedEntry.activeEntity);
                 typedEntry.activeEntity = Scene::kInvalidEntityUVE;
                 RestoreSelectionUVE(typedEntry.selectionBefore);
+                m_sceneDirty = typedEntry.dirtyBefore;
+                return true;
+            } else if constexpr (std::is_same_v<EntryType, DuplicationHistoryEntryUVE>) {
+                if (!IsDocumentEntityUVE(typedEntry.activeEntity)) {
+                    return false;
+                }
+                DestroyDocumentSubtreeUVE(typedEntry.activeEntity);
+                typedEntry.activeEntity = Scene::kInvalidEntityUVE;
+                RestoreSelectionUVE(typedEntry.selectionBefore);
+                m_sceneDirty = typedEntry.dirtyBefore;
+                return true;
+            } else {
+                if (typedEntry.activeEntity != Scene::kInvalidEntityUVE &&
+                    m_services->GetEntityManagerUVE().IsAliveUVE(typedEntry.activeEntity)) {
+                    return false;
+                }
+                const Scene::EntityUVE restored = RestoreSubtreeUnderParentUVE(typedEntry.snapshot, typedEntry.originalParent);
+                if (restored == Scene::kInvalidEntityUVE) {
+                    return false;
+                }
+                typedEntry.activeEntity = restored;
+                typedEntry.selectionBefore = restored;
+                RestoreSelectionUVE(restored);
                 m_sceneDirty = typedEntry.dirtyBefore;
                 return true;
             }
@@ -774,7 +949,7 @@ bool EditorUVE::RedoHistoryEntryUVE(HistoryEntryUVE& entry) {
                 RestoreSelectionUVE(typedEntry.selectionAfter);
                 m_sceneDirty = typedEntry.dirtyAfter;
                 return true;
-            } else {
+            } else if constexpr (std::is_same_v<EntryType, CreationHistoryEntryUVE>) {
                 if (typedEntry.activeEntity != Scene::kInvalidEntityUVE &&
                     m_services->GetEntityManagerUVE().IsAliveUVE(typedEntry.activeEntity)) {
                     return false;
@@ -787,6 +962,34 @@ bool EditorUVE::RedoHistoryEntryUVE(HistoryEntryUVE& entry) {
                 typedEntry.activeEntity = recreated;
                 typedEntry.selectionAfter = recreated;
                 RestoreSelectionUVE(recreated);
+                m_sceneDirty = typedEntry.dirtyAfter;
+                return true;
+            } else if constexpr (std::is_same_v<EntryType, DuplicationHistoryEntryUVE>) {
+                if (typedEntry.activeEntity != Scene::kInvalidEntityUVE &&
+                    m_services->GetEntityManagerUVE().IsAliveUVE(typedEntry.activeEntity)) {
+                    return false;
+                }
+                const Scene::EntityUVE restored = RestoreSubtreeUnderParentUVE(typedEntry.snapshot, typedEntry.originalParent);
+                if (restored == Scene::kInvalidEntityUVE) {
+                    return false;
+                }
+                if (typedEntry.duplicateRootName.has_value() &&
+                    !ApplyEntityNameStateUVE(restored, typedEntry.duplicateRootName)) {
+                    DestroyDocumentSubtreeUVE(restored);
+                    return false;
+                }
+                typedEntry.activeEntity = restored;
+                typedEntry.selectionAfter = restored;
+                RestoreSelectionUVE(restored);
+                m_sceneDirty = typedEntry.dirtyAfter;
+                return true;
+            } else {
+                if (!IsDocumentEntityUVE(typedEntry.activeEntity)) {
+                    return false;
+                }
+                DestroyDocumentSubtreeUVE(typedEntry.activeEntity);
+                typedEntry.activeEntity = Scene::kInvalidEntityUVE;
+                RestoreSelectionUVE(typedEntry.selectionAfter);
                 m_sceneDirty = typedEntry.dirtyAfter;
                 return true;
             }
@@ -1320,6 +1523,7 @@ void EditorUVE::DrawMenuBarUVE() {
     }
 
     ImGuiIO& io = ImGui::GetIO();
+    const bool lifecycleCommandAllowed = IsLifecycleCommandAllowedUVE() && IsDocumentEntityUVE(m_selectedEntity);
     if (!io.WantTextInput && io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Z, false)) {
         if (io.KeyShift) {
             static_cast<void>(RedoUVE());
@@ -1328,6 +1532,11 @@ void EditorUVE::DrawMenuBarUVE() {
         }
     } else if (!io.WantTextInput && io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Y, false)) {
         static_cast<void>(RedoUVE());
+    } else if (!io.WantTextInput && lifecycleCommandAllowed && io.KeyCtrl &&
+               ImGui::IsKeyPressed(ImGuiKey_D, false)) {
+        static_cast<void>(DuplicateSelectedEntityUVE());
+    } else if (!io.WantTextInput && lifecycleCommandAllowed && ImGui::IsKeyPressed(ImGuiKey_Delete, false)) {
+        static_cast<void>(DeleteSelectedEntityUVE());
     }
 
     if (ImGui::BeginMenu("File")) {
@@ -1346,6 +1555,13 @@ void EditorUVE::DrawMenuBarUVE() {
         }
         if (ImGui::MenuItem("Redo", "Ctrl+Y / Ctrl+Shift+Z", false, CanRedoUVE())) {
             static_cast<void>(RedoUVE());
+        }
+        ImGui::Separator();
+        if (ImGui::MenuItem("Duplicate", "Ctrl+D", false, lifecycleCommandAllowed)) {
+            static_cast<void>(DuplicateSelectedEntityUVE());
+        }
+        if (ImGui::MenuItem("Delete", "Delete", false, lifecycleCommandAllowed)) {
+            static_cast<void>(DeleteSelectedEntityUVE());
         }
         ImGui::EndMenu();
     }

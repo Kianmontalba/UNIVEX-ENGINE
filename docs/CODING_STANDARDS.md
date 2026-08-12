@@ -127,11 +127,12 @@ named set. See "Save/Load (`engine/save/`)" below for the full `.uvesave` layout
 opened with `std::ios::binary`. A malformed header (bad magic, truncated file,
 unsupported version/compression method) or a corrupt payload must never crash — log a detailed
 `UVE_ERROR` (path + reason) and return a failure value, mirroring `ConfigManagerUVE`'s
-error-handling contract. `WriteUveFileUVE`/`ReadUveFileUVE`
+error-handling contract. `EncodeUveFileEnvelopeUVE`/`DecodeUveFileEnvelopeUVE` are the authoritative
+in-memory byte layout and validation seam; `WriteUveFileUVE`/`ReadUveFileUVE`
 (`engine/asset/include/uve/asset/uve_file_envelope_uve.h`,
-`engine/asset/src/uve_file_envelope_uve.cpp`) are the one shared implementation of this envelope
-— every consumer (`SceneSerializerUVE`, `AssetBundleUVE`, and any future binary asset format)
-calls them rather than reimplementing header read/write logic.
+`engine/asset/src/uve_file_envelope_uve.cpp`) delegate to it for filesystem persistence. Every
+consumer (`SceneSerializerUVE`, `AssetBundleUVE`, and any future binary asset format) must reuse
+this envelope contract rather than reimplementing header read/write logic.
 
 ## Deferred garbage collection for ref-counted resources
 
@@ -219,17 +220,16 @@ worldJson:          worldJsonLength bytes (UTF-8 JSON — the embedded Scene pay
 Unlike `Bundle`'s variable-length, name-indexed entry table, this shape is intentionally fixed —
 always exactly a metadata section followed by a world section, never an arbitrary named set.
 
-**The scratch-file bounce**: `ISceneSerializerUVE::SaveUVE()`/`LoadUVE()` only take/produce a real
-`std::filesystem::path` — there is no in-memory byte-buffer entry point, and its per-component
-JSON table is deliberately private to `scene_serializer_uve.cpp` (not part of its public
-contract). Rather than growing `ISceneSerializerUVE`'s API surface for one caller,
-`SaveGameSystemUVE::SaveUVE()` calls `SceneSerializerUVE::SaveUVE()` against a scratch path, reads
-the raw bytes back via `Asset::ReadUveFileUVE()`, deletes the scratch file, and embeds those bytes
-verbatim as the world section of its own payload; `LoadUVE()` does the reverse (write the embedded
-world bytes to a scratch path, call `SceneSerializerUVE::LoadUVE()`, delete the scratch file).
-Copy this pattern — write to scratch, read the bytes back, delete the scratch file — for any
-future caller that needs to embed a file-based service's output inside another format without
-widening that service's public contract.
+**The save-game scratch-file bounce remains intentionally local.** `ISceneSerializerUVE` now also
+exposes `CaptureUVE()`/`RestoreUVE()` for editor-owned in-memory subtree history, while keeping its
+per-component JSON table private to `scene_serializer_uve.cpp`. `SaveGameSystemUVE` continues to
+call `SceneSerializerUVE::SaveUVE()` against a scratch path, read the raw bytes via
+`Asset::ReadUveFileUVE()`, delete the scratch file, and embed those bytes verbatim as the world
+section; `LoadUVE()` performs the reverse. That retained path preserves the established save-file
+format and keeps save-game embedding independent from editor command snapshots. Future callers
+must choose the smallest fitting boundary: `CaptureUVE()`/`RestoreUVE()` for transient in-memory
+scene-subtree replay, or an explicitly managed scratch file when embedding an already-file-shaped
+format.
 
 **Payload layer isolation**: `BuildSavePayloadUVE()`/`SplitSavePayloadUVE()`
 (`save_game_system_uve.cpp`) are the *only* functions that touch the raw metadata+world byte
@@ -1208,12 +1208,20 @@ Camera navigation uses a 0.5–500 world-unit distance range and an 85-degree pi
 
 ### Editor History v1: Undo/Redo (Increment 42)
 
-**History is editor-private session state.** `EditorUVE` owns bounded undo and redo deques with a default capacity of 100 entries; a zero constructor capacity is normalized to one. The editor records only successful state-changing Transform, Name, and root-archetype creation operations. Every new recorded command clears redo, and reaching capacity discards the oldest undo command. Core, Scene, runtime, and serializer layers remain independent of command-history types.
+**History is editor-private session state.** `EditorUVE` owns bounded undo and redo deques with a default capacity of 100 entries; a zero constructor capacity is normalized to one. The editor records only successful state-changing Transform, Name, root-archetype creation, duplicate, and delete operations. Every new recorded command clears redo, and reaching capacity discards the oldest undo command. Core, Scene, runtime, and serializer layers remain independent of command-history types.
 
-Every history entry stores its before/after selection and dirty-state values. Undo restores the prior mutation state, selection when still a live document entity, and dirty flag; redo restores the post-mutation equivalents. Transform and Name replay uses non-recording helpers so history cannot recursively append commands. Creation replay destroys the created root on undo and recreates its stored archetype/name on redo; a new entity handle is valid after recreation. Loading a document clears session history after the recovery copy has been saved and before document replacement begins, so stale handles from the previous scene cannot be replayed. An externally destroyed target causes history replay to fail without mutation and clears the unavailable command timeline.
+Every history entry stores its before/after selection and dirty-state values. Undo restores the prior mutation state, selection when still a live document entity, and dirty flag; redo restores the post-mutation equivalents. Transform and Name replay uses non-recording helpers so history cannot recursively append commands. Creation replay destroys the created root on undo and recreates its stored archetype/name on redo; a new entity handle is valid after recreation. Loading a document clears session history after the recovery copy has been saved and before document replacement begins, so stale handles from the previous scene cannot be replayed. An externally destroyed target, missing original parent, or failed subtree restoration causes history replay to fail without partial mutation and clears the unavailable command timeline.
 
-The Edit menu exposes disabled-state Undo/Redo actions. `Ctrl+Z`, `Ctrl+Y`, and `Ctrl+Shift+Z` are accepted only while ImGui does not own text input, avoiding interference with the Properties Name field. A translate-gizmo press-to-release interaction is a single Transform transaction: intermediate drag frames are non-recording previews, a changed release commits one history entry, and cancellation restores the initial Transform without recording a command.
+The Edit menu exposes disabled-state Undo/Redo, Duplicate, and Delete actions. `Ctrl+Z`, `Ctrl+Y`, `Ctrl+Shift+Z`, `Ctrl+D`, and `Delete` are accepted only while ImGui does not own text input, avoiding interference with the Properties Name field. Duplicate/Delete are also unavailable during an active translate-gizmo or viewport-navigation gesture. A translate-gizmo press-to-release interaction is a single Transform transaction: intermediate drag frames are non-recording previews, a changed release commits one history entry, and cancellation restores the initial Transform without recording a command.
 
-**Deliberately deferred:** offscreen texture compositing of the viewport, mesh-triangle or render-ID picking, non-collider selection, final visual selection outline/bounds rendering, first-person/fly navigation, camera bookmarks, cinematic camera controls, local/plane/rotate/scale gizmo handles, snapping, Play/Pause sandboxing, multi-selection, reflection-based/custom inspector drawers, native file dialogs, layout/preferences persistence, autosave policy changes, filesystem scanning, asset import/reimport, asset drag-and-drop, thumbnails, preview generation, hierarchy search/filter, in-place rename shortcuts, entity duplication/deletion history, hierarchy reparenting history, multi-entity naming, cross-session command logs, and branchable history. These remain separate increments so every editor slice stays buildable, testable, and compatible with the existing renderer.
+### Entity Lifecycle v1: Duplicate and Delete (Increment 44)
+
+**Snapshot boundary.** `Scene::ISceneSerializerUVE::CaptureUVE()` creates an in-memory universal `.uve*` envelope and `RestoreUVE()` creates fresh entities from that same registered-component payload. Disk `SaveUVE()`/`LoadUVE()` share the payload encode/decode implementation, so lifecycle history cannot silently diverge from `.uvescene` hierarchy mapping, component coverage, or derived `WorldTransformComponentUVE` rebuild rules. Capture rejects invalid roots and unregistered component types before the editor changes any entity; malformed restore data rolls back entities it created.
+
+**Hierarchy semantics.** Duplicate captures the selected root and all descendants, restores one fresh subtree, and attaches its root to the source root's current parent. A document root therefore duplicates as another document root; a child duplicates as a sibling under the same parent. When a valid root `NameComponentUVE` exists, its duplicate root receives the first available deterministic suffix through `MakeUniqueDocumentEntityNameUVE()`; descendants retain their snapshot names. Delete captures before destroying the selected subtree, then selects its still-live document parent or clears selection. Undo restores a deleted subtree below the original parent with a fresh root handle; redo destroys that current restored subtree. Duplicate undo destroys the current duplicate; redo restores a fresh duplicate under its stored parent. No replay path records a nested history command.
+
+**Ownership and safety.** The editor-owned viewport camera is never a document entity and cannot be selected, captured, duplicated, deleted, or restored through lifecycle history. A lifecycle operation requires a running editor, a live selected document entity, no active gizmo drag, no viewport-navigation gesture, and a successful serializer capture. If an externally stale parent prevents restore, the operation fails safely and the unusable history timeline is cleared rather than attaching content to an arbitrary root.
+
+**Deliberately deferred:** offscreen texture compositing of the viewport, mesh-triangle or render-ID picking, non-collider selection, final visual selection outline/bounds rendering, first-person/fly navigation, camera bookmarks, cinematic camera controls, local/plane/rotate/scale gizmo handles, snapping, Play/Pause sandboxing, multi-selection, reflection-based/custom inspector drawers, native file dialogs, layout/preferences persistence, autosave policy changes, filesystem scanning, asset import/reimport, asset drag-and-drop, thumbnails, preview generation, hierarchy search/filter, in-place rename shortcuts, hierarchy reparenting history, multi-entity duplication/deletion, OS clipboard copy/paste, multi-entity naming, cross-session command logs, and branchable history. These remain separate increments so every editor slice stays buildable, testable, and compatible with the existing renderer.
 
 **Validation expectation:** every Editor Foundation v1 change must build under GCC and Clang, retain the full headless CTest suite, run `uve_editor --headless --frames <n>` successfully, and exercise the real windowed overlay path under `xvfb-run` where a virtual display is available.

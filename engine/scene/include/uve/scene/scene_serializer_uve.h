@@ -16,6 +16,12 @@ class SceneSerializerUVE final : public ISceneSerializerUVE {
 public:
     SceneSerializerUVE() = default;
 
+    [[nodiscard]] std::optional<SceneSnapshotUVE> CaptureUVE(
+        IEntityManagerUVE& entityManager, const std::vector<EntityUVE>& rootEntities,
+        SceneAssetTypeUVE assetType) const override;
+    [[nodiscard]] std::vector<EntityUVE> RestoreUVE(IEntityManagerUVE& entityManager,
+                                                     const SceneSnapshotUVE& snapshot) const override;
+
     [[nodiscard]] bool SaveUVE(IEntityManagerUVE& entityManager,
                                 const std::vector<EntityUVE>& rootEntities,
                                 const std::filesystem::path& path,

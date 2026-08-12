@@ -21,12 +21,16 @@
 #include "uve/math/vector3_uve.h"
 #include "uve/memory/memory_manager_uve.h"
 #include "uve/scene/components/audio_source_component_uve.h"
+#include "uve/scene/components/camera_component_uve.h"
 #include "uve/scene/components/collider_component_uve.h"
 #include "uve/scene/components/hierarchy_component_uve.h"
 #include "uve/scene/components/light_component_uve.h"
 #include "uve/scene/components/mesh_component_uve.h"
 #include "uve/scene/components/name_component_uve.h"
+#include "uve/scene/components/particle_emitter_component_uve.h"
+#include "uve/scene/components/prefab_instance_component_uve.h"
 #include "uve/scene/components/rigid_body_component_uve.h"
+#include "uve/scene/components/script_component_uve.h"
 #include "uve/scene/components/transform_component_uve.h"
 #include "uve/scene/components/world_transform_component_uve.h"
 #include "uve/scene/entity_manager_uve.h"
@@ -42,6 +46,149 @@ protected:
     EntityManagerUVE entityManager{memoryManager.GetDefaultAllocatorUVE(), eventSystem};
     SceneSerializerUVE serializer;
 };
+
+struct UnregisteredSnapshotComponentUVE final {
+    int value = 0;
+};
+
+TEST_F(SceneSerializerUVETest, CaptureThenRestore_EmptyRootList_ReturnsValidEmptySnapshotWithoutMutation) {
+    const std::size_t entityCountBefore = entityManager.GetEntityCountUVE();
+
+    const std::optional<SceneSnapshotUVE> snapshot =
+        serializer.CaptureUVE(entityManager, {}, SceneAssetTypeUVE::Scene);
+    ASSERT_TRUE(snapshot.has_value());
+    EXPECT_FALSE(snapshot->bytes.empty());
+    EXPECT_EQ(snapshot->assetType, SceneAssetTypeUVE::Scene);
+
+    const std::vector<EntityUVE> roots = serializer.RestoreUVE(entityManager, *snapshot);
+    EXPECT_TRUE(roots.empty());
+    EXPECT_EQ(entityManager.GetEntityCountUVE(), entityCountBefore);
+}
+
+TEST_F(SceneSerializerUVETest, CaptureThenRestore_NestedHierarchy_RecreatesFreshHandlesAndRelationships) {
+    const EntityUVE sourceRoot = entityManager.CreateEntityUVE();
+    entityManager.AddComponentUVE<TransformComponentUVE>(sourceRoot, TransformComponentUVE{});
+    entityManager.AddComponentUVE<HierarchyComponentUVE>(sourceRoot, HierarchyComponentUVE{kInvalidEntityUVE});
+    entityManager.AddComponentUVE<NameComponentUVE>(sourceRoot, NameComponentUVE{"Source Root"});
+
+    const EntityUVE sourceChild = entityManager.CreateEntityUVE();
+    TransformComponentUVE childTransform{};
+    childTransform.localPosition = Math::Vector3UVE{2.0F, 3.0F, 4.0F};
+    entityManager.AddComponentUVE<TransformComponentUVE>(sourceChild, childTransform);
+    entityManager.AddComponentUVE<HierarchyComponentUVE>(sourceChild, HierarchyComponentUVE{sourceRoot});
+    entityManager.AddComponentUVE<NameComponentUVE>(sourceChild, NameComponentUVE{"Source Child"});
+
+    const std::optional<SceneSnapshotUVE> snapshot =
+        serializer.CaptureUVE(entityManager, {sourceRoot}, SceneAssetTypeUVE::Scene);
+    ASSERT_TRUE(snapshot.has_value());
+
+    const std::vector<EntityUVE> restoredRoots = serializer.RestoreUVE(entityManager, *snapshot);
+    ASSERT_EQ(restoredRoots.size(), 1U);
+    const EntityUVE restoredRoot = restoredRoots.front();
+    EXPECT_NE(restoredRoot, sourceRoot);
+    EXPECT_EQ(entityManager.GetComponentUVE<NameComponentUVE>(restoredRoot).name, "Source Root");
+
+    EntityUVE restoredChild = kInvalidEntityUVE;
+    entityManager.ForEachUVE<HierarchyComponentUVE>(
+        [&restoredChild, restoredRoot](const EntityUVE entity, HierarchyComponentUVE& hierarchy) {
+            if (hierarchy.parent == restoredRoot) {
+                restoredChild = entity;
+            }
+        });
+    ASSERT_NE(restoredChild, kInvalidEntityUVE);
+    EXPECT_NE(restoredChild, sourceChild);
+    EXPECT_EQ(entityManager.GetComponentUVE<NameComponentUVE>(restoredChild).name, "Source Child");
+    EXPECT_TRUE(entityManager.GetComponentUVE<TransformComponentUVE>(restoredChild).localPosition ==
+                childTransform.localPosition);
+    EXPECT_TRUE(entityManager.HasComponentUVE<WorldTransformComponentUVE>(restoredRoot));
+    EXPECT_TRUE(entityManager.HasComponentUVE<WorldTransformComponentUVE>(restoredChild));
+}
+
+TEST_F(SceneSerializerUVETest, CaptureThenRestore_AllRegisteredComponentTypes_RoundTrip) {
+    const EntityUVE source = entityManager.CreateEntityUVE();
+    TransformComponentUVE transform{};
+    transform.localPosition = Math::Vector3UVE{1.0F, 2.0F, 3.0F};
+    entityManager.AddComponentUVE<TransformComponentUVE>(source, transform);
+    entityManager.AddComponentUVE<MeshComponentUVE>(source,
+                                                     MeshComponentUVE{Asset::AssetGuidUVE{11}, Asset::AssetGuidUVE{22}});
+    LightComponentUVE light{};
+    light.type = LightTypeUVE::Spot;
+    light.intensity = 4.0F;
+    entityManager.AddComponentUVE<LightComponentUVE>(source, light);
+    entityManager.AddComponentUVE<CameraComponentUVE>(source, CameraComponentUVE{75.0F, 0.2F, 250.0F});
+    entityManager.AddComponentUVE<NameComponentUVE>(source, NameComponentUVE{"Complete Snapshot"});
+    ColliderComponentUVE collider{};
+    collider.friction = 0.25F;
+    entityManager.AddComponentUVE<ColliderComponentUVE>(source, collider);
+    RigidBodyComponentUVE body{};
+    body.mass = 9.5F;
+    body.isKinematic = true;
+    entityManager.AddComponentUVE<RigidBodyComponentUVE>(source, body);
+    AudioSourceComponentUVE audio{};
+    audio.audioAssetPath = "sounds/lifecycle.wav";
+    audio.looping = true;
+    entityManager.AddComponentUVE<AudioSourceComponentUVE>(source, audio);
+    entityManager.AddComponentUVE<ScriptComponentUVE>(source, ScriptComponentUVE{"scripts/lifecycle.lua"});
+    entityManager.AddComponentUVE<ParticleEmitterComponentUVE>(source, ParticleEmitterComponentUVE{128U});
+    entityManager.AddComponentUVE<PrefabInstanceComponentUVE>(source,
+                                                               PrefabInstanceComponentUVE{Asset::AssetGuidUVE{9001}});
+
+    const std::optional<SceneSnapshotUVE> snapshot =
+        serializer.CaptureUVE(entityManager, {source}, SceneAssetTypeUVE::Scene);
+    ASSERT_TRUE(snapshot.has_value());
+    const std::vector<EntityUVE> restoredRoots = serializer.RestoreUVE(entityManager, *snapshot);
+    ASSERT_EQ(restoredRoots.size(), 1U);
+    const EntityUVE restored = restoredRoots.front();
+
+    EXPECT_NE(restored, source);
+    EXPECT_TRUE(entityManager.GetComponentUVE<TransformComponentUVE>(restored).localPosition == transform.localPosition);
+    EXPECT_EQ(entityManager.GetComponentUVE<MeshComponentUVE>(restored).meshGuid, Asset::AssetGuidUVE{11});
+    EXPECT_EQ(entityManager.GetComponentUVE<LightComponentUVE>(restored).type, LightTypeUVE::Spot);
+    EXPECT_FLOAT_EQ(entityManager.GetComponentUVE<CameraComponentUVE>(restored).farPlane, 250.0F);
+    EXPECT_EQ(entityManager.GetComponentUVE<NameComponentUVE>(restored).name, "Complete Snapshot");
+    EXPECT_FLOAT_EQ(entityManager.GetComponentUVE<ColliderComponentUVE>(restored).friction, 0.25F);
+    EXPECT_FLOAT_EQ(entityManager.GetComponentUVE<RigidBodyComponentUVE>(restored).mass, 9.5F);
+    EXPECT_TRUE(entityManager.GetComponentUVE<RigidBodyComponentUVE>(restored).isKinematic);
+    EXPECT_EQ(entityManager.GetComponentUVE<AudioSourceComponentUVE>(restored).audioAssetPath,
+              "sounds/lifecycle.wav");
+    EXPECT_TRUE(entityManager.GetComponentUVE<AudioSourceComponentUVE>(restored).looping);
+    EXPECT_EQ(entityManager.GetComponentUVE<ScriptComponentUVE>(restored).scriptAssetPath, "scripts/lifecycle.lua");
+    EXPECT_EQ(entityManager.GetComponentUVE<ParticleEmitterComponentUVE>(restored).maxParticles, 128U);
+    EXPECT_EQ(entityManager.GetComponentUVE<PrefabInstanceComponentUVE>(restored).sourcePrefabGuid,
+              Asset::AssetGuidUVE{9001});
+    EXPECT_TRUE(entityManager.HasComponentUVE<WorldTransformComponentUVE>(restored));
+}
+
+TEST_F(SceneSerializerUVETest, CaptureUVE_UnregisteredComponent_ReturnsNulloptWithoutMutation) {
+    const EntityUVE entity = entityManager.CreateEntityUVE();
+    entityManager.AddComponentUVE<UnregisteredSnapshotComponentUVE>(entity, UnregisteredSnapshotComponentUVE{42});
+    const std::size_t entityCountBefore = entityManager.GetEntityCountUVE();
+
+    const std::optional<SceneSnapshotUVE> snapshot =
+        serializer.CaptureUVE(entityManager, {entity}, SceneAssetTypeUVE::Scene);
+
+    EXPECT_FALSE(snapshot.has_value());
+    EXPECT_TRUE(entityManager.IsAliveUVE(entity));
+    EXPECT_EQ(entityManager.GetEntityCountUVE(), entityCountBefore);
+}
+
+TEST_F(SceneSerializerUVETest, RestoreUVE_MalformedComponentData_RollsBackCreatedEntities) {
+    const EntityUVE existing = entityManager.CreateEntityUVE();
+    const std::size_t entityCountBefore = entityManager.GetEntityCountUVE();
+    const std::string payloadText =
+        R"({"entities":[{"localId":0,"components":{"NameComponentUVE":{"name":"Valid"}}},{"localId":1,"components":{"MeshComponentUVE":{"meshGuid":5}}}]})";
+    const auto* const payloadBytes = reinterpret_cast<const std::byte*>(payloadText.data());
+    const SceneSnapshotUVE snapshot{
+        Asset::EncodeUveFileEnvelopeUVE(SceneAssetTypeUVE::Scene,
+                                        std::vector<std::byte>{payloadBytes, payloadBytes + payloadText.size()}),
+        SceneAssetTypeUVE::Scene};
+
+    const std::vector<EntityUVE> roots = serializer.RestoreUVE(entityManager, snapshot);
+
+    EXPECT_TRUE(roots.empty());
+    EXPECT_TRUE(entityManager.IsAliveUVE(existing));
+    EXPECT_EQ(entityManager.GetEntityCountUVE(), entityCountBefore);
+}
 
 TEST_F(SceneSerializerUVETest, SaveThenLoad_SingleEntityWithMultipleComponents_RoundTripsExactly) {
     const EntityUVE entity = entityManager.CreateEntityUVE();

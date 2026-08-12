@@ -3,8 +3,10 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <optional>
 #include <vector>
 
 #include "uve/asset/uve_file_envelope_uve.h"
@@ -22,6 +24,16 @@ namespace UVE::Scene {
 /// `Bundle`) also uses.
 using SceneAssetTypeUVE = Asset::AssetKindUVE;
 
+/// An in-memory universal `.uve*` envelope containing one or more scene roots and every descendant.
+/// It deliberately uses the same envelope, component registration, and file-local hierarchy-id rules
+/// as SaveUVE()/LoadUVE(), allowing editor history to restore fresh entity handles without temporary
+/// files. `assetType` is retained beside the bytes as a caller-visible intent check; RestoreUVE()
+/// validates that it agrees with the embedded envelope header before mutating the entity manager.
+struct SceneSnapshotUVE final {
+    std::vector<std::byte> bytes;
+    SceneAssetTypeUVE assetType = SceneAssetTypeUVE::Scene;
+};
+
 /// ISceneSerializerUVE saves/loads entity subtrees (an entity plus every descendant reachable
 /// via HierarchyComponentUVE) to/from the universal `.uve*` binary envelope: magic `"UVE\0"`,
 /// `version uint32`, `assetType uint32`, `compressionMethod uint32` (`0 = None` — the only value
@@ -36,6 +48,20 @@ using SceneAssetTypeUVE = Asset::AssetKindUVE;
 class ISceneSerializerUVE {
 public:
     virtual ~ISceneSerializerUVE() = default;
+
+    /// Captures every entity reachable from `rootEntities` (each root plus all descendants) into
+    /// a universal in-memory envelope. Returns std::nullopt without mutation if a root is invalid,
+    /// a component is unregistered, or the requested asset type is not Scene/Prefab.
+    [[nodiscard]] virtual std::optional<SceneSnapshotUVE> CaptureUVE(
+        IEntityManagerUVE& entityManager, const std::vector<EntityUVE>& rootEntities,
+        SceneAssetTypeUVE assetType) const = 0;
+
+    /// Restores a valid snapshot by creating fresh live entities and remapping its file-local
+    /// hierarchy ids. The returned entities are the snapshot roots in file order. On malformed or
+    /// unsupported data it returns an empty vector and rolls back any entities created during the
+    /// attempted restore.
+    [[nodiscard]] virtual std::vector<EntityUVE> RestoreUVE(IEntityManagerUVE& entityManager,
+                                                             const SceneSnapshotUVE& snapshot) const = 0;
 
     /// Serializes every entity reachable from `rootEntities` (each root plus all its
     /// descendants) to `path`. Returns false (logging the reason) on any failure — an

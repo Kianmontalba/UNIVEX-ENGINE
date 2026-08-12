@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <optional>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -43,23 +44,35 @@ struct UveFileHeaderUVE {
     std::uint32_t compressionMethod = 0;
 };
 
-/// Writes `payload` to `path` as a universal `.uve*` binary envelope: magic `"UVE\0"`,
+/// Encodes `payload` as a universal `.uve*` binary envelope in memory: magic `"UVE\0"`,
 /// `version uint32` (the current payload schema version), `assetType uint32`,
-/// `compressionMethod uint32` (always `0 = None` — the only value implemented so far),
-/// `payloadLength uint64`, then `payload` verbatim. Every field is written individually as a
-/// fixed-width value (never a whole-struct write), sidestepping padding/alignment ambiguity.
-/// The payload's own interpretation (UTF-8 JSON text for Scene/Prefab, a binary directory+blob
-/// table for Bundle, raw file bytes for Blob) is entirely up to the caller. Returns false
-/// (logging the path + reason) if the file can't be opened for writing.
+/// `compressionMethod uint32` (always `0 = None`), `payloadLength uint64`, then `payload`
+/// verbatim. It is the authoritative byte layout used by both filesystem persistence and
+/// in-memory scene-history snapshots.
+[[nodiscard]] std::vector<std::byte> EncodeUveFileEnvelopeUVE(AssetKindUVE assetType,
+                                                               const std::vector<std::byte>& payload);
+
+/// Validates and decodes a universal `.uve*` binary envelope held in memory. `sourceDescription`
+/// appears in diagnostic logging and should identify the caller's logical source. Returns
+/// std::nullopt for bad magic, a truncated header/payload, unsupported version/compression, or an
+/// oversized payload. Trailing bytes remain permitted for compatibility with ReadUveFileUVE().
+[[nodiscard]] std::optional<std::pair<UveFileHeaderUVE, std::vector<std::byte>>>
+DecodeUveFileEnvelopeUVE(const std::vector<std::byte>& envelope,
+                         std::string_view sourceDescription = "<memory>");
+
+/// Writes `payload` to `path` using EncodeUveFileEnvelopeUVE(). The payload's own interpretation
+/// (UTF-8 JSON text for Scene/Prefab, a binary directory+blob table for Bundle, raw file bytes for
+/// Blob) is entirely up to the caller. Returns false (logging the path + reason) if the file can't
+/// be opened or written.
 [[nodiscard]] bool WriteUveFileUVE(const std::filesystem::path& path, AssetKindUVE assetType,
                                     const std::vector<std::byte>& payload);
 
-/// Reads and validates a `.uve*` file written by WriteUveFileUVE(), returning its header and
-/// payload bytes. Returns `std::nullopt` (logging a detailed `UVE_ERROR`: path + reason) on any
-/// failure — missing file, bad magic, truncated header/payload, or an unsupported compression
-/// method — never throws and never crashes. Deliberately does not validate `assetType` against
-/// any specific expected value; callers that care (e.g. `SceneSerializerUVE` rejecting a Bundle
-/// file, or vice versa) check `UveFileHeaderUVE::assetType` themselves.
+/// Reads and validates a `.uve*` file written by WriteUveFileUVE(), delegating binary parsing
+/// to DecodeUveFileEnvelopeUVE(). Returns `std::nullopt` (logging a detailed `UVE_ERROR`: path +
+/// reason) on any failure — missing file, bad magic, truncated header/payload, or an unsupported
+/// compression method — never throws and never crashes. Deliberately does not validate `assetType`
+/// against any specific expected value; callers that care (e.g. `SceneSerializerUVE` rejecting a
+/// Bundle file, or vice versa) check `UveFileHeaderUVE::assetType` themselves.
 [[nodiscard]] std::optional<std::pair<UveFileHeaderUVE, std::vector<std::byte>>>
 ReadUveFileUVE(const std::filesystem::path& path);
 
