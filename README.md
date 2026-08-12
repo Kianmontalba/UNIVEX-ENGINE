@@ -39,14 +39,18 @@ xvfb-run -a ./build/gcc-debug/engine/app/uve_editor --gl-version 4.5 --frames 3
 Swap `-DCMAKE_CXX_COMPILER=clang++` to build with Clang instead. `UVE_BUILD_TESTS` (default
 `ON`) can be set to `OFF` to skip building the GoogleTest suite.
 
-The current editor supports a Scene/Viewport/Properties/Assets layout, local Transform editing,
-collider-backed viewport picking, a world-axis translate gizmo, File menu scene save/load actions,
-and Scene menu creation for Empty, Camera, Directional Light, and Collision Box document roots. The
-Assets panel lists only deterministic snapshots of `AssetDatabaseUVE` registered records and offers
-a case-insensitive path filter; it does not scan filesystems, import assets, or load previews.
-Viewport picking intentionally selects only live document entities with the existing box collider
-component. Mesh picking, rotate/scale gizmos, snapping, play mode, filesystem browsing,
-import/reimport, asset drag-and-drop, thumbnails, and layout persistence remain future increments.
+The current editor supports a Scene/Viewport/Properties/Assets layout, persistent human-readable
+entity names, local Transform editing, collider-backed viewport picking, a world-axis translate
+gizmo, File menu scene save/load actions, and Scene menu creation for Empty, Camera, Directional
+Light, and Collision Box document roots. New archetypes receive deterministic default names such as
+`Camera` and `Camera 2`; the Properties panel can rename one selected live document entity, and
+names persist through `.uvescene` save/load. Legacy scenes without name metadata remain valid and
+fall back to stable entity index/generation labels. The Assets panel lists only deterministic
+snapshots of `AssetDatabaseUVE` registered records and offers a case-insensitive path filter; it
+does not scan filesystems, import assets, or load previews. Viewport picking intentionally selects
+only live document entities with the existing box collider component. Mesh picking, rotate/scale
+gizmos, snapping, play mode, filesystem browsing, import/reimport, asset drag-and-drop, thumbnails,
+layout persistence, hierarchy search, duplication, and deletion remain future increments.
 
 ## Repository layout
 

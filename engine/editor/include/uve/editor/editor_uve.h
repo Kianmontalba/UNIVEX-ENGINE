@@ -105,6 +105,11 @@ public:
     /// invalid/deleted/non-transform entities or non-finite transform values.
     [[nodiscard]] bool SetSelectedLocalTransformUVE(const Scene::TransformComponentUVE& transform);
 
+    /// Adds or updates persistent human-readable metadata for the selected live document entity.
+    /// Returns false without mutation for invalid editor/selection state, an empty or whitespace-only
+    /// name, a name longer than the supported editor-entry limit, or an unchanged value.
+    [[nodiscard]] bool SetSelectedEntityNameUVE(std::string name);
+
     /// Creates a normalized world-space ray from a pointer inside viewportRect. Uses the editor
     /// camera's derived world transform and perspective settings. Returns std::nullopt for invalid
     /// editor state, camera data, viewport geometry, or pointer coordinates outside the rectangle.
@@ -154,6 +159,10 @@ private:
 
     [[nodiscard]] bool IsDocumentEntityUVE(Scene::EntityUVE entity) const noexcept;
     [[nodiscard]] bool IsTransformFiniteUVE(const Scene::TransformComponentUVE& transform) const noexcept;
+    [[nodiscard]] bool IsEntityNameValidUVE(std::string_view name) const noexcept;
+    [[nodiscard]] std::string GetEntityDisplayLabelUVE(Scene::EntityUVE entity) const;
+    [[nodiscard]] std::string GetDefaultEntityNameUVE(EditorEntityKindUVE kind) const;
+    [[nodiscard]] std::string MakeUniqueDocumentEntityNameUVE(std::string_view baseName) const;
     [[nodiscard]] bool IsViewportRectValidUVE(const EditorViewportRectUVE& viewportRect) const noexcept;
     [[nodiscard]] bool IsFiniteVectorUVE(const Math::Vector3UVE& vector) const noexcept;
     [[nodiscard]] Math::Vector3UVE GetAxisVectorUVE(EditorTranslateAxisUVE axis) const noexcept;

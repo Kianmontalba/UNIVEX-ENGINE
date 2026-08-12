@@ -26,6 +26,7 @@
 #include "uve/scene/components/hierarchy_component_uve.h"
 #include "uve/scene/components/light_component_uve.h"
 #include "uve/scene/components/mesh_component_uve.h"
+#include "uve/scene/components/name_component_uve.h"
 #include "uve/scene/components/particle_emitter_component_uve.h"
 #include "uve/scene/components/prefab_instance_component_uve.h"
 #include "uve/scene/components/rigid_body_component_uve.h"
@@ -91,6 +92,10 @@ namespace {
         {"nearPlane", component.nearPlane},
         {"farPlane", component.farPlane},
     };
+}
+
+[[nodiscard]] nlohmann::json ToJsonUVE(const NameComponentUVE& component) {
+    return {{"name", component.name}};
 }
 
 [[nodiscard]] nlohmann::json ToJsonUVE(const ColliderComponentUVE& component) {
@@ -183,6 +188,9 @@ template <typename T, typename FromJsonFunc>
                           return CameraComponentUVE{json.at("fieldOfViewDegrees").get<float>(),
                                                      json.at("nearPlane").get<float>(),
                                                      json.at("farPlane").get<float>()};
+                      }));
+        table.emplace("NameComponentUVE", MakeRegistrationUVE<NameComponentUVE>([](const nlohmann::json& json) {
+                          return NameComponentUVE{json.at("name").get<std::string>()};
                       }));
         table.emplace("ColliderComponentUVE", MakeRegistrationUVE<ColliderComponentUVE>([](const nlohmann::json& json) {
                           ColliderComponentUVE collider;
