@@ -274,6 +274,7 @@ struct Renderer3DUVE::ImplUVE {
     /// (IsValidUVE() == false) on any given frame; RecordShadowPassUVE() checks IsValidUVE()
     /// before every use, exactly like RenderDemoTriangleUVE() does.
     std::shared_ptr<Shader::ShaderProgramUVE> shadowProgram;
+    std::shared_ptr<Shader::ShaderProgramUVE> toneMappingProgram;
 
     /// A 1x1 opaque-white texture, used whenever a material leaves albedoTexture/aoTexture unset
     /// (kInvalidAssetGuidUVE) — sampling it always yields {1,1,1,1}, so
@@ -597,8 +598,10 @@ Renderer3DUVE::Renderer3DUVE(IRenderDeviceUVE& renderDevice, IRenderSystemUVE& r
                                         targetHeight, ambientColor, shadowMapResolution, shadowMapHalfExtent,
                                         shadowMapNearPlane, shadowMapFarPlane, shadowFrustumPadding,
                                         shadowCascadeSplitLambda, shadowCascadeBlendRatio, shadowPcfKernelRadius)) {
+    // The scene is rendered to HDR first; the final fullscreen graph pass tone-maps it to the
+    // default framebuffer's LDR presentation surface.
     m_impl->colorTarget = renderDevice.CreateTextureUVE(
-        TextureDescUVE{targetWidth, targetHeight, TextureFormatUVE::RGBA8Unorm, 1});
+        TextureDescUVE{targetWidth, targetHeight, TextureFormatUVE::RGBA16Float, 1});
     m_impl->depthTarget = renderDevice.CreateTextureUVE(
         TextureDescUVE{targetWidth, targetHeight, TextureFormatUVE::Depth32Float, 1});
     m_impl->fallbackWhiteTexture = renderDevice.CreateTextureUVE(
@@ -619,6 +622,14 @@ Renderer3DUVE::Renderer3DUVE(IRenderDeviceUVE& renderDevice, IRenderSystemUVE& r
     shadowProgramDesc.depthWriteEnabled = true;
     shadowProgramDesc.debugNameUVE = "ShadowDepth";
     m_impl->shadowProgram = shaderManager.CreateProgramUVE(shadowProgramDesc);
+
+    Shader::ShaderProgramDescUVE toneMappingProgramDesc;
+    toneMappingProgramDesc.virtualFilePath = std::string(Shader::BuiltIn::kFullscreenQuadVirtualPath);
+    toneMappingProgramDesc.embeddedFallbackSourceCode = std::string(Shader::BuiltIn::kFullscreenQuadSource);
+    toneMappingProgramDesc.depthTestEnabled = false;
+    toneMappingProgramDesc.depthWriteEnabled = false;
+    toneMappingProgramDesc.debugNameUVE = "ToneMapping";
+    m_impl->toneMappingProgram = shaderManager.CreateProgramUVE(toneMappingProgramDesc);
 
     ImplUVE* const implPtr = m_impl.get();
     m_impl->reloadSubscription = eventSystem.Subscribe<Asset::AssetReloadedEventUVE>(
@@ -732,6 +743,24 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
             commandBuffer.BeginRenderPassUVE(passDesc);
             m_impl->RecordItemsUVE(queue.opaqueItems, frameUniforms, commandBuffer);
             m_impl->RecordItemsUVE(queue.transparentItems, frameUniforms, commandBuffer);
+            commandBuffer.EndRenderPassUVE();
+        }});
+    // The default framebuffer is an external presentation surface, not a TextureHandleUVE; the
+    // scene color input remains explicit in the graph while this pass writes that external output.
+    renderGraph.AddPassUVE(RenderGraphPassDescUVE{
+        "ToneMapping", {{colorResource, RenderGraphResourceAccessUVE::Read}},
+        [this](ICommandBufferUVE& commandBuffer) {
+            if (!m_impl->toneMappingProgram->IsValidUVE()) {
+                return;
+            }
+            RenderPassDescUVE passDesc;
+            passDesc.colorAttachment = kInvalidTextureHandleUVE;
+            passDesc.depthAttachment = kInvalidTextureHandleUVE;
+            commandBuffer.BeginRenderPassUVE(passDesc);
+            m_impl->toneMappingProgram->SetIntUVE("uSourceTexture", 0);
+            m_impl->toneMappingProgram->ApplyToUVE(commandBuffer);
+            commandBuffer.BindTextureUVE(m_impl->colorTarget, 0U);
+            commandBuffer.DrawUVE(3);
             commandBuffer.EndRenderPassUVE();
         }});
 

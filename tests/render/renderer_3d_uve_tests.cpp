@@ -549,8 +549,8 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_MaterialWithoutTextures_UsesFallbackTex
 
     const std::vector<RecordedCommandUVE>& commands = renderDevice.GetLastSubmittedCommandsUVE();
     // Slot 3 (the shadow map, bound once per item in the main pass regardless of material) is
-    // excluded here — this test is only about the three material-owned texture slots' fallback
-    // reuse, not the shadow map bind.
+    // excluded here. The final slot-0 bind is the HDR scene color consumed by the fullscreen
+    // tone-mapping pass; the first six remain the two items' material fallback bindings.
     std::vector<BindTextureCommandUVE> textureBinds;
     for (const RecordedCommandUVE& command : commands) {
         if (const auto* const bindTexture = std::get_if<BindTextureCommandUVE>(&command)) {
@@ -559,7 +559,7 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_MaterialWithoutTextures_UsesFallbackTex
             }
         }
     }
-    ASSERT_EQ(textureBinds.size(), 6U); // 2 items x 3 material texture slots each
+    ASSERT_EQ(textureBinds.size(), 7U); // 2 items x 3 material texture slots, then tone-map source
 
     // Group by slot: item1's slot-N handle must equal item2's slot-N handle (fallback reuse
     // across two independently-resolved materials), and the albedo/AO slots (both default to the
@@ -652,15 +652,18 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_TextureAssetNotYetReady_SkipsItemUntilL
     WaitUntilAssetsReadyUVE(meshGuid, materialGuid);
 
     // The texture load kicked off inside this call is blocked on textureLoadGateUVE, so the item
-    // must be skipped this frame - only the three cascade shadow passes plus main pass, all empty,
-    // appear.
+    // must be skipped this frame. The three cascade passes and empty main pass still run, then the
+    // ready fullscreen program records the independent tone-mapping output pass.
     renderer3D->RenderFrameUVE(entityManager, cameraEntity);
     const std::vector<RecordedCommandUVE>& commandsBeforeReady = renderDevice.GetLastSubmittedCommandsUVE();
-    ASSERT_EQ(commandsBeforeReady.size(), 8U);
+    ASSERT_EQ(commandsBeforeReady.size(), 14U);
     for (std::size_t passIndex = 0; passIndex < 4; ++passIndex) {
         EXPECT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commandsBeforeReady[passIndex * 2U]));
         EXPECT_TRUE(std::holds_alternative<EndRenderPassCommandUVE>(commandsBeforeReady[passIndex * 2U + 1U]));
     }
+    EXPECT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commandsBeforeReady[8U]));
+    EXPECT_TRUE(std::holds_alternative<DrawCommandUVE>(commandsBeforeReady[12U]));
+    EXPECT_TRUE(std::holds_alternative<EndRenderPassCommandUVE>(commandsBeforeReady[13U]));
 
     textureLoadGateUVE = true;
     WaitUntilTextureReadyUVE(textureGuid);
