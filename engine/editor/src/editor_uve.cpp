@@ -39,6 +39,8 @@ constexpr float kVectorEpsilonUVE = 0.00001F;
 constexpr float kMinimumLocalScaleUVE = 0.001F;
 constexpr float kGizmoAxisLengthUVE = 1.25F;
 constexpr float kGizmoHandleRadiusPixelsUVE = 12.0F;
+constexpr float kTrackballRadiusPixelsUVE = 42.0F;
+constexpr float kTrackballAntipodalDotThresholdUVE = -0.999F;
 constexpr float kMinimumViewportWidthUVE = 64.0F;
 constexpr float kMinimumViewportHeightUVE = 64.0F;
 constexpr float kAssetsPanelHeightUVE = 150.0F;
@@ -2185,6 +2187,35 @@ bool EditorUVE::BeginGizmoDragUVE(const EditorViewportRectUVE& viewportRect,
     return true;
 }
 
+bool EditorUVE::MapTrackballPointerUVE(const Math::Vector2UVE center, const float radius,
+                                         const Math::Vector2UVE pointerPosition,
+                                         Math::Vector3UVE& outVector) const noexcept {
+    if (!IsFiniteUVE(center.x) || !IsFiniteUVE(center.y) || !IsFiniteUVE(radius) ||
+        radius <= kVectorEpsilonUVE || !IsFiniteUVE(pointerPosition.x) || !IsFiniteUVE(pointerPosition.y)) {
+        return false;
+    }
+    float x = (pointerPosition.x - center.x) / radius;
+    float y = (center.y - pointerPosition.y) / radius;
+    const float radiusSquared = (x * x) + (y * y);
+    if (!IsFiniteUVE(radiusSquared)) {
+        return false;
+    }
+    if (radiusSquared > 1.0F) {
+        const float inverseRadius = 1.0F / std::sqrt(radiusSquared);
+        x *= inverseRadius;
+        y *= inverseRadius;
+        outVector = Math::Vector3UVE{x, y, 0.0F};
+    } else {
+        outVector = Math::Vector3UVE{x, y, std::sqrt(std::max(0.0F, 1.0F - radiusSquared))};
+    }
+    const float vectorLengthSquared = Math::LengthSquaredUVE(outVector);
+    if (!IsFiniteUVE(vectorLengthSquared) || vectorLengthSquared <= kVectorEpsilonUVE) {
+        return false;
+    }
+    outVector = outVector * (1.0F / std::sqrt(vectorLengthSquared));
+    return true;
+}
+
 bool EditorUVE::FindClosestRingParameterUVE(const EditorViewportRectUVE& viewportRect,
                                             const Scene::EntityUVE entity,
                                             const EditorTranslateAxisUVE axis,
@@ -2309,6 +2340,39 @@ bool EditorUVE::BeginRotateGizmoDragUVE(const EditorViewportRectUVE& viewportRec
         bestDistanceSquared = distanceSquared;
     }
 
+    // Ring candidates have explicit priority; the camera-oriented center trackball is fallback only.
+    if (candidate.axis == EditorTranslateAxisUVE::None) {
+        const Scene::WorldTransformComponentUVE& selectedWorld =
+            entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(m_selectedEntity);
+        Math::Vector2UVE center{};
+        Math::Vector3UVE initialTrackballVector{};
+        if (!selectedWorld.dirty && ProjectWorldPointUVE(viewportRect, selectedWorld.worldPosition, center) &&
+            MapTrackballPointerUVE(center, kTrackballRadiusPixelsUVE, pointerPosition, initialTrackballVector) &&
+            entityManager.HasComponentUVE<Scene::WorldTransformComponentUVE>(m_viewportCamera)) {
+            const float centerDistanceSquared = LengthSquared2UVE(
+                Math::Vector2UVE{pointerPosition.x - center.x, pointerPosition.y - center.y});
+            const Scene::WorldTransformComponentUVE& cameraWorld =
+                entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(m_viewportCamera);
+            Math::QuaternionUVE viewRotation{};
+            if (centerDistanceSquared <= (kTrackballRadiusPixelsUVE * kTrackballRadiusPixelsUVE) &&
+                !cameraWorld.dirty && Math::TryNormalizeUVE(cameraWorld.worldRotation, viewRotation)) {
+                candidate.mode = EditorGizmoModeUVE::Rotate;
+                candidate.handleKind = GizmoHandleKindUVE::Trackball;
+                candidate.axis = EditorTranslateAxisUVE::X;
+                candidate.entity = m_selectedEntity;
+                candidate.initialLocalTransform =
+                    entityManager.GetComponentUVE<Scene::TransformComponentUVE>(m_selectedEntity);
+                candidate.initialPointer = pointerPosition;
+                candidate.screenCenter = center;
+                candidate.initialTrackballVector = initialTrackballVector;
+                candidate.viewWorldRotation = viewRotation;
+                candidate.trackballRadiusPixels = kTrackballRadiusPixelsUVE;
+                candidate.viewportRect = viewportRect;
+                candidate.initialDirty = m_sceneDirty;
+            }
+        }
+    }
+
     if (candidate.axis == EditorTranslateAxisUVE::None) {
         return false;
     }
@@ -2324,6 +2388,58 @@ void EditorUVE::UpdateGizmoDragUVE(const Math::Vector2UVE pointerPosition) {
         m_gizmoDrag.entity != m_selectedEntity || !IsFiniteUVE(pointerPosition.x) ||
         !IsFiniteUVE(pointerPosition.y)) {
         CancelGizmoDragUVE();
+        return;
+    }
+
+    if (m_gizmoDrag.mode == EditorGizmoModeUVE::Rotate &&
+        m_gizmoDrag.handleKind == GizmoHandleKindUVE::Trackball) {
+        Math::Vector3UVE currentTrackballVector{};
+        if (!MapTrackballPointerUVE(m_gizmoDrag.screenCenter, m_gizmoDrag.trackballRadiusPixels,
+                                    pointerPosition, currentTrackballVector)) {
+            CancelGizmoDragUVE();
+            return;
+        }
+        const float dot = std::clamp(Math::DotUVE(m_gizmoDrag.initialTrackballVector, currentTrackballVector), -1.0F, 1.0F);
+        const Math::Vector3UVE cameraAxis = Math::CrossUVE(m_gizmoDrag.initialTrackballVector, currentTrackballVector);
+        const float axisLengthSquared = Math::LengthSquaredUVE(cameraAxis);
+        if (!IsFiniteUVE(dot) || !IsFiniteVectorUVE(cameraAxis) || axisLengthSquared <= kVectorEpsilonUVE) {
+            if (dot <= kTrackballAntipodalDotThresholdUVE) {
+                CancelGizmoDragUVE();
+                return;
+            }
+            if (ApplyLocalTransformUVE(m_gizmoDrag.entity, m_gizmoDrag.initialLocalTransform)) {
+                m_sceneDirty = m_gizmoDrag.initialDirty;
+            }
+            return;
+        }
+        const float inverseAxisLength = 1.0F / std::sqrt(axisLengthSquared);
+        const Math::Vector3UVE normalizedCameraAxis = cameraAxis * inverseAxisLength;
+        if (!IsFiniteVectorUVE(normalizedCameraAxis)) {
+            CancelGizmoDragUVE();
+            return;
+        }
+        const float radians = std::acos(dot);
+        const float rotateStepRadians =
+            (m_transformSnappingSettings.rotateStepDegrees * std::numbers::pi_v<float>) / 180.0F;
+        const float snappedRadians = m_transformSnappingSettings.enabled
+                                         ? SnapScalarUVE(radians, rotateStepRadians)
+                                         : radians;
+        const Math::Vector3UVE worldAxis = Math::RotateVectorUVE(m_gizmoDrag.viewWorldRotation, normalizedCameraAxis);
+        Math::QuaternionUVE localRotation{};
+        if (!IsFiniteUVE(snappedRadians) || !IsFiniteVectorUVE(worldAxis) ||
+            !ComputeLocalRotationForWorldAxisUVE(m_gizmoDrag.entity,
+                                                 m_gizmoDrag.initialLocalTransform.localRotation,
+                                                 worldAxis, snappedRadians, localRotation)) {
+            CancelGizmoDragUVE();
+            return;
+        }
+        Scene::TransformComponentUVE updated = m_gizmoDrag.initialLocalTransform;
+        updated.localRotation = localRotation;
+        if (!ApplyLocalTransformUVE(m_gizmoDrag.entity, updated)) {
+            CancelGizmoDragUVE();
+            return;
+        }
+        m_sceneDirty = true;
         return;
     }
 
@@ -2714,6 +2830,10 @@ void EditorUVE::DrawRotateGizmoUVE(const EditorViewportRectUVE& viewportRect) {
     if (selectedWorld.dirty || !IsFiniteVectorUVE(selectedWorld.worldPosition)) {
         return;
     }
+    Math::Vector2UVE center{};
+    if (!ProjectWorldPointUVE(viewportRect, selectedWorld.worldPosition, center)) {
+        return;
+    }
 
     constexpr std::array<EditorTranslateAxisUVE, 3> axes{
         EditorTranslateAxisUVE::X,
@@ -2724,6 +2844,13 @@ void EditorUVE::DrawRotateGizmoUVE(const EditorViewportRectUVE& viewportRect) {
     constexpr float kFullTurnRadiansUVE = std::numbers::pi_v<float> * 2.0F;
     const float segmentRadians = kFullTurnRadiansUVE / static_cast<float>(kRingSegmentCountUVE);
     ImDrawList* const drawList = ImGui::GetForegroundDrawList();
+    const bool trackballActive = m_gizmoDrag.mode == EditorGizmoModeUVE::Rotate &&
+                                 m_gizmoDrag.handleKind == GizmoHandleKindUVE::Trackball;
+    drawList->AddCircleFilled(ImVec2{center.x, center.y}, kTrackballRadiusPixelsUVE,
+                              trackballActive ? IM_COL32(255, 232, 110, 64) : IM_COL32(210, 220, 235, 35), 32);
+    drawList->AddCircle(ImVec2{center.x, center.y}, kTrackballRadiusPixelsUVE,
+                        trackballActive ? IM_COL32(255, 232, 110, 235) : IM_COL32(210, 220, 235, 145), 32,
+                        trackballActive ? 2.5F : 1.25F);
 
     for (const EditorTranslateAxisUVE axis : axes) {
         Math::Vector3UVE first{};
@@ -2740,7 +2867,8 @@ void EditorUVE::DrawRotateGizmoUVE(const EditorViewportRectUVE& viewportRect) {
             second = Math::RotateVectorUVE(rotation, second);
         }
 
-        const bool active = m_gizmoDrag.mode == EditorGizmoModeUVE::Rotate && m_gizmoDrag.axis == axis;
+        const bool active = m_gizmoDrag.mode == EditorGizmoModeUVE::Rotate &&
+                            m_gizmoDrag.handleKind == GizmoHandleKindUVE::Axis && m_gizmoDrag.axis == axis;
         const ImU32 color = GizmoAxisColorUVE(axis, active);
         for (int segment = 0; segment < kRingSegmentCountUVE; ++segment) {
             const float startParameter = static_cast<float>(segment) * segmentRadians;

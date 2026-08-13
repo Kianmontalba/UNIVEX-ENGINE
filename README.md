@@ -71,7 +71,10 @@ XY/XZ/YZ plane handles in the positive 20–60% gizmo quadrant; axis hits always
 both captured screen-space basis coefficients independently before applying the existing parent-safe local delta path.
 Rotate mode uses world-axis X/Y/Z rings,
 converts a parented entity's world-axis delta back to its local quaternion, and preserves local position
-and scale. Scale mode uses X/Y/Z square handles to edit one strictly positive authored local-scale component.
+and scale. Its inner translucent disc is a camera-oriented **Free Rotation Trackball**: ring hits retain priority,
+while a center drag maps pointer movement to an edge-clamped virtual sphere for arbitrary world-axis rotation. Pointer
+movement beyond the disc remains defined at the sphere edge; ambiguous near-180-degree antipodal drags cancel and restore
+the captured Transform rather than choosing an unstable arbitrary axis. Scale mode uses X/Y/Z square handles to edit one strictly positive authored local-scale component.
 Its center square is **Uniform Scale Offset**: a captured shared additive local-scale delta is applied to X/Y/Z;
 it is intentionally not proportional/multiplicative scaling. If any proposed component falls below `0.001`, the
 whole center-handle gesture cancels and restores its captured Transform instead of clamping an individual axis. The editor-only viewport camera now supports
@@ -91,7 +94,7 @@ offers a case-insensitive path filter; it does not scan filesystems, import asse
 Viewport picking intentionally selects only live document entities with the existing box collider
 component. A selected collider-backed document entity receives a read-only cyan oriented bounds overlay with corner
 and center markers; this feedback follows its derived world transform and never changes scene data or history.
-Mesh picking, mesh-derived bounds, negative scale, proportional/multiplicative scale, trackball rotation, fly navigation, camera bookmarks, cinematic
+Mesh picking, mesh-derived bounds, negative scale, proportional/multiplicative scale, fly navigation, camera bookmarks, cinematic
 camera tools, filesystem browsing, import/reimport, asset drag-and-drop, thumbnails,
 layout persistence, child ordering,
 multi-entity lifecycle operations, and OS clipboard copy/paste remain future increments.
