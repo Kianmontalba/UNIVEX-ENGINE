@@ -1711,5 +1711,30 @@ TEST(EditorUVETest, PlayModeSandbox_HandlesEmptyDocumentAndMissingControlSafely)
     engine.Shutdown();
 }
 
+TEST(EditorUVETest, GizmoCoordinateSpaceUVE_DefaultsToWorldAndRejectsSandboxChanges) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_coordinate_space.uvescene", 100U, &engine);
+        editor.InitUVE();
+        EXPECT_EQ(editor.GetGizmoCoordinateSpaceUVE(), EditorGizmoCoordinateSpaceUVE::World);
+        EXPECT_TRUE(editor.SetGizmoCoordinateSpaceUVE(EditorGizmoCoordinateSpaceUVE::Local));
+        EXPECT_EQ(editor.GetGizmoCoordinateSpaceUVE(), EditorGizmoCoordinateSpaceUVE::Local);
+        EXPECT_TRUE(editor.SetGizmoCoordinateSpaceUVE(EditorGizmoCoordinateSpaceUVE::World));
+
+        ASSERT_TRUE(editor.EnterPlayModeUVE());
+        EXPECT_FALSE(editor.SetGizmoCoordinateSpaceUVE(EditorGizmoCoordinateSpaceUVE::Local));
+        ASSERT_TRUE(editor.PausePlayModeUVE());
+        EXPECT_FALSE(editor.SetGizmoCoordinateSpaceUVE(EditorGizmoCoordinateSpaceUVE::Local));
+        ASSERT_TRUE(editor.StopPlayModeUVE());
+        EXPECT_TRUE(editor.SetGizmoCoordinateSpaceUVE(EditorGizmoCoordinateSpaceUVE::Local));
+        editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
+}
+
 } // namespace
 } // namespace UVE::Editor::Tests

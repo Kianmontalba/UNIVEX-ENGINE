@@ -47,8 +47,8 @@ struct EditorViewportRectUVE final {
     Math::Vector2UVE size{};
 };
 
-/// World-space axes supported by EditorUVE's first Translate, Rotate, and Scale gizmo slice. Planar
-/// handles, local axes, free/trackball rotation, and multi-selection are intentionally deferred.
+/// Canonical named axes used by EditorUVE's Translate, Rotate, and Scale gizmos. The active
+/// coordinate space chooses whether their world or selected-entity-local basis is used.
 enum class EditorTranslateAxisUVE {
     None,
     X,
@@ -56,12 +56,19 @@ enum class EditorTranslateAxisUVE {
     Z,
 };
 
-/// Selects the active first-pass transform-gizmo handle family. All modes use world axes for
-/// interaction; local axes, uniform/negative scale, and trackball rotation remain future increments.
+/// Selects the active transform-gizmo handle family. Handles use the session-local World or Local
+/// coordinate space, while uniform/negative scale and trackball rotation remain future work.
 enum class EditorGizmoModeUVE {
     Translate,
     Rotate,
     Scale,
+};
+
+/// Selects whether transform handles use canonical world axes or the selected entity's derived
+/// world orientation. This editor session preference is never serialized or added to history.
+enum class EditorGizmoCoordinateSpaceUVE {
+    World,
+    Local,
 };
 
 /// Session-local transform snapping settings. These values are editor-only and are not serialized
@@ -195,6 +202,8 @@ public:
     /// navigation gesture is active, preserving the transaction currently in progress.
     void SetGizmoModeUVE(EditorGizmoModeUVE mode) noexcept;
     [[nodiscard]] EditorGizmoModeUVE GetGizmoModeUVE() const noexcept;
+    [[nodiscard]] bool SetGizmoCoordinateSpaceUVE(EditorGizmoCoordinateSpaceUVE coordinateSpace);
+    [[nodiscard]] EditorGizmoCoordinateSpaceUVE GetGizmoCoordinateSpaceUVE() const noexcept;
 
     /// Replaces session-local snapping settings only when every increment is finite and strictly
     /// positive and no transform/navigation gesture is active. Returns false without mutation otherwise.
@@ -280,13 +289,31 @@ private:
         std::optional<EditorSelectionPathUVE> selectionBefore;
     };
 
+    enum class EditorTranslatePlaneUVE {
+        None,
+        XY,
+        XZ,
+        YZ,
+    };
+
+    enum class GizmoHandleKindUVE {
+        Axis,
+        Plane,
+    };
+
     struct GizmoDragUVE final {
         EditorGizmoModeUVE mode = EditorGizmoModeUVE::Translate;
+        GizmoHandleKindUVE handleKind = GizmoHandleKindUVE::Axis;
         EditorTranslateAxisUVE axis = EditorTranslateAxisUVE::None;
+        EditorTranslatePlaneUVE plane = EditorTranslatePlaneUVE::None;
         Scene::EntityUVE entity = Scene::kInvalidEntityUVE;
         Scene::TransformComponentUVE initialLocalTransform{};
         Math::Vector2UVE initialPointer{};
         Math::Vector2UVE screenAxisDirection{};
+        Math::Vector2UVE screenPlaneAxisA{};
+        Math::Vector2UVE screenPlaneAxisB{};
+        Math::Vector3UVE worldAxisA{};
+        Math::Vector3UVE worldAxisB{};
         EditorViewportRectUVE viewportRect{};
         float pixelsPerWorldUnit = 0.0F;
         float initialRingParameterRadians = 0.0F;
@@ -378,6 +405,10 @@ private:
         const EditorTransformSnappingSettingsUVE& settings) const noexcept;
     [[nodiscard]] float SnapScalarUVE(float value, float increment) const noexcept;
     [[nodiscard]] Math::Vector3UVE GetAxisVectorUVE(EditorTranslateAxisUVE axis) const noexcept;
+    [[nodiscard]] bool GetGizmoAxisWorldVectorUVE(Scene::EntityUVE entity, EditorTranslateAxisUVE axis,
+                                                    Math::Vector3UVE& outAxis) const;
+    [[nodiscard]] bool GetPlaneAxesUVE(EditorTranslatePlaneUVE plane, Math::Vector3UVE& outAxisA,
+                                        Math::Vector3UVE& outAxisB) const noexcept;
     [[nodiscard]] bool ProjectWorldPointUVE(const EditorViewportRectUVE& viewportRect,
                                              const Math::Vector3UVE& worldPoint,
                                              Math::Vector2UVE& outScreenPoint) const;
@@ -386,7 +417,7 @@ private:
                                                            Math::Vector3UVE& outLocalDelta) const;
     [[nodiscard]] bool ComputeLocalRotationForWorldAxisUVE(Scene::EntityUVE entity,
                                                             const Math::QuaternionUVE& initialLocalRotation,
-                                                            EditorTranslateAxisUVE axis, float radians,
+                                                            const Math::Vector3UVE& worldAxis, float radians,
                                                             Math::QuaternionUVE& outLocalRotation) const;
     [[nodiscard]] bool ApplyViewportCameraUVE();
     [[nodiscard]] bool IsViewportNavigationFiniteUVE() const noexcept;
@@ -454,6 +485,7 @@ private:
     std::filesystem::path m_activeScenePath;
     std::size_t m_historyCapacity = 100U;
     EditorGizmoModeUVE m_gizmoMode = EditorGizmoModeUVE::Translate;
+    EditorGizmoCoordinateSpaceUVE m_gizmoCoordinateSpace = EditorGizmoCoordinateSpaceUVE::World;
     EditorTransformSnappingSettingsUVE m_transformSnappingSettings{};
     GizmoDragUVE m_gizmoDrag{};
     Math::Vector3UVE m_viewportFocusPoint{0.0F, 1.5F, 0.0F};
