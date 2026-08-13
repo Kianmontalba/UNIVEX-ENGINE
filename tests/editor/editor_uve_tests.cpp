@@ -1489,6 +1489,63 @@ TEST(EditorUVETest, ScaleSelectedAlongAxis_RejectsUnsafeInputWithoutMutation) {
     engine.Shutdown();
 }
 
+TEST(EditorUVETest, ScaleSelectedUniformlyUVE_AppliesAdditiveOffsetAndSnapping) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_uniform_scale_offset.uvescene");
+        editor.InitUVE();
+        Scene::IEntityManagerUVE& entityManager = engine.GetServicesUVE().GetEntityManagerUVE();
+        const Scene::EntityUVE entity = entityManager.CreateEntityUVE();
+        Scene::TransformComponentUVE initial{};
+        initial.localScale = Math::Vector3UVE{2.0F, 1.0F, 1.0F};
+        AttachRootUVE(engine, entity, initial);
+        editor.SelectEntityUVE(entity);
+        ASSERT_TRUE(editor.ScaleSelectedUniformlyUVE(1.0F));
+        const Scene::TransformComponentUVE& additive =
+            entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity);
+        EXPECT_NEAR(additive.localScale.x, 3.0F, 0.0001F);
+        EXPECT_NEAR(additive.localScale.y, 2.0F, 0.0001F);
+        EXPECT_NEAR(additive.localScale.z, 2.0F, 0.0001F);
+        EditorTransformSnappingSettingsUVE settings{};
+        settings.enabled = true;
+        settings.scaleStep = 0.25F;
+        ASSERT_TRUE(editor.SetTransformSnappingSettingsUVE(settings));
+        ASSERT_TRUE(editor.ScaleSelectedUniformlyUVE(0.37F));
+        const Scene::TransformComponentUVE& snapped =
+            entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity);
+        EXPECT_NEAR(snapped.localScale.x, 3.25F, 0.0001F);
+        EXPECT_NEAR(snapped.localScale.y, 2.25F, 0.0001F);
+        EXPECT_NEAR(snapped.localScale.z, 2.25F, 0.0001F);
+        editor.ShutdownUVE();
+    }
+    engine.Shutdown();
+}
+
+TEST(EditorUVETest, ScaleSelectedUniformlyUVE_RejectsAsymmetricFloorWithoutPartialMutation) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_uniform_scale_floor.uvescene");
+        editor.InitUVE();
+        Scene::IEntityManagerUVE& entityManager = engine.GetServicesUVE().GetEntityManagerUVE();
+        const Scene::EntityUVE entity = entityManager.CreateEntityUVE();
+        Scene::TransformComponentUVE initial{};
+        initial.localScale = Math::Vector3UVE{0.01F, 5.0F, 5.0F};
+        AttachRootUVE(engine, entity, initial);
+        editor.SelectEntityUVE(entity);
+        EXPECT_FALSE(editor.ScaleSelectedUniformlyUVE(-0.02F));
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity).localScale,
+                  initial.localScale);
+        EXPECT_FALSE(editor.IsSceneDirtyUVE());
+        EXPECT_FALSE(editor.CanUndoUVE());
+        editor.ShutdownUVE();
+    }
+    engine.Shutdown();
+}
+
 TEST(EditorUVETest, SelectedBoundsQuery_BuildsIdentityWorldBoxWithoutMutatingEditorState) {
     Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
     engine.Init();

@@ -678,6 +678,33 @@ bool EditorUVE::ScaleSelectedAlongAxisUVE(const EditorTranslateAxisUVE axis,
     return SetSelectedLocalTransformUVE(updated);
 }
 
+bool EditorUVE::ScaleSelectedUniformlyUVE(const float localScaleOffset) {
+    if (!IsAuthoringCommandAllowedUVE() || !IsDocumentEntityUVE(m_selectedEntity) ||
+        !IsFiniteUVE(localScaleOffset) || m_gizmoDrag.axis != EditorTranslateAxisUVE::None ||
+        m_viewportNavigationMode != EditorViewportNavigationModeUVE::None) {
+        return false;
+    }
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    if (!entityManager.HasComponentUVE<Scene::TransformComponentUVE>(m_selectedEntity)) {
+        return false;
+    }
+    const float snappedOffset = m_transformSnappingSettings.enabled
+                                    ? SnapScalarUVE(localScaleOffset, m_transformSnappingSettings.scaleStep)
+                                    : localScaleOffset;
+    Scene::TransformComponentUVE updated =
+        entityManager.GetComponentUVE<Scene::TransformComponentUVE>(m_selectedEntity);
+    updated.localScale.x += snappedOffset;
+    updated.localScale.y += snappedOffset;
+    updated.localScale.z += snappedOffset;
+    if (!IsFiniteUVE(snappedOffset) || !IsFiniteUVE(updated.localScale.x) ||
+        !IsFiniteUVE(updated.localScale.y) || !IsFiniteUVE(updated.localScale.z) ||
+        updated.localScale.x < kMinimumLocalScaleUVE || updated.localScale.y < kMinimumLocalScaleUVE ||
+        updated.localScale.z < kMinimumLocalScaleUVE) {
+        return false;
+    }
+    return SetSelectedLocalTransformUVE(updated);
+}
+
 void EditorUVE::SetGizmoModeUVE(const EditorGizmoModeUVE mode) noexcept {
     if (!IsAuthoringCommandAllowedUVE() || m_gizmoDrag.axis != EditorTranslateAxisUVE::None ||
         m_viewportNavigationMode != EditorViewportNavigationModeUVE::None) {
@@ -2022,6 +2049,8 @@ bool EditorUVE::BeginGizmoDragUVE(const EditorViewportRectUVE& viewportRect,
     }
 
     float bestDistanceSquared = std::numeric_limits<float>::max();
+    float uniformPixelsPerWorldUnitSum = 0.0F;
+    std::size_t uniformPixelsPerWorldUnitCount = 0U;
     GizmoDragUVE candidate{};
     constexpr std::array<EditorTranslateAxisUVE, 3> axes{
         EditorTranslateAxisUVE::X,
@@ -2045,17 +2074,21 @@ bool EditorUVE::BeginGizmoDragUVE(const EditorViewportRectUVE& viewportRect,
             continue;
         }
 
+        const float axisLength = std::sqrt(axisLengthSquared);
+        uniformPixelsPerWorldUnitSum += axisLength / kGizmoAxisLengthUVE;
+        ++uniformPixelsPerWorldUnitCount;
         const Math::Vector2UVE pointerOffset{pointerPosition.x - center.x, pointerPosition.y - center.y};
         const float along = std::clamp(Dot2UVE(pointerOffset, screenAxis) / axisLengthSquared, 0.0F, 1.0F);
-        const Math::Vector2UVE closestPoint{center.x + screenAxis.x * along, center.y + screenAxis.y * along};
+        const Math::Vector2UVE closestPoint = m_gizmoMode == EditorGizmoModeUVE::Scale
+                                                  ? endpoint
+                                                  : Math::Vector2UVE{center.x + screenAxis.x * along,
+                                                                     center.y + screenAxis.y * along};
         const Math::Vector2UVE distanceVector{pointerPosition.x - closestPoint.x, pointerPosition.y - closestPoint.y};
         const float distanceSquared = LengthSquared2UVE(distanceVector);
         if (distanceSquared > (kGizmoHandleRadiusPixelsUVE * kGizmoHandleRadiusPixelsUVE) ||
             distanceSquared >= bestDistanceSquared) {
             continue;
         }
-
-        const float axisLength = std::sqrt(axisLengthSquared);
         candidate.mode = m_gizmoMode;
         candidate.axis = axis;
         candidate.entity = m_selectedEntity;
@@ -2069,8 +2102,28 @@ bool EditorUVE::BeginGizmoDragUVE(const EditorViewportRectUVE& viewportRect,
         bestDistanceSquared = distanceSquared;
     }
 
+    // Axis/endpoint candidates win deterministically. The Scale center is a fallback only after every axis hit.
+    if (candidate.axis == EditorTranslateAxisUVE::None && m_gizmoMode == EditorGizmoModeUVE::Scale &&
+        uniformPixelsPerWorldUnitCount > 0U) {
+        const Math::Vector2UVE centerOffset{pointerPosition.x - center.x, pointerPosition.y - center.y};
+        const float centerDistanceSquared = LengthSquared2UVE(centerOffset);
+        if (centerDistanceSquared <= (kGizmoHandleRadiusPixelsUVE * kGizmoHandleRadiusPixelsUVE)) {
+            candidate.mode = EditorGizmoModeUVE::Scale;
+            candidate.handleKind = GizmoHandleKindUVE::UniformScaleOffset;
+            candidate.axis = EditorTranslateAxisUVE::X;
+            candidate.entity = m_selectedEntity;
+            candidate.initialLocalTransform = entityManager.GetComponentUVE<Scene::TransformComponentUVE>(m_selectedEntity);
+            candidate.initialPointer = pointerPosition;
+            candidate.screenCenter = center;
+            candidate.pixelsPerWorldUnit =
+                uniformPixelsPerWorldUnitSum / static_cast<float>(uniformPixelsPerWorldUnitCount);
+            candidate.initialDirty = m_sceneDirty;
+        }
+    }
+
     // Axis/endpoint candidates win deterministically. Plane handles are considered only when no axis hit exists.
-    if (candidate.axis == EditorTranslateAxisUVE::None && m_gizmoMode == EditorGizmoModeUVE::Translate) {
+    if (candidate.axis == EditorTranslateAxisUVE::None && candidate.handleKind != GizmoHandleKindUVE::UniformScaleOffset &&
+        m_gizmoMode == EditorGizmoModeUVE::Translate) {
         constexpr std::array<EditorTranslatePlaneUVE, 3> planes{
             EditorTranslatePlaneUVE::XY, EditorTranslatePlaneUVE::XZ, EditorTranslatePlaneUVE::YZ};
         for (const EditorTranslatePlaneUVE plane : planes) {
@@ -2121,7 +2174,8 @@ bool EditorUVE::BeginGizmoDragUVE(const EditorViewportRectUVE& viewportRect,
         }
     }
 
-    if (candidate.axis == EditorTranslateAxisUVE::None ||
+    if ((candidate.axis == EditorTranslateAxisUVE::None &&
+         candidate.handleKind != GizmoHandleKindUVE::UniformScaleOffset) ||
         candidate.pixelsPerWorldUnit <= kVectorEpsilonUVE ||
         !IsFiniteUVE(candidate.pixelsPerWorldUnit)) {
         return false;
@@ -2263,7 +2317,9 @@ bool EditorUVE::BeginRotateGizmoDragUVE(const EditorViewportRectUVE& viewportRec
 }
 
 void EditorUVE::UpdateGizmoDragUVE(const Math::Vector2UVE pointerPosition) {
-    if (!IsAuthoringCommandAllowedUVE() || m_gizmoDrag.axis == EditorTranslateAxisUVE::None ||
+    if (!IsAuthoringCommandAllowedUVE() ||
+        (m_gizmoDrag.axis == EditorTranslateAxisUVE::None &&
+         m_gizmoDrag.handleKind != GizmoHandleKindUVE::UniformScaleOffset) ||
         !IsDocumentEntityUVE(m_gizmoDrag.entity) ||
         m_gizmoDrag.entity != m_selectedEntity || !IsFiniteUVE(pointerPosition.x) ||
         !IsFiniteUVE(pointerPosition.y)) {
@@ -2297,6 +2353,32 @@ void EditorUVE::UpdateGizmoDragUVE(const Math::Vector2UVE pointerPosition) {
         Scene::TransformComponentUVE updated = m_gizmoDrag.initialLocalTransform;
         updated.localRotation = localRotation;
         if (!ApplyLocalTransformUVE(m_gizmoDrag.entity, updated)) {
+            CancelGizmoDragUVE();
+            return;
+        }
+        m_sceneDirty = true;
+        return;
+    }
+
+    if (m_gizmoDrag.handleKind == GizmoHandleKindUVE::UniformScaleOffset) {
+        const Math::Vector2UVE initialOffset{m_gizmoDrag.initialPointer.x - m_gizmoDrag.screenCenter.x,
+                                             m_gizmoDrag.initialPointer.y - m_gizmoDrag.screenCenter.y};
+        const Math::Vector2UVE currentOffset{pointerPosition.x - m_gizmoDrag.screenCenter.x,
+                                              pointerPosition.y - m_gizmoDrag.screenCenter.y};
+        const float initialRadius = std::sqrt(LengthSquared2UVE(initialOffset));
+        const float currentRadius = std::sqrt(LengthSquared2UVE(currentOffset));
+        const float rawOffset = (currentRadius - initialRadius) / m_gizmoDrag.pixelsPerWorldUnit;
+        const float uniformOffset = m_transformSnappingSettings.enabled
+                                        ? SnapScalarUVE(rawOffset, m_transformSnappingSettings.scaleStep)
+                                        : rawOffset;
+        Scene::TransformComponentUVE updated = m_gizmoDrag.initialLocalTransform;
+        updated.localScale.x += uniformOffset;
+        updated.localScale.y += uniformOffset;
+        updated.localScale.z += uniformOffset;
+        if (!IsFiniteUVE(uniformOffset) || !IsFiniteUVE(updated.localScale.x) ||
+            !IsFiniteUVE(updated.localScale.y) || !IsFiniteUVE(updated.localScale.z) ||
+            updated.localScale.x < kMinimumLocalScaleUVE || updated.localScale.y < kMinimumLocalScaleUVE ||
+            updated.localScale.z < kMinimumLocalScaleUVE || !ApplyLocalTransformUVE(m_gizmoDrag.entity, updated)) {
             CancelGizmoDragUVE();
             return;
         }
@@ -2400,7 +2482,9 @@ void EditorUVE::UpdateGizmoDragUVE(const Math::Vector2UVE pointerPosition) {
 void EditorUVE::CommitGizmoDragUVE() {
     const GizmoDragUVE completedDrag = m_gizmoDrag;
     m_gizmoDrag = GizmoDragUVE{};
-    if (completedDrag.axis == EditorTranslateAxisUVE::None || !IsDocumentEntityUVE(completedDrag.entity)) {
+    if ((completedDrag.axis == EditorTranslateAxisUVE::None &&
+         completedDrag.handleKind != GizmoHandleKindUVE::UniformScaleOffset) ||
+        !IsDocumentEntityUVE(completedDrag.entity)) {
         return;
     }
 
@@ -2428,7 +2512,9 @@ void EditorUVE::CommitGizmoDragUVE() {
 void EditorUVE::CancelGizmoDragUVE() noexcept {
     const GizmoDragUVE cancelledDrag = m_gizmoDrag;
     m_gizmoDrag = GizmoDragUVE{};
-    if (cancelledDrag.axis == EditorTranslateAxisUVE::None || !IsDocumentEntityUVE(cancelledDrag.entity)) {
+    if ((cancelledDrag.axis == EditorTranslateAxisUVE::None &&
+         cancelledDrag.handleKind != GizmoHandleKindUVE::UniformScaleOffset) ||
+        !IsDocumentEntityUVE(cancelledDrag.entity)) {
         return;
     }
 
@@ -2590,8 +2676,12 @@ void EditorUVE::DrawScaleGizmoUVE(const EditorViewportRectUVE& viewportRect) {
     };
     ImDrawList* const drawList = ImGui::GetForegroundDrawList();
     const ImVec2 centerPoint{center.x, center.y};
-    drawList->AddRectFilled(ImVec2{center.x - 4.0F, center.y - 4.0F}, ImVec2{center.x + 4.0F, center.y + 4.0F},
-                            IM_COL32(235, 235, 235, 220));
+    const bool uniformActive = m_gizmoDrag.mode == EditorGizmoModeUVE::Scale &&
+                               m_gizmoDrag.handleKind == GizmoHandleKindUVE::UniformScaleOffset;
+    const float uniformHalfSize = uniformActive ? 6.5F : 4.0F;
+    drawList->AddRectFilled(ImVec2{center.x - uniformHalfSize, center.y - uniformHalfSize},
+                            ImVec2{center.x + uniformHalfSize, center.y + uniformHalfSize},
+                            uniformActive ? IM_COL32(255, 230, 90, 245) : IM_COL32(235, 235, 235, 220));
     for (const EditorTranslateAxisUVE axis : axes) {
         Math::Vector3UVE worldAxis{};
         Math::Vector2UVE endpoint{};
@@ -2599,7 +2689,8 @@ void EditorUVE::DrawScaleGizmoUVE(const EditorViewportRectUVE& viewportRect) {
             !ProjectWorldPointUVE(viewportRect, selectedWorld.worldPosition + worldAxis * kGizmoAxisLengthUVE, endpoint)) {
             continue;
         }
-        const bool active = m_gizmoDrag.mode == EditorGizmoModeUVE::Scale && m_gizmoDrag.axis == axis;
+        const bool active = m_gizmoDrag.mode == EditorGizmoModeUVE::Scale &&
+                            m_gizmoDrag.handleKind == GizmoHandleKindUVE::Axis && m_gizmoDrag.axis == axis;
         const ImU32 color = GizmoAxisColorUVE(axis, active);
         const ImVec2 endpointPoint{endpoint.x, endpoint.y};
         const float halfSize = active ? 6.5F : 5.0F;
@@ -3257,7 +3348,7 @@ void EditorUVE::DrawViewportPanelUVE() {
         const char* const modeLabel = m_gizmoMode == EditorGizmoModeUVE::Translate
                                           ? "Translate (W)"
                                           : (m_gizmoMode == EditorGizmoModeUVE::Rotate ? "Rotate (E)"
-                                                                                       : "Scale (R)");
+                                                                                       : "Scale (R) | center: Uniform Offset");
         drawList->AddText(ImVec2{contentOrigin.x + 10.0F, contentOrigin.y + 10.0F}, IM_COL32(230, 230, 230, 220),
                           "Viewport | LMB select / drag handle | RMB orbit | MMB pan | wheel zoom | F focus");
         drawList->AddText(ImVec2{contentOrigin.x + 10.0F, contentOrigin.y + 30.0F}, IM_COL32(190, 215, 235, 220),

@@ -205,6 +205,11 @@ public:
     /// gesture, or a proposed zero/negative/non-finite scale result.
     [[nodiscard]] bool ScaleSelectedAlongAxisUVE(EditorTranslateAxisUVE axis, float localScaleDelta);
 
+    /// Adds one finite local-scale offset to every authored local-scale component of the selected
+    /// entity. The command rejects as a whole if any proposed component is non-finite or below the
+    /// positive scale floor; it never clamps individual components or performs proportional scaling.
+    [[nodiscard]] bool ScaleSelectedUniformlyUVE(float localScaleOffset);
+
     /// Changes the transform handle family. Mode changes are ignored while a gizmo drag or viewport
     /// navigation gesture is active, preserving the transaction currently in progress.
     void SetGizmoModeUVE(EditorGizmoModeUVE mode) noexcept;
@@ -308,6 +313,7 @@ private:
     enum class GizmoHandleKindUVE {
         Axis,
         Plane,
+        UniformScaleOffset,
     };
 
     struct GizmoDragUVE final {
@@ -318,6 +324,7 @@ private:
         Scene::EntityUVE entity = Scene::kInvalidEntityUVE;
         Scene::TransformComponentUVE initialLocalTransform{};
         Math::Vector2UVE initialPointer{};
+        Math::Vector2UVE screenCenter{};
         Math::Vector2UVE screenAxisDirection{};
         Math::Vector2UVE screenPlaneAxisA{};
         Math::Vector2UVE screenPlaneAxisB{};
