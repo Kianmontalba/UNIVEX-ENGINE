@@ -13,6 +13,7 @@
 
 #include "uve/asset/i_asset_database_uve.h"
 #include "uve/asset/i_project_file_index_uve.h"
+#include "uve/asset/i_project_change_watcher_uve.h"
 #include "uve/core/engine_services_uve.h"
 #include "uve/core/i_simulation_control_uve.h"
 #include "uve/math/ray_uve.h"
@@ -592,6 +593,9 @@ private:
     void DrawInspectorContentUVE();
     void DrawImportQueueMonitorUVE();
     void DrawViewportPanelUVE();
+    /// Renders a copied watcher journal as read-only editor feedback. The helper never schedules
+    /// imports, refreshes the project index, or mutates the project filesystem.
+    void DrawProjectChangeJournalUVE(const Asset::ProjectChangeSnapshotUVE& snapshot);
     void DrawAssetsPanelUVE();
 
     Core::EngineServicesUVE* m_services = nullptr;

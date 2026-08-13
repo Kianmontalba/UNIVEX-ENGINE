@@ -213,5 +213,102 @@ TEST(AssetContentFingerprintUVETest, ComputeUVE_IsTimestampIndependentAndByteSen
     std::filesystem::remove_all(root);
 }
 
+// Increment 61 stale-metadata regressions remain intentionally beside queue cache-hit coverage:
+// the cache owns persistence and the queue owns acceptance of a persisted record.
+TEST_F(AssetImportQueueUVETest, DerivedArtifactCacheUVE_MarkStaleForSourceUVE_IsTargetedAndIdempotent) {
+    const std::filesystem::path firstSource = root / "first-source.custom";
+    const std::filesystem::path secondSource = root / "second-source.custom";
+    const std::filesystem::path firstDestination = contentRoot / "first-output.custom";
+    const std::filesystem::path secondDestination = contentRoot / "second-output.custom";
+    WriteFixtureFileUVE(firstSource, "first source");
+    WriteFixtureFileUVE(secondSource, "second source");
+    WriteFixtureFileUVE(firstDestination, "first destination");
+    WriteFixtureFileUVE(secondDestination, "second destination");
+
+    const std::optional<AssetContentFingerprintUVE> firstSourceFingerprint =
+        ComputeAssetContentFingerprintUVE(firstSource);
+    const std::optional<AssetContentFingerprintUVE> secondSourceFingerprint =
+        ComputeAssetContentFingerprintUVE(secondSource);
+    const std::optional<AssetContentFingerprintUVE> firstDestinationFingerprint =
+        ComputeAssetContentFingerprintUVE(firstDestination);
+    const std::optional<AssetContentFingerprintUVE> secondDestinationFingerprint =
+        ComputeAssetContentFingerprintUVE(secondDestination);
+    ASSERT_TRUE(firstSourceFingerprint.has_value());
+    ASSERT_TRUE(secondSourceFingerprint.has_value());
+    ASSERT_TRUE(firstDestinationFingerprint.has_value());
+    ASSERT_TRUE(secondDestinationFingerprint.has_value());
+
+    const DerivedArtifactCacheRecordUVE firstRecord{kDerivedArtifactCacheSchemaVersionUVE,
+                                                     firstSource,
+                                                     firstDestination,
+                                                     *firstSourceFingerprint,
+                                                     *firstDestinationFingerprint,
+                                                     "generic-v1",
+                                                     AssetGuidUVE{1U}};
+    const DerivedArtifactCacheRecordUVE secondRecord{kDerivedArtifactCacheSchemaVersionUVE,
+                                                      secondSource,
+                                                      secondDestination,
+                                                      *secondSourceFingerprint,
+                                                      *secondDestinationFingerprint,
+                                                      "generic-v1",
+                                                      AssetGuidUVE{2U}};
+    ASSERT_TRUE(cache.StoreImportRecordUVE(firstDestination, firstRecord));
+    ASSERT_TRUE(cache.StoreImportRecordUVE(secondDestination, secondRecord));
+
+    EXPECT_EQ(cache.MarkStaleForSourceUVE(firstSource), 1U);
+    const std::optional<DerivedArtifactCacheRecordUVE> staleFirst = cache.LoadImportRecordUVE(firstDestination);
+    const std::optional<DerivedArtifactCacheRecordUVE> freshSecond = cache.LoadImportRecordUVE(secondDestination);
+    ASSERT_TRUE(staleFirst.has_value());
+    ASSERT_TRUE(freshSecond.has_value());
+    EXPECT_TRUE(staleFirst->stale);
+    EXPECT_FALSE(freshSecond->stale);
+    EXPECT_EQ(cache.MarkStaleForSourceUVE(root / "unrelated-source.custom"), 0U);
+    EXPECT_EQ(cache.MarkStaleForSourceUVE(firstSource), 0U);
+    EXPECT_FALSE(cache.LoadImportRecordUVE(secondDestination)->stale);
+}
+
+TEST_F(AssetImportQueueUVETest, CacheUVE_StaleRecordForcesFreshImportAndSuccessfulWriteClearsStaleState) {
+    const std::filesystem::path source = root / "source.custom";
+    const std::filesystem::path destination = contentRoot / "output.custom";
+    WriteFixtureFileUVE(source, "source bytes");
+    std::filesystem::create_directories(contentRoot);
+
+    int importerCallCount = 0;
+    importer.RegisterImporterUVE("custom", [&importerCallCount](const std::filesystem::path& sourcePath,
+                                                                   const std::filesystem::path& destinationPath,
+                                                                   const AssetImportSettingsUVE&) {
+        ++importerCallCount;
+        std::ifstream input(sourcePath, std::ios::binary);
+        std::ofstream output(destinationPath, std::ios::binary | std::ios::trunc);
+        output << input.rdbuf();
+        return input.good() || input.eof();
+    });
+
+    ASSERT_TRUE(queue.EnqueueUVE(MakeRequestUVE(source, destination)).has_value());
+    ASSERT_TRUE(queue.TickUVE());
+    EXPECT_EQ(importerCallCount, 1);
+    ASSERT_EQ(cache.MarkStaleForSourceUVE(source), 1U);
+    const std::optional<DerivedArtifactCacheRecordUVE> staleRecord = cache.LoadImportRecordUVE(destination);
+    ASSERT_TRUE(staleRecord.has_value());
+    EXPECT_TRUE(staleRecord->stale);
+
+    ASSERT_TRUE(queue.EnqueueUVE(MakeRequestUVE(source, destination)).has_value());
+    ASSERT_TRUE(queue.TickUVE());
+    EXPECT_EQ(importerCallCount, 2);
+    const std::vector<AssetImportJobUVE> jobsAfterFreshImport = queue.GetJobsUVE();
+    ASSERT_EQ(jobsAfterFreshImport.size(), 2U);
+    EXPECT_FALSE(jobsAfterFreshImport[1].cacheHit);
+    const std::optional<DerivedArtifactCacheRecordUVE> refreshedRecord = cache.LoadImportRecordUVE(destination);
+    ASSERT_TRUE(refreshedRecord.has_value());
+    EXPECT_FALSE(refreshedRecord->stale);
+
+    ASSERT_TRUE(queue.EnqueueUVE(MakeRequestUVE(source, destination)).has_value());
+    ASSERT_TRUE(queue.TickUVE());
+    EXPECT_EQ(importerCallCount, 2);
+    const std::vector<AssetImportJobUVE> finalJobs = queue.GetJobsUVE();
+    ASSERT_EQ(finalJobs.size(), 3U);
+    EXPECT_TRUE(finalJobs[2].cacheHit);
+}
+
 } // namespace
 } // namespace UVE::Asset::Tests

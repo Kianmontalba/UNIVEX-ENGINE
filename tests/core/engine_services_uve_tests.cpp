@@ -296,6 +296,32 @@ public:
     Asset::ProjectFileSnapshotUVE snapshot;
 };
 
+class FakeProjectChangeWatcherUVE final : public Asset::IProjectChangeWatcherUVE {
+public:
+    [[nodiscard]] bool PollUVE(double, const Asset::IAssetDatabaseUVE&,
+                               Asset::IDerivedArtifactCacheUVE&) override {
+        ++pollCallCount;
+        return true;
+    }
+
+    [[nodiscard]] bool PollNowUVE(const Asset::IAssetDatabaseUVE&,
+                                  Asset::IDerivedArtifactCacheUVE&) override {
+        ++pollNowCallCount;
+        return true;
+    }
+
+    [[nodiscard]] Asset::ProjectChangeSnapshotUVE GetSnapshotUVE() const override { return snapshot; }
+
+    void AcknowledgeThroughUVE(std::uint64_t sequence) override { acknowledgedThrough = sequence; }
+
+    void AcknowledgeRescanUVE() override { snapshot.rescanRequired = false; }
+
+    int pollCallCount = 0;
+    int pollNowCallCount = 0;
+    std::uint64_t acknowledgedThrough = 0U;
+    Asset::ProjectChangeSnapshotUVE snapshot;
+};
+
 class FakeDerivedArtifactCacheUVE final : public Asset::IDerivedArtifactCacheUVE {
 public:
     [[nodiscard]] std::optional<Asset::DerivedArtifactCacheRecordUVE>
@@ -310,10 +336,16 @@ public:
         return true;
     }
 
+    [[nodiscard]] std::size_t MarkStaleForSourceUVE(const std::filesystem::path&) override {
+        ++markStaleCallCount;
+        return 0U;
+    }
+
     [[nodiscard]] std::filesystem::path GetCacheRootUVE() const override { return "fake-derived-cache"; }
 
     mutable int loadCallCount = 0;
     int storeCallCount = 0;
+    int markStaleCallCount = 0;
 };
 
 class FakeAssetImportQueueUVE final : public Asset::IAssetImportQueueUVE {
@@ -788,6 +820,7 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     FakeAssetDatabaseUVE assetDatabase;
     FakeProjectFileIndexUVE projectFileIndex;
     FakeDerivedArtifactCacheUVE derivedArtifactCache;
+    FakeProjectChangeWatcherUVE projectChangeWatcher;
     FakeSceneSerializerUVE sceneSerializer;
     FakePrefabSystemUVE prefabSystem;
     FakeHotReloadUVE hotReload;
@@ -816,7 +849,8 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
 
     const EngineServicesUVE services(logger, timer, eventSystem, memoryManager, threadPool,
                                       commandLine, configManager, entityManager, sceneGraph,
-                                      assetDatabase, projectFileIndex, derivedArtifactCache, sceneSerializer, prefabSystem,
+                                      assetDatabase, projectFileIndex, derivedArtifactCache, projectChangeWatcher,
+                                      sceneSerializer, prefabSystem,
                                       hotReload, assetManager, assetImporter, assetImportQueue, assetBundle, fileSystem,
                                       renderDevice, shaderManager, renderSystem, cameraSystem,
                                       meshRenderer, lightSystem, renderer3D, collisionSystem, physicsSystem,
@@ -836,6 +870,7 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     EXPECT_EQ(&services.GetAssetDatabaseUVE(), &assetDatabase);
     EXPECT_EQ(&services.GetProjectFileIndexUVE(), &projectFileIndex);
     EXPECT_EQ(&services.GetDerivedArtifactCacheUVE(), &derivedArtifactCache);
+    EXPECT_EQ(&services.GetProjectChangeWatcherUVE(), &projectChangeWatcher);
     EXPECT_EQ(&services.GetSceneSerializerUVE(), &sceneSerializer);
     EXPECT_EQ(&services.GetPrefabSystemUVE(), &prefabSystem);
     EXPECT_EQ(&services.GetHotReloadUVE(), &hotReload);
@@ -875,6 +910,7 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     FakeAssetDatabaseUVE assetDatabase;
     FakeProjectFileIndexUVE projectFileIndex;
     FakeDerivedArtifactCacheUVE derivedArtifactCache;
+    FakeProjectChangeWatcherUVE projectChangeWatcher;
     FakeSceneSerializerUVE sceneSerializer;
     FakePrefabSystemUVE prefabSystem;
     FakeHotReloadUVE hotReload;
@@ -902,7 +938,8 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     FakeWindowManagerUVE windowManager;
     const EngineServicesUVE services(logger, timer, eventSystem, memoryManager, threadPool,
                                       commandLine, configManager, entityManager, sceneGraph,
-                                      assetDatabase, projectFileIndex, derivedArtifactCache, sceneSerializer, prefabSystem,
+                                      assetDatabase, projectFileIndex, derivedArtifactCache, projectChangeWatcher,
+                                      sceneSerializer, prefabSystem,
                                       hotReload, assetManager, assetImporter, assetImportQueue, assetBundle, fileSystem,
                                       renderDevice, shaderManager, renderSystem, cameraSystem,
                                       meshRenderer, lightSystem, renderer3D, collisionSystem, physicsSystem,
@@ -921,6 +958,8 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     services.GetAssetDatabaseUVE().SaveUVE();
     static_cast<void>(services.GetProjectFileIndexUVE().RefreshUVE(services.GetAssetDatabaseUVE()));
     static_cast<void>(services.GetDerivedArtifactCacheUVE().LoadImportRecordUVE("unused.asset"));
+    EXPECT_TRUE(services.GetProjectChangeWatcherUVE().PollNowUVE(services.GetAssetDatabaseUVE(),
+                                                                   services.GetDerivedArtifactCacheUVE()));
     static_cast<void>(services.GetAssetImportQueueUVE().TickUVE());
     static_cast<void>(services.GetSceneSerializerUVE().SaveUVE(
         services.GetEntityManagerUVE(), {}, "unused.uvescene", Scene::SceneAssetTypeUVE::Scene));
@@ -965,6 +1004,7 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     EXPECT_EQ(assetDatabase.saveCallCount, 1);
     EXPECT_EQ(projectFileIndex.refreshCallCount, 1);
     EXPECT_EQ(derivedArtifactCache.loadCallCount, 1);
+    EXPECT_EQ(projectChangeWatcher.pollNowCallCount, 1);
     EXPECT_EQ(assetImportQueue.tickCallCount, 1);
     EXPECT_EQ(sceneSerializer.saveCallCount, 1);
     EXPECT_EQ(prefabSystem.savePrefabCallCount, 1);
