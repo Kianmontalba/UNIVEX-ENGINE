@@ -17,6 +17,7 @@ add_library(uve_asset STATIC
     src/hot_reload_uve.cpp
     src/asset_bundle_uve.cpp
     src/file_system_uve.cpp
+    src/project_file_index_uve.cpp
     src/mesh_asset_uve.cpp
     src/texture_asset_uve.cpp
     src/shader_asset_uve.cpp

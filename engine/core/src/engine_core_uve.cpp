@@ -23,6 +23,7 @@
 #include "uve/asset/hot_reload_uve.h"
 #include "uve/asset/material_asset_uve.h"
 #include "uve/asset/mesh_asset_uve.h"
+#include "uve/asset/project_file_index_uve.h"
 #include "uve/asset/shader_asset_uve.h"
 #include "uve/asset/texture_asset_uve.h"
 #include "uve/audio/audio_source_system_uve.h"
@@ -159,8 +160,13 @@ void EngineCoreUVE::Init() {
     assetDatabase->LoadUVE(m_config.assetDatabaseFilePath);
     m_assetDatabase = std::move(assetDatabase);
 
-    // SceneSerializer and PrefabSystem tenth/eleventh: both stateless,
-    // grouped immediately after AssetDatabase for readability.
+    // ProjectFileIndex tenth: holds only an explicit configured content-root
+    // and a cached read-only editor snapshot. It never scans until an editor
+    // caller requests RefreshUVE(), and has no ownership of AssetDatabase.
+    m_projectFileIndex = std::make_unique<Asset::ProjectFileIndexUVE>(m_config.projectContentRootUVE);
+
+    // SceneSerializer and PrefabSystem eleventh/twelfth: both stateless,
+    // grouped immediately after AssetDatabase/ProjectFileIndex for readability.
     m_sceneSerializer = std::make_unique<Scene::SceneSerializerUVE>();
     m_prefabSystem = std::make_unique<Scene::PrefabSystemUVE>();
 
@@ -322,7 +328,7 @@ void EngineCoreUVE::Init() {
 
     m_services.emplace(*m_logger, *m_timer, *m_eventSystem, *m_memoryManager, *m_threadPool,
                         *m_commandLine, *m_configManager, *m_entityManager, *m_sceneGraph,
-                        *m_assetDatabase, *m_sceneSerializer, *m_prefabSystem, *m_hotReload,
+                        *m_assetDatabase, *m_projectFileIndex, *m_sceneSerializer, *m_prefabSystem, *m_hotReload,
                         *m_assetManager, *m_assetImporter, *m_assetBundle, *m_fileSystem,
                         *m_renderDevice, *m_shaderManager, *m_renderSystem, *m_cameraSystem,
                         *m_meshRenderer, *m_lightSystem, *m_renderer3D, *m_collisionSystem, *m_physicsSystem,
@@ -519,6 +525,7 @@ void EngineCoreUVE::Shutdown() {
     m_hotReload.reset();
     m_prefabSystem.reset();
     m_sceneSerializer.reset();
+    m_projectFileIndex.reset();
     m_assetDatabase.reset();
     m_sceneGraph.reset();
 
