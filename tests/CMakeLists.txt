@@ -84,6 +84,7 @@ add_executable(uve_tests
     core/engine_services_uve_tests.cpp
     core/version_uve_tests.cpp
     editor/editor_uve_tests.cpp
+    editor/inspector_drawer_registry_uve_tests.cpp
 )
 target_link_libraries(uve_tests PRIVATE
     uve_platform

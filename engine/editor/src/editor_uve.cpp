@@ -228,7 +228,9 @@ EditorUVE::EditorUVE(Core::EngineServicesUVE& services, std::filesystem::path ac
     : m_services(&services),
       m_simulationControl(simulationControl),
       m_activeScenePath(std::move(activeScenePath)),
-      m_historyCapacity(std::max<std::size_t>(std::size_t{1U}, historyCapacity)) {}
+      m_historyCapacity(std::max<std::size_t>(std::size_t{1U}, historyCapacity)) {
+    RegisterBuiltInInspectorDrawersUVE();
+}
 
 EditorUVE::~EditorUVE() {
     ShutdownUVE();
@@ -3683,26 +3685,65 @@ void EditorUVE::DrawInspectorContentUVE() {
     ImGui::BeginDisabled(!IsAuthoringCommandAllowedUVE());
     ImGui::Text("%s", GetEntityDisplayLabelUVE(m_selectedEntity).c_str());
     ImGui::TextDisabled("%s", EntityLabelUVE(m_selectedEntity).c_str());
+    m_inspectorDrawerRegistry.DrawEligibleUVE(m_selectedEntity);
+    if (!m_services->GetEntityManagerUVE().HasComponentUVE<Scene::TransformComponentUVE>(m_selectedEntity)) {
+        ImGui::TextUnformatted("No local Transform component.");
+    }
+    ImGui::EndDisabled();
+}
+
+void EditorUVE::RegisterBuiltInInspectorDrawersUVE() {
+    static_cast<void>(m_inspectorDrawerRegistry.RegisterDrawerUVE(InspectorDrawerEntryUVE{
+        "name",
+        [this](const Scene::EntityUVE entity) { return IsDocumentEntityUVE(entity); },
+        [this](const Scene::EntityUVE entity) { DrawNameInspectorDrawerUVE(entity); },
+    }));
+    static_cast<void>(m_inspectorDrawerRegistry.RegisterDrawerUVE(InspectorDrawerEntryUVE{
+        "transform",
+        [this](const Scene::EntityUVE entity) {
+            return IsDocumentEntityUVE(entity) &&
+                   m_services->GetEntityManagerUVE().HasComponentUVE<Scene::TransformComponentUVE>(entity);
+        },
+        [this](const Scene::EntityUVE entity) { DrawTransformInspectorDrawerUVE(entity); },
+    }));
+    static_cast<void>(m_inspectorDrawerRegistry.RegisterDrawerUVE(InspectorDrawerEntryUVE{
+        "primitive-mesh",
+        [this](const Scene::EntityUVE entity) {
+            return IsDocumentEntityUVE(entity) &&
+                   m_services->GetEntityManagerUVE().HasComponentUVE<Scene::TransformComponentUVE>(entity) &&
+                   m_services->GetEntityManagerUVE().HasComponentUVE<Scene::PrimitiveMeshComponentUVE>(entity);
+        },
+        [this](const Scene::EntityUVE entity) { DrawPrimitiveMeshInspectorDrawerUVE(entity); },
+    }));
+}
+
+void EditorUVE::DrawNameInspectorDrawerUVE(const Scene::EntityUVE entity) {
+    if (!IsDocumentEntityUVE(entity)) {
+        return;
+    }
 
     Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
     std::array<char, kMaximumEntityNameBytesUVE + 1U> nameBuffer{};
-    if (entityManager.HasComponentUVE<Scene::NameComponentUVE>(m_selectedEntity)) {
-        const std::string& currentName =
-            entityManager.GetComponentUVE<Scene::NameComponentUVE>(m_selectedEntity).name;
+    if (entityManager.HasComponentUVE<Scene::NameComponentUVE>(entity)) {
+        const std::string& currentName = entityManager.GetComponentUVE<Scene::NameComponentUVE>(entity).name;
         currentName.copy(nameBuffer.data(), std::min(currentName.size(), nameBuffer.size() - 1U));
     }
     if (ImGui::InputText("Name", nameBuffer.data(), nameBuffer.size())) {
         static_cast<void>(SetSelectedEntityNameUVE(nameBuffer.data()));
     }
+}
 
-    if (!entityManager.HasComponentUVE<Scene::TransformComponentUVE>(m_selectedEntity)) {
-        ImGui::TextUnformatted("No local Transform component.");
-        ImGui::EndDisabled();
+void EditorUVE::DrawTransformInspectorDrawerUVE(const Scene::EntityUVE entity) {
+    if (!IsDocumentEntityUVE(entity)) {
         return;
     }
 
-    Scene::TransformComponentUVE edited =
-        entityManager.GetComponentUVE<Scene::TransformComponentUVE>(m_selectedEntity);
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    if (!entityManager.HasComponentUVE<Scene::TransformComponentUVE>(entity)) {
+        return;
+    }
+
+    Scene::TransformComponentUVE edited = entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity);
     float position[3]{edited.localPosition.x, edited.localPosition.y, edited.localPosition.z};
     float rotation[4]{edited.localRotation.x, edited.localRotation.y, edited.localRotation.z, edited.localRotation.w};
     float scale[3]{edited.localScale.x, edited.localScale.y, edited.localScale.z};
@@ -3716,27 +3757,35 @@ void EditorUVE::DrawInspectorContentUVE() {
         edited.localScale = Math::Vector3UVE{scale[0], scale[1], scale[2]};
         static_cast<void>(SetSelectedLocalTransformUVE(edited));
     }
+}
 
-    if (entityManager.HasComponentUVE<Scene::PrimitiveMeshComponentUVE>(m_selectedEntity)) {
-        ImGui::Separator();
-        ImGui::TextUnformatted("Primitive");
-        const Scene::PrimitiveMeshComponentUVE current =
-            entityManager.GetComponentUVE<Scene::PrimitiveMeshComponentUVE>(m_selectedEntity);
-        int kindIndex = static_cast<int>(current.kind);
-        constexpr const char* kPrimitiveKinds[] = {"Cube", "UV Sphere", "Plane"};
-        const bool kindChanged = ImGui::Combo("Primitive Kind", &kindIndex, kPrimitiveKinds,
-                                              static_cast<int>(std::size(kPrimitiveKinds)));
-        float baseColor[3]{current.baseColor.x, current.baseColor.y, current.baseColor.z};
-        const bool colorChanged = ImGui::ColorEdit3("Base Color", baseColor,
-                                                    ImGuiColorEditFlags_Float | ImGuiColorEditFlags_DisplayRGB);
-        if (kindChanged || colorChanged) {
-            Scene::PrimitiveMeshComponentUVE updated = current;
-            updated.kind = static_cast<Scene::PrimitiveMeshKindUVE>(kindIndex);
-            updated.baseColor = Math::Vector3UVE{baseColor[0], baseColor[1], baseColor[2]};
-            static_cast<void>(SetSelectedPrimitiveMeshUVE(updated));
-        }
+void EditorUVE::DrawPrimitiveMeshInspectorDrawerUVE(const Scene::EntityUVE entity) {
+    if (!IsDocumentEntityUVE(entity)) {
+        return;
     }
-    ImGui::EndDisabled();
+
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    if (!entityManager.HasComponentUVE<Scene::PrimitiveMeshComponentUVE>(entity)) {
+        return;
+    }
+
+    ImGui::Separator();
+    ImGui::TextUnformatted("Primitive");
+    const Scene::PrimitiveMeshComponentUVE current =
+        entityManager.GetComponentUVE<Scene::PrimitiveMeshComponentUVE>(entity);
+    int kindIndex = static_cast<int>(current.kind);
+    constexpr const char* kPrimitiveKinds[] = {"Cube", "UV Sphere", "Plane"};
+    const bool kindChanged = ImGui::Combo("Primitive Kind", &kindIndex, kPrimitiveKinds,
+                                          static_cast<int>(std::size(kPrimitiveKinds)));
+    float baseColor[3]{current.baseColor.x, current.baseColor.y, current.baseColor.z};
+    const bool colorChanged =
+        ImGui::ColorEdit3("Base Color", baseColor, ImGuiColorEditFlags_Float | ImGuiColorEditFlags_DisplayRGB);
+    if (kindChanged || colorChanged) {
+        Scene::PrimitiveMeshComponentUVE updated = current;
+        updated.kind = static_cast<Scene::PrimitiveMeshKindUVE>(kindIndex);
+        updated.baseColor = Math::Vector3UVE{baseColor[0], baseColor[1], baseColor[2]};
+        static_cast<void>(SetSelectedPrimitiveMeshUVE(updated));
+    }
 }
 
 void EditorUVE::DrawProjectChangeJournalUVE(const Asset::ProjectChangeSnapshotUVE& snapshot) {

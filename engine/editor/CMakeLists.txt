@@ -39,6 +39,7 @@ target_compile_options(uve_editor_imgui PRIVATE $<$<CXX_COMPILER_ID:GNU,Clang>:-
 
 add_library(uve_editor STATIC
     src/editor_uve.cpp
+    src/inspector_drawer_registry_uve.cpp
 )
 target_include_directories(uve_editor PUBLIC include)
 target_compile_features(uve_editor PUBLIC cxx_std_20)

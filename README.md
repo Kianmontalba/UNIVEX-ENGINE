@@ -103,6 +103,8 @@ XZ ground grid at one-unit spacing as viewport feedback. It is neither selectabl
 render-ID picking, non-collider selection, mesh-derived selection bounds, and offscreen-texture viewport compositing
 remain deferred.
 
+**Inspector Drawer Registry v1** keeps the single-entity Inspector extensible without turning it into a generic reflection UI. Its built-in **Name**, **Transform**, and **Primitive Mesh** sections are registered in deterministic order through editor-local eligibility/draw callbacks. The registry owns callbacks only; it never owns ECS state, EngineServices, or Dear ImGui state. Every authored write remains routed through the existing `EditorUVE` commands, preserving validation, dirty-state changes, Transform/Name/Primitive Appearance history, collider synchronization, and Play/Pause authoring protections. Future component sections must register a stable unique identifier and route edits through a dedicated editor command; dynamic plugin loading, generic arbitrary-component inspection, asset settings, and multi-entity component editing remain deferred.
+
 The top-level **Play** menu provides a transient editor sandbox: **Play** (`F5`) captures the complete
 editable document in memory and disables authoring, **Pause** (`F6`) holds fixed physics without accumulating
 catch-up time, **Step** (`F10`) advances exactly one fixed physics tick while paused, and **Stop** (`Shift+F5`)

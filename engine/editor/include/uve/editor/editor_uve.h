@@ -16,6 +16,7 @@
 #include "uve/asset/i_project_change_watcher_uve.h"
 #include "uve/core/engine_services_uve.h"
 #include "uve/core/i_simulation_control_uve.h"
+#include "uve/editor/inspector_drawer_registry_uve.h"
 #include "uve/math/ray_uve.h"
 #include "uve/math/vector2_uve.h"
 #include "uve/math/vector3_uve.h"
@@ -591,6 +592,10 @@ private:
     void AcceptHierarchyDropTargetUVE(Scene::EntityUVE targetParent);
     void DrawInspectorPanelUVE();
     void DrawInspectorContentUVE();
+    void RegisterBuiltInInspectorDrawersUVE();
+    void DrawNameInspectorDrawerUVE(Scene::EntityUVE entity);
+    void DrawTransformInspectorDrawerUVE(Scene::EntityUVE entity);
+    void DrawPrimitiveMeshInspectorDrawerUVE(Scene::EntityUVE entity);
     void DrawImportQueueMonitorUVE();
     void DrawViewportPanelUVE();
     /// Renders a copied watcher journal as read-only editor feedback. The helper never schedules
@@ -622,6 +627,7 @@ private:
     std::deque<HistoryEntryUVE> m_redoHistory;
     EditorWorkspaceUVE m_activeWorkspace = EditorWorkspaceUVE::Library;
     EditorRightPanelTabUVE m_activeRightPanelTab = EditorRightPanelTabUVE::Inspector;
+    InspectorDrawerRegistryUVE m_inspectorDrawerRegistry;
     EditorBottomDockUVE m_activeBottomDock = EditorBottomDockUVE::FileSystem;
     std::string m_assetFilter;
     std::string m_hierarchyFilter;
