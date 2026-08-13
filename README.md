@@ -44,7 +44,13 @@ entity names, local Transform editing, collider-backed viewport picking, Transla
 gizmo modes (`W` / `E` / `R`) with a guarded **World**/**Local** coordinate-space selection, File menu scene save/load actions, and Scene menu creation for Empty, Camera, Directional
 Light, and Collision Box document roots. New archetypes receive deterministic default names such as
 `Camera` and `Camera 2`; the Properties panel or selected hierarchy row can rename one selected live document entity, and
-names persist through `.uvescene` save/load. The Scene panel has a session-only case-insensitive hierarchy filter that
+names persist through `.uvescene` save/load. **Multi-Selection v1** provides an ordered document-entity selection with one
+active entity: normal hierarchy or viewport click replaces selection, while `Ctrl`-click adds/removes one entity. Removing
+the active entity promotes the last remaining selected entity; a Ctrl-click viewport miss retains selection while a regular
+miss clears it. Multi-select rows and collider-backed bounds remain visible, with a yellow active outline, but the Properties
+panel becomes a read-only selection summary and all gizmos are fully hidden. Transform, rename, duplicate, delete,
+reparent, hierarchy drag/drop, and single-entity inspector edits remain deliberately unavailable until exactly one entity is
+selected. The Scene panel has a session-only case-insensitive hierarchy filter that
 retains matching ancestor paths; `F2` or the selected-row **Rename** control opens an inline editor, where `Enter` commits one
 existing Name-history transaction and `Escape` cancels without mutation. Legacy scenes without name metadata remain valid and
 fall back to stable entity index/generation labels. The editor also provides a bounded in-session
@@ -83,7 +89,7 @@ These navigation controls never alter the document, dirty state, scene file, or 
 The top-level **Play** menu provides a transient editor sandbox: **Play** (`F5`) captures the complete
 editable document in memory and disables authoring, **Pause** (`F6`) holds fixed physics without accumulating
 catch-up time, **Step** (`F10`) advances exactly one fixed physics tick while paused, and **Stop** (`Shift+F5`)
-restores the captured document with fresh entity handles, its logical selection, dirty state, and existing
+restores the captured document with fresh entity handles, its ordered logical selection plus active entity, dirty state, and existing
 Undo/Redo timeline. The Viewport shows a PLAYING or PAUSED badge while active. Save/Load, hierarchy and
 inspector edits, document creation, picking, transform gizmos, and history replay are disabled in the sandbox;
 the editor-only orbit/pan/zoom camera remains available and intentionally retains user navigation changes.
@@ -92,12 +98,12 @@ produce an autosave or overwrite the active `.uvescene` file.
 The Assets panel lists only deterministic snapshots of `AssetDatabaseUVE` registered records and
 offers a case-insensitive path filter; it does not scan filesystems, import assets, or load previews.
 Viewport picking intentionally selects only live document entities with the existing box collider
-component. A selected collider-backed document entity receives a read-only cyan oriented bounds overlay with corner
-and center markers; this feedback follows its derived world transform and never changes scene data or history.
-Mesh picking, mesh-derived bounds, negative scale, proportional/multiplicative scale, fly navigation, camera bookmarks, cinematic
-camera tools, filesystem browsing, import/reimport, asset drag-and-drop, thumbnails,
-layout persistence, child ordering,
-multi-entity lifecycle operations, and OS clipboard copy/paste remain future increments.
+component. Every selected collider-backed document entity receives a read-only oriented bounds overlay with corner
+and center markers; the active entity is yellow while other selected entities are cyan. This feedback follows derived
+world transforms and never changes scene data or history. Mesh picking, mesh-derived bounds, negative scale,
+proportional/multiplicative scale, fly navigation, camera bookmarks, cinematic camera tools, filesystem browsing,
+import/reimport, asset drag-and-drop, thumbnails, layout persistence, child ordering, multi-entity lifecycle operations,
+marquee/range selection, grouped transforms, multi-edit inspector fields, and OS clipboard copy/paste remain future increments.
 
 ## Repository layout
 

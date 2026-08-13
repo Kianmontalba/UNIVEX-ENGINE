@@ -228,17 +228,16 @@ void EditorUVE::TickUVE() {
         return;
     }
 
-    if (m_selectedEntity != Scene::kInvalidEntityUVE &&
-        !m_services->GetEntityManagerUVE().IsAliveUVE(m_selectedEntity)) {
-        ClearSelectionUVE();
-    }
+    PruneSelectionUVE();
     if (m_gizmoDrag.axis != EditorTranslateAxisUVE::None &&
-        (!IsDocumentEntityUVE(m_gizmoDrag.entity) || m_gizmoDrag.entity != m_selectedEntity)) {
+        (!HasSingleDocumentSelectionUVE() || !IsDocumentEntityUVE(m_gizmoDrag.entity) ||
+         m_gizmoDrag.entity != m_selectedEntity)) {
         CancelGizmoDragUVE();
     }
     if (m_hierarchyRenameEntity != Scene::kInvalidEntityUVE &&
-        (!IsAuthoringCommandAllowedUVE() || !IsDocumentEntityUVE(m_hierarchyRenameEntity) ||
-         m_hierarchyRenameEntity != m_selectedEntity || m_gizmoDrag.axis != EditorTranslateAxisUVE::None ||
+        (!IsAuthoringCommandAllowedUVE() || !HasSingleDocumentSelectionUVE() ||
+         !IsDocumentEntityUVE(m_hierarchyRenameEntity) || m_hierarchyRenameEntity != m_selectedEntity ||
+         m_gizmoDrag.axis != EditorTranslateAxisUVE::None ||
          m_viewportNavigationMode != EditorViewportNavigationModeUVE::None)) {
         CancelHierarchyRenameUVE();
     }
@@ -265,7 +264,7 @@ bool EditorUVE::EnterPlayModeUVE() {
         session.documentSnapshot = *snapshot;
     }
     session.dirtyBefore = m_sceneDirty;
-    session.selectionBefore = CaptureSelectionPathUVE(roots);
+    session.selectionBefore = CaptureSelectionPathsUVE(roots);
 
     if (!m_simulationControl->SetTransientSimulationSessionActiveUVE(true)) {
         return false;
@@ -337,12 +336,7 @@ bool EditorUVE::StopPlayModeUVE() {
         }
     }
 
-    if (session.selectionBefore.has_value()) {
-        m_selectedEntity = ResolveSelectionPathUVE(*session.selectionBefore, restoredRoots);
-        CancelGizmoDragUVE();
-    } else {
-        ClearSelectionUVE();
-    }
+    RestoreSelectionUVE(ResolveSelectionPathsUVE(session.selectionBefore, restoredRoots));
     m_sceneDirty = session.dirtyBefore;
     if (!m_simulationControl->SetSimulationExecutionModeUVE(Core::SimulationExecutionModeUVE::Running) ||
         !m_simulationControl->SetTransientSimulationSessionActiveUVE(false)) {
@@ -431,24 +425,56 @@ void EditorUVE::SelectEntityUVE(const Scene::EntityUVE entity) noexcept {
     if (!IsAuthoringCommandAllowedUVE()) {
         return;
     }
-    if (entity != Scene::kInvalidEntityUVE && IsDocumentEntityUVE(entity)) {
-        if (m_selectedEntity != entity) {
-            CancelHierarchyRenameUVE();
-        }
-        m_selectedEntity = entity;
+    if (!IsDocumentEntityUVE(entity)) {
+        ClearSelectionUVE();
         return;
     }
-    ClearSelectionUVE();
+    RestoreSelectionUVE(EditorSelectionSnapshotUVE{{entity}, entity});
+}
+
+void EditorUVE::ToggleEntitySelectionUVE(const Scene::EntityUVE entity) noexcept {
+    if (!IsAuthoringCommandAllowedUVE() || !IsDocumentEntityUVE(entity)) {
+        return;
+    }
+
+    const auto selectedIt = std::find(m_selectedEntities.begin(), m_selectedEntities.end(), entity);
+    if (selectedIt == m_selectedEntities.end()) {
+        m_selectedEntities.push_back(entity);
+        m_selectedEntity = entity;
+        CancelHierarchyRenameUVE();
+        CancelGizmoDragUVE();
+        return;
+    }
+
+    const bool removedActive = entity == m_selectedEntity;
+    m_selectedEntities.erase(selectedIt);
+    if (m_selectedEntities.empty()) {
+        m_selectedEntity = Scene::kInvalidEntityUVE;
+    } else if (removedActive) {
+        m_selectedEntity = m_selectedEntities.back();
+    }
+    CancelHierarchyRenameUVE();
+    CancelGizmoDragUVE();
 }
 
 void EditorUVE::ClearSelectionUVE() noexcept {
+    m_selectedEntities.clear();
     m_selectedEntity = Scene::kInvalidEntityUVE;
     CancelHierarchyRenameUVE();
     CancelGizmoDragUVE();
 }
 
+const std::vector<Scene::EntityUVE>& EditorUVE::GetSelectedEntitiesUVE() const noexcept {
+    return m_selectedEntities;
+}
+
+bool EditorUVE::HasSingleDocumentSelectionUVE() const noexcept {
+    return m_selectedEntities.size() == 1U && m_selectedEntities.front() == m_selectedEntity &&
+           IsDocumentEntityUVE(m_selectedEntity);
+}
+
 bool EditorUVE::SetSelectedLocalTransformUVE(const Scene::TransformComponentUVE& transform) {
-    if (!IsAuthoringCommandAllowedUVE() || !IsDocumentEntityUVE(m_selectedEntity) ||
+    if (!IsAuthoringCommandAllowedUVE() || !HasSingleDocumentSelectionUVE() ||
         !IsTransformFiniteUVE(transform)) {
         return false;
     }
@@ -458,6 +484,7 @@ bool EditorUVE::SetSelectedLocalTransformUVE(const Scene::TransformComponentUVE&
         return false;
     }
 
+    const EditorSelectionSnapshotUVE selectionBefore = CaptureSelectionSnapshotUVE();
     const Scene::TransformComponentUVE before =
         entityManager.GetComponentUVE<Scene::TransformComponentUVE>(m_selectedEntity);
     if (AreTransformsEqualUVE(before, transform)) {
@@ -471,12 +498,12 @@ bool EditorUVE::SetSelectedLocalTransformUVE(const Scene::TransformComponentUVE&
 
     m_sceneDirty = true;
     RecordHistoryUVE(TransformHistoryEntryUVE{
-        m_selectedEntity, before, transform, m_selectedEntity, m_selectedEntity, dirtyBefore, true});
+        m_selectedEntity, before, transform, selectionBefore, CaptureSelectionSnapshotUVE(), dirtyBefore, true});
     return true;
 }
 
 bool EditorUVE::SetSelectedEntityNameUVE(std::string name) {
-    if (!IsAuthoringCommandAllowedUVE() || !IsDocumentEntityUVE(m_selectedEntity) ||
+    if (!IsAuthoringCommandAllowedUVE() || !HasSingleDocumentSelectionUVE() ||
         !IsEntityNameValidUVE(name)) {
         return false;
     }
@@ -490,6 +517,7 @@ bool EditorUVE::SetSelectedEntityNameUVE(std::string name) {
         }
     }
 
+    const EditorSelectionSnapshotUVE selectionBefore = CaptureSelectionSnapshotUVE();
     const bool dirtyBefore = m_sceneDirty;
     const std::optional<std::string> afterName{std::move(name)};
     if (!ApplyEntityNameStateUVE(m_selectedEntity, afterName)) {
@@ -498,7 +526,7 @@ bool EditorUVE::SetSelectedEntityNameUVE(std::string name) {
 
     m_sceneDirty = true;
     RecordHistoryUVE(NameHistoryEntryUVE{
-        m_selectedEntity, beforeName, afterName, m_selectedEntity, m_selectedEntity, dirtyBefore, true});
+        m_selectedEntity, beforeName, afterName, selectionBefore, CaptureSelectionSnapshotUVE(), dirtyBefore, true});
     return true;
 }
 
@@ -557,7 +585,8 @@ std::optional<Math::RayUVE> EditorUVE::MakeViewportRayUVE(const EditorViewportRe
 }
 
 bool EditorUVE::PickViewportUVE(const EditorViewportRectUVE& viewportRect,
-                                 const Math::Vector2UVE pointerPosition) {
+                                 const Math::Vector2UVE pointerPosition,
+                                 const bool toggleSelection) {
     if (!IsAuthoringCommandAllowedUVE()) {
         return false;
     }
@@ -577,16 +606,22 @@ bool EditorUVE::PickViewportUVE(const EditorViewportRectUVE& viewportRect,
     const std::optional<Physics::RaycastHitUVE> hit =
         m_services->GetRaycastSystemUVE().RaycastUVE(entityManager, query);
     if (hit.has_value() && IsDocumentEntityUVE(hit->entity)) {
-        SelectEntityUVE(hit->entity);
+        if (toggleSelection) {
+            ToggleEntitySelectionUVE(hit->entity);
+        } else {
+            SelectEntityUVE(hit->entity);
+        }
         return true;
     }
 
-    ClearSelectionUVE();
+    if (!toggleSelection) {
+        ClearSelectionUVE();
+    }
     return false;
 }
 
 bool EditorUVE::TranslateSelectedAlongAxisUVE(const EditorTranslateAxisUVE axis, const float worldDistance) {
-    if (!IsAuthoringCommandAllowedUVE() || !IsDocumentEntityUVE(m_selectedEntity) ||
+    if (!IsAuthoringCommandAllowedUVE() || !HasSingleDocumentSelectionUVE() ||
         !IsFiniteUVE(worldDistance) || axis == EditorTranslateAxisUVE::None) {
         return false;
     }
@@ -612,7 +647,7 @@ bool EditorUVE::TranslateSelectedAlongAxisUVE(const EditorTranslateAxisUVE axis,
 }
 
 bool EditorUVE::RotateSelectedAroundWorldAxisUVE(const EditorTranslateAxisUVE axis, const float radians) {
-    if (!IsAuthoringCommandAllowedUVE() || !IsDocumentEntityUVE(m_selectedEntity) ||
+    if (!IsAuthoringCommandAllowedUVE() || !HasSingleDocumentSelectionUVE() ||
         !IsFiniteUVE(radians) || axis == EditorTranslateAxisUVE::None ||
         m_gizmoDrag.axis != EditorTranslateAxisUVE::None ||
         m_viewportNavigationMode != EditorViewportNavigationModeUVE::None) {
@@ -642,7 +677,7 @@ bool EditorUVE::RotateSelectedAroundWorldAxisUVE(const EditorTranslateAxisUVE ax
 
 bool EditorUVE::ScaleSelectedAlongAxisUVE(const EditorTranslateAxisUVE axis,
                                            const float localScaleDelta) {
-    if (!IsAuthoringCommandAllowedUVE() || !IsDocumentEntityUVE(m_selectedEntity) ||
+    if (!IsAuthoringCommandAllowedUVE() || !HasSingleDocumentSelectionUVE() ||
         !IsFiniteUVE(localScaleDelta) || axis == EditorTranslateAxisUVE::None ||
         m_gizmoDrag.axis != EditorTranslateAxisUVE::None ||
         m_viewportNavigationMode != EditorViewportNavigationModeUVE::None) {
@@ -681,7 +716,7 @@ bool EditorUVE::ScaleSelectedAlongAxisUVE(const EditorTranslateAxisUVE axis,
 }
 
 bool EditorUVE::ScaleSelectedUniformlyUVE(const float localScaleOffset) {
-    if (!IsAuthoringCommandAllowedUVE() || !IsDocumentEntityUVE(m_selectedEntity) ||
+    if (!IsAuthoringCommandAllowedUVE() || !HasSingleDocumentSelectionUVE() ||
         !IsFiniteUVE(localScaleOffset) || m_gizmoDrag.axis != EditorTranslateAxisUVE::None ||
         m_viewportNavigationMode != EditorViewportNavigationModeUVE::None) {
         return false;
@@ -764,21 +799,25 @@ const EditorTransformSnappingSettingsUVE& EditorUVE::GetTransformSnappingSetting
 }
 
 std::optional<EditorSelectionBoundsUVE> EditorUVE::TryGetSelectedBoundsUVE() const {
-    if (m_state != EditorStateUVE::Running || !IsDocumentEntityUVE(m_selectedEntity)) {
+    return TryGetEntityBoundsUVE(m_selectedEntity);
+}
+
+std::optional<EditorSelectionBoundsUVE> EditorUVE::TryGetEntityBoundsUVE(const Scene::EntityUVE entity) const {
+    if (m_state != EditorStateUVE::Running || !IsDocumentEntityUVE(entity)) {
         return std::nullopt;
     }
 
     Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
-    if (!entityManager.HasComponentUVE<Scene::TransformComponentUVE>(m_selectedEntity) ||
-        !entityManager.HasComponentUVE<Scene::WorldTransformComponentUVE>(m_selectedEntity) ||
-        !entityManager.HasComponentUVE<Scene::ColliderComponentUVE>(m_selectedEntity)) {
+    if (!entityManager.HasComponentUVE<Scene::TransformComponentUVE>(entity) ||
+        !entityManager.HasComponentUVE<Scene::WorldTransformComponentUVE>(entity) ||
+        !entityManager.HasComponentUVE<Scene::ColliderComponentUVE>(entity)) {
         return std::nullopt;
     }
 
     const Scene::WorldTransformComponentUVE& worldTransform =
-        entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(m_selectedEntity);
+        entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(entity);
     const Scene::ColliderComponentUVE& collider =
-        entityManager.GetComponentUVE<Scene::ColliderComponentUVE>(m_selectedEntity);
+        entityManager.GetComponentUVE<Scene::ColliderComponentUVE>(entity);
     if (worldTransform.dirty || !IsFiniteVectorUVE(worldTransform.worldPosition) ||
         !IsFiniteVectorUVE(worldTransform.worldScale) || !IsFiniteVectorUVE(collider.halfExtents) ||
         collider.halfExtents.x <= kVectorEpsilonUVE || collider.halfExtents.y <= kVectorEpsilonUVE ||
@@ -937,7 +976,7 @@ Scene::EntityUVE EditorUVE::CreateDocumentEntityUVE(const EditorEntityKindUVE ki
         return Scene::kInvalidEntityUVE;
     }
 
-    const Scene::EntityUVE selectionBefore = m_selectedEntity;
+    const EditorSelectionSnapshotUVE selectionBefore = CaptureSelectionSnapshotUVE();
     const bool dirtyBefore = m_sceneDirty;
     const Scene::EntityUVE entity = CreateDocumentEntityInternalUVE(kind, std::nullopt);
     if (entity == Scene::kInvalidEntityUVE) {
@@ -949,7 +988,7 @@ Scene::EntityUVE EditorUVE::CreateDocumentEntityUVE(const EditorEntityKindUVE ki
     SelectEntityUVE(entity);
     m_sceneDirty = true;
     RecordHistoryUVE(CreationHistoryEntryUVE{
-        kind, createdName, entity, selectionBefore, entity, dirtyBefore, true});
+        kind, createdName, entity, selectionBefore, CaptureSelectionSnapshotUVE(), dirtyBefore, true});
     return entity;
 }
 
@@ -987,12 +1026,14 @@ Scene::EntityUVE EditorUVE::DuplicateSelectedEntityUVE() {
         }
     }
 
+    const EditorSelectionSnapshotUVE selectionBefore = CaptureSelectionSnapshotUVE();
     const bool dirtyBefore = m_sceneDirty;
     SelectEntityUVE(duplicate);
     m_sceneDirty = true;
     InvalidateHierarchyFilterCacheUVE();
     RecordHistoryUVE(DuplicationHistoryEntryUVE{
-        std::move(*snapshot), originalParent, duplicate, std::move(duplicateRootName), source, duplicate, dirtyBefore, true});
+        std::move(*snapshot), originalParent, duplicate, std::move(duplicateRootName), selectionBefore,
+        CaptureSelectionSnapshotUVE(), dirtyBefore, true});
     return duplicate;
 }
 
@@ -1012,16 +1053,20 @@ bool EditorUVE::DeleteSelectedEntityUVE() {
         return false;
     }
 
+    const EditorSelectionSnapshotUVE selectionBefore = CaptureSelectionSnapshotUVE();
     const bool dirtyBefore = m_sceneDirty;
     DestroyDocumentSubtreeUVE(target);
     const Scene::EntityUVE selectionAfter = IsDocumentEntityUVE(originalParent)
                                                 ? originalParent
                                                 : Scene::kInvalidEntityUVE;
-    RestoreSelectionUVE(selectionAfter);
+    RestoreSelectionUVE(EditorSelectionSnapshotUVE{
+        selectionAfter == Scene::kInvalidEntityUVE ? std::vector<Scene::EntityUVE>{}
+                                                    : std::vector<Scene::EntityUVE>{selectionAfter},
+        selectionAfter});
     m_sceneDirty = true;
     InvalidateHierarchyFilterCacheUVE();
     RecordHistoryUVE(DeletionHistoryEntryUVE{
-        std::move(*snapshot), originalParent, target, target, selectionAfter, dirtyBefore, true});
+        std::move(*snapshot), originalParent, target, selectionBefore, CaptureSelectionSnapshotUVE(), dirtyBefore, true});
     return true;
 }
 
@@ -1115,7 +1160,7 @@ bool EditorUVE::ReparentDocumentEntityUVE(const Scene::EntityUVE entity, const S
         !ComputeKeepWorldLocalTransformUVE(entity, newParent, localAfter)) {
         return false;
     }
-    const Scene::EntityUVE selectionBefore = m_selectedEntity;
+    const EditorSelectionSnapshotUVE selectionBefore = CaptureSelectionSnapshotUVE();
     const bool dirtyBefore = m_sceneDirty;
     m_services->GetSceneGraphUVE().SetParentUVE(entityManager, entity, newParent);
     if (!ApplyLocalTransformUVE(entity, localAfter)) {
@@ -1123,11 +1168,12 @@ bool EditorUVE::ReparentDocumentEntityUVE(const Scene::EntityUVE entity, const S
         static_cast<void>(ApplyLocalTransformUVE(entity, localBefore));
         return false;
     }
-    RestoreSelectionUVE(entity);
+    RestoreSelectionUVE(EditorSelectionSnapshotUVE{{entity}, entity});
     m_sceneDirty = true;
     InvalidateHierarchyFilterCacheUVE();
     RecordHistoryUVE(ReparentHistoryEntryUVE{
-        entity, parentBefore, newParent, localBefore, localAfter, selectionBefore, entity, dirtyBefore, true});
+        entity, parentBefore, newParent, localBefore, localAfter, selectionBefore, CaptureSelectionSnapshotUVE(),
+        dirtyBefore, true});
     return true;
 }
 
@@ -1318,7 +1364,8 @@ bool EditorUVE::TryGetDocumentParentUVE(const Scene::EntityUVE entity, Scene::En
 }
 
 bool EditorUVE::IsLifecycleCommandAllowedUVE() const noexcept {
-    return IsAuthoringCommandAllowedUVE() && m_gizmoDrag.axis == EditorTranslateAxisUVE::None &&
+    return IsAuthoringCommandAllowedUVE() && HasSingleDocumentSelectionUVE() &&
+           m_gizmoDrag.axis == EditorTranslateAxisUVE::None &&
            m_viewportNavigationMode == EditorViewportNavigationModeUVE::None;
 }
 
@@ -1326,20 +1373,98 @@ bool EditorUVE::IsAuthoringCommandAllowedUVE() const noexcept {
     return m_state == EditorStateUVE::Running && m_playModeState == EditorPlayModeStateUVE::Edit;
 }
 
-std::optional<EditorUVE::EditorSelectionPathUVE> EditorUVE::CaptureSelectionPathUVE(
-    const std::vector<Scene::EntityUVE>& roots) const {
-    if (!IsDocumentEntityUVE(m_selectedEntity)) {
-        return std::nullopt;
-    }
-
-    for (std::size_t rootIndex = 0U; rootIndex < roots.size(); ++rootIndex) {
-        EditorSelectionPathUVE path{};
-        path.rootIndex = rootIndex;
-        if (FindSelectionPathUVE(roots[rootIndex], m_selectedEntity, path.childIndices)) {
-            return path;
+EditorUVE::EditorSelectionSnapshotUVE EditorUVE::CaptureSelectionSnapshotUVE() const {
+    EditorSelectionSnapshotUVE selection{};
+    for (const Scene::EntityUVE entity : m_selectedEntities) {
+        if (IsDocumentEntityUVE(entity) &&
+            std::find(selection.entities.begin(), selection.entities.end(), entity) == selection.entities.end()) {
+            selection.entities.push_back(entity);
         }
     }
-    return std::nullopt;
+    if (IsDocumentEntityUVE(m_selectedEntity) &&
+        std::find(selection.entities.begin(), selection.entities.end(), m_selectedEntity) != selection.entities.end()) {
+        selection.activeEntity = m_selectedEntity;
+    } else if (!selection.entities.empty()) {
+        selection.activeEntity = selection.entities.back();
+    }
+    return selection;
+}
+
+void EditorUVE::RestoreSelectionUVE(EditorSelectionSnapshotUVE selection) noexcept {
+    std::vector<Scene::EntityUVE> restored;
+    restored.reserve(selection.entities.size());
+    for (const Scene::EntityUVE entity : selection.entities) {
+        if (IsDocumentEntityUVE(entity) && std::find(restored.begin(), restored.end(), entity) == restored.end()) {
+            restored.push_back(entity);
+        }
+    }
+
+    const bool activeValid = IsDocumentEntityUVE(selection.activeEntity) &&
+                             std::find(restored.begin(), restored.end(), selection.activeEntity) != restored.end();
+    const Scene::EntityUVE restoredActive = activeValid
+                                                ? selection.activeEntity
+                                                : (restored.empty() ? Scene::kInvalidEntityUVE : restored.back());
+    const bool changed = restored != m_selectedEntities || restoredActive != m_selectedEntity;
+    m_selectedEntities = std::move(restored);
+    m_selectedEntity = restoredActive;
+    if (changed) {
+        CancelHierarchyRenameUVE();
+        CancelGizmoDragUVE();
+    }
+}
+
+void EditorUVE::PruneSelectionUVE() noexcept {
+    RestoreSelectionUVE(CaptureSelectionSnapshotUVE());
+}
+
+bool EditorUVE::IsEntitySelectedUVE(const Scene::EntityUVE entity) const noexcept {
+    return std::find(m_selectedEntities.begin(), m_selectedEntities.end(), entity) != m_selectedEntities.end();
+}
+
+EditorUVE::EditorSelectionPathsUVE EditorUVE::CaptureSelectionPathsUVE(
+    const std::vector<Scene::EntityUVE>& roots) const {
+    EditorSelectionPathsUVE paths{};
+    const EditorSelectionSnapshotUVE selection = CaptureSelectionSnapshotUVE();
+    const auto capturePath = [this, &roots](const Scene::EntityUVE entity) -> std::optional<EditorSelectionPathUVE> {
+        for (std::size_t rootIndex = 0U; rootIndex < roots.size(); ++rootIndex) {
+            EditorSelectionPathUVE path{};
+            path.rootIndex = rootIndex;
+            if (FindSelectionPathUVE(roots[rootIndex], entity, path.childIndices)) {
+                return path;
+            }
+        }
+        return std::nullopt;
+    };
+
+    for (const Scene::EntityUVE entity : selection.entities) {
+        if (const std::optional<EditorSelectionPathUVE> path = capturePath(entity); path.has_value()) {
+            paths.entityPaths.push_back(*path);
+        }
+    }
+    paths.activePath = capturePath(selection.activeEntity);
+    return paths;
+}
+
+EditorUVE::EditorSelectionSnapshotUVE EditorUVE::ResolveSelectionPathsUVE(
+    const EditorSelectionPathsUVE& paths, const std::vector<Scene::EntityUVE>& roots) const {
+    EditorSelectionSnapshotUVE selection{};
+    for (const EditorSelectionPathUVE& path : paths.entityPaths) {
+        const Scene::EntityUVE entity = ResolveSelectionPathUVE(path, roots);
+        if (IsDocumentEntityUVE(entity) &&
+            std::find(selection.entities.begin(), selection.entities.end(), entity) == selection.entities.end()) {
+            selection.entities.push_back(entity);
+        }
+    }
+    if (paths.activePath.has_value()) {
+        const Scene::EntityUVE active = ResolveSelectionPathUVE(*paths.activePath, roots);
+        if (std::find(selection.entities.begin(), selection.entities.end(), active) != selection.entities.end()) {
+            selection.activeEntity = active;
+        }
+    }
+    if (selection.activeEntity == Scene::kInvalidEntityUVE && !selection.entities.empty()) {
+        selection.activeEntity = selection.entities.back();
+    }
+    return selection;
 }
 
 Scene::EntityUVE EditorUVE::ResolveSelectionPathUVE(const EditorSelectionPathUVE& path,
@@ -1443,10 +1568,6 @@ void EditorUVE::ClearHistoryUVE() noexcept {
     m_redoHistory.clear();
 }
 
-void EditorUVE::RestoreSelectionUVE(const Scene::EntityUVE selection) noexcept {
-    SelectEntityUVE(selection);
-}
-
 bool EditorUVE::UndoHistoryEntryUVE(HistoryEntryUVE& entry) {
     return std::visit(
         [this](auto& typedEntry) -> bool {
@@ -1493,8 +1614,8 @@ bool EditorUVE::UndoHistoryEntryUVE(HistoryEntryUVE& entry) {
                     return false;
                 }
                 typedEntry.activeEntity = restored;
-                typedEntry.selectionBefore = restored;
-                RestoreSelectionUVE(restored);
+                typedEntry.selectionBefore = EditorSelectionSnapshotUVE{{restored}, restored};
+                RestoreSelectionUVE(typedEntry.selectionBefore);
                 m_sceneDirty = typedEntry.dirtyBefore;
                 return true;
             } else {
@@ -1547,8 +1668,8 @@ bool EditorUVE::RedoHistoryEntryUVE(HistoryEntryUVE& entry) {
                     return false;
                 }
                 typedEntry.activeEntity = recreated;
-                typedEntry.selectionAfter = recreated;
-                RestoreSelectionUVE(recreated);
+                typedEntry.selectionAfter = EditorSelectionSnapshotUVE{{recreated}, recreated};
+                RestoreSelectionUVE(typedEntry.selectionAfter);
                 m_sceneDirty = typedEntry.dirtyAfter;
                 return true;
             } else if constexpr (std::is_same_v<EntryType, DuplicationHistoryEntryUVE>) {
@@ -1566,8 +1687,8 @@ bool EditorUVE::RedoHistoryEntryUVE(HistoryEntryUVE& entry) {
                     return false;
                 }
                 typedEntry.activeEntity = restored;
-                typedEntry.selectionAfter = restored;
-                RestoreSelectionUVE(restored);
+                typedEntry.selectionAfter = EditorSelectionSnapshotUVE{{restored}, restored};
+                RestoreSelectionUVE(typedEntry.selectionAfter);
                 m_sceneDirty = typedEntry.dirtyAfter;
                 return true;
             } else if constexpr (std::is_same_v<EntryType, DeletionHistoryEntryUVE>) {
@@ -2029,7 +2150,7 @@ bool EditorUVE::BeginGizmoDragUVE(const EditorViewportRectUVE& viewportRect,
     if (m_gizmoMode == EditorGizmoModeUVE::Rotate) {
         return BeginRotateGizmoDragUVE(viewportRect, pointerPosition);
     }
-    if (!IsDocumentEntityUVE(m_selectedEntity) || !IsViewportRectValidUVE(viewportRect)) {
+    if (!HasSingleDocumentSelectionUVE() || !IsViewportRectValidUVE(viewportRect)) {
         return false;
     }
 
@@ -2298,7 +2419,7 @@ bool EditorUVE::FindClosestRingParameterUVE(const EditorViewportRectUVE& viewpor
 
 bool EditorUVE::BeginRotateGizmoDragUVE(const EditorViewportRectUVE& viewportRect,
                                         const Math::Vector2UVE pointerPosition) {
-    if (!IsAuthoringCommandAllowedUVE() || !IsDocumentEntityUVE(m_selectedEntity) ||
+    if (!IsAuthoringCommandAllowedUVE() || !HasSingleDocumentSelectionUVE() ||
         !IsViewportRectValidUVE(viewportRect)) {
         return false;
     }
@@ -2384,7 +2505,7 @@ void EditorUVE::UpdateGizmoDragUVE(const Math::Vector2UVE pointerPosition) {
     if (!IsAuthoringCommandAllowedUVE() ||
         (m_gizmoDrag.axis == EditorTranslateAxisUVE::None &&
          m_gizmoDrag.handleKind != GizmoHandleKindUVE::UniformScaleOffset) ||
-        !IsDocumentEntityUVE(m_gizmoDrag.entity) ||
+        !HasSingleDocumentSelectionUVE() || !IsDocumentEntityUVE(m_gizmoDrag.entity) ||
         m_gizmoDrag.entity != m_selectedEntity || !IsFiniteUVE(pointerPosition.x) ||
         !IsFiniteUVE(pointerPosition.y)) {
         CancelGizmoDragUVE();
@@ -2619,8 +2740,8 @@ void EditorUVE::CommitGizmoDragUVE() {
     RecordHistoryUVE(TransformHistoryEntryUVE{completedDrag.entity,
                                                completedDrag.initialLocalTransform,
                                                after,
-                                               completedDrag.entity,
-                                               completedDrag.entity,
+                                               EditorSelectionSnapshotUVE{{completedDrag.entity}, completedDrag.entity},
+                                               CaptureSelectionSnapshotUVE(),
                                                completedDrag.initialDirty,
                                                true});
 }
@@ -2645,20 +2766,7 @@ void EditorUVE::CancelGizmoDragUVE() noexcept {
 }
 
 void EditorUVE::DrawSelectionBoundsUVE(const EditorViewportRectUVE& viewportRect) {
-    const std::optional<EditorSelectionBoundsUVE> bounds = TryGetSelectedBoundsUVE();
-    if (!bounds.has_value() || !IsViewportRectValidUVE(viewportRect)) {
-        return;
-    }
-
-    std::array<Math::Vector2UVE, 8> projectedCorners{};
-    for (std::size_t index = 0U; index < bounds->worldCorners.size(); ++index) {
-        if (!ProjectWorldPointUVE(viewportRect, bounds->worldCorners[index], projectedCorners[index])) {
-            return;
-        }
-    }
-
-    Math::Vector2UVE projectedCenter{};
-    if (!ProjectWorldPointUVE(viewportRect, bounds->worldCenter, projectedCenter)) {
+    if (!IsViewportRectValidUVE(viewportRect)) {
         return;
     }
 
@@ -2678,21 +2786,42 @@ void EditorUVE::DrawSelectionBoundsUVE(const EditorViewportRectUVE& viewportRect
     };
 
     ImDrawList* const drawList = ImGui::GetWindowDrawList();
-    constexpr ImU32 kBoundsColorUVE = IM_COL32(0, 212, 255, 235);
-    constexpr ImU32 kCornerColorUVE = IM_COL32(185, 248, 255, 245);
-    for (const std::array<std::size_t, 2>& edge : kBoxEdgesUVE) {
-        const Math::Vector2UVE& first = projectedCorners[edge[0]];
-        const Math::Vector2UVE& second = projectedCorners[edge[1]];
-        drawList->AddLine(ImVec2{first.x, first.y}, ImVec2{second.x, second.y}, kBoundsColorUVE, 2.0F);
+    for (const Scene::EntityUVE entity : m_selectedEntities) {
+        const std::optional<EditorSelectionBoundsUVE> bounds = TryGetEntityBoundsUVE(entity);
+        if (!bounds.has_value()) {
+            continue;
+        }
+
+        std::array<Math::Vector2UVE, 8> projectedCorners{};
+        bool projected = true;
+        for (std::size_t index = 0U; index < bounds->worldCorners.size(); ++index) {
+            projected = ProjectWorldPointUVE(viewportRect, bounds->worldCorners[index], projectedCorners[index]) && projected;
+        }
+        Math::Vector2UVE projectedCenter{};
+        projected = ProjectWorldPointUVE(viewportRect, bounds->worldCenter, projectedCenter) && projected;
+        if (!projected) {
+            continue;
+        }
+
+        const bool active = entity == m_selectedEntity;
+        const ImU32 boundsColor = active ? IM_COL32(255, 218, 75, 250) : IM_COL32(0, 212, 255, 180);
+        const ImU32 cornerColor = active ? IM_COL32(255, 244, 190, 255) : IM_COL32(185, 248, 255, 205);
+        const float thickness = active ? 2.75F : 1.5F;
+        for (const std::array<std::size_t, 2>& edge : kBoxEdgesUVE) {
+            const Math::Vector2UVE& first = projectedCorners[edge[0]];
+            const Math::Vector2UVE& second = projectedCorners[edge[1]];
+            drawList->AddLine(ImVec2{first.x, first.y}, ImVec2{second.x, second.y}, boundsColor, thickness);
+        }
+        for (const Math::Vector2UVE& corner : projectedCorners) {
+            drawList->AddCircleFilled(ImVec2{corner.x, corner.y}, active ? 3.5F : 2.5F, cornerColor, 8);
+        }
+        drawList->AddCircleFilled(ImVec2{projectedCenter.x, projectedCenter.y}, active ? 4.5F : 3.5F,
+                                  boundsColor, 12);
     }
-    for (const Math::Vector2UVE& corner : projectedCorners) {
-        drawList->AddCircleFilled(ImVec2{corner.x, corner.y}, 3.0F, kCornerColorUVE, 8);
-    }
-    drawList->AddCircleFilled(ImVec2{projectedCenter.x, projectedCenter.y}, 4.0F, kBoundsColorUVE, 12);
 }
 
 void EditorUVE::DrawTranslateGizmoUVE(const EditorViewportRectUVE& viewportRect) {
-    if (!IsDocumentEntityUVE(m_selectedEntity) || !IsViewportRectValidUVE(viewportRect)) {
+    if (!HasSingleDocumentSelectionUVE() || !IsViewportRectValidUVE(viewportRect)) {
         return;
     }
 
@@ -2766,7 +2895,7 @@ void EditorUVE::DrawTranslateGizmoUVE(const EditorViewportRectUVE& viewportRect)
 }
 
 void EditorUVE::DrawScaleGizmoUVE(const EditorViewportRectUVE& viewportRect) {
-    if (!IsDocumentEntityUVE(m_selectedEntity) || !IsViewportRectValidUVE(viewportRect)) {
+    if (!HasSingleDocumentSelectionUVE() || !IsViewportRectValidUVE(viewportRect)) {
         return;
     }
 
@@ -2817,7 +2946,7 @@ void EditorUVE::DrawScaleGizmoUVE(const EditorViewportRectUVE& viewportRect) {
 }
 
 void EditorUVE::DrawRotateGizmoUVE(const EditorViewportRectUVE& viewportRect) {
-    if (!IsDocumentEntityUVE(m_selectedEntity) || !IsViewportRectValidUVE(viewportRect)) {
+    if (!HasSingleDocumentSelectionUVE() || !IsViewportRectValidUVE(viewportRect)) {
         return;
     }
 
@@ -3190,7 +3319,9 @@ void EditorUVE::DrawHierarchyNodeUVE(const Scene::EntityUVE entity) {
     if (children.empty()) {
         flags |= ImGuiTreeNodeFlags_Leaf;
     }
-    if (entity == m_selectedEntity) {
+    const bool selected = IsEntitySelectedUVE(entity);
+    const bool active = entity == m_selectedEntity;
+    if (selected) {
         flags |= ImGuiTreeNodeFlags_Selected;
     }
     if (IsHierarchyFilterActiveUVE()) {
@@ -3200,19 +3331,32 @@ void EditorUVE::DrawHierarchyNodeUVE(const Scene::EntityUVE entity) {
     const bool renaming = entity == m_hierarchyRenameEntity;
     const std::string nodeLabel = (renaming ? "" : GetEntityDisplayLabelUVE(entity)) + "##entity-" +
                                   std::to_string(entity.index) + ":" + std::to_string(entity.generation);
-    const bool open = ImGui::TreeNodeEx(nodeLabel.c_str(), flags);
-    if (ImGui::IsItemClicked() && !renaming) {
-        SelectEntityUVE(entity);
+    if (active) {
+        ImGui::PushStyleColor(ImGuiCol_Header, IM_COL32(55, 105, 160, 215));
+        ImGui::PushStyleColor(ImGuiCol_HeaderActive, IM_COL32(70, 125, 180, 245));
+        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, IM_COL32(60, 110, 165, 220));
     }
-    if (!renaming && entity == m_selectedEntity && IsAuthoringCommandAllowedUVE() &&
+    const bool open = ImGui::TreeNodeEx(nodeLabel.c_str(), flags);
+    if (active) {
+        ImGui::PopStyleColor(3);
+    }
+    if (ImGui::IsItemClicked() && !renaming) {
+        if (ImGui::GetIO().KeyCtrl) {
+            ToggleEntitySelectionUVE(entity);
+        } else {
+            SelectEntityUVE(entity);
+        }
+    }
+    if (!renaming && HasSingleDocumentSelectionUVE() && entity == m_selectedEntity &&
+        IsAuthoringCommandAllowedUVE() &&
         m_gizmoDrag.axis == EditorTranslateAxisUVE::None &&
         m_viewportNavigationMode == EditorViewportNavigationModeUVE::None && ImGui::IsKeyPressed(ImGuiKey_F2)) {
         m_hierarchyRenameEntity = entity;
         m_hierarchyRenameBuffer = GetEntityDisplayLabelUVE(entity);
         m_hierarchyRenameFocusRequested = true;
     }
-    if (!renaming && entity == m_selectedEntity && IsAuthoringCommandAllowedUVE() &&
-        m_gizmoDrag.axis == EditorTranslateAxisUVE::None &&
+    if (!renaming && HasSingleDocumentSelectionUVE() && entity == m_selectedEntity &&
+        IsAuthoringCommandAllowedUVE() && m_gizmoDrag.axis == EditorTranslateAxisUVE::None &&
         m_viewportNavigationMode == EditorViewportNavigationModeUVE::None) {
         ImGui::SameLine();
         const std::string renameLabel = "Rename##entity-" + std::to_string(entity.index) + ":" +
@@ -3282,8 +3426,24 @@ void EditorUVE::DrawInspectorPanelUVE() {
         ImVec2{330.0F, std::max(kMinimumViewportHeightUVE, mainViewport->WorkSize.y - kAssetsPanelHeightUVE)},
         ImGuiCond_FirstUseEver);
     ImGui::Begin("Properties");
-    if (!IsDocumentEntityUVE(m_selectedEntity)) {
+    if (m_selectedEntities.empty()) {
         ImGui::TextUnformatted("Select an entity in Scene or Viewport.");
+        ImGui::End();
+        return;
+    }
+    if (!HasSingleDocumentSelectionUVE()) {
+        ImGui::Text("%zu entities selected", m_selectedEntities.size());
+        if (IsDocumentEntityUVE(m_selectedEntity)) {
+            ImGui::Text("Active: %s", GetEntityDisplayLabelUVE(m_selectedEntity).c_str());
+        }
+        ImGui::Separator();
+        for (const Scene::EntityUVE entity : m_selectedEntities) {
+            if (IsDocumentEntityUVE(entity)) {
+                ImGui::BulletText("%s%s", GetEntityDisplayLabelUVE(entity).c_str(),
+                                  entity == m_selectedEntity ? " (Active)" : "");
+            }
+        }
+        ImGui::TextDisabled("Single-entity editing is unavailable for multi-selection.");
         ImGui::End();
         return;
     }
@@ -3457,7 +3617,7 @@ void EditorUVE::DrawViewportPanelUVE() {
                 m_viewportNavigationMode = EditorViewportNavigationModeUVE::Pan;
             } else if (viewportClicked) {
                 if (!BeginGizmoDragUVE(viewportRect, pointerPosition)) {
-                    static_cast<void>(PickViewportUVE(viewportRect, pointerPosition));
+                    static_cast<void>(PickViewportUVE(viewportRect, pointerPosition, io.KeyCtrl));
                 }
             }
         }
