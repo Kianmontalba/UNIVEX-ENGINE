@@ -338,6 +338,31 @@ private:
         Trackball,
     };
 
+    /// Editor-only workspace labels. They do not alter document data, simulation state, or history.
+    enum class EditorWorkspaceUVE {
+        Library,
+        Asset,
+        Scripting,
+        Debug,
+        Plugin,
+    };
+
+    /// Selects the visible content inside the fixed right-side editor panel.
+    enum class EditorRightPanelTabUVE {
+        Inspector,
+        Import,
+        Signals,
+    };
+
+    /// Selects one docked lower-workspace panel. FileSystem is the safe default and keeps the
+    /// former Assets database view visible without introducing an AI tooling implementation.
+    enum class EditorBottomDockUVE {
+        Debugger,
+        Animator,
+        AIToolbar,
+        FileSystem,
+    };
+
     struct GizmoDragUVE final {
         EditorGizmoModeUVE mode = EditorGizmoModeUVE::Translate;
         GizmoHandleKindUVE handleKind = GizmoHandleKindUVE::Axis;
@@ -527,10 +552,13 @@ private:
     void DestroyDocumentSubtreeUVE(Scene::EntityUVE root);
     void ClearDocumentSceneUVE();
     void DrawMenuBarUVE();
+    void DrawBottomDockUVE();
+    void DrawBottomDockContentUVE();
     void DrawHierarchyPanelUVE();
     void DrawHierarchyNodeUVE(Scene::EntityUVE entity);
     void AcceptHierarchyDropTargetUVE(Scene::EntityUVE targetParent);
     void DrawInspectorPanelUVE();
+    void DrawInspectorContentUVE();
     void DrawViewportPanelUVE();
     void DrawAssetsPanelUVE();
 
@@ -556,6 +584,9 @@ private:
     EditorViewportNavigationModeUVE m_viewportNavigationMode = EditorViewportNavigationModeUVE::None;
     std::deque<HistoryEntryUVE> m_undoHistory;
     std::deque<HistoryEntryUVE> m_redoHistory;
+    EditorWorkspaceUVE m_activeWorkspace = EditorWorkspaceUVE::Library;
+    EditorRightPanelTabUVE m_activeRightPanelTab = EditorRightPanelTabUVE::Inspector;
+    EditorBottomDockUVE m_activeBottomDock = EditorBottomDockUVE::FileSystem;
     std::string m_assetFilter;
     std::string m_hierarchyFilter;
     std::string m_cachedHierarchyFilter;

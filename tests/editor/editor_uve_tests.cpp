@@ -65,6 +65,33 @@ TEST(EditorUVETest, InitUVE_CreatesCameraOutsideDocumentRootsAndSupportsHeadless
     engine.Shutdown();
 }
 
+TEST(EditorUVETest, RenderOverlayUVE_HeadlessWorkspaceCompositionDoesNotMutateEditorState) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_workspace_layout.uvescene");
+        editor.InitUVE();
+        Core::EngineServicesUVE& services = engine.GetServicesUVE();
+        const Scene::EntityUVE root = services.GetEntityManagerUVE().CreateEntityUVE();
+        AttachRootUVE(engine, root, Scene::TransformComponentUVE{});
+        editor.SelectEntityUVE(root);
+
+        editor.RenderOverlayUVE();
+
+        EXPECT_EQ(editor.GetStateUVE(), EditorStateUVE::Running);
+        EXPECT_EQ(editor.GetSelectedEntityUVE(), root);
+        ASSERT_EQ(editor.GetSelectedEntitiesUVE().size(), 1U);
+        EXPECT_EQ(editor.GetSelectedEntitiesUVE().front(), root);
+        EXPECT_FALSE(editor.IsSceneDirtyUVE());
+
+        editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
+}
+
 TEST(EditorUVETest, SelectionAndInspectorTransformEdit_ValidateLifetimeAndFiniteValues) {
     Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
     engine.Init();
