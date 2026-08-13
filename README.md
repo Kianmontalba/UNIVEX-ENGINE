@@ -40,8 +40,8 @@ Swap `-DCMAKE_CXX_COMPILER=clang++` to build with Clang instead. `UVE_BUILD_TEST
 `ON`) can be set to `OFF` to skip building the GoogleTest suite.
 
 The current editor supports a Scene/Viewport/Properties/Assets layout, persistent human-readable
-entity names, local Transform editing, collider-backed viewport picking, world-axis Translate, Rotate, and Scale
-gizmo modes (`W` / `E` / `R`), File menu scene save/load actions, and Scene menu creation for Empty, Camera, Directional
+entity names, local Transform editing, collider-backed viewport picking, Translate, Rotate, and Scale
+gizmo modes (`W` / `E` / `R`) with a guarded **World**/**Local** coordinate-space selection, File menu scene save/load actions, and Scene menu creation for Empty, Camera, Directional
 Light, and Collision Box document roots. New archetypes receive deterministic default names such as
 `Camera` and `Camera 2`; the Properties panel can rename one selected live document entity, and
 names persist through `.uvescene` save/load. Legacy scenes without name metadata remain valid and
@@ -62,7 +62,10 @@ Duplicate and delete capture the complete selected subtree in memory through the
 same registered-component envelope used by `.uvescene`, preserving hierarchy and restoring fresh
 entity handles during Undo/Redo; they cannot affect the editor-only camera. Shortcut actions are
 suppressed while a text field owns input or an active viewport gesture is in progress. One completed
-Translate, Rotate, or Scale gizmo drag is recorded as one history step. Rotate mode uses world-axis X/Y/Z rings,
+Translate, Rotate, or Scale gizmo drag is recorded as one history step. Translate mode additionally exposes translucent
+XY/XZ/YZ plane handles in the positive 20–60% gizmo quadrant; axis hits always take precedence and plane movement solves
+both captured screen-space basis coefficients independently before applying the existing parent-safe local delta path.
+Rotate mode uses world-axis X/Y/Z rings,
 converts a parented entity's world-axis delta back to its local quaternion, and preserves local position
 and scale. Scale mode uses X/Y/Z square handles to edit one strictly positive authored local-scale component,
 preserving local position and rotation. The editor-only viewport camera now supports
@@ -82,7 +85,7 @@ offers a case-insensitive path filter; it does not scan filesystems, import asse
 Viewport picking intentionally selects only live document entities with the existing box collider
 component. A selected collider-backed document entity receives a read-only cyan oriented bounds overlay with corner
 and center markers; this feedback follows its derived world transform and never changes scene data or history.
-Mesh picking, mesh-derived bounds, uniform/negative scale, local-axis and plane handles, trackball rotation, fly navigation, camera bookmarks, cinematic
+Mesh picking, mesh-derived bounds, uniform/negative scale, trackball rotation, fly navigation, camera bookmarks, cinematic
 camera tools, filesystem browsing, import/reimport, asset drag-and-drop, thumbnails,
 layout persistence, hierarchy search, world-transform-preserving reparenting, child ordering,
 multi-entity lifecycle operations, and OS clipboard copy/paste remain future increments.
