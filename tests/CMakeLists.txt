@@ -47,6 +47,7 @@ add_executable(uve_tests
     asset/asset_bundle_uve_tests.cpp
     asset/file_system_uve_tests.cpp
     asset/project_file_index_uve_tests.cpp
+    asset/project_change_watcher_uve_tests.cpp
     asset/mesh_asset_uve_tests.cpp
     asset/texture_asset_uve_tests.cpp
     asset/shader_asset_uve_tests.cpp

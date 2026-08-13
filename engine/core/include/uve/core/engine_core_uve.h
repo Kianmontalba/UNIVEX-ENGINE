@@ -25,6 +25,7 @@
 #include "uve/asset/i_file_system_uve.h"
 #include "uve/asset/i_hot_reload_uve.h"
 #include "uve/asset/i_project_file_index_uve.h"
+#include "uve/asset/i_project_change_watcher_uve.h"
 #include "uve/audio/i_audio_device_uve.h"
 #include "uve/audio/i_audio_source_system_uve.h"
 #include "uve/audio/i_audio_system_uve.h"
@@ -64,8 +65,8 @@ namespace UVE::Core {
 
 /// EngineCoreUVE owns the foundational engine services (CommandLine, Logger,
 /// MemoryManager, ThreadPool, Timer, EventSystem, EntityManager, SceneGraph,
-/// AssetDatabase, ProjectFileIndex, DerivedArtifactCache, SceneSerializer, PrefabSystem, HotReload,
-/// AssetManager, AssetImporter, AssetImportQueue, AssetBundle, FileSystem, WindowManager, RenderDevice, ShaderManager,
+/// AssetDatabase, ProjectFileIndex, DerivedArtifactCache, ProjectChangeWatcher, SceneSerializer, PrefabSystem,
+/// HotReload, AssetManager, AssetImporter, AssetImportQueue, AssetBundle, FileSystem, WindowManager, RenderDevice, ShaderManager,
 /// RenderSystem, CameraSystem, MeshRenderer, LightSystem, Renderer3D, CollisionSystem, PhysicsSystem,
 /// RaycastSystem, InputSystem, AudioDevice, AudioSystem, AudioSourceSystem,
 /// SaveGameSystem, CheckpointManager, ConfigManager) and drives the canonical
@@ -379,6 +380,7 @@ private:
     std::unique_ptr<Asset::IAssetDatabaseUVE> m_assetDatabase;
     std::unique_ptr<Asset::IProjectFileIndexUVE> m_projectFileIndex;
     std::unique_ptr<Asset::IDerivedArtifactCacheUVE> m_derivedArtifactCache;
+    std::unique_ptr<Asset::IProjectChangeWatcherUVE> m_projectChangeWatcher;
     std::unique_ptr<Scene::ISceneSerializerUVE> m_sceneSerializer;
     std::unique_ptr<Scene::IPrefabSystemUVE> m_prefabSystem;
     std::unique_ptr<Asset::IHotReloadUVE> m_hotReload;

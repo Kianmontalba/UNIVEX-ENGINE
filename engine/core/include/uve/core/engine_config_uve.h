@@ -90,6 +90,16 @@ struct EngineConfigUVE {
     /// destination directories and never changes AssetDatabaseUVE ownership.
     std::filesystem::path derivedArtifactCacheRootUVE = "DerivedData/Import/";
 
+    /// Minimum elapsed engine-update time before ProjectChangeWatcherUVE re-enumerates the
+    /// configured project content root. The watcher has no background thread or native OS event
+    /// backend in v1; a zero value intentionally requests a scan every engine Update().
+    double projectChangeWatchPollIntervalSecondsUVE = 1.0;
+
+    /// Maximum copied project-change entries retained for editor review. When the journal is full,
+    /// ProjectChangeWatcherUVE retains newest entries while setting an explicit rescan-required
+    /// boundary; stale-cache marking continues for every subsequently observed change.
+    std::size_t projectChangeJournalCapacityUVE = 256U;
+
     /// Whether Update() calls HotReloadUVE::PollUVE() each frame.
     /// AssetManagerUVE still tracks/untracks loaded assets with HotReloadUVE
     /// regardless of this flag — it only gates whether the poll itself

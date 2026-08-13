@@ -53,7 +53,8 @@ constexpr std::uint64_t kFnvPrimeUVE = 1099511628211ULL;
                           {"sourceFingerprint", FingerprintToJsonUVE(record.sourceFingerprint)},
                           {"destinationFingerprint", FingerprintToJsonUVE(record.destinationFingerprint)},
                           {"settingsVersion", record.settingsVersion},
-                          {"assetGuid", record.assetGuid.value}};
+                          {"assetGuid", record.assetGuid.value},
+                          {"stale", record.stale}};
 }
 
 [[nodiscard]] std::optional<DerivedArtifactCacheRecordUVE>
@@ -70,6 +71,7 @@ RecordFromJsonUVE(const nlohmann::json& document) {
         record.destinationFingerprint = FingerprintFromJsonUVE(document.at("destinationFingerprint"));
         record.settingsVersion = document.at("settingsVersion").get<std::string>();
         record.assetGuid = AssetGuidUVE{document.at("assetGuid").get<std::uint64_t>()};
+        record.stale = document.value("stale", false);
         if (record.sourcePath.empty() || record.destinationPath.empty() || record.settingsVersion.empty() ||
             record.assetGuid == kInvalidAssetGuidUVE) {
             return std::nullopt;
@@ -78,6 +80,36 @@ RecordFromJsonUVE(const nlohmann::json& document) {
     } catch (const nlohmann::json::exception&) {
         return std::nullopt;
     }
+}
+
+[[nodiscard]] bool WriteRecordAtomicallyUVE(const std::filesystem::path& artifactPath,
+                                             const DerivedArtifactCacheRecordUVE& record) {
+    std::filesystem::path temporaryPath = artifactPath;
+    temporaryPath += ".tmp";
+    std::error_code errorCode;
+    std::filesystem::remove(temporaryPath, errorCode);
+    errorCode.clear();
+
+    {
+        std::ofstream file(temporaryPath, std::ios::trunc);
+        if (!file.is_open()) {
+            return false;
+        }
+        file << RecordToJsonUVE(record).dump(2) << '\n';
+        file.flush();
+        if (!file.good()) {
+            file.close();
+            std::filesystem::remove(temporaryPath, errorCode);
+            return false;
+        }
+    }
+
+    std::filesystem::rename(temporaryPath, artifactPath, errorCode);
+    if (errorCode) {
+        std::filesystem::remove(temporaryPath, errorCode);
+        return false;
+    }
+    return true;
 }
 
 } // namespace
@@ -147,31 +179,60 @@ bool DerivedArtifactCacheUVE::StoreImportRecordUVE(const std::filesystem::path& 
     }
 
     const std::filesystem::path artifactPath = m_impl->cacheRoot / ArtifactFileNameUVE(destinationPath);
-    std::filesystem::path temporaryPath = artifactPath;
-    temporaryPath += ".tmp";
-    std::filesystem::remove(temporaryPath, errorCode);
-    errorCode.clear();
+    return WriteRecordAtomicallyUVE(artifactPath, record);
+}
 
-    {
-        std::ofstream file(temporaryPath, std::ios::trunc);
-        if (!file.is_open()) {
-            return false;
-        }
-        file << RecordToJsonUVE(record).dump(2) << '\n';
-        file.flush();
-        if (!file.good()) {
-            file.close();
-            std::filesystem::remove(temporaryPath, errorCode);
-            return false;
-        }
+std::size_t DerivedArtifactCacheUVE::MarkStaleForSourceUVE(const std::filesystem::path& sourcePath) {
+    if (sourcePath.empty()) {
+        return 0U;
     }
 
-    std::filesystem::rename(temporaryPath, artifactPath, errorCode);
+    const std::filesystem::path normalizedSourcePath = NormalizePathUVE(sourcePath);
+    std::lock_guard<std::mutex> lock(m_impl->mutex);
+    std::error_code errorCode;
+    const std::filesystem::file_status rootStatus = std::filesystem::symlink_status(m_impl->cacheRoot, errorCode);
+    if (errorCode || std::filesystem::is_symlink(rootStatus) || !std::filesystem::is_directory(rootStatus)) {
+        return 0U;
+    }
+
+    std::size_t markedCount = 0U;
+    std::filesystem::directory_iterator iterator(m_impl->cacheRoot,
+                                                 std::filesystem::directory_options::skip_permission_denied,
+                                                 errorCode);
     if (errorCode) {
-        std::filesystem::remove(temporaryPath, errorCode);
-        return false;
+        return 0U;
     }
-    return true;
+    const std::filesystem::directory_iterator end;
+    while (iterator != end) {
+        const std::filesystem::directory_entry entry = *iterator;
+        const std::filesystem::file_status entryStatus = entry.symlink_status(errorCode);
+        if (errorCode) {
+            return markedCount;
+        }
+        if (std::filesystem::is_regular_file(entryStatus) && entry.path().extension() == ".uveimportcache") {
+            std::ifstream file(entry.path());
+            if (file.is_open()) {
+                try {
+                    nlohmann::json document;
+                    file >> document;
+                    std::optional<DerivedArtifactCacheRecordUVE> record = RecordFromJsonUVE(document);
+                    if (record.has_value() && record->sourcePath == normalizedSourcePath && !record->stale) {
+                        record->stale = true;
+                        if (WriteRecordAtomicallyUVE(entry.path(), *record)) {
+                            ++markedCount;
+                        }
+                    }
+                } catch (const nlohmann::json::exception&) {
+                    // A malformed artifact is already a cache miss; leave it untouched.
+                }
+            }
+        }
+        iterator.increment(errorCode);
+        if (errorCode) {
+            return markedCount;
+        }
+    }
+    return markedCount;
 }
 
 std::filesystem::path DerivedArtifactCacheUVE::GetCacheRootUVE() const {

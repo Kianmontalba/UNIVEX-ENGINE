@@ -24,6 +24,7 @@ EngineServicesUVE::EngineServicesUVE(Debug::ILoggerUVE& logger, Utilities::ITime
                                       Asset::IAssetDatabaseUVE& assetDatabase,
                                       Asset::IProjectFileIndexUVE& projectFileIndex,
                                       Asset::IDerivedArtifactCacheUVE& derivedArtifactCache,
+                                      Asset::IProjectChangeWatcherUVE& projectChangeWatcher,
                                       Scene::ISceneSerializerUVE& sceneSerializer,
                                       Scene::IPrefabSystemUVE& prefabSystem,
                                       Asset::IHotReloadUVE& hotReload,
@@ -53,7 +54,8 @@ EngineServicesUVE::EngineServicesUVE(Debug::ILoggerUVE& logger, Utilities::ITime
       m_memoryManager(&memoryManager), m_threadPool(&threadPool), m_commandLine(&commandLine),
       m_configManager(&configManager), m_entityManager(&entityManager), m_sceneGraph(&sceneGraph),
       m_assetDatabase(&assetDatabase), m_projectFileIndex(&projectFileIndex),
-      m_derivedArtifactCache(&derivedArtifactCache), m_sceneSerializer(&sceneSerializer),
+      m_derivedArtifactCache(&derivedArtifactCache), m_projectChangeWatcher(&projectChangeWatcher),
+      m_sceneSerializer(&sceneSerializer),
       m_prefabSystem(&prefabSystem), m_hotReload(&hotReload), m_assetManager(&assetManager),
       m_assetImporter(&assetImporter), m_assetImportQueue(&assetImportQueue), m_assetBundle(&assetBundle),
       m_fileSystem(&fileSystem),
@@ -112,6 +114,10 @@ Asset::IProjectFileIndexUVE& EngineServicesUVE::GetProjectFileIndexUVE() const n
 
 Asset::IDerivedArtifactCacheUVE& EngineServicesUVE::GetDerivedArtifactCacheUVE() const noexcept {
     return *m_derivedArtifactCache;
+}
+
+Asset::IProjectChangeWatcherUVE& EngineServicesUVE::GetProjectChangeWatcherUVE() const noexcept {
+    return *m_projectChangeWatcher;
 }
 
 Scene::ISceneSerializerUVE& EngineServicesUVE::GetSceneSerializerUVE() const noexcept {

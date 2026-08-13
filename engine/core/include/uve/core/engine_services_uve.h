@@ -20,6 +20,7 @@
 #include "uve/asset/i_file_system_uve.h"
 #include "uve/asset/i_hot_reload_uve.h"
 #include "uve/asset/i_project_file_index_uve.h"
+#include "uve/asset/i_project_change_watcher_uve.h"
 #include "uve/audio/i_audio_device_uve.h"
 #include "uve/audio/i_audio_source_system_uve.h"
 #include "uve/audio/i_audio_system_uve.h"
@@ -55,7 +56,7 @@ namespace UVE::Core {
 /// container: a small bundle of references to the core engine services
 /// (Logger, Timer, EventSystem, MemoryManager, ThreadPool, CommandLine,
 /// ConfigManager, EntityManager, SceneGraph, AssetDatabase, ProjectFileIndex, DerivedArtifactCache,
-/// SceneSerializer, PrefabSystem, HotReload, AssetManager, AssetImporter, AssetImportQueue, AssetBundle,
+/// ProjectChangeWatcher, SceneSerializer, PrefabSystem, HotReload, AssetManager, AssetImporter, AssetImportQueue, AssetBundle,
 /// FileSystem, RenderDevice, ShaderManager, RenderSystem, CameraSystem,
 /// MeshRenderer, LightSystem, Renderer3D, CollisionSystem, PhysicsSystem,
 /// RaycastSystem, InputSystem, AudioDevice, AudioSystem, AudioSourceSystem,
@@ -69,7 +70,7 @@ namespace UVE::Core {
 /// Referenced through the
 /// ILoggerUVE/ITimerUVE/IEventSystemUVE/IMemoryManagerUVE/IThreadPoolUVE/
 /// ICommandLineUVE/IConfigManagerUVE/IEntityManagerUVE/ISceneGraphUVE/
-/// IAssetDatabaseUVE/IProjectFileIndexUVE/IDerivedArtifactCacheUVE/ISceneSerializerUVE/IPrefabSystemUVE/IHotReloadUVE/
+/// IAssetDatabaseUVE/IProjectFileIndexUVE/IDerivedArtifactCacheUVE/IProjectChangeWatcherUVE/ISceneSerializerUVE/IPrefabSystemUVE/IHotReloadUVE/
 /// IAssetManagerUVE/IAssetImporterUVE/IAssetImportQueueUVE/IAssetBundleUVE/IFileSystemUVE/
 /// IRenderDeviceUVE/Shader::IShaderManagerUVE/IRenderSystemUVE/
 /// ICameraSystemUVE/IMeshRendererUVE/ILightSystemUVE/
@@ -94,6 +95,7 @@ public:
                        Asset::IAssetDatabaseUVE& assetDatabase,
                        Asset::IProjectFileIndexUVE& projectFileIndex,
                        Asset::IDerivedArtifactCacheUVE& derivedArtifactCache,
+                       Asset::IProjectChangeWatcherUVE& projectChangeWatcher,
                        Scene::ISceneSerializerUVE& sceneSerializer,
                        Scene::IPrefabSystemUVE& prefabSystem,
                        Asset::IHotReloadUVE& hotReload,
@@ -132,6 +134,7 @@ public:
     [[nodiscard]] Asset::IAssetDatabaseUVE& GetAssetDatabaseUVE() const noexcept;
     [[nodiscard]] Asset::IProjectFileIndexUVE& GetProjectFileIndexUVE() const noexcept;
     [[nodiscard]] Asset::IDerivedArtifactCacheUVE& GetDerivedArtifactCacheUVE() const noexcept;
+    [[nodiscard]] Asset::IProjectChangeWatcherUVE& GetProjectChangeWatcherUVE() const noexcept;
     [[nodiscard]] Scene::ISceneSerializerUVE& GetSceneSerializerUVE() const noexcept;
     [[nodiscard]] Scene::IPrefabSystemUVE& GetPrefabSystemUVE() const noexcept;
     [[nodiscard]] Asset::IHotReloadUVE& GetHotReloadUVE() const noexcept;
@@ -171,6 +174,7 @@ private:
     Asset::IAssetDatabaseUVE* m_assetDatabase;
     Asset::IProjectFileIndexUVE* m_projectFileIndex;
     Asset::IDerivedArtifactCacheUVE* m_derivedArtifactCache;
+    Asset::IProjectChangeWatcherUVE* m_projectChangeWatcher;
     Scene::ISceneSerializerUVE* m_sceneSerializer;
     Scene::IPrefabSystemUVE* m_prefabSystem;
     Asset::IHotReloadUVE* m_hotReload;

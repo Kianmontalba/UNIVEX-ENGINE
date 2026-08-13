@@ -91,6 +91,18 @@ constexpr const char* kHierarchyEntityPayloadUVE = "UVE_SCENE_HIERARCHY_ENTITY";
     return "Unknown";
 }
 
+[[nodiscard]] const char* ProjectFileChangeKindLabelUVE(const Asset::ProjectFileChangeKindUVE kind) noexcept {
+    switch (kind) {
+        case Asset::ProjectFileChangeKindUVE::Created:
+            return "Created";
+        case Asset::ProjectFileChangeKindUVE::Modified:
+            return "Modified";
+        case Asset::ProjectFileChangeKindUVE::Removed:
+            return "Removed";
+    }
+    return "Unknown";
+}
+
 [[nodiscard]] bool ContainsCaseInsensitiveUVE(const std::string_view text,
                                                const std::string_view query) noexcept {
     if (query.empty()) {
@@ -3727,6 +3739,38 @@ void EditorUVE::DrawInspectorContentUVE() {
     ImGui::EndDisabled();
 }
 
+void EditorUVE::DrawProjectChangeJournalUVE(const Asset::ProjectChangeSnapshotUVE& snapshot) {
+    if (!ImGui::CollapsingHeader("Review Changes")) {
+        return;
+    }
+
+    ImGui::TextDisabled("Read-only project-content observation. Refresh applies no import or filesystem action.");
+    if (snapshot.changes.empty()) {
+        ImGui::TextDisabled("No unacknowledged project-content changes.");
+        return;
+    }
+
+    ImGui::BeginChild("##project-change-journal", ImVec2{0.0F, 76.0F}, true);
+    for (const Asset::ProjectFileChangeUVE& change : snapshot.changes) {
+        const std::string path = change.relativePath.generic_string();
+        const std::string rowLabel = "#" + std::to_string(change.sequence) + " " +
+                                     ProjectFileChangeKindLabelUVE(change.kind) + " — " + path +
+                                     "##project-change-" + std::to_string(change.sequence);
+        if (ImGui::TreeNodeEx(rowLabel.c_str(), ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen)) {
+            // Leaf nodes intentionally have no expanded body; all observable data is kept in the row.
+        }
+        if (change.registeredAssetGuid.has_value()) {
+            ImGui::SameLine();
+            ImGui::TextDisabled("GUID %016llX", static_cast<unsigned long long>(change.registeredAssetGuid->value));
+        }
+        if (change.staleArtifactCount > 0U) {
+            ImGui::SameLine();
+            ImGui::TextDisabled("%zu cached import record(s) marked stale", change.staleArtifactCount);
+        }
+    }
+    ImGui::EndChild();
+}
+
 void EditorUVE::DrawAssetsPanelUVE() {
     const ImGuiViewport* const mainViewport = ImGui::GetMainViewport();
     const float contentHeight = kAssetsPanelHeightUVE - kBottomDockTabHeightUVE;
@@ -3739,12 +3783,23 @@ void EditorUVE::DrawAssetsPanelUVE() {
     ImGui::Begin("FileSystem", nullptr, flags);
 
     Asset::IProjectFileIndexUVE& projectFileIndex = m_services->GetProjectFileIndexUVE();
+    Asset::IProjectChangeWatcherUVE& projectChangeWatcher = m_services->GetProjectChangeWatcherUVE();
     const bool refreshRequested = !m_projectFileSnapshotInitialized || ImGui::Button("Refresh");
     if (refreshRequested) {
+        const Asset::ProjectChangeSnapshotUVE changesBeforeRefresh = projectChangeWatcher.GetSnapshotUVE();
         m_projectFileLastRefreshSucceeded = projectFileIndex.RefreshUVE(m_services->GetAssetDatabaseUVE());
         m_projectFileSnapshotInitialized = true;
+        if (m_projectFileLastRefreshSucceeded) {
+            projectChangeWatcher.AcknowledgeThroughUVE(changesBeforeRefresh.latestSequence);
+            if (changesBeforeRefresh.rescanRequired) {
+                // The project index has just completed the full refresh required to re-establish
+                // correctness after bounded-journal overflow.
+                projectChangeWatcher.AcknowledgeRescanUVE();
+            }
+        }
     }
     const Asset::ProjectFileSnapshotUVE snapshot = projectFileIndex.GetSnapshotUVE();
+    const Asset::ProjectChangeSnapshotUVE changeSnapshot = projectChangeWatcher.GetSnapshotUVE();
 
     std::array<char, 256> filterBuffer{};
     const std::size_t copiedCharacters = std::min(m_assetFilter.size(), filterBuffer.size() - 1U);
@@ -3779,6 +3834,16 @@ void EditorUVE::DrawAssetsPanelUVE() {
         ImGui::SameLine();
         ImGui::TextDisabled("Refresh failed; showing the last successful snapshot.");
     }
+    if (!changeSnapshot.changes.empty()) {
+        ImGui::SameLine();
+        ImGui::TextDisabled("%zu changes pending", changeSnapshot.changes.size());
+    }
+    if (changeSnapshot.rescanRequired) {
+        ImGui::SameLine();
+        ImGui::TextColored(ImVec4{1.0F, 0.72F, 0.22F, 1.0F}, "Rescan required");
+    }
+
+    DrawProjectChangeJournalUVE(changeSnapshot);
 
     const auto isVisible = [this, &snapshot](const Asset::ProjectFileEntryUVE& entry) {
         if (m_assetFilter.empty()) {

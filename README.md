@@ -116,15 +116,22 @@ The active FileSystem dock presents a cached, deterministic `ProjectFileIndexUVE
 `assets/` content root, with folders before files, case-insensitive path filtering, and existing AssetDatabase GUID
 correlation. It scans only when the dock first opens or the user presses **Refresh**; normal overlay frames read the
 cached snapshot and perform no filesystem traversal. Missing roots are valid empty states, refresh failure retains
-the last successful tree, and symlinks are never exposed or followed. The dock is strictly read-only: it does not
-import, reimport, preview, rename, move, delete, create folders, drag-and-drop, or load assets. The **Import** tab
-now exposes a read-only copied-job monitor for the deterministic main-thread `AssetImportQueueUVE`; it has no file
-picker, enqueue, retry, cancel, drag-and-drop, automatic reimport, or document mutation control. Explicitly
-programmatic jobs process at most one per engine update and use the existing generic importer. Successful imports
-persist project-local metadata under `DerivedData/Import/`; cache reuse requires matching source bytes, destination
-bytes, settings version, schema, output existence, and AssetDatabase GUID/path identity, so out-of-band destination
-edits force a fresh import. Signals remains a deliberate session-only placeholder until scripting runtime contracts
-exist.
+the last successful tree, and symlinks are never exposed or followed. A separate portable `ProjectChangeWatcherUVE`
+polls the same root on the main thread at a configurable interval (one second by default), publishes a copied bounded
+journal, and marks only matching derived import metadata stale. The FileSystem dock shows pending-change and
+rescan-required status plus a read-only **Review Changes** section. A successful **Refresh** explicitly acknowledges
+changes reviewed by that full index rebuild; it never imports, reimports, or mutates source files. Journal overflow
+retains newest entries, declares an explicit rescan boundary, and still continues targeted stale-cache marking.
+Native OS event backends, automatic index refresh, automatic reimport, and rename pairing remain deferred.
+
+The dock is otherwise strictly read-only: it does not preview, rename, move, delete, create folders,
+drag-and-drop, or load assets. The **Import** tab now exposes a read-only copied-job monitor for the deterministic
+main-thread `AssetImportQueueUVE`; it has no file picker, enqueue, retry, cancel, drag-and-drop, automatic reimport,
+or document mutation control. Explicitly programmatic jobs process at most one per engine update and use the existing
+generic importer. Successful imports persist project-local metadata under `DerivedData/Import/`; cache reuse requires
+matching source bytes, destination bytes, settings version, schema, output existence, AssetDatabase GUID/path
+identity, and a non-stale cache record, so out-of-band destination edits and observed source changes force a fresh
+import. Signals remains a deliberate session-only placeholder until scripting runtime contracts exist.
 Viewport picking intentionally selects only live document entities with the existing box collider
 component. Primitive roots receive matching default colliders: Cube and UV Sphere use 0.5-unit half extents on all
 axes, while Plane uses `{0.5, 0.025, 0.5}` so its visible, origin-centered XZ surface remains selectable. Every selected collider-backed document entity receives a read-only oriented bounds overlay with corner

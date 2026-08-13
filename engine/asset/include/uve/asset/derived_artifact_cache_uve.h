@@ -24,6 +24,7 @@ public:
     LoadImportRecordUVE(const std::filesystem::path& destinationPath) const override;
     [[nodiscard]] bool StoreImportRecordUVE(const std::filesystem::path& destinationPath,
                                              const DerivedArtifactCacheRecordUVE& record) override;
+    [[nodiscard]] std::size_t MarkStaleForSourceUVE(const std::filesystem::path& sourcePath) override;
     [[nodiscard]] std::filesystem::path GetCacheRootUVE() const override;
 
 private:

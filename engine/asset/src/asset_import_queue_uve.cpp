@@ -23,7 +23,7 @@ namespace {
                                          const AssetContentFingerprintUVE& sourceFingerprint,
                                          IAssetDatabaseUVE& assetDatabase,
                                          AssetContentFingerprintUVE& outDestinationFingerprint) {
-    if (record.schemaVersion != kDerivedArtifactCacheSchemaVersionUVE ||
+    if (record.schemaVersion != kDerivedArtifactCacheSchemaVersionUVE || record.stale ||
         record.sourcePath != request.sourcePath || record.destinationPath != request.destinationPath ||
         record.sourceFingerprint != sourceFingerprint || record.settingsVersion != request.settingsVersion ||
         record.assetGuid == kInvalidAssetGuidUVE) {

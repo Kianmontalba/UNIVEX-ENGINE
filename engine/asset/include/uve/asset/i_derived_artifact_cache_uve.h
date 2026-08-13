@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <optional>
@@ -26,6 +27,11 @@ struct DerivedArtifactCacheRecordUVE final {
     AssetContentFingerprintUVE destinationFingerprint{};
     std::string settingsVersion{};
     AssetGuidUVE assetGuid{};
+
+    /// Set only by targeted project-change invalidation. A stale record is retained for
+    /// diagnostics but must never satisfy an import-cache hit until a successful explicit import
+    /// overwrites it with fresh fingerprints and `stale == false`.
+    bool stale = false;
 };
 
 /// I/O abstraction for project-local generated import metadata. Implementations accept only
@@ -47,6 +53,12 @@ public:
     /// cannot be written atomically.
     [[nodiscard]] virtual bool StoreImportRecordUVE(const std::filesystem::path& destinationPath,
                                                      const DerivedArtifactCacheRecordUVE& record) = 0;
+
+    /// Marks every valid artifact whose normalized source path equals `sourcePath` as stale,
+    /// preserving its prior metadata and destination bytes for diagnostics. Returns the number of
+    /// records successfully marked. This operation must not create cache directories, import,
+    /// reload, delete user content, or alter AssetDatabaseUVE.
+    [[nodiscard]] virtual std::size_t MarkStaleForSourceUVE(const std::filesystem::path& sourcePath) = 0;
 
     /// Exposes the normalized configured cache root for diagnostics and tests. Returning a value
     /// does not imply that the root currently exists; it is created lazily only on successful store.

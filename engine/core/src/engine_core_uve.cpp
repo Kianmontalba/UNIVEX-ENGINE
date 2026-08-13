@@ -26,6 +26,7 @@
 #include "uve/asset/material_asset_uve.h"
 #include "uve/asset/mesh_asset_uve.h"
 #include "uve/asset/project_file_index_uve.h"
+#include "uve/asset/project_change_watcher_uve.h"
 #include "uve/asset/shader_asset_uve.h"
 #include "uve/asset/texture_asset_uve.h"
 #include "uve/audio/audio_source_system_uve.h"
@@ -171,7 +172,13 @@ void EngineCoreUVE::Init() {
     // its configured root lazily during a successful cache write and has no AssetDatabase ownership.
     m_derivedArtifactCache = std::make_unique<Asset::DerivedArtifactCacheUVE>(m_config.derivedArtifactCacheRootUVE);
 
-    // SceneSerializer and PrefabSystem twelfth/thirteenth: both stateless,
+    // ProjectChangeWatcher twelfth: interval-driven project-content observation stays separate
+    // from the loaded-runtime HotReload poller. It owns no importer, worker, or index refresh policy.
+    m_projectChangeWatcher = std::make_unique<Asset::ProjectChangeWatcherUVE>(
+        m_config.projectContentRootUVE, m_config.projectChangeWatchPollIntervalSecondsUVE,
+        m_config.projectChangeJournalCapacityUVE);
+
+    // SceneSerializer and PrefabSystem thirteenth/fourteenth: both stateless,
     // grouped immediately after AssetDatabase/ProjectFileIndex for readability.
     m_sceneSerializer = std::make_unique<Scene::SceneSerializerUVE>();
     m_prefabSystem = std::make_unique<Scene::PrefabSystemUVE>();
@@ -340,7 +347,8 @@ void EngineCoreUVE::Init() {
 
     m_services.emplace(*m_logger, *m_timer, *m_eventSystem, *m_memoryManager, *m_threadPool,
                                                  *m_commandLine, *m_configManager, *m_entityManager, *m_sceneGraph,
-                         *m_assetDatabase, *m_projectFileIndex, *m_derivedArtifactCache, *m_sceneSerializer,
+                         *m_assetDatabase, *m_projectFileIndex, *m_derivedArtifactCache, *m_projectChangeWatcher,
+                         *m_sceneSerializer,
                          *m_prefabSystem, *m_hotReload, *m_assetManager, *m_assetImporter, *m_assetImportQueue,
                          *m_assetBundle, *m_fileSystem,
 
@@ -404,6 +412,12 @@ void EngineCoreUVE::Update() {
     if (m_config.hotReloadEnabledUVE) {
         m_hotReload->PollUVE(*m_assetManager, *m_assetDatabase, m_timer->GetDeltaTimeUVE());
     }
+
+    // Increment 61: portable project-content change detection is distinct from the loaded-asset
+    // hot reloader. It can only journal changes and mark matching derived metadata stale; it never
+    // refreshes the editor index, enqueues imports, or mutates authoring state automatically.
+    static_cast<void>(m_projectChangeWatcher->PollUVE(m_timer->GetDeltaTimeUVE(), *m_assetDatabase,
+                                                       *m_derivedArtifactCache));
     m_assetManager->CollectGarbageUVE();
 
     // Increment 60: one deterministic, main-thread import job at most per engine Update().
@@ -546,6 +560,7 @@ void EngineCoreUVE::Shutdown() {
     m_prefabSystem.reset();
     m_sceneSerializer.reset();
     m_projectFileIndex.reset();
+    m_projectChangeWatcher.reset();
     m_derivedArtifactCache.reset();
     m_assetDatabase.reset();
     m_sceneGraph.reset();
