@@ -57,7 +57,7 @@ enum class EditorTranslateAxisUVE {
 };
 
 /// Selects the active transform-gizmo handle family. Handles use the session-local World or Local
-/// coordinate space, while uniform/negative scale and trackball rotation remain future work.
+/// coordinate space; negative and proportional/multiplicative scale remain future work.
 enum class EditorGizmoModeUVE {
     Translate,
     Rotate,
@@ -161,10 +161,19 @@ public:
     /// remains outside the document root set.
     [[nodiscard]] bool LoadSceneUVE();
 
-    /// Makes entity the sole hierarchy/inspector selection when it is live; invalid or deleted
-    /// handles clear the selection instead of exposing stale ECS state.
+    /// Makes entity the sole ordered hierarchy/inspector selection when it is live; invalid or
+    /// deleted handles clear the selection instead of exposing stale ECS state.
     void SelectEntityUVE(Scene::EntityUVE entity) noexcept;
+    /// Adds a live document entity to the ordered selection or removes it when already selected.
+    /// A newly added entity becomes active. Removing the active entity promotes the last remaining
+    /// selected entity; removing the final entity clears the active selection.
+    void ToggleEntitySelectionUVE(Scene::EntityUVE entity) noexcept;
     void ClearSelectionUVE() noexcept;
+    /// Returns the ordered, deduplicated live document selection. The final entry is active whenever
+    /// ToggleEntitySelectionUVE() removed the prior active entity.
+    [[nodiscard]] const std::vector<Scene::EntityUVE>& GetSelectedEntitiesUVE() const noexcept;
+    /// Returns true only when the active entity is the sole selected live document entity.
+    [[nodiscard]] bool HasSingleDocumentSelectionUVE() const noexcept;
 
     /// Applies one validated local transform through ISceneGraphUVE, ensuring derived world
     /// transforms are marked dirty for EngineCoreUVE's next scene-graph update. Returns false for
@@ -183,10 +192,12 @@ public:
                                                                    Math::Vector2UVE pointerPosition) const;
 
     /// Uses the existing deterministic box-collider raycast system to select the closest live
-    /// document entity under pointerPosition. A valid viewport miss clears selection. Entities
-    /// without ColliderComponentUVE are intentionally not selectable in this first picking slice.
+    /// document entity under pointerPosition. A valid regular viewport miss clears selection; a
+    /// toggle-selection miss retains it. Entities without ColliderComponentUVE are intentionally
+    /// not selectable in this first picking slice.
     [[nodiscard]] bool PickViewportUVE(const EditorViewportRectUVE& viewportRect,
-                                        Math::Vector2UVE pointerPosition);
+                                        Math::Vector2UVE pointerPosition,
+                                        bool toggleSelection = false);
 
     /// Moves the selected document entity by a finite world-space distance along one unit world
     /// axis. Parent world rotation and scale are converted back to a local position delta before
@@ -222,7 +233,7 @@ public:
     [[nodiscard]] bool SetTransformSnappingSettingsUVE(const EditorTransformSnappingSettingsUVE& settings);
     [[nodiscard]] const EditorTransformSnappingSettingsUVE& GetTransformSnappingSettingsUVE() const noexcept;
 
-    /// Returns the derived world-space box for the selected live collider-backed document entity.
+    /// Returns the derived world-space box for the active live collider-backed document entity.
     /// It never mutates selection, scene state, dirty state, or Undo/Redo history; unsafe or
     /// unsupported state returns std::nullopt.
     [[nodiscard]] std::optional<EditorSelectionBoundsUVE> TryGetSelectedBoundsUVE() const;
@@ -296,11 +307,21 @@ private:
         std::vector<std::size_t> childIndices;
     };
 
+    struct EditorSelectionSnapshotUVE final {
+        std::vector<Scene::EntityUVE> entities;
+        Scene::EntityUVE activeEntity = Scene::kInvalidEntityUVE;
+    };
+
+    struct EditorSelectionPathsUVE final {
+        std::vector<EditorSelectionPathUVE> entityPaths;
+        std::optional<EditorSelectionPathUVE> activePath;
+    };
+
     struct PlayModeSessionUVE final {
         Scene::SceneSnapshotUVE documentSnapshot;
         bool capturedEmptyDocument = false;
         bool dirtyBefore = false;
-        std::optional<EditorSelectionPathUVE> selectionBefore;
+        EditorSelectionPathsUVE selectionBefore;
     };
 
     enum class EditorTranslatePlaneUVE {
@@ -344,8 +365,8 @@ private:
         Scene::EntityUVE entity = Scene::kInvalidEntityUVE;
         Scene::TransformComponentUVE before{};
         Scene::TransformComponentUVE after{};
-        Scene::EntityUVE selectionBefore = Scene::kInvalidEntityUVE;
-        Scene::EntityUVE selectionAfter = Scene::kInvalidEntityUVE;
+        EditorSelectionSnapshotUVE selectionBefore;
+        EditorSelectionSnapshotUVE selectionAfter;
         bool dirtyBefore = false;
         bool dirtyAfter = false;
     };
@@ -354,8 +375,8 @@ private:
         Scene::EntityUVE entity = Scene::kInvalidEntityUVE;
         std::optional<std::string> beforeName;
         std::optional<std::string> afterName;
-        Scene::EntityUVE selectionBefore = Scene::kInvalidEntityUVE;
-        Scene::EntityUVE selectionAfter = Scene::kInvalidEntityUVE;
+        EditorSelectionSnapshotUVE selectionBefore;
+        EditorSelectionSnapshotUVE selectionAfter;
         bool dirtyBefore = false;
         bool dirtyAfter = false;
     };
@@ -364,8 +385,8 @@ private:
         EditorEntityKindUVE kind = EditorEntityKindUVE::Empty;
         std::string name;
         Scene::EntityUVE activeEntity = Scene::kInvalidEntityUVE;
-        Scene::EntityUVE selectionBefore = Scene::kInvalidEntityUVE;
-        Scene::EntityUVE selectionAfter = Scene::kInvalidEntityUVE;
+        EditorSelectionSnapshotUVE selectionBefore;
+        EditorSelectionSnapshotUVE selectionAfter;
         bool dirtyBefore = false;
         bool dirtyAfter = false;
     };
@@ -377,8 +398,8 @@ private:
         Scene::EntityUVE originalParent = Scene::kInvalidEntityUVE;
         Scene::EntityUVE activeEntity = Scene::kInvalidEntityUVE;
         std::optional<std::string> duplicateRootName;
-        Scene::EntityUVE selectionBefore = Scene::kInvalidEntityUVE;
-        Scene::EntityUVE selectionAfter = Scene::kInvalidEntityUVE;
+        EditorSelectionSnapshotUVE selectionBefore;
+        EditorSelectionSnapshotUVE selectionAfter;
         bool dirtyBefore = false;
         bool dirtyAfter = false;
     };
@@ -389,8 +410,8 @@ private:
         Scene::SceneSnapshotUVE snapshot;
         Scene::EntityUVE originalParent = Scene::kInvalidEntityUVE;
         Scene::EntityUVE activeEntity = Scene::kInvalidEntityUVE;
-        Scene::EntityUVE selectionBefore = Scene::kInvalidEntityUVE;
-        Scene::EntityUVE selectionAfter = Scene::kInvalidEntityUVE;
+        EditorSelectionSnapshotUVE selectionBefore;
+        EditorSelectionSnapshotUVE selectionAfter;
         bool dirtyBefore = false;
         bool dirtyAfter = false;
     };
@@ -402,8 +423,8 @@ private:
         Scene::EntityUVE parentAfter = Scene::kInvalidEntityUVE;
         Scene::TransformComponentUVE localTransformBefore{};
         Scene::TransformComponentUVE localTransformAfter{};
-        Scene::EntityUVE selectionBefore = Scene::kInvalidEntityUVE;
-        Scene::EntityUVE selectionAfter = Scene::kInvalidEntityUVE;
+        EditorSelectionSnapshotUVE selectionBefore;
+        EditorSelectionSnapshotUVE selectionAfter;
         bool dirtyBefore = false;
         bool dirtyAfter = false;
     };
@@ -475,8 +496,15 @@ private:
     [[nodiscard]] bool TryGetDocumentParentUVE(Scene::EntityUVE entity, Scene::EntityUVE& outParent) const;
     [[nodiscard]] bool IsLifecycleCommandAllowedUVE() const noexcept;
     [[nodiscard]] bool IsAuthoringCommandAllowedUVE() const noexcept;
-    [[nodiscard]] std::optional<EditorSelectionPathUVE> CaptureSelectionPathUVE(
+    [[nodiscard]] EditorSelectionSnapshotUVE CaptureSelectionSnapshotUVE() const;
+    void RestoreSelectionUVE(EditorSelectionSnapshotUVE selection) noexcept;
+    void PruneSelectionUVE() noexcept;
+    [[nodiscard]] bool IsEntitySelectedUVE(Scene::EntityUVE entity) const noexcept;
+    [[nodiscard]] std::optional<EditorSelectionBoundsUVE> TryGetEntityBoundsUVE(Scene::EntityUVE entity) const;
+    [[nodiscard]] EditorSelectionPathsUVE CaptureSelectionPathsUVE(
         const std::vector<Scene::EntityUVE>& roots) const;
+    [[nodiscard]] EditorSelectionSnapshotUVE ResolveSelectionPathsUVE(
+        const EditorSelectionPathsUVE& paths, const std::vector<Scene::EntityUVE>& roots) const;
     [[nodiscard]] Scene::EntityUVE ResolveSelectionPathUVE(
         const EditorSelectionPathUVE& path, const std::vector<Scene::EntityUVE>& roots) const;
     [[nodiscard]] bool FindSelectionPathUVE(Scene::EntityUVE current, Scene::EntityUVE target,
@@ -494,7 +522,6 @@ private:
         EditorEntityKindUVE kind, const std::optional<std::string>& explicitName);
     void RecordHistoryUVE(HistoryEntryUVE entry);
     void ClearHistoryUVE() noexcept;
-    void RestoreSelectionUVE(Scene::EntityUVE selection) noexcept;
     [[nodiscard]] bool UndoHistoryEntryUVE(HistoryEntryUVE& entry);
     [[nodiscard]] bool RedoHistoryEntryUVE(HistoryEntryUVE& entry);
     void DestroyDocumentSubtreeUVE(Scene::EntityUVE root);
@@ -513,6 +540,7 @@ private:
     EditorPlayModeStateUVE m_playModeState = EditorPlayModeStateUVE::Edit;
     std::optional<PlayModeSessionUVE> m_playModeSession;
     Scene::EntityUVE m_viewportCamera = Scene::kInvalidEntityUVE;
+    std::vector<Scene::EntityUVE> m_selectedEntities;
     Scene::EntityUVE m_selectedEntity = Scene::kInvalidEntityUVE;
     std::filesystem::path m_activeScenePath;
     std::size_t m_historyCapacity = 100U;

@@ -102,6 +102,95 @@ TEST(EditorUVETest, SelectionAndInspectorTransformEdit_ValidateLifetimeAndFinite
     engine.Shutdown();
 }
 
+TEST(EditorUVETest, MultiSelectionUVE_ToggleMaintainsOrderActiveFallbackAndSingleCommandSafety) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_multi_selection.uvescene");
+        editor.InitUVE();
+        Core::EngineServicesUVE& services = engine.GetServicesUVE();
+        Scene::IEntityManagerUVE& entityManager = services.GetEntityManagerUVE();
+        const Scene::EntityUVE first = entityManager.CreateEntityUVE();
+        const Scene::EntityUVE second = entityManager.CreateEntityUVE();
+        AttachRootUVE(engine, first, Scene::TransformComponentUVE{});
+        AttachRootUVE(engine, second, Scene::TransformComponentUVE{});
+
+        editor.SelectEntityUVE(first);
+        EXPECT_EQ(editor.GetSelectedEntitiesUVE(), std::vector<Scene::EntityUVE>{first});
+        EXPECT_EQ(editor.GetSelectedEntityUVE(), first);
+        EXPECT_TRUE(editor.HasSingleDocumentSelectionUVE());
+
+        editor.ToggleEntitySelectionUVE(second);
+        EXPECT_EQ(editor.GetSelectedEntitiesUVE(), (std::vector<Scene::EntityUVE>{first, second}));
+        EXPECT_EQ(editor.GetSelectedEntityUVE(), second);
+        EXPECT_FALSE(editor.HasSingleDocumentSelectionUVE());
+
+        const Scene::TransformComponentUVE before =
+            entityManager.GetComponentUVE<Scene::TransformComponentUVE>(second);
+        EXPECT_FALSE(editor.TranslateSelectedAlongAxisUVE(EditorTranslateAxisUVE::X, 1.0F));
+        EXPECT_FALSE(editor.DuplicateSelectedEntityUVE() != Scene::kInvalidEntityUVE);
+        EXPECT_FALSE(editor.DeleteSelectedEntityUVE());
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(second).localPosition,
+                  before.localPosition);
+
+        editor.ToggleEntitySelectionUVE(second);
+        EXPECT_EQ(editor.GetSelectedEntitiesUVE(), std::vector<Scene::EntityUVE>{first});
+        EXPECT_EQ(editor.GetSelectedEntityUVE(), first);
+        EXPECT_TRUE(editor.HasSingleDocumentSelectionUVE());
+
+        editor.ToggleEntitySelectionUVE(second);
+        editor.ToggleEntitySelectionUVE(first);
+        EXPECT_EQ(editor.GetSelectedEntitiesUVE(), std::vector<Scene::EntityUVE>{second});
+        EXPECT_EQ(editor.GetSelectedEntityUVE(), second);
+
+        editor.ToggleEntitySelectionUVE(second);
+        EXPECT_TRUE(editor.GetSelectedEntitiesUVE().empty());
+        EXPECT_EQ(editor.GetSelectedEntityUVE(), Scene::kInvalidEntityUVE);
+        EXPECT_FALSE(editor.HasSingleDocumentSelectionUVE());
+
+        editor.ToggleEntitySelectionUVE(editor.GetViewportCameraUVE());
+        EXPECT_TRUE(editor.GetSelectedEntitiesUVE().empty());
+        editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
+}
+
+TEST(EditorUVETest, MultiSelectionUVE_TickPrunesStaleEntitiesAndPromotesLastLiveSelection) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_multi_selection_stale.uvescene");
+        editor.InitUVE();
+        Scene::IEntityManagerUVE& entityManager = engine.GetServicesUVE().GetEntityManagerUVE();
+        const Scene::EntityUVE first = entityManager.CreateEntityUVE();
+        const Scene::EntityUVE second = entityManager.CreateEntityUVE();
+        AttachRootUVE(engine, first, Scene::TransformComponentUVE{});
+        AttachRootUVE(engine, second, Scene::TransformComponentUVE{});
+
+        editor.SelectEntityUVE(first);
+        editor.ToggleEntitySelectionUVE(second);
+        entityManager.DestroyEntityUVE(second);
+        editor.TickUVE();
+        EXPECT_EQ(editor.GetSelectedEntitiesUVE(), std::vector<Scene::EntityUVE>{first});
+        EXPECT_EQ(editor.GetSelectedEntityUVE(), first);
+        EXPECT_TRUE(editor.HasSingleDocumentSelectionUVE());
+
+        entityManager.DestroyEntityUVE(first);
+        editor.TickUVE();
+        EXPECT_TRUE(editor.GetSelectedEntitiesUVE().empty());
+        EXPECT_EQ(editor.GetSelectedEntityUVE(), Scene::kInvalidEntityUVE);
+
+        editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
+}
+
 TEST(EditorUVETest, CreateDocumentEntityUVE_CreatesSelectedDirtyRootArchetypes) {
     Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
     engine.Init();
@@ -1230,6 +1319,16 @@ TEST(EditorUVETest, ViewportRayAndColliderPicking_SelectClosestDocumentEntityAnd
         EXPECT_FALSE(editor.PickViewportUVE(viewportRect, Math::Vector2UVE{0.0F, 0.0F}));
         EXPECT_EQ(editor.GetSelectedEntityUVE(), Scene::kInvalidEntityUVE);
 
+        editor.SelectEntityUVE(farEntity);
+        EXPECT_TRUE(editor.PickViewportUVE(viewportRect, Math::Vector2UVE{400.0F, 300.0F}, true));
+        EXPECT_EQ(editor.GetSelectedEntitiesUVE(), (std::vector<Scene::EntityUVE>{farEntity, nearEntity}));
+        EXPECT_EQ(editor.GetSelectedEntityUVE(), nearEntity);
+        EXPECT_FALSE(editor.PickViewportUVE(viewportRect, Math::Vector2UVE{0.0F, 0.0F}, true));
+        EXPECT_EQ(editor.GetSelectedEntitiesUVE(), (std::vector<Scene::EntityUVE>{farEntity, nearEntity}));
+        EXPECT_TRUE(editor.PickViewportUVE(viewportRect, Math::Vector2UVE{400.0F, 300.0F}, true));
+        EXPECT_EQ(editor.GetSelectedEntitiesUVE(), std::vector<Scene::EntityUVE>{farEntity});
+        EXPECT_EQ(editor.GetSelectedEntityUVE(), farEntity);
+
         editor.ShutdownUVE();
     }
 
@@ -1828,6 +1927,39 @@ TEST(EditorUVETest, PlayModeSandbox_RestoresSnapshotRejectsAuthoringAndPreserves
         const Scene::TransformComponentUVE& restored =
             entityManager.GetComponentUVE<Scene::TransformComponentUVE>(restoredRoots.front());
         EXPECT_EQ(restored.localPosition, authored.localPosition);
+
+        editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
+}
+
+TEST(EditorUVETest, PlayModeSandbox_RestoresOrderedMultiSelectionAndActiveEntity) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_play_multi_selection.uvescene", 100U, &engine);
+        editor.InitUVE();
+        Scene::IEntityManagerUVE& entityManager = engine.GetServicesUVE().GetEntityManagerUVE();
+        const Scene::EntityUVE first = entityManager.CreateEntityUVE();
+        const Scene::EntityUVE second = entityManager.CreateEntityUVE();
+        AttachRootUVE(engine, first, Scene::TransformComponentUVE{});
+        AttachRootUVE(engine, second, Scene::TransformComponentUVE{});
+        editor.SelectEntityUVE(first);
+        editor.ToggleEntitySelectionUVE(second);
+
+        ASSERT_TRUE(editor.EnterPlayModeUVE());
+        ASSERT_TRUE(editor.StopPlayModeUVE());
+
+        const std::vector<Scene::EntityUVE> restoredRoots = editor.GetDocumentRootsUVE();
+        ASSERT_EQ(restoredRoots.size(), 2U);
+        EXPECT_NE(restoredRoots[0], first);
+        EXPECT_NE(restoredRoots[1], second);
+        EXPECT_EQ(editor.GetSelectedEntitiesUVE(), restoredRoots);
+        EXPECT_EQ(editor.GetSelectedEntityUVE(), restoredRoots.back());
+        EXPECT_FALSE(editor.HasSingleDocumentSelectionUVE());
 
         editor.ShutdownUVE();
     }
