@@ -7,8 +7,9 @@ A next-generation 3D game engine focused on modular architecture, real-time came
 **Increment 1: Foundation Layer** — a headless, fully unit-tested core consisting of
 `LoggerUVE`, `TimerUVE`, `EventSystemUVE`, and `EngineCoreUVE` (the `Init → Load →
 BeginFrame → Update → LateUpdate → Render → EndFrame → Shutdown` pipeline). No windowing or
-rendering yet — see `docs/MASTER_SPEC.md` for the full engine vision and `docs/
-CODING_STANDARDS.md` for the conventions this codebase follows.
+rendering yet — see `docs/MASTER_SPEC.md` for the full engine vision,
+[`docs/ROADMAP_INDEX.md`](docs/ROADMAP_INDEX.md) for the active cross-domain roadmap, and
+`docs/CODING_STANDARDS.md` for the conventions this codebase follows.
 
 ## Building & Testing (Linux)
 

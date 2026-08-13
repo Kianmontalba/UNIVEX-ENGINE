@@ -1,0 +1,57 @@
+<div align="center">
+
+<h1><strong>UNIVEX ENGINE — CORE & RUNTIME ROADMAP</strong></h1>
+
+<strong>Native runtime contracts, scene ownership, assets, simulation, and platform foundations</strong>
+
+</div>
+
+> This roadmap protects the engine-owned C++ runtime. Editor features consume these contracts through `EngineServicesUVE`; they do not create a second scene, asset, or runtime lifecycle.
+
+| Status | Completed foundation | Delivered capability | Ongoing boundary |
+|---|---|---|---|
+| **COMPLETED** | **Increment 1** | Engine loop, logging, timing, events, and `EngineCoreUVE`. | The documented `Init → Load → BeginFrame → Update → LateUpdate → Render → EndFrame → Shutdown` lifecycle remains the single runtime path. |
+| **COMPLETED** | **Increment 2** | Memory manager with pool, stack, and heap allocators. | RAII and measured allocation behavior remain required for future low-level work. |
+| **COMPLETED** | **Increment 3** | Work-stealing thread-pool job system. | Thread affinity and main-thread rendering constraints remain explicit. |
+| **COMPLETED** | **Increment 4** | Configuration and command-line foundations. | Settings must remain versioned and safely recover from malformed/missing files. |
+| **COMPLETED** | **Increments 5–6** | ECS, scene graph, prefabs, and scene serialization. | The runtime scene is authoritative; the editor only authors it through commands. |
+| **COMPLETED** | **Increment 7** | Asset manager, generic importer, hot reload, and asset bundle foundations. | Asset identity remains GUID-based; future importers must preserve deterministic cache/invalidation rules. |
+| **COMPLETED** | **Increment 8** | Virtual file system. | New content systems must use the existing virtual-path and mount contracts where appropriate. |
+| **COMPLETED** | **Increments 15–16** | Physics/collision, raycasts, and physics materials. | Current collision/raycast implementation is the safe interaction foundation; advanced body/shape work remains partial. |
+| **COMPLETED** | **Increment 17** | Input action and binding foundations. | Expanded gamepad/mobile input stays separate from editor-camera behavior. |
+| **COMPLETED** | **Increment 18** | Audio system foundations. | Mixer/effects and full listener/source workflows are partial. |
+| **COMPLETED** | **Increment 19** | Save-game and checkpoint foundations. | Compression, encryption, cloud sync, migration, screenshots, and gameplay-state sections remain partial. |
+| **COMPLETED** | **Increment 20** | GLFW window manager and desktop OpenGL backend. | Window/context ownership remains isolated from the renderer. |
+| **COMPLETED** | **Increments 59–61** | Project index, import queue/cache, portable change watch, and targeted stale-cache marking. | No automatic reimport, source mutation, or native directory-watch backend is claimed. |
+
+<div align="center">
+
+<h2><strong>PARTIAL — CORE & RUNTIME EXPANSION</strong></h2>
+
+</div>
+
+| Status | Area | Intended next capability | Completion proof / boundary |
+|---|---|---|---|
+| **PARTIAL** | Scene components and user-facing nodes | Introduce only supported components/nodes such as richer camera, mesh, light, collider, rigid-body, audio-source, animation, particle, and script attachments. | Each component requires serialization, runtime ownership, editor command path, and tests; no placeholder node catalog. |
+| **PARTIAL** | Prefab maturity | Nested prefabs, override tracking, safe apply/revert, and deterministic conflict handling. | Requires a stable serialized override model; no ad-hoc prefab mutation. |
+| **PARTIAL** | Asset-type importers | Deliberately select and implement model, texture, audio, material, animation, and shader import contracts. | Parser licensing, source/derived-data boundaries, deterministic metadata, and test fixtures are required first. |
+| **PARTIAL** | Physics depth | Rigid bodies, expanded shapes, character controller, trigger areas, broad-phase acceleration, and measured simulation hardening. | Must not replace current collision behavior without a migration/test plan. |
+| **PARTIAL** | Audio depth | Source/listener components, mixer groups, effects, streaming, and platform backend selection. | Audio behavior must be testable without conflating it with editor UI. |
+| **PARTIAL** | Input breadth | Gamepad, touch, gyro, mobile gesture, remapping, and platform-specific input policy. | Requires explicit platform targets and responsiveness measurements. |
+| **PARTIAL** | Save-game depth | Version migration, compression, encryption, cloud hooks, screenshot thumbnails, and gameplay-domain state. | Format migration and failure recovery must be tested before a save feature is called complete. |
+| **PARTIAL** | Platform abstraction | Desktop display modes, Android/iOS lifecycle, mobile safe areas, power management, and other native platform contracts. | Platform-specific work begins only after each toolchain/backend is available in CI. |
+| **PARTIAL** | Networking | Reliable UDP channels, replication, prediction, and reconciliation. | A separate deterministic network model and security/performance test strategy are required. |
+
+<div align="center">
+
+<h2><strong>CORE RUNTIME ENTRY RULES</strong></h2>
+
+</div>
+
+| Rule | Required discipline |
+|---|---|
+| **Service ownership** | Cross-subsystem runtime dependencies flow through `EngineServicesUVE`, not new globals. |
+| **Threading** | Every public system states thread affinity; OpenGL/device work remains on the owning main/context thread. |
+| **Persistence** | `.uve*` and derived-data changes need explicit versioning, validation, and backward-compatibility policy. |
+| **Performance** | Optimization claims require profiling evidence. Hot paths require measured allocation and iteration discipline. |
+| **Recovery** | Filesystem, serialization, and import failure paths must retain last-known-good data where the contract permits. |
