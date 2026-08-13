@@ -3284,11 +3284,12 @@ void EditorUVE::RebuildHierarchyFilterCacheUVE() {
 
 void EditorUVE::DrawHierarchyPanelUVE() {
     const ImGuiViewport* const mainViewport = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(ImVec2{mainViewport->WorkPos.x, mainViewport->WorkPos.y},
-                            ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(
-        ImVec2{250.0F, std::max(kMinimumViewportHeightUVE, mainViewport->WorkSize.y - kAssetsPanelHeightUVE)},
-        ImGuiCond_FirstUseEver);
+    const float menuBarHeight = ImGui::GetFrameHeight();
+    const float workspaceHeight =
+        std::max(kMinimumViewportHeightUVE, mainViewport->WorkSize.y - menuBarHeight - kAssetsPanelHeightUVE);
+    ImGui::SetNextWindowPos(ImVec2{mainViewport->WorkPos.x, mainViewport->WorkPos.y + menuBarHeight},
+                            ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2{250.0F, workspaceHeight}, ImGuiCond_Always);
     ImGui::Begin("Scene");
     std::array<char, 256> filterBuffer{};
     m_hierarchyFilter.copy(filterBuffer.data(), filterBuffer.size() - 1U);
@@ -3419,12 +3420,13 @@ void EditorUVE::AcceptHierarchyDropTargetUVE(const Scene::EntityUVE targetParent
 
 void EditorUVE::DrawInspectorPanelUVE() {
     const ImGuiViewport* const mainViewport = ImGui::GetMainViewport();
+    const float menuBarHeight = ImGui::GetFrameHeight();
+    const float workspaceHeight =
+        std::max(kMinimumViewportHeightUVE, mainViewport->WorkSize.y - menuBarHeight - kAssetsPanelHeightUVE);
     ImGui::SetNextWindowPos(
-        ImVec2{mainViewport->WorkPos.x + mainViewport->WorkSize.x - 330.0F, mainViewport->WorkPos.y},
-        ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(
-        ImVec2{330.0F, std::max(kMinimumViewportHeightUVE, mainViewport->WorkSize.y - kAssetsPanelHeightUVE)},
-        ImGuiCond_FirstUseEver);
+        ImVec2{mainViewport->WorkPos.x + mainViewport->WorkSize.x - 330.0F, mainViewport->WorkPos.y + menuBarHeight},
+        ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2{330.0F, workspaceHeight}, ImGuiCond_Always);
     ImGui::Begin("Properties");
     if (m_selectedEntities.empty()) {
         ImGui::TextUnformatted("Select an entity in Scene or Viewport.");
@@ -3557,14 +3559,15 @@ void EditorUVE::DrawViewportPanelUVE() {
     const ImGuiViewport* const mainViewport = ImGui::GetMainViewport();
     const float leftInset = 250.0F;
     const float rightInset = 330.0F;
+    const float menuBarHeight = ImGui::GetFrameHeight();
     const float bottomInset = kAssetsPanelHeightUVE;
-    const ImVec2 desiredPosition{mainViewport->WorkPos.x + leftInset, mainViewport->WorkPos.y};
+    const ImVec2 desiredPosition{mainViewport->WorkPos.x + leftInset, mainViewport->WorkPos.y + menuBarHeight};
     const ImVec2 desiredSize{
         std::max(kMinimumViewportWidthUVE, mainViewport->WorkSize.x - leftInset - rightInset),
-        std::max(kMinimumViewportHeightUVE, mainViewport->WorkSize.y - bottomInset),
+        std::max(kMinimumViewportHeightUVE, mainViewport->WorkSize.y - menuBarHeight - bottomInset),
     };
-    ImGui::SetNextWindowPos(desiredPosition, ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSize(desiredSize, ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(desiredPosition, ImGuiCond_Always);
+    ImGui::SetNextWindowSize(desiredSize, ImGuiCond_Always);
     ImGui::SetNextWindowBgAlpha(0.0F);
     constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBringToFrontOnFocus |
                                        ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_NoScrollbar |
