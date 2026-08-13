@@ -71,8 +71,10 @@ XY/XZ/YZ plane handles in the positive 20–60% gizmo quadrant; axis hits always
 both captured screen-space basis coefficients independently before applying the existing parent-safe local delta path.
 Rotate mode uses world-axis X/Y/Z rings,
 converts a parented entity's world-axis delta back to its local quaternion, and preserves local position
-and scale. Scale mode uses X/Y/Z square handles to edit one strictly positive authored local-scale component,
-preserving local position and rotation. The editor-only viewport camera now supports
+and scale. Scale mode uses X/Y/Z square handles to edit one strictly positive authored local-scale component.
+Its center square is **Uniform Scale Offset**: a captured shared additive local-scale delta is applied to X/Y/Z;
+it is intentionally not proportional/multiplicative scaling. If any proposed component falls below `0.001`, the
+whole center-handle gesture cancels and restores its captured Transform instead of clamping an individual axis. The editor-only viewport camera now supports
 right-drag orbit, middle-drag pan, wheel zoom, and `F` focus for a selected live document entity.
 These navigation controls never alter the document, dirty state, scene file, or Undo/Redo history.
 The top-level **Play** menu provides a transient editor sandbox: **Play** (`F5`) captures the complete
@@ -89,7 +91,7 @@ offers a case-insensitive path filter; it does not scan filesystems, import asse
 Viewport picking intentionally selects only live document entities with the existing box collider
 component. A selected collider-backed document entity receives a read-only cyan oriented bounds overlay with corner
 and center markers; this feedback follows its derived world transform and never changes scene data or history.
-Mesh picking, mesh-derived bounds, uniform/negative scale, trackball rotation, fly navigation, camera bookmarks, cinematic
+Mesh picking, mesh-derived bounds, negative scale, proportional/multiplicative scale, trackball rotation, fly navigation, camera bookmarks, cinematic
 camera tools, filesystem browsing, import/reimport, asset drag-and-drop, thumbnails,
 layout persistence, child ordering,
 multi-entity lifecycle operations, and OS clipboard copy/paste remain future increments.
