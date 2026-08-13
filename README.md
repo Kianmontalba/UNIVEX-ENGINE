@@ -46,8 +46,9 @@ a left Scene panel; a clean central **3D Viewport**; and a right panel with hori
 read-only AssetDatabase snapshot; Debugger, Animator, and AI Toolbar are visible dock tabs but remain separate
 future-work areas. The editor also supports persistent human-readable entity names, local Transform editing,
 collider-backed viewport picking, Translate, Rotate, and Scale
-gizmo modes (`W` / `E` / `R`) with a guarded **World**/**Local** coordinate-space selection, File menu scene save/load actions, and Scene menu creation for Empty, Camera, Directional
-Light, and Collision Box document roots. New archetypes receive deterministic default names such as
+gizmo modes (`W` / `E` / `R`) with a guarded **World**/**Local** coordinate-space selection, scene save/load actions, and
+**Library** workspace creation controls for Empty, Camera, Directional Light, Collision Box, Cube, UV Sphere, and Plane
+document roots. New archetypes receive deterministic default names such as
 `Camera` and `Camera 2`; the Properties panel or selected hierarchy row can rename one selected live document entity, and
 names persist through `.uvescene` save/load. **Multi-Selection v1** provides an ordered document-entity selection with one
 active entity: normal hierarchy or viewport click replaces selection, while `Ctrl`-click adds/removes one entity. Removing
@@ -59,8 +60,8 @@ selected. The Scene panel has a session-only case-insensitive hierarchy filter t
 retains matching ancestor paths; `F2` or the selected-row **Rename** control opens an inline editor, where `Enter` commits one
 existing Name-history transaction and `Escape` cancels without mutation. Legacy scenes without name metadata remain valid and
 fall back to stable entity index/generation labels. The editor also provides a bounded in-session
-Undo/Redo history for successful Transform, rename, root-creation, duplicate, delete, and hierarchy
-reparent actions. The Scene panel supports drag-and-drop reparenting: drop a document entity onto
+Undo/Redo history for successful Transform, rename, root-creation, duplicate, delete, hierarchy
+reparent, and atomic primitive-appearance actions. The Scene panel supports drag-and-drop reparenting: drop a document entity onto
 another document entity to make it a child, or onto the root drop target to detach it. Reparenting preserves the moved subtree and offers a session-only **Reparent Transform** choice: the default
 **Keep Local** retains the authored local Transform, while **Keep World** derives a compatible replacement local TRS
 from captured world state. Keep World rejects rotated non-uniformly scaled parents and parent scale components below
@@ -91,6 +92,17 @@ it is intentionally not proportional/multiplicative scaling. If any proposed com
 whole center-handle gesture cancels and restores its captured Transform instead of clamping an individual axis. The editor-only viewport camera now supports
 right-drag orbit, middle-drag pan, wheel zoom, and `F` focus for a selected live document entity.
 These navigation controls never alter the document, dirty state, scene file, or Undo/Redo history.
+
+**Viewport Scene Rendering v1** replaces the retired EngineCore demo-triangle scaffold with renderer-owned built-in
+geometry. Cube, UV Sphere, and Plane roots carry a serializable primitive kind plus bounded linear-RGB base color;
+the renderer uploads each deterministic mesh once, uses the canonical lit/shadowed material shader with fallback
+white/normal textures, and culls primitives from their transformed local bounds. The Library workspace exposes
+`+ Cube`, `+ Sphere`, and `+ Plane`; the Inspector lets exactly one selected primitive atomically change its kind
+and base color, while synchronizing its collider extents for the new kind. The editor draws a session-only 10 × 10
+XZ ground grid at one-unit spacing as viewport feedback. It is neither selectable nor serialized. Mesh-triangle or
+render-ID picking, non-collider selection, mesh-derived selection bounds, and offscreen-texture viewport compositing
+remain deferred.
+
 The top-level **Play** menu provides a transient editor sandbox: **Play** (`F5`) captures the complete
 editable document in memory and disables authoring, **Pause** (`F6`) holds fixed physics without accumulating
 catch-up time, **Step** (`F10`) advances exactly one fixed physics tick while paused, and **Stop** (`Shift+F5`)
@@ -104,7 +116,8 @@ The active FileSystem dock lists only deterministic snapshots of `AssetDatabaseU
 offers a case-insensitive path filter; it does not scan filesystems, import assets, or load previews. Import and
 Signals tabs are deliberate session-only placeholders until asset import and scripting runtime contracts exist.
 Viewport picking intentionally selects only live document entities with the existing box collider
-component. Every selected collider-backed document entity receives a read-only oriented bounds overlay with corner
+component. Primitive roots receive matching default colliders: Cube and UV Sphere use 0.5-unit half extents on all
+axes, while Plane uses `{0.5, 0.025, 0.5}` so its visible, origin-centered XZ surface remains selectable. Every selected collider-backed document entity receives a read-only oriented bounds overlay with corner
 and center markers; the active entity is yellow while other selected entities are cyan. This feedback follows derived
 world transforms and never changes scene data or history. Mesh picking, mesh-derived bounds, negative scale,
 proportional/multiplicative scale, fly navigation, camera bookmarks, cinematic camera tools, filesystem browsing,

@@ -53,9 +53,9 @@ template <typename T>
     return false;
 }
 
-[[nodiscard]] bool WaitForContentUVE(const AssetHandleUVE<BlobAssetUVE>& handle, std::string_view expected,
-                                      int maxIterations = 200000) {
-    for (int iteration = 0; iteration < maxIterations; ++iteration) {
+[[nodiscard]] bool WaitForContentUVE(const AssetHandleUVE<BlobAssetUVE>& handle, std::string_view expected) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{2};
+    while (std::chrono::steady_clock::now() < deadline) {
         if (handle.IsReadyUVE()) {
             const BlobAssetUVE* const blob = handle.TryGetUVE();
             if (blob != nullptr) {

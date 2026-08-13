@@ -782,7 +782,7 @@ TEST(EngineCoreUVETest, HeadlessCommandLineFlag_ForcesHeadlessAndUsesNullWindowM
 // Needs a real (possibly virtual, e.g. Xvfb) X display and GL context. Skips cleanly with a clear
 // message when unavailable, so the same uve_tests binary runs cleanly with or without a display -
 // same GTEST_SKIP() pattern as WindowManagerUVETest/GlRenderDeviceUVETest.
-TEST(EngineCoreUVETest, WindowedMode_ReachesRunningAndRendersApprovedDemoTriangleColors) {
+TEST(EngineCoreUVETest, WindowedMode_ReachesRunningAndPresentsEmptyRendererScene) {
     EngineConfigUVE config = MakeTestConfigUVE();
     config.headlessUVE = false;
     config.windowWidth = 64;
@@ -804,7 +804,7 @@ TEST(EngineCoreUVETest, WindowedMode_ReachesRunningAndRendersApprovedDemoTriangl
     ASSERT_TRUE(engine.Load());
     EXPECT_EQ(engine.GetServicesUVE().GetWindowManagerUVE().GetBackendNameUVE(), "GLFW3");
 
-    // A few frames so the same triangle image has settled into both the front and back buffers.
+    // A few frames let Renderer3DUVE complete scene, tone-mapping, and presentation work.
     for (int frame = 0; frame < 3; ++frame) {
         engine.TickFrameUVE();
     }
@@ -816,18 +816,14 @@ TEST(EngineCoreUVETest, WindowedMode_ReachesRunningAndRendersApprovedDemoTriangl
         return pixel;
     };
 
-    // Corner: background clear color #0D0D0D (the approved design decision).
-    const std::array<unsigned char, 3> backgroundPixel = readPixelUVE(2, 2);
-    EXPECT_NEAR(static_cast<int>(backgroundPixel[0]), 0x0D, 10);
-    EXPECT_NEAR(static_cast<int>(backgroundPixel[1]), 0x0D, 10);
-    EXPECT_NEAR(static_cast<int>(backgroundPixel[2]), 0x0D, 10);
-
-    // Centroid of the demo triangle (NDC origin maps to the window's center pixel regardless of
-    // the read buffer's Y-axis convention): #00D4FF (the approved design decision).
-    const std::array<unsigned char, 3> trianglePixel = readPixelUVE(32, 32);
-    EXPECT_NEAR(static_cast<int>(trianglePixel[0]), 0x00, 10);
-    EXPECT_NEAR(static_cast<int>(trianglePixel[1]), 0xD4, 10);
-    EXPECT_NEAR(static_cast<int>(trianglePixel[2]), 0xFF, 10);
+    // With no document render items, Renderer3DUVE presents its deterministic black tone-mapped
+    // scene. This is intentionally not a demo-geometry assertion: visible content now enters only
+    // through ECS extraction into the renderer.
+    const std::array<unsigned char, 3> scenePixel = readPixelUVE(32, 32);
+    EXPECT_EQ(scenePixel[0], 0U);
+    EXPECT_EQ(scenePixel[1], 0U);
+    EXPECT_EQ(scenePixel[2], 0U);
+    EXPECT_EQ(glGetError(), GL_NO_ERROR);
 
     engine.Shutdown();
 }

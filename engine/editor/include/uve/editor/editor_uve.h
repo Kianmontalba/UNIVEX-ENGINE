@@ -17,6 +17,7 @@
 #include "uve/math/ray_uve.h"
 #include "uve/math/vector2_uve.h"
 #include "uve/math/vector3_uve.h"
+#include "uve/scene/components/primitive_mesh_component_uve.h"
 #include "uve/scene/components/transform_component_uve.h"
 #include "uve/scene/entity_uve.h"
 #include "uve/scene/i_scene_serializer_uve.h"
@@ -94,13 +95,16 @@ struct EditorSelectionBoundsUVE final {
     Math::Vector3UVE worldCenter{};
 };
 
-/// The supported first-pass Scene menu archetypes. Each created entity is a document root with a
-/// TransformComponentUVE; specialized kinds add only the named gameplay component.
+/// The supported Library workspace archetypes. Each created entity is a document root with a
+/// TransformComponentUVE; specialized kinds add only the named gameplay or built-in primitive component.
 enum class EditorEntityKindUVE {
     Empty,
     Camera,
     DirectionalLight,
     CollisionBox,
+    Cube,
+    UVSphere,
+    Plane,
 };
 
 /// The active pointer gesture affecting the editor-owned viewport camera. This state never touches
@@ -184,6 +188,12 @@ public:
     /// Returns false without mutation for invalid editor/selection state, an empty or whitespace-only
     /// name, a name longer than the supported editor-entry limit, or an unchanged value.
     [[nodiscard]] bool SetSelectedEntityNameUVE(std::string name);
+
+    /// Replaces the selected primitive's complete authored appearance atomically. Primitive kind
+    /// and bounded linear-RGB base color are both editable after creation; one changed valid call
+    /// becomes one Primitive Appearance Undo/Redo transaction. Invalid, unchanged, multi-selected,
+    /// protected-Play, or competing-gesture state returns false without mutation.
+    [[nodiscard]] bool SetSelectedPrimitiveMeshUVE(const Scene::PrimitiveMeshComponentUVE& primitive);
 
     /// Creates a normalized world-space ray from a pointer inside viewportRect. Uses the editor
     /// camera's derived world transform and perspective settings. Returns std::nullopt for invalid
@@ -406,6 +416,16 @@ private:
         bool dirtyAfter = false;
     };
 
+    struct PrimitiveAppearanceHistoryEntryUVE final {
+        Scene::EntityUVE entity = Scene::kInvalidEntityUVE;
+        Scene::PrimitiveMeshComponentUVE before{};
+        Scene::PrimitiveMeshComponentUVE after{};
+        EditorSelectionSnapshotUVE selectionBefore;
+        EditorSelectionSnapshotUVE selectionAfter;
+        bool dirtyBefore = false;
+        bool dirtyAfter = false;
+    };
+
     struct CreationHistoryEntryUVE final {
         EditorEntityKindUVE kind = EditorEntityKindUVE::Empty;
         std::string name;
@@ -455,8 +475,9 @@ private:
     };
 
     using HistoryEntryUVE =
-        std::variant<TransformHistoryEntryUVE, NameHistoryEntryUVE, CreationHistoryEntryUVE,
-                     DuplicationHistoryEntryUVE, DeletionHistoryEntryUVE, ReparentHistoryEntryUVE>;
+        std::variant<TransformHistoryEntryUVE, NameHistoryEntryUVE, PrimitiveAppearanceHistoryEntryUVE,
+                     CreationHistoryEntryUVE, DuplicationHistoryEntryUVE, DeletionHistoryEntryUVE,
+                     ReparentHistoryEntryUVE>;
 
     [[nodiscard]] bool IsDocumentEntityUVE(Scene::EntityUVE entity) const noexcept;
     [[nodiscard]] bool HasSceneGraphNodeUVE(Scene::EntityUVE entity) const noexcept;
@@ -504,6 +525,9 @@ private:
     void UpdateGizmoDragUVE(Math::Vector2UVE pointerPosition);
     void CommitGizmoDragUVE();
     void CancelGizmoDragUVE() noexcept;
+    /// Draws editor-only projected XZ grid feedback. It is never an ECS entity, pick target,
+    /// serialized component, dirty-state mutation, or history entry.
+    void DrawViewportGridUVE(const EditorViewportRectUVE& viewportRect);
     void DrawSelectionBoundsUVE(const EditorViewportRectUVE& viewportRect);
     void DrawTranslateGizmoUVE(const EditorViewportRectUVE& viewportRect);
     void DrawRotateGizmoUVE(const EditorViewportRectUVE& viewportRect);
@@ -512,6 +536,8 @@ private:
                                                const Scene::TransformComponentUVE& transform);
     [[nodiscard]] bool ApplyEntityNameStateUVE(Scene::EntityUVE entity,
                                                 const std::optional<std::string>& name);
+    [[nodiscard]] bool ApplyPrimitiveMeshStateUVE(Scene::EntityUVE entity,
+                                                    const Scene::PrimitiveMeshComponentUVE& primitive);
     [[nodiscard]] bool IsDocumentSubtreeUVE(Scene::EntityUVE root) const;
     [[nodiscard]] bool DoesSubtreeContainEntityUVE(Scene::EntityUVE root,
                                                     Scene::EntityUVE candidate) const;

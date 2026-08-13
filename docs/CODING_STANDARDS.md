@@ -388,18 +388,13 @@ calls against a context it assumes is already current. `EngineCoreUVE::Shutdown(
 reset `m_renderDevice` strictly before `m_windowManager` — every GL object dies while the context
 is still valid, and the context/GLFW itself is only torn down after.
 
-**The demo triangle** (`EngineCoreUVE::SetupDemoTriangleUVE()`/`RenderDemoTriangleUVE()`) is
-explicitly temporary scaffold proving `CreateBuffer → CreateProgram (via ShaderManagerUVE) →
-Bind/SetUniforms/Draw → Present` end-to-end — it deliberately bypasses `Renderer3DUVE`/
-`MeshRendererUVE`/the asset pipeline/the ECS entirely and must never grow into a real content
-path. Since Increment 21 its shader program is loaded through `ShaderManagerUVE::CreateProgramUVE()`
-from the `basic_3d.glsl` built-in (no more inline GLSL string literals in `EngineCoreUVE` itself);
-compilation is asynchronous, so `RenderDemoTriangleUVE()` always clears the framebuffer but only
-issues the draw call once `ShaderProgramUVE::IsValidUVE()` is true. The intended long-term
-rendering roadmap is: `NullRenderDeviceUVE → GlRenderDeviceUVE (Increment 20) → ShaderManagerUVE
-(Increment 21) → Renderer3DUVE scene integration → Materials → PBR → RenderGraph → Editor
-viewport` — the demo triangle is only the first visible milestone on that path, not the final
-architecture, and should be deleted (not extended) once a real scene-to-window bridge exists.
+**Increment 58 retires the EngineCore demo-triangle scaffold completely.** `EngineCoreUVE::Render()`
+now delegates scene rendering to `Renderer3DUVE`, then invokes the non-owning post-render callback,
+and finally presents through `IRenderDeviceUVE::PresentUVE()`. `Renderer3DUVE` owns the sole
+scene-to-window path: its existing HDR main color/depth targets, shadow pass, canonical tone-mapping
+pass, and default-framebuffer presentation are shared by asset-backed meshes and renderer-owned
+built-in primitives. No engine-core draw buffers, shader programs, or proof-of-life geometry may be
+reintroduced; visible scene content must enter through ECS extraction into `Renderer3DUVE`.
 
 ### Windowing/OpenGL environment prerequisites
 
@@ -1168,7 +1163,7 @@ by those future passes.
 
 The standalone `uve_editor` executable is a sibling of `uve_runtime`. It drives the ordinary `EngineCoreUVE` lifecycle, creates an `EditorUVE` after `EngineCoreUVE::Load()` succeeds, selects the editor camera as the renderer's active camera, and clears/destroys editor state before `EngineCoreUVE::Shutdown()`. `--scene <path>` selects the `.uvescene` document, `--frames <n>` bounds an automated run, `--gl-version <major.minor>` explicitly overrides the desktop context request for a constrained platform such as virtual-display CI, and `--headless` keeps editor logic testable without a native window or GL context.
 
-**Overlay ordering is explicit.** `EngineCoreUVE::SetPostRenderCallbackUVE()` is a generic, non-owning application-overlay seam with no editor or GUI types in the core API. In a windowed frame, `Renderer3DUVE` still performs its own HDR `MainColor -> ToneMapping` graph work first; the legacy proof-of-life default-framebuffer pass then completes; a registered overlay callback draws; and only then does `IRenderDeviceUVE::PresentUVE()` swap the back buffer. The runtime does not register a callback, so its frame behavior remains unchanged. Headless runs never invoke the callback.
+**Overlay ordering is explicit.** `EngineCoreUVE::SetPostRenderCallbackUVE()` is a generic, non-owning application-overlay seam with no editor or GUI types in the core API. In a windowed frame, `Renderer3DUVE` performs the HDR `MainColor -> ToneMapping` graph work and writes the default framebuffer; a registered overlay callback then draws; and only then does `IRenderDeviceUVE::PresentUVE()` swap the back buffer. The runtime does not register a callback, so its frame behavior remains unchanged. Headless runs never invoke the callback.
 
 **Dear ImGui is a pinned, editor-private dependency.** CMake `FetchContent` retrieves version `v1.91.5` at commit `f401021d5a5d56fe2304056c391e78f81c8d4b8f`, following the repository's established GLFW/GoogleTest dependency pattern. Its GLFW/OpenGL3 backend sources link only into `uve_editor_imgui`; all ImGui headers and types are confined to `engine/editor/src/editor_uve.cpp`. Third-party code is deliberately compiled outside UVE's warning-as-error policy, while all UniVex editor source remains subject to it.
 
@@ -1198,13 +1193,51 @@ Translate plane handles occupy the positive 20–60% square of each active singl
 
 **Layout safety.** The header, Scene, 3D Viewport, right panel, lower dock content, and dock strip are deliberately fixed to one coherent session layout. They reserve the ImGui main-menu height and bottom-dock height before computing the central editor rectangles, preventing workspace windows from overlapping top controls. Headless `RenderOverlayUVE()` remains a no-op and must leave selection, dirty state, and lifecycle unchanged.
 
+### Viewport Scene Rendering v1 (Increment 58)
+
+**`PrimitiveMeshComponentUVE` is the serializable scene boundary for built-in meshes.** It stores only a
+validated `PrimitiveMeshKindUVE` (`Cube`, `UVSphere`, or `Plane`) and a finite, bounded `[0,1]`
+linear-RGB `baseColor`. It never embeds vertex/index arrays, material assets, GPU handles, or editor-session
+state. `ISceneSerializerUVE` registers the component like every other scene component; malformed kind or color
+payloads reject the entire restore transaction and roll back all entities created for that transaction. This keeps
+`.uvescene` documents compact, deterministic, and forward-compatible with renderer-owned geometry revisions.
+
+**`GetPrimitiveGeometryUVE()` owns immutable CPU geometry, not scene data.** All three unit-scale entries use
+`Asset::MeshVertexUVE`, preserving the same position/normal/UV/tangent layout and tangent-generation path as
+asset-backed meshes. Cube is authored with face-separated vertices, Plane is origin-centered on XZ with explicit
+`+Y` winding, and UV Sphere uses 24 slices × 16 stacks, a duplicated seam column (`u = 0` / `u = 1`), and
+per-sector pole vertices with exact unit normals. The catalog returns stable process-local cached geometry; only
+one copied vertex stream per primitive kind is tangent-generated and uploaded to `Renderer3DUVE` GPU buffers.
+
+**`Renderer3DUVE` is the exclusive primitive draw owner.** Primitive extraction requires a non-dirty
+`WorldTransformComponentUVE` and a valid primitive component, composes world TRS, frustum-culls the transformed
+catalog bounds, and records the surviving items in the existing HDR main pass after asset-backed opaque and
+transparent items. The primitive program uses `lit_shadowed_3d.glsl` with canonical mesh vertex layout, the
+existing light/shadow uniforms, default metallic/roughness values, and renderer-owned fallback white/flat-normal
+textures. Primitive GPU buffers are cached by kind and destroyed with the renderer; neither `EngineCoreUVE` nor
+`EditorUVE` owns RHI resources or issues direct draw calls.
+
+**Editor authoring is deliberately narrow and atomic.** Library workspace controls create selected Cube, UV Sphere,
+and Plane document roots with a `PrimitiveMeshComponentUVE` and matching selectable collider. Cube and UV Sphere
+use `{0.5, 0.5, 0.5}` half extents; Plane uses `{0.5, 0.025, 0.5}`. With exactly one primitive selected, Inspector
+kind/color editing is validated as one `PrimitiveAppearanceHistoryEntryUVE`: the entire component snapshot and
+collider dimensions change together, and Undo/Redo applies the before/after snapshot atomically. Multi-selection,
+Play/Pause, invalid values, stale selection, unchanged state, and competing editor gestures reject the edit without
+mutation. The XZ ground grid is a 10 × 10, one-unit session-only projected overlay; it is not scene data,
+selectable content, or history.
+
+**Scope boundary.** This increment supplies ECS-backed visible primitives, not a complete viewport composition or
+asset pipeline. The viewport still overlays UI over default-framebuffer presentation; texture compositing, render-ID
+or mesh-triangle picking, non-collider selection, mesh-derived selection bounds, fly navigation, camera bookmarks,
+filesystem scanning, import/reimport, drag-and-drop, and thumbnails remain separate work.
+
 ### Content Browser v1 + Scene Entity Creation (Increment 40)
 
 **`IAssetDatabaseUVE::GetRegisteredAssetsUVE()` is the sole Content Browser data boundary.** It returns copied `AssetRecordUVE` values while the database mutex is held, then sorts the snapshot by normalized lexical path with the 64-bit GUID as a deterministic tie-breaker. The browser therefore never scans the filesystem, infers that a registered path exists, or loads an asset as a side effect of drawing. This keeps the panel correct for first-run projects with an empty registry and makes its ordering stable despite the database's internal hash maps.
 
 The bottom **FileSystem** dock exposes that read-only snapshot through a case-insensitive path filter, a single selected registry record, and selected-record path/GUID detail. Its editor state stores only the copied record and filter text, so it does not retain AssetDatabase internals or alter asset ownership. Scene persistence remains available through the existing editor command API; the workspace update does not introduce a separate content serialization format or a native file-dialog dependency.
 
-The Scene menu creates a root-level document entity through `EditorUVE::CreateDocumentEntityUVE()`, selects it, and marks the document dirty. Every supported archetype receives `TransformComponentUVE`; **Empty** adds no other component, **Camera** adds `CameraComponentUVE`, **Directional Light** adds `LightComponentUVE` with `LightTypeUVE::Directional`, and **Collision Box** adds `ColliderComponentUVE`. The editor camera remains an excluded non-document entity. All exposed specialized components are already registered by `ISceneSerializerUVE`, so creating and saving them preserves the existing `.uvescene` persistence boundary.
+The Library workspace creates a root-level document entity through `EditorUVE::CreateDocumentEntityUVE()`, selects it, and marks the document dirty. Every supported archetype receives `TransformComponentUVE`; **Empty** adds no other component, **Camera** adds `CameraComponentUVE`, **Directional Light** adds `LightComponentUVE` with `LightTypeUVE::Directional`, **Collision Box** adds `ColliderComponentUVE`, and Increment 58’s **Cube**, **UV Sphere**, and **Plane** add a serializable `PrimitiveMeshComponentUVE` plus their matching collider. The editor camera remains an excluded non-document entity. All exposed specialized components are registered by `ISceneSerializerUVE`, so creating and saving them preserves the existing `.uvescene` persistence boundary.
 
 ### Scene Hierarchy v2: Entity Naming (Increment 41)
 

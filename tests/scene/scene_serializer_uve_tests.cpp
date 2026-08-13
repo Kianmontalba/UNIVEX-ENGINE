@@ -28,6 +28,7 @@
 #include "uve/scene/components/mesh_component_uve.h"
 #include "uve/scene/components/name_component_uve.h"
 #include "uve/scene/components/particle_emitter_component_uve.h"
+#include "uve/scene/components/primitive_mesh_component_uve.h"
 #include "uve/scene/components/prefab_instance_component_uve.h"
 #include "uve/scene/components/rigid_body_component_uve.h"
 #include "uve/scene/components/script_component_uve.h"
@@ -111,6 +112,8 @@ TEST_F(SceneSerializerUVETest, CaptureThenRestore_AllRegisteredComponentTypes_Ro
     entityManager.AddComponentUVE<TransformComponentUVE>(source, transform);
     entityManager.AddComponentUVE<MeshComponentUVE>(source,
                                                      MeshComponentUVE{Asset::AssetGuidUVE{11}, Asset::AssetGuidUVE{22}});
+    entityManager.AddComponentUVE<PrimitiveMeshComponentUVE>(
+        source, PrimitiveMeshComponentUVE{PrimitiveMeshKindUVE::UVSphere, Math::Vector3UVE{0.2F, 0.5F, 0.8F}});
     LightComponentUVE light{};
     light.type = LightTypeUVE::Spot;
     light.intensity = 4.0F;
@@ -143,6 +146,11 @@ TEST_F(SceneSerializerUVETest, CaptureThenRestore_AllRegisteredComponentTypes_Ro
     EXPECT_NE(restored, source);
     EXPECT_TRUE(entityManager.GetComponentUVE<TransformComponentUVE>(restored).localPosition == transform.localPosition);
     EXPECT_EQ(entityManager.GetComponentUVE<MeshComponentUVE>(restored).meshGuid, Asset::AssetGuidUVE{11});
+    ASSERT_TRUE(entityManager.HasComponentUVE<PrimitiveMeshComponentUVE>(restored));
+    EXPECT_EQ(entityManager.GetComponentUVE<PrimitiveMeshComponentUVE>(restored).kind,
+              PrimitiveMeshKindUVE::UVSphere);
+    EXPECT_EQ(entityManager.GetComponentUVE<PrimitiveMeshComponentUVE>(restored).baseColor,
+              (Math::Vector3UVE{0.2F, 0.5F, 0.8F}));
     EXPECT_EQ(entityManager.GetComponentUVE<LightComponentUVE>(restored).type, LightTypeUVE::Spot);
     EXPECT_FLOAT_EQ(entityManager.GetComponentUVE<CameraComponentUVE>(restored).farPlane, 250.0F);
     EXPECT_EQ(entityManager.GetComponentUVE<NameComponentUVE>(restored).name, "Complete Snapshot");
@@ -177,6 +185,24 @@ TEST_F(SceneSerializerUVETest, RestoreUVE_MalformedComponentData_RollsBackCreate
     const std::size_t entityCountBefore = entityManager.GetEntityCountUVE();
     const std::string payloadText =
         R"({"entities":[{"localId":0,"components":{"NameComponentUVE":{"name":"Valid"}}},{"localId":1,"components":{"MeshComponentUVE":{"meshGuid":5}}}]})";
+    const auto* const payloadBytes = reinterpret_cast<const std::byte*>(payloadText.data());
+    const SceneSnapshotUVE snapshot{
+        Asset::EncodeUveFileEnvelopeUVE(SceneAssetTypeUVE::Scene,
+                                        std::vector<std::byte>{payloadBytes, payloadBytes + payloadText.size()}),
+        SceneAssetTypeUVE::Scene};
+
+    const std::vector<EntityUVE> roots = serializer.RestoreUVE(entityManager, snapshot);
+
+    EXPECT_TRUE(roots.empty());
+    EXPECT_TRUE(entityManager.IsAliveUVE(existing));
+    EXPECT_EQ(entityManager.GetEntityCountUVE(), entityCountBefore);
+}
+
+TEST_F(SceneSerializerUVETest, RestoreUVE_InvalidPrimitivePayload_RollsBackCreatedEntities) {
+    const EntityUVE existing = entityManager.CreateEntityUVE();
+    const std::size_t entityCountBefore = entityManager.GetEntityCountUVE();
+    const std::string payloadText =
+        R"({"entities":[{"localId":0,"components":{"PrimitiveMeshComponentUVE":{"kind":99,"baseColor":[0.5,0.5,0.5]}}}]})";
     const auto* const payloadBytes = reinterpret_cast<const std::byte*>(payloadText.data());
     const SceneSnapshotUVE snapshot{
         Asset::EncodeUveFileEnvelopeUVE(SceneAssetTypeUVE::Scene,

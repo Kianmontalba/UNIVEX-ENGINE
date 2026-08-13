@@ -36,6 +36,7 @@
 #include "uve/scene/components/camera_component_uve.h"
 #include "uve/scene/components/light_component_uve.h"
 #include "uve/scene/components/mesh_component_uve.h"
+#include "uve/scene/components/primitive_mesh_component_uve.h"
 #include "uve/scene/components/transform_component_uve.h"
 #include "uve/scene/entity_manager_uve.h"
 #include "uve/scene/scene_graph_uve.h"
@@ -166,6 +167,17 @@ protected:
         return entity;
     }
 
+    Scene::EntityUVE MakePrimitiveEntityUVE(Math::Vector3UVE worldPosition,
+                                             Scene::PrimitiveMeshComponentUVE primitive) {
+        const Scene::EntityUVE entity = entityManager.CreateEntityUVE();
+        Scene::TransformComponentUVE local;
+        local.localPosition = worldPosition;
+        sceneGraph.AttachTransformUVE(entityManager, entity, local);
+        sceneGraph.UpdateUVE(entityManager);
+        entityManager.AddComponentUVE<Scene::PrimitiveMeshComponentUVE>(entity, primitive);
+        return entity;
+    }
+
     Scene::EntityUVE MakeLightEntityUVE(Scene::LightComponentUVE light) {
         const Scene::EntityUVE entity = entityManager.CreateEntityUVE();
         sceneGraph.AttachTransformUVE(entityManager, entity, Scene::TransformComponentUVE{});
@@ -281,6 +293,38 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_EmptyScene_ShadowAndMainPassesBothBegin
         EXPECT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commands[passIndex * 2U]));
         EXPECT_TRUE(std::holds_alternative<EndRenderPassCommandUVE>(commands[passIndex * 2U + 1U]));
     }
+}
+
+TEST_F(Renderer3DUVETest, RenderFrameUVE_VisiblePrimitive_RecordsCanonicalGeometryAndAuthoredColor) {
+    const Scene::EntityUVE cameraEntity = MakeCameraEntityUVE();
+    const Math::Vector3UVE baseColor{0.15F, 0.45F, 0.85F};
+    MakePrimitiveEntityUVE(Math::Vector3UVE{0.0F, 0.0F, -10.0F},
+                           Scene::PrimitiveMeshComponentUVE{Scene::PrimitiveMeshKindUVE::Cube, baseColor});
+
+    // The renderer-owned built-in program compiles asynchronously. The first frame triggers regular
+    // extraction; draining ShaderManagerUVE then makes the next frame’s primitive draw observable.
+    renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+    for (int iteration = 0; iteration < kMaxPollIterationsUVE; ++iteration) {
+        shaderManager.UpdateUVE(0.0);
+        if (shaderManager.GetPendingJobCountUVE() == 0U) {
+            break;
+        }
+        std::this_thread::yield();
+    }
+    ASSERT_EQ(shaderManager.GetPendingJobCountUVE(), 0U);
+
+    renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+    const std::vector<RecordedCommandUVE>& commands = renderDevice.GetLastSubmittedCommandsUVE();
+    EXPECT_TRUE(std::any_of(commands.cbegin(), commands.cend(), [](const RecordedCommandUVE& command) {
+        return std::holds_alternative<DrawIndexedCommandUVE>(command) &&
+               std::get<DrawIndexedCommandUVE>(command).indexCount == 36U;
+    }));
+    const auto albedoColor = std::find_if(commands.cbegin(), commands.cend(), [](const RecordedCommandUVE& command) {
+        return std::holds_alternative<SetUniformVector3CommandUVE>(command) &&
+               std::get<SetUniformVector3CommandUVE>(command).name == "uAlbedoColor";
+    });
+    ASSERT_NE(albedoColor, commands.cend());
+    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(*albedoColor).value, baseColor);
 }
 
 TEST_F(Renderer3DUVETest, RenderFrameUVE_VisibleMesh_RecordsExpectedCommandSequence) {

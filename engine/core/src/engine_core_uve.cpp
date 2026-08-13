@@ -12,7 +12,6 @@
 #include "uve/core/engine_core_uve.h"
 
 #include <cstddef>
-#include <span>
 #include <string>
 #include <utility>
 
@@ -51,7 +50,6 @@
 #include "uve/render/null_render_device_uve.h"
 #include "uve/render/render_system_uve.h"
 #include "uve/render/renderer_3d_uve.h"
-#include "uve/render/shader/built_in_shaders_uve.h"
 #include "uve/render/shader/shader_manager_uve.h"
 #include "uve/save/checkpoint_manager_uve.h"
 #include "uve/save/save_game_system_uve.h"
@@ -85,61 +83,6 @@ void EngineCoreUVE::RegisterBuiltInAssetLoadersUVE() {
     m_assetManager->RegisterLoaderUVE<Asset::TextureAssetUVE>(&Asset::LoadTextureAssetUVE);
     m_assetManager->RegisterLoaderUVE<Asset::ShaderAssetUVE>(&Asset::LoadShaderAssetUVE);
     m_assetManager->RegisterLoaderUVE<Asset::MaterialAssetUVE>(&Asset::LoadMaterialAssetUVE);
-}
-
-void EngineCoreUVE::SetupDemoTriangleUVE() {
-    // clang-format off
-    constexpr float kVertices[] = {
-        0.0F, 0.5F, 0.0F,
-        -0.5F, -0.5F, 0.0F,
-        0.5F, -0.5F, 0.0F,
-    };
-    // clang-format on
-    const std::span<const std::byte> vertexBytes = std::as_bytes(std::span<const float>(kVertices));
-    m_demoTriangleVertexBuffer = m_renderDevice->CreateBufferUVE(
-        Render::BufferDescUVE{vertexBytes.size(), Render::BufferUsageUVE::Vertex}, vertexBytes);
-
-    // basic_3d.glsl (see Render::Shader::BuiltIn) declares uModel/uViewProjection/uColor, set each
-    // frame in RenderDemoTriangleUVE() — #0D0D0D background / #00D4FF triangle are the approved
-    // design decision's exact colors.
-    Render::Shader::ShaderProgramDescUVE programDesc;
-    programDesc.virtualFilePath = std::string(Render::Shader::BuiltIn::kBasic3DVirtualPath);
-    programDesc.embeddedFallbackSourceCode = std::string(Render::Shader::BuiltIn::kBasic3DSource);
-    programDesc.vertexLayout = {
-        Render::VertexAttributeUVE{"POSITION", Render::VertexAttributeFormatUVE::Float3, 0}};
-    programDesc.vertexStride = 3U * static_cast<std::uint32_t>(sizeof(float));
-    programDesc.depthTestEnabled = false;
-    programDesc.depthWriteEnabled = false;
-    programDesc.debugNameUVE = "DemoTriangle";
-    m_demoTriangleProgram = m_shaderManager->CreateProgramUVE(programDesc);
-}
-
-void EngineCoreUVE::RenderDemoTriangleUVE() {
-    m_renderSystem->BeginFrameUVE();
-    Render::ICommandBufferUVE& commandBuffer = m_renderSystem->GetFrameCommandBufferUVE();
-
-    Render::RenderPassDescUVE passDesc;
-    passDesc.colorAttachment = Render::kInvalidTextureHandleUVE; // the window's default framebuffer
-    passDesc.depthAttachment = Render::kInvalidTextureHandleUVE;
-    passDesc.colorLoadOp = Render::LoadOpUVE::Clear;
-    passDesc.clearColor = {0x0D / 255.0F, 0x0D / 255.0F, 0x0D / 255.0F, 1.0F};
-    passDesc.depthLoadOp = Render::LoadOpUVE::DontCare;
-
-    commandBuffer.BeginRenderPassUVE(passDesc);
-    // The program may still be asynchronously compiling (see ShaderManagerUVE's threading model)
-    // — the framebuffer clear above still runs every frame regardless, so the window never shows
-    // undefined content; only the draw call itself is gated on readiness.
-    if (m_demoTriangleProgram->IsValidUVE()) {
-        m_demoTriangleProgram->SetMatrix4x4UVE("uModel", Math::Matrix4x4UVE::IdentityUVE());
-        m_demoTriangleProgram->SetMatrix4x4UVE("uViewProjection", Math::Matrix4x4UVE::IdentityUVE());
-        m_demoTriangleProgram->SetVector3UVE("uColor", Math::Vector3UVE{0.0F, 0.83137255F, 1.0F});
-        m_demoTriangleProgram->ApplyToUVE(commandBuffer);
-        commandBuffer.BindVertexBufferUVE(m_demoTriangleVertexBuffer);
-        commandBuffer.DrawUVE(3);
-    }
-    commandBuffer.EndRenderPassUVE();
-
-    m_renderSystem->EndFrameUVE();
 }
 
 void EngineCoreUVE::Init() {
@@ -335,13 +278,6 @@ void EngineCoreUVE::Init() {
         m_config.shadowMapNearPlane, m_config.shadowMapFarPlane, m_config.shadowFrustumPadding,
         m_config.shadowCascadeSplitLambda, m_config.shadowCascadeBlendRatio, m_config.shadowPcfKernelRadius);
 
-    // The demo triangle is set up right after Renderer3D, only when windowed rendering is
-    // active — see SetupDemoTriangleUVE()'s own doc comment for why this is deliberately
-    // temporary scaffold, entirely independent of Renderer3D/the ECS.
-    if (m_windowedRenderingActiveUVE) {
-        SetupDemoTriangleUVE();
-    }
-
     // CollisionSystem twenty-fifth: stateless, no dependencies of its own.
     m_collisionSystem = std::make_unique<Physics::CollisionSystemUVE>();
 
@@ -490,7 +426,6 @@ void EngineCoreUVE::Render() {
     }
 
     if (m_windowedRenderingActiveUVE) {
-        RenderDemoTriangleUVE();
         if (m_postRenderCallback) {
             m_postRenderCallback();
         }
@@ -569,13 +504,6 @@ void EngineCoreUVE::Shutdown() {
     m_cameraSystem.reset();
     m_renderSystem.reset();
 
-    // The demo triangle's shader program (owned via a ShaderManagerUVE-supplied shared_ptr
-    // deleter) and vertex buffer must be destroyed while m_renderDevice (and the GL context
-    // m_windowManager owns) is still valid — before either is reset below.
-    if (m_windowedRenderingActiveUVE) {
-        m_demoTriangleProgram.reset();
-        m_renderDevice->DestroyBufferUVE(m_demoTriangleVertexBuffer);
-    }
     m_shaderManager.reset();
     m_renderDevice.reset();
 
