@@ -42,9 +42,9 @@ Swap `-DCMAKE_CXX_COMPILER=clang++` to build with Clang instead. `UVE_BUILD_TEST
 The current editor uses a fixed UniVex workspace layout: a compact **UNIVEX** header with session-only
 **Library**, **Asset**, **Scripting**, **Debug**, and **Plugin** workspace labels plus guarded Play/Stop controls;
 a left Scene panel; a clean central **3D Viewport**; and a right panel with horizontal **Inspector**,
-**Import**, and **Signals** tabs. The active lower dock defaults to **FileSystem**, which exposes the existing
-read-only AssetDatabase snapshot; Debugger, Animator, and AI Toolbar are visible dock tabs but remain separate
-future-work areas. The editor also supports persistent human-readable entity names, local Transform editing,
+**Import**, and **Signals** tabs. The active lower dock defaults to **FileSystem**, which exposes a cached,
+read-only project-content tree correlated with existing AssetDatabase GUIDs; Debugger, Animator, and AI Toolbar
+are visible dock tabs but remain separate future-work areas. The editor also supports persistent human-readable entity names, local Transform editing,
 collider-backed viewport picking, Translate, Rotate, and Scale
 gizmo modes (`W` / `E` / `R`) with a guarded **World**/**Local** coordinate-space selection, scene save/load actions, and
 **Library** workspace creation controls for Empty, Camera, Directional Light, Collision Box, Cube, UV Sphere, and Plane
@@ -112,16 +112,20 @@ inspector edits, document creation, picking, transform gizmos, and history repla
 the editor-only orbit/pan/zoom camera remains available and intentionally retains user navigation changes.
 Transient sandbox frames also suppress Core checkpoint/save-game advancement, so Play-time state cannot
 produce an autosave or overwrite the active `.uvescene` file.
-The active FileSystem dock lists only deterministic snapshots of `AssetDatabaseUVE` registered records and
-offers a case-insensitive path filter; it does not scan filesystems, import assets, or load previews. Import and
-Signals tabs are deliberate session-only placeholders until asset import and scripting runtime contracts exist.
+The active FileSystem dock presents a cached, deterministic `ProjectFileIndexUVE` snapshot of the configured
+`assets/` content root, with folders before files, case-insensitive path filtering, and existing AssetDatabase GUID
+correlation. It scans only when the dock first opens or the user presses **Refresh**; normal overlay frames read the
+cached snapshot and perform no filesystem traversal. Missing roots are valid empty states, refresh failure retains
+the last successful tree, and symlinks are never exposed or followed. The dock is strictly read-only: it does not
+import, reimport, preview, rename, move, delete, create folders, drag-and-drop, or load assets. Import and Signals
+tabs remain deliberate session-only placeholders until their backing contracts exist.
 Viewport picking intentionally selects only live document entities with the existing box collider
 component. Primitive roots receive matching default colliders: Cube and UV Sphere use 0.5-unit half extents on all
 axes, while Plane uses `{0.5, 0.025, 0.5}` so its visible, origin-centered XZ surface remains selectable. Every selected collider-backed document entity receives a read-only oriented bounds overlay with corner
 and center markers; the active entity is yellow while other selected entities are cyan. This feedback follows derived
 world transforms and never changes scene data or history. Mesh picking, mesh-derived bounds, negative scale,
-proportional/multiplicative scale, fly navigation, camera bookmarks, cinematic camera tools, filesystem browsing,
-import/reimport, asset drag-and-drop, thumbnails, workspace-content implementation for Debugger/Animator/AI Toolbar,
+proportional/multiplicative scale, fly navigation, camera bookmarks, cinematic camera tools, import/reimport,
+asset drag-and-drop, thumbnails, workspace-content implementation for Debugger/Animator/AI Toolbar,
 layout persistence, child ordering, multi-entity lifecycle operations,
 marquee/range selection, grouped transforms, multi-edit inspector fields, and OS clipboard copy/paste remain future increments.
 

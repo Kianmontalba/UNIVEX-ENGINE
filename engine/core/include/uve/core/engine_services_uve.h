@@ -17,6 +17,7 @@
 #include "uve/asset/i_asset_manager_uve.h"
 #include "uve/asset/i_file_system_uve.h"
 #include "uve/asset/i_hot_reload_uve.h"
+#include "uve/asset/i_project_file_index_uve.h"
 #include "uve/audio/i_audio_device_uve.h"
 #include "uve/audio/i_audio_source_system_uve.h"
 #include "uve/audio/i_audio_system_uve.h"
@@ -51,13 +52,13 @@ namespace UVE::Core {
 /// EngineServicesUVE is the engine's central dependency-provider / service
 /// container: a small bundle of references to the core engine services
 /// (Logger, Timer, EventSystem, MemoryManager, ThreadPool, CommandLine,
-/// ConfigManager, EntityManager, SceneGraph, AssetDatabase, SceneSerializer,
+/// ConfigManager, EntityManager, SceneGraph, AssetDatabase, ProjectFileIndex, SceneSerializer,
 /// PrefabSystem, HotReload, AssetManager, AssetImporter, AssetBundle,
 /// FileSystem, RenderDevice, ShaderManager, RenderSystem, CameraSystem,
 /// MeshRenderer, LightSystem, Renderer3D, CollisionSystem, PhysicsSystem,
 /// RaycastSystem, InputSystem, AudioDevice, AudioSystem, AudioSourceSystem,
 /// SaveGameSystem, CheckpointManager, WindowManager), built once
-/// EngineCoreUVE has constructed all thirty-four. Any future subsystem that
+/// EngineCoreUVE has constructed all thirty-five. Any future subsystem that
 /// needs access to one of these should receive an EngineServicesUVE&
 /// (obtained from EngineCoreUVE::GetServicesUVE()) rather than a raw global
 /// pointer — the logging macros' internal active-instance pointer remains
@@ -66,7 +67,7 @@ namespace UVE::Core {
 /// Referenced through the
 /// ILoggerUVE/ITimerUVE/IEventSystemUVE/IMemoryManagerUVE/IThreadPoolUVE/
 /// ICommandLineUVE/IConfigManagerUVE/IEntityManagerUVE/ISceneGraphUVE/
-/// IAssetDatabaseUVE/ISceneSerializerUVE/IPrefabSystemUVE/IHotReloadUVE/
+/// IAssetDatabaseUVE/IProjectFileIndexUVE/ISceneSerializerUVE/IPrefabSystemUVE/IHotReloadUVE/
 /// IAssetManagerUVE/IAssetImporterUVE/IAssetBundleUVE/IFileSystemUVE/
 /// IRenderDeviceUVE/Shader::IShaderManagerUVE/IRenderSystemUVE/
 /// ICameraSystemUVE/IMeshRendererUVE/ILightSystemUVE/
@@ -74,7 +75,7 @@ namespace UVE::Core {
 /// IInputSystemUVE/IAudioDeviceUVE/IAudioSystemUVE/IAudioSourceSystemUVE/
 /// ISaveGameSystemUVE/ICheckpointManagerUVE/IWindowManagerUVE interfaces,
 /// not the concrete types, so a future substitute implementation of any of
-/// the thirty-four requires no change here.
+/// the thirty-five requires no change here.
 /// Thread-safety: EngineServicesUVE itself holds only non-owning pointers
 /// and has no mutable state of its own; the thread-safety of each accessor
 /// is whatever the referenced service documents.
@@ -89,6 +90,7 @@ public:
                        Scene::IEntityManagerUVE& entityManager,
                        Scene::ISceneGraphUVE& sceneGraph,
                        Asset::IAssetDatabaseUVE& assetDatabase,
+                       Asset::IProjectFileIndexUVE& projectFileIndex,
                        Scene::ISceneSerializerUVE& sceneSerializer,
                        Scene::IPrefabSystemUVE& prefabSystem,
                        Asset::IHotReloadUVE& hotReload,
@@ -124,6 +126,7 @@ public:
     [[nodiscard]] Scene::IEntityManagerUVE& GetEntityManagerUVE() const noexcept;
     [[nodiscard]] Scene::ISceneGraphUVE& GetSceneGraphUVE() const noexcept;
     [[nodiscard]] Asset::IAssetDatabaseUVE& GetAssetDatabaseUVE() const noexcept;
+    [[nodiscard]] Asset::IProjectFileIndexUVE& GetProjectFileIndexUVE() const noexcept;
     [[nodiscard]] Scene::ISceneSerializerUVE& GetSceneSerializerUVE() const noexcept;
     [[nodiscard]] Scene::IPrefabSystemUVE& GetPrefabSystemUVE() const noexcept;
     [[nodiscard]] Asset::IHotReloadUVE& GetHotReloadUVE() const noexcept;
@@ -160,6 +163,7 @@ private:
     Scene::IEntityManagerUVE* m_entityManager;
     Scene::ISceneGraphUVE* m_sceneGraph;
     Asset::IAssetDatabaseUVE* m_assetDatabase;
+    Asset::IProjectFileIndexUVE* m_projectFileIndex;
     Scene::ISceneSerializerUVE* m_sceneSerializer;
     Scene::IPrefabSystemUVE* m_prefabSystem;
     Asset::IHotReloadUVE* m_hotReload;

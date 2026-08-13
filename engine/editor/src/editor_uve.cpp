@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstring>
 #include <filesystem>
+#include <functional>
 #include <limits>
 #include <numbers>
 #include <string>
@@ -1863,6 +1864,10 @@ const std::optional<Asset::AssetRecordUVE>& EditorUVE::GetSelectedAssetUVE() con
     return m_selectedAsset;
 }
 
+const std::optional<Asset::ProjectFileEntryUVE>& EditorUVE::GetSelectedProjectFileUVE() const noexcept {
+    return m_selectedProjectFile;
+}
+
 const std::string& EditorUVE::GetAssetFilterUVE() const noexcept {
     return m_assetFilter;
 }
@@ -3670,58 +3675,147 @@ void EditorUVE::DrawAssetsPanelUVE() {
     ImGui::SetNextWindowSize(ImVec2{mainViewport->WorkSize.x, contentHeight}, ImGuiCond_Always);
     constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize;
     ImGui::Begin("FileSystem", nullptr, flags);
-    ImGui::BeginDisabled(!IsAuthoringCommandAllowedUVE());
+
+    Asset::IProjectFileIndexUVE& projectFileIndex = m_services->GetProjectFileIndexUVE();
+    const bool refreshRequested = !m_projectFileSnapshotInitialized || ImGui::Button("Refresh");
+    if (refreshRequested) {
+        m_projectFileLastRefreshSucceeded = projectFileIndex.RefreshUVE(m_services->GetAssetDatabaseUVE());
+        m_projectFileSnapshotInitialized = true;
+    }
+    const Asset::ProjectFileSnapshotUVE snapshot = projectFileIndex.GetSnapshotUVE();
 
     std::array<char, 256> filterBuffer{};
     const std::size_t copiedCharacters = std::min(m_assetFilter.size(), filterBuffer.size() - 1U);
     m_assetFilter.copy(filterBuffer.data(), copiedCharacters);
-    if (ImGui::InputTextWithHint("Filter", "Filter registered asset paths", filterBuffer.data(), filterBuffer.size())) {
+    if (ImGui::InputTextWithHint("Filter", "Filter project paths", filterBuffer.data(), filterBuffer.size())) {
         m_assetFilter = filterBuffer.data();
     }
 
-    const std::vector<Asset::AssetRecordUVE> records = m_services->GetAssetDatabaseUVE().GetRegisteredAssetsUVE();
-    if (m_selectedAsset.has_value()) {
+    if (m_selectedProjectFile.has_value()) {
         const auto selectedIt = std::find_if(
-            records.begin(), records.end(), [this](const Asset::AssetRecordUVE& record) {
-                return record.guid == m_selectedAsset->guid;
+            snapshot.entries.begin(), snapshot.entries.end(), [this](const Asset::ProjectFileEntryUVE& entry) {
+                return entry.relativePath == m_selectedProjectFile->relativePath && entry.kind == m_selectedProjectFile->kind;
             });
-        if (selectedIt == records.end()) {
+        if (selectedIt == snapshot.entries.end()) {
+            m_selectedProjectFile.reset();
             m_selectedAsset.reset();
         } else {
-            m_selectedAsset = *selectedIt;
+            m_selectedProjectFile = *selectedIt;
+            if (selectedIt->registeredAssetGuid.has_value()) {
+                m_selectedAsset = Asset::AssetRecordUVE{*selectedIt->registeredAssetGuid,
+                                                         snapshot.contentRoot / selectedIt->relativePath};
+            } else {
+                m_selectedAsset.reset();
+            }
         }
     }
 
     ImGui::SameLine();
-    ImGui::Text("%zu registered", records.size());
-    ImGui::BeginChild("##asset-list", ImVec2{0.0F, 64.0F}, true);
-    bool displayedAsset = false;
-    for (const Asset::AssetRecordUVE& record : records) {
-        const std::string pathString = record.path.generic_string();
-        if (!ContainsCaseInsensitiveUVE(pathString, m_assetFilter)) {
-            continue;
-        }
-
-        displayedAsset = true;
-        const bool selected = m_selectedAsset.has_value() && m_selectedAsset->guid == record.guid;
-        const std::string selectableLabel = pathString + "##asset-" + std::to_string(record.guid.value);
-        if (ImGui::Selectable(selectableLabel.c_str(), selected)) {
-            m_selectedAsset = record;
-        }
+    ImGui::Text("%zu entries | Snapshot #%llu", snapshot.entries.size(),
+                static_cast<unsigned long long>(snapshot.refreshGeneration));
+    if (!m_projectFileLastRefreshSucceeded) {
+        ImGui::SameLine();
+        ImGui::TextDisabled("Refresh failed; showing the last successful snapshot.");
     }
-    if (!displayedAsset) {
-        ImGui::TextUnformatted(records.empty() ? "No registered assets." : "No registered assets match the filter.");
+
+    const auto isVisible = [this, &snapshot](const Asset::ProjectFileEntryUVE& entry) {
+        if (m_assetFilter.empty()) {
+            return true;
+        }
+        const std::string entryPath = entry.relativePath.generic_string();
+        if (ContainsCaseInsensitiveUVE(entryPath, m_assetFilter)) {
+            return true;
+        }
+        if (entry.kind != Asset::ProjectFileEntryKindUVE::Directory) {
+            return false;
+        }
+        const std::string prefix = entryPath + "/";
+        return std::any_of(snapshot.entries.begin(), snapshot.entries.end(), [this, &prefix](const Asset::ProjectFileEntryUVE& child) {
+            const std::string childPath = child.relativePath.generic_string();
+            return childPath.starts_with(prefix) && ContainsCaseInsensitiveUVE(childPath, m_assetFilter);
+        });
+    };
+
+    const auto hasVisibleChild = [&snapshot, &isVisible](const std::filesystem::path& parent) {
+        return std::any_of(snapshot.entries.begin(), snapshot.entries.end(), [&parent, &isVisible](const Asset::ProjectFileEntryUVE& entry) {
+            return entry.relativePath.parent_path() == parent && isVisible(entry);
+        });
+    };
+
+    const auto selectEntry = [this, &snapshot](const Asset::ProjectFileEntryUVE& entry) {
+        m_selectedProjectFile = entry;
+        if (entry.registeredAssetGuid.has_value()) {
+            m_selectedAsset = Asset::AssetRecordUVE{*entry.registeredAssetGuid, snapshot.contentRoot / entry.relativePath};
+        } else {
+            m_selectedAsset.reset();
+        }
+    };
+
+    ImGui::BeginChild("##project-file-tree", ImVec2{0.0F, 72.0F}, true);
+    if (!m_projectFileLastRefreshSucceeded && snapshot.refreshGeneration == 0U) {
+        ImGui::TextUnformatted("Project content root could not be scanned. Press Refresh after correcting the root.");
+    } else if (!snapshot.contentRootExists) {
+        ImGui::TextUnformatted("Project content root does not exist yet. Press Refresh after adding content.");
+    } else if (snapshot.entries.empty()) {
+        ImGui::TextUnformatted("Project content root is empty.");
+    } else {
+        std::function<void(const std::filesystem::path&)> drawTreeLevel;
+        drawTreeLevel = [&](const std::filesystem::path& parent) {
+            for (const Asset::ProjectFileEntryUVE& entry : snapshot.entries) {
+                if (entry.relativePath.parent_path() != parent || !isVisible(entry)) {
+                    continue;
+                }
+
+                const bool selected = m_selectedProjectFile.has_value() &&
+                                      m_selectedProjectFile->relativePath == entry.relativePath &&
+                                      m_selectedProjectFile->kind == entry.kind;
+                const std::string name = entry.relativePath.filename().generic_string();
+                const std::string identity = entry.relativePath.generic_string();
+                if (entry.kind == Asset::ProjectFileEntryKindUVE::Directory) {
+                    ImGuiTreeNodeFlags nodeFlags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick;
+                    if (selected) {
+                        nodeFlags |= ImGuiTreeNodeFlags_Selected;
+                    }
+                    if (!hasVisibleChild(entry.relativePath)) {
+                        nodeFlags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
+                    }
+                    const bool open = ImGui::TreeNodeEx((name + "##project-dir-" + identity).c_str(), nodeFlags);
+                    if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
+                        selectEntry(entry);
+                    }
+                    if (open && (nodeFlags & ImGuiTreeNodeFlags_NoTreePushOnOpen) == 0) {
+                        drawTreeLevel(entry.relativePath);
+                        ImGui::TreePop();
+                    }
+                } else {
+                    std::string label = name;
+                    if (entry.registeredAssetGuid.has_value()) {
+                        label += " [Registered]";
+                    }
+                    label += "##project-file-" + identity;
+                    if (ImGui::Selectable(label.c_str(), selected)) {
+                        selectEntry(entry);
+                    }
+                }
+            }
+        };
+        drawTreeLevel({});
     }
     ImGui::EndChild();
 
-    if (m_selectedAsset.has_value()) {
-        const std::string selectedPath = m_selectedAsset->path.generic_string();
+    if (m_selectedProjectFile.has_value()) {
+        const std::string selectedPath = m_selectedProjectFile->relativePath.generic_string();
         ImGui::TextWrapped("Selected: %s", selectedPath.c_str());
-        ImGui::Text("GUID: %016llX", static_cast<unsigned long long>(m_selectedAsset->guid.value));
+        ImGui::TextUnformatted(m_selectedProjectFile->kind == Asset::ProjectFileEntryKindUVE::Directory ? "Kind: Directory"
+                                                                                                           : "Kind: File");
+        if (m_selectedProjectFile->registeredAssetGuid.has_value()) {
+            ImGui::Text("GUID: %016llX", static_cast<unsigned long long>(m_selectedProjectFile->registeredAssetGuid->value));
+        } else {
+            ImGui::TextUnformatted("Registry: Unregistered");
+        }
     } else {
-        ImGui::TextUnformatted("Select a registered asset to inspect its registry record.");
+        ImGui::TextUnformatted("Select a project file or directory to inspect its cached entry.");
     }
-    ImGui::EndDisabled();
     ImGui::End();
 }
 

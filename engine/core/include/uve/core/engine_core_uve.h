@@ -22,6 +22,7 @@
 #include "uve/asset/i_asset_manager_uve.h"
 #include "uve/asset/i_file_system_uve.h"
 #include "uve/asset/i_hot_reload_uve.h"
+#include "uve/asset/i_project_file_index_uve.h"
 #include "uve/audio/i_audio_device_uve.h"
 #include "uve/audio/i_audio_source_system_uve.h"
 #include "uve/audio/i_audio_system_uve.h"
@@ -61,7 +62,7 @@ namespace UVE::Core {
 
 /// EngineCoreUVE owns the foundational engine services (CommandLine, Logger,
 /// MemoryManager, ThreadPool, Timer, EventSystem, EntityManager, SceneGraph,
-/// AssetDatabase, SceneSerializer, PrefabSystem, HotReload, AssetManager,
+/// AssetDatabase, ProjectFileIndex, SceneSerializer, PrefabSystem, HotReload, AssetManager,
 /// AssetImporter, AssetBundle, FileSystem, WindowManager, RenderDevice, ShaderManager,
 /// RenderSystem, CameraSystem, MeshRenderer, LightSystem, Renderer3D, CollisionSystem, PhysicsSystem,
 /// RaycastSystem, InputSystem, AudioDevice, AudioSystem, AudioSourceSystem,
@@ -137,7 +138,7 @@ public:
 
     /// Constructs and initializes CommandLine, Logger, MemoryManager,
     /// ThreadPool, Timer, EventSystem, EntityManager, SceneGraph,
-    /// AssetDatabase, SceneSerializer, PrefabSystem, HotReload, AssetManager,
+    /// AssetDatabase, ProjectFileIndex, SceneSerializer, PrefabSystem, HotReload, AssetManager,
     /// AssetImporter, AssetBundle, FileSystem, WindowManager, RenderDevice, ShaderManager, RenderSystem,
     /// CameraSystem, MeshRenderer, LightSystem, Renderer3D, CollisionSystem, PhysicsSystem, RaycastSystem, InputSystem, AudioDevice, AudioSystem, AudioSourceSystem, SaveGameSystem, CheckpointManager, and ConfigManager in that order (CommandLine first — it
     /// has no dependencies of its own; immediately after, reads the `--headless` CLI flag via
@@ -374,6 +375,7 @@ private:
     std::unique_ptr<Scene::IEntityManagerUVE> m_entityManager;
     std::unique_ptr<Scene::ISceneGraphUVE> m_sceneGraph;
     std::unique_ptr<Asset::IAssetDatabaseUVE> m_assetDatabase;
+    std::unique_ptr<Asset::IProjectFileIndexUVE> m_projectFileIndex;
     std::unique_ptr<Scene::ISceneSerializerUVE> m_sceneSerializer;
     std::unique_ptr<Scene::IPrefabSystemUVE> m_prefabSystem;
     std::unique_ptr<Asset::IHotReloadUVE> m_hotReload;

@@ -79,6 +79,12 @@ struct EngineConfigUVE {
     /// registry yet.
     std::filesystem::path assetDatabaseFilePath = ".uveassetdb";
 
+    /// Root directory the read-only ProjectFileIndexUVE explicitly scans for
+    /// editor Asset Browser presentation. Missing or empty roots are valid
+    /// empty snapshots and are never created by the index. The root does not
+    /// change AssetDatabaseUVE ownership, import behavior, or VFS mounts.
+    std::filesystem::path projectContentRootUVE = "assets/";
+
     /// Whether Update() calls HotReloadUVE::PollUVE() each frame.
     /// AssetManagerUVE still tracks/untracks loaded assets with HotReloadUVE
     /// regardless of this flag — it only gates whether the poll itself

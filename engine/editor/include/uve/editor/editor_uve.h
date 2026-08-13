@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "uve/asset/i_asset_database_uve.h"
+#include "uve/asset/i_project_file_index_uve.h"
 #include "uve/core/engine_services_uve.h"
 #include "uve/core/i_simulation_control_uve.h"
 #include "uve/math/ray_uve.h"
@@ -302,7 +303,11 @@ public:
     [[nodiscard]] float GetViewportDistanceUVE() const noexcept;
     [[nodiscard]] EditorViewportNavigationModeUVE GetViewportNavigationModeUVE() const noexcept;
     [[nodiscard]] bool IsSceneDirtyUVE() const noexcept;
+    /// Returns the selected registered asset record when the selected project-file entry is a currently
+    /// correlated file. Directories and unregistered files return std::nullopt.
     [[nodiscard]] const std::optional<Asset::AssetRecordUVE>& GetSelectedAssetUVE() const noexcept;
+    /// Returns the selected cached project-file entry, including directories and unregistered files.
+    [[nodiscard]] const std::optional<Asset::ProjectFileEntryUVE>& GetSelectedProjectFileUVE() const noexcept;
     [[nodiscard]] const std::string& GetAssetFilterUVE() const noexcept;
     [[nodiscard]] const std::filesystem::path& GetActiveScenePathUVE() const noexcept;
     void SetActiveScenePathUVE(std::filesystem::path path);
@@ -622,6 +627,9 @@ private:
     bool m_hierarchyFilterCacheDirty = true;
     bool m_hierarchyRenameFocusRequested = false;
     std::optional<Asset::AssetRecordUVE> m_selectedAsset;
+    std::optional<Asset::ProjectFileEntryUVE> m_selectedProjectFile;
+    bool m_projectFileSnapshotInitialized = false;
+    bool m_projectFileLastRefreshSucceeded = true;
     bool m_sceneDirty = false;
     bool m_uiInitialized = false;
 };

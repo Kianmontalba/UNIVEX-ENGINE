@@ -22,6 +22,7 @@ EngineServicesUVE::EngineServicesUVE(Debug::ILoggerUVE& logger, Utilities::ITime
                                       Scene::IEntityManagerUVE& entityManager,
                                       Scene::ISceneGraphUVE& sceneGraph,
                                       Asset::IAssetDatabaseUVE& assetDatabase,
+                                      Asset::IProjectFileIndexUVE& projectFileIndex,
                                       Scene::ISceneSerializerUVE& sceneSerializer,
                                       Scene::IPrefabSystemUVE& prefabSystem,
                                       Asset::IHotReloadUVE& hotReload,
@@ -49,7 +50,7 @@ EngineServicesUVE::EngineServicesUVE(Debug::ILoggerUVE& logger, Utilities::ITime
     : m_logger(&logger), m_timer(&timer), m_eventSystem(&eventSystem),
       m_memoryManager(&memoryManager), m_threadPool(&threadPool), m_commandLine(&commandLine),
       m_configManager(&configManager), m_entityManager(&entityManager), m_sceneGraph(&sceneGraph),
-      m_assetDatabase(&assetDatabase), m_sceneSerializer(&sceneSerializer),
+      m_assetDatabase(&assetDatabase), m_projectFileIndex(&projectFileIndex), m_sceneSerializer(&sceneSerializer),
       m_prefabSystem(&prefabSystem), m_hotReload(&hotReload), m_assetManager(&assetManager),
       m_assetImporter(&assetImporter), m_assetBundle(&assetBundle), m_fileSystem(&fileSystem),
       m_renderDevice(&renderDevice), m_shaderManager(&shaderManager), m_renderSystem(&renderSystem),
@@ -99,6 +100,10 @@ Scene::ISceneGraphUVE& EngineServicesUVE::GetSceneGraphUVE() const noexcept {
 
 Asset::IAssetDatabaseUVE& EngineServicesUVE::GetAssetDatabaseUVE() const noexcept {
     return *m_assetDatabase;
+}
+
+Asset::IProjectFileIndexUVE& EngineServicesUVE::GetProjectFileIndexUVE() const noexcept {
+    return *m_projectFileIndex;
 }
 
 Scene::ISceneSerializerUVE& EngineServicesUVE::GetSceneSerializerUVE() const noexcept {
