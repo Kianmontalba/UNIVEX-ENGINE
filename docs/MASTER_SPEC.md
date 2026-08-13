@@ -81,6 +81,81 @@ Do NOT jump to Phase 8 or 9 while Phase 1 is incomplete. The ecosystem
 exists to serve the engine. Without a solid engine, the ecosystem is 
 meaningless.
 
+5.1 ORIGINAL TOOLING ROADMAP — POST-VIEWPORT FOUNDATIONS
+---------------------------------------------------------
+The following roadmap extends the engine-first priority order after the first
+ECS-backed viewport scene rendering milestone. These are **original UniVex
+systems** informed only by high-level observations about separating runtime,
+editor, developer tooling, and standalone utilities in mature engines. Do not
+copy third-party source, assets, APIs, build scripts, or implementation logic.
+
+The sequence intentionally strengthens the asset and editor workflow before
+starting broad plugin, ecosystem, or cinematic features.
+
+  Increment 59 — Project FileSystem & Asset Browser v1
+    • Add a read-only `ProjectFileIndexUVE` that creates a deterministic,
+      normalized snapshot of configured project roots, folders, and files.
+    • Upgrade the FileSystem dock from registered-asset rows to a filterable
+      folder/tree browser with asset-record correlation and safe empty-project
+      behavior.
+    • Preserve the current AssetDatabase as the authority for registered GUIDs;
+      scanning must not silently import, delete, or mutate assets.
+
+  Increment 60 — Import Work Queue & Derived Artifact Cache v1
+    • Build an original `AssetImportJobUVE` queue around the existing generic
+      importer, with queued/running/succeeded/failed state, deterministic
+      content fingerprints, explicit retry, and structured diagnostics.
+    • Add a project-local derived-artifact cache for future generated outputs
+      such as import metadata and thumbnails; cache invalidation must depend on
+      source fingerprint and importer-settings version, never wall-clock time.
+    • Keep format-specific model/image/audio conversion out of v1 until each
+      parser and its licensing boundary are intentionally chosen.
+
+  Increment 61 — Project Change Watch & Targeted Reload v1
+    • Add `ProjectChangeWatcherUVE` as a project-file change journal distinct
+      from the existing loaded-asset hot-reload poller.
+    • Re-index only affected paths and mark matching import artifacts stale;
+      editor UI presents explicit refresh/reimport actions rather than
+      overwriting authoring state automatically.
+    • Start with deterministic portable polling and a test seam; native OS
+      directory-watch backends remain optional platform modules later.
+
+  Increment 62 — Inspector Drawer Registry v1
+    • Replace hard-coded Inspector branching with a small C++ registered drawer
+      registry for Name, Transform, Primitive Mesh, and future asset settings.
+    • Each drawer must declare its valid selection shape, its history mutation
+      transaction, and its Play-mode/invalid-state rejection contract.
+    • This is not reflection or a custom scripting language; it is a safe
+      internal editor boundary that keeps feature-specific UI out of one file.
+
+  Increment 63 — Editor Tool Sessions v1
+    • Move reusable viewport interaction lifecycle rules into original
+      `EditorToolSessionUVE` contracts: begin, preview, commit, cancel,
+      selection eligibility, and history ownership.
+    • Migrate only the existing transform gizmos after parity tests pass; do
+      not add new modeling tools or duplicate Unreal-style APIs in this step.
+    • This prepares clean ownership for future measure, placement, terrain, or
+      animation tools without prematurely implementing them.
+
+  Increment 64 — Project Health & Headless Automation v1
+    • Add a standalone `uve_project_check` executable that validates asset
+      registry entries, scene envelopes, primitive payloads, and broken
+      references without starting a window.
+    • Emit deterministic human-readable and machine-readable results for CI;
+      failures must explain a project path, object type, and recovery action.
+    • Keep source-control dashboards, remote workers, and packaging/cooking
+      systems out of this initial diagnostic tool.
+
+  Later Backlog — Source Control Status & Editor Session Diagnostics
+    • Add read-only repository status/badges and a local editor diagnostic
+      timeline only after the Asset Browser and Project Health foundations are
+      stable. No credentials, commit, push, or merge operation belongs to v1.
+
+Existing planned phases remain unchanged: native C++ visual scripting follows
+core scene/editor foundations, plugin architecture follows the scripting
+foundation, and sample-project/ecosystem work remains after the core engine is
+ready.
+
 6. CODE QUALITY STANDARDS
 --------------------------
   • Use modern C++20/23. No raw new/delete. RAII everywhere.
