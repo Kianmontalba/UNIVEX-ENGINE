@@ -29,6 +29,7 @@
 #include "uve/config/i_config_manager_uve.h"
 #include "uve/core/engine_config_uve.h"
 #include "uve/core/engine_services_uve.h"
+#include "uve/core/i_simulation_control_uve.h"
 #include "uve/core/engine_state_uve.h"
 #include "uve/core/frame_stats_uve.h"
 #include "uve/core/version_uve.h"
@@ -126,7 +127,7 @@ namespace UVE::Core {
 /// each document their own thread-safety contract independently (e.g.
 /// LoggerUVE is safe to log to from other threads even though
 /// EngineCoreUVE's own methods are not thread-safe).
-class EngineCoreUVE final {
+class EngineCoreUVE final : public ISimulationControlUVE {
 public:
     explicit EngineCoreUVE(EngineConfigUVE config = {});
     ~EngineCoreUVE();
@@ -246,6 +247,20 @@ public:
 
     [[nodiscard]] EngineStateUVE GetStateUVE() const noexcept;
     [[nodiscard]] const FrameStatsUVE& GetFrameStatsUVE() const noexcept;
+
+    /// Requests normal fixed simulation or a held simulation state. Frame maintenance and rendering
+    /// continue in both modes. Returns false outside EngineStateUVE::Running.
+    [[nodiscard]] bool SetSimulationExecutionModeUVE(SimulationExecutionModeUVE mode) noexcept override;
+    [[nodiscard]] SimulationExecutionModeUVE GetSimulationExecutionModeUVE() const noexcept override;
+
+    /// Queues one fixed physics step while paused. The request is consumed by Update(), never from
+    /// the caller's stack frame, and a second pending request is rejected.
+    [[nodiscard]] bool RequestSingleSimulationStepUVE() noexcept override;
+
+    /// Marks an editor-owned transient simulation session. While active, checkpoint/save-game
+    /// advancement is skipped independently from normal or paused fixed simulation execution.
+    [[nodiscard]] bool SetTransientSimulationSessionActiveUVE(bool active) noexcept override;
+    [[nodiscard]] bool IsTransientSimulationSessionActiveUVE() const noexcept override;
 
     /// Sets the entity Render() passes to Renderer3DUVE::RenderFrameUVE() as the camera to render
     /// from, starting with the next frame. Passing Scene::kInvalidEntityUVE (the default) reverts
@@ -370,6 +385,9 @@ private:
 
     EngineConfigUVE m_config;
     EngineStateUVE m_state = EngineStateUVE::Uninitialized;
+    SimulationExecutionModeUVE m_simulationExecutionMode = SimulationExecutionModeUVE::Running;
+    bool m_singleSimulationStepPending = false;
+    bool m_transientSimulationSessionActive = false;
 
     std::unique_ptr<CommandLine::ICommandLineUVE> m_commandLine;
     std::unique_ptr<Debug::ILoggerUVE> m_logger;

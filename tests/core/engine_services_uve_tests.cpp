@@ -93,8 +93,10 @@ public:
     void SetMaxDeltaTimeUVE(double) override {}
     void SetFixedTimestepUVE(double) override {}
     Utilities::FixedStepResultUVE AdvanceFixedStepUVE() override { return {}; }
+    void DiscardFixedStepAccumulatorUVE() noexcept override { ++discardCount; }
 
     int tickCount = 0;
+    int discardCount = 0;
 };
 
 class FakeEventSystemUVE final : public Events::IEventSystemUVE {

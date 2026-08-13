@@ -99,7 +99,7 @@ int main(const int argc, char** argv) {
         return 1;
     }
 
-    UVE::Editor::EditorUVE editor(engine.GetServicesUVE(), options.scenePath);
+    UVE::Editor::EditorUVE editor(engine.GetServicesUVE(), options.scenePath, 100U, &engine);
     editor.InitUVE();
     engine.SetActiveCameraUVE(editor.GetViewportCameraUVE());
     engine.SetPostRenderCallbackUVE([&editor] { editor.RenderOverlayUVE(); });

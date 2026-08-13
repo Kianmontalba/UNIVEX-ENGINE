@@ -72,6 +72,11 @@ public:
     /// unbounded catch-up loop), returning how many steps to run and the
     /// leftover fractional progress toward the next one.
     virtual FixedStepResultUVE AdvanceFixedStepUVE() = 0;
+
+    /// Discards only fixed-step progress accumulated by Tick(). Wall-clock total time, the current
+    /// frame delta, and the clock reference remain unchanged. Used by a paused transient session to
+    /// prevent catch-up physics when normal simulation resumes.
+    virtual void DiscardFixedStepAccumulatorUVE() noexcept = 0;
 };
 
 } // namespace UVE::Utilities

@@ -171,8 +171,9 @@ constexpr const char* kHierarchyEntityPayloadUVE = "UVE_SCENE_HIERARCHY_ENTITY";
 } // namespace
 
 EditorUVE::EditorUVE(Core::EngineServicesUVE& services, std::filesystem::path activeScenePath,
-                     const std::size_t historyCapacity)
+                     const std::size_t historyCapacity, Core::ISimulationControlUVE* const simulationControl)
     : m_services(&services),
+      m_simulationControl(simulationControl),
       m_activeScenePath(std::move(activeScenePath)),
       m_historyCapacity(std::max<std::size_t>(std::size_t{1U}, historyCapacity)) {}
 
@@ -235,6 +236,120 @@ void EditorUVE::TickUVE() {
     }
 }
 
+bool EditorUVE::EnterPlayModeUVE() {
+    if (m_state != EditorStateUVE::Running || m_playModeState != EditorPlayModeStateUVE::Edit ||
+        m_simulationControl == nullptr || !IsAuthoringCommandAllowedUVE() ||
+        m_gizmoDrag.axis != EditorTranslateAxisUVE::None ||
+        m_viewportNavigationMode != EditorViewportNavigationModeUVE::None) {
+        return false;
+    }
+
+    const std::vector<Scene::EntityUVE> roots = GetDocumentRootsUVE();
+    PlayModeSessionUVE session{};
+    session.capturedEmptyDocument = roots.empty();
+    if (!session.capturedEmptyDocument) {
+        const std::optional<Scene::SceneSnapshotUVE> snapshot =
+            m_services->GetSceneSerializerUVE().CaptureUVE(
+                m_services->GetEntityManagerUVE(), roots, Asset::AssetKindUVE::Scene);
+        if (!snapshot.has_value()) {
+            return false;
+        }
+        session.documentSnapshot = *snapshot;
+    }
+    session.dirtyBefore = m_sceneDirty;
+    session.selectionBefore = CaptureSelectionPathUVE(roots);
+
+    if (!m_simulationControl->SetTransientSimulationSessionActiveUVE(true)) {
+        return false;
+    }
+    if (!m_simulationControl->SetSimulationExecutionModeUVE(Core::SimulationExecutionModeUVE::Running)) {
+        static_cast<void>(m_simulationControl->SetTransientSimulationSessionActiveUVE(false));
+        return false;
+    }
+
+    m_playModeSession = std::move(session);
+    m_playModeState = EditorPlayModeStateUVE::Playing;
+    return true;
+}
+
+bool EditorUVE::PausePlayModeUVE() {
+    if (m_state != EditorStateUVE::Running || m_playModeState != EditorPlayModeStateUVE::Playing ||
+        m_simulationControl == nullptr ||
+        !m_simulationControl->SetSimulationExecutionModeUVE(Core::SimulationExecutionModeUVE::Paused)) {
+        return false;
+    }
+    m_playModeState = EditorPlayModeStateUVE::Paused;
+    return true;
+}
+
+bool EditorUVE::ResumePlayModeUVE() {
+    if (m_state != EditorStateUVE::Running || m_playModeState != EditorPlayModeStateUVE::Paused ||
+        m_simulationControl == nullptr ||
+        !m_simulationControl->SetSimulationExecutionModeUVE(Core::SimulationExecutionModeUVE::Running)) {
+        return false;
+    }
+    m_playModeState = EditorPlayModeStateUVE::Playing;
+    return true;
+}
+
+bool EditorUVE::StepPlayModeUVE() {
+    return m_state == EditorStateUVE::Running && m_playModeState == EditorPlayModeStateUVE::Paused &&
+           m_simulationControl != nullptr && m_simulationControl->RequestSingleSimulationStepUVE();
+}
+
+bool EditorUVE::StopPlayModeUVE() {
+    if (m_state != EditorStateUVE::Running || m_playModeState == EditorPlayModeStateUVE::Edit ||
+        !m_playModeSession.has_value() || m_simulationControl == nullptr ||
+        !m_simulationControl->SetSimulationExecutionModeUVE(Core::SimulationExecutionModeUVE::Paused)) {
+        return false;
+    }
+
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    const std::vector<Scene::EntityUVE> transientRoots = GetDocumentRootsUVE();
+    std::optional<Scene::SceneSnapshotUVE> transientSnapshot;
+    if (!transientRoots.empty()) {
+        transientSnapshot = m_services->GetSceneSerializerUVE().CaptureUVE(
+            entityManager, transientRoots, Asset::AssetKindUVE::Scene);
+        if (!transientSnapshot.has_value()) {
+            return false;
+        }
+    }
+
+    const PlayModeSessionUVE& session = *m_playModeSession;
+    ClearDocumentSceneUVE();
+    std::vector<Scene::EntityUVE> restoredRoots;
+    if (!session.capturedEmptyDocument) {
+        restoredRoots = m_services->GetSceneSerializerUVE().RestoreUVE(entityManager, session.documentSnapshot);
+        if (restoredRoots.empty()) {
+            ClearDocumentSceneUVE();
+            if (transientSnapshot.has_value()) {
+                static_cast<void>(m_services->GetSceneSerializerUVE().RestoreUVE(entityManager, *transientSnapshot));
+            }
+            return false;
+        }
+    }
+
+    if (session.selectionBefore.has_value()) {
+        m_selectedEntity = ResolveSelectionPathUVE(*session.selectionBefore, restoredRoots);
+        CancelGizmoDragUVE();
+    } else {
+        ClearSelectionUVE();
+    }
+    m_sceneDirty = session.dirtyBefore;
+    if (!m_simulationControl->SetSimulationExecutionModeUVE(Core::SimulationExecutionModeUVE::Running) ||
+        !m_simulationControl->SetTransientSimulationSessionActiveUVE(false)) {
+        return false;
+    }
+
+    m_playModeSession.reset();
+    m_playModeState = EditorPlayModeStateUVE::Edit;
+    return true;
+}
+
+EditorPlayModeStateUVE EditorUVE::GetPlayModeStateUVE() const noexcept {
+    return m_playModeState;
+}
+
 void EditorUVE::RenderOverlayUVE() {
     if (m_state != EditorStateUVE::Running || !m_uiInitialized) {
         return;
@@ -255,7 +370,7 @@ void EditorUVE::RenderOverlayUVE() {
 }
 
 bool EditorUVE::SaveSceneUVE() {
-    if (m_state != EditorStateUVE::Running || m_activeScenePath.empty()) {
+    if (!IsAuthoringCommandAllowedUVE() || m_activeScenePath.empty()) {
         return false;
     }
 
@@ -269,7 +384,7 @@ bool EditorUVE::SaveSceneUVE() {
 }
 
 bool EditorUVE::LoadSceneUVE() {
-    if (m_state != EditorStateUVE::Running || m_activeScenePath.empty() ||
+    if (!IsAuthoringCommandAllowedUVE() || m_activeScenePath.empty() ||
         !std::filesystem::exists(m_activeScenePath)) {
         return false;
     }
@@ -304,6 +419,9 @@ bool EditorUVE::LoadSceneUVE() {
 }
 
 void EditorUVE::SelectEntityUVE(const Scene::EntityUVE entity) noexcept {
+    if (!IsAuthoringCommandAllowedUVE()) {
+        return;
+    }
     if (entity != Scene::kInvalidEntityUVE && IsDocumentEntityUVE(entity)) {
         m_selectedEntity = entity;
         return;
@@ -317,7 +435,7 @@ void EditorUVE::ClearSelectionUVE() noexcept {
 }
 
 bool EditorUVE::SetSelectedLocalTransformUVE(const Scene::TransformComponentUVE& transform) {
-    if (m_state != EditorStateUVE::Running || !IsDocumentEntityUVE(m_selectedEntity) ||
+    if (!IsAuthoringCommandAllowedUVE() || !IsDocumentEntityUVE(m_selectedEntity) ||
         !IsTransformFiniteUVE(transform)) {
         return false;
     }
@@ -345,7 +463,7 @@ bool EditorUVE::SetSelectedLocalTransformUVE(const Scene::TransformComponentUVE&
 }
 
 bool EditorUVE::SetSelectedEntityNameUVE(std::string name) {
-    if (m_state != EditorStateUVE::Running || !IsDocumentEntityUVE(m_selectedEntity) ||
+    if (!IsAuthoringCommandAllowedUVE() || !IsDocumentEntityUVE(m_selectedEntity) ||
         !IsEntityNameValidUVE(name)) {
         return false;
     }
@@ -427,6 +545,9 @@ std::optional<Math::RayUVE> EditorUVE::MakeViewportRayUVE(const EditorViewportRe
 
 bool EditorUVE::PickViewportUVE(const EditorViewportRectUVE& viewportRect,
                                  const Math::Vector2UVE pointerPosition) {
+    if (!IsAuthoringCommandAllowedUVE()) {
+        return false;
+    }
     const std::optional<Math::RayUVE> ray = MakeViewportRayUVE(viewportRect, pointerPosition);
     if (!ray.has_value()) {
         return false;
@@ -452,7 +573,7 @@ bool EditorUVE::PickViewportUVE(const EditorViewportRectUVE& viewportRect,
 }
 
 bool EditorUVE::TranslateSelectedAlongAxisUVE(const EditorTranslateAxisUVE axis, const float worldDistance) {
-    if (m_state != EditorStateUVE::Running || !IsDocumentEntityUVE(m_selectedEntity) ||
+    if (!IsAuthoringCommandAllowedUVE() || !IsDocumentEntityUVE(m_selectedEntity) ||
         !IsFiniteUVE(worldDistance) || axis == EditorTranslateAxisUVE::None) {
         return false;
     }
@@ -478,7 +599,7 @@ bool EditorUVE::TranslateSelectedAlongAxisUVE(const EditorTranslateAxisUVE axis,
 }
 
 bool EditorUVE::RotateSelectedAroundWorldAxisUVE(const EditorTranslateAxisUVE axis, const float radians) {
-    if (m_state != EditorStateUVE::Running || !IsDocumentEntityUVE(m_selectedEntity) ||
+    if (!IsAuthoringCommandAllowedUVE() || !IsDocumentEntityUVE(m_selectedEntity) ||
         !IsFiniteUVE(radians) || axis == EditorTranslateAxisUVE::None ||
         m_gizmoDrag.axis != EditorTranslateAxisUVE::None ||
         m_viewportNavigationMode != EditorViewportNavigationModeUVE::None) {
@@ -507,7 +628,7 @@ bool EditorUVE::RotateSelectedAroundWorldAxisUVE(const EditorTranslateAxisUVE ax
 
 bool EditorUVE::ScaleSelectedAlongAxisUVE(const EditorTranslateAxisUVE axis,
                                            const float localScaleDelta) {
-    if (m_state != EditorStateUVE::Running || !IsDocumentEntityUVE(m_selectedEntity) ||
+    if (!IsAuthoringCommandAllowedUVE() || !IsDocumentEntityUVE(m_selectedEntity) ||
         !IsFiniteUVE(localScaleDelta) || axis == EditorTranslateAxisUVE::None ||
         m_gizmoDrag.axis != EditorTranslateAxisUVE::None ||
         m_viewportNavigationMode != EditorViewportNavigationModeUVE::None) {
@@ -546,7 +667,7 @@ bool EditorUVE::ScaleSelectedAlongAxisUVE(const EditorTranslateAxisUVE axis,
 }
 
 void EditorUVE::SetGizmoModeUVE(const EditorGizmoModeUVE mode) noexcept {
-    if (m_gizmoDrag.axis != EditorTranslateAxisUVE::None ||
+    if (!IsAuthoringCommandAllowedUVE() || m_gizmoDrag.axis != EditorTranslateAxisUVE::None ||
         m_viewportNavigationMode != EditorViewportNavigationModeUVE::None) {
         return;
     }
@@ -558,7 +679,7 @@ EditorGizmoModeUVE EditorUVE::GetGizmoModeUVE() const noexcept {
 }
 
 bool EditorUVE::SetTransformSnappingSettingsUVE(const EditorTransformSnappingSettingsUVE& settings) {
-    if (m_gizmoDrag.axis != EditorTranslateAxisUVE::None ||
+    if (!IsAuthoringCommandAllowedUVE() || m_gizmoDrag.axis != EditorTranslateAxisUVE::None ||
         m_viewportNavigationMode != EditorViewportNavigationModeUVE::None ||
         !AreTransformSnappingSettingsValidUVE(settings)) {
         return false;
@@ -741,7 +862,7 @@ bool EditorUVE::ZoomViewportUVE(const float wheelDelta) {
 }
 
 Scene::EntityUVE EditorUVE::CreateDocumentEntityUVE(const EditorEntityKindUVE kind) {
-    if (m_state != EditorStateUVE::Running) {
+    if (!IsAuthoringCommandAllowedUVE()) {
         return Scene::kInvalidEntityUVE;
     }
 
@@ -863,7 +984,7 @@ bool EditorUVE::ReparentDocumentEntityUVE(const Scene::EntityUVE entity, const S
 }
 
 bool EditorUVE::UndoUVE() {
-    if (m_state != EditorStateUVE::Running || m_undoHistory.empty()) {
+    if (!IsAuthoringCommandAllowedUVE() || m_undoHistory.empty()) {
         return false;
     }
 
@@ -879,7 +1000,7 @@ bool EditorUVE::UndoUVE() {
 }
 
 bool EditorUVE::RedoUVE() {
-    if (m_state != EditorStateUVE::Running || m_redoHistory.empty()) {
+    if (!IsAuthoringCommandAllowedUVE() || m_redoHistory.empty()) {
         return false;
     }
 
@@ -895,11 +1016,11 @@ bool EditorUVE::RedoUVE() {
 }
 
 bool EditorUVE::CanUndoUVE() const noexcept {
-    return m_state == EditorStateUVE::Running && !m_undoHistory.empty();
+    return IsAuthoringCommandAllowedUVE() && !m_undoHistory.empty();
 }
 
 bool EditorUVE::CanRedoUVE() const noexcept {
-    return m_state == EditorStateUVE::Running && !m_redoHistory.empty();
+    return IsAuthoringCommandAllowedUVE() && !m_redoHistory.empty();
 }
 
 bool EditorUVE::ApplyLocalTransformUVE(const Scene::EntityUVE entity,
@@ -1047,8 +1168,69 @@ bool EditorUVE::TryGetDocumentParentUVE(const Scene::EntityUVE entity, Scene::En
 }
 
 bool EditorUVE::IsLifecycleCommandAllowedUVE() const noexcept {
-    return m_state == EditorStateUVE::Running && m_gizmoDrag.axis == EditorTranslateAxisUVE::None &&
+    return IsAuthoringCommandAllowedUVE() && m_gizmoDrag.axis == EditorTranslateAxisUVE::None &&
            m_viewportNavigationMode == EditorViewportNavigationModeUVE::None;
+}
+
+bool EditorUVE::IsAuthoringCommandAllowedUVE() const noexcept {
+    return m_state == EditorStateUVE::Running && m_playModeState == EditorPlayModeStateUVE::Edit;
+}
+
+std::optional<EditorUVE::EditorSelectionPathUVE> EditorUVE::CaptureSelectionPathUVE(
+    const std::vector<Scene::EntityUVE>& roots) const {
+    if (!IsDocumentEntityUVE(m_selectedEntity)) {
+        return std::nullopt;
+    }
+
+    for (std::size_t rootIndex = 0U; rootIndex < roots.size(); ++rootIndex) {
+        EditorSelectionPathUVE path{};
+        path.rootIndex = rootIndex;
+        if (FindSelectionPathUVE(roots[rootIndex], m_selectedEntity, path.childIndices)) {
+            return path;
+        }
+    }
+    return std::nullopt;
+}
+
+Scene::EntityUVE EditorUVE::ResolveSelectionPathUVE(const EditorSelectionPathUVE& path,
+                                                     const std::vector<Scene::EntityUVE>& roots) const {
+    if (path.rootIndex >= roots.size() || !IsDocumentEntityUVE(roots[path.rootIndex])) {
+        return Scene::kInvalidEntityUVE;
+    }
+
+    Scene::EntityUVE resolved = roots[path.rootIndex];
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    for (const std::size_t childIndex : path.childIndices) {
+        const std::vector<Scene::EntityUVE> children =
+            m_services->GetSceneGraphUVE().GetChildrenUVE(entityManager, resolved);
+        if (childIndex >= children.size() || !IsDocumentEntityUVE(children[childIndex])) {
+            return Scene::kInvalidEntityUVE;
+        }
+        resolved = children[childIndex];
+    }
+    return resolved;
+}
+
+bool EditorUVE::FindSelectionPathUVE(const Scene::EntityUVE current, const Scene::EntityUVE target,
+                                     std::vector<std::size_t>& inOutChildIndices) const {
+    if (current == target) {
+        return true;
+    }
+    if (!IsDocumentEntityUVE(current)) {
+        return false;
+    }
+
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    const std::vector<Scene::EntityUVE> children =
+        m_services->GetSceneGraphUVE().GetChildrenUVE(entityManager, current);
+    for (std::size_t childIndex = 0U; childIndex < children.size(); ++childIndex) {
+        inOutChildIndices.push_back(childIndex);
+        if (FindSelectionPathUVE(children[childIndex], target, inOutChildIndices)) {
+            return true;
+        }
+        inOutChildIndices.pop_back();
+    }
+    return false;
 }
 
 Scene::EntityUVE EditorUVE::CreateDocumentEntityInternalUVE(
@@ -1320,6 +1502,15 @@ void EditorUVE::ShutdownUVE() {
 
     CancelGizmoDragUVE();
     CancelViewportNavigationUVE();
+    if (m_playModeState != EditorPlayModeStateUVE::Edit) {
+        if (!StopPlayModeUVE() && m_simulationControl != nullptr) {
+            static_cast<void>(m_simulationControl->SetSimulationExecutionModeUVE(
+                Core::SimulationExecutionModeUVE::Running));
+            static_cast<void>(m_simulationControl->SetTransientSimulationSessionActiveUVE(false));
+            m_playModeSession.reset();
+            m_playModeState = EditorPlayModeStateUVE::Edit;
+        }
+    }
     if (m_uiInitialized) {
         ImGui_ImplOpenGL3_Shutdown();
         ImGui_ImplGlfw_Shutdown();
@@ -1638,6 +1829,9 @@ bool EditorUVE::ComputeLocalDeltaForWorldDeltaUVE(const Scene::EntityUVE entity,
 
 bool EditorUVE::BeginGizmoDragUVE(const EditorViewportRectUVE& viewportRect,
                                   const Math::Vector2UVE pointerPosition) {
+    if (!IsAuthoringCommandAllowedUVE()) {
+        return false;
+    }
     if (m_gizmoMode == EditorGizmoModeUVE::Rotate) {
         return BeginRotateGizmoDragUVE(viewportRect, pointerPosition);
     }
@@ -1789,7 +1983,8 @@ bool EditorUVE::FindClosestRingParameterUVE(const EditorViewportRectUVE& viewpor
 
 bool EditorUVE::BeginRotateGizmoDragUVE(const EditorViewportRectUVE& viewportRect,
                                         const Math::Vector2UVE pointerPosition) {
-    if (!IsDocumentEntityUVE(m_selectedEntity) || !IsViewportRectValidUVE(viewportRect)) {
+    if (!IsAuthoringCommandAllowedUVE() || !IsDocumentEntityUVE(m_selectedEntity) ||
+        !IsViewportRectValidUVE(viewportRect)) {
         return false;
     }
 
@@ -1835,7 +2030,8 @@ bool EditorUVE::BeginRotateGizmoDragUVE(const EditorViewportRectUVE& viewportRec
 }
 
 void EditorUVE::UpdateGizmoDragUVE(const Math::Vector2UVE pointerPosition) {
-    if (m_gizmoDrag.axis == EditorTranslateAxisUVE::None || !IsDocumentEntityUVE(m_gizmoDrag.entity) ||
+    if (!IsAuthoringCommandAllowedUVE() || m_gizmoDrag.axis == EditorTranslateAxisUVE::None ||
+        !IsDocumentEntityUVE(m_gizmoDrag.entity) ||
         m_gizmoDrag.entity != m_selectedEntity || !IsFiniteUVE(pointerPosition.x) ||
         !IsFiniteUVE(pointerPosition.y)) {
         CancelGizmoDragUVE();
@@ -2195,9 +2391,28 @@ void EditorUVE::DrawMenuBarUVE() {
 
     ImGuiIO& io = ImGui::GetIO();
     const bool lifecycleCommandAllowed = IsLifecycleCommandAllowedUVE() && IsDocumentEntityUVE(m_selectedEntity);
-    const bool gizmoModeChangeAllowed = m_gizmoDrag.axis == EditorTranslateAxisUVE::None &&
+    const bool gizmoModeChangeAllowed = IsAuthoringCommandAllowedUVE() &&
+                                        m_gizmoDrag.axis == EditorTranslateAxisUVE::None &&
                                         m_viewportNavigationMode == EditorViewportNavigationModeUVE::None;
-    if (!io.WantTextInput && gizmoModeChangeAllowed && ImGui::IsKeyPressed(ImGuiKey_W, false)) {
+    const bool canEnterPlayMode = m_simulationControl != nullptr &&
+                                  m_playModeState == EditorPlayModeStateUVE::Edit &&
+                                  m_gizmoDrag.axis == EditorTranslateAxisUVE::None &&
+                                  m_viewportNavigationMode == EditorViewportNavigationModeUVE::None;
+    if (!io.WantTextInput && canEnterPlayMode && ImGui::IsKeyPressed(ImGuiKey_F5, false)) {
+        static_cast<void>(EnterPlayModeUVE());
+    } else if (!io.WantTextInput && m_playModeState == EditorPlayModeStateUVE::Playing &&
+               ImGui::IsKeyPressed(ImGuiKey_F6, false)) {
+        static_cast<void>(PausePlayModeUVE());
+    } else if (!io.WantTextInput && m_playModeState == EditorPlayModeStateUVE::Paused &&
+               ImGui::IsKeyPressed(ImGuiKey_F6, false)) {
+        static_cast<void>(ResumePlayModeUVE());
+    } else if (!io.WantTextInput && m_playModeState == EditorPlayModeStateUVE::Paused &&
+               ImGui::IsKeyPressed(ImGuiKey_F10, false)) {
+        static_cast<void>(StepPlayModeUVE());
+    } else if (!io.WantTextInput && m_playModeState != EditorPlayModeStateUVE::Edit && io.KeyShift &&
+               ImGui::IsKeyPressed(ImGuiKey_F5, false)) {
+        static_cast<void>(StopPlayModeUVE());
+    } else if (!io.WantTextInput && gizmoModeChangeAllowed && ImGui::IsKeyPressed(ImGuiKey_W, false)) {
         SetGizmoModeUVE(EditorGizmoModeUVE::Translate);
     } else if (!io.WantTextInput && gizmoModeChangeAllowed && ImGui::IsKeyPressed(ImGuiKey_E, false)) {
         SetGizmoModeUVE(EditorGizmoModeUVE::Rotate);
@@ -2218,11 +2433,30 @@ void EditorUVE::DrawMenuBarUVE() {
         static_cast<void>(DeleteSelectedEntityUVE());
     }
 
+    if (ImGui::BeginMenu("Play")) {
+        if (ImGui::MenuItem("Play", "F5", false, canEnterPlayMode)) {
+            static_cast<void>(EnterPlayModeUVE());
+        }
+        if (ImGui::MenuItem("Pause", "F6", false, m_playModeState == EditorPlayModeStateUVE::Playing)) {
+            static_cast<void>(PausePlayModeUVE());
+        }
+        if (ImGui::MenuItem("Resume", "F6", false, m_playModeState == EditorPlayModeStateUVE::Paused)) {
+            static_cast<void>(ResumePlayModeUVE());
+        }
+        if (ImGui::MenuItem("Step", "F10", false, m_playModeState == EditorPlayModeStateUVE::Paused)) {
+            static_cast<void>(StepPlayModeUVE());
+        }
+        if (ImGui::MenuItem("Stop", "Shift+F5", false, m_playModeState != EditorPlayModeStateUVE::Edit)) {
+            static_cast<void>(StopPlayModeUVE());
+        }
+        ImGui::EndMenu();
+    }
+
     if (ImGui::BeginMenu("File")) {
-        if (ImGui::MenuItem("Save Scene")) {
+        if (ImGui::MenuItem("Save Scene", nullptr, false, IsAuthoringCommandAllowedUVE())) {
             static_cast<void>(SaveSceneUVE());
         }
-        if (ImGui::MenuItem("Load Scene")) {
+        if (ImGui::MenuItem("Load Scene", nullptr, false, IsAuthoringCommandAllowedUVE())) {
             static_cast<void>(LoadSceneUVE());
         }
         ImGui::EndMenu();
@@ -2297,16 +2531,16 @@ void EditorUVE::DrawMenuBarUVE() {
     }
 
     if (ImGui::BeginMenu("Scene")) {
-        if (ImGui::MenuItem("Create Empty")) {
+        if (ImGui::MenuItem("Create Empty", nullptr, false, IsAuthoringCommandAllowedUVE())) {
             static_cast<void>(CreateDocumentEntityUVE(EditorEntityKindUVE::Empty));
         }
-        if (ImGui::MenuItem("Create Camera")) {
+        if (ImGui::MenuItem("Create Camera", nullptr, false, IsAuthoringCommandAllowedUVE())) {
             static_cast<void>(CreateDocumentEntityUVE(EditorEntityKindUVE::Camera));
         }
-        if (ImGui::MenuItem("Create Directional Light")) {
+        if (ImGui::MenuItem("Create Directional Light", nullptr, false, IsAuthoringCommandAllowedUVE())) {
             static_cast<void>(CreateDocumentEntityUVE(EditorEntityKindUVE::DirectionalLight));
         }
-        if (ImGui::MenuItem("Create Collision Box")) {
+        if (ImGui::MenuItem("Create Collision Box", nullptr, false, IsAuthoringCommandAllowedUVE())) {
             static_cast<void>(CreateDocumentEntityUVE(EditorEntityKindUVE::CollisionBox));
         }
         ImGui::EndMenu();
@@ -2323,12 +2557,14 @@ void EditorUVE::DrawHierarchyPanelUVE() {
         ImVec2{250.0F, std::max(kMinimumViewportHeightUVE, mainViewport->WorkSize.y - kAssetsPanelHeightUVE)},
         ImGuiCond_FirstUseEver);
     ImGui::Begin("Scene");
+    ImGui::BeginDisabled(!IsAuthoringCommandAllowedUVE());
     for (const Scene::EntityUVE root : GetDocumentRootsUVE()) {
         DrawHierarchyNodeUVE(root);
     }
     ImGui::Separator();
     ImGui::TextDisabled("Drop entity here to make it a root");
     AcceptHierarchyDropTargetUVE(Scene::kInvalidEntityUVE);
+    ImGui::EndDisabled();
     ImGui::End();
 }
 
@@ -2395,6 +2631,7 @@ void EditorUVE::DrawInspectorPanelUVE() {
         return;
     }
 
+    ImGui::BeginDisabled(!IsAuthoringCommandAllowedUVE());
     ImGui::Text("%s", GetEntityDisplayLabelUVE(m_selectedEntity).c_str());
     ImGui::TextDisabled("%s", EntityLabelUVE(m_selectedEntity).c_str());
 
@@ -2430,6 +2667,7 @@ void EditorUVE::DrawInspectorPanelUVE() {
         edited.localScale = Math::Vector3UVE{scale[0], scale[1], scale[2]};
         static_cast<void>(SetSelectedLocalTransformUVE(edited));
     }
+    ImGui::EndDisabled();
     ImGui::End();
 }
 
@@ -2440,6 +2678,7 @@ void EditorUVE::DrawAssetsPanelUVE() {
         ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowSize(ImVec2{mainViewport->WorkSize.x, kAssetsPanelHeightUVE}, ImGuiCond_FirstUseEver);
     ImGui::Begin("Assets");
+    ImGui::BeginDisabled(!IsAuthoringCommandAllowedUVE());
 
     std::array<char, 256> filterBuffer{};
     const std::size_t copiedCharacters = std::min(m_assetFilter.size(), filterBuffer.size() - 1U);
@@ -2490,6 +2729,7 @@ void EditorUVE::DrawAssetsPanelUVE() {
     } else {
         ImGui::TextUnformatted("Select a registered asset to inspect its registry record.");
     }
+    ImGui::EndDisabled();
     ImGui::End();
 }
 
@@ -2566,12 +2806,14 @@ void EditorUVE::DrawViewportPanelUVE() {
         }
 
         DrawSelectionBoundsUVE(viewportRect);
-        if (m_gizmoMode == EditorGizmoModeUVE::Translate) {
-            DrawTranslateGizmoUVE(viewportRect);
-        } else if (m_gizmoMode == EditorGizmoModeUVE::Rotate) {
-            DrawRotateGizmoUVE(viewportRect);
-        } else {
-            DrawScaleGizmoUVE(viewportRect);
+        if (IsAuthoringCommandAllowedUVE()) {
+            if (m_gizmoMode == EditorGizmoModeUVE::Translate) {
+                DrawTranslateGizmoUVE(viewportRect);
+            } else if (m_gizmoMode == EditorGizmoModeUVE::Rotate) {
+                DrawRotateGizmoUVE(viewportRect);
+            } else {
+                DrawScaleGizmoUVE(viewportRect);
+            }
         }
         ImDrawList* const drawList = ImGui::GetWindowDrawList();
         const char* const modeLabel = m_gizmoMode == EditorGizmoModeUVE::Translate
@@ -2582,6 +2824,16 @@ void EditorUVE::DrawViewportPanelUVE() {
                           "Viewport | LMB select / drag handle | RMB orbit | MMB pan | wheel zoom | F focus");
         drawList->AddText(ImVec2{contentOrigin.x + 10.0F, contentOrigin.y + 30.0F}, IM_COL32(190, 215, 235, 220),
                           modeLabel);
+        if (m_playModeState != EditorPlayModeStateUVE::Edit) {
+            const bool paused = m_playModeState == EditorPlayModeStateUVE::Paused;
+            const char* const playLabel = paused ? "PAUSED" : "PLAYING";
+            const ImU32 badgeColor = paused ? IM_COL32(194, 132, 45, 230) : IM_COL32(24, 148, 181, 230);
+            const ImVec2 badgePosition{contentOrigin.x + 10.0F, contentOrigin.y + 52.0F};
+            drawList->AddRectFilled(badgePosition, ImVec2{badgePosition.x + 82.0F, badgePosition.y + 22.0F},
+                                    badgeColor, 4.0F);
+            drawList->AddText(ImVec2{badgePosition.x + 9.0F, badgePosition.y + 3.0F}, IM_COL32(245, 245, 245, 255),
+                              playLabel);
+        }
     } else {
         ImGui::TextUnformatted("Viewport is too small for picking.");
     }

@@ -424,7 +424,16 @@ void EngineCoreUVE::Update() {
         RequestQuitUVE();
     }
 
-    const Utilities::FixedStepResultUVE fixedStep = m_timer->AdvanceFixedStepUVE();
+    Utilities::FixedStepResultUVE fixedStep{};
+    if (m_simulationExecutionMode == SimulationExecutionModeUVE::Running) {
+        fixedStep = m_timer->AdvanceFixedStepUVE();
+    } else {
+        m_timer->DiscardFixedStepAccumulatorUVE();
+        if (m_singleSimulationStepPending) {
+            fixedStep.stepsToRun = 1;
+            m_singleSimulationStepPending = false;
+        }
+    }
     UVE_TRACE("Update: {} fixed step(s), alpha={}", fixedStep.stepsToRun, fixedStep.alpha);
     m_eventSystem->DispatchQueuedUVE();
 
@@ -443,8 +452,11 @@ void EngineCoreUVE::Update() {
 
     m_shaderManager->UpdateUVE(m_timer->GetDeltaTimeUVE());
 
-    m_checkpointManager->UpdateUVE(m_timer->GetDeltaTimeUVE(), *m_entityManager,
-                                    m_sceneGraph->GetChildrenUVE(*m_entityManager, Scene::kInvalidEntityUVE));
+    if (!m_transientSimulationSessionActive) {
+        m_checkpointManager->UpdateUVE(
+            m_timer->GetDeltaTimeUVE(), *m_entityManager,
+            m_sceneGraph->GetChildrenUVE(*m_entityManager, Scene::kInvalidEntityUVE));
+    }
 }
 
 void EngineCoreUVE::LateUpdate() {
@@ -523,6 +535,9 @@ void EngineCoreUVE::RequestQuitUVE() noexcept {
 
 void EngineCoreUVE::Shutdown() {
     TransitionStateUVE(EngineStateUVE::ShuttingDown);
+    m_simulationExecutionMode = SimulationExecutionModeUVE::Running;
+    m_singleSimulationStepPending = false;
+    m_transientSimulationSessionActive = false;
     UVE_INFO("EngineCoreUVE: shutting down");
 
     // Exact reverse of Init()'s construction order: ConfigManager, then
@@ -616,6 +631,42 @@ EngineStateUVE EngineCoreUVE::GetStateUVE() const noexcept {
 
 const FrameStatsUVE& EngineCoreUVE::GetFrameStatsUVE() const noexcept {
     return m_frameStats;
+}
+
+bool EngineCoreUVE::SetSimulationExecutionModeUVE(const SimulationExecutionModeUVE mode) noexcept {
+    if (m_state != EngineStateUVE::Running) {
+        return false;
+    }
+    m_simulationExecutionMode = mode;
+    if (mode == SimulationExecutionModeUVE::Running) {
+        m_singleSimulationStepPending = false;
+    }
+    return true;
+}
+
+SimulationExecutionModeUVE EngineCoreUVE::GetSimulationExecutionModeUVE() const noexcept {
+    return m_simulationExecutionMode;
+}
+
+bool EngineCoreUVE::RequestSingleSimulationStepUVE() noexcept {
+    if (m_state != EngineStateUVE::Running || m_simulationExecutionMode != SimulationExecutionModeUVE::Paused ||
+        m_singleSimulationStepPending) {
+        return false;
+    }
+    m_singleSimulationStepPending = true;
+    return true;
+}
+
+bool EngineCoreUVE::SetTransientSimulationSessionActiveUVE(const bool active) noexcept {
+    if (m_state != EngineStateUVE::Running) {
+        return false;
+    }
+    m_transientSimulationSessionActive = active;
+    return true;
+}
+
+bool EngineCoreUVE::IsTransientSimulationSessionActiveUVE() const noexcept {
+    return m_transientSimulationSessionActive;
 }
 
 void EngineCoreUVE::SetActiveCameraUVE(Scene::EntityUVE cameraEntity) noexcept {

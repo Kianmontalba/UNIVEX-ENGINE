@@ -68,13 +68,22 @@ and scale. Scale mode uses X/Y/Z square handles to edit one strictly positive au
 preserving local position and rotation. The editor-only viewport camera now supports
 right-drag orbit, middle-drag pan, wheel zoom, and `F` focus for a selected live document entity.
 These navigation controls never alter the document, dirty state, scene file, or Undo/Redo history.
+The top-level **Play** menu provides a transient editor sandbox: **Play** (`F5`) captures the complete
+editable document in memory and disables authoring, **Pause** (`F6`) holds fixed physics without accumulating
+catch-up time, **Step** (`F10`) advances exactly one fixed physics tick while paused, and **Stop** (`Shift+F5`)
+restores the captured document with fresh entity handles, its logical selection, dirty state, and existing
+Undo/Redo timeline. The Viewport shows a PLAYING or PAUSED badge while active. Save/Load, hierarchy and
+inspector edits, document creation, picking, transform gizmos, and history replay are disabled in the sandbox;
+the editor-only orbit/pan/zoom camera remains available and intentionally retains user navigation changes.
+Transient sandbox frames also suppress Core checkpoint/save-game advancement, so Play-time state cannot
+produce an autosave or overwrite the active `.uvescene` file.
 The Assets panel lists only deterministic snapshots of `AssetDatabaseUVE` registered records and
 offers a case-insensitive path filter; it does not scan filesystems, import assets, or load previews.
 Viewport picking intentionally selects only live document entities with the existing box collider
 component. A selected collider-backed document entity receives a read-only cyan oriented bounds overlay with corner
 and center markers; this feedback follows its derived world transform and never changes scene data or history.
 Mesh picking, mesh-derived bounds, uniform/negative scale, local-axis and plane handles, trackball rotation, fly navigation, camera bookmarks, cinematic
-camera tools, play mode, filesystem browsing, import/reimport, asset drag-and-drop, thumbnails,
+camera tools, filesystem browsing, import/reimport, asset drag-and-drop, thumbnails,
 layout persistence, hierarchy search, world-transform-preserving reparenting, child ordering,
 multi-entity lifecycle operations, and OS clipboard copy/paste remain future increments.
 
