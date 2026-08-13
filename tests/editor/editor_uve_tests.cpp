@@ -918,6 +918,97 @@ TEST(EditorUVETest, EditorHistoryUVE_ReparentUndoRejectsStalePriorParentAndClear
     engine.Shutdown();
 }
 
+TEST(EditorUVETest, KeepWorldReparentUVE_PreservesCompatibleWorldTrsAndHistory) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_keep_world_reparent.uvescene");
+        editor.InitUVE();
+        Core::EngineServicesUVE& services = engine.GetServicesUVE();
+        Scene::IEntityManagerUVE& entityManager = services.GetEntityManagerUVE();
+        Scene::TransformComponentUVE parentTransform{};
+        parentTransform.localPosition = Math::Vector3UVE{10.0F, -2.0F, 5.0F};
+        parentTransform.localScale = Math::Vector3UVE{2.0F, 2.0F, 2.0F};
+        ASSERT_TRUE(Math::TryMakeAxisAngleUVE(Math::Vector3UVE{0.0F, 1.0F, 0.0F},
+                                              std::numbers::pi_v<float> * 0.5F,
+                                              parentTransform.localRotation));
+        const Scene::EntityUVE parent = entityManager.CreateEntityUVE();
+        AttachRootUVE(engine, parent, parentTransform);
+        Scene::TransformComponentUVE movedTransform{};
+        movedTransform.localPosition = Math::Vector3UVE{4.0F, 3.0F, -2.0F};
+        ASSERT_TRUE(Math::TryMakeAxisAngleUVE(Math::Vector3UVE{1.0F, 0.0F, 0.0F},
+                                              std::numbers::pi_v<float> * 0.25F,
+                                              movedTransform.localRotation));
+        const Scene::EntityUVE moved = entityManager.CreateEntityUVE();
+        AttachRootUVE(engine, moved, movedTransform);
+        services.GetSceneGraphUVE().UpdateUVE(entityManager);
+        const Scene::WorldTransformComponentUVE worldBefore =
+            entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(moved);
+        editor.SelectEntityUVE(moved);
+        ASSERT_TRUE(editor.SetReparentTransformModeUVE(EditorReparentTransformModeUVE::KeepWorld));
+        ASSERT_TRUE(editor.ReparentSelectedEntityUVE(parent));
+        services.GetSceneGraphUVE().UpdateUVE(entityManager);
+        const Scene::WorldTransformComponentUVE& worldAfter =
+            entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(moved);
+        EXPECT_NEAR(worldAfter.worldPosition.x, worldBefore.worldPosition.x, 0.0001F);
+        EXPECT_NEAR(worldAfter.worldPosition.y, worldBefore.worldPosition.y, 0.0001F);
+        EXPECT_NEAR(worldAfter.worldPosition.z, worldBefore.worldPosition.z, 0.0001F);
+        EXPECT_NEAR(worldAfter.worldScale.x, worldBefore.worldScale.x, 0.0001F);
+        EXPECT_NEAR(worldAfter.worldScale.y, worldBefore.worldScale.y, 0.0001F);
+        EXPECT_NEAR(worldAfter.worldScale.z, worldBefore.worldScale.z, 0.0001F);
+        ASSERT_TRUE(editor.UndoUVE());
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(moved).localPosition,
+                  movedTransform.localPosition);
+        ASSERT_TRUE(editor.RedoUVE());
+        EXPECT_NE(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(moved).localPosition,
+                  movedTransform.localPosition);
+        editor.ShutdownUVE();
+    }
+    engine.Shutdown();
+}
+
+TEST(EditorUVETest, KeepWorldReparentUVE_RejectsShearProneAndNearZeroScaleParents) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_keep_world_reject.uvescene");
+        editor.InitUVE();
+        Core::EngineServicesUVE& services = engine.GetServicesUVE();
+        Scene::IEntityManagerUVE& entityManager = services.GetEntityManagerUVE();
+        Scene::TransformComponentUVE shearParentTransform{};
+        shearParentTransform.localScale = Math::Vector3UVE{2.0F, 3.0F, 4.0F};
+        ASSERT_TRUE(Math::TryMakeAxisAngleUVE(Math::Vector3UVE{0.0F, 0.0F, 1.0F},
+                                              std::numbers::pi_v<float> * 0.25F,
+                                              shearParentTransform.localRotation));
+        const Scene::EntityUVE shearParent = entityManager.CreateEntityUVE();
+        AttachRootUVE(engine, shearParent, shearParentTransform);
+        Scene::TransformComponentUVE movedTransform{};
+        ASSERT_TRUE(Math::TryMakeAxisAngleUVE(Math::Vector3UVE{1.0F, 0.0F, 0.0F},
+                                              std::numbers::pi_v<float> * 0.25F,
+                                              movedTransform.localRotation));
+        const Scene::EntityUVE moved = entityManager.CreateEntityUVE();
+        AttachRootUVE(engine, moved, movedTransform);
+        services.GetSceneGraphUVE().UpdateUVE(entityManager);
+        editor.SelectEntityUVE(moved);
+        ASSERT_TRUE(editor.SetReparentTransformModeUVE(EditorReparentTransformModeUVE::KeepWorld));
+        EXPECT_FALSE(editor.ReparentSelectedEntityUVE(shearParent));
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(moved).localPosition,
+                  movedTransform.localPosition);
+        EXPECT_FALSE(editor.IsSceneDirtyUVE());
+        Scene::TransformComponentUVE tinyParentTransform{};
+        tinyParentTransform.localScale = Math::Vector3UVE{0.0001F, 1.0F, 1.0F};
+        const Scene::EntityUVE tinyParent = entityManager.CreateEntityUVE();
+        AttachRootUVE(engine, tinyParent, tinyParentTransform);
+        services.GetSceneGraphUVE().UpdateUVE(entityManager);
+        EXPECT_FALSE(editor.ReparentSelectedEntityUVE(tinyParent));
+        EXPECT_FALSE(editor.IsSceneDirtyUVE());
+        editor.ShutdownUVE();
+    }
+    engine.Shutdown();
+}
+
 TEST(EditorUVETest, SaveThenLoadScene_RoundTripsDocumentRootsWithoutSerializingEditorCamera) {
     const std::filesystem::path scenePath = "uve_editor_tests_round_trip.uvescene";
     std::filesystem::remove(scenePath);

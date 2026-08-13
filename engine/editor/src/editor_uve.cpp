@@ -703,6 +703,23 @@ EditorGizmoCoordinateSpaceUVE EditorUVE::GetGizmoCoordinateSpaceUVE() const noex
     return m_gizmoCoordinateSpace;
 }
 
+bool EditorUVE::IsReparentModeChangeAllowedUVE() const noexcept {
+    return IsAuthoringCommandAllowedUVE() && m_gizmoDrag.axis == EditorTranslateAxisUVE::None &&
+           m_viewportNavigationMode == EditorViewportNavigationModeUVE::None;
+}
+
+bool EditorUVE::SetReparentTransformModeUVE(const EditorReparentTransformModeUVE mode) {
+    if (!IsReparentModeChangeAllowedUVE()) {
+        return false;
+    }
+    m_reparentTransformMode = mode;
+    return true;
+}
+
+EditorReparentTransformModeUVE EditorUVE::GetReparentTransformModeUVE() const noexcept {
+    return m_reparentTransformMode;
+}
+
 bool EditorUVE::SetTransformSnappingSettingsUVE(const EditorTransformSnappingSettingsUVE& settings) {
     if (!IsAuthoringCommandAllowedUVE() || m_gizmoDrag.axis != EditorTranslateAxisUVE::None ||
         m_viewportNavigationMode != EditorViewportNavigationModeUVE::None ||
@@ -983,31 +1000,105 @@ bool EditorUVE::ReparentSelectedEntityUVE(const Scene::EntityUVE newParent) {
     return ReparentDocumentEntityUVE(m_selectedEntity, newParent);
 }
 
-bool EditorUVE::ReparentDocumentEntityUVE(const Scene::EntityUVE entity, const Scene::EntityUVE newParent) {
-    if (!IsLifecycleCommandAllowedUVE() || !HasSceneGraphNodeUVE(entity) || !IsDocumentSubtreeUVE(entity)) {
+bool EditorUVE::ComputeKeepWorldLocalTransformUVE(const Scene::EntityUVE entity,
+                                                    const Scene::EntityUVE newParent,
+                                                    Scene::TransformComponentUVE& outTransform) const {
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    if (!IsDocumentEntityUVE(entity) || !entityManager.HasComponentUVE<Scene::WorldTransformComponentUVE>(entity)) {
         return false;
     }
-    if (newParent != Scene::kInvalidEntityUVE && !HasSceneGraphNodeUVE(newParent)) {
-        return false;
-    }
-    if (entity == newParent || DoesSubtreeContainEntityUVE(entity, newParent)) {
+    const Scene::WorldTransformComponentUVE& sourceWorld =
+        entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(entity);
+    Math::QuaternionUVE sourceRotation{};
+    if (sourceWorld.dirty || !IsFiniteVectorUVE(sourceWorld.worldPosition) ||
+        !IsFiniteVectorUVE(sourceWorld.worldScale) || !Math::TryNormalizeUVE(sourceWorld.worldRotation, sourceRotation)) {
         return false;
     }
 
+    Math::Vector3UVE parentPosition{};
+    Math::Vector3UVE parentScale{1.0F, 1.0F, 1.0F};
+    Math::QuaternionUVE parentRotation{0.0F, 0.0F, 0.0F, 1.0F};
+    if (newParent != Scene::kInvalidEntityUVE) {
+        if (!IsDocumentEntityUVE(newParent) ||
+            !entityManager.HasComponentUVE<Scene::WorldTransformComponentUVE>(newParent)) {
+            return false;
+        }
+        const Scene::WorldTransformComponentUVE& parentWorld =
+            entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(newParent);
+        if (parentWorld.dirty || !IsFiniteVectorUVE(parentWorld.worldPosition) ||
+            !IsFiniteVectorUVE(parentWorld.worldScale) ||
+            !Math::TryNormalizeUVE(parentWorld.worldRotation, parentRotation) ||
+            parentWorld.worldScale.x < kMinimumLocalScaleUVE ||
+            parentWorld.worldScale.y < kMinimumLocalScaleUVE ||
+            parentWorld.worldScale.z < kMinimumLocalScaleUVE) {
+            return false;
+        }
+        const bool nonUniform = std::abs(parentWorld.worldScale.x - parentWorld.worldScale.y) > kVectorEpsilonUVE ||
+                                std::abs(parentWorld.worldScale.x - parentWorld.worldScale.z) > kVectorEpsilonUVE ||
+                                std::abs(parentWorld.worldScale.y - parentWorld.worldScale.z) > kVectorEpsilonUVE;
+        const bool rotated = std::abs(parentRotation.x) > kVectorEpsilonUVE ||
+                             std::abs(parentRotation.y) > kVectorEpsilonUVE ||
+                             std::abs(parentRotation.z) > kVectorEpsilonUVE ||
+                             std::abs(std::abs(parentRotation.w) - 1.0F) > kVectorEpsilonUVE;
+        if (nonUniform && rotated) {
+            return false;
+        }
+        parentPosition = parentWorld.worldPosition;
+        parentScale = parentWorld.worldScale;
+    }
+
+    Math::QuaternionUVE parentInverse{};
+    if (!Math::TryInverseUVE(parentRotation, parentInverse)) {
+        return false;
+    }
+    const Math::Vector3UVE unrotated = Math::RotateVectorUVE(
+        parentInverse, sourceWorld.worldPosition - parentPosition);
+    outTransform.localPosition = Math::Vector3UVE{
+        unrotated.x / parentScale.x, unrotated.y / parentScale.y, unrotated.z / parentScale.z};
+    if (!Math::TryNormalizeUVE(Math::MultiplyUVE(parentInverse, sourceRotation), outTransform.localRotation)) {
+        return false;
+    }
+    outTransform.localScale = Math::Vector3UVE{
+        sourceWorld.worldScale.x / parentScale.x, sourceWorld.worldScale.y / parentScale.y,
+        sourceWorld.worldScale.z / parentScale.z};
+    return IsTransformFiniteUVE(outTransform) && outTransform.localScale.x >= kMinimumLocalScaleUVE &&
+           outTransform.localScale.y >= kMinimumLocalScaleUVE && outTransform.localScale.z >= kMinimumLocalScaleUVE;
+}
+
+bool EditorUVE::ReparentDocumentEntityUVE(const Scene::EntityUVE entity, const Scene::EntityUVE newParent) {
+    if (!IsLifecycleCommandAllowedUVE() || !HasSceneGraphNodeUVE(entity) || !IsDocumentSubtreeUVE(entity) ||
+        (newParent != Scene::kInvalidEntityUVE && !HasSceneGraphNodeUVE(newParent)) ||
+        entity == newParent || DoesSubtreeContainEntityUVE(entity, newParent)) {
+        return false;
+    }
     Scene::EntityUVE parentBefore = Scene::kInvalidEntityUVE;
     if (!TryGetDocumentParentUVE(entity, parentBefore) || parentBefore == newParent) {
         return false;
     }
-
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    if (!entityManager.HasComponentUVE<Scene::TransformComponentUVE>(entity)) {
+        return false;
+    }
+    const Scene::TransformComponentUVE localBefore =
+        entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity);
+    Scene::TransformComponentUVE localAfter = localBefore;
+    if (m_reparentTransformMode == EditorReparentTransformModeUVE::KeepWorld &&
+        !ComputeKeepWorldLocalTransformUVE(entity, newParent, localAfter)) {
+        return false;
+    }
     const Scene::EntityUVE selectionBefore = m_selectedEntity;
     const bool dirtyBefore = m_sceneDirty;
-    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
     m_services->GetSceneGraphUVE().SetParentUVE(entityManager, entity, newParent);
+    if (!ApplyLocalTransformUVE(entity, localAfter)) {
+        m_services->GetSceneGraphUVE().SetParentUVE(entityManager, entity, parentBefore);
+        static_cast<void>(ApplyLocalTransformUVE(entity, localBefore));
+        return false;
+    }
     RestoreSelectionUVE(entity);
     m_sceneDirty = true;
     InvalidateHierarchyFilterCacheUVE();
     RecordHistoryUVE(ReparentHistoryEntryUVE{
-        entity, parentBefore, newParent, selectionBefore, entity, dirtyBefore, true});
+        entity, parentBefore, newParent, localBefore, localAfter, selectionBefore, entity, dirtyBefore, true});
     return true;
 }
 
@@ -1386,8 +1477,12 @@ bool EditorUVE::UndoHistoryEntryUVE(HistoryEntryUVE& entry) {
                 }
                 m_services->GetSceneGraphUVE().SetParentUVE(
                     m_services->GetEntityManagerUVE(), typedEntry.entity, typedEntry.parentBefore);
+                if (!ApplyLocalTransformUVE(typedEntry.entity, typedEntry.localTransformBefore)) {
+                    return false;
+                }
                 RestoreSelectionUVE(typedEntry.selectionBefore);
                 m_sceneDirty = typedEntry.dirtyBefore;
+                InvalidateHierarchyFilterCacheUVE();
                 return true;
             }
         },
@@ -1464,8 +1559,12 @@ bool EditorUVE::RedoHistoryEntryUVE(HistoryEntryUVE& entry) {
                 }
                 m_services->GetSceneGraphUVE().SetParentUVE(
                     m_services->GetEntityManagerUVE(), typedEntry.entity, typedEntry.parentAfter);
+                if (!ApplyLocalTransformUVE(typedEntry.entity, typedEntry.localTransformAfter)) {
+                    return false;
+                }
                 RestoreSelectionUVE(typedEntry.selectionAfter);
                 m_sceneDirty = typedEntry.dirtyAfter;
+                InvalidateHierarchyFilterCacheUVE();
                 return true;
             }
         },
@@ -2712,6 +2811,20 @@ void EditorUVE::DrawMenuBarUVE() {
                                 m_gizmoCoordinateSpace == EditorGizmoCoordinateSpaceUVE::Local,
                                 canChangeCoordinateSpace)) {
                 static_cast<void>(SetGizmoCoordinateSpaceUVE(EditorGizmoCoordinateSpaceUVE::Local));
+            }
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Reparent Transform")) {
+            const bool canChangeReparentMode = IsReparentModeChangeAllowedUVE();
+            if (ImGui::MenuItem("Keep Local", nullptr,
+                                m_reparentTransformMode == EditorReparentTransformModeUVE::KeepLocal,
+                                canChangeReparentMode)) {
+                static_cast<void>(SetReparentTransformModeUVE(EditorReparentTransformModeUVE::KeepLocal));
+            }
+            if (ImGui::MenuItem("Keep World", nullptr,
+                                m_reparentTransformMode == EditorReparentTransformModeUVE::KeepWorld,
+                                canChangeReparentMode)) {
+                static_cast<void>(SetReparentTransformModeUVE(EditorReparentTransformModeUVE::KeepWorld));
             }
             ImGui::EndMenu();
         }
