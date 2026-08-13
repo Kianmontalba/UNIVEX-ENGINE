@@ -1,0 +1,163 @@
+<div align="center">
+
+<h1><strong>UNIVEX ENGINE — COMPLETE DEVELOPMENT ROADMAP</strong></h1>
+
+<strong>Native C++ Engine and First-Generation Scene Editor</strong><br/>
+<strong>Last updated: August 2026</strong>
+
+</div>
+
+> **Status rule:** `COMPLETED` means the increment was delivered as a finished, verified milestone. `PARTIAL` means the milestone is planned or incomplete and must not be described as a shipped capability until implementation and verification are evidenced. An increment that affects the viewport must include a real desktop/OpenGL visual check, not only a headless unit test.
+
+| Column | Meaning |
+|---|---|
+| **Status** | Delivery state of the increment. |
+| **Increment** | Stable sequential milestone number. |
+| **Outcome** | The lasting engine or editor capability added by the milestone. |
+| **Verification / boundary** | Evidence or intentionally excluded scope that keeps the milestone honest. |
+
+<div align="center">
+
+<h2><strong>COMPLETED — CORE, SCENE, AND ASSET FOUNDATIONS</strong></h2>
+
+</div>
+
+| Status | Increment | Outcome | Verification / boundary |
+|---|---:|---|---|
+| **COMPLETED** | **1** | Foundation layer: `LoggerUVE`, `TimerUVE`, `EventSystemUVE`, and `EngineCoreUVE` frame lifecycle. | Established the engine startup, update, render, and shutdown foundation. |
+| **COMPLETED** | **2** | Memory manager plus pool, stack, and heap allocators. | Native RAII-oriented memory foundation. |
+| **COMPLETED** | **3** | Thread-pool job system with work-stealing queue. | Core asynchronous-work foundation. |
+| **COMPLETED** | **4** | `ConfigManagerUVE` and command-line parsing. | Versioned configuration and executable-option foundation. |
+| **COMPLETED** | **5** | Scene/ECS core: entity manager and scene graph. | Real scene ownership; no duplicate editor-only scene system. |
+| **COMPLETED** | **6** | Prefab system and scene serializer. | Persistent scene/prefab foundation through `.uve*` envelopes. |
+| **COMPLETED** | **7** | Asset manager, generic importer, hot reload, and asset bundle foundation. | Asset lifecycle and loading boundary. |
+| **COMPLETED** | **8** | Virtual file system. | Mount-based path resolution foundation. |
+
+<div align="center">
+
+<h2><strong>COMPLETED — RENDERING, PHYSICS, AND RUNTIME SYSTEMS</strong></h2>
+
+</div>
+
+| Status | Increment | Outcome | Verification / boundary |
+|---|---:|---|---|
+| **COMPLETED** | **9** | Rendering math foundations. | Matrices, vectors, quaternions, bounds, and frustum utilities. |
+| **COMPLETED** | **10** | Render Hardware Interface foundation. | Backend-agnostic render-device and command-buffer contracts. |
+| **COMPLETED** | **11** | Camera system with view/projection matrices and frustum culling. | Real camera/culling foundation. |
+| **COMPLETED** | **12** | Rendering-facing asset types. | Typed rendering data boundary. |
+| **COMPLETED** | **13** | Mesh renderer and render queue. | Scene-to-render submission foundation. |
+| **COMPLETED** | **14** | `Renderer3DUVE` frame orchestration. | Centralized scene-rendering pipeline. |
+| **COMPLETED** | **15** | Physics and collision systems. | Core collision simulation foundation. |
+| **COMPLETED** | **16** | Raycast system and physics material support. | Queryable collider interaction foundation. |
+| **COMPLETED** | **17** | Input system foundations. | Native input actions and bindings. |
+| **COMPLETED** | **18** | Audio system foundations. | Device-independent audio baseline. |
+| **COMPLETED** | **19** | Save game and checkpoint foundations. | Persistent runtime-state baseline. |
+| **COMPLETED** | **20** | GLFW window manager and real OpenGL render device. | Native desktop window and OpenGL execution path. |
+| **COMPLETED** | **21** | Shader manager with loading, hot reload, and uniform reflection. | Runtime shader lifecycle foundation. |
+| **COMPLETED** | **22** | Unlit textured materials. | First material path through `Renderer3DUVE`. |
+| **COMPLETED** | **23** | Basic directional lighting. | Lit 3D scene foundation. |
+| **COMPLETED** | **24** | Metallic/specular PBR uniform plumbing. | Material parameter expansion without a second renderer. |
+| **COMPLETED** | **25** | Point, spot, and multi-light support. | Multi-light scene lighting foundation. |
+| **COMPLETED** | **26** | Directional-light shadow mapping. | First real shadow pipeline. |
+
+<div align="center">
+
+<h2><strong>COMPLETED — RENDERING MATURITY AND DEVELOPER PLATFORM</strong></h2>
+
+</div>
+
+| Status | Increment | Outcome | Verification / boundary |
+|---|---:|---|---|
+| **COMPLETED** | **27** | Shadow-aware canonical material shader. | Unified lit/shadowed material foundation. |
+| **COMPLETED** | **28** | Bounded PCF soft shadows. | Improved shadow filtering without uncontrolled sampling cost. |
+| **COMPLETED** | **29** | Camera-fitted directional shadow frustum. | Better shadow coverage aligned to the camera. |
+| **COMPLETED** | **30** | Cascaded directional shadows. | Larger-scale directional-light shadow coverage. |
+| **COMPLETED** | **31** | Shadow cascade transition blending and stabilization. | Reduced cascade transition/shimmer artifacts. |
+| **COMPLETED** | **32** | Tangent-space normal mapping. | Surface-normal detail path. |
+| **COMPLETED** | **33** | Separate-stage material shader management. | Better shader-stage composition boundary. |
+| **COMPLETED** | **34** | GGX Smith direct-lighting path. | More physically grounded direct-light response. |
+| **COMPLETED** | **35** | Deterministic render-graph foundation. | Explicit render-pass dependency/order foundation. |
+| **COMPLETED** | **36** | Fullscreen tone-mapping pass. | Renderer-owned final color transform. |
+| **COMPLETED** | **37** | GCC CI verification and GLFW/X11 build coverage. | Repeatable pull-request build/test enforcement. |
+
+<div align="center">
+
+<h2><strong>COMPLETED — FIRST-GENERATION SCENE EDITOR</strong></h2>
+
+</div>
+
+| Status | Increment | Outcome | Verification / boundary |
+|---|---:|---|---|
+| **COMPLETED** | **38** | Editor Foundation v1 workflow. | Native editor shell, workspace composition, and real engine lifecycle integration. |
+| **COMPLETED** | **39** | Viewport picking and Translate gizmo. | Collider-backed scene selection and transform mutation path. |
+| **COMPLETED** | **40** | Content Browser and scene-entity creation. | Real scene creation controls and initial content tooling. |
+| **COMPLETED** | **41** | Persistent entity naming. | Human-readable names survive scene save/load. |
+| **COMPLETED** | **42** | Undo/Redo history. | Authoring commands gain bounded reversible transactions. |
+| **COMPLETED** | **43** | Editor camera navigation. | Orbit, pan, zoom, and focus without document mutation. |
+| **COMPLETED** | **44** | Entity duplicate and delete with Undo/Redo. | Scene lifecycle commands with history restoration. |
+| **COMPLETED** | **45** | Hierarchy reparenting with Undo/Redo. | Real parent-child authoring workflow. |
+| **COMPLETED** | **46** | Rotate gizmo. | World-axis rotational authoring path. |
+| **COMPLETED** | **47** | Scale gizmo. | Positive local-scale authoring path. |
+| **COMPLETED** | **48** | Transform snapping. | Deterministic translate/rotate/scale increments. |
+| **COMPLETED** | **49** | Viewport selection bounds. | Read-only visible selection feedback. |
+| **COMPLETED** | **50** | Play Mode Sandbox. | Transient Play/Pause/Step/Stop document isolation. |
+| **COMPLETED** | **51** | Local-axis and plane gizmos. | Parent-aware local manipulation and plane translation. |
+| **COMPLETED** | **52** | Hierarchy search and inline rename. | Usable real scene-outliner search/name workflow. |
+| **COMPLETED** | **53** | Keep-world reparenting. | Explicit world-transform-preserving hierarchy option. |
+| **COMPLETED** | **54** | Uniform scale offset gizmo. | Safe shared local-scale editing behavior. |
+| **COMPLETED** | **55** | Free-rotation trackball gizmo. | Camera-oriented arbitrary-axis rotation interaction. |
+| **COMPLETED** | **56** | Multi-selection foundation. | Ordered selection with a single active entity. |
+| **COMPLETED** | **57** | Fixed UniVex workspace layout. | Clear hierarchy/viewport/Inspector/lower-dock organization. |
+| **COMPLETED** | **58** | Viewport scene rendering with built-in primitives. | Cube, UV Sphere, Plane, grid feedback, primitive Inspector controls, and renderer extraction foundation. |
+| **COMPLETED** | **59** | Cached project asset browser. | Deterministic read-only `ProjectFileIndexUVE` and AssetDatabase correlation. |
+| **COMPLETED** | **60** | Import work queue and derived-artifact cache. | Deterministic main-thread jobs, fingerprints, diagnostics, and cache metadata. |
+| **COMPLETED** | **61** | Project Change Watch and targeted reload. | Portable polling, copied bounded journal, explicit refresh acknowledgement, and stale-cache marking. |
+| **COMPLETED** | **62** | Inspector Drawer Registry v1. | Deterministic Name/Transform/Primitive drawer seam while preserving existing command/history ownership. |
+
+<div align="center">
+
+<h2><strong>PARTIAL — NEXT SCENE EDITOR MILESTONES</strong></h2>
+
+</div>
+
+| Status | Increment | Outcome | Required proof before status becomes COMPLETED |
+|---|---:|---|---|
+| **PARTIAL — planned** | **63** | **Viewport Presentation & Render Verification v1**: diagnose and fix real primitive presentation; add an intentional empty-scene environment with restrained dark blue-gray/neutral background, subtle gradient, XZ grid, world origin, and localized RGB orientation feedback. | A real OpenGL/Xvfb recording visibly shows Cube, UV Sphere, and Plane. Automated presentation/render tests, GCC, Clang, CI, headless, and desktop smoke checks pass. |
+| **PARTIAL — planned** | **64** | **Editor Tool Sessions v1**: extract begin/preview/commit/cancel ownership from existing gizmo interactions. | Parity tests prove Translate, Rotate, Scale, snapping, cancel, Undo/Redo, and Play/Pause behavior are unchanged. |
+| **PARTIAL — planned** | **65** | **Scene Outliner & Inspector Workflow v2**: improve hierarchy readability and add only real, command-backed Inspector sections. | Viewport, hierarchy, selection, and Inspector remain synchronized in tests and desktop smoke validation. |
+| **PARTIAL — planned** | **66** | **Content Browser Workflow v2**: add folder navigation, breadcrumbs, type indicators, and focused filtering for existing asset types. | Deterministic index/browser tests and editor smoke coverage pass. |
+| **PARTIAL — planned** | **67** | **Editor Session Settings & Layout v1**: versioned editor-only preferences, visibility state, viewport preferences, and approved layout presets. | Default, migration, malformed-settings, and non-scene-mutation tests pass. |
+| **PARTIAL — planned** | **68** | **Project Health & Headless Automation v1**: `uve_project_check` validates registry entries, envelopes, primitive payloads, and broken references. | CI proves deterministic human-readable and machine-readable diagnostics with path/type/recovery details. |
+
+<div align="center">
+
+<h2><strong>PARTIAL — LONG-TERM ENGINE AND TOOLING BACKLOG</strong></h2>
+
+</div>
+
+| Status | Roadmap area | Intended direction | Entry condition |
+|---|---|---|---|
+| **PARTIAL** | Native C++ Visual Scripting | Continue the native C++ node registry, graph compiler, and bytecode/VM direction. | Stable scene/editor command and property contracts. |
+| **PARTIAL** | Plugin architecture | Design a native extension contract with lifecycle, ownership, ABI/versioning, and safety rules. | Stable editor and scripting foundations. |
+| **PARTIAL** | Asset pipeline depth | Add format-specific model, texture, audio, material, and thumbnail workflows only after format/licensing/derived-data contracts are selected. | Project Health and Content Browser foundations. |
+| **PARTIAL** | Advanced editor tools | Animation, terrain, world streaming, profiling, cinematics, source control, and collaboration. | Proven viewport, scene, asset, and session foundations. |
+| **PARTIAL** | Platform and shipping workflow | Cooking, packaging, deployment, and sample-project growth. | Stable asset pipeline, project validation, and renderer presentation. |
+
+<div align="center">
+
+<h2><strong>FIRST-GENERATION SCENE EDITOR — COMPLETION GATE</strong></h2>
+
+</div>
+
+| Area | Required condition |
+|---|---|
+| **Viewport** | Real geometry is visible and usable; an empty scene is intentionally presented rather than plain black. |
+| **Navigation** | Orbit, pan, zoom, and focus operate on the editor camera without scene mutation. |
+| **Hierarchy** | The Outliner displays real parent-child data and selection stays synchronized with viewport/Inspector. |
+| **Inspector** | Every editable property is backed by a validated engine command and actual scene state. |
+| **Transform tools** | Select, Move, Rotate, Scale, snapping, cancellation, and Undo/Redo are real testable behaviors. |
+| **Content Browser** | Displays deterministic real project content, not mock folders or fake asset cards. |
+| **Toolbar and menus** | Every displayed action is implemented; unavailable work remains disabled, hidden, or explicitly future scope. |
+| **Evidence** | Progress reports distinguish **[DESIGNED]**, **[IMPLEMENTED]**, **[COMPILED]**, **[TESTED]**, **[PROFILED]**, and **[HARDENED]**. |
+
+> **Technology direction:** UniVex remains a native **C++20** engine/editor with CMake and engine-owned UI composition. GLSL belongs to viewport, grid, selection, and gizmo visuals. JSON/TOML-style data belongs to versioned editor settings and presets. SVG/PNG/WebP belong to future icon/resource pipelines. Python is optional only for offline asset processing or build automation. A separate C# editor UI is **PARTIAL — not started** and is not introduced until a dedicated interoperability, deployment, tooling, and long-term ownership design proves it is needed.
