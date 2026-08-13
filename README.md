@@ -50,9 +50,11 @@ existing Name-history transaction and `Escape` cancels without mutation. Legacy 
 fall back to stable entity index/generation labels. The editor also provides a bounded in-session
 Undo/Redo history for successful Transform, rename, root-creation, duplicate, delete, and hierarchy
 reparent actions. The Scene panel supports drag-and-drop reparenting: drop a document entity onto
-another document entity to make it a child, or onto the root drop target to detach it. Reparenting
-preserves the moved subtree and the authored local Transform of its root; self-parenting, cycles,
-stale handles, and the editor camera are rejected safely. The Edit menu provides disabled-state
+another document entity to make it a child, or onto the root drop target to detach it. Reparenting preserves the moved subtree and offers a session-only **Reparent Transform** choice: the default
+**Keep Local** retains the authored local Transform, while **Keep World** derives a compatible replacement local TRS
+from captured world state. Keep World rejects rotated non-uniformly scaled parents and parent scale components below
+`0.001` rather than approximating unsupported shear; self-parenting, cycles, stale handles, and the editor camera are
+rejected safely. The Edit menu provides disabled-state
 **Duplicate** (`Ctrl+D`) and **Delete** (`Delete`) controls for
 one selected live document entity, in addition to focus-safe `Ctrl+Z`, `Ctrl+Y`, and
 `Ctrl+Shift+Z`. The View menu also provides session-only **Transform Snapping** with guarded enable
@@ -89,7 +91,7 @@ component. A selected collider-backed document entity receives a read-only cyan 
 and center markers; this feedback follows its derived world transform and never changes scene data or history.
 Mesh picking, mesh-derived bounds, uniform/negative scale, trackball rotation, fly navigation, camera bookmarks, cinematic
 camera tools, filesystem browsing, import/reimport, asset drag-and-drop, thumbnails,
-layout persistence, world-transform-preserving reparenting, child ordering,
+layout persistence, child ordering,
 multi-entity lifecycle operations, and OS clipboard copy/paste remain future increments.
 
 ## Repository layout

@@ -71,6 +71,13 @@ enum class EditorGizmoCoordinateSpaceUVE {
     Local,
 };
 
+/// Selects whether hierarchy reparenting retains authored local TRS or preserves compatible
+/// captured world TRS. This editor-session preference is never serialized or added to history.
+enum class EditorReparentTransformModeUVE {
+    KeepLocal,
+    KeepWorld,
+};
+
 /// Session-local transform snapping settings. These values are editor-only and are not serialized
 /// into scene documents or runtime state.
 struct EditorTransformSnappingSettingsUVE final {
@@ -245,10 +252,12 @@ public:
     [[nodiscard]] bool DeleteSelectedEntityUVE();
 
     /// Reparents the selected document subtree under newParent, or makes it a document root when
-    /// newParent is invalid. The selected entity retains its authored local Transform and one
-    /// successful move is recorded as an Undo/Redo operation. Returns false without mutation for
-    /// invalid, stale, self-parenting, cyclic, unchanged, or active-gesture state.
+    /// newParent is invalid. Keep Local retains authored local Transform; optional Keep World
+    /// preserves only a validated shear-safe compatible world TRS. One successful move is recorded
+    /// as an Undo/Redo operation. Returns false without mutation for unsafe state or solve input.
     [[nodiscard]] bool ReparentSelectedEntityUVE(Scene::EntityUVE newParent);
+    [[nodiscard]] bool SetReparentTransformModeUVE(EditorReparentTransformModeUVE mode);
+    [[nodiscard]] EditorReparentTransformModeUVE GetReparentTransformModeUVE() const noexcept;
 
     /// Replays the most recent supported editor mutation in reverse. It is safe and returns false
     /// when the editor is not running, history is empty, or a target became stale externally.
@@ -375,12 +384,13 @@ private:
         bool dirtyAfter = false;
     };
 
-    /// A hierarchy move keeps its entity handle and local Transform, while its parent changes.
-    /// Replay restores either stored parent and never records nested history.
+    /// A hierarchy move restores its parent and authored local Transform atomically on replay.
     struct ReparentHistoryEntryUVE final {
         Scene::EntityUVE entity = Scene::kInvalidEntityUVE;
         Scene::EntityUVE parentBefore = Scene::kInvalidEntityUVE;
         Scene::EntityUVE parentAfter = Scene::kInvalidEntityUVE;
+        Scene::TransformComponentUVE localTransformBefore{};
+        Scene::TransformComponentUVE localTransformAfter{};
         Scene::EntityUVE selectionBefore = Scene::kInvalidEntityUVE;
         Scene::EntityUVE selectionAfter = Scene::kInvalidEntityUVE;
         bool dirtyBefore = false;
@@ -458,6 +468,9 @@ private:
     [[nodiscard]] bool FindSelectionPathUVE(Scene::EntityUVE current, Scene::EntityUVE target,
                                              std::vector<std::size_t>& inOutChildIndices) const;
     [[nodiscard]] bool ReparentDocumentEntityUVE(Scene::EntityUVE entity, Scene::EntityUVE newParent);
+    [[nodiscard]] bool ComputeKeepWorldLocalTransformUVE(Scene::EntityUVE entity, Scene::EntityUVE newParent,
+                                                          Scene::TransformComponentUVE& outTransform) const;
+    [[nodiscard]] bool IsReparentModeChangeAllowedUVE() const noexcept;
     [[nodiscard]] bool IsHierarchyFilterActiveUVE() const noexcept;
     [[nodiscard]] bool IsHierarchyEntityVisibleUVE(Scene::EntityUVE entity) const;
     void RebuildHierarchyFilterCacheUVE();
@@ -491,6 +504,7 @@ private:
     std::size_t m_historyCapacity = 100U;
     EditorGizmoModeUVE m_gizmoMode = EditorGizmoModeUVE::Translate;
     EditorGizmoCoordinateSpaceUVE m_gizmoCoordinateSpace = EditorGizmoCoordinateSpaceUVE::World;
+    EditorReparentTransformModeUVE m_reparentTransformMode = EditorReparentTransformModeUVE::KeepLocal;
     EditorTransformSnappingSettingsUVE m_transformSnappingSettings{};
     GizmoDragUVE m_gizmoDrag{};
     Math::Vector3UVE m_viewportFocusPoint{0.0F, 1.5F, 0.0F};
