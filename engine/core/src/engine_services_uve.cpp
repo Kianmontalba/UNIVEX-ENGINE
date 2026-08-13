@@ -23,11 +23,13 @@ EngineServicesUVE::EngineServicesUVE(Debug::ILoggerUVE& logger, Utilities::ITime
                                       Scene::ISceneGraphUVE& sceneGraph,
                                       Asset::IAssetDatabaseUVE& assetDatabase,
                                       Asset::IProjectFileIndexUVE& projectFileIndex,
+                                      Asset::IDerivedArtifactCacheUVE& derivedArtifactCache,
                                       Scene::ISceneSerializerUVE& sceneSerializer,
                                       Scene::IPrefabSystemUVE& prefabSystem,
                                       Asset::IHotReloadUVE& hotReload,
                                       Asset::IAssetManagerUVE& assetManager,
                                       Asset::IAssetImporterUVE& assetImporter,
+                                      Asset::IAssetImportQueueUVE& assetImportQueue,
                                       Asset::IAssetBundleUVE& assetBundle,
                                       Asset::IFileSystemUVE& fileSystem,
                                       Render::IRenderDeviceUVE& renderDevice,
@@ -50,9 +52,11 @@ EngineServicesUVE::EngineServicesUVE(Debug::ILoggerUVE& logger, Utilities::ITime
     : m_logger(&logger), m_timer(&timer), m_eventSystem(&eventSystem),
       m_memoryManager(&memoryManager), m_threadPool(&threadPool), m_commandLine(&commandLine),
       m_configManager(&configManager), m_entityManager(&entityManager), m_sceneGraph(&sceneGraph),
-      m_assetDatabase(&assetDatabase), m_projectFileIndex(&projectFileIndex), m_sceneSerializer(&sceneSerializer),
+      m_assetDatabase(&assetDatabase), m_projectFileIndex(&projectFileIndex),
+      m_derivedArtifactCache(&derivedArtifactCache), m_sceneSerializer(&sceneSerializer),
       m_prefabSystem(&prefabSystem), m_hotReload(&hotReload), m_assetManager(&assetManager),
-      m_assetImporter(&assetImporter), m_assetBundle(&assetBundle), m_fileSystem(&fileSystem),
+      m_assetImporter(&assetImporter), m_assetImportQueue(&assetImportQueue), m_assetBundle(&assetBundle),
+      m_fileSystem(&fileSystem),
       m_renderDevice(&renderDevice), m_shaderManager(&shaderManager), m_renderSystem(&renderSystem),
       m_cameraSystem(&cameraSystem),
       m_meshRenderer(&meshRenderer), m_lightSystem(&lightSystem), m_renderer3D(&renderer3D),
@@ -106,6 +110,10 @@ Asset::IProjectFileIndexUVE& EngineServicesUVE::GetProjectFileIndexUVE() const n
     return *m_projectFileIndex;
 }
 
+Asset::IDerivedArtifactCacheUVE& EngineServicesUVE::GetDerivedArtifactCacheUVE() const noexcept {
+    return *m_derivedArtifactCache;
+}
+
 Scene::ISceneSerializerUVE& EngineServicesUVE::GetSceneSerializerUVE() const noexcept {
     return *m_sceneSerializer;
 }
@@ -124,6 +132,10 @@ Asset::IAssetManagerUVE& EngineServicesUVE::GetAssetManagerUVE() const noexcept 
 
 Asset::IAssetImporterUVE& EngineServicesUVE::GetAssetImporterUVE() const noexcept {
     return *m_assetImporter;
+}
+
+Asset::IAssetImportQueueUVE& EngineServicesUVE::GetAssetImportQueueUVE() const noexcept {
+    return *m_assetImportQueue;
 }
 
 Asset::IAssetBundleUVE& EngineServicesUVE::GetAssetBundleUVE() const noexcept {

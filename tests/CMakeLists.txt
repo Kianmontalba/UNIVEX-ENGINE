@@ -42,6 +42,7 @@ add_executable(uve_tests
     asset/uve_file_envelope_uve_tests.cpp
     asset/asset_manager_uve_tests.cpp
     asset/asset_importer_uve_tests.cpp
+    asset/asset_import_queue_uve_tests.cpp
     asset/hot_reload_uve_tests.cpp
     asset/asset_bundle_uve_tests.cpp
     asset/file_system_uve_tests.cpp

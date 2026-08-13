@@ -19,7 +19,9 @@
 #include "uve/asset/i_asset_bundle_uve.h"
 #include "uve/asset/i_asset_database_uve.h"
 #include "uve/asset/i_asset_importer_uve.h"
+#include "uve/asset/i_asset_import_queue_uve.h"
 #include "uve/asset/i_asset_manager_uve.h"
+#include "uve/asset/i_derived_artifact_cache_uve.h"
 #include "uve/asset/i_file_system_uve.h"
 #include "uve/asset/i_hot_reload_uve.h"
 #include "uve/asset/i_project_file_index_uve.h"
@@ -62,8 +64,8 @@ namespace UVE::Core {
 
 /// EngineCoreUVE owns the foundational engine services (CommandLine, Logger,
 /// MemoryManager, ThreadPool, Timer, EventSystem, EntityManager, SceneGraph,
-/// AssetDatabase, ProjectFileIndex, SceneSerializer, PrefabSystem, HotReload, AssetManager,
-/// AssetImporter, AssetBundle, FileSystem, WindowManager, RenderDevice, ShaderManager,
+/// AssetDatabase, ProjectFileIndex, DerivedArtifactCache, SceneSerializer, PrefabSystem, HotReload,
+/// AssetManager, AssetImporter, AssetImportQueue, AssetBundle, FileSystem, WindowManager, RenderDevice, ShaderManager,
 /// RenderSystem, CameraSystem, MeshRenderer, LightSystem, Renderer3D, CollisionSystem, PhysicsSystem,
 /// RaycastSystem, InputSystem, AudioDevice, AudioSystem, AudioSourceSystem,
 /// SaveGameSystem, CheckpointManager, ConfigManager) and drives the canonical
@@ -376,11 +378,13 @@ private:
     std::unique_ptr<Scene::ISceneGraphUVE> m_sceneGraph;
     std::unique_ptr<Asset::IAssetDatabaseUVE> m_assetDatabase;
     std::unique_ptr<Asset::IProjectFileIndexUVE> m_projectFileIndex;
+    std::unique_ptr<Asset::IDerivedArtifactCacheUVE> m_derivedArtifactCache;
     std::unique_ptr<Scene::ISceneSerializerUVE> m_sceneSerializer;
     std::unique_ptr<Scene::IPrefabSystemUVE> m_prefabSystem;
     std::unique_ptr<Asset::IHotReloadUVE> m_hotReload;
     std::unique_ptr<Asset::IAssetManagerUVE> m_assetManager;
     std::unique_ptr<Asset::IAssetImporterUVE> m_assetImporter;
+    std::unique_ptr<Asset::IAssetImportQueueUVE> m_assetImportQueue;
     std::unique_ptr<Asset::IAssetBundleUVE> m_assetBundle;
     std::unique_ptr<Asset::IFileSystemUVE> m_fileSystem;
     std::unique_ptr<Window::IWindowManagerUVE> m_windowManager;

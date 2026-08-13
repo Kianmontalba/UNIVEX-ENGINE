@@ -14,7 +14,9 @@
 #include "uve/asset/i_asset_bundle_uve.h"
 #include "uve/asset/i_asset_database_uve.h"
 #include "uve/asset/i_asset_importer_uve.h"
+#include "uve/asset/i_asset_import_queue_uve.h"
 #include "uve/asset/i_asset_manager_uve.h"
+#include "uve/asset/i_derived_artifact_cache_uve.h"
 #include "uve/asset/i_file_system_uve.h"
 #include "uve/asset/i_hot_reload_uve.h"
 #include "uve/asset/i_project_file_index_uve.h"
@@ -52,8 +54,8 @@ namespace UVE::Core {
 /// EngineServicesUVE is the engine's central dependency-provider / service
 /// container: a small bundle of references to the core engine services
 /// (Logger, Timer, EventSystem, MemoryManager, ThreadPool, CommandLine,
-/// ConfigManager, EntityManager, SceneGraph, AssetDatabase, ProjectFileIndex, SceneSerializer,
-/// PrefabSystem, HotReload, AssetManager, AssetImporter, AssetBundle,
+/// ConfigManager, EntityManager, SceneGraph, AssetDatabase, ProjectFileIndex, DerivedArtifactCache,
+/// SceneSerializer, PrefabSystem, HotReload, AssetManager, AssetImporter, AssetImportQueue, AssetBundle,
 /// FileSystem, RenderDevice, ShaderManager, RenderSystem, CameraSystem,
 /// MeshRenderer, LightSystem, Renderer3D, CollisionSystem, PhysicsSystem,
 /// RaycastSystem, InputSystem, AudioDevice, AudioSystem, AudioSourceSystem,
@@ -67,8 +69,8 @@ namespace UVE::Core {
 /// Referenced through the
 /// ILoggerUVE/ITimerUVE/IEventSystemUVE/IMemoryManagerUVE/IThreadPoolUVE/
 /// ICommandLineUVE/IConfigManagerUVE/IEntityManagerUVE/ISceneGraphUVE/
-/// IAssetDatabaseUVE/IProjectFileIndexUVE/ISceneSerializerUVE/IPrefabSystemUVE/IHotReloadUVE/
-/// IAssetManagerUVE/IAssetImporterUVE/IAssetBundleUVE/IFileSystemUVE/
+/// IAssetDatabaseUVE/IProjectFileIndexUVE/IDerivedArtifactCacheUVE/ISceneSerializerUVE/IPrefabSystemUVE/IHotReloadUVE/
+/// IAssetManagerUVE/IAssetImporterUVE/IAssetImportQueueUVE/IAssetBundleUVE/IFileSystemUVE/
 /// IRenderDeviceUVE/Shader::IShaderManagerUVE/IRenderSystemUVE/
 /// ICameraSystemUVE/IMeshRendererUVE/ILightSystemUVE/
 /// IRenderer3DUVE/ICollisionSystemUVE/IPhysicsSystemUVE/IRaycastSystemUVE/
@@ -91,11 +93,13 @@ public:
                        Scene::ISceneGraphUVE& sceneGraph,
                        Asset::IAssetDatabaseUVE& assetDatabase,
                        Asset::IProjectFileIndexUVE& projectFileIndex,
+                       Asset::IDerivedArtifactCacheUVE& derivedArtifactCache,
                        Scene::ISceneSerializerUVE& sceneSerializer,
                        Scene::IPrefabSystemUVE& prefabSystem,
                        Asset::IHotReloadUVE& hotReload,
                        Asset::IAssetManagerUVE& assetManager,
                        Asset::IAssetImporterUVE& assetImporter,
+                       Asset::IAssetImportQueueUVE& assetImportQueue,
                        Asset::IAssetBundleUVE& assetBundle,
                        Asset::IFileSystemUVE& fileSystem,
                        Render::IRenderDeviceUVE& renderDevice,
@@ -127,11 +131,13 @@ public:
     [[nodiscard]] Scene::ISceneGraphUVE& GetSceneGraphUVE() const noexcept;
     [[nodiscard]] Asset::IAssetDatabaseUVE& GetAssetDatabaseUVE() const noexcept;
     [[nodiscard]] Asset::IProjectFileIndexUVE& GetProjectFileIndexUVE() const noexcept;
+    [[nodiscard]] Asset::IDerivedArtifactCacheUVE& GetDerivedArtifactCacheUVE() const noexcept;
     [[nodiscard]] Scene::ISceneSerializerUVE& GetSceneSerializerUVE() const noexcept;
     [[nodiscard]] Scene::IPrefabSystemUVE& GetPrefabSystemUVE() const noexcept;
     [[nodiscard]] Asset::IHotReloadUVE& GetHotReloadUVE() const noexcept;
     [[nodiscard]] Asset::IAssetManagerUVE& GetAssetManagerUVE() const noexcept;
     [[nodiscard]] Asset::IAssetImporterUVE& GetAssetImporterUVE() const noexcept;
+    [[nodiscard]] Asset::IAssetImportQueueUVE& GetAssetImportQueueUVE() const noexcept;
     [[nodiscard]] Asset::IAssetBundleUVE& GetAssetBundleUVE() const noexcept;
     [[nodiscard]] Asset::IFileSystemUVE& GetFileSystemUVE() const noexcept;
     [[nodiscard]] Render::IRenderDeviceUVE& GetRenderDeviceUVE() const noexcept;
@@ -164,11 +170,13 @@ private:
     Scene::ISceneGraphUVE* m_sceneGraph;
     Asset::IAssetDatabaseUVE* m_assetDatabase;
     Asset::IProjectFileIndexUVE* m_projectFileIndex;
+    Asset::IDerivedArtifactCacheUVE* m_derivedArtifactCache;
     Scene::ISceneSerializerUVE* m_sceneSerializer;
     Scene::IPrefabSystemUVE* m_prefabSystem;
     Asset::IHotReloadUVE* m_hotReload;
     Asset::IAssetManagerUVE* m_assetManager;
     Asset::IAssetImporterUVE* m_assetImporter;
+    Asset::IAssetImportQueueUVE* m_assetImportQueue;
     Asset::IAssetBundleUVE* m_assetBundle;
     Asset::IFileSystemUVE* m_fileSystem;
     Render::IRenderDeviceUVE* m_renderDevice;

@@ -85,6 +85,11 @@ struct EngineConfigUVE {
     /// change AssetDatabaseUVE ownership, import behavior, or VFS mounts.
     std::filesystem::path projectContentRootUVE = "assets/";
 
+    /// Project-local root reserved for derived import metadata only. DerivedArtifactCacheUVE
+    /// creates this directory lazily on successful cache writes; it never creates source or
+    /// destination directories and never changes AssetDatabaseUVE ownership.
+    std::filesystem::path derivedArtifactCacheRootUVE = "DerivedData/Import/";
+
     /// Whether Update() calls HotReloadUVE::PollUVE() each frame.
     /// AssetManagerUVE still tracks/untracks loaded assets with HotReloadUVE
     /// regardless of this flag — it only gates whether the poll itself

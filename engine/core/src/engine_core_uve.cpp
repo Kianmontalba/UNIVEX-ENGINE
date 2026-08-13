@@ -18,7 +18,9 @@
 #include "uve/asset/asset_bundle_uve.h"
 #include "uve/asset/asset_database_uve.h"
 #include "uve/asset/asset_importer_uve.h"
+#include "uve/asset/asset_import_queue_uve.h"
 #include "uve/asset/asset_manager_uve.h"
+#include "uve/asset/derived_artifact_cache_uve.h"
 #include "uve/asset/file_system_uve.h"
 #include "uve/asset/hot_reload_uve.h"
 #include "uve/asset/material_asset_uve.h"
@@ -165,7 +167,11 @@ void EngineCoreUVE::Init() {
     // caller requests RefreshUVE(), and has no ownership of AssetDatabase.
     m_projectFileIndex = std::make_unique<Asset::ProjectFileIndexUVE>(m_config.projectContentRootUVE);
 
-    // SceneSerializer and PrefabSystem eleventh/twelfth: both stateless,
+    // DerivedArtifactCache eleventh: owns only project-local generated import metadata. It creates
+    // its configured root lazily during a successful cache write and has no AssetDatabase ownership.
+    m_derivedArtifactCache = std::make_unique<Asset::DerivedArtifactCacheUVE>(m_config.derivedArtifactCacheRootUVE);
+
+    // SceneSerializer and PrefabSystem twelfth/thirteenth: both stateless,
     // grouped immediately after AssetDatabase/ProjectFileIndex for readability.
     m_sceneSerializer = std::make_unique<Scene::SceneSerializerUVE>();
     m_prefabSystem = std::make_unique<Scene::PrefabSystemUVE>();
@@ -184,12 +190,18 @@ void EngineCoreUVE::Init() {
     m_assetManager = std::make_unique<Asset::AssetManagerUVE>(*m_threadPool, *m_eventSystem, m_hotReload.get());
     RegisterBuiltInAssetLoadersUVE();
 
-    // AssetImporter and AssetBundle fourteenth/fifteenth: both stateless,
-    // grouped immediately after AssetManager for readability.
+    // AssetImporter fourteenth: retains the existing extension-selected synchronous import behavior.
     m_assetImporter = std::make_unique<Asset::AssetImporterUVE>();
+
+    // AssetImportQueue fifteenth: calls the importer at most once per Update() and validates
+    // metadata cache hits against source and destination byte fingerprints plus AssetDatabase.
+    m_assetImportQueue = std::make_unique<Asset::AssetImportQueueUVE>(
+        *m_assetImporter, *m_assetDatabase, *m_derivedArtifactCache);
+
+    // AssetBundle sixteenth: stateless and independent from the queue/cache.
     m_assetBundle = std::make_unique<Asset::AssetBundleUVE>();
 
-    // FileSystem sixteenth: needs AssetBundle, since its bundle-backed
+    // FileSystem seventeenth: needs AssetBundle, since its bundle-backed
     // mounts read entries through IAssetBundleUVE.
     m_fileSystem = std::make_unique<Asset::FileSystemUVE>(*m_assetBundle);
 
@@ -327,9 +339,11 @@ void EngineCoreUVE::Init() {
     m_configManager = std::move(configManager);
 
     m_services.emplace(*m_logger, *m_timer, *m_eventSystem, *m_memoryManager, *m_threadPool,
-                        *m_commandLine, *m_configManager, *m_entityManager, *m_sceneGraph,
-                        *m_assetDatabase, *m_projectFileIndex, *m_sceneSerializer, *m_prefabSystem, *m_hotReload,
-                        *m_assetManager, *m_assetImporter, *m_assetBundle, *m_fileSystem,
+                                                 *m_commandLine, *m_configManager, *m_entityManager, *m_sceneGraph,
+                         *m_assetDatabase, *m_projectFileIndex, *m_derivedArtifactCache, *m_sceneSerializer,
+                         *m_prefabSystem, *m_hotReload, *m_assetManager, *m_assetImporter, *m_assetImportQueue,
+                         *m_assetBundle, *m_fileSystem,
+
                         *m_renderDevice, *m_shaderManager, *m_renderSystem, *m_cameraSystem,
                         *m_meshRenderer, *m_lightSystem, *m_renderer3D, *m_collisionSystem, *m_physicsSystem,
                         *m_raycastSystem, *m_inputSystem, *m_audioDevice, *m_audioSystem,
@@ -391,6 +405,11 @@ void EngineCoreUVE::Update() {
         m_hotReload->PollUVE(*m_assetManager, *m_assetDatabase, m_timer->GetDeltaTimeUVE());
     }
     m_assetManager->CollectGarbageUVE();
+
+    // Increment 60: one deterministic, main-thread import job at most per engine Update().
+    // Queues only progress after callers explicitly enqueue/retry; no file watcher or background
+    // import worker is introduced by this maintenance seam.
+    static_cast<void>(m_assetImportQueue->TickUVE());
 
     m_shaderManager->UpdateUVE(m_timer->GetDeltaTimeUVE());
 
@@ -520,12 +539,14 @@ void EngineCoreUVE::Shutdown() {
 
     m_fileSystem.reset();
     m_assetBundle.reset();
+    m_assetImportQueue.reset();
     m_assetImporter.reset();
     m_assetManager.reset();
     m_hotReload.reset();
     m_prefabSystem.reset();
     m_sceneSerializer.reset();
     m_projectFileIndex.reset();
+    m_derivedArtifactCache.reset();
     m_assetDatabase.reset();
     m_sceneGraph.reset();
 

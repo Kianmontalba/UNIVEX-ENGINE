@@ -11,9 +11,12 @@
 add_library(uve_asset STATIC
     src/asset_guid_uve.cpp
     src/asset_database_uve.cpp
+    src/asset_content_fingerprint_uve.cpp
+    src/derived_artifact_cache_uve.cpp
     src/uve_file_envelope_uve.cpp
     src/asset_manager_uve.cpp
     src/asset_importer_uve.cpp
+    src/asset_import_queue_uve.cpp
     src/hot_reload_uve.cpp
     src/asset_bundle_uve.cpp
     src/file_system_uve.cpp

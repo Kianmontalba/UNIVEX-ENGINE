@@ -19,6 +19,11 @@ namespace UVE::Asset {
 /// per format later.
 struct AssetImportSettingsUVE {
     virtual ~AssetImportSettingsUVE() = default;
+
+    /// Stable cache discriminator for all import behavior represented by this settings object.
+    /// Future format-specific settings override this when a conversion option changes derived
+    /// output. The default keeps the current generic copy-and-register importer deterministic.
+    [[nodiscard]] virtual std::string GetCacheVersionUVE() const { return "generic-v1"; }
 };
 
 /// IAssetImporterUVE is the spec's "import pipeline with settings per asset type" (Part 7.4):
