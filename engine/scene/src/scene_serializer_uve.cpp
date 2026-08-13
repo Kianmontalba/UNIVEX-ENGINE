@@ -8,6 +8,7 @@
 #include <functional>
 #include <limits>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <typeindex>
@@ -31,6 +32,7 @@
 #include "uve/scene/components/mesh_component_uve.h"
 #include "uve/scene/components/name_component_uve.h"
 #include "uve/scene/components/particle_emitter_component_uve.h"
+#include "uve/scene/components/primitive_mesh_component_uve.h"
 #include "uve/scene/components/prefab_instance_component_uve.h"
 #include "uve/scene/components/rigid_body_component_uve.h"
 #include "uve/scene/components/script_component_uve.h"
@@ -79,6 +81,10 @@ namespace {
 
 [[nodiscard]] nlohmann::json ToJsonUVE(const MeshComponentUVE& component) {
     return {{"meshGuid", component.meshGuid.value}, {"materialGuid", component.materialGuid.value}};
+}
+
+[[nodiscard]] nlohmann::json ToJsonUVE(const PrimitiveMeshComponentUVE& component) {
+    return {{"kind", static_cast<std::uint8_t>(component.kind)}, {"baseColor", ToJsonUVE(component.baseColor)}};
 }
 
 [[nodiscard]] nlohmann::json ToJsonUVE(const LightComponentUVE& component) {
@@ -176,6 +182,16 @@ template <typename T, typename FromJsonFunc>
         table.emplace("MeshComponentUVE", MakeRegistrationUVE<MeshComponentUVE>([](const nlohmann::json& json) {
                           return MeshComponentUVE{Asset::AssetGuidUVE{json.at("meshGuid").get<std::uint64_t>()},
                                                    Asset::AssetGuidUVE{json.at("materialGuid").get<std::uint64_t>()}};
+                      }));
+        table.emplace("PrimitiveMeshComponentUVE",
+                      MakeRegistrationUVE<PrimitiveMeshComponentUVE>([](const nlohmann::json& json) {
+                          PrimitiveMeshComponentUVE primitive;
+                          primitive.kind = static_cast<PrimitiveMeshKindUVE>(json.at("kind").get<std::uint8_t>());
+                          primitive.baseColor = Vector3FromJsonUVE(json.at("baseColor"));
+                          if (!IsPrimitiveMeshComponentValidUVE(primitive)) {
+                              throw std::runtime_error("Invalid PrimitiveMeshComponentUVE payload");
+                          }
+                          return primitive;
                       }));
         table.emplace("LightComponentUVE", MakeRegistrationUVE<LightComponentUVE>([](const nlohmann::json& json) {
                           LightComponentUVE light;
@@ -452,6 +468,11 @@ void RollbackRestoredEntitiesUVE(IEntityManagerUVE& entityManager, std::vector<E
     } catch (const nlohmann::json::exception& jsonError) {
         UVE_ERROR("SceneSerializerUVE: malformed component data in \"{}\": {}", sourceDescription,
                   jsonError.what());
+        RollbackRestoredEntitiesUVE(entityManager, createdEntities);
+        return std::nullopt;
+    } catch (const std::exception& validationError) {
+        UVE_ERROR("SceneSerializerUVE: invalid component data in \"{}\": {}", sourceDescription,
+                  validationError.what());
         RollbackRestoredEntitiesUVE(entityManager, createdEntities);
         return std::nullopt;
     }

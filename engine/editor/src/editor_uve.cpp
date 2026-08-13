@@ -29,6 +29,7 @@
 #include "uve/scene/components/hierarchy_component_uve.h"
 #include "uve/scene/components/light_component_uve.h"
 #include "uve/scene/components/name_component_uve.h"
+#include "uve/scene/components/primitive_mesh_component_uve.h"
 #include "uve/scene/components/world_transform_component_uve.h"
 
 namespace UVE::Editor {
@@ -37,6 +38,17 @@ namespace {
 
 constexpr float kVectorEpsilonUVE = 0.00001F;
 constexpr float kMinimumLocalScaleUVE = 0.001F;
+
+[[nodiscard]] Math::Vector3UVE PrimitiveColliderHalfExtentsUVE(const Scene::PrimitiveMeshKindUVE kind) noexcept {
+    switch (kind) {
+        case Scene::PrimitiveMeshKindUVE::Cube:
+        case Scene::PrimitiveMeshKindUVE::UVSphere:
+            return Math::Vector3UVE{0.5F, 0.5F, 0.5F};
+        case Scene::PrimitiveMeshKindUVE::Plane:
+            return Math::Vector3UVE{0.5F, 0.025F, 0.5F};
+    }
+    return Math::Vector3UVE{0.5F, 0.5F, 0.5F};
+}
 constexpr float kGizmoAxisLengthUVE = 1.25F;
 constexpr float kGizmoHandleRadiusPixelsUVE = 12.0F;
 constexpr float kTrackballRadiusPixelsUVE = 42.0F;
@@ -501,6 +513,37 @@ bool EditorUVE::SetSelectedLocalTransformUVE(const Scene::TransformComponentUVE&
     m_sceneDirty = true;
     RecordHistoryUVE(TransformHistoryEntryUVE{
         m_selectedEntity, before, transform, selectionBefore, CaptureSelectionSnapshotUVE(), dirtyBefore, true});
+    return true;
+}
+
+bool EditorUVE::SetSelectedPrimitiveMeshUVE(const Scene::PrimitiveMeshComponentUVE& primitive) {
+    if (!IsAuthoringCommandAllowedUVE() || !HasSingleDocumentSelectionUVE() ||
+        m_gizmoDrag.axis != EditorTranslateAxisUVE::None ||
+        m_viewportNavigationMode != EditorViewportNavigationModeUVE::None ||
+        !Scene::IsPrimitiveMeshComponentValidUVE(primitive)) {
+        return false;
+    }
+
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    if (!entityManager.HasComponentUVE<Scene::PrimitiveMeshComponentUVE>(m_selectedEntity)) {
+        return false;
+    }
+
+    const Scene::PrimitiveMeshComponentUVE before =
+        entityManager.GetComponentUVE<Scene::PrimitiveMeshComponentUVE>(m_selectedEntity);
+    if (before.kind == primitive.kind && before.baseColor == primitive.baseColor) {
+        return false;
+    }
+
+    const EditorSelectionSnapshotUVE selectionBefore = CaptureSelectionSnapshotUVE();
+    const bool dirtyBefore = m_sceneDirty;
+    if (!ApplyPrimitiveMeshStateUVE(m_selectedEntity, primitive)) {
+        return false;
+    }
+
+    m_sceneDirty = true;
+    RecordHistoryUVE(PrimitiveAppearanceHistoryEntryUVE{
+        m_selectedEntity, before, primitive, selectionBefore, CaptureSelectionSnapshotUVE(), dirtyBefore, true});
     return true;
 }
 
@@ -1234,8 +1277,27 @@ bool EditorUVE::ApplyLocalTransformUVE(const Scene::EntityUVE entity,
     return true;
 }
 
+bool EditorUVE::ApplyPrimitiveMeshStateUVE(const Scene::EntityUVE entity,
+                                            const Scene::PrimitiveMeshComponentUVE& primitive) {
+    if (!IsDocumentEntityUVE(entity) || !Scene::IsPrimitiveMeshComponentValidUVE(primitive)) {
+        return false;
+    }
+
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    if (!entityManager.HasComponentUVE<Scene::PrimitiveMeshComponentUVE>(entity)) {
+        return false;
+    }
+    entityManager.GetComponentUVE<Scene::PrimitiveMeshComponentUVE>(entity) = primitive;
+    if (entityManager.HasComponentUVE<Scene::ColliderComponentUVE>(entity)) {
+        entityManager.GetComponentUVE<Scene::ColliderComponentUVE>(entity).halfExtents =
+            PrimitiveColliderHalfExtentsUVE(primitive.kind);
+    }
+    return true;
+}
+
 bool EditorUVE::ApplyEntityNameStateUVE(const Scene::EntityUVE entity,
-                                        const std::optional<std::string>& name) {
+                                          const std::optional<std::string>& name) {
+
     if (!IsDocumentEntityUVE(entity) || (name.has_value() && !IsEntityNameValidUVE(*name))) {
         return false;
     }
@@ -1517,6 +1579,9 @@ Scene::EntityUVE EditorUVE::CreateDocumentEntityInternalUVE(
         case EditorEntityKindUVE::Camera:
         case EditorEntityKindUVE::DirectionalLight:
         case EditorEntityKindUVE::CollisionBox:
+        case EditorEntityKindUVE::Cube:
+        case EditorEntityKindUVE::UVSphere:
+        case EditorEntityKindUVE::Plane:
             break;
         default:
             return Scene::kInvalidEntityUVE;
@@ -1547,6 +1612,27 @@ Scene::EntityUVE EditorUVE::CreateDocumentEntityInternalUVE(
         }
         case EditorEntityKindUVE::CollisionBox:
             entityManager.AddComponentUVE<Scene::ColliderComponentUVE>(entity);
+            break;
+        case EditorEntityKindUVE::Cube:
+            entityManager.AddComponentUVE<Scene::PrimitiveMeshComponentUVE>(
+                entity, Scene::PrimitiveMeshComponentUVE{Scene::PrimitiveMeshKindUVE::Cube,
+                                                          Math::Vector3UVE{0.73F, 0.48F, 0.21F}});
+            entityManager.AddComponentUVE<Scene::ColliderComponentUVE>(
+                entity, Scene::ColliderComponentUVE{Math::Vector3UVE{0.5F, 0.5F, 0.5F}});
+            break;
+        case EditorEntityKindUVE::UVSphere:
+            entityManager.AddComponentUVE<Scene::PrimitiveMeshComponentUVE>(
+                entity, Scene::PrimitiveMeshComponentUVE{Scene::PrimitiveMeshKindUVE::UVSphere,
+                                                          Math::Vector3UVE{0.22F, 0.55F, 0.88F}});
+            entityManager.AddComponentUVE<Scene::ColliderComponentUVE>(
+                entity, Scene::ColliderComponentUVE{Math::Vector3UVE{0.5F, 0.5F, 0.5F}});
+            break;
+        case EditorEntityKindUVE::Plane:
+            entityManager.AddComponentUVE<Scene::PrimitiveMeshComponentUVE>(
+                entity, Scene::PrimitiveMeshComponentUVE{Scene::PrimitiveMeshKindUVE::Plane,
+                                                          Math::Vector3UVE{0.32F, 0.38F, 0.30F}});
+            entityManager.AddComponentUVE<Scene::ColliderComponentUVE>(
+                entity, Scene::ColliderComponentUVE{Math::Vector3UVE{0.5F, 0.025F, 0.5F}});
             break;
         default:
             return Scene::kInvalidEntityUVE;
@@ -1583,6 +1669,13 @@ bool EditorUVE::UndoHistoryEntryUVE(HistoryEntryUVE& entry) {
                 return true;
             } else if constexpr (std::is_same_v<EntryType, NameHistoryEntryUVE>) {
                 if (!ApplyEntityNameStateUVE(typedEntry.entity, typedEntry.beforeName)) {
+                    return false;
+                }
+                RestoreSelectionUVE(typedEntry.selectionBefore);
+                m_sceneDirty = typedEntry.dirtyBefore;
+                return true;
+            } else if constexpr (std::is_same_v<EntryType, PrimitiveAppearanceHistoryEntryUVE>) {
+                if (!ApplyPrimitiveMeshStateUVE(typedEntry.entity, typedEntry.before)) {
                     return false;
                 }
                 RestoreSelectionUVE(typedEntry.selectionBefore);
@@ -1654,6 +1747,13 @@ bool EditorUVE::RedoHistoryEntryUVE(HistoryEntryUVE& entry) {
                 return true;
             } else if constexpr (std::is_same_v<EntryType, NameHistoryEntryUVE>) {
                 if (!ApplyEntityNameStateUVE(typedEntry.entity, typedEntry.afterName)) {
+                    return false;
+                }
+                RestoreSelectionUVE(typedEntry.selectionAfter);
+                m_sceneDirty = typedEntry.dirtyAfter;
+                return true;
+            } else if constexpr (std::is_same_v<EntryType, PrimitiveAppearanceHistoryEntryUVE>) {
+                if (!ApplyPrimitiveMeshStateUVE(typedEntry.entity, typedEntry.after)) {
                     return false;
                 }
                 RestoreSelectionUVE(typedEntry.selectionAfter);
@@ -1851,6 +1951,12 @@ std::string EditorUVE::GetDefaultEntityNameUVE(const EditorEntityKindUVE kind) c
             return "Directional Light";
         case EditorEntityKindUVE::CollisionBox:
             return "Collision Box";
+        case EditorEntityKindUVE::Cube:
+            return "Cube";
+        case EditorEntityKindUVE::UVSphere:
+            return "UV Sphere";
+        case EditorEntityKindUVE::Plane:
+            return "Plane";
     }
     return {};
 }
@@ -2767,6 +2873,33 @@ void EditorUVE::CancelGizmoDragUVE() noexcept {
     m_sceneDirty = cancelledDrag.initialDirty;
 }
 
+void EditorUVE::DrawViewportGridUVE(const EditorViewportRectUVE& viewportRect) {
+    if (!IsViewportRectValidUVE(viewportRect)) {
+        return;
+    }
+
+    constexpr int kHalfLineCountUVE = 10;
+    constexpr float kGridSpacingUVE = 1.0F;
+    const float span = static_cast<float>(kHalfLineCountUVE) * kGridSpacingUVE;
+    const Math::Vector3UVE center{m_viewportFocusPoint.x, 0.0F, m_viewportFocusPoint.z};
+    ImDrawList* const drawList = ImGui::GetWindowDrawList();
+    for (int lineIndex = -kHalfLineCountUVE; lineIndex <= kHalfLineCountUVE; ++lineIndex) {
+        const float offset = static_cast<float>(lineIndex) * kGridSpacingUVE;
+        Math::Vector2UVE first{};
+        Math::Vector2UVE second{};
+        if (ProjectWorldPointUVE(viewportRect, center + Math::Vector3UVE{offset, 0.0F, -span}, first) &&
+            ProjectWorldPointUVE(viewportRect, center + Math::Vector3UVE{offset, 0.0F, span}, second)) {
+            const ImU32 color = lineIndex == 0 ? IM_COL32(96, 128, 150, 145) : IM_COL32(78, 90, 102, 90);
+            drawList->AddLine(ImVec2{first.x, first.y}, ImVec2{second.x, second.y}, color, lineIndex == 0 ? 1.5F : 1.0F);
+        }
+        if (ProjectWorldPointUVE(viewportRect, center + Math::Vector3UVE{-span, 0.0F, offset}, first) &&
+            ProjectWorldPointUVE(viewportRect, center + Math::Vector3UVE{span, 0.0F, offset}, second)) {
+            const ImU32 color = lineIndex == 0 ? IM_COL32(108, 118, 150, 145) : IM_COL32(78, 90, 102, 90);
+            drawList->AddLine(ImVec2{first.x, first.y}, ImVec2{second.x, second.y}, color, lineIndex == 0 ? 1.5F : 1.0F);
+        }
+    }
+}
+
 void EditorUVE::DrawSelectionBoundsUVE(const EditorViewportRectUVE& viewportRect) {
     if (!IsViewportRectValidUVE(viewportRect)) {
         return;
@@ -3110,6 +3243,28 @@ void EditorUVE::DrawMenuBarUVE() {
     ImGui::SameLine();
     ImGui::TextDisabled("|");
     ImGui::SameLine();
+    if (m_activeWorkspace == EditorWorkspaceUVE::Library) {
+        ImGui::BeginDisabled(!IsAuthoringCommandAllowedUVE());
+        if (ImGui::SmallButton("+ Cube")) {
+            static_cast<void>(CreateDocumentEntityUVE(EditorEntityKindUVE::Cube));
+        }
+        ImGui::SameLine();
+        if (ImGui::SmallButton("+ Sphere")) {
+            static_cast<void>(CreateDocumentEntityUVE(EditorEntityKindUVE::UVSphere));
+        }
+        ImGui::SameLine();
+        if (ImGui::SmallButton("+ Plane")) {
+            static_cast<void>(CreateDocumentEntityUVE(EditorEntityKindUVE::Plane));
+        }
+        ImGui::SameLine();
+        if (ImGui::SmallButton("+ Light")) {
+            static_cast<void>(CreateDocumentEntityUVE(EditorEntityKindUVE::DirectionalLight));
+        }
+        ImGui::EndDisabled();
+        ImGui::SameLine();
+        ImGui::TextDisabled("|");
+        ImGui::SameLine();
+    }
     if (m_playModeState == EditorPlayModeStateUVE::Edit) {
         if (ImGui::SmallButton(">") && canEnterPlayMode) {
             static_cast<void>(EnterPlayModeUVE());
@@ -3482,6 +3637,26 @@ void EditorUVE::DrawInspectorContentUVE() {
         edited.localScale = Math::Vector3UVE{scale[0], scale[1], scale[2]};
         static_cast<void>(SetSelectedLocalTransformUVE(edited));
     }
+
+    if (entityManager.HasComponentUVE<Scene::PrimitiveMeshComponentUVE>(m_selectedEntity)) {
+        ImGui::Separator();
+        ImGui::TextUnformatted("Primitive");
+        const Scene::PrimitiveMeshComponentUVE current =
+            entityManager.GetComponentUVE<Scene::PrimitiveMeshComponentUVE>(m_selectedEntity);
+        int kindIndex = static_cast<int>(current.kind);
+        constexpr const char* kPrimitiveKinds[] = {"Cube", "UV Sphere", "Plane"};
+        const bool kindChanged = ImGui::Combo("Primitive Kind", &kindIndex, kPrimitiveKinds,
+                                              static_cast<int>(std::size(kPrimitiveKinds)));
+        float baseColor[3]{current.baseColor.x, current.baseColor.y, current.baseColor.z};
+        const bool colorChanged = ImGui::ColorEdit3("Base Color", baseColor,
+                                                    ImGuiColorEditFlags_Float | ImGuiColorEditFlags_DisplayRGB);
+        if (kindChanged || colorChanged) {
+            Scene::PrimitiveMeshComponentUVE updated = current;
+            updated.kind = static_cast<Scene::PrimitiveMeshKindUVE>(kindIndex);
+            updated.baseColor = Math::Vector3UVE{baseColor[0], baseColor[1], baseColor[2]};
+            static_cast<void>(SetSelectedPrimitiveMeshUVE(updated));
+        }
+    }
     ImGui::EndDisabled();
 }
 
@@ -3623,6 +3798,7 @@ void EditorUVE::DrawViewportPanelUVE() {
             }
         }
 
+        DrawViewportGridUVE(viewportRect);
         DrawSelectionBoundsUVE(viewportRect);
         if (IsAuthoringCommandAllowedUVE()) {
             if (m_gizmoMode == EditorGizmoModeUVE::Translate) {

@@ -348,12 +348,8 @@ private:
     /// Calls Renderer3DUVE::RenderFrameUVE(*m_entityManager, m_activeCamera) when
     /// m_activeCamera is valid; otherwise logs the original no-op trace line, preserving every
     /// pre-Increment-14 frame-loop test's behavior unless SetActiveCameraUVE() was called. When a
-    /// real window/GL device is active (see m_windowedRenderingActiveUVE), additionally records
-    /// and submits the temporary demo triangle (BeginFrameUVE/clear/bind-if-ready/draw-if-ready/
-    /// EndFrameUVE against the default framebuffer) and calls IRenderDeviceUVE::PresentUVE() —
-    /// entirely independent of m_activeCamera/Renderer3DUVE, proving the window/GL pipeline
-    /// end-to-end without touching the ECS. See SetupDemoTriangleUVE()'s doc comment for why this
-    /// is deliberately temporary.
+    /// real window/GL device is active (see m_windowedRenderingActiveUVE), invokes the optional
+    /// post-render editor callback after the scene tone-mapping pass and then presents exactly once.
     void Render();
 
     /// Computes this frame's wall-clock frameTimeSeconds and records it
@@ -362,26 +358,6 @@ private:
 
     /// Asserts IsValidTransitionUVE(m_state, newState), then applies it.
     void TransitionStateUVE(EngineStateUVE newState);
-
-    /// Builds the triangle's vertex buffer via m_renderDevice and begins asynchronously compiling
-    /// its shader program (the `basic_3d.glsl` built-in) via m_shaderManager->CreateProgramUVE() —
-    /// called once from Init(), only when m_windowedRenderingActiveUVE. This is explicitly
-    /// temporary proof-of-life scaffold for Increment 20 ("the bridge from headless foundation to
-    /// visual engine"), now sourcing its shader from ShaderManagerUVE (Increment 21) instead of an
-    /// inline GLSL string, but still deliberately bypassing Renderer3DUVE/MeshRendererUVE/the
-    /// asset pipeline/the ECS entirely — it must never grow into a real content path. The
-    /// intended long-term rendering flow is Scene -> Renderer3DUVE -> RenderGraph -> RenderDevice
-    /// -> Present, not EngineCore -> Triangle (see docs/CODING_STANDARDS.md's rendering-evolution
-    /// roadmap); this scaffold is deleted, not extended, once that bridge is built.
-    void SetupDemoTriangleUVE();
-
-    /// Records and submits the demo triangle built by SetupDemoTriangleUVE(), then calls
-    /// IRenderDeviceUVE::PresentUVE(). Called from Render() only when
-    /// m_windowedRenderingActiveUVE. Always clears the framebuffer to the approved background
-    /// color; the actual triangle draw is additionally guarded on
-    /// m_demoTriangleProgram->IsValidUVE(), since CreateProgramUVE() compiles asynchronously and
-    /// may not have finished by the first frame or two after Init().
-    void RenderDemoTriangleUVE();
 
     EngineConfigUVE m_config;
     EngineStateUVE m_state = EngineStateUVE::Uninitialized;
@@ -432,7 +408,7 @@ private:
 
     /// True iff Init() constructed a real, valid WindowManagerUVE + GlRenderDeviceUVE pair (i.e.
     /// !EngineConfigUVE::headlessUVE and window/context creation succeeded). Gates
-    /// Update()'s window-event pump/close-check and Render()'s demo-triangle present — both stay
+    /// Update()'s window-event pump/close-check and Render()'s final PresentUVE() call — both stay
     /// exact no-ops when this is false, matching every prior increment's headless behavior.
     bool m_windowedRenderingActiveUVE = false;
 
@@ -441,17 +417,9 @@ private:
     /// proceeding into a broken windowed session.
     bool m_windowCreationFailedUVE = false;
 
-    Render::BufferHandleUVE m_demoTriangleVertexBuffer;
-
-    /// Optional application-owned drawing invoked after the scene and temporary proof-of-life
-    /// triangle but before RenderDeviceUVE::PresentUVE(). No editor/UI type enters core.
+    /// Optional application-owned drawing invoked after Renderer3DUVE tone-maps the scene and
+    /// before RenderDeviceUVE::PresentUVE(). No editor/UI type enters core.
     std::function<void()> m_postRenderCallback;
-
-    /// The demo triangle's linked shader program (Increment 21), created via
-    /// m_shaderManager->CreateProgramUVE() from the `basic_3d.glsl` built-in. Owns its underlying
-    /// GL shader/pipeline handles via a ShaderManagerUVE-supplied shared_ptr deleter — destroyed
-    /// by resetting this member (see Shutdown()), never via a raw Destroy*UVE() call.
-    std::shared_ptr<Render::Shader::ShaderProgramUVE> m_demoTriangleProgram;
 };
 
 } // namespace UVE::Core

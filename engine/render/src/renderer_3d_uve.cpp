@@ -26,11 +26,14 @@
 #include "uve/math/matrix4x4_uve.h"
 #include "uve/render/i_light_system_uve.h"
 #include "uve/render/render_graph_uve.h"
+#include "uve/render/primitive_geometry_uve.h"
 #include "uve/render/render_queue_uve.h"
 #include "uve/render/shader/built_in_shaders_uve.h"
 #include "uve/render/shader/shader_program_desc_uve.h"
 #include "uve/render/shader/shader_program_uve.h"
 #include "uve/scene/components/camera_component_uve.h"
+#include "uve/scene/components/primitive_mesh_component_uve.h"
+#include "uve/scene/components/world_transform_component_uve.h"
 
 namespace UVE::Render {
 
@@ -90,6 +93,15 @@ struct MeshGpuResourcesUVE {
     BufferHandleUVE vertexBuffer;
     BufferHandleUVE indexBuffer;
     std::uint32_t indexCount = 0;
+};
+
+/// Renderer-owned primitive draw data. It deliberately contains no AssetHandleUVE: primitive
+/// geometry is immutable renderer cache data, while authored kind/color remain ECS component state.
+struct PrimitiveRenderItemUVE {
+    Math::Matrix4x4UVE worldMatrix;
+    Scene::PrimitiveMeshKindUVE kind = Scene::PrimitiveMeshKindUVE::Cube;
+    Math::Vector3UVE baseColor{};
+    float sortDepth = 0.0F;
 };
 
 /// A material's manager-owned linked program plus its resolved texture handles, cached by
@@ -276,6 +288,10 @@ struct Renderer3DUVE::ImplUVE {
     std::shared_ptr<Shader::ShaderProgramUVE> shadowProgram;
     std::shared_ptr<Shader::ShaderProgramUVE> toneMappingProgram;
 
+    /// Built-in primitive shader deliberately reuses the canonical lit material contract, while
+    /// primitives bind only renderer-owned fallback textures and authored base color.
+    std::shared_ptr<Shader::ShaderProgramUVE> primitiveProgram;
+
     /// A 1x1 opaque-white texture, used whenever a material leaves albedoTexture/aoTexture unset
     /// (kInvalidAssetGuidUVE) — sampling it always yields {1,1,1,1}, so
     /// `texture(uAlbedoTexture, uv) * uAlbedoColor == uAlbedoColor` and
@@ -289,6 +305,7 @@ struct Renderer3DUVE::ImplUVE {
     TextureHandleUVE fallbackNormalTexture;
 
     std::unordered_map<Asset::AssetGuidUVE, MeshGpuResourcesUVE> meshCache;
+    std::unordered_map<std::uint8_t, MeshGpuResourcesUVE> primitiveMeshCache;
     std::unordered_map<Asset::AssetGuidUVE, MaterialGpuResourcesUVE> materialCache;
 
     /// GPU textures uploaded from a loaded TextureAssetUVE, cached by that texture's own
@@ -381,6 +398,30 @@ struct Renderer3DUVE::ImplUVE {
 
         const auto insertResult = meshCache.emplace(
             guid, MeshGpuResourcesUVE{vertexBuffer, indexBuffer, static_cast<std::uint32_t>(mesh->indices.size())});
+        return insertResult.first->second;
+    }
+
+    /// Returns the cached immutable GPU buffers for one built-in primitive kind. Geometry is copied
+    /// only for one-time tangent generation; the canonical catalog stays immutable and shared.
+    [[nodiscard]] const MeshGpuResourcesUVE& ResolvePrimitiveMeshGpuResourcesUVE(
+        const Scene::PrimitiveMeshKindUVE kind) {
+        const std::uint8_t key = static_cast<std::uint8_t>(kind);
+        const auto existingIt = primitiveMeshCache.find(key);
+        if (existingIt != primitiveMeshCache.end()) {
+            return existingIt->second;
+        }
+
+        const PrimitiveGeometryUVE& geometry = GetPrimitiveGeometryUVE(kind);
+        std::vector<Asset::MeshVertexUVE> vertices = geometry.vertices;
+        Asset::GenerateMeshTangentsUVE(vertices, geometry.indices);
+        const std::span<const Asset::MeshVertexUVE> vertexSpan(vertices);
+        const std::span<const std::uint32_t> indexSpan(geometry.indices);
+        const BufferHandleUVE vertexBuffer = renderDevice.CreateBufferUVE(
+            BufferDescUVE{std::as_bytes(vertexSpan).size(), BufferUsageUVE::Vertex}, std::as_bytes(vertexSpan));
+        const BufferHandleUVE indexBuffer = renderDevice.CreateBufferUVE(
+            BufferDescUVE{std::as_bytes(indexSpan).size(), BufferUsageUVE::Index}, std::as_bytes(indexSpan));
+        const auto insertResult = primitiveMeshCache.emplace(
+            key, MeshGpuResourcesUVE{vertexBuffer, indexBuffer, static_cast<std::uint32_t>(geometry.indices.size())});
         return insertResult.first->second;
     }
 
@@ -515,6 +556,31 @@ struct Renderer3DUVE::ImplUVE {
         commandBuffer.EndRenderPassUVE();
     }
 
+    [[nodiscard]] std::vector<PrimitiveRenderItemUVE> ExtractPrimitiveItemsUVE(
+        Scene::IEntityManagerUVE& entityManager, const Math::FrustumUVE& frustum) const {
+        std::vector<PrimitiveRenderItemUVE> items;
+        entityManager.ForEachUVE<Scene::WorldTransformComponentUVE, Scene::PrimitiveMeshComponentUVE>(
+            [&](Scene::EntityUVE, const Scene::WorldTransformComponentUVE& worldTransform,
+                const Scene::PrimitiveMeshComponentUVE& primitive) {
+                if (worldTransform.dirty || !Scene::IsPrimitiveMeshComponentValidUVE(primitive)) {
+                    return;
+                }
+                const Math::Matrix4x4UVE worldMatrix = Math::Matrix4x4UVE::ComposeTrsUVE(
+                    worldTransform.worldPosition, worldTransform.worldRotation, worldTransform.worldScale);
+                const Math::AabbUVE worldBounds = GetPrimitiveGeometryUVE(primitive.kind).localBounds.TransformUVE(worldMatrix);
+                if (!frustum.IntersectsUVE(worldBounds)) {
+                    return;
+                }
+                const float sortDepth = frustum.planes[4U].GetSignedDistanceUVE(worldBounds.GetCenterUVE());
+                items.push_back(PrimitiveRenderItemUVE{worldMatrix, primitive.kind, primitive.baseColor, sortDepth});
+            });
+        std::sort(items.begin(), items.end(),
+                  [](const PrimitiveRenderItemUVE& lhs, const PrimitiveRenderItemUVE& rhs) {
+                      return lhs.sortDepth < rhs.sortDepth;
+                  });
+        return items;
+    }
+
     void RecordItemsUVE(const std::vector<RenderItemUVE>& items, const FrameUniformsUVE& frameUniforms,
                         ICommandBufferUVE& commandBuffer) {
         for (const RenderItemUVE& item : items) {
@@ -581,6 +647,61 @@ struct Renderer3DUVE::ImplUVE {
             commandBuffer.DrawIndexedUVE(meshResources.indexCount);
         }
     }
+
+    void RecordPrimitiveItemsUVE(const std::vector<PrimitiveRenderItemUVE>& items,
+                                 const FrameUniformsUVE& frameUniforms, ICommandBufferUVE& commandBuffer) {
+        if (!primitiveProgram->IsValidUVE()) {
+            return;
+        }
+        for (const PrimitiveRenderItemUVE& item : items) {
+            const MeshGpuResourcesUVE& meshResources = ResolvePrimitiveMeshGpuResourcesUVE(item.kind);
+            primitiveProgram->SetMatrix4x4UVE("uModel", item.worldMatrix);
+            primitiveProgram->SetMatrix4x4UVE("uViewProjection", frameUniforms.viewProjection);
+            primitiveProgram->SetVector3UVE("uAmbientColor", frameUniforms.ambientColor);
+            primitiveProgram->SetVector3UVE("uViewPosition", frameUniforms.viewPosition);
+            for (std::size_t lightIndex = 0; lightIndex < kMaxLightsUVE; ++lightIndex) {
+                const LightDataUVE& light = frameUniforms.lights[lightIndex];
+                const std::string prefix = "uLights[" + std::to_string(lightIndex) + "].";
+                primitiveProgram->SetIntUVE(prefix + "type", static_cast<std::int32_t>(light.type));
+                primitiveProgram->SetVector3UVE(prefix + "position", light.position);
+                primitiveProgram->SetVector3UVE(prefix + "direction", light.direction);
+                primitiveProgram->SetVector3UVE(prefix + "color", light.color);
+                primitiveProgram->SetFloatUVE(prefix + "intensity", light.intensity);
+                primitiveProgram->SetFloatUVE(prefix + "range", light.range);
+                primitiveProgram->SetFloatUVE(prefix + "spotAngleDegrees", light.spotAngleDegrees);
+            }
+            primitiveProgram->SetMatrix4x4UVE("uLightSpaceMatrix", frameUniforms.lightSpaceMatrices[0]);
+            primitiveProgram->SetIntUVE("uShadowCascadeCount", frameUniforms.cascadeCount);
+            primitiveProgram->SetFloatUVE("uShadowCascadeBlendRatio", frameUniforms.cascadeBlendRatio);
+            for (std::size_t cascadeIndex = 0; cascadeIndex < kShadowCascadeCountUVE; ++cascadeIndex) {
+                const std::string index = std::to_string(cascadeIndex);
+                const std::uint32_t textureSlot = kShadowCascadeFirstTextureSlotUVE +
+                                                  static_cast<std::uint32_t>(cascadeIndex);
+                primitiveProgram->SetMatrix4x4UVE("uLightSpaceMatrices[" + index + "]",
+                                                   frameUniforms.lightSpaceMatrices[cascadeIndex]);
+                primitiveProgram->SetFloatUVE("uShadowCascadeSplits[" + index + "]",
+                                               frameUniforms.cascadeSplits[cascadeIndex]);
+                primitiveProgram->SetIntUVE("uShadowMapTextures[" + index + "]", static_cast<std::int32_t>(textureSlot));
+                commandBuffer.BindTextureUVE(shadowMapTargets[cascadeIndex], textureSlot);
+            }
+            primitiveProgram->SetIntUVE("uShadowMapTexture", static_cast<std::int32_t>(kShadowMapTextureSlotUVE));
+            primitiveProgram->SetIntUVE("uShadowPcfKernelRadius", shadowPcfKernelRadius);
+            primitiveProgram->SetVector3UVE("uAlbedoColor", item.baseColor);
+            primitiveProgram->SetFloatUVE("uMetallic", 0.0F);
+            primitiveProgram->SetFloatUVE("uRoughness", 0.82F);
+            primitiveProgram->SetVector3UVE("uEmissiveColor", Math::Vector3UVE{});
+            primitiveProgram->SetIntUVE("uAlbedoTexture", static_cast<std::int32_t>(kAlbedoTextureSlotUVE));
+            primitiveProgram->SetIntUVE("uNormalTexture", static_cast<std::int32_t>(kNormalTextureSlotUVE));
+            primitiveProgram->SetIntUVE("uAOTexture", static_cast<std::int32_t>(kAoTextureSlotUVE));
+            primitiveProgram->ApplyToUVE(commandBuffer);
+            commandBuffer.BindTextureUVE(fallbackWhiteTexture, kAlbedoTextureSlotUVE);
+            commandBuffer.BindTextureUVE(fallbackNormalTexture, kNormalTextureSlotUVE);
+            commandBuffer.BindTextureUVE(fallbackWhiteTexture, kAoTextureSlotUVE);
+            commandBuffer.BindVertexBufferUVE(meshResources.vertexBuffer);
+            commandBuffer.BindIndexBufferUVE(meshResources.indexBuffer);
+            commandBuffer.DrawIndexedUVE(meshResources.indexCount);
+        }
+    }
 };
 
 Renderer3DUVE::Renderer3DUVE(IRenderDeviceUVE& renderDevice, IRenderSystemUVE& renderSystem,
@@ -631,6 +752,16 @@ Renderer3DUVE::Renderer3DUVE(IRenderDeviceUVE& renderDevice, IRenderSystemUVE& r
     toneMappingProgramDesc.debugNameUVE = "ToneMapping";
     m_impl->toneMappingProgram = shaderManager.CreateProgramUVE(toneMappingProgramDesc);
 
+    Shader::ShaderProgramDescUVE primitiveProgramDesc;
+    primitiveProgramDesc.virtualFilePath = std::string(Shader::BuiltIn::kLitShadowed3DVirtualPath);
+    primitiveProgramDesc.embeddedFallbackSourceCode = std::string(Shader::BuiltIn::kLitShadowed3DSource);
+    primitiveProgramDesc.vertexLayout = MeshVertexLayoutUVE();
+    primitiveProgramDesc.vertexStride = static_cast<std::uint32_t>(sizeof(Asset::MeshVertexUVE));
+    primitiveProgramDesc.depthTestEnabled = true;
+    primitiveProgramDesc.depthWriteEnabled = true;
+    primitiveProgramDesc.debugNameUVE = "BuiltInPrimitiveLit";
+    m_impl->primitiveProgram = shaderManager.CreateProgramUVE(primitiveProgramDesc);
+
     ImplUVE* const implPtr = m_impl.get();
     m_impl->reloadSubscription = eventSystem.Subscribe<Asset::AssetReloadedEventUVE>(
         [implPtr](const Asset::AssetReloadedEventUVE& event) { implPtr->OnAssetReloadedUVE(event); });
@@ -639,6 +770,10 @@ Renderer3DUVE::Renderer3DUVE(IRenderDeviceUVE& renderDevice, IRenderSystemUVE& r
 Renderer3DUVE::~Renderer3DUVE() {
     m_impl->eventSystem.Unsubscribe(m_impl->reloadSubscription);
     for (const auto& [guid, meshResources] : m_impl->meshCache) {
+        m_impl->renderDevice.DestroyBufferUVE(meshResources.vertexBuffer);
+        m_impl->renderDevice.DestroyBufferUVE(meshResources.indexBuffer);
+    }
+    for (const auto& [kind, meshResources] : m_impl->primitiveMeshCache) {
         m_impl->renderDevice.DestroyBufferUVE(meshResources.vertexBuffer);
         m_impl->renderDevice.DestroyBufferUVE(meshResources.indexBuffer);
     }
@@ -709,6 +844,7 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
     RenderQueueUVE queue =
         m_impl->meshRenderer.ExtractRenderQueueUVE(entityManager, m_impl->assetManager, m_impl->assetDatabase, frustum);
     queue.SortUVE();
+    const std::vector<PrimitiveRenderItemUVE> primitiveItems = m_impl->ExtractPrimitiveItemsUVE(entityManager, frustum);
 
     RenderGraphUVE renderGraph;
     std::array<RenderGraphResourceHandleUVE, kShadowCascadeCountUVE> shadowResources{};
@@ -736,13 +872,14 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
     }
     renderGraph.AddPassUVE(RenderGraphPassDescUVE{
         "MainColor", std::move(mainResources),
-        [this, &queue, &frameUniforms](ICommandBufferUVE& commandBuffer) {
+        [this, &queue, &primitiveItems, &frameUniforms](ICommandBufferUVE& commandBuffer) {
             RenderPassDescUVE passDesc;
             passDesc.colorAttachment = m_impl->colorTarget;
             passDesc.depthAttachment = m_impl->depthTarget;
             commandBuffer.BeginRenderPassUVE(passDesc);
             m_impl->RecordItemsUVE(queue.opaqueItems, frameUniforms, commandBuffer);
             m_impl->RecordItemsUVE(queue.transparentItems, frameUniforms, commandBuffer);
+            m_impl->RecordPrimitiveItemsUVE(primitiveItems, frameUniforms, commandBuffer);
             commandBuffer.EndRenderPassUVE();
         }});
     // The default framebuffer is an external presentation surface, not a TextureHandleUVE; the

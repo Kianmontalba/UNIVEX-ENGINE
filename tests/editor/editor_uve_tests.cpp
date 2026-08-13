@@ -16,6 +16,7 @@
 #include "uve/scene/components/collider_component_uve.h"
 #include "uve/scene/components/light_component_uve.h"
 #include "uve/scene/components/name_component_uve.h"
+#include "uve/scene/components/primitive_mesh_component_uve.h"
 #include "uve/scene/components/transform_component_uve.h"
 #include "uve/scene/components/world_transform_component_uve.h"
 
@@ -270,13 +271,91 @@ TEST(EditorUVETest, CreateDocumentEntityUVE_CreatesSelectedDirtyRootArchetypes) 
         EXPECT_EQ(editor.GetSelectedEntityUVE(), collisionBox);
         EXPECT_TRUE(editor.IsSceneDirtyUVE());
 
+        const Scene::EntityUVE cube = editor.CreateDocumentEntityUVE(EditorEntityKindUVE::Cube);
+        ASSERT_TRUE(entityManager.IsAliveUVE(cube));
+        ASSERT_TRUE(entityManager.HasComponentUVE<Scene::PrimitiveMeshComponentUVE>(cube));
+        ASSERT_TRUE(entityManager.HasComponentUVE<Scene::ColliderComponentUVE>(cube));
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::PrimitiveMeshComponentUVE>(cube).kind,
+                  Scene::PrimitiveMeshKindUVE::Cube);
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::ColliderComponentUVE>(cube).halfExtents,
+                  (Math::Vector3UVE{0.5F, 0.5F, 0.5F}));
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::NameComponentUVE>(cube).name, "Cube");
+
+        const Scene::EntityUVE sphere = editor.CreateDocumentEntityUVE(EditorEntityKindUVE::UVSphere);
+        ASSERT_TRUE(entityManager.IsAliveUVE(sphere));
+        ASSERT_TRUE(entityManager.HasComponentUVE<Scene::PrimitiveMeshComponentUVE>(sphere));
+        ASSERT_TRUE(entityManager.HasComponentUVE<Scene::ColliderComponentUVE>(sphere));
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::PrimitiveMeshComponentUVE>(sphere).kind,
+                  Scene::PrimitiveMeshKindUVE::UVSphere);
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::ColliderComponentUVE>(sphere).halfExtents,
+                  (Math::Vector3UVE{0.5F, 0.5F, 0.5F}));
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::NameComponentUVE>(sphere).name, "UV Sphere");
+
+        const Scene::EntityUVE plane = editor.CreateDocumentEntityUVE(EditorEntityKindUVE::Plane);
+        ASSERT_TRUE(entityManager.IsAliveUVE(plane));
+        ASSERT_TRUE(entityManager.HasComponentUVE<Scene::PrimitiveMeshComponentUVE>(plane));
+        ASSERT_TRUE(entityManager.HasComponentUVE<Scene::ColliderComponentUVE>(plane));
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::PrimitiveMeshComponentUVE>(plane).kind,
+                  Scene::PrimitiveMeshKindUVE::Plane);
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::ColliderComponentUVE>(plane).halfExtents,
+                  (Math::Vector3UVE{0.5F, 0.025F, 0.5F}));
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::NameComponentUVE>(plane).name, "Plane");
+
         const std::vector<Scene::EntityUVE> roots = editor.GetDocumentRootsUVE();
-        ASSERT_EQ(roots.size(), 4U);
+        ASSERT_EQ(roots.size(), 7U);
         EXPECT_NE(std::find(roots.begin(), roots.end(), empty), roots.end());
         EXPECT_NE(std::find(roots.begin(), roots.end(), camera), roots.end());
         EXPECT_NE(std::find(roots.begin(), roots.end(), directionalLight), roots.end());
         EXPECT_NE(std::find(roots.begin(), roots.end(), collisionBox), roots.end());
+        EXPECT_NE(std::find(roots.begin(), roots.end(), cube), roots.end());
+        EXPECT_NE(std::find(roots.begin(), roots.end(), sphere), roots.end());
+        EXPECT_NE(std::find(roots.begin(), roots.end(), plane), roots.end());
         EXPECT_EQ(std::find(roots.begin(), roots.end(), editor.GetViewportCameraUVE()), roots.end());
+
+        editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
+}
+
+TEST(EditorUVETest, PrimitiveAppearanceUVE_UpdatesColliderAndSupportsAtomicUndoRedo) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_primitive_appearance.uvescene");
+        editor.InitUVE();
+        Scene::IEntityManagerUVE& entityManager = engine.GetServicesUVE().GetEntityManagerUVE();
+        const Scene::EntityUVE cube = editor.CreateDocumentEntityUVE(EditorEntityKindUVE::Cube);
+        ASSERT_TRUE(entityManager.IsAliveUVE(cube));
+        const Scene::PrimitiveMeshComponentUVE before =
+            entityManager.GetComponentUVE<Scene::PrimitiveMeshComponentUVE>(cube);
+
+        const Scene::PrimitiveMeshComponentUVE after{Scene::PrimitiveMeshKindUVE::Plane,
+                                                     Math::Vector3UVE{0.1F, 0.4F, 0.9F}};
+        ASSERT_TRUE(editor.SetSelectedPrimitiveMeshUVE(after));
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::PrimitiveMeshComponentUVE>(cube).kind, after.kind);
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::PrimitiveMeshComponentUVE>(cube).baseColor, after.baseColor);
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::ColliderComponentUVE>(cube).halfExtents,
+                  (Math::Vector3UVE{0.5F, 0.025F, 0.5F}));
+
+        const Scene::PrimitiveMeshComponentUVE invalid{static_cast<Scene::PrimitiveMeshKindUVE>(99),
+                                                       Math::Vector3UVE{0.1F, 0.4F, 0.9F}};
+        EXPECT_FALSE(editor.SetSelectedPrimitiveMeshUVE(invalid));
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::PrimitiveMeshComponentUVE>(cube).kind, after.kind);
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::PrimitiveMeshComponentUVE>(cube).baseColor, after.baseColor);
+
+        ASSERT_TRUE(editor.UndoUVE());
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::PrimitiveMeshComponentUVE>(cube).kind, before.kind);
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::PrimitiveMeshComponentUVE>(cube).baseColor, before.baseColor);
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::ColliderComponentUVE>(cube).halfExtents,
+                  (Math::Vector3UVE{0.5F, 0.5F, 0.5F}));
+        ASSERT_TRUE(editor.RedoUVE());
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::PrimitiveMeshComponentUVE>(cube).kind, after.kind);
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::PrimitiveMeshComponentUVE>(cube).baseColor, after.baseColor);
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::ColliderComponentUVE>(cube).halfExtents,
+                  (Math::Vector3UVE{0.5F, 0.025F, 0.5F}));
 
         editor.ShutdownUVE();
     }
