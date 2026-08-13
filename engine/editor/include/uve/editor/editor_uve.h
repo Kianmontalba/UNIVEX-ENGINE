@@ -590,6 +590,7 @@ private:
     void AcceptHierarchyDropTargetUVE(Scene::EntityUVE targetParent);
     void DrawInspectorPanelUVE();
     void DrawInspectorContentUVE();
+    void DrawImportQueueMonitorUVE();
     void DrawViewportPanelUVE();
     void DrawAssetsPanelUVE();
 

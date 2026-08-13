@@ -19,7 +19,9 @@
 #include "uve/asset/i_asset_bundle_uve.h"
 #include "uve/asset/i_asset_database_uve.h"
 #include "uve/asset/i_asset_importer_uve.h"
+#include "uve/asset/i_asset_import_queue_uve.h"
 #include "uve/asset/i_asset_manager_uve.h"
+#include "uve/asset/i_derived_artifact_cache_uve.h"
 #include "uve/asset/i_file_system_uve.h"
 #include "uve/asset/i_hot_reload_uve.h"
 #include "uve/asset/i_project_file_index_uve.h"
@@ -292,6 +294,50 @@ public:
 
     int refreshCallCount = 0;
     Asset::ProjectFileSnapshotUVE snapshot;
+};
+
+class FakeDerivedArtifactCacheUVE final : public Asset::IDerivedArtifactCacheUVE {
+public:
+    [[nodiscard]] std::optional<Asset::DerivedArtifactCacheRecordUVE>
+    LoadImportRecordUVE(const std::filesystem::path&) const override {
+        ++loadCallCount;
+        return std::nullopt;
+    }
+
+    [[nodiscard]] bool StoreImportRecordUVE(const std::filesystem::path&,
+                                             const Asset::DerivedArtifactCacheRecordUVE&) override {
+        ++storeCallCount;
+        return true;
+    }
+
+    [[nodiscard]] std::filesystem::path GetCacheRootUVE() const override { return "fake-derived-cache"; }
+
+    mutable int loadCallCount = 0;
+    int storeCallCount = 0;
+};
+
+class FakeAssetImportQueueUVE final : public Asset::IAssetImportQueueUVE {
+public:
+    [[nodiscard]] std::optional<Asset::AssetImportJobIdUVE> EnqueueUVE(Asset::AssetImportRequestUVE) override {
+        ++enqueueCallCount;
+        return Asset::AssetImportJobIdUVE{1U};
+    }
+
+    [[nodiscard]] bool TickUVE() override {
+        ++tickCallCount;
+        return false;
+    }
+
+    [[nodiscard]] bool RetryUVE(Asset::AssetImportJobIdUVE) override {
+        ++retryCallCount;
+        return false;
+    }
+
+    [[nodiscard]] std::vector<Asset::AssetImportJobUVE> GetJobsUVE() const override { return {}; }
+
+    int enqueueCallCount = 0;
+    int tickCallCount = 0;
+    int retryCallCount = 0;
 };
 
 class FakeSceneSerializerUVE final : public Scene::ISceneSerializerUVE {
@@ -741,11 +787,13 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     FakeSceneGraphUVE sceneGraph;
     FakeAssetDatabaseUVE assetDatabase;
     FakeProjectFileIndexUVE projectFileIndex;
+    FakeDerivedArtifactCacheUVE derivedArtifactCache;
     FakeSceneSerializerUVE sceneSerializer;
     FakePrefabSystemUVE prefabSystem;
     FakeHotReloadUVE hotReload;
     FakeAssetManagerUVE assetManager;
     FakeAssetImporterUVE assetImporter;
+    FakeAssetImportQueueUVE assetImportQueue;
     FakeAssetBundleUVE assetBundle;
     FakeFileSystemUVE fileSystem;
     FakeRenderDeviceUVE renderDevice;
@@ -768,8 +816,8 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
 
     const EngineServicesUVE services(logger, timer, eventSystem, memoryManager, threadPool,
                                       commandLine, configManager, entityManager, sceneGraph,
-                                      assetDatabase, projectFileIndex, sceneSerializer, prefabSystem, hotReload,
-                                      assetManager, assetImporter, assetBundle, fileSystem,
+                                      assetDatabase, projectFileIndex, derivedArtifactCache, sceneSerializer, prefabSystem,
+                                      hotReload, assetManager, assetImporter, assetImportQueue, assetBundle, fileSystem,
                                       renderDevice, shaderManager, renderSystem, cameraSystem,
                                       meshRenderer, lightSystem, renderer3D, collisionSystem, physicsSystem,
                                       raycastSystem, inputSystem, audioDevice, audioSystem,
@@ -787,6 +835,7 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     EXPECT_EQ(&services.GetSceneGraphUVE(), &sceneGraph);
     EXPECT_EQ(&services.GetAssetDatabaseUVE(), &assetDatabase);
     EXPECT_EQ(&services.GetProjectFileIndexUVE(), &projectFileIndex);
+    EXPECT_EQ(&services.GetDerivedArtifactCacheUVE(), &derivedArtifactCache);
     EXPECT_EQ(&services.GetSceneSerializerUVE(), &sceneSerializer);
     EXPECT_EQ(&services.GetPrefabSystemUVE(), &prefabSystem);
     EXPECT_EQ(&services.GetHotReloadUVE(), &hotReload);
@@ -825,11 +874,13 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     FakeSceneGraphUVE sceneGraph;
     FakeAssetDatabaseUVE assetDatabase;
     FakeProjectFileIndexUVE projectFileIndex;
+    FakeDerivedArtifactCacheUVE derivedArtifactCache;
     FakeSceneSerializerUVE sceneSerializer;
     FakePrefabSystemUVE prefabSystem;
     FakeHotReloadUVE hotReload;
     FakeAssetManagerUVE assetManager;
     FakeAssetImporterUVE assetImporter;
+    FakeAssetImportQueueUVE assetImportQueue;
     FakeAssetBundleUVE assetBundle;
     FakeFileSystemUVE fileSystem;
     FakeRenderDeviceUVE renderDevice;
@@ -851,8 +902,8 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     FakeWindowManagerUVE windowManager;
     const EngineServicesUVE services(logger, timer, eventSystem, memoryManager, threadPool,
                                       commandLine, configManager, entityManager, sceneGraph,
-                                      assetDatabase, projectFileIndex, sceneSerializer, prefabSystem, hotReload,
-                                      assetManager, assetImporter, assetBundle, fileSystem,
+                                      assetDatabase, projectFileIndex, derivedArtifactCache, sceneSerializer, prefabSystem,
+                                      hotReload, assetManager, assetImporter, assetImportQueue, assetBundle, fileSystem,
                                       renderDevice, shaderManager, renderSystem, cameraSystem,
                                       meshRenderer, lightSystem, renderer3D, collisionSystem, physicsSystem,
                                       raycastSystem, inputSystem, audioDevice, audioSystem,
@@ -869,6 +920,8 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     services.GetSceneGraphUVE().UpdateUVE(services.GetEntityManagerUVE());
     services.GetAssetDatabaseUVE().SaveUVE();
     static_cast<void>(services.GetProjectFileIndexUVE().RefreshUVE(services.GetAssetDatabaseUVE()));
+    static_cast<void>(services.GetDerivedArtifactCacheUVE().LoadImportRecordUVE("unused.asset"));
+    static_cast<void>(services.GetAssetImportQueueUVE().TickUVE());
     static_cast<void>(services.GetSceneSerializerUVE().SaveUVE(
         services.GetEntityManagerUVE(), {}, "unused.uvescene", Scene::SceneAssetTypeUVE::Scene));
     static_cast<void>(services.GetPrefabSystemUVE().SavePrefabUVE(
@@ -911,6 +964,8 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     EXPECT_EQ(sceneGraph.updateCallCount, 1);
     EXPECT_EQ(assetDatabase.saveCallCount, 1);
     EXPECT_EQ(projectFileIndex.refreshCallCount, 1);
+    EXPECT_EQ(derivedArtifactCache.loadCallCount, 1);
+    EXPECT_EQ(assetImportQueue.tickCallCount, 1);
     EXPECT_EQ(sceneSerializer.saveCallCount, 1);
     EXPECT_EQ(prefabSystem.savePrefabCallCount, 1);
     EXPECT_EQ(hotReload.pollCallCount, 1);

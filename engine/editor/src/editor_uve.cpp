@@ -66,6 +66,31 @@ constexpr float kViewportOrbitRadiansPerPixelUVE = 0.008F;
 constexpr float kViewportZoomExponentPerWheelUnitUVE = 0.16F;
 constexpr const char* kHierarchyEntityPayloadUVE = "UVE_SCENE_HIERARCHY_ENTITY";
 
+[[nodiscard]] const char* ImportJobStateLabelUVE(const Asset::AssetImportJobStateUVE state) noexcept {
+    switch (state) {
+        case Asset::AssetImportJobStateUVE::Queued:
+            return "Queued";
+        case Asset::AssetImportJobStateUVE::Running:
+            return "Running";
+        case Asset::AssetImportJobStateUVE::Succeeded:
+            return "Succeeded";
+        case Asset::AssetImportJobStateUVE::Failed:
+            return "Failed";
+    }
+    return "Unknown";
+}
+
+[[nodiscard]] const char* ImportDiagnosticSeverityLabelUVE(
+    const Asset::AssetImportDiagnosticSeverityUVE severity) noexcept {
+    switch (severity) {
+        case Asset::AssetImportDiagnosticSeverityUVE::Warning:
+            return "Warning";
+        case Asset::AssetImportDiagnosticSeverityUVE::Error:
+            return "Error";
+    }
+    return "Unknown";
+}
+
 [[nodiscard]] bool ContainsCaseInsensitiveUVE(const std::string_view text,
                                                const std::string_view query) noexcept {
     if (query.empty()) {
@@ -3574,8 +3599,7 @@ void EditorUVE::DrawInspectorPanelUVE() {
             DrawInspectorContentUVE();
             break;
         case EditorRightPanelTabUVE::Import:
-            ImGui::TextUnformatted("Import");
-            ImGui::TextDisabled("Asset import settings will appear for a selected imported asset.");
+            DrawImportQueueMonitorUVE();
             break;
         case EditorRightPanelTabUVE::Signals:
             ImGui::TextUnformatted("Signals");
@@ -3583,6 +3607,44 @@ void EditorUVE::DrawInspectorPanelUVE() {
             break;
     }
     ImGui::End();
+}
+
+void EditorUVE::DrawImportQueueMonitorUVE() {
+    ImGui::TextUnformatted("Import Queue");
+    ImGui::TextDisabled("Read-only monitor. Enqueue and retry are programmatic-only in v1.");
+
+    const std::vector<Asset::AssetImportJobUVE> jobs = m_services->GetAssetImportQueueUVE().GetJobsUVE();
+    if (jobs.empty()) {
+        ImGui::TextDisabled("No import jobs have been queued.");
+        return;
+    }
+
+    ImGui::Text("%zu job(s)", jobs.size());
+    ImGui::BeginChild("##import-queue-monitor", ImVec2{0.0F, 0.0F}, true);
+    for (const Asset::AssetImportJobUVE& job : jobs) {
+        const std::string header = "Job #" + std::to_string(job.id.value) + " — " +
+                                   ImportJobStateLabelUVE(job.state) + "##import-job-" +
+                                   std::to_string(job.id.value);
+        if (ImGui::TreeNodeEx(header.c_str(), ImGuiTreeNodeFlags_DefaultOpen)) {
+            const std::string sourcePath = job.request.sourcePath.generic_string();
+            const std::string destinationPath = job.request.destinationPath.generic_string();
+            ImGui::TextWrapped("Source: %s", sourcePath.c_str());
+            ImGui::TextWrapped("Destination: %s", destinationPath.c_str());
+            ImGui::Text("Attempt: %u", job.attemptCount);
+            ImGui::Text("Result: %s", job.cacheHit ? "Cache hit" : "Importer path");
+            if (job.resultGuid.has_value()) {
+                ImGui::Text("GUID: %016llX", static_cast<unsigned long long>(job.resultGuid->value));
+            }
+            for (const Asset::AssetImportDiagnosticUVE& diagnostic : job.diagnostics) {
+                ImGui::Separator();
+                ImGui::Text("%s (attempt %u)", ImportDiagnosticSeverityLabelUVE(diagnostic.severity),
+                            diagnostic.attempt);
+                ImGui::TextWrapped("%s", diagnostic.message.c_str());
+            }
+            ImGui::TreePop();
+        }
+    }
+    ImGui::EndChild();
 }
 
 void EditorUVE::DrawInspectorContentUVE() {
