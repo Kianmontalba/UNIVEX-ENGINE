@@ -314,6 +314,7 @@ private:
         Axis,
         Plane,
         UniformScaleOffset,
+        Trackball,
     };
 
     struct GizmoDragUVE final {
@@ -330,8 +331,11 @@ private:
         Math::Vector2UVE screenPlaneAxisB{};
         Math::Vector3UVE worldAxisA{};
         Math::Vector3UVE worldAxisB{};
+        Math::Vector3UVE initialTrackballVector{};
+        Math::QuaternionUVE viewWorldRotation{};
         EditorViewportRectUVE viewportRect{};
         float pixelsPerWorldUnit = 0.0F;
+        float trackballRadiusPixels = 0.0F;
         float initialRingParameterRadians = 0.0F;
         bool initialDirty = false;
     };
@@ -443,6 +447,9 @@ private:
                                           Math::Vector2UVE pointerPosition);
     [[nodiscard]] bool BeginRotateGizmoDragUVE(const EditorViewportRectUVE& viewportRect,
                                                 Math::Vector2UVE pointerPosition);
+    [[nodiscard]] bool MapTrackballPointerUVE(Math::Vector2UVE center, float radius,
+                                               Math::Vector2UVE pointerPosition,
+                                               Math::Vector3UVE& outVector) const noexcept;
     [[nodiscard]] bool FindClosestRingParameterUVE(const EditorViewportRectUVE& viewportRect,
                                                     Scene::EntityUVE entity, EditorTranslateAxisUVE axis,
                                                     Math::Vector2UVE pointerPosition,
