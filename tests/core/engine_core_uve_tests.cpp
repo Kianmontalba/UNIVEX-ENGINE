@@ -725,6 +725,38 @@ TEST(EngineCoreUVETest, CheckpointManager_AutoSavesAfterConfiguredInterval_TickF
     std::filesystem::remove_all(config.saveDirectoryPath);
 }
 
+TEST(EngineCoreUVETest, SimulationControl_PausesStepsQueuesOneStepAndSuppressesTransientCheckpoints) {
+    EngineConfigUVE config = MakeTestConfigUVE();
+    config.saveDirectoryPath = "uve_engine_core_tests_transient_saves";
+    config.autoSaveIntervalSecondsUVE = 0.0;
+    std::filesystem::remove_all(config.saveDirectoryPath);
+
+    EngineCoreUVE engine(config);
+    EXPECT_FALSE(engine.SetSimulationExecutionModeUVE(SimulationExecutionModeUVE::Paused));
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    Save::ISaveGameSystemUVE& saveGameSystem = engine.GetServicesUVE().GetSaveGameSystemUVE();
+    Save::ICheckpointManagerUVE& checkpointManager = engine.GetServicesUVE().GetCheckpointManagerUVE();
+    ASSERT_TRUE(engine.SetTransientSimulationSessionActiveUVE(true));
+    ASSERT_TRUE(engine.SetSimulationExecutionModeUVE(SimulationExecutionModeUVE::Paused));
+    EXPECT_TRUE(engine.RequestSingleSimulationStepUVE());
+    EXPECT_FALSE(engine.RequestSingleSimulationStepUVE());
+    engine.TickFrameUVE();
+    EXPECT_EQ(engine.GetSimulationExecutionModeUVE(), SimulationExecutionModeUVE::Paused);
+    EXPECT_FALSE(saveGameSystem.HasSaveUVE(Save::kAutoSaveSlotIndexUVE));
+    EXPECT_DOUBLE_EQ(checkpointManager.GetElapsedSinceLastSaveSecondsUVE(), 0.0);
+    EXPECT_DOUBLE_EQ(checkpointManager.GetTotalPlaytimeSecondsUVE(), 0.0);
+
+    ASSERT_TRUE(engine.SetSimulationExecutionModeUVE(SimulationExecutionModeUVE::Running));
+    ASSERT_TRUE(engine.SetTransientSimulationSessionActiveUVE(false));
+    engine.TickFrameUVE();
+    EXPECT_TRUE(saveGameSystem.HasSaveUVE(Save::kAutoSaveSlotIndexUVE));
+
+    engine.Shutdown();
+    std::filesystem::remove_all(config.saveDirectoryPath);
+}
+
 TEST(EngineCoreUVETest, HeadlessCommandLineFlag_ForcesHeadlessAndUsesNullWindowManager) {
     // headlessUVE starts false here specifically to prove the --headless CLI flag itself forces
     // it (Init() reads CommandLineUVE before anything else consults the flag), not that the

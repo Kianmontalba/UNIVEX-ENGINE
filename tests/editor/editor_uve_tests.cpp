@@ -1640,5 +1640,76 @@ TEST(EditorUVETest, LoadMissingScene_FailsWithoutDestroyingCurrentDocument) {
     engine.Shutdown();
 }
 
+TEST(EditorUVETest, PlayModeSandbox_RestoresSnapshotRejectsAuthoringAndPreservesSelectionIntent) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_play_restore.uvescene", 100U, &engine);
+        editor.InitUVE();
+        Scene::IEntityManagerUVE& entityManager = engine.GetServicesUVE().GetEntityManagerUVE();
+        const Scene::EntityUVE root = entityManager.CreateEntityUVE();
+        Scene::TransformComponentUVE authored{};
+        authored.localPosition = Math::Vector3UVE{2.0F, 3.0F, -4.0F};
+        AttachRootUVE(engine, root, authored);
+        editor.SelectEntityUVE(root);
+
+        ASSERT_TRUE(editor.EnterPlayModeUVE());
+        EXPECT_EQ(editor.GetPlayModeStateUVE(), EditorPlayModeStateUVE::Playing);
+        EXPECT_TRUE(engine.IsTransientSimulationSessionActiveUVE());
+        EXPECT_FALSE(editor.SetSelectedLocalTransformUVE(Scene::TransformComponentUVE{}));
+        EXPECT_EQ(editor.CreateDocumentEntityUVE(EditorEntityKindUVE::Empty), Scene::kInvalidEntityUVE);
+        EXPECT_FALSE(editor.UndoUVE());
+
+        ASSERT_TRUE(editor.PausePlayModeUVE());
+        EXPECT_EQ(engine.GetSimulationExecutionModeUVE(), Core::SimulationExecutionModeUVE::Paused);
+        ASSERT_TRUE(editor.StepPlayModeUVE());
+        EXPECT_FALSE(editor.StepPlayModeUVE());
+        engine.TickFrameUVE();
+        ASSERT_TRUE(editor.ResumePlayModeUVE());
+        EXPECT_EQ(engine.GetSimulationExecutionModeUVE(), Core::SimulationExecutionModeUVE::Running);
+
+        ASSERT_TRUE(editor.StopPlayModeUVE());
+        EXPECT_EQ(editor.GetPlayModeStateUVE(), EditorPlayModeStateUVE::Edit);
+        EXPECT_FALSE(engine.IsTransientSimulationSessionActiveUVE());
+        const std::vector<Scene::EntityUVE> restoredRoots = editor.GetDocumentRootsUVE();
+        ASSERT_EQ(restoredRoots.size(), 1U);
+        EXPECT_NE(restoredRoots.front(), root);
+        EXPECT_EQ(editor.GetSelectedEntityUVE(), restoredRoots.front());
+        const Scene::TransformComponentUVE& restored =
+            entityManager.GetComponentUVE<Scene::TransformComponentUVE>(restoredRoots.front());
+        EXPECT_EQ(restored.localPosition, authored.localPosition);
+
+        editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
+}
+
+TEST(EditorUVETest, PlayModeSandbox_HandlesEmptyDocumentAndMissingControlSafely) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE withoutControl(engine.GetServicesUVE(), "uve_editor_tests_play_no_control.uvescene");
+        withoutControl.InitUVE();
+        EXPECT_FALSE(withoutControl.EnterPlayModeUVE());
+        withoutControl.ShutdownUVE();
+
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_play_empty.uvescene", 100U, &engine);
+        editor.InitUVE();
+        EXPECT_TRUE(editor.GetDocumentRootsUVE().empty());
+        ASSERT_TRUE(editor.EnterPlayModeUVE());
+        ASSERT_TRUE(editor.StopPlayModeUVE());
+        EXPECT_EQ(editor.GetPlayModeStateUVE(), EditorPlayModeStateUVE::Edit);
+        EXPECT_TRUE(editor.GetDocumentRootsUVE().empty());
+        editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
+}
+
 } // namespace
 } // namespace UVE::Editor::Tests

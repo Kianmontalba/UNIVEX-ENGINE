@@ -13,6 +13,7 @@
 
 #include "uve/asset/i_asset_database_uve.h"
 #include "uve/core/engine_services_uve.h"
+#include "uve/core/i_simulation_control_uve.h"
 #include "uve/math/ray_uve.h"
 #include "uve/math/vector2_uve.h"
 #include "uve/math/vector3_uve.h"
@@ -28,6 +29,14 @@ enum class EditorStateUVE {
     Uninitialized,
     Running,
     Shutdown,
+};
+
+/// The editor-owned transient simulation state. Edit permits authored document commands; Playing
+/// and Paused own an immutable pre-Play document snapshot and reject authoring mutations.
+enum class EditorPlayModeStateUVE {
+    Edit,
+    Playing,
+    Paused,
 };
 
 /// A screen-space rectangle used by the editor's transparent viewport overlay. Coordinates are in
@@ -100,7 +109,8 @@ class EditorUVE final {
 public:
     explicit EditorUVE(Core::EngineServicesUVE& services,
                        std::filesystem::path activeScenePath = "editor_scene.uvescene",
-                       std::size_t historyCapacity = 100U);
+                       std::size_t historyCapacity = 100U,
+                       Core::ISimulationControlUVE* simulationControl = nullptr);
     ~EditorUVE();
 
     EditorUVE(const EditorUVE&) = delete;
@@ -114,6 +124,15 @@ public:
     /// Validates a possibly deleted selection, cancels an invalid gizmo drag, and performs
     /// non-rendering per-frame maintenance.
     void TickUVE();
+
+    /// Captures the complete editable document into an in-memory scene envelope and enters the
+    /// transient Play sandbox. Returns false without document mutation when capture or Core control fails.
+    [[nodiscard]] bool EnterPlayModeUVE();
+    [[nodiscard]] bool PausePlayModeUVE();
+    [[nodiscard]] bool ResumePlayModeUVE();
+    [[nodiscard]] bool StepPlayModeUVE();
+    [[nodiscard]] bool StopPlayModeUVE();
+    [[nodiscard]] EditorPlayModeStateUVE GetPlayModeStateUVE() const noexcept;
 
     /// Draws the private editor overlay. EngineCoreUVE invokes this from its post-render callback
     /// before PresentUVE(), after the HDR scene has passed through the standard tone-mapping path.
@@ -249,6 +268,18 @@ public:
     void ShutdownUVE();
 
 private:
+    struct EditorSelectionPathUVE final {
+        std::size_t rootIndex = 0U;
+        std::vector<std::size_t> childIndices;
+    };
+
+    struct PlayModeSessionUVE final {
+        Scene::SceneSnapshotUVE documentSnapshot;
+        bool capturedEmptyDocument = false;
+        bool dirtyBefore = false;
+        std::optional<EditorSelectionPathUVE> selectionBefore;
+    };
+
     struct GizmoDragUVE final {
         EditorGizmoModeUVE mode = EditorGizmoModeUVE::Translate;
         EditorTranslateAxisUVE axis = EditorTranslateAxisUVE::None;
@@ -388,6 +419,13 @@ private:
                                                                  Scene::EntityUVE parent);
     [[nodiscard]] bool TryGetDocumentParentUVE(Scene::EntityUVE entity, Scene::EntityUVE& outParent) const;
     [[nodiscard]] bool IsLifecycleCommandAllowedUVE() const noexcept;
+    [[nodiscard]] bool IsAuthoringCommandAllowedUVE() const noexcept;
+    [[nodiscard]] std::optional<EditorSelectionPathUVE> CaptureSelectionPathUVE(
+        const std::vector<Scene::EntityUVE>& roots) const;
+    [[nodiscard]] Scene::EntityUVE ResolveSelectionPathUVE(
+        const EditorSelectionPathUVE& path, const std::vector<Scene::EntityUVE>& roots) const;
+    [[nodiscard]] bool FindSelectionPathUVE(Scene::EntityUVE current, Scene::EntityUVE target,
+                                             std::vector<std::size_t>& inOutChildIndices) const;
     [[nodiscard]] bool ReparentDocumentEntityUVE(Scene::EntityUVE entity, Scene::EntityUVE newParent);
     [[nodiscard]] Scene::EntityUVE CreateDocumentEntityInternalUVE(
         EditorEntityKindUVE kind, const std::optional<std::string>& explicitName);
@@ -407,7 +445,10 @@ private:
     void DrawAssetsPanelUVE();
 
     Core::EngineServicesUVE* m_services = nullptr;
+    Core::ISimulationControlUVE* m_simulationControl = nullptr;
     EditorStateUVE m_state = EditorStateUVE::Uninitialized;
+    EditorPlayModeStateUVE m_playModeState = EditorPlayModeStateUVE::Edit;
+    std::optional<PlayModeSessionUVE> m_playModeSession;
     Scene::EntityUVE m_viewportCamera = Scene::kInvalidEntityUVE;
     Scene::EntityUVE m_selectedEntity = Scene::kInvalidEntityUVE;
     std::filesystem::path m_activeScenePath;

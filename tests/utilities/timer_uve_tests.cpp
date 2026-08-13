@@ -81,5 +81,20 @@ TEST(TimerUVETest, FixedStep_CapsStepsAtMaximum) {
     EXPECT_LE(result.stepsToRun, 8); // matches TimerUVE::kMaxStepsPerTick
 }
 
+TEST(TimerUVETest, DiscardFixedStepAccumulator_PreservesWallClockTimeAndDropsPendingSteps) {
+    TimerUVE timer;
+    timer.SetFixedTimestepUVE(0.001);
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    timer.Tick();
+    const double totalBeforeDiscard = timer.GetTotalTimeUVE();
+    const double deltaBeforeDiscard = timer.GetDeltaTimeUVE();
+
+    timer.DiscardFixedStepAccumulatorUVE();
+    const FixedStepResultUVE result = timer.AdvanceFixedStepUVE();
+    EXPECT_EQ(result.stepsToRun, 0);
+    EXPECT_DOUBLE_EQ(timer.GetTotalTimeUVE(), totalBeforeDiscard);
+    EXPECT_DOUBLE_EQ(timer.GetDeltaTimeUVE(), deltaBeforeDiscard);
+}
+
 } // namespace
 } // namespace UVE::Utilities::Tests

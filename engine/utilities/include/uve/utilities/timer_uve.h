@@ -29,6 +29,7 @@ public:
     void SetMaxDeltaTimeUVE(double maxDeltaSeconds) override;
     void SetFixedTimestepUVE(double fixedDeltaSeconds) override;
     FixedStepResultUVE AdvanceFixedStepUVE() override;
+    void DiscardFixedStepAccumulatorUVE() noexcept override;
 
 private:
     std::chrono::steady_clock::time_point m_lastTickTime;

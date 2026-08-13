@@ -66,4 +66,8 @@ FixedStepResultUVE TimerUVE::AdvanceFixedStepUVE() {
     return result;
 }
 
+void TimerUVE::DiscardFixedStepAccumulatorUVE() noexcept {
+    m_accumulator = 0.0;
+}
+
 } // namespace UVE::Utilities
