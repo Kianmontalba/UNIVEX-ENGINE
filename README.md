@@ -43,8 +43,10 @@ The current editor supports a Scene/Viewport/Properties/Assets layout, persisten
 entity names, local Transform editing, collider-backed viewport picking, Translate, Rotate, and Scale
 gizmo modes (`W` / `E` / `R`) with a guarded **World**/**Local** coordinate-space selection, File menu scene save/load actions, and Scene menu creation for Empty, Camera, Directional
 Light, and Collision Box document roots. New archetypes receive deterministic default names such as
-`Camera` and `Camera 2`; the Properties panel can rename one selected live document entity, and
-names persist through `.uvescene` save/load. Legacy scenes without name metadata remain valid and
+`Camera` and `Camera 2`; the Properties panel or selected hierarchy row can rename one selected live document entity, and
+names persist through `.uvescene` save/load. The Scene panel has a session-only case-insensitive hierarchy filter that
+retains matching ancestor paths; `F2` or the selected-row **Rename** control opens an inline editor, where `Enter` commits one
+existing Name-history transaction and `Escape` cancels without mutation. Legacy scenes without name metadata remain valid and
 fall back to stable entity index/generation labels. The editor also provides a bounded in-session
 Undo/Redo history for successful Transform, rename, root-creation, duplicate, delete, and hierarchy
 reparent actions. The Scene panel supports drag-and-drop reparenting: drop a document entity onto
@@ -87,7 +89,7 @@ component. A selected collider-backed document entity receives a read-only cyan 
 and center markers; this feedback follows its derived world transform and never changes scene data or history.
 Mesh picking, mesh-derived bounds, uniform/negative scale, trackball rotation, fly navigation, camera bookmarks, cinematic
 camera tools, filesystem browsing, import/reimport, asset drag-and-drop, thumbnails,
-layout persistence, hierarchy search, world-transform-preserving reparenting, child ordering,
+layout persistence, world-transform-preserving reparenting, child ordering,
 multi-entity lifecycle operations, and OS clipboard copy/paste remain future increments.
 
 ## Repository layout

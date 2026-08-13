@@ -458,6 +458,11 @@ private:
     [[nodiscard]] bool FindSelectionPathUVE(Scene::EntityUVE current, Scene::EntityUVE target,
                                              std::vector<std::size_t>& inOutChildIndices) const;
     [[nodiscard]] bool ReparentDocumentEntityUVE(Scene::EntityUVE entity, Scene::EntityUVE newParent);
+    [[nodiscard]] bool IsHierarchyFilterActiveUVE() const noexcept;
+    [[nodiscard]] bool IsHierarchyEntityVisibleUVE(Scene::EntityUVE entity) const;
+    void RebuildHierarchyFilterCacheUVE();
+    void InvalidateHierarchyFilterCacheUVE() noexcept;
+    void CancelHierarchyRenameUVE() noexcept;
     [[nodiscard]] Scene::EntityUVE CreateDocumentEntityInternalUVE(
         EditorEntityKindUVE kind, const std::optional<std::string>& explicitName);
     void RecordHistoryUVE(HistoryEntryUVE entry);
@@ -496,6 +501,13 @@ private:
     std::deque<HistoryEntryUVE> m_undoHistory;
     std::deque<HistoryEntryUVE> m_redoHistory;
     std::string m_assetFilter;
+    std::string m_hierarchyFilter;
+    std::string m_cachedHierarchyFilter;
+    std::vector<Scene::EntityUVE> m_cachedHierarchyVisibleEntities;
+    Scene::EntityUVE m_hierarchyRenameEntity = Scene::kInvalidEntityUVE;
+    std::string m_hierarchyRenameBuffer;
+    bool m_hierarchyFilterCacheDirty = true;
+    bool m_hierarchyRenameFocusRequested = false;
     std::optional<Asset::AssetRecordUVE> m_selectedAsset;
     bool m_sceneDirty = false;
     bool m_uiInitialized = false;
