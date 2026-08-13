@@ -234,6 +234,12 @@ void EditorUVE::TickUVE() {
         (!IsDocumentEntityUVE(m_gizmoDrag.entity) || m_gizmoDrag.entity != m_selectedEntity)) {
         CancelGizmoDragUVE();
     }
+    if (m_hierarchyRenameEntity != Scene::kInvalidEntityUVE &&
+        (!IsAuthoringCommandAllowedUVE() || !IsDocumentEntityUVE(m_hierarchyRenameEntity) ||
+         m_hierarchyRenameEntity != m_selectedEntity || m_gizmoDrag.axis != EditorTranslateAxisUVE::None ||
+         m_viewportNavigationMode != EditorViewportNavigationModeUVE::None)) {
+        CancelHierarchyRenameUVE();
+    }
 }
 
 bool EditorUVE::EnterPlayModeUVE() {
@@ -415,6 +421,7 @@ bool EditorUVE::LoadSceneUVE() {
     ClearSelectionUVE();
     ClearHistoryUVE();
     m_sceneDirty = false;
+    InvalidateHierarchyFilterCacheUVE();
     return true;
 }
 
@@ -423,6 +430,9 @@ void EditorUVE::SelectEntityUVE(const Scene::EntityUVE entity) noexcept {
         return;
     }
     if (entity != Scene::kInvalidEntityUVE && IsDocumentEntityUVE(entity)) {
+        if (m_selectedEntity != entity) {
+            CancelHierarchyRenameUVE();
+        }
         m_selectedEntity = entity;
         return;
     }
@@ -431,6 +441,7 @@ void EditorUVE::SelectEntityUVE(const Scene::EntityUVE entity) noexcept {
 
 void EditorUVE::ClearSelectionUVE() noexcept {
     m_selectedEntity = Scene::kInvalidEntityUVE;
+    CancelHierarchyRenameUVE();
     CancelGizmoDragUVE();
 }
 
@@ -933,6 +944,7 @@ Scene::EntityUVE EditorUVE::DuplicateSelectedEntityUVE() {
     const bool dirtyBefore = m_sceneDirty;
     SelectEntityUVE(duplicate);
     m_sceneDirty = true;
+    InvalidateHierarchyFilterCacheUVE();
     RecordHistoryUVE(DuplicationHistoryEntryUVE{
         std::move(*snapshot), originalParent, duplicate, std::move(duplicateRootName), source, duplicate, dirtyBefore, true});
     return duplicate;
@@ -961,6 +973,7 @@ bool EditorUVE::DeleteSelectedEntityUVE() {
                                                 : Scene::kInvalidEntityUVE;
     RestoreSelectionUVE(selectionAfter);
     m_sceneDirty = true;
+    InvalidateHierarchyFilterCacheUVE();
     RecordHistoryUVE(DeletionHistoryEntryUVE{
         std::move(*snapshot), originalParent, target, target, selectionAfter, dirtyBefore, true});
     return true;
@@ -992,6 +1005,7 @@ bool EditorUVE::ReparentDocumentEntityUVE(const Scene::EntityUVE entity, const S
     m_services->GetSceneGraphUVE().SetParentUVE(entityManager, entity, newParent);
     RestoreSelectionUVE(entity);
     m_sceneDirty = true;
+    InvalidateHierarchyFilterCacheUVE();
     RecordHistoryUVE(ReparentHistoryEntryUVE{
         entity, parentBefore, newParent, selectionBefore, entity, dirtyBefore, true});
     return true;
@@ -1065,6 +1079,7 @@ bool EditorUVE::ApplyEntityNameStateUVE(const Scene::EntityUVE entity,
             return false;
         }
         entityManager.RemoveComponentUVE<Scene::NameComponentUVE>(entity);
+        InvalidateHierarchyFilterCacheUVE();
         return true;
     }
 
@@ -1073,6 +1088,7 @@ bool EditorUVE::ApplyEntityNameStateUVE(const Scene::EntityUVE entity,
     } else {
         entityManager.AddComponentUVE<Scene::NameComponentUVE>(entity, Scene::NameComponentUVE{*name});
     }
+    InvalidateHierarchyFilterCacheUVE();
     return true;
 }
 
@@ -1290,6 +1306,7 @@ Scene::EntityUVE EditorUVE::CreateDocumentEntityInternalUVE(
     }
 
     entityManager.AddComponentUVE<Scene::NameComponentUVE>(entity, Scene::NameComponentUVE{name});
+    InvalidateHierarchyFilterCacheUVE();
     return entity;
 }
 
@@ -2755,6 +2772,55 @@ void EditorUVE::DrawMenuBarUVE() {
     ImGui::EndMainMenuBar();
 }
 
+bool EditorUVE::IsHierarchyFilterActiveUVE() const noexcept {
+    return !m_hierarchyFilter.empty();
+}
+
+bool EditorUVE::IsHierarchyEntityVisibleUVE(const Scene::EntityUVE entity) const {
+    return !IsHierarchyFilterActiveUVE() ||
+           std::find(m_cachedHierarchyVisibleEntities.begin(), m_cachedHierarchyVisibleEntities.end(), entity) !=
+               m_cachedHierarchyVisibleEntities.end();
+}
+
+void EditorUVE::InvalidateHierarchyFilterCacheUVE() noexcept {
+    m_hierarchyFilterCacheDirty = true;
+}
+
+void EditorUVE::CancelHierarchyRenameUVE() noexcept {
+    m_hierarchyRenameEntity = Scene::kInvalidEntityUVE;
+    m_hierarchyRenameBuffer.clear();
+    m_hierarchyRenameFocusRequested = false;
+}
+
+void EditorUVE::RebuildHierarchyFilterCacheUVE() {
+    if (!m_hierarchyFilterCacheDirty && m_cachedHierarchyFilter == m_hierarchyFilter) {
+        return;
+    }
+    m_cachedHierarchyVisibleEntities.clear();
+    m_cachedHierarchyFilter = m_hierarchyFilter;
+    m_hierarchyFilterCacheDirty = false;
+    if (!IsHierarchyFilterActiveUVE()) {
+        return;
+    }
+    const auto visit = [this](const auto& self, const Scene::EntityUVE entity) -> bool {
+        if (!IsDocumentEntityUVE(entity)) {
+            return false;
+        }
+        bool visible = ContainsCaseInsensitiveUVE(GetEntityDisplayLabelUVE(entity), m_hierarchyFilter);
+        Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+        for (const Scene::EntityUVE child : m_services->GetSceneGraphUVE().GetChildrenUVE(entityManager, entity)) {
+            visible = self(self, child) || visible;
+        }
+        if (visible) {
+            m_cachedHierarchyVisibleEntities.push_back(entity);
+        }
+        return visible;
+    };
+    for (const Scene::EntityUVE root : GetDocumentRootsUVE()) {
+        static_cast<void>(visit(visit, root));
+    }
+}
+
 void EditorUVE::DrawHierarchyPanelUVE() {
     const ImGuiViewport* const mainViewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(ImVec2{mainViewport->WorkPos.x, mainViewport->WorkPos.y},
@@ -2763,6 +2829,13 @@ void EditorUVE::DrawHierarchyPanelUVE() {
         ImVec2{250.0F, std::max(kMinimumViewportHeightUVE, mainViewport->WorkSize.y - kAssetsPanelHeightUVE)},
         ImGuiCond_FirstUseEver);
     ImGui::Begin("Scene");
+    std::array<char, 256> filterBuffer{};
+    m_hierarchyFilter.copy(filterBuffer.data(), filterBuffer.size() - 1U);
+    if (ImGui::InputTextWithHint("##hierarchy-filter", "Filter entities...", filterBuffer.data(), filterBuffer.size())) {
+        m_hierarchyFilter = filterBuffer.data();
+        InvalidateHierarchyFilterCacheUVE();
+    }
+    RebuildHierarchyFilterCacheUVE();
     ImGui::BeginDisabled(!IsAuthoringCommandAllowedUVE());
     for (const Scene::EntityUVE root : GetDocumentRootsUVE()) {
         DrawHierarchyNodeUVE(root);
@@ -2775,6 +2848,9 @@ void EditorUVE::DrawHierarchyPanelUVE() {
 }
 
 void EditorUVE::DrawHierarchyNodeUVE(const Scene::EntityUVE entity) {
+    if (!IsHierarchyEntityVisibleUVE(entity)) {
+        return;
+    }
     Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
     const std::vector<Scene::EntityUVE> children =
         m_services->GetSceneGraphUVE().GetChildrenUVE(entityManager, entity);
@@ -2785,12 +2861,55 @@ void EditorUVE::DrawHierarchyNodeUVE(const Scene::EntityUVE entity) {
     if (entity == m_selectedEntity) {
         flags |= ImGuiTreeNodeFlags_Selected;
     }
+    if (IsHierarchyFilterActiveUVE()) {
+        ImGui::SetNextItemOpen(true, ImGuiCond_Always);
+    }
 
-    const std::string nodeLabel = GetEntityDisplayLabelUVE(entity) + "##entity-" +
+    const bool renaming = entity == m_hierarchyRenameEntity;
+    const std::string nodeLabel = (renaming ? "" : GetEntityDisplayLabelUVE(entity)) + "##entity-" +
                                   std::to_string(entity.index) + ":" + std::to_string(entity.generation);
     const bool open = ImGui::TreeNodeEx(nodeLabel.c_str(), flags);
-    if (ImGui::IsItemClicked()) {
+    if (ImGui::IsItemClicked() && !renaming) {
         SelectEntityUVE(entity);
+    }
+    if (!renaming && entity == m_selectedEntity && IsAuthoringCommandAllowedUVE() &&
+        m_gizmoDrag.axis == EditorTranslateAxisUVE::None &&
+        m_viewportNavigationMode == EditorViewportNavigationModeUVE::None && ImGui::IsKeyPressed(ImGuiKey_F2)) {
+        m_hierarchyRenameEntity = entity;
+        m_hierarchyRenameBuffer = GetEntityDisplayLabelUVE(entity);
+        m_hierarchyRenameFocusRequested = true;
+    }
+    if (!renaming && entity == m_selectedEntity && IsAuthoringCommandAllowedUVE() &&
+        m_gizmoDrag.axis == EditorTranslateAxisUVE::None &&
+        m_viewportNavigationMode == EditorViewportNavigationModeUVE::None) {
+        ImGui::SameLine();
+        const std::string renameLabel = "Rename##entity-" + std::to_string(entity.index) + ":" +
+                                        std::to_string(entity.generation);
+        if (ImGui::SmallButton(renameLabel.c_str())) {
+            m_hierarchyRenameEntity = entity;
+            m_hierarchyRenameBuffer = GetEntityDisplayLabelUVE(entity);
+            m_hierarchyRenameFocusRequested = true;
+        }
+    }
+    if (renaming) {
+        ImGui::SameLine();
+        std::array<char, kMaximumEntityNameBytesUVE + 1U> renameBuffer{};
+        m_hierarchyRenameBuffer.copy(renameBuffer.data(), renameBuffer.size() - 1U);
+        if (m_hierarchyRenameFocusRequested) {
+            ImGui::SetKeyboardFocusHere();
+            m_hierarchyRenameFocusRequested = false;
+        }
+        const bool committed = ImGui::InputText("##hierarchy-rename", renameBuffer.data(), renameBuffer.size(),
+                                                ImGuiInputTextFlags_EnterReturnsTrue);
+        m_hierarchyRenameBuffer = renameBuffer.data();
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+            CancelHierarchyRenameUVE();
+        } else if (committed) {
+            if (SetSelectedEntityNameUVE(m_hierarchyRenameBuffer)) {
+                InvalidateHierarchyFilterCacheUVE();
+            }
+            CancelHierarchyRenameUVE();
+        }
     }
     if (IsLifecycleCommandAllowedUVE() && IsDocumentEntityUVE(entity) && ImGui::BeginDragDropSource()) {
         ImGui::SetDragDropPayload(kHierarchyEntityPayloadUVE, &entity, sizeof(entity));
