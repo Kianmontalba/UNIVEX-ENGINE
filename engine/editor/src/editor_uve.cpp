@@ -134,6 +134,18 @@ constexpr const char* kHierarchyEntityPayloadUVE = "UVE_SCENE_HIERARCHY_ENTITY";
            lhs.localScale.y == rhs.localScale.y && lhs.localScale.z == rhs.localScale.z;
 }
 
+[[nodiscard]] EditorToolSessionModeUVE ToToolSessionModeUVE(const EditorGizmoModeUVE mode) noexcept {
+    switch (mode) {
+        case EditorGizmoModeUVE::Translate:
+            return EditorToolSessionModeUVE::Translate;
+        case EditorGizmoModeUVE::Rotate:
+            return EditorToolSessionModeUVE::Rotate;
+        case EditorGizmoModeUVE::Scale:
+            return EditorToolSessionModeUVE::Scale;
+    }
+    return EditorToolSessionModeUVE::Translate;
+}
+
 [[nodiscard]] std::filesystem::path MakeRecoveryPathUVE(const std::filesystem::path& scenePath) {
     std::filesystem::path recoveryPath = scenePath;
     recoveryPath += ".editor-recovery";
@@ -1899,6 +1911,14 @@ bool EditorUVE::IsSceneDirtyUVE() const noexcept {
     return m_sceneDirty;
 }
 
+EditorToolSessionPhaseUVE EditorUVE::GetToolSessionPhaseUVE() const noexcept {
+    return m_toolSession.GetPhaseUVE();
+}
+
+EditorToolSessionOutcomeUVE EditorUVE::GetLastToolSessionOutcomeUVE() const noexcept {
+    return m_toolSession.GetLastOutcomeUVE();
+}
+
 const std::optional<Asset::AssetRecordUVE>& EditorUVE::GetSelectedAssetUVE() const noexcept {
     return m_selectedAsset;
 }
@@ -2296,7 +2316,8 @@ bool EditorUVE::ComputeLocalDeltaForWorldDeltaUVE(const Scene::EntityUVE entity,
 
 bool EditorUVE::BeginGizmoDragUVE(const EditorViewportRectUVE& viewportRect,
                                   const Math::Vector2UVE pointerPosition) {
-    if (!IsAuthoringCommandAllowedUVE()) {
+    if (!IsAuthoringCommandAllowedUVE() ||
+        m_toolSession.GetPhaseUVE() == EditorToolSessionPhaseUVE::Previewing) {
         return false;
     }
     if (m_gizmoMode == EditorGizmoModeUVE::Rotate) {
@@ -2367,13 +2388,10 @@ bool EditorUVE::BeginGizmoDragUVE(const EditorViewportRectUVE& viewportRect,
         candidate.mode = m_gizmoMode;
         candidate.axis = axis;
         candidate.entity = m_selectedEntity;
-        candidate.initialLocalTransform =
-            entityManager.GetComponentUVE<Scene::TransformComponentUVE>(m_selectedEntity);
         candidate.initialPointer = pointerPosition;
         candidate.worldAxisA = worldAxis;
         candidate.screenAxisDirection = Scale2UVE(screenAxis, 1.0F / axisLength);
         candidate.pixelsPerWorldUnit = axisLength / kGizmoAxisLengthUVE;
-        candidate.initialDirty = m_sceneDirty;
         bestDistanceSquared = distanceSquared;
     }
 
@@ -2387,13 +2405,11 @@ bool EditorUVE::BeginGizmoDragUVE(const EditorViewportRectUVE& viewportRect,
             candidate.handleKind = GizmoHandleKindUVE::UniformScaleOffset;
             candidate.axis = EditorTranslateAxisUVE::X;
             candidate.entity = m_selectedEntity;
-            candidate.initialLocalTransform = entityManager.GetComponentUVE<Scene::TransformComponentUVE>(m_selectedEntity);
             candidate.initialPointer = pointerPosition;
             candidate.screenCenter = center;
             candidate.pixelsPerWorldUnit =
                 uniformPixelsPerWorldUnitSum / static_cast<float>(uniformPixelsPerWorldUnitCount);
-            candidate.initialDirty = m_sceneDirty;
-        }
+            }
     }
 
     // Axis/endpoint candidates win deterministically. Plane handles are considered only when no axis hit exists.
@@ -2437,14 +2453,12 @@ bool EditorUVE::BeginGizmoDragUVE(const EditorViewportRectUVE& viewportRect,
             candidate.plane = plane;
             candidate.axis = axisA;
             candidate.entity = m_selectedEntity;
-            candidate.initialLocalTransform = entityManager.GetComponentUVE<Scene::TransformComponentUVE>(m_selectedEntity);
             candidate.initialPointer = pointerPosition;
             candidate.screenPlaneAxisA = screenA;
             candidate.screenPlaneAxisB = screenB;
             candidate.worldAxisA = worldAxisA;
             candidate.worldAxisB = worldAxisB;
-            candidate.initialDirty = m_sceneDirty;
-            candidate.pixelsPerWorldUnit = 1.0F;
+                candidate.pixelsPerWorldUnit = 1.0F;
             break;
         }
     }
@@ -2456,6 +2470,11 @@ bool EditorUVE::BeginGizmoDragUVE(const EditorViewportRectUVE& viewportRect,
         return false;
     }
 
+    const Scene::TransformComponentUVE baseline =
+        entityManager.GetComponentUVE<Scene::TransformComponentUVE>(candidate.entity);
+    if (!m_toolSession.BeginUVE(candidate.entity, ToToolSessionModeUVE(candidate.mode), baseline, m_sceneDirty)) {
+        return false;
+    }
     m_gizmoDrag = candidate;
     return true;
 }
@@ -2571,7 +2590,8 @@ bool EditorUVE::FindClosestRingParameterUVE(const EditorViewportRectUVE& viewpor
 
 bool EditorUVE::BeginRotateGizmoDragUVE(const EditorViewportRectUVE& viewportRect,
                                         const Math::Vector2UVE pointerPosition) {
-    if (!IsAuthoringCommandAllowedUVE() || !HasSingleDocumentSelectionUVE() ||
+    if (!IsAuthoringCommandAllowedUVE() ||
+        m_toolSession.GetPhaseUVE() == EditorToolSessionPhaseUVE::Previewing || !HasSingleDocumentSelectionUVE() ||
         !IsViewportRectValidUVE(viewportRect)) {
         return false;
     }
@@ -2601,15 +2621,12 @@ bool EditorUVE::BeginRotateGizmoDragUVE(const EditorViewportRectUVE& viewportRec
         candidate.mode = EditorGizmoModeUVE::Rotate;
         candidate.axis = axis;
         candidate.entity = m_selectedEntity;
-        candidate.initialLocalTransform =
-            entityManager.GetComponentUVE<Scene::TransformComponentUVE>(m_selectedEntity);
         candidate.initialPointer = pointerPosition;
         if (!GetGizmoAxisWorldVectorUVE(m_selectedEntity, axis, candidate.worldAxisA)) {
             continue;
         }
         candidate.viewportRect = viewportRect;
         candidate.initialRingParameterRadians = parameterRadians;
-        candidate.initialDirty = m_sceneDirty;
         bestDistanceSquared = distanceSquared;
     }
 
@@ -2633,20 +2650,22 @@ bool EditorUVE::BeginRotateGizmoDragUVE(const EditorViewportRectUVE& viewportRec
                 candidate.handleKind = GizmoHandleKindUVE::Trackball;
                 candidate.axis = EditorTranslateAxisUVE::X;
                 candidate.entity = m_selectedEntity;
-                candidate.initialLocalTransform =
-                    entityManager.GetComponentUVE<Scene::TransformComponentUVE>(m_selectedEntity);
                 candidate.initialPointer = pointerPosition;
                 candidate.screenCenter = center;
                 candidate.initialTrackballVector = initialTrackballVector;
                 candidate.viewWorldRotation = viewRotation;
                 candidate.trackballRadiusPixels = kTrackballRadiusPixelsUVE;
                 candidate.viewportRect = viewportRect;
-                candidate.initialDirty = m_sceneDirty;
-            }
+                    }
         }
     }
 
     if (candidate.axis == EditorTranslateAxisUVE::None) {
+        return false;
+    }
+    const Scene::TransformComponentUVE baseline =
+        entityManager.GetComponentUVE<Scene::TransformComponentUVE>(candidate.entity);
+    if (!m_toolSession.BeginUVE(candidate.entity, ToToolSessionModeUVE(candidate.mode), baseline, m_sceneDirty)) {
         return false;
     }
     m_gizmoDrag = candidate;
@@ -2654,12 +2673,23 @@ bool EditorUVE::BeginRotateGizmoDragUVE(const EditorViewportRectUVE& viewportRec
 }
 
 void EditorUVE::UpdateGizmoDragUVE(const Math::Vector2UVE pointerPosition) {
-    if (!IsAuthoringCommandAllowedUVE() ||
+    const std::optional<EditorToolSessionSnapshotUVE>& session = m_toolSession.GetSnapshotUVE();
+    if (!session.has_value() || !IsAuthoringCommandAllowedUVE() ||
         (m_gizmoDrag.axis == EditorTranslateAxisUVE::None &&
          m_gizmoDrag.handleKind != GizmoHandleKindUVE::UniformScaleOffset) ||
         !HasSingleDocumentSelectionUVE() || !IsDocumentEntityUVE(m_gizmoDrag.entity) ||
-        m_gizmoDrag.entity != m_selectedEntity || !IsFiniteUVE(pointerPosition.x) ||
+        m_gizmoDrag.entity != m_selectedEntity || m_gizmoDrag.entity != session->entity ||
+        ToToolSessionModeUVE(m_gizmoDrag.mode) != session->mode || !IsFiniteUVE(pointerPosition.x) ||
         !IsFiniteUVE(pointerPosition.y)) {
+        CancelGizmoDragUVE();
+        return;
+    }
+
+    const EditorToolSessionSnapshotUVE& sessionSnapshot = *session;
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    if (!entityManager.HasComponentUVE<Scene::TransformComponentUVE>(sessionSnapshot.entity) ||
+        !AreTransformsEqualUVE(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(sessionSnapshot.entity),
+                               sessionSnapshot.lastAppliedTransform)) {
         CancelGizmoDragUVE();
         return;
     }
@@ -2680,8 +2710,9 @@ void EditorUVE::UpdateGizmoDragUVE(const Math::Vector2UVE pointerPosition) {
                 CancelGizmoDragUVE();
                 return;
             }
-            if (ApplyLocalTransformUVE(m_gizmoDrag.entity, m_gizmoDrag.initialLocalTransform)) {
-                m_sceneDirty = m_gizmoDrag.initialDirty;
+            if (ApplyLocalTransformUVE(m_gizmoDrag.entity, sessionSnapshot.baselineTransform) &&
+                m_toolSession.RecordPreviewAppliedUVE(sessionSnapshot.baselineTransform)) {
+                m_sceneDirty = sessionSnapshot.baselineDirty;
             }
             return;
         }
@@ -2701,14 +2732,14 @@ void EditorUVE::UpdateGizmoDragUVE(const Math::Vector2UVE pointerPosition) {
         Math::QuaternionUVE localRotation{};
         if (!IsFiniteUVE(snappedRadians) || !IsFiniteVectorUVE(worldAxis) ||
             !ComputeLocalRotationForWorldAxisUVE(m_gizmoDrag.entity,
-                                                 m_gizmoDrag.initialLocalTransform.localRotation,
+                                                 sessionSnapshot.baselineTransform.localRotation,
                                                  worldAxis, snappedRadians, localRotation)) {
             CancelGizmoDragUVE();
             return;
         }
-        Scene::TransformComponentUVE updated = m_gizmoDrag.initialLocalTransform;
+        Scene::TransformComponentUVE updated = sessionSnapshot.baselineTransform;
         updated.localRotation = localRotation;
-        if (!ApplyLocalTransformUVE(m_gizmoDrag.entity, updated)) {
+        if (!ApplyLocalTransformUVE(m_gizmoDrag.entity, updated) || !m_toolSession.RecordPreviewAppliedUVE(updated)) {
             CancelGizmoDragUVE();
             return;
         }
@@ -2734,14 +2765,14 @@ void EditorUVE::UpdateGizmoDragUVE(const Math::Vector2UVE pointerPosition) {
         Math::QuaternionUVE localRotation{};
         if (!IsFiniteUVE(snappedDeltaRadians) ||
             !ComputeLocalRotationForWorldAxisUVE(m_gizmoDrag.entity,
-                                                 m_gizmoDrag.initialLocalTransform.localRotation,
+                                                 sessionSnapshot.baselineTransform.localRotation,
                                                  m_gizmoDrag.worldAxisA, snappedDeltaRadians, localRotation)) {
             CancelGizmoDragUVE();
             return;
         }
-        Scene::TransformComponentUVE updated = m_gizmoDrag.initialLocalTransform;
+        Scene::TransformComponentUVE updated = sessionSnapshot.baselineTransform;
         updated.localRotation = localRotation;
-        if (!ApplyLocalTransformUVE(m_gizmoDrag.entity, updated)) {
+        if (!ApplyLocalTransformUVE(m_gizmoDrag.entity, updated) || !m_toolSession.RecordPreviewAppliedUVE(updated)) {
             CancelGizmoDragUVE();
             return;
         }
@@ -2760,14 +2791,14 @@ void EditorUVE::UpdateGizmoDragUVE(const Math::Vector2UVE pointerPosition) {
         const float uniformOffset = m_transformSnappingSettings.enabled
                                         ? SnapScalarUVE(rawOffset, m_transformSnappingSettings.scaleStep)
                                         : rawOffset;
-        Scene::TransformComponentUVE updated = m_gizmoDrag.initialLocalTransform;
+        Scene::TransformComponentUVE updated = sessionSnapshot.baselineTransform;
         updated.localScale.x += uniformOffset;
         updated.localScale.y += uniformOffset;
         updated.localScale.z += uniformOffset;
         if (!IsFiniteUVE(uniformOffset) || !IsFiniteUVE(updated.localScale.x) ||
             !IsFiniteUVE(updated.localScale.y) || !IsFiniteUVE(updated.localScale.z) ||
             updated.localScale.x < kMinimumLocalScaleUVE || updated.localScale.y < kMinimumLocalScaleUVE ||
-            updated.localScale.z < kMinimumLocalScaleUVE || !ApplyLocalTransformUVE(m_gizmoDrag.entity, updated)) {
+            updated.localScale.z < kMinimumLocalScaleUVE || !ApplyLocalTransformUVE(m_gizmoDrag.entity, updated) || !m_toolSession.RecordPreviewAppliedUVE(updated)) {
             CancelGizmoDragUVE();
             return;
         }
@@ -2799,9 +2830,9 @@ void EditorUVE::UpdateGizmoDragUVE(const Math::Vector2UVE pointerPosition) {
             CancelGizmoDragUVE();
             return;
         }
-        Scene::TransformComponentUVE updated = m_gizmoDrag.initialLocalTransform;
+        Scene::TransformComponentUVE updated = sessionSnapshot.baselineTransform;
         updated.localPosition += localDelta;
-        if (!ApplyLocalTransformUVE(m_gizmoDrag.entity, updated)) {
+        if (!ApplyLocalTransformUVE(m_gizmoDrag.entity, updated) || !m_toolSession.RecordPreviewAppliedUVE(updated)) {
             CancelGizmoDragUVE();
             return;
         }
@@ -2823,7 +2854,7 @@ void EditorUVE::UpdateGizmoDragUVE(const Math::Vector2UVE pointerPosition) {
         const float snappedWorldDistance = m_transformSnappingSettings.enabled
                                                ? SnapScalarUVE(worldDistance, m_transformSnappingSettings.scaleStep)
                                                : worldDistance;
-        Scene::TransformComponentUVE updated = m_gizmoDrag.initialLocalTransform;
+        Scene::TransformComponentUVE updated = sessionSnapshot.baselineTransform;
         float* component = nullptr;
         switch (m_gizmoDrag.axis) {
             case EditorTranslateAxisUVE::X:
@@ -2841,7 +2872,7 @@ void EditorUVE::UpdateGizmoDragUVE(const Math::Vector2UVE pointerPosition) {
         }
         *component += snappedWorldDistance;
         if (!IsFiniteUVE(*component) || *component < kMinimumLocalScaleUVE ||
-            !ApplyLocalTransformUVE(m_gizmoDrag.entity, updated)) {
+            !ApplyLocalTransformUVE(m_gizmoDrag.entity, updated) || !m_toolSession.RecordPreviewAppliedUVE(updated)) {
             CancelGizmoDragUVE();
             return;
         }
@@ -2859,9 +2890,9 @@ void EditorUVE::UpdateGizmoDragUVE(const Math::Vector2UVE pointerPosition) {
         return;
     }
 
-    Scene::TransformComponentUVE updated = m_gizmoDrag.initialLocalTransform;
+    Scene::TransformComponentUVE updated = sessionSnapshot.baselineTransform;
     updated.localPosition += localDelta;
-    if (!ApplyLocalTransformUVE(m_gizmoDrag.entity, updated)) {
+    if (!ApplyLocalTransformUVE(m_gizmoDrag.entity, updated) || !m_toolSession.RecordPreviewAppliedUVE(updated)) {
         CancelGizmoDragUVE();
         return;
     }
@@ -2869,52 +2900,93 @@ void EditorUVE::UpdateGizmoDragUVE(const Math::Vector2UVE pointerPosition) {
 }
 
 void EditorUVE::CommitGizmoDragUVE() {
-    const GizmoDragUVE completedDrag = m_gizmoDrag;
-    m_gizmoDrag = GizmoDragUVE{};
-    if ((completedDrag.axis == EditorTranslateAxisUVE::None &&
-         completedDrag.handleKind != GizmoHandleKindUVE::UniformScaleOffset) ||
-        !IsDocumentEntityUVE(completedDrag.entity)) {
+    const std::optional<EditorToolSessionSnapshotUVE>& activeSession = m_toolSession.GetSnapshotUVE();
+    if (!activeSession.has_value()) {
+        m_gizmoDrag = GizmoDragUVE{};
+        m_toolSession.MarkRejectedUVE();
+        return;
+    }
+
+    const EditorToolSessionSnapshotUVE sessionSnapshot = *activeSession;
+    if ((m_gizmoDrag.axis == EditorTranslateAxisUVE::None &&
+         m_gizmoDrag.handleKind != GizmoHandleKindUVE::UniformScaleOffset) ||
+        m_gizmoDrag.entity != sessionSnapshot.entity || !IsDocumentEntityUVE(sessionSnapshot.entity)) {
+        CancelGizmoDragUVE();
         return;
     }
 
     Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
-    if (!entityManager.HasComponentUVE<Scene::TransformComponentUVE>(completedDrag.entity)) {
+    if (!entityManager.HasComponentUVE<Scene::TransformComponentUVE>(sessionSnapshot.entity)) {
+        CancelGizmoDragUVE();
         return;
     }
 
     const Scene::TransformComponentUVE after =
-        entityManager.GetComponentUVE<Scene::TransformComponentUVE>(completedDrag.entity);
-    if (AreTransformsEqualUVE(completedDrag.initialLocalTransform, after)) {
-        m_sceneDirty = completedDrag.initialDirty;
+        entityManager.GetComponentUVE<Scene::TransformComponentUVE>(sessionSnapshot.entity);
+    if (!IsTransformFiniteUVE(after) || !AreTransformsEqualUVE(after, sessionSnapshot.lastAppliedTransform)) {
+        CancelGizmoDragUVE();
         return;
     }
 
-    RecordHistoryUVE(TransformHistoryEntryUVE{completedDrag.entity,
-                                               completedDrag.initialLocalTransform,
+    const bool changed = !AreTransformsEqualUVE(sessionSnapshot.baselineTransform, after);
+    const std::optional<EditorToolSessionSnapshotUVE> completedSession = m_toolSession.CommitUVE(changed);
+    m_gizmoDrag = GizmoDragUVE{};
+    if (!completedSession.has_value()) {
+        return;
+    }
+
+    if (!changed) {
+        m_sceneDirty = completedSession->baselineDirty;
+        return;
+    }
+
+    m_sceneDirty = true;
+    RecordHistoryUVE(TransformHistoryEntryUVE{completedSession->entity,
+                                               completedSession->baselineTransform,
                                                after,
-                                               EditorSelectionSnapshotUVE{{completedDrag.entity}, completedDrag.entity},
+                                               EditorSelectionSnapshotUVE{{completedSession->entity},
+                                                                          completedSession->entity},
                                                CaptureSelectionSnapshotUVE(),
-                                               completedDrag.initialDirty,
+                                               completedSession->baselineDirty,
                                                true});
 }
 
 void EditorUVE::CancelGizmoDragUVE() noexcept {
-    const GizmoDragUVE cancelledDrag = m_gizmoDrag;
+    const std::optional<EditorToolSessionSnapshotUVE>& activeSession = m_toolSession.GetSnapshotUVE();
+    if (!activeSession.has_value()) {
+        m_gizmoDrag = GizmoDragUVE{};
+        return;
+    }
+
+    const EditorToolSessionSnapshotUVE sessionSnapshot = *activeSession;
     m_gizmoDrag = GizmoDragUVE{};
-    if ((cancelledDrag.axis == EditorTranslateAxisUVE::None &&
-         cancelledDrag.handleKind != GizmoHandleKindUVE::UniformScaleOffset) ||
-        !IsDocumentEntityUVE(cancelledDrag.entity)) {
+    if (!IsDocumentEntityUVE(sessionSnapshot.entity)) {
+        m_toolSession.DiscardUVE();
         return;
     }
 
     Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
-    if (!entityManager.HasComponentUVE<Scene::TransformComponentUVE>(cancelledDrag.entity)) {
+    if (!entityManager.HasComponentUVE<Scene::TransformComponentUVE>(sessionSnapshot.entity)) {
+        m_toolSession.DiscardUVE();
         return;
     }
 
-    m_services->GetSceneGraphUVE().SetLocalTransformUVE(
-        entityManager, cancelledDrag.entity, cancelledDrag.initialLocalTransform);
-    m_sceneDirty = cancelledDrag.initialDirty;
+    const Scene::TransformComponentUVE currentTransform =
+        entityManager.GetComponentUVE<Scene::TransformComponentUVE>(sessionSnapshot.entity);
+    const std::optional<EditorToolSessionSnapshotUVE> cancelledSession = m_toolSession.CancelUVE(currentTransform);
+    if (!cancelledSession.has_value()) {
+        if (m_toolSession.GetLastOutcomeUVE() == EditorToolSessionOutcomeUVE::ExternalTransformConflict) {
+            m_sceneDirty = true;
+        }
+        return;
+    }
+
+    if (!ApplyLocalTransformUVE(cancelledSession->entity, cancelledSession->baselineTransform)) {
+        m_sceneDirty = true;
+        m_toolSession.MarkRestoreFailedUVE();
+        return;
+    }
+    m_sceneDirty = cancelledSession->baselineDirty;
 }
 
 void EditorUVE::DrawViewportGridUVE(const EditorViewportRectUVE& viewportRect) {

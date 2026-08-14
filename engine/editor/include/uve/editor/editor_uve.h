@@ -16,6 +16,7 @@
 #include "uve/asset/i_project_change_watcher_uve.h"
 #include "uve/core/engine_services_uve.h"
 #include "uve/core/i_simulation_control_uve.h"
+#include "uve/editor/editor_tool_session_uve.h"
 #include "uve/editor/inspector_drawer_registry_uve.h"
 #include "uve/math/ray_uve.h"
 #include "uve/math/vector2_uve.h"
@@ -305,6 +306,10 @@ public:
     [[nodiscard]] float GetViewportDistanceUVE() const noexcept;
     [[nodiscard]] EditorViewportNavigationModeUVE GetViewportNavigationModeUVE() const noexcept;
     [[nodiscard]] bool IsSceneDirtyUVE() const noexcept;
+    /// Read-only transform-tool lifecycle diagnostics. These values expose editor-session evidence
+    /// only; they neither alter input routing nor claim any ECS mutation succeeded.
+    [[nodiscard]] EditorToolSessionPhaseUVE GetToolSessionPhaseUVE() const noexcept;
+    [[nodiscard]] EditorToolSessionOutcomeUVE GetLastToolSessionOutcomeUVE() const noexcept;
     /// Returns the selected registered asset record when the selected project-file entry is a currently
     /// correlated file. Directories and unregistered files return std::nullopt.
     [[nodiscard]] const std::optional<Asset::AssetRecordUVE>& GetSelectedAssetUVE() const noexcept;
@@ -386,7 +391,6 @@ private:
         EditorTranslateAxisUVE axis = EditorTranslateAxisUVE::None;
         EditorTranslatePlaneUVE plane = EditorTranslatePlaneUVE::None;
         Scene::EntityUVE entity = Scene::kInvalidEntityUVE;
-        Scene::TransformComponentUVE initialLocalTransform{};
         Math::Vector2UVE initialPointer{};
         Math::Vector2UVE screenCenter{};
         Math::Vector2UVE screenAxisDirection{};
@@ -400,7 +404,6 @@ private:
         float pixelsPerWorldUnit = 0.0F;
         float trackballRadiusPixels = 0.0F;
         float initialRingParameterRadians = 0.0F;
-        bool initialDirty = false;
     };
 
     struct TransformHistoryEntryUVE final {
@@ -617,6 +620,7 @@ private:
     EditorGizmoCoordinateSpaceUVE m_gizmoCoordinateSpace = EditorGizmoCoordinateSpaceUVE::World;
     EditorReparentTransformModeUVE m_reparentTransformMode = EditorReparentTransformModeUVE::KeepLocal;
     EditorTransformSnappingSettingsUVE m_transformSnappingSettings{};
+    EditorToolSessionUVE m_toolSession;
     GizmoDragUVE m_gizmoDrag{};
     Math::Vector3UVE m_viewportFocusPoint{0.0F, 1.5F, 0.0F};
     float m_viewportYawRadians = 0.0F;
