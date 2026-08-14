@@ -1,21 +1,40 @@
 // Copyright (c) 2026 UniVex Studios. All Rights Reserved.
 
-
 #pragma once
+
+#include <cstddef>
 
 #include "uve/scene/entity_uve.h"
 #include "uve/scene/i_entity_manager_uve.h"
 
 namespace UVE::Render {
 
+/// A copied, frame-local account of observable Renderer3DUVE work. Each field names evidence that
+/// the renderer actually has: extraction and recorded-pass/draw counts are CPU-side facts;
+/// `glDrawCallsIssued` means a draw call was dispatched through the immediate OpenGL backend, not
+/// that the driver completed it or that a compositor displayed pixels. Presentation and pixel
+/// verification belong to EngineCoreUVE and dedicated real-GL integration tests respectively.
+/// Thread-safety: returned by value; RenderFrameUVE() and this accessor remain main-thread only.
+struct Renderer3DFrameDiagnosticsUVE final {
+    std::size_t meshItemsExtracted = 0U;
+    std::size_t primitiveCandidates = 0U;
+    std::size_t primitiveItemsExtracted = 0U;
+    std::size_t meshDrawCallsRecorded = 0U;
+    std::size_t primitiveDrawCallsRecorded = 0U;
+    std::size_t glDrawCallsIssued = 0U;
+    bool primitiveProgramReady = false;
+    bool mainPassRecorded = false;
+    bool toneMappingProgramReady = false;
+    bool toneMappingPassRecorded = false;
+};
+
 /// IRenderer3DUVE is the engine's final per-frame render orchestrator (the spec's `Renderer3DUVE`,
 /// Part 7.2): for a given camera entity, it computes the view-projection, culls and sorts the
 /// scene into a RenderQueueUVE (via IMeshRendererUVE), lazily uploads each encountered mesh's/
-/// material's GPU-shaped resources (cached, invalidated on hot-reload), and records the resulting
-/// draw calls into a real ICommandBufferUVE submitted through IRenderSystemUVE. Renders into an
-/// internally-owned offscreen color+depth target only — no WindowManagerUVE/swapchain exists yet
-/// in this sandbox (no display server, GPU device node, or graphics SDK headers), so there is no
-/// present step. Adding one later is additive, not a redesign.
+/// material's GPU-shaped resources (cached, invalidated on hot reload), records resulting draw
+/// calls into an ICommandBufferUVE, and renders to an internally owned HDR color/depth target.
+/// The built-in tone-mapping pass then writes the color target to the backend default framebuffer;
+/// EngineCoreUVE owns the subsequent overlay callback and explicit PresentUVE() request.
 /// Thread-safety: not thread-safe. RenderFrameUVE() must be called once per frame from the main
 /// engine thread only, after SceneGraphUVE::UpdateUVE() has run for this frame (it needs current
 /// WorldTransformComponentUVE data), matching EngineCoreUVE's single-threaded Update -> Render
@@ -24,11 +43,16 @@ class IRenderer3DUVE {
 public:
     virtual ~IRenderer3DUVE() = default;
 
-    /// Renders the scene as seen by `cameraEntity` into this Renderer3DUVE's offscreen target:
-    /// extract -> sort -> record -> submit. `cameraEntity` must have both
+    /// Renders the scene as seen by `cameraEntity`: extract -> sort -> record -> submit ->
+    /// tone-map to the current backend presentation surface. `cameraEntity` must have both
     /// WorldTransformComponentUVE and CameraComponentUVE (the same contract ICameraSystemUVE
     /// already enforces).
     virtual void RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scene::EntityUVE cameraEntity) = 0;
+
+    /// Returns the last frame's copied renderer evidence snapshot. The snapshot intentionally does
+    /// not claim a completed GPU frame or visible window pixels; use the real-GL integration tests
+    /// for that stronger presentation proof.
+    [[nodiscard]] virtual Renderer3DFrameDiagnosticsUVE GetLastFrameDiagnosticsUVE() const noexcept = 0;
 };
 
 } // namespace UVE::Render

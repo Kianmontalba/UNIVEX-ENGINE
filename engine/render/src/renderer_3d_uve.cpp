@@ -133,7 +133,12 @@ constexpr std::uint32_t kAoTextureSlotUVE = 2;
 /// Slot the directional-light shadow map is bound to for the main color pass (Increment 26) —
 /// the next slot after the three material texture slots above, following the same fixed-constant
 /// convention.
-constexpr std::uint32_t kShadowMapTextureSlotUVE = 3;
+constexpr std::uint32_t kShadowMapTextureSlotUVE = 3U;
+
+// The renderer always clears its HDR scene target. This restrained blue-gray is the intentional
+// empty-scene environment baseline; it is not an editor overlay and never counts as primitive
+// presentation evidence in the real-GL fixture tests.
+constexpr std::array<float, 4> kDefaultSceneClearColorUVE{0.035F, 0.055F, 0.085F, 1.0F};
 constexpr std::size_t kShadowCascadeCountUVE = 3;
 constexpr std::uint32_t kShadowCascadeFirstTextureSlotUVE = kShadowMapTextureSlotUVE;
 
@@ -250,6 +255,10 @@ struct Renderer3DUVE::ImplUVE {
     std::uint32_t targetWidth;
     std::uint32_t targetHeight;
 
+    /// Copied only through IRenderer3DUVE::GetLastFrameDiagnosticsUVE(). Recorded counts are
+    /// CPU-side renderer facts; the OpenGL-issued count never asserts completed presentation.
+    Renderer3DFrameDiagnosticsUVE lastFrameDiagnostics;
+
     /// Flat ambient term added to every rendered item every frame, regardless of whether an
     /// active light exists this frame (see EngineConfigUVE::ambientColor, Increment 23).
     Math::Vector3UVE ambientColor;
@@ -288,8 +297,9 @@ struct Renderer3DUVE::ImplUVE {
     std::shared_ptr<Shader::ShaderProgramUVE> shadowProgram;
     std::shared_ptr<Shader::ShaderProgramUVE> toneMappingProgram;
 
-    /// Built-in primitive shader deliberately reuses the canonical lit material contract, while
-    /// primitives bind only renderer-owned fallback textures and authored base color.
+    /// Built-in primitive visualization program. Its Basic3D contract contains only model,
+    /// view-projection, and authored base-color uniforms; primitives intentionally do not bind
+    /// material, texture, light, or shadow state.
     std::shared_ptr<Shader::ShaderProgramUVE> primitiveProgram;
 
     /// A 1x1 opaque-white texture, used whenever a material leaves albedoTexture/aoTexture unset
@@ -557,7 +567,7 @@ struct Renderer3DUVE::ImplUVE {
     }
 
     [[nodiscard]] std::vector<PrimitiveRenderItemUVE> ExtractPrimitiveItemsUVE(
-        Scene::IEntityManagerUVE& entityManager, const Math::FrustumUVE& frustum) const {
+        Scene::IEntityManagerUVE& entityManager, const Math::FrustumUVE& frustum) {
         std::vector<PrimitiveRenderItemUVE> items;
         entityManager.ForEachUVE<Scene::WorldTransformComponentUVE, Scene::PrimitiveMeshComponentUVE>(
             [&](Scene::EntityUVE, const Scene::WorldTransformComponentUVE& worldTransform,
@@ -565,6 +575,7 @@ struct Renderer3DUVE::ImplUVE {
                 if (worldTransform.dirty || !Scene::IsPrimitiveMeshComponentValidUVE(primitive)) {
                     return;
                 }
+                ++lastFrameDiagnostics.primitiveCandidates;
                 const Math::Matrix4x4UVE worldMatrix = Math::Matrix4x4UVE::ComposeTrsUVE(
                     worldTransform.worldPosition, worldTransform.worldRotation, worldTransform.worldScale);
                 const Math::AabbUVE worldBounds = GetPrimitiveGeometryUVE(primitive.kind).localBounds.TransformUVE(worldMatrix);
@@ -581,8 +592,10 @@ struct Renderer3DUVE::ImplUVE {
         return items;
     }
 
-    void RecordItemsUVE(const std::vector<RenderItemUVE>& items, const FrameUniformsUVE& frameUniforms,
-                        ICommandBufferUVE& commandBuffer) {
+    [[nodiscard]] std::size_t RecordItemsUVE(const std::vector<RenderItemUVE>& items,
+                                              const FrameUniformsUVE& frameUniforms,
+                                              ICommandBufferUVE& commandBuffer) {
+        std::size_t drawCalls = 0U;
         for (const RenderItemUVE& item : items) {
             const MaterialGpuResourcesUVE* const materialResources = ResolveMaterialGpuResourcesUVE(item);
             if (materialResources == nullptr) {
@@ -645,62 +658,30 @@ struct Renderer3DUVE::ImplUVE {
             commandBuffer.BindVertexBufferUVE(meshResources.vertexBuffer);
             commandBuffer.BindIndexBufferUVE(meshResources.indexBuffer);
             commandBuffer.DrawIndexedUVE(meshResources.indexCount);
+            ++drawCalls;
         }
+        return drawCalls;
     }
 
-    void RecordPrimitiveItemsUVE(const std::vector<PrimitiveRenderItemUVE>& items,
-                                 const FrameUniformsUVE& frameUniforms, ICommandBufferUVE& commandBuffer) {
+    [[nodiscard]] std::size_t RecordPrimitiveItemsUVE(const std::vector<PrimitiveRenderItemUVE>& items,
+                                                       const FrameUniformsUVE& frameUniforms,
+                                                       ICommandBufferUVE& commandBuffer) {
         if (!primitiveProgram->IsValidUVE()) {
-            return;
+            return 0U;
         }
+        std::size_t drawCalls = 0U;
         for (const PrimitiveRenderItemUVE& item : items) {
             const MeshGpuResourcesUVE& meshResources = ResolvePrimitiveMeshGpuResourcesUVE(item.kind);
             primitiveProgram->SetMatrix4x4UVE("uModel", item.worldMatrix);
             primitiveProgram->SetMatrix4x4UVE("uViewProjection", frameUniforms.viewProjection);
-            primitiveProgram->SetVector3UVE("uAmbientColor", frameUniforms.ambientColor);
-            primitiveProgram->SetVector3UVE("uViewPosition", frameUniforms.viewPosition);
-            for (std::size_t lightIndex = 0; lightIndex < kMaxLightsUVE; ++lightIndex) {
-                const LightDataUVE& light = frameUniforms.lights[lightIndex];
-                const std::string prefix = "uLights[" + std::to_string(lightIndex) + "].";
-                primitiveProgram->SetIntUVE(prefix + "type", static_cast<std::int32_t>(light.type));
-                primitiveProgram->SetVector3UVE(prefix + "position", light.position);
-                primitiveProgram->SetVector3UVE(prefix + "direction", light.direction);
-                primitiveProgram->SetVector3UVE(prefix + "color", light.color);
-                primitiveProgram->SetFloatUVE(prefix + "intensity", light.intensity);
-                primitiveProgram->SetFloatUVE(prefix + "range", light.range);
-                primitiveProgram->SetFloatUVE(prefix + "spotAngleDegrees", light.spotAngleDegrees);
-            }
-            primitiveProgram->SetMatrix4x4UVE("uLightSpaceMatrix", frameUniforms.lightSpaceMatrices[0]);
-            primitiveProgram->SetIntUVE("uShadowCascadeCount", frameUniforms.cascadeCount);
-            primitiveProgram->SetFloatUVE("uShadowCascadeBlendRatio", frameUniforms.cascadeBlendRatio);
-            for (std::size_t cascadeIndex = 0; cascadeIndex < kShadowCascadeCountUVE; ++cascadeIndex) {
-                const std::string index = std::to_string(cascadeIndex);
-                const std::uint32_t textureSlot = kShadowCascadeFirstTextureSlotUVE +
-                                                  static_cast<std::uint32_t>(cascadeIndex);
-                primitiveProgram->SetMatrix4x4UVE("uLightSpaceMatrices[" + index + "]",
-                                                   frameUniforms.lightSpaceMatrices[cascadeIndex]);
-                primitiveProgram->SetFloatUVE("uShadowCascadeSplits[" + index + "]",
-                                               frameUniforms.cascadeSplits[cascadeIndex]);
-                primitiveProgram->SetIntUVE("uShadowMapTextures[" + index + "]", static_cast<std::int32_t>(textureSlot));
-                commandBuffer.BindTextureUVE(shadowMapTargets[cascadeIndex], textureSlot);
-            }
-            primitiveProgram->SetIntUVE("uShadowMapTexture", static_cast<std::int32_t>(kShadowMapTextureSlotUVE));
-            primitiveProgram->SetIntUVE("uShadowPcfKernelRadius", shadowPcfKernelRadius);
-            primitiveProgram->SetVector3UVE("uAlbedoColor", item.baseColor);
-            primitiveProgram->SetFloatUVE("uMetallic", 0.0F);
-            primitiveProgram->SetFloatUVE("uRoughness", 0.82F);
-            primitiveProgram->SetVector3UVE("uEmissiveColor", Math::Vector3UVE{});
-            primitiveProgram->SetIntUVE("uAlbedoTexture", static_cast<std::int32_t>(kAlbedoTextureSlotUVE));
-            primitiveProgram->SetIntUVE("uNormalTexture", static_cast<std::int32_t>(kNormalTextureSlotUVE));
-            primitiveProgram->SetIntUVE("uAOTexture", static_cast<std::int32_t>(kAoTextureSlotUVE));
+            primitiveProgram->SetVector3UVE("uColor", item.baseColor);
             primitiveProgram->ApplyToUVE(commandBuffer);
-            commandBuffer.BindTextureUVE(fallbackWhiteTexture, kAlbedoTextureSlotUVE);
-            commandBuffer.BindTextureUVE(fallbackNormalTexture, kNormalTextureSlotUVE);
-            commandBuffer.BindTextureUVE(fallbackWhiteTexture, kAoTextureSlotUVE);
             commandBuffer.BindVertexBufferUVE(meshResources.vertexBuffer);
             commandBuffer.BindIndexBufferUVE(meshResources.indexBuffer);
             commandBuffer.DrawIndexedUVE(meshResources.indexCount);
+            ++drawCalls;
         }
+        return drawCalls;
     }
 };
 
@@ -753,13 +734,13 @@ Renderer3DUVE::Renderer3DUVE(IRenderDeviceUVE& renderDevice, IRenderSystemUVE& r
     m_impl->toneMappingProgram = shaderManager.CreateProgramUVE(toneMappingProgramDesc);
 
     Shader::ShaderProgramDescUVE primitiveProgramDesc;
-    primitiveProgramDesc.virtualFilePath = std::string(Shader::BuiltIn::kLitShadowed3DVirtualPath);
-    primitiveProgramDesc.embeddedFallbackSourceCode = std::string(Shader::BuiltIn::kLitShadowed3DSource);
+    primitiveProgramDesc.virtualFilePath = std::string(Shader::BuiltIn::kBasic3DVirtualPath);
+    primitiveProgramDesc.embeddedFallbackSourceCode = std::string(Shader::BuiltIn::kBasic3DSource);
     primitiveProgramDesc.vertexLayout = MeshVertexLayoutUVE();
     primitiveProgramDesc.vertexStride = static_cast<std::uint32_t>(sizeof(Asset::MeshVertexUVE));
     primitiveProgramDesc.depthTestEnabled = true;
     primitiveProgramDesc.depthWriteEnabled = true;
-    primitiveProgramDesc.debugNameUVE = "BuiltInPrimitiveLit";
+    primitiveProgramDesc.debugNameUVE = "BuiltInPrimitiveVisual";
     m_impl->primitiveProgram = shaderManager.CreateProgramUVE(primitiveProgramDesc);
 
     ImplUVE* const implPtr = m_impl.get();
@@ -793,6 +774,10 @@ Renderer3DUVE::~Renderer3DUVE() {
 }
 
 void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scene::EntityUVE cameraEntity) {
+    m_impl->lastFrameDiagnostics = Renderer3DFrameDiagnosticsUVE{};
+    m_impl->lastFrameDiagnostics.primitiveProgramReady = m_impl->primitiveProgram->IsValidUVE();
+    m_impl->lastFrameDiagnostics.toneMappingProgramReady = m_impl->toneMappingProgram->IsValidUVE();
+
     const float aspectRatio = static_cast<float>(m_impl->targetWidth) / static_cast<float>(m_impl->targetHeight);
     const Math::Matrix4x4UVE viewProjection =
         m_impl->cameraSystem.ComputeViewProjectionUVE(entityManager, cameraEntity, aspectRatio);
@@ -844,7 +829,9 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
     RenderQueueUVE queue =
         m_impl->meshRenderer.ExtractRenderQueueUVE(entityManager, m_impl->assetManager, m_impl->assetDatabase, frustum);
     queue.SortUVE();
+    m_impl->lastFrameDiagnostics.meshItemsExtracted = queue.opaqueItems.size() + queue.transparentItems.size();
     const std::vector<PrimitiveRenderItemUVE> primitiveItems = m_impl->ExtractPrimitiveItemsUVE(entityManager, frustum);
+    m_impl->lastFrameDiagnostics.primitiveItemsExtracted = primitiveItems.size();
 
     RenderGraphUVE renderGraph;
     std::array<RenderGraphResourceHandleUVE, kShadowCascadeCountUVE> shadowResources{};
@@ -876,10 +863,20 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
             RenderPassDescUVE passDesc;
             passDesc.colorAttachment = m_impl->colorTarget;
             passDesc.depthAttachment = m_impl->depthTarget;
+            passDesc.clearColor = kDefaultSceneClearColorUVE;
+            m_impl->lastFrameDiagnostics.mainPassRecorded = true;
             commandBuffer.BeginRenderPassUVE(passDesc);
-            m_impl->RecordItemsUVE(queue.opaqueItems, frameUniforms, commandBuffer);
-            m_impl->RecordItemsUVE(queue.transparentItems, frameUniforms, commandBuffer);
-            m_impl->RecordPrimitiveItemsUVE(primitiveItems, frameUniforms, commandBuffer);
+            m_impl->lastFrameDiagnostics.meshDrawCallsRecorded +=
+                m_impl->RecordItemsUVE(queue.opaqueItems, frameUniforms, commandBuffer);
+            m_impl->lastFrameDiagnostics.meshDrawCallsRecorded +=
+                m_impl->RecordItemsUVE(queue.transparentItems, frameUniforms, commandBuffer);
+            m_impl->lastFrameDiagnostics.primitiveDrawCallsRecorded +=
+                m_impl->RecordPrimitiveItemsUVE(primitiveItems, frameUniforms, commandBuffer);
+            if (m_impl->renderDevice.GetBackendNameUVE() == "OpenGL") {
+                m_impl->lastFrameDiagnostics.glDrawCallsIssued =
+                    m_impl->lastFrameDiagnostics.meshDrawCallsRecorded +
+                    m_impl->lastFrameDiagnostics.primitiveDrawCallsRecorded;
+            }
             commandBuffer.EndRenderPassUVE();
         }});
     // The default framebuffer is an external presentation surface, not a TextureHandleUVE; the
@@ -890,6 +887,7 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
             if (!m_impl->toneMappingProgram->IsValidUVE()) {
                 return;
             }
+            m_impl->lastFrameDiagnostics.toneMappingPassRecorded = true;
             RenderPassDescUVE passDesc;
             passDesc.colorAttachment = kInvalidTextureHandleUVE;
             passDesc.depthAttachment = kInvalidTextureHandleUVE;
@@ -906,6 +904,10 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
     const bool graphExecuted = renderGraph.ExecuteUVE(commandBuffer);
     UVE_ASSERT(graphExecuted && "Renderer3DUVE must build a valid render graph");
     m_impl->renderSystem.EndFrameUVE();
+}
+
+Renderer3DFrameDiagnosticsUVE Renderer3DUVE::GetLastFrameDiagnosticsUVE() const noexcept {
+    return m_impl->lastFrameDiagnostics;
 }
 
 } // namespace UVE::Render

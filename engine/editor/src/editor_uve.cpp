@@ -4088,11 +4088,20 @@ void EditorUVE::DrawViewportPanelUVE() {
                           "LMB select / drag handle | RMB orbit | MMB pan | wheel zoom | F focus");
         drawList->AddText(ImVec2{contentOrigin.x + 10.0F, contentOrigin.y + 30.0F}, IM_COL32(190, 215, 235, 220),
                           modeLabel);
+        const Render::Renderer3DFrameDiagnosticsUVE rendererDiagnostics =
+            m_services->GetRenderer3DUVE().GetLastFrameDiagnosticsUVE();
+        const std::string diagnosticsLabel =
+            "Frame evidence: primitives " + std::to_string(rendererDiagnostics.primitiveItemsExtracted) +
+            " | draws " + std::to_string(rendererDiagnostics.meshDrawCallsRecorded +
+                                          rendererDiagnostics.primitiveDrawCallsRecorded) +
+            " (GL " + std::to_string(rendererDiagnostics.glDrawCallsIssued) + ")";
+        drawList->AddText(ImVec2{contentOrigin.x + 10.0F, contentOrigin.y + 52.0F}, IM_COL32(166, 198, 176, 220),
+                          diagnosticsLabel.c_str());
         if (m_playModeState != EditorPlayModeStateUVE::Edit) {
             const bool paused = m_playModeState == EditorPlayModeStateUVE::Paused;
             const char* const playLabel = paused ? "PAUSED" : "PLAYING";
             const ImU32 badgeColor = paused ? IM_COL32(194, 132, 45, 230) : IM_COL32(24, 148, 181, 230);
-            const ImVec2 badgePosition{contentOrigin.x + 10.0F, contentOrigin.y + 52.0F};
+            const ImVec2 badgePosition{contentOrigin.x + 10.0F, contentOrigin.y + 74.0F};
             drawList->AddRectFilled(badgePosition, ImVec2{badgePosition.x + 82.0F, badgePosition.y + 22.0F},
                                     badgeColor, 4.0F);
             drawList->AddText(ImVec2{badgePosition.x + 9.0F, badgePosition.y + 3.0F}, IM_COL32(245, 245, 245, 255),

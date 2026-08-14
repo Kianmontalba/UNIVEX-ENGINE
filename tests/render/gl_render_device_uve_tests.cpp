@@ -2,7 +2,12 @@
 
 
 #include "uve/render/gl_render_device_uve.h"
+#include "uve/asset/asset_bundle_uve.h"
+#include "uve/asset/file_system_uve.h"
+#include "uve/asset/mesh_asset_uve.h"
 #include "uve/render/shader/built_in_shaders_uve.h"
+#include "uve/render/shader/shader_manager_uve.h"
+#include "uve/threading/thread_pool_uve.h"
 
 #include <algorithm>
 #include <array>
@@ -10,6 +15,7 @@
 #include <memory>
 #include <span>
 #include <string>
+#include <thread>
 
 #include <GL/gl.h>
 #include <gtest/gtest.h>
@@ -244,6 +250,366 @@ TEST_F(GlRenderDeviceUVETest, FullTriangleDrawAndPresent_DoesNotCrash) {
     renderDevice->DestroyShaderUVE(fragmentShader);
 
     SUCCEED();
+}
+
+TEST_F(GlRenderDeviceUVETest, FullscreenToneMappingShader_MapsBoundSourceTextureToDefaultFramebuffer) {
+    const ShaderHandleUVE vertexShader = renderDevice->CreateShaderUVE(
+        ShaderDescUVE{ShaderStageUVE::Vertex, WithShaderStageDefineUVE(Shader::BuiltIn::kFullscreenQuadSource,
+                                                                        "VERTEX_SHADER")});
+    const ShaderHandleUVE fragmentShader = renderDevice->CreateShaderUVE(
+        ShaderDescUVE{ShaderStageUVE::Fragment, WithShaderStageDefineUVE(Shader::BuiltIn::kFullscreenQuadSource,
+                                                                          "FRAGMENT_SHADER")});
+    ASSERT_NE(vertexShader, kInvalidShaderHandleUVE);
+    ASSERT_NE(fragmentShader, kInvalidShaderHandleUVE);
+
+    PipelineDescUVE pipelineDesc;
+    pipelineDesc.vertexShader = vertexShader;
+    pipelineDesc.fragmentShader = fragmentShader;
+    pipelineDesc.depthTestEnabled = false;
+    pipelineDesc.depthWriteEnabled = false;
+    const PipelineHandleUVE pipeline = renderDevice->CreatePipelineUVE(pipelineDesc);
+    ASSERT_NE(pipeline, kInvalidPipelineHandleUVE);
+
+    constexpr std::array<std::uint8_t, 4> kWarmHdrLikePixel{220U, 48U, 20U, 255U};
+    const TextureHandleUVE sourceTexture = renderDevice->CreateTextureUVE(
+        TextureDescUVE{1U, 1U, TextureFormatUVE::RGBA8Unorm, 1U}, std::as_bytes(std::span(kWarmHdrLikePixel)));
+    ASSERT_NE(sourceTexture, kInvalidTextureHandleUVE);
+
+    std::unique_ptr<ICommandBufferUVE> commandBuffer = renderDevice->CreateCommandBufferUVE();
+    ASSERT_NE(commandBuffer, nullptr);
+    RenderPassDescUVE passDesc;
+    passDesc.colorAttachment = kInvalidTextureHandleUVE;
+    passDesc.clearColor = {0.0F, 0.0F, 0.0F, 1.0F};
+    passDesc.depthLoadOp = LoadOpUVE::DontCare;
+    commandBuffer->BeginRenderPassUVE(passDesc);
+    commandBuffer->BindPipelineUVE(pipeline);
+    commandBuffer->SetUniformIntUVE("uSourceTexture", 0);
+    commandBuffer->BindTextureUVE(sourceTexture, 0U);
+    commandBuffer->DrawUVE(3U);
+    commandBuffer->EndRenderPassUVE();
+    renderDevice->SubmitUVE(std::move(commandBuffer));
+
+    std::array<std::uint8_t, 3> pixel{};
+    glReadPixels(32, 32, 1, 1, GL_RGB, GL_UNSIGNED_BYTE, pixel.data());
+    EXPECT_GT(pixel[0], static_cast<std::uint8_t>(pixel[1] + 24U));
+    EXPECT_GT(pixel[1], pixel[2]);
+    EXPECT_EQ(glGetError(), GL_NO_ERROR);
+
+    renderDevice->DestroyTextureUVE(sourceTexture);
+    renderDevice->DestroyPipelineUVE(pipeline);
+    renderDevice->DestroyShaderUVE(fragmentShader);
+    renderDevice->DestroyShaderUVE(vertexShader);
+}
+
+TEST_F(GlRenderDeviceUVETest, FullscreenToneMappingShader_ComposesRgba16FloatRenderTargetToDefaultFramebuffer) {
+    constexpr std::string_view kFullscreenVertexSource = R"(#version 330 core
+void main() {
+    vec2 position = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2);
+    gl_Position = vec4(position * 2.0 - 1.0, 0.0, 1.0);
+}
+)";
+    constexpr std::string_view kFlatColorFragmentSource = R"(#version 330 core
+out vec4 FragColor;
+uniform vec3 uColor;
+void main() {
+    FragColor = vec4(uColor, 1.0);
+}
+)";
+    const ShaderHandleUVE sourceVertexShader =
+        renderDevice->CreateShaderUVE(ShaderDescUVE{ShaderStageUVE::Vertex, std::string(kFullscreenVertexSource)});
+    const ShaderHandleUVE sourceFragmentShader = renderDevice->CreateShaderUVE(
+        ShaderDescUVE{ShaderStageUVE::Fragment, std::string(kFlatColorFragmentSource)});
+    const ShaderHandleUVE toneVertexShader = renderDevice->CreateShaderUVE(
+        ShaderDescUVE{ShaderStageUVE::Vertex, WithShaderStageDefineUVE(Shader::BuiltIn::kFullscreenQuadSource,
+                                                                        "VERTEX_SHADER")});
+    const ShaderHandleUVE toneFragmentShader = renderDevice->CreateShaderUVE(
+        ShaderDescUVE{ShaderStageUVE::Fragment, WithShaderStageDefineUVE(Shader::BuiltIn::kFullscreenQuadSource,
+                                                                          "FRAGMENT_SHADER")});
+    ASSERT_NE(sourceVertexShader, kInvalidShaderHandleUVE);
+    ASSERT_NE(sourceFragmentShader, kInvalidShaderHandleUVE);
+    ASSERT_NE(toneVertexShader, kInvalidShaderHandleUVE);
+    ASSERT_NE(toneFragmentShader, kInvalidShaderHandleUVE);
+
+    PipelineDescUVE sourcePipelineDesc;
+    sourcePipelineDesc.vertexShader = sourceVertexShader;
+    sourcePipelineDesc.fragmentShader = sourceFragmentShader;
+    sourcePipelineDesc.depthTestEnabled = true;
+    sourcePipelineDesc.depthWriteEnabled = true;
+    const PipelineHandleUVE sourcePipeline = renderDevice->CreatePipelineUVE(sourcePipelineDesc);
+    ASSERT_NE(sourcePipeline, kInvalidPipelineHandleUVE);
+    PipelineDescUVE tonePipelineDesc;
+    tonePipelineDesc.vertexShader = toneVertexShader;
+    tonePipelineDesc.fragmentShader = toneFragmentShader;
+    tonePipelineDesc.depthTestEnabled = false;
+    tonePipelineDesc.depthWriteEnabled = false;
+    const PipelineHandleUVE tonePipeline = renderDevice->CreatePipelineUVE(tonePipelineDesc);
+    ASSERT_NE(tonePipeline, kInvalidPipelineHandleUVE);
+
+    const TextureHandleUVE hdrTarget =
+        renderDevice->CreateTextureUVE(TextureDescUVE{64U, 64U, TextureFormatUVE::RGBA16Float, 1U});
+    const TextureHandleUVE depthTarget =
+        renderDevice->CreateTextureUVE(TextureDescUVE{64U, 64U, TextureFormatUVE::Depth32Float, 1U});
+    const TextureHandleUVE shadowStyleDepthTarget =
+        renderDevice->CreateTextureUVE(TextureDescUVE{64U, 64U, TextureFormatUVE::Depth32Float, 1U});
+    ASSERT_NE(hdrTarget, kInvalidTextureHandleUVE);
+    ASSERT_NE(depthTarget, kInvalidTextureHandleUVE);
+    ASSERT_NE(shadowStyleDepthTarget, kInvalidTextureHandleUVE);
+
+    // Renderer3DUVE always emits bounded depth-only shadow passes before MainColor. Ensure those
+    // core-profile `GL_NONE` draw/read-buffer states cannot prevent a subsequent color+depth pass
+    // from rasterizing its fullscreen source geometry.
+    std::unique_ptr<ICommandBufferUVE> commandBuffer = renderDevice->CreateCommandBufferUVE();
+    ASSERT_NE(commandBuffer, nullptr);
+    RenderPassDescUVE shadowStylePassDesc;
+    shadowStylePassDesc.colorAttachment = kInvalidTextureHandleUVE;
+    shadowStylePassDesc.depthAttachment = shadowStyleDepthTarget;
+    shadowStylePassDesc.depthLoadOp = LoadOpUVE::Clear;
+    shadowStylePassDesc.clearDepth = 1.0F;
+    commandBuffer->BeginRenderPassUVE(shadowStylePassDesc);
+    commandBuffer->EndRenderPassUVE();
+
+    RenderPassDescUVE sourcePassDesc;
+    sourcePassDesc.colorAttachment = hdrTarget;
+    sourcePassDesc.depthAttachment = depthTarget;
+    sourcePassDesc.depthLoadOp = LoadOpUVE::Clear;
+    sourcePassDesc.clearDepth = 1.0F;
+    commandBuffer->BeginRenderPassUVE(sourcePassDesc);
+    commandBuffer->BindPipelineUVE(sourcePipeline);
+    commandBuffer->SetUniformVector3UVE("uColor", Math::Vector3UVE{0.9F, 0.1F, 0.03F});
+    commandBuffer->DrawUVE(3U);
+    commandBuffer->EndRenderPassUVE();
+
+    RenderPassDescUVE tonePassDesc;
+    tonePassDesc.colorAttachment = kInvalidTextureHandleUVE;
+    tonePassDesc.depthLoadOp = LoadOpUVE::DontCare;
+    commandBuffer->BeginRenderPassUVE(tonePassDesc);
+    commandBuffer->BindPipelineUVE(tonePipeline);
+    commandBuffer->SetUniformIntUVE("uSourceTexture", 0);
+    commandBuffer->BindTextureUVE(hdrTarget, 0U);
+    commandBuffer->DrawUVE(3U);
+    commandBuffer->EndRenderPassUVE();
+    renderDevice->SubmitUVE(std::move(commandBuffer));
+
+    // ToneMapping binds a depth-write-disabled pipeline. The next frame's clear must override
+    // that persisted GL state before it draws the same depth again; otherwise GL_LESS rejects
+    // later scene pixels although the renderer recorded valid draws.
+    std::unique_ptr<ICommandBufferUVE> nextFrameCommandBuffer = renderDevice->CreateCommandBufferUVE();
+    ASSERT_NE(nextFrameCommandBuffer, nullptr);
+    nextFrameCommandBuffer->BeginRenderPassUVE(sourcePassDesc);
+    nextFrameCommandBuffer->BindPipelineUVE(sourcePipeline);
+    nextFrameCommandBuffer->SetUniformVector3UVE("uColor", Math::Vector3UVE{0.04F, 0.12F, 0.92F});
+    nextFrameCommandBuffer->DrawUVE(3U);
+    nextFrameCommandBuffer->EndRenderPassUVE();
+    nextFrameCommandBuffer->BeginRenderPassUVE(tonePassDesc);
+    nextFrameCommandBuffer->BindPipelineUVE(tonePipeline);
+    nextFrameCommandBuffer->SetUniformIntUVE("uSourceTexture", 0);
+    nextFrameCommandBuffer->BindTextureUVE(hdrTarget, 0U);
+    nextFrameCommandBuffer->DrawUVE(3U);
+    nextFrameCommandBuffer->EndRenderPassUVE();
+    renderDevice->SubmitUVE(std::move(nextFrameCommandBuffer));
+
+    std::array<std::uint8_t, 3> pixel{};
+    glReadPixels(32, 32, 1, 1, GL_RGB, GL_UNSIGNED_BYTE, pixel.data());
+    EXPECT_GT(pixel[2], static_cast<std::uint8_t>(pixel[0] + 36U));
+    EXPECT_GT(pixel[2], static_cast<std::uint8_t>(pixel[1] + 36U));
+    EXPECT_EQ(glGetError(), GL_NO_ERROR);
+
+    renderDevice->DestroyTextureUVE(shadowStyleDepthTarget);
+    renderDevice->DestroyTextureUVE(depthTarget);
+    renderDevice->DestroyTextureUVE(hdrTarget);
+    renderDevice->DestroyPipelineUVE(tonePipeline);
+    renderDevice->DestroyPipelineUVE(sourcePipeline);
+    renderDevice->DestroyShaderUVE(toneFragmentShader);
+    renderDevice->DestroyShaderUVE(toneVertexShader);
+    renderDevice->DestroyShaderUVE(sourceFragmentShader);
+    renderDevice->DestroyShaderUVE(sourceVertexShader);
+}
+
+TEST_F(GlRenderDeviceUVETest, Basic3DShader_PerspectiveMatrixRendersNegativeZGeometry) {
+    const ShaderHandleUVE vertexShader = renderDevice->CreateShaderUVE(
+        ShaderDescUVE{ShaderStageUVE::Vertex,
+                      WithShaderStageDefineUVE(Shader::BuiltIn::kBasic3DSource, "VERTEX_SHADER")});
+    const ShaderHandleUVE fragmentShader = renderDevice->CreateShaderUVE(
+        ShaderDescUVE{ShaderStageUVE::Fragment,
+                      WithShaderStageDefineUVE(Shader::BuiltIn::kBasic3DSource, "FRAGMENT_SHADER")});
+    ASSERT_NE(vertexShader, kInvalidShaderHandleUVE);
+    ASSERT_NE(fragmentShader, kInvalidShaderHandleUVE);
+
+    PipelineDescUVE pipelineDesc;
+    pipelineDesc.vertexShader = vertexShader;
+    pipelineDesc.fragmentShader = fragmentShader;
+    pipelineDesc.vertexLayout = {VertexAttributeUVE{"POSITION", VertexAttributeFormatUVE::Float3, 0U}};
+    pipelineDesc.vertexStride = 3U * static_cast<std::uint32_t>(sizeof(float));
+    pipelineDesc.depthTestEnabled = false;
+    pipelineDesc.depthWriteEnabled = false;
+    const PipelineHandleUVE pipeline = renderDevice->CreatePipelineUVE(pipelineDesc);
+    ASSERT_NE(pipeline, kInvalidPipelineHandleUVE);
+
+    constexpr std::array<float, 9> kVertices{-2.0F, -2.0F, -8.0F, 2.0F, -2.0F, -8.0F, 0.0F, 2.0F, -8.0F};
+    const BufferHandleUVE vertexBuffer = renderDevice->CreateBufferUVE(
+        BufferDescUVE{std::as_bytes(std::span(kVertices)).size(), BufferUsageUVE::Vertex},
+        std::as_bytes(std::span(kVertices)));
+    ASSERT_NE(vertexBuffer, kInvalidBufferHandleUVE);
+
+    std::unique_ptr<ICommandBufferUVE> commandBuffer = renderDevice->CreateCommandBufferUVE();
+    ASSERT_NE(commandBuffer, nullptr);
+    RenderPassDescUVE passDesc;
+    passDesc.colorAttachment = kInvalidTextureHandleUVE;
+    passDesc.clearColor = {0.0F, 0.0F, 0.0F, 1.0F};
+    passDesc.depthLoadOp = LoadOpUVE::DontCare;
+    commandBuffer->BeginRenderPassUVE(passDesc);
+    commandBuffer->BindPipelineUVE(pipeline);
+    commandBuffer->SetUniformMatrix4x4UVE("uModel", Math::Matrix4x4UVE::IdentityUVE());
+    commandBuffer->SetUniformMatrix4x4UVE(
+        "uViewProjection", Math::Matrix4x4UVE::PerspectiveUVE(1.0471975512F, 1.0F, 0.1F, 100.0F));
+    commandBuffer->SetUniformVector3UVE("uColor", Math::Vector3UVE{0.95F, 0.15F, 0.05F});
+    commandBuffer->BindVertexBufferUVE(vertexBuffer);
+    commandBuffer->DrawUVE(3U);
+    commandBuffer->EndRenderPassUVE();
+    renderDevice->SubmitUVE(std::move(commandBuffer));
+
+    std::array<std::uint8_t, 3> pixel{};
+    glReadPixels(32, 28, 1, 1, GL_RGB, GL_UNSIGNED_BYTE, pixel.data());
+    EXPECT_GT(pixel[0], static_cast<std::uint8_t>(pixel[1] + 48U));
+    EXPECT_EQ(glGetError(), GL_NO_ERROR);
+
+    renderDevice->DestroyBufferUVE(vertexBuffer);
+    renderDevice->DestroyPipelineUVE(pipeline);
+    renderDevice->DestroyShaderUVE(fragmentShader);
+    renderDevice->DestroyShaderUVE(vertexShader);
+}
+
+TEST_F(GlRenderDeviceUVETest, Basic3DShader_IndexedCanonicalMeshVertexLayoutRenders) {
+    const ShaderHandleUVE vertexShader = renderDevice->CreateShaderUVE(
+        ShaderDescUVE{ShaderStageUVE::Vertex,
+                      WithShaderStageDefineUVE(Shader::BuiltIn::kBasic3DSource, "VERTEX_SHADER")});
+    const ShaderHandleUVE fragmentShader = renderDevice->CreateShaderUVE(
+        ShaderDescUVE{ShaderStageUVE::Fragment,
+                      WithShaderStageDefineUVE(Shader::BuiltIn::kBasic3DSource, "FRAGMENT_SHADER")});
+    ASSERT_NE(vertexShader, kInvalidShaderHandleUVE);
+    ASSERT_NE(fragmentShader, kInvalidShaderHandleUVE);
+
+    PipelineDescUVE pipelineDesc;
+    pipelineDesc.vertexShader = vertexShader;
+    pipelineDesc.fragmentShader = fragmentShader;
+    pipelineDesc.vertexLayout = {VertexAttributeUVE{"POSITION", VertexAttributeFormatUVE::Float3,
+                                                     offsetof(Asset::MeshVertexUVE, position)},
+                                 VertexAttributeUVE{"NORMAL", VertexAttributeFormatUVE::Float3,
+                                                     offsetof(Asset::MeshVertexUVE, normal)},
+                                 VertexAttributeUVE{"TEXCOORD0", VertexAttributeFormatUVE::Float2,
+                                                     offsetof(Asset::MeshVertexUVE, u)},
+                                 VertexAttributeUVE{"TANGENT", VertexAttributeFormatUVE::Float4,
+                                                     offsetof(Asset::MeshVertexUVE, tangent)}};
+    pipelineDesc.vertexStride = static_cast<std::uint32_t>(sizeof(Asset::MeshVertexUVE));
+    pipelineDesc.depthTestEnabled = false;
+    pipelineDesc.depthWriteEnabled = false;
+    const PipelineHandleUVE pipeline = renderDevice->CreatePipelineUVE(pipelineDesc);
+    ASSERT_NE(pipeline, kInvalidPipelineHandleUVE);
+
+    const std::array<Asset::MeshVertexUVE, 3> vertices{
+        Asset::MeshVertexUVE{Math::Vector3UVE{-2.0F, -2.0F, 0.0F}, Math::Vector3UVE{0.0F, 0.0F, 1.0F}, 0.0F, 0.0F},
+        Asset::MeshVertexUVE{Math::Vector3UVE{2.0F, -2.0F, 0.0F}, Math::Vector3UVE{0.0F, 0.0F, 1.0F}, 1.0F, 0.0F},
+        Asset::MeshVertexUVE{Math::Vector3UVE{0.0F, 2.0F, 0.0F}, Math::Vector3UVE{0.0F, 0.0F, 1.0F}, 0.5F, 1.0F},
+    };
+    constexpr std::array<std::uint32_t, 3> kIndices{0U, 1U, 2U};
+    const BufferHandleUVE vertexBuffer = renderDevice->CreateBufferUVE(
+        BufferDescUVE{std::as_bytes(std::span(vertices)).size(), BufferUsageUVE::Vertex}, std::as_bytes(std::span(vertices)));
+    const BufferHandleUVE indexBuffer = renderDevice->CreateBufferUVE(
+        BufferDescUVE{std::as_bytes(std::span(kIndices)).size(), BufferUsageUVE::Index}, std::as_bytes(std::span(kIndices)));
+    ASSERT_NE(vertexBuffer, kInvalidBufferHandleUVE);
+    ASSERT_NE(indexBuffer, kInvalidBufferHandleUVE);
+
+    std::unique_ptr<ICommandBufferUVE> commandBuffer = renderDevice->CreateCommandBufferUVE();
+    ASSERT_NE(commandBuffer, nullptr);
+    RenderPassDescUVE passDesc;
+    passDesc.colorAttachment = kInvalidTextureHandleUVE;
+    passDesc.clearColor = {0.0F, 0.0F, 0.0F, 1.0F};
+    passDesc.depthLoadOp = LoadOpUVE::DontCare;
+    commandBuffer->BeginRenderPassUVE(passDesc);
+    commandBuffer->BindPipelineUVE(pipeline);
+    commandBuffer->SetUniformMatrix4x4UVE(
+        "uModel", Math::Matrix4x4UVE::ComposeTrsUVE(Math::Vector3UVE{0.0F, 0.0F, -8.0F}, Math::QuaternionUVE{},
+                                                      Math::Vector3UVE{1.0F, 1.0F, 1.0F}));
+    commandBuffer->SetUniformMatrix4x4UVE(
+        "uViewProjection", Math::Matrix4x4UVE::PerspectiveUVE(1.0471975512F, 1.0F, 0.1F, 100.0F));
+    commandBuffer->SetUniformVector3UVE("uColor", Math::Vector3UVE{0.95F, 0.15F, 0.05F});
+    commandBuffer->BindVertexBufferUVE(vertexBuffer);
+    commandBuffer->BindIndexBufferUVE(indexBuffer);
+    commandBuffer->DrawIndexedUVE(3U);
+    commandBuffer->EndRenderPassUVE();
+    renderDevice->SubmitUVE(std::move(commandBuffer));
+
+    std::array<std::uint8_t, 3> pixel{};
+    glReadPixels(32, 28, 1, 1, GL_RGB, GL_UNSIGNED_BYTE, pixel.data());
+    EXPECT_GT(pixel[0], static_cast<std::uint8_t>(pixel[1] + 48U));
+    EXPECT_EQ(glGetError(), GL_NO_ERROR);
+
+    renderDevice->DestroyBufferUVE(indexBuffer);
+    renderDevice->DestroyBufferUVE(vertexBuffer);
+    renderDevice->DestroyPipelineUVE(pipeline);
+    renderDevice->DestroyShaderUVE(fragmentShader);
+    renderDevice->DestroyShaderUVE(vertexShader);
+}
+
+TEST_F(GlRenderDeviceUVETest, ShaderManager_Basic3DProgramRendersIndexedGeometry) {
+    Threading::ThreadPoolUVE threadPool{1U};
+    Asset::AssetBundleUVE assetBundle;
+    Asset::FileSystemUVE fileSystem{assetBundle};
+    const Asset::MountHandleUVE shaderMount =
+        fileSystem.MountDirectoryUVE("shaders", "engine/render/shader/built_in", 0);
+    ASSERT_NE(shaderMount, 0U);
+    Shader::ShaderManagerUVE shaderManager(threadPool, eventSystem, *renderDevice, fileSystem,
+                                            Shader::ShaderManagerConfigUVE{});
+
+    Shader::ShaderProgramDescUVE programDesc;
+    programDesc.virtualFilePath = std::string(Shader::BuiltIn::kBasic3DVirtualPath);
+    programDesc.embeddedFallbackSourceCode = std::string(Shader::BuiltIn::kBasic3DSource);
+    programDesc.vertexLayout = {VertexAttributeUVE{"POSITION", VertexAttributeFormatUVE::Float3, 0U}};
+    programDesc.vertexStride = 3U * static_cast<std::uint32_t>(sizeof(float));
+    programDesc.depthTestEnabled = false;
+    programDesc.depthWriteEnabled = false;
+    programDesc.debugNameUVE = "ShaderManagerBasic3DRealGl";
+    const std::shared_ptr<Shader::ShaderProgramUVE> program = shaderManager.CreateProgramUVE(programDesc);
+    ASSERT_NE(program, nullptr);
+    for (int iteration = 0; iteration < 256; ++iteration) {
+        shaderManager.UpdateUVE(0.0);
+        if (program->IsReadyUVE()) {
+            break;
+        }
+        std::this_thread::yield();
+    }
+    ASSERT_TRUE(program->IsValidUVE());
+
+    constexpr std::array<float, 9> kVertices{-2.0F, -2.0F, -8.0F, 2.0F, -2.0F, -8.0F, 0.0F, 2.0F, -8.0F};
+    const BufferHandleUVE vertexBuffer = renderDevice->CreateBufferUVE(
+        BufferDescUVE{std::as_bytes(std::span(kVertices)).size(), BufferUsageUVE::Vertex},
+        std::as_bytes(std::span(kVertices)));
+    ASSERT_NE(vertexBuffer, kInvalidBufferHandleUVE);
+
+    std::unique_ptr<ICommandBufferUVE> commandBuffer = renderDevice->CreateCommandBufferUVE();
+    ASSERT_NE(commandBuffer, nullptr);
+    RenderPassDescUVE passDesc;
+    passDesc.colorAttachment = kInvalidTextureHandleUVE;
+    passDesc.clearColor = {0.0F, 0.0F, 0.0F, 1.0F};
+    passDesc.depthLoadOp = LoadOpUVE::DontCare;
+    commandBuffer->BeginRenderPassUVE(passDesc);
+    program->SetMatrix4x4UVE("uModel", Math::Matrix4x4UVE::IdentityUVE());
+    program->SetMatrix4x4UVE(
+        "uViewProjection", Math::Matrix4x4UVE::PerspectiveUVE(1.0471975512F, 1.0F, 0.1F, 100.0F));
+    program->SetVector3UVE("uColor", Math::Vector3UVE{0.95F, 0.15F, 0.05F});
+    program->ApplyToUVE(*commandBuffer);
+    commandBuffer->BindVertexBufferUVE(vertexBuffer);
+    commandBuffer->DrawUVE(3U);
+    commandBuffer->EndRenderPassUVE();
+    renderDevice->SubmitUVE(std::move(commandBuffer));
+
+    std::array<std::uint8_t, 3> pixel{};
+    glReadPixels(32, 28, 1, 1, GL_RGB, GL_UNSIGNED_BYTE, pixel.data());
+    EXPECT_GT(pixel[0], static_cast<std::uint8_t>(pixel[1] + 48U));
+    EXPECT_EQ(glGetError(), GL_NO_ERROR);
+
+    renderDevice->DestroyBufferUVE(vertexBuffer);
+    fileSystem.UnmountUVE(shaderMount);
 }
 
 // Depth-only render pass (Increment 26, shadow mapping's depth pre-pass): colorAttachment left

@@ -57,6 +57,7 @@ public:
     Renderer3DUVE& operator=(const Renderer3DUVE&) = delete;
 
     void RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scene::EntityUVE cameraEntity) override;
+    [[nodiscard]] Renderer3DFrameDiagnosticsUVE GetLastFrameDiagnosticsUVE() const noexcept override;
 
 private:
     struct ImplUVE;
