@@ -12,6 +12,21 @@ public sealed class SessionLossPolicyTests
     }
 
     [Theory]
+    [InlineData(HostSessionState.Disconnected, false, true)]
+    [InlineData(HostSessionState.Failed, false, true)]
+    [InlineData(HostSessionState.Disconnected, true, false)]
+    [InlineData(HostSessionState.Failed, true, false)]
+    [InlineData(HostSessionState.Connecting, false, false)]
+    [InlineData(HostSessionState.Connected, false, false)]
+    [InlineData(HostSessionState.ConfirmFreshSession, false, false)]
+    [InlineData(HostSessionState.ConfirmDiscardDirtySession, true, false)]
+    public void CanStartBackend_RequiresNoOwnedBackendAndAnAdmissibleState(
+        HostSessionState state, bool hasOwnedBackend, bool expected)
+    {
+        Assert.Equal(expected, SessionLossPolicy.CanStartBackend(state, hasOwnedBackend));
+    }
+
+    [Theory]
     [InlineData(HostSessionState.Disconnected, false)]
     [InlineData(HostSessionState.Connecting, false)]
     [InlineData(HostSessionState.Connected, false)]

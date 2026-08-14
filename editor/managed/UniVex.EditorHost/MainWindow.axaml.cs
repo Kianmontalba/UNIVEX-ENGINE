@@ -1,6 +1,7 @@
 // Copyright (c) 2026 UniVex Studios. All Rights Reserved.
 
 using System.Text.Json;
+using System.Threading;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
@@ -10,6 +11,7 @@ namespace UniVex.EditorHost;
 
 public partial class MainWindow : Window
 {
+    private readonly SemaphoreSlim lifecycleGate = new(1, 1);
     private BridgeBackendSession? session;
     private HostSessionState state = HostSessionState.Disconnected;
     private bool closeConfirmed;
@@ -89,43 +91,58 @@ public partial class MainWindow : Window
         else if (state == HostSessionState.ConfirmDiscardDirtySession)
         {
             state = HostSessionState.Connected;
+            SetControlsEnabled(true);
+            RefreshButton.IsEnabled = true;
         }
     }
 
     private async Task StartBackendAsync()
     {
-        if (state == HostSessionState.Connecting)
+        if (!SessionLossPolicy.CanStartBackend(state, session is not null))
         {
             return;
         }
 
-        string executablePath = BackendPathTextBox.Text?.Trim() ?? string.Empty;
-        string? scenePath = string.IsNullOrWhiteSpace(ScenePathTextBox.Text) ? null : ScenePathTextBox.Text.Trim();
-        state = HostSessionState.Connecting;
-        SetControlsEnabled(false);
-        StatusTextBlock.Text = "Connecting to a separate headless bridge backend…";
-        DetailsTextBlock.Text = executablePath;
-
-        using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(10));
+        await lifecycleGate.WaitAsync().ConfigureAwait(true);
         try
         {
-            BridgeBackendSession started = await BridgeBackendSession.StartAsync(executablePath, scenePath, timeout.Token)
-                .ConfigureAwait(true);
-            session = started;
-            session.Exited += Session_OnExited;
-            DisplayConnectedSnapshot(started.LastSnapshot!.Value);
+            if (!SessionLossPolicy.CanStartBackend(state, session is not null))
+            {
+                return;
+            }
+
+            string executablePath = BackendPathTextBox.Text?.Trim() ?? string.Empty;
+            string? scenePath = string.IsNullOrWhiteSpace(ScenePathTextBox.Text) ? null : ScenePathTextBox.Text.Trim();
+            state = HostSessionState.Connecting;
+            SetControlsEnabled(false);
+            StatusTextBlock.Text = "Connecting to a separate headless bridge backend…";
+            DetailsTextBlock.Text = executablePath;
+
+            using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(10));
+            try
+            {
+                BridgeBackendSession started = await BridgeBackendSession.StartAsync(executablePath, scenePath, timeout.Token)
+                    .ConfigureAwait(true);
+                session = started;
+                session.Exited += Session_OnExited;
+                DisplayConnectedSnapshot(started.LastSnapshot!.Value);
+            }
+            catch (BridgeProtocolException exception)
+            {
+                EnterFailure(exception.Code, exception.Message);
+            }
+            catch (OperationCanceledException)
+            {
+                EnterFailure("bridge.backend.timeout", "The backend did not complete the protocol handshake within 10 seconds.");
+            }
+            catch (Exception exception)
+            {
+                EnterFailure("bridge.backend.launch.failed", exception.Message);
+            }
         }
-        catch (BridgeProtocolException exception)
+        finally
         {
-            EnterFailure(exception.Code, exception.Message);
-        }
-        catch (OperationCanceledException)
-        {
-            EnterFailure("bridge.backend.timeout", "The backend did not complete the protocol handshake within 10 seconds.");
-        }
-        catch (Exception exception)
-        {
-            EnterFailure("bridge.backend.launch.failed", exception.Message);
+            lifecycleGate.Release();
         }
     }
 
@@ -173,7 +190,7 @@ public partial class MainWindow : Window
 
     private void SetControlsEnabled(bool enabled)
     {
-        ConnectButton.IsEnabled = enabled;
+        ConnectButton.IsEnabled = enabled && SessionLossPolicy.CanStartBackend(state, session is not null);
         BackendPathTextBox.IsEnabled = enabled;
         ScenePathTextBox.IsEnabled = enabled;
     }
@@ -220,14 +237,22 @@ public partial class MainWindow : Window
 
     private async Task DisposeSessionAsync()
     {
-        if (session is null)
+        await lifecycleGate.WaitAsync().ConfigureAwait(true);
+        try
         {
-            return;
-        }
+            if (session is null)
+            {
+                return;
+            }
 
-        BridgeBackendSession disposing = session;
-        session = null;
-        disposing.Exited -= Session_OnExited;
-        await disposing.DisposeAsync().ConfigureAwait(true);
+            BridgeBackendSession disposing = session;
+            session = null;
+            disposing.Exited -= Session_OnExited;
+            await disposing.DisposeAsync().ConfigureAwait(true);
+        }
+        finally
+        {
+            lifecycleGate.Release();
+        }
     }
 }
