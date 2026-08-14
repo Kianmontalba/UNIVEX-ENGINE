@@ -79,7 +79,12 @@ Duplicate and delete capture the complete selected subtree in memory through the
 same registered-component envelope used by `.uvescene`, preserving hierarchy and restoring fresh
 entity handles during Undo/Redo; they cannot affect the editor-only camera. Shortcut actions are
 suppressed while a text field owns input or an active viewport gesture is in progress. One completed
-Translate, Rotate, or Scale gizmo drag is recorded as one history step. Translate mode additionally exposes translucent
+Translate, Rotate, or Scale gizmo drag is recorded as one history step. **Editor Tool Sessions v1** explicitly
+separates pointer/handle solving from transform transaction ownership: preview values remain baseline-derived and non-recording,
+a re-entrant begin request cannot replace an active gesture, release commits the already-applied preview without a second
+transform write. Cancellation restores the captured baseline only while the live Transform still matches its own
+last preview; an external transform conflict is preserved, marks the document dirty, and never gets overwritten by a stale
+baseline. Restore failure is reported explicitly without claiming a false rollback. Translate mode additionally exposes translucent
 XY/XZ/YZ plane handles in the positive 20–60% gizmo quadrant; axis hits always take precedence and plane movement solves
 both captured screen-space basis coefficients independently before applying the existing parent-safe local delta path.
 Rotate mode uses world-axis X/Y/Z rings,
