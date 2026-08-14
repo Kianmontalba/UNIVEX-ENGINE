@@ -1479,6 +1479,112 @@ bool EditorUVE::TryGetDocumentParentUVE(const Scene::EntityUVE entity, Scene::En
     return true;
 }
 
+std::string EditorUVE::GetOutlinerTypeTagUVE(const Scene::EntityUVE entity) const {
+    if (!IsDocumentEntityUVE(entity)) {
+        return {};
+    }
+
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    if (entityManager.HasComponentUVE<Scene::PrimitiveMeshComponentUVE>(entity)) {
+        switch (entityManager.GetComponentUVE<Scene::PrimitiveMeshComponentUVE>(entity).kind) {
+            case Scene::PrimitiveMeshKindUVE::Plane:
+                return "Plane";
+            case Scene::PrimitiveMeshKindUVE::UVSphere:
+                return "UV Sphere";
+            case Scene::PrimitiveMeshKindUVE::Cube:
+                return "Cube";
+        }
+    }
+    if (entityManager.HasComponentUVE<Scene::CameraComponentUVE>(entity)) {
+        return "Camera";
+    }
+    if (entityManager.HasComponentUVE<Scene::LightComponentUVE>(entity) &&
+        entityManager.GetComponentUVE<Scene::LightComponentUVE>(entity).type == Scene::LightTypeUVE::Directional) {
+        return "Directional Light";
+    }
+    if (entityManager.HasComponentUVE<Scene::ColliderComponentUVE>(entity)) {
+        return "Collision Box";
+    }
+    return {};
+}
+
+std::vector<Scene::EntityUVE> EditorUVE::GetDocumentAncestryUVE(const Scene::EntityUVE entity) const {
+    if (!IsDocumentEntityUVE(entity)) {
+        return {};
+    }
+
+    std::vector<Scene::EntityUVE> ancestry;
+    Scene::EntityUVE current = entity;
+    while (current != Scene::kInvalidEntityUVE) {
+        if (!IsDocumentEntityUVE(current) ||
+            std::find(ancestry.begin(), ancestry.end(), current) != ancestry.end()) {
+            return {};
+        }
+        ancestry.push_back(current);
+
+        Scene::EntityUVE parent = Scene::kInvalidEntityUVE;
+        if (!TryGetDocumentParentUVE(current, parent)) {
+            return {};
+        }
+        current = parent;
+    }
+
+    std::reverse(ancestry.begin(), ancestry.end());
+    return ancestry;
+}
+
+std::vector<Scene::EntityUVE> EditorUVE::GetEligibleReparentParentsUVE(const Scene::EntityUVE entity) {
+    if (!IsDocumentSubtreeUVE(entity)) {
+        return {};
+    }
+
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    std::vector<Scene::EntityUVE> excludedSubtree;
+    std::vector<Scene::EntityUVE> pending{entity};
+    while (!pending.empty()) {
+        const Scene::EntityUVE current = pending.back();
+        pending.pop_back();
+        if (!IsDocumentEntityUVE(current) ||
+            std::find(excludedSubtree.begin(), excludedSubtree.end(), current) != excludedSubtree.end()) {
+            return {};
+        }
+        excludedSubtree.push_back(current);
+        const std::vector<Scene::EntityUVE> children =
+            m_services->GetSceneGraphUVE().GetChildrenUVE(entityManager, current);
+        pending.insert(pending.end(), children.begin(), children.end());
+    }
+
+    std::vector<Scene::EntityUVE> candidates;
+    std::vector<Scene::EntityUVE> visited;
+    const auto visit = [this, &entityManager, &excludedSubtree, &candidates, &visited](
+                           const auto& self, const Scene::EntityUVE current) -> void {
+        if (!IsDocumentEntityUVE(current) || std::find(visited.begin(), visited.end(), current) != visited.end()) {
+            return;
+        }
+        visited.push_back(current);
+        if (std::find(excludedSubtree.begin(), excludedSubtree.end(), current) == excludedSubtree.end()) {
+            candidates.push_back(current);
+        }
+        for (const Scene::EntityUVE child : m_services->GetSceneGraphUVE().GetChildrenUVE(entityManager, current)) {
+            self(self, child);
+        }
+    };
+
+    for (const Scene::EntityUVE root : GetDocumentRootsUVE()) {
+        visit(visit, root);
+    }
+    return candidates;
+}
+
+std::string EditorUVE::GetHierarchyCandidateLabelUVE(const Scene::EntityUVE entity) const {
+    const std::string typeTag = GetOutlinerTypeTagUVE(entity);
+    std::string label = GetEntityDisplayLabelUVE(entity);
+    if (!typeTag.empty()) {
+        label += " [" + typeTag + "]";
+    }
+    return label + " (" + EntityLabelUVE(entity) + ")";
+}
+
 bool EditorUVE::IsLifecycleCommandAllowedUVE() const noexcept {
     return IsAuthoringCommandAllowedUVE() && HasSingleDocumentSelectionUVE() &&
            m_gizmoDrag.axis == EditorTranslateAxisUVE::None &&
@@ -3564,8 +3670,26 @@ void EditorUVE::DrawHierarchyNodeUVE(const Scene::EntityUVE entity) {
     }
 
     const bool renaming = entity == m_hierarchyRenameEntity;
-    const std::string nodeLabel = (renaming ? "" : GetEntityDisplayLabelUVE(entity)) + "##entity-" +
-                                  std::to_string(entity.index) + ":" + std::to_string(entity.generation);
+    std::string visibleLabel = renaming ? "" : GetEntityDisplayLabelUVE(entity);
+    if (!renaming) {
+        const std::string typeTag = GetOutlinerTypeTagUVE(entity);
+        if (!typeTag.empty()) {
+            visibleLabel += " [" + typeTag + "]";
+        }
+
+        Scene::EntityUVE parent = Scene::kInvalidEntityUVE;
+        const bool hasDocumentParent = TryGetDocumentParentUVE(entity, parent) && parent != Scene::kInvalidEntityUVE;
+        if (!hasDocumentParent) {
+            visibleLabel += " • Root";
+        } else if (!children.empty()) {
+            visibleLabel += " • " + std::to_string(children.size()) + " child" +
+                            (children.size() == 1U ? "" : "ren");
+        } else {
+            visibleLabel += " • Child";
+        }
+    }
+    const std::string nodeLabel = visibleLabel + "##entity-" + std::to_string(entity.index) + ":" +
+                                  std::to_string(entity.generation);
     if (active) {
         ImGui::PushStyleColor(ImGuiCol_Header, IM_COL32(55, 105, 160, 215));
         ImGui::PushStyleColor(ImGuiCol_HeaderActive, IM_COL32(70, 125, 180, 245));
@@ -3771,6 +3895,11 @@ void EditorUVE::RegisterBuiltInInspectorDrawersUVE() {
         [this](const Scene::EntityUVE entity) { DrawNameInspectorDrawerUVE(entity); },
     }));
     static_cast<void>(m_inspectorDrawerRegistry.RegisterDrawerUVE(InspectorDrawerEntryUVE{
+        "hierarchy",
+        [this](const Scene::EntityUVE entity) { return IsDocumentEntityUVE(entity); },
+        [this](const Scene::EntityUVE entity) { DrawHierarchyInspectorDrawerUVE(entity); },
+    }));
+    static_cast<void>(m_inspectorDrawerRegistry.RegisterDrawerUVE(InspectorDrawerEntryUVE{
         "transform",
         [this](const Scene::EntityUVE entity) {
             return IsDocumentEntityUVE(entity) &&
@@ -3803,6 +3932,72 @@ void EditorUVE::DrawNameInspectorDrawerUVE(const Scene::EntityUVE entity) {
     if (ImGui::InputText("Name", nameBuffer.data(), nameBuffer.size())) {
         static_cast<void>(SetSelectedEntityNameUVE(nameBuffer.data()));
     }
+}
+
+void EditorUVE::DrawHierarchyInspectorDrawerUVE(const Scene::EntityUVE entity) {
+    if (!IsDocumentEntityUVE(entity) || entity != m_selectedEntity) {
+        return;
+    }
+
+    ImGui::Separator();
+    ImGui::TextUnformatted("Hierarchy");
+    Scene::EntityUVE currentParent = Scene::kInvalidEntityUVE;
+    if (!TryGetDocumentParentUVE(entity, currentParent)) {
+        ImGui::TextDisabled("Parent unavailable due to invalid hierarchy state.");
+        return;
+    }
+
+    if (currentParent == Scene::kInvalidEntityUVE) {
+        ImGui::TextDisabled("Parent: Root");
+    } else {
+        ImGui::Text("Parent: %s", GetHierarchyCandidateLabelUVE(currentParent).c_str());
+    }
+
+    const std::vector<Scene::EntityUVE> ancestry = GetDocumentAncestryUVE(entity);
+    if (!ancestry.empty()) {
+        ImGui::TextDisabled("Ancestry (read-only)");
+        for (const Scene::EntityUVE ancestor : ancestry) {
+            ImGui::BulletText("%s", GetHierarchyCandidateLabelUVE(ancestor).c_str());
+        }
+    }
+
+    const bool canReparent = IsLifecycleCommandAllowedUVE();
+    ImGui::BeginDisabled(!canReparent);
+    int reparentModeIndex =
+        m_reparentTransformMode == EditorReparentTransformModeUVE::KeepWorld ? 1 : 0;
+    constexpr const char* kReparentModes[] = {"Keep Local", "Keep World"};
+    if (ImGui::Combo("Reparent Transform", &reparentModeIndex, kReparentModes,
+                     static_cast<int>(std::size(kReparentModes)))) {
+        const EditorReparentTransformModeUVE requestedMode = reparentModeIndex == 1
+                                                                  ? EditorReparentTransformModeUVE::KeepWorld
+                                                                  : EditorReparentTransformModeUVE::KeepLocal;
+        static_cast<void>(SetReparentTransformModeUVE(requestedMode));
+    }
+
+    const std::string parentPreview = currentParent == Scene::kInvalidEntityUVE
+                                          ? "Root"
+                                          : GetHierarchyCandidateLabelUVE(currentParent);
+    if (ImGui::BeginCombo("New Parent", parentPreview.c_str())) {
+        for (const Scene::EntityUVE candidate : GetEligibleReparentParentsUVE(entity)) {
+            const bool isCurrentParent = candidate == currentParent;
+            ImGui::BeginDisabled(isCurrentParent);
+            const std::string candidateLabel = GetHierarchyCandidateLabelUVE(candidate) + "##reparent-" +
+                                               std::to_string(candidate.index) + ":" +
+                                               std::to_string(candidate.generation);
+            if (ImGui::Selectable(candidateLabel.c_str(), false) && !isCurrentParent) {
+                static_cast<void>(ReparentSelectedEntityUVE(candidate));
+            }
+            ImGui::EndDisabled();
+        }
+        ImGui::EndCombo();
+    }
+
+    ImGui::BeginDisabled(currentParent == Scene::kInvalidEntityUVE);
+    if (ImGui::Button("Make Root")) {
+        static_cast<void>(ReparentSelectedEntityUVE(Scene::kInvalidEntityUVE));
+    }
+    ImGui::EndDisabled();
+    ImGui::EndDisabled();
 }
 
 void EditorUVE::DrawTransformInspectorDrawerUVE(const Scene::EntityUVE entity) {

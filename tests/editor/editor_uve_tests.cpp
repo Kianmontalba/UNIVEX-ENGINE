@@ -6,6 +6,7 @@
 #include <limits>
 #include <numbers>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -21,6 +22,32 @@
 #include "uve/scene/components/world_transform_component_uve.h"
 
 namespace UVE::Editor::Tests {
+
+struct EditorUVEAccessUVE final {
+    [[nodiscard]] static std::string GetOutlinerTypeTagUVE(const EditorUVE& editor,
+                                                            const Scene::EntityUVE entity) {
+        return editor.GetOutlinerTypeTagUVE(entity);
+    }
+
+    [[nodiscard]] static std::vector<Scene::EntityUVE> GetDocumentAncestryUVE(const EditorUVE& editor,
+                                                                                const Scene::EntityUVE entity) {
+        return editor.GetDocumentAncestryUVE(entity);
+    }
+
+    [[nodiscard]] static std::vector<Scene::EntityUVE> GetEligibleReparentParentsUVE(EditorUVE& editor,
+                                                                                        const Scene::EntityUVE entity) {
+        return editor.GetEligibleReparentParentsUVE(entity);
+    }
+
+    [[nodiscard]] static bool HasInspectorDrawerUVE(const EditorUVE& editor, const std::string_view id) {
+        return editor.m_inspectorDrawerRegistry.HasDrawerUVE(id);
+    }
+
+    [[nodiscard]] static std::size_t GetInspectorDrawerCountUVE(const EditorUVE& editor) {
+        return editor.m_inspectorDrawerRegistry.GetDrawerCountUVE();
+    }
+};
+
 namespace {
 
 [[nodiscard]] Core::EngineConfigUVE MakeEditorTestConfigUVE() {
@@ -86,6 +113,103 @@ TEST(EditorUVETest, RenderOverlayUVE_HeadlessWorkspaceCompositionDoesNotMutateEd
         ASSERT_EQ(editor.GetSelectedEntitiesUVE().size(), 1U);
         EXPECT_EQ(editor.GetSelectedEntitiesUVE().front(), root);
         EXPECT_FALSE(editor.IsSceneDirtyUVE());
+
+        editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
+}
+
+TEST(EditorUVETest, InspectorDrawerRegistrationUVE_IncludesStableHierarchyDrawer) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_hierarchy_drawer_registration.uvescene");
+        EXPECT_EQ(EditorUVEAccessUVE::GetInspectorDrawerCountUVE(editor), 4U);
+        EXPECT_TRUE(EditorUVEAccessUVE::HasInspectorDrawerUVE(editor, "name"));
+        EXPECT_TRUE(EditorUVEAccessUVE::HasInspectorDrawerUVE(editor, "hierarchy"));
+        EXPECT_TRUE(EditorUVEAccessUVE::HasInspectorDrawerUVE(editor, "transform"));
+        EXPECT_TRUE(EditorUVEAccessUVE::HasInspectorDrawerUVE(editor, "primitive-mesh"));
+        editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
+}
+
+TEST(EditorUVETest, OutlinerContextUVE_UsesFixedSpecializedTagPriority) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_outliner_tags.uvescene");
+        editor.InitUVE();
+        Core::EngineServicesUVE& services = engine.GetServicesUVE();
+        Scene::IEntityManagerUVE& entityManager = services.GetEntityManagerUVE();
+
+        const Scene::EntityUVE plain = entityManager.CreateEntityUVE();
+        AttachRootUVE(engine, plain, Scene::TransformComponentUVE{});
+        EXPECT_TRUE(EditorUVEAccessUVE::GetOutlinerTypeTagUVE(editor, plain).empty());
+
+        const Scene::EntityUVE collider = entityManager.CreateEntityUVE();
+        AttachRootUVE(engine, collider, Scene::TransformComponentUVE{});
+        entityManager.AddComponentUVE<Scene::ColliderComponentUVE>(collider, Scene::ColliderComponentUVE{});
+        EXPECT_EQ(EditorUVEAccessUVE::GetOutlinerTypeTagUVE(editor, collider), "Collision Box");
+
+        const Scene::EntityUVE light = entityManager.CreateEntityUVE();
+        AttachRootUVE(engine, light, Scene::TransformComponentUVE{});
+        entityManager.AddComponentUVE<Scene::LightComponentUVE>(light, Scene::LightComponentUVE{});
+        EXPECT_EQ(EditorUVEAccessUVE::GetOutlinerTypeTagUVE(editor, light), "Directional Light");
+
+        const Scene::EntityUVE camera = entityManager.CreateEntityUVE();
+        AttachRootUVE(engine, camera, Scene::TransformComponentUVE{});
+        entityManager.AddComponentUVE<Scene::CameraComponentUVE>(camera, Scene::CameraComponentUVE{});
+        EXPECT_EQ(EditorUVEAccessUVE::GetOutlinerTypeTagUVE(editor, camera), "Camera");
+
+        const Scene::EntityUVE primitive = entityManager.CreateEntityUVE();
+        AttachRootUVE(engine, primitive, Scene::TransformComponentUVE{});
+        entityManager.AddComponentUVE<Scene::PrimitiveMeshComponentUVE>(
+            primitive, Scene::PrimitiveMeshComponentUVE{Scene::PrimitiveMeshKindUVE::Plane, {0.4F, 0.5F, 0.6F}});
+        entityManager.AddComponentUVE<Scene::ColliderComponentUVE>(primitive, Scene::ColliderComponentUVE{});
+        entityManager.AddComponentUVE<Scene::CameraComponentUVE>(primitive, Scene::CameraComponentUVE{});
+        EXPECT_EQ(EditorUVEAccessUVE::GetOutlinerTypeTagUVE(editor, primitive), "Plane");
+
+        editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
+}
+
+TEST(EditorUVETest, OutlinerContextUVE_AncestryAndEligibleParentsExcludeSelectedSubtree) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_outliner_hierarchy_context.uvescene");
+        editor.InitUVE();
+        Core::EngineServicesUVE& services = engine.GetServicesUVE();
+        Scene::IEntityManagerUVE& entityManager = services.GetEntityManagerUVE();
+
+        const Scene::EntityUVE rootA = entityManager.CreateEntityUVE();
+        AttachRootUVE(engine, rootA, Scene::TransformComponentUVE{});
+        const Scene::EntityUVE parent = entityManager.CreateEntityUVE();
+        AttachRootUVE(engine, parent, Scene::TransformComponentUVE{});
+        const Scene::EntityUVE selected = entityManager.CreateEntityUVE();
+        AttachRootUVE(engine, selected, Scene::TransformComponentUVE{});
+        services.GetSceneGraphUVE().SetParentUVE(entityManager, selected, parent);
+        const Scene::EntityUVE descendant = entityManager.CreateEntityUVE();
+        AttachRootUVE(engine, descendant, Scene::TransformComponentUVE{});
+        services.GetSceneGraphUVE().SetParentUVE(entityManager, descendant, selected);
+        const Scene::EntityUVE rootB = entityManager.CreateEntityUVE();
+        AttachRootUVE(engine, rootB, Scene::TransformComponentUVE{});
+
+        EXPECT_EQ(EditorUVEAccessUVE::GetDocumentAncestryUVE(editor, selected),
+                  (std::vector<Scene::EntityUVE>{parent, selected}));
+        EXPECT_EQ(EditorUVEAccessUVE::GetEligibleReparentParentsUVE(editor, selected),
+                  (std::vector<Scene::EntityUVE>{rootA, parent, rootB}));
 
         editor.ShutdownUVE();
     }
