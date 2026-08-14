@@ -81,6 +81,18 @@ struct EditorUVEAccessUVE final {
     static void ReconcileContentBrowserDirectoryUVE(EditorUVE& editor, const Asset::ProjectFileSnapshotUVE& snapshot) {
         editor.ReconcileContentBrowserDirectoryUVE(snapshot);
     }
+
+    static void LoadSessionSettingsUVE(EditorUVE& editor) { editor.LoadSessionSettingsUVE(); }
+    [[nodiscard]] static bool SaveSessionSettingsUVE(EditorUVE& editor) { return editor.SaveSessionSettingsUVE(); }
+    static void ApplyFocusViewportPresetUVE(EditorUVE& editor) {
+        editor.ApplyLayoutPresetUVE(EditorUVE::EditorLayoutPresetUVE::FocusViewport);
+    }
+    static void ApplyDefaultLayoutPresetUVE(EditorUVE& editor) {
+        editor.ApplyLayoutPresetUVE(EditorUVE::EditorLayoutPresetUVE::Default);
+    }
+    [[nodiscard]] static bool IsScenePanelVisibleUVE(const EditorUVE& editor) noexcept { return editor.m_scenePanelVisible; }
+    [[nodiscard]] static bool IsInspectorPanelVisibleUVE(const EditorUVE& editor) noexcept { return editor.m_inspectorPanelVisible; }
+    [[nodiscard]] static bool IsBottomDockVisibleUVE(const EditorUVE& editor) noexcept { return editor.m_bottomDockVisible; }
 };
 
 namespace {
@@ -324,6 +336,57 @@ TEST(EditorUVETest, ContentBrowserWorkflowUVE_PersistsFiltersAndSafelyFallsBackW
     }
 
     engine.Shutdown();
+}
+
+TEST(EditorUVETest, SessionSettingsUVE_MigratesWithoutHiddenWriteAndPreservesDocumentState) {
+    const Core::EngineConfigUVE config = MakeEditorTestConfigUVE();
+    std::filesystem::remove(config.settingsFilePath);
+    Core::EngineCoreUVE engine(config);
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        Core::EngineServicesUVE& services = engine.GetServicesUVE();
+        Config::IConfigManagerUVE& settings = services.GetConfigManagerUVE();
+        settings.SetIntUVE("editor.sessionSettingsVersion", 0);
+        settings.SetBoolUVE("editor.panels.sceneVisible", false);
+        settings.SetBoolUVE("editor.panels.inspectorVisible", false);
+        settings.SetBoolUVE("editor.panels.bottomDockVisible", false);
+        settings.SetBoolUVE("editor.viewport.snap.enabled", true);
+        settings.SetDoubleUVE("editor.viewport.snap.translateStep", -1.0);
+        settings.SetDoubleUVE("editor.viewport.snap.rotateStepDegrees", 45.0);
+        settings.SetDoubleUVE("editor.viewport.snap.scaleStep", 0.25);
+
+        EditorUVE editor(services, "uve_editor_tests_session_settings.uvescene");
+        editor.InitUVE();
+        EXPECT_FALSE(EditorUVEAccessUVE::IsScenePanelVisibleUVE(editor));
+        EXPECT_FALSE(EditorUVEAccessUVE::IsInspectorPanelVisibleUVE(editor));
+        EXPECT_FALSE(EditorUVEAccessUVE::IsBottomDockVisibleUVE(editor));
+        EXPECT_FALSE(settings.HasKeyUVE("editor.workspace.active"));
+        const EditorTransformSnappingSettingsUVE& snapping = editor.GetTransformSnappingSettingsUVE();
+        EXPECT_TRUE(snapping.enabled);
+        EXPECT_FLOAT_EQ(snapping.translateStep, 1.0F);
+        EXPECT_FLOAT_EQ(snapping.rotateStepDegrees, 45.0F);
+        EXPECT_FLOAT_EQ(snapping.scaleStep, 0.25F);
+        EXPECT_FALSE(editor.IsSceneDirtyUVE());
+        EXPECT_TRUE(editor.GetSelectedEntitiesUVE().empty());
+
+        EditorUVEAccessUVE::ApplyDefaultLayoutPresetUVE(editor);
+        EXPECT_TRUE(EditorUVEAccessUVE::IsScenePanelVisibleUVE(editor));
+        EXPECT_TRUE(EditorUVEAccessUVE::IsInspectorPanelVisibleUVE(editor));
+        EXPECT_TRUE(EditorUVEAccessUVE::IsBottomDockVisibleUVE(editor));
+        EXPECT_FALSE(editor.IsSceneDirtyUVE());
+        EXPECT_TRUE(editor.GetSelectedEntitiesUVE().empty());
+
+        ASSERT_TRUE(EditorUVEAccessUVE::SaveSessionSettingsUVE(editor));
+        EXPECT_EQ(settings.GetIntUVE("editor.sessionSettingsVersion", -1), 1);
+        EXPECT_TRUE(settings.HasKeyUVE("editor.workspace.active"));
+        EXPECT_FALSE(editor.IsSceneDirtyUVE());
+        editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
+    std::filesystem::remove(config.settingsFilePath);
 }
 
 TEST(EditorUVETest, SelectionAndInspectorTransformEdit_ValidateLifetimeAndFiniteValues) {

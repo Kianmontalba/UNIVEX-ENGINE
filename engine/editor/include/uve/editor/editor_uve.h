@@ -330,6 +330,12 @@ public:
     void ShutdownUVE();
 
 private:
+    enum class EditorLayoutPresetUVE : std::uint8_t {
+        Default,
+        FocusViewport,
+        ContentReview,
+    };
+
     struct EditorSelectionPathUVE final {
         std::size_t rootIndex = 0U;
         std::vector<std::size_t> childIndices;
@@ -631,6 +637,9 @@ private:
     [[nodiscard]] bool RedoHistoryEntryUVE(HistoryEntryUVE& entry);
     void DestroyDocumentSubtreeUVE(Scene::EntityUVE root);
     void ClearDocumentSceneUVE();
+    void LoadSessionSettingsUVE();
+    [[nodiscard]] bool SaveSessionSettingsUVE();
+    void ApplyLayoutPresetUVE(EditorLayoutPresetUVE preset) noexcept;
     void DrawMenuBarUVE();
     void DrawBottomDockUVE();
     void DrawBottomDockContentUVE();
@@ -702,6 +711,9 @@ private:
     std::optional<Asset::ProjectFileEntryUVE> m_selectedProjectFile;
     bool m_projectFileSnapshotInitialized = false;
     bool m_projectFileLastRefreshSucceeded = true;
+    bool m_scenePanelVisible = true;
+    bool m_inspectorPanelVisible = true;
+    bool m_bottomDockVisible = true;
     bool m_sceneDirty = false;
     bool m_uiInitialized = false;
 };

@@ -1334,6 +1334,12 @@ The Edit menu exposes disabled-state Undo/Redo, Duplicate, and Delete actions. `
 
 The View menu provides a guarded **Transform Snapping** submenu with an enable toggle and the supported discrete values: translation 0.25, 0.5, 1.0, or 5.0 world units; rotation 5, 15, or 45 degrees; and scale 0.05, 0.1, or 0.25 local-scale units. When enabled, direct transform commands and Translate, Rotate, and Scale gizmo gestures round their signed delta to the nearest configured increment. Gesture quantization is always calculated from the initial pointer and captured initial local Transform, so preview frames do not accumulate floating-point drift. A rounded zero delta makes no mutation and therefore records no history entry; a changed release still records exactly one Transform transaction.
 
+### Editor Session Settings & Layout v1 (Increment 67)
+
+**Editor preferences remain `.uvesettings` data, never scene data.** A versioned `editor.sessionSettingsVersion` namespace stores fixed workspace tabs, panel visibility, valid viewport gizmo/snap/camera values, and fixed layout presets. Settings load once after the editor camera exists and apply only validated scalar fields. Missing legacy keys migrate in memory to v1 defaults but are never written back automatically; only the explicit **Save Editor Preferences** action serializes settings. Unsupported future versions leave stable defaults intact.
+
+**Only committed state is persisted.** Save reads the editor's validated member values, never an ImGui text buffer or in-progress numeric edit. Save is rejected during a gizmo drag or viewport navigation gesture. Presets are fixed `Default`, `Focus Viewport`, and `Content Review` visibility/tab combinations; arbitrary dock coordinates, document selection, scene dirty state, Undo/Redo, ECS data, and Play state remain outside this persistence boundary.
+
 ### Viewport Selection Bounds v1 (Increment 49)
 
 **Selection bounds are derived, read-only editor feedback.** `EditorUVE::TryGetSelectedBoundsUVE()` returns an oriented world-space box only for the active live document entity with Transform, derived WorldTransform, and box Collider components. The query rejects dirty derived transforms, non-finite values, unsafe zero extents or scale components, and an invalid world quaternion without mutating selection, scene data, dirty state, camera state, or Undo/Redo history.
