@@ -116,7 +116,7 @@
 
 <div align="center">
 
-<h2><strong>PARTIAL — NEXT SCENE EDITOR MILESTONES</strong></h2>
+<h2><strong>COMPLETED — MULTI-LANGUAGE EDITOR FOUNDATIONS</strong></h2>
 
 </div>
 
@@ -130,6 +130,7 @@
 | **COMPLETED** | **68** | **Project Health & Headless Automation v1**: read-only `uve_project_check` validates registry snapshots and supported universal asset envelopes with deterministic text/JSON diagnostics. | Per-file failure isolation, dependency-aware multi-diagnostic aggregation, read-only fixtures, documented exit mapping, GCC, Clang, CI/Ninja, and headless CLI checks passed. |
 | **COMPLETED** | **69** | **Editor Bridge Contract v1**: versioned C++ bridge DTOs, copied revisioned snapshots, capability discovery, stable diagnostics, and stale mutation protection over existing editor commands. | Native-ImGui-change observation, stale mutation rejection, create/name/Undo/Redo routing, protocol/entity safety, GCC, Clang, CI/Ninja, and desktop smoke checks passed. The framed host transport is delivered by Increment 70. |
 | **COMPLETED** | **70** | **C# Editor Host Foundation v1**: optional .NET 8/Avalonia connection shell, typed copied bridge client, local framed JSON-RPC over stdio, protocol handshake/capability display, and headless C++ bridge-server mode. | Bridge stdio is mutually exclusive with native ImGui per process; stdout is protocol-only; malformed frames/JSON and incompatible protocol are contained; crash/EOF never auto-restarts; fresh-session and dirty-close loss acknowledgements are explicit. Native transport, managed unit, real C#→C++ probe, GCC, Clang, CI/Ninja, and desktop smoke validation are required. |
+| **COMPLETED** | **71** | **C# Editor Shell & Docking v1**: resizable fixed-region Avalonia shell with menu/workspace strips; Scene, Viewport, Inspector/Import/Signals, and lower dock tabs; honest deferred panel cards; and managed-only layout persistence. | No floating docks, C# authoring, native viewport surface, or GL ownership. A recognized v0 layout migrates in memory to v1; corrupt/unrecognized/future files retain safe defaults without overwrite. Only **Save Shell Layout** writes preferences; close/reconnect/crash never autosave. Layout/migration/capability regressions, managed Xvfb no-autosave smoke, bridge probe, GCC, Clang, CI/Ninja, and native desktop smoke are required. |
 
 <div align="center">
 

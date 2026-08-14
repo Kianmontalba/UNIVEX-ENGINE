@@ -1,56 +1,173 @@
 <!-- Copyright (c) 2026 UniVex Studios. All Rights Reserved. -->
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:input="clr-namespace:Avalonia.Input;assembly=Avalonia.Base"
         x:Class="UniVex.EditorHost.MainWindow"
-        Width="760"
-        Height="560"
-        MinWidth="640"
-        MinHeight="480"
-        Title="UniVex Editor Host — Foundation v1">
-    <ScrollViewer>
-        <StackPanel Margin="28" Spacing="14">
-            <TextBlock Text="UNIVEX EDITOR HOST" FontSize="24" FontWeight="SemiBold" />
-            <TextBlock Text="Increment 70 — local C++ bridge connection foundation"
-                       Opacity="0.72" />
-
-            <Grid ColumnDefinitions="150,*" RowDefinitions="Auto,Auto" ColumnSpacing="12" RowSpacing="10">
-                <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Backend executable" />
-                <TextBox x:Name="BackendPathTextBox" Grid.Row="0" Grid.Column="1"
-                         Watermark="Absolute path to uve_editor" />
-                <TextBlock Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" Text="Scene path (optional)" />
-                <TextBox x:Name="ScenePathTextBox" Grid.Row="1" Grid.Column="1"
-                         Watermark="Optional .uvescene path" />
+        Width="1280"
+        Height="820"
+        MinWidth="960"
+        MinHeight="640"
+        Title="UniVex Editor Host — Shell &amp; Docking v1"
+        Background="#171A20">
+    <Grid RowDefinitions="Auto,Auto,Auto,*,Auto">
+        <Border Grid.Row="0" Padding="16,12" Background="#20242B" BorderBrush="#394150" BorderThickness="0,0,0,1">
+            <Grid ColumnDefinitions="*,Auto">
+                <StackPanel Spacing="2">
+                    <TextBlock Text="UNIVEX EDITOR" FontSize="20" FontWeight="SemiBold" />
+                    <TextBlock Text="Increment 71 — managed shell presentation over the headless C++ bridge"
+                               Opacity="0.66" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" HorizontalAlignment="Right" Spacing="2">
+                    <TextBlock x:Name="ConnectionIndicatorTextBlock" Text="BACKEND OFFLINE" FontWeight="SemiBold"
+                               HorizontalAlignment="Right" Foreground="#D8A34B" />
+                    <TextBlock x:Name="LayoutDirtyTextBlock" Text="Layout saved" Opacity="0.66"
+                               HorizontalAlignment="Right" />
+                </StackPanel>
             </Grid>
+        </Border>
 
-            <StackPanel Orientation="Horizontal" Spacing="10">
-                <Button x:Name="ConnectButton" Click="ConnectButton_OnClick" Content="Start Headless Backend" />
-                <Button x:Name="RefreshButton" Click="RefreshButton_OnClick" Content="Refresh Snapshot" IsEnabled="False" />
-                <Button x:Name="StartNewSessionButton" Click="StartNewSessionButton_OnClick"
-                        Content="Start New Backend Session" IsEnabled="False" />
+        <Border Grid.Row="1" Padding="8,6" Background="#1B1F26" BorderBrush="#394150" BorderThickness="0,0,0,1">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Content="File" IsEnabled="False" ToolTip.Tip="Project and scene file commands remain C++ command-layer work." />
+                <Button Content="Edit" IsEnabled="False" ToolTip.Tip="Managed authoring commands are deferred to Increment 75." />
+                <Button Content="View" IsEnabled="False" ToolTip.Tip="Use the fixed dock visibility controls in this shell." />
+                <Separator Margin="4,0" />
+                <Button Content="Save Shell Layout" Click="SaveShellLayoutButton_OnClick"
+                        ToolTip.Tip="Explicitly saves managed presentation layout only. Closing does not autosave." />
+                <Button Content="Toggle Left Dock" Click="ToggleLeftDockButton_OnClick" />
+                <Button Content="Toggle Right Dock" Click="ToggleRightDockButton_OnClick" />
+                <Button Content="Toggle Bottom Dock" Click="ToggleBottomDockButton_OnClick" />
+                <TextBlock VerticalAlignment="Center" Margin="8,0,0,0" Opacity="0.62"
+                           Text="Fixed regions only — no floating docks, backend command, or OpenGL ownership." />
             </StackPanel>
+        </Border>
 
-            <Border x:Name="WarningBorder" Padding="14" IsVisible="False" CornerRadius="4"
-                    Background="#3A2810" BorderBrush="#D28A24" BorderThickness="1">
-                <StackPanel Spacing="8">
-                    <TextBlock Text="Session safety acknowledgement required" FontWeight="SemiBold" />
-                    <TextBlock x:Name="WarningTextBlock" TextWrapping="Wrap" />
-                    <StackPanel Orientation="Horizontal" Spacing="10">
-                        <Button x:Name="ConfirmWarningButton" Click="ConfirmWarningButton_OnClick"
-                                Content="Acknowledge and continue" />
-                        <Button Click="CancelWarningButton_OnClick" Content="Cancel" />
-                    </StackPanel>
-                </StackPanel>
+        <Border Grid.Row="2" Padding="8,6" Background="#20242B" BorderBrush="#394150" BorderThickness="0,0,0,1">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Text="WORKSPACE" VerticalAlignment="Center" Margin="0,0,6,0" FontWeight="SemiBold" Opacity="0.72" />
+                <Button Tag="Library" Content="Library" Click="WorkspaceButton_OnClick" />
+                <Button Tag="Asset" Content="Asset" Click="WorkspaceButton_OnClick" />
+                <Button Tag="Scripting" Content="Scripting" Click="WorkspaceButton_OnClick" />
+                <Button Tag="Debug" Content="Debug" Click="WorkspaceButton_OnClick" />
+                <Button Tag="Plugin" Content="Plugin" Click="WorkspaceButton_OnClick" />
+                <TextBlock x:Name="WorkspaceTextBlock" VerticalAlignment="Center" Margin="10,0,0,0" Opacity="0.68" />
+            </StackPanel>
+        </Border>
+
+        <Grid Grid.Row="3" x:Name="ShellGrid" ColumnDefinitions="260,5,*,5,320" RowDefinitions="*,5,220">
+            <Border x:Name="LeftDockBorder" Grid.Row="0" Grid.Column="0" Padding="10" Background="#1D222B"
+                    BorderBrush="#394150" BorderThickness="0,0,1,0">
+                <Grid RowDefinitions="Auto,*" RowSpacing="8">
+                    <TextBlock Text="SCENE" FontWeight="SemiBold" Opacity="0.8" />
+                    <TabControl x:Name="LeftTabControl" Grid.Row="1" SelectionChanged="DockTabControl_OnSelectionChanged">
+                        <TabItem Header="Scene">
+                            <Border Padding="12" Background="#20242B" CornerRadius="3">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="Hierarchy deferred" FontWeight="SemiBold" />
+                                    <TextBlock Text="C# Hierarchy presentation, selection, and context actions are scheduled for Increment 72. This shell does not own entity state." TextWrapping="Wrap" Opacity="0.75" />
+                                </StackPanel>
+                            </Border>
+                        </TabItem>
+                    </TabControl>
+                </Grid>
             </Border>
 
-            <Border Padding="16" CornerRadius="4" Background="#20242B" BorderBrush="#4B5563" BorderThickness="1">
-                <StackPanel Spacing="8">
-                    <TextBlock x:Name="StatusTextBlock" Text="Disconnected. No backend child has been launched." FontWeight="SemiBold" />
-                    <TextBlock x:Name="DetailsTextBlock" TextWrapping="Wrap" Opacity="0.85" />
-                </StackPanel>
+            <GridSplitter x:Name="LeftDockSplitter" Grid.Row="0" Grid.Column="1" Width="5"
+                          ResizeDirection="Columns" ResizeBehavior="PreviousAndNext"
+                          Background="#394150" PointerReleased="DockSplitter_OnPointerReleased" />
+
+            <Border Grid.Row="0" Grid.Column="2" Padding="10" Background="#171A20">
+                <Grid RowDefinitions="Auto,*,Auto" RowSpacing="10">
+                    <TabControl x:Name="CenterTabControl" SelectionChanged="DockTabControl_OnSelectionChanged">
+                        <TabItem Header="Viewport">
+                            <Border Padding="16" Background="#20242B" BorderBrush="#394150" BorderThickness="1" CornerRadius="3">
+                                <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
+                                    <TextBlock Text="Native Viewport Surface Deferred" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                                    <TextBlock Text="Increment 74 will define a platform-scoped native surface bridge. Increment 71 creates no OpenGL context, renderer texture, picking pass, or input-forwarding path in C#." TextWrapping="Wrap" TextAlignment="Center" MaxWidth="560" Opacity="0.76" />
+                                </StackPanel>
+                            </Border>
+                        </TabItem>
+                    </TabControl>
+
+                    <Expander Grid.Row="1" Header="Headless C++ Bridge Connection" IsExpanded="True">
+                        <StackPanel Margin="0,10,0,0" Spacing="10">
+                            <Grid ColumnDefinitions="150,*" RowDefinitions="Auto,Auto" ColumnSpacing="12" RowSpacing="10">
+                                <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Backend executable" />
+                                <TextBox x:Name="BackendPathTextBox" Grid.Row="0" Grid.Column="1" Watermark="Absolute path to uve_editor" />
+                                <TextBlock Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" Text="Scene path (optional)" />
+                                <TextBox x:Name="ScenePathTextBox" Grid.Row="1" Grid.Column="1" Watermark="Optional .uvescene path" />
+                            </Grid>
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <Button x:Name="ConnectButton" Click="ConnectButton_OnClick" Content="Start Headless Backend" />
+                                <Button x:Name="RefreshButton" Click="RefreshButton_OnClick" Content="Refresh Snapshot" IsEnabled="False" />
+                                <Button x:Name="StartNewSessionButton" Click="StartNewSessionButton_OnClick" Content="Start New Backend Session" IsEnabled="False" />
+                            </StackPanel>
+                            <Border x:Name="WarningBorder" Padding="14" IsVisible="False" CornerRadius="4"
+                                    Background="#3A2810" BorderBrush="#D28A24" BorderThickness="1">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="Session safety acknowledgement required" FontWeight="SemiBold" />
+                                    <TextBlock x:Name="WarningTextBlock" TextWrapping="Wrap" />
+                                    <StackPanel Orientation="Horizontal" Spacing="10">
+                                        <Button x:Name="ConfirmWarningButton" Click="ConfirmWarningButton_OnClick" Content="Acknowledge and continue" />
+                                        <Button Click="CancelWarningButton_OnClick" Content="Cancel" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </Expander>
+
+                    <Border Grid.Row="2" Padding="12" CornerRadius="4" Background="#20242B" BorderBrush="#4B5563" BorderThickness="1">
+                        <StackPanel Spacing="6">
+                            <TextBlock x:Name="StatusTextBlock" Text="Disconnected. No backend child has been launched." FontWeight="SemiBold" />
+                            <TextBlock x:Name="DetailsTextBlock" TextWrapping="Wrap" Opacity="0.85" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
             </Border>
 
-            <TextBlock Text="The managed host owns no ECS pointers, scene files, renderer handles, or OpenGL resources. Bridge-stdio always starts a separate headless C++ process; it cannot share the native ImGui editor process."
-                       TextWrapping="Wrap" Opacity="0.65" />
-        </StackPanel>
-    </ScrollViewer>
+            <GridSplitter x:Name="RightDockSplitter" Grid.Row="0" Grid.Column="3" Width="5"
+                          ResizeDirection="Columns" ResizeBehavior="PreviousAndNext"
+                          Background="#394150" PointerReleased="DockSplitter_OnPointerReleased" />
+
+            <Border x:Name="RightDockBorder" Grid.Row="0" Grid.Column="4" Padding="10" Background="#1D222B"
+                    BorderBrush="#394150" BorderThickness="1,0,0,0">
+                <Grid RowDefinitions="Auto,*" RowSpacing="8">
+                    <TextBlock Text="TOOLS" FontWeight="SemiBold" Opacity="0.8" />
+                    <TabControl x:Name="RightTabControl" Grid.Row="1" SelectionChanged="DockTabControl_OnSelectionChanged">
+                        <TabItem Header="Inspector">
+                            <Border Padding="12" Background="#20242B" CornerRadius="3"><TextBlock Text="Inspector presentation and all property edits are deferred to Increment 72. C# sends no entity mutation from this shell." TextWrapping="Wrap" /></Border>
+                        </TabItem>
+                        <TabItem Header="Import">
+                            <Border Padding="12" Background="#20242B" CornerRadius="3"><TextBlock Text="Import review is deferred to Increment 76. This shell cannot enqueue, retry, or mutate import jobs." TextWrapping="Wrap" /></Border>
+                        </TabItem>
+                        <TabItem Header="Signals">
+                            <Border Padding="12" Background="#20242B" CornerRadius="3"><TextBlock Text="Managed scripting signals are not available in Increment 71." TextWrapping="Wrap" /></Border>
+                        </TabItem>
+                    </TabControl>
+                </Grid>
+            </Border>
+
+            <GridSplitter x:Name="BottomDockSplitter" Grid.Row="1" Grid.ColumnSpan="5" Height="5"
+                          ResizeDirection="Rows" ResizeBehavior="PreviousAndNext"
+                          Background="#394150" PointerReleased="DockSplitter_OnPointerReleased" />
+
+            <Border x:Name="BottomDockBorder" Grid.Row="2" Grid.ColumnSpan="5" Padding="10" Background="#1B1F26"
+                    BorderBrush="#394150" BorderThickness="0,1,0,0">
+                <Grid RowDefinitions="Auto,*" RowSpacing="8">
+                    <TextBlock Text="LOWER DOCK" FontWeight="SemiBold" Opacity="0.8" />
+                    <TabControl x:Name="BottomTabControl" Grid.Row="1" SelectionChanged="DockTabControl_OnSelectionChanged">
+                        <TabItem Header="FileSystem"><Border Padding="12" Background="#20242B" CornerRadius="3"><TextBlock Text="C# Content Browser navigation is scheduled for Increment 72. No project filesystem enumeration or mutation is available in this shell." TextWrapping="Wrap" /></Border></TabItem>
+                        <TabItem Header="Debugger"><Border Padding="12" Background="#20242B" CornerRadius="3"><TextBlock Text="Managed debugger presentation is deferred. This shell does not attach to or control a runtime." TextWrapping="Wrap" /></Border></TabItem>
+                        <TabItem Header="Animator"><Border Padding="12" Background="#20242B" CornerRadius="3"><TextBlock Text="Animation tooling is deferred. This shell owns no animation state." TextWrapping="Wrap" /></Border></TabItem>
+                        <TabItem Header="AI Toolbar"><Border Padding="12" Background="#20242B" CornerRadius="3"><TextBlock Text="AI tooling is deferred. This shell owns no background jobs or asset mutations." TextWrapping="Wrap" /></Border></TabItem>
+                    </TabControl>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <Border Grid.Row="4" Padding="10,7" Background="#20242B" BorderBrush="#394150" BorderThickness="0,1,0,0">
+            <TextBlock Text="C# shell layout is session-only until explicitly saved. C++ retains all scene, command, renderer, OpenGL, and backend-process authority."
+                       Opacity="0.68" TextWrapping="Wrap" />
+        </Border>
+    </Grid>
 </Window>

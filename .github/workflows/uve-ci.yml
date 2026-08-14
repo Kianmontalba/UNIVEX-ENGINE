@@ -80,7 +80,8 @@ jobs:
             libxrandr-dev \
             libxi-dev \
             libxinerama-dev \
-            libxcursor-dev
+            libxcursor-dev \
+            xvfb
 
       - name: Configure headless bridge backend
         run: >-
@@ -99,6 +100,23 @@ jobs:
 
       - name: Run managed unit tests
         run: dotnet test editor/managed/UniVex.EditorHost.Tests/UniVex.EditorHost.Tests.csproj --no-build --no-restore
+
+      - name: Run managed shell desktop-start smoke
+        run: |
+          shell_home="${RUNNER_TEMP}/uve-shell-home"
+          shell_runtime="${RUNNER_TEMP}/uve-shell-runtime"
+          shell_log="${RUNNER_TEMP}/uve-shell-startup.log"
+          rm -rf "${shell_home}" "${shell_runtime}"
+          mkdir -p "${shell_home}" "${shell_runtime}"
+          set +e
+          HOME="${shell_home}" XDG_DATA_HOME="${shell_home}/data" XDG_RUNTIME_DIR="${shell_runtime}" \
+            xvfb-run -a timeout 5s dotnet run --project editor/managed/UniVex.EditorHost/UniVex.EditorHost.csproj --no-build --no-restore \
+            > "${shell_log}" 2>&1
+          shell_status=$?
+          set -e
+          test "${shell_status}" -eq 124
+          test ! -e "${shell_home}/data/UniVex/editor_host_layout.json"
+          ! grep -Eiq 'exception|error AVLN|unhandled' "${shell_log}"
 
       - name: Run managed-to-native bridge probe
         run: ./tools/verify_editor_host_probe.sh ./build/ci-gcc/engine/app/uve_editor

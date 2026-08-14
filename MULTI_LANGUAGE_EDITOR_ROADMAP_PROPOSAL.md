@@ -7,7 +7,7 @@
 
 </div>
 
-> **Status:** **Increments 69–70 — COMPLETED.** The owner-approved architecture keeps C++20 authoritative for the engine/editor backend, reserves C#/.NET for the editor experience layer, and reserves GLSL for viewport visuals. Increments 71–81 remain **PARTIAL** until separately implemented and verified. Increment 70 adds an optional .NET 8/Avalonia host and a local headless-only framed transport; it does not add C# docking, authoring panels, scene ownership, or viewport/GL hosting.
+> **Status:** **Increments 69–71 — COMPLETED.** The owner-approved architecture keeps C++20 authoritative for the engine/editor backend, reserves C#/.NET for the editor experience layer, and reserves GLSL for viewport visuals. Increments 72–81 remain **PARTIAL** until separately implemented and verified. Increment 70 adds an optional .NET 8/Avalonia host and a local headless-only framed transport. Increment 71 adds fixed-region C# docking presentation and explicit-save-only local layout persistence; it does not add C# authoring panels, scene ownership, or viewport/GL hosting.
 
 ## Decision
 
@@ -43,7 +43,7 @@ The new order starts by creating a safe multi-language architecture **before** m
 |---|---:|---|---|---|
 | **COMPLETED** | **69** | **Editor Bridge Contract v1** | C++ | Versioned editor command/state DTOs, main-thread backend bridge service, capability discovery, revisioned copied snapshots, typed diagnostics, stale mutation protection, and in-memory native-change observation. |
 | **COMPLETED** | **70** | **C# Editor Host Foundation v1** | C++, C# | Optional .NET 8/Avalonia host, typed copied bridge client, local framed JSON-RPC stdio transport, compatibility/capability screen, and child lifecycle policy. `--bridge-stdio` is headless-only and process-exclusive with native ImGui; crash/EOF has no auto-restart and a replacement child requires explicit unsaved-session-loss acknowledgement. No direct engine pointers, C# authoring panels, docking, or viewport hosting. |
-| **PARTIAL** | **71** | **C# Editor Shell & Docking v1** | C#, C++ | Cross-platform C# desktop shell with original UniVex layout: menu, dock regions, workspace tabs, persistent presentation layout, and backend-provided panel visibility commands. Existing C++ editor remains fallback. |
+| **COMPLETED** | **71** | **C# Editor Shell & Docking v1** | C#, C++ | Fixed-region, resizable Avalonia shell with UniVex menu/workspace strips and Scene, Viewport, Inspector/Import/Signals, and lower dock presentation. Layout is managed-local, recognized v0→v1 migrates in memory, corrupt/future records fall back without overwrite, and only explicit Save Shell Layout persists. Existing native C++ editor remains independent fallback; C# authoring panels, backend layout commands, and viewport/GL hosting remain deferred. |
 | **PARTIAL** | **72** | **C# Hierarchy, Inspector & Content Browser v1** | C#, C++ | C# panels consume immutable backend snapshots; selection and edits invoke C++ commands. Hierarchy context, Inspector drawers, breadcrumbs, filters, and asset records remain C++ authoritative. |
 | **PARTIAL** | **73** | **GLSL Viewport Visuals v1** | C++, GLSL | Editor grid/background contract, top-right X/Y/Z orientation widget, axis highlights, selection outline, gizmo visual states, color/accessibility constants, and GPU-visible regression tests. |
 | **PARTIAL** | **74** | **Native Viewport Surface Bridge v1** | C++, C#, GLSL | Platform-scoped viewport-surface integration with explicit focus/input/resize lifecycle. C++ still owns OpenGL; C# only hosts the surface. Start with Linux/X11 evidence, then define Windows policy. |
@@ -102,6 +102,6 @@ The new order starts by creating a safe multi-language architecture **before** m
 
 ## What This Means for the Next Approval
 
-**Increments 69–70 are complete.** Together they establish the authority, copied DTO, revision, capability, diagnostic, native-command-routing, framed local transport, and explicit process/loss boundary required for a professional editor designed with C++, C#, and GLSL together.
+**Increments 69–71 are complete.** Together they establish the authority, copied DTO, revision, capability, diagnostic, native-command-routing, framed local transport, explicit process/loss boundary, and managed fixed-region shell required for a professional editor designed with C++, C#, and GLSL together.
 
-Increment 71 can now add the C# shell and docking presentation safely; Increment 73 remains the planned GLSL viewport-visuals foundation. Neither step may weaken C++ ownership, bypass the bridge contract, or make a C# process own native GL resources.
+Increment 72 can now add C# Hierarchy, Inspector, and Content Browser presentation safely through immutable backend snapshots and existing command routes; Increment 73 remains the planned GLSL viewport-visuals foundation. Neither step may weaken C++ ownership, bypass the bridge contract, or make a C# process own native GL resources.
