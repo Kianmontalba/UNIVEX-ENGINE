@@ -24,6 +24,7 @@
 #include <backends/imgui_impl_opengl3.h>
 
 #include "uve/asset/uve_file_envelope_uve.h"
+#include "uve/config/i_config_manager_uve.h"
 #include "uve/physics/raycast_query_uve.h"
 #include "uve/scene/components/camera_component_uve.h"
 #include "uve/scene/components/collider_component_uve.h"
@@ -286,6 +287,7 @@ void EditorUVE::InitUVE() {
     }
 
     m_state = EditorStateUVE::Running;
+    LoadSessionSettingsUVE();
 }
 
 void EditorUVE::TickUVE() {
@@ -3395,6 +3397,106 @@ void EditorUVE::ClearDocumentSceneUVE() {
     ClearSelectionUVE();
 }
 
+void EditorUVE::ApplyLayoutPresetUVE(const EditorLayoutPresetUVE preset) noexcept {
+    switch (preset) {
+        case EditorLayoutPresetUVE::Default:
+            m_scenePanelVisible = true;
+            m_inspectorPanelVisible = true;
+            m_bottomDockVisible = true;
+            m_activeRightPanelTab = EditorRightPanelTabUVE::Inspector;
+            m_activeBottomDock = EditorBottomDockUVE::FileSystem;
+            break;
+        case EditorLayoutPresetUVE::FocusViewport:
+            m_scenePanelVisible = false;
+            m_inspectorPanelVisible = false;
+            m_bottomDockVisible = false;
+            break;
+        case EditorLayoutPresetUVE::ContentReview:
+            m_scenePanelVisible = true;
+            m_inspectorPanelVisible = true;
+            m_bottomDockVisible = true;
+            m_activeRightPanelTab = EditorRightPanelTabUVE::Import;
+            m_activeBottomDock = EditorBottomDockUVE::FileSystem;
+            break;
+    }
+}
+
+void EditorUVE::LoadSessionSettingsUVE() {
+    Config::IConfigManagerUVE& config = m_services->GetConfigManagerUVE();
+    constexpr std::int64_t kSessionVersion = 1;
+    const std::int64_t version = config.GetIntUVE("editor.sessionSettingsVersion", 0);
+    if (version > kSessionVersion) {
+        return;
+    }
+    const auto getEnum = [&config](const std::string_view key, const std::int64_t fallback, const std::int64_t maximum) {
+        const std::int64_t value = config.GetIntUVE(key, fallback);
+        return value >= 0 && value <= maximum ? value : fallback;
+    };
+    m_scenePanelVisible = config.GetBoolUVE("editor.panels.sceneVisible", true);
+    m_inspectorPanelVisible = config.GetBoolUVE("editor.panels.inspectorVisible", true);
+    m_bottomDockVisible = config.GetBoolUVE("editor.panels.bottomDockVisible", true);
+    m_activeWorkspace = static_cast<EditorWorkspaceUVE>(getEnum("editor.workspace.active", 0, 4));
+    m_activeRightPanelTab = static_cast<EditorRightPanelTabUVE>(getEnum("editor.rightPanel.activeTab", 0, 2));
+    m_activeBottomDock = static_cast<EditorBottomDockUVE>(getEnum("editor.bottomDock.active", 3, 3));
+    m_gizmoMode = static_cast<EditorGizmoModeUVE>(getEnum("editor.viewport.gizmoMode", 0, 2));
+    m_gizmoCoordinateSpace = static_cast<EditorGizmoCoordinateSpaceUVE>(getEnum("editor.viewport.coordinateSpace", 0, 1));
+    EditorTransformSnappingSettingsUVE snapping{};
+    const auto getPositiveSnapValue = [&config](const std::string_view key, const float fallback) {
+        const float candidate = static_cast<float>(config.GetDoubleUVE(key, fallback));
+        return IsFiniteUVE(candidate) && candidate > 0.0F ? candidate : fallback;
+    };
+    snapping.enabled = config.GetBoolUVE("editor.viewport.snap.enabled", false);
+    snapping.translateStep = getPositiveSnapValue("editor.viewport.snap.translateStep", snapping.translateStep);
+    snapping.rotateStepDegrees =
+        getPositiveSnapValue("editor.viewport.snap.rotateStepDegrees", snapping.rotateStepDegrees);
+    snapping.scaleStep = getPositiveSnapValue("editor.viewport.snap.scaleStep", snapping.scaleStep);
+    m_transformSnappingSettings = snapping;
+    const Math::Vector3UVE focus{static_cast<float>(config.GetDoubleUVE("editor.viewport.camera.focusX", m_viewportFocusPoint.x)),
+                                 static_cast<float>(config.GetDoubleUVE("editor.viewport.camera.focusY", m_viewportFocusPoint.y)),
+                                 static_cast<float>(config.GetDoubleUVE("editor.viewport.camera.focusZ", m_viewportFocusPoint.z))};
+    const float yaw = static_cast<float>(config.GetDoubleUVE("editor.viewport.camera.yawRadians", m_viewportYawRadians));
+    const float pitch = static_cast<float>(config.GetDoubleUVE("editor.viewport.camera.pitchRadians", m_viewportPitchRadians));
+    const float distance = static_cast<float>(config.GetDoubleUVE("editor.viewport.camera.distance", m_viewportDistance));
+    if (IsFiniteVectorUVE(focus) && IsFiniteUVE(yaw) && IsFiniteUVE(pitch) && IsFiniteUVE(distance) &&
+        std::abs(pitch) <= kMaximumViewportPitchRadiansUVE && distance >= kMinimumViewportDistanceUVE &&
+        distance <= kMaximumViewportDistanceUVE) {
+        m_viewportFocusPoint = focus;
+        m_viewportYawRadians = yaw;
+        m_viewportPitchRadians = pitch;
+        m_viewportDistance = distance;
+        static_cast<void>(ApplyViewportCameraUVE());
+    }
+}
+
+bool EditorUVE::SaveSessionSettingsUVE() {
+    if (m_state != EditorStateUVE::Running || m_gizmoDrag.axis != EditorTranslateAxisUVE::None ||
+        m_viewportNavigationMode != EditorViewportNavigationModeUVE::None ||
+        !AreTransformSnappingSettingsValidUVE(m_transformSnappingSettings)) {
+        return false;
+    }
+    Config::IConfigManagerUVE& config = m_services->GetConfigManagerUVE();
+    config.SetIntUVE("editor.sessionSettingsVersion", 1);
+    config.SetIntUVE("editor.workspace.active", static_cast<std::int64_t>(m_activeWorkspace));
+    config.SetIntUVE("editor.rightPanel.activeTab", static_cast<std::int64_t>(m_activeRightPanelTab));
+    config.SetIntUVE("editor.bottomDock.active", static_cast<std::int64_t>(m_activeBottomDock));
+    config.SetBoolUVE("editor.panels.sceneVisible", m_scenePanelVisible);
+    config.SetBoolUVE("editor.panels.inspectorVisible", m_inspectorPanelVisible);
+    config.SetBoolUVE("editor.panels.bottomDockVisible", m_bottomDockVisible);
+    config.SetIntUVE("editor.viewport.gizmoMode", static_cast<std::int64_t>(m_gizmoMode));
+    config.SetIntUVE("editor.viewport.coordinateSpace", static_cast<std::int64_t>(m_gizmoCoordinateSpace));
+    config.SetBoolUVE("editor.viewport.snap.enabled", m_transformSnappingSettings.enabled);
+    config.SetDoubleUVE("editor.viewport.snap.translateStep", m_transformSnappingSettings.translateStep);
+    config.SetDoubleUVE("editor.viewport.snap.rotateStepDegrees", m_transformSnappingSettings.rotateStepDegrees);
+    config.SetDoubleUVE("editor.viewport.snap.scaleStep", m_transformSnappingSettings.scaleStep);
+    config.SetDoubleUVE("editor.viewport.camera.focusX", m_viewportFocusPoint.x);
+    config.SetDoubleUVE("editor.viewport.camera.focusY", m_viewportFocusPoint.y);
+    config.SetDoubleUVE("editor.viewport.camera.focusZ", m_viewportFocusPoint.z);
+    config.SetDoubleUVE("editor.viewport.camera.yawRadians", m_viewportYawRadians);
+    config.SetDoubleUVE("editor.viewport.camera.pitchRadians", m_viewportPitchRadians);
+    config.SetDoubleUVE("editor.viewport.camera.distance", m_viewportDistance);
+    return config.SaveUVE();
+}
+
 void EditorUVE::DrawMenuBarUVE() {
     if (!ImGui::BeginMainMenuBar()) {
         return;
@@ -3463,6 +3565,27 @@ void EditorUVE::DrawMenuBarUVE() {
     }
 
     ImGui::SameLine();
+    if (ImGui::BeginMenu("View")) {
+        ImGui::MenuItem("Scene Panel", nullptr, &m_scenePanelVisible);
+        ImGui::MenuItem("Inspector Panel", nullptr, &m_inspectorPanelVisible);
+        ImGui::MenuItem("Bottom Dock", nullptr, &m_bottomDockVisible);
+        ImGui::Separator();
+        if (ImGui::MenuItem("Default Layout")) {
+            ApplyLayoutPresetUVE(EditorLayoutPresetUVE::Default);
+        }
+        if (ImGui::MenuItem("Focus Viewport")) {
+            ApplyLayoutPresetUVE(EditorLayoutPresetUVE::FocusViewport);
+        }
+        if (ImGui::MenuItem("Content Review")) {
+            ApplyLayoutPresetUVE(EditorLayoutPresetUVE::ContentReview);
+        }
+        ImGui::Separator();
+        if (ImGui::MenuItem("Save Editor Preferences")) {
+            static_cast<void>(SaveSessionSettingsUVE());
+        }
+        ImGui::EndMenu();
+    }
+    ImGui::SameLine();
     ImGui::TextDisabled("|");
     ImGui::SameLine();
     if (m_activeWorkspace == EditorWorkspaceUVE::Library) {
@@ -3509,6 +3632,9 @@ void EditorUVE::DrawMenuBarUVE() {
 }
 
 void EditorUVE::DrawBottomDockUVE() {
+    if (!m_bottomDockVisible) {
+        return;
+    }
     const ImGuiViewport* const mainViewport = ImGui::GetMainViewport();
     ImGui::SetNextWindowPos(
         ImVec2{mainViewport->WorkPos.x, mainViewport->WorkPos.y + mainViewport->WorkSize.y - kBottomDockTabHeightUVE},
@@ -3540,6 +3666,9 @@ void EditorUVE::DrawBottomDockUVE() {
 }
 
 void EditorUVE::DrawBottomDockContentUVE() {
+    if (!m_bottomDockVisible) {
+        return;
+    }
     if (m_activeBottomDock == EditorBottomDockUVE::FileSystem) {
         DrawAssetsPanelUVE();
         return;
@@ -3623,10 +3752,13 @@ void EditorUVE::RebuildHierarchyFilterCacheUVE() {
 }
 
 void EditorUVE::DrawHierarchyPanelUVE() {
+    if (!m_scenePanelVisible) {
+        return;
+    }
     const ImGuiViewport* const mainViewport = ImGui::GetMainViewport();
     const float menuBarHeight = ImGui::GetFrameHeight();
     const float workspaceHeight = std::max(kMinimumViewportHeightUVE,
-                                                  mainViewport->WorkSize.y - menuBarHeight - kAssetsPanelHeightUVE);
+                                                  mainViewport->WorkSize.y - menuBarHeight - (m_bottomDockVisible ? kAssetsPanelHeightUVE : 0.0F));
     ImGui::SetNextWindowPos(ImVec2{mainViewport->WorkPos.x, mainViewport->WorkPos.y + menuBarHeight},
                             ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2{250.0F, workspaceHeight}, ImGuiCond_Always);
@@ -3777,10 +3909,13 @@ void EditorUVE::AcceptHierarchyDropTargetUVE(const Scene::EntityUVE targetParent
 }
 
 void EditorUVE::DrawInspectorPanelUVE() {
+    if (!m_inspectorPanelVisible) {
+        return;
+    }
     const ImGuiViewport* const mainViewport = ImGui::GetMainViewport();
     const float menuBarHeight = ImGui::GetFrameHeight();
     const float workspaceHeight = std::max(kMinimumViewportHeightUVE,
-                                           mainViewport->WorkSize.y - menuBarHeight - kAssetsPanelHeightUVE);
+                                           mainViewport->WorkSize.y - menuBarHeight - (m_bottomDockVisible ? kAssetsPanelHeightUVE : 0.0F));
     ImGui::SetNextWindowPos(
         ImVec2{mainViewport->WorkPos.x + mainViewport->WorkSize.x - 330.0F, mainViewport->WorkPos.y + menuBarHeight},
         ImGuiCond_Always);
@@ -4444,10 +4579,10 @@ void EditorUVE::DrawViewportPanelUVE() {
     // therefore owns only a transparent interactive input rectangle; it does not duplicate render
     // target, shader, or presentation ownership.
     const ImGuiViewport* const mainViewport = ImGui::GetMainViewport();
-    const float leftInset = 250.0F;
-    const float rightInset = 330.0F;
+    const float leftInset = m_scenePanelVisible ? 250.0F : 0.0F;
+    const float rightInset = m_inspectorPanelVisible ? 330.0F : 0.0F;
     const float menuBarHeight = ImGui::GetFrameHeight();
-    const float bottomInset = kAssetsPanelHeightUVE;
+    const float bottomInset = m_bottomDockVisible ? kAssetsPanelHeightUVE : 0.0F;
     const ImVec2 desiredPosition{mainViewport->WorkPos.x + leftInset, mainViewport->WorkPos.y + menuBarHeight};
     const ImVec2 desiredSize{
         std::max(kMinimumViewportWidthUVE, mainViewport->WorkSize.x - leftInset - rightInset),
