@@ -1,4 +1,0 @@
-Grok signing / write-access test
-Branch: grok/dev
-Timestamp: 2026-08-14
-This file is a temporary probe and can be deleted.
