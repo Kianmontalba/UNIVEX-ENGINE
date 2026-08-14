@@ -186,3 +186,8 @@ docs/           — MASTER_SPEC.md (full design doc), CODING_STANDARDS.md
 ```
 
 See `CONTRIBUTING.md` before making changes.
+
+
+## Project Health & Headless Automation
+
+`uve_project_check --project-root <path> --format text|json` validates a project without starting the editor, a window manager, or a render device. It reports deterministic registry and supported universal-asset envelope findings in human-readable text or machine-readable JSON. The command is deliberately read-only: it does not import, register, save, repair, rewrite, move, delete, or follow symlinks. A corrupt file is isolated as its own diagnostic so other files continue to be checked; independent facts for one file are aggregated only when their prerequisite parse data is valid.
