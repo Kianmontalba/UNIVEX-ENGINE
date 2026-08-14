@@ -95,6 +95,11 @@ TEST(EditorBridgeStdioUVETest, ServeUVE_HandshakesAndRoutesExistingBridgeDispatc
         EXPECT_TRUE(frames[0U].at("result").at("compatible").get<bool>());
         EXPECT_EQ(frames[0U].at("result").at("protocolVersion").get<std::uint32_t>(),
                   kEditorBridgeProtocolVersionUVE);
+        const JsonUVE& handshakeSnapshot = frames[0U].at("result").at("snapshot");
+        EXPECT_TRUE(handshakeSnapshot.at("selectedEntitiesTruncated").is_boolean());
+        EXPECT_TRUE(handshakeSnapshot.at("hierarchy").at("entries").is_array());
+        EXPECT_TRUE(handshakeSnapshot.at("inspector").at("eligibleDrawerIds").is_array());
+        EXPECT_TRUE(handshakeSnapshot.at("contentBrowser").at("breadcrumbs").is_array());
         EXPECT_TRUE(frames[1U].at("result").at("applied").get<bool>());
         EXPECT_EQ(frames[1U].at("result").at("code").get<std::string>(), "bridge.command.applied");
         EXPECT_TRUE(frames[1U].at("result").at("createdEntity").is_object());

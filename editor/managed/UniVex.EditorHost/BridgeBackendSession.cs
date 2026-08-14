@@ -2,7 +2,6 @@
 
 using System.Diagnostics;
 using System.Text;
-using System.Text.Json;
 
 namespace UniVex.EditorHost;
 
@@ -14,6 +13,7 @@ public sealed class BridgeBackendSession : IAsyncDisposable
 {
     private readonly Process process;
     private readonly BridgeProtocolClient client;
+    private readonly SemaphoreSlim requestGate = new(1, 1);
     private Task stderrDrain = Task.CompletedTask;
     private readonly StringBuilder stderr = new();
     private bool disposed;
@@ -32,7 +32,7 @@ public sealed class BridgeBackendSession : IAsyncDisposable
 
     public string StandardError => stderr.ToString();
 
-    public JsonElement? LastSnapshot { get; private set; }
+    public BridgeEditorSnapshot? LastSnapshot { get; private set; }
 
     public static async Task<BridgeBackendSession> StartAsync(
         string executablePath,
@@ -89,18 +89,41 @@ public sealed class BridgeBackendSession : IAsyncDisposable
         }
     }
 
-    public async Task<JsonElement> RefreshSnapshotAsync(CancellationToken cancellationToken)
+    public async Task<BridgeEditorSnapshot> RefreshSnapshotAsync(CancellationToken cancellationToken)
     {
-        JsonElement snapshot = await client.GetSnapshotAsync(cancellationToken).ConfigureAwait(false);
-        LastSnapshot = snapshot;
-        return snapshot;
+        ObjectDisposedException.ThrowIf(disposed, this);
+        await requestGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            ObjectDisposedException.ThrowIf(disposed, this);
+            BridgeEditorSnapshot snapshot = await client.GetSnapshotAsync(cancellationToken).ConfigureAwait(false);
+            LastSnapshot = snapshot;
+            return snapshot;
+        }
+        finally
+        {
+            requestGate.Release();
+        }
     }
 
-    public bool LastKnownSceneDirty()
+    public async Task<BridgeCommandResult> DispatchAsync(BridgeCommand command, CancellationToken cancellationToken)
     {
-        return LastSnapshot.HasValue && LastSnapshot.Value.TryGetProperty("sceneDirty", out JsonElement dirty) &&
-               dirty.ValueKind == JsonValueKind.True;
+        ObjectDisposedException.ThrowIf(disposed, this);
+        await requestGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            ObjectDisposedException.ThrowIf(disposed, this);
+            BridgeCommandResult result = await client.DispatchAsync(command, cancellationToken).ConfigureAwait(false);
+            LastSnapshot = result.Snapshot;
+            return result;
+        }
+        finally
+        {
+            requestGate.Release();
+        }
     }
+
+    public bool LastKnownSceneDirty() => LastSnapshot?.SceneDirty ?? false;
 
     public async ValueTask DisposeAsync()
     {
@@ -109,23 +132,31 @@ public sealed class BridgeBackendSession : IAsyncDisposable
             return;
         }
         disposed = true;
-
-        await client.DisposeAsync().ConfigureAwait(false);
-        if (!process.HasExited)
+        await requestGate.WaitAsync().ConfigureAwait(false);
+        try
         {
-            using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(2));
-            try
+            await client.DisposeAsync().ConfigureAwait(false);
+            if (!process.HasExited)
             {
-                await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
+                using CancellationTokenSource timeout = new(TimeSpan.FromSeconds(2));
+                try
+                {
+                    await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException)
+                {
+                    process.Kill(entireProcessTree: true);
+                    await process.WaitForExitAsync().ConfigureAwait(false);
+                }
             }
-            catch (OperationCanceledException)
-            {
-                process.Kill(entireProcessTree: true);
-                await process.WaitForExitAsync().ConfigureAwait(false);
-            }
+            await stderrDrain.ConfigureAwait(false);
         }
-        await stderrDrain.ConfigureAwait(false);
-        process.Dispose();
+        finally
+        {
+            requestGate.Release();
+            requestGate.Dispose();
+            process.Dispose();
+        }
     }
 
     private async Task DrainStandardErrorAsync()

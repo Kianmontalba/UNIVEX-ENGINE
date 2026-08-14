@@ -177,5 +177,91 @@ TEST(EditorBridgeUVETest, DispatchUVE_RejectsUnsupportedProtocolAndInvalidEntity
     engine.Shutdown();
 }
 
+TEST(EditorBridgeUVETest, SnapshotUVE_CopiesHierarchyInspectorAndNativePanelSessionState) {
+    Core::EngineCoreUVE engine(MakeBridgeTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_bridge_panel_snapshot.uvescene");
+        editor.InitUVE();
+        EditorBridgeUVE bridge(editor);
+
+        const Scene::EntityUVE root = editor.CreateDocumentEntityUVE(EditorEntityKindUVE::Cube);
+        ASSERT_NE(root, Scene::kInvalidEntityUVE);
+        ASSERT_TRUE(editor.SetSelectedEntityNameUVE("Bridge Root"));
+        const Scene::EntityUVE child = editor.CreateDocumentEntityUVE(EditorEntityKindUVE::Plane);
+        ASSERT_NE(child, Scene::kInvalidEntityUVE);
+        ASSERT_TRUE(editor.ReparentSelectedEntityUVE(root));
+        ASSERT_TRUE(editor.SetSelectedEntityNameUVE("Bridge Child"));
+
+        EditorBridgeSnapshotUVE snapshot = bridge.GetSnapshotUVE();
+        ASSERT_EQ(snapshot.hierarchy.entries.size(), 2U);
+        EXPECT_EQ(snapshot.hierarchy.entries[0].entity, (EditorBridgeEntityRefUVE{root.index, root.generation}));
+        EXPECT_EQ(snapshot.hierarchy.entries[0].displayLabel, "Bridge Root");
+        EXPECT_EQ(snapshot.hierarchy.entries[0].depth, 0U);
+        EXPECT_EQ(snapshot.hierarchy.entries[0].childCount, 1U);
+        EXPECT_EQ(snapshot.hierarchy.entries[1].entity, (EditorBridgeEntityRefUVE{child.index, child.generation}));
+        ASSERT_TRUE(snapshot.hierarchy.entries[1].parent.has_value());
+        EXPECT_EQ(*snapshot.hierarchy.entries[1].parent, (EditorBridgeEntityRefUVE{root.index, root.generation}));
+        EXPECT_EQ(snapshot.hierarchy.entries[1].depth, 1U);
+        ASSERT_EQ(snapshot.inspector.mode, EditorBridgeInspectorModeUVE::SingleSelection);
+        ASSERT_TRUE(snapshot.inspector.activeEntity.has_value());
+        EXPECT_EQ(snapshot.inspector.activeEntity->displayLabel, "Bridge Child");
+        ASSERT_TRUE(snapshot.inspector.parent.has_value());
+        EXPECT_TRUE(snapshot.inspector.parent->displayLabel.starts_with("Bridge Root [Cube] (Entity "));
+        EXPECT_EQ(snapshot.inspector.eligibleDrawerIds,
+                  (std::vector<std::string>{"name", "hierarchy", "transform", "primitive-mesh"}));
+        EXPECT_TRUE(snapshot.inspector.canEditSelectedName);
+        EXPECT_FALSE(snapshot.contentBrowser.initialized);
+
+        EditorBridgeRequestUVE filterRequest{};
+        filterRequest.protocolVersion = kEditorBridgeProtocolVersionUVE;
+        filterRequest.requestId = 10U;
+        filterRequest.expectedRevision = snapshot.revision;
+        filterRequest.kind = EditorBridgeRequestKindUVE::SetHierarchyFilter;
+        filterRequest.hierarchyFilter = "child";
+        const EditorBridgeResponseUVE filtered = bridge.DispatchUVE(filterRequest);
+        ASSERT_TRUE(filtered.applied);
+        EXPECT_TRUE(filtered.snapshot.hierarchy.filterActive);
+        ASSERT_EQ(filtered.snapshot.hierarchy.entries.size(), 2U);
+        EXPECT_GT(filtered.snapshot.revision, snapshot.revision);
+
+        EditorBridgeRequestUVE toggleRequest{};
+        toggleRequest.protocolVersion = kEditorBridgeProtocolVersionUVE;
+        toggleRequest.requestId = 11U;
+        toggleRequest.expectedRevision = filtered.snapshot.revision;
+        toggleRequest.kind = EditorBridgeRequestKindUVE::ToggleEntitySelection;
+        toggleRequest.entity = EditorBridgeEntityRefUVE{root.index, root.generation};
+        const EditorBridgeResponseUVE toggled = bridge.DispatchUVE(toggleRequest);
+        ASSERT_TRUE(toggled.applied);
+        EXPECT_EQ(toggled.snapshot.inspector.mode, EditorBridgeInspectorModeUVE::MultiSelection);
+        EXPECT_FALSE(toggled.snapshot.inspector.canEditSelectedName);
+
+        editor.ShutdownUVE();
+    }
+    engine.Shutdown();
+}
+
+TEST(EditorBridgeUVETest, SnapshotUVE_BoundsCopiedPanelRowsWithoutClaimingDeletion) {
+    Core::EngineCoreUVE engine(MakeBridgeTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_bridge_panel_bound.uvescene");
+        editor.InitUVE();
+        EditorBridgeUVE bridge(editor);
+        for (std::size_t index = 0U; index < kEditorBridgeMaximumPanelEntriesUVE + 1U; ++index) {
+            ASSERT_NE(editor.CreateDocumentEntityUVE(EditorEntityKindUVE::Empty), Scene::kInvalidEntityUVE);
+        }
+
+        const EditorBridgeSnapshotUVE snapshot = bridge.GetSnapshotUVE();
+        EXPECT_EQ(snapshot.hierarchy.entries.size(), kEditorBridgeMaximumPanelEntriesUVE);
+        EXPECT_TRUE(snapshot.hierarchy.truncated);
+
+        editor.ShutdownUVE();
+    }
+    engine.Shutdown();
+}
+
 } // namespace
 } // namespace UVE::Editor::Tests

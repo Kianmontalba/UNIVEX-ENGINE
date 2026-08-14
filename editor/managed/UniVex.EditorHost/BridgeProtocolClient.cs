@@ -43,15 +43,50 @@ public sealed class BridgeProtocolClient : IAsyncDisposable
         bool compatible = result.GetProperty("compatible").GetBoolean();
         uint backendProtocolVersion = result.GetProperty("protocolVersion").GetUInt32();
         string code = result.GetProperty("code").GetString() ?? "bridge.protocol.invalid";
-        JsonElement snapshot = result.GetProperty("snapshot").Clone();
+        BridgeEditorSnapshot snapshot = BridgeSnapshotParser.Parse(result.GetProperty("snapshot"));
         return new BridgeHelloResult(compatible, backendProtocolVersion, code, snapshot);
     }
 
-    public async Task<JsonElement> GetSnapshotAsync(CancellationToken cancellationToken)
+    public async Task<BridgeEditorSnapshot> GetSnapshotAsync(CancellationToken cancellationToken)
     {
         using JsonDocument response = await InvokeAsync("bridge.getSnapshot", new { }, cancellationToken)
             .ConfigureAwait(false);
-        return GetResultOrThrow(response.RootElement).GetProperty("snapshot").Clone();
+        return BridgeSnapshotParser.Parse(GetResultOrThrow(response.RootElement).GetProperty("snapshot"));
+    }
+
+    public async Task<BridgeCommandResult> DispatchAsync(BridgeCommand command, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        if (string.IsNullOrWhiteSpace(command.Kind))
+        {
+            throw new ArgumentException("A named bridge command kind is required.", nameof(command));
+        }
+
+        using JsonDocument response = await InvokeAsync("bridge.dispatch", new
+        {
+            protocolVersion = ProtocolVersion,
+            requestId = checked((ulong)nextRequestId),
+            expectedRevision = command.ExpectedRevision,
+            kind = command.Kind,
+            entity = command.Entity is null ? null : new { index = command.Entity.Index, generation = command.Entity.Generation },
+            entityName = command.EntityName,
+            entityKind = (string?)null,
+            hierarchyFilter = command.HierarchyFilter,
+            contentDirectory = command.ContentDirectory,
+            contentFilter = command.ContentFilter,
+            contentFocus = command.ContentFocus,
+            contentEntryPath = command.ContentEntryPath,
+        }, cancellationToken).ConfigureAwait(false);
+        JsonElement result = GetResultOrThrow(response.RootElement);
+        BridgeEntityRef? createdEntity = result.GetProperty("createdEntity").ValueKind == JsonValueKind.Null
+            ? null
+            : ParseEntityRef(result.GetProperty("createdEntity"));
+        return new BridgeCommandResult(
+            result.GetProperty("applied").GetBoolean(),
+            result.GetProperty("code").GetString() ?? "bridge.response.invalid",
+            result.GetProperty("message").GetString() ?? "The backend returned no bridge command message.",
+            BridgeSnapshotParser.Parse(result.GetProperty("snapshot")),
+            createdEntity);
     }
 
     public async ValueTask DisposeAsync()
@@ -164,6 +199,24 @@ public sealed class BridgeProtocolClient : IAsyncDisposable
         return buffer;
     }
 
+    private static BridgeEntityRef ParseEntityRef(JsonElement value)
+    {
+        if (value.ValueKind != JsonValueKind.Object)
+        {
+            throw new BridgeProtocolException("bridge.transport.response.invalid",
+                "The backend returned an invalid created entity identity.");
+        }
+        try
+        {
+            return new BridgeEntityRef(value.GetProperty("index").GetUInt32(), value.GetProperty("generation").GetUInt32());
+        }
+        catch (Exception exception) when (exception is KeyNotFoundException or InvalidOperationException or FormatException)
+        {
+            throw new BridgeProtocolException("bridge.transport.response.invalid",
+                $"The backend returned an invalid created entity identity: {exception.Message}");
+        }
+    }
+
     private static JsonElement GetResultOrThrow(JsonElement response)
     {
         bool hasError = response.TryGetProperty("error", out JsonElement error);
@@ -195,7 +248,7 @@ public sealed class BridgeProtocolClient : IAsyncDisposable
     }
 }
 
-public sealed record BridgeHelloResult(bool Compatible, uint BackendProtocolVersion, string Code, JsonElement Snapshot);
+public sealed record BridgeHelloResult(bool Compatible, uint BackendProtocolVersion, string Code, BridgeEditorSnapshot Snapshot);
 
 public sealed class BridgeProtocolException : Exception
 {

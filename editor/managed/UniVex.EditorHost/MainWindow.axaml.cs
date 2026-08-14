@@ -1,7 +1,5 @@
 // Copyright (c) 2026 UniVex Studios. All Rights Reserved.
 
-using System.Text.Json;
-using System.Threading;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -17,8 +15,11 @@ public partial class MainWindow : Window
     private DockShellLayoutSession layoutSession = new(DockShellLayoutState.Default);
     private BridgeBackendSession? session;
     private HostSessionState state = HostSessionState.Disconnected;
+    private BridgeHierarchyEntry? selectedHierarchyEntry;
+    private BridgeContentBrowserEntry? selectedContentEntry;
     private bool closeConfirmed;
     private bool applyingLayout;
+    private bool applyingSnapshot;
     private bool shellInitialized;
 
     public MainWindow()
@@ -58,29 +59,14 @@ public partial class MainWindow : Window
         }
     }
 
-    private void ToggleLeftDockButton_OnClick(object? sender, RoutedEventArgs e)
-    {
-        UpdateShellLayout(layoutSession.CurrentLayout with
-        {
-            IsLeftDockVisible = !layoutSession.CurrentLayout.IsLeftDockVisible,
-        });
-    }
+    private void ToggleLeftDockButton_OnClick(object? sender, RoutedEventArgs e) =>
+        UpdateShellLayout(layoutSession.CurrentLayout with { IsLeftDockVisible = !layoutSession.CurrentLayout.IsLeftDockVisible });
 
-    private void ToggleRightDockButton_OnClick(object? sender, RoutedEventArgs e)
-    {
-        UpdateShellLayout(layoutSession.CurrentLayout with
-        {
-            IsRightDockVisible = !layoutSession.CurrentLayout.IsRightDockVisible,
-        });
-    }
+    private void ToggleRightDockButton_OnClick(object? sender, RoutedEventArgs e) =>
+        UpdateShellLayout(layoutSession.CurrentLayout with { IsRightDockVisible = !layoutSession.CurrentLayout.IsRightDockVisible });
 
-    private void ToggleBottomDockButton_OnClick(object? sender, RoutedEventArgs e)
-    {
-        UpdateShellLayout(layoutSession.CurrentLayout with
-        {
-            IsBottomDockVisible = !layoutSession.CurrentLayout.IsBottomDockVisible,
-        });
-    }
+    private void ToggleBottomDockButton_OnClick(object? sender, RoutedEventArgs e) =>
+        UpdateShellLayout(layoutSession.CurrentLayout with { IsBottomDockVisible = !layoutSession.CurrentLayout.IsBottomDockVisible });
 
     private void WorkspaceButton_OnClick(object? sender, RoutedEventArgs e)
     {
@@ -142,12 +128,110 @@ public partial class MainWindow : Window
 
         try
         {
-            JsonElement snapshot = await session.RefreshSnapshotAsync(CancellationToken.None).ConfigureAwait(true);
-            DisplayConnectedSnapshot(snapshot);
+            DisplayConnectedSnapshot(await session.RefreshSnapshotAsync(CancellationToken.None).ConfigureAwait(true));
         }
         catch (Exception exception)
         {
             EnterFailure("bridge.snapshot.failed", exception.Message);
+        }
+    }
+
+    private void ApplyHierarchyFilterButton_OnClick(object? sender, RoutedEventArgs e) =>
+        DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "setHierarchyFilter",
+            HierarchyFilter: HierarchyFilterTextBox.Text ?? string.Empty));
+
+    private void ClearHierarchyFilterButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        HierarchyFilterTextBox.Text = string.Empty;
+        DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "setHierarchyFilter", HierarchyFilter: string.Empty));
+    }
+
+    private void HierarchyListBox_OnSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (!applyingSnapshot)
+        {
+            selectedHierarchyEntry = HierarchyListBox.SelectedItem as BridgeHierarchyEntry;
+        }
+    }
+
+    private void SelectHierarchyEntityButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (selectedHierarchyEntry is not null)
+        {
+            DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "selectEntity", Entity: selectedHierarchyEntry.Entity));
+        }
+    }
+
+    private void ToggleHierarchyEntityButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (selectedHierarchyEntry is not null)
+        {
+            DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "toggleEntitySelection", Entity: selectedHierarchyEntry.Entity));
+        }
+    }
+
+    private void ClearSelectionButton_OnClick(object? sender, RoutedEventArgs e) =>
+        DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "clearSelection"));
+
+    private void RenameSelectedEntityButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        string name = InspectorNameTextBox.Text?.Trim() ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(name))
+        {
+            DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "setSelectedEntityName", EntityName: name));
+        }
+    }
+
+    private void RefreshContentBrowserButton_OnClick(object? sender, RoutedEventArgs e) =>
+        DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "refreshContentBrowser"));
+
+    private void ContentRootButton_OnClick(object? sender, RoutedEventArgs e) =>
+        DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "setContentBrowserDirectory", ContentDirectory: string.Empty));
+
+    private void ContentUpButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        string currentDirectory = session?.LastSnapshot?.ContentBrowser.CurrentDirectory ?? string.Empty;
+        int separator = currentDirectory.LastIndexOf('/');
+        string parent = separator < 0 ? string.Empty : currentDirectory[..separator];
+        DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "setContentBrowserDirectory", ContentDirectory: parent));
+    }
+
+    private void OpenSelectedFolderButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (selectedContentEntry is { IsDirectory: true })
+        {
+            DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "setContentBrowserDirectory",
+                ContentDirectory: selectedContentEntry.RelativePath));
+        }
+    }
+
+    private void ApplyContentFiltersButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "setContentBrowserFilter",
+            ContentFilter: ContentFilterTextBox.Text ?? string.Empty));
+        DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "setContentBrowserFocus",
+            ContentFocus: SelectedContentFocusTag()));
+    }
+
+    private void ClearContentFiltersButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        ContentFilterTextBox.Text = string.Empty;
+        ContentFocusComboBox.SelectedIndex = 0;
+        DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "setContentBrowserFilter", ContentFilter: string.Empty));
+        DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "setContentBrowserFocus", ContentFocus: "all"));
+    }
+
+    private void ContentBrowserListBox_OnSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (applyingSnapshot)
+        {
+            return;
+        }
+        selectedContentEntry = ContentBrowserListBox.SelectedItem as BridgeContentBrowserEntry;
+        if (selectedContentEntry is not null)
+        {
+            DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "selectContentBrowserEntry",
+                ContentEntryPath: selectedContentEntry.RelativePath));
         }
     }
 
@@ -232,7 +316,7 @@ public partial class MainWindow : Window
                     .ConfigureAwait(true);
                 session = started;
                 session.Exited += Session_OnExited;
-                DisplayConnectedSnapshot(started.LastSnapshot!.Value);
+                DisplayConnectedSnapshot(started.LastSnapshot!);
             }
             catch (BridgeProtocolException exception)
             {
@@ -267,7 +351,37 @@ public partial class MainWindow : Window
         });
     }
 
-    private void DisplayConnectedSnapshot(JsonElement snapshot)
+    private async void DispatchCurrentCommand(BridgeCommand command)
+    {
+        if (session is null || state != HostSessionState.Connected)
+        {
+            return;
+        }
+
+        try
+        {
+            BridgeCommandResult result = await session.DispatchAsync(command, CancellationToken.None).ConfigureAwait(true);
+            if (result.Applied)
+            {
+                DisplayConnectedSnapshot(result.Snapshot);
+                return;
+            }
+
+            DisplayConnectedSnapshot(result.Snapshot);
+            StatusTextBlock.Text = $"Native command not applied — {result.Code}";
+            DetailsTextBlock.Text = result.Message;
+        }
+        catch (BridgeProtocolException exception)
+        {
+            EnterFailure(exception.Code, exception.Message);
+        }
+        catch (Exception exception)
+        {
+            EnterFailure("bridge.command.failed", exception.Message);
+        }
+    }
+
+    private void DisplayConnectedSnapshot(BridgeEditorSnapshot snapshot)
     {
         state = HostSessionState.Connected;
         WarningBorder.IsVisible = false;
@@ -276,7 +390,117 @@ public partial class MainWindow : Window
         StartNewSessionButton.IsEnabled = false;
         StatusTextBlock.Text = "Connected to a headless C++ bridge backend.";
         DetailsTextBlock.Text = DescribeSnapshot(snapshot);
+        RenderPanels(snapshot);
         UpdateShellPresentation();
+    }
+
+    private void RenderPanels(BridgeEditorSnapshot snapshot)
+    {
+        applyingSnapshot = true;
+        try
+        {
+            RenderHierarchy(snapshot.Hierarchy);
+            RenderInspector(snapshot.Inspector);
+            RenderContentBrowser(snapshot.ContentBrowser);
+        }
+        finally
+        {
+            applyingSnapshot = false;
+        }
+    }
+
+    private void RenderHierarchy(BridgeHierarchySnapshot hierarchy)
+    {
+        HierarchyFilterTextBox.Text = hierarchy.Filter;
+        HierarchyListBox.ItemsSource = hierarchy.Entries;
+        selectedHierarchyEntry = null;
+        foreach (BridgeHierarchyEntry entry in hierarchy.Entries)
+        {
+            if (entry.IsActive)
+            {
+                selectedHierarchyEntry = entry;
+                HierarchyListBox.SelectedItem = entry;
+                break;
+            }
+        }
+        string suffix = hierarchy.IsTruncated ? " The native bridge truncated this copied view." : string.Empty;
+        HierarchyStatusTextBlock.Text = $"{hierarchy.Entries.Count} native hierarchy row(s).{suffix}";
+    }
+
+    private void RenderInspector(BridgeInspectorSnapshot inspector)
+    {
+        switch (inspector.Mode)
+        {
+            case BridgeInspectorMode.NoSelection:
+                InspectorTitleTextBlock.Text = "No entity selection";
+                InspectorContextTextBlock.Text = "Select a hierarchy entity to inspect copied native context.";
+                InspectorNameTextBox.Text = string.Empty;
+                InspectorNameTextBox.IsEnabled = false;
+                RenameSelectedEntityButton.IsEnabled = false;
+                InspectorDrawersTextBlock.Text = "Native drawer facts: none";
+                InspectorSelectionTextBlock.Text = string.Empty;
+                break;
+            case BridgeInspectorMode.MultiSelection:
+                InspectorTitleTextBlock.Text = $"{inspector.SelectedEntities.Count} entities selected";
+                InspectorContextTextBlock.Text = inspector.ActiveEntity is null
+                    ? "Multi-selection is read-only."
+                    : $"Active native selection: {inspector.ActiveEntity.DisplayLabel}. Single-entity editing is unavailable.";
+                InspectorNameTextBox.Text = string.Empty;
+                InspectorNameTextBox.IsEnabled = false;
+                RenameSelectedEntityButton.IsEnabled = false;
+                InspectorDrawersTextBlock.Text = "Native drawer facts are available only for single selection.";
+                InspectorSelectionTextBlock.Text = string.Join("\n", inspector.SelectedEntities.Select(entity => entity.DisplayLabel)) +
+                                                   (inspector.SelectedEntitiesTruncated ? "\nSelection list truncated by native bridge." : string.Empty);
+                break;
+            case BridgeInspectorMode.SingleSelection:
+                BridgeEntitySnapshot active = inspector.ActiveEntity!;
+                InspectorTitleTextBlock.Text = active.DisplayLabel;
+                InspectorContextTextBlock.Text = inspector.Parent is null
+                    ? "Native hierarchy parent: Root"
+                    : $"Native hierarchy parent: {inspector.Parent.DisplayLabel}";
+                InspectorNameTextBox.Text = active.DisplayLabel;
+                InspectorNameTextBox.IsEnabled = inspector.CanEditSelectedName;
+                RenameSelectedEntityButton.IsEnabled = inspector.CanEditSelectedName;
+                InspectorDrawersTextBlock.Text = inspector.EligibleDrawerIds.Count == 0
+                    ? "Native drawer facts: none"
+                    : $"Native drawer facts: {string.Join(", ", inspector.EligibleDrawerIds)}";
+                InspectorSelectionTextBlock.Text = inspector.Ancestry.Count == 0
+                    ? "Native ancestry: unavailable"
+                    : $"Native ancestry: {string.Join(" > ", inspector.Ancestry.Select(entity => entity.DisplayLabel))}";
+                break;
+        }
+    }
+
+    private void RenderContentBrowser(BridgeContentBrowserSnapshot contentBrowser)
+    {
+        ContentFilterTextBox.Text = contentBrowser.Filter;
+        SelectContentFocus(contentBrowser.TypeFocus);
+        ContentBrowserListBox.ItemsSource = contentBrowser.Entries;
+        selectedContentEntry = contentBrowser.SelectedEntry;
+        ContentBrowserListBox.SelectedItem = selectedContentEntry;
+        string breadcrumbs = contentBrowser.Breadcrumbs.Count == 0
+            ? "Content"
+            : $"Content > {string.Join(" > ", contentBrowser.Breadcrumbs)}";
+        ContentBreadcrumbTextBlock.Text = breadcrumbs;
+        string status = $"{contentBrowser.Entries.Count} / {contentBrowser.VisibleEntryCount} visible copied row(s); " +
+                        $"{contentBrowser.DirectEntryCount} direct native entry(ies); snapshot #{contentBrowser.RefreshGeneration}.";
+        if (!contentBrowser.IsInitialized)
+        {
+            status += " Native cache has not been explicitly refreshed yet.";
+        }
+        if (!contentBrowser.LastRefreshSucceeded)
+        {
+            status += " Last native refresh failed; the prior successful snapshot is retained.";
+        }
+        if (!contentBrowser.ContentRootExists)
+        {
+            status += " Native content root does not exist.";
+        }
+        if (contentBrowser.IsTruncated)
+        {
+            status += " The native bridge truncated this copied view.";
+        }
+        ContentStatusTextBlock.Text = status;
     }
 
     private void EnterFailure(string code, string detail)
@@ -378,26 +602,30 @@ public partial class MainWindow : Window
         return Path.Combine(root, "UniVex", "editor_host_layout.json");
     }
 
-    private bool? LastKnownDirtyEvidence()
+    private bool? LastKnownDirtyEvidence() => session?.LastSnapshot?.SceneDirty;
+
+    private ulong CurrentRevision() => session?.LastSnapshot?.Revision ?? 0UL;
+
+    private string SelectedContentFocusTag() =>
+        ContentFocusComboBox.SelectedItem is ComboBoxItem { Tag: string tag } ? tag : "all";
+
+    private void SelectContentFocus(string nativeFocusLabel)
     {
-        if (session is null || session.LastSnapshot is null)
+        for (int index = 0; index < ContentFocusComboBox.Items.Count; ++index)
         {
-            return null;
+            if (ContentFocusComboBox.Items[index] is ComboBoxItem { Content: string content } && content == nativeFocusLabel)
+            {
+                ContentFocusComboBox.SelectedIndex = index;
+                return;
+            }
         }
-        return session.LastKnownSceneDirty();
+        ContentFocusComboBox.SelectedIndex = 0;
     }
 
-    private static string DescribeSnapshot(JsonElement snapshot)
-    {
-        uint protocolVersion = snapshot.GetProperty("protocolVersion").GetUInt32();
-        ulong revision = snapshot.GetProperty("revision").GetUInt64();
-        bool dirty = snapshot.GetProperty("sceneDirty").GetBoolean();
-        int selected = snapshot.GetProperty("selectedEntities").GetArrayLength();
-        int capabilities = snapshot.GetProperty("capabilities").GetArrayLength();
-        string scenePath = snapshot.GetProperty("activeScenePath").GetString() ?? "";
-        return $"Protocol {protocolVersion}; revision {revision}; dirty={dirty}; selected entities={selected}; " +
-               $"advertised capabilities={capabilities}; scene='{scenePath}'.";
-    }
+    private static string DescribeSnapshot(BridgeEditorSnapshot snapshot) =>
+        $"Protocol {snapshot.ProtocolVersion}; revision {snapshot.Revision}; dirty={snapshot.SceneDirty}; " +
+        $"hierarchy rows={snapshot.Hierarchy.Entries.Count}; content rows={snapshot.ContentBrowser.Entries.Count}; " +
+        $"advertised capabilities={snapshot.Capabilities.Count}; scene='{snapshot.ActiveScenePath}'.";
 
     private void MainWindow_OnClosing(object? sender, WindowClosingEventArgs e)
     {
