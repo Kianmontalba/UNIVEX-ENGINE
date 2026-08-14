@@ -94,6 +94,11 @@ void GlCommandBufferUVE::BeginRenderPassUVE(const RenderPassDescUVE& renderPassD
         clearMask |= GL_COLOR_BUFFER_BIT;
     }
     if (renderPassDesc.depthLoadOp == LoadOpUVE::Clear) {
+        // glClear(GL_DEPTH_BUFFER_BIT) respects GL_DEPTH_WRITEMASK. A prior fullscreen pass
+        // deliberately disables depth writes, so a render pass that explicitly requests a depth
+        // clear must restore the write mask first or its clear becomes a silent no-op and all
+        // same-depth geometry in subsequent frames can fail GL_LESS.
+        glDepthMask(GL_TRUE);
         glClearDepth(static_cast<GLdouble>(renderPassDesc.clearDepth));
         clearMask |= GL_DEPTH_BUFFER_BIT;
     }

@@ -96,13 +96,22 @@ These navigation controls never alter the document, dirty state, scene file, or 
 
 **Viewport Scene Rendering v1** replaces the retired EngineCore demo-triangle scaffold with renderer-owned built-in
 geometry. Cube, UV Sphere, and Plane roots carry a serializable primitive kind plus bounded linear-RGB base color;
-the renderer uploads each deterministic mesh once, uses the canonical lit/shadowed material shader with fallback
-white/normal textures, and culls primitives from their transformed local bounds. The Library workspace exposes
-`+ Cube`, `+ Sphere`, and `+ Plane`; the Inspector lets exactly one selected primitive atomically change its kind
-and base color, while synchronizing its collider extents for the new kind. The editor draws a session-only 10 × 10
-XZ ground grid at one-unit spacing as viewport feedback. It is neither selectable nor serialized. Mesh-triangle or
-render-ID picking, non-collider selection, mesh-derived selection bounds, and offscreen-texture viewport compositing
-remain deferred.
+the renderer uploads each deterministic mesh once, uses the Basic3D program (`uModel`, `uViewProjection`, and
+`uColor`), and culls primitives from their transformed local bounds. The Library workspace exposes `+ Cube`,
+`+ Sphere`, and `+ Plane`; the Inspector lets exactly one selected primitive atomically change its kind and base
+color, while synchronizing its collider extents for the new kind. The editor draws a session-only 10 × 10 XZ ground
+grid at one-unit spacing as viewport feedback. It is neither selectable nor serialized. Mesh-triangle or render-ID
+picking, non-collider selection, mesh-derived selection bounds, and offscreen-texture viewport compositing remain
+deferred.
+
+**Viewport Presentation & Render Verification v1** ensures the renderer clears the HDR scene to a restrained
+blue-gray environment, records primitive evidence through `Renderer3DFrameDiagnosticsUVE`, and presents the HDR
+image through the tone-mapping pass to the window back buffer. The viewport overlay displays the extracted primitive
+count plus recorded and OpenGL-issued draw-call evidence; these are CPU-side diagnostic facts, not pixel-readback
+claims. OpenGL render-pass clears explicitly restore the depth write mask before a requested depth clear, preventing
+a previous depth-disabled fullscreen pass from silently blocking later scene draws. Real-GL regressions verify the
+mounted Basic3D source, canonical indexed geometry, HDR composition, the cross-frame depth-clear transition, and
+red/green/blue ECS primitives sampled from `GL_BACK` after tone mapping and before swap.
 
 **Inspector Drawer Registry v1** keeps the single-entity Inspector extensible without turning it into a generic reflection UI. Its built-in **Name**, **Transform**, and **Primitive Mesh** sections are registered in deterministic order through editor-local eligibility/draw callbacks. The registry owns callbacks only; it never owns ECS state, EngineServices, or Dear ImGui state. Every authored write remains routed through the existing `EditorUVE` commands, preserving validation, dirty-state changes, Transform/Name/Primitive Appearance history, collider synchronization, and Play/Pause authoring protections. Future component sections must register a stable unique identifier and route edits through a dedicated editor command; dynamic plugin loading, generic arbitrary-component inspection, asset settings, and multi-entity component editing remain deferred.
 

@@ -1212,10 +1212,10 @@ one copied vertex stream per primitive kind is tangent-generated and uploaded to
 **`Renderer3DUVE` is the exclusive primitive draw owner.** Primitive extraction requires a non-dirty
 `WorldTransformComponentUVE` and a valid primitive component, composes world TRS, frustum-culls the transformed
 catalog bounds, and records the surviving items in the existing HDR main pass after asset-backed opaque and
-transparent items. The primitive program uses `lit_shadowed_3d.glsl` with canonical mesh vertex layout, the
-existing light/shadow uniforms, default metallic/roughness values, and renderer-owned fallback white/flat-normal
-textures. Primitive GPU buffers are cached by kind and destroyed with the renderer; neither `EngineCoreUVE` nor
-`EditorUVE` owns RHI resources or issues direct draw calls.
+transparent items. The primitive program uses `basic_3d.glsl` with canonical mesh vertex layout and exactly three
+per-draw uniforms: `uModel`, `uViewProjection`, and `uColor`. Built-in primitives must not set material, texture,
+light, or shadow uniforms that the Basic3D contract does not declare. Primitive GPU buffers are cached by kind and
+destroyed with the renderer; neither `EngineCoreUVE` nor `EditorUVE` owns RHI resources or issues direct draw calls.
 
 **Editor authoring is deliberately narrow and atomic.** Library workspace controls create selected Cube, UV Sphere,
 and Plane document roots with a `PrimitiveMeshComponentUVE` and matching selectable collider. Cube and UV Sphere
@@ -1232,6 +1232,29 @@ or mesh-triangle picking, non-collider selection, mesh-derived selection bounds,
 import/reimport, drag-and-drop, and thumbnails remain separate work. **Increment 59 adds a read-only project-content
 index, while Increment 61 adds a separate portable observation journal and targeted metadata invalidation**; neither
 increment adds source mutation, automatic import/reimport, or asset previews.
+
+### Viewport Presentation & Render Verification v1 (Increment 63)
+
+**`Renderer3DFrameDiagnosticsUVE` is evidence, not a pixel-readback claim.** `IRenderer3DUVE` returns a copied
+per-frame snapshot with primitive candidates/extractions, mesh and primitive draw calls recorded, the number of
+OpenGL-issued draw calls, program readiness, and main/tone-mapping pass recording. It is reset at frame start and is
+safe for tooling, tests, and status UI to read after rendering. `glDrawCallsIssued` is populated only for the OpenGL
+backend and confirms command issuance only; it must never be interpreted as proof that any particular pixel reached
+the default framebuffer. `EditorUVE` displays only compact frame evidence—primitive count and recorded/issued draw
+counts—in the viewport overlay.
+
+**A requested depth clear is state-independent.** `GlCommandBufferUVE::BeginRenderPassUVE()` restores
+`GL_DEPTH_WRITEMASK` before `glClear(GL_DEPTH_BUFFER_BIT)` whenever `RenderPassDescUVE::depthLoadOp` is `Clear`.
+A fullscreen tone-mapping pipeline correctly disables depth writes, but that prior state must not turn the next
+HDR main pass's depth clear into a silent no-op. Pipeline binding remains the authority for the depth-test and
+write-mask state used by each draw after the clear.
+
+**Viewport presentation is verified at the right boundary.** Real-GL tests read `GL_BACK` in the
+`EngineCoreUVE` post-render callback, after the tone-mapping pass and before swap, rather than treating a
+post-swap read as deterministic. The fixture asserts three independently colored ECS primitives at interior raster
+coordinates, alongside renderer evidence. Separate RHI regressions cover Basic3D compilation through the mounted
+virtual shader path, canonical indexed layouts, HDR-to-default-framebuffer tone mapping, and the persisted
+post-tone-map depth-mask transition.
 
 ### Project FileSystem & Asset Browser v1 (Increment 59)
 

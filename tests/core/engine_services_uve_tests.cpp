@@ -648,7 +648,14 @@ class FakeRenderer3DUVE final : public Render::IRenderer3DUVE {
 public:
     void RenderFrameUVE(Scene::IEntityManagerUVE&, Scene::EntityUVE) override { ++renderFrameCallCount; }
 
+    [[nodiscard]] Render::Renderer3DFrameDiagnosticsUVE GetLastFrameDiagnosticsUVE() const noexcept override {
+        ++getDiagnosticsCallCount;
+        return diagnostics;
+    }
+
     int renderFrameCallCount = 0;
+    mutable int getDiagnosticsCallCount = 0;
+    Render::Renderer3DFrameDiagnosticsUVE diagnostics{};
 };
 
 class FakeCollisionSystemUVE final : public Physics::ICollisionSystemUVE {
@@ -984,6 +991,8 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
         Math::FrustumUVE{}));
     static_cast<void>(services.GetLightSystemUVE().ExtractActiveLightsUVE(services.GetEntityManagerUVE()));
     services.GetRenderer3DUVE().RenderFrameUVE(services.GetEntityManagerUVE(), Scene::kInvalidEntityUVE);
+    renderer3D.diagnostics.primitiveItemsExtracted = 7U;
+    EXPECT_EQ(services.GetRenderer3DUVE().GetLastFrameDiagnosticsUVE().primitiveItemsExtracted, 7U);
     static_cast<void>(services.GetRaycastSystemUVE().RaycastUVE(services.GetEntityManagerUVE(), Physics::RaycastQueryUVE{}));
     services.GetInputSystemUVE().UpdateUVE();
     services.GetAudioSystemUVE().UpdateUVE();
@@ -1021,6 +1030,7 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     EXPECT_EQ(meshRenderer.extractRenderQueueCallCount, 1);
     EXPECT_EQ(lightSystem.extractActiveLightCallCount, 1);
     EXPECT_EQ(renderer3D.renderFrameCallCount, 1);
+    EXPECT_EQ(renderer3D.getDiagnosticsCallCount, 1);
     EXPECT_EQ(raycastSystem.raycastCallCount, 1);
     EXPECT_EQ(inputSystem.updateCallCount, 1);
     EXPECT_EQ(audioSystem.updateCallCount, 1);

@@ -319,12 +319,49 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_VisiblePrimitive_RecordsCanonicalGeomet
         return std::holds_alternative<DrawIndexedCommandUVE>(command) &&
                std::get<DrawIndexedCommandUVE>(command).indexCount == 36U;
     }));
-    const auto albedoColor = std::find_if(commands.cbegin(), commands.cend(), [](const RecordedCommandUVE& command) {
+    const auto primitiveColor = std::find_if(commands.cbegin(), commands.cend(), [](const RecordedCommandUVE& command) {
         return std::holds_alternative<SetUniformVector3CommandUVE>(command) &&
-               std::get<SetUniformVector3CommandUVE>(command).name == "uAlbedoColor";
+               std::get<SetUniformVector3CommandUVE>(command).name == "uColor";
     });
-    ASSERT_NE(albedoColor, commands.cend());
-    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(*albedoColor).value, baseColor);
+    ASSERT_NE(primitiveColor, commands.cend());
+    EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(*primitiveColor).value, baseColor);
+}
+
+TEST_F(Renderer3DUVETest, RenderFrameUVE_VisiblePrimitive_ReportsEvidenceSpecificDiagnostics) {
+    const Scene::EntityUVE cameraEntity = MakeCameraEntityUVE();
+    MakePrimitiveEntityUVE(Math::Vector3UVE{0.0F, 0.0F, -10.0F},
+                           Scene::PrimitiveMeshComponentUVE{Scene::PrimitiveMeshKindUVE::Cube,
+                                                            Math::Vector3UVE{0.75F, 0.2F, 0.1F}});
+
+    renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+    const Renderer3DFrameDiagnosticsUVE beforeProgramReady = renderer3D->GetLastFrameDiagnosticsUVE();
+    EXPECT_EQ(beforeProgramReady.primitiveCandidates, 1U);
+    EXPECT_EQ(beforeProgramReady.primitiveItemsExtracted, 1U);
+    EXPECT_EQ(beforeProgramReady.primitiveDrawCallsRecorded, 0U);
+    EXPECT_FALSE(beforeProgramReady.primitiveProgramReady);
+    EXPECT_TRUE(beforeProgramReady.mainPassRecorded);
+    EXPECT_FALSE(beforeProgramReady.toneMappingPassRecorded);
+    EXPECT_EQ(beforeProgramReady.glDrawCallsIssued, 0U);
+
+    for (int iteration = 0; iteration < kMaxPollIterationsUVE; ++iteration) {
+        shaderManager.UpdateUVE(0.0);
+        if (shaderManager.GetPendingJobCountUVE() == 0U) {
+            break;
+        }
+        std::this_thread::yield();
+    }
+    ASSERT_EQ(shaderManager.GetPendingJobCountUVE(), 0U);
+
+    renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+    const Renderer3DFrameDiagnosticsUVE afterProgramReady = renderer3D->GetLastFrameDiagnosticsUVE();
+    EXPECT_EQ(afterProgramReady.primitiveCandidates, 1U);
+    EXPECT_EQ(afterProgramReady.primitiveItemsExtracted, 1U);
+    EXPECT_EQ(afterProgramReady.primitiveDrawCallsRecorded, 1U);
+    EXPECT_TRUE(afterProgramReady.primitiveProgramReady);
+    EXPECT_TRUE(afterProgramReady.mainPassRecorded);
+    EXPECT_TRUE(afterProgramReady.toneMappingProgramReady);
+    EXPECT_TRUE(afterProgramReady.toneMappingPassRecorded);
+    EXPECT_EQ(afterProgramReady.glDrawCallsIssued, 0U);
 }
 
 TEST_F(Renderer3DUVETest, RenderFrameUVE_VisibleMesh_RecordsExpectedCommandSequence) {

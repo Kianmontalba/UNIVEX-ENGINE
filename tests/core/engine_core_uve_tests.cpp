@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <numbers>
 #include <optional>
 #include <string>
 #include <thread>
@@ -40,6 +41,7 @@
 #include "uve/scene/components/camera_component_uve.h"
 #include "uve/scene/components/collider_component_uve.h"
 #include "uve/scene/components/mesh_component_uve.h"
+#include "uve/scene/components/primitive_mesh_component_uve.h"
 #include "uve/scene/components/rigid_body_component_uve.h"
 #include "uve/scene/components/transform_component_uve.h"
 #include "uve/scene/components/world_transform_component_uve.h"
@@ -804,26 +806,138 @@ TEST(EngineCoreUVETest, WindowedMode_ReachesRunningAndPresentsEmptyRendererScene
     ASSERT_TRUE(engine.Load());
     EXPECT_EQ(engine.GetServicesUVE().GetWindowManagerUVE().GetBackendNameUVE(), "GLFW3");
 
+    // An active identity camera ensures this is an empty *renderer scene* test rather than a
+    // no-camera EngineCore no-op test.
+    EngineServicesUVE& services = engine.GetServicesUVE();
+    Scene::IEntityManagerUVE& entityManager = services.GetEntityManagerUVE();
+    Scene::ISceneGraphUVE& sceneGraph = services.GetSceneGraphUVE();
+    const Scene::EntityUVE camera = entityManager.CreateEntityUVE();
+    sceneGraph.AttachTransformUVE(entityManager, camera, Scene::TransformComponentUVE{});
+    entityManager.AddComponentUVE<Scene::CameraComponentUVE>(camera);
+    engine.SetActiveCameraUVE(camera);
+
+    std::array<unsigned char, 3> scenePixel{};
+    GLenum postRenderGlError = GL_NO_ERROR;
+    engine.SetPostRenderCallbackUVE([&scenePixel, &postRenderGlError] {
+        glFinish();
+        glReadBuffer(GL_BACK);
+        glReadPixels(32, 32, 1, 1, GL_RGB, GL_UNSIGNED_BYTE, scenePixel.data());
+        postRenderGlError = glGetError();
+    });
+
     // A few frames let Renderer3DUVE complete scene, tone-mapping, and presentation work.
     for (int frame = 0; frame < 3; ++frame) {
         engine.TickFrameUVE();
     }
+    engine.SetPostRenderCallbackUVE({});
     EXPECT_EQ(engine.GetStateUVE(), EngineStateUVE::Running);
 
-    const auto readPixelUVE = [](int x, int y) {
-        std::array<unsigned char, 3> pixel{};
-        glReadPixels(x, y, 1, 1, GL_RGB, GL_UNSIGNED_BYTE, pixel.data());
-        return pixel;
-    };
+    // With no document render items, Renderer3DUVE presents its deterministic blue-gray
+    // tone-mapped environment. This is intentionally not a demo-geometry assertion: visible
+    // content enters only through ECS extraction into the renderer.
+    EXPECT_EQ(scenePixel[0], 6U);
+    EXPECT_EQ(scenePixel[1], 13U);
+    EXPECT_EQ(scenePixel[2], 25U);
+    EXPECT_EQ(postRenderGlError, GL_NO_ERROR);
 
-    // With no document render items, Renderer3DUVE presents its deterministic black tone-mapped
-    // scene. This is intentionally not a demo-geometry assertion: visible content now enters only
-    // through ECS extraction into the renderer.
-    const std::array<unsigned char, 3> scenePixel = readPixelUVE(32, 32);
-    EXPECT_EQ(scenePixel[0], 0U);
-    EXPECT_EQ(scenePixel[1], 0U);
-    EXPECT_EQ(scenePixel[2], 0U);
-    EXPECT_EQ(glGetError(), GL_NO_ERROR);
+    engine.Shutdown();
+}
+
+// Exercises the actual EngineCore -> Renderer3DUVE -> tone-mapping -> GLFW default-framebuffer
+// path. The fixed positions are intentionally far from geometry edges so a future expected-pixel
+// assertion cannot be satisfied by the background alone.
+TEST(EngineCoreUVETest, WindowedMode_PresentsDeterministicPrimitiveFixtureToDefaultFramebuffer) {
+    EngineConfigUVE config = MakeTestConfigUVE();
+    config.headlessUVE = false;
+    config.windowWidth = 128U;
+    config.windowHeight = 96U;
+    config.renderTargetWidth = 128U;
+    config.renderTargetHeight = 96U;
+    config.vsyncEnabledUVE = false;
+    config.windowGlVersionMajor = 4U;
+    config.windowGlVersionMinor = 5U;
+    config.ambientColor = Math::Vector3UVE{0.45F, 0.45F, 0.45F};
+
+    EngineCoreUVE engine(config);
+    engine.Init();
+    if (!engine.GetServicesUVE().GetWindowManagerUVE().IsValidUVE()) {
+        GTEST_SKIP() << "No display available for windowed EngineCoreUVE - skipping (run under "
+                        "xvfb-run to exercise this test)";
+    }
+    ASSERT_TRUE(engine.Load());
+
+    EngineServicesUVE& services = engine.GetServicesUVE();
+    Scene::IEntityManagerUVE& entityManager = services.GetEntityManagerUVE();
+    Scene::ISceneGraphUVE& sceneGraph = services.GetSceneGraphUVE();
+    const Scene::EntityUVE camera = entityManager.CreateEntityUVE();
+    sceneGraph.AttachTransformUVE(entityManager, camera, Scene::TransformComponentUVE{});
+    entityManager.AddComponentUVE<Scene::CameraComponentUVE>(camera);
+    engine.SetActiveCameraUVE(camera);
+
+    Math::QuaternionUVE planeFacingCamera{};
+    ASSERT_TRUE(Math::TryMakeAxisAngleUVE(Math::Vector3UVE{1.0F, 0.0F, 0.0F},
+                                          std::numbers::pi_v<float> * 0.5F, planeFacingCamera));
+    const auto makePrimitive = [&entityManager, &sceneGraph](const Math::Vector3UVE position,
+                                                               const Math::QuaternionUVE rotation,
+                                                               const Math::Vector3UVE scale,
+                                                               const Scene::PrimitiveMeshKindUVE kind,
+                                                               const Math::Vector3UVE color) {
+        const Scene::EntityUVE entity = entityManager.CreateEntityUVE();
+        Scene::TransformComponentUVE transform{};
+        transform.localPosition = position;
+        transform.localRotation = rotation;
+        transform.localScale = scale;
+        sceneGraph.AttachTransformUVE(entityManager, entity, transform);
+        entityManager.AddComponentUVE<Scene::PrimitiveMeshComponentUVE>(
+            entity, Scene::PrimitiveMeshComponentUVE{kind, color});
+    };
+    makePrimitive(Math::Vector3UVE{0.0F, 0.0F, -10.0F}, planeFacingCamera, Math::Vector3UVE{6.0F, 6.0F, 1.0F},
+                  Scene::PrimitiveMeshKindUVE::Plane, Math::Vector3UVE{0.10F, 0.72F, 0.20F});
+    makePrimitive(Math::Vector3UVE{-3.5F, 0.0F, -8.0F}, Math::QuaternionUVE{}, Math::Vector3UVE{1.0F, 1.0F, 1.0F},
+                  Scene::PrimitiveMeshKindUVE::Cube, Math::Vector3UVE{0.88F, 0.10F, 0.06F});
+    makePrimitive(Math::Vector3UVE{-1.8F, 0.0F, -7.0F}, Math::QuaternionUVE{}, Math::Vector3UVE{1.4F, 1.4F, 1.4F},
+                  Scene::PrimitiveMeshKindUVE::UVSphere, Math::Vector3UVE{0.06F, 0.20F, 0.90F});
+    sceneGraph.UpdateUVE(entityManager);
+
+    std::array<unsigned char, 3> cube{};
+    std::array<unsigned char, 3> plane{};
+    std::array<unsigned char, 3> sphere{};
+    GLenum postRenderGlError = GL_NO_ERROR;
+    engine.SetPostRenderCallbackUVE([&cube, &plane, &sphere, &postRenderGlError] {
+        // The callback runs after Renderer3DUVE’s default-framebuffer tone-map pass and before
+        // EngineCoreUVE requests SwapBuffersUVE(). GL_BACK is therefore the exact presentation
+        // surface being handed to the window manager, unlike post-swap front/back reads.
+        glFinish();
+        glReadBuffer(GL_BACK);
+        // These center-of-raster samples are intentionally well inside the fixed fixture's
+        // projected geometry: red cube, green plane, then blue UV sphere.
+        glReadPixels(41, 85, 1, 1, GL_RGB, GL_UNSIGNED_BYTE, cube.data());
+        glReadPixels(103, 89, 1, 1, GL_RGB, GL_UNSIGNED_BYTE, plane.data());
+        glReadPixels(79, 80, 1, 1, GL_RGB, GL_UNSIGNED_BYTE, sphere.data());
+        postRenderGlError = glGetError();
+    });
+    for (int frame = 0; frame < 12; ++frame) {
+        engine.TickFrameUVE();
+    }
+    engine.SetPostRenderCallbackUVE({});
+
+    const Render::Renderer3DFrameDiagnosticsUVE diagnostics = services.GetRenderer3DUVE().GetLastFrameDiagnosticsUVE();
+    EXPECT_EQ(diagnostics.primitiveCandidates, 3U);
+    EXPECT_EQ(diagnostics.primitiveItemsExtracted, 3U);
+    EXPECT_EQ(diagnostics.primitiveDrawCallsRecorded, 3U);
+    EXPECT_EQ(diagnostics.glDrawCallsIssued, 3U);
+    EXPECT_TRUE(diagnostics.toneMappingPassRecorded);
+
+    EXPECT_GT(cube[0], static_cast<unsigned char>(cube[1] + 12U)) << "cube RGB=" << static_cast<int>(cube[0])
+                                                                     << ',' << static_cast<int>(cube[1]) << ','
+                                                                     << static_cast<int>(cube[2]);
+    EXPECT_GT(plane[1], static_cast<unsigned char>(plane[0] + 12U)) << "plane RGB=" << static_cast<int>(plane[0])
+                                                                      << ',' << static_cast<int>(plane[1]) << ','
+                                                                      << static_cast<int>(plane[2]);
+    EXPECT_GT(sphere[2], static_cast<unsigned char>(sphere[0] + 12U)) << "sphere RGB=" << static_cast<int>(sphere[0])
+                                                                        << ',' << static_cast<int>(sphere[1]) << ','
+                                                                        << static_cast<int>(sphere[2]);
+    EXPECT_EQ(postRenderGlError, GL_NO_ERROR);
 
     engine.Shutdown();
 }
