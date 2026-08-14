@@ -3,6 +3,10 @@ build/
 out/
 cmake-build-*/
 
+# .NET build output
+**/bin/
+**/obj/
+
 # Runtime logs
 *.log
 

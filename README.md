@@ -33,6 +33,14 @@ ctest --test-dir build/gcc-debug --output-on-failure
 # Run the desktop editor with an existing scene document
 ./build/gcc-debug/engine/app/uve_editor --scene path/to/level.uvescene
 
+# Build and test the optional managed C# editor host (requires .NET 8)
+dotnet restore editor/managed/UniVex.EditorHost.Tests/UniVex.EditorHost.Tests.csproj --locked-mode
+dotnet build editor/managed/UniVex.EditorHost.Tests/UniVex.EditorHost.Tests.csproj --no-restore
+dotnet test editor/managed/UniVex.EditorHost.Tests/UniVex.EditorHost.Tests.csproj --no-build --no-restore
+
+# Run a non-UI C# host → real headless C++ bridge probe
+./tools/verify_editor_host_probe.sh ./build/gcc-debug/engine/app/uve_editor
+
 # Virtual-display smoke test on a platform capped at OpenGL 4.5
 xvfb-run -a ./build/gcc-debug/engine/app/uve_editor --gl-version 4.5 --frames 3
 ```
@@ -125,7 +133,9 @@ red/green/blue ECS primitives sampled from `GL_BACK` after tone mapping and befo
 
 **Inspector Drawer Registry v1** keeps the single-entity Inspector extensible without turning it into a generic reflection UI. Its built-in **Name**, **Transform**, and **Primitive Mesh** sections are registered in deterministic order through editor-local eligibility/draw callbacks. The registry owns callbacks only; it never owns ECS state, EngineServices, or Dear ImGui state. Every authored write remains routed through the existing `EditorUVE` commands, preserving validation, dirty-state changes, Transform/Name/Primitive Appearance history, collider synchronization, and Play/Pause authoring protections. Future component sections must register a stable unique identifier and route edits through a dedicated editor command; dynamic plugin loading, generic arbitrary-component inspection, asset settings, and multi-entity component editing remain deferred.
 
-**Editor Bridge Contract v1** adds a versioned, main-thread C++ adapter for a future managed editor host without replacing the native ImGui editor. `EditorBridgeUVE` exposes copied snapshots, discoverable capabilities, value-only entity identities, and stable diagnostics; it never exposes raw ECS pointers, renderer/GL resources, or direct scene-file access. The bridge revision changes whenever bridge-visible editor state changes—whether through native ImGui or bridge commands—so every mutation must submit the current `expectedRevision` and receives `bridge.snapshot.stale` on a conflict. v1 routes selection, clear selection, name editing, document-entity creation, Undo, and Redo only through existing `EditorUVE` command paths, retaining existing validation, dirty state, Play Mode, and history rules. The approved direction separates responsibilities: **C++20** remains authoritative for engine/editor backend, scene/assets, history, validation, and rendering; future **C#/.NET** owns UI presentation and workflow only; and **GLSL** owns viewport visuals. No C# host or transport is shipped in this increment.
+**Editor Bridge Contract v1** adds a versioned, main-thread C++ adapter for a managed editor host without replacing the native ImGui editor. `EditorBridgeUVE` exposes copied snapshots, discoverable capabilities, value-only entity identities, and stable diagnostics; it never exposes raw ECS pointers, renderer/GL resources, or direct scene-file access. The bridge revision changes whenever bridge-visible editor state changes—whether through native ImGui or bridge commands—so every mutation must submit the current `expectedRevision` and receives `bridge.snapshot.stale` on a conflict. v1 routes selection, clear selection, name editing, document-entity creation, Undo, and Redo only through existing `EditorUVE` command paths, retaining existing validation, dirty state, Play Mode, and history rules. The approved direction separates responsibilities: **C++20** remains authoritative for engine/editor backend, scene/assets, history, validation, and rendering; **C#/.NET** owns UI presentation and workflow only; and **GLSL** owns viewport visuals.
+
+**C# Editor Host Foundation v1** now adds an optional .NET 8/Avalonia connection shell and a local length-prefixed JSON-RPC bridge transport. The host launches one separate `uve_editor --bridge-stdio` child, completes a versioned `bridge.hello` handshake, shows copied backend capability/snapshot facts, and presents compatible, incompatible, failed, and disconnected states. Bridge stdio is intentionally **headless-only and mutually exclusive with native ImGui in that process**: it creates no GLFW window, ImGui overlay, or OpenGL resource. Protocol stdout contains framed JSON-RPC only; logs remain on stderr/file sinks. A crash, EOF, timeout, or compatibility failure never auto-restarts the backend. **Start New Backend Session** requires acknowledgement that it creates a fresh `EditorUVE` and may have lost unsaved in-memory work because bridge v1 has no Save command; a dirty connected session similarly requires an explicit discard confirmation before host shutdown. The connected surface intentionally contains no docking, hierarchy/Inspector/Content Browser authoring, scene mutation controls, native viewport hosting, or OpenGL ownership; those remain later increments.
 
 The top-level **Play** menu provides a transient editor sandbox: **Play** (`F5`) captures the complete
 editable document in memory and disables authoring, **Pause** (`F6`) holds fixed physics without accumulating
@@ -183,6 +193,7 @@ engine/
 ├── core/       — UVE::Core      — EngineCoreUVE and supporting types
 ├── editor/     — UVE::Editor    — Editor Foundation v1 session and UI composition
 └── app/        — uve_runtime and the standalone uve_editor executables
+editor/managed/ — optional .NET 8/Avalonia editor host and managed protocol/session tests
 tests/          — GoogleTest suite, mirrors the engine/ layout
 docs/           — MASTER_SPEC.md (full design doc), CODING_STANDARDS.md
 ```

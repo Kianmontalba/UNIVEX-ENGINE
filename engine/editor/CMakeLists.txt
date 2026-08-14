@@ -38,6 +38,7 @@ target_compile_features(uve_editor_imgui PUBLIC cxx_std_20)
 target_compile_options(uve_editor_imgui PRIVATE $<$<CXX_COMPILER_ID:GNU,Clang>:-w>)
 
 add_library(uve_editor STATIC
+    src/editor_bridge_stdio_uve.cpp
     src/editor_bridge_uve.cpp
     src/editor_tool_session_uve.cpp
     src/editor_uve.cpp
@@ -47,6 +48,6 @@ target_include_directories(uve_editor PUBLIC include)
 target_compile_features(uve_editor PUBLIC cxx_std_20)
 target_link_libraries(uve_editor
     PUBLIC uve_core
-    PRIVATE uve_editor_imgui
+    PRIVATE uve_editor_imgui nlohmann_json::nlohmann_json
 )
 uve_set_warnings(uve_editor)

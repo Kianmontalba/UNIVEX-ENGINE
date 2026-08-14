@@ -1,0 +1,9 @@
+<!-- Copyright (c) 2026 UniVex Studios. All Rights Reserved. -->
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="UniVex.EditorHost.App"
+             RequestedThemeVariant="Default">
+    <Application.Styles>
+        <FluentTheme />
+    </Application.Styles>
+</Application>
