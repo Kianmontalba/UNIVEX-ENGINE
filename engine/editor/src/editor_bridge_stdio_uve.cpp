@@ -34,6 +34,87 @@ enum class FrameReadResultUVE : std::uint8_t {
     return JsonUVE{{"entity", ToJsonUVE(entity.entity)}, {"displayLabel", entity.displayLabel}};
 }
 
+[[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeHierarchyEntryUVE& entry) {
+    return JsonUVE{{"entity", ToJsonUVE(entry.entity)},
+                   {"parent", entry.parent.has_value() ? ToJsonUVE(*entry.parent) : JsonUVE(nullptr)},
+                   {"displayLabel", entry.displayLabel},
+                   {"typeTag", entry.typeTag},
+                   {"depth", entry.depth},
+                   {"childCount", entry.childCount},
+                   {"selected", entry.selected},
+                   {"active", entry.active}};
+}
+
+[[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeHierarchySnapshotUVE& snapshot) {
+    JsonUVE entries = JsonUVE::array();
+    for (const EditorBridgeHierarchyEntryUVE& entry : snapshot.entries) {
+        entries.push_back(ToJsonUVE(entry));
+    }
+    return JsonUVE{{"filter", snapshot.filter},
+                   {"filterActive", snapshot.filterActive},
+                   {"truncated", snapshot.truncated},
+                   {"entries", std::move(entries)}};
+}
+
+[[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeInspectorSnapshotUVE& snapshot) {
+    JsonUVE selectedEntities = JsonUVE::array();
+    for (const EditorBridgeEntitySnapshotUVE& entity : snapshot.selectedEntities) {
+        selectedEntities.push_back(ToJsonUVE(entity));
+    }
+    JsonUVE ancestry = JsonUVE::array();
+    for (const EditorBridgeEntitySnapshotUVE& entity : snapshot.ancestry) {
+        ancestry.push_back(ToJsonUVE(entity));
+    }
+    JsonUVE drawerIds = JsonUVE::array();
+    for (const std::string& identifier : snapshot.eligibleDrawerIds) {
+        drawerIds.push_back(identifier);
+    }
+    return JsonUVE{{"mode", static_cast<std::uint8_t>(snapshot.mode)},
+                   {"selectedEntitiesTruncated", snapshot.selectedEntitiesTruncated},
+                   {"selectedEntities", std::move(selectedEntities)},
+                   {"activeEntity", snapshot.activeEntity.has_value() ? ToJsonUVE(*snapshot.activeEntity)
+                                                                         : JsonUVE(nullptr)},
+                   {"parent", snapshot.parent.has_value() ? ToJsonUVE(*snapshot.parent) : JsonUVE(nullptr)},
+                   {"ancestry", std::move(ancestry)},
+                   {"eligibleDrawerIds", std::move(drawerIds)},
+                   {"canEditSelectedName", snapshot.canEditSelectedName}};
+}
+
+[[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeContentBrowserEntryUVE& entry) {
+    return JsonUVE{{"relativePath", entry.relativePath},
+                   {"isDirectory", entry.isDirectory},
+                   {"typeLabel", entry.typeLabel},
+                   {"registeredAssetGuid", entry.registeredAssetGuid.has_value()
+                                               ? JsonUVE(*entry.registeredAssetGuid)
+                                               : JsonUVE(nullptr)}};
+}
+
+[[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeContentBrowserSnapshotUVE& snapshot) {
+    JsonUVE entries = JsonUVE::array();
+    for (const EditorBridgeContentBrowserEntryUVE& entry : snapshot.entries) {
+        entries.push_back(ToJsonUVE(entry));
+    }
+    JsonUVE breadcrumbs = JsonUVE::array();
+    for (const std::string& breadcrumb : snapshot.breadcrumbs) {
+        breadcrumbs.push_back(breadcrumb);
+    }
+    return JsonUVE{{"contentRoot", snapshot.contentRoot},
+                   {"currentDirectory", snapshot.currentDirectory},
+                   {"filter", snapshot.filter},
+                   {"typeFocus", snapshot.typeFocus},
+                   {"breadcrumbs", std::move(breadcrumbs)},
+                   {"refreshGeneration", snapshot.refreshGeneration},
+                   {"visibleEntryCount", snapshot.visibleEntryCount},
+                   {"directEntryCount", snapshot.directEntryCount},
+                   {"contentRootExists", snapshot.contentRootExists},
+                   {"initialized", snapshot.initialized},
+                   {"lastRefreshSucceeded", snapshot.lastRefreshSucceeded},
+                   {"truncated", snapshot.truncated},
+                   {"entries", std::move(entries)},
+                   {"selectedEntry", snapshot.selectedEntry.has_value() ? ToJsonUVE(*snapshot.selectedEntry)
+                                                                           : JsonUVE(nullptr)}};
+}
+
 [[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeSnapshotUVE& snapshot) {
     JsonUVE selectedEntities = JsonUVE::array();
     for (const EditorBridgeEntitySnapshotUVE& entity : snapshot.selectedEntities) {
@@ -53,8 +134,12 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"canRedo", snapshot.canRedo},
                    {"activeScenePath", snapshot.activeScenePath.generic_string()},
                    {"selectedEntities", std::move(selectedEntities)},
+                   {"selectedEntitiesTruncated", snapshot.selectedEntitiesTruncated},
                    {"activeEntity", snapshot.activeEntity.has_value() ? ToJsonUVE(*snapshot.activeEntity)
                                                                         : JsonUVE(nullptr)},
+                   {"hierarchy", ToJsonUVE(snapshot.hierarchy)},
+                   {"inspector", ToJsonUVE(snapshot.inspector)},
+                   {"contentBrowser", ToJsonUVE(snapshot.contentBrowser)},
                    {"capabilities", std::move(capabilities)}};
 }
 
@@ -148,6 +233,27 @@ enum class FrameReadResultUVE : std::uint8_t {
     if (value == "redo") {
         return EditorBridgeRequestKindUVE::Redo;
     }
+    if (value == "toggleEntitySelection") {
+        return EditorBridgeRequestKindUVE::ToggleEntitySelection;
+    }
+    if (value == "setHierarchyFilter") {
+        return EditorBridgeRequestKindUVE::SetHierarchyFilter;
+    }
+    if (value == "setContentBrowserDirectory") {
+        return EditorBridgeRequestKindUVE::SetContentBrowserDirectory;
+    }
+    if (value == "setContentBrowserFilter") {
+        return EditorBridgeRequestKindUVE::SetContentBrowserFilter;
+    }
+    if (value == "setContentBrowserFocus") {
+        return EditorBridgeRequestKindUVE::SetContentBrowserFocus;
+    }
+    if (value == "refreshContentBrowser") {
+        return EditorBridgeRequestKindUVE::RefreshContentBrowser;
+    }
+    if (value == "selectContentBrowserEntry") {
+        return EditorBridgeRequestKindUVE::SelectContentBrowserEntry;
+    }
     return std::nullopt;
 }
 
@@ -212,6 +318,21 @@ enum class FrameReadResultUVE : std::uint8_t {
         if (!request.entityKind.has_value()) {
             return std::nullopt;
         }
+    }
+    if (params.contains("hierarchyFilter") && !params.at("hierarchyFilter").is_null()) {
+        request.hierarchyFilter = params.at("hierarchyFilter").get<std::string>();
+    }
+    if (params.contains("contentDirectory") && !params.at("contentDirectory").is_null()) {
+        request.contentDirectory = params.at("contentDirectory").get<std::string>();
+    }
+    if (params.contains("contentFilter") && !params.at("contentFilter").is_null()) {
+        request.contentFilter = params.at("contentFilter").get<std::string>();
+    }
+    if (params.contains("contentFocus") && !params.at("contentFocus").is_null()) {
+        request.contentFocus = params.at("contentFocus").get<std::string>();
+    }
+    if (params.contains("contentEntryPath") && !params.at("contentEntryPath").is_null()) {
+        request.contentEntryPath = params.at("contentEntryPath").get<std::string>();
     }
     return request;
 }

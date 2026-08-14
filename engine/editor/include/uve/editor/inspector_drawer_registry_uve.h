@@ -45,6 +45,11 @@ public:
     /// methods own them.
     void DrawEligibleUVE(Scene::EntityUVE entity) const;
 
+    /// Returns copied stable identifiers for the drawers currently eligible for `entity`, in the
+    /// same registration order used by DrawEligibleUVE(). This is presentation metadata only: it
+    /// never invokes a drawer, exposes its callback, or transfers ECS/editor ownership.
+    [[nodiscard]] std::vector<std::string> GetEligibleDrawerIdsUVE(Scene::EntityUVE entity) const;
+
     [[nodiscard]] std::size_t GetDrawerCountUVE() const noexcept;
     [[nodiscard]] bool HasDrawerUVE(std::string_view id) const noexcept;
 

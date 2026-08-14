@@ -30,7 +30,10 @@ public sealed class BridgeProtocolClientTests
         Assert.True(result.Compatible);
         Assert.Equal(BridgeProtocolClient.ProtocolVersion, result.BackendProtocolVersion);
         Assert.Equal("bridge.hello.compatible", result.Code);
-        Assert.False(result.Snapshot.GetProperty("sceneDirty").GetBoolean());
+        Assert.False(result.Snapshot.SceneDirty);
+        Assert.Empty(result.Snapshot.Hierarchy.Entries);
+        Assert.Equal(BridgeInspectorMode.NoSelection, result.Snapshot.Inspector.Mode);
+        Assert.Empty(result.Snapshot.ContentBrowser.Entries);
 
         output.Position = 0;
         using JsonDocument request = JsonDocument.Parse(await ReadFrameAsync(output));
@@ -127,6 +130,108 @@ public sealed class BridgeProtocolClientTests
         Assert.Equal("bridge.transport.response.invalid", invalidEnvelope.Code);
     }
 
+    [Fact]
+    public async Task DispatchAsync_WritesNamedPanelCommandAndReturnsTypedCopiedSnapshot()
+    {
+        await using MemoryStream input = BuildFrames(new
+        {
+            jsonrpc = "2.0",
+            id = 1,
+            result = new
+            {
+                protocolVersion = BridgeProtocolClient.ProtocolVersion,
+                requestId = 1UL,
+                applied = true,
+                code = "bridge.command.applied",
+                message = "The native hierarchy filter was updated.",
+                snapshot = Snapshot(sceneDirty: false),
+                createdEntity = (object?)null,
+            },
+        });
+        await using MemoryStream output = new();
+        await using BridgeProtocolClient client = new(input, output);
+
+        BridgeCommandResult result = await client.DispatchAsync(
+            new BridgeCommand(7UL, "setHierarchyFilter", HierarchyFilter: "camera"), CancellationToken.None);
+
+        Assert.True(result.Applied);
+        Assert.Equal("bridge.command.applied", result.Code);
+        Assert.Equal(1UL, result.Snapshot.Revision);
+        output.Position = 0;
+        using JsonDocument request = JsonDocument.Parse(await ReadFrameAsync(output));
+        JsonElement parameters = request.RootElement.GetProperty("params");
+        Assert.Equal("bridge.dispatch", request.RootElement.GetProperty("method").GetString());
+        Assert.Equal(7UL, parameters.GetProperty("expectedRevision").GetUInt64());
+        Assert.Equal("setHierarchyFilter", parameters.GetProperty("kind").GetString());
+        Assert.Equal("camera", parameters.GetProperty("hierarchyFilter").GetString());
+    }
+
+    [Fact]
+    public void SnapshotParser_RejectsPanelRowsBeyondNativeBound()
+    {
+        object[] entries = Enumerable.Range(0, BridgeSnapshotParser.MaximumPanelEntries + 1)
+            .Select(index => (object)new
+            {
+                entity = new { index, generation = 1U },
+                parent = (object?)null,
+                displayLabel = "Entity",
+                typeTag = string.Empty,
+                depth = 0,
+                childCount = 0,
+                selected = false,
+                active = false,
+            }).ToArray();
+        using JsonDocument document = JsonDocument.Parse(JsonSerializer.Serialize(new
+        {
+            protocolVersion = BridgeProtocolClient.ProtocolVersion,
+            revision = 1UL,
+            editorState = 1,
+            playModeState = 0,
+            sceneDirty = false,
+            canUndo = false,
+            canRedo = false,
+            activeScenePath = "editor_scene.uvescene",
+            selectedEntities = Array.Empty<object>(),
+            selectedEntitiesTruncated = false,
+            activeEntity = (object?)null,
+            hierarchy = new { filter = string.Empty, filterActive = false, truncated = true, entries },
+            inspector = new
+            {
+                mode = 0,
+                selectedEntitiesTruncated = false,
+                selectedEntities = Array.Empty<object>(),
+                activeEntity = (object?)null,
+                parent = (object?)null,
+                ancestry = Array.Empty<object>(),
+                eligibleDrawerIds = Array.Empty<string>(),
+                canEditSelectedName = false,
+            },
+            contentBrowser = new
+            {
+                contentRoot = "assets",
+                currentDirectory = string.Empty,
+                filter = string.Empty,
+                typeFocus = "All",
+                breadcrumbs = Array.Empty<string>(),
+                refreshGeneration = 0UL,
+                visibleEntryCount = 0,
+                directEntryCount = 0,
+                contentRootExists = true,
+                initialized = false,
+                lastRefreshSucceeded = true,
+                truncated = false,
+                entries = Array.Empty<object>(),
+                selectedEntry = (object?)null,
+            },
+            capabilities = Array.Empty<int>(),
+        }));
+
+        BridgeProtocolException exception = Assert.Throws<BridgeProtocolException>(() =>
+            BridgeSnapshotParser.Parse(document.RootElement));
+
+        Assert.Equal("bridge.snapshot.invalid", exception.Code);
+    }
+
     private static MemoryStream BuildFrames(object message)
     {
         byte[] body = JsonSerializer.SerializeToUtf8Bytes(message);
@@ -178,7 +283,43 @@ public sealed class BridgeProtocolClientTests
         canRedo = false,
         activeScenePath = "editor_scene.uvescene",
         selectedEntities = Array.Empty<object>(),
+        selectedEntitiesTruncated = false,
         activeEntity = (object?)null,
+        hierarchy = new
+        {
+            filter = string.Empty,
+            filterActive = false,
+            truncated = false,
+            entries = Array.Empty<object>(),
+        },
+        inspector = new
+        {
+            mode = 0,
+            selectedEntitiesTruncated = false,
+            selectedEntities = Array.Empty<object>(),
+            activeEntity = (object?)null,
+            parent = (object?)null,
+            ancestry = Array.Empty<object>(),
+            eligibleDrawerIds = Array.Empty<string>(),
+            canEditSelectedName = false,
+        },
+        contentBrowser = new
+        {
+            contentRoot = "assets",
+            currentDirectory = string.Empty,
+            filter = string.Empty,
+            typeFocus = "All",
+            breadcrumbs = Array.Empty<string>(),
+            refreshGeneration = 0UL,
+            visibleEntryCount = 0,
+            directEntryCount = 0,
+            contentRootExists = true,
+            initialized = false,
+            lastRefreshSucceeded = true,
+            truncated = false,
+            entries = Array.Empty<object>(),
+            selectedEntry = (object?)null,
+        },
         capabilities = Array.Empty<int>(),
     };
 }

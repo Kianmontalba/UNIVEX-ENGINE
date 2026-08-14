@@ -25,6 +25,17 @@ void InspectorDrawerRegistryUVE::DrawEligibleUVE(const Scene::EntityUVE entity) 
     }
 }
 
+std::vector<std::string> InspectorDrawerRegistryUVE::GetEligibleDrawerIdsUVE(const Scene::EntityUVE entity) const {
+    std::vector<std::string> identifiers;
+    identifiers.reserve(m_entries.size());
+    for (const InspectorDrawerEntryUVE& entry : m_entries) {
+        if (entry.isEligible(entity)) {
+            identifiers.push_back(entry.id);
+        }
+    }
+    return identifiers;
+}
+
 std::size_t InspectorDrawerRegistryUVE::GetDrawerCountUVE() const noexcept {
     return m_entries.size();
 }
