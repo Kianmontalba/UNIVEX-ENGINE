@@ -32,6 +32,18 @@ namespace {
     return std::strtoull(hex.c_str(), nullptr, 16);
 }
 
+/// Stable in-process lookup identity for asset registration. AssetDatabaseUVE does not own a
+/// project-root dependency and must not resolve relative paths through the process current working
+/// directory. Identity is therefore lexical only: it collapses spelling aliases such as `a/../b`
+/// while keeping distinct relative and absolute representations explicit to the caller.
+[[nodiscard]] std::filesystem::path NormalizeAssetPathIdentityUVE(const std::filesystem::path& path) {
+    return path.lexically_normal();
+}
+
+[[nodiscard]] std::string AssetPathIdentityKeyUVE(const std::filesystem::path& path) {
+    return NormalizeAssetPathIdentityUVE(path).generic_string();
+}
+
 /// Writes `document` to `path`, logging a detailed Error (path + reason) on failure — the same
 /// contract ConfigManagerUVE's save path uses.
 [[nodiscard]] bool SaveDocumentToFileUVE(const nlohmann::json& document, const std::filesystem::path& path) {
@@ -85,9 +97,17 @@ bool AssetDatabaseUVE::LoadUVE(const std::filesystem::path& path) {
         std::unordered_map<std::string, AssetGuidUVE> pathToGuid;
         for (const auto& [guidHex, pathValue] : parsed.items()) {
             const AssetGuidUVE guid{FromHexStringUVE(guidHex)};
-            const std::string pathString = pathValue.get<std::string>();
-            guidToPath.emplace(guid, std::filesystem::path(pathString));
-            pathToGuid.emplace(pathString, guid);
+            const std::filesystem::path storedPath = std::filesystem::path(pathValue.get<std::string>()).lexically_normal();
+            guidToPath.emplace(guid, storedPath);
+
+            // Legacy registries can contain lexically equivalent spellings under different GUIDs.
+            // Preserve every persisted record, but ensure new equivalent-path lookups deterministically
+            // retain the numerically smallest existing GUID without resolving through process CWD.
+            const std::string pathKey = AssetPathIdentityKeyUVE(storedPath);
+            const auto existingIt = pathToGuid.find(pathKey);
+            if (existingIt == pathToGuid.end() || guid.value < existingIt->second.value) {
+                pathToGuid.insert_or_assign(pathKey, guid);
+            }
         }
         m_impl->guidToPath = std::move(guidToPath);
         m_impl->pathToGuid = std::move(pathToGuid);
@@ -127,7 +147,7 @@ bool AssetDatabaseUVE::SaveUVE(const std::filesystem::path& path) {
 
 AssetGuidUVE AssetDatabaseUVE::RegisterUVE(const std::filesystem::path& assetPath) {
     const std::lock_guard<std::mutex> lock(m_impl->mutex);
-    const std::string pathKey = assetPath.string();
+    const std::string pathKey = AssetPathIdentityKeyUVE(assetPath);
 
     const auto existingIt = m_impl->pathToGuid.find(pathKey);
     if (existingIt != m_impl->pathToGuid.end()) {
@@ -139,7 +159,7 @@ AssetGuidUVE AssetDatabaseUVE::RegisterUVE(const std::filesystem::path& assetPat
         guid = GenerateAssetGuidUVE(); // vanishingly unlikely, guarded anyway
     }
 
-    m_impl->guidToPath.emplace(guid, assetPath);
+    m_impl->guidToPath.emplace(guid, assetPath.lexically_normal());
     m_impl->pathToGuid.emplace(pathKey, guid);
     return guid;
 }
