@@ -29,6 +29,18 @@ namespace {
     return editor.GetDocumentRootsUVE();
 }
 
+TEST(EditorBridgeUVETest, EntityRefUVE_ValidatesTheFullGenerationalIdentity) {
+    const EditorBridgeEntityRefUVE invalid{};
+    EXPECT_FALSE(invalid.IsValidUVE());
+
+    const EditorBridgeEntityRefUVE sameIndexDifferentGeneration{
+        Scene::kInvalidEntityUVE.index, Scene::kInvalidEntityUVE.generation + 1U};
+    EXPECT_TRUE(sameIndexDifferentGeneration.IsValidUVE());
+
+    const EditorBridgeEntityRefUVE ordinaryEntity{0U, 7U};
+    EXPECT_TRUE(ordinaryEntity.IsValidUVE());
+}
+
 TEST(EditorBridgeUVETest, SnapshotUVE_ObservesNativeEditorChangesAndIncrementsRevision) {
     Core::EngineCoreUVE engine(MakeBridgeTestConfigUVE());
     engine.Init();

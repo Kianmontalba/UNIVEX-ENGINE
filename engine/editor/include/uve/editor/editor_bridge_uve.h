@@ -19,7 +19,9 @@ struct EditorBridgeEntityRefUVE final {
     std::uint32_t index = Scene::kInvalidEntityUVE.index;
     std::uint32_t generation = Scene::kInvalidEntityUVE.generation;
 
-    [[nodiscard]] constexpr bool IsValidUVE() const noexcept { return index != Scene::kInvalidEntityUVE.index; }
+    [[nodiscard]] constexpr bool IsValidUVE() const noexcept {
+        return Scene::EntityUVE{index, generation} != Scene::kInvalidEntityUVE;
+    }
     [[nodiscard]] constexpr bool operator==(const EditorBridgeEntityRefUVE&) const noexcept = default;
 };
 
