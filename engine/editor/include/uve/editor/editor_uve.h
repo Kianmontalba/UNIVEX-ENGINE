@@ -32,6 +32,8 @@ struct EditorUVEAccessUVE;
 
 namespace UVE::Editor {
 
+class EditorBridgeUVE;
+
 /// EditorStateUVE is the lifecycle state of one editor session. The editor owns session data only;
 /// EngineCoreUVE remains the owner of the ECS, renderer, window, and every engine service.
 enum class EditorStateUVE {
@@ -133,6 +135,7 @@ enum class EditorViewportNavigationModeUVE {
 /// EditorUVE is main-thread only, matching the scene, render, and window services it composes.
 class EditorUVE final {
     friend struct Tests::EditorUVEAccessUVE;
+    friend class EditorBridgeUVE;
 
 public:
     explicit EditorUVE(Core::EngineServicesUVE& services,
