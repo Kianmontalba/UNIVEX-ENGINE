@@ -57,6 +57,16 @@ struct BaselineEntryUVE final {
     return left.kind == right.kind && left.contentFingerprint == right.contentFingerprint;
 }
 
+[[nodiscard]] std::filesystem::path NormalizeProjectContentRootUVE(std::filesystem::path path) {
+    path = std::move(path).lexically_normal();
+    // Match ProjectFileIndexUVE: a relative trailing separator is spelling-only and must not
+    // become an extra empty path component during root-boundary comparison.
+    if (path.has_relative_path() && path.filename().empty()) {
+        path = path.parent_path();
+    }
+    return path;
+}
+
 [[nodiscard]] bool ChangeLessUVE(const ProjectFileChangeUVE& left,
                                  const ProjectFileChangeUVE& right) {
     if (left.relativePath.generic_string() != right.relativePath.generic_string()) {
@@ -171,7 +181,7 @@ BuildBaselineUVE(const std::filesystem::path& configuredContentRoot, const IAsse
 struct ProjectChangeWatcherUVE::ImplUVE final {
     ImplUVE(std::filesystem::path configuredContentRoot, const double configuredPollIntervalSeconds,
             const std::size_t configuredJournalCapacity)
-        : contentRoot(std::move(configuredContentRoot).lexically_normal()),
+        : contentRoot(NormalizeProjectContentRootUVE(std::move(configuredContentRoot))),
           pollIntervalSeconds(std::max(0.0, configuredPollIntervalSeconds)),
           journalCapacity(configuredJournalCapacity) {
         snapshot.contentRoot = contentRoot;

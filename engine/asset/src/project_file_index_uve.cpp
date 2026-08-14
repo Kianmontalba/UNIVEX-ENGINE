@@ -49,11 +49,22 @@ namespace {
     return left.relativePath.generic_string() < right.relativePath.generic_string();
 }
 
+[[nodiscard]] std::filesystem::path NormalizeProjectContentRootUVE(std::filesystem::path path) {
+    path = std::move(path).lexically_normal();
+    // `lexically_normal()` deliberately retains a trailing separator on a relative directory such
+    // as `assets/`. Remove only that empty final component so path iteration cannot mistake it for
+    // a root-boundary mismatch, while preserving absolute filesystem roots such as `/`.
+    if (path.has_relative_path() && path.filename().empty()) {
+        path = path.parent_path();
+    }
+    return path;
+}
+
 } // namespace
 
 struct ProjectFileIndexUVE::ImplUVE {
     explicit ImplUVE(std::filesystem::path configuredContentRoot)
-        : contentRoot(std::move(configuredContentRoot).lexically_normal()) {
+        : contentRoot(NormalizeProjectContentRootUVE(std::move(configuredContentRoot))) {
         snapshot.contentRoot = contentRoot;
     }
 
