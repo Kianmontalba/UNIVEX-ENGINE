@@ -11,7 +11,7 @@
 
 | Status | Roadmap | Scope | Current priority |
 |---|---|---|---|
-| **COMPLETED / PARTIAL** | [Complete Development Roadmap](EDITOR_ROADMAP.md) | Every completed Increment **1–64**, immediate Scene Editor increments, and the first-generation editor completion gate. | **Increment 65 — Scene Outliner & Inspector Workflow v2**. |
+| **COMPLETED / PARTIAL** | [Complete Development Roadmap](EDITOR_ROADMAP.md) | Every completed Increment **1–65**, immediate Scene Editor increments, and the first-generation editor completion gate. | **Increment 66 — Content Browser Workflow v2**. |
 | **COMPLETED / PARTIAL** | [Core & Runtime Roadmap](CORE_RUNTIME_ROADMAP.md) | Engine loop, memory, threading, ECS, scene, asset, physics, input, audio, save, and platform foundations. | Preserve existing contracts while filling only proven core-runtime gaps. |
 | **COMPLETED / PARTIAL** | [Rendering Roadmap](RENDERING_ROADMAP.md) | RHI, renderer, shaders, materials, lights, shadows, viewport presentation, and future visual systems. | Visible viewport correctness before broader visual features. |
 | **COMPLETED / PARTIAL** | [Editor & Workflow Roadmap](EDITOR_ROADMAP.md) | Scene authoring, selection, gizmos, Inspector, FileSystem, import monitoring, and editor preferences. | Complete real Scene Editor workflow before cosmetic expansion. |

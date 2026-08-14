@@ -84,7 +84,12 @@ separates pointer/handle solving from transform transaction ownership: preview v
 a re-entrant begin request cannot replace an active gesture, release commits the already-applied preview without a second
 transform write. Cancellation restores the captured baseline only while the live Transform still matches its own
 last preview; an external transform conflict is preserved, marks the document dirty, and never gets overwritten by a stale
-baseline. Restore failure is reported explicitly without claiming a false rollback. Translate mode additionally exposes translucent
+baseline. Restore failure is reported explicitly without claiming a false rollback. **Scene Outliner & Inspector Workflow v2**
+adds compact read-only root/child context and one deterministic specialized type tag per document row (Plane, UV Sphere,
+Cube, Camera, Directional Light, or Collision Box priority). The single-selection Inspector presents a read-only ancestry
+breadcrumb and a command-backed Hierarchy section for existing Keep Local/Keep World reparent preference, safe parent choice,
+and Make Root. It uses the same existing reparent/Undo/Redo boundary; breadcrumbs do not change selection, multi-selection
+remains summary-only, and no generic component-editing surface is implied. Translate mode additionally exposes translucent
 XY/XZ/YZ plane handles in the positive 20–60% gizmo quadrant; axis hits always take precedence and plane movement solves
 both captured screen-space basis coefficients independently before applying the existing parent-safe local delta path.
 Rotate mode uses world-axis X/Y/Z rings,

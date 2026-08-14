@@ -26,6 +26,10 @@
 #include "uve/scene/entity_uve.h"
 #include "uve/scene/i_scene_serializer_uve.h"
 
+namespace UVE::Editor::Tests {
+struct EditorUVEAccessUVE;
+}
+
 namespace UVE::Editor {
 
 /// EditorStateUVE is the lifecycle state of one editor session. The editor owns session data only;
@@ -128,6 +132,8 @@ enum class EditorViewportNavigationModeUVE {
 /// The supplied EngineServicesUVE reference must remain valid from InitUVE() through ShutdownUVE().
 /// EditorUVE is main-thread only, matching the scene, render, and window services it composes.
 class EditorUVE final {
+    friend struct Tests::EditorUVEAccessUVE;
+
 public:
     explicit EditorUVE(Core::EngineServicesUVE& services,
                        std::filesystem::path activeScenePath = "editor_scene.uvescene",
@@ -555,6 +561,12 @@ private:
     [[nodiscard]] Scene::EntityUVE RestoreSubtreeUnderParentUVE(const Scene::SceneSnapshotUVE& snapshot,
                                                                  Scene::EntityUVE parent);
     [[nodiscard]] bool TryGetDocumentParentUVE(Scene::EntityUVE entity, Scene::EntityUVE& outParent) const;
+    /// Returns one compact editor-only tag using the fixed primitive-first priority documented for
+    /// the Scene Outliner. Empty means the entity is a plain document entity.
+    [[nodiscard]] std::string GetOutlinerTypeTagUVE(Scene::EntityUVE entity) const;
+    [[nodiscard]] std::vector<Scene::EntityUVE> GetDocumentAncestryUVE(Scene::EntityUVE entity) const;
+    [[nodiscard]] std::vector<Scene::EntityUVE> GetEligibleReparentParentsUVE(Scene::EntityUVE entity);
+    [[nodiscard]] std::string GetHierarchyCandidateLabelUVE(Scene::EntityUVE entity) const;
     [[nodiscard]] bool IsLifecycleCommandAllowedUVE() const noexcept;
     [[nodiscard]] bool IsAuthoringCommandAllowedUVE() const noexcept;
     [[nodiscard]] EditorSelectionSnapshotUVE CaptureSelectionSnapshotUVE() const;
@@ -597,6 +609,7 @@ private:
     void DrawInspectorContentUVE();
     void RegisterBuiltInInspectorDrawersUVE();
     void DrawNameInspectorDrawerUVE(Scene::EntityUVE entity);
+    void DrawHierarchyInspectorDrawerUVE(Scene::EntityUVE entity);
     void DrawTransformInspectorDrawerUVE(Scene::EntityUVE entity);
     void DrawPrimitiveMeshInspectorDrawerUVE(Scene::EntityUVE entity);
     void DrawImportQueueMonitorUVE();
