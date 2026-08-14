@@ -8,6 +8,7 @@
 #include <fstream>
 #include <memory>
 #include <string>
+#include <system_error>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -23,6 +24,22 @@ void WriteFixtureFileUVE(const std::filesystem::path& path, std::string_view con
     ASSERT_TRUE(file.is_open());
     file << contents;
 }
+
+class CurrentWorkingDirectoryGuardUVE final {
+public:
+    CurrentWorkingDirectoryGuardUVE() : m_originalPath(std::filesystem::current_path()) {}
+
+    ~CurrentWorkingDirectoryGuardUVE() {
+        std::error_code errorCode;
+        std::filesystem::current_path(m_originalPath, errorCode);
+    }
+
+    CurrentWorkingDirectoryGuardUVE(const CurrentWorkingDirectoryGuardUVE&) = delete;
+    CurrentWorkingDirectoryGuardUVE& operator=(const CurrentWorkingDirectoryGuardUVE&) = delete;
+
+private:
+    std::filesystem::path m_originalPath;
+};
 
 TEST(AssetDatabaseUVETest, GetRegisteredAssetsUVE_EmptyDatabase_ReturnsEmptySnapshot) {
     AssetDatabaseUVE database;
@@ -84,6 +101,47 @@ TEST(AssetDatabaseUVETest, RegisterUVE_DifferentPaths_ReturnDifferentGuids) {
     EXPECT_NE(first, second);
 }
 
+TEST(AssetDatabaseUVETest, RegisterUVE_EquivalentLexicalPaths_ReturnSameGuidAndNormalizedStoredPath) {
+    AssetDatabaseUVE database;
+    const AssetGuidUVE first = database.RegisterUVE("meshes/generated/../cube.uvemodel");
+    const AssetGuidUVE second = database.RegisterUVE("meshes/cube.uvemodel");
+
+    EXPECT_EQ(first, second);
+    EXPECT_EQ(database.ResolveUVE(first), std::filesystem::path("meshes/cube.uvemodel"));
+    const std::vector<AssetRecordUVE> records = database.GetRegisteredAssetsUVE();
+    ASSERT_EQ(records.size(), 1U);
+    EXPECT_EQ(records.front().path, std::filesystem::path("meshes/cube.uvemodel"));
+}
+
+TEST(AssetDatabaseUVETest, RegisterUVE_StableRelativePath_IsIndependentOfCurrentWorkingDirectory) {
+    std::error_code errorCode;
+    const std::filesystem::path fixtureRoot =
+        std::filesystem::absolute("uve_asset_database_tests_working_directory", errorCode);
+    ASSERT_FALSE(errorCode);
+    const std::filesystem::path firstWorkingDirectory = fixtureRoot / "first";
+    const std::filesystem::path secondWorkingDirectory = fixtureRoot / "second";
+    std::filesystem::remove_all(fixtureRoot);
+    std::filesystem::create_directories(firstWorkingDirectory);
+    std::filesystem::create_directories(secondWorkingDirectory);
+
+    {
+        CurrentWorkingDirectoryGuardUVE workingDirectoryGuard;
+        errorCode.clear();
+        AssetDatabaseUVE database;
+        std::filesystem::current_path(firstWorkingDirectory, errorCode);
+        ASSERT_FALSE(errorCode);
+        const AssetGuidUVE firstGuid = database.RegisterUVE("assets/tree.uveprefab");
+
+        std::filesystem::current_path(secondWorkingDirectory, errorCode);
+        ASSERT_FALSE(errorCode);
+        const AssetGuidUVE secondGuid = database.RegisterUVE("assets/tree.uveprefab");
+
+        EXPECT_EQ(firstGuid, secondGuid);
+        EXPECT_EQ(database.ResolveUVE(firstGuid), std::filesystem::path("assets/tree.uveprefab"));
+    }
+    std::filesystem::remove_all(fixtureRoot);
+}
+
 TEST(AssetDatabaseUVETest, ResolveUVE_RoundTripsRegisteredPath) {
     AssetDatabaseUVE database;
     const AssetGuidUVE guid = database.RegisterUVE("prefabs/tree.uveprefab");
@@ -101,6 +159,27 @@ TEST(AssetDatabaseUVETest, HasGuidUVE_TrueForRegisteredFalseOtherwise) {
     EXPECT_TRUE(database.HasGuidUVE(guid));
     EXPECT_FALSE(database.HasGuidUVE(AssetGuidUVE{999}));
     EXPECT_FALSE(database.HasGuidUVE(kInvalidAssetGuidUVE));
+}
+
+TEST(AssetDatabaseUVETest, LoadUVE_LegacyEquivalentPathAliases_UsesSmallestGuidForFutureRegistration) {
+    const std::filesystem::path fixturePath = "uve_asset_database_tests_legacy_aliases.uveassetdb";
+    WriteFixtureFileUVE(
+        fixturePath,
+        R"({
+            "0000000000000020": "assets/generated/../tree.uveprefab",
+            "0000000000000010": "assets/tree.uveprefab"
+        })");
+
+    AssetDatabaseUVE database;
+    ASSERT_TRUE(database.LoadUVE(fixturePath));
+    EXPECT_EQ(database.RegisterUVE("assets/tree.uveprefab"), AssetGuidUVE{0x10U});
+    EXPECT_EQ(database.RegisterUVE("assets/./tree.uveprefab"), AssetGuidUVE{0x10U});
+
+    const std::vector<AssetRecordUVE> records = database.GetRegisteredAssetsUVE();
+    ASSERT_EQ(records.size(), 2U);
+    EXPECT_EQ(records[0].path, std::filesystem::path("assets/tree.uveprefab"));
+    EXPECT_EQ(records[1].path, std::filesystem::path("assets/tree.uveprefab"));
+    std::filesystem::remove(fixturePath);
 }
 
 TEST(AssetDatabaseUVETest, SaveThenLoad_RoundTripsThroughDisk) {

@@ -10,9 +10,9 @@
 
 namespace UVE::Asset {
 
-/// An immutable copy of one registered project asset. `path` is normalized for stable editor
-/// presentation; it remains a registry record only and does not imply that the file exists or is
-/// loaded. Value type; safe to retain after the AssetDatabase mutex is released.
+/// An immutable copy of one registered project asset. `path` is lexically normalized for stable
+/// editor presentation; it remains a registry record only and does not imply that the file exists
+/// or is loaded. Value type; safe to retain after the AssetDatabase mutex is released.
 struct AssetRecordUVE final {
     AssetGuidUVE guid{};
     std::filesystem::path path{};
@@ -43,11 +43,16 @@ public:
     virtual bool SaveUVE(const std::filesystem::path& path) = 0;
 
     /// Returns the existing GUID registered for `assetPath`, or generates and registers a fresh
-    /// one if `assetPath` isn't yet known — idempotent by path, so saving the same asset path
-    /// twice never produces two different GUIDs for it.
+    /// one if its normalized identity is not yet known. Identity is lexical only, so equivalent
+    /// `.`/`..` spellings resolve to one GUID without resolving relative paths through the process
+    /// current working directory. Relative and absolute forms remain distinct because this API has
+    /// no explicit project-root dependency. The persisted registry schema remains a GUID-to-path
+    /// map; legacy lexical-alias records stay resolvable, while future equivalent-path registration
+    /// deterministically selects the smallest existing GUID for that lexical identity.
     [[nodiscard]] virtual AssetGuidUVE RegisterUVE(const std::filesystem::path& assetPath) = 0;
 
-    /// Returns the file path registered for `guid`, or an empty path if `guid` is unknown.
+    /// Returns the lexically normalized stored path registered for `guid`, or an empty path if
+    /// `guid` is unknown. It is a persisted path representation, not the normalized lookup key.
     [[nodiscard]] virtual std::filesystem::path ResolveUVE(AssetGuidUVE guid) const = 0;
 
     /// True iff `guid` is currently registered.
