@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -169,7 +170,7 @@ TEST(EditorBridgeStdioUVETest, ServeUVE_RejectsMalformedJsonWithoutDispatchingEd
     engine.Shutdown();
 }
 
-TEST(EditorBridgeStdioUVETest, ServeUVE_RejectsInvalidFrameBeforeDispatchingEditorState) {
+TEST(EditorBridgeStdioUVETest, ServeUVE_RejectsZeroLengthFrameBeforeDispatchingEditorState) {
     Core::EngineCoreUVE engine(MakeBridgeStdioTestConfigUVE());
     engine.Init();
     ASSERT_TRUE(engine.Load());
@@ -185,13 +186,63 @@ TEST(EditorBridgeStdioUVETest, ServeUVE_RejectsInvalidFrameBeforeDispatchingEdit
         input.write(zeroLengthHeader.data(), static_cast<std::streamsize>(zeroLengthHeader.size()));
 
         EXPECT_EQ(server.ServeUVE(input, output, diagnostics), 2);
-        EXPECT_EQ(diagnostics.str(), "bridge.transport.frame.invalid\n");
+        EXPECT_EQ(diagnostics.str(), "bridge.transport.frame.zero_length\n");
         const std::vector<JsonUVE> frames = ReadFramesUVE(output);
         ASSERT_EQ(frames.size(), 1U);
         EXPECT_EQ(frames.front().at("error").at("data").at("code").get<std::string>(),
-                  "bridge.transport.frame.invalid");
+                  "bridge.transport.frame.zero_length");
         EXPECT_TRUE(editor.GetDocumentRootsUVE().empty());
         EXPECT_FALSE(editor.IsSceneDirtyUVE());
+
+        editor.ShutdownUVE();
+    }
+    engine.Shutdown();
+}
+
+TEST(EditorBridgeStdioUVETest, ServeUVE_ClassifiesTruncatedAndOversizedFramesBeforeDispatchingEditorState) {
+    Core::EngineCoreUVE engine(MakeBridgeStdioTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_bridge_stdio_frame_classification.uvescene");
+        editor.InitUVE();
+        EditorBridgeUVE bridge(editor);
+
+        const auto verifyMalformedFrame = [&](const std::string_view bytes, const std::string_view expectedCode) {
+            EditorBridgeStdioServerUVE server(bridge);
+            std::stringstream input;
+            std::stringstream output;
+            std::stringstream diagnostics;
+            input.write(bytes.data(), static_cast<std::streamsize>(bytes.size()));
+
+            EXPECT_EQ(server.ServeUVE(input, output, diagnostics), 2);
+            EXPECT_EQ(diagnostics.str(), std::string(expectedCode) + "\n");
+            const std::vector<JsonUVE> frames = ReadFramesUVE(output);
+            ASSERT_EQ(frames.size(), 1U);
+            EXPECT_EQ(frames.front().at("error").at("data").at("code").get<std::string>(), expectedCode);
+            EXPECT_TRUE(editor.GetDocumentRootsUVE().empty());
+            EXPECT_FALSE(editor.IsSceneDirtyUVE());
+        };
+
+        const std::string truncatedHeader{"\x00\x01", 2U};
+        verifyMalformedFrame(truncatedHeader, "bridge.transport.frame.truncated_header");
+
+        std::string truncatedBody;
+        const std::uint32_t declaredLength = 2U;
+        const std::array<char, 4U> truncatedBodyHeader{
+            static_cast<char>((declaredLength >> 24U) & 0xFFU), static_cast<char>((declaredLength >> 16U) & 0xFFU),
+            static_cast<char>((declaredLength >> 8U) & 0xFFU), static_cast<char>(declaredLength & 0xFFU)};
+        truncatedBody.append(truncatedBodyHeader.data(), truncatedBodyHeader.size());
+        truncatedBody.push_back('{');
+        verifyMalformedFrame(truncatedBody, "bridge.transport.frame.truncated_body");
+
+        std::string oversizedFrame;
+        const std::uint32_t oversizedLength = EditorBridgeStdioServerUVE::kMaximumFrameBytesUVE + 1U;
+        const std::array<char, 4U> oversizedHeader{
+            static_cast<char>((oversizedLength >> 24U) & 0xFFU), static_cast<char>((oversizedLength >> 16U) & 0xFFU),
+            static_cast<char>((oversizedLength >> 8U) & 0xFFU), static_cast<char>(oversizedLength & 0xFFU)};
+        oversizedFrame.append(oversizedHeader.data(), oversizedHeader.size());
+        verifyMalformedFrame(oversizedFrame, "bridge.transport.frame.oversized");
 
         editor.ShutdownUVE();
     }

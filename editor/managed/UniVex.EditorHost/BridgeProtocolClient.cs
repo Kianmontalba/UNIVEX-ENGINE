@@ -16,6 +16,12 @@ public sealed class BridgeProtocolClient : IAsyncDisposable
     public const uint ProtocolVersion = 1;
     public const int MaximumFrameBytes = 1024 * 1024;
 
+    private enum FrameReadStage
+    {
+        Header,
+        Body,
+    }
+
     private readonly Stream input;
     private readonly Stream output;
     private long nextRequestId = 1;
@@ -72,7 +78,24 @@ public sealed class BridgeProtocolClient : IAsyncDisposable
         });
         await WriteFrameAsync(requestBody, cancellationToken).ConfigureAwait(false);
         byte[] responseBody = await ReadFrameAsync(cancellationToken).ConfigureAwait(false);
-        JsonDocument response = JsonDocument.Parse(responseBody);
+        JsonDocument response;
+        try
+        {
+            response = JsonDocument.Parse(responseBody);
+        }
+        catch (JsonException exception)
+        {
+            throw new BridgeProtocolException("bridge.transport.json.invalid",
+                $"The backend returned invalid JSON: {exception.Message}");
+        }
+        if (response.RootElement.ValueKind != JsonValueKind.Object ||
+            !response.RootElement.TryGetProperty("jsonrpc", out JsonElement jsonRpcVersion) ||
+            jsonRpcVersion.ValueKind != JsonValueKind.String || jsonRpcVersion.GetString() != "2.0")
+        {
+            response.Dispose();
+            throw new BridgeProtocolException("bridge.transport.response.invalid",
+                "The backend returned an invalid JSON-RPC response envelope.");
+        }
         if (!response.RootElement.TryGetProperty("id", out JsonElement responseId) ||
             responseId.ValueKind != JsonValueKind.Number || responseId.GetInt64() != requestId)
         {
@@ -100,17 +123,22 @@ public sealed class BridgeProtocolClient : IAsyncDisposable
 
     private async Task<byte[]> ReadFrameAsync(CancellationToken cancellationToken)
     {
-        byte[] header = await ReadExactlyAsync(sizeof(uint), cancellationToken).ConfigureAwait(false);
+        byte[] header = await ReadExactlyAsync(sizeof(uint), FrameReadStage.Header, cancellationToken).ConfigureAwait(false);
         uint length = BinaryPrimitives.ReadUInt32BigEndian(header);
-        if (length == 0 || length > MaximumFrameBytes)
+        if (length == 0)
         {
-            throw new BridgeProtocolException("bridge.transport.frame.invalid",
-                "The backend returned a frame length outside the supported bound.");
+            throw new BridgeProtocolException("bridge.transport.frame.zero_length",
+                "The backend returned a zero-length response frame.");
         }
-        return await ReadExactlyAsync(checked((int)length), cancellationToken).ConfigureAwait(false);
+        if (length > MaximumFrameBytes)
+        {
+            throw new BridgeProtocolException("bridge.transport.frame.oversized",
+                "The backend returned a response frame larger than the supported bound.");
+        }
+        return await ReadExactlyAsync(checked((int)length), FrameReadStage.Body, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<byte[]> ReadExactlyAsync(int length, CancellationToken cancellationToken)
+    private async Task<byte[]> ReadExactlyAsync(int length, FrameReadStage stage, CancellationToken cancellationToken)
     {
         byte[] buffer = new byte[length];
         int total = 0;
@@ -119,8 +147,17 @@ public sealed class BridgeProtocolClient : IAsyncDisposable
             int count = await input.ReadAsync(buffer.AsMemory(total), cancellationToken).ConfigureAwait(false);
             if (count == 0)
             {
-                throw new BridgeProtocolException("bridge.transport.eof",
-                    "The backend process closed its protocol stream before the response completed.");
+                if (total == 0 && stage == FrameReadStage.Header)
+                {
+                    throw new BridgeProtocolException("bridge.transport.eof",
+                        "The backend process closed its protocol stream before sending a response.");
+                }
+
+                string code = stage == FrameReadStage.Header
+                    ? "bridge.transport.frame.truncated_header"
+                    : "bridge.transport.frame.truncated_body";
+                throw new BridgeProtocolException(code,
+                    "The backend process closed its protocol stream before a complete response frame was received.");
             }
             total += count;
         }
@@ -129,19 +166,30 @@ public sealed class BridgeProtocolClient : IAsyncDisposable
 
     private static JsonElement GetResultOrThrow(JsonElement response)
     {
-        if (response.TryGetProperty("error", out JsonElement error))
-        {
-            string code = error.TryGetProperty("data", out JsonElement data) &&
-                          data.TryGetProperty("code", out JsonElement codeValue)
-                ? codeValue.GetString() ?? "bridge.request.invalid"
-                : "bridge.request.invalid";
-            string message = error.GetProperty("message").GetString() ?? "The backend rejected the bridge request.";
-            throw new BridgeProtocolException(code, message);
-        }
-        if (!response.TryGetProperty("result", out JsonElement result))
+        bool hasError = response.TryGetProperty("error", out JsonElement error);
+        bool hasResult = response.TryGetProperty("result", out JsonElement result);
+        if (hasError == hasResult)
         {
             throw new BridgeProtocolException("bridge.transport.response.invalid",
-                "The backend response contains neither a result nor an error.");
+                "The backend response must contain exactly one result or error payload.");
+        }
+        if (hasError)
+        {
+            if (error.ValueKind != JsonValueKind.Object ||
+                !error.TryGetProperty("message", out JsonElement messageValue) ||
+                messageValue.ValueKind != JsonValueKind.String)
+            {
+                throw new BridgeProtocolException("bridge.transport.response.invalid",
+                    "The backend returned an invalid JSON-RPC error payload.");
+            }
+            string code = error.TryGetProperty("data", out JsonElement data) &&
+                          data.ValueKind == JsonValueKind.Object &&
+                          data.TryGetProperty("code", out JsonElement codeValue) &&
+                          codeValue.ValueKind == JsonValueKind.String
+                ? codeValue.GetString() ?? "bridge.request.invalid"
+                : "bridge.request.invalid";
+            throw new BridgeProtocolException(code,
+                messageValue.GetString() ?? "The backend rejected the bridge request.");
         }
         return result;
     }

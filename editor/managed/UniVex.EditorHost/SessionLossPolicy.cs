@@ -10,6 +10,9 @@ public static class SessionLossPolicy
 {
     public static bool RequiresFreshSessionAcknowledgement(bool hasPriorBackend) => hasPriorBackend;
 
+    public static bool IsTerminalFailureState(HostSessionState state) =>
+        state is HostSessionState.Failed or HostSessionState.ConfirmFreshSession;
+
     public static string DescribeFreshSessionLoss(bool? lastKnownDirty)
     {
         string evidence = lastKnownDirty switch

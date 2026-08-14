@@ -22,7 +22,8 @@ enum class FrameReadResultUVE : std::uint8_t {
     EndOfFile,
     TruncatedHeader,
     TruncatedBody,
-    TooLarge,
+    ZeroLength,
+    Oversized,
 };
 
 [[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeEntityRefUVE entity) {
@@ -84,8 +85,11 @@ enum class FrameReadResultUVE : std::uint8_t {
         (static_cast<std::uint32_t>(static_cast<unsigned char>(header[1])) << 16U) |
         (static_cast<std::uint32_t>(static_cast<unsigned char>(header[2])) << 8U) |
         static_cast<std::uint32_t>(static_cast<unsigned char>(header[3]));
-    if (length == 0U || length > EditorBridgeStdioServerUVE::kMaximumFrameBytesUVE) {
-        return FrameReadResultUVE::TooLarge;
+    if (length == 0U) {
+        return FrameReadResultUVE::ZeroLength;
+    }
+    if (length > EditorBridgeStdioServerUVE::kMaximumFrameBytesUVE) {
+        return FrameReadResultUVE::Oversized;
     }
 
     body.assign(length, '\0');
@@ -259,8 +263,10 @@ enum class FrameReadResultUVE : std::uint8_t {
             return "bridge.transport.frame.truncated_header";
         case FrameReadResultUVE::TruncatedBody:
             return "bridge.transport.frame.truncated_body";
-        case FrameReadResultUVE::TooLarge:
-            return "bridge.transport.frame.invalid";
+        case FrameReadResultUVE::ZeroLength:
+            return "bridge.transport.frame.zero_length";
+        case FrameReadResultUVE::Oversized:
+            return "bridge.transport.frame.oversized";
         case FrameReadResultUVE::Body:
         case FrameReadResultUVE::EndOfFile:
             return "bridge.transport.frame.invalid";
@@ -282,7 +288,7 @@ int EditorBridgeStdioServerUVE::ServeUVE(std::istream& input, std::ostream& outp
         if (frameResult != FrameReadResultUVE::Body) {
             diagnostics << FrameReadDiagnosticUVE(frameResult) << '\n';
             static_cast<void>(WriteFrameUVE(output, MakeErrorUVE(JsonUVE(nullptr), FrameReadDiagnosticUVE(frameResult),
-                                                                  "The bridge frame is malformed.")));
+                                                                  "The bridge frame is malformed or outside protocol bounds.")));
             return 2;
         }
 

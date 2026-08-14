@@ -77,6 +77,56 @@ public sealed class BridgeProtocolClientTests
         Assert.Equal("bridge.transport.eof", exception.Code);
     }
 
+    [Theory]
+    [InlineData(0U, "bridge.transport.frame.zero_length")]
+    [InlineData((uint)BridgeProtocolClient.MaximumFrameBytes + 1U, "bridge.transport.frame.oversized")]
+    public async Task GetSnapshotAsync_ClassifiesInvalidResponseFrameLength(uint length, string expectedCode)
+    {
+        await using MemoryStream input = BuildRawBytes(FrameHeader(length));
+        await using MemoryStream output = new();
+        await using BridgeProtocolClient client = new(input, output);
+
+        BridgeProtocolException exception = await Assert.ThrowsAsync<BridgeProtocolException>(
+            () => client.GetSnapshotAsync(CancellationToken.None));
+
+        Assert.Equal(expectedCode, exception.Code);
+    }
+
+    [Theory]
+    [InlineData(new byte[] { 0x00, 0x00 }, "bridge.transport.frame.truncated_header")]
+    [InlineData(new byte[] { 0x00, 0x00, 0x00, 0x02, (byte)'{' }, "bridge.transport.frame.truncated_body")]
+    public async Task GetSnapshotAsync_ClassifiesTruncatedResponseFrame(byte[] bytes, string expectedCode)
+    {
+        await using MemoryStream input = BuildRawBytes(bytes);
+        await using MemoryStream output = new();
+        await using BridgeProtocolClient client = new(input, output);
+
+        BridgeProtocolException exception = await Assert.ThrowsAsync<BridgeProtocolException>(
+            () => client.GetSnapshotAsync(CancellationToken.None));
+
+        Assert.Equal(expectedCode, exception.Code);
+    }
+
+    [Fact]
+    public async Task GetSnapshotAsync_ClassifiesInvalidJsonAndInvalidJsonRpcEnvelope()
+    {
+        await using MemoryStream invalidJsonInput = BuildRawBytes(FrameHeader(1U), new byte[] { (byte)'{' });
+        await using MemoryStream invalidJsonOutput = new();
+        await using BridgeProtocolClient invalidJsonClient = new(invalidJsonInput, invalidJsonOutput);
+
+        BridgeProtocolException invalidJson = await Assert.ThrowsAsync<BridgeProtocolException>(
+            () => invalidJsonClient.GetSnapshotAsync(CancellationToken.None));
+        Assert.Equal("bridge.transport.json.invalid", invalidJson.Code);
+
+        await using MemoryStream invalidEnvelopeInput = BuildFrames(new { id = 1, result = new { } });
+        await using MemoryStream invalidEnvelopeOutput = new();
+        await using BridgeProtocolClient invalidEnvelopeClient = new(invalidEnvelopeInput, invalidEnvelopeOutput);
+
+        BridgeProtocolException invalidEnvelope = await Assert.ThrowsAsync<BridgeProtocolException>(
+            () => invalidEnvelopeClient.GetSnapshotAsync(CancellationToken.None));
+        Assert.Equal("bridge.transport.response.invalid", invalidEnvelope.Code);
+    }
+
     private static MemoryStream BuildFrames(object message)
     {
         byte[] body = JsonSerializer.SerializeToUtf8Bytes(message);
@@ -87,6 +137,24 @@ public sealed class BridgeProtocolClientTests
         stream.Write(body);
         stream.Position = 0;
         return stream;
+    }
+
+    private static MemoryStream BuildRawBytes(params byte[][] chunks)
+    {
+        MemoryStream stream = new();
+        foreach (byte[] chunk in chunks)
+        {
+            stream.Write(chunk);
+        }
+        stream.Position = 0;
+        return stream;
+    }
+
+    private static byte[] FrameHeader(uint length)
+    {
+        byte[] header = new byte[sizeof(uint)];
+        BinaryPrimitives.WriteUInt32BigEndian(header, length);
+        return header;
     }
 
     private static async Task<byte[]> ReadFrameAsync(Stream input)

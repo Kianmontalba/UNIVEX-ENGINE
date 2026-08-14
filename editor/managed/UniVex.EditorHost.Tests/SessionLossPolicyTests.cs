@@ -11,6 +11,19 @@ public sealed class SessionLossPolicyTests
         Assert.False(SessionLossPolicy.RequiresFreshSessionAcknowledgement(false));
     }
 
+    [Theory]
+    [InlineData(HostSessionState.Disconnected, false)]
+    [InlineData(HostSessionState.Connecting, false)]
+    [InlineData(HostSessionState.Connected, false)]
+    [InlineData(HostSessionState.ConfirmDiscardDirtySession, false)]
+    [InlineData(HostSessionState.Failed, true)]
+    [InlineData(HostSessionState.ConfirmFreshSession, true)]
+    public void IsTerminalFailureState_OnlyPreservesExistingFailureAndFreshSessionAcknowledgement(
+        HostSessionState state, bool expected)
+    {
+        Assert.Equal(expected, SessionLossPolicy.IsTerminalFailureState(state));
+    }
+
     [Fact]
     public void DescribeFreshSessionLoss_DirtySnapshotMakesLossNonRecoverabilityExplicit()
     {

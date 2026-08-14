@@ -156,6 +156,11 @@ public partial class MainWindow : Window
 
     private void EnterFailure(string code, string detail)
     {
+        if (SessionLossPolicy.IsTerminalFailureState(state))
+        {
+            return;
+        }
+
         state = HostSessionState.Failed;
         WarningBorder.IsVisible = false;
         bool requiresFreshSessionAcknowledgement = SessionLossPolicy.RequiresFreshSessionAcknowledgement(session is not null);
