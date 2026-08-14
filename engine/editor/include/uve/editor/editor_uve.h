@@ -391,6 +391,38 @@ private:
         FileSystem,
     };
 
+    /// Session-only Content Browser focus. This filters copied ProjectFileIndexUVE entries and
+    /// never requests I/O, loads an asset, or changes the AssetDatabaseUVE registry.
+    enum class ContentBrowserTypeFocusUVE {
+        All,
+        Folders,
+        Scene,
+        Prefab,
+        Bundle,
+        Mesh,
+        Texture,
+        Shader,
+        Material,
+        Save,
+        Registered,
+        OtherFiles,
+    };
+
+    /// A file's primary presentation type. Registry correlation is deliberately a separate badge:
+    /// one registered `.uvemesh` row therefore remains Mesh + Registered, never an ambiguous tag.
+    enum class ContentBrowserItemTypeUVE {
+        Folder,
+        Scene,
+        Prefab,
+        Bundle,
+        Mesh,
+        Texture,
+        Shader,
+        Material,
+        Save,
+        File,
+    };
+
     struct GizmoDragUVE final {
         EditorGizmoModeUVE mode = EditorGizmoModeUVE::Translate;
         GizmoHandleKindUVE handleKind = GizmoHandleKindUVE::Axis;
@@ -617,6 +649,14 @@ private:
     /// Renders a copied watcher journal as read-only editor feedback. The helper never schedules
     /// imports, refreshes the project index, or mutates the project filesystem.
     void DrawProjectChangeJournalUVE(const Asset::ProjectChangeSnapshotUVE& snapshot);
+    [[nodiscard]] static ContentBrowserItemTypeUVE ClassifyContentBrowserEntryUVE(
+        const Asset::ProjectFileEntryUVE& entry);
+    [[nodiscard]] static const char* GetContentBrowserItemTypeLabelUVE(ContentBrowserItemTypeUVE type) noexcept;
+    [[nodiscard]] static const char* GetContentBrowserFocusLabelUVE(ContentBrowserTypeFocusUVE focus) noexcept;
+    [[nodiscard]] bool DoesContentBrowserEntryMatchFocusUVE(const Asset::ProjectFileEntryUVE& entry) const;
+    [[nodiscard]] bool IsContentBrowserDirectoryInSnapshotUVE(const Asset::ProjectFileSnapshotUVE& snapshot,
+                                                               const std::filesystem::path& directory) const;
+    void ReconcileContentBrowserDirectoryUVE(const Asset::ProjectFileSnapshotUVE& snapshot) noexcept;
     void DrawAssetsPanelUVE();
 
     Core::EngineServicesUVE* m_services = nullptr;
@@ -646,6 +686,10 @@ private:
     EditorRightPanelTabUVE m_activeRightPanelTab = EditorRightPanelTabUVE::Inspector;
     InspectorDrawerRegistryUVE m_inspectorDrawerRegistry;
     EditorBottomDockUVE m_activeBottomDock = EditorBottomDockUVE::FileSystem;
+    /// Empty is the ProjectFileIndexUVE content root. This value is session-only and must name a
+    /// directory in the latest successful copied snapshot before it is used as a browser location.
+    std::filesystem::path m_contentBrowserDirectory;
+    ContentBrowserTypeFocusUVE m_contentBrowserTypeFocus = ContentBrowserTypeFocusUVE::All;
     std::string m_assetFilter;
     std::string m_hierarchyFilter;
     std::string m_cachedHierarchyFilter;

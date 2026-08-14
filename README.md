@@ -135,10 +135,15 @@ the editor-only orbit/pan/zoom camera remains available and intentionally retain
 Transient sandbox frames also suppress Core checkpoint/save-game advancement, so Play-time state cannot
 produce an autosave or overwrite the active `.uvescene` file.
 The active FileSystem dock presents a cached, deterministic `ProjectFileIndexUVE` snapshot of the configured
-`assets/` content root, with folders before files, case-insensitive path filtering, and existing AssetDatabase GUID
-correlation. It scans only when the dock first opens or the user presses **Refresh**; normal overlay frames read the
-cached snapshot and perform no filesystem traversal. Missing roots are valid empty states, refresh failure retains
-the last successful tree, and symlinks are never exposed or followed. A separate portable `ProjectChangeWatcherUVE`
+`assets/` content root, with folders before files, session-only current-folder navigation, **Up**, clickable
+breadcrumbs, case-insensitive current-folder path filtering, and existing AssetDatabase GUID correlation. Every row
+has one extension-derived semantic tag (`Folder`, `Scene`, `Prefab`, `Bundle`, `Mesh`, `Texture`, `Shader`,
+`Material`, `Save`, or `File`); a correlated asset adds a separate `Registered` badge rather than replacing its
+semantic type. The type-focus selector and text filter persist through navigation and explicitly report a zero-match
+folder state. `assets/` and `assets` normalize to the same root contract. It scans only when the dock first opens or
+the user presses **Refresh**; normal overlay frames read the cached snapshot and perform no filesystem traversal.
+Missing roots are valid empty states, refresh failure retains the last successful tree, and symlinks are never exposed
+or followed. A separate portable `ProjectChangeWatcherUVE`
 polls the same root on the main thread at a configurable interval (one second by default), publishes a copied bounded
 journal, and marks only matching derived import metadata stale. The FileSystem dock shows pending-change and
 rescan-required status plus a read-only **Review Changes** section. A successful **Refresh** explicitly acknowledges

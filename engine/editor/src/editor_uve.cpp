@@ -4087,6 +4087,146 @@ void EditorUVE::DrawProjectChangeJournalUVE(const Asset::ProjectChangeSnapshotUV
     ImGui::EndChild();
 }
 
+EditorUVE::ContentBrowserItemTypeUVE EditorUVE::ClassifyContentBrowserEntryUVE(
+    const Asset::ProjectFileEntryUVE& entry) {
+    if (entry.kind == Asset::ProjectFileEntryKindUVE::Directory) {
+        return ContentBrowserItemTypeUVE::Folder;
+    }
+
+    std::string extension = entry.relativePath.extension().generic_string();
+    std::transform(extension.begin(), extension.end(), extension.begin(), [](const unsigned char character) {
+        return static_cast<char>(std::tolower(character));
+    });
+    if (extension == ".uvescene") {
+        return ContentBrowserItemTypeUVE::Scene;
+    }
+    if (extension == ".uveprefab") {
+        return ContentBrowserItemTypeUVE::Prefab;
+    }
+    if (extension == ".uvebundle") {
+        return ContentBrowserItemTypeUVE::Bundle;
+    }
+    if (extension == ".uvemesh") {
+        return ContentBrowserItemTypeUVE::Mesh;
+    }
+    if (extension == ".uvetexture") {
+        return ContentBrowserItemTypeUVE::Texture;
+    }
+    if (extension == ".uveshader") {
+        return ContentBrowserItemTypeUVE::Shader;
+    }
+    if (extension == ".uvematerial") {
+        return ContentBrowserItemTypeUVE::Material;
+    }
+    if (extension == ".uvesave") {
+        return ContentBrowserItemTypeUVE::Save;
+    }
+    return ContentBrowserItemTypeUVE::File;
+}
+
+const char* EditorUVE::GetContentBrowserItemTypeLabelUVE(const ContentBrowserItemTypeUVE type) noexcept {
+    switch (type) {
+        case ContentBrowserItemTypeUVE::Folder:
+            return "Folder";
+        case ContentBrowserItemTypeUVE::Scene:
+            return "Scene";
+        case ContentBrowserItemTypeUVE::Prefab:
+            return "Prefab";
+        case ContentBrowserItemTypeUVE::Bundle:
+            return "Bundle";
+        case ContentBrowserItemTypeUVE::Mesh:
+            return "Mesh";
+        case ContentBrowserItemTypeUVE::Texture:
+            return "Texture";
+        case ContentBrowserItemTypeUVE::Shader:
+            return "Shader";
+        case ContentBrowserItemTypeUVE::Material:
+            return "Material";
+        case ContentBrowserItemTypeUVE::Save:
+            return "Save";
+        case ContentBrowserItemTypeUVE::File:
+            return "File";
+    }
+    return "File";
+}
+
+const char* EditorUVE::GetContentBrowserFocusLabelUVE(const ContentBrowserTypeFocusUVE focus) noexcept {
+    switch (focus) {
+        case ContentBrowserTypeFocusUVE::All:
+            return "All";
+        case ContentBrowserTypeFocusUVE::Folders:
+            return "Folders";
+        case ContentBrowserTypeFocusUVE::Scene:
+            return "Scene";
+        case ContentBrowserTypeFocusUVE::Prefab:
+            return "Prefab";
+        case ContentBrowserTypeFocusUVE::Bundle:
+            return "Bundle";
+        case ContentBrowserTypeFocusUVE::Mesh:
+            return "Mesh";
+        case ContentBrowserTypeFocusUVE::Texture:
+            return "Texture";
+        case ContentBrowserTypeFocusUVE::Shader:
+            return "Shader";
+        case ContentBrowserTypeFocusUVE::Material:
+            return "Material";
+        case ContentBrowserTypeFocusUVE::Save:
+            return "Save";
+        case ContentBrowserTypeFocusUVE::Registered:
+            return "Registered";
+        case ContentBrowserTypeFocusUVE::OtherFiles:
+            return "Other Files";
+    }
+    return "All";
+}
+
+bool EditorUVE::DoesContentBrowserEntryMatchFocusUVE(const Asset::ProjectFileEntryUVE& entry) const {
+    const ContentBrowserItemTypeUVE type = ClassifyContentBrowserEntryUVE(entry);
+    switch (m_contentBrowserTypeFocus) {
+        case ContentBrowserTypeFocusUVE::All:
+            return true;
+        case ContentBrowserTypeFocusUVE::Folders:
+            return type == ContentBrowserItemTypeUVE::Folder;
+        case ContentBrowserTypeFocusUVE::Scene:
+            return type == ContentBrowserItemTypeUVE::Scene;
+        case ContentBrowserTypeFocusUVE::Prefab:
+            return type == ContentBrowserItemTypeUVE::Prefab;
+        case ContentBrowserTypeFocusUVE::Bundle:
+            return type == ContentBrowserItemTypeUVE::Bundle;
+        case ContentBrowserTypeFocusUVE::Mesh:
+            return type == ContentBrowserItemTypeUVE::Mesh;
+        case ContentBrowserTypeFocusUVE::Texture:
+            return type == ContentBrowserItemTypeUVE::Texture;
+        case ContentBrowserTypeFocusUVE::Shader:
+            return type == ContentBrowserItemTypeUVE::Shader;
+        case ContentBrowserTypeFocusUVE::Material:
+            return type == ContentBrowserItemTypeUVE::Material;
+        case ContentBrowserTypeFocusUVE::Save:
+            return type == ContentBrowserItemTypeUVE::Save;
+        case ContentBrowserTypeFocusUVE::Registered:
+            return entry.kind == Asset::ProjectFileEntryKindUVE::File && entry.registeredAssetGuid.has_value();
+        case ContentBrowserTypeFocusUVE::OtherFiles:
+            return type == ContentBrowserItemTypeUVE::File;
+    }
+    return false;
+}
+
+bool EditorUVE::IsContentBrowserDirectoryInSnapshotUVE(const Asset::ProjectFileSnapshotUVE& snapshot,
+                                                        const std::filesystem::path& directory) const {
+    if (directory.empty()) {
+        return true;
+    }
+    return std::any_of(snapshot.entries.begin(), snapshot.entries.end(), [&directory](const Asset::ProjectFileEntryUVE& entry) {
+        return entry.kind == Asset::ProjectFileEntryKindUVE::Directory && entry.relativePath == directory;
+    });
+}
+
+void EditorUVE::ReconcileContentBrowserDirectoryUVE(const Asset::ProjectFileSnapshotUVE& snapshot) noexcept {
+    if (!IsContentBrowserDirectoryInSnapshotUVE(snapshot, m_contentBrowserDirectory)) {
+        m_contentBrowserDirectory.clear();
+    }
+}
+
 void EditorUVE::DrawAssetsPanelUVE() {
     const ImGuiViewport* const mainViewport = ImGui::GetMainViewport();
     const float contentHeight = kAssetsPanelHeightUVE - kBottomDockTabHeightUVE;
@@ -4108,21 +4248,14 @@ void EditorUVE::DrawAssetsPanelUVE() {
         if (m_projectFileLastRefreshSucceeded) {
             projectChangeWatcher.AcknowledgeThroughUVE(changesBeforeRefresh.latestSequence);
             if (changesBeforeRefresh.rescanRequired) {
-                // The project index has just completed the full refresh required to re-establish
-                // correctness after bounded-journal overflow.
+                // A successful full index refresh is the explicit boundary that safely clears watcher overflow.
                 projectChangeWatcher.AcknowledgeRescanUVE();
             }
         }
     }
     const Asset::ProjectFileSnapshotUVE snapshot = projectFileIndex.GetSnapshotUVE();
     const Asset::ProjectChangeSnapshotUVE changeSnapshot = projectChangeWatcher.GetSnapshotUVE();
-
-    std::array<char, 256> filterBuffer{};
-    const std::size_t copiedCharacters = std::min(m_assetFilter.size(), filterBuffer.size() - 1U);
-    m_assetFilter.copy(filterBuffer.data(), copiedCharacters);
-    if (ImGui::InputTextWithHint("Filter", "Filter project paths", filterBuffer.data(), filterBuffer.size())) {
-        m_assetFilter = filterBuffer.data();
-    }
+    ReconcileContentBrowserDirectoryUVE(snapshot);
 
     if (m_selectedProjectFile.has_value()) {
         const auto selectedIt = std::find_if(
@@ -4161,29 +4294,67 @@ void EditorUVE::DrawAssetsPanelUVE() {
 
     DrawProjectChangeJournalUVE(changeSnapshot);
 
-    const auto isVisible = [this, &snapshot](const Asset::ProjectFileEntryUVE& entry) {
-        if (m_assetFilter.empty()) {
-            return true;
+    const bool atContentRoot = m_contentBrowserDirectory.empty();
+    if (atContentRoot) {
+        ImGui::BeginDisabled();
+    }
+    if (ImGui::Button("Up")) {
+        m_contentBrowserDirectory = m_contentBrowserDirectory.parent_path();
+    }
+    if (atContentRoot) {
+        ImGui::EndDisabled();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Content##content-root")) {
+        m_contentBrowserDirectory.clear();
+    }
+    std::filesystem::path breadcrumb;
+    std::size_t breadcrumbIndex = 0U;
+    for (const std::filesystem::path& segment : m_contentBrowserDirectory) {
+        breadcrumb /= segment;
+        ImGui::SameLine();
+        ImGui::TextUnformatted(">");
+        ImGui::SameLine();
+        const std::string segmentLabel = segment.generic_string();
+        const std::string buttonLabel = segmentLabel + "##content-breadcrumb-" + std::to_string(breadcrumbIndex++);
+        if (ImGui::Button(buttonLabel.c_str())) {
+            m_contentBrowserDirectory = breadcrumb;
         }
-        const std::string entryPath = entry.relativePath.generic_string();
-        if (ContainsCaseInsensitiveUVE(entryPath, m_assetFilter)) {
-            return true;
-        }
-        if (entry.kind != Asset::ProjectFileEntryKindUVE::Directory) {
-            return false;
-        }
-        const std::string prefix = entryPath + "/";
-        return std::any_of(snapshot.entries.begin(), snapshot.entries.end(), [this, &prefix](const Asset::ProjectFileEntryUVE& child) {
-            const std::string childPath = child.relativePath.generic_string();
-            return childPath.starts_with(prefix) && ContainsCaseInsensitiveUVE(childPath, m_assetFilter);
-        });
-    };
+    }
 
-    const auto hasVisibleChild = [&snapshot, &isVisible](const std::filesystem::path& parent) {
-        return std::any_of(snapshot.entries.begin(), snapshot.entries.end(), [&parent, &isVisible](const Asset::ProjectFileEntryUVE& entry) {
-            return entry.relativePath.parent_path() == parent && isVisible(entry);
-        });
-    };
+    std::array<char, 256> filterBuffer{};
+    const std::size_t copiedCharacters = std::min(m_assetFilter.size(), filterBuffer.size() - 1U);
+    m_assetFilter.copy(filterBuffer.data(), copiedCharacters);
+    if (ImGui::InputTextWithHint("Filter", "Filter current folder paths", filterBuffer.data(), filterBuffer.size())) {
+        m_assetFilter = filterBuffer.data();
+    }
+    ImGui::SameLine();
+    if (ImGui::BeginCombo("Type", GetContentBrowserFocusLabelUVE(m_contentBrowserTypeFocus))) {
+        constexpr std::array<ContentBrowserTypeFocusUVE, 12U> focuses = {
+            ContentBrowserTypeFocusUVE::All,       ContentBrowserTypeFocusUVE::Folders,
+            ContentBrowserTypeFocusUVE::Scene,     ContentBrowserTypeFocusUVE::Prefab,
+            ContentBrowserTypeFocusUVE::Bundle,    ContentBrowserTypeFocusUVE::Mesh,
+            ContentBrowserTypeFocusUVE::Texture,   ContentBrowserTypeFocusUVE::Shader,
+            ContentBrowserTypeFocusUVE::Material,  ContentBrowserTypeFocusUVE::Save,
+            ContentBrowserTypeFocusUVE::Registered, ContentBrowserTypeFocusUVE::OtherFiles,
+        };
+        for (const ContentBrowserTypeFocusUVE focus : focuses) {
+            const bool selected = focus == m_contentBrowserTypeFocus;
+            if (ImGui::Selectable(GetContentBrowserFocusLabelUVE(focus), selected)) {
+                m_contentBrowserTypeFocus = focus;
+            }
+            if (selected) {
+                ImGui::SetItemDefaultFocus();
+            }
+        }
+        ImGui::EndCombo();
+    }
+    const bool hasActiveFilters = !m_assetFilter.empty() || m_contentBrowserTypeFocus != ContentBrowserTypeFocusUVE::All;
+    ImGui::SameLine();
+    if (ImGui::Button("Clear Filters")) {
+        m_assetFilter.clear();
+        m_contentBrowserTypeFocus = ContentBrowserTypeFocusUVE::All;
+    }
 
     const auto selectEntry = [this, &snapshot](const Asset::ProjectFileEntryUVE& entry) {
         m_selectedProjectFile = entry;
@@ -4194,70 +4365,76 @@ void EditorUVE::DrawAssetsPanelUVE() {
         }
     };
 
-    ImGui::BeginChild("##project-file-tree", ImVec2{0.0F, 72.0F}, true);
+    std::vector<const Asset::ProjectFileEntryUVE*> visibleEntries;
+    std::size_t directEntryCount = 0U;
+    for (const Asset::ProjectFileEntryUVE& entry : snapshot.entries) {
+        if (entry.relativePath.parent_path() != m_contentBrowserDirectory) {
+            continue;
+        }
+        ++directEntryCount;
+        const std::string entryPath = entry.relativePath.generic_string();
+        if (ContainsCaseInsensitiveUVE(entryPath, m_assetFilter) && DoesContentBrowserEntryMatchFocusUVE(entry)) {
+            visibleEntries.push_back(&entry);
+        }
+    }
+
+    ImGui::SameLine();
+    ImGui::TextDisabled("%zu / %zu in %s", visibleEntries.size(), directEntryCount,
+                        m_contentBrowserDirectory.empty() ? "Content" : m_contentBrowserDirectory.generic_string().c_str());
+
+    ImGui::BeginChild("##content-browser-items", ImVec2{0.0F, 72.0F}, true);
     if (!m_projectFileLastRefreshSucceeded && snapshot.refreshGeneration == 0U) {
         ImGui::TextUnformatted("Project content root could not be scanned. Press Refresh after correcting the root.");
     } else if (!snapshot.contentRootExists) {
         ImGui::TextUnformatted("Project content root does not exist yet. Press Refresh after adding content.");
     } else if (snapshot.entries.empty()) {
         ImGui::TextUnformatted("Project content root is empty.");
+    } else if (visibleEntries.empty()) {
+        if (hasActiveFilters) {
+            ImGui::TextUnformatted("No entries in this folder match the active filters.");
+        } else {
+            ImGui::TextUnformatted("This folder has no direct entries.");
+        }
     } else {
-        std::function<void(const std::filesystem::path&)> drawTreeLevel;
-        drawTreeLevel = [&](const std::filesystem::path& parent) {
-            for (const Asset::ProjectFileEntryUVE& entry : snapshot.entries) {
-                if (entry.relativePath.parent_path() != parent || !isVisible(entry)) {
-                    continue;
-                }
-
-                const bool selected = m_selectedProjectFile.has_value() &&
-                                      m_selectedProjectFile->relativePath == entry.relativePath &&
-                                      m_selectedProjectFile->kind == entry.kind;
-                const std::string name = entry.relativePath.filename().generic_string();
-                const std::string identity = entry.relativePath.generic_string();
-                if (entry.kind == Asset::ProjectFileEntryKindUVE::Directory) {
-                    ImGuiTreeNodeFlags nodeFlags = ImGuiTreeNodeFlags_OpenOnArrow | ImGuiTreeNodeFlags_OpenOnDoubleClick;
-                    if (selected) {
-                        nodeFlags |= ImGuiTreeNodeFlags_Selected;
-                    }
-                    if (!hasVisibleChild(entry.relativePath)) {
-                        nodeFlags |= ImGuiTreeNodeFlags_Leaf | ImGuiTreeNodeFlags_NoTreePushOnOpen;
-                    }
-                    const bool open = ImGui::TreeNodeEx((name + "##project-dir-" + identity).c_str(), nodeFlags);
-                    if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen()) {
-                        selectEntry(entry);
-                    }
-                    if (open && (nodeFlags & ImGuiTreeNodeFlags_NoTreePushOnOpen) == 0) {
-                        drawTreeLevel(entry.relativePath);
-                        ImGui::TreePop();
-                    }
-                } else {
-                    std::string label = name;
-                    if (entry.registeredAssetGuid.has_value()) {
-                        label += " [Registered]";
-                    }
-                    label += "##project-file-" + identity;
-                    if (ImGui::Selectable(label.c_str(), selected)) {
-                        selectEntry(entry);
-                    }
+        for (const Asset::ProjectFileEntryUVE* const entry : visibleEntries) {
+            const bool selected = m_selectedProjectFile.has_value() &&
+                                  m_selectedProjectFile->relativePath == entry->relativePath &&
+                                  m_selectedProjectFile->kind == entry->kind;
+            const ContentBrowserItemTypeUVE type = ClassifyContentBrowserEntryUVE(*entry);
+            std::string label = entry->relativePath.filename().generic_string();
+            label += " [";
+            label += GetContentBrowserItemTypeLabelUVE(type);
+            label += "]";
+            if (entry->registeredAssetGuid.has_value()) {
+                label += " [Registered]";
+            }
+            label += "##content-browser-entry-" + entry->relativePath.generic_string();
+            if (ImGui::Selectable(label.c_str(), selected, ImGuiSelectableFlags_AllowDoubleClick)) {
+                selectEntry(*entry);
+                if (entry->kind == Asset::ProjectFileEntryKindUVE::Directory &&
+                    ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+                    m_contentBrowserDirectory = entry->relativePath;
                 }
             }
-        };
-        drawTreeLevel({});
+        }
     }
     ImGui::EndChild();
 
     if (m_selectedProjectFile.has_value()) {
         const std::string selectedPath = m_selectedProjectFile->relativePath.generic_string();
+        const ContentBrowserItemTypeUVE selectedType = ClassifyContentBrowserEntryUVE(*m_selectedProjectFile);
         ImGui::TextWrapped("Selected: %s", selectedPath.c_str());
-        ImGui::TextUnformatted(m_selectedProjectFile->kind == Asset::ProjectFileEntryKindUVE::Directory ? "Kind: Directory"
-                                                                                                           : "Kind: File");
+        ImGui::Text("Type: %s", GetContentBrowserItemTypeLabelUVE(selectedType));
         if (m_selectedProjectFile->registeredAssetGuid.has_value()) {
-            ImGui::Text("GUID: %016llX", static_cast<unsigned long long>(m_selectedProjectFile->registeredAssetGuid->value));
-        } else {
-            ImGui::TextUnformatted("Registry: Unregistered");
+            ImGui::SameLine();
+            ImGui::Text("[Registered] GUID: %016llX",
+                        static_cast<unsigned long long>(m_selectedProjectFile->registeredAssetGuid->value));
+        } else if (m_selectedProjectFile->kind == Asset::ProjectFileEntryKindUVE::File) {
+            ImGui::SameLine();
+            ImGui::TextUnformatted("[Unregistered]");
         }
     } else {
-        ImGui::TextUnformatted("Select a project file or directory to inspect its cached entry.");
+        ImGui::TextUnformatted("Select a cached project file or directory to inspect its content-browser entry.");
     }
     ImGui::End();
 }

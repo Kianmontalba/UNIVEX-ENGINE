@@ -46,6 +46,41 @@ struct EditorUVEAccessUVE final {
     [[nodiscard]] static std::size_t GetInspectorDrawerCountUVE(const EditorUVE& editor) {
         return editor.m_inspectorDrawerRegistry.GetDrawerCountUVE();
     }
+
+    [[nodiscard]] static std::string GetContentBrowserItemTypeLabelUVE(const Asset::ProjectFileEntryUVE& entry) {
+        return EditorUVE::GetContentBrowserItemTypeLabelUVE(EditorUVE::ClassifyContentBrowserEntryUVE(entry));
+    }
+
+    static void SelectContentBrowserMeshFocusUVE(EditorUVE& editor) {
+        editor.m_contentBrowserTypeFocus = EditorUVE::ContentBrowserTypeFocusUVE::Mesh;
+    }
+
+    static void SelectContentBrowserRegisteredFocusUVE(EditorUVE& editor) {
+        editor.m_contentBrowserTypeFocus = EditorUVE::ContentBrowserTypeFocusUVE::Registered;
+    }
+
+    [[nodiscard]] static bool DoesContentBrowserEntryMatchFocusUVE(const EditorUVE& editor,
+                                                                     const Asset::ProjectFileEntryUVE& entry) {
+        return editor.DoesContentBrowserEntryMatchFocusUVE(entry);
+    }
+
+    static void SetContentBrowserDirectoryUVE(EditorUVE& editor, std::filesystem::path directory) {
+        editor.m_contentBrowserDirectory = std::move(directory);
+    }
+
+    [[nodiscard]] static const std::filesystem::path& GetContentBrowserDirectoryUVE(const EditorUVE& editor) {
+        return editor.m_contentBrowserDirectory;
+    }
+
+    static void SetAssetFilterUVE(EditorUVE& editor, std::string filter) { editor.m_assetFilter = std::move(filter); }
+
+    [[nodiscard]] static std::string GetContentBrowserTypeFocusLabelUVE(const EditorUVE& editor) {
+        return EditorUVE::GetContentBrowserFocusLabelUVE(editor.m_contentBrowserTypeFocus);
+    }
+
+    static void ReconcileContentBrowserDirectoryUVE(EditorUVE& editor, const Asset::ProjectFileSnapshotUVE& snapshot) {
+        editor.ReconcileContentBrowserDirectoryUVE(snapshot);
+    }
 };
 
 namespace {
@@ -210,6 +245,80 @@ TEST(EditorUVETest, OutlinerContextUVE_AncestryAndEligibleParentsExcludeSelected
                   (std::vector<Scene::EntityUVE>{parent, selected}));
         EXPECT_EQ(EditorUVEAccessUVE::GetEligibleReparentParentsUVE(editor, selected),
                   (std::vector<Scene::EntityUVE>{rootA, parent, rootB}));
+
+        editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
+}
+
+TEST(EditorUVETest, ContentBrowserWorkflowUVE_UsesPrimaryExtensionTagAndIndependentRegisteredFocus) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_content_browser_tags.uvescene");
+        Asset::ProjectFileEntryUVE registeredMesh;
+        registeredMesh.relativePath = "Characters/Hero.UVEMESH";
+        registeredMesh.kind = Asset::ProjectFileEntryKindUVE::File;
+        registeredMesh.registeredAssetGuid = Asset::AssetGuidUVE{42U};
+
+        Asset::ProjectFileEntryUVE ordinaryFile;
+        ordinaryFile.relativePath = "Notes/readme.txt";
+        ordinaryFile.kind = Asset::ProjectFileEntryKindUVE::File;
+
+        Asset::ProjectFileEntryUVE directory;
+        directory.relativePath = "Characters";
+        directory.kind = Asset::ProjectFileEntryKindUVE::Directory;
+
+        // A registered file keeps its semantic extension tag; registration remains an independent badge/focus.
+        EXPECT_EQ(EditorUVEAccessUVE::GetContentBrowserItemTypeLabelUVE(registeredMesh), "Mesh");
+        EXPECT_EQ(EditorUVEAccessUVE::GetContentBrowserItemTypeLabelUVE(ordinaryFile), "File");
+        EXPECT_EQ(EditorUVEAccessUVE::GetContentBrowserItemTypeLabelUVE(directory), "Folder");
+
+        EditorUVEAccessUVE::SelectContentBrowserMeshFocusUVE(editor);
+        EXPECT_TRUE(EditorUVEAccessUVE::DoesContentBrowserEntryMatchFocusUVE(editor, registeredMesh));
+        EXPECT_FALSE(EditorUVEAccessUVE::DoesContentBrowserEntryMatchFocusUVE(editor, ordinaryFile));
+
+        EditorUVEAccessUVE::SelectContentBrowserRegisteredFocusUVE(editor);
+        EXPECT_TRUE(EditorUVEAccessUVE::DoesContentBrowserEntryMatchFocusUVE(editor, registeredMesh));
+        EXPECT_FALSE(EditorUVEAccessUVE::DoesContentBrowserEntryMatchFocusUVE(editor, ordinaryFile));
+        EXPECT_FALSE(EditorUVEAccessUVE::DoesContentBrowserEntryMatchFocusUVE(editor, directory));
+
+        editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
+}
+
+TEST(EditorUVETest, ContentBrowserWorkflowUVE_PersistsFiltersAndSafelyFallsBackWhenFolderDisappears) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_content_browser_navigation.uvescene");
+        Asset::ProjectFileSnapshotUVE snapshot;
+        snapshot.entries.push_back(
+            Asset::ProjectFileEntryUVE{std::filesystem::path{"Scenes"}, Asset::ProjectFileEntryKindUVE::Directory, std::nullopt});
+        snapshot.entries.push_back(Asset::ProjectFileEntryUVE{std::filesystem::path{"Scenes/City.uvescene"},
+                                                               Asset::ProjectFileEntryKindUVE::File, std::nullopt});
+
+        EditorUVEAccessUVE::SetAssetFilterUVE(editor, "city");
+        EditorUVEAccessUVE::SelectContentBrowserMeshFocusUVE(editor);
+        EditorUVEAccessUVE::SetContentBrowserDirectoryUVE(editor, "Scenes");
+        EditorUVEAccessUVE::ReconcileContentBrowserDirectoryUVE(editor, snapshot);
+
+        EXPECT_EQ(EditorUVEAccessUVE::GetContentBrowserDirectoryUVE(editor), std::filesystem::path{"Scenes"});
+        EXPECT_EQ(editor.GetAssetFilterUVE(), "city");
+        EXPECT_EQ(EditorUVEAccessUVE::GetContentBrowserTypeFocusLabelUVE(editor), "Mesh");
+
+        snapshot.entries.clear();
+        EditorUVEAccessUVE::ReconcileContentBrowserDirectoryUVE(editor, snapshot);
+        EXPECT_TRUE(EditorUVEAccessUVE::GetContentBrowserDirectoryUVE(editor).empty());
+        EXPECT_EQ(editor.GetAssetFilterUVE(), "city");
+        EXPECT_EQ(EditorUVEAccessUVE::GetContentBrowserTypeFocusLabelUVE(editor), "Mesh");
 
         editor.ShutdownUVE();
     }

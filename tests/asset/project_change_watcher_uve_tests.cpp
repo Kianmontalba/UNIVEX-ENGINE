@@ -87,6 +87,19 @@ TEST_F(ProjectChangeWatcherUVETest, PollNowUVE_InitialBaselineEmitsNoChanges) {
     EXPECT_TRUE(derivedArtifactCache.markedSources.empty());
 }
 
+TEST_F(ProjectChangeWatcherUVETest, PollNowUVE_NormalizesRelativeTrailingSeparatorBeforeBaselineScan) {
+    WriteFixtureFileUVE(root / "existing.txt", "existing");
+    const std::filesystem::path configuredRoot = root.generic_string() + "/";
+    ProjectChangeWatcherUVE watcher(configuredRoot, 1.0, 16U);
+
+    ASSERT_TRUE(watcher.PollNowUVE(assetDatabase, derivedArtifactCache));
+    const ProjectChangeSnapshotUVE snapshot = watcher.GetSnapshotUVE();
+    EXPECT_EQ(snapshot.contentRoot, root);
+    EXPECT_EQ(snapshot.successfulScanGeneration, 1U);
+    EXPECT_TRUE(snapshot.changes.empty());
+    EXPECT_FALSE(snapshot.lastScanDiagnostic.has_value());
+}
+
 TEST_F(ProjectChangeWatcherUVETest, PollUVE_DefersScanUntilConfiguredInterval) {
     const std::filesystem::path source = root / "tracked.txt";
     WriteFixtureFileUVE(source, "before");

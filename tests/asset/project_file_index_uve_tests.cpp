@@ -74,6 +74,24 @@ TEST(ProjectFileIndexUVETest, GetSnapshotUVE_UsesCachedTreeUntilExplicitRefresh)
     std::filesystem::remove_all(root);
 }
 
+TEST(ProjectFileIndexUVETest, RefreshUVE_NormalizesRelativeTrailingSeparatorBeforeRootBoundaryComparison) {
+    const std::filesystem::path root = "uve_project_file_index_tests_trailing_separator";
+    const std::filesystem::path configuredRoot = root.generic_string() + "/";
+    std::filesystem::remove_all(root);
+    WriteFixtureFileUVE(root / "nested" / "asset.txt", "asset");
+
+    AssetDatabaseUVE assetDatabase;
+    ProjectFileIndexUVE index(configuredRoot);
+
+    ASSERT_TRUE(index.RefreshUVE(assetDatabase));
+    const ProjectFileSnapshotUVE snapshot = index.GetSnapshotUVE();
+    EXPECT_EQ(snapshot.contentRoot, root);
+    EXPECT_TRUE(snapshot.contentRootExists);
+    EXPECT_EQ(SnapshotPathsUVE(snapshot), std::vector<std::string>({"nested", "nested/asset.txt"}));
+
+    std::filesystem::remove_all(root);
+}
+
 TEST(ProjectFileIndexUVETest, RefreshUVE_BuildsDeterministicFoldersFirstTreeAndCorrelatesInRootRecords) {
     const std::filesystem::path root = "uve_project_file_index_tests_tree";
     const std::filesystem::path outside = "uve_project_file_index_tests_outside.txt";
