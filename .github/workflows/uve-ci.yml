@@ -51,3 +51,54 @@ jobs:
 
       - name: Run full unit-test suite
         run: ctest --test-dir build/ci-gcc --output-on-failure
+
+
+  managed-editor-host:
+    name: managed-editor-host (.NET 8)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Install native bridge build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            cmake \
+            g++ \
+            ninja-build \
+            libglfw3-dev \
+            libwayland-dev \
+            libxkbcommon-dev \
+            libxrandr-dev \
+            libxi-dev \
+            libxinerama-dev \
+            libxcursor-dev
+
+      - name: Configure headless bridge backend
+        run: >-
+          cmake -S . -B build/ci-gcc -G Ninja
+          -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_CXX_COMPILER=g++
+
+      - name: Build bridge backend
+        run: cmake --build build/ci-gcc --parallel --target uve_editor_app
+
+      - name: Restore managed host with lock files
+        run: dotnet restore editor/managed/UniVex.EditorHost.Tests/UniVex.EditorHost.Tests.csproj --locked-mode
+
+      - name: Build managed host and tests
+        run: dotnet build editor/managed/UniVex.EditorHost.Tests/UniVex.EditorHost.Tests.csproj --no-restore
+
+      - name: Run managed unit tests
+        run: dotnet test editor/managed/UniVex.EditorHost.Tests/UniVex.EditorHost.Tests.csproj --no-build --no-restore
+
+      - name: Run managed-to-native bridge probe
+        run: ./tools/verify_editor_host_probe.sh ./build/ci-gcc/engine/app/uve_editor

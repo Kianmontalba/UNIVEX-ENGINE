@@ -1,0 +1,56 @@
+<!-- Copyright (c) 2026 UniVex Studios. All Rights Reserved. -->
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="UniVex.EditorHost.MainWindow"
+        Width="760"
+        Height="560"
+        MinWidth="640"
+        MinHeight="480"
+        Title="UniVex Editor Host — Foundation v1">
+    <ScrollViewer>
+        <StackPanel Margin="28" Spacing="14">
+            <TextBlock Text="UNIVEX EDITOR HOST" FontSize="24" FontWeight="SemiBold" />
+            <TextBlock Text="Increment 70 — local C++ bridge connection foundation"
+                       Opacity="0.72" />
+
+            <Grid ColumnDefinitions="150,*" RowDefinitions="Auto,Auto" ColumnSpacing="12" RowSpacing="10">
+                <TextBlock Grid.Row="0" Grid.Column="0" VerticalAlignment="Center" Text="Backend executable" />
+                <TextBox x:Name="BackendPathTextBox" Grid.Row="0" Grid.Column="1"
+                         Watermark="Absolute path to uve_editor" />
+                <TextBlock Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" Text="Scene path (optional)" />
+                <TextBox x:Name="ScenePathTextBox" Grid.Row="1" Grid.Column="1"
+                         Watermark="Optional .uvescene path" />
+            </Grid>
+
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <Button x:Name="ConnectButton" Click="ConnectButton_OnClick" Content="Start Headless Backend" />
+                <Button x:Name="RefreshButton" Click="RefreshButton_OnClick" Content="Refresh Snapshot" IsEnabled="False" />
+                <Button x:Name="StartNewSessionButton" Click="StartNewSessionButton_OnClick"
+                        Content="Start New Backend Session" IsEnabled="False" />
+            </StackPanel>
+
+            <Border x:Name="WarningBorder" Padding="14" IsVisible="False" CornerRadius="4"
+                    Background="#3A2810" BorderBrush="#D28A24" BorderThickness="1">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Session safety acknowledgement required" FontWeight="SemiBold" />
+                    <TextBlock x:Name="WarningTextBlock" TextWrapping="Wrap" />
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <Button x:Name="ConfirmWarningButton" Click="ConfirmWarningButton_OnClick"
+                                Content="Acknowledge and continue" />
+                        <Button Click="CancelWarningButton_OnClick" Content="Cancel" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <Border Padding="16" CornerRadius="4" Background="#20242B" BorderBrush="#4B5563" BorderThickness="1">
+                <StackPanel Spacing="8">
+                    <TextBlock x:Name="StatusTextBlock" Text="Disconnected. No backend child has been launched." FontWeight="SemiBold" />
+                    <TextBlock x:Name="DetailsTextBlock" TextWrapping="Wrap" Opacity="0.85" />
+                </StackPanel>
+            </Border>
+
+            <TextBlock Text="The managed host owns no ECS pointers, scene files, renderer handles, or OpenGL resources. Bridge-stdio always starts a separate headless C++ process; it cannot share the native ImGui editor process."
+                       TextWrapping="Wrap" Opacity="0.65" />
+        </StackPanel>
+    </ScrollViewer>
+</Window>

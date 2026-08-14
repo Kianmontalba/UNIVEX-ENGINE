@@ -7,7 +7,7 @@
 
 </div>
 
-> **Status:** **Increment 69 — COMPLETED.** The owner-approved architecture keeps C++20 authoritative for the engine/editor backend, reserves C#/.NET for a future editor experience layer, and reserves GLSL for viewport visuals. Increments 70–81 remain **PARTIAL** until separately implemented and verified. Increment 69 itself adds no managed runtime, C# host, or external transport.
+> **Status:** **Increments 69–70 — COMPLETED.** The owner-approved architecture keeps C++20 authoritative for the engine/editor backend, reserves C#/.NET for the editor experience layer, and reserves GLSL for viewport visuals. Increments 71–81 remain **PARTIAL** until separately implemented and verified. Increment 70 adds an optional .NET 8/Avalonia host and a local headless-only framed transport; it does not add C# docking, authoring panels, scene ownership, or viewport/GL hosting.
 
 ## Decision
 
@@ -41,8 +41,8 @@ The new order starts by creating a safe multi-language architecture **before** m
 
 | Status | Increment | Title | Main languages | Concrete outcome |
 |---|---:|---|---|---|
-| **COMPLETED** | **69** | **Editor Bridge Contract v1** | C++ | Versioned editor command/state DTOs, main-thread backend bridge service, capability discovery, revisioned copied snapshots, typed diagnostics, stale mutation protection, and headless protocol tests. No C# host or external transport yet. |
-| **PARTIAL** | **70** | **C# Editor Host Foundation v1** | C++, C# | Optional .NET 8 C# editor-host project, local bridge client, connection/error screen, backend capability display, protocol compatibility checks, and process lifecycle policy. No direct engine pointers. |
+| **COMPLETED** | **69** | **Editor Bridge Contract v1** | C++ | Versioned editor command/state DTOs, main-thread backend bridge service, capability discovery, revisioned copied snapshots, typed diagnostics, stale mutation protection, and in-memory native-change observation. |
+| **COMPLETED** | **70** | **C# Editor Host Foundation v1** | C++, C# | Optional .NET 8/Avalonia host, typed copied bridge client, local framed JSON-RPC stdio transport, compatibility/capability screen, and child lifecycle policy. `--bridge-stdio` is headless-only and process-exclusive with native ImGui; crash/EOF has no auto-restart and a replacement child requires explicit unsaved-session-loss acknowledgement. No direct engine pointers, C# authoring panels, docking, or viewport hosting. |
 | **PARTIAL** | **71** | **C# Editor Shell & Docking v1** | C#, C++ | Cross-platform C# desktop shell with original UniVex layout: menu, dock regions, workspace tabs, persistent presentation layout, and backend-provided panel visibility commands. Existing C++ editor remains fallback. |
 | **PARTIAL** | **72** | **C# Hierarchy, Inspector & Content Browser v1** | C#, C++ | C# panels consume immutable backend snapshots; selection and edits invoke C++ commands. Hierarchy context, Inspector drawers, breadcrumbs, filters, and asset records remain C++ authoritative. |
 | **PARTIAL** | **73** | **GLSL Viewport Visuals v1** | C++, GLSL | Editor grid/background contract, top-right X/Y/Z orientation widget, axis highlights, selection outline, gizmo visual states, color/accessibility constants, and GPU-visible regression tests. |
@@ -102,6 +102,6 @@ The new order starts by creating a safe multi-language architecture **before** m
 
 ## What This Means for the Next Approval
 
-**Increment 69 — Editor Bridge Contract v1 is complete.** It establishes the authority, copied DTO, revision, capability, diagnostic, and native-command-routing foundation required for a professional editor designed with C++, C#, and GLSL together.
+**Increments 69–70 are complete.** Together they establish the authority, copied DTO, revision, capability, diagnostic, native-command-routing, framed local transport, and explicit process/loss boundary required for a professional editor designed with C++, C#, and GLSL together.
 
-Increment 70 can now evaluate the C# host safely; Increment 73 remains the planned GLSL viewport-visuals foundation. Neither step may weaken C++ ownership or bypass the bridge contract.
+Increment 71 can now add the C# shell and docking presentation safely; Increment 73 remains the planned GLSL viewport-visuals foundation. Neither step may weaken C++ ownership, bypass the bridge contract, or make a C# process own native GL resources.
