@@ -21,6 +21,7 @@ public partial class MainWindow : Window
     private bool closeConfirmed;
     private bool applyingLayout;
     private bool applyingSnapshot;
+    private bool scriptRuntimeRequestAvailable;
     private bool shellInitialized;
 
     public MainWindow()
@@ -78,6 +79,9 @@ public partial class MainWindow : Window
 
     private void VisualScriptRedoButton_OnClick(object? sender, RoutedEventArgs e) =>
         VisualScriptCanvas.RequestRedo();
+
+    private void ScriptRuntimeRefreshButton_OnClick(object? sender, RoutedEventArgs e) =>
+        DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "readScriptRuntime"));
 
     private void DeveloperConsoleSubmitButton_OnClick(object? sender, RoutedEventArgs e)
     {
@@ -460,7 +464,7 @@ public partial class MainWindow : Window
             RenderContentBrowser(snapshot.ContentBrowser);
             RenderViewportSurface(snapshot.ViewportSurface);
             RenderVisualScripting(snapshot.VisualScripting, snapshot.Revision);
-            RenderScriptRuntime(snapshot.ScriptRuntime);
+            RenderScriptRuntime(snapshot.ScriptRuntime, snapshot.Capabilities.Contains(BridgeSnapshotParser.ReadScriptRuntimeCapability));
             RenderDeveloperConsole(snapshot.DeveloperConsole);
             RenderDataTableCatalog(snapshot.DataTableCatalog, snapshot.DataTablePreview);
             RenderDataTablePreview(snapshot.DataTablePreview);
@@ -512,8 +516,10 @@ public partial class MainWindow : Window
                $"{pauseReason} {debugger.Reason}";
     }
 
-    private void RenderScriptRuntime(BridgeScriptRuntimeSnapshot runtime)
+    private void RenderScriptRuntime(BridgeScriptRuntimeSnapshot runtime, bool requestAvailable)
     {
+        scriptRuntimeRequestAvailable = requestAvailable;
+        ScriptRuntimeRefreshButton.IsEnabled = state == HostSessionState.Connected && requestAvailable;
         ScriptRuntimeInstancesListBox.ItemsSource = runtime.Entries;
         if (!runtime.IsAvailable)
         {
@@ -720,6 +726,7 @@ public partial class MainWindow : Window
         ConnectButton.IsEnabled = enabled && SessionLossPolicy.CanStartBackend(state, session is not null);
         BackendPathTextBox.IsEnabled = enabled;
         ScenePathTextBox.IsEnabled = enabled;
+        ScriptRuntimeRefreshButton.IsEnabled = enabled && state == HostSessionState.Connected && scriptRuntimeRequestAvailable;
     }
 
     private void UpdateShellLayout(DockShellLayoutState layout)
