@@ -290,6 +290,34 @@ TEST(ScriptRuntimeUVETest, TickUVE_IsDeterministicAndSkipsDisabledInstances) {
     EXPECT_EQ(results[0].execution.instructionsExecuted, 2U);
 }
 
+TEST(ScriptRuntimeUVETest, SetEnabledDetailedUVEReturnsStructuredDiagnosticsAndControlsTicking) {
+    ScriptRuntimeUVE runtime;
+    ScriptBytecodeProgramUVE program;
+    const Scene::EntityUVE entity{6U, 1U};
+    ASSERT_TRUE(runtime.AttachUVE(entity, program));
+
+    const ScriptRuntimeEnabledUpdateResultUVE unchanged = runtime.SetEnabledDetailedUVE(entity, true);
+    EXPECT_EQ(unchanged.code, ScriptRuntimeEnabledUpdateCodeUVE::Unchanged);
+    EXPECT_TRUE(unchanged.IsAcceptedUVE());
+    EXPECT_FALSE(unchanged.message.empty());
+
+    const ScriptRuntimeEnabledUpdateResultUVE disabled = runtime.SetEnabledDetailedUVE(entity, false);
+    EXPECT_EQ(disabled.code, ScriptRuntimeEnabledUpdateCodeUVE::Applied);
+    EXPECT_TRUE(disabled.IsAcceptedUVE());
+    EXPECT_TRUE(runtime.TickUVE().empty());
+    EXPECT_TRUE(runtime.SetEnabledUVE(entity, false));
+
+    const ScriptRuntimeEnabledUpdateResultUVE enabled = runtime.SetEnabledDetailedUVE(entity, true);
+    EXPECT_EQ(enabled.code, ScriptRuntimeEnabledUpdateCodeUVE::Applied);
+    EXPECT_TRUE(enabled.IsAcceptedUVE());
+    EXPECT_EQ(runtime.TickUVE().size(), 1U);
+
+    const ScriptRuntimeEnabledUpdateResultUVE missing = runtime.SetEnabledDetailedUVE({9U, 1U}, true);
+    EXPECT_EQ(missing.code, ScriptRuntimeEnabledUpdateCodeUVE::NoActiveInstance);
+    EXPECT_FALSE(missing.IsAcceptedUVE());
+    EXPECT_FALSE(missing.message.empty());
+}
+
 TEST(ScriptRuntimeUVETest, DetachUVE_RemovesOnlyExactGenerationalHandle) {
     ScriptRuntimeUVE runtime;
     ScriptBytecodeProgramUVE program;
