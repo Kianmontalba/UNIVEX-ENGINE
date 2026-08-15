@@ -159,7 +159,11 @@ TEST(ScriptGraphUVETest, ValidateUVE_ReportsWrongDirectionsAndIncompatibleTypes)
     const auto diagnostics = graph.ValidateUVE(registry);
     ASSERT_EQ(diagnostics.size(), 2U);
     EXPECT_EQ(diagnostics[0].code, ScriptValidationCodeUVE::WrongPinDirection);
+    ASSERT_TRUE(diagnostics[0].relatedEndpoint.has_value());
+    EXPECT_EQ(*diagnostics[0].relatedEndpoint, (ScriptPinEndpointUVE{3U, "In"}));
     EXPECT_EQ(diagnostics[1].code, ScriptValidationCodeUVE::IncompatiblePinTypes);
+    ASSERT_TRUE(diagnostics[1].relatedEndpoint.has_value());
+    EXPECT_EQ(*diagnostics[1].relatedEndpoint, (ScriptPinEndpointUVE{1U, "Out"}));
 }
 
 TEST(ScriptGraphUVETest, ValidateUVE_ReportsSelfLinkAndMissingNodeDeterministically) {
@@ -172,8 +176,14 @@ TEST(ScriptGraphUVETest, ValidateUVE_ReportsSelfLinkAndMissingNodeDeterministica
     const auto diagnostics = graph.ValidateUVE(registry);
     ASSERT_EQ(diagnostics.size(), 3U);
     EXPECT_EQ(diagnostics[0].code, ScriptValidationCodeUVE::SelfLink);
+    ASSERT_TRUE(diagnostics[0].relatedEndpoint.has_value());
+    EXPECT_EQ(*diagnostics[0].relatedEndpoint, (ScriptPinEndpointUVE{1U, "Exec"}));
     EXPECT_EQ(diagnostics[1].code, ScriptValidationCodeUVE::WrongPinDirection);
+    ASSERT_TRUE(diagnostics[1].relatedEndpoint.has_value());
+    EXPECT_EQ(*diagnostics[1].relatedEndpoint, (ScriptPinEndpointUVE{1U, "Out"}));
     EXPECT_EQ(diagnostics[2].code, ScriptValidationCodeUVE::EmptyLinkEndpoint);
+    ASSERT_TRUE(diagnostics[2].relatedEndpoint.has_value());
+    EXPECT_EQ(*diagnostics[2].relatedEndpoint, (ScriptPinEndpointUVE{1U, "Out"}));
 }
 
 TEST(ScriptPinCompatibilityUVETest, AreScriptPinTypesCompatibleUVE_RequiresExactTypes) {

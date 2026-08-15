@@ -245,8 +245,12 @@ enum class FrameReadResultUVE : std::uint8_t {
 }
 
 [[nodiscard]] JsonUVE ToJsonUVE(const Scripting::ScriptValidationDiagnosticUVE& diagnostic) {
-    return JsonUVE{{"code", static_cast<std::uint8_t>(diagnostic.code)}, {"nodeId", diagnostic.nodeId},
+    JsonUVE result{{"code", static_cast<std::uint8_t>(diagnostic.code)}, {"nodeId", diagnostic.nodeId},
                    {"pinName", diagnostic.pinName}, {"message", diagnostic.message}};
+    result["relatedEndpoint"] = diagnostic.relatedEndpoint.has_value()
+        ? JsonUVE{{"nodeId", diagnostic.relatedEndpoint->nodeId}, {"pinName", diagnostic.relatedEndpoint->pinName}}
+        : JsonUVE{};
+    return result;
 }
 
 [[nodiscard]] JsonUVE ToJsonUVE(const Scripting::ScriptGraphCanvasSnapshotUVE& canvas) {

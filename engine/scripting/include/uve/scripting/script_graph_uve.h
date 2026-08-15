@@ -112,6 +112,14 @@ struct ScriptValidationDiagnosticUVE final {
     std::uint32_t nodeId = 0U;
     std::string pinName;
     std::string message;
+    std::optional<ScriptPinEndpointUVE> relatedEndpoint;
+
+    ScriptValidationDiagnosticUVE() = default;
+    ScriptValidationDiagnosticUVE(ScriptValidationCodeUVE diagnosticCode, const std::uint32_t diagnosticNodeId,
+                                  std::string diagnosticPinName, std::string diagnosticMessage,
+                                  std::optional<ScriptPinEndpointUVE> diagnosticRelatedEndpoint = std::nullopt)
+        : code(diagnosticCode), nodeId(diagnosticNodeId), pinName(std::move(diagnosticPinName)),
+          message(std::move(diagnosticMessage)), relatedEndpoint(std::move(diagnosticRelatedEndpoint)) {}
 
     [[nodiscard]] bool operator==(const ScriptValidationDiagnosticUVE&) const = default;
 };
