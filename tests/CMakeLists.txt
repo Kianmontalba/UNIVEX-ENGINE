@@ -89,6 +89,7 @@ add_executable(uve_tests
     editor/editor_uve_tests.cpp
     editor/inspector_drawer_registry_uve_tests.cpp
     scripting/script_graph_uve_tests.cpp
+    plugins/plugin_registry_uve_tests.cpp
     project_check/project_checker_uve_tests.cpp
 )
 target_link_libraries(uve_tests PRIVATE
@@ -113,6 +114,7 @@ target_link_libraries(uve_tests PRIVATE
     uve_core
     uve_editor
     uve_scripting
+    uve_plugins
     uve_project_check_lib
     GTest::gtest
     GTest::gtest_main

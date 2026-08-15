@@ -220,3 +220,6 @@ See `CONTRIBUTING.md` before making changes.
 ## Project Health & Headless Automation
 
 `uve_project_check --project-root <path> --format text|json` validates a project without starting the editor, a window manager, or a render device. It reports deterministic registry and supported universal-asset envelope findings in human-readable text or machine-readable JSON. The command is deliberately read-only: it does not import, register, save, repair, rewrite, move, delete, or follow symlinks. A corrupt file is isolated as its own diagnostic so other files continue to be checked; independent facts for one file are aggregated only when their prerequisite parse data is valid.
+
+
+**Native Plugin Extension Seam v1** adds a bounded static native registry for versioned plugin manifests, unique capability identifiers, and generation-checked registration scopes. This milestone intentionally does not load DLLs or shared objects, parse filesystem manifests, expose arbitrary engine callbacks, or bypass existing ownership boundaries; those parts require a separately reviewed plugin ABI and security design.
