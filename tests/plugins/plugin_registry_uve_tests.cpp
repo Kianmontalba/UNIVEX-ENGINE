@@ -1,9 +1,42 @@
 // Copyright (c) 2026 UniVex Studios. All Rights Reserved.
+#include "uve/plugins/plugin_manifest_validation_uve.h"
 #include "uve/plugins/plugin_registry_uve.h"
 
 #include <gtest/gtest.h>
 
 namespace UVE::Plugins::Tests {
+
+TEST(NativePluginManifestValidationUVETest, ValidateNativePluginManifestUVE_ReportsBoundedStructuredDiagnostics) {
+    NativePluginManifestUVE valid{"uve.valid", "Valid", {1U, 0U, 0U},
+                                 kNativePluginProtocolVersionUVE, {"node.types", "editor.window"}};
+    EXPECT_TRUE(ValidateNativePluginManifestUVE(valid).IsValidUVE());
+
+    NativePluginManifestUVE duplicate = valid;
+    duplicate.capabilityIds = {"node.types", "node.types"};
+    const NativePluginManifestValidationResultUVE duplicateResult = ValidateNativePluginManifestUVE(duplicate);
+    ASSERT_FALSE(duplicateResult.IsValidUVE());
+    ASSERT_EQ(duplicateResult.diagnostics.size(), 1U);
+    EXPECT_EQ(duplicateResult.diagnostics[0].code,
+              NativePluginManifestValidationCodeUVE::DuplicateCapabilityId);
+    EXPECT_EQ(duplicateResult.diagnostics[0].capabilityIndex, 1U);
+
+    NativePluginManifestUVE invalidProtocol = valid;
+    invalidProtocol.requiredEngineProtocol = 99U;
+    const NativePluginManifestValidationResultUVE protocolResult =
+        ValidateNativePluginManifestUVE(invalidProtocol);
+    ASSERT_FALSE(protocolResult.IsValidUVE());
+    EXPECT_EQ(protocolResult.diagnostics[0].code,
+              NativePluginManifestValidationCodeUVE::UnsupportedProtocol);
+
+    NativePluginManifestUVE tooManyCapabilities = valid;
+    tooManyCapabilities.capabilityIds.assign(
+        NativePluginRegistryUVE::kMaximumCapabilitiesPerPluginUVE + 1U, "capability");
+    const NativePluginManifestValidationResultUVE limitResult =
+        ValidateNativePluginManifestUVE(tooManyCapabilities);
+    ASSERT_FALSE(limitResult.IsValidUVE());
+    EXPECT_EQ(limitResult.diagnostics[0].code,
+              NativePluginManifestValidationCodeUVE::TooManyCapabilities);
+}
 
 TEST(NativePluginRegistryUVETest, RegisterManifestUVE_ValidatesIdentityProtocolAndCapabilities) {
     NativePluginRegistryUVE registry;

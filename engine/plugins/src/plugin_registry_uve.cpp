@@ -1,26 +1,20 @@
 // Copyright (c) 2026 UniVex Studios. All Rights Reserved.
 #include "uve/plugins/plugin_registry_uve.h"
+#include "uve/plugins/plugin_manifest_validation_uve.h"
 
 #include <algorithm>
-#include <cctype>
 #include <string_view>
-#include <unordered_set>
 #include <utility>
 
 namespace UVE::Plugins {
 
 NativePluginRegistryResultUVE NativePluginRegistryUVE::RegisterManifestUVE(NativePluginManifestUVE manifest) {
-    if (!IsValidIdentifierUVE(manifest.pluginId) || manifest.displayName.empty() ||
-        manifest.requiredEngineProtocol != kNativePluginProtocolVersionUVE ||
-        m_entries.contains(manifest.pluginId) || m_entries.size() >= kMaximumPluginsUVE ||
-        manifest.capabilityIds.size() > kMaximumCapabilitiesPerPluginUVE) {
-        return {NativePluginRegistryCodeUVE::Rejected, "Plugin manifest was rejected by the native protocol boundary."};
-    }
-    std::unordered_set<std::string> capabilities;
-    for (const std::string& capability : manifest.capabilityIds) {
-        if (!IsValidIdentifierUVE(capability) || !capabilities.insert(capability).second) {
-            return {NativePluginRegistryCodeUVE::Rejected, "Plugin capabilities must be unique bounded identifiers."};
-        }
+    const NativePluginManifestValidationResultUVE validation = ValidateNativePluginManifestUVE(manifest);
+    if (!validation.IsValidUVE() || m_entries.contains(manifest.pluginId) ||
+        m_entries.size() >= kMaximumPluginsUVE) {
+        return {NativePluginRegistryCodeUVE::Rejected,
+                validation.IsValidUVE() ? "Plugin manifest conflicts with an existing bounded registry entry."
+                                        : validation.diagnostics.front().message};
     }
     const std::string pluginId = manifest.pluginId;
     m_entries.emplace(pluginId, EntryUVE{std::move(manifest), 0U, false});
@@ -77,16 +71,6 @@ std::size_t NativePluginRegistryUVE::GetOpenScopeCountUVE() const noexcept {
     return static_cast<std::size_t>(std::count_if(m_entries.cbegin(), m_entries.cend(), [](const auto& entry) {
         return entry.second.scopeOpen;
     }));
-}
-
-bool NativePluginRegistryUVE::IsValidIdentifierUVE(const std::string& value) noexcept {
-    if (value.empty() || value.size() > 128U) {
-        return false;
-    }
-    return std::all_of(value.cbegin(), value.cend(), [](const char character) {
-        const unsigned char byte = static_cast<unsigned char>(character);
-        return std::isalnum(byte) != 0 || character == '_' || character == '-' || character == '.';
-    });
 }
 
 } // namespace UVE::Plugins

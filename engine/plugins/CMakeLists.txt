@@ -1,5 +1,6 @@
 # Copyright (c) 2026 UniVex Studios. All Rights Reserved.
 add_library(uve_plugins STATIC
+    src/plugin_manifest_validation_uve.cpp
     src/plugin_registry_uve.cpp
 )
 target_include_directories(uve_plugins PUBLIC include)
