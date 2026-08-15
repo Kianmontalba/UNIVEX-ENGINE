@@ -55,6 +55,7 @@ add_executable(uve_tests
     asset/data_table_uve_tests.cpp
     asset/data_table_asset_uve_tests.cpp
     asset/data_table_asset_registration_uve_tests.cpp
+    asset/data_table_asset_manager_uve_tests.cpp
     asset/data_table_registry_uve_tests.cpp
     render/null_render_device_uve_tests.cpp
     render/render_system_uve_tests.cpp
