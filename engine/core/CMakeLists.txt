@@ -17,6 +17,7 @@ add_library(uve_core STATIC
     src/time_pose_contract_uve.cpp
     src/animation_clip_uve.cpp
     src/animation_tree_uve.cpp
+    src/animation_state_machine_uve.cpp
 )
 target_include_directories(uve_core PUBLIC include)
 target_link_libraries(uve_core PUBLIC uve_platform uve_debug uve_utilities uve_events uve_memory uve_threading uve_commandline uve_config uve_asset uve_scene uve_physics uve_render uve_input uve_audio uve_save uve_window)
