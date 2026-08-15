@@ -273,17 +273,26 @@ bool DeveloperConsoleUVE::SetSeverityFilterUVE(const DeveloperConsoleSeverityFil
     return SetSeverityFilterDetailedUVE(filter).IsAcceptedUVE();
 }
 
-bool DeveloperConsoleUVE::SetCompletionPrefixUVE(std::string prefix) {
-    if (!IsAvailableUVE() || !IsBoundedValueUVE(prefix)) {
-        return false;
+DeveloperConsoleCompletionPrefixResultUVE DeveloperConsoleUVE::SetCompletionPrefixDetailedUVE(std::string prefix) {
+    if (!IsAvailableUVE()) {
+        return {DeveloperConsoleCompletionPrefixCodeUVE::Unavailable,
+                "Completion prefix filtering is unavailable under the Shipping build policy."};
+    }
+    if (!IsBoundedValueUVE(prefix)) {
+        return {DeveloperConsoleCompletionPrefixCodeUVE::InvalidPrefix,
+                "Completion prefix exceeds the bounded size or contains a line break."};
     }
     prefix = TrimUVE(prefix);
     if (m_completionPrefix == prefix) {
-        return true;
+        return {DeveloperConsoleCompletionPrefixCodeUVE::Unchanged, "Completion prefix is unchanged."};
     }
     m_completionPrefix = std::move(prefix);
     IncrementGenerationUVE(m_generation);
-    return true;
+    return {DeveloperConsoleCompletionPrefixCodeUVE::Applied, "Completion prefix updated."};
+}
+
+bool DeveloperConsoleUVE::SetCompletionPrefixUVE(std::string prefix) {
+    return SetCompletionPrefixDetailedUVE(std::move(prefix)).IsAcceptedUVE();
 }
 
 bool DeveloperConsoleUVE::MoveHistoryUVE(const std::int32_t delta) noexcept {

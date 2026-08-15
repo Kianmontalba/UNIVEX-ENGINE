@@ -119,6 +119,23 @@ struct DeveloperConsoleSeverityFilterResultUVE final {
     }
 };
 
+enum class DeveloperConsoleCompletionPrefixCodeUVE : std::uint8_t {
+    Applied = 0,
+    Unchanged,
+    Unavailable,
+    InvalidPrefix,
+};
+
+struct DeveloperConsoleCompletionPrefixResultUVE final {
+    DeveloperConsoleCompletionPrefixCodeUVE code = DeveloperConsoleCompletionPrefixCodeUVE::Applied;
+    std::string message;
+
+    [[nodiscard]] bool IsAcceptedUVE() const noexcept {
+        return code == DeveloperConsoleCompletionPrefixCodeUVE::Applied ||
+               code == DeveloperConsoleCompletionPrefixCodeUVE::Unchanged;
+    }
+};
+
 struct DeveloperConsoleCompletionUVE final {
     std::string identifier;
     std::string help;
@@ -187,6 +204,7 @@ public:
     [[nodiscard]] DeveloperConsoleSeverityFilterResultUVE SetSeverityFilterDetailedUVE(
         DeveloperConsoleSeverityFilterUVE filter) noexcept;
     [[nodiscard]] bool SetSeverityFilterUVE(DeveloperConsoleSeverityFilterUVE filter) noexcept;
+    [[nodiscard]] DeveloperConsoleCompletionPrefixResultUVE SetCompletionPrefixDetailedUVE(std::string prefix);
     [[nodiscard]] bool SetCompletionPrefixUVE(std::string prefix);
     [[nodiscard]] bool MoveHistoryUVE(std::int32_t delta) noexcept;
     [[nodiscard]] bool IsAvailableUVE() const noexcept;

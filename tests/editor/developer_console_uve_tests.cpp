@@ -227,6 +227,36 @@ TEST(DeveloperConsoleUVE, SetSeverityFilterDetailedUVEReturnsStructuredDiagnosti
     EXPECT_FALSE(unavailable.message.empty());
 }
 
+TEST(DeveloperConsoleUVE, SetCompletionPrefixDetailedUVEReturnsStructuredDiagnostics) {
+    DeveloperConsoleUVE console;
+    ASSERT_TRUE(console.RegisterCommand("camera.reset", "Reset the active camera.", [](DeveloperConsoleUVE&, std::string_view) {}));
+
+    const DeveloperConsoleCompletionPrefixResultUVE applied = console.SetCompletionPrefixDetailedUVE(" camera ");
+    EXPECT_EQ(applied.code, DeveloperConsoleCompletionPrefixCodeUVE::Applied);
+    EXPECT_TRUE(applied.IsAcceptedUVE());
+    EXPECT_FALSE(applied.message.empty());
+    ASSERT_TRUE(console.SetCompletionPrefixUVE("camera"));
+
+    const DeveloperConsoleCompletionPrefixResultUVE unchanged = console.SetCompletionPrefixDetailedUVE("camera");
+    EXPECT_EQ(unchanged.code, DeveloperConsoleCompletionPrefixCodeUVE::Unchanged);
+    EXPECT_TRUE(unchanged.IsAcceptedUVE());
+
+    const DeveloperConsoleCompletionPrefixResultUVE invalid =
+        console.SetCompletionPrefixDetailedUVE(std::string(DeveloperConsoleUVE::kMaximumValueBytesUVE + 1U, 'x'));
+    EXPECT_EQ(invalid.code, DeveloperConsoleCompletionPrefixCodeUVE::InvalidPrefix);
+    EXPECT_FALSE(invalid.IsAcceptedUVE());
+    EXPECT_FALSE(invalid.message.empty());
+    ASSERT_EQ(console.GetSnapshotUVE().completions.size(), 1U);
+    EXPECT_EQ(console.GetSnapshotUVE().completions.front().identifier, "camera.reset");
+
+    DeveloperConsoleUVE shipping(DeveloperConsoleBuildPolicyUVE::Shipping);
+    const DeveloperConsoleCompletionPrefixResultUVE unavailable =
+        shipping.SetCompletionPrefixDetailedUVE("camera");
+    EXPECT_EQ(unavailable.code, DeveloperConsoleCompletionPrefixCodeUVE::Unavailable);
+    EXPECT_FALSE(unavailable.IsAcceptedUVE());
+    EXPECT_FALSE(unavailable.message.empty());
+}
+
 TEST(DeveloperConsoleUVE, CompletionAndSeverityFilterAreNativeDeterministicFacts) {
     DeveloperConsoleUVE console;
     ASSERT_TRUE(console.RegisterCommand("camera.reset", "Reset the active camera.",
