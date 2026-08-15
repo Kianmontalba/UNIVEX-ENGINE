@@ -151,4 +151,77 @@ TEST(EditorDataTableRegistryBridgeUVE, RegistryMutationAdvancesBridgeRevisionOnl
 }
 
 } // namespace
+
+TEST(EditorDataTableRegistryBridgeUVE, DispatchRoutesRevisionCheckedPreviewSelection) {
+    Core::EngineCoreUVE engine(MakeRegistryBridgeConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_data_table_registry_dispatch.uvescene");
+        editor.InitUVE();
+        Asset::DataTableRegistryUVE registry;
+        ASSERT_TRUE(registry.RegisterUVE(MakeTableUVE("weapons", "pistol", 25)));
+        EditorBridgeUVE bridge(editor, &registry);
+        const EditorBridgeSnapshotUVE initial = bridge.GetSnapshotUVE();
+
+        EditorBridgeRequestUVE select{};
+        select.protocolVersion = kEditorBridgeProtocolVersionUVE;
+        select.requestId = 1U;
+        select.expectedRevision = initial.revision;
+        select.kind = EditorBridgeRequestKindUVE::SelectDataTablePreview;
+        select.dataTableName = "weapons";
+        const EditorBridgeResponseUVE selected = bridge.DispatchUVE(select);
+        ASSERT_TRUE(selected.applied);
+        EXPECT_EQ(selected.code, "bridge.command.applied");
+        EXPECT_EQ(selected.snapshot.dataTablePreview.name, "weapons");
+
+        EditorBridgeRequestUVE unknown = select;
+        unknown.requestId = 2U;
+        unknown.expectedRevision = selected.snapshot.revision;
+        unknown.dataTableName = "missing";
+        const EditorBridgeResponseUVE rejected = bridge.DispatchUVE(unknown);
+        EXPECT_FALSE(rejected.applied);
+        EXPECT_EQ(rejected.code, "bridge.data_table.preview.invalid");
+        EXPECT_EQ(rejected.snapshot.revision, selected.snapshot.revision);
+        EXPECT_EQ(rejected.snapshot.dataTablePreview.name, "weapons");
+
+        EditorBridgeRequestUVE stale = select;
+        stale.requestId = 3U;
+        stale.expectedRevision = initial.revision;
+        stale.dataTableName = "weapons";
+        const EditorBridgeResponseUVE staleResponse = bridge.DispatchUVE(stale);
+        EXPECT_FALSE(staleResponse.applied);
+        EXPECT_EQ(staleResponse.code, "bridge.snapshot.stale");
+
+        editor.ShutdownUVE();
+    }
+    engine.Shutdown();
+}
+
+TEST(EditorDataTableRegistryBridgeUVE, DispatchRejectsPreviewSelectionWithoutRegistryAuthority) {
+    Core::EngineCoreUVE engine(MakeRegistryBridgeConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_data_table_registry_legacy_dispatch.uvescene");
+        editor.InitUVE();
+        EditorBridgeUVE bridge(editor);
+        const EditorBridgeSnapshotUVE initial = bridge.GetSnapshotUVE();
+
+        EditorBridgeRequestUVE request{};
+        request.protocolVersion = kEditorBridgeProtocolVersionUVE;
+        request.requestId = 4U;
+        request.expectedRevision = initial.revision;
+        request.kind = EditorBridgeRequestKindUVE::SelectDataTablePreview;
+        request.dataTableName = "weapons";
+        const EditorBridgeResponseUVE response = bridge.DispatchUVE(request);
+        EXPECT_FALSE(response.applied);
+        EXPECT_EQ(response.code, "bridge.data_table.registry.unavailable");
+        EXPECT_EQ(response.snapshot.revision, initial.revision);
+
+        editor.ShutdownUVE();
+    }
+    engine.Shutdown();
+}
+
 } // namespace UVE::Editor::Tests

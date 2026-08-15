@@ -1623,3 +1623,12 @@ The registry is not an asset database. It must not scan files, persist automatic
 When a registry is supplied, bridge catalog capture must call `GetCatalogSnapshotUVE()` and preview capture must call `TryGetSnapshotUVE()` into a local copied snapshot. The legacy `SetDataTableCatalogSnapshotUVE()` and `SetDataTablePreviewSnapshotUVE()` seams remain for registry-free compatibility sessions, but must not create a second source of truth when registry authority is present.
 
 Preview selection is a bounded native seam: `SetPreviewTableUVE()` rejects unknown or overlong names without changing the current selection, accepts an empty name to clear selection, and never exposes a mutable table reference. Registry mutations and selection changes participate in bridge revision synchronization only through copied observable DTO differences. A removed selected table produces an unavailable preview fact rather than a dangling reference or implicit managed mutation.
+
+
+## Data-table preview selection protocol (Increment 97)
+
+A read-only preview selection must use the named `SelectDataTablePreview` native request and the wire kind `selectDataTablePreview`; do not overload a generic command string or infer selection from arbitrary JSON. The request carries a bounded `dataTableName` and is protected by the existing `expectedRevision` gate before it consults the native registry.
+
+A successful selection changes only native bridge session presentation state and returns a copied snapshot. Unknown names, overlong names, registry-free bridge sessions, malformed transport payloads, and stale revisions must reject deterministically without changing the current selection or mutating a `DataTableUVE`. The stdio parser owns wire-shape validation; the native bridge owns registry availability and selection semantics.
+
+The managed `BridgeCommand` and Avalonia Data Tables catalog are presentation adapters only. Managed selection emits a named command and reconciles the selected catalog item from the returned immutable snapshot; it never stores a native table pointer, edits rows or schemas, writes an asset file, or bypasses the C++ bridge.

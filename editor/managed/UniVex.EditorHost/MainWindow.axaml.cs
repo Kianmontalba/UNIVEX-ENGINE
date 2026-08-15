@@ -17,6 +17,7 @@ public partial class MainWindow : Window
     private HostSessionState state = HostSessionState.Disconnected;
     private BridgeHierarchyEntry? selectedHierarchyEntry;
     private BridgeContentBrowserEntry? selectedContentEntry;
+    private BridgeDataTableCatalogEntry? selectedDataTableEntry;
     private bool closeConfirmed;
     private bool applyingLayout;
     private bool applyingSnapshot;
@@ -262,6 +263,20 @@ public partial class MainWindow : Window
         DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "setContentBrowserFocus", ContentFocus: "all"));
     }
 
+    private void DataTableCatalogListBox_OnSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (applyingSnapshot)
+        {
+            return;
+        }
+        selectedDataTableEntry = DataTableCatalogListBox.SelectedItem as BridgeDataTableCatalogEntry;
+        if (selectedDataTableEntry is not null)
+        {
+            DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "selectDataTablePreview",
+                DataTableName: selectedDataTableEntry.Name));
+        }
+    }
+
     private void ContentBrowserListBox_OnSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
         if (applyingSnapshot)
@@ -446,7 +461,7 @@ public partial class MainWindow : Window
             RenderViewportSurface(snapshot.ViewportSurface);
             RenderVisualScripting(snapshot.VisualScripting, snapshot.Revision);
             RenderDeveloperConsole(snapshot.DeveloperConsole);
-            RenderDataTableCatalog(snapshot.DataTableCatalog);
+            RenderDataTableCatalog(snapshot.DataTableCatalog, snapshot.DataTablePreview);
             RenderDataTablePreview(snapshot.DataTablePreview);
         }
         finally
@@ -509,9 +524,14 @@ public partial class MainWindow : Window
             $"{console.CVars.Count} cvar(s){truncation}{discoveryTruncation}";
     }
 
-    private void RenderDataTableCatalog(BridgeDataTableCatalogSnapshot catalog)
+    private void RenderDataTableCatalog(BridgeDataTableCatalogSnapshot catalog,
+                                        BridgeDataTablePreviewSnapshot preview)
     {
         DataTableCatalogListBox.ItemsSource = catalog.Entries;
+        selectedDataTableEntry = preview.IsAvailable
+            ? catalog.Entries.FirstOrDefault(entry => entry.Name == preview.Name)
+            : null;
+        DataTableCatalogListBox.SelectedItem = selectedDataTableEntry;
         string truncation = catalog.EntriesTruncated ? " · bounded/truncated" : string.Empty;
         DataTableCatalogStatusTextBlock.Text =
             $"Generation {catalog.Generation}; {catalog.Entries.Count} native table descriptor(s){truncation}. " +
