@@ -1496,3 +1496,8 @@ Increment 75 deliberately does not introduce a bytecode VM, engine-call binding 
 ## Script Component Runtime Boundary v1 (Increment 79)
 
 `ScriptRuntimeUVE` owns only copied script-instance values keyed by generational `Scene::EntityUVE` handles. It does not own entities, components, ECS pointers, scene lifetime, or engine services. Attach rejects invalid or duplicate handles, incompatible bytecode versions, oversized programs, and instance-cap overflow without mutation. Tick order is canonicalized by entity index and generation; disabled instances are skipped; each execution returns a copied VM result. Entity-handle generation is part of identity and must never be reduced to an index-only key.
+
+
+## Native Graph Persistence v1 (Increment 80)
+
+`EncodeScriptGraphUVE()` and `DecodeScriptGraphUVE()` use a versioned deterministic JSON envelope for authored graph data. The encoder preserves graph order and rejects node/link/text limits before publishing output; the decoder validates schema version, required fields, JSON types, bounded collection sizes, duplicate entries, and endpoint shape before publishing a complete graph. Decode failure never returns a partial graph. Persistence is graph data only: it does not serialize runtime VM state, ECS pointers, engine services, managed UI state, or native resource handles.

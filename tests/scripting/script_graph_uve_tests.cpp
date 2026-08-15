@@ -3,6 +3,7 @@
 #include "uve/scripting/script_runtime_uve.h"
 #include "uve/scripting/script_vm_uve.h"
 #include "uve/scripting/script_compiler_ir_uve.h"
+#include "uve/scripting/script_graph_persistence_uve.h"
 #include "uve/scripting/script_graph_uve.h"
 
 #include <gtest/gtest.h>
@@ -289,6 +290,51 @@ TEST(ScriptRuntimeUVETest, DetachUVE_RemovesOnlyExactGenerationalHandle) {
     EXPECT_TRUE(runtime.HasInstanceUVE({4U, 1U}));
     EXPECT_TRUE(runtime.DetachUVE({4U, 1U}));
     EXPECT_FALSE(runtime.HasInstanceUVE({4U, 1U}));
+}
+
+} // namespace UVE::Scripting
+
+
+namespace UVE::Scripting {
+
+TEST(ScriptGraphPersistenceUVETest, EncodeDecodeScriptGraphUVE_RoundTripsDeterministically) {
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({2U, "test.sink"}));
+    ASSERT_TRUE(graph.AddNodeUVE({1U, "test.source"}));
+    ASSERT_TRUE(graph.AddLinkUVE({{1U, "Out"}, {2U, "In"}}));
+    std::vector<ScriptPersistenceDiagnosticUVE> diagnostics;
+    const std::string encoded = EncodeScriptGraphUVE(graph, diagnostics);
+    ASSERT_TRUE(diagnostics.empty());
+    const ScriptGraphDecodeResultUVE decoded = DecodeScriptGraphUVE(encoded);
+    ASSERT_TRUE(decoded.IsSuccessUVE());
+    EXPECT_EQ(decoded.graph->GetNodesUVE().size(), 2U);
+    EXPECT_EQ(decoded.graph->GetLinksUVE().size(), 1U);
+    std::vector<ScriptPersistenceDiagnosticUVE> secondDiagnostics;
+    EXPECT_EQ(EncodeScriptGraphUVE(*decoded.graph, secondDiagnostics), encoded);
+    EXPECT_TRUE(secondDiagnostics.empty());
+}
+
+TEST(ScriptGraphPersistenceUVETest, DecodeScriptGraphUVE_RejectsMalformedVersionAndDuplicates) {
+    const ScriptGraphDecodeResultUVE malformed = DecodeScriptGraphUVE("{not-json");
+    ASSERT_FALSE(malformed.IsSuccessUVE());
+    EXPECT_EQ(malformed.diagnostics[0].code, ScriptPersistenceDiagnosticCodeUVE::InvalidJson);
+    const ScriptGraphDecodeResultUVE unsupported = DecodeScriptGraphUVE(
+        R"({"schemaVersion":99,"nodes":[],"links":[]})");
+    ASSERT_FALSE(unsupported.IsSuccessUVE());
+    EXPECT_EQ(unsupported.diagnostics[0].code, ScriptPersistenceDiagnosticCodeUVE::UnsupportedVersion);
+    const ScriptGraphDecodeResultUVE duplicate = DecodeScriptGraphUVE(
+        R"({"schemaVersion":1,"nodes":[{"id":1,"typeId":"test"},{"id":1,"typeId":"test"}],"links":[]})");
+    ASSERT_FALSE(duplicate.IsSuccessUVE());
+    EXPECT_EQ(duplicate.diagnostics[0].code, ScriptPersistenceDiagnosticCodeUVE::DuplicateEntry);
+}
+
+TEST(ScriptGraphPersistenceUVETest, EncodeScriptGraphUVE_EnforcesTextLimitWithoutOutput) {
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({1U, "test.source"}));
+    std::vector<ScriptPersistenceDiagnosticUVE> diagnostics;
+    EXPECT_TRUE(EncodeScriptGraphUVE(graph, diagnostics, {4096U, 8192U, 4U}).empty());
+    ASSERT_EQ(diagnostics.size(), 1U);
+    EXPECT_EQ(diagnostics[0].code, ScriptPersistenceDiagnosticCodeUVE::LimitExceeded);
 }
 
 } // namespace UVE::Scripting
