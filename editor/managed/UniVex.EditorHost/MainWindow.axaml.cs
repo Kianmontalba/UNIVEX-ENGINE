@@ -570,6 +570,9 @@ public partial class MainWindow : Window
     {
         VisualScriptingStatusTextBlock.Text = DescribeVisualScripting(scripting);
         VisualScriptingDebuggerTextBlock.Text = DescribeVisualScriptDebugger(scripting.Debugger);
+        VisualScriptingBreakpointsListBox.ItemsSource = scripting.Debugger.Available
+            ? scripting.Debugger.BreakpointNodeIds.Select(nodeId => $"Node {nodeId}").ToArray()
+            : Array.Empty<string>();
         string truncation = scripting.Canvas.NodesTruncated || scripting.Canvas.LinksTruncated ||
             scripting.Canvas.PaletteTruncated || scripting.Canvas.DiagnosticsTruncated
             ? " · truncated"
