@@ -519,6 +519,9 @@ public sealed class BridgeProtocolClientTests
         Assert.Equal(new uint[] { 1U }, snapshot.VisualScripting.Canvas.SelectedNodeIds);
         Assert.Equal(1.5F, snapshot.VisualScripting.Canvas.View.Zoom);
         Assert.Single(snapshot.VisualScripting.Canvas.Diagnostics);
+        Assert.Equal((byte)2, snapshot.VisualScripting.Canvas.Diagnostics[0].Severity);
+        Assert.Equal("Node #1 / pin Out", snapshot.VisualScripting.Canvas.Diagnostics[0].SourceContext);
+        Assert.Equal("Node #1 / pin Out: diagnostic", snapshot.VisualScripting.Canvas.Diagnostics[0].DisplayText);
         Assert.Equal(new BridgeVisualScriptEndpoint(2U, "In"),
                      snapshot.VisualScripting.Canvas.Diagnostics[0].RelatedEndpoint);
         Assert.True(snapshot.VisualScripting.Debugger.Available);
@@ -531,6 +534,20 @@ public sealed class BridgeProtocolClientTests
         Assert.Equal("EVENT", snapshot.VisualScripting.Canvas.PaletteDescriptors[0].Category);
         Assert.Equal("node.event", snapshot.VisualScripting.Canvas.PaletteDescriptors[0].IconId);
         Assert.Single(snapshot.VisualScripting.Canvas.PaletteDescriptors[0].Pins);
+    }
+
+    [Fact]
+    public void SnapshotParser_RejectsVisualScriptDiagnosticSeverityBeyondBound()
+    {
+        JsonObject root = JsonNode.Parse(JsonSerializer.Serialize(Snapshot(sceneDirty: false, includeCanvas: true)))!.AsObject();
+        JsonObject canvas = root["visualScripting"]!["canvas"]!.AsObject();
+        canvas["diagnostics"]!.AsArray()[0]!["severity"] = 3;
+
+        using JsonDocument document = JsonDocument.Parse(root.ToJsonString());
+        BridgeProtocolException exception = Assert.Throws<BridgeProtocolException>(() =>
+            BridgeSnapshotParser.Parse(document.RootElement));
+
+        Assert.Equal("bridge.snapshot.invalid", exception.Code);
     }
 
     [Fact]
@@ -931,6 +948,8 @@ public sealed class BridgeProtocolClientTests
                     nodeId = 1U,
                     pinName = "",
                     message = "diagnostic",
+                    severity = 2,
+                    sourceContext = "Node #1 / pin Out",
                     relatedEndpoint = new { nodeId = 2U, pinName = "In" },
                 } },
             } : null,
@@ -1132,6 +1151,8 @@ public sealed class BridgeProtocolClientTests
                     nodeId = 1U,
                     pinName = "",
                     message = "diagnostic",
+                    severity = 2,
+                    sourceContext = "Node #1 / pin Out",
                     relatedEndpoint = new { nodeId = 2U, pinName = "In" },
                 } },
             } : null,

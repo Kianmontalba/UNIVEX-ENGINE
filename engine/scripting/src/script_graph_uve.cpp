@@ -25,14 +25,31 @@ const ScriptNodeUVE* FindNodeUVE(const std::vector<ScriptNodeUVE>& nodes,
     return iterator == nodes.cend() ? nullptr : &(*iterator);
 }
 
+std::string BoundDiagnosticTextUVE(std::string value, const std::size_t maximumBytes) {
+    if (value.size() > maximumBytes) {
+        value.resize(maximumBytes);
+    }
+    return value;
+}
+
 void AddDiagnosticUVE(std::vector<ScriptValidationDiagnosticUVE>& diagnostics,
                       ScriptValidationCodeUVE code,
                       std::uint32_t nodeId,
                       std::string pinName,
                       std::string message,
                       std::optional<ScriptPinEndpointUVE> relatedEndpoint = std::nullopt) {
+    std::string sourceContext = nodeId == 0U ? "Graph" : "Node #" + std::to_string(nodeId);
+    if (!pinName.empty()) {
+        sourceContext += " / pin " + pinName;
+    }
     diagnostics.push_back(ScriptValidationDiagnosticUVE{
-        code, nodeId, std::move(pinName), std::move(message), std::move(relatedEndpoint)});
+        code,
+        nodeId,
+        std::move(pinName),
+        BoundDiagnosticTextUVE(std::move(message), kMaximumScriptDiagnosticMessageBytesUVE),
+        std::move(relatedEndpoint),
+        ScriptDiagnosticSeverityUVE::Error,
+        BoundDiagnosticTextUVE(std::move(sourceContext), kMaximumScriptDiagnosticSourceContextBytesUVE)});
 }
 
 } // namespace

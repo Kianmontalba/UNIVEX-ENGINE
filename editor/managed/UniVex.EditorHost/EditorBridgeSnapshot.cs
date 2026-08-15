@@ -157,7 +157,15 @@ public sealed record BridgeVisualScriptDiagnostic(
     uint NodeId,
     string PinName,
     string Message,
-    BridgeVisualScriptEndpoint? RelatedEndpoint = null);
+    BridgeVisualScriptEndpoint? RelatedEndpoint = null,
+    byte Severity = 2,
+    string SourceContext = "")
+{
+    public bool IsError => Severity >= 2;
+    public string DisplayText => string.IsNullOrWhiteSpace(SourceContext)
+        ? Message
+        : $"{SourceContext}: {Message}";
+}
 
 public sealed record BridgeVisualScriptDebuggerSnapshot(
     bool Available,
@@ -998,10 +1006,15 @@ public static class BridgeSnapshotParser
                     relatedValue.GetProperty("nodeId").GetUInt32(),
                     RequiredBoundedString(relatedValue, "pinName"));
             }
+            byte severity = OptionalByte(diagnostic, "severity", 2);
+            if (severity > 2)
+            {
+                throw Invalid("The visual-scripting diagnostic severity is unsupported.");
+            }
             parsedDiagnostics.Add(new BridgeVisualScriptDiagnostic(
                 RequiredByte(diagnostic, "code"), diagnostic.GetProperty("nodeId").GetUInt32(),
                 RequiredBoundedString(diagnostic, "pinName"), RequiredBoundedString(diagnostic, "message"),
-                relatedEndpoint));
+                relatedEndpoint, severity, OptionalBoundedString(diagnostic, "sourceContext", string.Empty)));
         }
 
         return new BridgeVisualScriptCanvasSnapshot(

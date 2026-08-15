@@ -59,6 +59,9 @@ public sealed class VisualScriptCanvasControl : Control
     private static readonly Pen LinkPreviewPen = new(new SolidColorBrush(Color.Parse("#8BD3FF")), 2D);
     private static readonly IBrush CompatibleTargetBrush = new SolidColorBrush(Color.Parse("#78E5D5"));
     private static readonly IBrush IncompatibleTargetBrush = new SolidColorBrush(Color.Parse("#7A6670"));
+    private static readonly IBrush DiagnosticInfoBrush = new SolidColorBrush(Color.Parse("#8BD3FF"));
+    private static readonly IBrush DiagnosticWarningBrush = new SolidColorBrush(Color.Parse("#FFD081"));
+    private static readonly IBrush DiagnosticErrorBrush = new SolidColorBrush(Color.Parse("#FF8A8A"));
 
     private BridgeVisualScriptCanvasSnapshot canvas = EmptyCanvas();
     private ulong bridgeRevision;
@@ -217,6 +220,7 @@ public sealed class VisualScriptCanvasControl : Control
         DrawGrid(context);
         DrawLinks(context);
         DrawNodes(context);
+        DrawDiagnostics(context);
         DrawFooter(context);
     }
 
@@ -493,6 +497,44 @@ public sealed class VisualScriptCanvasControl : Control
         }
     }
 
+    private void DrawDiagnostics(DrawingContext context)
+    {
+        foreach (BridgeVisualScriptDiagnostic diagnostic in canvas.Diagnostics)
+        {
+            BridgeVisualScriptNode? node = canvas.Nodes.FirstOrDefault(item => item.Id == diagnostic.NodeId);
+            if (node is null)
+            {
+                continue;
+            }
+            IBrush brush = diagnostic.Severity switch
+            {
+                0 => DiagnosticInfoBrush,
+                1 => DiagnosticWarningBrush,
+                _ => DiagnosticErrorBrush,
+            };
+            Rect nodeRect = NodeRect(node);
+            context.DrawEllipse(brush, null, new Point(nodeRect.Right - 14D, nodeRect.Y + 14D), 5D, 5D);
+            if (!string.IsNullOrWhiteSpace(diagnostic.PinName))
+            {
+                Point pin = PinAnchor(node, diagnostic.PinName, outputSide: false);
+                context.DrawEllipse(brush, new Pen(BackgroundBrush, 1D), pin, 7D, 7D);
+            }
+        }
+        BridgeVisualScriptDiagnostic? firstDiagnostic = canvas.Diagnostics.FirstOrDefault();
+        if (firstDiagnostic is not null)
+        {
+            DrawText(context, firstDiagnostic.DisplayText,
+                new Point(10D, Math.Max(10D, Bounds.Height - 58D)), 11D, DiagnosticBrush(firstDiagnostic));
+        }
+    }
+
+    private static IBrush DiagnosticBrush(BridgeVisualScriptDiagnostic diagnostic) => diagnostic.Severity switch
+    {
+        0 => DiagnosticInfoBrush,
+        1 => DiagnosticWarningBrush,
+        _ => DiagnosticErrorBrush,
+    };
+
     private static IBrush PinBrush(BridgeVisualScriptPin pin, string fallbackHex) => pin.Type switch
     {
         1 => new SolidColorBrush(Color.Parse("#8BD3FF")),
@@ -539,7 +581,7 @@ public sealed class VisualScriptCanvasControl : Control
         if (linkAuthoringFeedback.Length > 0)
         {
             DrawText(context, linkAuthoringFeedback,
-                new Point(10D, Math.Max(10D, Bounds.Height - 58D)), 11D, ForegroundBrush);
+                new Point(10D, Math.Max(10D, Bounds.Height - 76D)), 11D, ForegroundBrush);
         }
     }
 

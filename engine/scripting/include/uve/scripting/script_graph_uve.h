@@ -36,6 +36,13 @@ inline constexpr std::uint32_t kScriptNodePresentationFlagNoneUVE = 0U;
 inline constexpr std::uint32_t kScriptNodePresentationFlagCompactUVE = 1U << 0U;
 inline constexpr std::uint32_t kScriptNodePresentationFlagCollapsibleUVE = 1U << 1U;
 
+enum class ScriptDiagnosticSeverityUVE : std::uint8_t {
+    Info = 0,
+    Warning = 1,
+    Error = 2,
+};
+
+// Values are serialized through the editor bridge; append new codes without renumbering existing entries.
 enum class ScriptValidationCodeUVE : std::uint8_t {
     EmptyNodeType = 0,
     DuplicateNodeType,
@@ -107,19 +114,27 @@ struct ScriptLinkUVE final {
     [[nodiscard]] bool operator==(const ScriptLinkUVE&) const = default;
 };
 
+inline constexpr std::size_t kMaximumScriptDiagnosticMessageBytesUVE = 512U;
+inline constexpr std::size_t kMaximumScriptDiagnosticSourceContextBytesUVE = 256U;
+
 struct ScriptValidationDiagnosticUVE final {
     ScriptValidationCodeUVE code = ScriptValidationCodeUVE::EmptyNodeType;
+    ScriptDiagnosticSeverityUVE severity = ScriptDiagnosticSeverityUVE::Error;
     std::uint32_t nodeId = 0U;
     std::string pinName;
     std::string message;
+    std::string sourceContext;
     std::optional<ScriptPinEndpointUVE> relatedEndpoint;
 
     ScriptValidationDiagnosticUVE() = default;
     ScriptValidationDiagnosticUVE(ScriptValidationCodeUVE diagnosticCode, const std::uint32_t diagnosticNodeId,
                                   std::string diagnosticPinName, std::string diagnosticMessage,
-                                  std::optional<ScriptPinEndpointUVE> diagnosticRelatedEndpoint = std::nullopt)
-        : code(diagnosticCode), nodeId(diagnosticNodeId), pinName(std::move(diagnosticPinName)),
-          message(std::move(diagnosticMessage)), relatedEndpoint(std::move(diagnosticRelatedEndpoint)) {}
+                                  std::optional<ScriptPinEndpointUVE> diagnosticRelatedEndpoint = std::nullopt,
+                                  ScriptDiagnosticSeverityUVE diagnosticSeverity = ScriptDiagnosticSeverityUVE::Error,
+                                  std::string diagnosticSourceContext = {})
+        : code(diagnosticCode), severity(diagnosticSeverity), nodeId(diagnosticNodeId),
+          pinName(std::move(diagnosticPinName)), message(std::move(diagnosticMessage)),
+          sourceContext(std::move(diagnosticSourceContext)), relatedEndpoint(std::move(diagnosticRelatedEndpoint)) {}
 
     [[nodiscard]] bool operator==(const ScriptValidationDiagnosticUVE&) const = default;
 };
