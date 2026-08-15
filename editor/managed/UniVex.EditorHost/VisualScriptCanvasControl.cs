@@ -56,6 +56,9 @@ public sealed class VisualScriptCanvasControl : Control
     private static readonly Pen NodePen = new(new SolidColorBrush(Color.Parse("#496274")), 1D);
     private static readonly Pen SelectedPen = new(SelectedBrush, 2D);
     private static readonly Pen GlassHighlightPen = new(GlassHighlightBrush, 1D);
+    private static readonly Pen LinkPreviewPen = new(new SolidColorBrush(Color.Parse("#8BD3FF")), 2D);
+    private static readonly IBrush CompatibleTargetBrush = new SolidColorBrush(Color.Parse("#78E5D5"));
+    private static readonly IBrush IncompatibleTargetBrush = new SolidColorBrush(Color.Parse("#7A6670"));
 
     private BridgeVisualScriptCanvasSnapshot canvas = EmptyCanvas();
     private ulong bridgeRevision;
@@ -66,12 +69,18 @@ public sealed class VisualScriptCanvasControl : Control
     private bool movedNode;
     private bool panning;
     private BridgeVisualScriptPoint panAtPointerDown = new(0F, 0F);
+    private uint? linkDragOutputNodeId;
+    private string? linkDragOutputPinName;
+    private Point linkDragPointer;
+    private string linkAuthoringFeedback = string.Empty;
 
     public event EventHandler<VisualScriptCanvasCommandEventArgs>? CommandRequested;
 
     public BridgeVisualScriptCanvasSnapshot CanvasSnapshot => canvas;
 
     public ulong BridgeRevision => bridgeRevision;
+
+    public string LinkAuthoringFeedback => linkAuthoringFeedback;
 
     public static VisualScriptNodePresentation DescribeNodePresentation(BridgeVisualScriptNode node)
     {
@@ -116,6 +125,83 @@ public sealed class VisualScriptCanvasControl : Control
         return node is null ? new Point(double.NaN, double.NaN) : PinAnchor(node, pinName, outputSide);
     }
 
+    public bool BeginLinkAuthoring(uint outputNodeId, string pinName, Point pointer)
+    {
+        BridgeVisualScriptNode? node = canvas.Nodes.FirstOrDefault(item => item.Id == outputNodeId);
+        BridgeVisualScriptPin? pin = node is null ? null : FindPin(node, pinName, outputSide: true);
+        if (node is null || pin is null)
+        {
+            linkAuthoringFeedback = "Choose a valid output pin to start a link.";
+            return false;
+        }
+        linkDragOutputNodeId = outputNodeId;
+        linkDragOutputPinName = pinName;
+        linkDragPointer = pointer;
+        linkAuthoringFeedback = "Choose a compatible input pin.";
+        InvalidateVisual();
+        return true;
+    }
+
+    public bool UpdateLinkAuthoring(Point pointer)
+    {
+        if (!linkDragOutputNodeId.HasValue)
+        {
+            return false;
+        }
+        linkDragPointer = pointer;
+        InvalidateVisual();
+        return true;
+    }
+
+    public IReadOnlyList<uint> GetCompatibleInputNodeIds()
+    {
+        if (!TryGetLinkOutput(out BridgeVisualScriptNode? outputNode, out BridgeVisualScriptPin? outputPin))
+        {
+            return Array.Empty<uint>();
+        }
+        return canvas.Nodes
+            .Where(node => node.Id != outputNode!.Id &&
+                           node.Pins.Any(pin => pin.Direction == 0 && pin.Type == outputPin!.Type))
+            .Select(node => node.Id)
+            .ToArray();
+    }
+
+    public bool CompleteLinkAuthoring(uint inputNodeId, string pinName)
+    {
+        if (!TryGetLinkOutput(out BridgeVisualScriptNode? outputNode, out BridgeVisualScriptPin? outputPin))
+        {
+            linkAuthoringFeedback = "Link authoring is not active.";
+            return false;
+        }
+        BridgeVisualScriptNode? inputNode = canvas.Nodes.FirstOrDefault(item => item.Id == inputNodeId);
+        BridgeVisualScriptPin? inputPin = inputNode is null ? null : FindPin(inputNode, pinName, outputSide: false);
+        if (inputNode is null || inputPin is null || inputNode.Id == outputNode!.Id || inputPin.Type != outputPin!.Type)
+        {
+            linkAuthoringFeedback = "The target pin is incompatible; native validation has not been requested.";
+            CancelLinkAuthoring();
+            return false;
+        }
+        string outputPinName = linkDragOutputPinName!;
+        Emit(new BridgeCommand(bridgeRevision, "addVisualScriptLink",
+            VisualScriptLink: new BridgeVisualScriptLink(
+                new BridgeVisualScriptEndpoint(outputNode.Id, outputPinName),
+                new BridgeVisualScriptEndpoint(inputNode.Id, inputPin.Name))));
+        linkAuthoringFeedback = "Link request sent for native validation.";
+        CancelLinkAuthoring(clearFeedback: false);
+        return true;
+    }
+
+    public void CancelLinkAuthoring(bool clearFeedback = false)
+    {
+        linkDragOutputNodeId = null;
+        linkDragOutputPinName = null;
+        if (clearFeedback)
+        {
+            linkAuthoringFeedback = string.Empty;
+        }
+        InvalidateVisual();
+    }
+
     public void ApplySnapshot(BridgeVisualScriptCanvasSnapshot next, ulong nextBridgeRevision)
     {
         ArgumentNullException.ThrowIfNull(next);
@@ -158,6 +244,12 @@ public sealed class VisualScriptCanvasControl : Control
 
         panning = false;
         movedNode = false;
+        if (point.Properties.IsLeftButtonPressed && TryGetOutputPinAt(pointerDown, out uint outputNodeId, out string outputPinName))
+        {
+            BeginLinkAuthoring(outputNodeId, outputPinName, pointerDown);
+            e.Handled = true;
+            return;
+        }
         pressedNodeId = HitTestNode(pointerDown);
         if (pressedNodeId.HasValue)
         {
@@ -179,6 +271,12 @@ public sealed class VisualScriptCanvasControl : Control
         }
 
         Point position = e.GetPosition(this);
+        if (linkDragOutputNodeId.HasValue)
+        {
+            UpdateLinkAuthoring(position);
+            e.Handled = true;
+            return;
+        }
         if (panning)
         {
             lastPointer = position;
@@ -205,6 +303,23 @@ public sealed class VisualScriptCanvasControl : Control
         }
 
         Point position = e.GetPosition(this);
+        if (linkDragOutputNodeId.HasValue)
+        {
+            if (TryGetInputPinAt(position, out uint inputNodeId, out string inputPinName))
+            {
+                CompleteLinkAuthoring(inputNodeId, inputPinName);
+            }
+            else
+            {
+                linkAuthoringFeedback = "Link cancelled; release over an input pin.";
+                CancelLinkAuthoring();
+            }
+            e.Pointer.Capture(null);
+            pointerCaptured = false;
+            lastPointer = position;
+            e.Handled = true;
+            return;
+        }
         if (panning)
         {
             Vector delta = position - pointerDown;
@@ -310,10 +425,26 @@ public sealed class VisualScriptCanvasControl : Control
                             canvas.SelectedNodeIds.Contains(outputNode.Id) || canvas.SelectedNodeIds.Contains(inputNode.Id);
             context.DrawGeometry(null, selected ? SelectedLinkPen : LinkPen, geometry);
         }
+        if (TryGetLinkOutput(out BridgeVisualScriptNode? outputNodeForPreview, out BridgeVisualScriptPin? outputPinForPreview))
+        {
+            Point output = PinAnchor(outputNodeForPreview!, linkDragOutputPinName!, outputSide: true);
+            double curve = Math.Max(32D * canvas.View.Zoom, Math.Abs(linkDragPointer.X - output.X) * 0.42D);
+            StreamGeometry previewGeometry = new();
+            using (StreamGeometryContext previewContext = previewGeometry.Open())
+            {
+                previewContext.BeginFigure(output, isFilled: false);
+                previewContext.CubicBezierTo(
+                    new Point(output.X + curve, output.Y),
+                    new Point(linkDragPointer.X - curve, linkDragPointer.Y),
+                    linkDragPointer);
+            }
+            context.DrawGeometry(null, LinkPreviewPen, previewGeometry);
+        }
     }
 
     private void DrawNodes(DrawingContext context)
     {
+        DrawCompatibleTargets(context);
         foreach (BridgeVisualScriptNode node in canvas.Nodes.OrderBy(item => item.DisplayOrder).ThenBy(item => item.Id))
         {
             Rect rect = NodeRect(node);
@@ -371,6 +502,29 @@ public sealed class VisualScriptCanvasControl : Control
         _ => new SolidColorBrush(Color.Parse(fallbackHex)),
     };
 
+    private void DrawCompatibleTargets(DrawingContext context)
+    {
+        if (!TryGetLinkOutput(out BridgeVisualScriptNode? outputNode, out BridgeVisualScriptPin? outputPin))
+        {
+            return;
+        }
+        foreach (BridgeVisualScriptNode node in canvas.Nodes)
+        {
+            if (node.Id == outputNode!.Id)
+            {
+                continue;
+            }
+            bool compatible = node.Pins.Any(pin => pin.Direction == 0 && pin.Type == outputPin!.Type);
+            if (!compatible && node.Pins.All(pin => pin.Direction != 0))
+            {
+                continue;
+            }
+            Rect rect = NodeRect(node).Inflate(compatible ? 5D : 2D);
+            context.DrawRectangle(null, new Pen(compatible ? CompatibleTargetBrush : IncompatibleTargetBrush,
+                compatible ? 2D : 1D), rect, 10D, 10D);
+        }
+    }
+
     private void DrawFooter(DrawingContext context)
     {
         string text = $"{canvas.Nodes.Count} node(s) · {canvas.Links.Count} link(s) · zoom {canvas.View.Zoom:0.00} · " +
@@ -381,6 +535,11 @@ public sealed class VisualScriptCanvasControl : Control
         {
             DrawText(context, "Native snapshot truncated by bounded bridge policy.",
                 new Point(10D, Math.Max(10D, Bounds.Height - 40D)), 11D, SelectedBrush);
+        }
+        if (linkAuthoringFeedback.Length > 0)
+        {
+            DrawText(context, linkAuthoringFeedback,
+                new Point(10D, Math.Max(10D, Bounds.Height - 58D)), 11D, ForegroundBrush);
         }
     }
 
@@ -398,6 +557,67 @@ public sealed class VisualScriptCanvasControl : Control
         int index = Math.Max(0, node.Pins.ToList().FindIndex(pin => pin.Name == pinName));
         double y = rect.Y + (HeaderHeight + NodePadding + index * PinRowHeight) * canvas.View.Zoom;
         return new Point(outputSide ? rect.Right : rect.Left, y);
+    }
+
+    private bool TryGetLinkOutput(out BridgeVisualScriptNode? node, out BridgeVisualScriptPin? pin)
+    {
+        node = linkDragOutputNodeId.HasValue
+            ? canvas.Nodes.FirstOrDefault(item => item.Id == linkDragOutputNodeId.Value)
+            : null;
+        pin = node is null || linkDragOutputPinName is null
+            ? null
+            : FindPin(node, linkDragOutputPinName, outputSide: true);
+        return node is not null && pin is not null;
+    }
+
+    private static BridgeVisualScriptPin? FindPin(BridgeVisualScriptNode node, string pinName, bool outputSide)
+    {
+        return node.Pins.FirstOrDefault(pin => pin.Name == pinName && (pin.Direction != 0) == outputSide);
+    }
+
+    private bool TryGetOutputPinAt(Point point, out uint nodeId, out string pinName)
+    {
+        foreach (BridgeVisualScriptNode node in canvas.Nodes.AsEnumerable().Reverse())
+        {
+            foreach (BridgeVisualScriptPin pin in node.Pins.Where(item => item.Direction != 0))
+            {
+                if (Distance(point, PinAnchor(node, pin.Name, outputSide: true)) <= 9D)
+                {
+                    nodeId = node.Id;
+                    pinName = pin.Name;
+                    return true;
+                }
+            }
+        }
+        nodeId = 0U;
+        pinName = string.Empty;
+        return false;
+    }
+
+    private bool TryGetInputPinAt(Point point, out uint nodeId, out string pinName)
+    {
+        foreach (BridgeVisualScriptNode node in canvas.Nodes.AsEnumerable().Reverse())
+        {
+            foreach (BridgeVisualScriptPin pin in node.Pins.Where(item => item.Direction == 0))
+            {
+                if (Distance(point, PinAnchor(node, pin.Name, outputSide: false)) <= 9D)
+                {
+                    nodeId = node.Id;
+                    pinName = pin.Name;
+                    return true;
+                }
+            }
+        }
+        nodeId = 0U;
+        pinName = string.Empty;
+        return false;
+    }
+
+    private static double Distance(Point left, Point right)
+    {
+        double deltaX = left.X - right.X;
+        double deltaY = left.Y - right.Y;
+        return Math.Sqrt(deltaX * deltaX + deltaY * deltaY);
     }
 
     public uint? HitTestNode(Point point)

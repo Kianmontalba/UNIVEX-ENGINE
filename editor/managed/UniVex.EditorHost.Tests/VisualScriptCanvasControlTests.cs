@@ -97,6 +97,41 @@ public sealed class VisualScriptCanvasControlTests
     }
 
     [Fact]
+    public void LinkAuthoring_EmitsNamedCommandOnlyForCompatibleInputTarget()
+    {
+        VisualScriptCanvasControl control = CreateControl();
+        control.ApplySnapshot(LinkSnapshot(), 31UL);
+        List<BridgeCommand> commands = new();
+        control.CommandRequested += (_, args) => commands.Add(args.Command);
+        Point output = control.GetPinScreenPoint(1U, "Out", outputSide: true);
+
+        Assert.True(control.BeginLinkAuthoring(1U, "Out", output));
+        Assert.Equal(new uint[] { 2U }, control.GetCompatibleInputNodeIds());
+        Assert.True(control.CompleteLinkAuthoring(2U, "In"));
+        Assert.Single(commands);
+        Assert.Equal("addVisualScriptLink", commands[0].Kind);
+        Assert.Equal(31UL, commands[0].ExpectedRevision);
+        BridgeVisualScriptLink link = commands[0].VisualScriptLink ?? throw new Xunit.Sdk.XunitException("Link payload was not emitted.");
+        Assert.Equal(new BridgeVisualScriptEndpoint(1U, "Out"), link.Output);
+        Assert.Equal(new BridgeVisualScriptEndpoint(2U, "In"), link.Input);
+        Assert.Contains("native validation", control.LinkAuthoringFeedback, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void LinkAuthoring_RejectsIncompatibleInputBeforeEmittingMutation()
+    {
+        VisualScriptCanvasControl control = CreateControl();
+        control.ApplySnapshot(LinkSnapshot(), 32UL);
+        List<BridgeCommand> commands = new();
+        control.CommandRequested += (_, args) => commands.Add(args.Command);
+
+        Assert.True(control.BeginLinkAuthoring(1U, "Out", control.GetPinScreenPoint(1U, "Out", true)));
+        Assert.False(control.CompleteLinkAuthoring(2U, "Bad"));
+        Assert.Empty(commands);
+        Assert.Contains("incompatible", control.LinkAuthoringFeedback, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void RequestUndoAndRedo_EmitNamedCommandsWithCurrentBridgeRevision()
     {
         VisualScriptCanvasControl control = CreateControl();
@@ -159,6 +194,19 @@ public sealed class VisualScriptCanvasControlTests
         control.Arrange(new Rect(0D, 0D, 800D, 600D));
         return control;
     }
+
+    private static BridgeVisualScriptCanvasSnapshot LinkSnapshot() =>
+        new(4UL, 3UL, new BridgeVisualScriptView(new BridgeVisualScriptPoint(0F, 0F), 1F),
+            false, false, false, false, false, false, false,
+            new[]
+            {
+                new BridgeVisualScriptNode(1U, "test.source", "Source", new BridgeVisualScriptPoint(-120F, 0F), false,
+                    new[] { new BridgeVisualScriptPin("Out", 1, 2) }),
+                new BridgeVisualScriptNode(2U, "test.sink", "Sink", new BridgeVisualScriptPoint(120F, 0F), false,
+                    new[] { new BridgeVisualScriptPin("In", 0, 2), new BridgeVisualScriptPin("Bad", 0, 3) }),
+            },
+            Array.Empty<BridgeVisualScriptLink>(), Array.Empty<uint>(), new[] { "test.source", "test.sink" },
+            Array.Empty<BridgeVisualScriptDiagnostic>());
 
     private static BridgeVisualScriptCanvasSnapshot Snapshot(BridgeVisualScriptNode? node = null) =>
         new(3UL, 2UL, new BridgeVisualScriptView(new BridgeVisualScriptPoint(0F, 0F), 1F),
