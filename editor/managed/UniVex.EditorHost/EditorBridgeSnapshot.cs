@@ -209,7 +209,11 @@ public sealed record BridgeScriptRuntimeSnapshot(
     int InstanceCount,
     bool EntriesTruncated,
     string Reason,
-    IReadOnlyList<BridgeScriptRuntimeInstanceEntry> Entries);
+    IReadOnlyList<BridgeScriptRuntimeInstanceEntry> Entries)
+{
+    public int VisibleEnabledInstanceCount => Entries.Count(entry => entry.Enabled);
+    public int VisibleDisabledInstanceCount => Entries.Count - VisibleEnabledInstanceCount;
+}
 
 public sealed record BridgeDataTableCatalogEntry(
     string Name,

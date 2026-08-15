@@ -444,6 +444,8 @@ public sealed class BridgeProtocolClientTests
         Assert.Equal("The native ScriptRuntime snapshot is available as copied read-only state.",
             snapshot.ScriptRuntime.Reason);
         Assert.Equal(2, snapshot.ScriptRuntime.Entries.Count);
+        Assert.Equal(1, snapshot.ScriptRuntime.VisibleEnabledInstanceCount);
+        Assert.Equal(1, snapshot.ScriptRuntime.VisibleDisabledInstanceCount);
         BridgeScriptRuntimeInstanceEntry first = snapshot.ScriptRuntime.Entries[0];
         Assert.Equal(7U, first.EntityIndex);
         Assert.Equal(3U, first.EntityGeneration);
