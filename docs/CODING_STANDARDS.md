@@ -1535,3 +1535,12 @@ Hot reload must decode and validate a complete candidate program before publicat
 Pan and zoom are explicitly non-undoable session state in v1. Every graph, layout, or selection mutation stores a complete canvas-plus-graph value state rather than a graph-only diff. Undoing node removal must restore exact node order, link order, layout-entry order, selection order, and selected flags; failed or stale commands create no history entry. History is bounded and a successful new mutation clears redo.
 
 The bridge exposes only bounded copy DTOs and named revision-checked requests. C# may render and submit value-only gestures, but it must never receive raw graph objects, ECS pointers, OpenGL handles, ImGui values, filesystem handles, or mutation authority. Canvas layout is session state and must not be added to the durable graph persistence schema without a separately versioned persistence increment.
+
+
+## Managed Visual Scripting Canvas Presentation v1 (Increment 87)
+
+`VisualScriptCanvasControl` is a managed presentation surface over copied `BridgeVisualScriptCanvasSnapshot` values. It may retain only the latest immutable DTO and transient pointer/gesture state. It must not retain native graph references, ECS pointers, OpenGL resources, ImGui values, filesystem handles, or backend process ownership.
+
+Canvas coordinates are derived from the copied pan/zoom view and are used only for rendering and gesture translation. Selection, node movement, view changes, Undo, and Redo are emitted as the existing named `BridgeCommand` values with the top-level bridge revision, then sent through the serialized bridge session. The managed control must not perform graph validation, link creation, compiler/VM work, persistence, or history mutation itself.
+
+Rendering must remain safe for empty and truncated snapshots. A truncated flag is displayed as status rather than silently treated as complete data. Durable canvas layout, source mapping, watches, breakpoint UI, and managed runtime ownership require separate reviewed increments.

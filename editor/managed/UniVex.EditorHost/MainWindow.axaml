@@ -1,19 +1,20 @@
 <!-- Copyright (c) 2026 UniVex Studios. All Rights Reserved. -->
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="using:UniVex.EditorHost"
         x:Class="UniVex.EditorHost.MainWindow"
         Width="1280"
         Height="820"
         MinWidth="960"
         MinHeight="640"
-        Title="UniVex Editor Host — Hierarchy, Inspector &amp; Content Browser v1"
+        Title="UniVex Editor Host — Visual Scripting Canvas v1"
         Background="#171A20">
     <Grid RowDefinitions="Auto,Auto,Auto,*,Auto">
         <Border Grid.Row="0" Padding="16,12" Background="#20242B" BorderBrush="#394150" BorderThickness="0,0,0,1">
             <Grid ColumnDefinitions="*,Auto">
                 <StackPanel Spacing="2">
                     <TextBlock Text="UNIVEX EDITOR" FontSize="20" FontWeight="SemiBold" />
-                    <TextBlock Text="Increment 74 — native-owned viewport surface lifecycle"
+                    <TextBlock Text="Increment 87 — managed visual-scripting canvas presentation"
                                Opacity="0.66" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" HorizontalAlignment="Right" Spacing="2">
@@ -97,12 +98,21 @@
                                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
                                     <TextBlock Text="Native Viewport Surface Lifecycle" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center" />
                                     <TextBlock x:Name="ViewportSurfaceStatusTextBlock" Text="Connect to read the C++ surface lifecycle state." TextWrapping="Wrap" TextAlignment="Center" MaxWidth="560" Opacity="0.76" />
-                                    <TextBlock Text="Visual scripting presentation" FontWeight="SemiBold" HorizontalAlignment="Center" />
-                                    <TextBlock x:Name="VisualScriptingStatusTextBlock" Text="Connect to read native graph presentation facts." TextWrapping="Wrap" TextAlignment="Center" MaxWidth="560" Opacity="0.76" />
-                                    <TextBlock Text="C# receives copied graph status and counts only; graph ownership, commands, compiler, VM, and runtime state remain native." TextWrapping="Wrap" TextAlignment="Center" MaxWidth="560" Opacity="0.76" />
-                                    <TextBlock Text="C# owns no OpenGL context, renderer texture, picking pass, native window handle, or input-forwarding path. A managed surface is shown only when an explicit future capability permits it." TextWrapping="Wrap" TextAlignment="Center" MaxWidth="560" Opacity="0.76" />
+                                    <TextBlock Text="Viewport remains native-owned; scripting presentation is available in the Scripting tab." FontWeight="SemiBold" HorizontalAlignment="Center" />
                                 </StackPanel>
                             </Border>
+                        </TabItem>
+                        <TabItem Header="Scripting">
+                            <Grid RowDefinitions="Auto,*,Auto" RowSpacing="8">
+                                <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="8">
+                                    <Button Content="Undo" Click="VisualScriptUndoButton_OnClick" />
+                                    <Button Grid.Column="1" Content="Redo" Click="VisualScriptRedoButton_OnClick" />
+                                    <TextBlock Grid.Column="2" x:Name="VisualScriptingStatusTextBlock" VerticalAlignment="Center" Text="Connect to read the native canvas." TextWrapping="Wrap" Opacity="0.76" />
+                                    <TextBlock Grid.Column="3" x:Name="VisualScriptingDiagnosticsTextBlock" VerticalAlignment="Center" TextAlignment="Right" Opacity="0.76" />
+                                </Grid>
+                                <local:VisualScriptCanvasControl x:Name="VisualScriptCanvas" Grid.Row="1" MinHeight="280" />
+                                <TextBlock Grid.Row="2" Text="C# renders copied DTOs only. Graph mutation, validation, history, compiler, VM, runtime, and resources remain native C++." TextWrapping="Wrap" Opacity="0.68" />
+                            </Grid>
                         </TabItem>
                     </TabControl>
 
