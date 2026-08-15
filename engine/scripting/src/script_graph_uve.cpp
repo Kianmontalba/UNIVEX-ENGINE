@@ -36,16 +36,22 @@ void AddDiagnosticUVE(std::vector<ScriptValidationDiagnosticUVE>& diagnostics,
 } // namespace
 
 bool ScriptNodeRegistryUVE::RegisterNodeTypeUVE(ScriptNodeTypeDescriptorUVE descriptor) {
-    if (descriptor.typeId.empty() || descriptor.displayName.empty() ||
-        m_nodeTypes.contains(descriptor.typeId)) {
+    if (descriptor.typeId.empty() || descriptor.displayName.empty() || descriptor.category.empty() ||
+        descriptor.iconId.empty() || m_nodeTypes.contains(descriptor.typeId)) {
         return false;
     }
 
     std::unordered_set<std::string> pinNames;
     pinNames.reserve(descriptor.pins.size());
-    for (const ScriptPinDescriptorUVE& pin : descriptor.pins) {
+    for (ScriptPinDescriptorUVE& pin : descriptor.pins) {
         if (pin.name.empty() || !pinNames.insert(pin.name).second) {
             return false;
+        }
+        if (pin.type == ScriptValueTypeUVE::Execution) {
+            pin.role = ScriptPinRoleUVE::Execution;
+            if (pin.defaultValue.has_value()) {
+                return false;
+            }
         }
     }
 
@@ -69,6 +75,26 @@ std::vector<std::string> ScriptNodeRegistryUVE::GetNodeTypeIdsUVE() const {
     }
     std::sort(typeIds.begin(), typeIds.end());
     return typeIds;
+}
+
+std::vector<ScriptNodeTypeDescriptorUVE> ScriptNodeRegistryUVE::GetNodeTypeDescriptorsUVE() const {
+    std::vector<ScriptNodeTypeDescriptorUVE> descriptors;
+    descriptors.reserve(m_nodeTypes.size());
+    for (const auto& [typeId, descriptor] : m_nodeTypes) {
+        static_cast<void>(typeId);
+        descriptors.push_back(descriptor);
+    }
+    std::sort(descriptors.begin(), descriptors.end(), [](const ScriptNodeTypeDescriptorUVE& left,
+                                                         const ScriptNodeTypeDescriptorUVE& right) {
+        if (left.displayOrder != right.displayOrder) {
+            return left.displayOrder < right.displayOrder;
+        }
+        if (left.category != right.category) {
+            return left.category < right.category;
+        }
+        return left.typeId < right.typeId;
+    });
+    return descriptors;
 }
 
 std::size_t ScriptNodeRegistryUVE::GetNodeTypeCountUVE() const noexcept {

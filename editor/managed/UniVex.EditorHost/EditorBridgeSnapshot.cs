@@ -106,15 +106,23 @@ public sealed record BridgeVisualScriptPoint(float X, float Y);
 
 public sealed record BridgeVisualScriptView(BridgeVisualScriptPoint Pan, float Zoom);
 
-public sealed record BridgeVisualScriptPin(string Name, byte Direction, byte Type);
-
+public sealed record BridgeVisualScriptPin(
+    string Name,
+    byte Direction,
+    byte Type,
+    byte Role = 1,
+    string? DefaultValue = null);
 public sealed record BridgeVisualScriptNode(
     uint Id,
     string TypeId,
     string DisplayName,
     BridgeVisualScriptPoint Position,
     bool IsSelected,
-    IReadOnlyList<BridgeVisualScriptPin> Pins);
+    IReadOnlyList<BridgeVisualScriptPin> Pins,
+    string Category = "Uncategorized",
+    string IconId = "node.default",
+    uint DisplayOrder = 0,
+    uint PresentationFlags = 0);
 
 public sealed record BridgeVisualScriptEndpoint(uint NodeId, string PinName);
 
@@ -752,8 +760,18 @@ public static class BridgeSnapshotParser
             foreach (JsonElement pin in pins.EnumerateArray())
             {
                 RequireObject(pin, "visual-scripting canvas pin");
+                byte type = RequiredByte(pin, "type");
+                byte role = OptionalByte(pin, "role", type == 0 ? (byte)0 : (byte)1);
+                if (role > 1)
+                {
+                    throw Invalid("The visual-scripting canvas pin role is unsupported.");
+                }
+                string? defaultValue = pin.TryGetProperty("defaultValue", out JsonElement defaultValueValue) &&
+                                       defaultValueValue.ValueKind != JsonValueKind.Null
+                    ? RequiredBoundedString(pin, "defaultValue")
+                    : null;
                 parsedPins.Add(new BridgeVisualScriptPin(
-                    RequiredBoundedString(pin, "name"), RequiredByte(pin, "direction"), RequiredByte(pin, "type")));
+                    RequiredBoundedString(pin, "name"), RequiredByte(pin, "direction"), type, role, defaultValue));
             }
             parsedNodes.Add(new BridgeVisualScriptNode(
                 node.GetProperty("id").GetUInt32(),
@@ -761,7 +779,11 @@ public static class BridgeSnapshotParser
                 RequiredBoundedString(node, "displayName"),
                 new BridgeVisualScriptPoint(node.GetProperty("x").GetSingle(), node.GetProperty("y").GetSingle()),
                 RequiredBoolean(node, "selected"),
-                parsedPins));
+                parsedPins,
+                OptionalBoundedString(node, "category", "Uncategorized"),
+                OptionalBoundedString(node, "iconId", "node.default"),
+                OptionalUInt32(node, "displayOrder", 0U),
+                OptionalUInt32(node, "presentationFlags", 0U)));
         }
 
         List<BridgeVisualScriptLink> parsedLinks = new(links.GetArrayLength());
@@ -1035,6 +1057,9 @@ public static class BridgeSnapshotParser
 
     private static int OptionalInt32(JsonElement value, string name, int fallback) =>
         value.TryGetProperty(name, out JsonElement result) ? result.GetInt32() : fallback;
+
+    private static uint OptionalUInt32(JsonElement value, string name, uint fallback) =>
+        value.TryGetProperty(name, out JsonElement result) ? result.GetUInt32() : fallback;
 
     private static bool OptionalBoolean(JsonElement value, string name, bool fallback) =>
         value.TryGetProperty(name, out JsonElement result) ? result.GetBoolean() : fallback;

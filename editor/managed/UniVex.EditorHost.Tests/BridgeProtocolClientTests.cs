@@ -471,6 +471,12 @@ public sealed class BridgeProtocolClientTests
         Assert.Equal("test.source", snapshot.VisualScripting.Canvas.Nodes[0].TypeId);
         Assert.Equal(1, snapshot.VisualScripting.Canvas.Nodes[0].Pins.Count);
         Assert.Equal("Out", snapshot.VisualScripting.Canvas.Nodes[0].Pins[0].Name);
+        Assert.Equal("EVENT", snapshot.VisualScripting.Canvas.Nodes[0].Category);
+        Assert.Equal("node.event", snapshot.VisualScripting.Canvas.Nodes[0].IconId);
+        Assert.Equal(10U, snapshot.VisualScripting.Canvas.Nodes[0].DisplayOrder);
+        Assert.Equal(1U, snapshot.VisualScripting.Canvas.Nodes[0].PresentationFlags);
+        Assert.Equal((byte)1, snapshot.VisualScripting.Canvas.Nodes[0].Pins[0].Role);
+        Assert.Equal("0.016", snapshot.VisualScripting.Canvas.Nodes[0].Pins[0].DefaultValue);
         Assert.Equal(1, snapshot.VisualScripting.Canvas.Links.Count);
         Assert.Equal(new uint[] { 1U }, snapshot.VisualScripting.Canvas.SelectedNodeIds);
         Assert.Equal(1.5F, snapshot.VisualScripting.Canvas.View.Zoom);
@@ -795,10 +801,14 @@ public sealed class BridgeProtocolClientTests
                     id = 1U,
                     typeId = "test.source",
                     displayName = "Test Source",
+                    category = "EVENT",
+                    iconId = "node.event",
+                    displayOrder = 10U,
+                    presentationFlags = 1U,
                     x = 10F,
                     y = 20F,
                     selected = true,
-                    pins = new[] { new { name = "Out", direction = 1, type = 2 } },
+                    pins = new[] { new { name = "Out", direction = 1, type = 2, role = 1, defaultValue = "0.016" } },
                 } },
                 links = new[] { new
                 {
@@ -978,10 +988,14 @@ public sealed class BridgeProtocolClientTests
                     id = 1U,
                     typeId = "test.source",
                     displayName = "Test Source",
+                    category = "EVENT",
+                    iconId = "node.event",
+                    displayOrder = 10U,
+                    presentationFlags = 1U,
                     x = 10F,
                     y = 20F,
                     selected = true,
-                    pins = new[] { new { name = "Out", direction = 1, type = 2 } },
+                    pins = new[] { new { name = "Out", direction = 1, type = 2, role = 1, defaultValue = "0.016" } },
                 } },
                 links = new[] { new
                 {
