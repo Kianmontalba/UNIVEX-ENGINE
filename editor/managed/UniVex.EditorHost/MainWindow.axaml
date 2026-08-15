@@ -118,7 +118,7 @@
                                     </StackPanel>
                                 </Border>
                                 <Border Grid.Row="3" Padding="6" Background="#20242B" BorderBrush="#394150" BorderThickness="1" CornerRadius="3">
-                                    <Grid RowDefinitions="Auto,*,Auto,Auto" RowSpacing="4">
+                                    <Grid RowDefinitions="Auto,*,Auto,Auto,Auto" RowSpacing="4">
                                         <Grid ColumnDefinitions="*,180,Auto,Auto,Auto" ColumnSpacing="8">
                                             <TextBlock x:Name="ScriptRuntimeStatusTextBlock" Text="Connect to read native ScriptRuntime instances." TextWrapping="Wrap" Opacity="0.76" />
                                             <TextBox x:Name="ScriptRuntimeFilterTextBox" Grid.Column="1" Watermark="Filter copied instances" TextChanged="ScriptRuntimeFilterTextBox_OnTextChanged" />
@@ -135,6 +135,7 @@
                                         </ListBox>
                                         <TextBlock x:Name="ScriptRuntimeEmptyTextBlock" Grid.Row="2" Text="No copied ScriptRuntime instances are visible." TextWrapping="Wrap" Opacity="0.72" IsVisible="False" />
                                         <TextBlock x:Name="ScriptRuntimeSelectionDetailsTextBlock" Grid.Row="3" Text="Select a copied ScriptRuntime instance for details." TextWrapping="Wrap" Opacity="0.72" />
+                                        <TextBlock x:Name="ScriptRuntimeHistoryTextBlock" Grid.Row="4" Text="No diagnostic tick history is available." TextWrapping="Wrap" Opacity="0.72" />
                                     </Grid>
                                 </Border>
                                 <local:VisualScriptCanvasControl x:Name="VisualScriptCanvas" Grid.Row="4" MinHeight="280" />

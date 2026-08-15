@@ -229,6 +229,10 @@ public sealed record BridgeScriptRuntimeTickSummary(
     int InvalidInstructionCount,
     int DiagnosticCount);
 
+public sealed record BridgeScriptRuntimeTickHistoryEntry(
+    ulong Sequence,
+    BridgeScriptRuntimeTickSummary Summary);
+
 public sealed record BridgeDataTableCatalogEntry(
     string Name,
     ulong Generation,
@@ -299,6 +303,8 @@ public sealed record BridgeEditorSnapshot(
     BridgeDeveloperConsoleSnapshot DeveloperConsole,
     BridgeScriptRuntimeSnapshot ScriptRuntime,
     BridgeScriptRuntimeTickSummary ScriptRuntimeTickSummary,
+    bool ScriptRuntimeTickHistoryTruncated,
+    IReadOnlyList<BridgeScriptRuntimeTickHistoryEntry> ScriptRuntimeTickHistory,
     BridgeDataTableCatalogSnapshot DataTableCatalog,
     BridgeDataTablePreviewSnapshot DataTablePreview,
     IReadOnlyList<byte> Capabilities);
@@ -340,6 +346,7 @@ public sealed record BridgeCommandResult(
 public static class BridgeSnapshotParser
 {
     public const int MaximumPanelEntries = 128;
+    public const int MaximumScriptRuntimeTickHistory = 8;
     public const int MaximumPresentationTextBytes = 256;
     // Capability IDs are append-only protocol values; 76 is ReadScriptRuntime and 77 is the
     // explicit copied ScriptRuntime tick-diagnostics request.
@@ -384,6 +391,10 @@ public static class BridgeSnapshotParser
                 value.TryGetProperty("scriptRuntimeTickSummary", out JsonElement tickSummaryValue) && tickSummaryValue.ValueKind != JsonValueKind.Null
                     ? ParseTickSummary(tickSummaryValue)
                     : EmptyTickSummary(),
+                OptionalBoolean(value, "scriptRuntimeTickHistoryTruncated", false),
+                value.TryGetProperty("scriptRuntimeTickHistory", out JsonElement tickHistoryValue) && tickHistoryValue.ValueKind != JsonValueKind.Null
+                    ? ParseTickHistory(tickHistoryValue)
+                    : Array.Empty<BridgeScriptRuntimeTickHistoryEntry>(),
                 value.TryGetProperty("dataTableCatalog", out JsonElement catalogValue) && catalogValue.ValueKind != JsonValueKind.Null
                     ? ParseDataTableCatalog(catalogValue)
                     : EmptyDataTableCatalog(),
@@ -532,6 +543,33 @@ public static class BridgeSnapshotParser
             RequiredBoolean(value, "available"), RequiredBoundedString(value, "reason"),
             enabledInstanceCount, completedCount, instructionBudgetExceededCount,
             invalidInstructionCount, diagnosticCount);
+    }
+
+    private static IReadOnlyList<BridgeScriptRuntimeTickHistoryEntry> ParseTickHistory(JsonElement value)
+    {
+        if (value.ValueKind != JsonValueKind.Array)
+        {
+            throw Invalid("The copied scriptRuntimeTickHistory value must be an array.");
+        }
+        if (value.GetArrayLength() > MaximumScriptRuntimeTickHistory)
+        {
+            throw Invalid("The copied ScriptRuntime tick history exceeds the supported bound.");
+        }
+        List<BridgeScriptRuntimeTickHistoryEntry> parsed = new(value.GetArrayLength());
+        ulong previousSequence = 0UL;
+        foreach (JsonElement entry in value.EnumerateArray())
+        {
+            RequireObject(entry, "ScriptRuntime tick history entry");
+            ulong sequence = RequiredUInt64(entry, "sequence");
+            if (sequence == 0UL || sequence <= previousSequence)
+            {
+                throw Invalid("ScriptRuntime tick history sequences must be strictly increasing and non-zero.");
+            }
+            previousSequence = sequence;
+            parsed.Add(new BridgeScriptRuntimeTickHistoryEntry(
+                sequence, ParseTickSummary(RequiredObjectMember(entry, "summary"))));
+        }
+        return parsed;
     }
 
     private static BridgeDataTableCatalogSnapshot EmptyDataTableCatalog() =>

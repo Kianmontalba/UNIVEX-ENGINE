@@ -113,7 +113,21 @@ TEST(EditorBridgeUVETest, ReadScriptRuntimeTickDiagnosticsUVE_IsAdvertisedAndDis
         EXPECT_EQ(response.snapshot.scriptRuntimeTickSummary.instructionBudgetExceededCount, 0U);
         EXPECT_EQ(response.snapshot.scriptRuntimeTickSummary.invalidInstructionCount, 0U);
         EXPECT_EQ(response.snapshot.scriptRuntimeTickSummary.diagnosticCount, 0U);
-        EXPECT_EQ(response.snapshot.revision, initial.revision);
+        EXPECT_EQ(response.snapshot.revision, initial.revision + 1U);
+        EXPECT_FALSE(response.snapshot.scriptRuntimeTickHistoryTruncated);
+        ASSERT_EQ(response.snapshot.scriptRuntimeTickHistory.size(), 1U);
+        EXPECT_EQ(response.snapshot.scriptRuntimeTickHistory.front().sequence, 1U);
+
+        EditorBridgeResponseUVE latest = response;
+        for (std::uint64_t requestId = 143U; requestId <= 151U; ++requestId) {
+            request.requestId = requestId;
+            latest = bridge.DispatchUVE(request);
+        }
+        ASSERT_EQ(latest.snapshot.scriptRuntimeTickHistory.size(), kEditorBridgeMaximumScriptRuntimeTickHistoryUVE);
+        EXPECT_TRUE(latest.snapshot.scriptRuntimeTickHistoryTruncated);
+        EXPECT_EQ(latest.snapshot.scriptRuntimeTickHistory.front().sequence, 3U);
+        EXPECT_EQ(latest.snapshot.scriptRuntimeTickHistory.back().sequence, 10U);
+        EXPECT_EQ(latest.snapshot.revision, initial.revision + 10U);
         editor.ShutdownUVE();
     }
     engine.Shutdown();

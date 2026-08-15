@@ -333,6 +333,10 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"diagnosticCount", summary.diagnosticCount}};
 }
 
+[[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeScriptRuntimeTickHistoryEntryUVE& entry) {
+    return JsonUVE{{"sequence", entry.sequence}, {"summary", ToJsonUVE(entry.summary)}};
+}
+
 [[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeSnapshotUVE& snapshot) {
     JsonUVE selectedEntities = JsonUVE::array();
     for (const EditorBridgeEntitySnapshotUVE& entity : snapshot.selectedEntities) {
@@ -341,6 +345,10 @@ enum class FrameReadResultUVE : std::uint8_t {
     JsonUVE capabilities = JsonUVE::array();
     for (const EditorBridgeCapabilityUVE capability : snapshot.capabilities) {
         capabilities.push_back(static_cast<std::uint8_t>(capability));
+    }
+    JsonUVE tickHistory = JsonUVE::array();
+    for (const EditorBridgeScriptRuntimeTickHistoryEntryUVE& entry : snapshot.scriptRuntimeTickHistory) {
+        tickHistory.push_back(ToJsonUVE(entry));
     }
 
     return JsonUVE{{"protocolVersion", snapshot.protocolVersion},
@@ -363,6 +371,8 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"developerConsole", ToJsonUVE(snapshot.developerConsole)},
                    {"scriptRuntime", ToJsonUVE(snapshot.scriptRuntime)},
                    {"scriptRuntimeTickSummary", ToJsonUVE(snapshot.scriptRuntimeTickSummary)},
+                   {"scriptRuntimeTickHistoryTruncated", snapshot.scriptRuntimeTickHistoryTruncated},
+                   {"scriptRuntimeTickHistory", std::move(tickHistory)},
                    {"dataTableCatalog", ToJsonUVE(snapshot.dataTableCatalog)},
                    {"dataTablePreview", ToJsonUVE(snapshot.dataTablePreview)},
                    {"capabilities", std::move(capabilities)}};
