@@ -103,7 +103,7 @@
                             </Border>
                         </TabItem>
                         <TabItem Header="Scripting">
-                            <Grid RowDefinitions="Auto,Auto,Auto,Auto,*,Auto" RowSpacing="8">
+                            <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,*,Auto" RowSpacing="8">
                                 <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="8">
                                     <Button Content="Undo" Click="VisualScriptUndoButton_OnClick" />
                                     <Button Grid.Column="1" Content="Redo" Click="VisualScriptRedoButton_OnClick" />
@@ -138,6 +138,23 @@
                                     </Grid>
                                 </Border>
                                 <Border Grid.Row="3" Padding="6" Background="#20242B" BorderBrush="#394150" BorderThickness="1" CornerRadius="3">
+                                    <Grid RowDefinitions="Auto,Auto,*" RowSpacing="4">
+                                        <Grid ColumnDefinitions="*,180,Auto" ColumnSpacing="8">
+                                            <TextBlock x:Name="VisualScriptPropertyStatusTextBlock" Text="Select a visual-script node to inspect copied pin defaults." TextWrapping="Wrap" Opacity="0.78" />
+                                            <TextBox x:Name="VisualScriptDefaultValueTextBox" Grid.Column="1" Watermark="Default value" />
+                                            <Button x:Name="VisualScriptApplyDefaultButton" Grid.Column="2" Content="Apply" Click="VisualScriptApplyDefaultButton_OnClick" IsEnabled="False" />
+                                        </Grid>
+                                        <TextBlock Grid.Row="1" Text="NODE PROPERTIES · native-validated input defaults" FontSize="10" Opacity="0.68" />
+                                        <ListBox x:Name="VisualScriptPropertiesListBox" Grid.Row="2" MaxHeight="76" SelectionMode="Single" SelectionChanged="VisualScriptPropertiesListBox_OnSelectionChanged">
+                                            <ListBox.ItemTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Text="{Binding Name}" />
+                                                </DataTemplate>
+                                            </ListBox.ItemTemplate>
+                                        </ListBox>
+                                    </Grid>
+                                </Border>
+                                <Border Grid.Row="4" Padding="6" Background="#20242B" BorderBrush="#394150" BorderThickness="1" CornerRadius="3">
                                     <Grid RowDefinitions="Auto,*,Auto,Auto,Auto" RowSpacing="4">
                                         <Grid ColumnDefinitions="*,180,Auto,Auto,Auto" ColumnSpacing="8">
                                             <TextBlock x:Name="ScriptRuntimeStatusTextBlock" Text="Connect to read native ScriptRuntime instances." TextWrapping="Wrap" Opacity="0.76" />
@@ -158,8 +175,8 @@
                                         <TextBlock x:Name="ScriptRuntimeHistoryTextBlock" Grid.Row="4" Text="No diagnostic tick history is available." TextWrapping="Wrap" Opacity="0.72" />
                                     </Grid>
                                 </Border>
-                                <local:VisualScriptCanvasControl x:Name="VisualScriptCanvas" Grid.Row="4" MinHeight="280" />
-                                <TextBlock Grid.Row="5" Text="C# renders copied DTOs only. Graph mutation, validation, history, compiler, VM, runtime, and resources remain native C++." TextWrapping="Wrap" Opacity="0.68" />
+                                <local:VisualScriptCanvasControl x:Name="VisualScriptCanvas" Grid.Row="5" MinHeight="280" />
+                                <TextBlock Grid.Row="6" Text="C# renders copied DTOs only. Graph mutation, validation, history, compiler, VM, runtime, and resources remain native C++." TextWrapping="Wrap" Opacity="0.68" />
                             </Grid>
                         </TabItem>
                     </TabControl>

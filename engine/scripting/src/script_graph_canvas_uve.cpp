@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <limits>
 #include <utility>
 
@@ -11,6 +12,21 @@ namespace UVE::Scripting {
 namespace {
 [[nodiscard]] bool ContainsIdUVE(const std::vector<std::uint32_t>& ids, const std::uint32_t id) noexcept {
     return std::find(ids.begin(), ids.end(), id) != ids.end();
+}
+
+[[nodiscard]] bool IsValidDefaultValueUVE(const ScriptValueTypeUVE type, const std::string& value) noexcept {
+    if (value.empty() || value.size() > kMaximumScriptGraphCanvasDefaultValueBytesUVE) {
+        return false;
+    }
+    if (type == ScriptValueTypeUVE::Boolean) {
+        return value == "true" || value == "false";
+    }
+    if (type != ScriptValueTypeUVE::Number) {
+        return false;
+    }
+    char* end = nullptr;
+    const float parsed = std::strtof(value.c_str(), &end);
+    return end != value.c_str() && end != nullptr && *end == '\0' && std::isfinite(parsed);
 }
 
 [[nodiscard]] std::vector<std::uint32_t> RemoveIdUVE(std::vector<std::uint32_t> ids,
@@ -58,6 +74,24 @@ bool ScriptGraphCanvasUVE::IsSelectionValidUVE(const std::vector<std::uint32_t>&
     return true;
 }
 
+const ScriptGraphCanvasPinDefaultOverrideUVE* ScriptGraphCanvasUVE::FindPinDefaultOverrideUVE(
+    const std::uint32_t nodeId, const std::string_view pinName) const noexcept {
+    const auto iterator = std::find_if(m_pinDefaultOverrides.cbegin(), m_pinDefaultOverrides.cend(),
+                                       [nodeId, pinName](const auto& entry) {
+                                           return entry.nodeId == nodeId && entry.pinName == pinName;
+                                       });
+    return iterator == m_pinDefaultOverrides.cend() ? nullptr : &*iterator;
+}
+
+ScriptGraphCanvasPinDefaultOverrideUVE* ScriptGraphCanvasUVE::FindPinDefaultOverrideUVE(
+    const std::uint32_t nodeId, const std::string_view pinName) noexcept {
+    const auto iterator = std::find_if(m_pinDefaultOverrides.begin(), m_pinDefaultOverrides.end(),
+                                       [nodeId, pinName](const auto& entry) {
+                                           return entry.nodeId == nodeId && entry.pinName == pinName;
+                                       });
+    return iterator == m_pinDefaultOverrides.end() ? nullptr : &*iterator;
+}
+
 const ScriptGraphCanvasUVE::LayoutEntryUVE* ScriptGraphCanvasUVE::FindLayoutUVE(
     const std::uint32_t nodeId) const noexcept {
     const auto iterator = std::find_if(m_layout.begin(), m_layout.end(),
@@ -73,13 +107,14 @@ ScriptGraphCanvasUVE::LayoutEntryUVE* ScriptGraphCanvasUVE::FindLayoutUVE(
 }
 
 ScriptGraphCanvasUVE::StateUVE ScriptGraphCanvasUVE::CaptureStateUVE() const {
-    return StateUVE{m_backend.GetGraphUVE(), m_layout, m_selection};
+    return StateUVE{m_backend.GetGraphUVE(), m_layout, m_selection, m_pinDefaultOverrides};
 }
 
 void ScriptGraphCanvasUVE::RestoreStateUVE(StateUVE state) {
     m_backend.RestoreGraphUVE(std::move(state.graph));
     m_layout = std::move(state.layout);
     m_selection = std::move(state.selection);
+    m_pinDefaultOverrides = std::move(state.pinDefaultOverrides);
 }
 
 void ScriptGraphCanvasUVE::RecordMutationUVE(StateUVE before, const bool marksDirty) {
@@ -128,6 +163,58 @@ ScriptGraphCanvasCommandResultUVE ScriptGraphCanvasUVE::AddNodeTypeUVE(
                              "AddNodeType could not allocate a node ID.");
     }
     return AddNodeUVE(ScriptNodeUVE{candidateId, std::move(typeId)}, position, expectedRevision);
+}
+
+ScriptGraphCanvasCommandResultUVE ScriptGraphCanvasUVE::SetPinDefaultValueUVE(
+    const std::uint32_t nodeId, std::string pinName, std::string value,
+    const std::uint64_t expectedRevision) {
+    if (!CheckExpectedRevisionUVE(expectedRevision)) {
+        return MakeResultUVE(ScriptGraphCanvasCommandCodeUVE::StaleRevision,
+                             "The canvas command used a stale revision.");
+    }
+    if (nodeId == 0U || pinName.empty() || pinName.size() > kMaximumScriptGraphCanvasDefaultValueBytesUVE ||
+        value.size() > kMaximumScriptGraphCanvasDefaultValueBytesUVE) {
+        return MakeResultUVE(ScriptGraphCanvasCommandCodeUVE::Rejected,
+                             "SetPinDefaultValue requires bounded node, pin, and value fields.");
+    }
+    const ScriptNodeUVE* node = nullptr;
+    for (const ScriptNodeUVE& candidate : m_backend.GetGraphUVE().GetNodesUVE()) {
+        if (candidate.id == nodeId) {
+            node = &candidate;
+            break;
+        }
+    }
+    const ScriptNodeTypeDescriptorUVE* descriptor = node == nullptr
+        ? nullptr : m_registry->FindNodeTypeUVE(node->typeId);
+    const ScriptPinDescriptorUVE* pin = nullptr;
+    if (descriptor != nullptr) {
+        for (const ScriptPinDescriptorUVE& candidate : descriptor->pins) {
+            if (candidate.name == pinName) {
+                pin = &candidate;
+                break;
+            }
+        }
+    }
+    if (pin == nullptr || pin->direction != ScriptPinDirectionUVE::Input ||
+        pin->role != ScriptPinRoleUVE::Data || !IsValidDefaultValueUVE(pin->type, value)) {
+        return MakeResultUVE(ScriptGraphCanvasCommandCodeUVE::Rejected,
+                             "SetPinDefaultValue requires a registered data input with a supported value.");
+    }
+    if (const ScriptGraphCanvasPinDefaultOverrideUVE* existing =
+            FindPinDefaultOverrideUVE(nodeId, pinName); existing != nullptr && existing->value == value) {
+        return MakeResultUVE(ScriptGraphCanvasCommandCodeUVE::NoHistory,
+                             "SetPinDefaultValue made no change.");
+    }
+    StateUVE before = CaptureStateUVE();
+    if (ScriptGraphCanvasPinDefaultOverrideUVE* existing = FindPinDefaultOverrideUVE(nodeId, pinName); existing != nullptr) {
+        existing->value = std::move(value);
+    } else {
+        m_pinDefaultOverrides.push_back(
+            ScriptGraphCanvasPinDefaultOverrideUVE{nodeId, std::move(pinName), std::move(value)});
+    }
+    RecordMutationUVE(std::move(before));
+    return MakeResultUVE(ScriptGraphCanvasCommandCodeUVE::Applied,
+                         "SetPinDefaultValue was applied and recorded in native canvas history.");
 }
 
 ScriptGraphCanvasCommandResultUVE ScriptGraphCanvasUVE::AddNodeUVE(
@@ -472,8 +559,13 @@ ScriptGraphCanvasSnapshotUVE ScriptGraphCanvasUVE::GetSnapshotUVE() const {
         if (descriptor != nullptr) {
             nodeSnapshot.pins.reserve(descriptor->pins.size());
             for (const ScriptPinDescriptorUVE& pin : descriptor->pins) {
+                std::optional<std::string> defaultValue = pin.defaultValue;
+                if (const ScriptGraphCanvasPinDefaultOverrideUVE* overrideValue =
+                        FindPinDefaultOverrideUVE(node.id, pin.name); overrideValue != nullptr) {
+                    defaultValue = overrideValue->value;
+                }
                 nodeSnapshot.pins.push_back(ScriptGraphCanvasPinSnapshotUVE{
-                    pin.name, pin.direction, pin.type, pin.role, pin.defaultValue});
+                    pin.name, pin.direction, pin.type, pin.role, std::move(defaultValue)});
             }
         }
         snapshot.nodes.push_back(std::move(nodeSnapshot));

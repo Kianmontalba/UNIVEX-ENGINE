@@ -168,6 +168,41 @@ public sealed class BridgeProtocolClientTests
     }
 
     [Fact]
+    public async Task DispatchAsync_WritesSetVisualScriptPinDefaultPayload()
+    {
+        await using MemoryStream input = BuildFrames(new
+        {
+            jsonrpc = "2.0",
+            id = 1,
+            result = new
+            {
+                protocolVersion = BridgeProtocolClient.ProtocolVersion,
+                requestId = 1UL,
+                applied = true,
+                code = "bridge.command.applied",
+                message = "The native visual-script pin default was updated.",
+                snapshot = Snapshot(sceneDirty: false),
+                createdEntity = (object?)null,
+            },
+        });
+        await using MemoryStream output = new();
+        await using BridgeProtocolClient client = new(input, output);
+
+        await client.DispatchAsync(new BridgeCommand(7UL, "setVisualScriptPinDefault",
+            VisualScriptNodeId: 7U,
+            VisualScriptPinName: "Value",
+            VisualScriptDefaultValue: "3.14"), CancellationToken.None);
+
+        output.Position = 0;
+        using JsonDocument request = JsonDocument.Parse(await ReadFrameAsync(output));
+        JsonElement parameters = request.RootElement.GetProperty("params");
+        Assert.Equal("setVisualScriptPinDefault", parameters.GetProperty("kind").GetString());
+        Assert.Equal(7U, parameters.GetProperty("visualScriptNodeId").GetUInt32());
+        Assert.Equal("Value", parameters.GetProperty("visualScriptPinName").GetString());
+        Assert.Equal("3.14", parameters.GetProperty("visualScriptDefaultValue").GetString());
+    }
+
+    [Fact]
     public void ReadScriptRuntimeCapability_UsesAppendOnlyProtocolId()
     {
         Assert.Equal((byte)76, BridgeSnapshotParser.ReadScriptRuntimeCapability);

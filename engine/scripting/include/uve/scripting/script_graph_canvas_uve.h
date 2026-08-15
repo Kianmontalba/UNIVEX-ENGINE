@@ -44,6 +44,14 @@ struct ScriptGraphCanvasPinSnapshotUVE final {
     [[nodiscard]] bool operator==(const ScriptGraphCanvasPinSnapshotUVE&) const = default;
 };
 
+struct ScriptGraphCanvasPinDefaultOverrideUVE final {
+    std::uint32_t nodeId = 0U;
+    std::string pinName;
+    std::string value;
+
+    [[nodiscard]] bool operator==(const ScriptGraphCanvasPinDefaultOverrideUVE&) const = default;
+};
+
 struct ScriptGraphCanvasNodeSnapshotUVE final {
     std::uint32_t id = 0U;
     std::string typeId;
@@ -88,6 +96,7 @@ struct ScriptGraphCanvasCommandResultUVE final {
 };
 
 inline constexpr std::size_t kMaximumScriptGraphCanvasEntriesUVE = 128U;
+inline constexpr std::size_t kMaximumScriptGraphCanvasDefaultValueBytesUVE = 256U;
 inline constexpr std::size_t kMaximumScriptGraphCanvasSelectionUVE = 128U;
 inline constexpr float kMinimumScriptGraphCanvasZoomUVE = 0.1F;
 inline constexpr float kMaximumScriptGraphCanvasZoomUVE = 8.0F;
@@ -142,6 +151,9 @@ public:
     [[nodiscard]] ScriptGraphCanvasCommandResultUVE AddNodeTypeUVE(
         std::string typeId, ScriptGraphCanvasPointUVE position,
         std::uint64_t expectedRevision = 0U);
+    [[nodiscard]] ScriptGraphCanvasCommandResultUVE SetPinDefaultValueUVE(
+        std::uint32_t nodeId, std::string pinName, std::string value,
+        std::uint64_t expectedRevision = 0U);
     [[nodiscard]] ScriptGraphCanvasCommandResultUVE RemoveNodeUVE(
         std::uint32_t nodeId, std::uint64_t expectedRevision = 0U);
     [[nodiscard]] ScriptGraphCanvasCommandResultUVE MoveNodeUVE(
@@ -178,6 +190,7 @@ private:
         ScriptGraphUVE graph;
         std::vector<LayoutEntryUVE> layout;
         std::vector<std::uint32_t> selection;
+        std::vector<ScriptGraphCanvasPinDefaultOverrideUVE> pinDefaultOverrides;
     };
 
     [[nodiscard]] ScriptGraphCanvasCommandResultUVE MakeResultUVE(
@@ -188,6 +201,10 @@ private:
     [[nodiscard]] bool IsSelectionValidUVE(const std::vector<std::uint32_t>& nodeIds) const noexcept;
     [[nodiscard]] const LayoutEntryUVE* FindLayoutUVE(std::uint32_t nodeId) const noexcept;
     [[nodiscard]] LayoutEntryUVE* FindLayoutUVE(std::uint32_t nodeId) noexcept;
+    [[nodiscard]] const ScriptGraphCanvasPinDefaultOverrideUVE* FindPinDefaultOverrideUVE(
+        std::uint32_t nodeId, std::string_view pinName) const noexcept;
+    [[nodiscard]] ScriptGraphCanvasPinDefaultOverrideUVE* FindPinDefaultOverrideUVE(
+        std::uint32_t nodeId, std::string_view pinName) noexcept;
     [[nodiscard]] StateUVE CaptureStateUVE() const;
     void RestoreStateUVE(StateUVE state);
     void RecordMutationUVE(StateUVE before, bool marksDirty = true);
@@ -200,6 +217,7 @@ private:
     ScriptGraphCanvasViewUVE m_view{};
     std::vector<LayoutEntryUVE> m_layout;
     std::vector<std::uint32_t> m_selection;
+    std::vector<ScriptGraphCanvasPinDefaultOverrideUVE> m_pinDefaultOverrides;
     std::uint64_t m_graphRevision = 1U;
     std::size_t m_historyCapacity = kDefaultHistoryCapacityUVE;
     std::uint64_t m_revision = 1U;

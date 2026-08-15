@@ -20,6 +20,8 @@ public partial class MainWindow : Window
     private BridgeDataTableCatalogEntry? selectedDataTableEntry;
     private BridgeScriptRuntimeInstanceEntry? selectedScriptRuntimeInstance;
     private IReadOnlyList<BridgeVisualScriptPaletteEntry> visualScriptPalette = Array.Empty<BridgeVisualScriptPaletteEntry>();
+    private BridgeVisualScriptNode? selectedVisualScriptNode;
+    private BridgeVisualScriptPin? selectedVisualScriptPin;
     private bool closeConfirmed;
     private bool applyingLayout;
     private bool applyingSnapshot;
@@ -90,6 +92,29 @@ public partial class MainWindow : Window
         {
             ApplyVisualScriptPaletteFilter();
         }
+    }
+
+    private void VisualScriptPropertiesListBox_OnSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (applyingSnapshot || VisualScriptPropertiesListBox.SelectedItem is not BridgeVisualScriptPin pin)
+        {
+            return;
+        }
+        selectedVisualScriptPin = pin;
+        VisualScriptDefaultValueTextBox.Text = pin.DefaultValue ?? string.Empty;
+        VisualScriptApplyDefaultButton.IsEnabled = selectedVisualScriptNode is not null;
+    }
+
+    private void VisualScriptApplyDefaultButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (selectedVisualScriptNode is null || selectedVisualScriptPin is null)
+        {
+            return;
+        }
+        DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "setVisualScriptPinDefault",
+            VisualScriptNodeId: selectedVisualScriptNode.Id,
+            VisualScriptPinName: selectedVisualScriptPin.Name,
+            VisualScriptDefaultValue: VisualScriptDefaultValueTextBox.Text ?? string.Empty));
     }
 
     private void VisualScriptPaletteListBox_OnSelectionChanged(object? sender, SelectionChangedEventArgs e)
@@ -730,6 +755,25 @@ public partial class MainWindow : Window
                 Array.Empty<BridgeVisualScriptPin>())).ToArray();
         ApplyVisualScriptPaletteFilter();
         VisualScriptCanvas.ApplySnapshot(scripting.Canvas, bridgeRevision);
+        RenderVisualScriptProperties(scripting.Canvas);
+    }
+
+    private void RenderVisualScriptProperties(BridgeVisualScriptCanvasSnapshot canvas)
+    {
+        selectedVisualScriptNode = canvas.SelectedNodeIds.Count == 1
+            ? canvas.Nodes.FirstOrDefault(node => node.Id == canvas.SelectedNodeIds[0])
+            : canvas.Nodes.FirstOrDefault(node => node.IsSelected);
+        IReadOnlyList<BridgeVisualScriptPin> editablePins = selectedVisualScriptNode?.Pins
+            .Where(pin => pin.Direction == 0 && pin.Role != 0)
+            .ToArray() ?? Array.Empty<BridgeVisualScriptPin>();
+        VisualScriptPropertiesListBox.ItemsSource = editablePins;
+        selectedVisualScriptPin = editablePins.FirstOrDefault();
+        VisualScriptPropertiesListBox.SelectedItem = selectedVisualScriptPin;
+        VisualScriptDefaultValueTextBox.Text = selectedVisualScriptPin?.DefaultValue ?? string.Empty;
+        VisualScriptApplyDefaultButton.IsEnabled = selectedVisualScriptNode is not null && selectedVisualScriptPin is not null;
+        VisualScriptPropertyStatusTextBlock.Text = selectedVisualScriptNode is null
+            ? "Select a single visual-script node to inspect copied pin defaults."
+            : $"Node {selectedVisualScriptNode.DisplayName} #{selectedVisualScriptNode.Id}: {editablePins.Count} editable copied input pin(s).";
     }
 
     private void ApplyVisualScriptPaletteFilter()

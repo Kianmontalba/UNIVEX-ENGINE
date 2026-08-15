@@ -678,6 +678,9 @@ enum class FrameReadResultUVE : std::uint8_t {
     if (value == "addVisualScriptNodeType") {
         return EditorBridgeRequestKindUVE::AddVisualScriptNodeType;
     }
+    if (value == "setVisualScriptPinDefault") {
+        return EditorBridgeRequestKindUVE::SetVisualScriptPinDefault;
+    }
     return std::nullopt;
 }
 
@@ -806,6 +809,22 @@ enum class FrameReadResultUVE : std::uint8_t {
             return std::nullopt;
         }
         request.visualScriptGraphSchema = params.at("visualScriptGraphSchema").get<std::string>();
+    }
+    if (params.contains("visualScriptPinName") && !params.at("visualScriptPinName").is_null()) {
+        if (!params.at("visualScriptPinName").is_string() ||
+            params.at("visualScriptPinName").get_ref<const std::string&>().empty() ||
+            params.at("visualScriptPinName").get_ref<const std::string&>().size() > 256U) {
+            return std::nullopt;
+        }
+        request.visualScriptPinName = params.at("visualScriptPinName").get<std::string>();
+    }
+    if (params.contains("visualScriptDefaultValue") && !params.at("visualScriptDefaultValue").is_null()) {
+        if (!params.at("visualScriptDefaultValue").is_string() ||
+            params.at("visualScriptDefaultValue").get_ref<const std::string&>().size() >
+                Scripting::kMaximumScriptGraphCanvasDefaultValueBytesUVE) {
+            return std::nullopt;
+        }
+        request.visualScriptDefaultValue = params.at("visualScriptDefaultValue").get<std::string>();
     }
     if (params.contains("dataTableName") && !params.at("dataTableName").is_null()) {
         request.dataTableName = params.at("dataTableName").get<std::string>();
