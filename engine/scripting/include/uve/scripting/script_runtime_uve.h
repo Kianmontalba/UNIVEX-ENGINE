@@ -19,6 +19,23 @@ struct ScriptRuntimeStateUVE final {
     [[nodiscard]] bool operator==(const ScriptRuntimeStateUVE&) const = default;
 };
 
+enum class ScriptRuntimeStateUpdateCodeUVE : std::uint8_t {
+    Applied = 0,
+    Unchanged,
+    NoActiveInstance,
+    CapacityExceeded,
+};
+
+struct ScriptRuntimeStateUpdateResultUVE final {
+    ScriptRuntimeStateUpdateCodeUVE code = ScriptRuntimeStateUpdateCodeUVE::Applied;
+    std::string message;
+
+    [[nodiscard]] bool IsAcceptedUVE() const noexcept {
+        return code == ScriptRuntimeStateUpdateCodeUVE::Applied ||
+               code == ScriptRuntimeStateUpdateCodeUVE::Unchanged;
+    }
+};
+
 struct ScriptRuntimeInstanceUVE final {
     Scene::EntityUVE entity;
     ScriptBytecodeProgramUVE program;
@@ -65,6 +82,8 @@ public:
                                                           ScriptBytecodeProgramUVE program);
     [[nodiscard]] bool DetachUVE(Scene::EntityUVE entity) noexcept;
     [[nodiscard]] bool SetEnabledUVE(Scene::EntityUVE entity, bool enabled) noexcept;
+    [[nodiscard]] ScriptRuntimeStateUpdateResultUVE SetStateDetailedUVE(Scene::EntityUVE entity,
+                                                                         ScriptRuntimeStateUVE state);
     [[nodiscard]] bool SetStateUVE(Scene::EntityUVE entity, ScriptRuntimeStateUVE state);
     [[nodiscard]] std::optional<ScriptRuntimeStateUVE> GetStateUVE(Scene::EntityUVE entity) const;
     [[nodiscard]] bool HasInstanceUVE(Scene::EntityUVE entity) const noexcept;

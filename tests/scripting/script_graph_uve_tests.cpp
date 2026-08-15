@@ -326,8 +326,16 @@ TEST(ScriptRuntimeUVETest, StateUVE_IsBoundedAndPreservedAcrossCompatibleReload)
 
     ScriptRuntimeStateUVE state;
     state.values = {11, -7, 42};
-    ASSERT_TRUE(runtime.SetStateUVE(entity, state));
+    const ScriptRuntimeStateUpdateResultUVE appliedState = runtime.SetStateDetailedUVE(entity, state);
+    EXPECT_EQ(appliedState.code, ScriptRuntimeStateUpdateCodeUVE::Applied);
+    EXPECT_TRUE(appliedState.IsAcceptedUVE());
+    EXPECT_FALSE(appliedState.message.empty());
     ASSERT_EQ(runtime.GetStateUVE(entity), std::optional<ScriptRuntimeStateUVE>(state));
+
+    const ScriptRuntimeStateUpdateResultUVE unchangedState = runtime.SetStateDetailedUVE(entity, state);
+    EXPECT_EQ(unchangedState.code, ScriptRuntimeStateUpdateCodeUVE::Unchanged);
+    EXPECT_TRUE(unchangedState.IsAcceptedUVE());
+    EXPECT_TRUE(runtime.SetStateUVE(entity, state));
 
     ScriptBytecodeProgramUVE replacement;
     replacement.instructions.resize(2U);
@@ -347,7 +355,15 @@ TEST(ScriptRuntimeUVETest, StateUVE_IsBoundedAndPreservedAcrossCompatibleReload)
 
     ScriptRuntimeStateUVE oversized;
     oversized.values.resize(ScriptRuntimeUVE::kMaximumStateValuesUVE + 1U);
-    EXPECT_FALSE(runtime.SetStateUVE(entity, std::move(oversized)));
+    const ScriptRuntimeStateUpdateResultUVE capacity = runtime.SetStateDetailedUVE(entity, std::move(oversized));
+    EXPECT_EQ(capacity.code, ScriptRuntimeStateUpdateCodeUVE::CapacityExceeded);
+    EXPECT_FALSE(capacity.IsAcceptedUVE());
+    EXPECT_FALSE(capacity.message.empty());
+
+    const ScriptRuntimeStateUpdateResultUVE missing = runtime.SetStateDetailedUVE({9U, 1U}, state);
+    EXPECT_EQ(missing.code, ScriptRuntimeStateUpdateCodeUVE::NoActiveInstance);
+    EXPECT_FALSE(missing.IsAcceptedUVE());
+    EXPECT_FALSE(missing.message.empty());
     EXPECT_FALSE(runtime.SetStateUVE({9U, 1U}, state));
 }
 
