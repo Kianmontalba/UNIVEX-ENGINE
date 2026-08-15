@@ -1,5 +1,6 @@
 // Copyright (c) 2026 UniVex Studios. All Rights Reserved.
 #include "uve/scripting/script_bytecode_uve.h"
+#include "uve/scripting/script_vm_uve.h"
 #include "uve/scripting/script_compiler_ir_uve.h"
 #include "uve/scripting/script_graph_uve.h"
 
@@ -210,6 +211,40 @@ TEST(ScriptBytecodeUVETest, EncodeScriptBytecodeUVE_RejectsInstructionLimit) {
     EXPECT_TRUE(EncodeScriptBytecodeUVE(program, diagnostics).empty());
     ASSERT_EQ(diagnostics.size(), 1U);
     EXPECT_EQ(diagnostics[0].code, ScriptBytecodeDiagnosticCodeUVE::InstructionLimitExceeded);
+}
+
+} // namespace UVE::Scripting
+
+
+namespace UVE::Scripting {
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_CompletesValidProgramWithinBudget) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U, "test.source", {}, {}});
+    program.instructions.push_back({ScriptIrInstructionKindUVE::TransferValue, 1U, 2U, {}, "Out", "In"});
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(program, {2U});
+    EXPECT_TRUE(result.IsSuccessUVE());
+    EXPECT_EQ(result.instructionsExecuted, 2U);
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_StopsAtInstructionBudget) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.resize(3U);
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(program, {2U});
+    EXPECT_FALSE(result.IsSuccessUVE());
+    EXPECT_EQ(result.status, ScriptVmStatusUVE::InstructionBudgetExceeded);
+    EXPECT_EQ(result.instructionsExecuted, 2U);
+    ASSERT_EQ(result.diagnostics.size(), 1U);
+    EXPECT_EQ(result.diagnostics[0].instructionIndex, 2U);
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_RejectsUnsupportedVersion) {
+    ScriptBytecodeProgramUVE program;
+    program.version = 99U;
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(program);
+    EXPECT_FALSE(result.IsSuccessUVE());
+    EXPECT_EQ(result.status, ScriptVmStatusUVE::InvalidInstruction);
+    EXPECT_EQ(result.instructionsExecuted, 0U);
 }
 
 } // namespace UVE::Scripting
