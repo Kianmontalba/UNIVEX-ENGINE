@@ -125,15 +125,38 @@ namespace {
 
 } // namespace
 
-EditorBridgeUVE::EditorBridgeUVE(EditorUVE& editor) noexcept
-    : m_editor(&editor), m_visualScriptCanvas(m_visualScriptRegistry) {}
+EditorBridgeUVE::EditorBridgeUVE(EditorUVE& editor,
+                                   const Asset::DataTableRegistryUVE* dataTableRegistry) noexcept
+    : m_editor(&editor),
+      m_visualScriptCanvas(m_visualScriptRegistry),
+      m_dataTableRegistry(dataTableRegistry) {}
 
 const std::vector<EditorBridgeCapabilityUVE>& EditorBridgeUVE::GetCapabilitiesUVE() noexcept {
     return CapabilitiesUVE();
 }
 
+bool EditorBridgeUVE::SetPreviewTableUVE(const std::string_view name) {
+    if (m_dataTableRegistry == nullptr || name.size() > kEditorBridgeMaximumPresentationTextBytesUVE) {
+        return false;
+    }
+    if (!name.empty() && !m_dataTableRegistry->ContainsUVE(name)) {
+        return false;
+    }
+    const std::optional<std::string> nextName = name.empty()
+        ? std::nullopt
+        : std::optional<std::string>{std::string{name}};
+    if (m_dataTablePreviewName == nextName) {
+        return true;
+    }
+    m_dataTablePreviewName = nextName;
+    if (m_lastObservedState.has_value()) {
+        SynchronizeRevisionUVE();
+    }
+    return true;
+}
+
 void EditorBridgeUVE::SetDataTableCatalogSnapshotUVE(Asset::DataTableCatalogSnapshotUVE snapshot) {
-    if (m_dataTableCatalogSnapshot == snapshot) {
+    if (m_dataTableRegistry != nullptr || m_dataTableCatalogSnapshot == snapshot) {
         return;
     }
     m_dataTableCatalogSnapshot = std::move(snapshot);
@@ -143,7 +166,7 @@ void EditorBridgeUVE::SetDataTableCatalogSnapshotUVE(Asset::DataTableCatalogSnap
 }
 
 void EditorBridgeUVE::SetDataTablePreviewSnapshotUVE(Asset::DataTableSnapshotUVE snapshot) {
-    if (m_dataTablePreviewSnapshot == snapshot) {
+    if (m_dataTableRegistry != nullptr || m_dataTablePreviewSnapshot == snapshot) {
         return;
     }
     m_dataTablePreviewSnapshot = std::move(snapshot);
@@ -624,11 +647,14 @@ EditorBridgeDeveloperConsoleSnapshotUVE EditorBridgeUVE::CaptureDeveloperConsole
 }
 
 EditorBridgeDataTableCatalogSnapshotUVE EditorBridgeUVE::CaptureDataTableCatalogUVE() const {
+    const Asset::DataTableCatalogSnapshotUVE source = m_dataTableRegistry != nullptr
+        ? m_dataTableRegistry->GetCatalogSnapshotUVE()
+        : m_dataTableCatalogSnapshot;
     EditorBridgeDataTableCatalogSnapshotUVE snapshot{};
-    snapshot.generation = m_dataTableCatalogSnapshot.generation;
-    snapshot.entriesTruncated = m_dataTableCatalogSnapshot.entriesTruncated;
-    snapshot.entries.reserve(m_dataTableCatalogSnapshot.entries.size());
-    for (const Asset::DataTableCatalogEntryUVE& entry : m_dataTableCatalogSnapshot.entries) {
+    snapshot.generation = source.generation;
+    snapshot.entriesTruncated = source.entriesTruncated;
+    snapshot.entries.reserve(source.entries.size());
+    for (const Asset::DataTableCatalogEntryUVE& entry : source.entries) {
         if (snapshot.entries.size() >= kEditorBridgeMaximumPanelEntriesUVE) {
             snapshot.entriesTruncated = true;
             break;
@@ -640,17 +666,27 @@ EditorBridgeDataTableCatalogSnapshotUVE EditorBridgeUVE::CaptureDataTableCatalog
 }
 
 EditorBridgeDataTablePreviewSnapshotUVE EditorBridgeUVE::CaptureDataTablePreviewUVE() const {
+    Asset::DataTableSnapshotUVE source = m_dataTablePreviewSnapshot;
+    if (m_dataTableRegistry != nullptr) {
+        source = Asset::DataTableSnapshotUVE{};
+        if (m_dataTablePreviewName.has_value()) {
+            static_cast<void>(m_dataTableRegistry->TryGetSnapshotUVE(*m_dataTablePreviewName, source));
+        }
+    }
+
     EditorBridgeDataTablePreviewSnapshotUVE preview{};
-    preview.generation = m_dataTablePreviewSnapshot.generation;
-    preview.name = BoundPresentationTextUVE(m_dataTablePreviewSnapshot.name);
+    preview.generation = source.generation;
+    preview.name = BoundPresentationTextUVE(source.name);
     preview.available = !preview.name.empty();
-    preview.totalColumnCount = m_dataTablePreviewSnapshot.columns.size();
-    preview.totalRowCount = m_dataTablePreviewSnapshot.rows.size();
+    preview.totalColumnCount = source.columns.size();
+    preview.totalRowCount = source.rows.size();
     preview.reason = preview.available
         ? "Native table preview is available as copied read-only facts."
-        : "No native data-table preview is available in this bridge session.";
+        : m_dataTableRegistry != nullptr && m_dataTablePreviewName.has_value()
+            ? "The selected native data-table preview is no longer available."
+            : "No native data-table preview is selected in this bridge session.";
 
-    for (const Asset::DataTableColumnUVE& column : m_dataTablePreviewSnapshot.columns) {
+    for (const Asset::DataTableColumnUVE& column : source.columns) {
         if (preview.columns.size() >= kEditorBridgeMaximumPanelEntriesUVE) {
             preview.columnsTruncated = true;
             break;
@@ -658,7 +694,7 @@ EditorBridgeDataTablePreviewSnapshotUVE EditorBridgeUVE::CaptureDataTablePreview
         preview.columns.push_back(EditorBridgeDataTablePreviewColumnUVE{
             BoundPresentationTextUVE(column.name), column.type});
     }
-    for (const Asset::DataTableRowUVE& row : m_dataTablePreviewSnapshot.rows) {
+    for (const Asset::DataTableRowUVE& row : source.rows) {
         if (preview.rows.size() >= kEditorBridgeMaximumPanelEntriesUVE) {
             preview.rowsTruncated = true;
             break;

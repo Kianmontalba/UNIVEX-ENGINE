@@ -6,9 +6,11 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
+#include "uve/asset/data_table_registry_uve.h"
 #include "uve/asset/data_table_uve.h"
 #include "uve/editor/editor_uve.h"
 #include "uve/scripting/script_graph_canvas_uve.h"
@@ -368,10 +370,17 @@ struct EditorBridgeResponseUVE final {
 /// C# client can observe native changes and cannot apply a stale mutation silently.
 class EditorBridgeUVE final {
 public:
-    explicit EditorBridgeUVE(EditorUVE& editor) noexcept;
+    /// The optional registry is non-owning and must outlive this bridge. When supplied, it is the
+    /// authoritative source for catalog facts and selected preview snapshots; the legacy injection
+    /// seams remain available only for bridge sessions without a registry dependency.
+    explicit EditorBridgeUVE(EditorUVE& editor,
+                             const Asset::DataTableRegistryUVE* dataTableRegistry = nullptr) noexcept;
 
     [[nodiscard]] EditorBridgeSnapshotUVE GetSnapshotUVE();
     [[nodiscard]] EditorBridgeResponseUVE DispatchUVE(const EditorBridgeRequestUVE& request);
+    /// Selects a registry-owned table for read-only preview. An empty name clears the selection.
+    /// Unknown or overlong names are rejected without changing the current selection.
+    [[nodiscard]] bool SetPreviewTableUVE(std::string_view name);
     void SetDataTableCatalogSnapshotUVE(Asset::DataTableCatalogSnapshotUVE snapshot);
     void SetDataTablePreviewSnapshotUVE(Asset::DataTableSnapshotUVE snapshot);
 
@@ -426,6 +435,8 @@ private:
     Scripting::ScriptNodeRegistryUVE m_visualScriptRegistry;
     Scripting::ScriptGraphCanvasUVE m_visualScriptCanvas;
     DeveloperConsoleUVE m_developerConsole;
+    const Asset::DataTableRegistryUVE* m_dataTableRegistry = nullptr;
+    std::optional<std::string> m_dataTablePreviewName;
     Asset::DataTableCatalogSnapshotUVE m_dataTableCatalogSnapshot;
     Asset::DataTableSnapshotUVE m_dataTablePreviewSnapshot;
     std::optional<ObservedStateUVE> m_lastObservedState;
