@@ -153,6 +153,21 @@ struct DeveloperConsoleHistoryNavigationResultUVE final {
     }
 };
 
+enum class DeveloperConsoleClearCodeUVE : std::uint8_t {
+    Applied = 0,
+    Unavailable,
+    Unchanged,
+};
+
+struct DeveloperConsoleClearResultUVE final {
+    DeveloperConsoleClearCodeUVE code = DeveloperConsoleClearCodeUVE::Applied;
+    std::string message;
+
+    [[nodiscard]] bool IsAcceptedUVE() const noexcept {
+        return code == DeveloperConsoleClearCodeUVE::Applied;
+    }
+};
+
 struct DeveloperConsoleCompletionUVE final {
     std::string identifier;
     std::string help;
@@ -213,6 +228,7 @@ public:
     [[nodiscard]] bool RegisterCVar(std::string name, std::string value, bool readOnly = false);
     [[nodiscard]] DeveloperConsoleExecutionResultUVE ExecuteDetailedUVE(std::string commandLine);
     [[nodiscard]] bool ExecuteUVE(std::string commandLine);
+    [[nodiscard]] DeveloperConsoleClearResultUVE ClearDetailedUVE() noexcept;
     [[nodiscard]] bool ClearUVE() noexcept;
     [[nodiscard]] DeveloperConsoleCVarMutationResultUVE SetCVarDetailedUVE(std::string_view name,
                                                                             std::string_view value);
