@@ -125,6 +125,15 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"reason", surface.reason}};
 }
 
+[[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeVisualScriptingSnapshotUVE& scripting) {
+    return JsonUVE{{"available", scripting.available},
+                   {"graphRevision", scripting.graphRevision},
+                   {"nodeCount", scripting.nodeCount},
+                   {"linkCount", scripting.linkCount},
+                   {"canEdit", scripting.canEdit},
+                   {"reason", scripting.reason}};
+}
+
 [[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeSnapshotUVE& snapshot) {
     JsonUVE selectedEntities = JsonUVE::array();
     for (const EditorBridgeEntitySnapshotUVE& entity : snapshot.selectedEntities) {
@@ -151,6 +160,7 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"inspector", ToJsonUVE(snapshot.inspector)},
                    {"contentBrowser", ToJsonUVE(snapshot.contentBrowser)},
                    {"viewportSurface", ToJsonUVE(snapshot.viewportSurface)},
+                   {"visualScripting", ToJsonUVE(snapshot.visualScripting)},
                    {"capabilities", std::move(capabilities)}};
 }
 

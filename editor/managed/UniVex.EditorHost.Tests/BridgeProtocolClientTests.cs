@@ -233,6 +233,7 @@ public sealed class BridgeProtocolClientTests
                 managedAttachAllowed = false,
                 reason = "No managed viewport surface transport is available in this headless bridge session.",
             },
+            visualScripting = new { available = false, graphRevision = 0UL, nodeCount = 0, linkCount = 0, canEdit = false, reason = "Native visual-scripting presentation is unavailable in this headless bridge session." },
             capabilities = Array.Empty<int>(),
         }));
 
@@ -310,6 +311,7 @@ public sealed class BridgeProtocolClientTests
         inspector = new { mode = 0, selectedEntitiesTruncated = false, selectedEntities = Array.Empty<object>(), activeEntity = (object?)null, parent = (object?)null, ancestry = Array.Empty<object>(), eligibleDrawerIds = Array.Empty<string>(), canEditSelectedName = false },
         contentBrowser = new { contentRoot = "assets", currentDirectory = string.Empty, filter = string.Empty, typeFocus = "All", breadcrumbs = Array.Empty<string>(), refreshGeneration = 0UL, visibleEntryCount = 0, directEntryCount = 0, contentRootExists = true, initialized = false, lastRefreshSucceeded = true, truncated = false, entries = Array.Empty<object>(), selectedEntry = (object?)null },
         viewportSurface = new { state = 0, generation = 0UL, width = 0U, height = 0U, nativeRendererOwnsSurface = true, managedAttachAllowed, reason = "No managed viewport surface transport is available in this headless bridge session." },
+        visualScripting = new { available = false, graphRevision = 0UL, nodeCount = 0, linkCount = 0, canEdit = false, reason = "Native visual-scripting presentation is unavailable in this headless bridge session." },
         capabilities = Array.Empty<int>(),
     };
 
@@ -371,6 +373,7 @@ public sealed class BridgeProtocolClientTests
             managedAttachAllowed = false,
             reason = "No managed viewport surface transport is available in this headless bridge session.",
         },
+        visualScripting = new { available = false, graphRevision = 0UL, nodeCount = 0, linkCount = 0, canEdit = false, reason = "Native visual-scripting presentation is unavailable in this headless bridge session." },
         capabilities = Array.Empty<int>(),
     };
 }

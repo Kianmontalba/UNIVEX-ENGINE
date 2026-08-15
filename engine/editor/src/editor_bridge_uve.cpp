@@ -337,6 +337,9 @@ EditorBridgeUVE::ObservedStateUVE EditorBridgeUVE::CaptureObservedStateUVE() {
     observed.viewportSurface = EditorBridgeViewportSurfaceSnapshotUVE{
         EditorBridgeViewportSurfaceStateUVE::Unavailable, 0U, 0U, 0U, true, false,
         "No managed viewport surface transport is available in this headless bridge session."};
+    observed.visualScripting = EditorBridgeVisualScriptingSnapshotUVE{
+        false, 0U, 0U, 0U, false,
+        "Native visual-scripting presentation is unavailable in this headless bridge session."};
     return observed;
 }
 
@@ -370,6 +373,7 @@ EditorBridgeSnapshotUVE EditorBridgeUVE::BuildSnapshotUVE() const {
     snapshot.inspector = observed.inspector;
     snapshot.contentBrowser = observed.contentBrowser;
     snapshot.viewportSurface = observed.viewportSurface;
+    snapshot.visualScripting = observed.visualScripting;
     snapshot.capabilities = GetCapabilitiesUVE();
     return snapshot;
 }

@@ -403,6 +403,7 @@ public partial class MainWindow : Window
             RenderInspector(snapshot.Inspector);
             RenderContentBrowser(snapshot.ContentBrowser);
             RenderViewportSurface(snapshot.ViewportSurface);
+            RenderVisualScripting(snapshot.VisualScripting);
         }
         finally
         {
@@ -421,6 +422,19 @@ public partial class MainWindow : Window
     private void RenderViewportSurface(BridgeViewportSurfaceSnapshot surface)
     {
         ViewportSurfaceStatusTextBlock.Text = DescribeViewportSurface(surface);
+    }
+
+    private static string DescribeVisualScripting(BridgeVisualScriptingSnapshot scripting)
+    {
+        string availability = scripting.IsAvailable ? "available" : "unavailable";
+        return $"Native presentation {availability}; graph revision {scripting.GraphRevision}; " +
+               $"{scripting.NodeCount} nodes, {scripting.LinkCount} links; managed edit capability: {scripting.CanEdit}. " +
+               scripting.Reason;
+    }
+
+    private void RenderVisualScripting(BridgeVisualScriptingSnapshot scripting)
+    {
+        VisualScriptingStatusTextBlock.Text = DescribeVisualScripting(scripting);
     }
 
     private void RenderHierarchy(BridgeHierarchySnapshot hierarchy)

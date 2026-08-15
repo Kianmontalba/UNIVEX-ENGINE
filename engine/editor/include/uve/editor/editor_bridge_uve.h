@@ -185,6 +185,19 @@ struct EditorBridgeContentBrowserSnapshotUVE final {
     [[nodiscard]] bool operator==(const EditorBridgeContentBrowserSnapshotUVE&) const = default;
 };
 
+/// Copied visual-scripting presentation facts. The managed host receives counts and capability state,
+/// never native graph objects or runtime ownership. Editing remains a separately named native command path.
+struct EditorBridgeVisualScriptingSnapshotUVE final {
+    bool available = false;
+    std::uint64_t graphRevision = 0U;
+    std::size_t nodeCount = 0U;
+    std::size_t linkCount = 0U;
+    bool canEdit = false;
+    std::string reason;
+
+    [[nodiscard]] bool operator==(const EditorBridgeVisualScriptingSnapshotUVE&) const = default;
+};
+
 /// Immutable bridge-visible state. A revision is incremented whenever any field observable through
 /// this snapshot changes, whether native ImGui or the bridge initiated that change.
 struct EditorBridgeSnapshotUVE final {
@@ -203,6 +216,7 @@ struct EditorBridgeSnapshotUVE final {
     EditorBridgeInspectorSnapshotUVE inspector;
     EditorBridgeContentBrowserSnapshotUVE contentBrowser;
     EditorBridgeViewportSurfaceSnapshotUVE viewportSurface;
+    EditorBridgeVisualScriptingSnapshotUVE visualScripting;
     std::vector<EditorBridgeCapabilityUVE> capabilities;
 };
 
@@ -278,6 +292,7 @@ private:
         EditorBridgeInspectorSnapshotUVE inspector;
         EditorBridgeContentBrowserSnapshotUVE contentBrowser;
         EditorBridgeViewportSurfaceSnapshotUVE viewportSurface;
+        EditorBridgeVisualScriptingSnapshotUVE visualScripting;
 
         [[nodiscard]] bool operator==(const ObservedStateUVE&) const = default;
     };
