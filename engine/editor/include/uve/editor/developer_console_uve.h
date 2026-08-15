@@ -168,6 +168,20 @@ struct DeveloperConsoleClearResultUVE final {
     }
 };
 
+enum class DeveloperConsoleBuildPolicyCodeUVE : std::uint8_t {
+    Applied = 0,
+    Unchanged,
+};
+
+struct DeveloperConsoleBuildPolicyResultUVE final {
+    DeveloperConsoleBuildPolicyCodeUVE code = DeveloperConsoleBuildPolicyCodeUVE::Applied;
+    std::string message;
+
+    [[nodiscard]] bool IsAcceptedUVE() const noexcept {
+        return code == DeveloperConsoleBuildPolicyCodeUVE::Applied;
+    }
+};
+
 struct DeveloperConsoleCompletionUVE final {
     std::string identifier;
     std::string help;
@@ -233,6 +247,8 @@ public:
     [[nodiscard]] DeveloperConsoleCVarMutationResultUVE SetCVarDetailedUVE(std::string_view name,
                                                                             std::string_view value);
     [[nodiscard]] bool SetCVarUVE(std::string_view name, std::string_view value);
+    [[nodiscard]] DeveloperConsoleBuildPolicyResultUVE SetBuildPolicyDetailedUVE(
+        DeveloperConsoleBuildPolicyUVE policy) noexcept;
     [[nodiscard]] bool SetBuildPolicyUVE(DeveloperConsoleBuildPolicyUVE policy) noexcept;
     [[nodiscard]] DeveloperConsoleSeverityFilterResultUVE SetSeverityFilterDetailedUVE(
         DeveloperConsoleSeverityFilterUVE filter) noexcept;

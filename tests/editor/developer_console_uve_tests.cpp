@@ -279,6 +279,25 @@ TEST(DeveloperConsoleUVE, CompletionAndSeverityFilterAreNativeDeterministicFacts
     EXPECT_EQ(filtered.output.front().severity, DeveloperConsoleSeverityUVE::Error);
 }
 
+TEST(DeveloperConsoleUVE, SetBuildPolicyDetailedUVEReturnsStructuredDiagnostics) {
+    DeveloperConsoleUVE console;
+    const DeveloperConsoleBuildPolicyResultUVE unchanged =
+        console.SetBuildPolicyDetailedUVE(DeveloperConsoleBuildPolicyUVE::Development);
+    EXPECT_EQ(unchanged.code, DeveloperConsoleBuildPolicyCodeUVE::Unchanged);
+    EXPECT_FALSE(unchanged.IsAcceptedUVE());
+    EXPECT_FALSE(unchanged.message.empty());
+
+    const DeveloperConsoleBuildPolicyResultUVE applied =
+        console.SetBuildPolicyDetailedUVE(DeveloperConsoleBuildPolicyUVE::Shipping);
+    EXPECT_EQ(applied.code, DeveloperConsoleBuildPolicyCodeUVE::Applied);
+    EXPECT_TRUE(applied.IsAcceptedUVE());
+    EXPECT_FALSE(applied.message.empty());
+    EXPECT_FALSE(console.GetSnapshotUVE().available);
+    EXPECT_TRUE(console.SetBuildPolicyUVE(DeveloperConsoleBuildPolicyUVE::Development));
+    EXPECT_TRUE(console.GetSnapshotUVE().available);
+    EXPECT_FALSE(console.SetBuildPolicyUVE(DeveloperConsoleBuildPolicyUVE::Development));
+}
+
 TEST(DeveloperConsoleUVE, MoveHistoryDetailedUVEReturnsStructuredDiagnostics) {
     DeveloperConsoleUVE empty;
     const DeveloperConsoleHistoryNavigationResultUVE emptyHistory = empty.MoveHistoryDetailedUVE(-1);
