@@ -1614,3 +1614,12 @@ The session registry must own `DataTableUVE` values by move and must expose only
 Registry generation increments only after successful registration, removal, or clear mutation. Failed duplicate registration, removal of a missing name, and clearing an empty registry do not advance generation. Catalog descriptors remain sorted through the existing catalog contract, while the registry generation is the authoritative session generation.
 
 The registry is not an asset database. It must not scan files, persist automatically, schedule imports, hot reload, mutate managed UI, bind ECS/runtime state, own OpenGL resources, or create process/network authority. Future persistence and editor mutation require separately reviewed commands and ownership contracts.
+
+
+## Data-table registry to editor bridge (Increment 96)
+
+`DataTableRegistryUVE` is the native main-thread session authority for validated in-memory tables. `EditorBridgeUVE` may retain only a non-owning `const DataTableRegistryUVE*`; the caller owns the registry and must keep it alive longer than the bridge. Do not place filesystem scanning, persistence, asset-database ownership, hot reload, ECS references, runtime bindings, or managed pointers in this bridge seam.
+
+When a registry is supplied, bridge catalog capture must call `GetCatalogSnapshotUVE()` and preview capture must call `TryGetSnapshotUVE()` into a local copied snapshot. The legacy `SetDataTableCatalogSnapshotUVE()` and `SetDataTablePreviewSnapshotUVE()` seams remain for registry-free compatibility sessions, but must not create a second source of truth when registry authority is present.
+
+Preview selection is a bounded native seam: `SetPreviewTableUVE()` rejects unknown or overlong names without changing the current selection, accepts an empty name to clear selection, and never exposes a mutable table reference. Registry mutations and selection changes participate in bridge revision synchronization only through copied observable DTO differences. A removed selected table produces an unavailable preview fact rather than a dangling reference or implicit managed mutation.

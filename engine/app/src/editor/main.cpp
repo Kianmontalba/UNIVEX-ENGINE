@@ -119,7 +119,8 @@ int main(const int argc, char** argv) {
     }
 
     if (options.bridgeStdio) {
-        UVE::Editor::EditorBridgeUVE bridge(editor);
+        UVE::Asset::DataTableRegistryUVE dataTableRegistry;
+        UVE::Editor::EditorBridgeUVE bridge(editor, &dataTableRegistry);
         UVE::Editor::EditorBridgeStdioServerUVE server(bridge);
         const int result = server.ServeUVE(std::cin, std::cout, std::cerr);
         editor.ShutdownUVE();
