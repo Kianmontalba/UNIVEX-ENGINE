@@ -484,6 +484,8 @@ public sealed class BridgeProtocolClientTests
         Assert.Equal(new uint[] { 1U }, snapshot.VisualScripting.Canvas.SelectedNodeIds);
         Assert.Equal(1.5F, snapshot.VisualScripting.Canvas.View.Zoom);
         Assert.Single(snapshot.VisualScripting.Canvas.Diagnostics);
+        Assert.Equal(new BridgeVisualScriptEndpoint(2U, "In"),
+                     snapshot.VisualScripting.Canvas.Diagnostics[0].RelatedEndpoint);
         Assert.True(snapshot.VisualScripting.Debugger.Available);
         Assert.Equal((byte)2, snapshot.VisualScripting.Debugger.State);
         Assert.Equal(1UL, snapshot.VisualScripting.Debugger.InstructionIndex);
@@ -829,6 +831,7 @@ public sealed class BridgeProtocolClientTests
                     nodeId = 1U,
                     pinName = "",
                     message = "diagnostic",
+                    relatedEndpoint = new { nodeId = 2U, pinName = "In" },
                 } },
             } : null,
         },
@@ -1019,6 +1022,7 @@ public sealed class BridgeProtocolClientTests
                     nodeId = 1U,
                     pinName = "",
                     message = "diagnostic",
+                    relatedEndpoint = new { nodeId = 2U, pinName = "In" },
                 } },
             } : null,
         },

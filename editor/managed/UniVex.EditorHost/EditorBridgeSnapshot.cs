@@ -128,7 +128,12 @@ public sealed record BridgeVisualScriptEndpoint(uint NodeId, string PinName);
 
 public sealed record BridgeVisualScriptLink(BridgeVisualScriptEndpoint Output, BridgeVisualScriptEndpoint Input);
 
-public sealed record BridgeVisualScriptDiagnostic(byte Code, uint NodeId, string PinName, string Message);
+public sealed record BridgeVisualScriptDiagnostic(
+    byte Code,
+    uint NodeId,
+    string PinName,
+    string Message,
+    BridgeVisualScriptEndpoint? RelatedEndpoint = null);
 
 public sealed record BridgeVisualScriptDebuggerSnapshot(
     bool Available,
@@ -816,9 +821,19 @@ public static class BridgeSnapshotParser
         foreach (JsonElement diagnostic in diagnostics.EnumerateArray())
         {
             RequireObject(diagnostic, "visual-scripting diagnostic");
+            BridgeVisualScriptEndpoint? relatedEndpoint = null;
+            if (diagnostic.TryGetProperty("relatedEndpoint", out JsonElement relatedValue) &&
+                relatedValue.ValueKind != JsonValueKind.Null)
+            {
+                RequireObject(relatedValue, "visual-scripting diagnostic related endpoint");
+                relatedEndpoint = new BridgeVisualScriptEndpoint(
+                    relatedValue.GetProperty("nodeId").GetUInt32(),
+                    RequiredBoundedString(relatedValue, "pinName"));
+            }
             parsedDiagnostics.Add(new BridgeVisualScriptDiagnostic(
                 RequiredByte(diagnostic, "code"), diagnostic.GetProperty("nodeId").GetUInt32(),
-                RequiredBoundedString(diagnostic, "pinName"), RequiredBoundedString(diagnostic, "message")));
+                RequiredBoundedString(diagnostic, "pinName"), RequiredBoundedString(diagnostic, "message"),
+                relatedEndpoint));
         }
 
         return new BridgeVisualScriptCanvasSnapshot(

@@ -29,8 +29,10 @@ void AddDiagnosticUVE(std::vector<ScriptValidationDiagnosticUVE>& diagnostics,
                       ScriptValidationCodeUVE code,
                       std::uint32_t nodeId,
                       std::string pinName,
-                      std::string message) {
-    diagnostics.push_back(ScriptValidationDiagnosticUVE{code, nodeId, std::move(pinName), std::move(message)});
+                      std::string message,
+                      std::optional<ScriptPinEndpointUVE> relatedEndpoint = std::nullopt) {
+    diagnostics.push_back(ScriptValidationDiagnosticUVE{
+        code, nodeId, std::move(pinName), std::move(message), std::move(relatedEndpoint)});
 }
 
 } // namespace
@@ -180,14 +182,18 @@ std::vector<ScriptValidationDiagnosticUVE> ScriptGraphUVE::ValidateUVE(
     for (const ScriptLinkUVE& link : m_links) {
         if (link.output.nodeId == link.input.nodeId) {
             AddDiagnosticUVE(diagnostics, ScriptValidationCodeUVE::SelfLink, link.output.nodeId,
-                             link.output.pinName, "A node cannot link to itself.");
+                             link.output.pinName, "A node cannot link to itself.", link.input);
         }
         const ScriptNodeUVE* outputNode = FindNodeUVE(m_nodes, link.output.nodeId);
         const ScriptNodeUVE* inputNode = FindNodeUVE(m_nodes, link.input.nodeId);
         if (outputNode == nullptr || inputNode == nullptr) {
+            const bool outputMissing = outputNode == nullptr;
             AddDiagnosticUVE(diagnostics, ScriptValidationCodeUVE::EmptyLinkEndpoint,
-                             outputNode == nullptr ? link.output.nodeId : link.input.nodeId, {},
-                             "Link references a node that is not present in the graph.");
+                             outputMissing ? link.output.nodeId : link.input.nodeId,
+                             outputMissing ? link.output.pinName : link.input.pinName,
+                             "Link references a node that is not present in the graph.",
+                             outputMissing ? std::optional<ScriptPinEndpointUVE>{link.input}
+                                           : std::optional<ScriptPinEndpointUVE>{link.output});
             continue;
         }
         const ScriptNodeTypeDescriptorUVE* outputType = registry.FindNodeTypeUVE(outputNode->typeId);
@@ -199,27 +205,27 @@ std::vector<ScriptValidationDiagnosticUVE> ScriptGraphUVE::ValidateUVE(
         const ScriptPinDescriptorUVE* inputPin = FindPinUVE(*inputType, link.input.pinName);
         if (outputPin == nullptr) {
             AddDiagnosticUVE(diagnostics, ScriptValidationCodeUVE::UnknownPin, link.output.nodeId,
-                             link.output.pinName, "Output pin is not registered on the node.");
+                             link.output.pinName, "Output pin is not registered on the node.", link.input);
             continue;
         }
         if (inputPin == nullptr) {
             AddDiagnosticUVE(diagnostics, ScriptValidationCodeUVE::UnknownPin, link.input.nodeId,
-                             link.input.pinName, "Input pin is not registered on the node.");
+                             link.input.pinName, "Input pin is not registered on the node.", link.output);
             continue;
         }
         if (outputPin->direction != ScriptPinDirectionUVE::Output) {
             AddDiagnosticUVE(diagnostics, ScriptValidationCodeUVE::WrongPinDirection,
-                             link.output.nodeId, link.output.pinName, "Link source pin must be an output.");
+                             link.output.nodeId, link.output.pinName, "Link source pin must be an output.", link.input);
         }
         if (inputPin->direction != ScriptPinDirectionUVE::Input) {
             AddDiagnosticUVE(diagnostics, ScriptValidationCodeUVE::WrongPinDirection,
-                             link.input.nodeId, link.input.pinName, "Link destination pin must be an input.");
+                             link.input.nodeId, link.input.pinName, "Link destination pin must be an input.", link.output);
         }
         if (outputPin->direction == ScriptPinDirectionUVE::Output &&
             inputPin->direction == ScriptPinDirectionUVE::Input &&
             !AreScriptPinTypesCompatibleUVE(outputPin->type, inputPin->type)) {
             AddDiagnosticUVE(diagnostics, ScriptValidationCodeUVE::IncompatiblePinTypes,
-                             link.input.nodeId, link.input.pinName, "Linked pin types are incompatible.");
+                             link.input.nodeId, link.input.pinName, "Linked pin types are incompatible.", link.output);
         }
     }
     return diagnostics;
