@@ -491,6 +491,21 @@ public partial class MainWindow : Window
                scripting.Reason;
     }
 
+    private static string DescribeVisualScriptDebugger(BridgeVisualScriptDebuggerSnapshot debugger)
+    {
+        if (!debugger.Available)
+        {
+            return $"Debugger unavailable. {debugger.Reason}";
+        }
+        string sourceNode = debugger.SourceNodeId == 0U ? "none" : debugger.SourceNodeId.ToString();
+        string pauseReason = string.IsNullOrWhiteSpace(debugger.PauseReason)
+            ? string.Empty
+            : $" Pause: {debugger.PauseReason}";
+        return $"Debugger state {debugger.State}; instruction {debugger.InstructionIndex}; source node {sourceNode}; " +
+               $"{debugger.ExecutedInstructions} executed; {debugger.BreakpointNodeIds.Count} breakpoint(s)." +
+               $"{pauseReason} {debugger.Reason}";
+    }
+
     private void RenderDeveloperConsole(BridgeDeveloperConsoleSnapshot console)
     {
         DeveloperConsoleOutputListBox.ItemsSource = console.Output
@@ -554,6 +569,7 @@ public partial class MainWindow : Window
     private void RenderVisualScripting(BridgeVisualScriptingSnapshot scripting, ulong bridgeRevision)
     {
         VisualScriptingStatusTextBlock.Text = DescribeVisualScripting(scripting);
+        VisualScriptingDebuggerTextBlock.Text = DescribeVisualScriptDebugger(scripting.Debugger);
         string truncation = scripting.Canvas.NodesTruncated || scripting.Canvas.LinksTruncated ||
             scripting.Canvas.PaletteTruncated || scripting.Canvas.DiagnosticsTruncated
             ? " · truncated"
