@@ -40,6 +40,7 @@ target_compile_options(uve_editor_imgui PRIVATE $<$<CXX_COMPILER_ID:GNU,Clang>:-
 add_library(uve_editor STATIC
     src/editor_bridge_stdio_uve.cpp
     src/editor_bridge_uve.cpp
+    src/developer_console_uve.cpp
     src/editor_tool_session_uve.cpp
     src/editor_uve.cpp
     src/inspector_drawer_registry_uve.cpp

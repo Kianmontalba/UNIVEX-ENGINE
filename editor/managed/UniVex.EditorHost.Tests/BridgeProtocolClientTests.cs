@@ -234,7 +234,17 @@ public sealed class BridgeProtocolClientTests
                 reason = "No managed viewport surface transport is available in this headless bridge session.",
             },
             visualScripting = new { available = false, graphRevision = 0UL, nodeCount = 0, linkCount = 0, canEdit = false, reason = "Native visual-scripting presentation is unavailable in this headless bridge session." },
-            capabilities = Array.Empty<int>(),
+            developerConsole = new
+        {
+            generation = 3UL,
+            outputTruncated = false,
+            historyTruncated = false,
+            cvarsTruncated = false,
+            output = new[] { new { severity = 0, text = "ready" } },
+            history = new[] { "help" },
+            cvars = new[] { new { name = "r.vsync", value = "1", readOnly = true } },
+        },
+        capabilities = Array.Empty<int>(),
         }));
 
         BridgeProtocolException exception = Assert.Throws<BridgeProtocolException>(() =>
@@ -261,6 +271,52 @@ public sealed class BridgeProtocolClientTests
         Assert.Equal(new uint[] { 1U }, snapshot.VisualScripting.Canvas.SelectedNodeIds);
         Assert.Equal(1.5F, snapshot.VisualScripting.Canvas.View.Zoom);
         Assert.Single(snapshot.VisualScripting.Canvas.Diagnostics);
+    }
+
+    [Fact]
+    public void SnapshotParser_AcceptsBoundedDeveloperConsoleDto()
+    {
+        using JsonDocument document = JsonDocument.Parse(JsonSerializer.Serialize(Snapshot(sceneDirty: false)));
+
+        BridgeEditorSnapshot snapshot = BridgeSnapshotParser.Parse(document.RootElement);
+
+        Assert.Equal(3UL, snapshot.DeveloperConsole.Generation);
+        Assert.Single(snapshot.DeveloperConsole.Output);
+        Assert.Equal(BridgeDeveloperConsoleSeverity.Info, snapshot.DeveloperConsole.Output[0].Severity);
+        Assert.Equal("ready", snapshot.DeveloperConsole.Output[0].Text);
+        Assert.Equal(new[] { "help" }, snapshot.DeveloperConsole.History);
+        Assert.True(snapshot.DeveloperConsole.CVars[0].IsReadOnly);
+    }
+
+    [Fact]
+    public async Task DispatchAsync_SerializesNamedDeveloperConsoleCommand()
+    {
+        await using MemoryStream input = BuildFrames(new
+        {
+            jsonrpc = "2.0",
+            id = 1,
+            result = new
+            {
+                protocolVersion = BridgeProtocolClient.ProtocolVersion,
+                requestId = 1UL,
+                applied = true,
+                code = "bridge.command.applied",
+                message = "The registered native console command executed.",
+                snapshot = Snapshot(sceneDirty: false),
+                createdEntity = (object?)null,
+            },
+        });
+        await using MemoryStream output = new();
+        await using BridgeProtocolClient client = new(input, output);
+
+        await client.DispatchAsync(new BridgeCommand(4UL, "submitDeveloperConsoleCommand",
+            DeveloperConsoleCommand: "help"), CancellationToken.None);
+
+        output.Position = 0;
+        using JsonDocument request = JsonDocument.Parse(await ReadFrameAsync(output));
+        JsonElement parameters = request.RootElement.GetProperty("params");
+        Assert.Equal("submitDeveloperConsoleCommand", parameters.GetProperty("kind").GetString());
+        Assert.Equal("help", parameters.GetProperty("developerConsoleCommand").GetString());
     }
 
     [Fact]
@@ -375,6 +431,16 @@ public sealed class BridgeProtocolClientTests
                 } },
             } : null,
         },
+        developerConsole = new
+        {
+            generation = 3UL,
+            outputTruncated = false,
+            historyTruncated = false,
+            cvarsTruncated = false,
+            output = new[] { new { severity = 0, text = "ready" } },
+            history = new[] { "help" },
+            cvars = new[] { new { name = "r.vsync", value = "1", readOnly = true } },
+        },
         capabilities = Array.Empty<int>(),
     };
 
@@ -479,6 +545,16 @@ public sealed class BridgeProtocolClientTests
                     message = "diagnostic",
                 } },
             } : null,
+        },
+        developerConsole = new
+        {
+            generation = 3UL,
+            outputTruncated = false,
+            historyTruncated = false,
+            cvarsTruncated = false,
+            output = new[] { new { severity = 0, text = "ready" } },
+            history = new[] { "help" },
+            cvars = new[] { new { name = "r.vsync", value = "1", readOnly = true } },
         },
         capabilities = Array.Empty<int>(),
     };

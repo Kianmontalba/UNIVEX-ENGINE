@@ -230,6 +230,23 @@
                                 <TextBlock x:Name="ContentStatusTextBlock" Grid.Row="4" Text="Connect to read the native cached project index." TextWrapping="Wrap" Opacity="0.72" />
                             </Grid>
                         </TabItem>
+                        <TabItem Header="Console">
+                            <Grid RowDefinitions="Auto,*,Auto" RowSpacing="6">
+                                <TextBlock x:Name="DeveloperConsoleStatusTextBlock" Text="Connect to read native console output." TextWrapping="Wrap" Opacity="0.72" />
+                                <ListBox x:Name="DeveloperConsoleOutputListBox" Grid.Row="1">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding}" TextWrapping="Wrap" />
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                                <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
+                                    <TextBox x:Name="DeveloperConsoleCommandTextBox" Watermark="Registered native command (e.g. help)" />
+                                    <Button Grid.Column="1" Content="Submit" Click="DeveloperConsoleSubmitButton_OnClick" />
+                                    <Button Grid.Column="2" Content="Clear" Click="DeveloperConsoleClearButton_OnClick" />
+                                </Grid>
+                            </Grid>
+                        </TabItem>
                         <TabItem Header="Debugger"><Border Padding="12" Background="#20242B" CornerRadius="3"><TextBlock Text="Managed debugger presentation is deferred. This shell does not attach to or control a runtime." TextWrapping="Wrap" /></Border></TabItem>
                         <TabItem Header="Animator"><Border Padding="12" Background="#20242B" CornerRadius="3"><TextBlock Text="Animation tooling is deferred. This shell owns no animation state." TextWrapping="Wrap" /></Border></TabItem>
                         <TabItem Header="AI Toolbar"><Border Padding="12" Background="#20242B" CornerRadius="3"><TextBlock Text="AI tooling is deferred. This shell owns no background jobs or asset mutations." TextWrapping="Wrap" /></Border></TabItem>

@@ -115,6 +115,35 @@ enum class FrameReadResultUVE : std::uint8_t {
                                                                            : JsonUVE(nullptr)}};
 }
 
+[[nodiscard]] JsonUVE ToJsonUVE(const DeveloperConsoleEntryUVE& entry) {
+    return JsonUVE{{"severity", static_cast<std::uint8_t>(entry.severity)}, {"text", entry.text}};
+}
+
+[[nodiscard]] JsonUVE ToJsonUVE(const DeveloperConsoleCVarUVE& cvar) {
+    return JsonUVE{{"name", cvar.name}, {"value", cvar.value}, {"readOnly", cvar.readOnly}};
+}
+
+[[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeDeveloperConsoleSnapshotUVE& snapshot) {
+    JsonUVE output = JsonUVE::array();
+    for (const DeveloperConsoleEntryUVE& entry : snapshot.console.output) {
+        output.push_back(ToJsonUVE(entry));
+    }
+    JsonUVE history = JsonUVE::array();
+    for (const std::string& command : snapshot.console.history) {
+        history.push_back(command);
+    }
+    JsonUVE cvars = JsonUVE::array();
+    for (const DeveloperConsoleCVarUVE& cvar : snapshot.console.cvars) {
+        cvars.push_back(ToJsonUVE(cvar));
+    }
+    return JsonUVE{{"generation", snapshot.console.generation},
+                   {"outputTruncated", snapshot.console.outputTruncated},
+                   {"historyTruncated", snapshot.console.historyTruncated},
+                   {"cvarsTruncated", snapshot.console.cvarsTruncated},
+                   {"output", std::move(output)}, {"history", std::move(history)},
+                   {"cvars", std::move(cvars)}};
+}
+
 [[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeViewportSurfaceSnapshotUVE& surface) {
     return JsonUVE{{"state", static_cast<std::uint8_t>(surface.state)},
                    {"generation", surface.generation},
@@ -217,6 +246,7 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"contentBrowser", ToJsonUVE(snapshot.contentBrowser)},
                    {"viewportSurface", ToJsonUVE(snapshot.viewportSurface)},
                    {"visualScripting", ToJsonUVE(snapshot.visualScripting)},
+                   {"developerConsole", ToJsonUVE(snapshot.developerConsole)},
                    {"capabilities", std::move(capabilities)}};
 }
 
@@ -417,6 +447,15 @@ enum class FrameReadResultUVE : std::uint8_t {
     if (value == "redoVisualScript") {
         return EditorBridgeRequestKindUVE::RedoVisualScript;
     }
+    if (value == "readDeveloperConsole") {
+        return EditorBridgeRequestKindUVE::ReadDeveloperConsole;
+    }
+    if (value == "submitDeveloperConsoleCommand") {
+        return EditorBridgeRequestKindUVE::SubmitDeveloperConsoleCommand;
+    }
+    if (value == "clearDeveloperConsole") {
+        return EditorBridgeRequestKindUVE::ClearDeveloperConsole;
+    }
     return std::nullopt;
 }
 
@@ -529,6 +568,9 @@ enum class FrameReadResultUVE : std::uint8_t {
         if (!request.visualScriptView.has_value()) {
             return std::nullopt;
         }
+    }
+    if (params.contains("developerConsoleCommand") && !params.at("developerConsoleCommand").is_null()) {
+        request.developerConsoleCommand = params.at("developerConsoleCommand").get<std::string>();
     }
     return request;
 }
