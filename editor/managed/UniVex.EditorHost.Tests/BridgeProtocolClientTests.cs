@@ -446,6 +446,8 @@ public sealed class BridgeProtocolClientTests
         Assert.Equal(2, snapshot.ScriptRuntime.Entries.Count);
         Assert.Equal(1, snapshot.ScriptRuntime.VisibleEnabledInstanceCount);
         Assert.Equal(1, snapshot.ScriptRuntime.VisibleDisabledInstanceCount);
+        Assert.Equal(1, snapshot.ScriptRuntime.CountMatchingEntries("entity 7"));
+        Assert.Equal(0, snapshot.ScriptRuntime.CountMatchingEntries("entity 99"));
         BridgeScriptRuntimeInstanceEntry first = snapshot.ScriptRuntime.Entries[0];
         Assert.Equal(7U, first.EntityIndex);
         Assert.Equal(3U, first.EntityGeneration);
