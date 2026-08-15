@@ -284,6 +284,35 @@ public sealed class BridgeProtocolClientTests
             cvars = new[] { new { name = "r.vsync", value = "1", readOnly = true } },
             completions = new[] { new { identifier = "help", help = "List registered native commands." } },
         },
+        scriptRuntime = new
+        {
+            available = true,
+            instanceCount = 2,
+            entriesTruncated = false,
+            entries = new[]
+            {
+                new
+                {
+                    entityIndex = 7U,
+                    entityGeneration = 3U,
+                    generation = 9UL,
+                    programVersion = 4U,
+                    instructionCount = 12,
+                    stateValueCount = 2,
+                    enabled = true,
+                },
+                new
+                {
+                    entityIndex = 8U,
+                    entityGeneration = 1U,
+                    generation = 10UL,
+                    programVersion = 5U,
+                    instructionCount = 3,
+                    stateValueCount = 0,
+                    enabled = false,
+                },
+            },
+        },
         dataTableCatalog = new
         {
             generation = 4UL,
@@ -359,6 +388,71 @@ public sealed class BridgeProtocolClientTests
         Assert.Equal("ready", snapshot.DeveloperConsole.Output[0].Text);
         Assert.Equal(new[] { "help" }, snapshot.DeveloperConsole.History);
         Assert.True(snapshot.DeveloperConsole.CVars[0].IsReadOnly);
+    }
+
+    [Fact]
+    public void ScriptRuntimeBridgeSnapshot_ParsesValidEntriesAndFallsBackToEmpty()
+    {
+        using JsonDocument document = JsonDocument.Parse(JsonSerializer.Serialize(Snapshot(sceneDirty: false)));
+
+        BridgeEditorSnapshot snapshot = BridgeSnapshotParser.Parse(document.RootElement);
+
+        Assert.True(snapshot.ScriptRuntime.IsAvailable);
+        Assert.Equal(2, snapshot.ScriptRuntime.InstanceCount);
+        Assert.False(snapshot.ScriptRuntime.EntriesTruncated);
+        Assert.Equal(2, snapshot.ScriptRuntime.Entries.Count);
+        BridgeScriptRuntimeInstanceEntry first = snapshot.ScriptRuntime.Entries[0];
+        Assert.Equal(7U, first.EntityIndex);
+        Assert.Equal(3U, first.EntityGeneration);
+        Assert.Equal(9UL, first.Generation);
+        Assert.Equal(4U, first.ProgramVersion);
+        Assert.Equal(12, first.InstructionCount);
+        Assert.Equal(2, first.StateValueCount);
+        Assert.True(first.Enabled);
+        Assert.False(snapshot.ScriptRuntime.Entries[1].Enabled);
+
+        Dictionary<string, JsonElement> members = document.RootElement.EnumerateObject()
+            .Where(property => property.Name != "scriptRuntime")
+            .ToDictionary(property => property.Name, property => property.Value.Clone());
+        using JsonDocument legacy = JsonDocument.Parse(JsonSerializer.Serialize(members));
+
+        BridgeEditorSnapshot fallback = BridgeSnapshotParser.Parse(legacy.RootElement);
+
+        Assert.False(fallback.ScriptRuntime.IsAvailable);
+        Assert.Equal(0, fallback.ScriptRuntime.InstanceCount);
+        Assert.Empty(fallback.ScriptRuntime.Entries);
+    }
+
+    [Fact]
+    public void ScriptRuntimeBridgeSnapshot_RejectsEntriesBeyondNativeBound()
+    {
+        using JsonDocument document = JsonDocument.Parse(JsonSerializer.Serialize(Snapshot(sceneDirty: false)));
+        object[] entries = Enumerable.Range(0, BridgeSnapshotParser.MaximumPanelEntries + 1)
+            .Select(index => (object)new
+            {
+                entityIndex = (uint)index,
+                entityGeneration = 1U,
+                generation = 1UL,
+                programVersion = 1U,
+                instructionCount = 1,
+                stateValueCount = 0,
+                enabled = true,
+            }).ToArray();
+        Dictionary<string, JsonElement> members = document.RootElement.EnumerateObject()
+            .ToDictionary(property => property.Name, property => property.Value.Clone());
+        members["scriptRuntime"] = JsonSerializer.SerializeToElement(new
+        {
+            available = true,
+            instanceCount = entries.Length,
+            entriesTruncated = true,
+            entries,
+        });
+        using JsonDocument oversized = JsonDocument.Parse(JsonSerializer.Serialize(members));
+
+        BridgeProtocolException exception = Assert.Throws<BridgeProtocolException>(() =>
+            BridgeSnapshotParser.Parse(oversized.RootElement));
+
+        Assert.Equal("bridge.snapshot.invalid", exception.Code);
     }
 
     [Fact]
@@ -617,6 +711,35 @@ public sealed class BridgeProtocolClientTests
             cvars = new[] { new { name = "r.vsync", value = "1", readOnly = true } },
             completions = new[] { new { identifier = "help", help = "List registered native commands." } },
         },
+        scriptRuntime = new
+        {
+            available = true,
+            instanceCount = 2,
+            entriesTruncated = false,
+            entries = new[]
+            {
+                new
+                {
+                    entityIndex = 7U,
+                    entityGeneration = 3U,
+                    generation = 9UL,
+                    programVersion = 4U,
+                    instructionCount = 12,
+                    stateValueCount = 2,
+                    enabled = true,
+                },
+                new
+                {
+                    entityIndex = 8U,
+                    entityGeneration = 1U,
+                    generation = 10UL,
+                    programVersion = 5U,
+                    instructionCount = 3,
+                    stateValueCount = 0,
+                    enabled = false,
+                },
+            },
+        },
         dataTableCatalog = new
         {
             generation = 4UL,
@@ -769,6 +892,35 @@ public sealed class BridgeProtocolClientTests
             history = new[] { "help" },
             cvars = new[] { new { name = "r.vsync", value = "1", readOnly = true } },
             completions = new[] { new { identifier = "help", help = "List registered native commands." } },
+        },
+        scriptRuntime = new
+        {
+            available = true,
+            instanceCount = 2,
+            entriesTruncated = false,
+            entries = new[]
+            {
+                new
+                {
+                    entityIndex = 7U,
+                    entityGeneration = 3U,
+                    generation = 9UL,
+                    programVersion = 4U,
+                    instructionCount = 12,
+                    stateValueCount = 2,
+                    enabled = true,
+                },
+                new
+                {
+                    entityIndex = 8U,
+                    entityGeneration = 1U,
+                    generation = 10UL,
+                    programVersion = 5U,
+                    instructionCount = 3,
+                    stateValueCount = 0,
+                    enabled = false,
+                },
+            },
         },
         dataTableCatalog = new
         {

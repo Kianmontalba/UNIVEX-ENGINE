@@ -130,11 +130,13 @@ namespace {
 
 EditorBridgeUVE::EditorBridgeUVE(EditorUVE& editor,
                                    const Asset::DataTableRegistryUVE* dataTableRegistry,
-                                   const Scripting::ScriptDebuggerUVE* scriptDebugger) noexcept
+                                   const Scripting::ScriptDebuggerUVE* scriptDebugger,
+                                   const Scripting::ScriptRuntimeUVE* scriptRuntime) noexcept
     : m_editor(&editor),
       m_visualScriptCanvas(m_visualScriptRegistry),
       m_dataTableRegistry(dataTableRegistry),
-      m_scriptDebugger(scriptDebugger) {}
+      m_scriptDebugger(scriptDebugger),
+      m_scriptRuntime(scriptRuntime) {}
 
 const std::vector<EditorBridgeCapabilityUVE>& EditorBridgeUVE::GetCapabilitiesUVE() noexcept {
     return CapabilitiesUVE();
@@ -666,9 +668,37 @@ EditorBridgeUVE::ObservedStateUVE EditorBridgeUVE::CaptureObservedStateUVE() {
         "No managed viewport surface transport is available in this headless bridge session."};
     observed.visualScripting = CaptureVisualScriptingUVE();
     observed.developerConsole = CaptureDeveloperConsoleUVE();
+    observed.scriptRuntime = CaptureScriptRuntimeUVE();
     observed.dataTableCatalog = CaptureDataTableCatalogUVE();
     observed.dataTablePreview = CaptureDataTablePreviewUVE();
     return observed;
+}
+
+EditorBridgeScriptRuntimeSnapshotUVE EditorBridgeUVE::CaptureScriptRuntimeUVE() const {
+    EditorBridgeScriptRuntimeSnapshotUVE snapshot{};
+    if (m_scriptRuntime == nullptr) {
+        return snapshot;
+    }
+
+    snapshot.available = true;
+    const std::vector<Scripting::ScriptRuntimeInstanceSnapshotUVE> source = m_scriptRuntime->GetSnapshotUVE();
+    snapshot.instanceCount = source.size();
+    snapshot.entries.reserve(std::min(source.size(), kEditorBridgeMaximumPanelEntriesUVE));
+    for (const Scripting::ScriptRuntimeInstanceSnapshotUVE& instance : source) {
+        if (snapshot.entries.size() >= kEditorBridgeMaximumPanelEntriesUVE) {
+            snapshot.entriesTruncated = true;
+            break;
+        }
+        snapshot.entries.push_back(EditorBridgeScriptRuntimeInstanceEntryUVE{
+            instance.entity.index,
+            instance.entity.generation,
+            instance.generation,
+            instance.programVersion,
+            instance.instructionCount,
+            instance.stateValueCount,
+            instance.enabled});
+    }
+    return snapshot;
 }
 
 EditorBridgeDeveloperConsoleSnapshotUVE EditorBridgeUVE::CaptureDeveloperConsoleUVE() const {
@@ -802,6 +832,7 @@ EditorBridgeSnapshotUVE EditorBridgeUVE::BuildSnapshotUVE() const {
     snapshot.viewportSurface = observed.viewportSurface;
     snapshot.visualScripting = observed.visualScripting;
     snapshot.developerConsole = observed.developerConsole;
+    snapshot.scriptRuntime = observed.scriptRuntime;
     snapshot.dataTableCatalog = observed.dataTableCatalog;
     snapshot.dataTablePreview = observed.dataTablePreview;
     snapshot.capabilities = GetCapabilitiesUVE();

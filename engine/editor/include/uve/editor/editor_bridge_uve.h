@@ -15,6 +15,7 @@
 #include "uve/editor/editor_uve.h"
 #include "uve/scripting/script_debugger_uve.h"
 #include "uve/scripting/script_graph_canvas_uve.h"
+#include "uve/scripting/script_runtime_uve.h"
 #include "uve/editor/developer_console_uve.h"
 
 namespace UVE::Editor {
@@ -290,6 +291,27 @@ struct EditorBridgeDataTablePreviewRowUVE final {
     [[nodiscard]] bool operator==(const EditorBridgeDataTablePreviewRowUVE&) const = default;
 };
 
+struct EditorBridgeScriptRuntimeInstanceEntryUVE final {
+    std::uint32_t entityIndex = Scene::kInvalidEntityUVE.index;
+    std::uint32_t entityGeneration = Scene::kInvalidEntityUVE.generation;
+    std::uint64_t generation = 0U;
+    std::uint32_t programVersion = 0U;
+    std::size_t instructionCount = 0U;
+    std::size_t stateValueCount = 0U;
+    bool enabled = false;
+
+    [[nodiscard]] bool operator==(const EditorBridgeScriptRuntimeInstanceEntryUVE&) const = default;
+};
+
+struct EditorBridgeScriptRuntimeSnapshotUVE final {
+    bool available = false;
+    std::size_t instanceCount = 0U;
+    bool entriesTruncated = false;
+    std::vector<EditorBridgeScriptRuntimeInstanceEntryUVE> entries;
+
+    [[nodiscard]] bool operator==(const EditorBridgeScriptRuntimeSnapshotUVE&) const = default;
+};
+
 struct EditorBridgeDataTablePreviewSnapshotUVE final {
     bool available = false;
     std::uint64_t generation = 0U;
@@ -323,6 +345,7 @@ struct EditorBridgeSnapshotUVE final {
     EditorBridgeViewportSurfaceSnapshotUVE viewportSurface;
     EditorBridgeVisualScriptingSnapshotUVE visualScripting;
     EditorBridgeDeveloperConsoleSnapshotUVE developerConsole;
+    EditorBridgeScriptRuntimeSnapshotUVE scriptRuntime;
     EditorBridgeDataTableCatalogSnapshotUVE dataTableCatalog;
     EditorBridgeDataTablePreviewSnapshotUVE dataTablePreview;
     std::vector<EditorBridgeCapabilityUVE> capabilities;
@@ -395,7 +418,8 @@ public:
     /// seams remain available only for bridge sessions without a registry dependency.
     explicit EditorBridgeUVE(EditorUVE& editor,
                              const Asset::DataTableRegistryUVE* dataTableRegistry = nullptr,
-                             const Scripting::ScriptDebuggerUVE* scriptDebugger = nullptr) noexcept;
+                             const Scripting::ScriptDebuggerUVE* scriptDebugger = nullptr,
+                             const Scripting::ScriptRuntimeUVE* scriptRuntime = nullptr) noexcept;
 
     [[nodiscard]] EditorBridgeSnapshotUVE GetSnapshotUVE();
     [[nodiscard]] EditorBridgeResponseUVE DispatchUVE(const EditorBridgeRequestUVE& request);
@@ -424,6 +448,7 @@ private:
         EditorBridgeViewportSurfaceSnapshotUVE viewportSurface;
         EditorBridgeVisualScriptingSnapshotUVE visualScripting;
         EditorBridgeDeveloperConsoleSnapshotUVE developerConsole;
+        EditorBridgeScriptRuntimeSnapshotUVE scriptRuntime;
         EditorBridgeDataTableCatalogSnapshotUVE dataTableCatalog;
         EditorBridgeDataTablePreviewSnapshotUVE dataTablePreview;
 
@@ -441,6 +466,7 @@ private:
     [[nodiscard]] static std::string BoundPresentationTextUVE(std::string value);
     [[nodiscard]] static std::string BoundContentPathUVE(std::string value);
     [[nodiscard]] EditorBridgeVisualScriptingSnapshotUVE CaptureVisualScriptingUVE() const;
+    [[nodiscard]] EditorBridgeScriptRuntimeSnapshotUVE CaptureScriptRuntimeUVE() const;
     [[nodiscard]] EditorBridgeDeveloperConsoleSnapshotUVE CaptureDeveloperConsoleUVE() const;
     [[nodiscard]] EditorBridgeDataTableCatalogSnapshotUVE CaptureDataTableCatalogUVE() const;
     [[nodiscard]] EditorBridgeDataTablePreviewSnapshotUVE CaptureDataTablePreviewUVE() const;
@@ -458,6 +484,7 @@ private:
     DeveloperConsoleUVE m_developerConsole;
     const Asset::DataTableRegistryUVE* m_dataTableRegistry = nullptr;
     const Scripting::ScriptDebuggerUVE* m_scriptDebugger = nullptr;
+    const Scripting::ScriptRuntimeUVE* m_scriptRuntime = nullptr;
     std::optional<std::string> m_dataTablePreviewName;
     Asset::DataTableCatalogSnapshotUVE m_dataTableCatalogSnapshot;
     Asset::DataTableSnapshotUVE m_dataTablePreviewSnapshot;
