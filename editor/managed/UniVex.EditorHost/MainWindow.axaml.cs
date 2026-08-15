@@ -533,6 +533,11 @@ public partial class MainWindow : Window
         scriptRuntimeRequestAvailable = requestAvailable;
         ScriptRuntimeRefreshButton.IsEnabled = state == HostSessionState.Connected && requestAvailable;
         ScriptRuntimeInstancesListBox.ItemsSource = runtime.Entries;
+        ScriptRuntimeInstancesListBox.IsVisible = runtime.Entries.Count > 0;
+        ScriptRuntimeEmptyTextBlock.IsVisible = runtime.Entries.Count == 0;
+        ScriptRuntimeEmptyTextBlock.Text = runtime.IsAvailable
+            ? "Native ScriptRuntime is attached, but no active instances are in the copied snapshot."
+            : runtime.Reason;
         selectedScriptRuntimeInstance = runtime.Entries.FirstOrDefault(entry =>
             selectedScriptRuntimeInstance is not null &&
             entry.EntityIndex == selectedScriptRuntimeInstance.EntityIndex &&
