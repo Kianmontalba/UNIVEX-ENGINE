@@ -100,6 +100,11 @@ TEST(EditorBridgeStdioUVETest, ServeUVE_HandshakesAndRoutesExistingBridgeDispatc
         EXPECT_TRUE(handshakeSnapshot.at("hierarchy").at("entries").is_array());
         EXPECT_TRUE(handshakeSnapshot.at("inspector").at("eligibleDrawerIds").is_array());
         EXPECT_TRUE(handshakeSnapshot.at("contentBrowser").at("breadcrumbs").is_array());
+        ASSERT_TRUE(handshakeSnapshot.at("viewportSurface").is_object());
+        EXPECT_EQ(handshakeSnapshot.at("viewportSurface").at("state").get<std::uint8_t>(), 0U);
+        EXPECT_TRUE(handshakeSnapshot.at("viewportSurface").at("nativeRendererOwnsSurface").get<bool>());
+        EXPECT_FALSE(handshakeSnapshot.at("viewportSurface").at("managedAttachAllowed").get<bool>());
+        EXPECT_TRUE(handshakeSnapshot.at("viewportSurface").at("reason").is_string());
         EXPECT_TRUE(frames[1U].at("result").at("applied").get<bool>());
         EXPECT_EQ(frames[1U].at("result").at("code").get<std::string>(), "bridge.command.applied");
         EXPECT_TRUE(frames[1U].at("result").at("createdEntity").is_object());

@@ -47,6 +47,7 @@ enum class EditorBridgeCapabilityUVE : std::uint8_t {
     SetContentBrowserFocus,
     RefreshContentBrowser,
     SelectContentBrowserEntry,
+    ReadViewportSurface,
 };
 
 /// The deliberately small v1 request vocabulary. No generic command string is accepted because
@@ -66,6 +67,27 @@ enum class EditorBridgeRequestKindUVE : std::uint8_t {
     SetContentBrowserFocus,
     RefreshContentBrowser,
     SelectContentBrowserEntry,
+    ReadViewportSurface,
+};
+
+/// Explicitly describes whether this bridge session has a native-owned viewport surface. No raw
+/// window, GL context, texture, or input-forwarding handle crosses the bridge boundary.
+enum class EditorBridgeViewportSurfaceStateUVE : std::uint8_t {
+    Unavailable,
+    NativeOwned,
+    Detached,
+};
+
+struct EditorBridgeViewportSurfaceSnapshotUVE final {
+    EditorBridgeViewportSurfaceStateUVE state = EditorBridgeViewportSurfaceStateUVE::Unavailable;
+    std::uint64_t generation = 0U;
+    std::uint32_t width = 0U;
+    std::uint32_t height = 0U;
+    bool nativeRendererOwnsSurface = true;
+    bool managedAttachAllowed = false;
+    std::string reason;
+
+    [[nodiscard]] bool operator==(const EditorBridgeViewportSurfaceSnapshotUVE&) const = default;
 };
 
 /// One copied entity fact usable by a UI. The label is intentionally presentation data, while all
@@ -180,6 +202,7 @@ struct EditorBridgeSnapshotUVE final {
     EditorBridgeHierarchySnapshotUVE hierarchy;
     EditorBridgeInspectorSnapshotUVE inspector;
     EditorBridgeContentBrowserSnapshotUVE contentBrowser;
+    EditorBridgeViewportSurfaceSnapshotUVE viewportSurface;
     std::vector<EditorBridgeCapabilityUVE> capabilities;
 };
 
@@ -254,6 +277,7 @@ private:
         EditorBridgeHierarchySnapshotUVE hierarchy;
         EditorBridgeInspectorSnapshotUVE inspector;
         EditorBridgeContentBrowserSnapshotUVE contentBrowser;
+        EditorBridgeViewportSurfaceSnapshotUVE viewportSurface;
 
         [[nodiscard]] bool operator==(const ObservedStateUVE&) const = default;
     };

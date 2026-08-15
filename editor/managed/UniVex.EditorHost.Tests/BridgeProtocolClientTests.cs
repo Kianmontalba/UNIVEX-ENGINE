@@ -223,8 +223,29 @@ public sealed class BridgeProtocolClientTests
                 entries = Array.Empty<object>(),
                 selectedEntry = (object?)null,
             },
+            viewportSurface = new
+            {
+                state = 0,
+                generation = 0UL,
+                width = 0U,
+                height = 0U,
+                nativeRendererOwnsSurface = true,
+                managedAttachAllowed = false,
+                reason = "No managed viewport surface transport is available in this headless bridge session.",
+            },
             capabilities = Array.Empty<int>(),
         }));
+
+        BridgeProtocolException exception = Assert.Throws<BridgeProtocolException>(() =>
+            BridgeSnapshotParser.Parse(document.RootElement));
+
+        Assert.Equal("bridge.snapshot.invalid", exception.Code);
+    }
+
+    [Fact]
+    public void SnapshotParser_RejectsManagedViewportAttachPermission()
+    {
+        using JsonDocument document = JsonDocument.Parse(JsonSerializer.Serialize(SnapshotWithSurface(managedAttachAllowed: true)));
 
         BridgeProtocolException exception = Assert.Throws<BridgeProtocolException>(() =>
             BridgeSnapshotParser.Parse(document.RootElement));
@@ -271,6 +292,26 @@ public sealed class BridgeProtocolClientTests
         await input.ReadExactlyAsync(body);
         return body;
     }
+
+    private static object SnapshotWithSurface(bool managedAttachAllowed) => new
+    {
+        protocolVersion = BridgeProtocolClient.ProtocolVersion,
+        revision = 1UL,
+        editorState = 1,
+        playModeState = 0,
+        sceneDirty = false,
+        canUndo = false,
+        canRedo = false,
+        activeScenePath = "editor_scene.uvescene",
+        selectedEntities = Array.Empty<object>(),
+        selectedEntitiesTruncated = false,
+        activeEntity = (object?)null,
+        hierarchy = new { filter = string.Empty, filterActive = false, truncated = false, entries = Array.Empty<object>() },
+        inspector = new { mode = 0, selectedEntitiesTruncated = false, selectedEntities = Array.Empty<object>(), activeEntity = (object?)null, parent = (object?)null, ancestry = Array.Empty<object>(), eligibleDrawerIds = Array.Empty<string>(), canEditSelectedName = false },
+        contentBrowser = new { contentRoot = "assets", currentDirectory = string.Empty, filter = string.Empty, typeFocus = "All", breadcrumbs = Array.Empty<string>(), refreshGeneration = 0UL, visibleEntryCount = 0, directEntryCount = 0, contentRootExists = true, initialized = false, lastRefreshSucceeded = true, truncated = false, entries = Array.Empty<object>(), selectedEntry = (object?)null },
+        viewportSurface = new { state = 0, generation = 0UL, width = 0U, height = 0U, nativeRendererOwnsSurface = true, managedAttachAllowed, reason = "No managed viewport surface transport is available in this headless bridge session." },
+        capabilities = Array.Empty<int>(),
+    };
 
     private static object Snapshot(bool sceneDirty) => new
     {
@@ -319,6 +360,16 @@ public sealed class BridgeProtocolClientTests
             truncated = false,
             entries = Array.Empty<object>(),
             selectedEntry = (object?)null,
+        },
+        viewportSurface = new
+        {
+            state = 0,
+            generation = 0UL,
+            width = 0U,
+            height = 0U,
+            nativeRendererOwnsSurface = true,
+            managedAttachAllowed = false,
+            reason = "No managed viewport surface transport is available in this headless bridge session.",
         },
         capabilities = Array.Empty<int>(),
     };
