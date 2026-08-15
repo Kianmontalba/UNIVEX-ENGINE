@@ -41,6 +41,40 @@ TEST(EditorBridgeUVETest, EntityRefUVE_ValidatesTheFullGenerationalIdentity) {
     EXPECT_TRUE(ordinaryEntity.IsValidUVE());
 }
 
+TEST(EditorBridgeUVETest, ReadScriptRuntimeUVE_IsAdvertisedAndReadOnly) {
+    Core::EngineCoreUVE engine(MakeBridgeTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_bridge_script_runtime_request.uvescene");
+        editor.InitUVE();
+        EditorBridgeUVE bridge(editor);
+        const EditorBridgeSnapshotUVE initial = bridge.GetSnapshotUVE();
+
+        bool advertised = false;
+        for (const EditorBridgeCapabilityUVE capability : initial.capabilities) {
+            advertised = advertised || capability == EditorBridgeCapabilityUVE::ReadScriptRuntime;
+        }
+        ASSERT_TRUE(advertised);
+
+        EditorBridgeRequestUVE request{};
+        request.protocolVersion = kEditorBridgeProtocolVersionUVE;
+        request.requestId = 77U;
+        request.expectedRevision = initial.revision + 100U;
+        request.kind = EditorBridgeRequestKindUVE::ReadScriptRuntime;
+        const EditorBridgeResponseUVE response = bridge.DispatchUVE(request);
+
+        EXPECT_TRUE(response.applied);
+        EXPECT_EQ(response.code, "bridge.script_runtime.snapshot.read");
+        EXPECT_EQ(response.snapshot.revision, initial.revision);
+        EXPECT_FALSE(response.snapshot.scriptRuntime.available);
+        EXPECT_EQ(response.snapshot.scriptRuntime.instanceCount, 0U);
+
+        editor.ShutdownUVE();
+    }
+    engine.Shutdown();
+}
+
 TEST(EditorBridgeUVETest, SnapshotUVE_ObservesNativeEditorChangesAndIncrementsRevision) {
     Core::EngineCoreUVE engine(MakeBridgeTestConfigUVE());
     engine.Init();

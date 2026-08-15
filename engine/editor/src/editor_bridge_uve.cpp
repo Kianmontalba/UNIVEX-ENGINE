@@ -51,6 +51,7 @@ namespace {
         EditorBridgeCapabilityUVE::SetDeveloperConsoleCompletionPrefix,
         EditorBridgeCapabilityUVE::MoveDeveloperConsoleHistory,
         EditorBridgeCapabilityUVE::SelectDataTablePreview,
+        EditorBridgeCapabilityUVE::ReadScriptRuntime,
     };
     return capabilities;
 }
@@ -60,7 +61,8 @@ namespace {
            kind != EditorBridgeRequestKindUVE::ReadViewportSurface &&
            kind != EditorBridgeRequestKindUVE::ReadVisualScriptCanvas &&
            kind != EditorBridgeRequestKindUVE::ReadVisualScriptDebugger &&
-           kind != EditorBridgeRequestKindUVE::ReadDeveloperConsole;
+           kind != EditorBridgeRequestKindUVE::ReadDeveloperConsole &&
+           kind != EditorBridgeRequestKindUVE::ReadScriptRuntime;
 }
 
 [[nodiscard]] bool IsVisualScriptMutationRequestUVE(const EditorBridgeRequestKindUVE kind) noexcept {
@@ -207,6 +209,10 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
     if (request.kind == EditorBridgeRequestKindUVE::ReadDeveloperConsole) {
         return MakeResponseUVE(request, true, "bridge.developer_console.snapshot.read",
                                "The bounded developer-console snapshot was copied.");
+    }
+    if (request.kind == EditorBridgeRequestKindUVE::ReadScriptRuntime) {
+        return MakeResponseUVE(request, true, "bridge.script_runtime.snapshot.read",
+                               "The bounded ScriptRuntime snapshot was copied.");
     }
     if (m_editor->GetStateUVE() != EditorStateUVE::Running) {
         return MakeResponseUVE(request, false, "bridge.editor.not_running",
@@ -629,6 +635,10 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
         case EditorBridgeRequestKindUVE::ReadDeveloperConsole:
             code = "bridge.developer_console.snapshot.read";
             message = "The bounded developer-console snapshot was copied.";
+            break;
+        case EditorBridgeRequestKindUVE::ReadScriptRuntime:
+            code = "bridge.script_runtime.snapshot.read";
+            message = "The bounded ScriptRuntime snapshot was copied.";
             break;
         case EditorBridgeRequestKindUVE::ReadSnapshot:
             break;

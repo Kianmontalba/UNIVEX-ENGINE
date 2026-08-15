@@ -577,6 +577,9 @@ enum class FrameReadResultUVE : std::uint8_t {
     if (value == "selectDataTablePreview") {
         return EditorBridgeRequestKindUVE::SelectDataTablePreview;
     }
+    if (value == "readScriptRuntime") {
+        return EditorBridgeRequestKindUVE::ReadScriptRuntime;
+    }
     return std::nullopt;
 }
 

@@ -167,6 +167,40 @@ public sealed class BridgeProtocolClientTests
     }
 
     [Fact]
+    public async Task DispatchAsync_WritesReadScriptRuntimeRequest()
+    {
+        await using MemoryStream input = BuildFrames(new
+        {
+            jsonrpc = "2.0",
+            id = 1,
+            result = new
+            {
+                protocolVersion = BridgeProtocolClient.ProtocolVersion,
+                requestId = 1UL,
+                applied = true,
+                code = "bridge.script_runtime.snapshot.read",
+                message = "The bounded ScriptRuntime snapshot was copied.",
+                snapshot = Snapshot(sceneDirty: false),
+                createdEntity = (object?)null,
+            },
+        });
+        await using MemoryStream output = new();
+        await using BridgeProtocolClient client = new(input, output);
+
+        BridgeCommandResult result = await client.DispatchAsync(
+            new BridgeCommand(999UL, "readScriptRuntime"), CancellationToken.None);
+
+        Assert.True(result.Applied);
+        Assert.Equal("bridge.script_runtime.snapshot.read", result.Code);
+        Assert.True(result.Snapshot.ScriptRuntime.IsAvailable);
+        output.Position = 0;
+        using JsonDocument request = JsonDocument.Parse(await ReadFrameAsync(output));
+        JsonElement parameters = request.RootElement.GetProperty("params");
+        Assert.Equal("readScriptRuntime", parameters.GetProperty("kind").GetString());
+        Assert.Equal(999UL, parameters.GetProperty("expectedRevision").GetUInt64());
+    }
+
+    [Fact]
     public async Task DispatchAsync_WritesDataTablePreviewSelectionPayload()
     {
         await using MemoryStream input = BuildFrames(new
