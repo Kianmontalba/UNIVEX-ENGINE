@@ -460,6 +460,7 @@ public partial class MainWindow : Window
             RenderContentBrowser(snapshot.ContentBrowser);
             RenderViewportSurface(snapshot.ViewportSurface);
             RenderVisualScripting(snapshot.VisualScripting, snapshot.Revision);
+            RenderScriptRuntime(snapshot.ScriptRuntime);
             RenderDeveloperConsole(snapshot.DeveloperConsole);
             RenderDataTableCatalog(snapshot.DataTableCatalog, snapshot.DataTablePreview);
             RenderDataTablePreview(snapshot.DataTablePreview);
@@ -509,6 +510,21 @@ public partial class MainWindow : Window
         return $"Debugger state {debugger.State}; instruction {debugger.InstructionIndex}; source node {sourceNode}; " +
                $"{debugger.ExecutedInstructions} executed; {debugger.BreakpointNodeIds.Count} breakpoint(s)." +
                $"{pauseReason} {debugger.Reason}";
+    }
+
+    private void RenderScriptRuntime(BridgeScriptRuntimeSnapshot runtime)
+    {
+        ScriptRuntimeInstancesListBox.ItemsSource = runtime.Entries;
+        if (!runtime.IsAvailable)
+        {
+            ScriptRuntimeStatusTextBlock.Text = "ScriptRuntime unavailable in this bridge session; no native instance metadata was copied.";
+            return;
+        }
+
+        string truncation = runtime.EntriesTruncated ? " The native bridge truncated the copied instance list." : string.Empty;
+        ScriptRuntimeStatusTextBlock.Text =
+            $"{runtime.InstanceCount} native ScriptRuntime instance(s); {runtime.Entries.Count} visible copied row(s). " +
+            $"Instance rows include generational identity, program version, instruction/state counts, and enabled state.{truncation}";
     }
 
     private void RenderDeveloperConsole(BridgeDeveloperConsoleSnapshot console)

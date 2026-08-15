@@ -53,6 +53,16 @@ public sealed class VisualScriptCanvasControlTests
     }
 
     [Fact]
+    public void ScriptRuntimeInstanceEntry_DisplayTextPresentsCopiedExecutionFacts()
+    {
+        BridgeScriptRuntimeInstanceEntry entry = new(7U, 3U, 9UL, 4U, 12, 2, true);
+
+        Assert.Equal("Entity 7:3 · generation 9 · program v4 · 12 instruction(s) · 2 state value(s) · enabled",
+            entry.DisplayText);
+        Assert.Contains("disabled", new BridgeScriptRuntimeInstanceEntry(8U, 1U, 10UL, 5U, 3, 0, false).DisplayText);
+    }
+
+    [Fact]
     public void EmptySnapshot_HitTestingDoesNotInventManagedNodes()
     {
         VisualScriptCanvasControl control = CreateControl();
