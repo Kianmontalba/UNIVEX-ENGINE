@@ -279,6 +279,36 @@ TEST(DeveloperConsoleUVE, CompletionAndSeverityFilterAreNativeDeterministicFacts
     EXPECT_EQ(filtered.output.front().severity, DeveloperConsoleSeverityUVE::Error);
 }
 
+TEST(DeveloperConsoleUVE, MoveHistoryDetailedUVEReturnsStructuredDiagnostics) {
+    DeveloperConsoleUVE empty;
+    const DeveloperConsoleHistoryNavigationResultUVE emptyHistory = empty.MoveHistoryDetailedUVE(-1);
+    EXPECT_EQ(emptyHistory.code, DeveloperConsoleHistoryNavigationCodeUVE::EmptyHistory);
+    EXPECT_FALSE(emptyHistory.IsAcceptedUVE());
+    EXPECT_FALSE(emptyHistory.message.empty());
+
+    ASSERT_TRUE(empty.ExecuteUVE("help"));
+    const DeveloperConsoleHistoryNavigationResultUVE invalidDelta = empty.MoveHistoryDetailedUVE(0);
+    EXPECT_EQ(invalidDelta.code, DeveloperConsoleHistoryNavigationCodeUVE::InvalidDelta);
+    EXPECT_FALSE(invalidDelta.IsAcceptedUVE());
+    EXPECT_FALSE(invalidDelta.message.empty());
+
+    const DeveloperConsoleHistoryNavigationResultUVE applied = empty.MoveHistoryDetailedUVE(-1);
+    EXPECT_EQ(applied.code, DeveloperConsoleHistoryNavigationCodeUVE::Applied);
+    EXPECT_TRUE(applied.IsAcceptedUVE());
+    EXPECT_TRUE(empty.MoveHistoryUVE(1));
+
+    const DeveloperConsoleHistoryNavigationResultUVE boundary = empty.MoveHistoryDetailedUVE(1);
+    EXPECT_EQ(boundary.code, DeveloperConsoleHistoryNavigationCodeUVE::Boundary);
+    EXPECT_FALSE(boundary.IsAcceptedUVE());
+    EXPECT_FALSE(boundary.message.empty());
+
+    DeveloperConsoleUVE shipping(DeveloperConsoleBuildPolicyUVE::Shipping);
+    const DeveloperConsoleHistoryNavigationResultUVE unavailable = shipping.MoveHistoryDetailedUVE(-1);
+    EXPECT_EQ(unavailable.code, DeveloperConsoleHistoryNavigationCodeUVE::Unavailable);
+    EXPECT_FALSE(unavailable.IsAcceptedUVE());
+    EXPECT_FALSE(unavailable.message.empty());
+}
+
 TEST(DeveloperConsoleUVE, HistoryCursorAndShippingPolicyAreExplicit) {
     DeveloperConsoleUVE console;
     ASSERT_TRUE(console.ExecuteUVE("help"));
