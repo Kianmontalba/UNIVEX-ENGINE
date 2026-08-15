@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -79,8 +80,6 @@ private:
         std::uint64_t generation = 0U;
         bool scopeOpen = false;
     };
-
-    [[nodiscard]] static bool IsValidIdentifierUVE(const std::string& value) noexcept;
 
     std::unordered_map<std::string, EntryUVE> m_entries;
     std::uint64_t m_nextGeneration = 1U;
