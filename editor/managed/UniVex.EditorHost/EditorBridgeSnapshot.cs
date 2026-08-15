@@ -196,7 +196,13 @@ public sealed record BridgeScriptRuntimeInstanceEntry(
     uint ProgramVersion,
     int InstructionCount,
     int StateValueCount,
-    bool Enabled);
+    bool Enabled)
+{
+    public string DisplayText =>
+        $"Entity {EntityIndex}:{EntityGeneration} · generation {Generation} · program v{ProgramVersion} · " +
+        $"{InstructionCount} instruction(s) · {StateValueCount} state value(s) · " +
+        (Enabled ? "enabled" : "disabled");
+}
 
 public sealed record BridgeScriptRuntimeSnapshot(
     bool IsAvailable,

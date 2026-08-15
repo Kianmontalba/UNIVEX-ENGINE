@@ -103,7 +103,7 @@
                             </Border>
                         </TabItem>
                         <TabItem Header="Scripting">
-                            <Grid RowDefinitions="Auto,Auto,Auto,*,Auto" RowSpacing="8">
+                            <Grid RowDefinitions="Auto,Auto,Auto,Auto,*,Auto" RowSpacing="8">
                                 <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="8">
                                     <Button Content="Undo" Click="VisualScriptUndoButton_OnClick" />
                                     <Button Grid.Column="1" Content="Redo" Click="VisualScriptRedoButton_OnClick" />
@@ -117,8 +117,20 @@
                                         <ListBox x:Name="VisualScriptingBreakpointsListBox" MaxHeight="68" MinWidth="180" IsHitTestVisible="False" />
                                     </StackPanel>
                                 </Border>
-                                <local:VisualScriptCanvasControl x:Name="VisualScriptCanvas" Grid.Row="3" MinHeight="280" />
-                                <TextBlock Grid.Row="4" Text="C# renders copied DTOs only. Graph mutation, validation, history, compiler, VM, runtime, and resources remain native C++." TextWrapping="Wrap" Opacity="0.68" />
+                                <Border Grid.Row="3" Padding="6" Background="#20242B" BorderBrush="#394150" BorderThickness="1" CornerRadius="3">
+                                    <Grid RowDefinitions="Auto,*" RowSpacing="4">
+                                        <TextBlock x:Name="ScriptRuntimeStatusTextBlock" Text="Connect to read native ScriptRuntime instances." TextWrapping="Wrap" Opacity="0.76" />
+                                        <ListBox x:Name="ScriptRuntimeInstancesListBox" Grid.Row="1" MaxHeight="112" IsHitTestVisible="False">
+                                            <ListBox.ItemTemplate>
+                                                <DataTemplate>
+                                                    <TextBlock Text="{Binding DisplayText}" TextWrapping="Wrap" />
+                                                </DataTemplate>
+                                            </ListBox.ItemTemplate>
+                                        </ListBox>
+                                    </Grid>
+                                </Border>
+                                <local:VisualScriptCanvasControl x:Name="VisualScriptCanvas" Grid.Row="4" MinHeight="280" />
+                                <TextBlock Grid.Row="5" Text="C# renders copied DTOs only. Graph mutation, validation, history, compiler, VM, runtime, and resources remain native C++." TextWrapping="Wrap" Opacity="0.68" />
                             </Grid>
                         </TabItem>
                     </TabControl>
