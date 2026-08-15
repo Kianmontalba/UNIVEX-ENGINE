@@ -1,4 +1,5 @@
 // Copyright (c) 2026 UniVex Studios. All Rights Reserved.
+#include "uve/scripting/script_bytecode_uve.h"
 #include "uve/scripting/script_compiler_ir_uve.h"
 #include "uve/scripting/script_graph_uve.h"
 
@@ -171,6 +172,44 @@ TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsInvalidGraphWitho
     EXPECT_FALSE(result.program.has_value());
     ASSERT_EQ(result.diagnostics.size(), 1U);
     EXPECT_EQ(result.diagnostics[0].code, ScriptValidationCodeUVE::UnknownNodeType);
+}
+
+} // namespace UVE::Scripting
+
+
+namespace UVE::Scripting {
+
+TEST(ScriptBytecodeUVETest, EncodeDecodeScriptBytecodeUVE_RoundTripsVersionedProgram) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 4U, 0U, "test.source", {}, {}});
+    program.instructions.push_back({ScriptIrInstructionKindUVE::TransferValue, 4U, 9U, {}, "Out", "In"});
+    std::vector<ScriptBytecodeDiagnosticUVE> diagnostics;
+    const std::vector<std::uint8_t> bytes = EncodeScriptBytecodeUVE(program, diagnostics);
+    ASSERT_TRUE(diagnostics.empty());
+    const ScriptBytecodeDecodeResultUVE decoded = DecodeScriptBytecodeUVE(bytes);
+    ASSERT_TRUE(decoded.IsSuccessUVE());
+    ASSERT_EQ(decoded.program->instructions.size(), 2U);
+    EXPECT_EQ(decoded.program->instructions[0].nodeTypeId, "test.source");
+    EXPECT_EQ(decoded.program->instructions[1].sourcePinName, "Out");
+}
+
+TEST(ScriptBytecodeUVETest, DecodeScriptBytecodeUVE_RejectsCorruptHeadersAndTruncation) {
+    const ScriptBytecodeDecodeResultUVE badMagic = DecodeScriptBytecodeUVE({0U, 1U, 2U, 3U});
+    ASSERT_FALSE(badMagic.IsSuccessUVE());
+    ASSERT_EQ(badMagic.diagnostics.size(), 1U);
+    EXPECT_EQ(badMagic.diagnostics[0].code, ScriptBytecodeDiagnosticCodeUVE::InvalidMagic);
+    const ScriptBytecodeDecodeResultUVE truncated = DecodeScriptBytecodeUVE({'U', 'V', 'E', 'S', 1U, 0U, 0U, 0U});
+    ASSERT_FALSE(truncated.IsSuccessUVE());
+    EXPECT_EQ(truncated.diagnostics[0].code, ScriptBytecodeDiagnosticCodeUVE::Truncated);
+}
+
+TEST(ScriptBytecodeUVETest, EncodeScriptBytecodeUVE_RejectsInstructionLimit) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.resize(ScriptBytecodeProgramUVE::kMaximumInstructionsUVE + 1U);
+    std::vector<ScriptBytecodeDiagnosticUVE> diagnostics;
+    EXPECT_TRUE(EncodeScriptBytecodeUVE(program, diagnostics).empty());
+    ASSERT_EQ(diagnostics.size(), 1U);
+    EXPECT_EQ(diagnostics[0].code, ScriptBytecodeDiagnosticCodeUVE::InstructionLimitExceeded);
 }
 
 } // namespace UVE::Scripting

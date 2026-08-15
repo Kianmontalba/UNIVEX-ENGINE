@@ -1481,3 +1481,8 @@ Increment 75 deliberately does not introduce a bytecode VM, engine-call binding 
 ## Visual Scripting Compiler IR v1 (Increment 76)
 
 `CompileScriptGraphToIrUVE()` is a validation-first, native-only lowering seam. An invalid graph returns diagnostics and no partial IR program. A valid program carries an explicit version, deterministic instruction order, and one source-node mapping entry per instruction. Node execution records are ordered by ascending stable node ID; value-transfer records are ordered by output node/pin and then input node/pin. The IR is descriptive and non-executable in this increment: it does not own engine calls, ECS state, bytecode memory, or a managed runtime. Later bytecode and VM increments must consume this versioned boundary rather than reinterpreting authored graph data independently.
+
+
+## Versioned Visual Script Bytecode v1 (Increment 77)
+
+`ScriptBytecodeProgramUVE` is a bounded, versioned native program container. Encoded data begins with explicit `UVES` magic, a fixed-width little-endian version, and an instruction count; decoding validates magic, version, truncation, instruction count, instruction kind, and trailing bytes before publishing a program. The current instruction cap is `kMaximumInstructionsUVE`; malformed or oversized input returns diagnostics and never allocates an unbounded instruction list. The format is a transport/storage boundary only in this increment: execution belongs to the later VM, and engine-call bindings do not enter bytecode implicitly.
