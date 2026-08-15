@@ -169,7 +169,37 @@ public sealed class BridgeProtocolClientTests
     [Fact]
     public void ReadScriptRuntimeCapability_UsesAppendOnlyProtocolId()
     {
-        Assert.Equal((byte)36, BridgeSnapshotParser.ReadScriptRuntimeCapability);
+        Assert.Equal((byte)76, BridgeSnapshotParser.ReadScriptRuntimeCapability);
+        Assert.Equal((byte)77, BridgeSnapshotParser.ReadScriptRuntimeTickDiagnosticsCapability);
+    }
+
+    [Fact]
+    public void ScriptRuntimeTickSummary_ParsesValidSummaryAndFallsBackToEmpty()
+    {
+        using JsonDocument validDocument = JsonDocument.Parse(JsonSerializer.Serialize(new
+        {
+            available = true,
+            reason = "The native ScriptRuntime diagnostic tick completed.",
+            enabledInstanceCount = 3,
+            completedCount = 2,
+            instructionBudgetExceededCount = 1,
+            invalidInstructionCount = 0,
+            diagnosticCount = 1,
+        }));
+        BridgeScriptRuntimeTickSummary valid = BridgeSnapshotParser.ParseTickSummaryForResponse(validDocument.RootElement);
+        Assert.True(valid.IsAvailable);
+        Assert.Equal("The native ScriptRuntime diagnostic tick completed.", valid.Reason);
+        Assert.Equal(3, valid.EnabledInstanceCount);
+        Assert.Equal(2, valid.CompletedCount);
+        Assert.Equal(1, valid.InstructionBudgetExceededCount);
+        Assert.Equal(0, valid.InvalidInstructionCount);
+        Assert.Equal(1, valid.DiagnosticCount);
+
+        using JsonDocument snapshotDocument = JsonDocument.Parse(JsonSerializer.Serialize(Snapshot(sceneDirty: false)));
+        BridgeEditorSnapshot fallback = BridgeSnapshotParser.Parse(snapshotDocument.RootElement);
+        Assert.False(fallback.ScriptRuntimeTickSummary.IsAvailable);
+        Assert.Equal(0, fallback.ScriptRuntimeTickSummary.EnabledInstanceCount);
+        Assert.Contains("has been requested", fallback.ScriptRuntimeTickSummary.Reason);
     }
 
     [Fact]

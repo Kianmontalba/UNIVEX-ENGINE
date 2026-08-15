@@ -119,11 +119,12 @@
                                 </Border>
                                 <Border Grid.Row="3" Padding="6" Background="#20242B" BorderBrush="#394150" BorderThickness="1" CornerRadius="3">
                                     <Grid RowDefinitions="Auto,*,Auto,Auto" RowSpacing="4">
-                                        <Grid ColumnDefinitions="*,180,Auto,Auto" ColumnSpacing="8">
+                                        <Grid ColumnDefinitions="*,180,Auto,Auto,Auto" ColumnSpacing="8">
                                             <TextBlock x:Name="ScriptRuntimeStatusTextBlock" Text="Connect to read native ScriptRuntime instances." TextWrapping="Wrap" Opacity="0.76" />
                                             <TextBox x:Name="ScriptRuntimeFilterTextBox" Grid.Column="1" Watermark="Filter copied instances" TextChanged="ScriptRuntimeFilterTextBox_OnTextChanged" />
                                             <Button x:Name="ScriptRuntimeClearFilterButton" Grid.Column="2" Content="Clear" Click="ScriptRuntimeClearFilterButton_OnClick" />
                                             <Button x:Name="ScriptRuntimeRefreshButton" Grid.Column="3" Content="Refresh runtime" Click="ScriptRuntimeRefreshButton_OnClick" IsEnabled="False" />
+                                            <Button x:Name="ScriptRuntimeTickButton" Grid.Column="4" Content="Tick diagnostics" Click="ScriptRuntimeTickButton_OnClick" IsEnabled="False" />
                                         </Grid>
                                         <ListBox x:Name="ScriptRuntimeInstancesListBox" Grid.Row="1" MaxHeight="112" SelectionMode="Single" SelectionChanged="ScriptRuntimeInstancesListBox_OnSelectionChanged">
                                             <ListBox.ItemTemplate>

@@ -220,6 +220,15 @@ public sealed record BridgeScriptRuntimeSnapshot(
     public int CountMatchingEntries(string? filter) => Entries.Count(entry => entry.MatchesFilter(filter));
 }
 
+public sealed record BridgeScriptRuntimeTickSummary(
+    bool IsAvailable,
+    string Reason,
+    int EnabledInstanceCount,
+    int CompletedCount,
+    int InstructionBudgetExceededCount,
+    int InvalidInstructionCount,
+    int DiagnosticCount);
+
 public sealed record BridgeDataTableCatalogEntry(
     string Name,
     ulong Generation,
@@ -289,6 +298,7 @@ public sealed record BridgeEditorSnapshot(
     BridgeVisualScriptingSnapshot VisualScripting,
     BridgeDeveloperConsoleSnapshot DeveloperConsole,
     BridgeScriptRuntimeSnapshot ScriptRuntime,
+    BridgeScriptRuntimeTickSummary ScriptRuntimeTickSummary,
     BridgeDataTableCatalogSnapshot DataTableCatalog,
     BridgeDataTablePreviewSnapshot DataTablePreview,
     IReadOnlyList<byte> Capabilities);
@@ -331,8 +341,10 @@ public static class BridgeSnapshotParser
 {
     public const int MaximumPanelEntries = 128;
     public const int MaximumPresentationTextBytes = 256;
-    // Capability IDs are append-only protocol values; 36 is ReadScriptRuntime after Increment 129.
-    public const byte ReadScriptRuntimeCapability = 36;
+    // Capability IDs are append-only protocol values; 76 is ReadScriptRuntime and 77 is the
+    // explicit copied ScriptRuntime tick-diagnostics request.
+    public const byte ReadScriptRuntimeCapability = 76;
+    public const byte ReadScriptRuntimeTickDiagnosticsCapability = 77;
     public const int MaximumContentPathBytes = 4096;
 
     public static BridgeEditorSnapshot Parse(JsonElement value)
@@ -369,6 +381,9 @@ public static class BridgeSnapshotParser
                 value.TryGetProperty("scriptRuntime", out JsonElement scriptRuntimeValue) && scriptRuntimeValue.ValueKind != JsonValueKind.Null
                     ? ParseScriptRuntime(scriptRuntimeValue)
                     : EmptyScriptRuntime(),
+                value.TryGetProperty("scriptRuntimeTickSummary", out JsonElement tickSummaryValue) && tickSummaryValue.ValueKind != JsonValueKind.Null
+                    ? ParseTickSummary(tickSummaryValue)
+                    : EmptyTickSummary(),
                 value.TryGetProperty("dataTableCatalog", out JsonElement catalogValue) && catalogValue.ValueKind != JsonValueKind.Null
                     ? ParseDataTableCatalog(catalogValue)
                     : EmptyDataTableCatalog(),
@@ -493,6 +508,30 @@ public static class BridgeSnapshotParser
             : "No native ScriptRuntime is attached to this bridge session.");
         return new BridgeScriptRuntimeSnapshot(
             available, instanceCount, RequiredBoolean(value, "entriesTruncated"), reason, parsed);
+    }
+
+    private static BridgeScriptRuntimeTickSummary EmptyTickSummary() =>
+        new(false, "No ScriptRuntime diagnostic tick has been requested.", 0, 0, 0, 0, 0);
+
+    public static BridgeScriptRuntimeTickSummary ParseTickSummaryForResponse(JsonElement value) => ParseTickSummary(value);
+
+    private static BridgeScriptRuntimeTickSummary ParseTickSummary(JsonElement value)
+    {
+        RequireObject(value, "scriptRuntimeTickSummary");
+        int enabledInstanceCount = RequiredInt32(value, "enabledInstanceCount");
+        int completedCount = RequiredInt32(value, "completedCount");
+        int instructionBudgetExceededCount = RequiredInt32(value, "instructionBudgetExceededCount");
+        int invalidInstructionCount = RequiredInt32(value, "invalidInstructionCount");
+        int diagnosticCount = RequiredInt32(value, "diagnosticCount");
+        if (enabledInstanceCount < 0 || completedCount < 0 || instructionBudgetExceededCount < 0 ||
+            invalidInstructionCount < 0 || diagnosticCount < 0)
+        {
+            throw Invalid("ScriptRuntime diagnostic tick counts must be non-negative.");
+        }
+        return new BridgeScriptRuntimeTickSummary(
+            RequiredBoolean(value, "available"), RequiredBoundedString(value, "reason"),
+            enabledInstanceCount, completedCount, instructionBudgetExceededCount,
+            invalidInstructionCount, diagnosticCount);
     }
 
     private static BridgeDataTableCatalogSnapshot EmptyDataTableCatalog() =>
