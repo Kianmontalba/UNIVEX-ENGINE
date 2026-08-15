@@ -92,6 +92,7 @@ add_executable(uve_tests
     core/engine_services_uve_tests.cpp
     core/version_uve_tests.cpp
     core/type_metadata_uve_tests.cpp
+    core/time_pose_contract_uve_tests.cpp
     editor/editor_tool_session_uve_tests.cpp
     editor/editor_bridge_stdio_uve_tests.cpp
     editor/editor_bridge_uve_tests.cpp
