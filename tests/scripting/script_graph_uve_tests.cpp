@@ -69,6 +69,42 @@ TEST(ScriptNodeRegistryUVETest, FindNodeTypeUVE_ReturnsCopiedStableDescriptorVie
     EXPECT_EQ(registry.FindNodeTypeUVE("missing"), nullptr);
 }
 
+TEST(ScriptNodeRegistryUVETest, DescriptorV2_PreservesPresentationMetadataAndOrdersDescriptorsDeterministically) {
+    ScriptNodeRegistryUVE registry;
+    ScriptNodeTypeDescriptorUVE late{
+        "test.late", "Late", {{"Value", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number,
+                                  ScriptPinRoleUVE::Data, std::string("0.016")}},
+        "FLOW", "node.branch", 20U, kScriptNodePresentationFlagCollapsibleUVE};
+    ScriptNodeTypeDescriptorUVE early{
+        "test.early", "Early", {{"Exec", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Execution}},
+        "EVENT", "node.event", 10U, kScriptNodePresentationFlagCompactUVE};
+    ASSERT_TRUE(registry.RegisterNodeTypeUVE(late));
+    ASSERT_TRUE(registry.RegisterNodeTypeUVE(early));
+
+    const ScriptNodeTypeDescriptorUVE* found = registry.FindNodeTypeUVE("test.late");
+    ASSERT_NE(found, nullptr);
+    EXPECT_EQ(found->category, "FLOW");
+    EXPECT_EQ(found->iconId, "node.branch");
+    EXPECT_EQ(found->displayOrder, 20U);
+    EXPECT_EQ(found->presentationFlags, kScriptNodePresentationFlagCollapsibleUVE);
+    ASSERT_EQ(found->pins.size(), 1U);
+    EXPECT_EQ(found->pins[0].defaultValue, std::optional<std::string>("0.016"));
+
+    const std::vector<ScriptNodeTypeDescriptorUVE> ordered = registry.GetNodeTypeDescriptorsUVE();
+    ASSERT_EQ(ordered.size(), 2U);
+    EXPECT_EQ(ordered[0].typeId, "test.early");
+    EXPECT_EQ(ordered[1].typeId, "test.late");
+    EXPECT_EQ(ordered[0].pins[0].role, ScriptPinRoleUVE::Execution);
+}
+
+TEST(ScriptNodeRegistryUVETest, DescriptorV2_RejectsExecutionDefaultValues) {
+    ScriptNodeRegistryUVE registry;
+    EXPECT_FALSE(registry.RegisterNodeTypeUVE({
+        "test.invalid-exec-default", "Invalid", {{"Exec", ScriptPinDirectionUVE::Output,
+                                                     ScriptValueTypeUVE::Execution, ScriptPinRoleUVE::Execution,
+                                                     std::string("true")}}}));
+}
+
 TEST(ScriptGraphUVETest, AddNodeUVE_RejectsEmptyTypeAndDuplicateIdsWithoutMutation) {
     ScriptGraphUVE graph;
     EXPECT_FALSE(graph.AddNodeUVE({1U, ""}));
@@ -742,6 +778,9 @@ TEST(ScriptGraphCanvasUVETest, SnapshotProvidesSortedPaletteAndTypedNodePins) {
     ASSERT_EQ(snapshot.nodes[0].pins.size(), 2U);
     EXPECT_EQ(snapshot.nodes[0].pins[0].name, "In");
     EXPECT_EQ(snapshot.nodes[0].pins[0].direction, ScriptPinDirectionUVE::Input);
+    EXPECT_EQ(snapshot.nodes[0].category, "Uncategorized");
+    EXPECT_EQ(snapshot.nodes[0].iconId, "node.default");
+    EXPECT_EQ(snapshot.nodes[0].pins[0].role, ScriptPinRoleUVE::Data);
 }
 
 } // namespace UVE::Scripting

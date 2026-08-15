@@ -385,6 +385,12 @@ ScriptGraphCanvasSnapshotUVE ScriptGraphCanvasUVE::GetSnapshotUVE() const {
         nodeSnapshot.id = node.id;
         nodeSnapshot.typeId = node.typeId;
         nodeSnapshot.displayName = descriptor == nullptr ? node.typeId : descriptor->displayName;
+        if (descriptor != nullptr) {
+            nodeSnapshot.category = descriptor->category;
+            nodeSnapshot.iconId = descriptor->iconId;
+            nodeSnapshot.displayOrder = descriptor->displayOrder;
+            nodeSnapshot.presentationFlags = descriptor->presentationFlags;
+        }
         if (const LayoutEntryUVE* layout = FindLayoutUVE(node.id); layout != nullptr) {
             nodeSnapshot.position = layout->position;
         }
@@ -392,7 +398,8 @@ ScriptGraphCanvasSnapshotUVE ScriptGraphCanvasUVE::GetSnapshotUVE() const {
         if (descriptor != nullptr) {
             nodeSnapshot.pins.reserve(descriptor->pins.size());
             for (const ScriptPinDescriptorUVE& pin : descriptor->pins) {
-                nodeSnapshot.pins.push_back(ScriptGraphCanvasPinSnapshotUVE{pin.name, pin.direction, pin.type});
+                nodeSnapshot.pins.push_back(ScriptGraphCanvasPinSnapshotUVE{
+                    pin.name, pin.direction, pin.type, pin.role, pin.defaultValue});
             }
         }
         snapshot.nodes.push_back(std::move(nodeSnapshot));
@@ -410,7 +417,12 @@ ScriptGraphCanvasSnapshotUVE ScriptGraphCanvasUVE::GetSnapshotUVE() const {
     snapshot.selectedNodeIds.assign(m_selection.begin(), m_selection.begin() +
                                                    static_cast<std::ptrdiff_t>(selectionCount));
 
-    std::vector<std::string> palette = m_registry->GetNodeTypeIdsUVE();
+    const std::vector<ScriptNodeTypeDescriptorUVE> descriptors = m_registry->GetNodeTypeDescriptorsUVE();
+    std::vector<std::string> palette;
+    palette.reserve(descriptors.size());
+    for (const ScriptNodeTypeDescriptorUVE& descriptor : descriptors) {
+        palette.push_back(descriptor.typeId);
+    }
     const std::size_t paletteCount = std::min(palette.size(), kMaximumScriptGraphCanvasEntriesUVE);
     snapshot.paletteNodeTypeIds.assign(palette.begin(), palette.begin() +
                                                     static_cast<std::ptrdiff_t>(paletteCount));

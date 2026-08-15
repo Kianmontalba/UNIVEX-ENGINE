@@ -222,7 +222,9 @@ enum class FrameReadResultUVE : std::uint8_t {
 
 [[nodiscard]] JsonUVE ToJsonUVE(const Scripting::ScriptGraphCanvasPinSnapshotUVE& pin) {
     return JsonUVE{{"name", pin.name}, {"direction", static_cast<std::uint8_t>(pin.direction)},
-                   {"type", static_cast<std::uint8_t>(pin.type)}};
+                   {"type", static_cast<std::uint8_t>(pin.type)},
+                   {"role", static_cast<std::uint8_t>(pin.role)},
+                   {"defaultValue", pin.defaultValue.has_value() ? JsonUVE(*pin.defaultValue) : JsonUVE(nullptr)}};
 }
 
 [[nodiscard]] JsonUVE ToJsonUVE(const Scripting::ScriptGraphCanvasNodeSnapshotUVE& node) {
@@ -231,6 +233,8 @@ enum class FrameReadResultUVE : std::uint8_t {
         pins.push_back(ToJsonUVE(pin));
     }
     return JsonUVE{{"id", node.id}, {"typeId", node.typeId}, {"displayName", node.displayName},
+                   {"category", node.category}, {"iconId", node.iconId},
+                   {"displayOrder", node.displayOrder}, {"presentationFlags", node.presentationFlags},
                    {"x", node.position.x}, {"y", node.position.y}, {"selected", node.selected},
                    {"pins", std::move(pins)}};
 }

@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <deque>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -36,6 +37,8 @@ struct ScriptGraphCanvasPinSnapshotUVE final {
     std::string name;
     ScriptPinDirectionUVE direction = ScriptPinDirectionUVE::Input;
     ScriptValueTypeUVE type = ScriptValueTypeUVE::Number;
+    ScriptPinRoleUVE role = ScriptPinRoleUVE::Data;
+    std::optional<std::string> defaultValue;
 
     [[nodiscard]] bool operator==(const ScriptGraphCanvasPinSnapshotUVE&) const = default;
 };
@@ -44,6 +47,10 @@ struct ScriptGraphCanvasNodeSnapshotUVE final {
     std::uint32_t id = 0U;
     std::string typeId;
     std::string displayName;
+    std::string category = "Uncategorized";
+    std::string iconId = "node.default";
+    std::uint32_t displayOrder = 0U;
+    std::uint32_t presentationFlags = kScriptNodePresentationFlagNoneUVE;
     ScriptGraphCanvasPointUVE position{};
     bool selected = false;
     std::vector<ScriptGraphCanvasPinSnapshotUVE> pins;

@@ -3,6 +3,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -26,6 +27,15 @@ enum class ScriptValueTypeUVE : std::uint8_t {
     Asset = 6,
 };
 
+enum class ScriptPinRoleUVE : std::uint8_t {
+    Execution = 0,
+    Data = 1,
+};
+
+inline constexpr std::uint32_t kScriptNodePresentationFlagNoneUVE = 0U;
+inline constexpr std::uint32_t kScriptNodePresentationFlagCompactUVE = 1U << 0U;
+inline constexpr std::uint32_t kScriptNodePresentationFlagCollapsibleUVE = 1U << 1U;
+
 enum class ScriptValidationCodeUVE : std::uint8_t {
     EmptyNodeType = 0,
     DuplicateNodeType,
@@ -46,12 +56,36 @@ struct ScriptPinDescriptorUVE final {
     std::string name;
     ScriptPinDirectionUVE direction = ScriptPinDirectionUVE::Input;
     ScriptValueTypeUVE type = ScriptValueTypeUVE::Number;
+    ScriptPinRoleUVE role = ScriptPinRoleUVE::Data;
+    std::optional<std::string> defaultValue;
+
+    ScriptPinDescriptorUVE() = default;
+    ScriptPinDescriptorUVE(std::string pinName, const ScriptPinDirectionUVE pinDirection,
+                          const ScriptValueTypeUVE pinType, const ScriptPinRoleUVE pinRole = ScriptPinRoleUVE::Data,
+                          std::optional<std::string> pinDefaultValue = std::nullopt)
+        : name(std::move(pinName)), direction(pinDirection), type(pinType), role(pinRole),
+          defaultValue(std::move(pinDefaultValue)) {}
 };
 
 struct ScriptNodeTypeDescriptorUVE final {
     std::string typeId;
     std::string displayName;
     std::vector<ScriptPinDescriptorUVE> pins;
+    std::string category = "Uncategorized";
+    std::string iconId = "node.default";
+    std::uint32_t displayOrder = 0U;
+    std::uint32_t presentationFlags = kScriptNodePresentationFlagNoneUVE;
+
+    ScriptNodeTypeDescriptorUVE() = default;
+    ScriptNodeTypeDescriptorUVE(std::string nodeTypeId, std::string nodeDisplayName,
+                               std::vector<ScriptPinDescriptorUVE> nodePins,
+                               std::string nodeCategory = "Uncategorized",
+                               std::string nodeIconId = "node.default",
+                               const std::uint32_t nodeDisplayOrder = 0U,
+                               const std::uint32_t nodePresentationFlags = kScriptNodePresentationFlagNoneUVE)
+        : typeId(std::move(nodeTypeId)), displayName(std::move(nodeDisplayName)), pins(std::move(nodePins)),
+          category(std::move(nodeCategory)), iconId(std::move(nodeIconId)), displayOrder(nodeDisplayOrder),
+          presentationFlags(nodePresentationFlags) {}
 };
 
 struct ScriptNodeUVE final {
@@ -91,6 +125,7 @@ public:
     [[nodiscard]] bool RegisterNodeTypeUVE(ScriptNodeTypeDescriptorUVE descriptor);
     [[nodiscard]] const ScriptNodeTypeDescriptorUVE* FindNodeTypeUVE(std::string_view typeId) const noexcept;
     [[nodiscard]] std::vector<std::string> GetNodeTypeIdsUVE() const;
+    [[nodiscard]] std::vector<ScriptNodeTypeDescriptorUVE> GetNodeTypeDescriptorsUVE() const;
     [[nodiscard]] std::size_t GetNodeTypeCountUVE() const noexcept;
 
 private:
