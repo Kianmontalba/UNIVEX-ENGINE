@@ -488,7 +488,7 @@ public partial class MainWindow : Window
             RenderContentBrowser(snapshot.ContentBrowser);
             RenderViewportSurface(snapshot.ViewportSurface);
             RenderVisualScripting(snapshot.VisualScripting, snapshot.Revision);
-            RenderScriptRuntime(snapshot.ScriptRuntime, snapshot.Capabilities.Contains(BridgeSnapshotParser.ReadScriptRuntimeCapability));
+            RenderScriptRuntime(snapshot.ScriptRuntime, snapshot.Capabilities.Contains(BridgeSnapshotParser.ReadScriptRuntimeCapability), snapshot.Revision);
             RenderDeveloperConsole(snapshot.DeveloperConsole);
             RenderDataTableCatalog(snapshot.DataTableCatalog, snapshot.DataTablePreview);
             RenderDataTablePreview(snapshot.DataTablePreview);
@@ -540,14 +540,14 @@ public partial class MainWindow : Window
                $"{pauseReason} {debugger.Reason}";
     }
 
-    private void RenderScriptRuntime(BridgeScriptRuntimeSnapshot runtime, bool requestAvailable)
+    private void RenderScriptRuntime(BridgeScriptRuntimeSnapshot runtime, bool requestAvailable, ulong bridgeRevision)
     {
         scriptRuntimeRequestAvailable = requestAvailable;
         ScriptRuntimeRefreshButton.IsEnabled = state == HostSessionState.Connected && requestAvailable;
         scriptRuntimeSnapshot = runtime;
         if (!runtime.IsAvailable)
         {
-            ScriptRuntimeStatusTextBlock.Text = runtime.Reason;
+            ScriptRuntimeStatusTextBlock.Text = $"Bridge revision {bridgeRevision}: {runtime.Reason}";
         }
         else
         {
@@ -556,7 +556,7 @@ public partial class MainWindow : Window
                 $"{runtime.InstanceCount} native ScriptRuntime instance(s); {runtime.Entries.Count} visible copied row(s) " +
                 $"({runtime.VisibleEnabledInstanceCount} enabled, {runtime.VisibleDisabledInstanceCount} disabled). " +
                 $"Instance rows include generational identity, program version, instruction/state counts, and enabled state. " +
-                $"{runtime.Reason}{truncation}";
+                $"Bridge revision {bridgeRevision}. {runtime.Reason}{truncation}";
         }
         ApplyScriptRuntimeFilter();
     }
