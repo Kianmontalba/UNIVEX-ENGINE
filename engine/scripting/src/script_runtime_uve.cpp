@@ -40,7 +40,7 @@ bool ScriptRuntimeUVE::AttachUVE(const Scene::EntityUVE entity, ScriptBytecodePr
         m_instances.size() >= kMaximumInstancesUVE || m_instances.contains(entity)) {
         return false;
     }
-    m_instances.emplace(entity, ScriptRuntimeInstanceUVE{entity, std::move(program), 1U, true});
+    m_instances.emplace(entity, ScriptRuntimeInstanceUVE{entity, std::move(program), {}, 1U, true});
     return true;
 }
 
@@ -48,20 +48,25 @@ ScriptRuntimeReloadResultUVE ScriptRuntimeUVE::ReloadUVE(const Scene::EntityUVE 
                                                           ScriptBytecodeProgramUVE program) {
     const auto iterator = m_instances.find(entity);
     if (iterator == m_instances.end()) {
-        return {ScriptRuntimeReloadCodeUVE::NoActiveInstance, 0U, false, {},
+        return {ScriptRuntimeReloadCodeUVE::NoActiveInstance, 0U, false, false, {},
                 "Runtime reload rejected because no active instance exists."};
     }
     const std::vector<ScriptBytecodeDiagnosticUVE> diagnostics = ValidateRuntimeProgramUVE(program);
     if (!diagnostics.empty()) {
-        return {ScriptRuntimeReloadCodeUVE::RejectedInvalidProgram, iterator->second.generation, true,
+        return {ScriptRuntimeReloadCodeUVE::RejectedInvalidProgram, iterator->second.generation, true, false,
                 diagnostics, "Runtime reload rejected; last-known-good program was retained."};
     }
+    const bool compatibleStatePreserved = iterator->second.program.version == program.version;
     iterator->second.program = std::move(program);
+    if (!compatibleStatePreserved) {
+        iterator->second.state.values.clear();
+    }
     if (iterator->second.generation < std::numeric_limits<std::uint64_t>::max()) {
         ++iterator->second.generation;
     }
-    return {ScriptRuntimeReloadCodeUVE::Accepted, iterator->second.generation, false, {},
-            "Runtime program reload accepted."};
+    return {ScriptRuntimeReloadCodeUVE::Accepted, iterator->second.generation, false, compatibleStatePreserved, {},
+            compatibleStatePreserved ? "Runtime program reload accepted; compatible state preserved."
+                                      : "Runtime program reload accepted; incompatible state was reset."};
 }
 
 bool ScriptRuntimeUVE::DetachUVE(const Scene::EntityUVE entity) noexcept {
@@ -75,6 +80,26 @@ bool ScriptRuntimeUVE::SetEnabledUVE(const Scene::EntityUVE entity, const bool e
     }
     iterator->second.enabled = enabled;
     return true;
+}
+
+bool ScriptRuntimeUVE::SetStateUVE(const Scene::EntityUVE entity, ScriptRuntimeStateUVE state) {
+    if (state.values.size() > kMaximumStateValuesUVE) {
+        return false;
+    }
+    const auto iterator = m_instances.find(entity);
+    if (iterator == m_instances.end()) {
+        return false;
+    }
+    iterator->second.state = std::move(state);
+    return true;
+}
+
+std::optional<ScriptRuntimeStateUVE> ScriptRuntimeUVE::GetStateUVE(const Scene::EntityUVE entity) const {
+    const auto iterator = m_instances.find(entity);
+    if (iterator == m_instances.end()) {
+        return std::nullopt;
+    }
+    return iterator->second.state;
 }
 
 bool ScriptRuntimeUVE::HasInstanceUVE(const Scene::EntityUVE entity) const noexcept {
