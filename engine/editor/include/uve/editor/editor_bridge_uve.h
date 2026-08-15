@@ -4,6 +4,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -149,6 +150,7 @@ struct EditorBridgeEntitySnapshotUVE final {
 /// The bridge deliberately bounds presentation records before serializing them. A client must show
 /// the explicit truncation fact and never infer that an omitted entry was deleted from the editor.
 inline constexpr std::size_t kEditorBridgeMaximumPanelEntriesUVE = 128U;
+inline constexpr std::size_t kEditorBridgeMaximumScriptRuntimeTickHistoryUVE = 8U;
 inline constexpr std::size_t kEditorBridgeMaximumPresentationTextBytesUVE = 256U;
 /// Relative content paths double as native-validated request identities, so they use a separate
 /// conservative bound rather than the shorter display-text bound. 128 such rows remain well below
@@ -331,6 +333,13 @@ struct EditorBridgeScriptRuntimeTickSummaryUVE final {
     [[nodiscard]] bool operator==(const EditorBridgeScriptRuntimeTickSummaryUVE&) const = default;
 };
 
+struct EditorBridgeScriptRuntimeTickHistoryEntryUVE final {
+    std::uint64_t sequence = 0U;
+    EditorBridgeScriptRuntimeTickSummaryUVE summary;
+
+    [[nodiscard]] bool operator==(const EditorBridgeScriptRuntimeTickHistoryEntryUVE&) const = default;
+};
+
 struct EditorBridgeDataTablePreviewSnapshotUVE final {
     bool available = false;
     std::uint64_t generation = 0U;
@@ -366,6 +375,8 @@ struct EditorBridgeSnapshotUVE final {
     EditorBridgeDeveloperConsoleSnapshotUVE developerConsole;
     EditorBridgeScriptRuntimeSnapshotUVE scriptRuntime;
     EditorBridgeScriptRuntimeTickSummaryUVE scriptRuntimeTickSummary;
+    bool scriptRuntimeTickHistoryTruncated = false;
+    std::vector<EditorBridgeScriptRuntimeTickHistoryEntryUVE> scriptRuntimeTickHistory;
     EditorBridgeDataTableCatalogSnapshotUVE dataTableCatalog;
     EditorBridgeDataTablePreviewSnapshotUVE dataTablePreview;
     std::vector<EditorBridgeCapabilityUVE> capabilities;
@@ -510,6 +521,9 @@ private:
     Asset::DataTableSnapshotUVE m_dataTablePreviewSnapshot;
     std::optional<ObservedStateUVE> m_lastObservedState;
     EditorBridgeScriptRuntimeTickSummaryUVE m_lastScriptRuntimeTickSummary;
+    std::deque<EditorBridgeScriptRuntimeTickHistoryEntryUVE> m_scriptRuntimeTickHistory;
+    bool m_scriptRuntimeTickHistoryTruncated = false;
+    std::uint64_t m_nextScriptRuntimeTickSequence = 1U;
     std::uint64_t m_revision = 0U;
 };
 

@@ -2,6 +2,7 @@
 
 using System.Buffers.Binary;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace UniVex.EditorHost.Tests;
 
@@ -200,6 +201,49 @@ public sealed class BridgeProtocolClientTests
         Assert.False(fallback.ScriptRuntimeTickSummary.IsAvailable);
         Assert.Equal(0, fallback.ScriptRuntimeTickSummary.EnabledInstanceCount);
         Assert.Contains("has been requested", fallback.ScriptRuntimeTickSummary.Reason);
+    }
+
+    [Fact]
+    public void ScriptRuntimeTickHistory_ParsesOrderedBoundedEntries()
+    {
+        JsonObject snapshot = JsonNode.Parse(JsonSerializer.Serialize(Snapshot(sceneDirty: false)))!.AsObject();
+        snapshot["scriptRuntimeTickHistoryTruncated"] = true;
+        snapshot["scriptRuntimeTickHistory"] = new JsonArray(
+            new JsonObject
+            {
+                ["sequence"] = 3UL,
+                ["summary"] = new JsonObject
+                {
+                    ["available"] = true,
+                    ["reason"] = "tick",
+                    ["enabledInstanceCount"] = 2,
+                    ["completedCount"] = 2,
+                    ["instructionBudgetExceededCount"] = 0,
+                    ["invalidInstructionCount"] = 0,
+                    ["diagnosticCount"] = 0,
+                },
+            },
+            new JsonObject
+            {
+                ["sequence"] = 4UL,
+                ["summary"] = new JsonObject
+                {
+                    ["available"] = true,
+                    ["reason"] = "tick",
+                    ["enabledInstanceCount"] = 2,
+                    ["completedCount"] = 1,
+                    ["instructionBudgetExceededCount"] = 1,
+                    ["invalidInstructionCount"] = 0,
+                    ["diagnosticCount"] = 1,
+                },
+            });
+        using JsonDocument document = JsonDocument.Parse(snapshot.ToJsonString());
+        BridgeEditorSnapshot parsed = BridgeSnapshotParser.Parse(document.RootElement);
+        Assert.True(parsed.ScriptRuntimeTickHistoryTruncated);
+        Assert.Equal(2, parsed.ScriptRuntimeTickHistory.Count);
+        Assert.Equal(3UL, parsed.ScriptRuntimeTickHistory[0].Sequence);
+        Assert.Equal(4UL, parsed.ScriptRuntimeTickHistory[1].Sequence);
+        Assert.Equal(1, parsed.ScriptRuntimeTickHistory[1].Summary.InstructionBudgetExceededCount);
     }
 
     [Fact]

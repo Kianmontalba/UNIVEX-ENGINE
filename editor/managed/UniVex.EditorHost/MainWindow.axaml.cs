@@ -496,7 +496,9 @@ public partial class MainWindow : Window
                 snapshot.Capabilities.Contains(BridgeSnapshotParser.ReadScriptRuntimeCapability),
                 snapshot.Capabilities.Contains(BridgeSnapshotParser.ReadScriptRuntimeTickDiagnosticsCapability),
                 snapshot.Revision,
-                snapshot.ScriptRuntimeTickSummary);
+                snapshot.ScriptRuntimeTickSummary,
+                snapshot.ScriptRuntimeTickHistory,
+                snapshot.ScriptRuntimeTickHistoryTruncated);
             RenderDeveloperConsole(snapshot.DeveloperConsole);
             RenderDataTableCatalog(snapshot.DataTableCatalog, snapshot.DataTablePreview);
             RenderDataTablePreview(snapshot.DataTablePreview);
@@ -550,7 +552,9 @@ public partial class MainWindow : Window
 
     private void RenderScriptRuntime(BridgeScriptRuntimeSnapshot runtime, bool requestAvailable,
                                      bool tickAvailable, ulong bridgeRevision,
-                                     BridgeScriptRuntimeTickSummary tickSummary)
+                                     BridgeScriptRuntimeTickSummary tickSummary,
+                                     IReadOnlyList<BridgeScriptRuntimeTickHistoryEntry> tickHistory,
+                                     bool tickHistoryTruncated)
     {
         scriptRuntimeRequestAvailable = requestAvailable;
         scriptRuntimeTickAvailable = tickAvailable;
@@ -562,6 +566,13 @@ public partial class MainWindow : Window
               $"{tickSummary.InstructionBudgetExceededCount} budget-exceeded, {tickSummary.InvalidInstructionCount} invalid, " +
               $"{tickSummary.DiagnosticCount} diagnostic(s)."
             : $" {tickSummary.Reason}";
+        string historyStatus = tickHistory.Count == 0
+            ? "No diagnostic tick history is available."
+            : $"Recent native diagnostic ticks: {string.Join(" · ", tickHistory.Select(entry =>
+                $"#{entry.Sequence} {entry.Summary.CompletedCount}/{entry.Summary.EnabledInstanceCount} completed, " +
+                $"{entry.Summary.DiagnosticCount} diagnostic(s)"))}" +
+              (tickHistoryTruncated ? " · older entries truncated" : string.Empty);
+        ScriptRuntimeHistoryTextBlock.Text = historyStatus;
         if (!runtime.IsAvailable)
         {
             ScriptRuntimeStatusTextBlock.Text = $"Bridge revision {bridgeRevision}: {runtime.Reason}{tickStatus}";

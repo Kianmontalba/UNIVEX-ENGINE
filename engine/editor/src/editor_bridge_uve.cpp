@@ -236,7 +236,18 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
             response.message = "The native ScriptRuntime diagnostic tick completed and its counters were copied.";
         }
         m_lastScriptRuntimeTickSummary = summary;
-        response.snapshot.scriptRuntimeTickSummary = std::move(summary);
+        if (m_scriptRuntimeTickHistory.size() >= kEditorBridgeMaximumScriptRuntimeTickHistoryUVE) {
+            m_scriptRuntimeTickHistory.pop_front();
+            m_scriptRuntimeTickHistoryTruncated = true;
+        }
+        m_scriptRuntimeTickHistory.push_back(
+            EditorBridgeScriptRuntimeTickHistoryEntryUVE{m_nextScriptRuntimeTickSequence++, summary});
+        ++m_revision;
+        response.snapshot.revision = m_revision;
+        response.snapshot.scriptRuntimeTickSummary = summary;
+        response.snapshot.scriptRuntimeTickHistoryTruncated = m_scriptRuntimeTickHistoryTruncated;
+        response.snapshot.scriptRuntimeTickHistory.assign(m_scriptRuntimeTickHistory.begin(),
+                                                          m_scriptRuntimeTickHistory.end());
         return response;
     }
     if (m_editor->GetStateUVE() != EditorStateUVE::Running) {
@@ -875,6 +886,8 @@ EditorBridgeSnapshotUVE EditorBridgeUVE::BuildSnapshotUVE() const {
     snapshot.developerConsole = observed.developerConsole;
     snapshot.scriptRuntime = observed.scriptRuntime;
     snapshot.scriptRuntimeTickSummary = m_lastScriptRuntimeTickSummary;
+    snapshot.scriptRuntimeTickHistoryTruncated = m_scriptRuntimeTickHistoryTruncated;
+    snapshot.scriptRuntimeTickHistory.assign(m_scriptRuntimeTickHistory.begin(), m_scriptRuntimeTickHistory.end());
     snapshot.dataTableCatalog = observed.dataTableCatalog;
     snapshot.dataTablePreview = observed.dataTablePreview;
     snapshot.capabilities = GetCapabilitiesUVE();
