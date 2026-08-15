@@ -8,6 +8,8 @@
 #include <limits>
 #include <utility>
 
+#include <nlohmann/json.hpp>
+
 namespace UVE::Asset {
 namespace {
 
@@ -40,7 +42,8 @@ void AddDiagnosticUVE(std::vector<DataTableDiagnosticUVE>& diagnostics,
     return document[index] == '\r' && index + 1U < document.size() && document[index + 1U] == '\n' ? 2U : 1U;
 }
 
-[[nodiscard]] bool ParseCsvRecordsUVE(std::string_view document,
+[[nodiscard]] bool ParseDelimitedRecordsUVE(std::string_view document,
+                                      const char delimiter,
                                       std::vector<CsvRecordUVE>& records,
                                       std::vector<DataTableDiagnosticUVE>& diagnostics,
                                       bool& diagnosticsTruncated) {
@@ -109,7 +112,7 @@ void AddDiagnosticUVE(std::vector<DataTableDiagnosticUVE>& diagnostics,
         }
 
         if (afterQuote) {
-            if (character == ',') {
+            if (character == delimiter) {
                 pushField();
                 afterQuote = false;
                 ++index;
@@ -142,7 +145,7 @@ void AddDiagnosticUVE(std::vector<DataTableDiagnosticUVE>& diagnostics,
             ++column;
             continue;
         }
-        if (character == ',') {
+        if (character == delimiter) {
             pushField();
             ++index;
             ++column;
@@ -373,11 +376,27 @@ bool DataTableUVE::ImportCsvUVE(const std::string_view document) {
     return DataTableCsvImporterUVE::ImportUVE(document, *this);
 }
 
+bool DataTableUVE::ImportTsvUVE(const std::string_view document) {
+    return DataTableTsvImporterUVE::ImportUVE(document, *this);
+}
+
+bool DataTableUVE::ImportJsonUVE(const std::string_view document) {
+    return DataTableJsonImporterUVE::ImportUVE(document, *this);
+}
+
 bool DataTableCsvImporterUVE::ImportUVE(const std::string_view document, DataTableUVE& table) {
+    return ImportDelimitedUVE(document, ',', table);
+}
+
+bool DataTableCsvImporterUVE::ImportDelimitedUVE(const std::string_view document, const char delimiter,
+                                                  DataTableUVE& table) {
+    if (delimiter == '\n' || delimiter == '\r' || delimiter == '"') {
+        return false;
+    }
     std::vector<DataTableDiagnosticUVE> diagnostics;
     bool diagnosticsTruncated = false;
     std::vector<CsvRecordUVE> records;
-    if (!ParseCsvRecordsUVE(document, records, diagnostics, diagnosticsTruncated)) {
+    if (!ParseDelimitedRecordsUVE(document, delimiter, records, diagnostics, diagnosticsTruncated)) {
         table.SetDiagnosticsUVE(std::move(diagnostics), diagnosticsTruncated);
         table.IncrementGenerationUVE();
         return false;
@@ -450,6 +469,130 @@ bool DataTableCsvImporterUVE::ImportUVE(const std::string_view document, DataTab
         table.SetDiagnosticsUVE(std::move(diagnostics), diagnosticsTruncated);
         table.IncrementGenerationUVE();
         return false;
+    }
+    table.m_rows = std::move(importedRows);
+    table.SetDiagnosticsUVE({}, false);
+    table.IncrementGenerationUVE();
+    return true;
+}
+
+bool DataTableTsvImporterUVE::ImportUVE(const std::string_view document, DataTableUVE& table) {
+    return DataTableCsvImporterUVE::ImportDelimitedUVE(document, '\t', table);
+}
+
+bool DataTableJsonImporterUVE::ImportUVE(const std::string_view document, DataTableUVE& table) {
+    std::vector<DataTableDiagnosticUVE> diagnostics;
+    bool diagnosticsTruncated = false;
+    const auto fail = [&]() {
+        table.SetDiagnosticsUVE(std::move(diagnostics), diagnosticsTruncated);
+        table.IncrementGenerationUVE();
+        return false;
+    };
+    if (document.empty() || document.size() > DataTableUVE::kMaximumDocumentBytesUVE) {
+        AddDiagnosticUVE(diagnostics, diagnosticsTruncated, DataTableDiagnosticCodeUVE::LimitExceeded, 1U, 1U,
+                         document.empty() ? "The JSON document is empty." : "The JSON document exceeds the supported byte limit.");
+        return fail();
+    }
+
+    nlohmann::json root;
+    try {
+        root = nlohmann::json::parse(document.begin(), document.end());
+    } catch (const nlohmann::json::exception&) {
+        AddDiagnosticUVE(diagnostics, diagnosticsTruncated, DataTableDiagnosticCodeUVE::InvalidDocument, 1U, 1U,
+                         "The JSON document is malformed.");
+        return fail();
+    }
+    if (!root.is_array() || root.size() > DataTableUVE::kMaximumRowsUVE) {
+        AddDiagnosticUVE(diagnostics, diagnosticsTruncated,
+                         root.is_array() ? DataTableDiagnosticCodeUVE::LimitExceeded
+                                         : DataTableDiagnosticCodeUVE::InvalidDocument,
+                         1U, 1U, root.is_array() ? "The JSON document exceeds the maximum row limit."
+                                                  : "The JSON root must be an array of row objects.");
+        return fail();
+    }
+
+    std::vector<DataTableRowUVE> importedRows;
+    importedRows.reserve(root.size());
+    for (std::size_t rowIndex = 0U; rowIndex < root.size(); ++rowIndex) {
+        const nlohmann::json& object = root[rowIndex];
+        const std::size_t line = rowIndex + 1U;
+        if (!object.is_object() || object.size() != table.m_columns.size() + 1U ||
+            !object.contains("id") || !object.at("id").is_string()) {
+            AddDiagnosticUVE(diagnostics, diagnosticsTruncated, DataTableDiagnosticCodeUVE::InvalidRow,
+                             line, 1U, "Each JSON row must contain exactly one string id and every schema column.");
+            continue;
+        }
+        const std::string identifier = object.at("id").get<std::string>();
+        if (!DataTableUVE::IsBoundedIdentifierUVE(identifier) ||
+            std::any_of(importedRows.begin(), importedRows.end(), [&identifier](const DataTableRowUVE& row) {
+                return row.identifier == identifier;
+            })) {
+            AddDiagnosticUVE(diagnostics, diagnosticsTruncated, DataTableDiagnosticCodeUVE::DuplicateRow,
+                             line, 1U, "The JSON row identifier is invalid or duplicated.");
+            continue;
+        }
+
+        std::vector<DataTableValueUVE> values;
+        values.reserve(table.m_columns.size());
+        bool rowValid = true;
+        for (const DataTableColumnUVE& column : table.m_columns) {
+            if (!object.contains(column.name)) {
+                AddDiagnosticUVE(diagnostics, diagnosticsTruncated, DataTableDiagnosticCodeUVE::InvalidRow,
+                                 line, 1U, "The JSON row is missing schema column " + column.name + ".");
+                rowValid = false;
+                continue;
+            }
+            const nlohmann::json& jsonValue = object.at(column.name);
+            try {
+                switch (column.type) {
+                    case DataTableColumnTypeUVE::Boolean:
+                        if (!jsonValue.is_boolean()) {
+                            throw nlohmann::json::type_error::create(302, "expected boolean", &jsonValue);
+                        }
+                        values.emplace_back(jsonValue.get<bool>());
+                        break;
+                    case DataTableColumnTypeUVE::Integer:
+                        if (!jsonValue.is_number_integer()) {
+                            throw nlohmann::json::type_error::create(302, "expected signed integer", &jsonValue);
+                        }
+                        values.emplace_back(jsonValue.get<std::int64_t>());
+                        break;
+                    case DataTableColumnTypeUVE::Number: {
+                        if (!jsonValue.is_number()) {
+                            throw nlohmann::json::type_error::create(302, "expected number", &jsonValue);
+                        }
+                        const double value = jsonValue.get<double>();
+                        if (!std::isfinite(value)) {
+                            throw nlohmann::json::type_error::create(302, "expected finite number", &jsonValue);
+                        }
+                        values.emplace_back(value);
+                        break;
+                    }
+                    case DataTableColumnTypeUVE::String: {
+                        if (!jsonValue.is_string()) {
+                            throw nlohmann::json::type_error::create(302, "expected string", &jsonValue);
+                        }
+                        const std::string value = jsonValue.get<std::string>();
+                        if (value.size() > DataTableUVE::kMaximumStringBytesUVE) {
+                            throw nlohmann::json::type_error::create(302, "string exceeds bound", &jsonValue);
+                        }
+                        values.emplace_back(value);
+                        break;
+                    }
+                }
+            } catch (const nlohmann::json::exception&) {
+                AddDiagnosticUVE(diagnostics, diagnosticsTruncated, DataTableDiagnosticCodeUVE::InvalidValue,
+                                 line, 1U, "The JSON value does not match schema column " + column.name + ".");
+                rowValid = false;
+            }
+        }
+        if (rowValid) {
+            importedRows.push_back(DataTableRowUVE{identifier, std::move(values)});
+        }
+    }
+
+    if (!diagnostics.empty()) {
+        return fail();
     }
     table.m_rows = std::move(importedRows);
     table.SetDiagnosticsUVE({}, false);
