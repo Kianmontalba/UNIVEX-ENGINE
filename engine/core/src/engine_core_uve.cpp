@@ -20,6 +20,7 @@
 #include "uve/asset/asset_importer_uve.h"
 #include "uve/asset/asset_import_queue_uve.h"
 #include "uve/asset/asset_manager_uve.h"
+#include "uve/asset/data_table_pipeline_uve.h"
 #include "uve/asset/derived_artifact_cache_uve.h"
 #include "uve/asset/file_system_uve.h"
 #include "uve/asset/hot_reload_uve.h"
@@ -199,6 +200,11 @@ void EngineCoreUVE::Init() {
 
     // AssetImporter fourteenth: retains the existing extension-selected synchronous import behavior.
     m_assetImporter = std::make_unique<Asset::AssetImporterUVE>();
+
+    // Compose the schema-driven Data Table importers and typed loader onto the existing generic
+    // services. Registration owns no service or loaded asset state, so EngineCoreUVE remains the
+    // sole owner and the generic service boundaries remain unchanged.
+    Asset::RegisterDataTablePipelineUVE(*m_assetImporter, *m_assetManager);
 
     // AssetImportQueue fifteenth: calls the importer at most once per Update() and validates
     // metadata cache hits against source and destination byte fingerprints plus AssetDatabase.
