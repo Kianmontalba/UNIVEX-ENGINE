@@ -41,6 +41,63 @@ TEST(EditorBridgeUVETest, EntityRefUVE_ValidatesTheFullGenerationalIdentity) {
     EXPECT_TRUE(ordinaryEntity.IsValidUVE());
 }
 
+TEST(EditorBridgeUVETest, VisualScriptGraphSchemaUVE_IsAdvertisedAndUsesNativeAuthority) {
+    Core::EngineCoreUVE engine(MakeBridgeTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_bridge_graph_schema.uvescene");
+        editor.InitUVE();
+        EditorBridgeUVE bridge(editor);
+        const EditorBridgeSnapshotUVE initial = bridge.GetSnapshotUVE();
+        bool serializeAdvertised = false;
+        bool deserializeAdvertised = false;
+        for (const EditorBridgeCapabilityUVE capability : initial.capabilities) {
+            serializeAdvertised = serializeAdvertised ||
+                                  capability == EditorBridgeCapabilityUVE::SerializeVisualScriptGraph;
+            deserializeAdvertised = deserializeAdvertised ||
+                                    capability == EditorBridgeCapabilityUVE::DeserializeVisualScriptGraph;
+        }
+        ASSERT_TRUE(serializeAdvertised);
+        ASSERT_TRUE(deserializeAdvertised);
+
+        EditorBridgeRequestUVE serializeRequest{};
+        serializeRequest.protocolVersion = kEditorBridgeProtocolVersionUVE;
+        serializeRequest.requestId = 147U;
+        serializeRequest.expectedRevision = initial.revision + 100U;
+        serializeRequest.kind = EditorBridgeRequestKindUVE::SerializeVisualScriptGraph;
+        const EditorBridgeResponseUVE serialized = bridge.DispatchUVE(serializeRequest);
+        ASSERT_TRUE(serialized.applied);
+        ASSERT_TRUE(serialized.visualScriptGraphSchema.has_value());
+        EXPECT_EQ(serialized.visualScriptGraphSchema->schemaVersion,
+                  Scripting::kScriptGraphSchemaVersionUVE);
+        EXPECT_EQ(serialized.visualScriptGraphSchema->metadata.at("assetType"), "visual-script-graph");
+
+        EditorBridgeRequestUVE deserializeRequest{};
+        deserializeRequest.protocolVersion = kEditorBridgeProtocolVersionUVE;
+        deserializeRequest.requestId = 148U;
+        deserializeRequest.expectedRevision = serialized.snapshot.revision;
+        deserializeRequest.kind = EditorBridgeRequestKindUVE::DeserializeVisualScriptGraph;
+        deserializeRequest.visualScriptGraphSchema =
+            R"({"schemaVersion":1,"nodes":[],"links":[],"layout":[],"metadata":{"assetType":"visual-script-graph"}})";
+        const EditorBridgeResponseUVE deserialized = bridge.DispatchUVE(deserializeRequest);
+        EXPECT_TRUE(deserialized.applied);
+        EXPECT_EQ(deserialized.code, "bridge.visual_scripting.graph_schema.deserialized");
+        EXPECT_TRUE(deserialized.visualScriptGraphSchema.has_value());
+
+        deserializeRequest.requestId = 149U;
+        deserializeRequest.expectedRevision = deserialized.snapshot.revision;
+        deserializeRequest.visualScriptGraphSchema =
+            R"({"schemaVersion":1,"nodes":[],"links":[],"layout":[],"metadata":{},"future":true})";
+        const EditorBridgeResponseUVE rejected = bridge.DispatchUVE(deserializeRequest);
+        EXPECT_FALSE(rejected.applied);
+        EXPECT_EQ(rejected.code, "bridge.visual_scripting.graph_schema.invalid");
+
+        editor.ShutdownUVE();
+    }
+    engine.Shutdown();
+}
+
 TEST(EditorBridgeUVETest, ReadScriptRuntimeUVE_IsAdvertisedAndReadOnly) {
     Core::EngineCoreUVE engine(MakeBridgeTestConfigUVE());
     engine.Init();

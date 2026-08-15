@@ -120,11 +120,18 @@ TEST(EditorBridgeStdioUVETest, ServeUVE_HandshakesAndRoutesExistingBridgeDispatc
                                                   {"requestId", 44U},
                                                   {"expectedRevision", 999U},
                                                   {"kind", "readScriptRuntimeTickDiagnostics"}}}});
+        AppendFrameUVE(input, JsonUVE{{"jsonrpc", "2.0"},
+                                      {"id", 5U},
+                                      {"method", "bridge.dispatch"},
+                                      {"params", {{"protocolVersion", kEditorBridgeProtocolVersionUVE},
+                                                  {"requestId", 45U},
+                                                  {"expectedRevision", 0U},
+                                                  {"kind", "serializeGraph"}}}});
 
         EXPECT_EQ(server.ServeUVE(input, output, diagnostics), 0);
         EXPECT_TRUE(diagnostics.str().empty());
         const std::vector<JsonUVE> frames = ReadFramesUVE(output);
-        ASSERT_EQ(frames.size(), 4U);
+        ASSERT_EQ(frames.size(), 5U);
         EXPECT_TRUE(frames[0U].at("result").at("compatible").get<bool>());
         EXPECT_EQ(frames[0U].at("result").at("protocolVersion").get<std::uint32_t>(),
                   kEditorBridgeProtocolVersionUVE);
@@ -192,6 +199,15 @@ TEST(EditorBridgeStdioUVETest, ServeUVE_HandshakesAndRoutesExistingBridgeDispatc
         EXPECT_EQ(tickSummary.at("enabledInstanceCount").get<std::size_t>(), 1U);
         EXPECT_EQ(tickSummary.at("completedCount").get<std::size_t>(), 1U);
         EXPECT_TRUE(frames[1U].at("result").at("createdEntity").is_object());
+        EXPECT_TRUE(frames[4U].at("result").at("applied").get<bool>());
+        EXPECT_EQ(frames[4U].at("result").at("code").get<std::string>(),
+                  "bridge.visual_scripting.graph_schema.serialized");
+        const JsonUVE& graphSchema = frames[4U].at("result").at("graphSchema");
+        EXPECT_EQ(graphSchema.at("schemaVersion").get<std::uint32_t>(), 1U);
+        EXPECT_TRUE(graphSchema.at("nodes").is_array());
+        EXPECT_TRUE(graphSchema.at("links").is_array());
+        EXPECT_TRUE(graphSchema.at("layout").is_array());
+        EXPECT_EQ(graphSchema.at("metadata").at("assetType").get<std::string>(), "visual-script-graph");
         EXPECT_TRUE(editor.IsSceneDirtyUVE());
 
         editor.ShutdownUVE();

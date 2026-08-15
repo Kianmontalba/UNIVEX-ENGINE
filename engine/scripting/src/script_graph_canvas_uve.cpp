@@ -308,6 +308,59 @@ ScriptGraphCanvasCommandResultUVE ScriptGraphCanvasUVE::RedoUVE(const std::uint6
                          "Canvas redo restored the exact next graph/layout/selection state.");
 }
 
+const ScriptGraphUVE& ScriptGraphCanvasUVE::GetGraphUVE() const noexcept {
+    return m_backend.GetGraphUVE();
+}
+
+ScriptGraphCanvasCommandResultUVE ScriptGraphCanvasUVE::ApplyGraphSchemaUVE(
+    ScriptGraphSchemaUVE schema, const std::uint64_t expectedRevision) {
+    if (!CheckExpectedRevisionUVE(expectedRevision)) {
+        return MakeResultUVE(ScriptGraphCanvasCommandCodeUVE::StaleRevision,
+                             "The graph schema used a stale revision.");
+    }
+    if (schema.schemaVersion != kScriptGraphSchemaVersionUVE) {
+        return MakeResultUVE(ScriptGraphCanvasCommandCodeUVE::Rejected,
+                             "The graph schema version is not supported.");
+    }
+    const std::vector<ScriptValidationDiagnosticUVE> diagnostics = schema.graph.ValidateUVE(*m_registry);
+    if (!diagnostics.empty()) {
+        return MakeResultUVE(ScriptGraphCanvasCommandCodeUVE::Rejected,
+                             "The graph schema was rejected by native graph validation.");
+    }
+    if (schema.layout.size() != schema.graph.GetNodesUVE().size() ||
+        schema.layout.size() > kMaximumScriptGraphCanvasEntriesUVE ||
+        !IsValidViewUVE(m_view)) {
+        return MakeResultUVE(ScriptGraphCanvasCommandCodeUVE::Rejected,
+                             "The graph schema requires one finite layout position for every live node.");
+    }
+    std::vector<std::uint32_t> nodeIds;
+    nodeIds.reserve(schema.graph.GetNodesUVE().size());
+    const auto hasSchemaNode = [&schema](const std::uint32_t nodeId) {
+        return std::find_if(schema.graph.GetNodesUVE().begin(), schema.graph.GetNodesUVE().end(),
+                            [nodeId](const ScriptNodeUVE& node) { return node.id == nodeId; }) !=
+               schema.graph.GetNodesUVE().end();
+    };
+    for (const ScriptGraphLayoutEntryUVE& entry : schema.layout) {
+        if (entry.nodeId == 0U || !hasSchemaNode(entry.nodeId) || !IsFinitePointUVE({entry.x, entry.y}) ||
+            ContainsIdUVE(nodeIds, entry.nodeId)) {
+            return MakeResultUVE(ScriptGraphCanvasCommandCodeUVE::Rejected,
+                                 "The graph schema layout must contain unique live node IDs and finite positions.");
+        }
+        nodeIds.push_back(entry.nodeId);
+    }
+    StateUVE before = CaptureStateUVE();
+    m_backend.RestoreGraphUVE(std::move(schema.graph));
+    m_layout.clear();
+    m_layout.reserve(schema.layout.size());
+    for (const ScriptGraphLayoutEntryUVE& entry : schema.layout) {
+        m_layout.push_back(LayoutEntryUVE{entry.nodeId, {entry.x, entry.y}});
+    }
+    m_selection.clear();
+    RecordMutationUVE(std::move(before));
+    return MakeResultUVE(ScriptGraphCanvasCommandCodeUVE::Applied,
+                         "The graph schema was applied through the native canvas history path.");
+}
+
 ScriptGraphCanvasLayoutSnapshotUVE ScriptGraphCanvasUVE::GetLayoutSnapshotUVE() const {
     ScriptGraphCanvasLayoutSnapshotUVE snapshot{};
     snapshot.view = m_view;

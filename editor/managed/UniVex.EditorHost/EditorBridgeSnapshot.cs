@@ -1,5 +1,6 @@
 // Copyright (c) 2026 UniVex Studios. All Rights Reserved.
 
+using System.Text;
 using System.Text.Json;
 
 namespace UniVex.EditorHost;
@@ -127,6 +128,20 @@ public sealed record BridgeVisualScriptNode(
 public sealed record BridgeVisualScriptEndpoint(uint NodeId, string PinName);
 
 public sealed record BridgeVisualScriptLink(BridgeVisualScriptEndpoint Output, BridgeVisualScriptEndpoint Input);
+
+public sealed record BridgeVisualScriptGraphNode(
+    uint Id,
+    string TypeId,
+    BridgeVisualScriptPoint Position);
+
+public sealed record BridgeVisualScriptGraphSchema(
+    uint SchemaVersion,
+    IReadOnlyList<BridgeVisualScriptGraphNode> Nodes,
+    IReadOnlyList<BridgeVisualScriptLink> Links,
+    IReadOnlyDictionary<string, string> Metadata)
+{
+    public const uint CurrentSchemaVersion = 1;
+}
 
 public sealed record BridgeVisualScriptDiagnostic(
     byte Code,
@@ -341,6 +356,7 @@ public sealed record BridgeCommand(
     BridgeVisualScriptLink? VisualScriptLink = null,
     IReadOnlyList<uint>? VisualScriptSelection = null,
     BridgeVisualScriptView? VisualScriptView = null,
+    string? VisualScriptGraphSchema = null,
     string? DataTableName = null,
     string? DeveloperConsoleCommand = null,
     byte? DeveloperConsoleSeverityFilter = null,
@@ -352,7 +368,8 @@ public sealed record BridgeCommandResult(
     string Code,
     string Message,
     BridgeEditorSnapshot Snapshot,
-    BridgeEntityRef? CreatedEntity);
+    BridgeEntityRef? CreatedEntity,
+    BridgeVisualScriptGraphSchema? VisualScriptGraphSchema = null);
 
 /// <summary>
 /// Strict parser for the copied snapshot schema. Unknown additive fields are ignored for protocol
@@ -369,6 +386,10 @@ public static class BridgeSnapshotParser
     public const byte ReadScriptRuntimeCapability = 76;
     public const byte ReadScriptRuntimeTickDiagnosticsCapability = 77;
     public const int MaximumContentPathBytes = 4096;
+    public const int MaximumGraphNodes = 4096;
+    public const int MaximumGraphLinks = 8192;
+    public const int MaximumGraphMetadataEntries = 128;
+    public const int MaximumGraphStringBytes = 4096;
 
     public static BridgeEditorSnapshot Parse(JsonElement value)
     {
@@ -426,6 +447,99 @@ public static class BridgeSnapshotParser
         catch (Exception exception) when (exception is JsonException or InvalidOperationException or OverflowException or KeyNotFoundException or FormatException)
         {
             throw Invalid($"The backend returned an invalid copied snapshot: {exception.Message}");
+        }
+    }
+
+    public static BridgeVisualScriptGraphSchema ParseVisualScriptGraphSchema(JsonElement value)
+    {
+        try
+        {
+            RequireObject(value, "visualScripting.graphSchema");
+            uint schemaVersion = RequiredUInt32(value, "schemaVersion");
+            if (schemaVersion != BridgeVisualScriptGraphSchema.CurrentSchemaVersion)
+            {
+                throw Invalid("The visual-scripting graph schema version is not supported by this host.");
+            }
+            JsonElement nodes = RequiredArray(value, "nodes");
+            JsonElement links = RequiredArray(value, "links");
+            JsonElement layout = RequiredArray(value, "layout");
+            if (nodes.GetArrayLength() > MaximumGraphNodes || links.GetArrayLength() > MaximumGraphLinks ||
+                layout.GetArrayLength() > MaximumGraphNodes)
+            {
+                throw Invalid("Visual-scripting graph schema nodes, links, or layout exceed the supported bound.");
+            }
+            Dictionary<uint, BridgeVisualScriptPoint> parsedLayout = new(layout.GetArrayLength());
+            foreach (JsonElement entry in layout.EnumerateArray())
+            {
+                RequireObject(entry, "visual-scripting graph schema layout entry");
+                uint nodeId = RequiredUInt32(entry, "nodeId");
+                float x = entry.GetProperty("x").GetSingle();
+                float y = entry.GetProperty("y").GetSingle();
+                if (nodeId == 0U || !float.IsFinite(x) || !float.IsFinite(y) ||
+                    !parsedLayout.TryAdd(nodeId, new BridgeVisualScriptPoint(x, y)))
+                {
+                    throw Invalid("Visual-scripting graph schema layout must contain unique finite node positions.");
+                }
+            }
+            List<BridgeVisualScriptGraphNode> parsedNodes = new(nodes.GetArrayLength());
+            HashSet<uint> nodeIds = new();
+            foreach (JsonElement node in nodes.EnumerateArray())
+            {
+                RequireObject(node, "visual-scripting graph schema node");
+                uint nodeId = RequiredUInt32(node, "id");
+                if (!nodeIds.Add(nodeId) || !parsedLayout.TryGetValue(nodeId, out BridgeVisualScriptPoint? position) ||
+                    position is null)
+                {
+                    throw Invalid("Visual-scripting graph schema nodes must have unique IDs and layout positions.");
+                }
+                parsedNodes.Add(new BridgeVisualScriptGraphNode(
+                    nodeId, RequiredBoundedString(node, "typeId"), position));
+            }
+            if (parsedLayout.Count != parsedNodes.Count)
+            {
+                throw Invalid("Visual-scripting graph schema layout must contain exactly one position per node.");
+            }
+            List<BridgeVisualScriptLink> parsedLinks = new(links.GetArrayLength());
+            foreach (JsonElement link in links.EnumerateArray())
+            {
+                RequireObject(link, "visual-scripting graph schema link");
+                JsonElement output = RequiredObjectMember(link, "output");
+                JsonElement input = RequiredObjectMember(link, "input");
+                parsedLinks.Add(new BridgeVisualScriptLink(
+                    new BridgeVisualScriptEndpoint(RequiredUInt32(output, "nodeId"),
+                                                   RequiredBoundedString(output, "pinName")),
+                    new BridgeVisualScriptEndpoint(RequiredUInt32(input, "nodeId"),
+                                                   RequiredBoundedString(input, "pinName"))));
+            }
+            Dictionary<string, string> metadata = new(StringComparer.Ordinal);
+            if (value.TryGetProperty("metadata", out JsonElement metadataValue) &&
+                metadataValue.ValueKind != JsonValueKind.Null)
+            {
+                RequireObject(metadataValue, "visual-scripting graph schema metadata");
+                if (metadataValue.EnumerateObject().Count() > MaximumGraphMetadataEntries)
+                {
+                    throw Invalid("Visual-scripting graph schema metadata exceeds the supported bound.");
+                }
+                foreach (JsonProperty property in metadataValue.EnumerateObject())
+                {
+                    if (Encoding.UTF8.GetByteCount(property.Name) > MaximumGraphStringBytes ||
+                        property.Value.ValueKind != JsonValueKind.String ||
+                        Encoding.UTF8.GetByteCount(property.Value.GetString() ?? string.Empty) > MaximumGraphStringBytes)
+                    {
+                        throw Invalid("Visual-scripting graph schema metadata must contain bounded strings.");
+                    }
+                    metadata[property.Name] = property.Value.GetString() ?? string.Empty;
+                }
+            }
+            return new BridgeVisualScriptGraphSchema(schemaVersion, parsedNodes, parsedLinks, metadata);
+        }
+        catch (BridgeProtocolException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (exception is JsonException or InvalidOperationException or OverflowException or KeyNotFoundException or FormatException)
+        {
+            throw Invalid($"The backend returned an invalid visual-scripting graph schema: {exception.Message}");
         }
     }
 

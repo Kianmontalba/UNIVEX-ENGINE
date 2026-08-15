@@ -495,6 +495,57 @@ public sealed class BridgeProtocolClientTests
     }
 
     [Fact]
+    public void SnapshotParser_AcceptsVersionedVisualScriptGraphSchemaDto()
+    {
+        using JsonDocument document = JsonDocument.Parse(JsonSerializer.Serialize(new
+        {
+            schemaVersion = 1U,
+            nodes = new[]
+            {
+                new { id = 2U, typeId = "test.sink" },
+                new { id = 1U, typeId = "test.source" },
+            },
+            links = new[]
+            {
+                new
+                {
+                    output = new { nodeId = 1U, pinName = "Out" },
+                    input = new { nodeId = 2U, pinName = "In" },
+                },
+            },
+            layout = new[]
+            {
+                new { nodeId = 2U, x = 30F, y = 40F },
+                new { nodeId = 1U, x = 10F, y = 20F },
+            },
+            metadata = new Dictionary<string, string> { ["assetType"] = "visual-script-graph" },
+        }));
+
+        BridgeVisualScriptGraphSchema schema = BridgeSnapshotParser.ParseVisualScriptGraphSchema(document.RootElement);
+
+        Assert.Equal(1U, schema.SchemaVersion);
+        Assert.Equal(2, schema.Nodes.Count);
+        Assert.Equal(new BridgeVisualScriptGraphNode(2U, "test.sink", new BridgeVisualScriptPoint(30F, 40F)),
+                     schema.Nodes[0]);
+        Assert.Equal(new BridgeVisualScriptGraphNode(1U, "test.source", new BridgeVisualScriptPoint(10F, 20F)),
+                     schema.Nodes[1]);
+        Assert.Single(schema.Links);
+        Assert.Equal(new BridgeVisualScriptEndpoint(2U, "In"), schema.Links[0].Input);
+        Assert.Equal("visual-script-graph", schema.Metadata["assetType"]);
+    }
+
+    [Fact]
+    public void SnapshotParser_RejectsUnsupportedVisualScriptGraphSchemaVersion()
+    {
+        using JsonDocument document = JsonDocument.Parse("{\"schemaVersion\":99,\"nodes\":[],\"links\":[]}");
+
+        BridgeProtocolException exception = Assert.Throws<BridgeProtocolException>(() =>
+            BridgeSnapshotParser.ParseVisualScriptGraphSchema(document.RootElement));
+
+        Assert.Equal("bridge.snapshot.invalid", exception.Code);
+    }
+
+    [Fact]
     public void SnapshotParser_AcceptsBoundedDeveloperConsoleDto()
     {
         using JsonDocument document = JsonDocument.Parse(JsonSerializer.Serialize(Snapshot(sceneDirty: false)));

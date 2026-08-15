@@ -2,6 +2,7 @@
 
 #include "uve/editor/editor_bridge_stdio_uve.h"
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <istream>
@@ -253,6 +254,41 @@ enum class FrameReadResultUVE : std::uint8_t {
     return result;
 }
 
+[[nodiscard]] JsonUVE ToJsonUVE(const Scripting::ScriptGraphSchemaUVE& schema) {
+    JsonUVE nodes = JsonUVE::array();
+    std::vector<Scripting::ScriptNodeUVE> sortedNodes = schema.graph.GetNodesUVE();
+    std::sort(sortedNodes.begin(), sortedNodes.end(), [](const auto& left, const auto& right) {
+        return left.id < right.id;
+    });
+    for (const Scripting::ScriptNodeUVE& node : sortedNodes) {
+        nodes.push_back({{"id", node.id}, {"typeId", node.typeId}});
+    }
+    JsonUVE links = JsonUVE::array();
+    std::vector<Scripting::ScriptLinkUVE> sortedLinks = schema.graph.GetLinksUVE();
+    std::sort(sortedLinks.begin(), sortedLinks.end(), [](const auto& left, const auto& right) {
+        if (left.output.nodeId != right.output.nodeId) return left.output.nodeId < right.output.nodeId;
+        if (left.output.pinName != right.output.pinName) return left.output.pinName < right.output.pinName;
+        if (left.input.nodeId != right.input.nodeId) return left.input.nodeId < right.input.nodeId;
+        return left.input.pinName < right.input.pinName;
+    });
+    for (const Scripting::ScriptLinkUVE& link : sortedLinks) {
+        links.push_back({{"output", {{"nodeId", link.output.nodeId}, {"pinName", link.output.pinName}}},
+                         {"input", {{"nodeId", link.input.nodeId}, {"pinName", link.input.pinName}}}});
+    }
+    JsonUVE layout = JsonUVE::array();
+    std::vector<Scripting::ScriptGraphLayoutEntryUVE> sortedLayout = schema.layout;
+    std::sort(sortedLayout.begin(), sortedLayout.end(), [](const auto& left, const auto& right) {
+        return left.nodeId < right.nodeId;
+    });
+    for (const Scripting::ScriptGraphLayoutEntryUVE& entry : sortedLayout) {
+        layout.push_back({{"nodeId", entry.nodeId}, {"x", entry.x}, {"y", entry.y}});
+    }
+    JsonUVE metadata = JsonUVE::object();
+    for (const auto& [key, value] : schema.metadata) metadata[key] = value;
+    return JsonUVE{{"schemaVersion", schema.schemaVersion}, {"nodes", std::move(nodes)},
+                   {"links", std::move(links)}, {"layout", std::move(layout)}, {"metadata", std::move(metadata)}};
+}
+
 [[nodiscard]] JsonUVE ToJsonUVE(const Scripting::ScriptGraphCanvasSnapshotUVE& canvas) {
     JsonUVE nodes = JsonUVE::array();
     for (const auto& node : canvas.nodes) {
@@ -395,7 +431,10 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"message", response.message},
                    {"snapshot", ToJsonUVE(response.snapshot)},
                    {"createdEntity", response.createdEntity.has_value() ? ToJsonUVE(*response.createdEntity)
-                                                                         : JsonUVE(nullptr)}};
+                                                                         : JsonUVE(nullptr)},
+                   {"graphSchema", response.visualScriptGraphSchema.has_value()
+                                        ? ToJsonUVE(*response.visualScriptGraphSchema)
+                                        : JsonUVE(nullptr)}};
 }
 
 [[nodiscard]] FrameReadResultUVE ReadFrameUVE(std::istream& input, std::string& body) {
@@ -614,6 +653,12 @@ enum class FrameReadResultUVE : std::uint8_t {
     if (value == "readScriptRuntimeTickDiagnostics") {
         return EditorBridgeRequestKindUVE::ReadScriptRuntimeTickDiagnostics;
     }
+    if (value == "serializeGraph") {
+        return EditorBridgeRequestKindUVE::SerializeVisualScriptGraph;
+    }
+    if (value == "deserializeGraph") {
+        return EditorBridgeRequestKindUVE::DeserializeVisualScriptGraph;
+    }
     return std::nullopt;
 }
 
@@ -726,6 +771,14 @@ enum class FrameReadResultUVE : std::uint8_t {
         if (!request.visualScriptView.has_value()) {
             return std::nullopt;
         }
+    }
+    if (params.contains("visualScriptGraphSchema") && !params.at("visualScriptGraphSchema").is_null()) {
+        if (!params.at("visualScriptGraphSchema").is_string() ||
+            params.at("visualScriptGraphSchema").get_ref<const std::string&>().size() >
+                EditorBridgeStdioServerUVE::kMaximumFrameBytesUVE) {
+            return std::nullopt;
+        }
+        request.visualScriptGraphSchema = params.at("visualScriptGraphSchema").get<std::string>();
     }
     if (params.contains("dataTableName") && !params.at("dataTableName").is_null()) {
         request.dataTableName = params.at("dataTableName").get<std::string>();

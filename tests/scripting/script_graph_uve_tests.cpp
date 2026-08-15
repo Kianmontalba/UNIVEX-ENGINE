@@ -601,6 +601,61 @@ TEST(ScriptRuntimeUVETest, ReloadUVE_AcceptsValidReplacementAndRejectsMissingIns
 
 namespace UVE::Scripting {
 
+TEST(ScriptGraphPersistenceUVETest, EncodeDecodeSchema_RoundTripsNodesLinksLayoutMetadataDeterministically) {
+    ScriptGraphSchemaUVE schema{};
+    ASSERT_TRUE(schema.graph.AddNodeUVE({2U, "test.sink"}));
+    ASSERT_TRUE(schema.graph.AddNodeUVE({1U, "test.source"}));
+    ASSERT_TRUE(schema.graph.AddLinkUVE({{2U, "Out"}, {1U, "In"}}));
+    ASSERT_TRUE(schema.graph.AddLinkUVE({{1U, "Out"}, {2U, "In"}}));
+    schema.layout = {{2U, 30.0F, 40.0F}, {1U, 10.0F, 20.0F}};
+    schema.metadata.emplace("zeta", "last");
+    schema.metadata.emplace("alpha", "first");
+
+    std::vector<ScriptPersistenceDiagnosticUVE> diagnostics;
+    const std::string encoded = EncodeScriptGraphSchemaUVE(schema, diagnostics);
+    ASSERT_TRUE(diagnostics.empty());
+    EXPECT_EQ(encoded,
+              R"({"schemaVersion":1,"nodes":[{"id":1,"typeId":"test.source"},{"id":2,"typeId":"test.sink"}],"links":[{"output":{"nodeId":1,"pinName":"Out"},"input":{"nodeId":2,"pinName":"In"}},{"output":{"nodeId":2,"pinName":"Out"},"input":{"nodeId":1,"pinName":"In"}}],"layout":[{"nodeId":1,"x":10.0,"y":20.0},{"nodeId":2,"x":30.0,"y":40.0}],"metadata":{"alpha":"first","zeta":"last"}})");
+
+    const ScriptGraphSchemaDecodeResultUVE decoded = DecodeScriptGraphSchemaUVE(encoded);
+    ASSERT_TRUE(decoded.IsSuccessUVE());
+    EXPECT_EQ(decoded.schema->schemaVersion, kScriptGraphSchemaVersionUVE);
+    EXPECT_EQ(decoded.schema->graph.GetNodesUVE().size(), 2U);
+    EXPECT_EQ(decoded.schema->graph.GetLinksUVE().size(), 2U);
+    EXPECT_EQ(decoded.schema->layout, (std::vector<ScriptGraphLayoutEntryUVE>{{1U, 10.0F, 20.0F}, {2U, 30.0F, 40.0F}}));
+    EXPECT_EQ(decoded.schema->metadata.at("alpha"), "first");
+
+    std::vector<ScriptPersistenceDiagnosticUVE> secondDiagnostics;
+    EXPECT_EQ(EncodeScriptGraphSchemaUVE(*decoded.schema, secondDiagnostics), encoded);
+    EXPECT_TRUE(secondDiagnostics.empty());
+}
+
+TEST(ScriptGraphPersistenceUVETest, DecodeSchema_RejectsUnknownFieldsMalformedInputAndFutureVersion) {
+    const ScriptGraphSchemaDecodeResultUVE unknown = DecodeScriptGraphSchemaUVE(
+        R"({"schemaVersion":1,"nodes":[],"links":[],"layout":[],"metadata":{},"future":true})");
+    ASSERT_FALSE(unknown.IsSuccessUVE());
+    EXPECT_EQ(unknown.diagnostics[0].code, ScriptPersistenceDiagnosticCodeUVE::UnknownField);
+
+    const ScriptGraphSchemaDecodeResultUVE malformed = DecodeScriptGraphSchemaUVE(
+        R"({"schemaVersion":1,"nodes":[{"id":1,"typeId":"test"}],"links":[],"layout":[],"metadata":{}})");
+    ASSERT_TRUE(malformed.IsSuccessUVE());
+
+    const ScriptGraphSchemaDecodeResultUVE missing = DecodeScriptGraphSchemaUVE(
+        R"({"schemaVersion":1,"nodes":[],"links":[],"metadata":{}})");
+    ASSERT_FALSE(missing.IsSuccessUVE());
+    EXPECT_EQ(missing.diagnostics[0].code, ScriptPersistenceDiagnosticCodeUVE::MissingField);
+
+    const ScriptGraphSchemaDecodeResultUVE future = DecodeScriptGraphSchemaUVE(
+        R"({"schemaVersion":2,"nodes":[],"links":[],"layout":[],"metadata":{}})");
+    ASSERT_FALSE(future.IsSuccessUVE());
+    EXPECT_EQ(future.diagnostics[0].code, ScriptPersistenceDiagnosticCodeUVE::UnsupportedVersion);
+
+    const ScriptGraphSchemaDecodeResultUVE duplicateLayout = DecodeScriptGraphSchemaUVE(
+        R"({"schemaVersion":1,"nodes":[{"id":1,"typeId":"test"}],"links":[],"layout":[{"nodeId":1,"x":0,"y":0},{"nodeId":1,"x":1,"y":1}],"metadata":{}})");
+    ASSERT_FALSE(duplicateLayout.IsSuccessUVE());
+    EXPECT_EQ(duplicateLayout.diagnostics[0].code, ScriptPersistenceDiagnosticCodeUVE::DuplicateEntry);
+}
+
 TEST(ScriptGraphPersistenceUVETest, EncodeDecodeScriptGraphUVE_RoundTripsDeterministically) {
     ScriptGraphUVE graph;
     ASSERT_TRUE(graph.AddNodeUVE({2U, "test.sink"}));
@@ -627,7 +682,7 @@ TEST(ScriptGraphPersistenceUVETest, DecodeScriptGraphUVE_RejectsMalformedVersion
     ASSERT_FALSE(unsupported.IsSuccessUVE());
     EXPECT_EQ(unsupported.diagnostics[0].code, ScriptPersistenceDiagnosticCodeUVE::UnsupportedVersion);
     const ScriptGraphDecodeResultUVE duplicate = DecodeScriptGraphUVE(
-        R"({"schemaVersion":1,"nodes":[{"id":1,"typeId":"test"},{"id":1,"typeId":"test"}],"links":[]})");
+        R"({"schemaVersion":1,"nodes":[{"id":1,"typeId":"test"},{"id":1,"typeId":"test"}],"links":[],"layout":[],"metadata":{}})");
     ASSERT_FALSE(duplicate.IsSuccessUVE());
     EXPECT_EQ(duplicate.diagnostics[0].code, ScriptPersistenceDiagnosticCodeUVE::DuplicateEntry);
 }
@@ -636,7 +691,7 @@ TEST(ScriptGraphPersistenceUVETest, EncodeScriptGraphUVE_EnforcesTextLimitWithou
     ScriptGraphUVE graph;
     ASSERT_TRUE(graph.AddNodeUVE({1U, "test.source"}));
     std::vector<ScriptPersistenceDiagnosticUVE> diagnostics;
-    EXPECT_TRUE(EncodeScriptGraphUVE(graph, diagnostics, {4096U, 8192U, 4U}).empty());
+    EXPECT_TRUE(EncodeScriptGraphUVE(graph, diagnostics, {4096U, 8192U, 4096U, 128U, 4096U, 4U}).empty());
     ASSERT_EQ(diagnostics.size(), 1U);
     EXPECT_EQ(diagnostics[0].code, ScriptPersistenceDiagnosticCodeUVE::LimitExceeded);
 }
@@ -673,6 +728,26 @@ TEST(ScriptGraphEditorBackendUVETest, UndoRedoRestoresSnapshotsAndNewEditClearsR
     ASSERT_TRUE(backend.AddNodeUVE({3U, "test.source"}).IsAppliedUVE());
     EXPECT_EQ(backend.GetRedoCountUVE(), 0U);
     EXPECT_EQ(backend.RedoUVE().code, ScriptGraphCommandCodeUVE::NoHistory);
+}
+
+TEST(ScriptGraphCanvasUVETest, ApplyGraphSchemaReplacesAuthoritativeGraphAndLayoutWithUndo) {
+    ScriptNodeRegistryUVE registry;
+    RegisterTestNodesUVE(registry);
+    ScriptGraphCanvasUVE canvas(registry);
+    ASSERT_TRUE(canvas.AddNodeUVE({1U, "test.source"}, {1.0F, 2.0F}).IsAppliedUVE());
+
+    ScriptGraphSchemaUVE schema{};
+    ASSERT_TRUE(schema.graph.AddNodeUVE({10U, "test.source"}));
+    ASSERT_TRUE(schema.graph.AddNodeUVE({20U, "test.sink"}));
+    ASSERT_TRUE(schema.graph.AddLinkUVE({{10U, "Out"}, {20U, "In"}}));
+    schema.layout = {{20U, 40.0F, 50.0F}, {10U, 10.0F, 20.0F}};
+    const ScriptGraphCanvasCommandResultUVE applied = canvas.ApplyGraphSchemaUVE(std::move(schema));
+    ASSERT_TRUE(applied.IsAppliedUVE());
+    EXPECT_TRUE(canvas.GetSnapshotUVE().dirty);
+    EXPECT_EQ(canvas.GetGraphUVE().GetNodesUVE().front().id, 10U);
+    EXPECT_EQ(canvas.GetLayoutSnapshotUVE().entries.size(), 2U);
+    EXPECT_TRUE(canvas.UndoUVE().IsAppliedUVE());
+    EXPECT_EQ(canvas.GetGraphUVE().GetNodesUVE().front().id, 1U);
 }
 
 TEST(ScriptGraphCanvasUVETest, RemoveNodeUndoRestoresExactGraphLayoutSelectionAndLinkOrder) {

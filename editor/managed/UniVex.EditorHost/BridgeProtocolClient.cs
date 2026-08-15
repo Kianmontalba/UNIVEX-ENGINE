@@ -110,6 +110,7 @@ public sealed class BridgeProtocolClient : IAsyncDisposable
                 },
                 zoom = command.VisualScriptView.Zoom,
             },
+            visualScriptGraphSchema = command.VisualScriptGraphSchema,
             dataTableName = command.DataTableName,
             developerConsoleCommand = command.DeveloperConsoleCommand,
             developerConsoleSeverityFilter = command.DeveloperConsoleSeverityFilter,
@@ -120,12 +121,17 @@ public sealed class BridgeProtocolClient : IAsyncDisposable
         BridgeEntityRef? createdEntity = result.GetProperty("createdEntity").ValueKind == JsonValueKind.Null
             ? null
             : ParseEntityRef(result.GetProperty("createdEntity"));
+        BridgeVisualScriptGraphSchema? graphSchema = result.TryGetProperty("graphSchema", out JsonElement graphSchemaValue) &&
+                                                       graphSchemaValue.ValueKind != JsonValueKind.Null
+            ? BridgeSnapshotParser.ParseVisualScriptGraphSchema(graphSchemaValue)
+            : null;
         return new BridgeCommandResult(
             result.GetProperty("applied").GetBoolean(),
             result.GetProperty("code").GetString() ?? "bridge.response.invalid",
             result.GetProperty("message").GetString() ?? "The backend returned no bridge command message.",
             BridgeSnapshotParser.Parse(result.GetProperty("snapshot")),
-            createdEntity);
+            createdEntity,
+            graphSchema);
     }
 
     public async ValueTask DisposeAsync()
