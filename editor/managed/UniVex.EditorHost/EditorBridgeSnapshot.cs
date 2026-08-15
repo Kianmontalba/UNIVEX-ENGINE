@@ -266,6 +266,7 @@ public sealed record BridgeCommand(
     BridgeVisualScriptLink? VisualScriptLink = null,
     IReadOnlyList<uint>? VisualScriptSelection = null,
     BridgeVisualScriptView? VisualScriptView = null,
+    string? DataTableName = null,
     string? DeveloperConsoleCommand = null,
     byte? DeveloperConsoleSeverityFilter = null,
     string? DeveloperConsoleCompletionPrefix = null,

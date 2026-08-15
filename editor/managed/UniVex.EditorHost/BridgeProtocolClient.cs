@@ -110,6 +110,7 @@ public sealed class BridgeProtocolClient : IAsyncDisposable
                 },
                 zoom = command.VisualScriptView.Zoom,
             },
+            dataTableName = command.DataTableName,
             developerConsoleCommand = command.DeveloperConsoleCommand,
             developerConsoleSeverityFilter = command.DeveloperConsoleSeverityFilter,
             developerConsoleCompletionPrefix = command.DeveloperConsoleCompletionPrefix,

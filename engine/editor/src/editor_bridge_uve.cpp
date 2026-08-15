@@ -49,6 +49,7 @@ namespace {
         EditorBridgeCapabilityUVE::SetDeveloperConsoleSeverityFilter,
         EditorBridgeCapabilityUVE::SetDeveloperConsoleCompletionPrefix,
         EditorBridgeCapabilityUVE::MoveDeveloperConsoleHistory,
+        EditorBridgeCapabilityUVE::SelectDataTablePreview,
     };
     return capabilities;
 }
@@ -580,6 +581,22 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
             code = applied ? "bridge.command.applied" : "bridge.developer_console.completion.noop";
             message = applied ? "The native developer-console completion prefix was updated."
                               : "The native developer-console completion prefix was already set.";
+            break;
+        case EditorBridgeRequestKindUVE::SelectDataTablePreview:
+            if (!request.dataTableName.has_value() ||
+                request.dataTableName->size() > kEditorBridgeMaximumPresentationTextBytesUVE) {
+                return MakeResponseUVE(request, false, "bridge.data_table.request.invalid",
+                                       "SelectDataTablePreview requires a bounded table name payload.");
+            }
+            if (m_dataTableRegistry == nullptr) {
+                return MakeResponseUVE(request, false, "bridge.data_table.registry.unavailable",
+                                       "Data-table preview selection requires a native registry-backed bridge session.");
+            }
+            applied = SetPreviewTableUVE(*request.dataTableName);
+            code = applied ? "bridge.command.applied" : "bridge.data_table.preview.invalid";
+            message = applied
+                ? "The selected native data-table preview was updated."
+                : "The requested native data-table name is not available in the session registry.";
             break;
         case EditorBridgeRequestKindUVE::MoveDeveloperConsoleHistory:
             if (!request.developerConsoleHistoryDelta.has_value() || *request.developerConsoleHistoryDelta == 0) {

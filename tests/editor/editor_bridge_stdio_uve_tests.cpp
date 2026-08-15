@@ -140,6 +140,55 @@ TEST(EditorBridgeStdioUVETest, ServeUVE_HandshakesAndRoutesExistingBridgeDispatc
     engine.Shutdown();
 }
 
+TEST(EditorBridgeStdioUVETest, ServeUVE_RoutesRegistryBackedDataTablePreviewSelection) {
+    Core::EngineCoreUVE engine(MakeBridgeStdioTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_bridge_stdio_data_table_selection.uvescene");
+        editor.InitUVE();
+        Asset::DataTableRegistryUVE registry;
+        Asset::DataTableUVE table("weapons");
+        ASSERT_TRUE(table.DefineColumnUVE("damage", Asset::DataTableColumnTypeUVE::Integer));
+        ASSERT_TRUE(table.AddRowUVE("pistol", {std::int64_t{25}}));
+        ASSERT_TRUE(registry.RegisterUVE(std::move(table)));
+        EditorBridgeUVE bridge(editor, &registry);
+        EditorBridgeStdioServerUVE server(bridge);
+        std::stringstream input;
+        std::stringstream output;
+        std::stringstream diagnostics;
+
+        AppendFrameUVE(input, JsonUVE{{"jsonrpc", "2.0"},
+                                      {"id", 1U},
+                                      {"method", "bridge.hello"},
+                                      {"params", {{"protocolVersion", kEditorBridgeProtocolVersionUVE}}}});
+        AppendFrameUVE(input, JsonUVE{{"jsonrpc", "2.0"},
+                                      {"id", 2U},
+                                      {"method", "bridge.dispatch"},
+                                      {"params", {{"protocolVersion", kEditorBridgeProtocolVersionUVE},
+                                                  {"requestId", 7U},
+                                                  {"expectedRevision", 1U},
+                                                  {"kind", "selectDataTablePreview"},
+                                                  {"dataTableName", "weapons"}}}});
+
+        EXPECT_EQ(server.ServeUVE(input, output, diagnostics), 0);
+        EXPECT_TRUE(diagnostics.str().empty());
+        const std::vector<JsonUVE> frames = ReadFramesUVE(output);
+        ASSERT_EQ(frames.size(), 2U);
+        const JsonUVE& response = frames[1U].at("result");
+        EXPECT_TRUE(response.at("applied").get<bool>());
+        EXPECT_EQ(response.at("code").get<std::string>(), "bridge.command.applied");
+        const JsonUVE& preview = response.at("snapshot").at("dataTablePreview");
+        EXPECT_TRUE(preview.at("available").get<bool>());
+        EXPECT_EQ(preview.at("name").get<std::string>(), "weapons");
+        EXPECT_EQ(preview.at("rows").front().at("identifier").get<std::string>(), "pistol");
+        EXPECT_EQ(preview.at("rows").front().at("values").front().get<std::string>(), "25");
+
+        editor.ShutdownUVE();
+    }
+    engine.Shutdown();
+}
+
 TEST(EditorBridgeStdioUVETest, ServeUVE_ReportsIncompatibleHelloWithoutMutatingEditorState) {
     Core::EngineCoreUVE engine(MakeBridgeStdioTestConfigUVE());
     engine.Init();

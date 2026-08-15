@@ -533,6 +533,9 @@ enum class FrameReadResultUVE : std::uint8_t {
     if (value == "moveDeveloperConsoleHistory") {
         return EditorBridgeRequestKindUVE::MoveDeveloperConsoleHistory;
     }
+    if (value == "selectDataTablePreview") {
+        return EditorBridgeRequestKindUVE::SelectDataTablePreview;
+    }
     return std::nullopt;
 }
 
@@ -645,6 +648,9 @@ enum class FrameReadResultUVE : std::uint8_t {
         if (!request.visualScriptView.has_value()) {
             return std::nullopt;
         }
+    }
+    if (params.contains("dataTableName") && !params.at("dataTableName").is_null()) {
+        request.dataTableName = params.at("dataTableName").get<std::string>();
     }
     if (params.contains("developerConsoleCommand") && !params.at("developerConsoleCommand").is_null()) {
         request.developerConsoleCommand = params.at("developerConsoleCommand").get<std::string>();
