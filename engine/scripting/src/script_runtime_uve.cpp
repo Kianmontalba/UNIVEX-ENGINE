@@ -73,13 +73,22 @@ bool ScriptRuntimeUVE::DetachUVE(const Scene::EntityUVE entity) noexcept {
     return m_instances.erase(entity) != 0U;
 }
 
-bool ScriptRuntimeUVE::SetEnabledUVE(const Scene::EntityUVE entity, const bool enabled) noexcept {
+ScriptRuntimeEnabledUpdateResultUVE ScriptRuntimeUVE::SetEnabledDetailedUVE(
+    const Scene::EntityUVE entity, const bool enabled) noexcept {
     const auto iterator = m_instances.find(entity);
     if (iterator == m_instances.end()) {
-        return false;
+        return {ScriptRuntimeEnabledUpdateCodeUVE::NoActiveInstance,
+                "Enabled-state update rejected because no active instance exists."};
+    }
+    if (iterator->second.enabled == enabled) {
+        return {ScriptRuntimeEnabledUpdateCodeUVE::Unchanged, "Enabled state is unchanged."};
     }
     iterator->second.enabled = enabled;
-    return true;
+    return {ScriptRuntimeEnabledUpdateCodeUVE::Applied, "Enabled state updated."};
+}
+
+bool ScriptRuntimeUVE::SetEnabledUVE(const Scene::EntityUVE entity, const bool enabled) noexcept {
+    return SetEnabledDetailedUVE(entity, enabled).IsAcceptedUVE();
 }
 
 ScriptRuntimeStateUpdateResultUVE ScriptRuntimeUVE::SetStateDetailedUVE(const Scene::EntityUVE entity,
