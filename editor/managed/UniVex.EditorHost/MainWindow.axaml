@@ -103,15 +103,16 @@
                             </Border>
                         </TabItem>
                         <TabItem Header="Scripting">
-                            <Grid RowDefinitions="Auto,*,Auto" RowSpacing="8">
+                            <Grid RowDefinitions="Auto,Auto,*,Auto" RowSpacing="8">
                                 <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="8">
                                     <Button Content="Undo" Click="VisualScriptUndoButton_OnClick" />
                                     <Button Grid.Column="1" Content="Redo" Click="VisualScriptRedoButton_OnClick" />
                                     <TextBlock Grid.Column="2" x:Name="VisualScriptingStatusTextBlock" VerticalAlignment="Center" Text="Connect to read the native canvas." TextWrapping="Wrap" Opacity="0.76" />
                                     <TextBlock Grid.Column="3" x:Name="VisualScriptingDiagnosticsTextBlock" VerticalAlignment="Center" TextAlignment="Right" Opacity="0.76" />
                                 </Grid>
-                                <local:VisualScriptCanvasControl x:Name="VisualScriptCanvas" Grid.Row="1" MinHeight="280" />
-                                <TextBlock Grid.Row="2" Text="C# renders copied DTOs only. Graph mutation, validation, history, compiler, VM, runtime, and resources remain native C++." TextWrapping="Wrap" Opacity="0.68" />
+                                <TextBlock Grid.Row="1" x:Name="VisualScriptingDebuggerTextBlock" Text="Connect to read native debugger state." TextWrapping="Wrap" Opacity="0.76" />
+                                <local:VisualScriptCanvasControl x:Name="VisualScriptCanvas" Grid.Row="2" MinHeight="280" />
+                                <TextBlock Grid.Row="3" Text="C# renders copied DTOs only. Graph mutation, validation, history, compiler, VM, runtime, and resources remain native C++." TextWrapping="Wrap" Opacity="0.68" />
                             </Grid>
                         </TabItem>
                     </TabControl>
