@@ -23,7 +23,8 @@ namespace UVE::Asset {
 /// is `Save::SaveGameSystemUVE`'s `.uvesave` format (Part 17) — a *fixed* two-section payload
 /// (a length-prefixed metadata JSON section, then a length-prefixed embedded world-state JSON
 /// section), deliberately distinct in shape from `Bundle`'s variable-length entry table, since a
-/// save file always has exactly these two sections, never a variable named set.
+/// save file always has exactly these two sections, never a variable named set. `DataTable` is the
+/// envelope-backed typed data-table asset format. The `assetType` value is never reused.
 enum class AssetKindUVE : std::uint32_t {
     Scene = 1,
     Prefab = 2,
@@ -34,6 +35,7 @@ enum class AssetKindUVE : std::uint32_t {
     Shader = 7,
     Material = 8,
     Save = 9,
+    DataTable = 10,
 };
 
 /// The fixed-size portion of a `.uve*` file's header, returned by ReadUveFileUVE() alongside the

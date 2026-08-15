@@ -1632,3 +1632,10 @@ A read-only preview selection must use the named `SelectDataTablePreview` native
 A successful selection changes only native bridge session presentation state and returns a copied snapshot. Unknown names, overlong names, registry-free bridge sessions, malformed transport payloads, and stale revisions must reject deterministically without changing the current selection or mutating a `DataTableUVE`. The stdio parser owns wire-shape validation; the native bridge owns registry availability and selection semantics.
 
 The managed `BridgeCommand` and Avalonia Data Tables catalog are presentation adapters only. Managed selection emits a named command and reconciles the selected catalog item from the returned immutable snapshot; it never stores a native table pointer, edits rows or schemas, writes an asset file, or bypasses the C++ bridge.
+
+
+## Data Table `.uve*` asset store (Increment 98)
+
+`DataTableAssetSerializerUVE` remains the single JSON document authority for typed data tables. `SaveDataTableAssetUVE()` must wrap that document with `WriteUveFileUVE()` using the unique `AssetKindUVE::DataTable` value; never create a second table payload format or write an unframed table file.
+
+`LoadDataTableAssetUVE()` must reject missing files, wrong envelope kinds, malformed payloads, and invalid schema/row/value data without mutating the caller's destination. Always deserialize into a temporary `DataTableUVE` and move-assign only after complete success. The store is synchronous and caller-path-owned; it must not scan directories, own asset-database records, retain filesystem handles, mutate the session registry, or perform hot reload.
