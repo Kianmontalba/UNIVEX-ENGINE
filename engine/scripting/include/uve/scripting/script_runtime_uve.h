@@ -37,6 +37,20 @@ struct ScriptRuntimeAttachResultUVE final {
     }
 };
 
+enum class ScriptRuntimeDetachCodeUVE : std::uint8_t {
+    Applied = 0,
+    NoActiveInstance,
+};
+
+struct ScriptRuntimeDetachResultUVE final {
+    ScriptRuntimeDetachCodeUVE code = ScriptRuntimeDetachCodeUVE::Applied;
+    std::string message;
+
+    [[nodiscard]] bool IsAcceptedUVE() const noexcept {
+        return code == ScriptRuntimeDetachCodeUVE::Applied;
+    }
+};
+
 enum class ScriptRuntimeStateUpdateCodeUVE : std::uint8_t {
     Applied = 0,
     Unchanged,
@@ -116,6 +130,7 @@ public:
     [[nodiscard]] bool AttachUVE(Scene::EntityUVE entity, ScriptBytecodeProgramUVE program);
     [[nodiscard]] ScriptRuntimeReloadResultUVE ReloadUVE(Scene::EntityUVE entity,
                                                           ScriptBytecodeProgramUVE program);
+    [[nodiscard]] ScriptRuntimeDetachResultUVE DetachDetailedUVE(Scene::EntityUVE entity) noexcept;
     [[nodiscard]] bool DetachUVE(Scene::EntityUVE entity) noexcept;
     [[nodiscard]] ScriptRuntimeEnabledUpdateResultUVE SetEnabledDetailedUVE(Scene::EntityUVE entity,
                                                                               bool enabled) noexcept;

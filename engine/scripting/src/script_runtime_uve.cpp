@@ -87,8 +87,16 @@ ScriptRuntimeReloadResultUVE ScriptRuntimeUVE::ReloadUVE(const Scene::EntityUVE 
                                       : "Runtime program reload accepted; incompatible state was reset."};
 }
 
+ScriptRuntimeDetachResultUVE ScriptRuntimeUVE::DetachDetailedUVE(const Scene::EntityUVE entity) noexcept {
+    if (m_instances.erase(entity) == 0U) {
+        return {ScriptRuntimeDetachCodeUVE::NoActiveInstance,
+                "Runtime detachment rejected because no active instance matches the entity handle."};
+    }
+    return {ScriptRuntimeDetachCodeUVE::Applied, "Runtime instance detached."};
+}
+
 bool ScriptRuntimeUVE::DetachUVE(const Scene::EntityUVE entity) noexcept {
-    return m_instances.erase(entity) != 0U;
+    return DetachDetailedUVE(entity).IsAcceptedUVE();
 }
 
 ScriptRuntimeEnabledUpdateResultUVE ScriptRuntimeUVE::SetEnabledDetailedUVE(

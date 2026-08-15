@@ -359,14 +359,24 @@ TEST(ScriptRuntimeUVETest, SetEnabledDetailedUVEReturnsStructuredDiagnosticsAndC
     EXPECT_FALSE(missing.message.empty());
 }
 
-TEST(ScriptRuntimeUVETest, DetachUVE_RemovesOnlyExactGenerationalHandle) {
+TEST(ScriptRuntimeUVETest, DetachDetailedUVEReturnsStructuredLifecycleDiagnostics) {
     ScriptRuntimeUVE runtime;
     ScriptBytecodeProgramUVE program;
-    ASSERT_TRUE(runtime.AttachUVE({4U, 1U}, program));
-    EXPECT_FALSE(runtime.DetachUVE({4U, 2U}));
-    EXPECT_TRUE(runtime.HasInstanceUVE({4U, 1U}));
-    EXPECT_TRUE(runtime.DetachUVE({4U, 1U}));
-    EXPECT_FALSE(runtime.HasInstanceUVE({4U, 1U}));
+    const Scene::EntityUVE entity{4U, 1U};
+    ASSERT_TRUE(runtime.AttachUVE(entity, program));
+
+    const ScriptRuntimeDetachResultUVE wrongGeneration = runtime.DetachDetailedUVE({4U, 2U});
+    EXPECT_EQ(wrongGeneration.code, ScriptRuntimeDetachCodeUVE::NoActiveInstance);
+    EXPECT_FALSE(wrongGeneration.IsAcceptedUVE());
+    EXPECT_FALSE(wrongGeneration.message.empty());
+    EXPECT_TRUE(runtime.HasInstanceUVE(entity));
+
+    const ScriptRuntimeDetachResultUVE applied = runtime.DetachDetailedUVE(entity);
+    EXPECT_EQ(applied.code, ScriptRuntimeDetachCodeUVE::Applied);
+    EXPECT_TRUE(applied.IsAcceptedUVE());
+    EXPECT_FALSE(applied.message.empty());
+    EXPECT_FALSE(runtime.HasInstanceUVE(entity));
+    EXPECT_FALSE(runtime.DetachUVE(entity));
 }
 
 TEST(ScriptRuntimeUVETest, ReloadUVE_RejectsInvalidCandidateAndRetainsLastKnownGoodProgram) {
