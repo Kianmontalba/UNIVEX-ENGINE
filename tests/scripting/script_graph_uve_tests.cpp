@@ -6,6 +6,7 @@
 #include "uve/scripting/script_debugger_uve.h"
 #include "uve/scripting/script_graph_editor_backend_uve.h"
 #include "uve/scripting/script_graph_canvas_uve.h"
+#include "uve/scripting/script_graph_canvas_persistence_uve.h"
 #include "uve/scripting/script_graph_persistence_uve.h"
 #include "uve/scripting/script_graph_uve.h"
 #include "uve/scripting/script_hot_reload_uve.h"
@@ -413,6 +414,55 @@ TEST(ScriptGraphCanvasUVETest, ViewChangesAreNotUndoableAndRejectInvalidValues) 
     EXPECT_GT(canvas.GetSnapshotUVE().revision, initialRevision);
     EXPECT_FALSE(canvas.SetViewUVE({{0.0F, 0.0F}, 0.0F}).IsAppliedUVE());
     EXPECT_FALSE(canvas.SetViewUVE({{std::numeric_limits<float>::quiet_NaN(), 0.0F}, 1.0F}).IsAppliedUVE());
+}
+
+TEST(ScriptGraphCanvasPersistenceUVETest, EncodeDecodeAndApplyLayout_RoundTripsDeterministicallyWithUndo) {
+    ScriptNodeRegistryUVE registry;
+    RegisterTestNodesUVE(registry);
+    ScriptGraphCanvasUVE canvas(registry);
+    ASSERT_TRUE(canvas.AddNodeUVE({1U, "test.source"}, {10.0F, 20.0F}).IsAppliedUVE());
+    ASSERT_TRUE(canvas.AddNodeUVE({2U, "test.sink"}, {30.0F, 40.0F}).IsAppliedUVE());
+    ASSERT_TRUE(canvas.SetViewUVE({{12.0F, -4.0F}, 2.0F}).IsAppliedUVE());
+
+    const ScriptGraphCanvasLayoutSnapshotUVE expected = canvas.GetLayoutSnapshotUVE();
+    std::vector<ScriptPersistenceDiagnosticUVE> diagnostics;
+    const std::string encoded = EncodeScriptGraphCanvasLayoutUVE(expected, diagnostics);
+    ASSERT_TRUE(diagnostics.empty());
+    const ScriptGraphCanvasLayoutDecodeResultUVE decoded = DecodeScriptGraphCanvasLayoutUVE(encoded);
+    ASSERT_TRUE(decoded.IsSuccessUVE());
+    ASSERT_EQ(*decoded.layout, expected);
+    ScriptGraphCanvasLayoutSnapshotUVE incomplete = expected;
+    incomplete.entries.pop_back();
+    EXPECT_EQ(canvas.ApplyLayoutUVE(std::move(incomplete)).code,
+              ScriptGraphCanvasCommandCodeUVE::Rejected);
+
+    ASSERT_TRUE(canvas.MoveNodeUVE(1U, {100.0F, 200.0F}).IsAppliedUVE());
+    ASSERT_TRUE(canvas.SetViewUVE({{-8.0F, 6.0F}, 1.0F}).IsAppliedUVE());
+    ASSERT_TRUE(canvas.ApplyLayoutUVE(*decoded.layout).IsAppliedUVE());
+    EXPECT_EQ(canvas.GetLayoutSnapshotUVE(), expected);
+    ASSERT_TRUE(canvas.UndoUVE().IsAppliedUVE());
+    EXPECT_EQ(canvas.GetLayoutSnapshotUVE().view, expected.view);
+    EXPECT_EQ(canvas.GetLayoutSnapshotUVE().entries[0].position,
+              (ScriptGraphCanvasPointUVE{100.0F, 200.0F}));
+}
+
+TEST(ScriptGraphCanvasPersistenceUVETest, DecodeLayout_RejectsMalformedVersionDuplicateAndTextLimit) {
+    const ScriptGraphCanvasLayoutDecodeResultUVE malformed = DecodeScriptGraphCanvasLayoutUVE("{not-json");
+    ASSERT_FALSE(malformed.IsSuccessUVE());
+    EXPECT_EQ(malformed.diagnostics[0].code, ScriptPersistenceDiagnosticCodeUVE::InvalidJson);
+
+    const ScriptGraphCanvasLayoutDecodeResultUVE duplicate = DecodeScriptGraphCanvasLayoutUVE(
+        R"({"schemaVersion":1,"view":{"pan":{"x":0,"y":0},"zoom":1},"entries":[{"nodeId":1,"x":0,"y":0},{"nodeId":1,"x":1,"y":1}]})");
+    ASSERT_FALSE(duplicate.IsSuccessUVE());
+    EXPECT_EQ(duplicate.diagnostics[0].code, ScriptPersistenceDiagnosticCodeUVE::DuplicateEntry);
+
+    ScriptGraphCanvasLayoutSnapshotUVE layout;
+    layout.entries.push_back({1U, {0.0F, 0.0F}});
+    std::vector<ScriptPersistenceDiagnosticUVE> diagnostics;
+    EXPECT_TRUE(EncodeScriptGraphCanvasLayoutUVE(layout, diagnostics,
+                                                  {128U, 8U}).empty());
+    ASSERT_EQ(diagnostics.size(), 1U);
+    EXPECT_EQ(diagnostics[0].code, ScriptPersistenceDiagnosticCodeUVE::LimitExceeded);
 }
 
 TEST(ScriptGraphCanvasUVETest, CommandsRejectStaleRevisionAndInvalidSelectionWithoutMutation) {

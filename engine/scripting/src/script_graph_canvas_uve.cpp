@@ -305,6 +305,54 @@ ScriptGraphCanvasCommandResultUVE ScriptGraphCanvasUVE::RedoUVE(const std::uint6
                          "Canvas redo restored the exact next graph/layout/selection state.");
 }
 
+ScriptGraphCanvasLayoutSnapshotUVE ScriptGraphCanvasUVE::GetLayoutSnapshotUVE() const {
+    ScriptGraphCanvasLayoutSnapshotUVE snapshot{};
+    snapshot.view = m_view;
+    const auto& graphNodes = m_backend.GetGraphUVE().GetNodesUVE();
+    snapshot.entries.reserve(graphNodes.size());
+    for (const ScriptNodeUVE& node : graphNodes) {
+        if (const LayoutEntryUVE* layout = FindLayoutUVE(node.id); layout != nullptr) {
+            snapshot.entries.push_back(*layout);
+        }
+    }
+    return snapshot;
+}
+
+ScriptGraphCanvasCommandResultUVE ScriptGraphCanvasUVE::ApplyLayoutUVE(
+    ScriptGraphCanvasLayoutSnapshotUVE layout, const std::uint64_t expectedRevision) {
+    if (!CheckExpectedRevisionUVE(expectedRevision)) {
+        return MakeResultUVE(ScriptGraphCanvasCommandCodeUVE::StaleRevision,
+                             "The canvas layout used a stale revision.");
+    }
+    const std::size_t liveNodeCount = m_backend.GetGraphUVE().GetNodesUVE().size();
+    if (layout.entries.size() > kMaximumScriptGraphCanvasEntriesUVE ||
+        layout.entries.size() != liveNodeCount || !IsValidViewUVE(layout.view)) {
+        return MakeResultUVE(ScriptGraphCanvasCommandCodeUVE::Rejected,
+                             "ApplyLayout requires a complete live-node layout and a finite, bounded view.");
+    }
+    std::vector<std::uint32_t> nodeIds;
+    nodeIds.reserve(layout.entries.size());
+    for (const ScriptGraphCanvasLayoutEntryUVE& entry : layout.entries) {
+        if (entry.nodeId == 0U || !HasNodeUVE(entry.nodeId) || !IsFinitePointUVE(entry.position) ||
+            ContainsIdUVE(nodeIds, entry.nodeId)) {
+            return MakeResultUVE(ScriptGraphCanvasCommandCodeUVE::Rejected,
+                                 "ApplyLayout requires unique live node IDs and finite positions.");
+        }
+        nodeIds.push_back(entry.nodeId);
+    }
+    const ScriptGraphCanvasLayoutSnapshotUVE current = GetLayoutSnapshotUVE();
+    if (current == layout) {
+        return MakeResultUVE(ScriptGraphCanvasCommandCodeUVE::NoHistory,
+                             "ApplyLayout made no change.");
+    }
+    StateUVE before = CaptureStateUVE();
+    m_view = layout.view;
+    m_layout = std::move(layout.entries);
+    RecordMutationUVE(std::move(before));
+    return MakeResultUVE(ScriptGraphCanvasCommandCodeUVE::Applied,
+                         "ApplyLayout was applied with undo support.");
+}
+
 bool ScriptGraphCanvasUVE::HasNodeUVE(const std::uint32_t nodeId) const noexcept {
     const auto& nodes = m_backend.GetGraphUVE().GetNodesUVE();
     return std::find_if(nodes.begin(), nodes.end(),

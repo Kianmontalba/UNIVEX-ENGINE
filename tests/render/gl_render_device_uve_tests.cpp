@@ -20,6 +20,9 @@
 #include <GL/gl.h>
 #include <gtest/gtest.h>
 
+#include <chrono>
+#include <limits>
+
 #include "uve/debug/log_sink_uve.h"
 #include "uve/debug/logger_uve.h"
 #include "uve/events/event_system_uve.h"
@@ -571,13 +574,12 @@ TEST_F(GlRenderDeviceUVETest, ShaderManager_Basic3DProgramRendersIndexedGeometry
     programDesc.debugNameUVE = "ShaderManagerBasic3DRealGl";
     const std::shared_ptr<Shader::ShaderProgramUVE> program = shaderManager.CreateProgramUVE(programDesc);
     ASSERT_NE(program, nullptr);
-    for (int iteration = 0; iteration < 256; ++iteration) {
+    const auto compileDeadline = std::chrono::steady_clock::now() + std::chrono::seconds{2};
+    while (!program->IsReadyUVE() && std::chrono::steady_clock::now() < compileDeadline) {
         shaderManager.UpdateUVE(0.0);
-        if (program->IsReadyUVE()) {
-            break;
-        }
         std::this_thread::yield();
     }
+    ASSERT_TRUE(program->IsReadyUVE());
     ASSERT_TRUE(program->IsValidUVE());
 
     constexpr std::array<float, 9> kVertices{-2.0F, -2.0F, -8.0F, 2.0F, -2.0F, -8.0F, 0.0F, 2.0F, -8.0F};
