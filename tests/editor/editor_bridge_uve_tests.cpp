@@ -53,6 +53,7 @@ TEST(EditorBridgeUVETest, VisualScriptGraphSchemaUVE_IsAdvertisedAndUsesNativeAu
         bool serializeAdvertised = false;
         bool deserializeAdvertised = false;
         bool addTypeAdvertised = false;
+        bool pinDefaultAdvertised = false;
         for (const EditorBridgeCapabilityUVE capability : initial.capabilities) {
             serializeAdvertised = serializeAdvertised ||
                                   capability == EditorBridgeCapabilityUVE::SerializeVisualScriptGraph;
@@ -60,10 +61,22 @@ TEST(EditorBridgeUVETest, VisualScriptGraphSchemaUVE_IsAdvertisedAndUsesNativeAu
                                     capability == EditorBridgeCapabilityUVE::DeserializeVisualScriptGraph;
             addTypeAdvertised = addTypeAdvertised ||
                                 capability == EditorBridgeCapabilityUVE::AddVisualScriptNodeType;
+            pinDefaultAdvertised = pinDefaultAdvertised ||
+                                   capability == EditorBridgeCapabilityUVE::SetVisualScriptPinDefault;
         }
         ASSERT_TRUE(serializeAdvertised);
         ASSERT_TRUE(deserializeAdvertised);
         ASSERT_TRUE(addTypeAdvertised);
+        ASSERT_TRUE(pinDefaultAdvertised);
+
+        EditorBridgeRequestUVE defaultRequest{};
+        defaultRequest.protocolVersion = kEditorBridgeProtocolVersionUVE;
+        defaultRequest.requestId = 151U;
+        defaultRequest.expectedRevision = initial.revision;
+        defaultRequest.kind = EditorBridgeRequestKindUVE::SetVisualScriptPinDefault;
+        const EditorBridgeResponseUVE rejectedDefault = bridge.DispatchUVE(defaultRequest);
+        EXPECT_FALSE(rejectedDefault.applied);
+        EXPECT_EQ(rejectedDefault.code, "bridge.visual_scripting.request.invalid");
 
         EditorBridgeRequestUVE addTypeRequest{};
         addTypeRequest.protocolVersion = kEditorBridgeProtocolVersionUVE;

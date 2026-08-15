@@ -933,6 +933,32 @@ TEST(ScriptDebuggerUVETest, SetBreakpointUVE_ProvidesSortedSnapshotAndRejectsEmp
 
 } // namespace UVE::Scripting
 namespace UVE::Scripting {
+TEST(ScriptGraphCanvasUVETest, SetPinDefaultValueValidatesAndRecordsNativeHistory) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(registry.RegisterNodeTypeUVE(ScriptNodeTypeDescriptorUVE{
+        "test.default", "Default", {{"Value", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number,
+                                        ScriptPinRoleUVE::Data, std::string("1.0")},
+                                       {"Out", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Number}}}));
+    ScriptGraphCanvasUVE canvas(registry);
+    ASSERT_TRUE(canvas.AddNodeUVE({1U, "test.default"}, {0.0F, 0.0F}).IsAppliedUVE());
+
+    const auto applied = canvas.SetPinDefaultValueUVE(1U, "Value", "2.5");
+    ASSERT_TRUE(applied.IsAppliedUVE());
+    const ScriptGraphCanvasSnapshotUVE changed = canvas.GetSnapshotUVE();
+    ASSERT_EQ(changed.nodes.size(), 1U);
+    ASSERT_EQ(changed.nodes[0].pins.size(), 2U);
+    EXPECT_EQ(changed.nodes[0].pins[0].defaultValue, std::optional<std::string>("2.5"));
+    EXPECT_TRUE(changed.dirty);
+    EXPECT_TRUE(changed.canUndo);
+
+    EXPECT_FALSE(canvas.SetPinDefaultValueUVE(1U, "Value", "not-a-number").IsAppliedUVE());
+    EXPECT_FALSE(canvas.SetPinDefaultValueUVE(1U, "Out", "2.5").IsAppliedUVE());
+    ASSERT_TRUE(canvas.UndoUVE(changed.revision).IsAppliedUVE());
+    const ScriptGraphCanvasSnapshotUVE restored = canvas.GetSnapshotUVE();
+    ASSERT_EQ(restored.nodes.size(), 1U);
+    EXPECT_EQ(restored.nodes[0].pins[0].defaultValue, std::optional<std::string>("1.0"));
+}
+
 TEST(ScriptGraphCanvasUVETest, SnapshotExposesDescriptorRichPaletteInDeterministicOrder) {
     ScriptNodeRegistryUVE registry;
     ASSERT_TRUE(registry.RegisterNodeTypeUVE(ScriptNodeTypeDescriptorUVE{

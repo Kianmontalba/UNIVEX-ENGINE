@@ -375,7 +375,9 @@ public sealed record BridgeCommand(
     string? DeveloperConsoleCommand = null,
     byte? DeveloperConsoleSeverityFilter = null,
     string? DeveloperConsoleCompletionPrefix = null,
-    int? DeveloperConsoleHistoryDelta = null);
+    int? DeveloperConsoleHistoryDelta = null,
+    string? VisualScriptPinName = null,
+    string? VisualScriptDefaultValue = null);
 
 public sealed record BridgeCommandResult(
     bool Applied,

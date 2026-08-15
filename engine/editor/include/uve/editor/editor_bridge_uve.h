@@ -79,6 +79,7 @@ enum class EditorBridgeCapabilityUVE : std::uint8_t {
     SerializeVisualScriptGraph,
     DeserializeVisualScriptGraph,
     AddVisualScriptNodeType,
+    SetVisualScriptPinDefault,
 };
 
 /// The deliberately small v1 request vocabulary. No generic command string is accepted because
@@ -122,6 +123,7 @@ enum class EditorBridgeRequestKindUVE : std::uint8_t {
     SerializeVisualScriptGraph,
     DeserializeVisualScriptGraph,
     AddVisualScriptNodeType,
+    SetVisualScriptPinDefault,
 };
 
 /// Explicitly describes whether this bridge session has a native-owned viewport surface. No raw
@@ -416,6 +418,8 @@ struct EditorBridgeRequestUVE final {
     std::optional<DeveloperConsoleSeverityFilterUVE> developerConsoleSeverityFilter;
     std::optional<std::string> developerConsoleCompletionPrefix;
     std::optional<std::int32_t> developerConsoleHistoryDelta;
+    std::optional<std::string> visualScriptPinName;
+    std::optional<std::string> visualScriptDefaultValue;
 
     EditorBridgeRequestUVE() = default;
 

@@ -56,6 +56,7 @@ namespace {
         EditorBridgeCapabilityUVE::SerializeVisualScriptGraph,
         EditorBridgeCapabilityUVE::DeserializeVisualScriptGraph,
         EditorBridgeCapabilityUVE::AddVisualScriptNodeType,
+        EditorBridgeCapabilityUVE::SetVisualScriptPinDefault,
     };
     return capabilities;
 }
@@ -84,6 +85,7 @@ namespace {
         case EditorBridgeRequestKindUVE::RedoVisualScript:
         case EditorBridgeRequestKindUVE::DeserializeVisualScriptGraph:
         case EditorBridgeRequestKindUVE::AddVisualScriptNodeType:
+        case EditorBridgeRequestKindUVE::SetVisualScriptPinDefault:
             return true;
         default:
             return false;
@@ -522,6 +524,26 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
                 applied = result.IsAppliedUVE();
                 code = result.code == Scripting::ScriptGraphCanvasCommandCodeUVE::StaleRevision
                     ? "bridge.snapshot.stale" : applied ? "bridge.command.applied" : "bridge.command.rejected";
+                message = result.message;
+            }
+            break;
+        case EditorBridgeRequestKindUVE::SetVisualScriptPinDefault:
+            if (!request.visualScriptNodeId.has_value() || !request.visualScriptPinName.has_value() ||
+                !request.visualScriptDefaultValue.has_value() || request.visualScriptPinName->empty() ||
+                request.visualScriptPinName->size() > 256U ||
+                request.visualScriptDefaultValue->size() > Scripting::kMaximumScriptGraphCanvasDefaultValueBytesUVE) {
+                return MakeResponseUVE(request, false, "bridge.visual_scripting.request.invalid",
+                                       "SetVisualScriptPinDefault requires bounded node, pin, and value payloads.");
+            }
+            {
+                const auto result = m_visualScriptCanvas.SetPinDefaultValueUVE(
+                    *request.visualScriptNodeId, *request.visualScriptPinName,
+                    *request.visualScriptDefaultValue, request.expectedRevision);
+                applied = result.IsAppliedUVE();
+                code = result.code == Scripting::ScriptGraphCanvasCommandCodeUVE::StaleRevision
+                    ? "bridge.snapshot.stale" : applied ? "bridge.command.applied" :
+                    result.code == Scripting::ScriptGraphCanvasCommandCodeUVE::NoHistory
+                        ? "bridge.command.noop" : "bridge.command.rejected";
                 message = result.message;
             }
             break;
