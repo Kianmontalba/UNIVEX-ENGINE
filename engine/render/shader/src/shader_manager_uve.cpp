@@ -51,6 +51,7 @@ struct ShaderManagerUVE::ImplUVE {
         PrimitiveTopologyUVE topology = PrimitiveTopologyUVE::Triangles;
         bool depthTestEnabled = true;
         bool depthWriteEnabled = true;
+        PipelineBlendModeUVE blendMode = PipelineBlendModeUVE::Opaque;
         bool hotReloadEnabledUVE = true;
         std::string debugNameUVE;
     };
@@ -178,6 +179,7 @@ namespace {
     request.topology = desc.topology;
     request.depthTestEnabled = desc.depthTestEnabled;
     request.depthWriteEnabled = desc.depthWriteEnabled;
+    request.blendMode = desc.blendMode;
     request.hotReloadEnabledUVE = desc.hotReloadEnabledUVE;
     return request;
 }
@@ -344,7 +346,7 @@ void ShaderManagerUVE::ApplyPendingProgramLinksUVE(ImplUVE& impl) {
                 Detail::GetCacheFilePathUVE(impl.config.cachePath, programHash);
             const PipelineBinaryDescUVE binaryDesc{pending.desc.vertexLayout, pending.desc.vertexStride,
                                                     pending.desc.topology, pending.desc.depthTestEnabled,
-                                                    pending.desc.depthWriteEnabled};
+                                                    pending.desc.depthWriteEnabled, pending.desc.blendMode};
 
             PipelineHandleUVE newPipeline = kInvalidPipelineHandleUVE;
             bool usedCache = false;
@@ -364,6 +366,7 @@ void ShaderManagerUVE::ApplyPendingProgramLinksUVE(ImplUVE& impl) {
                 pipelineDesc.topology = pending.desc.topology;
                 pipelineDesc.depthTestEnabled = pending.desc.depthTestEnabled;
                 pipelineDesc.depthWriteEnabled = pending.desc.depthWriteEnabled;
+                pipelineDesc.blendMode = pending.desc.blendMode;
                 pipelineDesc.vertexStride = pending.desc.vertexStride;
                 newPipeline = impl.renderDevice.CreatePipelineUVE(pipelineDesc, &infoLog);
 

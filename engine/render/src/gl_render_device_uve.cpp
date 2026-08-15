@@ -324,7 +324,8 @@ PipelineHandleUVE GlRenderDeviceUVE::CreatePipelineUVE(const PipelineDescUVE& de
     m_impl->state.gl.glGenVertexArrays(1, &glVao);
 
     Detail::GlDeviceStateUVE::PipelineRecordUVE record{
-        glProgram, glVao, desc.vertexLayout, desc.vertexStride, desc.depthTestEnabled, desc.depthWriteEnabled, {}};
+        glProgram, glVao, desc.vertexLayout, desc.vertexStride, desc.depthTestEnabled, desc.depthWriteEnabled,
+        desc.blendMode, {}};
     ReflectPipelineUniformsUVE(m_impl->state.gl, glProgram, record.uniforms);
 
     const std::uint32_t handleValue = m_impl->state.nextPipelineHandle++;
@@ -406,7 +407,8 @@ PipelineHandleUVE GlRenderDeviceUVE::CreatePipelineFromBinaryUVE(std::span<const
     m_impl->state.gl.glGenVertexArrays(1, &glVao);
 
     Detail::GlDeviceStateUVE::PipelineRecordUVE record{
-        glProgram, glVao, desc.vertexLayout, desc.vertexStride, desc.depthTestEnabled, desc.depthWriteEnabled, {}};
+        glProgram, glVao, desc.vertexLayout, desc.vertexStride, desc.depthTestEnabled, desc.depthWriteEnabled,
+        desc.blendMode, {}};
     // Uniform locations are not guaranteed portable across a binary load even though behavior
     // is - reflection must always be re-run here, never assumed inherited from the original
     // compile that produced this binary.

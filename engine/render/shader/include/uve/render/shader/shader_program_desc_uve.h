@@ -29,6 +29,7 @@ struct ShaderProgramDescUVE {
     PrimitiveTopologyUVE topology = PrimitiveTopologyUVE::Triangles;
     bool depthTestEnabled = true;
     bool depthWriteEnabled = true;
+    PipelineBlendModeUVE blendMode = PipelineBlendModeUVE::Opaque;
 
     bool hotReloadEnabledUVE = true;
     std::string debugNameUVE;

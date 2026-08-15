@@ -3,11 +3,31 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 
+#include "uve/math/vector3_uve.h"
 #include "uve/scene/entity_uve.h"
 #include "uve/scene/i_entity_manager_uve.h"
 
 namespace UVE::Render {
+
+/// Value-only editor visual facts consumed by the native renderer's optional composite pass.
+/// Coordinates are normalized to the presentation surface; invalid or inverted rectangles disable
+/// their feature instead of requesting undefined GPU work. Thread-safety: main render thread only.
+struct EditorViewportVisualStateUVE final {
+    bool enabled = false;
+    float viewportMinX = 0.0F;
+    float viewportMinY = 0.0F;
+    float viewportMaxX = 1.0F;
+    float viewportMaxY = 1.0F;
+    bool activeSelectionVisible = false;
+    float selectionMinX = 0.0F;
+    float selectionMinY = 0.0F;
+    float selectionMaxX = 0.0F;
+    float selectionMaxY = 0.0F;
+    std::int32_t activeGizmoAxis = 0;
+    Math::Vector3UVE cameraForward{0.0F, 0.0F, -1.0F};
+};
 
 /// A copied, frame-local account of observable Renderer3DUVE work. Each field names evidence that
 /// the renderer actually has: extraction and recorded-pass/draw counts are CPU-side facts;
@@ -26,6 +46,8 @@ struct Renderer3DFrameDiagnosticsUVE final {
     bool mainPassRecorded = false;
     bool toneMappingProgramReady = false;
     bool toneMappingPassRecorded = false;
+    bool editorVisualProgramReady = false;
+    bool editorVisualPassRecorded = false;
 };
 
 /// IRenderer3DUVE is the engine's final per-frame render orchestrator (the spec's `Renderer3DUVE`,
@@ -48,6 +70,12 @@ public:
     /// WorldTransformComponentUVE and CameraComponentUVE (the same contract ICameraSystemUVE
     /// already enforces).
     virtual void RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scene::EntityUVE cameraEntity) = 0;
+
+    /// Updates optional copied editor-only visual facts for a later native render frame. The default
+    /// implementation is intentionally a no-op so non-Renderer3D test doubles need not own editor state.
+    virtual void SetEditorViewportVisualStateUVE(const EditorViewportVisualStateUVE& state) {
+        static_cast<void>(state);
+    }
 
     /// Returns the last frame's copied renderer evidence snapshot. The snapshot intentionally does
     /// not claim a completed GPU frame or visible window pixels; use the real-GL integration tests

@@ -258,6 +258,7 @@ struct Renderer3DUVE::ImplUVE {
     /// Copied only through IRenderer3DUVE::GetLastFrameDiagnosticsUVE(). Recorded counts are
     /// CPU-side renderer facts; the OpenGL-issued count never asserts completed presentation.
     Renderer3DFrameDiagnosticsUVE lastFrameDiagnostics;
+    EditorViewportVisualStateUVE editorVisualState{};
 
     /// Flat ambient term added to every rendered item every frame, regardless of whether an
     /// active light exists this frame (see EngineConfigUVE::ambientColor, Increment 23).
@@ -296,6 +297,7 @@ struct Renderer3DUVE::ImplUVE {
     /// before every use, exactly like RenderDemoTriangleUVE() does.
     std::shared_ptr<Shader::ShaderProgramUVE> shadowProgram;
     std::shared_ptr<Shader::ShaderProgramUVE> toneMappingProgram;
+    std::shared_ptr<Shader::ShaderProgramUVE> editorViewportVisualsProgram;
 
     /// Built-in primitive visualization program. Its Basic3D contract contains only model,
     /// view-projection, and authored base-color uniforms; primitives intentionally do not bind
@@ -733,6 +735,15 @@ Renderer3DUVE::Renderer3DUVE(IRenderDeviceUVE& renderDevice, IRenderSystemUVE& r
     toneMappingProgramDesc.debugNameUVE = "ToneMapping";
     m_impl->toneMappingProgram = shaderManager.CreateProgramUVE(toneMappingProgramDesc);
 
+    Shader::ShaderProgramDescUVE editorViewportVisualsProgramDesc;
+    editorViewportVisualsProgramDesc.virtualFilePath = std::string(Shader::BuiltIn::kEditorViewportVisualsVirtualPath);
+    editorViewportVisualsProgramDesc.embeddedFallbackSourceCode = std::string(Shader::BuiltIn::kEditorViewportVisualsSource);
+    editorViewportVisualsProgramDesc.depthTestEnabled = false;
+    editorViewportVisualsProgramDesc.depthWriteEnabled = false;
+    editorViewportVisualsProgramDesc.blendMode = PipelineBlendModeUVE::SourceAlphaOver;
+    editorViewportVisualsProgramDesc.debugNameUVE = "EditorViewportVisuals";
+    m_impl->editorViewportVisualsProgram = shaderManager.CreateProgramUVE(editorViewportVisualsProgramDesc);
+
     Shader::ShaderProgramDescUVE primitiveProgramDesc;
     primitiveProgramDesc.virtualFilePath = std::string(Shader::BuiltIn::kBasic3DVirtualPath);
     primitiveProgramDesc.embeddedFallbackSourceCode = std::string(Shader::BuiltIn::kBasic3DSource);
@@ -777,6 +788,7 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
     m_impl->lastFrameDiagnostics = Renderer3DFrameDiagnosticsUVE{};
     m_impl->lastFrameDiagnostics.primitiveProgramReady = m_impl->primitiveProgram->IsValidUVE();
     m_impl->lastFrameDiagnostics.toneMappingProgramReady = m_impl->toneMappingProgram->IsValidUVE();
+    m_impl->lastFrameDiagnostics.editorVisualProgramReady = m_impl->editorViewportVisualsProgram->IsValidUVE();
 
     const float aspectRatio = static_cast<float>(m_impl->targetWidth) / static_cast<float>(m_impl->targetHeight);
     const Math::Matrix4x4UVE viewProjection =
@@ -879,6 +891,31 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
             }
             commandBuffer.EndRenderPassUVE();
         }});
+    renderGraph.AddPassUVE(RenderGraphPassDescUVE{
+        "EditorViewportVisuals", {{colorResource, RenderGraphResourceAccessUVE::Write}},
+        [this](ICommandBufferUVE& commandBuffer) {
+            const EditorViewportVisualStateUVE& state = m_impl->editorVisualState;
+            if (!state.enabled || !m_impl->editorViewportVisualsProgram->IsValidUVE()) {
+                return;
+            }
+            RenderPassDescUVE passDesc;
+            passDesc.colorAttachment = m_impl->colorTarget;
+            passDesc.depthAttachment = kInvalidTextureHandleUVE;
+            passDesc.colorLoadOp = LoadOpUVE::Load;
+            passDesc.depthLoadOp = LoadOpUVE::DontCare;
+            m_impl->lastFrameDiagnostics.editorVisualPassRecorded = true;
+            commandBuffer.BeginRenderPassUVE(passDesc);
+            m_impl->editorViewportVisualsProgram->SetVector3UVE("uViewportMin", Math::Vector3UVE{state.viewportMinX, state.viewportMinY, 0.0F});
+            m_impl->editorViewportVisualsProgram->SetVector3UVE("uViewportMax", Math::Vector3UVE{state.viewportMaxX, state.viewportMaxY, 0.0F});
+            m_impl->editorViewportVisualsProgram->SetVector3UVE("uSelectionMin", Math::Vector3UVE{state.selectionMinX, state.selectionMinY, 0.0F});
+            m_impl->editorViewportVisualsProgram->SetVector3UVE("uSelectionMax", Math::Vector3UVE{state.selectionMaxX, state.selectionMaxY, 0.0F});
+            m_impl->editorViewportVisualsProgram->SetVector3UVE("uCameraForward", state.cameraForward);
+            m_impl->editorViewportVisualsProgram->SetIntUVE("uSelectionVisible", state.activeSelectionVisible ? 1 : 0);
+            m_impl->editorViewportVisualsProgram->SetIntUVE("uActiveGizmoAxis", state.activeGizmoAxis);
+            m_impl->editorViewportVisualsProgram->ApplyToUVE(commandBuffer);
+            commandBuffer.DrawUVE(3);
+            commandBuffer.EndRenderPassUVE();
+        }});
     // The default framebuffer is an external presentation surface, not a TextureHandleUVE; the
     // scene color input remains explicit in the graph while this pass writes that external output.
     renderGraph.AddPassUVE(RenderGraphPassDescUVE{
@@ -904,6 +941,10 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
     const bool graphExecuted = renderGraph.ExecuteUVE(commandBuffer);
     UVE_ASSERT(graphExecuted && "Renderer3DUVE must build a valid render graph");
     m_impl->renderSystem.EndFrameUVE();
+}
+
+void Renderer3DUVE::SetEditorViewportVisualStateUVE(const EditorViewportVisualStateUVE& state) {
+    m_impl->editorVisualState = state;
 }
 
 Renderer3DFrameDiagnosticsUVE Renderer3DUVE::GetLastFrameDiagnosticsUVE() const noexcept {
