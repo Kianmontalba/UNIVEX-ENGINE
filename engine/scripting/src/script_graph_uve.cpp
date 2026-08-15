@@ -91,6 +91,32 @@ bool ScriptGraphUVE::AddLinkUVE(ScriptLinkUVE link) {
     return true;
 }
 
+bool ScriptGraphUVE::RemoveNodeUVE(const std::uint32_t nodeId) {
+    const auto node = std::find_if(m_nodes.begin(), m_nodes.end(), [nodeId](const ScriptNodeUVE& candidate) {
+        return candidate.id == nodeId;
+    });
+    if (node == m_nodes.end()) {
+        return false;
+    }
+    m_nodes.erase(node);
+    m_links.erase(std::remove_if(m_links.begin(), m_links.end(), [nodeId](const ScriptLinkUVE& link) {
+        return link.output.nodeId == nodeId || link.input.nodeId == nodeId;
+    }), m_links.end());
+    return true;
+}
+
+bool ScriptGraphUVE::RemoveLinkUVE(const ScriptLinkUVE& link) {
+    const auto existing = std::find_if(m_links.begin(), m_links.end(), [&link](const ScriptLinkUVE& candidate) {
+        return candidate.output.nodeId == link.output.nodeId && candidate.output.pinName == link.output.pinName &&
+               candidate.input.nodeId == link.input.nodeId && candidate.input.pinName == link.input.pinName;
+    });
+    if (existing == m_links.end()) {
+        return false;
+    }
+    m_links.erase(existing);
+    return true;
+}
+
 const std::vector<ScriptNodeUVE>& ScriptGraphUVE::GetNodesUVE() const noexcept {
     return m_nodes;
 }

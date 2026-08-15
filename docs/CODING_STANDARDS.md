@@ -1501,3 +1501,8 @@ Increment 75 deliberately does not introduce a bytecode VM, engine-call binding 
 ## Native Graph Persistence v1 (Increment 80)
 
 `EncodeScriptGraphUVE()` and `DecodeScriptGraphUVE()` use a versioned deterministic JSON envelope for authored graph data. The encoder preserves graph order and rejects node/link/text limits before publishing output; the decoder validates schema version, required fields, JSON types, bounded collection sizes, duplicate entries, and endpoint shape before publishing a complete graph. Decode failure never returns a partial graph. Persistence is graph data only: it does not serialize runtime VM state, ECS pointers, engine services, managed UI state, or native resource handles.
+
+
+## Native Graph Editor Backend v1 (Increment 81)
+
+`ScriptGraphEditorBackendUVE` is the native command boundary for graph authoring. Each add/remove command edits a candidate graph copy and publishes it only after the structural mutation succeeds; rejected commands leave the current graph and history unchanged. Undo and redo store bounded value snapshots, redo is cleared by a new successful edit, and node removal removes incident links atomically. This backend exposes no UI widgets, managed object references, ECS pointers, or runtime execution authority; later bridge presentation must send named commands and receive copied DTOs.

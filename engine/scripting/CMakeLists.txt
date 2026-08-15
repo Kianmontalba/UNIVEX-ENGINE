@@ -6,6 +6,7 @@ add_library(uve_scripting
     src/script_vm_uve.cpp
     src/script_runtime_uve.cpp
     src/script_graph_persistence_uve.cpp
+    src/script_graph_editor_backend_uve.cpp
 )
 target_include_directories(uve_scripting PUBLIC include)
 target_compile_features(uve_scripting PUBLIC cxx_std_20)
