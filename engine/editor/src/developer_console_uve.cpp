@@ -66,15 +66,37 @@ bool DeveloperConsoleUVE::IsAvailableUVE() const noexcept {
     return m_policy == DeveloperConsoleBuildPolicyUVE::Development;
 }
 
-bool DeveloperConsoleUVE::RegisterCommand(std::string identifier, std::string help,
-                                           DeveloperConsoleCommandHandlerUVE handler) {
-    if (!IsBoundedIdentifierUVE(identifier) || !IsBoundedValueUVE(help) || !handler ||
-        m_commands.size() >= kMaximumCommandsUVE || m_commands.contains(identifier)) {
-        return false;
+DeveloperConsoleCommandRegistrationResultUVE DeveloperConsoleUVE::RegisterCommandUVE(
+    std::string identifier, std::string help, DeveloperConsoleCommandHandlerUVE handler) {
+    if (!IsBoundedIdentifierUVE(identifier)) {
+        return {DeveloperConsoleCommandRegistrationCodeUVE::InvalidIdentifier,
+                "Command identifier is empty or contains unsupported characters."};
     }
+    if (help.empty() || !IsBoundedValueUVE(help)) {
+        return {DeveloperConsoleCommandRegistrationCodeUVE::InvalidHelp,
+                "Command help must be non-empty, bounded, and free of line breaks."};
+    }
+    if (!handler) {
+        return {DeveloperConsoleCommandRegistrationCodeUVE::MissingHandler,
+                "Command registration requires a callable handler."};
+    }
+    if (m_commands.size() >= kMaximumCommandsUVE) {
+        return {DeveloperConsoleCommandRegistrationCodeUVE::CapacityExceeded,
+                "The bounded command registry has reached its maximum capacity."};
+    }
+    if (m_commands.contains(identifier)) {
+        return {DeveloperConsoleCommandRegistrationCodeUVE::DuplicateIdentifier,
+                "A command with this identifier is already registered."};
+    }
+
     m_commands.emplace(std::move(identifier), CommandUVE{std::move(help), std::move(handler)});
     IncrementGenerationUVE(m_generation);
-    return true;
+    return {DeveloperConsoleCommandRegistrationCodeUVE::Accepted, "Command registered."};
+}
+
+bool DeveloperConsoleUVE::RegisterCommand(std::string identifier, std::string help,
+                                           DeveloperConsoleCommandHandlerUVE handler) {
+    return RegisterCommandUVE(std::move(identifier), std::move(help), std::move(handler)).IsAcceptedUVE();
 }
 
 bool DeveloperConsoleUVE::RegisterCVar(std::string name, std::string value, const bool readOnly) {
