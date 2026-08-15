@@ -1476,3 +1476,8 @@ A node type requires a non-empty stable internal identifier, a non-empty user-fa
 Graph mutation is conservative. Empty node types, duplicate node IDs, empty link endpoints, and duplicate links are rejected without changing the graph. `ValidateUVE()` is deterministic and returns stable diagnostics for unknown node types, unknown pins, wrong pin direction, incompatible pin types, self-links, and missing node endpoints. Validation never repairs, reorders, executes, compiles, serializes, or silently drops authored graph data.
 
 Increment 75 deliberately does not introduce a bytecode VM, engine-call binding registry, hot reload, debugger, C# graph canvas, managed runtime, or bridge capability. Compiler IR, versioned `.uvescript` bytecode, runtime state, and managed presentation require later increments with their own ownership, validation, compatibility, and failure-recovery contracts.
+
+
+## Visual Scripting Compiler IR v1 (Increment 76)
+
+`CompileScriptGraphToIrUVE()` is a validation-first, native-only lowering seam. An invalid graph returns diagnostics and no partial IR program. A valid program carries an explicit version, deterministic instruction order, and one source-node mapping entry per instruction. Node execution records are ordered by ascending stable node ID; value-transfer records are ordered by output node/pin and then input node/pin. The IR is descriptive and non-executable in this increment: it does not own engine calls, ECS state, bytecode memory, or a managed runtime. Later bytecode and VM increments must consume this versioned boundary rather than reinterpreting authored graph data independently.
