@@ -140,6 +140,12 @@ void GlCommandBufferUVE::BindPipelineUVE(PipelineHandleUVE pipeline) {
         glDisable(GL_DEPTH_TEST);
     }
     glDepthMask(pipelineIt->second.depthWriteEnabled ? GL_TRUE : GL_FALSE);
+    if (pipelineIt->second.blendMode == PipelineBlendModeUVE::SourceAlphaOver) {
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    } else {
+        glDisable(GL_BLEND);
+    }
 }
 
 void GlCommandBufferUVE::BindVertexBufferUVE(BufferHandleUVE buffer, std::uint32_t slot) {

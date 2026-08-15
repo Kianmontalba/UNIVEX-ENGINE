@@ -68,10 +68,14 @@ struct VertexAttributeUVE {
 /// exists today — lines/points aren't needed by anything built so far.
 enum class PrimitiveTopologyUVE : std::uint8_t { Triangles };
 
+/// Explicit color blending policy for a pipeline. SourceAlphaOver is the conventional premultiplied-
+/// independent source-alpha composite used by editor-only visual overlays; it remains opt-in so
+/// ordinary scene and tone-mapping pipelines preserve their existing opaque behavior.
+enum class PipelineBlendModeUVE : std::uint8_t { Opaque, SourceAlphaOver };
+
 /// Describes a pipeline state object to create via IRenderDeviceUVE::CreatePipelineUVE().
-/// Fixed-function state is deliberately minimal (no blend mode, cull mode, or stencil) — will
-/// grow once transparency/PostProcessUVE (a later, currently-blocked increment) actually needs
-/// it; flagged as expected future growth, not a hidden gap.
+/// Fixed-function state remains deliberately small; blending is explicit because editor visual
+/// composition is the first proven consumer rather than an implicit global OpenGL side effect.
 struct PipelineDescUVE {
     ShaderHandleUVE vertexShader;
     ShaderHandleUVE fragmentShader;
@@ -79,6 +83,7 @@ struct PipelineDescUVE {
     PrimitiveTopologyUVE topology = PrimitiveTopologyUVE::Triangles;
     bool depthTestEnabled = true;
     bool depthWriteEnabled = true;
+    PipelineBlendModeUVE blendMode = PipelineBlendModeUVE::Opaque;
 
     /// Byte distance between consecutive vertices in the bound vertex buffer — required by a real
     /// backend to interleave `vertexLayout`'s attributes correctly (e.g. GL's
@@ -97,6 +102,7 @@ struct PipelineBinaryDescUVE {
     PrimitiveTopologyUVE topology = PrimitiveTopologyUVE::Triangles;
     bool depthTestEnabled = true;
     bool depthWriteEnabled = true;
+    PipelineBlendModeUVE blendMode = PipelineBlendModeUVE::Opaque;
 };
 
 /// What happens to a render pass attachment's existing contents at the start of the pass.

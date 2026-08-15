@@ -310,7 +310,9 @@ INSTANTIATE_TEST_SUITE_P(
                        std::pair<std::string_view, std::string_view>{"shadow_depth.glsl",
                                                                       BuiltIn::kShadowDepthSource},
                        std::pair<std::string_view, std::string_view>{"lit_shadowed_3d.glsl",
-                                                                      BuiltIn::kLitShadowed3DSource}));
+                                                                      BuiltIn::kLitShadowed3DSource},
+                       std::pair<std::string_view, std::string_view>{"editor_viewport_visuals.glsl",
+                                                                      BuiltIn::kEditorViewportVisualsSource}));
 
 } // namespace
 } // namespace UVE::Render::Shader::Tests

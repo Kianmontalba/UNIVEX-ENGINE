@@ -4647,7 +4647,41 @@ void EditorUVE::DrawViewportPanelUVE() {
             }
         }
 
-        DrawViewportGridUVE(viewportRect);
+        Render::EditorViewportVisualStateUVE visualState{};
+        visualState.enabled = true;
+        const float viewportWidth = std::max(mainViewport->Size.x, 1.0F);
+        const float viewportHeight = std::max(mainViewport->Size.y, 1.0F);
+        visualState.viewportMinX = std::clamp((contentOrigin.x - mainViewport->Pos.x) / viewportWidth, 0.0F, 1.0F);
+        visualState.viewportMaxX = std::clamp((contentOrigin.x + contentSize.x - mainViewport->Pos.x) / viewportWidth, 0.0F, 1.0F);
+        visualState.viewportMinY = std::clamp(1.0F - (contentOrigin.y + contentSize.y - mainViewport->Pos.y) / viewportHeight, 0.0F, 1.0F);
+        visualState.viewportMaxY = std::clamp(1.0F - (contentOrigin.y - mainViewport->Pos.y) / viewportHeight, 0.0F, 1.0F);
+        visualState.activeGizmoAxis = static_cast<std::int32_t>(m_gizmoDrag.axis);
+        if (m_selectedEntity != Scene::kInvalidEntityUVE) {
+            const std::optional<EditorSelectionBoundsUVE> bounds = TryGetEntityBoundsUVE(m_selectedEntity);
+            if (bounds.has_value()) {
+                Math::Vector2UVE minimum{std::numeric_limits<float>::infinity(), std::numeric_limits<float>::infinity()};
+                Math::Vector2UVE maximum{-std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity()};
+                bool projected = true;
+                for (const Math::Vector3UVE& corner : bounds->worldCorners) {
+                    Math::Vector2UVE screen{};
+                    projected = ProjectWorldPointUVE(viewportRect, corner, screen) && projected;
+                    if (projected) {
+                        minimum.x = std::min(minimum.x, screen.x);
+                        minimum.y = std::min(minimum.y, screen.y);
+                        maximum.x = std::max(maximum.x, screen.x);
+                        maximum.y = std::max(maximum.y, screen.y);
+                    }
+                }
+                if (projected && minimum.x <= maximum.x && minimum.y <= maximum.y) {
+                    visualState.activeSelectionVisible = true;
+                    visualState.selectionMinX = std::clamp((minimum.x - mainViewport->Pos.x) / viewportWidth, 0.0F, 1.0F);
+                    visualState.selectionMaxX = std::clamp((maximum.x - mainViewport->Pos.x) / viewportWidth, 0.0F, 1.0F);
+                    visualState.selectionMinY = std::clamp(1.0F - (maximum.y - mainViewport->Pos.y) / viewportHeight, 0.0F, 1.0F);
+                    visualState.selectionMaxY = std::clamp(1.0F - (minimum.y - mainViewport->Pos.y) / viewportHeight, 0.0F, 1.0F);
+                }
+            }
+        }
+        m_services->GetRenderer3DUVE().SetEditorViewportVisualStateUVE(visualState);
         DrawSelectionBoundsUVE(viewportRect);
         if (IsAuthoringCommandAllowedUVE()) {
             if (m_gizmoMode == EditorGizmoModeUVE::Translate) {

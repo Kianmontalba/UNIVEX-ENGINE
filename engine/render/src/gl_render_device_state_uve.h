@@ -57,6 +57,7 @@ struct GlDeviceStateUVE {
         std::uint32_t vertexStride = 0;
         bool depthTestEnabled = true;
         bool depthWriteEnabled = true;
+        PipelineBlendModeUVE blendMode = PipelineBlendModeUVE::Opaque;
 
         /// Every uniform reflected right after this pipeline's program successfully linked
         /// (Increment 21) — GlCommandBufferUVE's SetUniform*UVE calls look a name up here instead
