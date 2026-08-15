@@ -167,6 +167,12 @@ public sealed class BridgeProtocolClientTests
     }
 
     [Fact]
+    public void ReadScriptRuntimeCapability_UsesAppendOnlyProtocolId()
+    {
+        Assert.Equal((byte)36, BridgeSnapshotParser.ReadScriptRuntimeCapability);
+    }
+
+    [Fact]
     public async Task DispatchAsync_WritesReadScriptRuntimeRequest()
     {
         await using MemoryStream input = BuildFrames(new

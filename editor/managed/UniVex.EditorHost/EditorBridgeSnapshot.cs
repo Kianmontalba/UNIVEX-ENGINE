@@ -321,6 +321,8 @@ public static class BridgeSnapshotParser
 {
     public const int MaximumPanelEntries = 128;
     public const int MaximumPresentationTextBytes = 256;
+    // Capability IDs are append-only protocol values; 36 is ReadScriptRuntime after Increment 129.
+    public const byte ReadScriptRuntimeCapability = 36;
     public const int MaximumContentPathBytes = 4096;
 
     public static BridgeEditorSnapshot Parse(JsonElement value)

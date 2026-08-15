@@ -119,7 +119,10 @@
                                 </Border>
                                 <Border Grid.Row="3" Padding="6" Background="#20242B" BorderBrush="#394150" BorderThickness="1" CornerRadius="3">
                                     <Grid RowDefinitions="Auto,*" RowSpacing="4">
-                                        <TextBlock x:Name="ScriptRuntimeStatusTextBlock" Text="Connect to read native ScriptRuntime instances." TextWrapping="Wrap" Opacity="0.76" />
+                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                            <TextBlock x:Name="ScriptRuntimeStatusTextBlock" Text="Connect to read native ScriptRuntime instances." TextWrapping="Wrap" Opacity="0.76" />
+                                            <Button x:Name="ScriptRuntimeRefreshButton" Grid.Column="1" Content="Refresh runtime" Click="ScriptRuntimeRefreshButton_OnClick" IsEnabled="False" />
+                                        </Grid>
                                         <ListBox x:Name="ScriptRuntimeInstancesListBox" Grid.Row="1" MaxHeight="112" IsHitTestVisible="False">
                                             <ListBox.ItemTemplate>
                                                 <DataTemplate>
