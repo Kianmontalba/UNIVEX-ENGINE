@@ -101,6 +101,9 @@ struct ScriptGraphCanvasSnapshotUVE final {
     bool linksTruncated = false;
     bool paletteTruncated = false;
     bool diagnosticsTruncated = false;
+    bool dirty = false;
+    bool canUndo = false;
+    bool canRedo = false;
     std::vector<ScriptGraphCanvasNodeSnapshotUVE> nodes;
     std::vector<ScriptGraphCanvasLinkSnapshotUVE> links;
     std::vector<std::uint32_t> selectedNodeIds;
@@ -167,7 +170,7 @@ private:
     [[nodiscard]] LayoutEntryUVE* FindLayoutUVE(std::uint32_t nodeId) noexcept;
     [[nodiscard]] StateUVE CaptureStateUVE() const;
     void RestoreStateUVE(StateUVE state);
-    void RecordMutationUVE(StateUVE before);
+    void RecordMutationUVE(StateUVE before, bool marksDirty = true);
     void BumpRevisionUVE() noexcept;
     [[nodiscard]] ScriptGraphCanvasCommandResultUVE ValidateAndApplyGraphEditUVE(
         ScriptGraphUVE candidate, std::string operation);
@@ -180,6 +183,7 @@ private:
     std::uint64_t m_graphRevision = 1U;
     std::size_t m_historyCapacity = kDefaultHistoryCapacityUVE;
     std::uint64_t m_revision = 1U;
+    bool m_dirty = false;
     std::deque<StateUVE> m_undo;
     std::deque<StateUVE> m_redo;
 };

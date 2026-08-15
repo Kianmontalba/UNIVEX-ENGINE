@@ -207,7 +207,7 @@ public sealed class VisualScriptCanvasControl : Control
 
     private static BridgeVisualScriptCanvasSnapshot EmptyCanvas() => new(
         0UL, 0UL, new BridgeVisualScriptView(new BridgeVisualScriptPoint(0F, 0F), 1F),
-        false, false, false, false,
+        false, false, false, false, false, false, false,
         Array.Empty<BridgeVisualScriptNode>(), Array.Empty<BridgeVisualScriptLink>(),
         Array.Empty<uint>(), Array.Empty<string>(), Array.Empty<BridgeVisualScriptDiagnostic>());
 
@@ -271,7 +271,8 @@ public sealed class VisualScriptCanvasControl : Control
     private void DrawFooter(DrawingContext context)
     {
         string text = $"{canvas.Nodes.Count} node(s) · {canvas.Links.Count} link(s) · zoom {canvas.View.Zoom:0.00} · " +
-                      $"palette {canvas.PaletteNodeTypeIds.Count} · diagnostics {canvas.Diagnostics.Count}";
+                      $"palette {canvas.PaletteNodeTypeIds.Count} · diagnostics {canvas.Diagnostics.Count} · " +
+                      $"dirty {canvas.Dirty} · undo {canvas.CanUndo} · redo {canvas.CanRedo}";
         DrawText(context, text, new Point(10D, Math.Max(10D, Bounds.Height - 22D)), 11D, MutedBrush);
         if (canvas.NodesTruncated || canvas.LinksTruncated || canvas.PaletteTruncated || canvas.DiagnosticsTruncated)
         {

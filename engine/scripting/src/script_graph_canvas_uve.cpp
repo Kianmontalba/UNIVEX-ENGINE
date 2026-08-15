@@ -82,12 +82,15 @@ void ScriptGraphCanvasUVE::RestoreStateUVE(StateUVE state) {
     m_selection = std::move(state.selection);
 }
 
-void ScriptGraphCanvasUVE::RecordMutationUVE(StateUVE before) {
+void ScriptGraphCanvasUVE::RecordMutationUVE(StateUVE before, const bool marksDirty) {
     m_undo.push_back(std::move(before));
     while (m_undo.size() > m_historyCapacity) {
         m_undo.pop_front();
     }
     m_redo.clear();
+    if (marksDirty) {
+        m_dirty = true;
+    }
     ++m_revision;
     ++m_graphRevision;
 }
@@ -242,7 +245,7 @@ ScriptGraphCanvasCommandResultUVE ScriptGraphCanvasUVE::SetSelectionUVE(
     }
     StateUVE before = CaptureStateUVE();
     m_selection = std::move(nodeIds);
-    RecordMutationUVE(std::move(before));
+    RecordMutationUVE(std::move(before), false);
     return MakeResultUVE(ScriptGraphCanvasCommandCodeUVE::Applied, "SetSelection was applied.");
 }
 
@@ -433,6 +436,9 @@ ScriptGraphCanvasSnapshotUVE ScriptGraphCanvasUVE::GetSnapshotUVE() const {
     snapshot.diagnostics.assign(diagnostics.begin(), diagnostics.begin() +
                                                    static_cast<std::ptrdiff_t>(diagnosticCount));
     snapshot.diagnosticsTruncated = diagnostics.size() > diagnosticCount;
+    snapshot.dirty = m_dirty;
+    snapshot.canUndo = !m_undo.empty();
+    snapshot.canRedo = !m_redo.empty();
     return snapshot;
 }
 
