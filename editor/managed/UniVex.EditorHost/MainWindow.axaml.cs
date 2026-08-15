@@ -23,6 +23,7 @@ public partial class MainWindow : Window
     private bool applyingLayout;
     private bool applyingSnapshot;
     private bool scriptRuntimeRequestAvailable;
+    private BridgeScriptRuntimeSnapshot? scriptRuntimeSnapshot;
     private bool shellInitialized;
 
     public MainWindow()
@@ -83,6 +84,14 @@ public partial class MainWindow : Window
 
     private void ScriptRuntimeRefreshButton_OnClick(object? sender, RoutedEventArgs e) =>
         DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "readScriptRuntime"));
+
+    private void ScriptRuntimeFilterTextBox_OnTextChanged(object? sender, TextChangedEventArgs e)
+    {
+        if (!applyingSnapshot)
+        {
+            ApplyScriptRuntimeFilter();
+        }
+    }
 
     private void ScriptRuntimeInstancesListBox_OnSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
@@ -532,31 +541,49 @@ public partial class MainWindow : Window
     {
         scriptRuntimeRequestAvailable = requestAvailable;
         ScriptRuntimeRefreshButton.IsEnabled = state == HostSessionState.Connected && requestAvailable;
-        ScriptRuntimeInstancesListBox.ItemsSource = runtime.Entries;
-        ScriptRuntimeInstancesListBox.IsVisible = runtime.Entries.Count > 0;
-        ScriptRuntimeEmptyTextBlock.IsVisible = runtime.Entries.Count == 0;
-        ScriptRuntimeEmptyTextBlock.Text = runtime.IsAvailable
-            ? "Native ScriptRuntime is attached, but no active instances are in the copied snapshot."
-            : runtime.Reason;
-        selectedScriptRuntimeInstance = runtime.Entries.FirstOrDefault(entry =>
+        scriptRuntimeSnapshot = runtime;
+        if (!runtime.IsAvailable)
+        {
+            ScriptRuntimeStatusTextBlock.Text = runtime.Reason;
+        }
+        else
+        {
+            string truncation = runtime.EntriesTruncated ? " The native bridge truncated the copied instance list." : string.Empty;
+            ScriptRuntimeStatusTextBlock.Text =
+                $"{runtime.InstanceCount} native ScriptRuntime instance(s); {runtime.Entries.Count} visible copied row(s) " +
+                $"({runtime.VisibleEnabledInstanceCount} enabled, {runtime.VisibleDisabledInstanceCount} disabled). " +
+                $"Instance rows include generational identity, program version, instruction/state counts, and enabled state. " +
+                $"{runtime.Reason}{truncation}";
+        }
+        ApplyScriptRuntimeFilter();
+    }
+
+    private void ApplyScriptRuntimeFilter()
+    {
+        if (scriptRuntimeSnapshot is not { } runtime)
+        {
+            return;
+        }
+
+        string filter = ScriptRuntimeFilterTextBox.Text?.Trim() ?? string.Empty;
+        IReadOnlyList<BridgeScriptRuntimeInstanceEntry> entries = filter.Length == 0
+            ? runtime.Entries
+            : runtime.Entries.Where(entry => entry.MatchesFilter(filter)).ToArray();
+        ScriptRuntimeInstancesListBox.ItemsSource = entries;
+        ScriptRuntimeInstancesListBox.IsVisible = entries.Count > 0;
+        ScriptRuntimeEmptyTextBlock.IsVisible = entries.Count == 0;
+        ScriptRuntimeEmptyTextBlock.Text = runtime.Entries.Count == 0
+            ? runtime.IsAvailable
+                ? "Native ScriptRuntime is attached, but no active instances are in the copied snapshot."
+                : runtime.Reason
+            : $"No copied ScriptRuntime instances match '{filter}'. The filter is local to this bounded snapshot.";
+        selectedScriptRuntimeInstance = entries.FirstOrDefault(entry =>
             selectedScriptRuntimeInstance is not null &&
             entry.EntityIndex == selectedScriptRuntimeInstance.EntityIndex &&
             entry.EntityGeneration == selectedScriptRuntimeInstance.EntityGeneration &&
             entry.Generation == selectedScriptRuntimeInstance.Generation);
         ScriptRuntimeInstancesListBox.SelectedItem = selectedScriptRuntimeInstance;
         RenderScriptRuntimeSelection(selectedScriptRuntimeInstance);
-        if (!runtime.IsAvailable)
-        {
-            ScriptRuntimeStatusTextBlock.Text = runtime.Reason;
-            return;
-        }
-
-        string truncation = runtime.EntriesTruncated ? " The native bridge truncated the copied instance list." : string.Empty;
-        ScriptRuntimeStatusTextBlock.Text =
-            $"{runtime.InstanceCount} native ScriptRuntime instance(s); {runtime.Entries.Count} visible copied row(s) " +
-            $"({runtime.VisibleEnabledInstanceCount} enabled, {runtime.VisibleDisabledInstanceCount} disabled). " +
-            $"Instance rows include generational identity, program version, instruction/state counts, and enabled state. " +
-            $"{runtime.Reason}{truncation}";
     }
 
     private void RenderScriptRuntimeSelection(BridgeScriptRuntimeInstanceEntry? instance)

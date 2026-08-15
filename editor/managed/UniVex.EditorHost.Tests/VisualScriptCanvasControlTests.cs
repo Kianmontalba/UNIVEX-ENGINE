@@ -63,6 +63,17 @@ public sealed class VisualScriptCanvasControlTests
     }
 
     [Fact]
+    public void ScriptRuntimeInstanceEntry_MatchesLocalFilterWithoutNativeMutation()
+    {
+        BridgeScriptRuntimeInstanceEntry entry = new(7U, 3U, 9UL, 4U, 12, 2, true);
+
+        Assert.True(entry.MatchesFilter("ENTITY 7:3"));
+        Assert.True(entry.MatchesFilter("enabled"));
+        Assert.True(entry.MatchesFilter("  "));
+        Assert.False(entry.MatchesFilter("entity 99"));
+    }
+
+    [Fact]
     public void EmptySnapshot_HitTestingDoesNotInventManagedNodes()
     {
         VisualScriptCanvasControl control = CreateControl();
