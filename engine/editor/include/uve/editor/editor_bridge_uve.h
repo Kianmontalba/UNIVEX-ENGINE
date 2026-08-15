@@ -13,6 +13,7 @@
 #include "uve/asset/data_table_registry_uve.h"
 #include "uve/asset/data_table_uve.h"
 #include "uve/editor/editor_uve.h"
+#include "uve/scripting/script_debugger_uve.h"
 #include "uve/scripting/script_graph_canvas_uve.h"
 #include "uve/editor/developer_console_uve.h"
 
@@ -54,6 +55,7 @@ enum class EditorBridgeCapabilityUVE : std::uint8_t {
     SelectContentBrowserEntry,
     ReadViewportSurface,
     ReadVisualScriptCanvas,
+    ReadVisualScriptDebugger,
     AddVisualScriptNode,
     RemoveVisualScriptNode,
     MoveVisualScriptNode,
@@ -91,6 +93,7 @@ enum class EditorBridgeRequestKindUVE : std::uint8_t {
     SelectContentBrowserEntry,
     ReadViewportSurface,
     ReadVisualScriptCanvas,
+    ReadVisualScriptDebugger,
     AddVisualScriptNode,
     RemoveVisualScriptNode,
     MoveVisualScriptNode,
@@ -226,6 +229,19 @@ struct EditorBridgeContentBrowserSnapshotUVE final {
 
 /// Copied visual-scripting presentation facts. The managed host receives counts and capability state,
 /// never native graph objects or runtime ownership. Editing remains a separately named native command path.
+struct EditorBridgeVisualScriptDebuggerSnapshotUVE final {
+    bool available = false;
+    Scripting::ScriptDebuggerStateUVE state = Scripting::ScriptDebuggerStateUVE::Detached;
+    std::size_t instructionIndex = 0U;
+    std::uint32_t sourceNodeId = 0U;
+    std::size_t executedInstructions = 0U;
+    std::string pauseReason;
+    std::vector<std::uint32_t> breakpointNodeIds;
+    std::string reason;
+
+    [[nodiscard]] bool operator==(const EditorBridgeVisualScriptDebuggerSnapshotUVE&) const = default;
+};
+
 struct EditorBridgeVisualScriptingSnapshotUVE final {
     bool available = false;
     std::uint64_t graphRevision = 0U;
@@ -234,6 +250,7 @@ struct EditorBridgeVisualScriptingSnapshotUVE final {
     bool canEdit = false;
     std::string reason;
     Scripting::ScriptGraphCanvasSnapshotUVE canvas;
+    EditorBridgeVisualScriptDebuggerSnapshotUVE debugger;
 
     [[nodiscard]] bool operator==(const EditorBridgeVisualScriptingSnapshotUVE&) const = default;
 };
@@ -377,7 +394,8 @@ public:
     /// authoritative source for catalog facts and selected preview snapshots; the legacy injection
     /// seams remain available only for bridge sessions without a registry dependency.
     explicit EditorBridgeUVE(EditorUVE& editor,
-                             const Asset::DataTableRegistryUVE* dataTableRegistry = nullptr) noexcept;
+                             const Asset::DataTableRegistryUVE* dataTableRegistry = nullptr,
+                             const Scripting::ScriptDebuggerUVE* scriptDebugger = nullptr) noexcept;
 
     [[nodiscard]] EditorBridgeSnapshotUVE GetSnapshotUVE();
     [[nodiscard]] EditorBridgeResponseUVE DispatchUVE(const EditorBridgeRequestUVE& request);
@@ -439,6 +457,7 @@ private:
     Scripting::ScriptGraphCanvasUVE m_visualScriptCanvas;
     DeveloperConsoleUVE m_developerConsole;
     const Asset::DataTableRegistryUVE* m_dataTableRegistry = nullptr;
+    const Scripting::ScriptDebuggerUVE* m_scriptDebugger = nullptr;
     std::optional<std::string> m_dataTablePreviewName;
     Asset::DataTableCatalogSnapshotUVE m_dataTableCatalogSnapshot;
     Asset::DataTableSnapshotUVE m_dataTablePreviewSnapshot;
