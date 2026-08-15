@@ -14,6 +14,7 @@
 #include <gtest/gtest.h>
 
 #include <limits>
+#include <optional>
 
 namespace UVE::Scripting {
 namespace {
@@ -314,6 +315,40 @@ TEST(ScriptRuntimeUVETest, ReloadUVE_RejectsInvalidCandidateAndRetainsLastKnownG
     ASSERT_EQ(rejected.diagnostics.size(), 1U);
     EXPECT_EQ(rejected.diagnostics[0].code, ScriptBytecodeDiagnosticCodeUVE::UnsupportedVersion);
     EXPECT_EQ(runtime.TickUVE({8U}).front().execution.instructionsExecuted, 1U);
+}
+
+TEST(ScriptRuntimeUVETest, StateUVE_IsBoundedAndPreservedAcrossCompatibleReload) {
+    ScriptRuntimeUVE runtime;
+    ScriptBytecodeProgramUVE initial;
+    initial.instructions.resize(1U);
+    const Scene::EntityUVE entity{8U, 1U};
+    ASSERT_TRUE(runtime.AttachUVE(entity, initial));
+
+    ScriptRuntimeStateUVE state;
+    state.values = {11, -7, 42};
+    ASSERT_TRUE(runtime.SetStateUVE(entity, state));
+    ASSERT_EQ(runtime.GetStateUVE(entity), std::optional<ScriptRuntimeStateUVE>(state));
+
+    ScriptBytecodeProgramUVE replacement;
+    replacement.instructions.resize(2U);
+    const ScriptRuntimeReloadResultUVE accepted = runtime.ReloadUVE(entity, replacement);
+    EXPECT_TRUE(accepted.IsAcceptedUVE());
+    EXPECT_TRUE(accepted.compatibleStatePreserved);
+    EXPECT_EQ(accepted.activeGeneration, 2U);
+    EXPECT_EQ(runtime.GetStateUVE(entity), std::optional<ScriptRuntimeStateUVE>(state));
+
+    ScriptBytecodeProgramUVE invalid;
+    invalid.version = 99U;
+    const ScriptRuntimeReloadResultUVE rejected = runtime.ReloadUVE(entity, invalid);
+    EXPECT_EQ(rejected.code, ScriptRuntimeReloadCodeUVE::RejectedInvalidProgram);
+    EXPECT_FALSE(rejected.compatibleStatePreserved);
+    EXPECT_TRUE(rejected.lastKnownGoodRetained);
+    EXPECT_EQ(runtime.GetStateUVE(entity), std::optional<ScriptRuntimeStateUVE>(state));
+
+    ScriptRuntimeStateUVE oversized;
+    oversized.values.resize(ScriptRuntimeUVE::kMaximumStateValuesUVE + 1U);
+    EXPECT_FALSE(runtime.SetStateUVE(entity, std::move(oversized)));
+    EXPECT_FALSE(runtime.SetStateUVE({9U, 1U}, state));
 }
 
 TEST(ScriptRuntimeUVETest, ReloadUVE_AcceptsValidReplacementAndRejectsMissingInstance) {

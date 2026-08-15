@@ -6,15 +6,23 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <unordered_map>
 #include <vector>
 
 namespace UVE::Scripting {
 
+struct ScriptRuntimeStateUVE final {
+    std::vector<std::int64_t> values;
+
+    [[nodiscard]] bool operator==(const ScriptRuntimeStateUVE&) const = default;
+};
+
 struct ScriptRuntimeInstanceUVE final {
     Scene::EntityUVE entity;
     ScriptBytecodeProgramUVE program;
+    ScriptRuntimeStateUVE state;
     std::uint64_t generation = 1U;
     bool enabled = true;
 };
@@ -34,6 +42,7 @@ struct ScriptRuntimeReloadResultUVE final {
     ScriptRuntimeReloadCodeUVE code = ScriptRuntimeReloadCodeUVE::RejectedInvalidProgram;
     std::uint64_t activeGeneration = 0U;
     bool lastKnownGoodRetained = false;
+    bool compatibleStatePreserved = false;
     std::vector<ScriptBytecodeDiagnosticUVE> diagnostics;
     std::string message;
 
@@ -45,6 +54,7 @@ struct ScriptRuntimeReloadResultUVE final {
 class ScriptRuntimeUVE final {
 public:
     static constexpr std::size_t kMaximumInstancesUVE = 4096U;
+    static constexpr std::size_t kMaximumStateValuesUVE = 256U;
 
     ScriptRuntimeUVE() = default;
     ScriptRuntimeUVE(const ScriptRuntimeUVE&) = delete;
@@ -55,6 +65,8 @@ public:
                                                           ScriptBytecodeProgramUVE program);
     [[nodiscard]] bool DetachUVE(Scene::EntityUVE entity) noexcept;
     [[nodiscard]] bool SetEnabledUVE(Scene::EntityUVE entity, bool enabled) noexcept;
+    [[nodiscard]] bool SetStateUVE(Scene::EntityUVE entity, ScriptRuntimeStateUVE state);
+    [[nodiscard]] std::optional<ScriptRuntimeStateUVE> GetStateUVE(Scene::EntityUVE entity) const;
     [[nodiscard]] bool HasInstanceUVE(Scene::EntityUVE entity) const noexcept;
     [[nodiscard]] std::size_t GetInstanceCountUVE() const noexcept;
     [[nodiscard]] std::vector<ScriptRuntimeTickResultUVE> TickUVE(
