@@ -1,5 +1,6 @@
 // Copyright (c) 2026 UniVex Studios. All Rights Reserved.
 #include "uve/scripting/script_bytecode_uve.h"
+#include "uve/scripting/script_runtime_uve.h"
 #include "uve/scripting/script_vm_uve.h"
 #include "uve/scripting/script_compiler_ir_uve.h"
 #include "uve/scripting/script_graph_uve.h"
@@ -245,6 +246,49 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_RejectsUnsupportedVersion) {
     EXPECT_FALSE(result.IsSuccessUVE());
     EXPECT_EQ(result.status, ScriptVmStatusUVE::InvalidInstruction);
     EXPECT_EQ(result.instructionsExecuted, 0U);
+}
+
+} // namespace UVE::Scripting
+
+
+namespace UVE::Scripting {
+
+TEST(ScriptRuntimeUVETest, AttachUVE_RejectsInvalidDuplicateAndAcceptsGenerationalIdentity) {
+    ScriptRuntimeUVE runtime;
+    ScriptBytecodeProgramUVE program;
+    EXPECT_FALSE(runtime.AttachUVE(Scene::kInvalidEntityUVE, program));
+    const Scene::EntityUVE first{3U, 1U};
+    const Scene::EntityUVE replacement{3U, 2U};
+    EXPECT_TRUE(runtime.AttachUVE(first, program));
+    EXPECT_FALSE(runtime.AttachUVE(first, program));
+    EXPECT_TRUE(runtime.AttachUVE(replacement, program));
+    EXPECT_EQ(runtime.GetInstanceCountUVE(), 2U);
+}
+
+TEST(ScriptRuntimeUVETest, TickUVE_IsDeterministicAndSkipsDisabledInstances) {
+    ScriptRuntimeUVE runtime;
+    ScriptBytecodeProgramUVE program;
+    program.instructions.resize(2U);
+    ASSERT_TRUE(runtime.AttachUVE({9U, 1U}, program));
+    ASSERT_TRUE(runtime.AttachUVE({2U, 4U}, program));
+    ASSERT_TRUE(runtime.AttachUVE({5U, 1U}, program));
+    ASSERT_TRUE(runtime.SetEnabledUVE({5U, 1U}, false));
+    const auto results = runtime.TickUVE({2U});
+    ASSERT_EQ(results.size(), 2U);
+    EXPECT_EQ(results[0].entity, (Scene::EntityUVE{2U, 4U}));
+    EXPECT_EQ(results[1].entity, (Scene::EntityUVE{9U, 1U}));
+    EXPECT_TRUE(results[0].execution.IsSuccessUVE());
+    EXPECT_EQ(results[0].execution.instructionsExecuted, 2U);
+}
+
+TEST(ScriptRuntimeUVETest, DetachUVE_RemovesOnlyExactGenerationalHandle) {
+    ScriptRuntimeUVE runtime;
+    ScriptBytecodeProgramUVE program;
+    ASSERT_TRUE(runtime.AttachUVE({4U, 1U}, program));
+    EXPECT_FALSE(runtime.DetachUVE({4U, 2U}));
+    EXPECT_TRUE(runtime.HasInstanceUVE({4U, 1U}));
+    EXPECT_TRUE(runtime.DetachUVE({4U, 1U}));
+    EXPECT_FALSE(runtime.HasInstanceUVE({4U, 1U}));
 }
 
 } // namespace UVE::Scripting

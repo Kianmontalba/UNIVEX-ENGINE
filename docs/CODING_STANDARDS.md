@@ -1491,3 +1491,8 @@ Increment 75 deliberately does not introduce a bytecode VM, engine-call binding 
 ## Bounded Native Visual Script VM v1 (Increment 78)
 
 `ExecuteScriptBytecodeUVE()` executes only validated bytecode instruction descriptors within an explicit instruction budget. The budget is clamped to the bytecode maximum, exhaustion returns a diagnostic and instruction index, and unsupported versions or instruction kinds halt without side effects. This increment intentionally has no ECS, renderer, input, audio, or filesystem binding; engine-call dispatch must be introduced through a separately reviewed, explicit binding registry rather than hidden VM behavior.
+
+
+## Script Component Runtime Boundary v1 (Increment 79)
+
+`ScriptRuntimeUVE` owns only copied script-instance values keyed by generational `Scene::EntityUVE` handles. It does not own entities, components, ECS pointers, scene lifetime, or engine services. Attach rejects invalid or duplicate handles, incompatible bytecode versions, oversized programs, and instance-cap overflow without mutation. Tick order is canonicalized by entity index and generation; disabled instances are skipped; each execution returns a copied VM result. Entity-handle generation is part of identity and must never be reduced to an index-only key.
