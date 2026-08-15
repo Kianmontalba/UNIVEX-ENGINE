@@ -770,6 +770,10 @@ TEST(ScriptGraphCanvasUVETest, SnapshotProvidesSortedPaletteAndTypedNodePins) {
     ScriptNodeRegistryUVE registry;
     RegisterTestNodesUVE(registry);
     ScriptGraphCanvasUVE canvas(registry);
+    const ScriptGraphCanvasSnapshotUVE initial = canvas.GetSnapshotUVE();
+    EXPECT_FALSE(initial.dirty);
+    EXPECT_FALSE(initial.canUndo);
+    EXPECT_FALSE(initial.canRedo);
     ASSERT_TRUE(canvas.AddNodeUVE({1U, "test.sink"}, {0.0F, 0.0F}).IsAppliedUVE());
     const ScriptGraphCanvasSnapshotUVE snapshot = canvas.GetSnapshotUVE();
     EXPECT_EQ(snapshot.paletteNodeTypeIds, (std::vector<std::string>{"test.sink", "test.source"}));
@@ -781,6 +785,20 @@ TEST(ScriptGraphCanvasUVETest, SnapshotProvidesSortedPaletteAndTypedNodePins) {
     EXPECT_EQ(snapshot.nodes[0].category, "Uncategorized");
     EXPECT_EQ(snapshot.nodes[0].iconId, "node.default");
     EXPECT_EQ(snapshot.nodes[0].pins[0].role, ScriptPinRoleUVE::Data);
+    EXPECT_TRUE(snapshot.dirty);
+    EXPECT_TRUE(snapshot.canUndo);
+    EXPECT_FALSE(snapshot.canRedo);
+
+    ScriptGraphCanvasUVE selectionCanvas(registry);
+    ASSERT_TRUE(selectionCanvas.AddNodeUVE({1U, "test.sink"}, {0.0F, 0.0F}).IsAppliedUVE());
+    ASSERT_TRUE(selectionCanvas.SetSelectionUVE({}).IsAppliedUVE());
+    EXPECT_TRUE(selectionCanvas.GetSnapshotUVE().dirty);
+
+    ASSERT_TRUE(canvas.UndoUVE().IsAppliedUVE());
+    const ScriptGraphCanvasSnapshotUVE undone = canvas.GetSnapshotUVE();
+    EXPECT_TRUE(undone.dirty);
+    EXPECT_FALSE(undone.canUndo);
+    EXPECT_TRUE(undone.canRedo);
 }
 
 } // namespace UVE::Scripting

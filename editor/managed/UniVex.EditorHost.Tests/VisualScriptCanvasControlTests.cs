@@ -94,7 +94,7 @@ public sealed class VisualScriptCanvasControlTests
 
     private static BridgeVisualScriptCanvasSnapshot Snapshot(BridgeVisualScriptNode? node = null) =>
         new(3UL, 2UL, new BridgeVisualScriptView(new BridgeVisualScriptPoint(0F, 0F), 1F),
-            false, false, false, false,
+            false, false, false, false, false, false, false,
             node is null ? Array.Empty<BridgeVisualScriptNode>() : new[] { node },
             Array.Empty<BridgeVisualScriptLink>(),
             node is null ? Array.Empty<uint>() : new[] { node.Id },

@@ -148,6 +148,9 @@ public sealed record BridgeVisualScriptCanvasSnapshot(
     bool LinksTruncated,
     bool PaletteTruncated,
     bool DiagnosticsTruncated,
+    bool Dirty,
+    bool CanUndo,
+    bool CanRedo,
     IReadOnlyList<BridgeVisualScriptNode> Nodes,
     IReadOnlyList<BridgeVisualScriptLink> Links,
     IReadOnlyList<uint> SelectedNodeIds,
@@ -452,7 +455,7 @@ public static class BridgeSnapshotParser
 
     private static BridgeVisualScriptCanvasSnapshot EmptyVisualScriptCanvas(ulong graphRevision) =>
         new(0UL, graphRevision, new BridgeVisualScriptView(new BridgeVisualScriptPoint(0F, 0F), 1F),
-            false, false, false, false,
+            false, false, false, false, false, false, false,
             Array.Empty<BridgeVisualScriptNode>(), Array.Empty<BridgeVisualScriptLink>(),
             Array.Empty<uint>(), Array.Empty<string>(), Array.Empty<BridgeVisualScriptDiagnostic>());
 
@@ -823,6 +826,8 @@ public static class BridgeSnapshotParser
             new BridgeVisualScriptView(new BridgeVisualScriptPoint(panX, panY), zoom),
             RequiredBoolean(value, "nodesTruncated"), RequiredBoolean(value, "linksTruncated"),
             RequiredBoolean(value, "paletteTruncated"), RequiredBoolean(value, "diagnosticsTruncated"),
+            OptionalBoolean(value, "dirty", false), OptionalBoolean(value, "canUndo", false),
+            OptionalBoolean(value, "canRedo", false),
             parsedNodes, parsedLinks, parsedSelection, parsedPalette, parsedDiagnostics);
     }
 

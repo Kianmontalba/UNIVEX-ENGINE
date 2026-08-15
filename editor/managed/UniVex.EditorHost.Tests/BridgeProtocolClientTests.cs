@@ -475,6 +475,9 @@ public sealed class BridgeProtocolClientTests
         Assert.Equal("node.event", snapshot.VisualScripting.Canvas.Nodes[0].IconId);
         Assert.Equal(10U, snapshot.VisualScripting.Canvas.Nodes[0].DisplayOrder);
         Assert.Equal(1U, snapshot.VisualScripting.Canvas.Nodes[0].PresentationFlags);
+        Assert.True(snapshot.VisualScripting.Canvas.Dirty);
+        Assert.True(snapshot.VisualScripting.Canvas.CanUndo);
+        Assert.False(snapshot.VisualScripting.Canvas.CanRedo);
         Assert.Equal((byte)1, snapshot.VisualScripting.Canvas.Nodes[0].Pins[0].Role);
         Assert.Equal("0.016", snapshot.VisualScripting.Canvas.Nodes[0].Pins[0].DefaultValue);
         Assert.Equal(1, snapshot.VisualScripting.Canvas.Links.Count);
@@ -796,6 +799,9 @@ public sealed class BridgeProtocolClientTests
                 linksTruncated = false,
                 paletteTruncated = false,
                 diagnosticsTruncated = false,
+                dirty = true,
+                canUndo = true,
+                canRedo = false,
                 nodes = new[] { new
                 {
                     id = 1U,
@@ -983,6 +989,9 @@ public sealed class BridgeProtocolClientTests
                 linksTruncated = false,
                 paletteTruncated = false,
                 diagnosticsTruncated = false,
+                dirty = true,
+                canUndo = true,
+                canRedo = false,
                 nodes = new[] { new
                 {
                     id = 1U,

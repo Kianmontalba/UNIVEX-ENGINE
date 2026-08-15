@@ -274,7 +274,8 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"pan", {{"x", canvas.view.pan.x}, {"y", canvas.view.pan.y}}},
                    {"zoom", canvas.view.zoom}, {"nodesTruncated", canvas.nodesTruncated},
                    {"linksTruncated", canvas.linksTruncated}, {"paletteTruncated", canvas.paletteTruncated},
-                   {"diagnosticsTruncated", canvas.diagnosticsTruncated}, {"nodes", std::move(nodes)},
+                   {"diagnosticsTruncated", canvas.diagnosticsTruncated}, {"dirty", canvas.dirty},
+                   {"canUndo", canvas.canUndo}, {"canRedo", canvas.canRedo}, {"nodes", std::move(nodes)},
                    {"links", std::move(links)}, {"selectedNodeIds", std::move(selection)},
                    {"paletteNodeTypeIds", std::move(palette)}, {"diagnostics", std::move(diagnostics)}};
 }
