@@ -223,3 +223,6 @@ See `CONTRIBUTING.md` before making changes.
 
 
 **Native Plugin Extension Seam v1** adds a bounded static native registry for versioned plugin manifests, unique capability identifiers, and generation-checked registration scopes. This milestone intentionally does not load DLLs or shared objects, parse filesystem manifests, expose arbitrary engine callbacks, or bypass existing ownership boundaries; those parts require a separately reviewed plugin ABI and security design.
+
+
+**Bytecode Hot Reload Safety v1** adds decode-first script program replacement with explicit generations, last-known-good retention on invalid candidates, and compatible-version/state-transfer facts. A failed reload never publishes a partial or corrupt program; accepted replacement remains native C++ and does not imply arbitrary VM, ECS, editor, or managed state preservation.
