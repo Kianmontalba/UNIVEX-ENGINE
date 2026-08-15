@@ -102,6 +102,23 @@ struct DeveloperConsoleExecutionResultUVE final {
     }
 };
 
+enum class DeveloperConsoleSeverityFilterCodeUVE : std::uint8_t {
+    Applied = 0,
+    Unchanged,
+    Unavailable,
+    InvalidFilter,
+};
+
+struct DeveloperConsoleSeverityFilterResultUVE final {
+    DeveloperConsoleSeverityFilterCodeUVE code = DeveloperConsoleSeverityFilterCodeUVE::Applied;
+    std::string message;
+
+    [[nodiscard]] bool IsAcceptedUVE() const noexcept {
+        return code == DeveloperConsoleSeverityFilterCodeUVE::Applied ||
+               code == DeveloperConsoleSeverityFilterCodeUVE::Unchanged;
+    }
+};
+
 struct DeveloperConsoleCompletionUVE final {
     std::string identifier;
     std::string help;
@@ -167,6 +184,8 @@ public:
                                                                             std::string_view value);
     [[nodiscard]] bool SetCVarUVE(std::string_view name, std::string_view value);
     [[nodiscard]] bool SetBuildPolicyUVE(DeveloperConsoleBuildPolicyUVE policy) noexcept;
+    [[nodiscard]] DeveloperConsoleSeverityFilterResultUVE SetSeverityFilterDetailedUVE(
+        DeveloperConsoleSeverityFilterUVE filter) noexcept;
     [[nodiscard]] bool SetSeverityFilterUVE(DeveloperConsoleSeverityFilterUVE filter) noexcept;
     [[nodiscard]] bool SetCompletionPrefixUVE(std::string prefix);
     [[nodiscard]] bool MoveHistoryUVE(std::int32_t delta) noexcept;
