@@ -44,6 +44,39 @@ TEST(DeveloperConsoleUVE, ExplicitCommandsAndUnknownInputStayNativeAndBounded) {
     EXPECT_EQ(snapshot.history.size(), 2U);
 }
 
+TEST(DeveloperConsoleUVE, RegisterCVarUVEReturnsStructuredDiagnosticsForEachRejectionCode) {
+    DeveloperConsoleUVE console;
+
+    const DeveloperConsoleCVarRegistrationResultUVE invalidName = console.RegisterCVarUVE("invalid name", "1");
+    EXPECT_EQ(invalidName.code, DeveloperConsoleCVarRegistrationCodeUVE::InvalidName);
+    EXPECT_FALSE(invalidName.IsAcceptedUVE());
+    EXPECT_FALSE(invalidName.message.empty());
+
+    const DeveloperConsoleCVarRegistrationResultUVE invalidValue =
+        console.RegisterCVarUVE("r.invalid", std::string(DeveloperConsoleUVE::kMaximumValueBytesUVE + 1U, 'x'));
+    EXPECT_EQ(invalidValue.code, DeveloperConsoleCVarRegistrationCodeUVE::InvalidValue);
+    EXPECT_FALSE(invalidValue.IsAcceptedUVE());
+    EXPECT_FALSE(invalidValue.message.empty());
+
+    const DeveloperConsoleCVarRegistrationResultUVE accepted = console.RegisterCVarUVE("r.runtime", "1", true);
+    EXPECT_EQ(accepted.code, DeveloperConsoleCVarRegistrationCodeUVE::Accepted);
+    EXPECT_TRUE(accepted.IsAcceptedUVE());
+    EXPECT_FALSE(accepted.message.empty());
+
+    const DeveloperConsoleCVarRegistrationResultUVE duplicate = console.RegisterCVarUVE("r.runtime", "2");
+    EXPECT_EQ(duplicate.code, DeveloperConsoleCVarRegistrationCodeUVE::DuplicateName);
+    EXPECT_FALSE(duplicate.IsAcceptedUVE());
+    EXPECT_FALSE(duplicate.message.empty());
+
+    for (std::size_t index = 0U; index < DeveloperConsoleUVE::kMaximumCVarsUVE - 1U; ++index) {
+        ASSERT_TRUE(console.RegisterCVar("r.custom." + std::to_string(index), "0"));
+    }
+    const DeveloperConsoleCVarRegistrationResultUVE capacity = console.RegisterCVarUVE("r.capacity", "0");
+    EXPECT_EQ(capacity.code, DeveloperConsoleCVarRegistrationCodeUVE::CapacityExceeded);
+    EXPECT_FALSE(capacity.IsAcceptedUVE());
+    EXPECT_FALSE(capacity.message.empty());
+}
+
 TEST(DeveloperConsoleUVE, RegisterCommandUVEReturnsStructuredDiagnosticsForEachRejectionCode) {
     DeveloperConsoleUVE console;
     const auto handler = [](DeveloperConsoleUVE&, std::string_view) {};
