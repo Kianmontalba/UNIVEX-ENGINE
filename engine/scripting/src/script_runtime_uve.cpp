@@ -176,7 +176,7 @@ std::size_t ScriptRuntimeUVE::GetInstanceCountUVE() const noexcept {
     return m_instances.size();
 }
 
-std::vector<ScriptRuntimeTickResultUVE> ScriptRuntimeUVE::TickUVE(
+ScriptRuntimeTickBatchResultUVE ScriptRuntimeUVE::TickDetailedUVE(
     const ScriptVmExecutionOptionsUVE options) const {
     std::vector<Scene::EntityUVE> entities;
     entities.reserve(m_instances.size());
@@ -191,13 +191,33 @@ std::vector<ScriptRuntimeTickResultUVE> ScriptRuntimeUVE::TickUVE(
         }
         return lhs.generation < rhs.generation;
     });
-    std::vector<ScriptRuntimeTickResultUVE> results;
-    results.reserve(entities.size());
+
+    ScriptRuntimeTickBatchResultUVE batch;
+    batch.summary.enabledInstanceCount = entities.size();
+    batch.results.reserve(entities.size());
     for (const Scene::EntityUVE entity : entities) {
         const auto iterator = m_instances.find(entity);
-        results.push_back({entity, ExecuteScriptBytecodeUVE(iterator->second.program, options)});
+        ScriptVmExecutionResultUVE execution = ExecuteScriptBytecodeUVE(iterator->second.program, options);
+        switch (execution.status) {
+        case ScriptVmStatusUVE::Completed:
+            ++batch.summary.completedCount;
+            break;
+        case ScriptVmStatusUVE::InstructionBudgetExceeded:
+            ++batch.summary.instructionBudgetExceededCount;
+            break;
+        case ScriptVmStatusUVE::InvalidInstruction:
+            ++batch.summary.invalidInstructionCount;
+            break;
+        }
+        batch.summary.diagnosticCount += execution.diagnostics.size();
+        batch.results.push_back({entity, std::move(execution)});
     }
-    return results;
+    return batch;
+}
+
+std::vector<ScriptRuntimeTickResultUVE> ScriptRuntimeUVE::TickUVE(
+    const ScriptVmExecutionOptionsUVE options) const {
+    return TickDetailedUVE(options).results;
 }
 
 } // namespace UVE::Scripting
