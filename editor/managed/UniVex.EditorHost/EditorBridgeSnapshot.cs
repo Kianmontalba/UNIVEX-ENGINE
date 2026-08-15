@@ -122,6 +122,16 @@ public sealed record BridgeVisualScriptLink(BridgeVisualScriptEndpoint Output, B
 
 public sealed record BridgeVisualScriptDiagnostic(byte Code, uint NodeId, string PinName, string Message);
 
+public sealed record BridgeVisualScriptDebuggerSnapshot(
+    bool Available,
+    byte State,
+    ulong InstructionIndex,
+    uint SourceNodeId,
+    ulong ExecutedInstructions,
+    string PauseReason,
+    IReadOnlyList<uint> BreakpointNodeIds,
+    string Reason);
+
 public sealed record BridgeVisualScriptCanvasSnapshot(
     ulong Revision,
     ulong GraphRevision,
@@ -147,7 +157,8 @@ public sealed record BridgeVisualScriptingSnapshot(
     int LinkCount,
     bool CanEdit,
     string Reason,
-    BridgeVisualScriptCanvasSnapshot Canvas);
+    BridgeVisualScriptCanvasSnapshot Canvas,
+    BridgeVisualScriptDebuggerSnapshot Debugger);
 
 public enum BridgeDeveloperConsoleSeverity : byte
 {
@@ -353,6 +364,10 @@ public static class BridgeSnapshotParser
                                                      canvasValue.ValueKind != JsonValueKind.Null
             ? ParseVisualScriptCanvas(canvasValue)
             : EmptyVisualScriptCanvas(graphRevision);
+        BridgeVisualScriptDebuggerSnapshot debugger = value.TryGetProperty("debugger", out JsonElement debuggerValue) &&
+                                                        debuggerValue.ValueKind != JsonValueKind.Null
+            ? ParseVisualScriptDebugger(debuggerValue)
+            : EmptyVisualScriptDebugger();
         return new BridgeVisualScriptingSnapshot(
             RequiredBoolean(value, "available"),
             graphRevision,
@@ -360,7 +375,8 @@ public static class BridgeSnapshotParser
             linkCount,
             RequiredBoolean(value, "canEdit"),
             RequiredBoundedString(value, "reason"),
-            canvas);
+            canvas,
+            debugger);
     }
 
     private static BridgeVisualScriptCanvasSnapshot EmptyVisualScriptCanvas(ulong graphRevision) =>
@@ -368,6 +384,31 @@ public static class BridgeSnapshotParser
             false, false, false, false,
             Array.Empty<BridgeVisualScriptNode>(), Array.Empty<BridgeVisualScriptLink>(),
             Array.Empty<uint>(), Array.Empty<string>(), Array.Empty<BridgeVisualScriptDiagnostic>());
+
+    private static BridgeVisualScriptDebuggerSnapshot EmptyVisualScriptDebugger() =>
+        new(false, 0, 0UL, 0U, 0UL, string.Empty, Array.Empty<uint>(),
+            "No visual-scripting debugger is attached to this bridge session.");
+
+    private static BridgeVisualScriptDebuggerSnapshot ParseVisualScriptDebugger(JsonElement value)
+    {
+        RequireObject(value, "visualScripting.debugger");
+        JsonElement breakpoints = RequiredArray(value, "breakpointNodeIds");
+        EnsureBoundedArray(breakpoints, "visualScripting.debugger.breakpointNodeIds");
+        List<uint> parsedBreakpoints = new(breakpoints.GetArrayLength());
+        foreach (JsonElement breakpoint in breakpoints.EnumerateArray())
+        {
+            parsedBreakpoints.Add(breakpoint.GetUInt32());
+        }
+        return new BridgeVisualScriptDebuggerSnapshot(
+            RequiredBoolean(value, "available"),
+            RequiredByte(value, "state"),
+            RequiredUInt64(value, "instructionIndex"),
+            RequiredUInt32(value, "sourceNodeId"),
+            RequiredUInt64(value, "executedInstructions"),
+            RequiredBoundedString(value, "pauseReason"),
+            parsedBreakpoints,
+            RequiredBoundedString(value, "reason"));
+    }
 
     private static BridgeDeveloperConsoleSnapshot EmptyDeveloperConsole() =>
         new(0UL, false, true, 0, -1, string.Empty, false, false, false, false,

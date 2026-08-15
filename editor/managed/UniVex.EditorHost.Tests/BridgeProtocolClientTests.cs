@@ -331,6 +331,12 @@ public sealed class BridgeProtocolClientTests
         Assert.Equal(new uint[] { 1U }, snapshot.VisualScripting.Canvas.SelectedNodeIds);
         Assert.Equal(1.5F, snapshot.VisualScripting.Canvas.View.Zoom);
         Assert.Single(snapshot.VisualScripting.Canvas.Diagnostics);
+        Assert.True(snapshot.VisualScripting.Debugger.Available);
+        Assert.Equal((byte)2, snapshot.VisualScripting.Debugger.State);
+        Assert.Equal(1UL, snapshot.VisualScripting.Debugger.InstructionIndex);
+        Assert.Equal(20U, snapshot.VisualScripting.Debugger.SourceNodeId);
+        Assert.Equal("Breakpoint reached.", snapshot.VisualScripting.Debugger.PauseReason);
+        Assert.Equal(new uint[] { 20U }, snapshot.VisualScripting.Debugger.BreakpointNodeIds);
     }
 
     [Fact]
@@ -547,6 +553,17 @@ public sealed class BridgeProtocolClientTests
             linkCount = 0,
             canEdit = false,
             reason = "Native visual-scripting presentation is unavailable in this headless bridge session.",
+            debugger = new
+            {
+                available = includeCanvas,
+                state = includeCanvas ? 2 : 0,
+                instructionIndex = includeCanvas ? 1UL : 0UL,
+                sourceNodeId = includeCanvas ? 20U : 0U,
+                executedInstructions = includeCanvas ? 1UL : 0UL,
+                pauseReason = includeCanvas ? "Breakpoint reached." : string.Empty,
+                breakpointNodeIds = includeCanvas ? new[] { 20U } : Array.Empty<uint>(),
+                reason = includeCanvas ? "The native visual-scripting debugger snapshot is available as copied read-only state." : "No visual-scripting debugger is attached to this bridge session.",
+            },
             canvas = includeCanvas ? new
             {
                 revision = 1UL,
@@ -689,6 +706,17 @@ public sealed class BridgeProtocolClientTests
             linkCount = 0,
             canEdit = false,
             reason = "Native visual-scripting presentation is unavailable in this headless bridge session.",
+            debugger = new
+            {
+                available = includeCanvas,
+                state = includeCanvas ? 2 : 0,
+                instructionIndex = includeCanvas ? 1UL : 0UL,
+                sourceNodeId = includeCanvas ? 20U : 0U,
+                executedInstructions = includeCanvas ? 1UL : 0UL,
+                pauseReason = includeCanvas ? "Breakpoint reached." : string.Empty,
+                breakpointNodeIds = includeCanvas ? new[] { 20U } : Array.Empty<uint>(),
+                reason = includeCanvas ? "The native visual-scripting debugger snapshot is available as copied read-only state." : "No visual-scripting debugger is attached to this bridge session.",
+            },
             canvas = includeCanvas ? new
             {
                 revision = 1UL,

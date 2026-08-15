@@ -5,6 +5,7 @@
 #include <sstream>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -12,6 +13,7 @@
 
 #include "uve/core/engine_core_uve.h"
 #include "uve/editor/editor_bridge_stdio_uve.h"
+#include "uve/scripting/script_debugger_uve.h"
 
 namespace UVE::Editor::Tests {
 namespace {
@@ -69,7 +71,14 @@ TEST(EditorBridgeStdioUVETest, ServeUVE_HandshakesAndRoutesExistingBridgeDispatc
     {
         EditorUVE editor(engine.GetServicesUVE(), "uve_editor_bridge_stdio_roundtrip.uvescene");
         editor.InitUVE();
-        EditorBridgeUVE bridge(editor);
+        Scripting::ScriptDebuggerUVE debugger;
+        Scripting::ScriptBytecodeProgramUVE program;
+        program.instructions.push_back({Scripting::ScriptIrInstructionKindUVE::ExecuteNode, 10U, 0U, "test.source", {}, {}});
+        program.instructions.push_back({Scripting::ScriptIrInstructionKindUVE::TransferValue, 20U, 30U, {}, "Out", "In"});
+        ASSERT_TRUE(debugger.AttachUVE(std::move(program)));
+        ASSERT_TRUE(debugger.SetBreakpointUVE(20U, true));
+        ASSERT_EQ(debugger.ContinueUVE().state, Scripting::ScriptDebuggerStateUVE::Paused);
+        EditorBridgeUVE bridge(editor, nullptr, &debugger);
         Asset::DataTableUVE previewTable("weapons");
         ASSERT_TRUE(previewTable.DefineColumnUVE("damage", Asset::DataTableColumnTypeUVE::Integer));
         ASSERT_TRUE(previewTable.AddRowUVE("pistol", {std::int64_t{25}}));
@@ -120,6 +129,11 @@ TEST(EditorBridgeStdioUVETest, ServeUVE_HandshakesAndRoutesExistingBridgeDispatc
         EXPECT_TRUE(handshakeSnapshot.at("visualScripting").at("canvas").at("nodes").is_array());
         EXPECT_TRUE(handshakeSnapshot.at("visualScripting").at("canvas").at("links").is_array());
         EXPECT_TRUE(handshakeSnapshot.at("visualScripting").at("canvas").at("paletteNodeTypeIds").is_array());
+        ASSERT_TRUE(handshakeSnapshot.at("visualScripting").at("debugger").is_object());
+        EXPECT_TRUE(handshakeSnapshot.at("visualScripting").at("debugger").at("available").get<bool>());
+        EXPECT_EQ(handshakeSnapshot.at("visualScripting").at("debugger").at("state").get<std::uint8_t>(), 2U);
+        EXPECT_EQ(handshakeSnapshot.at("visualScripting").at("debugger").at("sourceNodeId").get<std::uint32_t>(), 20U);
+        EXPECT_EQ(handshakeSnapshot.at("visualScripting").at("debugger").at("breakpointNodeIds").front().get<std::uint32_t>(), 20U);
         ASSERT_TRUE(handshakeSnapshot.at("dataTableCatalog").is_object());
         EXPECT_TRUE(handshakeSnapshot.at("dataTableCatalog").at("generation").is_number_unsigned());
         EXPECT_TRUE(handshakeSnapshot.at("dataTableCatalog").at("entriesTruncated").is_boolean());

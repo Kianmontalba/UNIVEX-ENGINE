@@ -34,6 +34,7 @@ namespace {
         EditorBridgeCapabilityUVE::SelectContentBrowserEntry,
         EditorBridgeCapabilityUVE::ReadViewportSurface,
         EditorBridgeCapabilityUVE::ReadVisualScriptCanvas,
+        EditorBridgeCapabilityUVE::ReadVisualScriptDebugger,
         EditorBridgeCapabilityUVE::AddVisualScriptNode,
         EditorBridgeCapabilityUVE::RemoveVisualScriptNode,
         EditorBridgeCapabilityUVE::MoveVisualScriptNode,
@@ -58,6 +59,7 @@ namespace {
     return kind != EditorBridgeRequestKindUVE::ReadSnapshot &&
            kind != EditorBridgeRequestKindUVE::ReadViewportSurface &&
            kind != EditorBridgeRequestKindUVE::ReadVisualScriptCanvas &&
+           kind != EditorBridgeRequestKindUVE::ReadVisualScriptDebugger &&
            kind != EditorBridgeRequestKindUVE::ReadDeveloperConsole;
 }
 
@@ -127,10 +129,12 @@ namespace {
 } // namespace
 
 EditorBridgeUVE::EditorBridgeUVE(EditorUVE& editor,
-                                   const Asset::DataTableRegistryUVE* dataTableRegistry) noexcept
+                                   const Asset::DataTableRegistryUVE* dataTableRegistry,
+                                   const Scripting::ScriptDebuggerUVE* scriptDebugger) noexcept
     : m_editor(&editor),
       m_visualScriptCanvas(m_visualScriptRegistry),
-      m_dataTableRegistry(dataTableRegistry) {}
+      m_dataTableRegistry(dataTableRegistry),
+      m_scriptDebugger(scriptDebugger) {}
 
 const std::vector<EditorBridgeCapabilityUVE>& EditorBridgeUVE::GetCapabilitiesUVE() noexcept {
     return CapabilitiesUVE();
@@ -193,6 +197,10 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
     if (request.kind == EditorBridgeRequestKindUVE::ReadVisualScriptCanvas) {
         return MakeResponseUVE(request, true, "bridge.visual_scripting.snapshot.read",
                                "The visual-scripting canvas snapshot was copied.");
+    }
+    if (request.kind == EditorBridgeRequestKindUVE::ReadVisualScriptDebugger) {
+        return MakeResponseUVE(request, true, "bridge.visual_scripting.debugger.read",
+                               "The read-only visual-scripting debugger snapshot was copied.");
     }
     if (request.kind == EditorBridgeRequestKindUVE::ReadDeveloperConsole) {
         return MakeResponseUVE(request, true, "bridge.developer_console.snapshot.read",
@@ -421,6 +429,10 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
         case EditorBridgeRequestKindUVE::ReadVisualScriptCanvas:
             code = "bridge.visual_scripting.snapshot.read";
             message = "The visual-scripting canvas snapshot was copied.";
+            break;
+        case EditorBridgeRequestKindUVE::ReadVisualScriptDebugger:
+            code = "bridge.visual_scripting.debugger.read";
+            message = "The read-only visual-scripting debugger snapshot was copied.";
             break;
         case EditorBridgeRequestKindUVE::AddVisualScriptNode:
             if (!request.visualScriptNode.has_value() || !request.visualScriptPosition.has_value()) {
@@ -744,8 +756,18 @@ EditorBridgeVisualScriptingSnapshotUVE EditorBridgeUVE::CaptureVisualScriptingUV
         : canEdit
             ? "The native visual-scripting canvas is available through the bounded bridge contract."
             : "The native visual-scripting canvas is read-only outside Edit mode.";
+    EditorBridgeVisualScriptDebuggerSnapshotUVE debugger{};
+    if (m_scriptDebugger != nullptr) {
+        const Scripting::ScriptDebuggerSnapshotUVE source = m_scriptDebugger->GetSnapshotUVE();
+        debugger = EditorBridgeVisualScriptDebuggerSnapshotUVE{
+            true, source.state, source.instructionIndex, source.sourceNodeId, source.executedInstructions,
+            source.pauseReason, source.breakpointNodeIds,
+            "The native visual-scripting debugger snapshot is available as copied read-only state."};
+    } else {
+        debugger.reason = "No visual-scripting debugger is attached to this bridge session.";
+    }
     return EditorBridgeVisualScriptingSnapshotUVE{
-        running, canvas.graphRevision, canvas.nodes.size(), canvas.links.size(), canEdit, reason, canvas};
+        running, canvas.graphRevision, canvas.nodes.size(), canvas.links.size(), canEdit, reason, canvas, debugger};
 }
 
 void EditorBridgeUVE::SynchronizeRevisionUVE() {

@@ -275,6 +275,21 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"paletteNodeTypeIds", std::move(palette)}, {"diagnostics", std::move(diagnostics)}};
 }
 
+[[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeVisualScriptDebuggerSnapshotUVE& debugger) {
+    JsonUVE breakpoints = JsonUVE::array();
+    for (const std::uint32_t nodeId : debugger.breakpointNodeIds) {
+        breakpoints.push_back(nodeId);
+    }
+    return JsonUVE{{"available", debugger.available},
+                   {"state", static_cast<std::uint8_t>(debugger.state)},
+                   {"instructionIndex", debugger.instructionIndex},
+                   {"sourceNodeId", debugger.sourceNodeId},
+                   {"executedInstructions", debugger.executedInstructions},
+                   {"pauseReason", debugger.pauseReason},
+                   {"breakpointNodeIds", std::move(breakpoints)},
+                   {"reason", debugger.reason}};
+}
+
 [[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeVisualScriptingSnapshotUVE& scripting) {
     return JsonUVE{{"available", scripting.available},
                    {"graphRevision", scripting.graphRevision},
@@ -282,7 +297,8 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"linkCount", scripting.linkCount},
                    {"canEdit", scripting.canEdit},
                    {"reason", scripting.reason},
-                   {"canvas", ToJsonUVE(scripting.canvas)}};
+                   {"canvas", ToJsonUVE(scripting.canvas)},
+                   {"debugger", ToJsonUVE(scripting.debugger)}};
 }
 
 [[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeSnapshotUVE& snapshot) {
@@ -487,6 +503,9 @@ enum class FrameReadResultUVE : std::uint8_t {
     }
     if (value == "readVisualScriptCanvas") {
         return EditorBridgeRequestKindUVE::ReadVisualScriptCanvas;
+    }
+    if (value == "readVisualScriptDebugger") {
+        return EditorBridgeRequestKindUVE::ReadVisualScriptDebugger;
     }
     if (value == "addVisualScriptNode") {
         return EditorBridgeRequestKindUVE::AddVisualScriptNode;
