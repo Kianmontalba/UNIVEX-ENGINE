@@ -53,23 +53,6 @@ template <typename T>
     return false;
 }
 
-[[nodiscard]] bool WaitForContentUVE(const AssetHandleUVE<BlobAssetUVE>& handle, std::string_view expected) {
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{2};
-    while (std::chrono::steady_clock::now() < deadline) {
-        if (handle.IsReadyUVE()) {
-            const BlobAssetUVE* const blob = handle.TryGetUVE();
-            if (blob != nullptr) {
-                const std::string content(reinterpret_cast<const char*>(blob->data()), blob->size());
-                if (content == expected) {
-                    return true;
-                }
-            }
-        }
-        std::this_thread::yield();
-    }
-    return false;
-}
-
 class HotReloadUVETest : public ::testing::Test {
 protected:
     Threading::ThreadPoolUVE threadPool{2};
@@ -99,7 +82,7 @@ TEST_F(HotReloadUVETest, PollUVE_DetectsOnDiskChange_ReloadsAssetAndPublishesEve
     const auto farFuture = std::filesystem::file_time_type::clock::now() + std::chrono::hours(1);
     std::filesystem::last_write_time(path, farFuture);
 
-    bool reloadEventReceived = false;
+    std::atomic<bool> reloadEventReceived{false};
     eventSystem.Subscribe<AssetReloadedEventUVE>([&reloadEventReceived, guid](const AssetReloadedEventUVE& event) {
         if (event.guid == guid) {
             reloadEventReceived = true;
@@ -107,10 +90,22 @@ TEST_F(HotReloadUVETest, PollUVE_DetectsOnDiskChange_ReloadsAssetAndPublishesEve
     });
 
     hotReload.PollUVE(assetManager, assetDatabase, 10.0);
-    eventSystem.DispatchQueuedUVE();
-    EXPECT_TRUE(reloadEventReceived);
-
-    EXPECT_TRUE(WaitForContentUVE(handle, "version2"));
+    const auto reloadDeadline = std::chrono::steady_clock::now() + std::chrono::seconds{2};
+    bool contentReloaded = false;
+    while (std::chrono::steady_clock::now() < reloadDeadline &&
+           (!reloadEventReceived.load() || !contentReloaded)) {
+        eventSystem.DispatchQueuedUVE();
+        if (handle.IsReadyUVE()) {
+            const BlobAssetUVE* const blob = handle.TryGetUVE();
+            if (blob != nullptr) {
+                const std::string content(reinterpret_cast<const char*>(blob->data()), blob->size());
+                contentReloaded = content == "version2";
+            }
+        }
+        std::this_thread::yield();
+    }
+    EXPECT_TRUE(reloadEventReceived.load());
+    EXPECT_TRUE(contentReloaded);
 
     std::filesystem::remove(path);
 }

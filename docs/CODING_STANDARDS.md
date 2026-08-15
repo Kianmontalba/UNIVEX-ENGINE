@@ -1653,3 +1653,10 @@ The helper may rely on the generic database's established lexical normalization 
 Register the DataTableUVE loader explicitly through `RegisterDataTableAssetLoaderUVE()` and reuse `LoadDataTableAssetUVE()` as the sole file-validation path. Do not create a parallel manager, cache, worker, or reference-count implementation for data tables.
 
 The helper owns no lifetime beyond registration. `AssetManagerUVE` owns worker execution, typed records, `AssetHandleUVE<DataTableUVE>` references, failure states, garbage collection, and any future explicit reload operation. A successful manager load does not mutate `DataTableRegistryUVE`, editor bridge DTOs, database identity records, or managed state.
+
+
+## Schema-driven Data Table source importers (Increment 101)
+
+Data Table source importers must receive an explicit `DataTableImportSettingsUVE` schema. Do not infer column names or types from source text in this increment. CSV, TSV, and JSON handlers must read through the bounded document limit, construct a temporary typed `DataTableUVE`, and write only through `SaveDataTableAssetUVE()` after import success.
+
+The importer may hand a successful `.uvetable` destination to `AssetImporterUVE` for generic database registration, but it must not register a destination before conversion succeeds. Importers own no background workers, queues, directory scans, hot-reload state, registry session, editor bridge state, runtime binding, or managed pointer.
