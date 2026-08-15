@@ -329,6 +329,28 @@ TEST(DeveloperConsoleUVE, HistoryCursorAndShippingPolicyAreExplicit) {
     EXPECT_FALSE(shipping.MoveHistoryUVE(-1));
 }
 
+TEST(DeveloperConsoleUVE, ClearDetailedUVEReturnsStructuredDiagnostics) {
+    DeveloperConsoleUVE console;
+    const DeveloperConsoleClearResultUVE unchanged = console.ClearDetailedUVE();
+    EXPECT_EQ(unchanged.code, DeveloperConsoleClearCodeUVE::Unchanged);
+    EXPECT_FALSE(unchanged.IsAcceptedUVE());
+    EXPECT_FALSE(unchanged.message.empty());
+
+    console.AppendUVE(DeveloperConsoleSeverityUVE::Info, "entry");
+    const DeveloperConsoleClearResultUVE applied = console.ClearDetailedUVE();
+    EXPECT_EQ(applied.code, DeveloperConsoleClearCodeUVE::Applied);
+    EXPECT_TRUE(applied.IsAcceptedUVE());
+    EXPECT_FALSE(applied.message.empty());
+    EXPECT_TRUE(console.GetSnapshotUVE().output.empty());
+    EXPECT_FALSE(console.ClearUVE());
+
+    DeveloperConsoleUVE shipping(DeveloperConsoleBuildPolicyUVE::Shipping);
+    const DeveloperConsoleClearResultUVE unavailable = shipping.ClearDetailedUVE();
+    EXPECT_EQ(unavailable.code, DeveloperConsoleClearCodeUVE::Unavailable);
+    EXPECT_FALSE(unavailable.IsAcceptedUVE());
+    EXPECT_FALSE(unavailable.message.empty());
+}
+
 TEST(DeveloperConsoleUVE, OutputAndHistoryExposeTruncationAndClearIsExplicit) {
     DeveloperConsoleUVE console;
     for (std::size_t index = 0U; index < DeveloperConsoleUVE::kMaximumOutputUVE + 4U; ++index) {

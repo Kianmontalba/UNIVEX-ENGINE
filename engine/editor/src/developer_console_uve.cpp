@@ -183,14 +183,22 @@ bool DeveloperConsoleUVE::ExecuteUVE(std::string commandLine) {
     return ExecuteDetailedUVE(std::move(commandLine)).IsAcceptedUVE();
 }
 
-bool DeveloperConsoleUVE::ClearUVE() noexcept {
-    if (!IsAvailableUVE() || m_output.empty()) {
-        return false;
+DeveloperConsoleClearResultUVE DeveloperConsoleUVE::ClearDetailedUVE() noexcept {
+    if (!IsAvailableUVE()) {
+        return {DeveloperConsoleClearCodeUVE::Unavailable,
+                "Console clearing is unavailable under the Shipping build policy."};
+    }
+    if (m_output.empty()) {
+        return {DeveloperConsoleClearCodeUVE::Unchanged, "Console output is already clear."};
     }
     m_output.clear();
     m_outputTruncated = false;
     IncrementGenerationUVE(m_generation);
-    return true;
+    return {DeveloperConsoleClearCodeUVE::Applied, "Console output cleared."};
+}
+
+bool DeveloperConsoleUVE::ClearUVE() noexcept {
+    return ClearDetailedUVE().IsAcceptedUVE();
 }
 
 DeveloperConsoleCVarMutationResultUVE DeveloperConsoleUVE::SetCVarDetailedUVE(const std::string_view name,
