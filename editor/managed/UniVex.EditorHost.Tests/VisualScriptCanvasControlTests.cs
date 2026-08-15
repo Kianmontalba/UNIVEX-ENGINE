@@ -29,6 +29,39 @@ public sealed class VisualScriptCanvasControlTests
     }
 
     [Fact]
+    public void NodePresentation_MapsKnownCategoriesToStableLiquidGlassStyles()
+    {
+        BridgeVisualScriptNode eventNode = new(
+            1U, "test.event", "Event", new BridgeVisualScriptPoint(0F, 0F), false,
+            Array.Empty<BridgeVisualScriptPin>(), Category: "Event");
+        BridgeVisualScriptNode unknownNode = eventNode with { Category = "FutureCategory" };
+
+        VisualScriptNodePresentation eventStyle = VisualScriptCanvasControl.DescribeNodePresentation(eventNode);
+        VisualScriptNodePresentation fallbackStyle = VisualScriptCanvasControl.DescribeNodePresentation(unknownNode);
+
+        Assert.Equal("#78E5D5", eventStyle.AccentHex);
+        Assert.Equal("E", eventStyle.IconGlyph);
+        Assert.False(eventStyle.UsesFallback);
+        Assert.Equal("#1B222C", fallbackStyle.FillHex);
+        Assert.Equal("?", fallbackStyle.IconGlyph);
+        Assert.True(fallbackStyle.UsesFallback);
+    }
+
+    [Fact]
+    public void NodePresentation_IsCaseInsensitiveAndDoesNotMutateCopiedNodeDto()
+    {
+        BridgeVisualScriptNode node = new(
+            2U, "test.math", "Math", new BridgeVisualScriptPoint(0F, 0F), false,
+            new[] { new BridgeVisualScriptPin("Value", 0, 3) }, Category: "mAtH");
+
+        VisualScriptNodePresentation style = VisualScriptCanvasControl.DescribeNodePresentation(node);
+
+        Assert.Equal("#30291A", style.FillHex);
+        Assert.Equal("#F4C56B", style.PinHex);
+        Assert.Equal("mAtH", node.Category);
+    }
+
+    [Fact]
     public void RequestUndoAndRedo_EmitNamedCommandsWithCurrentBridgeRevision()
     {
         VisualScriptCanvasControl control = CreateControl();
