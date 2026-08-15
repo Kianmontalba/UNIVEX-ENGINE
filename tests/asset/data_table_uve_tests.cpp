@@ -168,4 +168,59 @@ TEST(DataTableUVE, CsvImportRejectsInvalidBooleanAndNonFiniteNumber) {
     EXPECT_EQ(table.GetSnapshotUVE().diagnostics.front().code, DataTableDiagnosticCodeUVE::InvalidValue);
 }
 
+TEST(DataTableUVE, AssetEnvelopeRoundTripIsDeterministicAndTyped) {
+    DataTableUVE source("weapons");
+    ASSERT_TRUE(source.DefineColumnUVE("damage", DataTableColumnTypeUVE::Integer));
+    ASSERT_TRUE(source.DefineColumnUVE("weight", DataTableColumnTypeUVE::Number));
+    ASSERT_TRUE(source.DefineColumnUVE("name", DataTableColumnTypeUVE::String));
+    ASSERT_TRUE(source.AddRowUVE("pistol", {std::int64_t{25}, 1.5, std::string{"Pistol"}}));
+
+    std::string first;
+    std::string second;
+    ASSERT_TRUE(DataTableAssetSerializerUVE::SerializeUVE(source, first));
+    ASSERT_TRUE(DataTableAssetSerializerUVE::SerializeUVE(source, second));
+    EXPECT_EQ(first, second);
+
+    DataTableUVE restored("placeholder");
+    ASSERT_TRUE(DataTableAssetSerializerUVE::DeserializeUVE(first, restored));
+    EXPECT_EQ(restored.GetSnapshotUVE().columns, source.GetSnapshotUVE().columns);
+    EXPECT_EQ(restored.GetSnapshotUVE().rows, source.GetSnapshotUVE().rows);
+}
+
+TEST(DataTableUVE, AssetEnvelopeRejectsInvalidInputWithoutReplacingDestination) {
+    DataTableUVE table("stable");
+    ASSERT_TRUE(table.DefineColumnUVE("value", DataTableColumnTypeUVE::Integer));
+    ASSERT_TRUE(table.AddRowUVE("one", {std::int64_t{1}}));
+    const DataTableSnapshotUVE before = table.GetSnapshotUVE();
+
+    EXPECT_FALSE(DataTableAssetSerializerUVE::DeserializeUVE(
+        R"({"format":"uve.data_table","version":2,"name":"new","columns":[],"rows":[]})", table));
+    EXPECT_EQ(table.GetSnapshotUVE().columns, before.columns);
+    EXPECT_EQ(table.GetSnapshotUVE().rows, before.rows);
+}
+
+TEST(DataTableUVE, CatalogSnapshotIsSortedCopiedAndGenerationCounted) {
+    DataTableUVE zebra("zebra");
+    ASSERT_TRUE(zebra.DefineColumnUVE("value", DataTableColumnTypeUVE::Integer));
+    ASSERT_TRUE(zebra.AddRowUVE("row", {std::int64_t{1}}));
+    DataTableUVE alpha("alpha");
+    ASSERT_TRUE(alpha.DefineColumnUVE("value", DataTableColumnTypeUVE::Integer));
+
+    DataTableCatalogUVE catalog;
+    ASSERT_TRUE(catalog.UpsertUVE(zebra.GetSnapshotUVE()));
+    ASSERT_TRUE(catalog.UpsertUVE(alpha.GetSnapshotUVE()));
+    const DataTableCatalogSnapshotUVE snapshot = catalog.GetSnapshotUVE();
+    ASSERT_EQ(snapshot.entries.size(), 2U);
+    EXPECT_EQ(snapshot.entries[0].name, "alpha");
+    EXPECT_EQ(snapshot.entries[1].name, "zebra");
+    EXPECT_TRUE(snapshot.entries[1].valid);
+    EXPECT_EQ(snapshot.entries[0].rowCount, 0U);
+    EXPECT_TRUE(catalog.ContainsUVE("alpha"));
+
+    EXPECT_FALSE(catalog.UpsertUVE(alpha.GetSnapshotUVE()));
+    ASSERT_TRUE(catalog.RemoveUVE("alpha"));
+    EXPECT_FALSE(catalog.ContainsUVE("alpha"));
+    EXPECT_FALSE(catalog.RemoveUVE("alpha"));
+}
+
 } // namespace UVE::Asset::Tests

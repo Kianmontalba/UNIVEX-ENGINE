@@ -1578,3 +1578,12 @@ TSV import must reuse the bounded quoted-delimited rules of CSV with a tab delim
 JSON import must accept only a top-level array of objects. Every row must contain exactly one bounded string `id` and one member for each declared column; object member order may vary, but output values must follow schema order. JSON kinds are checked directly: booleans require JSON booleans, integers require signed integer numbers, numbers must be finite, and strings must remain within the string bound. Extra members, missing members, nulls, wrong kinds, malformed documents, and duplicate IDs are deterministic diagnostics.
 
 Both adapters are failure-atomic. A failed import publishes bounded diagnostics and a new generation while preserving the last committed rows; a successful import atomically replaces all rows and clears previous diagnostics. These adapters remain native value/asset-module code and acquire no filesystem, editor, managed, runtime, or visual-scripting authority.
+
+
+## Data Table Asset Envelope and Catalog v1 (Increment 92)
+
+The data-table asset envelope uses the fixed `uve.data_table` format identifier and explicit schema version `1`. Serialization must preserve declared column order and row order, use explicit tagged values, and reject non-finite numbers or out-of-bound strings. Unknown versions, wrong format identifiers, malformed JSON, extra envelope members, duplicate columns or rows, and missing fields are invalid rather than silently migrated.
+
+Deserialization must construct a temporary `DataTableUVE` through its public schema and row validation path. The destination table is replaced only after the entire envelope validates; malformed input must never partially mutate the destination. The envelope serializer is deterministic and bounded by the native document limit.
+
+`DataTableCatalogUVE` stores copied descriptors only: name, source generation, column count, row count, and validity. Catalog snapshots are copied and lexicographically sorted. The catalog must not own table rows, pointers, file paths, filesystem scanning, asset-database registration, content hashes, hot-reload authority, editor bridge state, managed objects, runtime bindings, or visual-scripting state.

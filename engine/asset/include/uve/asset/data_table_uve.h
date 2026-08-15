@@ -125,4 +125,42 @@ public:
     [[nodiscard]] static bool ImportUVE(std::string_view document, DataTableUVE& table);
 };
 
+class DataTableAssetSerializerUVE final {
+public:
+    [[nodiscard]] static bool SerializeUVE(const DataTableUVE& table, std::string& document);
+    [[nodiscard]] static bool DeserializeUVE(std::string_view document, DataTableUVE& table);
+};
+
+struct DataTableCatalogEntryUVE final {
+    std::string name;
+    std::uint64_t generation = 0U;
+    std::size_t columnCount = 0U;
+    std::size_t rowCount = 0U;
+    bool valid = false;
+    [[nodiscard]] bool operator==(const DataTableCatalogEntryUVE&) const = default;
+};
+
+struct DataTableCatalogSnapshotUVE final {
+    std::uint64_t generation = 0U;
+    std::vector<DataTableCatalogEntryUVE> entries;
+    bool entriesTruncated = false;
+    [[nodiscard]] bool operator==(const DataTableCatalogSnapshotUVE&) const = default;
+};
+
+class DataTableCatalogUVE final {
+public:
+    static constexpr std::size_t kMaximumEntriesUVE = 1024U;
+
+    [[nodiscard]] bool UpsertUVE(const DataTableSnapshotUVE& table);
+    [[nodiscard]] bool RemoveUVE(std::string_view name);
+    [[nodiscard]] DataTableCatalogSnapshotUVE GetSnapshotUVE() const;
+    [[nodiscard]] bool ContainsUVE(std::string_view name) const noexcept;
+
+private:
+    void IncrementGenerationUVE() noexcept;
+
+    std::vector<DataTableCatalogEntryUVE> m_entries;
+    std::uint64_t m_generation = 1U;
+};
+
 } // namespace UVE::Asset

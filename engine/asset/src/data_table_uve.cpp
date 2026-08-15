@@ -6,6 +6,8 @@
 #include <cmath>
 #include <cstdlib>
 #include <limits>
+#include <optional>
+#include <type_traits>
 #include <utility>
 
 #include <nlohmann/json.hpp>
@@ -598,6 +600,217 @@ bool DataTableJsonImporterUVE::ImportUVE(const std::string_view document, DataTa
     table.SetDiagnosticsUVE({}, false);
     table.IncrementGenerationUVE();
     return true;
+}
+
+namespace {
+
+[[nodiscard]] const char* ColumnTypeNameUVE(const DataTableColumnTypeUVE type) noexcept {
+    switch (type) {
+        case DataTableColumnTypeUVE::Boolean:
+            return "boolean";
+        case DataTableColumnTypeUVE::Integer:
+            return "integer";
+        case DataTableColumnTypeUVE::Number:
+            return "number";
+        case DataTableColumnTypeUVE::String:
+            return "string";
+    }
+    return "";
+}
+
+[[nodiscard]] std::optional<DataTableColumnTypeUVE> ParseColumnTypeUVE(const std::string_view type) noexcept {
+    if (type == "boolean") {
+        return DataTableColumnTypeUVE::Boolean;
+    }
+    if (type == "integer") {
+        return DataTableColumnTypeUVE::Integer;
+    }
+    if (type == "number") {
+        return DataTableColumnTypeUVE::Number;
+    }
+    if (type == "string") {
+        return DataTableColumnTypeUVE::String;
+    }
+    return std::nullopt;
+}
+
+[[nodiscard]] nlohmann::json SerializeValueUVE(const DataTableValueUVE& value) {
+    nlohmann::json encoded = nlohmann::json::object();
+    std::visit([&encoded](const auto& current) {
+        using ValueType = std::decay_t<decltype(current)>;
+        if constexpr (std::is_same_v<ValueType, bool>) {
+            encoded["type"] = "boolean";
+        } else if constexpr (std::is_same_v<ValueType, std::int64_t>) {
+            encoded["type"] = "integer";
+        } else if constexpr (std::is_same_v<ValueType, double>) {
+            encoded["type"] = "number";
+        } else {
+            encoded["type"] = "string";
+        }
+        encoded["value"] = current;
+    }, value);
+    return encoded;
+}
+
+[[nodiscard]] bool IsCatalogNameUVE(const std::string_view name) noexcept {
+    if (name.empty() || name.size() > DataTableUVE::kMaximumIdentifierBytesUVE) {
+        return false;
+    }
+    return std::all_of(name.begin(), name.end(), [](const char character) {
+        return (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') ||
+               (character >= '0' && character <= '9') || character == '_' || character == '-' || character == '.';
+    });
+}
+
+} // namespace
+
+bool DataTableAssetSerializerUVE::SerializeUVE(const DataTableUVE& table, std::string& document) {
+    const DataTableSnapshotUVE snapshot = table.GetSnapshotUVE();
+    if (!IsCatalogNameUVE(snapshot.name)) {
+        return false;
+    }
+    nlohmann::json envelope = nlohmann::json::object();
+    envelope["format"] = "uve.data_table";
+    envelope["version"] = 1U;
+    envelope["name"] = snapshot.name;
+    envelope["columns"] = nlohmann::json::array();
+    for (const DataTableColumnUVE& column : snapshot.columns) {
+        envelope["columns"].push_back({{"name", column.name}, {"type", ColumnTypeNameUVE(column.type)}});
+    }
+    envelope["rows"] = nlohmann::json::array();
+    for (const DataTableRowUVE& row : snapshot.rows) {
+        nlohmann::json values = nlohmann::json::array();
+        for (const DataTableValueUVE& value : row.values) {
+            values.push_back(SerializeValueUVE(value));
+        }
+        envelope["rows"].push_back({{"id", row.identifier}, {"values", std::move(values)}});
+    }
+    const std::string serialized = envelope.dump();
+    if (serialized.size() > DataTableUVE::kMaximumDocumentBytesUVE) {
+        return false;
+    }
+    document = serialized;
+    return true;
+}
+
+bool DataTableAssetSerializerUVE::DeserializeUVE(const std::string_view document, DataTableUVE& table) {
+    if (document.empty() || document.size() > DataTableUVE::kMaximumDocumentBytesUVE) {
+        return false;
+    }
+    nlohmann::json envelope;
+    try {
+        envelope = nlohmann::json::parse(document.begin(), document.end());
+    } catch (const nlohmann::json::exception&) {
+        return false;
+    }
+    if (!envelope.is_object() || envelope.size() != 5U || envelope.value("format", "") != "uve.data_table" ||
+        envelope.value("version", 0U) != 1U || !envelope.at("name").is_string() ||
+        !envelope.at("columns").is_array() || !envelope.at("rows").is_array()) {
+        return false;
+    }
+    const std::string name = envelope.at("name").get<std::string>();
+    DataTableUVE candidate(name);
+    if (candidate.GetSnapshotUVE().name != name || envelope.at("columns").size() > DataTableUVE::kMaximumColumnsUVE ||
+        envelope.at("rows").size() > DataTableUVE::kMaximumRowsUVE) {
+        return false;
+    }
+    for (const nlohmann::json& column : envelope.at("columns")) {
+        if (!column.is_object() || column.size() != 2U || !column.contains("name") || !column.contains("type") ||
+            !column.at("name").is_string() || !column.at("type").is_string()) {
+            return false;
+        }
+        const std::optional<DataTableColumnTypeUVE> type = ParseColumnTypeUVE(column.at("type").get<std::string>());
+        if (!type.has_value() || !candidate.DefineColumnUVE(column.at("name").get<std::string>(), *type)) {
+            return false;
+        }
+    }
+    for (const nlohmann::json& row : envelope.at("rows")) {
+        if (!row.is_object() || row.size() != 2U || !row.contains("id") || !row.contains("values") ||
+            !row.at("id").is_string() || !row.at("values").is_array() ||
+            row.at("values").size() != candidate.GetSnapshotUVE().columns.size()) {
+            return false;
+        }
+        std::vector<DataTableValueUVE> values;
+        values.reserve(row.at("values").size());
+        for (const nlohmann::json& encoded : row.at("values")) {
+            if (!encoded.is_object() || encoded.size() != 2U || !encoded.contains("type") || !encoded.contains("value") ||
+                !encoded.at("type").is_string()) {
+                return false;
+            }
+            const std::string type = encoded.at("type").get<std::string>();
+            const nlohmann::json& value = encoded.at("value");
+            if (type == "boolean" && value.is_boolean()) {
+                values.emplace_back(value.get<bool>());
+            } else if (type == "integer" && value.is_number_integer()) {
+                values.emplace_back(value.get<std::int64_t>());
+            } else if (type == "number" && value.is_number() && std::isfinite(value.get<double>())) {
+                values.emplace_back(value.get<double>());
+            } else if (type == "string" && value.is_string() && value.get<std::string>().size() <= DataTableUVE::kMaximumStringBytesUVE) {
+                values.emplace_back(value.get<std::string>());
+            } else {
+                return false;
+            }
+        }
+        if (!candidate.AddRowUVE(row.at("id").get<std::string>(), std::move(values))) {
+            return false;
+        }
+    }
+    table = std::move(candidate);
+    return true;
+}
+
+bool DataTableCatalogUVE::UpsertUVE(const DataTableSnapshotUVE& table) {
+    if (!IsCatalogNameUVE(table.name)) {
+        return false;
+    }
+    const DataTableCatalogEntryUVE entry{table.name, table.generation, table.columns.size(), table.rows.size(),
+                                         table.diagnostics.empty()};
+    const auto iterator = std::lower_bound(m_entries.begin(), m_entries.end(), entry.name,
+                                           [](const DataTableCatalogEntryUVE& current, const std::string& name) {
+                                               return current.name < name;
+                                           });
+    if (iterator != m_entries.end() && iterator->name == entry.name) {
+        if (*iterator == entry) {
+            return false;
+        }
+        *iterator = entry;
+    } else {
+        if (m_entries.size() >= kMaximumEntriesUVE) {
+            return false;
+        }
+        m_entries.insert(iterator, entry);
+    }
+    IncrementGenerationUVE();
+    return true;
+}
+
+bool DataTableCatalogUVE::RemoveUVE(const std::string_view name) {
+    const auto iterator = std::lower_bound(m_entries.begin(), m_entries.end(), name,
+                                           [](const DataTableCatalogEntryUVE& current, const std::string_view target) {
+                                               return current.name < target;
+                                           });
+    if (iterator == m_entries.end() || iterator->name != name) {
+        return false;
+    }
+    m_entries.erase(iterator);
+    IncrementGenerationUVE();
+    return true;
+}
+
+DataTableCatalogSnapshotUVE DataTableCatalogUVE::GetSnapshotUVE() const {
+    return DataTableCatalogSnapshotUVE{m_generation, m_entries, false};
+}
+
+bool DataTableCatalogUVE::ContainsUVE(const std::string_view name) const noexcept {
+    return std::any_of(m_entries.begin(), m_entries.end(), [name](const DataTableCatalogEntryUVE& entry) {
+        return entry.name == name;
+    });
+}
+
+void DataTableCatalogUVE::IncrementGenerationUVE() noexcept {
+    if (m_generation < std::numeric_limits<std::uint64_t>::max()) {
+        ++m_generation;
+    }
 }
 
 } // namespace UVE::Asset
