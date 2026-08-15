@@ -158,6 +158,24 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"cvars", std::move(cvars)}, {"completions", std::move(completions)}};
 }
 
+[[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeDataTableCatalogEntryUVE& entry) {
+    return JsonUVE{{"name", entry.name},
+                   {"generation", entry.generation},
+                   {"columnCount", entry.columnCount},
+                   {"rowCount", entry.rowCount},
+                   {"valid", entry.valid}};
+}
+
+[[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeDataTableCatalogSnapshotUVE& snapshot) {
+    JsonUVE entries = JsonUVE::array();
+    for (const EditorBridgeDataTableCatalogEntryUVE& entry : snapshot.entries) {
+        entries.push_back(ToJsonUVE(entry));
+    }
+    return JsonUVE{{"generation", snapshot.generation},
+                   {"entriesTruncated", snapshot.entriesTruncated},
+                   {"entries", std::move(entries)}};
+}
+
 [[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeViewportSurfaceSnapshotUVE& surface) {
     return JsonUVE{{"state", static_cast<std::uint8_t>(surface.state)},
                    {"generation", surface.generation},
@@ -261,6 +279,7 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"viewportSurface", ToJsonUVE(snapshot.viewportSurface)},
                    {"visualScripting", ToJsonUVE(snapshot.visualScripting)},
                    {"developerConsole", ToJsonUVE(snapshot.developerConsole)},
+                   {"dataTableCatalog", ToJsonUVE(snapshot.dataTableCatalog)},
                    {"capabilities", std::move(capabilities)}};
 }
 

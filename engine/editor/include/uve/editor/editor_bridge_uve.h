@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "uve/asset/data_table_uve.h"
 #include "uve/editor/editor_uve.h"
 #include "uve/scripting/script_graph_canvas_uve.h"
 #include "uve/editor/developer_console_uve.h"
@@ -240,6 +241,22 @@ struct EditorBridgeDeveloperConsoleSnapshotUVE final {
     [[nodiscard]] bool operator==(const EditorBridgeDeveloperConsoleSnapshotUVE&) const = default;
 };
 
+struct EditorBridgeDataTableCatalogEntryUVE final {
+    std::string name;
+    std::uint64_t generation = 0U;
+    std::size_t columnCount = 0U;
+    std::size_t rowCount = 0U;
+    bool valid = false;
+    [[nodiscard]] bool operator==(const EditorBridgeDataTableCatalogEntryUVE&) const = default;
+};
+
+struct EditorBridgeDataTableCatalogSnapshotUVE final {
+    std::uint64_t generation = 0U;
+    bool entriesTruncated = false;
+    std::vector<EditorBridgeDataTableCatalogEntryUVE> entries;
+    [[nodiscard]] bool operator==(const EditorBridgeDataTableCatalogSnapshotUVE&) const = default;
+};
+
 struct EditorBridgeSnapshotUVE final {
     std::uint32_t protocolVersion = kEditorBridgeProtocolVersionUVE;
     std::uint64_t revision = 0U;
@@ -258,6 +275,7 @@ struct EditorBridgeSnapshotUVE final {
     EditorBridgeViewportSurfaceSnapshotUVE viewportSurface;
     EditorBridgeVisualScriptingSnapshotUVE visualScripting;
     EditorBridgeDeveloperConsoleSnapshotUVE developerConsole;
+    EditorBridgeDataTableCatalogSnapshotUVE dataTableCatalog;
     std::vector<EditorBridgeCapabilityUVE> capabilities;
 };
 
@@ -326,6 +344,8 @@ public:
 
     [[nodiscard]] EditorBridgeSnapshotUVE GetSnapshotUVE();
     [[nodiscard]] EditorBridgeResponseUVE DispatchUVE(const EditorBridgeRequestUVE& request);
+    void SetDataTableCatalogSnapshotUVE(Asset::DataTableCatalogSnapshotUVE snapshot);
+
     [[nodiscard]] static const std::vector<EditorBridgeCapabilityUVE>& GetCapabilitiesUVE() noexcept;
 
 private:
@@ -345,6 +365,7 @@ private:
         EditorBridgeViewportSurfaceSnapshotUVE viewportSurface;
         EditorBridgeVisualScriptingSnapshotUVE visualScripting;
         EditorBridgeDeveloperConsoleSnapshotUVE developerConsole;
+        EditorBridgeDataTableCatalogSnapshotUVE dataTableCatalog;
 
         [[nodiscard]] bool operator==(const ObservedStateUVE&) const = default;
     };
@@ -361,6 +382,7 @@ private:
     [[nodiscard]] static std::string BoundContentPathUVE(std::string value);
     [[nodiscard]] EditorBridgeVisualScriptingSnapshotUVE CaptureVisualScriptingUVE() const;
     [[nodiscard]] EditorBridgeDeveloperConsoleSnapshotUVE CaptureDeveloperConsoleUVE() const;
+    [[nodiscard]] EditorBridgeDataTableCatalogSnapshotUVE CaptureDataTableCatalogUVE() const;
     [[nodiscard]] EditorBridgeHierarchySnapshotUVE CaptureHierarchyUVE();
     [[nodiscard]] EditorBridgeInspectorSnapshotUVE CaptureInspectorUVE() const;
     [[nodiscard]] EditorBridgeContentBrowserSnapshotUVE CaptureContentBrowserUVE();
@@ -373,6 +395,7 @@ private:
     Scripting::ScriptNodeRegistryUVE m_visualScriptRegistry;
     Scripting::ScriptGraphCanvasUVE m_visualScriptCanvas;
     DeveloperConsoleUVE m_developerConsole;
+    Asset::DataTableCatalogSnapshotUVE m_dataTableCatalogSnapshot;
     std::optional<ObservedStateUVE> m_lastObservedState;
     std::uint64_t m_revision = 0U;
 };

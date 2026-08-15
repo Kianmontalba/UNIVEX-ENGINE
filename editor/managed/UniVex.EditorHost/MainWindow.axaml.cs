@@ -446,6 +446,7 @@ public partial class MainWindow : Window
             RenderViewportSurface(snapshot.ViewportSurface);
             RenderVisualScripting(snapshot.VisualScripting, snapshot.Revision);
             RenderDeveloperConsole(snapshot.DeveloperConsole);
+            RenderDataTableCatalog(snapshot.DataTableCatalog);
         }
         finally
         {
@@ -505,6 +506,15 @@ public partial class MainWindow : Window
             $"Generation {console.Generation}; {availability}; filter {console.SeverityFilter}; {cursor}; " +
             $"{console.Output.Count} output entr(y/ies), {console.History.Count} history item(s), " +
             $"{console.CVars.Count} cvar(s){truncation}{discoveryTruncation}";
+    }
+
+    private void RenderDataTableCatalog(BridgeDataTableCatalogSnapshot catalog)
+    {
+        DataTableCatalogListBox.ItemsSource = catalog.Entries;
+        string truncation = catalog.EntriesTruncated ? " · bounded/truncated" : string.Empty;
+        DataTableCatalogStatusTextBlock.Text =
+            $"Generation {catalog.Generation}; {catalog.Entries.Count} native table descriptor(s){truncation}. " +
+            "Read-only copied facts; table rows and asset ownership remain native.";
     }
 
     private void RenderVisualScripting(BridgeVisualScriptingSnapshot scripting, ulong bridgeRevision)

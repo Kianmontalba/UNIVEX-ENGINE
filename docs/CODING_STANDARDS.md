@@ -1587,3 +1587,12 @@ The data-table asset envelope uses the fixed `uve.data_table` format identifier 
 Deserialization must construct a temporary `DataTableUVE` through its public schema and row validation path. The destination table is replaced only after the entire envelope validates; malformed input must never partially mutate the destination. The envelope serializer is deterministic and bounded by the native document limit.
 
 `DataTableCatalogUVE` stores copied descriptors only: name, source generation, column count, row count, and validity. Catalog snapshots are copied and lexicographically sorted. The catalog must not own table rows, pointers, file paths, filesystem scanning, asset-database registration, content hashes, hot-reload authority, editor bridge state, managed objects, runtime bindings, or visual-scripting state.
+
+
+## Read-Only Data Table Catalog Bridge v1 (Increment 93)
+
+Data-table catalog bridge fields are additive value-only DTOs. The native bridge must cap copied catalog records at the existing panel-entry bound, preserve a truncation fact, and include catalog changes in observed-state equality and bridge revision synchronization.
+
+No request kind or capability may be added for catalog mutation in this increment. The stdio `dataTableCatalog` object is a presentation snapshot; managed parsing must accept its absence for older backends, reject wrong types or negative counts, and never retain raw JSON values. The Avalonia Data Tables tab is read-only and must not expose file, asset-database, schema, row, runtime, or reference mutation controls.
+
+C++ owns rows, schemas, diagnostics, asset envelopes, catalog state, and future persistence. C# owns only copied DTOs and transient presentation state. Native pointers, ECS references, OpenGL resources, filesystem handles, and process authority do not cross this bridge.

@@ -251,6 +251,12 @@ public sealed class BridgeProtocolClientTests
             cvars = new[] { new { name = "r.vsync", value = "1", readOnly = true } },
             completions = new[] { new { identifier = "help", help = "List registered native commands." } },
         },
+        dataTableCatalog = new
+        {
+            generation = 4UL,
+            entriesTruncated = false,
+            entries = new[] { new { name = "weapons", generation = 2UL, columnCount = 1, rowCount = 1, valid = true } },
+        },
         capabilities = Array.Empty<int>(),
         }));
 
@@ -300,6 +306,40 @@ public sealed class BridgeProtocolClientTests
         Assert.Equal("ready", snapshot.DeveloperConsole.Output[0].Text);
         Assert.Equal(new[] { "help" }, snapshot.DeveloperConsole.History);
         Assert.True(snapshot.DeveloperConsole.CVars[0].IsReadOnly);
+    }
+
+    [Fact]
+    public void SnapshotParser_AcceptsReadOnlyDataTableCatalogDto()
+    {
+        using JsonDocument document = JsonDocument.Parse(JsonSerializer.Serialize(Snapshot(sceneDirty: false)));
+
+        BridgeEditorSnapshot snapshot = BridgeSnapshotParser.Parse(document.RootElement);
+
+        Assert.Equal(4UL, snapshot.DataTableCatalog.Generation);
+        Assert.False(snapshot.DataTableCatalog.EntriesTruncated);
+        var entry = Assert.Single(snapshot.DataTableCatalog.Entries);
+        Assert.Equal("weapons", entry.Name);
+        Assert.Equal(2UL, entry.Generation);
+        Assert.Equal(1, entry.ColumnCount);
+        Assert.Equal(1, entry.RowCount);
+        Assert.True(entry.IsValid);
+        Assert.Contains("weapons", entry.DisplayText);
+    }
+
+    [Fact]
+    public void SnapshotParser_UsesEmptyCatalogFallbackForOlderFrames()
+    {
+        using JsonDocument document = JsonDocument.Parse(JsonSerializer.Serialize(Snapshot(sceneDirty: false)));
+        using JsonDocument withoutCatalog = JsonDocument.Parse(document.RootElement.GetRawText());
+        Dictionary<string, JsonElement> members = withoutCatalog.RootElement.EnumerateObject()
+            .Where(property => property.Name != "dataTableCatalog")
+            .ToDictionary(property => property.Name, property => property.Value.Clone());
+        using JsonDocument legacy = JsonDocument.Parse(JsonSerializer.Serialize(members));
+
+        BridgeEditorSnapshot snapshot = BridgeSnapshotParser.Parse(legacy.RootElement);
+
+        Assert.Equal(0UL, snapshot.DataTableCatalog.Generation);
+        Assert.Empty(snapshot.DataTableCatalog.Entries);
     }
 
     [Fact]
@@ -495,6 +535,12 @@ public sealed class BridgeProtocolClientTests
             cvars = new[] { new { name = "r.vsync", value = "1", readOnly = true } },
             completions = new[] { new { identifier = "help", help = "List registered native commands." } },
         },
+        dataTableCatalog = new
+        {
+            generation = 4UL,
+            entriesTruncated = false,
+            entries = new[] { new { name = "weapons", generation = 2UL, columnCount = 1, rowCount = 1, valid = true } },
+        },
         capabilities = Array.Empty<int>(),
     };
 
@@ -616,6 +662,12 @@ public sealed class BridgeProtocolClientTests
             history = new[] { "help" },
             cvars = new[] { new { name = "r.vsync", value = "1", readOnly = true } },
             completions = new[] { new { identifier = "help", help = "List registered native commands." } },
+        },
+        dataTableCatalog = new
+        {
+            generation = 4UL,
+            entriesTruncated = false,
+            entries = new[] { new { name = "weapons", generation = 2UL, columnCount = 1, rowCount = 1, valid = true } },
         },
         capabilities = Array.Empty<int>(),
     };

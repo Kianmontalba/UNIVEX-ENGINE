@@ -116,6 +116,10 @@ TEST(EditorBridgeStdioUVETest, ServeUVE_HandshakesAndRoutesExistingBridgeDispatc
         EXPECT_TRUE(handshakeSnapshot.at("visualScripting").at("canvas").at("nodes").is_array());
         EXPECT_TRUE(handshakeSnapshot.at("visualScripting").at("canvas").at("links").is_array());
         EXPECT_TRUE(handshakeSnapshot.at("visualScripting").at("canvas").at("paletteNodeTypeIds").is_array());
+        ASSERT_TRUE(handshakeSnapshot.at("dataTableCatalog").is_object());
+        EXPECT_TRUE(handshakeSnapshot.at("dataTableCatalog").at("generation").is_number_unsigned());
+        EXPECT_TRUE(handshakeSnapshot.at("dataTableCatalog").at("entriesTruncated").is_boolean());
+        EXPECT_TRUE(handshakeSnapshot.at("dataTableCatalog").at("entries").is_array());
         EXPECT_TRUE(frames[1U].at("result").at("applied").get<bool>());
         EXPECT_EQ(frames[1U].at("result").at("code").get<std::string>(), "bridge.command.applied");
         EXPECT_TRUE(frames[1U].at("result").at("createdEntity").is_object());
