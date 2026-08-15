@@ -1560,3 +1560,12 @@ The developer console is explicitly development-only in v1. A shipping-policy in
 Severity filtering is a presentation-state mutation over bounded native output; it must never delete or rewrite the underlying log history. Completion is deterministic, prefix-based, registry-backed, lexicographically ordered, and bounded by the native completion limit. History navigation uses a bounded native cursor and an explicit empty-draft state; the managed host may render and request cursor movement but must not own or mutate history.
 
 The Increment 89 bridge additions remain named and value-only: severity-filter, completion-prefix, and history-delta payloads are validated by C++ and serialized as additive DTO fields. C# may display copied availability, filter, cursor, and completion values, but it must not infer policy, execute commands, access filesystem/process/network/ECS/renderer/plugin state, or retain a native console reference.
+
+
+## Typed Data Table Core v1 (Increment 90)
+
+`DataTableUVE` is a native, value-only asset-module contract. Its schema is ordered and caller-declared; columns are bounded and unique, row identifiers are bounded and unique, and each row must contain exactly one value matching every declared column type. Supported values are Boolean, signed 64-bit Integer, finite Number, and bounded String. The table exposes copied snapshots and a read-only row lookup rather than pointers to mutable row storage.
+
+CSV ingestion is deterministic and failure-atomic. The first header field is `id`, subsequent headers must match the declared schema exactly and in order, quoted fields support doubled quotes, and CRLF/LF line endings are normalized without locale-sensitive behavior. Invalid rows, duplicate identifiers, type conversion failures, overflow, non-finite numbers, malformed quotes, and bounds violations produce bounded diagnostics with stable codes and line/column context. A failed import never replaces previously committed rows.
+
+The Increment 90 core must not infer types or silently acquire filesystem, asset-database, ECS, renderer, process, network, reflection, managed-runtime, editor-bridge, hot-reload, export, reference, or visual-scripting authority. JSON/TSV/XLSX adapters and editor-facing workflows require separate reviewed increments.
