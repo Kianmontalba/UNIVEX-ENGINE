@@ -122,6 +122,37 @@ TEST(DeveloperConsoleUVE, SetCVarDetailedUVEReturnsStructuredMutationDiagnostics
     EXPECT_FALSE(unavailable.message.empty());
 }
 
+TEST(DeveloperConsoleUVE, ExecuteDetailedUVEReturnsStructuredDiagnosticsAndPreservesHistoryPolicy) {
+    DeveloperConsoleUVE console;
+    ASSERT_TRUE(console.RegisterCommand("echo", "Append a diagnostic echo.", [](DeveloperConsoleUVE& target, std::string_view arguments) {
+        target.AppendUVE(DeveloperConsoleSeverityUVE::Info, std::string(arguments));
+    }));
+
+    const DeveloperConsoleExecutionResultUVE executed = console.ExecuteDetailedUVE("echo hello");
+    EXPECT_EQ(executed.code, DeveloperConsoleExecutionCodeUVE::Executed);
+    EXPECT_TRUE(executed.IsAcceptedUVE());
+    EXPECT_FALSE(executed.message.empty());
+    EXPECT_TRUE(console.ExecuteUVE("echo bool"));
+
+    const DeveloperConsoleExecutionResultUVE invalidInput = console.ExecuteDetailedUVE("");
+    EXPECT_EQ(invalidInput.code, DeveloperConsoleExecutionCodeUVE::InvalidInput);
+    EXPECT_FALSE(invalidInput.IsAcceptedUVE());
+    EXPECT_FALSE(invalidInput.message.empty());
+
+    const DeveloperConsoleExecutionResultUVE unknown = console.ExecuteDetailedUVE("missing");
+    EXPECT_EQ(unknown.code, DeveloperConsoleExecutionCodeUVE::UnknownCommand);
+    EXPECT_FALSE(unknown.IsAcceptedUVE());
+    EXPECT_FALSE(unknown.message.empty());
+    EXPECT_EQ(console.GetSnapshotUVE().history.size(), 3U);
+
+    DeveloperConsoleUVE shipping(DeveloperConsoleBuildPolicyUVE::Shipping);
+    const DeveloperConsoleExecutionResultUVE unavailable = shipping.ExecuteDetailedUVE("help");
+    EXPECT_EQ(unavailable.code, DeveloperConsoleExecutionCodeUVE::Unavailable);
+    EXPECT_FALSE(unavailable.IsAcceptedUVE());
+    EXPECT_FALSE(unavailable.message.empty());
+    EXPECT_TRUE(shipping.GetSnapshotUVE().history.empty());
+}
+
 TEST(DeveloperConsoleUVE, RegisterCommandUVEReturnsStructuredDiagnosticsForEachRejectionCode) {
     DeveloperConsoleUVE console;
     const auto handler = [](DeveloperConsoleUVE&, std::string_view) {};

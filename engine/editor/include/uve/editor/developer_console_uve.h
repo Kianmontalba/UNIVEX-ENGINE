@@ -86,6 +86,22 @@ struct DeveloperConsoleCVarMutationResultUVE final {
     }
 };
 
+enum class DeveloperConsoleExecutionCodeUVE : std::uint8_t {
+    Executed = 0,
+    Unavailable,
+    InvalidInput,
+    UnknownCommand,
+};
+
+struct DeveloperConsoleExecutionResultUVE final {
+    DeveloperConsoleExecutionCodeUVE code = DeveloperConsoleExecutionCodeUVE::Executed;
+    std::string message;
+
+    [[nodiscard]] bool IsAcceptedUVE() const noexcept {
+        return code == DeveloperConsoleExecutionCodeUVE::Executed;
+    }
+};
+
 struct DeveloperConsoleCompletionUVE final {
     std::string identifier;
     std::string help;
@@ -144,6 +160,7 @@ public:
     [[nodiscard]] DeveloperConsoleCVarRegistrationResultUVE RegisterCVarUVE(
         std::string name, std::string value, bool readOnly = false);
     [[nodiscard]] bool RegisterCVar(std::string name, std::string value, bool readOnly = false);
+    [[nodiscard]] DeveloperConsoleExecutionResultUVE ExecuteDetailedUVE(std::string commandLine);
     [[nodiscard]] bool ExecuteUVE(std::string commandLine);
     [[nodiscard]] bool ClearUVE() noexcept;
     [[nodiscard]] DeveloperConsoleCVarMutationResultUVE SetCVarDetailedUVE(std::string_view name,
