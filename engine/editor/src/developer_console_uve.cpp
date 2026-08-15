@@ -15,9 +15,24 @@ void IncrementGenerationUVE(std::uint64_t& generation) noexcept {
     }
 }
 
+[[nodiscard]] bool MatchesSeverityUVE(const DeveloperConsoleSeverityUVE severity,
+                                      const DeveloperConsoleSeverityFilterUVE filter) noexcept {
+    switch (filter) {
+        case DeveloperConsoleSeverityFilterUVE::All:
+            return true;
+        case DeveloperConsoleSeverityFilterUVE::Info:
+            return severity == DeveloperConsoleSeverityUVE::Info;
+        case DeveloperConsoleSeverityFilterUVE::Warning:
+            return severity == DeveloperConsoleSeverityUVE::Warning;
+        case DeveloperConsoleSeverityFilterUVE::Error:
+            return severity == DeveloperConsoleSeverityUVE::Error;
+    }
+    return false;
+}
+
 } // namespace
 
-DeveloperConsoleUVE::DeveloperConsoleUVE() {
+DeveloperConsoleUVE::DeveloperConsoleUVE(const DeveloperConsoleBuildPolicyUVE policy) : m_policy(policy) {
     RegisterBuiltInsUVE();
 }
 
@@ -45,6 +60,10 @@ std::string DeveloperConsoleUVE::TrimUVE(const std::string_view value) {
         --last;
     }
     return std::string(value.substr(first, last - first));
+}
+
+bool DeveloperConsoleUVE::IsAvailableUVE() const noexcept {
+    return m_policy == DeveloperConsoleBuildPolicyUVE::Development;
 }
 
 bool DeveloperConsoleUVE::RegisterCommand(std::string identifier, std::string help,
@@ -89,9 +108,13 @@ void DeveloperConsoleUVE::AddHistoryUVE(std::string value) {
         m_historyTruncated = true;
     }
     m_history.push_back(std::move(value));
+    m_historyCursor = -1;
 }
 
 bool DeveloperConsoleUVE::ExecuteUVE(std::string commandLine) {
+    if (!IsAvailableUVE()) {
+        return false;
+    }
     commandLine = TrimUVE(commandLine);
     if (commandLine.empty() || commandLine.size() > kMaximumValueBytesUVE ||
         commandLine.find_first_of("\r\n") != std::string::npos) {
@@ -115,15 +138,19 @@ bool DeveloperConsoleUVE::ExecuteUVE(std::string commandLine) {
 }
 
 bool DeveloperConsoleUVE::ClearUVE() noexcept {
-    if (m_output.empty()) {
+    if (!IsAvailableUVE() || m_output.empty()) {
         return false;
     }
     m_output.clear();
+    m_outputTruncated = false;
     IncrementGenerationUVE(m_generation);
     return true;
 }
 
 bool DeveloperConsoleUVE::SetCVarUVE(const std::string_view name, const std::string_view value) {
+    if (!IsAvailableUVE()) {
+        return false;
+    }
     const auto iterator = m_cvars.find(name);
     if (iterator == m_cvars.end() || iterator->second.readOnly || !IsBoundedValueUVE(value)) {
         return false;
@@ -152,6 +179,62 @@ bool DeveloperConsoleUVE::ExecuteCVarUVE(const std::string_view arguments) {
     return SetCVarUVE(name, TrimUVE(trimmed.substr(separator)));
 }
 
+bool DeveloperConsoleUVE::SetBuildPolicyUVE(const DeveloperConsoleBuildPolicyUVE policy) noexcept {
+    if (m_policy == policy) {
+        return false;
+    }
+    m_policy = policy;
+    m_completionPrefix.clear();
+    m_historyCursor = -1;
+    IncrementGenerationUVE(m_generation);
+    return true;
+}
+
+bool DeveloperConsoleUVE::SetSeverityFilterUVE(const DeveloperConsoleSeverityFilterUVE filter) noexcept {
+    if (!IsAvailableUVE() || static_cast<std::uint8_t>(filter) > static_cast<std::uint8_t>(DeveloperConsoleSeverityFilterUVE::Error) ||
+        m_severityFilter == filter) {
+        return false;
+    }
+    m_severityFilter = filter;
+    IncrementGenerationUVE(m_generation);
+    return true;
+}
+
+bool DeveloperConsoleUVE::SetCompletionPrefixUVE(std::string prefix) {
+    if (!IsAvailableUVE() || !IsBoundedValueUVE(prefix)) {
+        return false;
+    }
+    prefix = TrimUVE(prefix);
+    if (m_completionPrefix == prefix) {
+        return true;
+    }
+    m_completionPrefix = std::move(prefix);
+    IncrementGenerationUVE(m_generation);
+    return true;
+}
+
+bool DeveloperConsoleUVE::MoveHistoryUVE(const std::int32_t delta) noexcept {
+    if (!IsAvailableUVE() || delta == 0 || m_history.empty()) {
+        return false;
+    }
+    const std::int64_t current = m_historyCursor;
+    std::int64_t next = current;
+    if (current < 0) {
+        next = delta < 0 ? static_cast<std::int64_t>(m_history.size() - 1U) : -1;
+    } else if (delta > 0 && current == static_cast<std::int64_t>(m_history.size() - 1U)) {
+        next = -1;
+    } else {
+        next += delta;
+        next = std::clamp<std::int64_t>(next, 0, static_cast<std::int64_t>(m_history.size() - 1U));
+    }
+    if (next == current) {
+        return false;
+    }
+    m_historyCursor = static_cast<std::int32_t>(next);
+    IncrementGenerationUVE(m_generation);
+    return true;
+}
+
 void DeveloperConsoleUVE::AppendUVE(const DeveloperConsoleSeverityUVE severity, std::string text) {
     if (text.size() > kMaximumValueBytesUVE) {
         text.resize(kMaximumValueBytesUVE);
@@ -168,13 +251,35 @@ void DeveloperConsoleUVE::AppendUVE(const DeveloperConsoleSeverityUVE severity, 
 DeveloperConsoleSnapshotUVE DeveloperConsoleUVE::GetSnapshotUVE() const {
     DeveloperConsoleSnapshotUVE snapshot{};
     snapshot.generation = m_generation;
+    snapshot.available = IsAvailableUVE();
+    snapshot.developmentOnly = true;
+    snapshot.severityFilter = m_severityFilter;
+    snapshot.historyCursor = m_historyCursor;
+    if (m_historyCursor >= 0 && static_cast<std::size_t>(m_historyCursor) < m_history.size()) {
+        snapshot.historyEntry = m_history[static_cast<std::size_t>(m_historyCursor)];
+    }
     snapshot.outputTruncated = m_outputTruncated;
     snapshot.historyTruncated = m_historyTruncated;
     snapshot.cvarsTruncated = m_cvarsTruncated;
-    snapshot.output = m_output;
+    snapshot.completionTruncated = m_completionTruncated;
+    for (const DeveloperConsoleEntryUVE& entry : m_output) {
+        if (MatchesSeverityUVE(entry.severity, m_severityFilter)) {
+            snapshot.output.push_back(entry);
+        }
+    }
     snapshot.history = m_history;
     for (const auto& [name, cvar] : m_cvars) {
         snapshot.cvars.push_back(cvar);
+    }
+    for (const auto& [identifier, command] : m_commands) {
+        if (!m_completionPrefix.empty() && identifier.compare(0U, m_completionPrefix.size(), m_completionPrefix) != 0) {
+            continue;
+        }
+        if (snapshot.completions.size() >= kMaximumCompletionsUVE) {
+            snapshot.completionTruncated = true;
+            break;
+        }
+        snapshot.completions.push_back(DeveloperConsoleCompletionUVE{identifier, command.help});
     }
     return snapshot;
 }

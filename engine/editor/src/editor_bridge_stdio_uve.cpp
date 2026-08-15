@@ -123,6 +123,10 @@ enum class FrameReadResultUVE : std::uint8_t {
     return JsonUVE{{"name", cvar.name}, {"value", cvar.value}, {"readOnly", cvar.readOnly}};
 }
 
+[[nodiscard]] JsonUVE ToJsonUVE(const DeveloperConsoleCompletionUVE& completion) {
+    return JsonUVE{{"identifier", completion.identifier}, {"help", completion.help}};
+}
+
 [[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeDeveloperConsoleSnapshotUVE& snapshot) {
     JsonUVE output = JsonUVE::array();
     for (const DeveloperConsoleEntryUVE& entry : snapshot.console.output) {
@@ -136,12 +140,22 @@ enum class FrameReadResultUVE : std::uint8_t {
     for (const DeveloperConsoleCVarUVE& cvar : snapshot.console.cvars) {
         cvars.push_back(ToJsonUVE(cvar));
     }
+    JsonUVE completions = JsonUVE::array();
+    for (const DeveloperConsoleCompletionUVE& completion : snapshot.console.completions) {
+        completions.push_back(ToJsonUVE(completion));
+    }
     return JsonUVE{{"generation", snapshot.console.generation},
+                   {"available", snapshot.console.available},
+                   {"developmentOnly", snapshot.console.developmentOnly},
+                   {"severityFilter", static_cast<std::uint8_t>(snapshot.console.severityFilter)},
+                   {"historyCursor", snapshot.console.historyCursor},
+                   {"historyEntry", snapshot.console.historyEntry},
                    {"outputTruncated", snapshot.console.outputTruncated},
                    {"historyTruncated", snapshot.console.historyTruncated},
                    {"cvarsTruncated", snapshot.console.cvarsTruncated},
+                   {"completionTruncated", snapshot.console.completionTruncated},
                    {"output", std::move(output)}, {"history", std::move(history)},
-                   {"cvars", std::move(cvars)}};
+                   {"cvars", std::move(cvars)}, {"completions", std::move(completions)}};
 }
 
 [[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeViewportSurfaceSnapshotUVE& surface) {
@@ -456,6 +470,15 @@ enum class FrameReadResultUVE : std::uint8_t {
     if (value == "clearDeveloperConsole") {
         return EditorBridgeRequestKindUVE::ClearDeveloperConsole;
     }
+    if (value == "setDeveloperConsoleSeverityFilter") {
+        return EditorBridgeRequestKindUVE::SetDeveloperConsoleSeverityFilter;
+    }
+    if (value == "setDeveloperConsoleCompletionPrefix") {
+        return EditorBridgeRequestKindUVE::SetDeveloperConsoleCompletionPrefix;
+    }
+    if (value == "moveDeveloperConsoleHistory") {
+        return EditorBridgeRequestKindUVE::MoveDeveloperConsoleHistory;
+    }
     return std::nullopt;
 }
 
@@ -571,6 +594,19 @@ enum class FrameReadResultUVE : std::uint8_t {
     }
     if (params.contains("developerConsoleCommand") && !params.at("developerConsoleCommand").is_null()) {
         request.developerConsoleCommand = params.at("developerConsoleCommand").get<std::string>();
+    }
+    if (params.contains("developerConsoleSeverityFilter") && !params.at("developerConsoleSeverityFilter").is_null()) {
+        const std::uint8_t filter = params.at("developerConsoleSeverityFilter").get<std::uint8_t>();
+        if (filter > static_cast<std::uint8_t>(DeveloperConsoleSeverityFilterUVE::Error)) {
+            return std::nullopt;
+        }
+        request.developerConsoleSeverityFilter = static_cast<DeveloperConsoleSeverityFilterUVE>(filter);
+    }
+    if (params.contains("developerConsoleCompletionPrefix") && !params.at("developerConsoleCompletionPrefix").is_null()) {
+        request.developerConsoleCompletionPrefix = params.at("developerConsoleCompletionPrefix").get<std::string>();
+    }
+    if (params.contains("developerConsoleHistoryDelta") && !params.at("developerConsoleHistoryDelta").is_null()) {
+        request.developerConsoleHistoryDelta = params.at("developerConsoleHistoryDelta").get<std::int32_t>();
     }
     return request;
 }

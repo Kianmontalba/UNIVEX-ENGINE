@@ -160,14 +160,23 @@ public sealed record BridgeDeveloperConsoleEntry(BridgeDeveloperConsoleSeverity 
 
 public sealed record BridgeDeveloperConsoleCVar(string Name, string Value, bool IsReadOnly);
 
+public sealed record BridgeDeveloperConsoleCompletion(string Identifier, string Help);
+
 public sealed record BridgeDeveloperConsoleSnapshot(
     ulong Generation,
+    bool IsAvailable,
+    bool IsDevelopmentOnly,
+    byte SeverityFilter,
+    int HistoryCursor,
+    string HistoryEntry,
     bool OutputTruncated,
     bool HistoryTruncated,
     bool CVarsTruncated,
+    bool CompletionTruncated,
     IReadOnlyList<BridgeDeveloperConsoleEntry> Output,
     IReadOnlyList<string> History,
-    IReadOnlyList<BridgeDeveloperConsoleCVar> CVars);
+    IReadOnlyList<BridgeDeveloperConsoleCVar> CVars,
+    IReadOnlyList<BridgeDeveloperConsoleCompletion> Completions);
 
 public sealed record BridgeEditorSnapshot(
     uint ProtocolVersion,
@@ -205,7 +214,10 @@ public sealed record BridgeCommand(
     BridgeVisualScriptLink? VisualScriptLink = null,
     IReadOnlyList<uint>? VisualScriptSelection = null,
     BridgeVisualScriptView? VisualScriptView = null,
-    string? DeveloperConsoleCommand = null);
+    string? DeveloperConsoleCommand = null,
+    byte? DeveloperConsoleSeverityFilter = null,
+    string? DeveloperConsoleCompletionPrefix = null,
+    int? DeveloperConsoleHistoryDelta = null);
 
 public sealed record BridgeCommandResult(
     bool Applied,
@@ -299,8 +311,9 @@ public static class BridgeSnapshotParser
             Array.Empty<uint>(), Array.Empty<string>(), Array.Empty<BridgeVisualScriptDiagnostic>());
 
     private static BridgeDeveloperConsoleSnapshot EmptyDeveloperConsole() =>
-        new(0UL, false, false, false, Array.Empty<BridgeDeveloperConsoleEntry>(),
-            Array.Empty<string>(), Array.Empty<BridgeDeveloperConsoleCVar>());
+        new(0UL, false, true, 0, -1, string.Empty, false, false, false, false,
+            Array.Empty<BridgeDeveloperConsoleEntry>(), Array.Empty<string>(), Array.Empty<BridgeDeveloperConsoleCVar>(),
+            Array.Empty<BridgeDeveloperConsoleCompletion>());
 
     private static BridgeDeveloperConsoleSnapshot ParseDeveloperConsole(JsonElement value)
     {
@@ -311,6 +324,23 @@ public static class BridgeSnapshotParser
         EnsureBoundedArray(output, "developerConsole.output");
         EnsureBoundedArray(history, "developerConsole.history");
         EnsureBoundedArray(cvars, "developerConsole.cvars");
+        byte severityFilter = OptionalByte(value, "severityFilter", 0);
+        if (severityFilter > 3)
+        {
+            throw Invalid("The backend returned an unsupported developer-console severity filter.");
+        }
+        int historyCursor = OptionalInt32(value, "historyCursor", -1);
+        if (historyCursor < -1 || historyCursor >= history.GetArrayLength())
+        {
+            throw Invalid("The backend returned an invalid developer-console history cursor.");
+        }
+        string historyEntry = OptionalBoundedString(value, "historyEntry", string.Empty);
+        if (historyCursor >= 0 && historyEntry != (history[historyCursor].GetString() ?? string.Empty))
+        {
+            throw Invalid("The developer-console history cursor and entry disagree.");
+        }
+        JsonElement completions = OptionalArray(value, "completions");
+        EnsureBoundedArray(completions, "developerConsole.completions");
 
         List<BridgeDeveloperConsoleEntry> parsedOutput = new(output.GetArrayLength());
         foreach (JsonElement entry in output.EnumerateArray())
@@ -340,10 +370,20 @@ public static class BridgeSnapshotParser
                 RequiredBoolean(cvar, "readOnly")));
         }
 
+        List<BridgeDeveloperConsoleCompletion> parsedCompletions = new(completions.GetArrayLength());
+        foreach (JsonElement completion in completions.EnumerateArray())
+        {
+            RequireObject(completion, "developer-console completion");
+            parsedCompletions.Add(new BridgeDeveloperConsoleCompletion(
+                RequiredBoundedString(completion, "identifier"), RequiredBoundedString(completion, "help")));
+        }
+
         return new BridgeDeveloperConsoleSnapshot(
-            RequiredUInt64(value, "generation"), RequiredBoolean(value, "outputTruncated"),
-            RequiredBoolean(value, "historyTruncated"), RequiredBoolean(value, "cvarsTruncated"),
-            parsedOutput, parsedHistory, parsedCVars);
+            RequiredUInt64(value, "generation"), OptionalBoolean(value, "available", true),
+            OptionalBoolean(value, "developmentOnly", true), severityFilter, historyCursor, historyEntry,
+            RequiredBoolean(value, "outputTruncated"), RequiredBoolean(value, "historyTruncated"),
+            RequiredBoolean(value, "cvarsTruncated"), OptionalBoolean(value, "completionTruncated", false),
+            parsedOutput, parsedHistory, parsedCVars, parsedCompletions);
     }
 
     private static BridgeVisualScriptCanvasSnapshot ParseVisualScriptCanvas(JsonElement value)
@@ -642,6 +682,32 @@ public static class BridgeSnapshotParser
         }
         return result;
     }
+
+    private static JsonElement OptionalArray(JsonElement value, string name)
+    {
+        if (value.TryGetProperty(name, out JsonElement result))
+        {
+            if (result.ValueKind != JsonValueKind.Array)
+            {
+                throw Invalid($"The copied {name} value must be an array.");
+            }
+            return result;
+        }
+        using JsonDocument empty = JsonDocument.Parse("[]");
+        return empty.RootElement.Clone();
+    }
+
+    private static byte OptionalByte(JsonElement value, string name, byte fallback) =>
+        value.TryGetProperty(name, out JsonElement result) ? result.GetByte() : fallback;
+
+    private static int OptionalInt32(JsonElement value, string name, int fallback) =>
+        value.TryGetProperty(name, out JsonElement result) ? result.GetInt32() : fallback;
+
+    private static bool OptionalBoolean(JsonElement value, string name, bool fallback) =>
+        value.TryGetProperty(name, out JsonElement result) ? result.GetBoolean() : fallback;
+
+    private static string OptionalBoundedString(JsonElement value, string name, string fallback) =>
+        value.TryGetProperty(name, out JsonElement result) ? BoundedStringValue(result, name) : fallback;
 
     private static uint RequiredUInt32(JsonElement value, string name) => value.GetProperty(name).GetUInt32();
 

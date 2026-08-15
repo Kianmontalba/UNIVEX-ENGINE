@@ -231,16 +231,35 @@
                             </Grid>
                         </TabItem>
                         <TabItem Header="Console">
-                            <Grid RowDefinitions="Auto,*,Auto" RowSpacing="6">
+                            <Grid RowDefinitions="Auto,Auto,*,*,Auto" RowSpacing="6">
                                 <TextBlock x:Name="DeveloperConsoleStatusTextBlock" Text="Connect to read native console output." TextWrapping="Wrap" Opacity="0.72" />
-                                <ListBox x:Name="DeveloperConsoleOutputListBox" Grid.Row="1">
+                                <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="6">
+                                    <ComboBox x:Name="DeveloperConsoleSeverityFilterComboBox" Width="110" SelectedIndex="0">
+                                        <ComboBoxItem Content="All" />
+                                        <ComboBoxItem Content="Info" />
+                                        <ComboBoxItem Content="Warning" />
+                                        <ComboBoxItem Content="Error" />
+                                    </ComboBox>
+                                    <TextBox x:Name="DeveloperConsoleCompletionPrefixTextBox" Width="150" Watermark="Completion prefix" />
+                                    <Button Content="Discover" Click="DeveloperConsoleDiscoverButton_OnClick" />
+                                    <Button Content="History ↑" Click="DeveloperConsoleHistoryUpButton_OnClick" />
+                                    <Button Content="History ↓" Click="DeveloperConsoleHistoryDownButton_OnClick" />
+                                </StackPanel>
+                                <ListBox x:Name="DeveloperConsoleCompletionListBox" Grid.Row="2">
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
                                             <TextBlock Text="{Binding}" TextWrapping="Wrap" />
                                         </DataTemplate>
                                     </ListBox.ItemTemplate>
                                 </ListBox>
-                                <Grid Grid.Row="2" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
+                                <ListBox x:Name="DeveloperConsoleOutputListBox" Grid.Row="3">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding}" TextWrapping="Wrap" />
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                                <Grid Grid.Row="4" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6">
                                     <TextBox x:Name="DeveloperConsoleCommandTextBox" Watermark="Registered native command (e.g. help)" />
                                     <Button Grid.Column="1" Content="Submit" Click="DeveloperConsoleSubmitButton_OnClick" />
                                     <Button Grid.Column="2" Content="Clear" Click="DeveloperConsoleClearButton_OnClick" />
