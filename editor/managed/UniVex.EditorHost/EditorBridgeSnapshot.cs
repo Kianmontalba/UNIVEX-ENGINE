@@ -202,6 +202,9 @@ public sealed record BridgeScriptRuntimeInstanceEntry(
         $"Entity {EntityIndex}:{EntityGeneration} · generation {Generation} · program v{ProgramVersion} · " +
         $"{InstructionCount} instruction(s) · {StateValueCount} state value(s) · " +
         (Enabled ? "enabled" : "disabled");
+
+    public bool MatchesFilter(string? filter) =>
+        string.IsNullOrWhiteSpace(filter) || DisplayText.Contains(filter.Trim(), StringComparison.OrdinalIgnoreCase);
 }
 
 public sealed record BridgeScriptRuntimeSnapshot(
