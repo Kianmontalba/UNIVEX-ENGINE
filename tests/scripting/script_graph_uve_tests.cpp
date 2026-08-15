@@ -7,6 +7,7 @@
 #include "uve/scripting/script_graph_editor_backend_uve.h"
 #include "uve/scripting/script_graph_persistence_uve.h"
 #include "uve/scripting/script_graph_uve.h"
+#include "uve/scripting/script_hot_reload_uve.h"
 
 #include <gtest/gtest.h>
 
@@ -416,6 +417,52 @@ TEST(ScriptDebuggerUVETest, SetBreakpointUVE_ProvidesSortedSnapshotAndRejectsEmp
     EXPECT_TRUE(debugger.SetBreakpointUVE(10U, true));
     const ScriptDebuggerSnapshotUVE snapshot = debugger.GetSnapshotUVE();
     EXPECT_EQ(snapshot.breakpointNodeIds, (std::vector<std::uint32_t>{10U, 20U}));
+}
+
+} // namespace UVE::Scripting
+
+
+namespace UVE::Scripting {
+
+TEST(ScriptHotReloadManagerUVETest, LoadInitialAndReloadUVE_PublishOnlyValidatedCandidates) {
+    ScriptBytecodeProgramUVE initial;
+    initial.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 10U, 0U, "test.source", {}, {}});
+    std::vector<std::uint8_t> initialBytes;
+    std::vector<ScriptBytecodeDiagnosticUVE> diagnostics;
+    initialBytes = EncodeScriptBytecodeUVE(initial, diagnostics);
+    ASSERT_TRUE(diagnostics.empty());
+
+    ScriptHotReloadManagerUVE manager;
+    const ScriptHotReloadResultUVE loaded = manager.LoadInitialUVE(initialBytes);
+    ASSERT_TRUE(loaded.IsAcceptedUVE());
+    EXPECT_EQ(loaded.activeGeneration, 1U);
+    EXPECT_TRUE(manager.GetSnapshotUVE().hasActiveProgram);
+
+    std::vector<std::uint8_t> invalid = initialBytes;
+    invalid[0U] = static_cast<std::uint8_t>('X');
+    const ScriptHotReloadResultUVE rejected = manager.ReloadUVE(invalid);
+    EXPECT_FALSE(rejected.IsAcceptedUVE());
+    EXPECT_TRUE(rejected.lastKnownGoodRetained);
+    EXPECT_EQ(rejected.activeGeneration, 1U);
+    EXPECT_EQ(manager.GetActiveProgramUVE()->instructions.size(), 1U);
+
+    initial.instructions.push_back({ScriptIrInstructionKindUVE::TransferValue, 10U, 20U, {}, "Out", "In"});
+    diagnostics.clear();
+    const std::vector<std::uint8_t> replacement = EncodeScriptBytecodeUVE(initial, diagnostics);
+    ASSERT_TRUE(diagnostics.empty());
+    const ScriptHotReloadResultUVE accepted = manager.ReloadUVE(replacement);
+    EXPECT_TRUE(accepted.IsAcceptedUVE());
+    EXPECT_EQ(accepted.activeGeneration, 2U);
+    EXPECT_TRUE(accepted.compatibleStatePreserved);
+    EXPECT_EQ(manager.GetSnapshotUVE().instructionCount, 2U);
+}
+
+TEST(ScriptHotReloadManagerUVETest, ReloadUVE_ReportsNoActiveProgramWhenInitialCandidateIsInvalid) {
+    ScriptHotReloadManagerUVE manager;
+    const ScriptHotReloadResultUVE result = manager.ReloadUVE({0x00U, 0x01U});
+    EXPECT_EQ(result.code, ScriptHotReloadCodeUVE::NoActiveProgram);
+    EXPECT_FALSE(result.lastKnownGoodRetained);
+    EXPECT_FALSE(manager.GetSnapshotUVE().hasActiveProgram);
 }
 
 } // namespace UVE::Scripting

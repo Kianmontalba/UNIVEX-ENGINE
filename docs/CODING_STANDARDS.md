@@ -1521,3 +1521,8 @@ The managed host may receive only copied visual-scripting presentation facts: av
 ## Native Plugin Extension Seam v1 (Increment 85)
 
 The first plugin milestone is a static native lifecycle seam, not a dynamic loader. `NativePluginManifestUVE` requires a bounded identifier, display name, engine protocol version, and unique capability identifiers. `NativePluginRegistryUVE` accepts at most a bounded number of manifests and exposes generation-checked registration scopes; stale or duplicate close operations are rejected. Dynamic libraries, filesystem manifests, ABI negotiation beyond the explicit protocol field, arbitrary engine callbacks, and security-sensitive loading remain future reviewed work. A plugin scope must not bypass existing graph, editor, asset, ECS, or runtime ownership boundaries.
+
+
+## Bytecode Hot Reload Safety v1 (Increment 84)
+
+Hot reload must decode and validate a complete candidate program before publication. Invalid magic, version, truncation, instruction, or limit diagnostics must leave the active program and generation unchanged. `ScriptHotReloadManagerUVE` retains the last-known-good program on failed replacement, increments the active generation only for an accepted candidate, and reports compatible-version/state-transfer facts explicitly rather than implying that arbitrary VM state can survive. It owns copied bytecode only; ECS, editor, managed, and filesystem state remain outside this boundary.
