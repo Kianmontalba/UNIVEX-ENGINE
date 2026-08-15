@@ -491,13 +491,18 @@ public partial class MainWindow : Window
                scripting.Reason;
     }
 
-    private static string DescribeVisualScriptDebugger(BridgeVisualScriptDebuggerSnapshot debugger)
+    private static string DescribeVisualScriptDebugger(BridgeVisualScriptDebuggerSnapshot debugger,
+                                                         BridgeVisualScriptCanvasSnapshot canvas)
     {
         if (!debugger.Available)
         {
             return $"Debugger unavailable. {debugger.Reason}";
         }
-        string sourceNode = debugger.SourceNodeId == 0U ? "none" : debugger.SourceNodeId.ToString();
+        string sourceNode = debugger.SourceNodeId == 0U
+            ? "none"
+            : canvas.Nodes.FirstOrDefault(node => node.Id == debugger.SourceNodeId) is { } node
+                ? $"{node.DisplayName} (#{node.Id})"
+                : $"#{debugger.SourceNodeId} (not in copied canvas view)";
         string pauseReason = string.IsNullOrWhiteSpace(debugger.PauseReason)
             ? string.Empty
             : $" Pause: {debugger.PauseReason}";
@@ -569,7 +574,7 @@ public partial class MainWindow : Window
     private void RenderVisualScripting(BridgeVisualScriptingSnapshot scripting, ulong bridgeRevision)
     {
         VisualScriptingStatusTextBlock.Text = DescribeVisualScripting(scripting);
-        VisualScriptingDebuggerTextBlock.Text = DescribeVisualScriptDebugger(scripting.Debugger);
+        VisualScriptingDebuggerTextBlock.Text = DescribeVisualScriptDebugger(scripting.Debugger, scripting.Canvas);
         VisualScriptingBreakpointsListBox.ItemsSource = scripting.Debugger.Available
             ? scripting.Debugger.BreakpointNodeIds.Select(nodeId => $"Node {nodeId}").ToArray()
             : Array.Empty<string>();
