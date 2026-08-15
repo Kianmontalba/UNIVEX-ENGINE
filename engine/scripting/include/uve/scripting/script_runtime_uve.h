@@ -97,6 +97,30 @@ struct ScriptRuntimeTickResultUVE final {
     ScriptVmExecutionResultUVE execution;
 };
 
+struct ScriptRuntimeTickSummaryUVE final {
+    std::size_t enabledInstanceCount = 0U;
+    std::size_t completedCount = 0U;
+    std::size_t instructionBudgetExceededCount = 0U;
+    std::size_t invalidInstructionCount = 0U;
+    std::size_t diagnosticCount = 0U;
+
+    [[nodiscard]] bool IsSuccessUVE() const noexcept {
+        return instructionBudgetExceededCount == 0U && invalidInstructionCount == 0U &&
+               diagnosticCount == 0U;
+    }
+
+    [[nodiscard]] bool operator==(const ScriptRuntimeTickSummaryUVE&) const = default;
+};
+
+struct ScriptRuntimeTickBatchResultUVE final {
+    std::vector<ScriptRuntimeTickResultUVE> results;
+    ScriptRuntimeTickSummaryUVE summary;
+
+    [[nodiscard]] bool IsSuccessUVE() const noexcept {
+        return summary.IsSuccessUVE();
+    }
+};
+
 struct ScriptRuntimeInstanceSnapshotUVE final {
     Scene::EntityUVE entity;
     std::uint64_t generation = 0U;
@@ -151,6 +175,8 @@ public:
     [[nodiscard]] std::vector<ScriptRuntimeInstanceSnapshotUVE> GetSnapshotUVE() const;
     [[nodiscard]] bool HasInstanceUVE(Scene::EntityUVE entity) const noexcept;
     [[nodiscard]] std::size_t GetInstanceCountUVE() const noexcept;
+    [[nodiscard]] ScriptRuntimeTickBatchResultUVE TickDetailedUVE(
+        ScriptVmExecutionOptionsUVE options = {}) const;
     [[nodiscard]] std::vector<ScriptRuntimeTickResultUVE> TickUVE(
         ScriptVmExecutionOptionsUVE options = {}) const;
 

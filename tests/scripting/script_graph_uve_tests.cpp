@@ -331,6 +331,48 @@ TEST(ScriptRuntimeUVETest, TickUVE_IsDeterministicAndSkipsDisabledInstances) {
     EXPECT_EQ(results[0].execution.instructionsExecuted, 2U);
 }
 
+TEST(ScriptRuntimeUVETest, TickDetailedUVE_SummarizesEnabledCompletedAndDisabledInstances) {
+    ScriptRuntimeUVE runtime;
+    ScriptBytecodeProgramUVE program;
+    program.instructions.resize(2U);
+    ASSERT_TRUE(runtime.AttachUVE({9U, 1U}, program));
+    ASSERT_TRUE(runtime.AttachUVE({2U, 4U}, program));
+    ASSERT_TRUE(runtime.SetEnabledUVE({2U, 4U}, false));
+
+    const ScriptRuntimeTickBatchResultUVE detailed = runtime.TickDetailedUVE({4U});
+    ASSERT_EQ(detailed.results.size(), 1U);
+    EXPECT_EQ(detailed.results[0].entity, (Scene::EntityUVE{9U, 1U}));
+    EXPECT_EQ(detailed.summary.enabledInstanceCount, 1U);
+    EXPECT_EQ(detailed.summary.completedCount, 1U);
+    EXPECT_EQ(detailed.summary.instructionBudgetExceededCount, 0U);
+    EXPECT_EQ(detailed.summary.invalidInstructionCount, 0U);
+    EXPECT_EQ(detailed.summary.diagnosticCount, 0U);
+    EXPECT_TRUE(detailed.IsSuccessUVE());
+
+    const auto legacyResults = runtime.TickUVE({4U});
+    ASSERT_EQ(legacyResults.size(), detailed.results.size());
+    EXPECT_EQ(legacyResults[0].entity, detailed.results[0].entity);
+    EXPECT_EQ(legacyResults[0].execution.instructionsExecuted,
+              detailed.results[0].execution.instructionsExecuted);
+}
+
+TEST(ScriptRuntimeUVETest, TickDetailedUVE_SummarizesInstructionBudgetDiagnostics) {
+    ScriptRuntimeUVE runtime;
+    ScriptBytecodeProgramUVE program;
+    program.instructions.resize(3U);
+    ASSERT_TRUE(runtime.AttachUVE({4U, 2U}, program));
+
+    const ScriptRuntimeTickBatchResultUVE detailed = runtime.TickDetailedUVE({2U});
+    ASSERT_EQ(detailed.results.size(), 1U);
+    EXPECT_EQ(detailed.summary.enabledInstanceCount, 1U);
+    EXPECT_EQ(detailed.summary.completedCount, 0U);
+    EXPECT_EQ(detailed.summary.instructionBudgetExceededCount, 1U);
+    EXPECT_EQ(detailed.summary.invalidInstructionCount, 0U);
+    EXPECT_EQ(detailed.summary.diagnosticCount, 1U);
+    EXPECT_FALSE(detailed.IsSuccessUVE());
+    EXPECT_EQ(detailed.results[0].execution.status, ScriptVmStatusUVE::InstructionBudgetExceeded);
+}
+
 TEST(ScriptRuntimeUVETest, GetSnapshotUVE_ReturnsDeterministicCopiedInstanceMetadata) {
     ScriptRuntimeUVE runtime;
     ScriptBytecodeProgramUVE firstProgram;
