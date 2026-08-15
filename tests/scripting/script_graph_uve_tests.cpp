@@ -299,6 +299,42 @@ TEST(ScriptRuntimeUVETest, DetachUVE_RemovesOnlyExactGenerationalHandle) {
     EXPECT_FALSE(runtime.HasInstanceUVE({4U, 1U}));
 }
 
+TEST(ScriptRuntimeUVETest, ReloadUVE_RejectsInvalidCandidateAndRetainsLastKnownGoodProgram) {
+    ScriptRuntimeUVE runtime;
+    ScriptBytecodeProgramUVE initial;
+    initial.instructions.resize(1U);
+    ASSERT_TRUE(runtime.AttachUVE({7U, 1U}, initial));
+
+    ScriptBytecodeProgramUVE invalid;
+    invalid.version = 99U;
+    const ScriptRuntimeReloadResultUVE rejected = runtime.ReloadUVE({7U, 1U}, invalid);
+    EXPECT_EQ(rejected.code, ScriptRuntimeReloadCodeUVE::RejectedInvalidProgram);
+    EXPECT_EQ(rejected.activeGeneration, 1U);
+    EXPECT_TRUE(rejected.lastKnownGoodRetained);
+    ASSERT_EQ(rejected.diagnostics.size(), 1U);
+    EXPECT_EQ(rejected.diagnostics[0].code, ScriptBytecodeDiagnosticCodeUVE::UnsupportedVersion);
+    EXPECT_EQ(runtime.TickUVE({8U}).front().execution.instructionsExecuted, 1U);
+}
+
+TEST(ScriptRuntimeUVETest, ReloadUVE_AcceptsValidReplacementAndRejectsMissingInstance) {
+    ScriptRuntimeUVE runtime;
+    ScriptBytecodeProgramUVE initial;
+    ASSERT_TRUE(runtime.AttachUVE({8U, 1U}, initial));
+
+    ScriptBytecodeProgramUVE replacement;
+    replacement.instructions.resize(2U);
+    const ScriptRuntimeReloadResultUVE accepted = runtime.ReloadUVE({8U, 1U}, replacement);
+    EXPECT_TRUE(accepted.IsAcceptedUVE());
+    EXPECT_EQ(accepted.activeGeneration, 2U);
+    EXPECT_FALSE(accepted.lastKnownGoodRetained);
+    ASSERT_EQ(runtime.TickUVE({8U}).size(), 1U);
+    EXPECT_EQ(runtime.TickUVE({8U}).front().execution.instructionsExecuted, 2U);
+
+    const ScriptRuntimeReloadResultUVE missing = runtime.ReloadUVE({9U, 1U}, replacement);
+    EXPECT_EQ(missing.code, ScriptRuntimeReloadCodeUVE::NoActiveInstance);
+    EXPECT_EQ(missing.activeGeneration, 0U);
+}
+
 } // namespace UVE::Scripting
 
 
