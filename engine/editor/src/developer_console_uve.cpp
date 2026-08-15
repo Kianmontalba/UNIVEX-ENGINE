@@ -248,15 +248,20 @@ bool DeveloperConsoleUVE::ExecuteCVarUVE(const std::string_view arguments) {
     return SetCVarUVE(name, TrimUVE(trimmed.substr(separator)));
 }
 
-bool DeveloperConsoleUVE::SetBuildPolicyUVE(const DeveloperConsoleBuildPolicyUVE policy) noexcept {
+DeveloperConsoleBuildPolicyResultUVE DeveloperConsoleUVE::SetBuildPolicyDetailedUVE(
+    const DeveloperConsoleBuildPolicyUVE policy) noexcept {
     if (m_policy == policy) {
-        return false;
+        return {DeveloperConsoleBuildPolicyCodeUVE::Unchanged, "Build policy is unchanged."};
     }
     m_policy = policy;
     m_completionPrefix.clear();
     m_historyCursor = -1;
     IncrementGenerationUVE(m_generation);
-    return true;
+    return {DeveloperConsoleBuildPolicyCodeUVE::Applied, "Build policy updated."};
+}
+
+bool DeveloperConsoleUVE::SetBuildPolicyUVE(const DeveloperConsoleBuildPolicyUVE policy) noexcept {
+    return SetBuildPolicyDetailedUVE(policy).IsAcceptedUVE();
 }
 
 DeveloperConsoleSeverityFilterResultUVE DeveloperConsoleUVE::SetSeverityFilterDetailedUVE(
