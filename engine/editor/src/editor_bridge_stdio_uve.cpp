@@ -176,6 +176,40 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"entries", std::move(entries)}};
 }
 
+[[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeDataTablePreviewColumnUVE& column) {
+    return JsonUVE{{"name", column.name}, {"type", static_cast<std::uint8_t>(column.type)}};
+}
+
+[[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeDataTablePreviewRowUVE& row) {
+    JsonUVE values = JsonUVE::array();
+    for (const std::string& value : row.values) {
+        values.push_back(value);
+    }
+    return JsonUVE{{"identifier", row.identifier}, {"values", std::move(values)}};
+}
+
+[[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeDataTablePreviewSnapshotUVE& snapshot) {
+    JsonUVE columns = JsonUVE::array();
+    for (const EditorBridgeDataTablePreviewColumnUVE& column : snapshot.columns) {
+        columns.push_back(ToJsonUVE(column));
+    }
+    JsonUVE rows = JsonUVE::array();
+    for (const EditorBridgeDataTablePreviewRowUVE& row : snapshot.rows) {
+        rows.push_back(ToJsonUVE(row));
+    }
+    return JsonUVE{{"available", snapshot.available},
+                   {"generation", snapshot.generation},
+                   {"name", snapshot.name},
+                   {"totalColumnCount", snapshot.totalColumnCount},
+                   {"totalRowCount", snapshot.totalRowCount},
+                   {"columnsTruncated", snapshot.columnsTruncated},
+                   {"rowsTruncated", snapshot.rowsTruncated},
+                   {"valuesTruncated", snapshot.valuesTruncated},
+                   {"reason", snapshot.reason},
+                   {"columns", std::move(columns)},
+                   {"rows", std::move(rows)}};
+}
+
 [[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeViewportSurfaceSnapshotUVE& surface) {
     return JsonUVE{{"state", static_cast<std::uint8_t>(surface.state)},
                    {"generation", surface.generation},
@@ -280,6 +314,7 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"visualScripting", ToJsonUVE(snapshot.visualScripting)},
                    {"developerConsole", ToJsonUVE(snapshot.developerConsole)},
                    {"dataTableCatalog", ToJsonUVE(snapshot.dataTableCatalog)},
+                   {"dataTablePreview", ToJsonUVE(snapshot.dataTablePreview)},
                    {"capabilities", std::move(capabilities)}};
 }
 

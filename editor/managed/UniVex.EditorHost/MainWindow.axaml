@@ -267,9 +267,17 @@
                             </Grid>
                         </TabItem>
                         <TabItem Header="Data Tables">
-                            <Grid RowDefinitions="Auto,*" RowSpacing="6">
+                            <Grid RowDefinitions="Auto,Auto,*,*" RowSpacing="6">
                                 <TextBlock x:Name="DataTableCatalogStatusTextBlock" Text="Connect to read native data-table catalog facts." TextWrapping="Wrap" Opacity="0.72" />
-                                <ListBox x:Name="DataTableCatalogListBox" Grid.Row="1">
+                                <TextBlock x:Name="DataTablePreviewStatusTextBlock" Grid.Row="1" Text="No native table preview is available." TextWrapping="Wrap" Opacity="0.72" />
+                                <ListBox x:Name="DataTableCatalogListBox" Grid.Row="2">
+                                    <ListBox.ItemTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding DisplayText}" TextWrapping="Wrap" />
+                                        </DataTemplate>
+                                    </ListBox.ItemTemplate>
+                                </ListBox>
+                                <ListBox x:Name="DataTablePreviewListBox" Grid.Row="3">
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
                                             <TextBlock Text="{Binding DisplayText}" TextWrapping="Wrap" />

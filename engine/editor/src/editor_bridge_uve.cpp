@@ -4,7 +4,10 @@
 
 #include <algorithm>
 #include <cctype>
+#include <charconv>
+#include <cmath>
 #include <filesystem>
+#include <type_traits>
 #include <utility>
 
 namespace UVE::Editor {
@@ -99,6 +102,27 @@ namespace {
     return value.size() <= kEditorBridgeMaximumContentPathBytesUVE;
 }
 
+[[nodiscard]] std::string FormatDataTableValueUVE(const Asset::DataTableValueUVE& value) {
+    return std::visit([](const auto& current) {
+        using ValueType = std::decay_t<decltype(current)>;
+        if constexpr (std::is_same_v<ValueType, bool>) {
+            return std::string{current ? "true" : "false"};
+        } else if constexpr (std::is_same_v<ValueType, std::int64_t>) {
+            return std::to_string(current);
+        } else if constexpr (std::is_same_v<ValueType, double>) {
+            if (!std::isfinite(current)) {
+                return std::string{"<non-finite>"};
+            }
+            char buffer[64]{};
+            const auto result = std::to_chars(buffer, buffer + sizeof(buffer), current,
+                                              std::chars_format::general, 15);
+            return result.ec == std::errc{} ? std::string{buffer, result.ptr} : std::string{"<number>"};
+        } else {
+            return current;
+        }
+    }, value);
+}
+
 } // namespace
 
 EditorBridgeUVE::EditorBridgeUVE(EditorUVE& editor) noexcept
@@ -113,6 +137,16 @@ void EditorBridgeUVE::SetDataTableCatalogSnapshotUVE(Asset::DataTableCatalogSnap
         return;
     }
     m_dataTableCatalogSnapshot = std::move(snapshot);
+    if (m_lastObservedState.has_value()) {
+        SynchronizeRevisionUVE();
+    }
+}
+
+void EditorBridgeUVE::SetDataTablePreviewSnapshotUVE(Asset::DataTableSnapshotUVE snapshot) {
+    if (m_dataTablePreviewSnapshot == snapshot) {
+        return;
+    }
+    m_dataTablePreviewSnapshot = std::move(snapshot);
     if (m_lastObservedState.has_value()) {
         SynchronizeRevisionUVE();
     }
@@ -581,6 +615,7 @@ EditorBridgeUVE::ObservedStateUVE EditorBridgeUVE::CaptureObservedStateUVE() {
     observed.visualScripting = CaptureVisualScriptingUVE();
     observed.developerConsole = CaptureDeveloperConsoleUVE();
     observed.dataTableCatalog = CaptureDataTableCatalogUVE();
+    observed.dataTablePreview = CaptureDataTablePreviewUVE();
     return observed;
 }
 
@@ -602,6 +637,49 @@ EditorBridgeDataTableCatalogSnapshotUVE EditorBridgeUVE::CaptureDataTableCatalog
             BoundPresentationTextUVE(entry.name), entry.generation, entry.columnCount, entry.rowCount, entry.valid});
     }
     return snapshot;
+}
+
+EditorBridgeDataTablePreviewSnapshotUVE EditorBridgeUVE::CaptureDataTablePreviewUVE() const {
+    EditorBridgeDataTablePreviewSnapshotUVE preview{};
+    preview.generation = m_dataTablePreviewSnapshot.generation;
+    preview.name = BoundPresentationTextUVE(m_dataTablePreviewSnapshot.name);
+    preview.available = !preview.name.empty();
+    preview.totalColumnCount = m_dataTablePreviewSnapshot.columns.size();
+    preview.totalRowCount = m_dataTablePreviewSnapshot.rows.size();
+    preview.reason = preview.available
+        ? "Native table preview is available as copied read-only facts."
+        : "No native data-table preview is available in this bridge session.";
+
+    for (const Asset::DataTableColumnUVE& column : m_dataTablePreviewSnapshot.columns) {
+        if (preview.columns.size() >= kEditorBridgeMaximumPanelEntriesUVE) {
+            preview.columnsTruncated = true;
+            break;
+        }
+        preview.columns.push_back(EditorBridgeDataTablePreviewColumnUVE{
+            BoundPresentationTextUVE(column.name), column.type});
+    }
+    for (const Asset::DataTableRowUVE& row : m_dataTablePreviewSnapshot.rows) {
+        if (preview.rows.size() >= kEditorBridgeMaximumPanelEntriesUVE) {
+            preview.rowsTruncated = true;
+            break;
+        }
+        EditorBridgeDataTablePreviewRowUVE copiedRow{};
+        copiedRow.identifier = BoundPresentationTextUVE(row.identifier);
+        const std::size_t visibleValueCount = std::min(row.values.size(), preview.columns.size());
+        for (std::size_t index = 0U; index < visibleValueCount; ++index) {
+            std::string displayValue = FormatDataTableValueUVE(row.values[index]);
+            if (displayValue.size() > kEditorBridgeMaximumPresentationTextBytesUVE) {
+                displayValue.resize(kEditorBridgeMaximumPresentationTextBytesUVE);
+                preview.valuesTruncated = true;
+            }
+            copiedRow.values.push_back(std::move(displayValue));
+        }
+        if (row.values.size() != visibleValueCount) {
+            preview.valuesTruncated = true;
+        }
+        preview.rows.push_back(std::move(copiedRow));
+    }
+    return preview;
 }
 
 EditorBridgeVisualScriptingSnapshotUVE EditorBridgeUVE::CaptureVisualScriptingUVE() const {
@@ -650,6 +728,7 @@ EditorBridgeSnapshotUVE EditorBridgeUVE::BuildSnapshotUVE() const {
     snapshot.visualScripting = observed.visualScripting;
     snapshot.developerConsole = observed.developerConsole;
     snapshot.dataTableCatalog = observed.dataTableCatalog;
+    snapshot.dataTablePreview = observed.dataTablePreview;
     snapshot.capabilities = GetCapabilitiesUVE();
     return snapshot;
 }

@@ -447,6 +447,7 @@ public partial class MainWindow : Window
             RenderVisualScripting(snapshot.VisualScripting, snapshot.Revision);
             RenderDeveloperConsole(snapshot.DeveloperConsole);
             RenderDataTableCatalog(snapshot.DataTableCatalog);
+            RenderDataTablePreview(snapshot.DataTablePreview);
         }
         finally
         {
@@ -515,6 +516,19 @@ public partial class MainWindow : Window
         DataTableCatalogStatusTextBlock.Text =
             $"Generation {catalog.Generation}; {catalog.Entries.Count} native table descriptor(s){truncation}. " +
             "Read-only copied facts; table rows and asset ownership remain native.";
+    }
+
+    private void RenderDataTablePreview(BridgeDataTablePreviewSnapshot preview)
+    {
+        DataTablePreviewListBox.ItemsSource = preview.Rows;
+        string truncation = preview.ColumnsTruncated || preview.RowsTruncated || preview.ValuesTruncated
+            ? " · bounded/truncated"
+            : string.Empty;
+        DataTablePreviewStatusTextBlock.Text = preview.IsAvailable
+            ? $"{preview.Name}; generation {preview.Generation}; {preview.TotalColumnCount} column(s), " +
+              $"{preview.TotalRowCount} row(s); {preview.Columns.Count} visible column descriptor(s){truncation}. " +
+              preview.Reason
+            : preview.Reason;
     }
 
     private void RenderVisualScripting(BridgeVisualScriptingSnapshot scripting, ulong bridgeRevision)

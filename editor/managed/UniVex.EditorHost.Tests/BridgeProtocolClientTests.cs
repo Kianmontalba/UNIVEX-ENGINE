@@ -257,6 +257,20 @@ public sealed class BridgeProtocolClientTests
             entriesTruncated = false,
             entries = new[] { new { name = "weapons", generation = 2UL, columnCount = 1, rowCount = 1, valid = true } },
         },
+        dataTablePreview = new
+        {
+            available = true,
+            generation = 2UL,
+            name = "weapons",
+            totalColumnCount = 1,
+            totalRowCount = 1,
+            columnsTruncated = false,
+            rowsTruncated = false,
+            valuesTruncated = false,
+            reason = "Native table preview is available as copied read-only facts.",
+            columns = new[] { new { name = "damage", type = 1 } },
+            rows = new[] { new { identifier = "pistol", values = new[] { "25" } } },
+        },
         capabilities = Array.Empty<int>(),
         }));
 
@@ -340,6 +354,24 @@ public sealed class BridgeProtocolClientTests
 
         Assert.Equal(0UL, snapshot.DataTableCatalog.Generation);
         Assert.Empty(snapshot.DataTableCatalog.Entries);
+    }
+
+    [Fact]
+    public void SnapshotParser_AcceptsReadOnlyDataTablePreviewDto()
+    {
+        using JsonDocument document = JsonDocument.Parse(JsonSerializer.Serialize(Snapshot(sceneDirty: false)));
+
+        BridgeEditorSnapshot snapshot = BridgeSnapshotParser.Parse(document.RootElement);
+
+        Assert.True(snapshot.DataTablePreview.IsAvailable);
+        Assert.Equal(2UL, snapshot.DataTablePreview.Generation);
+        Assert.Equal("weapons", snapshot.DataTablePreview.Name);
+        Assert.Equal(1, snapshot.DataTablePreview.TotalColumnCount);
+        Assert.Equal(1, snapshot.DataTablePreview.TotalRowCount);
+        Assert.Single(snapshot.DataTablePreview.Columns);
+        Assert.Equal("damage [Integer]", snapshot.DataTablePreview.Columns[0].DisplayText);
+        var row = Assert.Single(snapshot.DataTablePreview.Rows);
+        Assert.Equal("pistol: 25", row.DisplayText);
     }
 
     [Fact]
@@ -541,6 +573,20 @@ public sealed class BridgeProtocolClientTests
             entriesTruncated = false,
             entries = new[] { new { name = "weapons", generation = 2UL, columnCount = 1, rowCount = 1, valid = true } },
         },
+        dataTablePreview = new
+        {
+            available = true,
+            generation = 2UL,
+            name = "weapons",
+            totalColumnCount = 1,
+            totalRowCount = 1,
+            columnsTruncated = false,
+            rowsTruncated = false,
+            valuesTruncated = false,
+            reason = "Native table preview is available as copied read-only facts.",
+            columns = new[] { new { name = "damage", type = 1 } },
+            rows = new[] { new { identifier = "pistol", values = new[] { "25" } } },
+        },
         capabilities = Array.Empty<int>(),
     };
 
@@ -668,6 +714,20 @@ public sealed class BridgeProtocolClientTests
             generation = 4UL,
             entriesTruncated = false,
             entries = new[] { new { name = "weapons", generation = 2UL, columnCount = 1, rowCount = 1, valid = true } },
+        },
+        dataTablePreview = new
+        {
+            available = true,
+            generation = 2UL,
+            name = "weapons",
+            totalColumnCount = 1,
+            totalRowCount = 1,
+            columnsTruncated = false,
+            rowsTruncated = false,
+            valuesTruncated = false,
+            reason = "Native table preview is available as copied read-only facts.",
+            columns = new[] { new { name = "damage", type = 1 } },
+            rows = new[] { new { identifier = "pistol", values = new[] { "25" } } },
         },
         capabilities = Array.Empty<int>(),
     };
