@@ -1,4 +1,5 @@
 // Copyright (c) 2026 UniVex Studios. All Rights Reserved.
+#include "uve/scripting/script_compiler_ir_uve.h"
 #include "uve/scripting/script_graph_uve.h"
 
 #include <gtest/gtest.h>
@@ -131,6 +132,45 @@ TEST(ScriptPinCompatibilityUVETest, AreScriptPinTypesCompatibleUVE_RequiresExact
     EXPECT_TRUE(AreScriptPinTypesCompatibleUVE(ScriptValueTypeUVE::Vector3, ScriptValueTypeUVE::Vector3));
     EXPECT_FALSE(AreScriptPinTypesCompatibleUVE(ScriptValueTypeUVE::Number, ScriptValueTypeUVE::Boolean));
     EXPECT_FALSE(AreScriptPinTypesCompatibleUVE(ScriptValueTypeUVE::Entity, ScriptValueTypeUVE::Asset));
+}
+
+} // namespace UVE::Scripting
+
+namespace UVE::Scripting {
+
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_SortsNodesAndLinksDeterministically) {
+    ScriptNodeRegistryUVE registry;
+    RegisterTestNodesUVE(registry);
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({20U, "test.sink"}));
+    ASSERT_TRUE(graph.AddNodeUVE({10U, "test.source"}));
+    ASSERT_TRUE(graph.AddLinkUVE({{10U, "Out"}, {20U, "In"}}));
+
+    const ScriptIrCompileResultUVE result = CompileScriptGraphToIrUVE(graph, registry);
+    ASSERT_TRUE(result.IsSuccessUVE());
+    ASSERT_TRUE(result.program.has_value());
+    EXPECT_EQ(result.program->version, ScriptIrProgramUVE::kCurrentVersionUVE);
+    ASSERT_EQ(result.program->instructions.size(), 3U);
+    EXPECT_EQ(result.program->instructions[0].kind, ScriptIrInstructionKindUVE::ExecuteNode);
+    EXPECT_EQ(result.program->instructions[0].sourceNodeId, 10U);
+    EXPECT_EQ(result.program->instructions[1].sourceNodeId, 20U);
+    EXPECT_EQ(result.program->instructions[2].kind, ScriptIrInstructionKindUVE::TransferValue);
+    EXPECT_EQ(result.program->instructions[2].sourceNodeId, 10U);
+    EXPECT_EQ(result.program->instructions[2].targetNodeId, 20U);
+    EXPECT_EQ(result.program->sourceNodeIds, (std::vector<std::uint32_t>{10U, 20U, 10U}));
+}
+
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsInvalidGraphWithoutPartialProgram) {
+    ScriptNodeRegistryUVE registry;
+    RegisterTestNodesUVE(registry);
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({1U, "missing.node"}));
+
+    const ScriptIrCompileResultUVE result = CompileScriptGraphToIrUVE(graph, registry);
+    EXPECT_FALSE(result.IsSuccessUVE());
+    EXPECT_FALSE(result.program.has_value());
+    ASSERT_EQ(result.diagnostics.size(), 1U);
+    EXPECT_EQ(result.diagnostics[0].code, ScriptValidationCodeUVE::UnknownNodeType);
 }
 
 } // namespace UVE::Scripting
