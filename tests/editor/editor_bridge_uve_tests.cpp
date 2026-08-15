@@ -77,6 +77,48 @@ TEST(EditorBridgeUVETest, ReadScriptRuntimeUVE_IsAdvertisedAndReadOnly) {
     engine.Shutdown();
 }
 
+TEST(EditorBridgeUVETest, ReadScriptRuntimeTickDiagnosticsUVE_IsAdvertisedAndDispatchesCopiedSummary) {
+    Core::EngineCoreUVE engine(MakeBridgeTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_bridge_script_runtime_tick.uvescene");
+        editor.InitUVE();
+        const Scene::EntityUVE entity = editor.CreateDocumentEntityUVE(EditorEntityKindUVE::Cube);
+        ASSERT_NE(entity, Scene::kInvalidEntityUVE);
+        Scripting::ScriptRuntimeUVE runtime;
+        Scripting::ScriptBytecodeProgramUVE program;
+        program.instructions.resize(2U);
+        ASSERT_TRUE(runtime.AttachUVE(entity, std::move(program)));
+        EditorBridgeUVE bridge(editor, nullptr, nullptr, &runtime);
+        const EditorBridgeSnapshotUVE initial = bridge.GetSnapshotUVE();
+        bool advertised = false;
+        for (const EditorBridgeCapabilityUVE capability : initial.capabilities) {
+            advertised = advertised || capability == EditorBridgeCapabilityUVE::ReadScriptRuntimeTickDiagnostics;
+        }
+        ASSERT_TRUE(advertised);
+
+        EditorBridgeRequestUVE request{};
+        request.protocolVersion = kEditorBridgeProtocolVersionUVE;
+        request.requestId = 142U;
+        request.expectedRevision = initial.revision + 100U;
+        request.kind = EditorBridgeRequestKindUVE::ReadScriptRuntimeTickDiagnostics;
+        const EditorBridgeResponseUVE response = bridge.DispatchUVE(request);
+
+        ASSERT_TRUE(response.applied);
+        EXPECT_EQ(response.code, "bridge.script_runtime.tick.completed");
+        EXPECT_TRUE(response.snapshot.scriptRuntimeTickSummary.available);
+        EXPECT_EQ(response.snapshot.scriptRuntimeTickSummary.enabledInstanceCount, 1U);
+        EXPECT_EQ(response.snapshot.scriptRuntimeTickSummary.completedCount, 1U);
+        EXPECT_EQ(response.snapshot.scriptRuntimeTickSummary.instructionBudgetExceededCount, 0U);
+        EXPECT_EQ(response.snapshot.scriptRuntimeTickSummary.invalidInstructionCount, 0U);
+        EXPECT_EQ(response.snapshot.scriptRuntimeTickSummary.diagnosticCount, 0U);
+        EXPECT_EQ(response.snapshot.revision, initial.revision);
+        editor.ShutdownUVE();
+    }
+    engine.Shutdown();
+}
+
 TEST(EditorBridgeUVETest, SnapshotUVE_ObservesNativeEditorChangesAndIncrementsRevision) {
     Core::EngineCoreUVE engine(MakeBridgeTestConfigUVE());
     engine.Init();

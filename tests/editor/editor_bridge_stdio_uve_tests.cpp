@@ -113,11 +113,18 @@ TEST(EditorBridgeStdioUVETest, ServeUVE_HandshakesAndRoutesExistingBridgeDispatc
                                                   {"requestId", 43U},
                                                   {"expectedRevision", 999U},
                                                   {"kind", "readScriptRuntime"}}}});
+        AppendFrameUVE(input, JsonUVE{{"jsonrpc", "2.0"},
+                                      {"id", 4U},
+                                      {"method", "bridge.dispatch"},
+                                      {"params", {{"protocolVersion", kEditorBridgeProtocolVersionUVE},
+                                                  {"requestId", 44U},
+                                                  {"expectedRevision", 999U},
+                                                  {"kind", "readScriptRuntimeTickDiagnostics"}}}});
 
         EXPECT_EQ(server.ServeUVE(input, output, diagnostics), 0);
         EXPECT_TRUE(diagnostics.str().empty());
         const std::vector<JsonUVE> frames = ReadFramesUVE(output);
-        ASSERT_EQ(frames.size(), 3U);
+        ASSERT_EQ(frames.size(), 4U);
         EXPECT_TRUE(frames[0U].at("result").at("compatible").get<bool>());
         EXPECT_EQ(frames[0U].at("result").at("protocolVersion").get<std::uint32_t>(),
                   kEditorBridgeProtocolVersionUVE);
@@ -178,6 +185,12 @@ TEST(EditorBridgeStdioUVETest, ServeUVE_HandshakesAndRoutesExistingBridgeDispatc
         EXPECT_EQ(frames[2U].at("result").at("code").get<std::string>(), "bridge.script_runtime.snapshot.read");
         EXPECT_EQ(frames[2U].at("result").at("snapshot").at("scriptRuntime").at("instanceCount").get<std::size_t>(), 1U);
         EXPECT_EQ(frames[2U].at("result").at("snapshot").at("scriptRuntime").at("entries").size(), 1U);
+        EXPECT_TRUE(frames[3U].at("result").at("applied").get<bool>());
+        EXPECT_EQ(frames[3U].at("result").at("code").get<std::string>(), "bridge.script_runtime.tick.completed");
+        const JsonUVE& tickSummary = frames[3U].at("result").at("snapshot").at("scriptRuntimeTickSummary");
+        EXPECT_TRUE(tickSummary.at("available").get<bool>());
+        EXPECT_EQ(tickSummary.at("enabledInstanceCount").get<std::size_t>(), 1U);
+        EXPECT_EQ(tickSummary.at("completedCount").get<std::size_t>(), 1U);
         EXPECT_TRUE(frames[1U].at("result").at("createdEntity").is_object());
         EXPECT_TRUE(editor.IsSceneDirtyUVE());
 

@@ -323,6 +323,16 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"entries", std::move(entries)}};
 }
 
+[[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeScriptRuntimeTickSummaryUVE& summary) {
+    return JsonUVE{{"available", summary.available},
+                   {"reason", summary.reason},
+                   {"enabledInstanceCount", summary.enabledInstanceCount},
+                   {"completedCount", summary.completedCount},
+                   {"instructionBudgetExceededCount", summary.instructionBudgetExceededCount},
+                   {"invalidInstructionCount", summary.invalidInstructionCount},
+                   {"diagnosticCount", summary.diagnosticCount}};
+}
+
 [[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeSnapshotUVE& snapshot) {
     JsonUVE selectedEntities = JsonUVE::array();
     for (const EditorBridgeEntitySnapshotUVE& entity : snapshot.selectedEntities) {
@@ -352,6 +362,7 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"visualScripting", ToJsonUVE(snapshot.visualScripting)},
                    {"developerConsole", ToJsonUVE(snapshot.developerConsole)},
                    {"scriptRuntime", ToJsonUVE(snapshot.scriptRuntime)},
+                   {"scriptRuntimeTickSummary", ToJsonUVE(snapshot.scriptRuntimeTickSummary)},
                    {"dataTableCatalog", ToJsonUVE(snapshot.dataTableCatalog)},
                    {"dataTablePreview", ToJsonUVE(snapshot.dataTablePreview)},
                    {"capabilities", std::move(capabilities)}};
@@ -580,6 +591,9 @@ enum class FrameReadResultUVE : std::uint8_t {
     }
     if (value == "readScriptRuntime") {
         return EditorBridgeRequestKindUVE::ReadScriptRuntime;
+    }
+    if (value == "readScriptRuntimeTickDiagnostics") {
+        return EditorBridgeRequestKindUVE::ReadScriptRuntimeTickDiagnostics;
     }
     return std::nullopt;
 }

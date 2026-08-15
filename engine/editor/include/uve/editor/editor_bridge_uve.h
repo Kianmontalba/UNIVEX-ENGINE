@@ -74,6 +74,7 @@ enum class EditorBridgeCapabilityUVE : std::uint8_t {
     MoveDeveloperConsoleHistory,
     SelectDataTablePreview,
     ReadScriptRuntime,
+    ReadScriptRuntimeTickDiagnostics,
 };
 
 /// The deliberately small v1 request vocabulary. No generic command string is accepted because
@@ -113,6 +114,7 @@ enum class EditorBridgeRequestKindUVE : std::uint8_t {
     MoveDeveloperConsoleHistory,
     SelectDataTablePreview,
     ReadScriptRuntime,
+    ReadScriptRuntimeTickDiagnostics,
 };
 
 /// Explicitly describes whether this bridge session has a native-owned viewport surface. No raw
@@ -315,6 +317,20 @@ struct EditorBridgeScriptRuntimeSnapshotUVE final {
     [[nodiscard]] bool operator==(const EditorBridgeScriptRuntimeSnapshotUVE&) const = default;
 };
 
+/// Copied counters from one explicitly requested native ScriptRuntime diagnostic tick. The managed
+/// host may request this DTO but never executes VM work or receives a runtime pointer.
+struct EditorBridgeScriptRuntimeTickSummaryUVE final {
+    bool available = false;
+    std::string reason = "No ScriptRuntime diagnostic tick has been requested.";
+    std::size_t enabledInstanceCount = 0U;
+    std::size_t completedCount = 0U;
+    std::size_t instructionBudgetExceededCount = 0U;
+    std::size_t invalidInstructionCount = 0U;
+    std::size_t diagnosticCount = 0U;
+
+    [[nodiscard]] bool operator==(const EditorBridgeScriptRuntimeTickSummaryUVE&) const = default;
+};
+
 struct EditorBridgeDataTablePreviewSnapshotUVE final {
     bool available = false;
     std::uint64_t generation = 0U;
@@ -349,6 +365,7 @@ struct EditorBridgeSnapshotUVE final {
     EditorBridgeVisualScriptingSnapshotUVE visualScripting;
     EditorBridgeDeveloperConsoleSnapshotUVE developerConsole;
     EditorBridgeScriptRuntimeSnapshotUVE scriptRuntime;
+    EditorBridgeScriptRuntimeTickSummaryUVE scriptRuntimeTickSummary;
     EditorBridgeDataTableCatalogSnapshotUVE dataTableCatalog;
     EditorBridgeDataTablePreviewSnapshotUVE dataTablePreview;
     std::vector<EditorBridgeCapabilityUVE> capabilities;
@@ -492,6 +509,7 @@ private:
     Asset::DataTableCatalogSnapshotUVE m_dataTableCatalogSnapshot;
     Asset::DataTableSnapshotUVE m_dataTablePreviewSnapshot;
     std::optional<ObservedStateUVE> m_lastObservedState;
+    EditorBridgeScriptRuntimeTickSummaryUVE m_lastScriptRuntimeTickSummary;
     std::uint64_t m_revision = 0U;
 };
 

@@ -52,6 +52,7 @@ namespace {
         EditorBridgeCapabilityUVE::MoveDeveloperConsoleHistory,
         EditorBridgeCapabilityUVE::SelectDataTablePreview,
         EditorBridgeCapabilityUVE::ReadScriptRuntime,
+        EditorBridgeCapabilityUVE::ReadScriptRuntimeTickDiagnostics,
     };
     return capabilities;
 }
@@ -62,7 +63,8 @@ namespace {
            kind != EditorBridgeRequestKindUVE::ReadVisualScriptCanvas &&
            kind != EditorBridgeRequestKindUVE::ReadVisualScriptDebugger &&
            kind != EditorBridgeRequestKindUVE::ReadDeveloperConsole &&
-           kind != EditorBridgeRequestKindUVE::ReadScriptRuntime;
+           kind != EditorBridgeRequestKindUVE::ReadScriptRuntime &&
+           kind != EditorBridgeRequestKindUVE::ReadScriptRuntimeTickDiagnostics;
 }
 
 [[nodiscard]] bool IsVisualScriptMutationRequestUVE(const EditorBridgeRequestKindUVE kind) noexcept {
@@ -213,6 +215,29 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
     if (request.kind == EditorBridgeRequestKindUVE::ReadScriptRuntime) {
         return MakeResponseUVE(request, true, "bridge.script_runtime.snapshot.read",
                                "The bounded ScriptRuntime snapshot was copied.");
+    }
+    if (request.kind == EditorBridgeRequestKindUVE::ReadScriptRuntimeTickDiagnostics) {
+        EditorBridgeResponseUVE response = MakeResponseUVE(
+            request, false, "bridge.script_runtime.tick.unavailable",
+            "No native ScriptRuntime is attached to this bridge session.");
+        EditorBridgeScriptRuntimeTickSummaryUVE summary;
+        summary.reason = "No native ScriptRuntime is attached to this bridge session.";
+        if (m_scriptRuntime != nullptr) {
+            const Scripting::ScriptRuntimeTickBatchResultUVE tick = m_scriptRuntime->TickDetailedUVE();
+            summary.available = true;
+            summary.reason = "The native ScriptRuntime diagnostic tick completed.";
+            summary.enabledInstanceCount = tick.summary.enabledInstanceCount;
+            summary.completedCount = tick.summary.completedCount;
+            summary.instructionBudgetExceededCount = tick.summary.instructionBudgetExceededCount;
+            summary.invalidInstructionCount = tick.summary.invalidInstructionCount;
+            summary.diagnosticCount = tick.summary.diagnosticCount;
+            response.applied = true;
+            response.code = "bridge.script_runtime.tick.completed";
+            response.message = "The native ScriptRuntime diagnostic tick completed and its counters were copied.";
+        }
+        m_lastScriptRuntimeTickSummary = summary;
+        response.snapshot.scriptRuntimeTickSummary = std::move(summary);
+        return response;
     }
     if (m_editor->GetStateUVE() != EditorStateUVE::Running) {
         return MakeResponseUVE(request, false, "bridge.editor.not_running",
@@ -640,6 +665,10 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
             code = "bridge.script_runtime.snapshot.read";
             message = "The bounded ScriptRuntime snapshot was copied.";
             break;
+        case EditorBridgeRequestKindUVE::ReadScriptRuntimeTickDiagnostics:
+            code = "bridge.script_runtime.tick.completed";
+            message = "The native ScriptRuntime diagnostic tick completed and its counters were copied.";
+            break;
         case EditorBridgeRequestKindUVE::ReadSnapshot:
             break;
     }
@@ -845,6 +874,7 @@ EditorBridgeSnapshotUVE EditorBridgeUVE::BuildSnapshotUVE() const {
     snapshot.visualScripting = observed.visualScripting;
     snapshot.developerConsole = observed.developerConsole;
     snapshot.scriptRuntime = observed.scriptRuntime;
+    snapshot.scriptRuntimeTickSummary = m_lastScriptRuntimeTickSummary;
     snapshot.dataTableCatalog = observed.dataTableCatalog;
     snapshot.dataTablePreview = observed.dataTablePreview;
     snapshot.capabilities = GetCapabilitiesUVE();

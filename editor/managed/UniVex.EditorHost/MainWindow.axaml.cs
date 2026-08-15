@@ -23,6 +23,7 @@ public partial class MainWindow : Window
     private bool applyingLayout;
     private bool applyingSnapshot;
     private bool scriptRuntimeRequestAvailable;
+    private bool scriptRuntimeTickAvailable;
     private BridgeScriptRuntimeSnapshot? scriptRuntimeSnapshot;
     private bool shellInitialized;
 
@@ -84,6 +85,9 @@ public partial class MainWindow : Window
 
     private void ScriptRuntimeRefreshButton_OnClick(object? sender, RoutedEventArgs e) =>
         DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "readScriptRuntime"));
+
+    private void ScriptRuntimeTickButton_OnClick(object? sender, RoutedEventArgs e) =>
+        DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "readScriptRuntimeTickDiagnostics"));
 
     private void ScriptRuntimeFilterTextBox_OnTextChanged(object? sender, TextChangedEventArgs e)
     {
@@ -488,7 +492,11 @@ public partial class MainWindow : Window
             RenderContentBrowser(snapshot.ContentBrowser);
             RenderViewportSurface(snapshot.ViewportSurface);
             RenderVisualScripting(snapshot.VisualScripting, snapshot.Revision);
-            RenderScriptRuntime(snapshot.ScriptRuntime, snapshot.Capabilities.Contains(BridgeSnapshotParser.ReadScriptRuntimeCapability), snapshot.Revision);
+            RenderScriptRuntime(snapshot.ScriptRuntime,
+                snapshot.Capabilities.Contains(BridgeSnapshotParser.ReadScriptRuntimeCapability),
+                snapshot.Capabilities.Contains(BridgeSnapshotParser.ReadScriptRuntimeTickDiagnosticsCapability),
+                snapshot.Revision,
+                snapshot.ScriptRuntimeTickSummary);
             RenderDeveloperConsole(snapshot.DeveloperConsole);
             RenderDataTableCatalog(snapshot.DataTableCatalog, snapshot.DataTablePreview);
             RenderDataTablePreview(snapshot.DataTablePreview);
@@ -540,14 +548,23 @@ public partial class MainWindow : Window
                $"{pauseReason} {debugger.Reason}";
     }
 
-    private void RenderScriptRuntime(BridgeScriptRuntimeSnapshot runtime, bool requestAvailable, ulong bridgeRevision)
+    private void RenderScriptRuntime(BridgeScriptRuntimeSnapshot runtime, bool requestAvailable,
+                                     bool tickAvailable, ulong bridgeRevision,
+                                     BridgeScriptRuntimeTickSummary tickSummary)
     {
         scriptRuntimeRequestAvailable = requestAvailable;
+        scriptRuntimeTickAvailable = tickAvailable;
         ScriptRuntimeRefreshButton.IsEnabled = state == HostSessionState.Connected && requestAvailable;
+        ScriptRuntimeTickButton.IsEnabled = state == HostSessionState.Connected && tickAvailable;
         scriptRuntimeSnapshot = runtime;
+        string tickStatus = tickSummary.IsAvailable
+            ? $" Last diagnostic tick: {tickSummary.EnabledInstanceCount} enabled, {tickSummary.CompletedCount} completed, " +
+              $"{tickSummary.InstructionBudgetExceededCount} budget-exceeded, {tickSummary.InvalidInstructionCount} invalid, " +
+              $"{tickSummary.DiagnosticCount} diagnostic(s)."
+            : $" {tickSummary.Reason}";
         if (!runtime.IsAvailable)
         {
-            ScriptRuntimeStatusTextBlock.Text = $"Bridge revision {bridgeRevision}: {runtime.Reason}";
+            ScriptRuntimeStatusTextBlock.Text = $"Bridge revision {bridgeRevision}: {runtime.Reason}{tickStatus}";
         }
         else
         {
@@ -556,7 +573,7 @@ public partial class MainWindow : Window
                 $"{runtime.InstanceCount} native ScriptRuntime instance(s); {runtime.Entries.Count} visible copied row(s) " +
                 $"({runtime.VisibleEnabledInstanceCount} enabled, {runtime.VisibleDisabledInstanceCount} disabled). " +
                 $"Instance rows include generational identity, program version, instruction/state counts, and enabled state. " +
-                $"Bridge revision {bridgeRevision}. {runtime.Reason}{truncation}";
+                $"Bridge revision {bridgeRevision}. {runtime.Reason}{truncation}{tickStatus}";
         }
         ApplyScriptRuntimeFilter();
     }
@@ -795,6 +812,7 @@ public partial class MainWindow : Window
         BackendPathTextBox.IsEnabled = enabled;
         ScenePathTextBox.IsEnabled = enabled;
         ScriptRuntimeRefreshButton.IsEnabled = enabled && state == HostSessionState.Connected && scriptRuntimeRequestAvailable;
+        ScriptRuntimeTickButton.IsEnabled = enabled && state == HostSessionState.Connected && scriptRuntimeTickAvailable;
     }
 
     private void UpdateShellLayout(DockShellLayoutState layout)
