@@ -295,10 +295,21 @@ bool DeveloperConsoleUVE::SetCompletionPrefixUVE(std::string prefix) {
     return SetCompletionPrefixDetailedUVE(std::move(prefix)).IsAcceptedUVE();
 }
 
-bool DeveloperConsoleUVE::MoveHistoryUVE(const std::int32_t delta) noexcept {
-    if (!IsAvailableUVE() || delta == 0 || m_history.empty()) {
-        return false;
+DeveloperConsoleHistoryNavigationResultUVE DeveloperConsoleUVE::MoveHistoryDetailedUVE(
+    const std::int32_t delta) noexcept {
+    if (!IsAvailableUVE()) {
+        return {DeveloperConsoleHistoryNavigationCodeUVE::Unavailable,
+                "History navigation is unavailable under the Shipping build policy."};
     }
+    if (delta == 0) {
+        return {DeveloperConsoleHistoryNavigationCodeUVE::InvalidDelta,
+                "History navigation delta must be non-zero."};
+    }
+    if (m_history.empty()) {
+        return {DeveloperConsoleHistoryNavigationCodeUVE::EmptyHistory,
+                "History navigation requires at least one history entry."};
+    }
+
     const std::int64_t current = m_historyCursor;
     std::int64_t next = current;
     if (current < 0) {
@@ -310,11 +321,16 @@ bool DeveloperConsoleUVE::MoveHistoryUVE(const std::int32_t delta) noexcept {
         next = std::clamp<std::int64_t>(next, 0, static_cast<std::int64_t>(m_history.size() - 1U));
     }
     if (next == current) {
-        return false;
+        return {DeveloperConsoleHistoryNavigationCodeUVE::Boundary,
+                "History navigation is already at the requested boundary."};
     }
     m_historyCursor = static_cast<std::int32_t>(next);
     IncrementGenerationUVE(m_generation);
-    return true;
+    return {DeveloperConsoleHistoryNavigationCodeUVE::Applied, "History cursor updated."};
+}
+
+bool DeveloperConsoleUVE::MoveHistoryUVE(const std::int32_t delta) noexcept {
+    return MoveHistoryDetailedUVE(delta).IsAcceptedUVE();
 }
 
 void DeveloperConsoleUVE::AppendUVE(const DeveloperConsoleSeverityUVE severity, std::string text) {

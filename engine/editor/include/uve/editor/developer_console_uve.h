@@ -136,6 +136,23 @@ struct DeveloperConsoleCompletionPrefixResultUVE final {
     }
 };
 
+enum class DeveloperConsoleHistoryNavigationCodeUVE : std::uint8_t {
+    Applied = 0,
+    Unavailable,
+    InvalidDelta,
+    EmptyHistory,
+    Boundary,
+};
+
+struct DeveloperConsoleHistoryNavigationResultUVE final {
+    DeveloperConsoleHistoryNavigationCodeUVE code = DeveloperConsoleHistoryNavigationCodeUVE::Applied;
+    std::string message;
+
+    [[nodiscard]] bool IsAcceptedUVE() const noexcept {
+        return code == DeveloperConsoleHistoryNavigationCodeUVE::Applied;
+    }
+};
+
 struct DeveloperConsoleCompletionUVE final {
     std::string identifier;
     std::string help;
@@ -206,6 +223,7 @@ public:
     [[nodiscard]] bool SetSeverityFilterUVE(DeveloperConsoleSeverityFilterUVE filter) noexcept;
     [[nodiscard]] DeveloperConsoleCompletionPrefixResultUVE SetCompletionPrefixDetailedUVE(std::string prefix);
     [[nodiscard]] bool SetCompletionPrefixUVE(std::string prefix);
+    [[nodiscard]] DeveloperConsoleHistoryNavigationResultUVE MoveHistoryDetailedUVE(std::int32_t delta) noexcept;
     [[nodiscard]] bool MoveHistoryUVE(std::int32_t delta) noexcept;
     [[nodiscard]] bool IsAvailableUVE() const noexcept;
     [[nodiscard]] DeveloperConsoleSnapshotUVE GetSnapshotUVE() const;
