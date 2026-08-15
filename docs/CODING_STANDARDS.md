@@ -1639,3 +1639,10 @@ The managed `BridgeCommand` and Avalonia Data Tables catalog are presentation ad
 `DataTableAssetSerializerUVE` remains the single JSON document authority for typed data tables. `SaveDataTableAssetUVE()` must wrap that document with `WriteUveFileUVE()` using the unique `AssetKindUVE::DataTable` value; never create a second table payload format or write an unframed table file.
 
 `LoadDataTableAssetUVE()` must reject missing files, wrong envelope kinds, malformed payloads, and invalid schema/row/value data without mutating the caller's destination. Always deserialize into a temporary `DataTableUVE` and move-assign only after complete success. The store is synchronous and caller-path-owned; it must not scan directories, own asset-database records, retain filesystem handles, mutate the session registry, or perform hot reload.
+
+
+## Validated Data Table asset-database registration (Increment 99)
+
+`RegisterDataTableAssetUVE()` must validate the `.uvetable` extension and complete `LoadDataTableAssetUVE()` operation before calling `IAssetDatabaseUVE::RegisterUVE()`. A failed validation must return `std::nullopt` and leave the database unchanged; never register a path first and validate it later.
+
+The helper may rely on the generic database's established lexical normalization and idempotent GUID behavior, but it must not reinterpret a database record as a loaded table. Registration does not own a `DataTableUVE`, schedule import work, scan directories, watch files, hot reload sessions, mutate the editor bridge, bind runtime objects, or transfer managed pointers.

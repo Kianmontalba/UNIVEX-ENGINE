@@ -28,6 +28,7 @@ add_library(uve_asset STATIC
     src/material_asset_uve.cpp
     src/data_table_uve.cpp
     src/data_table_asset_uve.cpp
+    src/data_table_asset_registration_uve.cpp
     src/data_table_registry_uve.cpp
 )
 target_include_directories(uve_asset PUBLIC include)
