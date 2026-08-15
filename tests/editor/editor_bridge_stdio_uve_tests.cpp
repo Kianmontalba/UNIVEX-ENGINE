@@ -156,6 +156,7 @@ TEST(EditorBridgeStdioUVETest, ServeUVE_HandshakesAndRoutesExistingBridgeDispatc
         EXPECT_TRUE(handshakeSnapshot.at("visualScripting").at("canvas").at("nodes").is_array());
         EXPECT_TRUE(handshakeSnapshot.at("visualScripting").at("canvas").at("links").is_array());
         EXPECT_TRUE(handshakeSnapshot.at("visualScripting").at("canvas").at("paletteNodeTypeIds").is_array());
+        EXPECT_TRUE(handshakeSnapshot.at("visualScripting").at("canvas").at("paletteDescriptors").is_array());
         ASSERT_TRUE(handshakeSnapshot.at("visualScripting").at("debugger").is_object());
         EXPECT_TRUE(handshakeSnapshot.at("visualScripting").at("debugger").at("available").get<bool>());
         EXPECT_EQ(handshakeSnapshot.at("visualScripting").at("debugger").at("state").get<std::uint8_t>(), 2U);

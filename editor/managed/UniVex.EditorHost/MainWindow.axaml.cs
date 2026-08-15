@@ -19,6 +19,7 @@ public partial class MainWindow : Window
     private BridgeContentBrowserEntry? selectedContentEntry;
     private BridgeDataTableCatalogEntry? selectedDataTableEntry;
     private BridgeScriptRuntimeInstanceEntry? selectedScriptRuntimeInstance;
+    private IReadOnlyList<BridgeVisualScriptPaletteEntry> visualScriptPalette = Array.Empty<BridgeVisualScriptPaletteEntry>();
     private bool closeConfirmed;
     private bool applyingLayout;
     private bool applyingSnapshot;
@@ -82,6 +83,26 @@ public partial class MainWindow : Window
 
     private void VisualScriptRedoButton_OnClick(object? sender, RoutedEventArgs e) =>
         VisualScriptCanvas.RequestRedo();
+
+    private void VisualScriptPaletteFilterTextBox_OnTextChanged(object? sender, TextChangedEventArgs e)
+    {
+        if (!applyingSnapshot)
+        {
+            ApplyVisualScriptPaletteFilter();
+        }
+    }
+
+    private void VisualScriptPaletteListBox_OnSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (applyingSnapshot || VisualScriptPaletteListBox.SelectedItem is not BridgeVisualScriptPaletteEntry entry)
+        {
+            return;
+        }
+        VisualScriptPaletteListBox.SelectedItem = null;
+        DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "addVisualScriptNodeType",
+            VisualScriptNodeTypeId: entry.TypeId,
+            VisualScriptPosition: new BridgeVisualScriptPoint(0F, 0F)));
+    }
 
     private void ScriptRuntimeRefreshButton_OnClick(object? sender, RoutedEventArgs e) =>
         DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "readScriptRuntime"));
@@ -702,7 +723,19 @@ public partial class MainWindow : Window
             : string.Empty;
         VisualScriptingDiagnosticsTextBlock.Text =
             $"Canvas rev {scripting.Canvas.Revision}; {scripting.Canvas.Diagnostics.Count} diagnostic(s){truncation}";
+        visualScriptPalette = scripting.Canvas.PaletteDescriptors.Count > 0
+            ? scripting.Canvas.PaletteDescriptors
+            : scripting.Canvas.PaletteNodeTypeIds.Select(typeId => new BridgeVisualScriptPaletteEntry(
+                typeId, typeId, "Uncategorized", "node.default", 0U, 0U,
+                Array.Empty<BridgeVisualScriptPin>())).ToArray();
+        ApplyVisualScriptPaletteFilter();
         VisualScriptCanvas.ApplySnapshot(scripting.Canvas, bridgeRevision);
+    }
+
+    private void ApplyVisualScriptPaletteFilter()
+    {
+        VisualScriptPaletteListBox.ItemsSource = VisualScriptCanvasControl.FilterPalette(
+            visualScriptPalette, VisualScriptPaletteFilterTextBox.Text);
     }
 
     private void RenderHierarchy(BridgeHierarchySnapshot hierarchy)

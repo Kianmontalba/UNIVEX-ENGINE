@@ -88,6 +88,22 @@ public sealed class VisualScriptCanvasControl : Control
         };
     }
 
+    public static IReadOnlyList<BridgeVisualScriptPaletteEntry> FilterPalette(
+        IEnumerable<BridgeVisualScriptPaletteEntry> entries, string? query)
+    {
+        ArgumentNullException.ThrowIfNull(entries);
+        string filter = query?.Trim() ?? string.Empty;
+        return entries
+            .Where(entry => filter.Length == 0 ||
+                            entry.TypeId.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                            entry.DisplayName.Contains(filter, StringComparison.OrdinalIgnoreCase) ||
+                            entry.Category.Contains(filter, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(entry => entry.DisplayOrder)
+            .ThenBy(entry => entry.Category, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(entry => entry.TypeId, StringComparer.Ordinal)
+            .ToArray();
+    }
+
     public Rect GetNodeScreenRect(uint nodeId)
     {
         BridgeVisualScriptNode? node = canvas.Nodes.FirstOrDefault(item => item.Id == nodeId);
@@ -226,6 +242,13 @@ public sealed class VisualScriptCanvasControl : Control
         double nextZoom = Math.Clamp(canvas.View.Zoom * Math.Pow(1.1D, e.Delta.Y), MinimumZoom, MaximumZoom);
         EmitView(new BridgeVisualScriptView(canvas.View.Pan, (float)nextZoom));
         e.Handled = true;
+    }
+
+    public void RequestPaletteInsertion(BridgeVisualScriptPaletteEntry entry) {
+        ArgumentNullException.ThrowIfNull(entry);
+        Emit(new BridgeCommand(bridgeRevision, "addVisualScriptNodeType",
+            VisualScriptNodeTypeId: entry.TypeId,
+            VisualScriptPosition: new BridgeVisualScriptPoint(0F, 0F)));
     }
 
     public void RequestUndo() => EmitSimple("undoVisualScript");

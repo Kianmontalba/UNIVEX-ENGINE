@@ -129,6 +129,15 @@ public sealed record BridgeVisualScriptEndpoint(uint NodeId, string PinName);
 
 public sealed record BridgeVisualScriptLink(BridgeVisualScriptEndpoint Output, BridgeVisualScriptEndpoint Input);
 
+public sealed record BridgeVisualScriptPaletteEntry(
+    string TypeId,
+    string DisplayName,
+    string Category,
+    string IconId,
+    uint DisplayOrder,
+    uint PresentationFlags,
+    IReadOnlyList<BridgeVisualScriptPin> Pins);
+
 public sealed record BridgeVisualScriptGraphNode(
     uint Id,
     string TypeId,
@@ -175,7 +184,11 @@ public sealed record BridgeVisualScriptCanvasSnapshot(
     IReadOnlyList<BridgeVisualScriptLink> Links,
     IReadOnlyList<uint> SelectedNodeIds,
     IReadOnlyList<string> PaletteNodeTypeIds,
-    IReadOnlyList<BridgeVisualScriptDiagnostic> Diagnostics);
+    IReadOnlyList<BridgeVisualScriptDiagnostic> Diagnostics)
+{
+    public IReadOnlyList<BridgeVisualScriptPaletteEntry> PaletteDescriptors { get; init; } =
+        Array.Empty<BridgeVisualScriptPaletteEntry>();
+}
 
 /// <summary>
 /// C++-authoritative visual-scripting presentation facts. The managed host receives copied DTOs only;
@@ -352,6 +365,7 @@ public sealed record BridgeCommand(
     string? ContentEntryPath = null,
     uint? VisualScriptNodeId = null,
     BridgeVisualScriptNode? VisualScriptNode = null,
+    string? VisualScriptNodeTypeId = null,
     BridgeVisualScriptPoint? VisualScriptPosition = null,
     BridgeVisualScriptLink? VisualScriptLink = null,
     IReadOnlyList<uint>? VisualScriptSelection = null,
@@ -931,6 +945,44 @@ public static class BridgeSnapshotParser
         {
             parsedPalette.Add(BoundedStringValue(typeId, "visual-scripting palette type ID"));
         }
+        List<BridgeVisualScriptPaletteEntry> parsedPaletteDescriptors = new();
+        if (value.TryGetProperty("paletteDescriptors", out JsonElement paletteDescriptors) &&
+            paletteDescriptors.ValueKind != JsonValueKind.Null)
+        {
+            EnsureBoundedArray(paletteDescriptors, "visualScripting.canvas.paletteDescriptors");
+            parsedPaletteDescriptors = new List<BridgeVisualScriptPaletteEntry>(paletteDescriptors.GetArrayLength());
+            foreach (JsonElement descriptor in paletteDescriptors.EnumerateArray())
+            {
+                RequireObject(descriptor, "visual-scripting palette descriptor");
+                JsonElement descriptorPins = RequiredArray(descriptor, "pins");
+                EnsureBoundedArray(descriptorPins, "visual-scripting palette descriptor pins");
+                List<BridgeVisualScriptPin> parsedDescriptorPins = new(descriptorPins.GetArrayLength());
+                foreach (JsonElement pin in descriptorPins.EnumerateArray())
+                {
+                    RequireObject(pin, "visual-scripting palette descriptor pin");
+                    byte type = RequiredByte(pin, "type");
+                    byte role = OptionalByte(pin, "role", type == 0 ? (byte)0 : (byte)1);
+                    if (role > 1)
+                    {
+                        throw Invalid("The visual-scripting palette descriptor pin role is unsupported.");
+                    }
+                    string? defaultValue = pin.TryGetProperty("defaultValue", out JsonElement defaultValueValue) &&
+                                           defaultValueValue.ValueKind != JsonValueKind.Null
+                        ? RequiredBoundedString(pin, "defaultValue")
+                        : null;
+                    parsedDescriptorPins.Add(new BridgeVisualScriptPin(
+                        RequiredBoundedString(pin, "name"), RequiredByte(pin, "direction"), type, role, defaultValue));
+                }
+                parsedPaletteDescriptors.Add(new BridgeVisualScriptPaletteEntry(
+                    RequiredBoundedString(descriptor, "typeId"),
+                    RequiredBoundedString(descriptor, "displayName"),
+                    OptionalBoundedString(descriptor, "category", "Uncategorized"),
+                    OptionalBoundedString(descriptor, "iconId", "node.default"),
+                    OptionalUInt32(descriptor, "displayOrder", 0U),
+                    OptionalUInt32(descriptor, "presentationFlags", 0U),
+                    parsedDescriptorPins));
+            }
+        }
         List<BridgeVisualScriptDiagnostic> parsedDiagnostics = new(diagnostics.GetArrayLength());
         foreach (JsonElement diagnostic in diagnostics.EnumerateArray())
         {
@@ -957,7 +1009,10 @@ public static class BridgeSnapshotParser
             RequiredBoolean(value, "paletteTruncated"), RequiredBoolean(value, "diagnosticsTruncated"),
             OptionalBoolean(value, "dirty", false), OptionalBoolean(value, "canUndo", false),
             OptionalBoolean(value, "canRedo", false),
-            parsedNodes, parsedLinks, parsedSelection, parsedPalette, parsedDiagnostics);
+            parsedNodes, parsedLinks, parsedSelection, parsedPalette, parsedDiagnostics)
+        {
+            PaletteDescriptors = parsedPaletteDescriptors,
+        };
     }
 
     private static BridgeHierarchySnapshot ParseHierarchy(JsonElement value)

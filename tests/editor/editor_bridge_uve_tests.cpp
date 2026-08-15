@@ -52,18 +52,33 @@ TEST(EditorBridgeUVETest, VisualScriptGraphSchemaUVE_IsAdvertisedAndUsesNativeAu
         const EditorBridgeSnapshotUVE initial = bridge.GetSnapshotUVE();
         bool serializeAdvertised = false;
         bool deserializeAdvertised = false;
+        bool addTypeAdvertised = false;
         for (const EditorBridgeCapabilityUVE capability : initial.capabilities) {
             serializeAdvertised = serializeAdvertised ||
                                   capability == EditorBridgeCapabilityUVE::SerializeVisualScriptGraph;
             deserializeAdvertised = deserializeAdvertised ||
                                     capability == EditorBridgeCapabilityUVE::DeserializeVisualScriptGraph;
+            addTypeAdvertised = addTypeAdvertised ||
+                                capability == EditorBridgeCapabilityUVE::AddVisualScriptNodeType;
         }
         ASSERT_TRUE(serializeAdvertised);
         ASSERT_TRUE(deserializeAdvertised);
+        ASSERT_TRUE(addTypeAdvertised);
+
+        EditorBridgeRequestUVE addTypeRequest{};
+        addTypeRequest.protocolVersion = kEditorBridgeProtocolVersionUVE;
+        addTypeRequest.requestId = 146U;
+        addTypeRequest.expectedRevision = initial.revision;
+        addTypeRequest.kind = EditorBridgeRequestKindUVE::AddVisualScriptNodeType;
+        addTypeRequest.visualScriptNodeTypeId = "missing.palette.node";
+        addTypeRequest.visualScriptPosition = Scripting::ScriptGraphCanvasPointUVE{24.0F, 48.0F};
+        const EditorBridgeResponseUVE rejectedAdd = bridge.DispatchUVE(addTypeRequest);
+        EXPECT_FALSE(rejectedAdd.applied);
+        EXPECT_EQ(rejectedAdd.code, "bridge.command.rejected");
 
         EditorBridgeRequestUVE serializeRequest{};
         serializeRequest.protocolVersion = kEditorBridgeProtocolVersionUVE;
-        serializeRequest.requestId = 147U;
+        serializeRequest.requestId = 148U;
         serializeRequest.expectedRevision = initial.revision + 100U;
         serializeRequest.kind = EditorBridgeRequestKindUVE::SerializeVisualScriptGraph;
         const EditorBridgeResponseUVE serialized = bridge.DispatchUVE(serializeRequest);
@@ -75,7 +90,7 @@ TEST(EditorBridgeUVETest, VisualScriptGraphSchemaUVE_IsAdvertisedAndUsesNativeAu
 
         EditorBridgeRequestUVE deserializeRequest{};
         deserializeRequest.protocolVersion = kEditorBridgeProtocolVersionUVE;
-        deserializeRequest.requestId = 148U;
+        deserializeRequest.requestId = 149U;
         deserializeRequest.expectedRevision = serialized.snapshot.revision;
         deserializeRequest.kind = EditorBridgeRequestKindUVE::DeserializeVisualScriptGraph;
         deserializeRequest.visualScriptGraphSchema =
@@ -85,7 +100,7 @@ TEST(EditorBridgeUVETest, VisualScriptGraphSchemaUVE_IsAdvertisedAndUsesNativeAu
         EXPECT_EQ(deserialized.code, "bridge.visual_scripting.graph_schema.deserialized");
         EXPECT_TRUE(deserialized.visualScriptGraphSchema.has_value());
 
-        deserializeRequest.requestId = 149U;
+        deserializeRequest.requestId = 150U;
         deserializeRequest.expectedRevision = deserialized.snapshot.revision;
         deserializeRequest.visualScriptGraphSchema =
             R"({"schemaVersion":1,"nodes":[],"links":[],"layout":[],"metadata":{},"future":true})";

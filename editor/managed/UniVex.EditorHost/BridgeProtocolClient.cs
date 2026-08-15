@@ -82,6 +82,7 @@ public sealed class BridgeProtocolClient : IAsyncDisposable
                 id = command.VisualScriptNode.Id,
                 typeId = command.VisualScriptNode.TypeId,
             },
+            visualScriptNodeTypeId = command.VisualScriptNodeTypeId,
             visualScriptPosition = command.VisualScriptPosition is null ? null : new
             {
                 x = command.VisualScriptPosition.X,

@@ -78,6 +78,7 @@ enum class EditorBridgeCapabilityUVE : std::uint8_t {
     ReadScriptRuntimeTickDiagnostics,
     SerializeVisualScriptGraph,
     DeserializeVisualScriptGraph,
+    AddVisualScriptNodeType,
 };
 
 /// The deliberately small v1 request vocabulary. No generic command string is accepted because
@@ -120,6 +121,7 @@ enum class EditorBridgeRequestKindUVE : std::uint8_t {
     ReadScriptRuntimeTickDiagnostics,
     SerializeVisualScriptGraph,
     DeserializeVisualScriptGraph,
+    AddVisualScriptNodeType,
 };
 
 /// Explicitly describes whether this bridge session has a native-owned viewport surface. No raw
@@ -403,6 +405,7 @@ struct EditorBridgeRequestUVE final {
     std::optional<std::string> contentEntryPath;
     std::optional<std::uint32_t> visualScriptNodeId;
     std::optional<Scripting::ScriptNodeUVE> visualScriptNode;
+    std::optional<std::string> visualScriptNodeTypeId;
     std::optional<Scripting::ScriptGraphCanvasPointUVE> visualScriptPosition;
     std::optional<Scripting::ScriptLinkUVE> visualScriptLink;
     std::optional<std::vector<std::uint32_t>> visualScriptSelection;

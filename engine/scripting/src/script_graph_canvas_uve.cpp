@@ -112,6 +112,24 @@ ScriptGraphCanvasCommandResultUVE ScriptGraphCanvasUVE::ValidateAndApplyGraphEdi
     return MakeResultUVE(ScriptGraphCanvasCommandCodeUVE::Applied, std::move(operation) + " was applied.");
 }
 
+ScriptGraphCanvasCommandResultUVE ScriptGraphCanvasUVE::AddNodeTypeUVE(
+    std::string typeId, const ScriptGraphCanvasPointUVE position,
+    const std::uint64_t expectedRevision) {
+    if (typeId.empty() || typeId.size() > 256U) {
+        return MakeResultUVE(ScriptGraphCanvasCommandCodeUVE::Rejected,
+                             "AddNodeType requires a bounded non-empty type ID.");
+    }
+    std::uint32_t candidateId = 1U;
+    while (candidateId != std::numeric_limits<std::uint32_t>::max() && HasNodeUVE(candidateId)) {
+        ++candidateId;
+    }
+    if (candidateId == std::numeric_limits<std::uint32_t>::max()) {
+        return MakeResultUVE(ScriptGraphCanvasCommandCodeUVE::Rejected,
+                             "AddNodeType could not allocate a node ID.");
+    }
+    return AddNodeUVE(ScriptNodeUVE{candidateId, std::move(typeId)}, position, expectedRevision);
+}
+
 ScriptGraphCanvasCommandResultUVE ScriptGraphCanvasUVE::AddNodeUVE(
     const ScriptNodeUVE node, const ScriptGraphCanvasPointUVE position,
     const std::uint64_t expectedRevision) {
@@ -482,6 +500,25 @@ ScriptGraphCanvasSnapshotUVE ScriptGraphCanvasUVE::GetSnapshotUVE() const {
     const std::size_t paletteCount = std::min(palette.size(), kMaximumScriptGraphCanvasEntriesUVE);
     snapshot.paletteNodeTypeIds.assign(palette.begin(), palette.begin() +
                                                     static_cast<std::ptrdiff_t>(paletteCount));
+    snapshot.paletteDescriptors.reserve(paletteCount);
+    for (std::size_t index = 0U; index < paletteCount; ++index) {
+        const ScriptNodeTypeDescriptorUVE& descriptor = descriptors[index];
+        ScriptGraphCanvasPaletteEntryUVE entry{};
+        entry.typeId = descriptor.typeId;
+        entry.displayName = descriptor.displayName;
+        entry.category = descriptor.category;
+        entry.iconId = descriptor.iconId;
+        entry.displayOrder = descriptor.displayOrder;
+        entry.presentationFlags = descriptor.presentationFlags;
+        const std::size_t pinCount = std::min(descriptor.pins.size(), kMaximumScriptGraphCanvasEntriesUVE);
+        entry.pins.reserve(pinCount);
+        for (std::size_t pinIndex = 0U; pinIndex < pinCount; ++pinIndex) {
+            const ScriptPinDescriptorUVE& pin = descriptor.pins[pinIndex];
+            entry.pins.push_back(ScriptGraphCanvasPinSnapshotUVE{
+                pin.name, pin.direction, pin.type, pin.role, pin.defaultValue});
+        }
+        snapshot.paletteDescriptors.push_back(std::move(entry));
+    }
     snapshot.paletteTruncated = palette.size() > paletteCount;
 
     std::vector<ScriptValidationDiagnosticUVE> diagnostics = graph.ValidateUVE(*m_registry);

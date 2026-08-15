@@ -245,6 +245,17 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"input", {{"nodeId", link.link.input.nodeId}, {"pinName", link.link.input.pinName}}}};
 }
 
+[[nodiscard]] JsonUVE ToJsonUVE(const Scripting::ScriptGraphCanvasPaletteEntryUVE& entry) {
+    JsonUVE pins = JsonUVE::array();
+    for (const auto& pin : entry.pins) {
+        pins.push_back(ToJsonUVE(pin));
+    }
+    return JsonUVE{{"typeId", entry.typeId}, {"displayName", entry.displayName},
+                   {"category", entry.category}, {"iconId", entry.iconId},
+                   {"displayOrder", entry.displayOrder}, {"presentationFlags", entry.presentationFlags},
+                   {"pins", std::move(pins)}};
+}
+
 [[nodiscard]] JsonUVE ToJsonUVE(const Scripting::ScriptValidationDiagnosticUVE& diagnostic) {
     JsonUVE result{{"code", static_cast<std::uint8_t>(diagnostic.code)}, {"nodeId", diagnostic.nodeId},
                    {"pinName", diagnostic.pinName}, {"message", diagnostic.message}};
@@ -306,6 +317,10 @@ enum class FrameReadResultUVE : std::uint8_t {
     for (const std::string& typeId : canvas.paletteNodeTypeIds) {
         palette.push_back(typeId);
     }
+    JsonUVE paletteDescriptors = JsonUVE::array();
+    for (const auto& descriptor : canvas.paletteDescriptors) {
+        paletteDescriptors.push_back(ToJsonUVE(descriptor));
+    }
     JsonUVE diagnostics = JsonUVE::array();
     for (const auto& diagnostic : canvas.diagnostics) {
         diagnostics.push_back(ToJsonUVE(diagnostic));
@@ -317,7 +332,8 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"diagnosticsTruncated", canvas.diagnosticsTruncated}, {"dirty", canvas.dirty},
                    {"canUndo", canvas.canUndo}, {"canRedo", canvas.canRedo}, {"nodes", std::move(nodes)},
                    {"links", std::move(links)}, {"selectedNodeIds", std::move(selection)},
-                   {"paletteNodeTypeIds", std::move(palette)}, {"diagnostics", std::move(diagnostics)}};
+                   {"paletteNodeTypeIds", std::move(palette)}, {"paletteDescriptors", std::move(paletteDescriptors)},
+                   {"diagnostics", std::move(diagnostics)}};
 }
 
 [[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeVisualScriptDebuggerSnapshotUVE& debugger) {
@@ -659,6 +675,9 @@ enum class FrameReadResultUVE : std::uint8_t {
     if (value == "deserializeGraph") {
         return EditorBridgeRequestKindUVE::DeserializeVisualScriptGraph;
     }
+    if (value == "addVisualScriptNodeType") {
+        return EditorBridgeRequestKindUVE::AddVisualScriptNodeType;
+    }
     return std::nullopt;
 }
 
@@ -747,6 +766,14 @@ enum class FrameReadResultUVE : std::uint8_t {
         if (!request.visualScriptNode.has_value()) {
             return std::nullopt;
         }
+    }
+    if (params.contains("visualScriptNodeTypeId") && !params.at("visualScriptNodeTypeId").is_null()) {
+        if (!params.at("visualScriptNodeTypeId").is_string() ||
+            params.at("visualScriptNodeTypeId").get_ref<const std::string&>().empty() ||
+            params.at("visualScriptNodeTypeId").get_ref<const std::string&>().size() > 256U) {
+            return std::nullopt;
+        }
+        request.visualScriptNodeTypeId = params.at("visualScriptNodeTypeId").get<std::string>();
     }
     if (params.contains("visualScriptPosition") && !params.at("visualScriptPosition").is_null()) {
         request.visualScriptPosition = ParseCanvasPointUVE(params.at("visualScriptPosition"));
