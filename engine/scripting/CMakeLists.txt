@@ -6,6 +6,7 @@ add_library(uve_scripting
     src/script_vm_uve.cpp
     src/script_runtime_uve.cpp
     src/script_graph_persistence_uve.cpp
+    src/script_graph_canvas_persistence_uve.cpp
     src/script_graph_editor_backend_uve.cpp
     src/script_graph_canvas_uve.cpp
     src/script_debugger_uve.cpp

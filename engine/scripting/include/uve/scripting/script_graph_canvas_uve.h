@@ -72,6 +72,20 @@ inline constexpr std::size_t kMaximumScriptGraphCanvasSelectionUVE = 128U;
 inline constexpr float kMinimumScriptGraphCanvasZoomUVE = 0.1F;
 inline constexpr float kMaximumScriptGraphCanvasZoomUVE = 8.0F;
 
+struct ScriptGraphCanvasLayoutEntryUVE final {
+    std::uint32_t nodeId = 0U;
+    ScriptGraphCanvasPointUVE position{};
+
+    [[nodiscard]] bool operator==(const ScriptGraphCanvasLayoutEntryUVE&) const noexcept = default;
+};
+
+struct ScriptGraphCanvasLayoutSnapshotUVE final {
+    ScriptGraphCanvasViewUVE view{};
+    std::vector<ScriptGraphCanvasLayoutEntryUVE> entries;
+
+    [[nodiscard]] bool operator==(const ScriptGraphCanvasLayoutSnapshotUVE&) const noexcept = default;
+};
+
 struct ScriptGraphCanvasSnapshotUVE final {
     std::uint64_t revision = 0U;
     std::uint64_t graphRevision = 0U;
@@ -120,17 +134,15 @@ public:
         std::uint64_t expectedRevision = 0U);
 
     [[nodiscard]] ScriptGraphCanvasSnapshotUVE GetSnapshotUVE() const;
+    [[nodiscard]] ScriptGraphCanvasLayoutSnapshotUVE GetLayoutSnapshotUVE() const;
+    [[nodiscard]] ScriptGraphCanvasCommandResultUVE ApplyLayoutUVE(
+        ScriptGraphCanvasLayoutSnapshotUVE layout, std::uint64_t expectedRevision = 0U);
     [[nodiscard]] bool HasNodeUVE(std::uint32_t nodeId) const noexcept;
     [[nodiscard]] std::size_t GetUndoCountUVE() const noexcept;
     [[nodiscard]] std::size_t GetRedoCountUVE() const noexcept;
 
 private:
-    struct LayoutEntryUVE final {
-        std::uint32_t nodeId = 0U;
-        ScriptGraphCanvasPointUVE position{};
-
-        [[nodiscard]] bool operator==(const LayoutEntryUVE&) const noexcept = default;
-    };
+    using LayoutEntryUVE = ScriptGraphCanvasLayoutEntryUVE;
 
     struct StateUVE final {
         ScriptGraphUVE graph;
