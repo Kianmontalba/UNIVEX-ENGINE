@@ -50,6 +50,23 @@ struct DeveloperConsoleCommandRegistrationResultUVE final {
     }
 };
 
+enum class DeveloperConsoleCVarRegistrationCodeUVE : std::uint8_t {
+    Accepted = 0,
+    InvalidName,
+    InvalidValue,
+    CapacityExceeded,
+    DuplicateName,
+};
+
+struct DeveloperConsoleCVarRegistrationResultUVE final {
+    DeveloperConsoleCVarRegistrationCodeUVE code = DeveloperConsoleCVarRegistrationCodeUVE::Accepted;
+    std::string message;
+
+    [[nodiscard]] bool IsAcceptedUVE() const noexcept {
+        return code == DeveloperConsoleCVarRegistrationCodeUVE::Accepted;
+    }
+};
+
 struct DeveloperConsoleCompletionUVE final {
     std::string identifier;
     std::string help;
@@ -105,6 +122,8 @@ public:
         std::string identifier, std::string help, DeveloperConsoleCommandHandlerUVE handler);
     [[nodiscard]] bool RegisterCommand(std::string identifier, std::string help,
                                        DeveloperConsoleCommandHandlerUVE handler);
+    [[nodiscard]] DeveloperConsoleCVarRegistrationResultUVE RegisterCVarUVE(
+        std::string name, std::string value, bool readOnly = false);
     [[nodiscard]] bool RegisterCVar(std::string name, std::string value, bool readOnly = false);
     [[nodiscard]] bool ExecuteUVE(std::string commandLine);
     [[nodiscard]] bool ClearUVE() noexcept;

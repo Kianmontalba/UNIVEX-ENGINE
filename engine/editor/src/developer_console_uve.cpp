@@ -99,15 +99,33 @@ bool DeveloperConsoleUVE::RegisterCommand(std::string identifier, std::string he
     return RegisterCommandUVE(std::move(identifier), std::move(help), std::move(handler)).IsAcceptedUVE();
 }
 
-bool DeveloperConsoleUVE::RegisterCVar(std::string name, std::string value, const bool readOnly) {
-    if (!IsBoundedIdentifierUVE(name) || !IsBoundedValueUVE(value) || m_cvars.size() >= kMaximumCVarsUVE ||
-        m_cvars.contains(name)) {
-        return false;
+DeveloperConsoleCVarRegistrationResultUVE DeveloperConsoleUVE::RegisterCVarUVE(std::string name, std::string value,
+                                                                                const bool readOnly) {
+    if (!IsBoundedIdentifierUVE(name)) {
+        return {DeveloperConsoleCVarRegistrationCodeUVE::InvalidName,
+                "CVAR name is empty or contains unsupported characters."};
     }
+    if (!IsBoundedValueUVE(value)) {
+        return {DeveloperConsoleCVarRegistrationCodeUVE::InvalidValue,
+                "CVAR value exceeds the bounded size or contains a line break."};
+    }
+    if (m_cvars.size() >= kMaximumCVarsUVE) {
+        return {DeveloperConsoleCVarRegistrationCodeUVE::CapacityExceeded,
+                "The bounded CVAR registry has reached its maximum capacity."};
+    }
+    if (m_cvars.contains(name)) {
+        return {DeveloperConsoleCVarRegistrationCodeUVE::DuplicateName,
+                "A CVAR with this name is already registered."};
+    }
+
     const std::string key = name;
     m_cvars.emplace(key, DeveloperConsoleCVarUVE{key, std::move(value), readOnly});
     IncrementGenerationUVE(m_generation);
-    return true;
+    return {DeveloperConsoleCVarRegistrationCodeUVE::Accepted, "CVAR registered."};
+}
+
+bool DeveloperConsoleUVE::RegisterCVar(std::string name, std::string value, const bool readOnly) {
+    return RegisterCVarUVE(std::move(name), std::move(value), readOnly).IsAcceptedUVE();
 }
 
 void DeveloperConsoleUVE::RegisterBuiltInsUVE() {
