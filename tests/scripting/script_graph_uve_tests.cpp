@@ -159,9 +159,11 @@ TEST(ScriptGraphUVETest, ValidateUVE_ReportsWrongDirectionsAndIncompatibleTypes)
     const auto diagnostics = graph.ValidateUVE(registry);
     ASSERT_EQ(diagnostics.size(), 2U);
     EXPECT_EQ(diagnostics[0].code, ScriptValidationCodeUVE::WrongPinDirection);
+    EXPECT_EQ(diagnostics[0].sourceContext, "Node #2 / pin In");
     ASSERT_TRUE(diagnostics[0].relatedEndpoint.has_value());
     EXPECT_EQ(*diagnostics[0].relatedEndpoint, (ScriptPinEndpointUVE{3U, "In"}));
     EXPECT_EQ(diagnostics[1].code, ScriptValidationCodeUVE::IncompatiblePinTypes);
+    EXPECT_EQ(diagnostics[1].sourceContext, "Node #2 / pin In");
     ASSERT_TRUE(diagnostics[1].relatedEndpoint.has_value());
     EXPECT_EQ(*diagnostics[1].relatedEndpoint, (ScriptPinEndpointUVE{1U, "Out"}));
 }
@@ -219,6 +221,21 @@ TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_SortsNodesAndLinksDeterm
     EXPECT_EQ(result.program->sourceNodeIds, (std::vector<std::uint32_t>{10U, 20U, 10U}));
 }
 
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_BoundsDiagnosticPresentationFields) {
+    ScriptNodeRegistryUVE registry;
+    RegisterTestNodesUVE(registry);
+    ScriptGraphUVE graph;
+    const std::string longTypeId(900U, 'x');
+    ASSERT_TRUE(graph.AddNodeUVE({1U, longTypeId}));
+
+    const ScriptIrCompileResultUVE result = CompileScriptGraphToIrUVE(graph, registry);
+    ASSERT_FALSE(result.IsSuccessUVE());
+    ASSERT_EQ(result.diagnostics.size(), 1U);
+    EXPECT_EQ(result.diagnostics[0].severity, ScriptDiagnosticSeverityUVE::Error);
+    EXPECT_LE(result.diagnostics[0].message.size(), kMaximumScriptDiagnosticMessageBytesUVE);
+    EXPECT_LE(result.diagnostics[0].sourceContext.size(), kMaximumScriptDiagnosticSourceContextBytesUVE);
+}
+
 TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsInvalidGraphWithoutPartialProgram) {
     ScriptNodeRegistryUVE registry;
     RegisterTestNodesUVE(registry);
@@ -230,6 +247,9 @@ TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsInvalidGraphWitho
     EXPECT_FALSE(result.program.has_value());
     ASSERT_EQ(result.diagnostics.size(), 1U);
     EXPECT_EQ(result.diagnostics[0].code, ScriptValidationCodeUVE::UnknownNodeType);
+    EXPECT_EQ(result.diagnostics[0].severity, ScriptDiagnosticSeverityUVE::Error);
+    EXPECT_EQ(result.diagnostics[0].sourceContext, "Node #1");
+    EXPECT_EQ(result.diagnostics[0].message, "Node type is not registered: missing.node");
 }
 
 } // namespace UVE::Scripting
