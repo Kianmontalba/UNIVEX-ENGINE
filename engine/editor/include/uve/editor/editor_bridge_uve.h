@@ -73,6 +73,7 @@ enum class EditorBridgeCapabilityUVE : std::uint8_t {
     SetDeveloperConsoleCompletionPrefix,
     MoveDeveloperConsoleHistory,
     SelectDataTablePreview,
+    ReadScriptRuntime,
 };
 
 /// The deliberately small v1 request vocabulary. No generic command string is accepted because
@@ -111,6 +112,7 @@ enum class EditorBridgeRequestKindUVE : std::uint8_t {
     SetDeveloperConsoleCompletionPrefix,
     MoveDeveloperConsoleHistory,
     SelectDataTablePreview,
+    ReadScriptRuntime,
 };
 
 /// Explicitly describes whether this bridge session has a native-owned viewport surface. No raw

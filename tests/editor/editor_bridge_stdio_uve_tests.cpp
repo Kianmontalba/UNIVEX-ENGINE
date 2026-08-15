@@ -106,11 +106,18 @@ TEST(EditorBridgeStdioUVETest, ServeUVE_HandshakesAndRoutesExistingBridgeDispatc
                                                   {"expectedRevision", 1U},
                                                   {"kind", "createDocumentEntity"},
                                                   {"entityKind", "cube"}}}});
+        AppendFrameUVE(input, JsonUVE{{"jsonrpc", "2.0"},
+                                      {"id", 3U},
+                                      {"method", "bridge.dispatch"},
+                                      {"params", {{"protocolVersion", kEditorBridgeProtocolVersionUVE},
+                                                  {"requestId", 43U},
+                                                  {"expectedRevision", 999U},
+                                                  {"kind", "readScriptRuntime"}}}});
 
         EXPECT_EQ(server.ServeUVE(input, output, diagnostics), 0);
         EXPECT_TRUE(diagnostics.str().empty());
         const std::vector<JsonUVE> frames = ReadFramesUVE(output);
-        ASSERT_EQ(frames.size(), 2U);
+        ASSERT_EQ(frames.size(), 3U);
         EXPECT_TRUE(frames[0U].at("result").at("compatible").get<bool>());
         EXPECT_EQ(frames[0U].at("result").at("protocolVersion").get<std::uint32_t>(),
                   kEditorBridgeProtocolVersionUVE);
@@ -165,6 +172,10 @@ TEST(EditorBridgeStdioUVETest, ServeUVE_HandshakesAndRoutesExistingBridgeDispatc
         EXPECT_EQ(handshakeSnapshot.at("dataTablePreview").at("rows").front().at("values").front().get<std::string>(), "25");
         EXPECT_TRUE(frames[1U].at("result").at("applied").get<bool>());
         EXPECT_EQ(frames[1U].at("result").at("code").get<std::string>(), "bridge.command.applied");
+        EXPECT_TRUE(frames[2U].at("result").at("applied").get<bool>());
+        EXPECT_EQ(frames[2U].at("result").at("code").get<std::string>(), "bridge.script_runtime.snapshot.read");
+        EXPECT_EQ(frames[2U].at("result").at("snapshot").at("scriptRuntime").at("instanceCount").get<std::size_t>(), 1U);
+        EXPECT_EQ(frames[2U].at("result").at("snapshot").at("scriptRuntime").at("entries").size(), 1U);
         EXPECT_TRUE(frames[1U].at("result").at("createdEntity").is_object());
         EXPECT_TRUE(editor.IsSceneDirtyUVE());
 
