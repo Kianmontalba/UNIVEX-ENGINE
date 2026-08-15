@@ -331,6 +331,49 @@ TEST(ScriptRuntimeUVETest, TickUVE_IsDeterministicAndSkipsDisabledInstances) {
     EXPECT_EQ(results[0].execution.instructionsExecuted, 2U);
 }
 
+TEST(ScriptRuntimeUVETest, GetSnapshotUVE_ReturnsDeterministicCopiedInstanceMetadata) {
+    ScriptRuntimeUVE runtime;
+    ScriptBytecodeProgramUVE firstProgram;
+    firstProgram.instructions.resize(2U);
+    ScriptBytecodeProgramUVE secondProgram;
+    secondProgram.instructions.resize(1U);
+    const Scene::EntityUVE firstEntity{9U, 1U};
+    const Scene::EntityUVE secondEntity{2U, 4U};
+    ASSERT_TRUE(runtime.AttachUVE(firstEntity, firstProgram));
+    ASSERT_TRUE(runtime.AttachUVE(secondEntity, secondProgram));
+
+    ScriptRuntimeStateUVE firstState;
+    firstState.values = {3, 5};
+    ASSERT_TRUE(runtime.SetStateUVE(firstEntity, firstState));
+    ASSERT_TRUE(runtime.SetEnabledUVE(firstEntity, false));
+
+    const auto initialSnapshot = runtime.GetSnapshotUVE();
+    ASSERT_EQ(initialSnapshot.size(), 2U);
+    EXPECT_EQ(initialSnapshot[0].entity, secondEntity);
+    EXPECT_EQ(initialSnapshot[0].generation, 1U);
+    EXPECT_EQ(initialSnapshot[0].programVersion, ScriptBytecodeProgramUVE::kCurrentVersionUVE);
+    EXPECT_EQ(initialSnapshot[0].instructionCount, 1U);
+    EXPECT_EQ(initialSnapshot[0].stateValueCount, 0U);
+    EXPECT_TRUE(initialSnapshot[0].enabled);
+    EXPECT_EQ(initialSnapshot[1].entity, firstEntity);
+    EXPECT_EQ(initialSnapshot[1].instructionCount, 2U);
+    EXPECT_EQ(initialSnapshot[1].stateValueCount, 2U);
+    EXPECT_FALSE(initialSnapshot[1].enabled);
+
+    const ScriptRuntimeReloadResultUVE reload = runtime.ReloadUVE(firstEntity, firstProgram);
+    ASSERT_TRUE(reload.IsAcceptedUVE());
+    const auto reloadedSnapshot = runtime.GetSnapshotUVE();
+    ASSERT_EQ(reloadedSnapshot.size(), 2U);
+    EXPECT_EQ(reloadedSnapshot[1].generation, 2U);
+    EXPECT_EQ(reloadedSnapshot[1].stateValueCount, 2U);
+    EXPECT_FALSE(reloadedSnapshot[1].enabled);
+
+    ASSERT_TRUE(runtime.DetachUVE(secondEntity));
+    const auto detachedSnapshot = runtime.GetSnapshotUVE();
+    ASSERT_EQ(detachedSnapshot.size(), 1U);
+    EXPECT_EQ(detachedSnapshot.front().entity, firstEntity);
+}
+
 TEST(ScriptRuntimeUVETest, SetEnabledDetailedUVEReturnsStructuredDiagnosticsAndControlsTicking) {
     ScriptRuntimeUVE runtime;
     ScriptBytecodeProgramUVE program;
