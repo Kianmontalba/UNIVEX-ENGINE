@@ -44,6 +44,7 @@ add_library(uve_editor STATIC
     src/editor_tool_session_uve.cpp
     src/editor_uve.cpp
     src/inspector_drawer_registry_uve.cpp
+    src/regression_harness_uve.cpp
 )
 target_include_directories(uve_editor PUBLIC include)
 target_compile_features(uve_editor PUBLIC cxx_std_20)

@@ -104,6 +104,7 @@ add_executable(uve_tests
     editor/editor_tool_session_uve_tests.cpp
     editor/editor_bridge_stdio_uve_tests.cpp
     editor/editor_bridge_uve_tests.cpp
+    editor/regression_harness_uve_tests.cpp
     editor/developer_console_uve_tests.cpp
     editor/developer_console_bridge_uve_tests.cpp
     editor/data_table_registry_bridge_uve_tests.cpp
