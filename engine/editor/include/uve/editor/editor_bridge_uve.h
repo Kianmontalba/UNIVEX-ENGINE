@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "uve/editor/editor_uve.h"
+#include "uve/scripting/script_graph_canvas_uve.h"
 
 namespace UVE::Editor {
 
@@ -48,6 +49,16 @@ enum class EditorBridgeCapabilityUVE : std::uint8_t {
     RefreshContentBrowser,
     SelectContentBrowserEntry,
     ReadViewportSurface,
+    ReadVisualScriptCanvas,
+    AddVisualScriptNode,
+    RemoveVisualScriptNode,
+    MoveVisualScriptNode,
+    AddVisualScriptLink,
+    RemoveVisualScriptLink,
+    SetVisualScriptSelection,
+    SetVisualScriptView,
+    UndoVisualScript,
+    RedoVisualScript,
 };
 
 /// The deliberately small v1 request vocabulary. No generic command string is accepted because
@@ -68,6 +79,16 @@ enum class EditorBridgeRequestKindUVE : std::uint8_t {
     RefreshContentBrowser,
     SelectContentBrowserEntry,
     ReadViewportSurface,
+    ReadVisualScriptCanvas,
+    AddVisualScriptNode,
+    RemoveVisualScriptNode,
+    MoveVisualScriptNode,
+    AddVisualScriptLink,
+    RemoveVisualScriptLink,
+    SetVisualScriptSelection,
+    SetVisualScriptView,
+    UndoVisualScript,
+    RedoVisualScript,
 };
 
 /// Explicitly describes whether this bridge session has a native-owned viewport surface. No raw
@@ -194,6 +215,7 @@ struct EditorBridgeVisualScriptingSnapshotUVE final {
     std::size_t linkCount = 0U;
     bool canEdit = false;
     std::string reason;
+    Scripting::ScriptGraphCanvasSnapshotUVE canvas;
 
     [[nodiscard]] bool operator==(const EditorBridgeVisualScriptingSnapshotUVE&) const = default;
 };
@@ -235,6 +257,12 @@ struct EditorBridgeRequestUVE final {
     std::optional<std::string> contentFilter;
     std::optional<std::string> contentFocus;
     std::optional<std::string> contentEntryPath;
+    std::optional<std::uint32_t> visualScriptNodeId;
+    std::optional<Scripting::ScriptNodeUVE> visualScriptNode;
+    std::optional<Scripting::ScriptGraphCanvasPointUVE> visualScriptPosition;
+    std::optional<Scripting::ScriptLinkUVE> visualScriptLink;
+    std::optional<std::vector<std::uint32_t>> visualScriptSelection;
+    std::optional<Scripting::ScriptGraphCanvasViewUVE> visualScriptView;
 
     EditorBridgeRequestUVE() = default;
 
@@ -307,6 +335,7 @@ private:
     [[nodiscard]] bool IsSupportedEntityKindUVE(EditorEntityKindUVE kind) const noexcept;
     [[nodiscard]] static std::string BoundPresentationTextUVE(std::string value);
     [[nodiscard]] static std::string BoundContentPathUVE(std::string value);
+    [[nodiscard]] EditorBridgeVisualScriptingSnapshotUVE CaptureVisualScriptingUVE() const;
     [[nodiscard]] EditorBridgeHierarchySnapshotUVE CaptureHierarchyUVE();
     [[nodiscard]] EditorBridgeInspectorSnapshotUVE CaptureInspectorUVE() const;
     [[nodiscard]] EditorBridgeContentBrowserSnapshotUVE CaptureContentBrowserUVE();
@@ -316,6 +345,8 @@ private:
         const std::string& focus) noexcept;
 
     EditorUVE* m_editor = nullptr;
+    Scripting::ScriptNodeRegistryUVE m_visualScriptRegistry;
+    Scripting::ScriptGraphCanvasUVE m_visualScriptCanvas;
     std::optional<ObservedStateUVE> m_lastObservedState;
     std::uint64_t m_revision = 0U;
 };

@@ -102,9 +102,43 @@ public sealed record BridgeViewportSurfaceSnapshot(
 /// Entire immutable state copied from a single C++ bridge response. Presentation code must replace
 /// this value atomically after a response; it must never retain raw JsonElement or native objects.
 /// </summary>
+public sealed record BridgeVisualScriptPoint(float X, float Y);
+
+public sealed record BridgeVisualScriptView(BridgeVisualScriptPoint Pan, float Zoom);
+
+public sealed record BridgeVisualScriptPin(string Name, byte Direction, byte Type);
+
+public sealed record BridgeVisualScriptNode(
+    uint Id,
+    string TypeId,
+    string DisplayName,
+    BridgeVisualScriptPoint Position,
+    bool IsSelected,
+    IReadOnlyList<BridgeVisualScriptPin> Pins);
+
+public sealed record BridgeVisualScriptEndpoint(uint NodeId, string PinName);
+
+public sealed record BridgeVisualScriptLink(BridgeVisualScriptEndpoint Output, BridgeVisualScriptEndpoint Input);
+
+public sealed record BridgeVisualScriptDiagnostic(byte Code, uint NodeId, string PinName, string Message);
+
+public sealed record BridgeVisualScriptCanvasSnapshot(
+    ulong Revision,
+    ulong GraphRevision,
+    BridgeVisualScriptView View,
+    bool NodesTruncated,
+    bool LinksTruncated,
+    bool PaletteTruncated,
+    bool DiagnosticsTruncated,
+    IReadOnlyList<BridgeVisualScriptNode> Nodes,
+    IReadOnlyList<BridgeVisualScriptLink> Links,
+    IReadOnlyList<uint> SelectedNodeIds,
+    IReadOnlyList<string> PaletteNodeTypeIds,
+    IReadOnlyList<BridgeVisualScriptDiagnostic> Diagnostics);
+
 /// <summary>
-/// C++-authoritative visual-scripting presentation facts. The managed host receives counts and status
-/// only; graph ownership, command execution, and runtime state remain native.
+/// C++-authoritative visual-scripting presentation facts. The managed host receives copied DTOs only;
+/// graph ownership, command execution, and runtime state remain native.
 /// </summary>
 public sealed record BridgeVisualScriptingSnapshot(
     bool IsAvailable,
@@ -112,7 +146,8 @@ public sealed record BridgeVisualScriptingSnapshot(
     int NodeCount,
     int LinkCount,
     bool CanEdit,
-    string Reason);
+    string Reason,
+    BridgeVisualScriptCanvasSnapshot Canvas);
 
 public sealed record BridgeEditorSnapshot(
     uint ProtocolVersion,
@@ -142,7 +177,13 @@ public sealed record BridgeCommand(
     string? ContentDirectory = null,
     string? ContentFilter = null,
     string? ContentFocus = null,
-    string? ContentEntryPath = null);
+    string? ContentEntryPath = null,
+    uint? VisualScriptNodeId = null,
+    BridgeVisualScriptNode? VisualScriptNode = null,
+    BridgeVisualScriptPoint? VisualScriptPosition = null,
+    BridgeVisualScriptLink? VisualScriptLink = null,
+    IReadOnlyList<uint>? VisualScriptSelection = null,
+    BridgeVisualScriptView? VisualScriptView = null);
 
 public sealed record BridgeCommandResult(
     bool Applied,
@@ -211,13 +252,110 @@ public static class BridgeSnapshotParser
         {
             throw Invalid("Visual-scripting graph counts must be non-negative.");
         }
+        ulong graphRevision = RequiredUInt64(value, "graphRevision");
+        BridgeVisualScriptCanvasSnapshot canvas = value.TryGetProperty("canvas", out JsonElement canvasValue) &&
+                                                     canvasValue.ValueKind != JsonValueKind.Null
+            ? ParseVisualScriptCanvas(canvasValue)
+            : EmptyVisualScriptCanvas(graphRevision);
         return new BridgeVisualScriptingSnapshot(
             RequiredBoolean(value, "available"),
-            RequiredUInt64(value, "graphRevision"),
+            graphRevision,
             nodeCount,
             linkCount,
             RequiredBoolean(value, "canEdit"),
-            RequiredBoundedString(value, "reason"));
+            RequiredBoundedString(value, "reason"),
+            canvas);
+    }
+
+    private static BridgeVisualScriptCanvasSnapshot EmptyVisualScriptCanvas(ulong graphRevision) =>
+        new(0UL, graphRevision, new BridgeVisualScriptView(new BridgeVisualScriptPoint(0F, 0F), 1F),
+            false, false, false, false,
+            Array.Empty<BridgeVisualScriptNode>(), Array.Empty<BridgeVisualScriptLink>(),
+            Array.Empty<uint>(), Array.Empty<string>(), Array.Empty<BridgeVisualScriptDiagnostic>());
+
+    private static BridgeVisualScriptCanvasSnapshot ParseVisualScriptCanvas(JsonElement value)
+    {
+        RequireObject(value, "visualScripting.canvas");
+        JsonElement nodes = RequiredArray(value, "nodes");
+        JsonElement links = RequiredArray(value, "links");
+        JsonElement selectedNodeIds = RequiredArray(value, "selectedNodeIds");
+        JsonElement palette = RequiredArray(value, "paletteNodeTypeIds");
+        JsonElement diagnostics = RequiredArray(value, "diagnostics");
+        EnsureBoundedArray(nodes, "visualScripting.canvas.nodes");
+        EnsureBoundedArray(links, "visualScripting.canvas.links");
+        EnsureBoundedArray(selectedNodeIds, "visualScripting.canvas.selectedNodeIds");
+        EnsureBoundedArray(palette, "visualScripting.canvas.paletteNodeTypeIds");
+        EnsureBoundedArray(diagnostics, "visualScripting.canvas.diagnostics");
+
+        JsonElement pan = RequiredObjectMember(value, "pan");
+        float panX = pan.GetProperty("x").GetSingle();
+        float panY = pan.GetProperty("y").GetSingle();
+        float zoom = value.GetProperty("zoom").GetSingle();
+        if (!float.IsFinite(panX) || !float.IsFinite(panY) || !float.IsFinite(zoom) || zoom < 0.1F || zoom > 8F)
+        {
+            throw Invalid("The visual-scripting canvas view is not finite or is outside the supported zoom range.");
+        }
+
+        List<BridgeVisualScriptNode> parsedNodes = new(nodes.GetArrayLength());
+        foreach (JsonElement node in nodes.EnumerateArray())
+        {
+            RequireObject(node, "visual-scripting canvas node");
+            JsonElement pins = RequiredArray(node, "pins");
+            EnsureBoundedArray(pins, "visual-scripting canvas node pins");
+            List<BridgeVisualScriptPin> parsedPins = new(pins.GetArrayLength());
+            foreach (JsonElement pin in pins.EnumerateArray())
+            {
+                RequireObject(pin, "visual-scripting canvas pin");
+                parsedPins.Add(new BridgeVisualScriptPin(
+                    RequiredBoundedString(pin, "name"), RequiredByte(pin, "direction"), RequiredByte(pin, "type")));
+            }
+            parsedNodes.Add(new BridgeVisualScriptNode(
+                node.GetProperty("id").GetUInt32(),
+                RequiredBoundedString(node, "typeId"),
+                RequiredBoundedString(node, "displayName"),
+                new BridgeVisualScriptPoint(node.GetProperty("x").GetSingle(), node.GetProperty("y").GetSingle()),
+                RequiredBoolean(node, "selected"),
+                parsedPins));
+        }
+
+        List<BridgeVisualScriptLink> parsedLinks = new(links.GetArrayLength());
+        foreach (JsonElement link in links.EnumerateArray())
+        {
+            RequireObject(link, "visual-scripting canvas link");
+            JsonElement output = RequiredObjectMember(link, "output");
+            JsonElement input = RequiredObjectMember(link, "input");
+            parsedLinks.Add(new BridgeVisualScriptLink(
+                new BridgeVisualScriptEndpoint(output.GetProperty("nodeId").GetUInt32(),
+                                               RequiredBoundedString(output, "pinName")),
+                new BridgeVisualScriptEndpoint(input.GetProperty("nodeId").GetUInt32(),
+                                               RequiredBoundedString(input, "pinName"))));
+        }
+
+        List<uint> parsedSelection = new(selectedNodeIds.GetArrayLength());
+        foreach (JsonElement nodeId in selectedNodeIds.EnumerateArray())
+        {
+            parsedSelection.Add(nodeId.GetUInt32());
+        }
+        List<string> parsedPalette = new(palette.GetArrayLength());
+        foreach (JsonElement typeId in palette.EnumerateArray())
+        {
+            parsedPalette.Add(BoundedStringValue(typeId, "visual-scripting palette type ID"));
+        }
+        List<BridgeVisualScriptDiagnostic> parsedDiagnostics = new(diagnostics.GetArrayLength());
+        foreach (JsonElement diagnostic in diagnostics.EnumerateArray())
+        {
+            RequireObject(diagnostic, "visual-scripting diagnostic");
+            parsedDiagnostics.Add(new BridgeVisualScriptDiagnostic(
+                RequiredByte(diagnostic, "code"), diagnostic.GetProperty("nodeId").GetUInt32(),
+                RequiredBoundedString(diagnostic, "pinName"), RequiredBoundedString(diagnostic, "message")));
+        }
+
+        return new BridgeVisualScriptCanvasSnapshot(
+            RequiredUInt64(value, "revision"), RequiredUInt64(value, "graphRevision"),
+            new BridgeVisualScriptView(new BridgeVisualScriptPoint(panX, panY), zoom),
+            RequiredBoolean(value, "nodesTruncated"), RequiredBoolean(value, "linksTruncated"),
+            RequiredBoolean(value, "paletteTruncated"), RequiredBoolean(value, "diagnosticsTruncated"),
+            parsedNodes, parsedLinks, parsedSelection, parsedPalette, parsedDiagnostics);
     }
 
     private static BridgeHierarchySnapshot ParseHierarchy(JsonElement value)

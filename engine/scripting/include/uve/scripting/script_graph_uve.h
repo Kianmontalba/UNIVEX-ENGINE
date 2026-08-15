@@ -62,11 +62,15 @@ struct ScriptNodeUVE final {
 struct ScriptPinEndpointUVE final {
     std::uint32_t nodeId = 0U;
     std::string pinName;
+
+    [[nodiscard]] bool operator==(const ScriptPinEndpointUVE&) const = default;
 };
 
 struct ScriptLinkUVE final {
     ScriptPinEndpointUVE output;
     ScriptPinEndpointUVE input;
+
+    [[nodiscard]] bool operator==(const ScriptLinkUVE&) const = default;
 };
 
 struct ScriptValidationDiagnosticUVE final {
@@ -74,6 +78,8 @@ struct ScriptValidationDiagnosticUVE final {
     std::uint32_t nodeId = 0U;
     std::string pinName;
     std::string message;
+
+    [[nodiscard]] bool operator==(const ScriptValidationDiagnosticUVE&) const = default;
 };
 
 class ScriptNodeRegistryUVE final {
@@ -84,6 +90,7 @@ public:
 
     [[nodiscard]] bool RegisterNodeTypeUVE(ScriptNodeTypeDescriptorUVE descriptor);
     [[nodiscard]] const ScriptNodeTypeDescriptorUVE* FindNodeTypeUVE(std::string_view typeId) const noexcept;
+    [[nodiscard]] std::vector<std::string> GetNodeTypeIdsUVE() const;
     [[nodiscard]] std::size_t GetNodeTypeCountUVE() const noexcept;
 
 private:

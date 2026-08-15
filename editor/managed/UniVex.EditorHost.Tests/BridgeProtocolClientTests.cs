@@ -244,6 +244,26 @@ public sealed class BridgeProtocolClientTests
     }
 
     [Fact]
+    public void SnapshotParser_AcceptsBoundedVisualScriptCanvasDto()
+    {
+        using JsonDocument document = JsonDocument.Parse(JsonSerializer.Serialize(Snapshot(sceneDirty: false, includeCanvas: true)));
+
+        BridgeEditorSnapshot snapshot = BridgeSnapshotParser.Parse(document.RootElement);
+
+        Assert.Equal(1UL, snapshot.VisualScripting.Canvas.Revision);
+        Assert.Equal(1UL, snapshot.VisualScripting.Canvas.GraphRevision);
+        Assert.Equal(1, snapshot.VisualScripting.Canvas.Nodes.Count);
+        Assert.Equal(1U, snapshot.VisualScripting.Canvas.Nodes[0].Id);
+        Assert.Equal("test.source", snapshot.VisualScripting.Canvas.Nodes[0].TypeId);
+        Assert.Equal(1, snapshot.VisualScripting.Canvas.Nodes[0].Pins.Count);
+        Assert.Equal("Out", snapshot.VisualScripting.Canvas.Nodes[0].Pins[0].Name);
+        Assert.Equal(1, snapshot.VisualScripting.Canvas.Links.Count);
+        Assert.Equal(new uint[] { 1U }, snapshot.VisualScripting.Canvas.SelectedNodeIds);
+        Assert.Equal(1.5F, snapshot.VisualScripting.Canvas.View.Zoom);
+        Assert.Single(snapshot.VisualScripting.Canvas.Diagnostics);
+    }
+
+    [Fact]
     public void SnapshotParser_RejectsManagedViewportAttachPermission()
     {
         using JsonDocument document = JsonDocument.Parse(JsonSerializer.Serialize(SnapshotWithSurface(managedAttachAllowed: true)));
@@ -294,7 +314,7 @@ public sealed class BridgeProtocolClientTests
         return body;
     }
 
-    private static object SnapshotWithSurface(bool managedAttachAllowed) => new
+    private static object SnapshotWithSurface(bool managedAttachAllowed, bool includeCanvas = false) => new
     {
         protocolVersion = BridgeProtocolClient.ProtocolVersion,
         revision = 1UL,
@@ -311,11 +331,54 @@ public sealed class BridgeProtocolClientTests
         inspector = new { mode = 0, selectedEntitiesTruncated = false, selectedEntities = Array.Empty<object>(), activeEntity = (object?)null, parent = (object?)null, ancestry = Array.Empty<object>(), eligibleDrawerIds = Array.Empty<string>(), canEditSelectedName = false },
         contentBrowser = new { contentRoot = "assets", currentDirectory = string.Empty, filter = string.Empty, typeFocus = "All", breadcrumbs = Array.Empty<string>(), refreshGeneration = 0UL, visibleEntryCount = 0, directEntryCount = 0, contentRootExists = true, initialized = false, lastRefreshSucceeded = true, truncated = false, entries = Array.Empty<object>(), selectedEntry = (object?)null },
         viewportSurface = new { state = 0, generation = 0UL, width = 0U, height = 0U, nativeRendererOwnsSurface = true, managedAttachAllowed, reason = "No managed viewport surface transport is available in this headless bridge session." },
-        visualScripting = new { available = false, graphRevision = 0UL, nodeCount = 0, linkCount = 0, canEdit = false, reason = "Native visual-scripting presentation is unavailable in this headless bridge session." },
+        visualScripting = new
+        {
+            available = false,
+            graphRevision = 0UL,
+            nodeCount = 0,
+            linkCount = 0,
+            canEdit = false,
+            reason = "Native visual-scripting presentation is unavailable in this headless bridge session.",
+            canvas = includeCanvas ? new
+            {
+                revision = 1UL,
+                graphRevision = 1UL,
+                pan = new { x = 2F, y = -3F },
+                zoom = 1.5F,
+                nodesTruncated = false,
+                linksTruncated = false,
+                paletteTruncated = false,
+                diagnosticsTruncated = false,
+                nodes = new[] { new
+                {
+                    id = 1U,
+                    typeId = "test.source",
+                    displayName = "Test Source",
+                    x = 10F,
+                    y = 20F,
+                    selected = true,
+                    pins = new[] { new { name = "Out", direction = 1, type = 2 } },
+                } },
+                links = new[] { new
+                {
+                    output = new { nodeId = 1U, pinName = "Out" },
+                    input = new { nodeId = 2U, pinName = "In" },
+                } },
+                selectedNodeIds = new[] { 1U },
+                paletteNodeTypeIds = new[] { "test.source" },
+                diagnostics = new[] { new
+                {
+                    code = 0,
+                    nodeId = 1U,
+                    pinName = "",
+                    message = "diagnostic",
+                } },
+            } : null,
+        },
         capabilities = Array.Empty<int>(),
     };
 
-    private static object Snapshot(bool sceneDirty) => new
+    private static object Snapshot(bool sceneDirty, bool includeCanvas = false) => new
     {
         protocolVersion = BridgeProtocolClient.ProtocolVersion,
         revision = 1UL,
@@ -373,7 +436,50 @@ public sealed class BridgeProtocolClientTests
             managedAttachAllowed = false,
             reason = "No managed viewport surface transport is available in this headless bridge session.",
         },
-        visualScripting = new { available = false, graphRevision = 0UL, nodeCount = 0, linkCount = 0, canEdit = false, reason = "Native visual-scripting presentation is unavailable in this headless bridge session." },
+        visualScripting = new
+        {
+            available = false,
+            graphRevision = 0UL,
+            nodeCount = 0,
+            linkCount = 0,
+            canEdit = false,
+            reason = "Native visual-scripting presentation is unavailable in this headless bridge session.",
+            canvas = includeCanvas ? new
+            {
+                revision = 1UL,
+                graphRevision = 1UL,
+                pan = new { x = 2F, y = -3F },
+                zoom = 1.5F,
+                nodesTruncated = false,
+                linksTruncated = false,
+                paletteTruncated = false,
+                diagnosticsTruncated = false,
+                nodes = new[] { new
+                {
+                    id = 1U,
+                    typeId = "test.source",
+                    displayName = "Test Source",
+                    x = 10F,
+                    y = 20F,
+                    selected = true,
+                    pins = new[] { new { name = "Out", direction = 1, type = 2 } },
+                } },
+                links = new[] { new
+                {
+                    output = new { nodeId = 1U, pinName = "Out" },
+                    input = new { nodeId = 2U, pinName = "In" },
+                } },
+                selectedNodeIds = new[] { 1U },
+                paletteNodeTypeIds = new[] { "test.source" },
+                diagnostics = new[] { new
+                {
+                    code = 0,
+                    nodeId = 1U,
+                    pinName = "",
+                    message = "diagnostic",
+                } },
+            } : null,
+        },
         capabilities = Array.Empty<int>(),
     };
 }

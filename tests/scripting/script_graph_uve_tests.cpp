@@ -5,11 +5,14 @@
 #include "uve/scripting/script_compiler_ir_uve.h"
 #include "uve/scripting/script_debugger_uve.h"
 #include "uve/scripting/script_graph_editor_backend_uve.h"
+#include "uve/scripting/script_graph_canvas_uve.h"
 #include "uve/scripting/script_graph_persistence_uve.h"
 #include "uve/scripting/script_graph_uve.h"
 #include "uve/scripting/script_hot_reload_uve.h"
 
 #include <gtest/gtest.h>
+
+#include <limits>
 
 namespace UVE::Scripting {
 namespace {
@@ -372,6 +375,72 @@ TEST(ScriptGraphEditorBackendUVETest, UndoRedoRestoresSnapshotsAndNewEditClearsR
     ASSERT_TRUE(backend.AddNodeUVE({3U, "test.source"}).IsAppliedUVE());
     EXPECT_EQ(backend.GetRedoCountUVE(), 0U);
     EXPECT_EQ(backend.RedoUVE().code, ScriptGraphCommandCodeUVE::NoHistory);
+}
+
+TEST(ScriptGraphCanvasUVETest, RemoveNodeUndoRestoresExactGraphLayoutSelectionAndLinkOrder) {
+    ScriptNodeRegistryUVE registry;
+    RegisterTestNodesUVE(registry);
+    ScriptGraphCanvasUVE canvas(registry);
+    ASSERT_TRUE(canvas.AddNodeUVE({1U, "test.source"}, {10.0F, 20.0F}).IsAppliedUVE());
+    ASSERT_TRUE(canvas.AddNodeUVE({2U, "test.sink"}, {30.0F, 40.0F}).IsAppliedUVE());
+    ASSERT_TRUE(canvas.AddNodeUVE({3U, "test.sink"}, {50.0F, 60.0F}).IsAppliedUVE());
+    ASSERT_TRUE(canvas.AddLinkUVE({{1U, "Out"}, {2U, "In"}}).IsAppliedUVE());
+    ASSERT_TRUE(canvas.AddLinkUVE({{1U, "Exec"}, {3U, "Exec"}}).IsAppliedUVE());
+    ASSERT_TRUE(canvas.SetSelectionUVE({1U, 2U, 3U}).IsAppliedUVE());
+    const ScriptGraphCanvasSnapshotUVE before = canvas.GetSnapshotUVE();
+
+    ASSERT_TRUE(canvas.RemoveNodeUVE(2U).IsAppliedUVE());
+    EXPECT_EQ(canvas.GetSnapshotUVE().selectedNodeIds, (std::vector<std::uint32_t>{1U, 3U}));
+    ASSERT_TRUE(canvas.UndoUVE().IsAppliedUVE());
+    const ScriptGraphCanvasSnapshotUVE restored = canvas.GetSnapshotUVE();
+    EXPECT_EQ(restored.nodes, before.nodes);
+    EXPECT_EQ(restored.links, before.links);
+    EXPECT_EQ(restored.selectedNodeIds, before.selectedNodeIds);
+    ASSERT_TRUE(canvas.RedoUVE().IsAppliedUVE());
+    EXPECT_EQ(canvas.GetSnapshotUVE().nodes.size(), 2U);
+    EXPECT_EQ(canvas.GetSnapshotUVE().links.size(), 1U);
+}
+
+TEST(ScriptGraphCanvasUVETest, ViewChangesAreNotUndoableAndRejectInvalidValues) {
+    ScriptNodeRegistryUVE registry;
+    RegisterTestNodesUVE(registry);
+    ScriptGraphCanvasUVE canvas(registry);
+    const std::uint64_t initialRevision = canvas.GetSnapshotUVE().revision;
+    ASSERT_TRUE(canvas.SetViewUVE({{12.0F, -4.0F}, 2.0F}).IsAppliedUVE());
+    EXPECT_EQ(canvas.GetUndoCountUVE(), 0U);
+    EXPECT_EQ(canvas.GetSnapshotUVE().view.pan, (ScriptGraphCanvasPointUVE{12.0F, -4.0F}));
+    EXPECT_EQ(canvas.GetSnapshotUVE().view.zoom, 2.0F);
+    EXPECT_GT(canvas.GetSnapshotUVE().revision, initialRevision);
+    EXPECT_FALSE(canvas.SetViewUVE({{0.0F, 0.0F}, 0.0F}).IsAppliedUVE());
+    EXPECT_FALSE(canvas.SetViewUVE({{std::numeric_limits<float>::quiet_NaN(), 0.0F}, 1.0F}).IsAppliedUVE());
+}
+
+TEST(ScriptGraphCanvasUVETest, CommandsRejectStaleRevisionAndInvalidSelectionWithoutMutation) {
+    ScriptNodeRegistryUVE registry;
+    RegisterTestNodesUVE(registry);
+    ScriptGraphCanvasUVE canvas(registry);
+    ASSERT_TRUE(canvas.AddNodeUVE({1U, "test.source"}, {0.0F, 0.0F}).IsAppliedUVE());
+    const std::uint64_t revision = canvas.GetSnapshotUVE().revision;
+    ASSERT_TRUE(canvas.MoveNodeUVE(1U, {5.0F, 5.0F}, revision).IsAppliedUVE());
+    const ScriptGraphCanvasSnapshotUVE beforeReject = canvas.GetSnapshotUVE();
+    EXPECT_EQ(canvas.MoveNodeUVE(1U, {8.0F, 8.0F}, revision).code,
+              ScriptGraphCanvasCommandCodeUVE::StaleRevision);
+    EXPECT_EQ(canvas.SetSelectionUVE({1U, 1U}).code, ScriptGraphCanvasCommandCodeUVE::Rejected);
+    EXPECT_EQ(canvas.GetSnapshotUVE(), beforeReject);
+}
+
+TEST(ScriptGraphCanvasUVETest, SnapshotProvidesSortedPaletteAndTypedNodePins) {
+    ScriptNodeRegistryUVE registry;
+    RegisterTestNodesUVE(registry);
+    ScriptGraphCanvasUVE canvas(registry);
+    ASSERT_TRUE(canvas.AddNodeUVE({1U, "test.sink"}, {0.0F, 0.0F}).IsAppliedUVE());
+    const ScriptGraphCanvasSnapshotUVE snapshot = canvas.GetSnapshotUVE();
+    EXPECT_EQ(snapshot.paletteNodeTypeIds, (std::vector<std::string>{"test.sink", "test.source"}));
+    ASSERT_EQ(snapshot.nodes.size(), 1U);
+    EXPECT_EQ(snapshot.nodes[0].displayName, "Test Sink");
+    ASSERT_EQ(snapshot.nodes[0].pins.size(), 2U);
+    EXPECT_EQ(snapshot.nodes[0].pins[0].name, "In");
+    EXPECT_EQ(snapshot.nodes[0].pins[0].direction, ScriptPinDirectionUVE::Input);
 }
 
 } // namespace UVE::Scripting

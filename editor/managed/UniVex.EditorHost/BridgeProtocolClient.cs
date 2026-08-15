@@ -76,6 +76,40 @@ public sealed class BridgeProtocolClient : IAsyncDisposable
             contentFilter = command.ContentFilter,
             contentFocus = command.ContentFocus,
             contentEntryPath = command.ContentEntryPath,
+            visualScriptNodeId = command.VisualScriptNodeId,
+            visualScriptNode = command.VisualScriptNode is null ? null : new
+            {
+                id = command.VisualScriptNode.Id,
+                typeId = command.VisualScriptNode.TypeId,
+            },
+            visualScriptPosition = command.VisualScriptPosition is null ? null : new
+            {
+                x = command.VisualScriptPosition.X,
+                y = command.VisualScriptPosition.Y,
+            },
+            visualScriptLink = command.VisualScriptLink is null ? null : new
+            {
+                output = new
+                {
+                    nodeId = command.VisualScriptLink.Output.NodeId,
+                    pinName = command.VisualScriptLink.Output.PinName,
+                },
+                input = new
+                {
+                    nodeId = command.VisualScriptLink.Input.NodeId,
+                    pinName = command.VisualScriptLink.Input.PinName,
+                },
+            },
+            visualScriptSelection = command.VisualScriptSelection,
+            visualScriptView = command.VisualScriptView is null ? null : new
+            {
+                pan = new
+                {
+                    x = command.VisualScriptView.Pan.X,
+                    y = command.VisualScriptView.Pan.Y,
+                },
+                zoom = command.VisualScriptView.Zoom,
+            },
         }, cancellationToken).ConfigureAwait(false);
         JsonElement result = GetResultOrThrow(response.RootElement);
         BridgeEntityRef? createdEntity = result.GetProperty("createdEntity").ValueKind == JsonValueKind.Null
