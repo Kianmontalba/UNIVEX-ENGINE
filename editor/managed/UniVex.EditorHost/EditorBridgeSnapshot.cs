@@ -189,6 +189,21 @@ public sealed record BridgeDeveloperConsoleSnapshot(
     IReadOnlyList<BridgeDeveloperConsoleCVar> CVars,
     IReadOnlyList<BridgeDeveloperConsoleCompletion> Completions);
 
+public sealed record BridgeScriptRuntimeInstanceEntry(
+    uint EntityIndex,
+    uint EntityGeneration,
+    ulong Generation,
+    uint ProgramVersion,
+    int InstructionCount,
+    int StateValueCount,
+    bool Enabled);
+
+public sealed record BridgeScriptRuntimeSnapshot(
+    bool IsAvailable,
+    int InstanceCount,
+    bool EntriesTruncated,
+    IReadOnlyList<BridgeScriptRuntimeInstanceEntry> Entries);
+
 public sealed record BridgeDataTableCatalogEntry(
     string Name,
     ulong Generation,
@@ -257,6 +272,7 @@ public sealed record BridgeEditorSnapshot(
     BridgeViewportSurfaceSnapshot ViewportSurface,
     BridgeVisualScriptingSnapshot VisualScripting,
     BridgeDeveloperConsoleSnapshot DeveloperConsole,
+    BridgeScriptRuntimeSnapshot ScriptRuntime,
     BridgeDataTableCatalogSnapshot DataTableCatalog,
     BridgeDataTablePreviewSnapshot DataTablePreview,
     IReadOnlyList<byte> Capabilities);
@@ -332,6 +348,9 @@ public static class BridgeSnapshotParser
                 value.TryGetProperty("developerConsole", out JsonElement consoleValue) && consoleValue.ValueKind != JsonValueKind.Null
                     ? ParseDeveloperConsole(consoleValue)
                     : EmptyDeveloperConsole(),
+                value.TryGetProperty("scriptRuntime", out JsonElement scriptRuntimeValue) && scriptRuntimeValue.ValueKind != JsonValueKind.Null
+                    ? ParseScriptRuntime(scriptRuntimeValue)
+                    : EmptyScriptRuntime(),
                 value.TryGetProperty("dataTableCatalog", out JsonElement catalogValue) && catalogValue.ValueKind != JsonValueKind.Null
                     ? ParseDataTableCatalog(catalogValue)
                     : EmptyDataTableCatalog(),
@@ -414,6 +433,45 @@ public static class BridgeSnapshotParser
         new(0UL, false, true, 0, -1, string.Empty, false, false, false, false,
             Array.Empty<BridgeDeveloperConsoleEntry>(), Array.Empty<string>(), Array.Empty<BridgeDeveloperConsoleCVar>(),
             Array.Empty<BridgeDeveloperConsoleCompletion>());
+
+    private static BridgeScriptRuntimeSnapshot EmptyScriptRuntime() =>
+        new(false, 0, false, Array.Empty<BridgeScriptRuntimeInstanceEntry>());
+
+    private static BridgeScriptRuntimeSnapshot ParseScriptRuntime(JsonElement value)
+    {
+        RequireObject(value, "scriptRuntime");
+        JsonElement entries = RequiredArray(value, "entries");
+        EnsureBoundedArray(entries, "scriptRuntime.entries");
+        int instanceCount = RequiredInt32(value, "instanceCount");
+        if (instanceCount < 0)
+        {
+            throw Invalid("ScriptRuntime instance count must be non-negative.");
+        }
+
+        List<BridgeScriptRuntimeInstanceEntry> parsed = new(entries.GetArrayLength());
+        foreach (JsonElement entry in entries.EnumerateArray())
+        {
+            RequireObject(entry, "ScriptRuntime instance entry");
+            int instructionCount = RequiredInt32(entry, "instructionCount");
+            int stateValueCount = RequiredInt32(entry, "stateValueCount");
+            if (instructionCount < 0 || stateValueCount < 0)
+            {
+                throw Invalid("ScriptRuntime instance counts must be non-negative.");
+            }
+            parsed.Add(new BridgeScriptRuntimeInstanceEntry(
+                RequiredUInt32(entry, "entityIndex"),
+                RequiredUInt32(entry, "entityGeneration"),
+                RequiredUInt64(entry, "generation"),
+                RequiredUInt32(entry, "programVersion"),
+                instructionCount,
+                stateValueCount,
+                RequiredBoolean(entry, "enabled")));
+        }
+
+        return new BridgeScriptRuntimeSnapshot(
+            RequiredBoolean(value, "available"), instanceCount,
+            RequiredBoolean(value, "entriesTruncated"), parsed);
+    }
 
     private static BridgeDataTableCatalogSnapshot EmptyDataTableCatalog() =>
         new(0UL, false, Array.Empty<BridgeDataTableCatalogEntry>());
