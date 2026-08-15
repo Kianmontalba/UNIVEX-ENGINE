@@ -251,14 +251,26 @@ bool DeveloperConsoleUVE::SetBuildPolicyUVE(const DeveloperConsoleBuildPolicyUVE
     return true;
 }
 
-bool DeveloperConsoleUVE::SetSeverityFilterUVE(const DeveloperConsoleSeverityFilterUVE filter) noexcept {
-    if (!IsAvailableUVE() || static_cast<std::uint8_t>(filter) > static_cast<std::uint8_t>(DeveloperConsoleSeverityFilterUVE::Error) ||
-        m_severityFilter == filter) {
-        return false;
+DeveloperConsoleSeverityFilterResultUVE DeveloperConsoleUVE::SetSeverityFilterDetailedUVE(
+    const DeveloperConsoleSeverityFilterUVE filter) noexcept {
+    if (!IsAvailableUVE()) {
+        return {DeveloperConsoleSeverityFilterCodeUVE::Unavailable,
+                "Severity filtering is unavailable under the Shipping build policy."};
+    }
+    if (static_cast<std::uint8_t>(filter) > static_cast<std::uint8_t>(DeveloperConsoleSeverityFilterUVE::Error)) {
+        return {DeveloperConsoleSeverityFilterCodeUVE::InvalidFilter,
+                "Severity filter value is outside the supported filter range."};
+    }
+    if (m_severityFilter == filter) {
+        return {DeveloperConsoleSeverityFilterCodeUVE::Unchanged, "Severity filter is unchanged."};
     }
     m_severityFilter = filter;
     IncrementGenerationUVE(m_generation);
-    return true;
+    return {DeveloperConsoleSeverityFilterCodeUVE::Applied, "Severity filter updated."};
+}
+
+bool DeveloperConsoleUVE::SetSeverityFilterUVE(const DeveloperConsoleSeverityFilterUVE filter) noexcept {
+    return SetSeverityFilterDetailedUVE(filter).IsAcceptedUVE();
 }
 
 bool DeveloperConsoleUVE::SetCompletionPrefixUVE(std::string prefix) {

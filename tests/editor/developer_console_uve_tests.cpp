@@ -196,6 +196,37 @@ TEST(DeveloperConsoleUVE, RegisterCommandUVEReturnsStructuredDiagnosticsForEachR
     EXPECT_FALSE(capacity.message.empty());
 }
 
+TEST(DeveloperConsoleUVE, SetSeverityFilterDetailedUVEReturnsStructuredDiagnostics) {
+    DeveloperConsoleUVE console;
+    console.AppendUVE(DeveloperConsoleSeverityUVE::Info, "info");
+    console.AppendUVE(DeveloperConsoleSeverityUVE::Warning, "warning");
+
+    const DeveloperConsoleSeverityFilterResultUVE applied =
+        console.SetSeverityFilterDetailedUVE(DeveloperConsoleSeverityFilterUVE::Warning);
+    EXPECT_EQ(applied.code, DeveloperConsoleSeverityFilterCodeUVE::Applied);
+    EXPECT_TRUE(applied.IsAcceptedUVE());
+    EXPECT_FALSE(applied.message.empty());
+
+    const DeveloperConsoleSeverityFilterResultUVE unchanged =
+        console.SetSeverityFilterDetailedUVE(DeveloperConsoleSeverityFilterUVE::Warning);
+    EXPECT_EQ(unchanged.code, DeveloperConsoleSeverityFilterCodeUVE::Unchanged);
+    EXPECT_TRUE(unchanged.IsAcceptedUVE());
+
+    const DeveloperConsoleSeverityFilterResultUVE invalid = console.SetSeverityFilterDetailedUVE(
+        static_cast<DeveloperConsoleSeverityFilterUVE>(255U));
+    EXPECT_EQ(invalid.code, DeveloperConsoleSeverityFilterCodeUVE::InvalidFilter);
+    EXPECT_FALSE(invalid.IsAcceptedUVE());
+    EXPECT_FALSE(invalid.message.empty());
+    ASSERT_TRUE(console.SetSeverityFilterUVE(DeveloperConsoleSeverityFilterUVE::Error));
+
+    DeveloperConsoleUVE shipping(DeveloperConsoleBuildPolicyUVE::Shipping);
+    const DeveloperConsoleSeverityFilterResultUVE unavailable =
+        shipping.SetSeverityFilterDetailedUVE(DeveloperConsoleSeverityFilterUVE::Error);
+    EXPECT_EQ(unavailable.code, DeveloperConsoleSeverityFilterCodeUVE::Unavailable);
+    EXPECT_FALSE(unavailable.IsAcceptedUVE());
+    EXPECT_FALSE(unavailable.message.empty());
+}
+
 TEST(DeveloperConsoleUVE, CompletionAndSeverityFilterAreNativeDeterministicFacts) {
     DeveloperConsoleUVE console;
     ASSERT_TRUE(console.RegisterCommand("camera.reset", "Reset the active camera.",
