@@ -33,6 +33,7 @@ add_library(uve_asset STATIC
     src/data_table_importer_uve.cpp
     src/data_table_pipeline_uve.cpp
     src/data_table_registry_uve.cpp
+    src/resource_dependency_graph_uve.cpp
 )
 target_include_directories(uve_asset PUBLIC include)
 target_link_libraries(uve_asset
