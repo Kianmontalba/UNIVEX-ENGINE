@@ -82,16 +82,26 @@ bool ScriptRuntimeUVE::SetEnabledUVE(const Scene::EntityUVE entity, const bool e
     return true;
 }
 
-bool ScriptRuntimeUVE::SetStateUVE(const Scene::EntityUVE entity, ScriptRuntimeStateUVE state) {
-    if (state.values.size() > kMaximumStateValuesUVE) {
-        return false;
-    }
+ScriptRuntimeStateUpdateResultUVE ScriptRuntimeUVE::SetStateDetailedUVE(const Scene::EntityUVE entity,
+                                                                            ScriptRuntimeStateUVE state) {
     const auto iterator = m_instances.find(entity);
     if (iterator == m_instances.end()) {
-        return false;
+        return {ScriptRuntimeStateUpdateCodeUVE::NoActiveInstance,
+                "State update rejected because no active instance exists."};
+    }
+    if (state.values.size() > kMaximumStateValuesUVE) {
+        return {ScriptRuntimeStateUpdateCodeUVE::CapacityExceeded,
+                "State update rejected because the state vector exceeds its bounded capacity."};
+    }
+    if (iterator->second.state == state) {
+        return {ScriptRuntimeStateUpdateCodeUVE::Unchanged, "Runtime state is unchanged."};
     }
     iterator->second.state = std::move(state);
-    return true;
+    return {ScriptRuntimeStateUpdateCodeUVE::Applied, "Runtime state updated."};
+}
+
+bool ScriptRuntimeUVE::SetStateUVE(const Scene::EntityUVE entity, ScriptRuntimeStateUVE state) {
+    return SetStateDetailedUVE(entity, std::move(state)).IsAcceptedUVE();
 }
 
 std::optional<ScriptRuntimeStateUVE> ScriptRuntimeUVE::GetStateUVE(const Scene::EntityUVE entity) const {
