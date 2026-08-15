@@ -41,6 +41,7 @@ public:
     [[nodiscard]] ScriptGraphCommandResultUVE RedoUVE();
 
     [[nodiscard]] const ScriptGraphUVE& GetGraphUVE() const noexcept;
+    void RestoreGraphUVE(ScriptGraphUVE graph);
     [[nodiscard]] std::size_t GetUndoCountUVE() const noexcept;
     [[nodiscard]] std::size_t GetRedoCountUVE() const noexcept;
 

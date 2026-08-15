@@ -30,13 +30,41 @@ namespace {
         EditorBridgeCapabilityUVE::RefreshContentBrowser,
         EditorBridgeCapabilityUVE::SelectContentBrowserEntry,
         EditorBridgeCapabilityUVE::ReadViewportSurface,
+        EditorBridgeCapabilityUVE::ReadVisualScriptCanvas,
+        EditorBridgeCapabilityUVE::AddVisualScriptNode,
+        EditorBridgeCapabilityUVE::RemoveVisualScriptNode,
+        EditorBridgeCapabilityUVE::MoveVisualScriptNode,
+        EditorBridgeCapabilityUVE::AddVisualScriptLink,
+        EditorBridgeCapabilityUVE::RemoveVisualScriptLink,
+        EditorBridgeCapabilityUVE::SetVisualScriptSelection,
+        EditorBridgeCapabilityUVE::SetVisualScriptView,
+        EditorBridgeCapabilityUVE::UndoVisualScript,
+        EditorBridgeCapabilityUVE::RedoVisualScript,
     };
     return capabilities;
 }
 
 [[nodiscard]] bool IsMutationRequestUVE(const EditorBridgeRequestKindUVE kind) noexcept {
     return kind != EditorBridgeRequestKindUVE::ReadSnapshot &&
-           kind != EditorBridgeRequestKindUVE::ReadViewportSurface;
+           kind != EditorBridgeRequestKindUVE::ReadViewportSurface &&
+           kind != EditorBridgeRequestKindUVE::ReadVisualScriptCanvas;
+}
+
+[[nodiscard]] bool IsVisualScriptMutationRequestUVE(const EditorBridgeRequestKindUVE kind) noexcept {
+    switch (kind) {
+        case EditorBridgeRequestKindUVE::AddVisualScriptNode:
+        case EditorBridgeRequestKindUVE::RemoveVisualScriptNode:
+        case EditorBridgeRequestKindUVE::MoveVisualScriptNode:
+        case EditorBridgeRequestKindUVE::AddVisualScriptLink:
+        case EditorBridgeRequestKindUVE::RemoveVisualScriptLink:
+        case EditorBridgeRequestKindUVE::SetVisualScriptSelection:
+        case EditorBridgeRequestKindUVE::SetVisualScriptView:
+        case EditorBridgeRequestKindUVE::UndoVisualScript:
+        case EditorBridgeRequestKindUVE::RedoVisualScript:
+            return true;
+        default:
+            return false;
+    }
 }
 
 [[nodiscard]] bool ContainsCaseInsensitiveUVE(const std::string& value, const std::string& needle) {
@@ -66,7 +94,8 @@ namespace {
 
 } // namespace
 
-EditorBridgeUVE::EditorBridgeUVE(EditorUVE& editor) noexcept : m_editor(&editor) {}
+EditorBridgeUVE::EditorBridgeUVE(EditorUVE& editor) noexcept
+    : m_editor(&editor), m_visualScriptCanvas(m_visualScriptRegistry) {}
 
 const std::vector<EditorBridgeCapabilityUVE>& EditorBridgeUVE::GetCapabilitiesUVE() noexcept {
     return CapabilitiesUVE();
@@ -86,6 +115,10 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
     if (request.kind == EditorBridgeRequestKindUVE::ReadSnapshot) {
         return MakeResponseUVE(request, true, "bridge.snapshot.read", "Bridge-visible editor state was copied.");
     }
+    if (request.kind == EditorBridgeRequestKindUVE::ReadVisualScriptCanvas) {
+        return MakeResponseUVE(request, true, "bridge.visual_scripting.snapshot.read",
+                               "The visual-scripting canvas snapshot was copied.");
+    }
     if (m_editor->GetStateUVE() != EditorStateUVE::Running) {
         return MakeResponseUVE(request, false, "bridge.editor.not_running",
                                "The editor is not in a running state and cannot accept bridge commands.");
@@ -93,6 +126,11 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
     if (IsMutationRequestUVE(request.kind) && request.expectedRevision != m_revision) {
         return MakeResponseUVE(request, false, "bridge.snapshot.stale",
                                "The request was based on an older bridge-visible editor snapshot.");
+    }
+    if (IsVisualScriptMutationRequestUVE(request.kind) &&
+        m_editor->GetPlayModeStateUVE() != EditorPlayModeStateUVE::Edit) {
+        return MakeResponseUVE(request, false, "bridge.visual_scripting.edit_mode_required",
+                               "Visual-scripting canvas mutations are allowed only in Edit mode.");
     }
 
     bool applied = false;
@@ -301,6 +339,124 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
             code = "bridge.viewport_surface.unavailable";
             message = "This headless bridge session has no attachable managed viewport surface; native C++ retains window and OpenGL ownership.";
             break;
+        case EditorBridgeRequestKindUVE::ReadVisualScriptCanvas:
+            code = "bridge.visual_scripting.snapshot.read";
+            message = "The visual-scripting canvas snapshot was copied.";
+            break;
+        case EditorBridgeRequestKindUVE::AddVisualScriptNode:
+            if (!request.visualScriptNode.has_value() || !request.visualScriptPosition.has_value()) {
+                return MakeResponseUVE(request, false, "bridge.visual_scripting.request.invalid",
+                                       "AddVisualScriptNode requires a node and finite position payload.");
+            }
+            {
+                const auto result = m_visualScriptCanvas.AddNodeUVE(
+                    *request.visualScriptNode, *request.visualScriptPosition, request.expectedRevision);
+                applied = result.IsAppliedUVE();
+                code = result.code == Scripting::ScriptGraphCanvasCommandCodeUVE::StaleRevision
+                    ? "bridge.snapshot.stale" : applied ? "bridge.command.applied" : "bridge.command.rejected";
+                message = result.message;
+            }
+            break;
+        case EditorBridgeRequestKindUVE::RemoveVisualScriptNode:
+            if (!request.visualScriptNodeId.has_value()) {
+                return MakeResponseUVE(request, false, "bridge.visual_scripting.request.invalid",
+                                       "RemoveVisualScriptNode requires a node ID.");
+            }
+            {
+                const auto result = m_visualScriptCanvas.RemoveNodeUVE(
+                    *request.visualScriptNodeId, request.expectedRevision);
+                applied = result.IsAppliedUVE();
+                code = result.code == Scripting::ScriptGraphCanvasCommandCodeUVE::StaleRevision
+                    ? "bridge.snapshot.stale" : applied ? "bridge.command.applied" : "bridge.command.rejected";
+                message = result.message;
+            }
+            break;
+        case EditorBridgeRequestKindUVE::MoveVisualScriptNode:
+            if (!request.visualScriptNodeId.has_value() || !request.visualScriptPosition.has_value()) {
+                return MakeResponseUVE(request, false, "bridge.visual_scripting.request.invalid",
+                                       "MoveVisualScriptNode requires a node ID and finite position payload.");
+            }
+            {
+                const auto result = m_visualScriptCanvas.MoveNodeUVE(
+                    *request.visualScriptNodeId, *request.visualScriptPosition, request.expectedRevision);
+                applied = result.IsAppliedUVE();
+                code = result.code == Scripting::ScriptGraphCanvasCommandCodeUVE::StaleRevision
+                    ? "bridge.snapshot.stale" : applied ? "bridge.command.applied" : "bridge.command.rejected";
+                message = result.message;
+            }
+            break;
+        case EditorBridgeRequestKindUVE::AddVisualScriptLink:
+            if (!request.visualScriptLink.has_value()) {
+                return MakeResponseUVE(request, false, "bridge.visual_scripting.request.invalid",
+                                       "AddVisualScriptLink requires a link payload.");
+            }
+            {
+                const auto result = m_visualScriptCanvas.AddLinkUVE(
+                    *request.visualScriptLink, request.expectedRevision);
+                applied = result.IsAppliedUVE();
+                code = result.code == Scripting::ScriptGraphCanvasCommandCodeUVE::StaleRevision
+                    ? "bridge.snapshot.stale" : applied ? "bridge.command.applied" : "bridge.command.rejected";
+                message = result.message;
+            }
+            break;
+        case EditorBridgeRequestKindUVE::RemoveVisualScriptLink:
+            if (!request.visualScriptLink.has_value()) {
+                return MakeResponseUVE(request, false, "bridge.visual_scripting.request.invalid",
+                                       "RemoveVisualScriptLink requires a link payload.");
+            }
+            {
+                const auto result = m_visualScriptCanvas.RemoveLinkUVE(
+                    *request.visualScriptLink, request.expectedRevision);
+                applied = result.IsAppliedUVE();
+                code = result.code == Scripting::ScriptGraphCanvasCommandCodeUVE::StaleRevision
+                    ? "bridge.snapshot.stale" : applied ? "bridge.command.applied" : "bridge.command.rejected";
+                message = result.message;
+            }
+            break;
+        case EditorBridgeRequestKindUVE::SetVisualScriptSelection:
+            if (!request.visualScriptSelection.has_value()) {
+                return MakeResponseUVE(request, false, "bridge.visual_scripting.request.invalid",
+                                       "SetVisualScriptSelection requires a selection payload.");
+            }
+            {
+                const auto result = m_visualScriptCanvas.SetSelectionUVE(
+                    *request.visualScriptSelection, request.expectedRevision);
+                applied = result.IsAppliedUVE();
+                code = result.code == Scripting::ScriptGraphCanvasCommandCodeUVE::StaleRevision
+                    ? "bridge.snapshot.stale" : applied ? "bridge.command.applied" : "bridge.command.rejected";
+                message = result.message;
+            }
+            break;
+        case EditorBridgeRequestKindUVE::SetVisualScriptView:
+            if (!request.visualScriptView.has_value()) {
+                return MakeResponseUVE(request, false, "bridge.visual_scripting.request.invalid",
+                                       "SetVisualScriptView requires a finite view payload.");
+            }
+            {
+                const auto result = m_visualScriptCanvas.SetViewUVE(
+                    *request.visualScriptView, request.expectedRevision);
+                applied = result.IsAppliedUVE();
+                code = result.code == Scripting::ScriptGraphCanvasCommandCodeUVE::StaleRevision
+                    ? "bridge.snapshot.stale" : applied ? "bridge.command.applied" : "bridge.command.rejected";
+                message = result.message;
+            }
+            break;
+        case EditorBridgeRequestKindUVE::UndoVisualScript: {
+            const auto result = m_visualScriptCanvas.UndoUVE(request.expectedRevision);
+            applied = result.IsAppliedUVE();
+            code = result.code == Scripting::ScriptGraphCanvasCommandCodeUVE::StaleRevision
+                ? "bridge.snapshot.stale" : applied ? "bridge.command.applied" : "bridge.command.rejected";
+            message = result.message;
+            break;
+        }
+        case EditorBridgeRequestKindUVE::RedoVisualScript: {
+            const auto result = m_visualScriptCanvas.RedoUVE(request.expectedRevision);
+            applied = result.IsAppliedUVE();
+            code = result.code == Scripting::ScriptGraphCanvasCommandCodeUVE::StaleRevision
+                ? "bridge.snapshot.stale" : applied ? "bridge.command.applied" : "bridge.command.rejected";
+            message = result.message;
+            break;
+        }
         case EditorBridgeRequestKindUVE::ReadSnapshot:
             break;
     }
@@ -337,10 +493,21 @@ EditorBridgeUVE::ObservedStateUVE EditorBridgeUVE::CaptureObservedStateUVE() {
     observed.viewportSurface = EditorBridgeViewportSurfaceSnapshotUVE{
         EditorBridgeViewportSurfaceStateUVE::Unavailable, 0U, 0U, 0U, true, false,
         "No managed viewport surface transport is available in this headless bridge session."};
-    observed.visualScripting = EditorBridgeVisualScriptingSnapshotUVE{
-        false, 0U, 0U, 0U, false,
-        "Native visual-scripting presentation is unavailable in this headless bridge session."};
+    observed.visualScripting = CaptureVisualScriptingUVE();
     return observed;
+}
+
+EditorBridgeVisualScriptingSnapshotUVE EditorBridgeUVE::CaptureVisualScriptingUVE() const {
+    const Scripting::ScriptGraphCanvasSnapshotUVE canvas = m_visualScriptCanvas.GetSnapshotUVE();
+    const bool running = m_editor->GetStateUVE() == EditorStateUVE::Running;
+    const bool canEdit = running && m_editor->GetPlayModeStateUVE() == EditorPlayModeStateUVE::Edit;
+    const std::string reason = !running
+        ? "The native visual-scripting canvas is unavailable before the editor session is running."
+        : canEdit
+            ? "The native visual-scripting canvas is available through the bounded bridge contract."
+            : "The native visual-scripting canvas is read-only outside Edit mode.";
+    return EditorBridgeVisualScriptingSnapshotUVE{
+        running, canvas.graphRevision, canvas.nodes.size(), canvas.links.size(), canEdit, reason, canvas};
 }
 
 void EditorBridgeUVE::SynchronizeRevisionUVE() {

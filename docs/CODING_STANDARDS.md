@@ -1526,3 +1526,12 @@ The first plugin milestone is a static native lifecycle seam, not a dynamic load
 ## Bytecode Hot Reload Safety v1 (Increment 84)
 
 Hot reload must decode and validate a complete candidate program before publication. Invalid magic, version, truncation, instruction, or limit diagnostics must leave the active program and generation unchanged. `ScriptHotReloadManagerUVE` retains the last-known-good program on failed replacement, increments the active generation only for an accepted candidate, and reports compatible-version/state-transfer facts explicitly rather than implying that arbitrary VM state can survive. It owns copied bytecode only; ECS, editor, managed, and filesystem state remain outside this boundary.
+
+
+## Visual Scripting Editor Canvas v1 (Increment 86)
+
+`ScriptGraphCanvasUVE` is a native editor-session layer over `ScriptGraphEditorBackendUVE`. It owns only copied canvas-session values: bounded node layout entries, ordered selection, palette/snapshot presentation, and finite pan/zoom state. Graph structure and typed-link validation remain delegated to the native graph/backend boundary; the canvas must not become a VM, ECS, renderer, filesystem, or plugin ownership surface.
+
+Pan and zoom are explicitly non-undoable session state in v1. Every graph, layout, or selection mutation stores a complete canvas-plus-graph value state rather than a graph-only diff. Undoing node removal must restore exact node order, link order, layout-entry order, selection order, and selected flags; failed or stale commands create no history entry. History is bounded and a successful new mutation clears redo.
+
+The bridge exposes only bounded copy DTOs and named revision-checked requests. C# may render and submit value-only gestures, but it must never receive raw graph objects, ECS pointers, OpenGL handles, ImGui values, filesystem handles, or mutation authority. Canvas layout is session state and must not be added to the durable graph persistence schema without a separately versioned persistence increment.

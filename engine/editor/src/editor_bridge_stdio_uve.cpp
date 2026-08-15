@@ -125,13 +125,69 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"reason", surface.reason}};
 }
 
+[[nodiscard]] JsonUVE ToJsonUVE(const Scripting::ScriptGraphCanvasPinSnapshotUVE& pin) {
+    return JsonUVE{{"name", pin.name}, {"direction", static_cast<std::uint8_t>(pin.direction)},
+                   {"type", static_cast<std::uint8_t>(pin.type)}};
+}
+
+[[nodiscard]] JsonUVE ToJsonUVE(const Scripting::ScriptGraphCanvasNodeSnapshotUVE& node) {
+    JsonUVE pins = JsonUVE::array();
+    for (const auto& pin : node.pins) {
+        pins.push_back(ToJsonUVE(pin));
+    }
+    return JsonUVE{{"id", node.id}, {"typeId", node.typeId}, {"displayName", node.displayName},
+                   {"x", node.position.x}, {"y", node.position.y}, {"selected", node.selected},
+                   {"pins", std::move(pins)}};
+}
+
+[[nodiscard]] JsonUVE ToJsonUVE(const Scripting::ScriptGraphCanvasLinkSnapshotUVE& link) {
+    return JsonUVE{{"output", {{"nodeId", link.link.output.nodeId}, {"pinName", link.link.output.pinName}}},
+                   {"input", {{"nodeId", link.link.input.nodeId}, {"pinName", link.link.input.pinName}}}};
+}
+
+[[nodiscard]] JsonUVE ToJsonUVE(const Scripting::ScriptValidationDiagnosticUVE& diagnostic) {
+    return JsonUVE{{"code", static_cast<std::uint8_t>(diagnostic.code)}, {"nodeId", diagnostic.nodeId},
+                   {"pinName", diagnostic.pinName}, {"message", diagnostic.message}};
+}
+
+[[nodiscard]] JsonUVE ToJsonUVE(const Scripting::ScriptGraphCanvasSnapshotUVE& canvas) {
+    JsonUVE nodes = JsonUVE::array();
+    for (const auto& node : canvas.nodes) {
+        nodes.push_back(ToJsonUVE(node));
+    }
+    JsonUVE links = JsonUVE::array();
+    for (const auto& link : canvas.links) {
+        links.push_back(ToJsonUVE(link));
+    }
+    JsonUVE selection = JsonUVE::array();
+    for (const std::uint32_t nodeId : canvas.selectedNodeIds) {
+        selection.push_back(nodeId);
+    }
+    JsonUVE palette = JsonUVE::array();
+    for (const std::string& typeId : canvas.paletteNodeTypeIds) {
+        palette.push_back(typeId);
+    }
+    JsonUVE diagnostics = JsonUVE::array();
+    for (const auto& diagnostic : canvas.diagnostics) {
+        diagnostics.push_back(ToJsonUVE(diagnostic));
+    }
+    return JsonUVE{{"revision", canvas.revision}, {"graphRevision", canvas.graphRevision},
+                   {"pan", {{"x", canvas.view.pan.x}, {"y", canvas.view.pan.y}}},
+                   {"zoom", canvas.view.zoom}, {"nodesTruncated", canvas.nodesTruncated},
+                   {"linksTruncated", canvas.linksTruncated}, {"paletteTruncated", canvas.paletteTruncated},
+                   {"diagnosticsTruncated", canvas.diagnosticsTruncated}, {"nodes", std::move(nodes)},
+                   {"links", std::move(links)}, {"selectedNodeIds", std::move(selection)},
+                   {"paletteNodeTypeIds", std::move(palette)}, {"diagnostics", std::move(diagnostics)}};
+}
+
 [[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeVisualScriptingSnapshotUVE& scripting) {
     return JsonUVE{{"available", scripting.available},
                    {"graphRevision", scripting.graphRevision},
                    {"nodeCount", scripting.nodeCount},
                    {"linkCount", scripting.linkCount},
                    {"canEdit", scripting.canEdit},
-                   {"reason", scripting.reason}};
+                   {"reason", scripting.reason},
+                   {"canvas", ToJsonUVE(scripting.canvas)}};
 }
 
 [[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeSnapshotUVE& snapshot) {
@@ -232,6 +288,62 @@ enum class FrameReadResultUVE : std::uint8_t {
     return JsonUVE{{"jsonrpc", "2.0"}, {"id", id}, {"result", std::move(result)}};
 }
 
+[[nodiscard]] std::optional<Scripting::ScriptGraphCanvasPointUVE> ParseCanvasPointUVE(const JsonUVE& value) {
+    if (!value.is_object() || !value.contains("x") || !value.contains("y")) {
+        return std::nullopt;
+    }
+    return Scripting::ScriptGraphCanvasPointUVE{value.at("x").get<float>(), value.at("y").get<float>()};
+}
+
+[[nodiscard]] std::optional<Scripting::ScriptGraphCanvasViewUVE> ParseCanvasViewUVE(const JsonUVE& value) {
+    if (!value.is_object() || !value.contains("pan") || !value.contains("zoom")) {
+        return std::nullopt;
+    }
+    const auto pan = ParseCanvasPointUVE(value.at("pan"));
+    if (!pan.has_value()) {
+        return std::nullopt;
+    }
+    return Scripting::ScriptGraphCanvasViewUVE{*pan, value.at("zoom").get<float>()};
+}
+
+[[nodiscard]] std::optional<Scripting::ScriptNodeUVE> ParseScriptNodeUVE(const JsonUVE& value) {
+    if (!value.is_object() || !value.contains("id") || !value.contains("typeId")) {
+        return std::nullopt;
+    }
+    return Scripting::ScriptNodeUVE{value.at("id").get<std::uint32_t>(), value.at("typeId").get<std::string>()};
+}
+
+[[nodiscard]] std::optional<Scripting::ScriptLinkUVE> ParseScriptLinkUVE(const JsonUVE& value) {
+    if (!value.is_object() || !value.contains("output") || !value.contains("input") ||
+        !value.at("output").is_object() || !value.at("input").is_object()) {
+        return std::nullopt;
+    }
+    const JsonUVE& output = value.at("output");
+    const JsonUVE& input = value.at("input");
+    if (!output.contains("nodeId") || !output.contains("pinName") ||
+        !input.contains("nodeId") || !input.contains("pinName")) {
+        return std::nullopt;
+    }
+    return Scripting::ScriptLinkUVE{
+        {output.at("nodeId").get<std::uint32_t>(), output.at("pinName").get<std::string>()},
+        {input.at("nodeId").get<std::uint32_t>(), input.at("pinName").get<std::string>()}};
+}
+
+[[nodiscard]] std::optional<std::vector<std::uint32_t>> ParseScriptSelectionUVE(const JsonUVE& value) {
+    if (!value.is_array() || value.size() > Scripting::kMaximumScriptGraphCanvasSelectionUVE) {
+        return std::nullopt;
+    }
+    std::vector<std::uint32_t> selection;
+    selection.reserve(value.size());
+    for (const JsonUVE& nodeId : value) {
+        if (!nodeId.is_number_unsigned()) {
+            return std::nullopt;
+        }
+        selection.push_back(nodeId.get<std::uint32_t>());
+    }
+    return selection;
+}
+
 [[nodiscard]] std::optional<EditorBridgeRequestKindUVE> ParseRequestKindUVE(const std::string_view value) {
     if (value == "readSnapshot") {
         return EditorBridgeRequestKindUVE::ReadSnapshot;
@@ -274,6 +386,36 @@ enum class FrameReadResultUVE : std::uint8_t {
     }
     if (value == "selectContentBrowserEntry") {
         return EditorBridgeRequestKindUVE::SelectContentBrowserEntry;
+    }
+    if (value == "readVisualScriptCanvas") {
+        return EditorBridgeRequestKindUVE::ReadVisualScriptCanvas;
+    }
+    if (value == "addVisualScriptNode") {
+        return EditorBridgeRequestKindUVE::AddVisualScriptNode;
+    }
+    if (value == "removeVisualScriptNode") {
+        return EditorBridgeRequestKindUVE::RemoveVisualScriptNode;
+    }
+    if (value == "moveVisualScriptNode") {
+        return EditorBridgeRequestKindUVE::MoveVisualScriptNode;
+    }
+    if (value == "addVisualScriptLink") {
+        return EditorBridgeRequestKindUVE::AddVisualScriptLink;
+    }
+    if (value == "removeVisualScriptLink") {
+        return EditorBridgeRequestKindUVE::RemoveVisualScriptLink;
+    }
+    if (value == "setVisualScriptSelection") {
+        return EditorBridgeRequestKindUVE::SetVisualScriptSelection;
+    }
+    if (value == "setVisualScriptView") {
+        return EditorBridgeRequestKindUVE::SetVisualScriptView;
+    }
+    if (value == "undoVisualScript") {
+        return EditorBridgeRequestKindUVE::UndoVisualScript;
+    }
+    if (value == "redoVisualScript") {
+        return EditorBridgeRequestKindUVE::RedoVisualScript;
     }
     return std::nullopt;
 }
@@ -354,6 +496,39 @@ enum class FrameReadResultUVE : std::uint8_t {
     }
     if (params.contains("contentEntryPath") && !params.at("contentEntryPath").is_null()) {
         request.contentEntryPath = params.at("contentEntryPath").get<std::string>();
+    }
+    if (params.contains("visualScriptNodeId") && !params.at("visualScriptNodeId").is_null()) {
+        request.visualScriptNodeId = params.at("visualScriptNodeId").get<std::uint32_t>();
+    }
+    if (params.contains("visualScriptNode") && !params.at("visualScriptNode").is_null()) {
+        request.visualScriptNode = ParseScriptNodeUVE(params.at("visualScriptNode"));
+        if (!request.visualScriptNode.has_value()) {
+            return std::nullopt;
+        }
+    }
+    if (params.contains("visualScriptPosition") && !params.at("visualScriptPosition").is_null()) {
+        request.visualScriptPosition = ParseCanvasPointUVE(params.at("visualScriptPosition"));
+        if (!request.visualScriptPosition.has_value()) {
+            return std::nullopt;
+        }
+    }
+    if (params.contains("visualScriptLink") && !params.at("visualScriptLink").is_null()) {
+        request.visualScriptLink = ParseScriptLinkUVE(params.at("visualScriptLink"));
+        if (!request.visualScriptLink.has_value()) {
+            return std::nullopt;
+        }
+    }
+    if (params.contains("visualScriptSelection") && !params.at("visualScriptSelection").is_null()) {
+        request.visualScriptSelection = ParseScriptSelectionUVE(params.at("visualScriptSelection"));
+        if (!request.visualScriptSelection.has_value()) {
+            return std::nullopt;
+        }
+    }
+    if (params.contains("visualScriptView") && !params.at("visualScriptView").is_null()) {
+        request.visualScriptView = ParseCanvasViewUVE(params.at("visualScriptView"));
+        if (!request.visualScriptView.has_value()) {
+            return std::nullopt;
+        }
     }
     return request;
 }

@@ -77,6 +77,12 @@ const ScriptGraphUVE& ScriptGraphEditorBackendUVE::GetGraphUVE() const noexcept 
     return m_graph;
 }
 
+void ScriptGraphEditorBackendUVE::RestoreGraphUVE(ScriptGraphUVE graph) {
+    m_graph = std::move(graph);
+    m_undo.clear();
+    m_redo.clear();
+}
+
 std::size_t ScriptGraphEditorBackendUVE::GetUndoCountUVE() const noexcept {
     return m_undo.size();
 }

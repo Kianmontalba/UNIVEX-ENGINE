@@ -60,6 +60,17 @@ const ScriptNodeTypeDescriptorUVE* ScriptNodeRegistryUVE::FindNodeTypeUVE(
     return iterator == m_nodeTypes.cend() ? nullptr : &iterator->second;
 }
 
+std::vector<std::string> ScriptNodeRegistryUVE::GetNodeTypeIdsUVE() const {
+    std::vector<std::string> typeIds;
+    typeIds.reserve(m_nodeTypes.size());
+    for (const auto& [typeId, descriptor] : m_nodeTypes) {
+        static_cast<void>(descriptor);
+        typeIds.push_back(typeId);
+    }
+    std::sort(typeIds.begin(), typeIds.end());
+    return typeIds;
+}
+
 std::size_t ScriptNodeRegistryUVE::GetNodeTypeCountUVE() const noexcept {
     return m_nodeTypes.size();
 }

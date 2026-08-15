@@ -219,6 +219,33 @@ TEST(EditorBridgeUVETest, SnapshotUVE_CopiesHierarchyInspectorAndNativePanelSess
         EXPECT_EQ(snapshot.viewportSurface.height, 0U);
         EXPECT_TRUE(snapshot.viewportSurface.nativeRendererOwnsSurface);
         EXPECT_FALSE(snapshot.viewportSurface.managedAttachAllowed);
+        EXPECT_TRUE(snapshot.visualScripting.available);
+        EXPECT_TRUE(snapshot.visualScripting.canEdit);
+        EXPECT_EQ(snapshot.visualScripting.nodeCount, 0U);
+        EXPECT_EQ(snapshot.visualScripting.linkCount, 0U);
+        EXPECT_EQ(snapshot.visualScripting.canvas.nodes.size(), 0U);
+        EXPECT_EQ(snapshot.visualScripting.canvas.links.size(), 0U);
+        EXPECT_FALSE(snapshot.visualScripting.canvas.nodesTruncated);
+        EXPECT_FALSE(snapshot.visualScripting.canvas.linksTruncated);
+
+        EditorBridgeRequestUVE canvasViewRequest{};
+        canvasViewRequest.protocolVersion = kEditorBridgeProtocolVersionUVE;
+        canvasViewRequest.requestId = 8U;
+        canvasViewRequest.expectedRevision = snapshot.revision;
+        canvasViewRequest.kind = EditorBridgeRequestKindUVE::SetVisualScriptView;
+        canvasViewRequest.visualScriptView = Scripting::ScriptGraphCanvasViewUVE{{4.0F, -2.0F}, 1.5F};
+        const EditorBridgeResponseUVE canvasViewResponse = bridge.DispatchUVE(canvasViewRequest);
+        ASSERT_TRUE(canvasViewResponse.applied);
+        EXPECT_EQ(canvasViewResponse.snapshot.visualScripting.canvas.view.pan,
+                  (Scripting::ScriptGraphCanvasPointUVE{4.0F, -2.0F}));
+        EXPECT_FLOAT_EQ(canvasViewResponse.snapshot.visualScripting.canvas.view.zoom, 1.5F);
+
+        EditorBridgeRequestUVE canvasStaleRequest = canvasViewRequest;
+        canvasStaleRequest.requestId = 81U;
+        canvasStaleRequest.expectedRevision = snapshot.revision;
+        const EditorBridgeResponseUVE canvasStaleResponse = bridge.DispatchUVE(canvasStaleRequest);
+        EXPECT_FALSE(canvasStaleResponse.applied);
+        EXPECT_EQ(canvasStaleResponse.code, "bridge.snapshot.stale");
 
         EditorBridgeRequestUVE surfaceRequest{};
         surfaceRequest.protocolVersion = kEditorBridgeProtocolVersionUVE;
@@ -233,7 +260,7 @@ TEST(EditorBridgeUVETest, SnapshotUVE_CopiesHierarchyInspectorAndNativePanelSess
         EditorBridgeRequestUVE filterRequest{};
         filterRequest.protocolVersion = kEditorBridgeProtocolVersionUVE;
         filterRequest.requestId = 10U;
-        filterRequest.expectedRevision = snapshot.revision;
+        filterRequest.expectedRevision = canvasViewResponse.snapshot.revision;
         filterRequest.kind = EditorBridgeRequestKindUVE::SetHierarchyFilter;
         filterRequest.hierarchyFilter = "child";
         const EditorBridgeResponseUVE filtered = bridge.DispatchUVE(filterRequest);
