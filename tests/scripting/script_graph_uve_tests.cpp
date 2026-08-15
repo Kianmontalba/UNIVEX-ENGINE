@@ -9,6 +9,7 @@
 #include "uve/scripting/script_graph_canvas_persistence_uve.h"
 #include "uve/scripting/script_graph_persistence_uve.h"
 #include "uve/scripting/script_graph_uve.h"
+#include "uve/scripting/script_graph_runtime_binding_uve.h"
 #include "uve/scripting/script_hot_reload_uve.h"
 
 #include <gtest/gtest.h>
@@ -256,6 +257,75 @@ TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsInvalidGraphWitho
 
 
 namespace UVE::Scripting {
+
+TEST(ScriptGraphRuntimeBindingUVETest, BindUVE_CompilesLowersAndAttachesValidatedGraph) {
+    ScriptNodeRegistryUVE registry;
+    RegisterTestNodesUVE(registry);
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({10U, "test.source"}));
+    ASSERT_TRUE(graph.AddNodeUVE({20U, "test.sink"}));
+    ASSERT_TRUE(graph.AddLinkUVE({{10U, "Out"}, {20U, "In"}}));
+    ScriptRuntimeUVE runtime;
+
+    const ScriptGraphRuntimeBindingResultUVE result =
+        ScriptGraphRuntimeBindingUVE::BindUVE(graph, registry, runtime, {7U, 3U});
+
+    ASSERT_TRUE(result.IsAcceptedUVE());
+    EXPECT_EQ(result.runtimeCode, ScriptRuntimeAttachCodeUVE::Accepted);
+    EXPECT_TRUE(result.compileDiagnostics.empty());
+    EXPECT_TRUE(result.bytecodeDiagnostics.empty());
+    EXPECT_TRUE(runtime.HasInstanceUVE({7U, 3U}));
+    const auto snapshots = runtime.GetSnapshotUVE();
+    ASSERT_EQ(snapshots.size(), 1U);
+    EXPECT_EQ(snapshots[0].instructionCount, 3U);
+}
+
+TEST(ScriptGraphRuntimeBindingUVETest, BindUVE_RejectsBeforeRuntimeMutationWhenGraphCompileFails) {
+    ScriptNodeRegistryUVE registry;
+    RegisterTestNodesUVE(registry);
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({1U, "missing.node"}));
+    ScriptRuntimeUVE runtime;
+
+    const ScriptGraphRuntimeBindingResultUVE result =
+        ScriptGraphRuntimeBindingUVE::BindUVE(graph, registry, runtime, {8U, 1U});
+
+    EXPECT_EQ(result.code, ScriptGraphRuntimeBindingCodeUVE::CompileRejected);
+    ASSERT_EQ(result.compileDiagnostics.size(), 1U);
+    EXPECT_EQ(result.compileDiagnostics[0].code, ScriptValidationCodeUVE::UnknownNodeType);
+    EXPECT_EQ(runtime.GetInstanceCountUVE(), 0U);
+}
+
+TEST(ScriptGraphRuntimeBindingUVETest, BindUVE_RejectsDuplicateEntityWithoutOverwritingRuntimeState) {
+    ScriptNodeRegistryUVE registry;
+    RegisterTestNodesUVE(registry);
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({1U, "test.source"}));
+    ScriptRuntimeUVE runtime;
+    ASSERT_TRUE(runtime.AttachUVE({9U, 2U}, ScriptBytecodeProgramUVE{}));
+
+    const ScriptGraphRuntimeBindingResultUVE result =
+        ScriptGraphRuntimeBindingUVE::BindUVE(graph, registry, runtime, {9U, 2U});
+
+    EXPECT_EQ(result.code, ScriptGraphRuntimeBindingCodeUVE::RuntimeRejected);
+    EXPECT_EQ(result.runtimeCode, ScriptRuntimeAttachCodeUVE::DuplicateInstance);
+    EXPECT_EQ(runtime.GetInstanceCountUVE(), 1U);
+}
+
+TEST(ScriptGraphRuntimeBindingUVETest, BindUVE_RejectsInvalidEntityWithoutCompilationOrRuntimeMutation) {
+    ScriptNodeRegistryUVE registry;
+    RegisterTestNodesUVE(registry);
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({1U, "test.source"}));
+    ScriptRuntimeUVE runtime;
+
+    const ScriptGraphRuntimeBindingResultUVE result =
+        ScriptGraphRuntimeBindingUVE::BindUVE(graph, registry, runtime, Scene::kInvalidEntityUVE);
+
+    EXPECT_EQ(result.code, ScriptGraphRuntimeBindingCodeUVE::InvalidEntity);
+    EXPECT_TRUE(result.compileDiagnostics.empty());
+    EXPECT_EQ(runtime.GetInstanceCountUVE(), 0U);
+}
 
 TEST(ScriptBytecodeUVETest, EncodeDecodeScriptBytecodeUVE_RoundTripsVersionedProgram) {
     ScriptBytecodeProgramUVE program;

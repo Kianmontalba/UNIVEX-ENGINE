@@ -11,6 +11,7 @@ add_library(uve_scripting
     src/script_graph_canvas_uve.cpp
     src/script_debugger_uve.cpp
     src/script_hot_reload_uve.cpp
+    src/script_graph_runtime_binding_uve.cpp
 )
 target_include_directories(uve_scripting PUBLIC include)
 target_compile_features(uve_scripting PUBLIC cxx_std_20)
