@@ -93,6 +93,9 @@ public partial class MainWindow : Window
         }
     }
 
+    private void ScriptRuntimeClearFilterButton_OnClick(object? sender, RoutedEventArgs e) =>
+        ScriptRuntimeFilterTextBox.Text = string.Empty;
+
     private void ScriptRuntimeInstancesListBox_OnSelectionChanged(object? sender, SelectionChangedEventArgs e)
     {
         if (applyingSnapshot)
