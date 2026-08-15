@@ -1486,3 +1486,8 @@ Increment 75 deliberately does not introduce a bytecode VM, engine-call binding 
 ## Versioned Visual Script Bytecode v1 (Increment 77)
 
 `ScriptBytecodeProgramUVE` is a bounded, versioned native program container. Encoded data begins with explicit `UVES` magic, a fixed-width little-endian version, and an instruction count; decoding validates magic, version, truncation, instruction count, instruction kind, and trailing bytes before publishing a program. The current instruction cap is `kMaximumInstructionsUVE`; malformed or oversized input returns diagnostics and never allocates an unbounded instruction list. The format is a transport/storage boundary only in this increment: execution belongs to the later VM, and engine-call bindings do not enter bytecode implicitly.
+
+
+## Bounded Native Visual Script VM v1 (Increment 78)
+
+`ExecuteScriptBytecodeUVE()` executes only validated bytecode instruction descriptors within an explicit instruction budget. The budget is clamped to the bytecode maximum, exhaustion returns a diagnostic and instruction index, and unsupported versions or instruction kinds halt without side effects. This increment intentionally has no ECS, renderer, input, audio, or filesystem binding; engine-call dispatch must be introduced through a separately reviewed, explicit binding registry rather than hidden VM behavior.
