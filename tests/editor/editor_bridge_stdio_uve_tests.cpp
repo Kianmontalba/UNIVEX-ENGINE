@@ -149,6 +149,8 @@ TEST(EditorBridgeStdioUVETest, ServeUVE_HandshakesAndRoutesExistingBridgeDispatc
         EXPECT_EQ(handshakeSnapshot.at("visualScripting").at("debugger").at("breakpointNodeIds").front().get<std::uint32_t>(), 20U);
         ASSERT_TRUE(handshakeSnapshot.at("scriptRuntime").is_object());
         EXPECT_TRUE(handshakeSnapshot.at("scriptRuntime").at("available").get<bool>());
+        EXPECT_EQ(handshakeSnapshot.at("scriptRuntime").at("reason").get<std::string>(),
+                  "The native ScriptRuntime snapshot is available as copied read-only state.");
         EXPECT_EQ(handshakeSnapshot.at("scriptRuntime").at("instanceCount").get<std::size_t>(), 1U);
         EXPECT_FALSE(handshakeSnapshot.at("scriptRuntime").at("entriesTruncated").get<bool>());
         ASSERT_EQ(handshakeSnapshot.at("scriptRuntime").at("entries").size(), 1U);

@@ -309,6 +309,7 @@ struct EditorBridgeScriptRuntimeSnapshotUVE final {
     bool available = false;
     std::size_t instanceCount = 0U;
     bool entriesTruncated = false;
+    std::string reason;
     std::vector<EditorBridgeScriptRuntimeInstanceEntryUVE> entries;
 
     [[nodiscard]] bool operator==(const EditorBridgeScriptRuntimeSnapshotUVE&) const = default;
