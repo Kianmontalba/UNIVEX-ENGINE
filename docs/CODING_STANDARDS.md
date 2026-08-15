@@ -1667,3 +1667,10 @@ The importer may hand a successful `.uvetable` destination to `AssetImporterUVE`
 `DataTableImportSettingsUVE::GetCacheVersionUVE()` must encode every semantic import setting that can change the generated table. For Increment 102 this is the table name and ordered typed column schema. Use a stable length-delimited representation and a deterministic non-cryptographic digest; never depend on pointer addresses, unordered iteration, locale, or filesystem state.
 
 The settings version is opaque metadata consumed by `AssetImportQueueUVE` and `DerivedArtifactCacheUVE`. Bump the version prefix when the settings identity algorithm changes. Do not add a second cache authority, reinterpret the digest as a security signature, or make the fingerprint silently trigger background imports, hot reload, registry mutation, editor updates, runtime binding, or managed ownership.
+
+
+## Data Table pipeline bootstrap (Increment 103)
+
+Composition helpers may register existing Data Table importers and typed loaders on caller-owned services, but they must not own or duplicate those services. `RegisterDataTablePipelineUVE()` is wiring only: it must not create a queue, cache, database, registry, bridge, worker, path store, or loaded asset cache.
+
+The bootstrap must preserve the existing explicit boundaries: callers provide import settings and destination paths, `AssetImporterUVE` performs source dispatch and database registration, and `AssetManagerUVE` owns asynchronous typed loading and handles. Repeated bootstrap calls may rely on the underlying replace-on-register contracts, but must not produce hidden duplicate state.
