@@ -96,6 +96,51 @@ TEST(DataTableUVE, CsvImportRejectsHeaderAndDuplicateRowsDeterministically) {
     EXPECT_TRUE(snapshot.rows.empty());
 }
 
+TEST(DataTableUVE, TsvImportSupportsQuotedFieldsAndTabs) {
+    DataTableUVE table("dialogue");
+    ASSERT_TRUE(table.DefineColumnUVE("speaker", DataTableColumnTypeUVE::String));
+    ASSERT_TRUE(table.DefineColumnUVE("line", DataTableColumnTypeUVE::String));
+    ASSERT_TRUE(table.DefineColumnUVE("next", DataTableColumnTypeUVE::Integer));
+
+    ASSERT_TRUE(table.ImportTsvUVE("id\tspeaker\tline\tnext\r\n"
+                                   "intro\tNPC\t\"Hello\ttraveler\"\t2\r\n"));
+    const DataTableSnapshotUVE snapshot = table.GetSnapshotUVE();
+    ASSERT_EQ(snapshot.rows.size(), 1U);
+    EXPECT_EQ(std::get<std::string>(snapshot.rows[0].values[1]), "Hello\ttraveler");
+    EXPECT_EQ(std::get<std::int64_t>(snapshot.rows[0].values[2]), 2);
+}
+
+TEST(DataTableUVE, JsonImportUsesSchemaTypesAndIgnoresObjectMemberOrder) {
+    DataTableUVE table("items");
+    ASSERT_TRUE(table.DefineColumnUVE("label", DataTableColumnTypeUVE::String));
+    ASSERT_TRUE(table.DefineColumnUVE("count", DataTableColumnTypeUVE::Integer));
+    ASSERT_TRUE(table.DefineColumnUVE("enabled", DataTableColumnTypeUVE::Boolean));
+    ASSERT_TRUE(table.ImportJsonUVE(R"([{"enabled":true,"id":"item_a","count":7,"label":"Potion"}])"));
+
+    const DataTableSnapshotUVE snapshot = table.GetSnapshotUVE();
+    ASSERT_EQ(snapshot.rows.size(), 1U);
+    EXPECT_EQ(std::get<std::string>(snapshot.rows[0].values[0]), "Potion");
+    EXPECT_EQ(std::get<std::int64_t>(snapshot.rows[0].values[1]), 7);
+    EXPECT_TRUE(std::get<bool>(snapshot.rows[0].values[2]));
+}
+
+TEST(DataTableUVE, JsonImportRejectsWrongTypesAndDuplicateRowsAtomically) {
+    DataTableUVE table("items");
+    ASSERT_TRUE(table.DefineColumnUVE("count", DataTableColumnTypeUVE::Integer));
+    ASSERT_TRUE(table.ImportJsonUVE(R"([{"id":"stable","count":3}])"));
+    const DataTableSnapshotUVE before = table.GetSnapshotUVE();
+
+    EXPECT_FALSE(table.ImportJsonUVE(R"([{"id":"new","count":"wrong"}])"));
+    EXPECT_EQ(table.GetSnapshotUVE().rows, before.rows);
+    ASSERT_EQ(table.GetSnapshotUVE().diagnostics.size(), 1U);
+    EXPECT_EQ(table.GetSnapshotUVE().diagnostics.front().code, DataTableDiagnosticCodeUVE::InvalidValue);
+
+    EXPECT_FALSE(table.ImportJsonUVE(R"([{"id":"duplicate","count":1},{"id":"duplicate","count":2}])"));
+    EXPECT_TRUE(table.GetSnapshotUVE().rows == before.rows);
+    ASSERT_EQ(table.GetSnapshotUVE().diagnostics.size(), 1U);
+    EXPECT_EQ(table.GetSnapshotUVE().diagnostics.front().code, DataTableDiagnosticCodeUVE::DuplicateRow);
+}
+
 TEST(DataTableUVE, BoundsAndDiagnosticGenerationAreExplicit) {
     DataTableUVE table("bounded");
     for (std::size_t index = 0U; index < DataTableUVE::kMaximumColumnsUVE; ++index) {

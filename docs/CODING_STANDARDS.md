@@ -1569,3 +1569,12 @@ The Increment 89 bridge additions remain named and value-only: severity-filter, 
 CSV ingestion is deterministic and failure-atomic. The first header field is `id`, subsequent headers must match the declared schema exactly and in order, quoted fields support doubled quotes, and CRLF/LF line endings are normalized without locale-sensitive behavior. Invalid rows, duplicate identifiers, type conversion failures, overflow, non-finite numbers, malformed quotes, and bounds violations produce bounded diagnostics with stable codes and line/column context. A failed import never replaces previously committed rows.
 
 The Increment 90 core must not infer types or silently acquire filesystem, asset-database, ECS, renderer, process, network, reflection, managed-runtime, editor-bridge, hot-reload, export, reference, or visual-scripting authority. JSON/TSV/XLSX adapters and editor-facing workflows require separate reviewed increments.
+
+
+## Data Table TSV and JSON Import v1 (Increment 91)
+
+TSV import must reuse the bounded quoted-delimited rules of CSV with a tab delimiter, including CRLF/LF normalization, doubled quotes, exact `id`-first headers, and caller-declared schema order. It must not silently treat commas, whitespace, or inferred columns as alternate delimiters.
+
+JSON import must accept only a top-level array of objects. Every row must contain exactly one bounded string `id` and one member for each declared column; object member order may vary, but output values must follow schema order. JSON kinds are checked directly: booleans require JSON booleans, integers require signed integer numbers, numbers must be finite, and strings must remain within the string bound. Extra members, missing members, nulls, wrong kinds, malformed documents, and duplicate IDs are deterministic diagnostics.
+
+Both adapters are failure-atomic. A failed import publishes bounded diagnostics and a new generation while preserving the last committed rows; a successful import atomically replaces all rows and clears previous diagnostics. These adapters remain native value/asset-module code and acquire no filesystem, editor, managed, runtime, or visual-scripting authority.

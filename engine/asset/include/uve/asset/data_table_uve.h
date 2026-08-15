@@ -60,6 +60,8 @@ struct DataTableSnapshotUVE final {
 };
 
 class DataTableCsvImporterUVE;
+class DataTableTsvImporterUVE;
+class DataTableJsonImporterUVE;
 
 class DataTableUVE final {
 public:
@@ -81,11 +83,15 @@ public:
     [[nodiscard]] bool AddRowUVE(std::string identifier, std::vector<DataTableValueUVE> values);
     [[nodiscard]] bool ClearRowsUVE() noexcept;
     [[nodiscard]] bool ImportCsvUVE(std::string_view document);
+    [[nodiscard]] bool ImportTsvUVE(std::string_view document);
+    [[nodiscard]] bool ImportJsonUVE(std::string_view document);
     [[nodiscard]] DataTableSnapshotUVE GetSnapshotUVE() const;
     [[nodiscard]] const DataTableRowUVE* FindRowUVE(std::string_view identifier) const noexcept;
 
 private:
     friend class DataTableCsvImporterUVE;
+    friend class DataTableTsvImporterUVE;
+    friend class DataTableJsonImporterUVE;
 
     [[nodiscard]] static bool IsBoundedIdentifierUVE(std::string_view value) noexcept;
     [[nodiscard]] static bool IsValueCompatibleUVE(const DataTableValueUVE& value,
@@ -104,6 +110,17 @@ private:
 };
 
 class DataTableCsvImporterUVE final {
+public:
+    [[nodiscard]] static bool ImportUVE(std::string_view document, DataTableUVE& table);
+    [[nodiscard]] static bool ImportDelimitedUVE(std::string_view document, char delimiter, DataTableUVE& table);
+};
+
+class DataTableTsvImporterUVE final {
+public:
+    [[nodiscard]] static bool ImportUVE(std::string_view document, DataTableUVE& table);
+};
+
+class DataTableJsonImporterUVE final {
 public:
     [[nodiscard]] static bool ImportUVE(std::string_view document, DataTableUVE& table);
 };
