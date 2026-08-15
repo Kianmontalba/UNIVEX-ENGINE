@@ -529,7 +529,8 @@ public partial class MainWindow : Window
 
         string truncation = runtime.EntriesTruncated ? " The native bridge truncated the copied instance list." : string.Empty;
         ScriptRuntimeStatusTextBlock.Text =
-            $"{runtime.InstanceCount} native ScriptRuntime instance(s); {runtime.Entries.Count} visible copied row(s). " +
+            $"{runtime.InstanceCount} native ScriptRuntime instance(s); {runtime.Entries.Count} visible copied row(s) " +
+            $"({runtime.VisibleEnabledInstanceCount} enabled, {runtime.VisibleDisabledInstanceCount} disabled). " +
             $"Instance rows include generational identity, program version, instruction/state counts, and enabled state. " +
             $"{runtime.Reason}{truncation}";
     }
