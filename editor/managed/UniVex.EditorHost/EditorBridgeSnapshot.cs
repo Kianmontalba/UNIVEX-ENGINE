@@ -75,6 +75,29 @@ public sealed record BridgeContentBrowserSnapshot(
     IReadOnlyList<BridgeContentBrowserEntry> Entries,
     BridgeContentBrowserEntry? SelectedEntry);
 
+public enum BridgeViewportSurfaceState : byte
+{
+    Unavailable = 0,
+    NativeOwned = 1,
+    Detached = 2,
+}
+
+/// <summary>
+/// C++-authoritative viewport surface lifecycle facts. It deliberately carries no native window,
+/// OpenGL context, texture, or input-forwarding handle across the managed boundary.
+/// </summary>
+public sealed record BridgeViewportSurfaceSnapshot(
+    BridgeViewportSurfaceState State,
+    ulong Generation,
+    uint Width,
+    uint Height,
+    bool NativeRendererOwnsSurface,
+    bool ManagedAttachAllowed,
+    string Reason)
+{
+    public bool IsPresentableToManagedHost => ManagedAttachAllowed && State == BridgeViewportSurfaceState.NativeOwned;
+}
+
 /// <summary>
 /// Entire immutable state copied from a single C++ bridge response. Presentation code must replace
 /// this value atomically after a response; it must never retain raw JsonElement or native objects.
@@ -94,6 +117,7 @@ public sealed record BridgeEditorSnapshot(
     BridgeHierarchySnapshot Hierarchy,
     BridgeInspectorSnapshot Inspector,
     BridgeContentBrowserSnapshot ContentBrowser,
+    BridgeViewportSurfaceSnapshot ViewportSurface,
     IReadOnlyList<byte> Capabilities);
 
 public sealed record BridgeCommand(
@@ -151,6 +175,7 @@ public static class BridgeSnapshotParser
                 ParseHierarchy(RequiredObjectMember(value, "hierarchy")),
                 ParseInspector(RequiredObjectMember(value, "inspector")),
                 ParseContentBrowser(RequiredObjectMember(value, "contentBrowser")),
+                ParseViewportSurface(RequiredObjectMember(value, "viewportSurface")),
                 ParseCapabilities(RequiredArray(value, "capabilities")));
         }
         catch (BridgeProtocolException)
@@ -222,6 +247,30 @@ public static class BridgeSnapshotParser
             parsedAncestry,
             parsedDrawerIds,
             RequiredBoolean(value, "canEditSelectedName"));
+    }
+
+    private static BridgeViewportSurfaceSnapshot ParseViewportSurface(JsonElement value)
+    {
+        byte rawState = RequiredByte(value, "state");
+        if (!Enum.IsDefined((BridgeViewportSurfaceState)rawState))
+        {
+            throw Invalid("The backend returned an unsupported viewport-surface state.");
+        }
+
+        bool managedAttachAllowed = RequiredBoolean(value, "managedAttachAllowed");
+        if (managedAttachAllowed)
+        {
+            throw Invalid("Managed viewport surface attachment is not supported by this host contract.");
+        }
+
+        return new BridgeViewportSurfaceSnapshot(
+            (BridgeViewportSurfaceState)rawState,
+            RequiredUInt64(value, "generation"),
+            RequiredUInt32(value, "width"),
+            RequiredUInt32(value, "height"),
+            RequiredBoolean(value, "nativeRendererOwnsSurface"),
+            managedAttachAllowed,
+            RequiredBoundedString(value, "reason"));
     }
 
     private static BridgeContentBrowserSnapshot ParseContentBrowser(JsonElement value)

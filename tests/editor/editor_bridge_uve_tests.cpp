@@ -213,6 +213,22 @@ TEST(EditorBridgeUVETest, SnapshotUVE_CopiesHierarchyInspectorAndNativePanelSess
                   (std::vector<std::string>{"name", "hierarchy", "transform", "primitive-mesh"}));
         EXPECT_TRUE(snapshot.inspector.canEditSelectedName);
         EXPECT_FALSE(snapshot.contentBrowser.initialized);
+        EXPECT_EQ(snapshot.viewportSurface.state, EditorBridgeViewportSurfaceStateUVE::Unavailable);
+        EXPECT_EQ(snapshot.viewportSurface.generation, 0U);
+        EXPECT_EQ(snapshot.viewportSurface.width, 0U);
+        EXPECT_EQ(snapshot.viewportSurface.height, 0U);
+        EXPECT_TRUE(snapshot.viewportSurface.nativeRendererOwnsSurface);
+        EXPECT_FALSE(snapshot.viewportSurface.managedAttachAllowed);
+
+        EditorBridgeRequestUVE surfaceRequest{};
+        surfaceRequest.protocolVersion = kEditorBridgeProtocolVersionUVE;
+        surfaceRequest.requestId = 9U;
+        surfaceRequest.expectedRevision = 0U;
+        surfaceRequest.kind = EditorBridgeRequestKindUVE::ReadViewportSurface;
+        const EditorBridgeResponseUVE surfaceResponse = bridge.DispatchUVE(surfaceRequest);
+        EXPECT_FALSE(surfaceResponse.applied);
+        EXPECT_EQ(surfaceResponse.code, "bridge.viewport_surface.unavailable");
+        EXPECT_EQ(surfaceResponse.snapshot.viewportSurface, snapshot.viewportSurface);
 
         EditorBridgeRequestUVE filterRequest{};
         filterRequest.protocolVersion = kEditorBridgeProtocolVersionUVE;

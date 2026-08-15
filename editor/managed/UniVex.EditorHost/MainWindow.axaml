@@ -13,7 +13,7 @@
             <Grid ColumnDefinitions="*,Auto">
                 <StackPanel Spacing="2">
                     <TextBlock Text="UNIVEX EDITOR" FontSize="20" FontWeight="SemiBold" />
-                    <TextBlock Text="Increment 72 — copied C++ hierarchy, Inspector, and cached content presentation"
+                    <TextBlock Text="Increment 74 — native-owned viewport surface lifecycle"
                                Opacity="0.66" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" HorizontalAlignment="Right" Spacing="2">
@@ -95,8 +95,9 @@
                         <TabItem Header="Viewport">
                             <Border Padding="16" Background="#20242B" BorderBrush="#394150" BorderThickness="1" CornerRadius="3">
                                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
-                                    <TextBlock Text="Native Viewport Surface Deferred" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center" />
-                                    <TextBlock Text="Increment 74 will define a platform-scoped native surface bridge. C# owns no OpenGL context, renderer texture, picking pass, or input-forwarding path." TextWrapping="Wrap" TextAlignment="Center" MaxWidth="560" Opacity="0.76" />
+                                    <TextBlock Text="Native Viewport Surface Lifecycle" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                                    <TextBlock x:Name="ViewportSurfaceStatusTextBlock" Text="Connect to read the C++ surface lifecycle state." TextWrapping="Wrap" TextAlignment="Center" MaxWidth="560" Opacity="0.76" />
+                                    <TextBlock Text="C# owns no OpenGL context, renderer texture, picking pass, native window handle, or input-forwarding path. A managed surface is shown only when an explicit future capability permits it." TextWrapping="Wrap" TextAlignment="Center" MaxWidth="560" Opacity="0.76" />
                                 </StackPanel>
                             </Border>
                         </TabItem>

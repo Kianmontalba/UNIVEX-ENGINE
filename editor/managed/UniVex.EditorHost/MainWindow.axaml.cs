@@ -402,11 +402,25 @@ public partial class MainWindow : Window
             RenderHierarchy(snapshot.Hierarchy);
             RenderInspector(snapshot.Inspector);
             RenderContentBrowser(snapshot.ContentBrowser);
+            RenderViewportSurface(snapshot.ViewportSurface);
         }
         finally
         {
             applyingSnapshot = false;
         }
+    }
+
+    private static string DescribeViewportSurface(BridgeViewportSurfaceSnapshot surface)
+    {
+        string dimensions = surface.Width == 0U || surface.Height == 0U
+            ? "no native dimensions"
+            : $"{surface.Width}×{surface.Height}";
+        return $"C++ surface state: {surface.State}; generation {surface.Generation}; {dimensions}. {surface.Reason}";
+    }
+
+    private void RenderViewportSurface(BridgeViewportSurfaceSnapshot surface)
+    {
+        ViewportSurfaceStatusTextBlock.Text = DescribeViewportSurface(surface);
     }
 
     private void RenderHierarchy(BridgeHierarchySnapshot hierarchy)
@@ -625,7 +639,7 @@ public partial class MainWindow : Window
     private static string DescribeSnapshot(BridgeEditorSnapshot snapshot) =>
         $"Protocol {snapshot.ProtocolVersion}; revision {snapshot.Revision}; dirty={snapshot.SceneDirty}; " +
         $"hierarchy rows={snapshot.Hierarchy.Entries.Count}; content rows={snapshot.ContentBrowser.Entries.Count}; " +
-        $"advertised capabilities={snapshot.Capabilities.Count}; scene='{snapshot.ActiveScenePath}'.";
+        $"viewport={snapshot.ViewportSurface.State}; advertised capabilities={snapshot.Capabilities.Count}; scene='{snapshot.ActiveScenePath}'.";
 
     private void MainWindow_OnClosing(object? sender, WindowClosingEventArgs e)
     {

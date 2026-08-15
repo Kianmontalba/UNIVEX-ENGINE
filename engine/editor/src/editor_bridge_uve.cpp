@@ -29,12 +29,14 @@ namespace {
         EditorBridgeCapabilityUVE::SetContentBrowserFocus,
         EditorBridgeCapabilityUVE::RefreshContentBrowser,
         EditorBridgeCapabilityUVE::SelectContentBrowserEntry,
+        EditorBridgeCapabilityUVE::ReadViewportSurface,
     };
     return capabilities;
 }
 
 [[nodiscard]] bool IsMutationRequestUVE(const EditorBridgeRequestKindUVE kind) noexcept {
-    return kind != EditorBridgeRequestKindUVE::ReadSnapshot;
+    return kind != EditorBridgeRequestKindUVE::ReadSnapshot &&
+           kind != EditorBridgeRequestKindUVE::ReadViewportSurface;
 }
 
 [[nodiscard]] bool ContainsCaseInsensitiveUVE(const std::string& value, const std::string& needle) {
@@ -295,6 +297,10 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
             }
             break;
         }
+        case EditorBridgeRequestKindUVE::ReadViewportSurface:
+            code = "bridge.viewport_surface.unavailable";
+            message = "This headless bridge session has no attachable managed viewport surface; native C++ retains window and OpenGL ownership.";
+            break;
         case EditorBridgeRequestKindUVE::ReadSnapshot:
             break;
     }
@@ -328,6 +334,9 @@ EditorBridgeUVE::ObservedStateUVE EditorBridgeUVE::CaptureObservedStateUVE() {
     observed.hierarchy = CaptureHierarchyUVE();
     observed.inspector = CaptureInspectorUVE();
     observed.contentBrowser = CaptureContentBrowserUVE();
+    observed.viewportSurface = EditorBridgeViewportSurfaceSnapshotUVE{
+        EditorBridgeViewportSurfaceStateUVE::Unavailable, 0U, 0U, 0U, true, false,
+        "No managed viewport surface transport is available in this headless bridge session."};
     return observed;
 }
 
@@ -360,6 +369,7 @@ EditorBridgeSnapshotUVE EditorBridgeUVE::BuildSnapshotUVE() const {
     snapshot.hierarchy = observed.hierarchy;
     snapshot.inspector = observed.inspector;
     snapshot.contentBrowser = observed.contentBrowser;
+    snapshot.viewportSurface = observed.viewportSurface;
     snapshot.capabilities = GetCapabilitiesUVE();
     return snapshot;
 }
