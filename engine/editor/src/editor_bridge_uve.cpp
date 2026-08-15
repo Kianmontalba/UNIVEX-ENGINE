@@ -687,10 +687,12 @@ EditorBridgeUVE::ObservedStateUVE EditorBridgeUVE::CaptureObservedStateUVE() {
 EditorBridgeScriptRuntimeSnapshotUVE EditorBridgeUVE::CaptureScriptRuntimeUVE() const {
     EditorBridgeScriptRuntimeSnapshotUVE snapshot{};
     if (m_scriptRuntime == nullptr) {
+        snapshot.reason = "No native ScriptRuntime is attached to this bridge session.";
         return snapshot;
     }
 
     snapshot.available = true;
+    snapshot.reason = "The native ScriptRuntime snapshot is available as copied read-only state.";
     const std::vector<Scripting::ScriptRuntimeInstanceSnapshotUVE> source = m_scriptRuntime->GetSnapshotUVE();
     snapshot.instanceCount = source.size();
     snapshot.entries.reserve(std::min(source.size(), kEditorBridgeMaximumPanelEntriesUVE));

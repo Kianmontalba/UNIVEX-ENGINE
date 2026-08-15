@@ -69,6 +69,8 @@ TEST(EditorBridgeUVETest, ReadScriptRuntimeUVE_IsAdvertisedAndReadOnly) {
         EXPECT_EQ(response.snapshot.revision, initial.revision);
         EXPECT_FALSE(response.snapshot.scriptRuntime.available);
         EXPECT_EQ(response.snapshot.scriptRuntime.instanceCount, 0U);
+        EXPECT_EQ(response.snapshot.scriptRuntime.reason,
+                  "No native ScriptRuntime is attached to this bridge session.");
 
         editor.ShutdownUVE();
     }

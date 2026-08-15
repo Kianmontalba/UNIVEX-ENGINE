@@ -329,6 +329,7 @@ public sealed class BridgeProtocolClientTests
             available = true,
             instanceCount = 2,
             entriesTruncated = false,
+            reason = "The native ScriptRuntime snapshot is available as copied read-only state.",
             entries = new[]
             {
                 new
@@ -440,6 +441,8 @@ public sealed class BridgeProtocolClientTests
         Assert.True(snapshot.ScriptRuntime.IsAvailable);
         Assert.Equal(2, snapshot.ScriptRuntime.InstanceCount);
         Assert.False(snapshot.ScriptRuntime.EntriesTruncated);
+        Assert.Equal("The native ScriptRuntime snapshot is available as copied read-only state.",
+            snapshot.ScriptRuntime.Reason);
         Assert.Equal(2, snapshot.ScriptRuntime.Entries.Count);
         BridgeScriptRuntimeInstanceEntry first = snapshot.ScriptRuntime.Entries[0];
         Assert.Equal(7U, first.EntityIndex);
@@ -460,6 +463,7 @@ public sealed class BridgeProtocolClientTests
 
         Assert.False(fallback.ScriptRuntime.IsAvailable);
         Assert.Equal(0, fallback.ScriptRuntime.InstanceCount);
+        Assert.Equal("No native ScriptRuntime is attached to this bridge session.", fallback.ScriptRuntime.Reason);
         Assert.Empty(fallback.ScriptRuntime.Entries);
     }
 
@@ -756,6 +760,7 @@ public sealed class BridgeProtocolClientTests
             available = true,
             instanceCount = 2,
             entriesTruncated = false,
+            reason = "The native ScriptRuntime snapshot is available as copied read-only state.",
             entries = new[]
             {
                 new
@@ -938,6 +943,7 @@ public sealed class BridgeProtocolClientTests
             available = true,
             instanceCount = 2,
             entriesTruncated = false,
+            reason = "The native ScriptRuntime snapshot is available as copied read-only state.",
             entries = new[]
             {
                 new

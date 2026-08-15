@@ -319,6 +319,7 @@ enum class FrameReadResultUVE : std::uint8_t {
     return JsonUVE{{"available", snapshot.available},
                    {"instanceCount", snapshot.instanceCount},
                    {"entriesTruncated", snapshot.entriesTruncated},
+                   {"reason", snapshot.reason},
                    {"entries", std::move(entries)}};
 }
 

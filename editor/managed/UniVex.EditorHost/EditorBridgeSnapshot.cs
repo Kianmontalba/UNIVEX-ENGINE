@@ -208,6 +208,7 @@ public sealed record BridgeScriptRuntimeSnapshot(
     bool IsAvailable,
     int InstanceCount,
     bool EntriesTruncated,
+    string Reason,
     IReadOnlyList<BridgeScriptRuntimeInstanceEntry> Entries);
 
 public sealed record BridgeDataTableCatalogEntry(
@@ -443,7 +444,8 @@ public static class BridgeSnapshotParser
             Array.Empty<BridgeDeveloperConsoleCompletion>());
 
     private static BridgeScriptRuntimeSnapshot EmptyScriptRuntime() =>
-        new(false, 0, false, Array.Empty<BridgeScriptRuntimeInstanceEntry>());
+        new(false, 0, false, "No native ScriptRuntime is attached to this bridge session.",
+            Array.Empty<BridgeScriptRuntimeInstanceEntry>());
 
     private static BridgeScriptRuntimeSnapshot ParseScriptRuntime(JsonElement value)
     {
@@ -476,9 +478,12 @@ public static class BridgeSnapshotParser
                 RequiredBoolean(entry, "enabled")));
         }
 
+        bool available = RequiredBoolean(value, "available");
+        string reason = OptionalBoundedString(value, "reason", available
+            ? "The native ScriptRuntime snapshot is available as copied read-only state."
+            : "No native ScriptRuntime is attached to this bridge session.");
         return new BridgeScriptRuntimeSnapshot(
-            RequiredBoolean(value, "available"), instanceCount,
-            RequiredBoolean(value, "entriesTruncated"), parsed);
+            available, instanceCount, RequiredBoolean(value, "entriesTruncated"), reason, parsed);
     }
 
     private static BridgeDataTableCatalogSnapshot EmptyDataTableCatalog() =>
