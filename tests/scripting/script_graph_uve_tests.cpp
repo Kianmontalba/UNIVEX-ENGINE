@@ -3,6 +3,7 @@
 #include "uve/scripting/script_runtime_uve.h"
 #include "uve/scripting/script_vm_uve.h"
 #include "uve/scripting/script_compiler_ir_uve.h"
+#include "uve/scripting/script_graph_editor_backend_uve.h"
 #include "uve/scripting/script_graph_persistence_uve.h"
 #include "uve/scripting/script_graph_uve.h"
 
@@ -335,6 +336,40 @@ TEST(ScriptGraphPersistenceUVETest, EncodeScriptGraphUVE_EnforcesTextLimitWithou
     EXPECT_TRUE(EncodeScriptGraphUVE(graph, diagnostics, {4096U, 8192U, 4U}).empty());
     ASSERT_EQ(diagnostics.size(), 1U);
     EXPECT_EQ(diagnostics[0].code, ScriptPersistenceDiagnosticCodeUVE::LimitExceeded);
+}
+
+} // namespace UVE::Scripting
+
+
+namespace UVE::Scripting {
+
+TEST(ScriptGraphEditorBackendUVETest, CommandsAreTransactionalAndNodeRemovalCleansIncidentLinks) {
+    ScriptGraphEditorBackendUVE backend;
+    ASSERT_TRUE(backend.AddNodeUVE({1U, "test.source"}).IsAppliedUVE());
+    ASSERT_TRUE(backend.AddNodeUVE({2U, "test.sink"}).IsAppliedUVE());
+    ASSERT_TRUE(backend.AddLinkUVE({{1U, "Out"}, {2U, "In"}}).IsAppliedUVE());
+    EXPECT_EQ(backend.GetGraphUVE().GetLinksUVE().size(), 1U);
+    EXPECT_FALSE(backend.AddLinkUVE({{1U, "Out"}, {2U, "In"}}).IsAppliedUVE());
+    EXPECT_EQ(backend.GetGraphUVE().GetLinksUVE().size(), 1U);
+    ASSERT_TRUE(backend.RemoveNodeUVE(1U).IsAppliedUVE());
+    EXPECT_TRUE(backend.GetGraphUVE().GetNodesUVE().size() == 1U);
+    EXPECT_TRUE(backend.GetGraphUVE().GetLinksUVE().empty());
+}
+
+TEST(ScriptGraphEditorBackendUVETest, UndoRedoRestoresSnapshotsAndNewEditClearsRedo) {
+    ScriptGraphEditorBackendUVE backend;
+    ASSERT_TRUE(backend.AddNodeUVE({1U, "test.source"}).IsAppliedUVE());
+    ASSERT_TRUE(backend.AddNodeUVE({2U, "test.sink"}).IsAppliedUVE());
+    EXPECT_EQ(backend.GetUndoCountUVE(), 2U);
+    ASSERT_TRUE(backend.UndoUVE().IsAppliedUVE());
+    EXPECT_EQ(backend.GetGraphUVE().GetNodesUVE().size(), 1U);
+    EXPECT_EQ(backend.GetRedoCountUVE(), 1U);
+    ASSERT_TRUE(backend.RedoUVE().IsAppliedUVE());
+    EXPECT_EQ(backend.GetGraphUVE().GetNodesUVE().size(), 2U);
+    ASSERT_TRUE(backend.UndoUVE().IsAppliedUVE());
+    ASSERT_TRUE(backend.AddNodeUVE({3U, "test.source"}).IsAppliedUVE());
+    EXPECT_EQ(backend.GetRedoCountUVE(), 0U);
+    EXPECT_EQ(backend.RedoUVE().code, ScriptGraphCommandCodeUVE::NoHistory);
 }
 
 } // namespace UVE::Scripting

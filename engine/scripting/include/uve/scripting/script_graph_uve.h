@@ -96,6 +96,8 @@ public:
 
     [[nodiscard]] bool AddNodeUVE(ScriptNodeUVE node);
     [[nodiscard]] bool AddLinkUVE(ScriptLinkUVE link);
+    [[nodiscard]] bool RemoveNodeUVE(std::uint32_t nodeId);
+    [[nodiscard]] bool RemoveLinkUVE(const ScriptLinkUVE& link);
     [[nodiscard]] const std::vector<ScriptNodeUVE>& GetNodesUVE() const noexcept;
     [[nodiscard]] const std::vector<ScriptLinkUVE>& GetLinksUVE() const noexcept;
     [[nodiscard]] std::vector<ScriptValidationDiagnosticUVE> ValidateUVE(
