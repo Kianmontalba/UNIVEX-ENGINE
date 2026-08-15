@@ -55,6 +55,7 @@ namespace {
         EditorBridgeCapabilityUVE::ReadScriptRuntimeTickDiagnostics,
         EditorBridgeCapabilityUVE::SerializeVisualScriptGraph,
         EditorBridgeCapabilityUVE::DeserializeVisualScriptGraph,
+        EditorBridgeCapabilityUVE::AddVisualScriptNodeType,
     };
     return capabilities;
 }
@@ -82,6 +83,7 @@ namespace {
         case EditorBridgeRequestKindUVE::UndoVisualScript:
         case EditorBridgeRequestKindUVE::RedoVisualScript:
         case EditorBridgeRequestKindUVE::DeserializeVisualScriptGraph:
+        case EditorBridgeRequestKindUVE::AddVisualScriptNodeType:
             return true;
         default:
             return false;
@@ -507,6 +509,21 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
         case EditorBridgeRequestKindUVE::ReadVisualScriptDebugger:
             code = "bridge.visual_scripting.debugger.read";
             message = "The read-only visual-scripting debugger snapshot was copied.";
+            break;
+        case EditorBridgeRequestKindUVE::AddVisualScriptNodeType:
+            if (!request.visualScriptNodeTypeId.has_value() || request.visualScriptNodeTypeId->empty() ||
+                request.visualScriptNodeTypeId->size() > 256U || !request.visualScriptPosition.has_value()) {
+                return MakeResponseUVE(request, false, "bridge.visual_scripting.request.invalid",
+                                       "AddVisualScriptNodeType requires a bounded type ID and finite position payload.");
+            }
+            {
+                const auto result = m_visualScriptCanvas.AddNodeTypeUVE(
+                    *request.visualScriptNodeTypeId, *request.visualScriptPosition, request.expectedRevision);
+                applied = result.IsAppliedUVE();
+                code = result.code == Scripting::ScriptGraphCanvasCommandCodeUVE::StaleRevision
+                    ? "bridge.snapshot.stale" : applied ? "bridge.command.applied" : "bridge.command.rejected";
+                message = result.message;
+            }
             break;
         case EditorBridgeRequestKindUVE::AddVisualScriptNode:
             if (!request.visualScriptNode.has_value() || !request.visualScriptPosition.has_value()) {

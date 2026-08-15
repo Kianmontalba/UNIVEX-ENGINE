@@ -62,6 +62,41 @@ public sealed class VisualScriptCanvasControlTests
     }
 
     [Fact]
+    public void PaletteFilter_SearchesCopiedDescriptorTextAndSortsDeterministically()
+    {
+        BridgeVisualScriptPaletteEntry math = new(
+            "math.add", "Add", "Math", "node.math", 20U, 0U, Array.Empty<BridgeVisualScriptPin>());
+        BridgeVisualScriptPaletteEntry eventNode = new(
+            "event.begin", "Begin", "Event", "node.event", 10U, 0U, Array.Empty<BridgeVisualScriptPin>());
+
+        IReadOnlyList<BridgeVisualScriptPaletteEntry> result = VisualScriptCanvasControl.FilterPalette(
+            new[] { math, eventNode }, "event");
+
+        Assert.Single(result);
+        Assert.Equal("event.begin", result[0].TypeId);
+        Assert.Equal("Event", result[0].Category);
+        Assert.Empty(VisualScriptCanvasControl.FilterPalette(new[] { math, eventNode }, "missing"));
+    }
+
+    [Fact]
+    public void RequestPaletteInsertion_UsesNamedTypeOnlyCommandWithNativeRevision()
+    {
+        VisualScriptCanvasControl control = CreateControl();
+        control.ApplySnapshot(Snapshot(), 23UL);
+        BridgeVisualScriptPaletteEntry entry = new(
+            "math.add", "Add", "Math", "node.math", 1U, 0U, Array.Empty<BridgeVisualScriptPin>());
+        List<BridgeCommand> commands = new();
+        control.CommandRequested += (_, args) => commands.Add(args.Command);
+
+        control.RequestPaletteInsertion(entry);
+
+        Assert.Single(commands);
+        Assert.Equal("addVisualScriptNodeType", commands[0].Kind);
+        Assert.Equal(23UL, commands[0].ExpectedRevision);
+        Assert.Equal("math.add", commands[0].VisualScriptNodeTypeId);
+    }
+
+    [Fact]
     public void RequestUndoAndRedo_EmitNamedCommandsWithCurrentBridgeRevision()
     {
         VisualScriptCanvasControl control = CreateControl();

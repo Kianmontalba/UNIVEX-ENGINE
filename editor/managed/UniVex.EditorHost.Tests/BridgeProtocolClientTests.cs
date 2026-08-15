@@ -492,6 +492,10 @@ public sealed class BridgeProtocolClientTests
         Assert.Equal(20U, snapshot.VisualScripting.Debugger.SourceNodeId);
         Assert.Equal("Breakpoint reached.", snapshot.VisualScripting.Debugger.PauseReason);
         Assert.Equal(new uint[] { 20U }, snapshot.VisualScripting.Debugger.BreakpointNodeIds);
+        Assert.Single(snapshot.VisualScripting.Canvas.PaletteDescriptors);
+        Assert.Equal("EVENT", snapshot.VisualScripting.Canvas.PaletteDescriptors[0].Category);
+        Assert.Equal("node.event", snapshot.VisualScripting.Canvas.PaletteDescriptors[0].IconId);
+        Assert.Single(snapshot.VisualScripting.Canvas.PaletteDescriptors[0].Pins);
     }
 
     [Fact]
@@ -876,6 +880,16 @@ public sealed class BridgeProtocolClientTests
                 } },
                 selectedNodeIds = new[] { 1U },
                 paletteNodeTypeIds = new[] { "test.source" },
+                paletteDescriptors = new[] { new
+                {
+                    typeId = "test.source",
+                    displayName = "Test Source",
+                    category = "EVENT",
+                    iconId = "node.event",
+                    displayOrder = 10U,
+                    presentationFlags = 1U,
+                    pins = new[] { new { name = "Out", direction = 1, type = 2, role = 1, defaultValue = "0.016" } },
+                } },
                 diagnostics = new[] { new
                 {
                     code = 0,
@@ -1067,6 +1081,16 @@ public sealed class BridgeProtocolClientTests
                 } },
                 selectedNodeIds = new[] { 1U },
                 paletteNodeTypeIds = new[] { "test.source" },
+                paletteDescriptors = new[] { new
+                {
+                    typeId = "test.source",
+                    displayName = "Test Source",
+                    category = "EVENT",
+                    iconId = "node.event",
+                    displayOrder = 10U,
+                    presentationFlags = 1U,
+                    pins = new[] { new { name = "Out", direction = 1, type = 2, role = 1, defaultValue = "0.016" } },
+                } },
                 diagnostics = new[] { new
                 {
                     code = 0,

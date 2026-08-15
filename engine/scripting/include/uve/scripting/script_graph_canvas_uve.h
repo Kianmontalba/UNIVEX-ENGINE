@@ -65,6 +65,18 @@ struct ScriptGraphCanvasLinkSnapshotUVE final {
     [[nodiscard]] bool operator==(const ScriptGraphCanvasLinkSnapshotUVE&) const = default;
 };
 
+struct ScriptGraphCanvasPaletteEntryUVE final {
+    std::string typeId;
+    std::string displayName;
+    std::string category = "Uncategorized";
+    std::string iconId = "node.default";
+    std::uint32_t displayOrder = 0U;
+    std::uint32_t presentationFlags = kScriptNodePresentationFlagNoneUVE;
+    std::vector<ScriptGraphCanvasPinSnapshotUVE> pins;
+
+    [[nodiscard]] bool operator==(const ScriptGraphCanvasPaletteEntryUVE&) const = default;
+};
+
 struct ScriptGraphCanvasCommandResultUVE final {
     ScriptGraphCanvasCommandCodeUVE code = ScriptGraphCanvasCommandCodeUVE::Rejected;
     std::uint64_t revision = 0U;
@@ -109,6 +121,7 @@ struct ScriptGraphCanvasSnapshotUVE final {
     std::vector<ScriptGraphCanvasLinkSnapshotUVE> links;
     std::vector<std::uint32_t> selectedNodeIds;
     std::vector<std::string> paletteNodeTypeIds;
+    std::vector<ScriptGraphCanvasPaletteEntryUVE> paletteDescriptors;
     std::vector<ScriptValidationDiagnosticUVE> diagnostics;
 
     [[nodiscard]] bool operator==(const ScriptGraphCanvasSnapshotUVE&) const = default;
@@ -125,6 +138,9 @@ public:
 
     [[nodiscard]] ScriptGraphCanvasCommandResultUVE AddNodeUVE(
         ScriptNodeUVE node, ScriptGraphCanvasPointUVE position,
+        std::uint64_t expectedRevision = 0U);
+    [[nodiscard]] ScriptGraphCanvasCommandResultUVE AddNodeTypeUVE(
+        std::string typeId, ScriptGraphCanvasPointUVE position,
         std::uint64_t expectedRevision = 0U);
     [[nodiscard]] ScriptGraphCanvasCommandResultUVE RemoveNodeUVE(
         std::uint32_t nodeId, std::uint64_t expectedRevision = 0U);

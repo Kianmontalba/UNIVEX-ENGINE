@@ -112,10 +112,30 @@
                                 </Grid>
                                 <TextBlock Grid.Row="1" x:Name="VisualScriptingDebuggerTextBlock" Text="Connect to read native debugger state." TextWrapping="Wrap" Opacity="0.76" />
                                 <Border Grid.Row="2" Padding="6" Background="#20242B" BorderBrush="#394150" BorderThickness="1" CornerRadius="3">
-                                    <StackPanel Orientation="Horizontal" Spacing="8">
-                                        <TextBlock Text="Breakpoints (read-only)" VerticalAlignment="Center" Opacity="0.76" />
-                                        <ListBox x:Name="VisualScriptingBreakpointsListBox" MaxHeight="68" MinWidth="180" IsHitTestVisible="False" />
-                                    </StackPanel>
+                                    <Grid ColumnDefinitions="*,320" ColumnSpacing="8">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <TextBlock Text="Breakpoints (read-only)" VerticalAlignment="Center" Opacity="0.76" />
+                                            <ListBox x:Name="VisualScriptingBreakpointsListBox" MaxHeight="68" MinWidth="180" IsHitTestVisible="False" />
+                                        </StackPanel>
+                                        <Border Grid.Column="1" Padding="6" Background="#111A23" BorderBrush="#496274" BorderThickness="1" CornerRadius="6">
+                                            <Grid RowDefinitions="Auto,*" RowSpacing="5">
+                                                <Grid ColumnDefinitions="*,150" ColumnSpacing="6">
+                                                    <TextBlock Text="NODE PALETTE" FontWeight="SemiBold" Opacity="0.82" VerticalAlignment="Center" />
+                                                    <TextBox x:Name="VisualScriptPaletteFilterTextBox" Grid.Column="1" Watermark="Search nodes" TextChanged="VisualScriptPaletteFilterTextBox_OnTextChanged" />
+                                                </Grid>
+                                                <ListBox x:Name="VisualScriptPaletteListBox" Grid.Row="1" MaxHeight="92" SelectionMode="Single" SelectionChanged="VisualScriptPaletteListBox_OnSelectionChanged">
+                                                    <ListBox.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <StackPanel Spacing="1">
+                                                                <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" />
+                                                                <TextBlock Text="{Binding Category}" FontSize="10" Opacity="0.68" />
+                                                            </StackPanel>
+                                                        </DataTemplate>
+                                                    </ListBox.ItemTemplate>
+                                                </ListBox>
+                                            </Grid>
+                                        </Border>
+                                    </Grid>
                                 </Border>
                                 <Border Grid.Row="3" Padding="6" Background="#20242B" BorderBrush="#394150" BorderThickness="1" CornerRadius="3">
                                     <Grid RowDefinitions="Auto,*,Auto,Auto,Auto" RowSpacing="4">

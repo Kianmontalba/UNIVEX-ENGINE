@@ -932,11 +932,33 @@ TEST(ScriptDebuggerUVETest, SetBreakpointUVE_ProvidesSortedSnapshotAndRejectsEmp
 }
 
 } // namespace UVE::Scripting
-
-
 namespace UVE::Scripting {
+TEST(ScriptGraphCanvasUVETest, SnapshotExposesDescriptorRichPaletteInDeterministicOrder) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(registry.RegisterNodeTypeUVE(ScriptNodeTypeDescriptorUVE{
+        "test.late", "Late", {{"Value", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number}},
+        "FLOW", "node.branch", 20U, kScriptNodePresentationFlagCollapsibleUVE}));
+    ASSERT_TRUE(registry.RegisterNodeTypeUVE(ScriptNodeTypeDescriptorUVE{
+        "test.early", "Early", {{"Exec", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Execution}},
+        "EVENT", "node.event", 10U, kScriptNodePresentationFlagCompactUVE}));
+    ScriptGraphCanvasUVE canvas(registry);
+    ASSERT_TRUE(canvas.AddNodeTypeUVE("test.early", {24.0F, 48.0F}).IsAppliedUVE());
+
+    const ScriptGraphCanvasSnapshotUVE snapshot = canvas.GetSnapshotUVE();
+
+    ASSERT_EQ(snapshot.paletteNodeTypeIds.size(), 2U);
+    ASSERT_EQ(snapshot.paletteDescriptors.size(), 2U);
+    EXPECT_EQ(snapshot.paletteDescriptors[0].typeId, "test.early");
+    EXPECT_EQ(snapshot.paletteDescriptors[0].category, "EVENT");
+    EXPECT_EQ(snapshot.paletteDescriptors[0].displayOrder, 10U);
+    ASSERT_EQ(snapshot.paletteDescriptors[0].pins.size(), 1U);
+    EXPECT_EQ(snapshot.paletteDescriptors[0].pins[0].name, "Exec");
+    EXPECT_EQ(snapshot.paletteDescriptors[1].typeId, "test.late");
+    EXPECT_EQ(snapshot.paletteDescriptors[1].category, "FLOW");
+}
 
 TEST(ScriptHotReloadManagerUVETest, LoadInitialAndReloadUVE_PublishOnlyValidatedCandidates) {
+
     ScriptBytecodeProgramUVE initial;
     initial.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 10U, 0U, "test.source", {}, {}});
     std::vector<std::uint8_t> initialBytes;
