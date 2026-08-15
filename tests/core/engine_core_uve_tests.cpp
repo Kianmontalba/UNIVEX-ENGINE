@@ -20,7 +20,11 @@
 #include <gtest/gtest.h>
 
 #include "uve/asset/asset_handle_uve.h"
+#include "uve/asset/asset_importer_uve.h"
+#include "uve/asset/asset_manager_uve.h"
 #include "uve/asset/blob_asset_uve.h"
+#include "uve/asset/data_table_importer_uve.h"
+#include "uve/asset/data_table_uve.h"
 #include "uve/audio/i_audio_system_uve.h"
 #include "uve/debug/log_sink_uve.h"
 #include "uve/debug/logger_uve.h"
@@ -374,6 +378,71 @@ TEST(EngineCoreUVETest, AssetManagerImporterHotReloadBundle_ReachableAndRoundTri
 
     std::filesystem::remove(sourcePath);
     std::filesystem::remove(destinationPath);
+    engine.Shutdown();
+}
+
+TEST(EngineCoreUVETest, DataTablePipeline_RegisteredAndReachableThroughServicesAfterInit) {
+    EngineConfigUVE config = MakeTestConfigUVE();
+    const std::filesystem::path root = std::filesystem::temp_directory_path();
+    config.assetDatabaseFilePath = root / "uve_engine_core_data_table_tests.uveassetdb";
+    const std::filesystem::path sourcePath = root / "uve_engine_core_data_table_tests.csv";
+    const std::filesystem::path destinationPath = root / "uve_engine_core_data_table_tests.uvetable";
+    std::filesystem::remove(config.assetDatabaseFilePath);
+    std::filesystem::remove(sourcePath);
+    std::filesystem::remove(destinationPath);
+
+    struct CleanupUVE final {
+        std::filesystem::path database;
+        std::filesystem::path source;
+        std::filesystem::path destination;
+        ~CleanupUVE() {
+            std::filesystem::remove(database);
+            std::filesystem::remove(source);
+            std::filesystem::remove(destination);
+        }
+    } cleanup{config.assetDatabaseFilePath, sourcePath, destinationPath};
+
+    {
+        std::ofstream output(sourcePath, std::ios::binary | std::ios::trunc);
+        ASSERT_TRUE(output.is_open());
+        output << "id,damage\npistol,25\n";
+    }
+
+    EngineCoreUVE engine(config);
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    Asset::IAssetDatabaseUVE& assetDatabase = engine.GetServicesUVE().GetAssetDatabaseUVE();
+    Asset::IAssetImporterUVE& importer = engine.GetServicesUVE().GetAssetImporterUVE();
+    Asset::IAssetManagerUVE& assetManager = engine.GetServicesUVE().GetAssetManagerUVE();
+
+    Asset::DataTableImportSettingsUVE settings;
+    settings.tableName = "weapons";
+    settings.columns = {Asset::DataTableColumnUVE{"damage", Asset::DataTableColumnTypeUVE::Integer}};
+    const Asset::AssetGuidUVE guid = importer.ImportUVE(sourcePath, destinationPath, assetDatabase, settings);
+    ASSERT_NE(guid, Asset::kInvalidAssetGuidUVE);
+
+    {
+        const Asset::AssetHandleUVE<Asset::DataTableUVE> handle =
+            assetManager.LoadUVE<Asset::DataTableUVE>(guid, assetDatabase);
+        bool terminal = false;
+        for (int iteration = 0; iteration < 200000 && !terminal; ++iteration) {
+            terminal = handle.IsReadyUVE() || handle.HasFailedUVE();
+            if (!terminal) {
+                std::this_thread::yield();
+            }
+        }
+        ASSERT_TRUE(terminal);
+        ASSERT_TRUE(handle.IsReadyUVE());
+        const Asset::DataTableUVE* const table = handle.TryGetUVE();
+        ASSERT_NE(table, nullptr);
+        const Asset::DataTableSnapshotUVE snapshot = table->GetSnapshotUVE();
+        EXPECT_EQ(snapshot.name, "weapons");
+        ASSERT_EQ(snapshot.rows.size(), 1U);
+        ASSERT_EQ(snapshot.rows.front().values.size(), 1U);
+        EXPECT_EQ(std::get<std::int64_t>(snapshot.rows.front().values.front()), 25);
+    }
+
     engine.Shutdown();
 }
 
