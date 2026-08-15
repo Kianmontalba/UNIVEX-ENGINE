@@ -2,6 +2,7 @@
 #pragma once
 
 #include "uve/scripting/script_graph_editor_backend_uve.h"
+#include "uve/scripting/script_graph_persistence_uve.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -144,6 +145,9 @@ public:
         std::uint64_t expectedRevision = 0U);
 
     [[nodiscard]] ScriptGraphCanvasSnapshotUVE GetSnapshotUVE() const;
+    [[nodiscard]] const ScriptGraphUVE& GetGraphUVE() const noexcept;
+    [[nodiscard]] ScriptGraphCanvasCommandResultUVE ApplyGraphSchemaUVE(
+        ScriptGraphSchemaUVE schema, std::uint64_t expectedRevision = 0U);
     [[nodiscard]] ScriptGraphCanvasLayoutSnapshotUVE GetLayoutSnapshotUVE() const;
     [[nodiscard]] ScriptGraphCanvasCommandResultUVE ApplyLayoutUVE(
         ScriptGraphCanvasLayoutSnapshotUVE layout, std::uint64_t expectedRevision = 0U);

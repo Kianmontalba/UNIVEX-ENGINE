@@ -53,6 +53,8 @@ namespace {
         EditorBridgeCapabilityUVE::SelectDataTablePreview,
         EditorBridgeCapabilityUVE::ReadScriptRuntime,
         EditorBridgeCapabilityUVE::ReadScriptRuntimeTickDiagnostics,
+        EditorBridgeCapabilityUVE::SerializeVisualScriptGraph,
+        EditorBridgeCapabilityUVE::DeserializeVisualScriptGraph,
     };
     return capabilities;
 }
@@ -64,7 +66,8 @@ namespace {
            kind != EditorBridgeRequestKindUVE::ReadVisualScriptDebugger &&
            kind != EditorBridgeRequestKindUVE::ReadDeveloperConsole &&
            kind != EditorBridgeRequestKindUVE::ReadScriptRuntime &&
-           kind != EditorBridgeRequestKindUVE::ReadScriptRuntimeTickDiagnostics;
+           kind != EditorBridgeRequestKindUVE::ReadScriptRuntimeTickDiagnostics &&
+           kind != EditorBridgeRequestKindUVE::SerializeVisualScriptGraph;
 }
 
 [[nodiscard]] bool IsVisualScriptMutationRequestUVE(const EditorBridgeRequestKindUVE kind) noexcept {
@@ -78,6 +81,7 @@ namespace {
         case EditorBridgeRequestKindUVE::SetVisualScriptView:
         case EditorBridgeRequestKindUVE::UndoVisualScript:
         case EditorBridgeRequestKindUVE::RedoVisualScript:
+        case EditorBridgeRequestKindUVE::DeserializeVisualScriptGraph:
             return true;
         default:
             return false;
@@ -107,6 +111,17 @@ namespace {
 
 [[nodiscard]] bool IsBoundedContentPathUVE(const std::string& value) noexcept {
     return value.size() <= kEditorBridgeMaximumContentPathBytesUVE;
+}
+
+[[nodiscard]] Scripting::ScriptGraphSchemaUVE CaptureGraphSchemaUVE(
+    const Scripting::ScriptGraphCanvasUVE& canvas) {
+    Scripting::ScriptGraphSchemaUVE schema{};
+    schema.graph = canvas.GetGraphUVE();
+    for (const Scripting::ScriptGraphCanvasLayoutEntryUVE& entry : canvas.GetLayoutSnapshotUVE().entries) {
+        schema.layout.push_back({entry.nodeId, entry.position.x, entry.position.y});
+    }
+    schema.metadata.emplace("assetType", "visual-script-graph");
+    return schema;
 }
 
 [[nodiscard]] std::string FormatDataTableValueUVE(const Asset::DataTableValueUVE& value) {
@@ -208,6 +223,20 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
         return MakeResponseUVE(request, true, "bridge.visual_scripting.debugger.read",
                                "The read-only visual-scripting debugger snapshot was copied.");
     }
+    if (request.kind == EditorBridgeRequestKindUVE::SerializeVisualScriptGraph) {
+        EditorBridgeResponseUVE response = MakeResponseUVE(
+            request, false, "bridge.visual_scripting.graph_schema.invalid",
+            "The visual-scripting graph schema could not be serialized.");
+        Scripting::ScriptGraphSchemaUVE schema = CaptureGraphSchemaUVE(m_visualScriptCanvas);
+        std::vector<Scripting::ScriptPersistenceDiagnosticUVE> diagnostics;
+        if (!Scripting::EncodeScriptGraphSchemaUVE(schema, diagnostics).empty()) {
+            response.applied = true;
+            response.code = "bridge.visual_scripting.graph_schema.serialized";
+            response.message = "The native visual-scripting graph schema was copied in deterministic order.";
+            response.visualScriptGraphSchema = std::move(schema);
+        }
+        return response;
+    }
     if (request.kind == EditorBridgeRequestKindUVE::ReadDeveloperConsole) {
         return MakeResponseUVE(request, true, "bridge.developer_console.snapshot.read",
                                "The bounded developer-console snapshot was copied.");
@@ -268,6 +297,7 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
     std::string code = "bridge.command.rejected";
     std::string message = "The editor command was rejected without applying a mutation.";
     std::optional<EditorBridgeEntityRefUVE> createdEntity;
+    std::optional<Scripting::ScriptGraphSchemaUVE> responseSchema;
     switch (request.kind) {
         case EditorBridgeRequestKindUVE::SelectEntity: {
             if (!request.entity.has_value() || !request.entity->IsValidUVE() ||
@@ -680,6 +710,34 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
             code = "bridge.script_runtime.tick.completed";
             message = "The native ScriptRuntime diagnostic tick completed and its counters were copied.";
             break;
+        case EditorBridgeRequestKindUVE::SerializeVisualScriptGraph:
+            code = "bridge.visual_scripting.graph_schema.serialized";
+            message = "The native visual-scripting graph schema was copied in deterministic order.";
+            break;
+        case EditorBridgeRequestKindUVE::DeserializeVisualScriptGraph: {
+            if (!request.visualScriptGraphSchema.has_value() ||
+                request.visualScriptGraphSchema->size() > Scripting::ScriptGraphPersistenceLimitsUVE{}.maximumTextBytes) {
+                return MakeResponseUVE(request, false, "bridge.visual_scripting.graph_schema.invalid",
+                                       "DeserializeVisualScriptGraph requires a bounded graph schema JSON payload.");
+            }
+            const Scripting::ScriptGraphSchemaDecodeResultUVE decoded =
+                Scripting::DecodeScriptGraphSchemaUVE(*request.visualScriptGraphSchema);
+            if (!decoded.IsSuccessUVE()) {
+                return MakeResponseUVE(request, false, "bridge.visual_scripting.graph_schema.invalid",
+                                       "The graph schema was rejected before native canvas mutation.");
+            }
+            const Scripting::ScriptGraphCanvasCommandResultUVE appliedResult =
+                m_visualScriptCanvas.ApplyGraphSchemaUVE(*decoded.schema, request.expectedRevision);
+            applied = appliedResult.IsAppliedUVE();
+            code = applied ? "bridge.visual_scripting.graph_schema.deserialized"
+                           : "bridge.visual_scripting.graph_schema.rejected";
+            message = applied ? "The graph schema was applied through native canvas history."
+                              : appliedResult.message;
+            if (applied) {
+                responseSchema = decoded.schema;
+            }
+            break;
+        }
         case EditorBridgeRequestKindUVE::ReadSnapshot:
             break;
     }
@@ -687,6 +745,7 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
     SynchronizeRevisionUVE();
     EditorBridgeResponseUVE response = MakeResponseUVE(request, applied, std::move(code), std::move(message));
     response.createdEntity = createdEntity;
+    response.visualScriptGraphSchema = std::move(responseSchema);
     return response;
 }
 
@@ -897,7 +956,8 @@ EditorBridgeSnapshotUVE EditorBridgeUVE::BuildSnapshotUVE() const {
 EditorBridgeResponseUVE EditorBridgeUVE::MakeResponseUVE(const EditorBridgeRequestUVE& request, const bool applied,
                                                            std::string code, std::string message) const {
     return EditorBridgeResponseUVE{kEditorBridgeProtocolVersionUVE, request.requestId, applied,
-                                   std::move(code), std::move(message), BuildSnapshotUVE(), std::nullopt};
+                                   std::move(code), std::move(message), BuildSnapshotUVE(), std::nullopt,
+                                   std::nullopt};
 }
 
 Scene::EntityUVE EditorBridgeUVE::ToEntityUVE(const EditorBridgeEntityRefUVE entity) noexcept {

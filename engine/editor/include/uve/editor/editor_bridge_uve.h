@@ -76,6 +76,8 @@ enum class EditorBridgeCapabilityUVE : std::uint8_t {
     SelectDataTablePreview,
     ReadScriptRuntime,
     ReadScriptRuntimeTickDiagnostics,
+    SerializeVisualScriptGraph,
+    DeserializeVisualScriptGraph,
 };
 
 /// The deliberately small v1 request vocabulary. No generic command string is accepted because
@@ -116,6 +118,8 @@ enum class EditorBridgeRequestKindUVE : std::uint8_t {
     SelectDataTablePreview,
     ReadScriptRuntime,
     ReadScriptRuntimeTickDiagnostics,
+    SerializeVisualScriptGraph,
+    DeserializeVisualScriptGraph,
 };
 
 /// Explicitly describes whether this bridge session has a native-owned viewport surface. No raw
@@ -403,6 +407,7 @@ struct EditorBridgeRequestUVE final {
     std::optional<Scripting::ScriptLinkUVE> visualScriptLink;
     std::optional<std::vector<std::uint32_t>> visualScriptSelection;
     std::optional<Scripting::ScriptGraphCanvasViewUVE> visualScriptView;
+    std::optional<std::string> visualScriptGraphSchema;
     std::optional<std::string> dataTableName;
     std::optional<std::string> developerConsoleCommand;
     std::optional<DeveloperConsoleSeverityFilterUVE> developerConsoleSeverityFilter;
@@ -437,6 +442,7 @@ struct EditorBridgeResponseUVE final {
     std::string message;
     EditorBridgeSnapshotUVE snapshot;
     std::optional<EditorBridgeEntityRefUVE> createdEntity;
+    std::optional<Scripting::ScriptGraphSchemaUVE> visualScriptGraphSchema;
 };
 
 /// Main-thread adapter over EditorUVE. It supports coexistence with the native ImGui editor: every
