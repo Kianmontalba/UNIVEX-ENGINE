@@ -1551,3 +1551,12 @@ Rendering must remain safe for empty and truncated snapshots. A truncated flag i
 Developer-console commands must be explicitly registered by native code with bounded identifiers, bounded help text, and a native handler. Unknown, oversized, multiline, or malformed command text is rejected without granting an implicit filesystem, process, network, ECS, renderer, or plugin capability. Built-in commands remain safe and deterministic; CVAR names and values are bounded, typed by their registered native descriptor, and read-only state is enforced by the native service.
 
 The managed Console panel renders only copied `DeveloperConsoleSnapshotUVE` DTO values. It may submit bounded text through the named bridge request `SubmitDeveloperConsoleCommand`, but it must never parse or execute commands locally, write logs/settings, or retain a native service reference. Output, history, and CVAR truncation flags must be shown rather than interpreted as deletion or completeness.
+
+
+## Developer Console Policy and Discovery v1 (Increment 89)
+
+The developer console is explicitly development-only in v1. A shipping-policy instance must publish `available=false` and `developmentOnly=true`, reject command execution and discovery mutations, and never silently expose a debug or cheat surface. Policy state is native-owned and is represented as copied snapshot facts across the bridge.
+
+Severity filtering is a presentation-state mutation over bounded native output; it must never delete or rewrite the underlying log history. Completion is deterministic, prefix-based, registry-backed, lexicographically ordered, and bounded by the native completion limit. History navigation uses a bounded native cursor and an explicit empty-draft state; the managed host may render and request cursor movement but must not own or mutate history.
+
+The Increment 89 bridge additions remain named and value-only: severity-filter, completion-prefix, and history-delta payloads are validated by C++ and serialized as additive DTO fields. C# may display copied availability, filter, cursor, and completion values, but it must not infer policy, execute commands, access filesystem/process/network/ECS/renderer/plugin state, or retain a native console reference.

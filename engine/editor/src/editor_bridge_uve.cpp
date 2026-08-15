@@ -43,6 +43,9 @@ namespace {
         EditorBridgeCapabilityUVE::ReadDeveloperConsole,
         EditorBridgeCapabilityUVE::SubmitDeveloperConsoleCommand,
         EditorBridgeCapabilityUVE::ClearDeveloperConsole,
+        EditorBridgeCapabilityUVE::SetDeveloperConsoleSeverityFilter,
+        EditorBridgeCapabilityUVE::SetDeveloperConsoleCompletionPrefix,
+        EditorBridgeCapabilityUVE::MoveDeveloperConsoleHistory,
     };
     return capabilities;
 }
@@ -481,6 +484,49 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
             code = applied ? "bridge.command.applied" : "bridge.developer_console.clear.noop";
             message = applied ? "The native developer-console output was cleared."
                               : "The native developer-console output was already empty.";
+            break;
+        case EditorBridgeRequestKindUVE::SetDeveloperConsoleSeverityFilter:
+            if (!request.developerConsoleSeverityFilter.has_value()) {
+                return MakeResponseUVE(request, false, "bridge.developer_console.request.invalid",
+                                       "SetDeveloperConsoleSeverityFilter requires a severity-filter payload.");
+            }
+            if (!m_developerConsole.IsAvailableUVE()) {
+                return MakeResponseUVE(request, false, "bridge.developer_console.unavailable",
+                                       "Developer-console discovery is disabled by the native shipping build policy.");
+            }
+            applied = m_developerConsole.SetSeverityFilterUVE(*request.developerConsoleSeverityFilter);
+            code = applied ? "bridge.command.applied" : "bridge.developer_console.filter.noop";
+            message = applied ? "The native developer-console severity filter was updated."
+                              : "The native developer-console severity filter was already set.";
+            break;
+        case EditorBridgeRequestKindUVE::SetDeveloperConsoleCompletionPrefix:
+            if (!request.developerConsoleCompletionPrefix.has_value() ||
+                request.developerConsoleCompletionPrefix->size() > DeveloperConsoleUVE::kMaximumValueBytesUVE) {
+                return MakeResponseUVE(request, false, "bridge.developer_console.request.invalid",
+                                       "SetDeveloperConsoleCompletionPrefix requires a bounded prefix payload.");
+            }
+            if (!m_developerConsole.IsAvailableUVE()) {
+                return MakeResponseUVE(request, false, "bridge.developer_console.unavailable",
+                                       "Developer-console discovery is disabled by the native shipping build policy.");
+            }
+            applied = m_developerConsole.SetCompletionPrefixUVE(*request.developerConsoleCompletionPrefix);
+            code = applied ? "bridge.command.applied" : "bridge.developer_console.completion.noop";
+            message = applied ? "The native developer-console completion prefix was updated."
+                              : "The native developer-console completion prefix was already set.";
+            break;
+        case EditorBridgeRequestKindUVE::MoveDeveloperConsoleHistory:
+            if (!request.developerConsoleHistoryDelta.has_value() || *request.developerConsoleHistoryDelta == 0) {
+                return MakeResponseUVE(request, false, "bridge.developer_console.request.invalid",
+                                       "MoveDeveloperConsoleHistory requires a non-zero history delta.");
+            }
+            if (!m_developerConsole.IsAvailableUVE()) {
+                return MakeResponseUVE(request, false, "bridge.developer_console.unavailable",
+                                       "Developer-console history is disabled by the native shipping build policy.");
+            }
+            applied = m_developerConsole.MoveHistoryUVE(*request.developerConsoleHistoryDelta);
+            code = applied ? "bridge.command.applied" : "bridge.developer_console.history.noop";
+            message = applied ? "The native developer-console history cursor moved."
+                              : "The native developer-console history cursor did not move.";
             break;
         case EditorBridgeRequestKindUVE::ReadDeveloperConsole:
             code = "bridge.developer_console.snapshot.read";

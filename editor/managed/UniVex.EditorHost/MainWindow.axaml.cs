@@ -93,6 +93,22 @@ public partial class MainWindow : Window
     private void DeveloperConsoleClearButton_OnClick(object? sender, RoutedEventArgs e) =>
         DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "clearDeveloperConsole"));
 
+    private void DeveloperConsoleDiscoverButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        byte filter = checked((byte)Math.Clamp(DeveloperConsoleSeverityFilterComboBox.SelectedIndex, 0, 3));
+        DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "setDeveloperConsoleSeverityFilter",
+            DeveloperConsoleSeverityFilter: filter,
+            DeveloperConsoleCompletionPrefix: DeveloperConsoleCompletionPrefixTextBox.Text ?? string.Empty));
+    }
+
+    private void DeveloperConsoleHistoryUpButton_OnClick(object? sender, RoutedEventArgs e) =>
+        DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "moveDeveloperConsoleHistory",
+            DeveloperConsoleHistoryDelta: -1));
+
+    private void DeveloperConsoleHistoryDownButton_OnClick(object? sender, RoutedEventArgs e) =>
+        DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "moveDeveloperConsoleHistory",
+            DeveloperConsoleHistoryDelta: 1));
+
     private void WorkspaceButton_OnClick(object? sender, RoutedEventArgs e)
     {
         if (sender is not Button { Tag: string workspaceText } ||
@@ -466,9 +482,29 @@ public partial class MainWindow : Window
         string truncation = console.OutputTruncated || console.HistoryTruncated || console.CVarsTruncated
             ? " · bounded/truncated"
             : string.Empty;
+        DeveloperConsoleCompletionListBox.ItemsSource = console.Completions
+            .Select(completion => $"{completion.Identifier} — {completion.Help}")
+            .ToArray();
+        applyingSnapshot = true;
+        try
+        {
+            DeveloperConsoleSeverityFilterComboBox.SelectedIndex = Math.Clamp(console.SeverityFilter, (byte)0, (byte)3);
+            if (console.HistoryCursor >= 0)
+            {
+                DeveloperConsoleCommandTextBox.Text = console.HistoryEntry;
+            }
+        }
+        finally
+        {
+            applyingSnapshot = false;
+        }
+        string availability = console.IsAvailable ? "available" : "shipping-disabled";
+        string cursor = console.HistoryCursor < 0 ? "draft" : $"history {console.HistoryCursor}";
+        string discoveryTruncation = console.CompletionTruncated ? " · completion list truncated" : string.Empty;
         DeveloperConsoleStatusTextBlock.Text =
-            $"Generation {console.Generation}; {console.Output.Count} output entr(y/ies), " +
-            $"{console.History.Count} history item(s), {console.CVars.Count} cvar(s){truncation}";
+            $"Generation {console.Generation}; {availability}; filter {console.SeverityFilter}; {cursor}; " +
+            $"{console.Output.Count} output entr(y/ies), {console.History.Count} history item(s), " +
+            $"{console.CVars.Count} cvar(s){truncation}{discoveryTruncation}";
     }
 
     private void RenderVisualScripting(BridgeVisualScriptingSnapshot scripting, ulong bridgeRevision)

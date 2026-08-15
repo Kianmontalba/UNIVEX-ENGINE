@@ -237,12 +237,19 @@ public sealed class BridgeProtocolClientTests
             developerConsole = new
         {
             generation = 3UL,
+            available = true,
+            developmentOnly = true,
+            severityFilter = 0,
+            historyCursor = 0,
+            historyEntry = "help",
             outputTruncated = false,
             historyTruncated = false,
             cvarsTruncated = false,
+            completionTruncated = false,
             output = new[] { new { severity = 0, text = "ready" } },
             history = new[] { "help" },
             cvars = new[] { new { name = "r.vsync", value = "1", readOnly = true } },
+            completions = new[] { new { identifier = "help", help = "List registered native commands." } },
         },
         capabilities = Array.Empty<int>(),
         }));
@@ -281,6 +288,13 @@ public sealed class BridgeProtocolClientTests
         BridgeEditorSnapshot snapshot = BridgeSnapshotParser.Parse(document.RootElement);
 
         Assert.Equal(3UL, snapshot.DeveloperConsole.Generation);
+        Assert.True(snapshot.DeveloperConsole.IsAvailable);
+        Assert.True(snapshot.DeveloperConsole.IsDevelopmentOnly);
+        Assert.Equal((byte)0, snapshot.DeveloperConsole.SeverityFilter);
+        Assert.Equal(0, snapshot.DeveloperConsole.HistoryCursor);
+        Assert.Equal("help", snapshot.DeveloperConsole.HistoryEntry);
+        Assert.Single(snapshot.DeveloperConsole.Completions);
+        Assert.Equal("help", snapshot.DeveloperConsole.Completions[0].Identifier);
         Assert.Single(snapshot.DeveloperConsole.Output);
         Assert.Equal(BridgeDeveloperConsoleSeverity.Info, snapshot.DeveloperConsole.Output[0].Severity);
         Assert.Equal("ready", snapshot.DeveloperConsole.Output[0].Text);
@@ -317,6 +331,39 @@ public sealed class BridgeProtocolClientTests
         JsonElement parameters = request.RootElement.GetProperty("params");
         Assert.Equal("submitDeveloperConsoleCommand", parameters.GetProperty("kind").GetString());
         Assert.Equal("help", parameters.GetProperty("developerConsoleCommand").GetString());
+    }
+
+    [Fact]
+    public async Task DispatchAsync_SerializesConsoleDiscoveryPayloads()
+    {
+        await using MemoryStream input = BuildFrames(new
+        {
+            jsonrpc = "2.0",
+            id = 1,
+            result = new
+            {
+                protocolVersion = BridgeProtocolClient.ProtocolVersion,
+                requestId = 1UL,
+                applied = true,
+                code = "bridge.command.applied",
+                message = "The console discovery state changed.",
+                snapshot = Snapshot(sceneDirty: false),
+                createdEntity = (object?)null,
+            },
+        });
+        await using MemoryStream output = new();
+        await using BridgeProtocolClient client = new(input, output);
+
+        await client.DispatchAsync(new BridgeCommand(9UL, "setDeveloperConsoleSeverityFilter",
+            DeveloperConsoleSeverityFilter: 2, DeveloperConsoleCompletionPrefix: "ca", DeveloperConsoleHistoryDelta: -1),
+            CancellationToken.None);
+
+        output.Position = 0;
+        using JsonDocument request = JsonDocument.Parse(await ReadFrameAsync(output));
+        JsonElement parameters = request.RootElement.GetProperty("params");
+        Assert.Equal((byte)2, parameters.GetProperty("developerConsoleSeverityFilter").GetByte());
+        Assert.Equal("ca", parameters.GetProperty("developerConsoleCompletionPrefix").GetString());
+        Assert.Equal(-1, parameters.GetProperty("developerConsoleHistoryDelta").GetInt32());
     }
 
     [Fact]
@@ -434,12 +481,19 @@ public sealed class BridgeProtocolClientTests
         developerConsole = new
         {
             generation = 3UL,
+            available = true,
+            developmentOnly = true,
+            severityFilter = 0,
+            historyCursor = 0,
+            historyEntry = "help",
             outputTruncated = false,
             historyTruncated = false,
             cvarsTruncated = false,
+            completionTruncated = false,
             output = new[] { new { severity = 0, text = "ready" } },
             history = new[] { "help" },
             cvars = new[] { new { name = "r.vsync", value = "1", readOnly = true } },
+            completions = new[] { new { identifier = "help", help = "List registered native commands." } },
         },
         capabilities = Array.Empty<int>(),
     };
@@ -549,12 +603,19 @@ public sealed class BridgeProtocolClientTests
         developerConsole = new
         {
             generation = 3UL,
+            available = true,
+            developmentOnly = true,
+            severityFilter = 0,
+            historyCursor = 0,
+            historyEntry = "help",
             outputTruncated = false,
             historyTruncated = false,
             cvarsTruncated = false,
+            completionTruncated = false,
             output = new[] { new { severity = 0, text = "ready" } },
             history = new[] { "help" },
             cvars = new[] { new { name = "r.vsync", value = "1", readOnly = true } },
+            completions = new[] { new { identifier = "help", help = "List registered native commands." } },
         },
         capabilities = Array.Empty<int>(),
     };

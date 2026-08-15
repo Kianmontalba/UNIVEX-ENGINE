@@ -63,6 +63,9 @@ enum class EditorBridgeCapabilityUVE : std::uint8_t {
     ReadDeveloperConsole,
     SubmitDeveloperConsoleCommand,
     ClearDeveloperConsole,
+    SetDeveloperConsoleSeverityFilter,
+    SetDeveloperConsoleCompletionPrefix,
+    MoveDeveloperConsoleHistory,
 };
 
 /// The deliberately small v1 request vocabulary. No generic command string is accepted because
@@ -96,6 +99,9 @@ enum class EditorBridgeRequestKindUVE : std::uint8_t {
     ReadDeveloperConsole,
     SubmitDeveloperConsoleCommand,
     ClearDeveloperConsole,
+    SetDeveloperConsoleSeverityFilter,
+    SetDeveloperConsoleCompletionPrefix,
+    MoveDeveloperConsoleHistory,
 };
 
 /// Explicitly describes whether this bridge session has a native-owned viewport surface. No raw
@@ -277,6 +283,9 @@ struct EditorBridgeRequestUVE final {
     std::optional<std::vector<std::uint32_t>> visualScriptSelection;
     std::optional<Scripting::ScriptGraphCanvasViewUVE> visualScriptView;
     std::optional<std::string> developerConsoleCommand;
+    std::optional<DeveloperConsoleSeverityFilterUVE> developerConsoleSeverityFilter;
+    std::optional<std::string> developerConsoleCompletionPrefix;
+    std::optional<std::int32_t> developerConsoleHistoryDelta;
 
     EditorBridgeRequestUVE() = default;
 
