@@ -8,6 +8,14 @@ using UniVex.EditorHost;
 
 namespace UniVex.EditorHost;
 
+public sealed record VisualScriptNodePresentation(
+    string FillHex,
+    string HeaderHex,
+    string AccentHex,
+    string PinHex,
+    string IconGlyph,
+    bool UsesFallback);
+
 public sealed class VisualScriptCanvasCommandEventArgs : EventArgs
 {
     public VisualScriptCanvasCommandEventArgs(BridgeCommand command)
@@ -31,19 +39,23 @@ public sealed class VisualScriptCanvasControl : Control
     private const double MinimumZoom = 0.1D;
     private const double MaximumZoom = 8D;
 
-    private static readonly IBrush BackgroundBrush = new SolidColorBrush(Color.Parse("#11151B"));
-    private static readonly IBrush GridBrush = new SolidColorBrush(Color.Parse("#222A35"));
-    private static readonly IBrush NodeBrush = new SolidColorBrush(Color.Parse("#263241"));
-    private static readonly IBrush SelectedNodeBrush = new SolidColorBrush(Color.Parse("#304A64"));
-    private static readonly IBrush NodeHeaderBrush = new SolidColorBrush(Color.Parse("#34465B"));
-    private static readonly IBrush LinkBrush = new SolidColorBrush(Color.Parse("#8EB6D8"));
-    private static readonly IBrush SelectedBrush = new SolidColorBrush(Color.Parse("#F0B84B"));
-    private static readonly IBrush ForegroundBrush = new SolidColorBrush(Color.Parse("#E6EDF5"));
-    private static readonly IBrush MutedBrush = new SolidColorBrush(Color.Parse("#8C9AAF"));
+    private static readonly IBrush BackgroundBrush = new SolidColorBrush(Color.Parse("#0D1219"));
+    private static readonly IBrush GridBrush = new SolidColorBrush(Color.Parse("#24303D"));
+    private static readonly IBrush GridMajorBrush = new SolidColorBrush(Color.Parse("#314052"));
+    private static readonly IBrush NodeBrush = new SolidColorBrush(Color.Parse("#17222D"));
+    private static readonly IBrush SelectedNodeBrush = new SolidColorBrush(Color.Parse("#1D3445"));
+    private static readonly IBrush LinkBrush = new SolidColorBrush(Color.Parse("#78B7D8"));
+    private static readonly IBrush SelectedBrush = new SolidColorBrush(Color.Parse("#F5C66A"));
+    private static readonly IBrush ForegroundBrush = new SolidColorBrush(Color.Parse("#EFF7FF"));
+    private static readonly IBrush MutedBrush = new SolidColorBrush(Color.Parse("#9AAEC0"));
+    private static readonly IBrush GlassHighlightBrush = new SolidColorBrush(Color.Parse("#5D7B91"));
     private static readonly Pen GridPen = new(GridBrush, 1D);
+    private static readonly Pen GridMajorPen = new(GridMajorBrush, 1D);
     private static readonly Pen LinkPen = new(LinkBrush, 2D);
-    private static readonly Pen NodePen = new(new SolidColorBrush(Color.Parse("#536477")), 1D);
+    private static readonly Pen SelectedLinkPen = new(SelectedBrush, 3D);
+    private static readonly Pen NodePen = new(new SolidColorBrush(Color.Parse("#496274")), 1D);
     private static readonly Pen SelectedPen = new(SelectedBrush, 2D);
+    private static readonly Pen GlassHighlightPen = new(GlassHighlightBrush, 1D);
 
     private BridgeVisualScriptCanvasSnapshot canvas = EmptyCanvas();
     private ulong bridgeRevision;
@@ -60,6 +72,21 @@ public sealed class VisualScriptCanvasControl : Control
     public BridgeVisualScriptCanvasSnapshot CanvasSnapshot => canvas;
 
     public ulong BridgeRevision => bridgeRevision;
+
+    public static VisualScriptNodePresentation DescribeNodePresentation(BridgeVisualScriptNode node)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        string category = node.Category.Trim();
+        return category.ToUpperInvariant() switch
+        {
+            "EVENT" => new("#182B35", "#315C63", "#78E5D5", "#7EDBD1", "E", false),
+            "FLOW" => new("#211E35", "#4B466E", "#BBA9FF", "#B8A8FF", "F", false),
+            "DATA" => new("#172A38", "#2D586E", "#8BD3FF", "#86D0F7", "D", false),
+            "MATH" => new("#30291A", "#5B4D2F", "#FFD081", "#F4C56B", "∑", false),
+            "UTILITY" => new("#202A31", "#3D4D59", "#B5C7D8", "#B5C7D8", "U", false),
+            _ => new("#1B222C", "#2D3440", "#8C9AAF", "#9AAEC0", "?", true),
+        };
+    }
 
     public Rect GetNodeScreenRect(uint nodeId)
     {
@@ -214,14 +241,23 @@ public sealed class VisualScriptCanvasControl : Control
     private void DrawGrid(DrawingContext context)
     {
         double zoom = Math.Max(canvas.View.Zoom, 0.1F);
-        double spacing = Math.Clamp(32D * zoom, 8D, 96D);
-        for (double x = Mod(canvas.View.Pan.X * zoom, spacing); x < Bounds.Width; x += spacing)
+        double minorSpacing = Math.Clamp(24D * zoom, 8D, 72D);
+        double majorSpacing = minorSpacing * 4D;
+        for (double x = Mod(canvas.View.Pan.X * zoom, minorSpacing); x < Bounds.Width; x += minorSpacing)
         {
             context.DrawLine(GridPen, new Point(x, 0D), new Point(x, Bounds.Height));
         }
-        for (double y = Mod(canvas.View.Pan.Y * zoom, spacing); y < Bounds.Height; y += spacing)
+        for (double y = Mod(canvas.View.Pan.Y * zoom, minorSpacing); y < Bounds.Height; y += minorSpacing)
         {
             context.DrawLine(GridPen, new Point(0D, y), new Point(Bounds.Width, y));
+        }
+        for (double x = Mod(canvas.View.Pan.X * zoom, majorSpacing); x < Bounds.Width; x += majorSpacing)
+        {
+            context.DrawLine(GridMajorPen, new Point(x, 0D), new Point(x, Bounds.Height));
+        }
+        for (double y = Mod(canvas.View.Pan.Y * zoom, majorSpacing); y < Bounds.Height; y += majorSpacing)
+        {
+            context.DrawLine(GridMajorPen, new Point(0D, y), new Point(Bounds.Width, y));
         }
     }
 
@@ -237,36 +273,80 @@ public sealed class VisualScriptCanvasControl : Control
             }
             Point output = PinAnchor(outputNode, link.Output.PinName, outputSide: true);
             Point input = PinAnchor(inputNode, link.Input.PinName, outputSide: false);
-            Point midpoint = new((output.X + input.X) / 2D, (output.Y + input.Y) / 2D);
-            context.DrawLine(LinkPen, output, new Point(midpoint.X, output.Y));
-            context.DrawLine(LinkPen, new Point(midpoint.X, output.Y), new Point(midpoint.X, input.Y));
-            context.DrawLine(LinkPen, new Point(midpoint.X, input.Y), input);
+            double curve = Math.Max(32D * canvas.View.Zoom, Math.Abs(input.X - output.X) * 0.42D);
+            StreamGeometry geometry = new();
+            using (StreamGeometryContext geometryContext = geometry.Open())
+            {
+                geometryContext.BeginFigure(output, isFilled: false);
+                geometryContext.CubicBezierTo(
+                    new Point(output.X + curve, output.Y),
+                    new Point(input.X - curve, input.Y),
+                    input);
+            }
+            bool selected = outputNode.IsSelected || inputNode.IsSelected ||
+                            canvas.SelectedNodeIds.Contains(outputNode.Id) || canvas.SelectedNodeIds.Contains(inputNode.Id);
+            context.DrawGeometry(null, selected ? SelectedLinkPen : LinkPen, geometry);
         }
     }
 
     private void DrawNodes(DrawingContext context)
     {
-        foreach (BridgeVisualScriptNode node in canvas.Nodes)
+        foreach (BridgeVisualScriptNode node in canvas.Nodes.OrderBy(item => item.DisplayOrder).ThenBy(item => item.Id))
         {
             Rect rect = NodeRect(node);
             bool selected = node.IsSelected || canvas.SelectedNodeIds.Contains(node.Id);
-            context.DrawRectangle(selected ? SelectedNodeBrush : NodeBrush, selected ? SelectedPen : NodePen, rect, 4D, 4D);
+            VisualScriptNodePresentation presentation = DescribeNodePresentation(node);
+            IBrush fill = new SolidColorBrush(Color.Parse(selected ? "#213B4D" : presentation.FillHex));
+            IBrush headerBrush = new SolidColorBrush(Color.Parse(presentation.HeaderHex));
+            IBrush accentBrush = new SolidColorBrush(Color.Parse(presentation.AccentHex));
+            context.DrawRectangle(fill, selected ? SelectedPen : NodePen, rect, 8D, 8D);
             Rect header = new(rect.X, rect.Y, rect.Width, Math.Min(HeaderHeight * canvas.View.Zoom, rect.Height));
-            context.DrawRectangle(NodeHeaderBrush, null, header, 4D, 4D);
-            DrawText(context, node.DisplayName.Length == 0 ? node.TypeId : node.DisplayName,
-                new Point(rect.X + NodePadding * canvas.View.Zoom, rect.Y + 6D * canvas.View.Zoom), 12D * canvas.View.Zoom, ForegroundBrush);
+            context.DrawRectangle(headerBrush, null, header, 8D, 8D);
+            context.DrawLine(GlassHighlightPen, new Point(rect.X + 8D, rect.Y + 1D),
+                new Point(rect.Right - 8D, rect.Y + 1D));
+            context.DrawEllipse(accentBrush, null,
+                new Point(rect.X + 15D * canvas.View.Zoom, rect.Y + 14D * canvas.View.Zoom),
+                7D * canvas.View.Zoom, 7D * canvas.View.Zoom);
+            DrawText(context, presentation.IconGlyph,
+                new Point(rect.X + 11D * canvas.View.Zoom, rect.Y + 6D * canvas.View.Zoom),
+                9D * canvas.View.Zoom, fill);
+            string title = node.DisplayName.Length == 0 ? node.TypeId : node.DisplayName;
+            string category = node.Category.Length == 0 ? "Uncategorized" : node.Category;
+            DrawText(context, title,
+                new Point(rect.X + 28D * canvas.View.Zoom, rect.Y + 3D * canvas.View.Zoom),
+                11D * canvas.View.Zoom, ForegroundBrush);
+            DrawText(context, presentation.UsesFallback ? "fallback" : category.ToLowerInvariant(),
+                new Point(rect.X + 28D * canvas.View.Zoom, rect.Y + 15D * canvas.View.Zoom),
+                8D * canvas.View.Zoom, MutedBrush);
             for (int index = 0; index < node.Pins.Count; ++index)
             {
                 BridgeVisualScriptPin pin = node.Pins[index];
                 bool output = pin.Direction != 0;
                 double y = rect.Y + (HeaderHeight + NodePadding + index * PinRowHeight) * canvas.View.Zoom;
                 double x = output ? rect.Right - NodePadding * canvas.View.Zoom : rect.X + NodePadding * canvas.View.Zoom;
-                context.DrawEllipse(output ? SelectedBrush : LinkBrush, null, new Point(x, y), 3D * canvas.View.Zoom, 3D * canvas.View.Zoom);
-                double textX = output ? rect.X + NodePadding * canvas.View.Zoom : rect.X + 15D * canvas.View.Zoom;
-                DrawText(context, pin.Name, new Point(textX, y - 6D * canvas.View.Zoom), 10D * canvas.View.Zoom, MutedBrush);
+                IBrush pinBrush = PinBrush(pin, presentation.PinHex);
+                context.DrawEllipse(pinBrush, null, new Point(x, y), 4D * canvas.View.Zoom, 4D * canvas.View.Zoom);
+                double textX = output ? rect.X + NodePadding * canvas.View.Zoom : rect.X + 16D * canvas.View.Zoom;
+                DrawText(context, pin.Name, new Point(textX, y - 6D * canvas.View.Zoom),
+                    10D * canvas.View.Zoom, ForegroundBrush);
+                if (!string.IsNullOrWhiteSpace(pin.DefaultValue))
+                {
+                    DrawText(context, pin.DefaultValue,
+                        new Point(rect.X + rect.Width / 2D, y - 6D * canvas.View.Zoom),
+                        8D * canvas.View.Zoom, MutedBrush);
+                }
             }
         }
     }
+
+    private static IBrush PinBrush(BridgeVisualScriptPin pin, string fallbackHex) => pin.Type switch
+    {
+        1 => new SolidColorBrush(Color.Parse("#8BD3FF")),
+        2 => new SolidColorBrush(Color.Parse("#BBA9FF")),
+        3 => new SolidColorBrush(Color.Parse("#FFD081")),
+        4 => new SolidColorBrush(Color.Parse("#78E5D5")),
+        _ => new SolidColorBrush(Color.Parse(fallbackHex)),
+    };
 
     private void DrawFooter(DrawingContext context)
     {
