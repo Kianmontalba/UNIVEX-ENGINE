@@ -1646,3 +1646,10 @@ The managed `BridgeCommand` and Avalonia Data Tables catalog are presentation ad
 `RegisterDataTableAssetUVE()` must validate the `.uvetable` extension and complete `LoadDataTableAssetUVE()` operation before calling `IAssetDatabaseUVE::RegisterUVE()`. A failed validation must return `std::nullopt` and leave the database unchanged; never register a path first and validate it later.
 
 The helper may rely on the generic database's established lexical normalization and idempotent GUID behavior, but it must not reinterpret a database record as a loaded table. Registration does not own a `DataTableUVE`, schedule import work, scan directories, watch files, hot reload sessions, mutate the editor bridge, bind runtime objects, or transfer managed pointers.
+
+
+## Typed Data Table asset-manager loader (Increment 100)
+
+Register the DataTableUVE loader explicitly through `RegisterDataTableAssetLoaderUVE()` and reuse `LoadDataTableAssetUVE()` as the sole file-validation path. Do not create a parallel manager, cache, worker, or reference-count implementation for data tables.
+
+The helper owns no lifetime beyond registration. `AssetManagerUVE` owns worker execution, typed records, `AssetHandleUVE<DataTableUVE>` references, failure states, garbage collection, and any future explicit reload operation. A successful manager load does not mutate `DataTableRegistryUVE`, editor bridge DTOs, database identity records, or managed state.
