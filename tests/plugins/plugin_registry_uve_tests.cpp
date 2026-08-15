@@ -38,6 +38,35 @@ TEST(NativePluginManifestValidationUVETest, ValidateNativePluginManifestUVE_Repo
               NativePluginManifestValidationCodeUVE::TooManyCapabilities);
 }
 
+TEST(NativePluginManifestValidationUVETest, ValidateNativePluginManifestUVE_AppliesExplicitCapabilityPolicy) {
+    const NativePluginManifestUVE manifest{"uve.policy", "Policy", {1U, 0U, 0U},
+                                           kNativePluginProtocolVersionUVE, {"node.types", "editor.window"}};
+    const NativePluginCapabilityPolicyUVE allowPolicy{false, {"node.types", "editor.window"}};
+    EXPECT_TRUE(ValidateNativePluginManifestUVE(manifest, allowPolicy).IsValidUVE());
+
+    const NativePluginCapabilityPolicyUVE denyPolicy{false, {"node.types"}};
+    const NativePluginManifestValidationResultUVE denied =
+        ValidateNativePluginManifestUVE(manifest, denyPolicy);
+    ASSERT_FALSE(denied.IsValidUVE());
+    ASSERT_EQ(denied.diagnostics.size(), 1U);
+    EXPECT_EQ(denied.diagnostics[0].code, NativePluginManifestValidationCodeUVE::CapabilityNotAllowed);
+    EXPECT_EQ(denied.diagnostics[0].capabilityIndex, 1U);
+
+    const NativePluginCapabilityPolicyUVE duplicatePolicy{false, {"node.types", "node.types"}};
+    const NativePluginManifestValidationResultUVE duplicate =
+        ValidateNativePluginManifestUVE(manifest, duplicatePolicy);
+    ASSERT_FALSE(duplicate.IsValidUVE());
+    EXPECT_EQ(duplicate.diagnostics[0].code,
+              NativePluginManifestValidationCodeUVE::DuplicatePolicyCapabilityId);
+    EXPECT_EQ(duplicate.diagnostics[0].capabilityIndex, 1U);
+
+    const NativePluginCapabilityPolicyUVE invalidPolicy{false, {"bad id"}};
+    const NativePluginManifestValidationResultUVE invalid =
+        ValidateNativePluginManifestUVE(manifest, invalidPolicy);
+    ASSERT_FALSE(invalid.IsValidUVE());
+    EXPECT_EQ(invalid.diagnostics[0].code, NativePluginManifestValidationCodeUVE::InvalidCapabilityId);
+}
+
 TEST(NativePluginRegistryUVETest, RegisterManifestUVE_ValidatesIdentityProtocolAndCapabilities) {
     NativePluginRegistryUVE registry;
     NativePluginManifestUVE manifest{"uve.terrain", "Terrain", {1U, 2U, 0U},
