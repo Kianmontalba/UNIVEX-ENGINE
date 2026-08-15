@@ -149,6 +149,8 @@ red/green/blue ECS primitives sampled from `GL_BACK` after tone mapping and befo
 
 **Managed Viewport Surface Lifecycle v1** adds a typed C++↔C# surface-state contract with explicit `Unavailable`, `NativeOwned`, and `Detached` states, including generation and dimension metadata. Headless bridge sessions deterministically report an unavailable surface owned by the native renderer; the managed shell presents that lifecycle status without receiving raw window, GL context, texture, picking, or input handles. The managed parser rejects any `managedAttachAllowed=true` snapshot as invalid, and future managed surface hosting requires a separately reviewed explicit capability and ownership contract.
 
+**Native C++ Visual Scripting Core v1** adds the first production-oriented graph foundation: a stable node registry, typed input/output pins, authored graph nodes and links, structural mutation guards, and deterministic validation diagnostics. C++ owns this graph model without a managed runtime or bridge dependency. The compiler, versioned `.uvescript` bytecode, VM, debugger, hot reload, and C# graph canvas remain separate future increments rather than being implied by the foundation.
+
 The top-level **Play** menu provides a transient editor sandbox: **Play** (`F5`) captures the complete
 editable document in memory and disables authoring, **Pause** (`F6`) holds fixed physics without accumulating
 catch-up time, **Step** (`F10`) advances exactly one fixed physics tick while paused, and **Stop** (`Shift+F5`)
