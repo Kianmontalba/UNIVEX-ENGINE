@@ -1605,3 +1605,12 @@ Data-table preview DTOs must preserve explicit native column types and must form
 Preview snapshots must carry total counts and explicit column, row, and value truncation facts. The native bridge must include preview changes in observed-state equality and revision synchronization. Missing preview fields from older backends produce an unavailable managed fallback rather than a parser failure.
 
 The preview is read-only. No request kind, capability, file operation, asset-database registration, schema edit, row edit, reference binding, hot reload, runtime binding, or visual-scripting mutation may be introduced through this DTO.
+
+
+## Native Data Table Session Registry v1 (Increment 95)
+
+The session registry must own `DataTableUVE` values by move and must expose only copied snapshots. Registration accepts only non-empty, diagnostics-free tables; duplicate names and capacity overflow are rejected without changing existing state. Registry capacity is bounded at 128 tables and all lifecycle operations remain deterministic.
+
+Registry generation increments only after successful registration, removal, or clear mutation. Failed duplicate registration, removal of a missing name, and clearing an empty registry do not advance generation. Catalog descriptors remain sorted through the existing catalog contract, while the registry generation is the authoritative session generation.
+
+The registry is not an asset database. It must not scan files, persist automatically, schedule imports, hot reload, mutate managed UI, bind ECS/runtime state, own OpenGL resources, or create process/network authority. Future persistence and editor mutation require separately reviewed commands and ownership contracts.

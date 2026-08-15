@@ -27,6 +27,7 @@ add_library(uve_asset STATIC
     src/shader_asset_uve.cpp
     src/material_asset_uve.cpp
     src/data_table_uve.cpp
+    src/data_table_registry_uve.cpp
 )
 target_include_directories(uve_asset PUBLIC include)
 target_link_libraries(uve_asset
