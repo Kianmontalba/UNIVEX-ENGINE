@@ -16,7 +16,7 @@ struct DataTableImportSettingsUVE final : AssetImportSettingsUVE {
     std::string tableName;
     std::vector<DataTableColumnUVE> columns;
 
-    [[nodiscard]] std::string GetCacheVersionUVE() const override { return "data-table-import-v1"; }
+    [[nodiscard]] std::string GetCacheVersionUVE() const override;
 };
 
 /// Registers schema-driven CSV, TSV, and JSON source importers. Each importer writes one validated

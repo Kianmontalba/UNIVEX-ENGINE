@@ -12,6 +12,8 @@
 #include "uve/asset/asset_content_fingerprint_uve.h"
 #include "uve/asset/asset_database_uve.h"
 #include "uve/asset/asset_importer_uve.h"
+#include "uve/asset/data_table_asset_uve.h"
+#include "uve/asset/data_table_importer_uve.h"
 #include "uve/asset/derived_artifact_cache_uve.h"
 
 namespace UVE::Asset::Tests {
@@ -160,6 +162,65 @@ TEST_F(AssetImportQueueUVETest, CacheUVE_HitsForMatchingBytesAndInvalidatesOutOf
     EXPECT_EQ(jobs[2].state, AssetImportJobStateUVE::Succeeded);
     EXPECT_FALSE(jobs[2].cacheHit);
     EXPECT_EQ(*ComputeAssetContentFingerprintUVE(destination), *ComputeAssetContentFingerprintUVE(source));
+}
+
+TEST_F(AssetImportQueueUVETest, DataTableSettingsFingerprintForcesCacheMissWhenSchemaChanges) {
+    const std::filesystem::path source = root / "weapons.csv";
+    const std::filesystem::path destination = contentRoot / "weapons.uvetable";
+    WriteFixtureFileUVE(source, "id,damage\npistol,25\n");
+    std::filesystem::create_directories(contentRoot);
+
+    importer.RegisterImporterUVE(".csv", [](const std::filesystem::path& sourcePath,
+                                             const std::filesystem::path& destinationPath,
+                                             const AssetImportSettingsUVE& settings) {
+        const auto* const dataTableSettings = dynamic_cast<const DataTableImportSettingsUVE*>(&settings);
+        if (dataTableSettings == nullptr) {
+            return false;
+        }
+        std::ifstream input(sourcePath, std::ios::binary);
+        std::string document((std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+        if (!input.good() && !input.eof()) {
+            return false;
+        }
+        DataTableUVE table(dataTableSettings->tableName);
+        for (const DataTableColumnUVE& column : dataTableSettings->columns) {
+            if (!table.DefineColumnUVE(column.name, column.type)) {
+                return false;
+            }
+        }
+        return table.ImportCsvUVE(document) && SaveDataTableAssetUVE(table, destinationPath);
+    });
+
+    auto integerSettings = std::make_shared<DataTableImportSettingsUVE>();
+    integerSettings->tableName = "weapons";
+    integerSettings->columns = {DataTableColumnUVE{"damage", DataTableColumnTypeUVE::Integer}};
+    auto numberSettings = std::make_shared<DataTableImportSettingsUVE>(*integerSettings);
+    numberSettings->columns.front().type = DataTableColumnTypeUVE::Number;
+    EXPECT_NE(integerSettings->GetCacheVersionUVE(), numberSettings->GetCacheVersionUVE());
+
+    AssetImportRequestUVE firstRequest;
+    firstRequest.sourcePath = source;
+    firstRequest.destinationPath = destination;
+    firstRequest.settings = integerSettings;
+    ASSERT_TRUE(queue.EnqueueUVE(std::move(firstRequest)).has_value());
+    ASSERT_TRUE(queue.TickUVE());
+
+    AssetImportRequestUVE secondRequest;
+    secondRequest.sourcePath = source;
+    secondRequest.destinationPath = destination;
+    secondRequest.settings = numberSettings;
+    ASSERT_TRUE(queue.EnqueueUVE(std::move(secondRequest)).has_value());
+    ASSERT_TRUE(queue.TickUVE());
+
+    const std::vector<AssetImportJobUVE> jobs = queue.GetJobsUVE();
+    ASSERT_EQ(jobs.size(), 2U);
+    EXPECT_FALSE(jobs[0].cacheHit);
+    EXPECT_FALSE(jobs[1].cacheHit);
+    ASSERT_TRUE(jobs[0].request.settingsVersion != jobs[1].request.settingsVersion);
+    DataTableUVE imported;
+    ASSERT_TRUE(LoadDataTableAssetUVE(destination, imported));
+    ASSERT_EQ(imported.GetSnapshotUVE().columns.size(), 1U);
+    EXPECT_EQ(imported.GetSnapshotUVE().columns.front().type, DataTableColumnTypeUVE::Number);
 }
 
 TEST_F(AssetImportQueueUVETest, SnapshotAndCacheContracts_RejectInvalidRequestAndReturnCopies) {

@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -122,4 +123,31 @@ TEST(DataTableImporterUVE, RejectsMalformedSourceMissingSchemaAndWrongDestinatio
 }
 
 } // namespace
+} // namespace UVE::Asset::Tests
+
+
+namespace UVE::Asset::Tests {
+
+TEST(DataTableImportSettingsUVE, CacheVersionIsDeterministicAndSchemaSensitive) {
+    DataTableImportSettingsUVE first;
+    first.tableName = "items";
+    first.columns = {
+        DataTableColumnUVE{"label", DataTableColumnTypeUVE::String},
+        DataTableColumnUVE{"count", DataTableColumnTypeUVE::Integer},
+    };
+    const DataTableImportSettingsUVE same = first;
+    DataTableImportSettingsUVE reordered = first;
+    std::swap(reordered.columns[0], reordered.columns[1]);
+    DataTableImportSettingsUVE renamed = first;
+    renamed.tableName = "other_items";
+    DataTableImportSettingsUVE retyped = first;
+    retyped.columns[1].type = DataTableColumnTypeUVE::Number;
+
+    EXPECT_EQ(first.GetCacheVersionUVE(), same.GetCacheVersionUVE());
+    EXPECT_NE(first.GetCacheVersionUVE(), reordered.GetCacheVersionUVE());
+    EXPECT_NE(first.GetCacheVersionUVE(), renamed.GetCacheVersionUVE());
+    EXPECT_NE(first.GetCacheVersionUVE(), retyped.GetCacheVersionUVE());
+    EXPECT_EQ(first.GetCacheVersionUVE().size(), std::string{"data-table-import-v2-"}.size() + 16U);
+}
+
 } // namespace UVE::Asset::Tests

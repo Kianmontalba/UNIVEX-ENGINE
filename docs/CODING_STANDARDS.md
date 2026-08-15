@@ -1660,3 +1660,10 @@ The helper owns no lifetime beyond registration. `AssetManagerUVE` owns worker e
 Data Table source importers must receive an explicit `DataTableImportSettingsUVE` schema. Do not infer column names or types from source text in this increment. CSV, TSV, and JSON handlers must read through the bounded document limit, construct a temporary typed `DataTableUVE`, and write only through `SaveDataTableAssetUVE()` after import success.
 
 The importer may hand a successful `.uvetable` destination to `AssetImporterUVE` for generic database registration, but it must not register a destination before conversion succeeds. Importers own no background workers, queues, directory scans, hot-reload state, registry session, editor bridge state, runtime binding, or managed pointer.
+
+
+## Deterministic Data Table import-cache identity (Increment 102)
+
+`DataTableImportSettingsUVE::GetCacheVersionUVE()` must encode every semantic import setting that can change the generated table. For Increment 102 this is the table name and ordered typed column schema. Use a stable length-delimited representation and a deterministic non-cryptographic digest; never depend on pointer addresses, unordered iteration, locale, or filesystem state.
+
+The settings version is opaque metadata consumed by `AssetImportQueueUVE` and `DerivedArtifactCacheUVE`. Bump the version prefix when the settings identity algorithm changes. Do not add a second cache authority, reinterpret the digest as a security signature, or make the fingerprint silently trigger background imports, hot reload, registry mutation, editor updates, runtime binding, or managed ownership.
