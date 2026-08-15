@@ -151,14 +151,16 @@ void DeveloperConsoleUVE::AddHistoryUVE(std::string value) {
     m_historyCursor = -1;
 }
 
-bool DeveloperConsoleUVE::ExecuteUVE(std::string commandLine) {
+DeveloperConsoleExecutionResultUVE DeveloperConsoleUVE::ExecuteDetailedUVE(std::string commandLine) {
     if (!IsAvailableUVE()) {
-        return false;
+        return {DeveloperConsoleExecutionCodeUVE::Unavailable,
+                "Developer Console execution is unavailable under the Shipping build policy."};
     }
     commandLine = TrimUVE(commandLine);
     if (commandLine.empty() || commandLine.size() > kMaximumValueBytesUVE ||
         commandLine.find_first_of("\r\n") != std::string::npos) {
-        return false;
+        return {DeveloperConsoleExecutionCodeUVE::InvalidInput,
+                "Command input must be non-empty, bounded, and free of line breaks."};
     }
 
     const std::size_t separator = commandLine.find_first_of(" \t");
@@ -167,14 +169,18 @@ bool DeveloperConsoleUVE::ExecuteUVE(std::string commandLine) {
     if (iterator == m_commands.end()) {
         AddHistoryUVE(commandLine);
         AppendUVE(DeveloperConsoleSeverityUVE::Error, "Unknown console command: " + identifier);
-        return false;
+        return {DeveloperConsoleExecutionCodeUVE::UnknownCommand, "No command is registered with this identifier."};
     }
 
     const std::string arguments = separator == std::string::npos ? std::string{} : TrimUVE(commandLine.substr(separator));
     AddHistoryUVE(commandLine);
     iterator->second.handler(*this, arguments);
     IncrementGenerationUVE(m_generation);
-    return true;
+    return {DeveloperConsoleExecutionCodeUVE::Executed, "Command executed."};
+}
+
+bool DeveloperConsoleUVE::ExecuteUVE(std::string commandLine) {
+    return ExecuteDetailedUVE(std::move(commandLine)).IsAcceptedUVE();
 }
 
 bool DeveloperConsoleUVE::ClearUVE() noexcept {
