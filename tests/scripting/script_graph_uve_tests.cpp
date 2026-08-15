@@ -13,6 +13,7 @@
 
 #include <gtest/gtest.h>
 
+#include <cstdint>
 #include <limits>
 #include <optional>
 
@@ -272,6 +273,46 @@ TEST(ScriptRuntimeUVETest, AttachUVE_RejectsInvalidDuplicateAndAcceptsGeneration
     EXPECT_FALSE(runtime.AttachUVE(first, program));
     EXPECT_TRUE(runtime.AttachUVE(replacement, program));
     EXPECT_EQ(runtime.GetInstanceCountUVE(), 2U);
+}
+
+TEST(ScriptRuntimeUVETest, AttachDetailedUVEReturnsStructuredDiagnosticsForValidationAndCapacity) {
+    ScriptRuntimeUVE runtime;
+    ScriptBytecodeProgramUVE valid;
+
+    const ScriptRuntimeAttachResultUVE invalidEntity = runtime.AttachDetailedUVE(Scene::kInvalidEntityUVE, valid);
+    EXPECT_EQ(invalidEntity.code, ScriptRuntimeAttachCodeUVE::InvalidEntity);
+    EXPECT_FALSE(invalidEntity.IsAcceptedUVE());
+    EXPECT_FALSE(invalidEntity.message.empty());
+
+    ScriptBytecodeProgramUVE invalidProgram;
+    invalidProgram.version = 99U;
+    const ScriptRuntimeAttachResultUVE invalid = runtime.AttachDetailedUVE({1U, 1U}, invalidProgram);
+    EXPECT_EQ(invalid.code, ScriptRuntimeAttachCodeUVE::InvalidProgram);
+    EXPECT_FALSE(invalid.IsAcceptedUVE());
+    EXPECT_FALSE(invalid.diagnostics.empty());
+    EXPECT_FALSE(invalid.message.empty());
+
+    const Scene::EntityUVE entity{1U, 1U};
+    const ScriptRuntimeAttachResultUVE accepted = runtime.AttachDetailedUVE(entity, valid);
+    EXPECT_EQ(accepted.code, ScriptRuntimeAttachCodeUVE::Accepted);
+    EXPECT_TRUE(accepted.IsAcceptedUVE());
+    EXPECT_FALSE(accepted.message.empty());
+    EXPECT_TRUE(runtime.AttachUVE({2U, 1U}, valid));
+
+    const ScriptRuntimeAttachResultUVE duplicate = runtime.AttachDetailedUVE(entity, valid);
+    EXPECT_EQ(duplicate.code, ScriptRuntimeAttachCodeUVE::DuplicateInstance);
+    EXPECT_FALSE(duplicate.IsAcceptedUVE());
+    EXPECT_FALSE(duplicate.message.empty());
+
+    ScriptRuntimeUVE capacityRuntime;
+    for (std::size_t index = 0U; index < ScriptRuntimeUVE::kMaximumInstancesUVE; ++index) {
+        ASSERT_TRUE(capacityRuntime.AttachUVE(
+            {static_cast<std::uint32_t>(1000U + index), 1U}, valid));
+    }
+    const ScriptRuntimeAttachResultUVE capacity = capacityRuntime.AttachDetailedUVE({9999U, 1U}, valid);
+    EXPECT_EQ(capacity.code, ScriptRuntimeAttachCodeUVE::CapacityExceeded);
+    EXPECT_FALSE(capacity.IsAcceptedUVE());
+    EXPECT_FALSE(capacity.message.empty());
 }
 
 TEST(ScriptRuntimeUVETest, TickUVE_IsDeterministicAndSkipsDisabledInstances) {

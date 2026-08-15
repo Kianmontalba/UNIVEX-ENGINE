@@ -19,6 +19,24 @@ struct ScriptRuntimeStateUVE final {
     [[nodiscard]] bool operator==(const ScriptRuntimeStateUVE&) const = default;
 };
 
+enum class ScriptRuntimeAttachCodeUVE : std::uint8_t {
+    Accepted = 0,
+    InvalidEntity,
+    InvalidProgram,
+    CapacityExceeded,
+    DuplicateInstance,
+};
+
+struct ScriptRuntimeAttachResultUVE final {
+    ScriptRuntimeAttachCodeUVE code = ScriptRuntimeAttachCodeUVE::InvalidProgram;
+    std::vector<ScriptBytecodeDiagnosticUVE> diagnostics;
+    std::string message;
+
+    [[nodiscard]] bool IsAcceptedUVE() const noexcept {
+        return code == ScriptRuntimeAttachCodeUVE::Accepted;
+    }
+};
+
 enum class ScriptRuntimeStateUpdateCodeUVE : std::uint8_t {
     Applied = 0,
     Unchanged,
@@ -93,6 +111,8 @@ public:
     ScriptRuntimeUVE(const ScriptRuntimeUVE&) = delete;
     ScriptRuntimeUVE& operator=(const ScriptRuntimeUVE&) = delete;
 
+    [[nodiscard]] ScriptRuntimeAttachResultUVE AttachDetailedUVE(Scene::EntityUVE entity,
+                                                                  ScriptBytecodeProgramUVE program);
     [[nodiscard]] bool AttachUVE(Scene::EntityUVE entity, ScriptBytecodeProgramUVE program);
     [[nodiscard]] ScriptRuntimeReloadResultUVE ReloadUVE(Scene::EntityUVE entity,
                                                           ScriptBytecodeProgramUVE program);

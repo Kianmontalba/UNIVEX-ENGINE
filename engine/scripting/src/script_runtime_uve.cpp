@@ -35,13 +35,31 @@ namespace {
 
 } // namespace
 
-bool ScriptRuntimeUVE::AttachUVE(const Scene::EntityUVE entity, ScriptBytecodeProgramUVE program) {
-    if (entity == Scene::kInvalidEntityUVE || !ValidateRuntimeProgramUVE(program).empty() ||
-        m_instances.size() >= kMaximumInstancesUVE || m_instances.contains(entity)) {
-        return false;
+ScriptRuntimeAttachResultUVE ScriptRuntimeUVE::AttachDetailedUVE(const Scene::EntityUVE entity,
+                                                                    ScriptBytecodeProgramUVE program) {
+    if (entity == Scene::kInvalidEntityUVE) {
+        return {ScriptRuntimeAttachCodeUVE::InvalidEntity, {},
+                "Runtime attachment rejected because the entity handle is invalid."};
+    }
+    const std::vector<ScriptBytecodeDiagnosticUVE> diagnostics = ValidateRuntimeProgramUVE(program);
+    if (!diagnostics.empty()) {
+        return {ScriptRuntimeAttachCodeUVE::InvalidProgram, diagnostics,
+                "Runtime attachment rejected because the bytecode program is invalid."};
+    }
+    if (m_instances.size() >= kMaximumInstancesUVE) {
+        return {ScriptRuntimeAttachCodeUVE::CapacityExceeded, {},
+                "Runtime attachment rejected because instance capacity is exhausted."};
+    }
+    if (m_instances.contains(entity)) {
+        return {ScriptRuntimeAttachCodeUVE::DuplicateInstance, {},
+                "Runtime attachment rejected because the entity already has an active instance."};
     }
     m_instances.emplace(entity, ScriptRuntimeInstanceUVE{entity, std::move(program), {}, 1U, true});
-    return true;
+    return {ScriptRuntimeAttachCodeUVE::Accepted, {}, "Runtime instance attached."};
+}
+
+bool ScriptRuntimeUVE::AttachUVE(const Scene::EntityUVE entity, ScriptBytecodeProgramUVE program) {
+    return AttachDetailedUVE(entity, std::move(program)).IsAcceptedUVE();
 }
 
 ScriptRuntimeReloadResultUVE ScriptRuntimeUVE::ReloadUVE(const Scene::EntityUVE entity,
