@@ -577,6 +577,11 @@ public partial class MainWindow : Window
                 ? "Native ScriptRuntime is attached, but no active instances are in the copied snapshot."
                 : runtime.Reason
             : $"No copied ScriptRuntime instances match '{filter}'. The filter is local to this bounded snapshot.";
+        if (runtime.IsAvailable && filter.Length > 0)
+        {
+            ScriptRuntimeStatusTextBlock.Text +=
+                $" Filter '{filter}' matches {entries.Count} of {runtime.Entries.Count} copied row(s).";
+        }
         selectedScriptRuntimeInstance = entries.FirstOrDefault(entry =>
             selectedScriptRuntimeInstance is not null &&
             entry.EntityIndex == selectedScriptRuntimeInstance.EntityIndex &&

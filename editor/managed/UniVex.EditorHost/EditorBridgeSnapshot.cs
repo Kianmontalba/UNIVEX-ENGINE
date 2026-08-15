@@ -216,6 +216,8 @@ public sealed record BridgeScriptRuntimeSnapshot(
 {
     public int VisibleEnabledInstanceCount => Entries.Count(entry => entry.Enabled);
     public int VisibleDisabledInstanceCount => Entries.Count - VisibleEnabledInstanceCount;
+
+    public int CountMatchingEntries(string? filter) => Entries.Count(entry => entry.MatchesFilter(filter));
 }
 
 public sealed record BridgeDataTableCatalogEntry(
