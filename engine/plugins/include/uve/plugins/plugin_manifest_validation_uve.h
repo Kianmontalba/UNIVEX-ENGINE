@@ -12,6 +12,12 @@ namespace UVE::Plugins {
 
 inline constexpr std::size_t kNativePluginManifestMaximumIdentifierBytesUVE = 128U;
 inline constexpr std::size_t kNativePluginManifestMaximumDisplayNameBytesUVE = 256U;
+inline constexpr std::size_t kNativePluginCapabilityPolicyMaximumEntriesUVE = 64U;
+
+struct NativePluginCapabilityPolicyUVE final {
+    bool allowAllCapabilities = true;
+    std::vector<std::string> allowedCapabilityIds;
+};
 
 enum class NativePluginManifestValidationCodeUVE : std::uint8_t {
     InvalidPluginId = 0,
@@ -21,6 +27,9 @@ enum class NativePluginManifestValidationCodeUVE : std::uint8_t {
     TooManyCapabilities,
     InvalidCapabilityId,
     DuplicateCapabilityId,
+    CapabilityPolicyTooLarge,
+    DuplicatePolicyCapabilityId,
+    CapabilityNotAllowed,
 };
 
 struct NativePluginManifestDiagnosticUVE final {
@@ -39,5 +48,9 @@ struct NativePluginManifestValidationResultUVE final {
 
 [[nodiscard]] NativePluginManifestValidationResultUVE ValidateNativePluginManifestUVE(
     const NativePluginManifestUVE& manifest);
+
+[[nodiscard]] NativePluginManifestValidationResultUVE ValidateNativePluginManifestUVE(
+    const NativePluginManifestUVE& manifest,
+    const NativePluginCapabilityPolicyUVE& policy);
 
 } // namespace UVE::Plugins
