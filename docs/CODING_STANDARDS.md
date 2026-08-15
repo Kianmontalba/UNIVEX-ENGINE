@@ -1596,3 +1596,12 @@ Data-table catalog bridge fields are additive value-only DTOs. The native bridge
 No request kind or capability may be added for catalog mutation in this increment. The stdio `dataTableCatalog` object is a presentation snapshot; managed parsing must accept its absence for older backends, reject wrong types or negative counts, and never retain raw JSON values. The Avalonia Data Tables tab is read-only and must not expose file, asset-database, schema, row, runtime, or reference mutation controls.
 
 C++ owns rows, schemas, diagnostics, asset envelopes, catalog state, and future persistence. C# owns only copied DTOs and transient presentation state. Native pointers, ECS references, OpenGL resources, filesystem handles, and process authority do not cross this bridge.
+
+
+## Read-Only Data Table Detail Preview Bridge v1 (Increment 94)
+
+Data-table preview DTOs must preserve explicit native column types and must format cell values in C++ before crossing the bridge. Managed code must not infer types, parse native values for authority, or retain raw JSON/native references. Names, reasons, identifiers, and cell display strings use the existing presentation-text bound; visible columns and rows use the existing panel-entry bound.
+
+Preview snapshots must carry total counts and explicit column, row, and value truncation facts. The native bridge must include preview changes in observed-state equality and revision synchronization. Missing preview fields from older backends produce an unavailable managed fallback rather than a parser failure.
+
+The preview is read-only. No request kind, capability, file operation, asset-database registration, schema edit, row edit, reference binding, hot reload, runtime binding, or visual-scripting mutation may be introduced through this DTO.

@@ -70,6 +70,10 @@ TEST(EditorBridgeStdioUVETest, ServeUVE_HandshakesAndRoutesExistingBridgeDispatc
         EditorUVE editor(engine.GetServicesUVE(), "uve_editor_bridge_stdio_roundtrip.uvescene");
         editor.InitUVE();
         EditorBridgeUVE bridge(editor);
+        Asset::DataTableUVE previewTable("weapons");
+        ASSERT_TRUE(previewTable.DefineColumnUVE("damage", Asset::DataTableColumnTypeUVE::Integer));
+        ASSERT_TRUE(previewTable.AddRowUVE("pistol", {std::int64_t{25}}));
+        bridge.SetDataTablePreviewSnapshotUVE(previewTable.GetSnapshotUVE());
         EditorBridgeStdioServerUVE server(bridge);
         std::stringstream input;
         std::stringstream output;
@@ -120,6 +124,12 @@ TEST(EditorBridgeStdioUVETest, ServeUVE_HandshakesAndRoutesExistingBridgeDispatc
         EXPECT_TRUE(handshakeSnapshot.at("dataTableCatalog").at("generation").is_number_unsigned());
         EXPECT_TRUE(handshakeSnapshot.at("dataTableCatalog").at("entriesTruncated").is_boolean());
         EXPECT_TRUE(handshakeSnapshot.at("dataTableCatalog").at("entries").is_array());
+        ASSERT_TRUE(handshakeSnapshot.at("dataTablePreview").is_object());
+        EXPECT_TRUE(handshakeSnapshot.at("dataTablePreview").at("available").get<bool>());
+        ASSERT_EQ(handshakeSnapshot.at("dataTablePreview").at("columns").size(), 1U);
+        EXPECT_EQ(handshakeSnapshot.at("dataTablePreview").at("columns").front().at("name").get<std::string>(), "damage");
+        ASSERT_EQ(handshakeSnapshot.at("dataTablePreview").at("rows").size(), 1U);
+        EXPECT_EQ(handshakeSnapshot.at("dataTablePreview").at("rows").front().at("values").front().get<std::string>(), "25");
         EXPECT_TRUE(frames[1U].at("result").at("applied").get<bool>());
         EXPECT_EQ(frames[1U].at("result").at("code").get<std::string>(), "bridge.command.applied");
         EXPECT_TRUE(frames[1U].at("result").at("createdEntity").is_object());

@@ -112,6 +112,44 @@ TEST(EditorDeveloperConsoleBridgeUVE, CopiesReadOnlyDataTableCatalogAndAdvancesR
     engine.Shutdown();
 }
 
+TEST(EditorDeveloperConsoleBridgeUVE, CopiesBoundedDataTablePreviewAsReadOnlyFacts) {
+    Core::EngineCoreUVE engine(MakeConsoleBridgeConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_data_table_preview_bridge.uvescene");
+        editor.InitUVE();
+        EditorBridgeUVE bridge(editor);
+        const EditorBridgeSnapshotUVE initial = bridge.GetSnapshotUVE();
+
+        Asset::DataTableUVE table("weapons");
+        ASSERT_TRUE(table.DefineColumnUVE("damage", Asset::DataTableColumnTypeUVE::Integer));
+        ASSERT_TRUE(table.DefineColumnUVE("weight", Asset::DataTableColumnTypeUVE::Number));
+        ASSERT_TRUE(table.AddRowUVE("pistol", {std::int64_t{25}, 1.5}));
+        bridge.SetDataTablePreviewSnapshotUVE(table.GetSnapshotUVE());
+
+        const EditorBridgeSnapshotUVE copied = bridge.GetSnapshotUVE();
+        ASSERT_GT(copied.revision, initial.revision);
+        ASSERT_TRUE(copied.dataTablePreview.available);
+        EXPECT_EQ(copied.dataTablePreview.name, "weapons");
+        EXPECT_EQ(copied.dataTablePreview.totalColumnCount, 2U);
+        EXPECT_EQ(copied.dataTablePreview.totalRowCount, 1U);
+        ASSERT_EQ(copied.dataTablePreview.columns.size(), 2U);
+        EXPECT_EQ(copied.dataTablePreview.columns[0].name, "damage");
+        EXPECT_EQ(copied.dataTablePreview.columns[0].type, Asset::DataTableColumnTypeUVE::Integer);
+        ASSERT_EQ(copied.dataTablePreview.rows.size(), 1U);
+        EXPECT_EQ(copied.dataTablePreview.rows[0].identifier, "pistol");
+        EXPECT_EQ(copied.dataTablePreview.rows[0].values, (std::vector<std::string>{"25", "1.5"}));
+
+        EditorBridgeSnapshotUVE mutatedCopy = copied;
+        mutatedCopy.dataTablePreview.rows.clear();
+        EXPECT_EQ(bridge.GetSnapshotUVE().dataTablePreview.rows.size(), 1U);
+
+        editor.ShutdownUVE();
+    }
+    engine.Shutdown();
+}
+
 TEST(EditorDeveloperConsoleBridgeUVE, RoutesDiscoveryFilterAndHistoryThroughNamedRequests) {
     Core::EngineCoreUVE engine(MakeConsoleBridgeConfigUVE());
     engine.Init();

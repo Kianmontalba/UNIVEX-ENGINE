@@ -194,6 +194,40 @@ public sealed record BridgeDataTableCatalogSnapshot(
     bool EntriesTruncated,
     IReadOnlyList<BridgeDataTableCatalogEntry> Entries);
 
+public sealed record BridgeDataTablePreviewColumn(string Name, byte Type)
+{
+    public string DisplayText => $"{Name} [{TypeName(Type)}]";
+
+    private static string TypeName(byte type) => type switch
+    {
+        0 => "Boolean",
+        1 => "Integer",
+        2 => "Number",
+        3 => "String",
+        _ => "Unknown",
+    };
+}
+
+public sealed record BridgeDataTablePreviewRow(string Identifier, IReadOnlyList<string> Values)
+{
+    public string DisplayText => string.IsNullOrEmpty(Identifier)
+        ? string.Join(" | ", Values)
+        : $"{Identifier}: {string.Join(" | ", Values)}";
+}
+
+public sealed record BridgeDataTablePreviewSnapshot(
+    bool IsAvailable,
+    ulong Generation,
+    string Name,
+    int TotalColumnCount,
+    int TotalRowCount,
+    bool ColumnsTruncated,
+    bool RowsTruncated,
+    bool ValuesTruncated,
+    string Reason,
+    IReadOnlyList<BridgeDataTablePreviewColumn> Columns,
+    IReadOnlyList<BridgeDataTablePreviewRow> Rows);
+
 public sealed record BridgeEditorSnapshot(
     uint ProtocolVersion,
     ulong Revision,
@@ -213,6 +247,7 @@ public sealed record BridgeEditorSnapshot(
     BridgeVisualScriptingSnapshot VisualScripting,
     BridgeDeveloperConsoleSnapshot DeveloperConsole,
     BridgeDataTableCatalogSnapshot DataTableCatalog,
+    BridgeDataTablePreviewSnapshot DataTablePreview,
     IReadOnlyList<byte> Capabilities);
 
 public sealed record BridgeCommand(
@@ -288,6 +323,9 @@ public static class BridgeSnapshotParser
                 value.TryGetProperty("dataTableCatalog", out JsonElement catalogValue) && catalogValue.ValueKind != JsonValueKind.Null
                     ? ParseDataTableCatalog(catalogValue)
                     : EmptyDataTableCatalog(),
+                value.TryGetProperty("dataTablePreview", out JsonElement previewValue) && previewValue.ValueKind != JsonValueKind.Null
+                    ? ParseDataTablePreview(previewValue)
+                    : EmptyDataTablePreview(),
                 ParseCapabilities(RequiredArray(value, "capabilities")));
         }
         catch (BridgeProtocolException)
@@ -359,6 +397,56 @@ public static class BridgeSnapshotParser
         }
         return new BridgeDataTableCatalogSnapshot(
             RequiredUInt64(value, "generation"), RequiredBoolean(value, "entriesTruncated"), parsed);
+    }
+
+    private static BridgeDataTablePreviewSnapshot EmptyDataTablePreview() =>
+        new(false, 0UL, string.Empty, 0, 0, false, false, false,
+            "No native data-table preview is available in this bridge session.",
+            Array.Empty<BridgeDataTablePreviewColumn>(), Array.Empty<BridgeDataTablePreviewRow>());
+
+    private static BridgeDataTablePreviewSnapshot ParseDataTablePreview(JsonElement value)
+    {
+        RequireObject(value, "dataTablePreview");
+        JsonElement columns = RequiredArray(value, "columns");
+        JsonElement rows = RequiredArray(value, "rows");
+        EnsureBoundedArray(columns, "dataTablePreview.columns");
+        EnsureBoundedArray(rows, "dataTablePreview.rows");
+        int totalColumnCount = RequiredInt32(value, "totalColumnCount");
+        int totalRowCount = RequiredInt32(value, "totalRowCount");
+        if (totalColumnCount < 0 || totalRowCount < 0)
+        {
+            throw Invalid("Data-table preview counts must be non-negative.");
+        }
+        List<BridgeDataTablePreviewColumn> parsedColumns = new(columns.GetArrayLength());
+        foreach (JsonElement column in columns.EnumerateArray())
+        {
+            RequireObject(column, "data-table preview column");
+            byte type = RequiredByte(column, "type");
+            if (type > 3)
+            {
+                throw Invalid("The backend returned an unsupported data-table preview column type.");
+            }
+            parsedColumns.Add(new BridgeDataTablePreviewColumn(RequiredBoundedString(column, "name"), type));
+        }
+        List<BridgeDataTablePreviewRow> parsedRows = new(rows.GetArrayLength());
+        foreach (JsonElement row in rows.EnumerateArray())
+        {
+            RequireObject(row, "data-table preview row");
+            JsonElement values = RequiredArray(row, "values");
+            EnsureBoundedArray(values, "dataTablePreview.row.values");
+            List<string> parsedValues = new(values.GetArrayLength());
+            foreach (JsonElement cell in values.EnumerateArray())
+            {
+                parsedValues.Add(BoundedStringValue(cell, "data-table preview cell"));
+            }
+            parsedRows.Add(new BridgeDataTablePreviewRow(RequiredBoundedString(row, "identifier"), parsedValues));
+        }
+        return new BridgeDataTablePreviewSnapshot(
+            RequiredBoolean(value, "available"), RequiredUInt64(value, "generation"),
+            RequiredBoundedString(value, "name"), totalColumnCount, totalRowCount,
+            RequiredBoolean(value, "columnsTruncated"), RequiredBoolean(value, "rowsTruncated"),
+            RequiredBoolean(value, "valuesTruncated"), RequiredBoundedString(value, "reason"),
+            parsedColumns, parsedRows);
     }
 
     private static BridgeDeveloperConsoleSnapshot ParseDeveloperConsole(JsonElement value)
