@@ -44,6 +44,49 @@ TEST(DeveloperConsoleUVE, ExplicitCommandsAndUnknownInputStayNativeAndBounded) {
     EXPECT_EQ(snapshot.history.size(), 2U);
 }
 
+TEST(DeveloperConsoleUVE, RegisterCommandUVEReturnsStructuredDiagnosticsForEachRejectionCode) {
+    DeveloperConsoleUVE console;
+    const auto handler = [](DeveloperConsoleUVE&, std::string_view) {};
+
+    const DeveloperConsoleCommandRegistrationResultUVE invalidIdentifier =
+        console.RegisterCommandUVE("invalid identifier", "Help", handler);
+    EXPECT_EQ(invalidIdentifier.code, DeveloperConsoleCommandRegistrationCodeUVE::InvalidIdentifier);
+    EXPECT_FALSE(invalidIdentifier.IsAcceptedUVE());
+    EXPECT_FALSE(invalidIdentifier.message.empty());
+
+    const DeveloperConsoleCommandRegistrationResultUVE invalidHelp = console.RegisterCommandUVE("empty.help", "", handler);
+    EXPECT_EQ(invalidHelp.code, DeveloperConsoleCommandRegistrationCodeUVE::InvalidHelp);
+    EXPECT_FALSE(invalidHelp.IsAcceptedUVE());
+    EXPECT_FALSE(invalidHelp.message.empty());
+
+    const DeveloperConsoleCommandRegistrationResultUVE missingHandler =
+        console.RegisterCommandUVE("missing.handler", "Help", DeveloperConsoleCommandHandlerUVE{});
+    EXPECT_EQ(missingHandler.code, DeveloperConsoleCommandRegistrationCodeUVE::MissingHandler);
+    EXPECT_FALSE(missingHandler.IsAcceptedUVE());
+    EXPECT_FALSE(missingHandler.message.empty());
+
+    const DeveloperConsoleCommandRegistrationResultUVE accepted =
+        console.RegisterCommandUVE("runtime.inspect", "Inspect runtime state.", handler);
+    EXPECT_EQ(accepted.code, DeveloperConsoleCommandRegistrationCodeUVE::Accepted);
+    EXPECT_TRUE(accepted.IsAcceptedUVE());
+    EXPECT_FALSE(accepted.message.empty());
+
+    const DeveloperConsoleCommandRegistrationResultUVE duplicate =
+        console.RegisterCommandUVE("runtime.inspect", "Inspect runtime state again.", handler);
+    EXPECT_EQ(duplicate.code, DeveloperConsoleCommandRegistrationCodeUVE::DuplicateIdentifier);
+    EXPECT_FALSE(duplicate.IsAcceptedUVE());
+    EXPECT_FALSE(duplicate.message.empty());
+
+    for (std::size_t index = 0U; index < DeveloperConsoleUVE::kMaximumCommandsUVE - 4U; ++index) {
+        ASSERT_TRUE(console.RegisterCommand("custom." + std::to_string(index), "Custom command.", handler));
+    }
+    const DeveloperConsoleCommandRegistrationResultUVE capacity =
+        console.RegisterCommandUVE("capacity.exceeded", "Capacity test.", handler);
+    EXPECT_EQ(capacity.code, DeveloperConsoleCommandRegistrationCodeUVE::CapacityExceeded);
+    EXPECT_FALSE(capacity.IsAcceptedUVE());
+    EXPECT_FALSE(capacity.message.empty());
+}
+
 TEST(DeveloperConsoleUVE, CompletionAndSeverityFilterAreNativeDeterministicFacts) {
     DeveloperConsoleUVE console;
     ASSERT_TRUE(console.RegisterCommand("camera.reset", "Reset the active camera.",

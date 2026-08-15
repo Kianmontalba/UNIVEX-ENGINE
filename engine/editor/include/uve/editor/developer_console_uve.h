@@ -32,6 +32,24 @@ enum class DeveloperConsoleBuildPolicyUVE : std::uint8_t {
     Shipping,
 };
 
+enum class DeveloperConsoleCommandRegistrationCodeUVE : std::uint8_t {
+    Accepted = 0,
+    InvalidIdentifier,
+    InvalidHelp,
+    MissingHandler,
+    CapacityExceeded,
+    DuplicateIdentifier,
+};
+
+struct DeveloperConsoleCommandRegistrationResultUVE final {
+    DeveloperConsoleCommandRegistrationCodeUVE code = DeveloperConsoleCommandRegistrationCodeUVE::Accepted;
+    std::string message;
+
+    [[nodiscard]] bool IsAcceptedUVE() const noexcept {
+        return code == DeveloperConsoleCommandRegistrationCodeUVE::Accepted;
+    }
+};
+
 struct DeveloperConsoleCompletionUVE final {
     std::string identifier;
     std::string help;
@@ -83,6 +101,8 @@ public:
     DeveloperConsoleUVE(const DeveloperConsoleUVE&) = delete;
     DeveloperConsoleUVE& operator=(const DeveloperConsoleUVE&) = delete;
 
+    [[nodiscard]] DeveloperConsoleCommandRegistrationResultUVE RegisterCommandUVE(
+        std::string identifier, std::string help, DeveloperConsoleCommandHandlerUVE handler);
     [[nodiscard]] bool RegisterCommand(std::string identifier, std::string help,
                                        DeveloperConsoleCommandHandlerUVE handler);
     [[nodiscard]] bool RegisterCVar(std::string name, std::string value, bool readOnly = false);
