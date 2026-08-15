@@ -1516,3 +1516,8 @@ The managed host may receive only copied visual-scripting presentation facts: av
 ## Script Debugger Contract v1 (Increment 83)
 
 `ScriptDebuggerUVE` consumes copied versioned bytecode and uses each instruction's source-node ID as the stable breakpoint mapping. Breakpoints are bounded and snapshots sort IDs deterministically. Continue skips a just-hit breakpoint once to avoid a resume loop; Step executes exactly one validated instruction; completion, detachment, and faults are explicit states. The debugger does not own ECS state, editor UI state, engine services, or hot-reload replacement; later managed debugger presentation must consume copied snapshots and named commands.
+
+
+## Native Plugin Extension Seam v1 (Increment 85)
+
+The first plugin milestone is a static native lifecycle seam, not a dynamic loader. `NativePluginManifestUVE` requires a bounded identifier, display name, engine protocol version, and unique capability identifiers. `NativePluginRegistryUVE` accepts at most a bounded number of manifests and exposes generation-checked registration scopes; stale or duplicate close operations are rejected. Dynamic libraries, filesystem manifests, ABI negotiation beyond the explicit protocol field, arbitrary engine callbacks, and security-sensitive loading remain future reviewed work. A plugin scope must not bypass existing graph, editor, asset, ECS, or runtime ownership boundaries.
