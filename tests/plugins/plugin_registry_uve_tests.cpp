@@ -67,6 +67,24 @@ TEST(NativePluginManifestValidationUVETest, ValidateNativePluginManifestUVE_Appl
     EXPECT_EQ(invalid.diagnostics[0].code, NativePluginManifestValidationCodeUVE::InvalidCapabilityId);
 }
 
+TEST(NativePluginRegistryUVETest, RegisterManifestUVE_ExplicitPolicyRejectsBeforeMutation) {
+    NativePluginRegistryUVE registry;
+    const NativePluginManifestUVE manifest{"uve.restricted", "Restricted", {1U, 0U, 0U},
+                                           kNativePluginProtocolVersionUVE, {"node.types", "filesystem.read"}};
+    const NativePluginCapabilityPolicyUVE policy{false, {"node.types"}};
+    const NativePluginRegistryResultUVE rejected = registry.RegisterManifestUVE(manifest, policy);
+    EXPECT_FALSE(rejected.IsAcceptedUVE());
+    EXPECT_EQ(registry.GetManifestCountUVE(), 0U);
+    EXPECT_EQ(registry.GetOpenScopeCountUVE(), 0U);
+    EXPECT_EQ(registry.FindManifestUVE("uve.restricted"), nullptr);
+
+    const NativePluginCapabilityPolicyUVE allowPolicy{false, {"node.types", "filesystem.read"}};
+    const NativePluginRegistryResultUVE accepted = registry.RegisterManifestUVE(manifest, allowPolicy);
+    ASSERT_TRUE(accepted.IsAcceptedUVE()) << accepted.message;
+    EXPECT_EQ(registry.GetManifestCountUVE(), 1U);
+    ASSERT_TRUE(registry.OpenScopeUVE("uve.restricted").has_value());
+}
+
 TEST(NativePluginRegistryUVETest, RegisterManifestUVE_ValidatesIdentityProtocolAndCapabilities) {
     NativePluginRegistryUVE registry;
     NativePluginManifestUVE manifest{"uve.terrain", "Terrain", {1U, 2U, 0U},

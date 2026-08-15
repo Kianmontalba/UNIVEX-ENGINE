@@ -11,6 +11,8 @@
 
 namespace UVE::Plugins {
 
+struct NativePluginCapabilityPolicyUVE;
+
 inline constexpr std::uint32_t kNativePluginProtocolVersionUVE = 1U;
 
 enum class NativePluginRegistryCodeUVE : std::uint8_t {
@@ -67,6 +69,8 @@ public:
     NativePluginRegistryUVE& operator=(const NativePluginRegistryUVE&) = delete;
 
     [[nodiscard]] NativePluginRegistryResultUVE RegisterManifestUVE(NativePluginManifestUVE manifest);
+    [[nodiscard]] NativePluginRegistryResultUVE RegisterManifestUVE(
+        NativePluginManifestUVE manifest, const NativePluginCapabilityPolicyUVE& policy);
     [[nodiscard]] std::optional<NativePluginRegistrationScopeUVE> OpenScopeUVE(std::string_view pluginId);
     [[nodiscard]] NativePluginRegistryResultUVE CloseScopeUVE(const NativePluginRegistrationScopeUVE& scope);
     [[nodiscard]] const NativePluginManifestUVE* FindManifestUVE(std::string_view pluginId) const noexcept;

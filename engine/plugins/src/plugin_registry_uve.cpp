@@ -9,7 +9,12 @@
 namespace UVE::Plugins {
 
 NativePluginRegistryResultUVE NativePluginRegistryUVE::RegisterManifestUVE(NativePluginManifestUVE manifest) {
-    const NativePluginManifestValidationResultUVE validation = ValidateNativePluginManifestUVE(manifest);
+    return RegisterManifestUVE(std::move(manifest), NativePluginCapabilityPolicyUVE{});
+}
+
+NativePluginRegistryResultUVE NativePluginRegistryUVE::RegisterManifestUVE(
+    NativePluginManifestUVE manifest, const NativePluginCapabilityPolicyUVE& policy) {
+    const NativePluginManifestValidationResultUVE validation = ValidateNativePluginManifestUVE(manifest, policy);
     if (!validation.IsValidUVE() || m_entries.contains(manifest.pluginId) ||
         m_entries.size() >= kMaximumPluginsUVE) {
         return {NativePluginRegistryCodeUVE::Rejected,
