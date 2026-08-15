@@ -147,6 +147,27 @@ std::optional<ScriptRuntimeStateUVE> ScriptRuntimeUVE::GetStateUVE(const Scene::
     return iterator->second.state;
 }
 
+std::vector<ScriptRuntimeInstanceSnapshotUVE> ScriptRuntimeUVE::GetSnapshotUVE() const {
+    std::vector<ScriptRuntimeInstanceSnapshotUVE> snapshots;
+    snapshots.reserve(m_instances.size());
+    for (const auto& [entity, instance] : m_instances) {
+        snapshots.push_back({entity,
+                             instance.generation,
+                             instance.program.version,
+                             instance.program.instructions.size(),
+                             instance.state.values.size(),
+                             instance.enabled});
+    }
+    std::sort(snapshots.begin(), snapshots.end(), [](const ScriptRuntimeInstanceSnapshotUVE& lhs,
+                                                     const ScriptRuntimeInstanceSnapshotUVE& rhs) {
+        if (lhs.entity.index != rhs.entity.index) {
+            return lhs.entity.index < rhs.entity.index;
+        }
+        return lhs.entity.generation < rhs.entity.generation;
+    });
+    return snapshots;
+}
+
 bool ScriptRuntimeUVE::HasInstanceUVE(const Scene::EntityUVE entity) const noexcept {
     return m_instances.contains(entity);
 }

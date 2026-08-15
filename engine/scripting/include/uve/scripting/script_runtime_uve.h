@@ -97,6 +97,15 @@ struct ScriptRuntimeTickResultUVE final {
     ScriptVmExecutionResultUVE execution;
 };
 
+struct ScriptRuntimeInstanceSnapshotUVE final {
+    Scene::EntityUVE entity;
+    std::uint64_t generation = 0U;
+    std::uint32_t programVersion = 0U;
+    std::size_t instructionCount = 0U;
+    std::size_t stateValueCount = 0U;
+    bool enabled = false;
+};
+
 enum class ScriptRuntimeReloadCodeUVE : std::uint8_t {
     Accepted = 0,
     RejectedInvalidProgram,
@@ -139,6 +148,7 @@ public:
                                                                          ScriptRuntimeStateUVE state);
     [[nodiscard]] bool SetStateUVE(Scene::EntityUVE entity, ScriptRuntimeStateUVE state);
     [[nodiscard]] std::optional<ScriptRuntimeStateUVE> GetStateUVE(Scene::EntityUVE entity) const;
+    [[nodiscard]] std::vector<ScriptRuntimeInstanceSnapshotUVE> GetSnapshotUVE() const;
     [[nodiscard]] bool HasInstanceUVE(Scene::EntityUVE entity) const noexcept;
     [[nodiscard]] std::size_t GetInstanceCountUVE() const noexcept;
     [[nodiscard]] std::vector<ScriptRuntimeTickResultUVE> TickUVE(
