@@ -118,18 +118,19 @@
                                     </StackPanel>
                                 </Border>
                                 <Border Grid.Row="3" Padding="6" Background="#20242B" BorderBrush="#394150" BorderThickness="1" CornerRadius="3">
-                                    <Grid RowDefinitions="Auto,*" RowSpacing="4">
+                                    <Grid RowDefinitions="Auto,*,Auto" RowSpacing="4">
                                         <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
                                             <TextBlock x:Name="ScriptRuntimeStatusTextBlock" Text="Connect to read native ScriptRuntime instances." TextWrapping="Wrap" Opacity="0.76" />
                                             <Button x:Name="ScriptRuntimeRefreshButton" Grid.Column="1" Content="Refresh runtime" Click="ScriptRuntimeRefreshButton_OnClick" IsEnabled="False" />
                                         </Grid>
-                                        <ListBox x:Name="ScriptRuntimeInstancesListBox" Grid.Row="1" MaxHeight="112" IsHitTestVisible="False">
+                                        <ListBox x:Name="ScriptRuntimeInstancesListBox" Grid.Row="1" MaxHeight="112" SelectionMode="Single" SelectionChanged="ScriptRuntimeInstancesListBox_OnSelectionChanged">
                                             <ListBox.ItemTemplate>
                                                 <DataTemplate>
                                                     <TextBlock Text="{Binding DisplayText}" TextWrapping="Wrap" />
                                                 </DataTemplate>
                                             </ListBox.ItemTemplate>
                                         </ListBox>
+                                        <TextBlock x:Name="ScriptRuntimeSelectionDetailsTextBlock" Grid.Row="2" Text="Select a copied ScriptRuntime instance for details." TextWrapping="Wrap" Opacity="0.72" />
                                     </Grid>
                                 </Border>
                                 <local:VisualScriptCanvasControl x:Name="VisualScriptCanvas" Grid.Row="4" MinHeight="280" />

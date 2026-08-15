@@ -18,6 +18,7 @@ public partial class MainWindow : Window
     private BridgeHierarchyEntry? selectedHierarchyEntry;
     private BridgeContentBrowserEntry? selectedContentEntry;
     private BridgeDataTableCatalogEntry? selectedDataTableEntry;
+    private BridgeScriptRuntimeInstanceEntry? selectedScriptRuntimeInstance;
     private bool closeConfirmed;
     private bool applyingLayout;
     private bool applyingSnapshot;
@@ -82,6 +83,17 @@ public partial class MainWindow : Window
 
     private void ScriptRuntimeRefreshButton_OnClick(object? sender, RoutedEventArgs e) =>
         DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "readScriptRuntime"));
+
+    private void ScriptRuntimeInstancesListBox_OnSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (applyingSnapshot)
+        {
+            return;
+        }
+
+        selectedScriptRuntimeInstance = ScriptRuntimeInstancesListBox.SelectedItem as BridgeScriptRuntimeInstanceEntry;
+        RenderScriptRuntimeSelection(selectedScriptRuntimeInstance);
+    }
 
     private void DeveloperConsoleSubmitButton_OnClick(object? sender, RoutedEventArgs e)
     {
@@ -521,6 +533,13 @@ public partial class MainWindow : Window
         scriptRuntimeRequestAvailable = requestAvailable;
         ScriptRuntimeRefreshButton.IsEnabled = state == HostSessionState.Connected && requestAvailable;
         ScriptRuntimeInstancesListBox.ItemsSource = runtime.Entries;
+        selectedScriptRuntimeInstance = runtime.Entries.FirstOrDefault(entry =>
+            selectedScriptRuntimeInstance is not null &&
+            entry.EntityIndex == selectedScriptRuntimeInstance.EntityIndex &&
+            entry.EntityGeneration == selectedScriptRuntimeInstance.EntityGeneration &&
+            entry.Generation == selectedScriptRuntimeInstance.Generation);
+        ScriptRuntimeInstancesListBox.SelectedItem = selectedScriptRuntimeInstance;
+        RenderScriptRuntimeSelection(selectedScriptRuntimeInstance);
         if (!runtime.IsAvailable)
         {
             ScriptRuntimeStatusTextBlock.Text = runtime.Reason;
@@ -533,6 +552,13 @@ public partial class MainWindow : Window
             $"({runtime.VisibleEnabledInstanceCount} enabled, {runtime.VisibleDisabledInstanceCount} disabled). " +
             $"Instance rows include generational identity, program version, instruction/state counts, and enabled state. " +
             $"{runtime.Reason}{truncation}";
+    }
+
+    private void RenderScriptRuntimeSelection(BridgeScriptRuntimeInstanceEntry? instance)
+    {
+        ScriptRuntimeSelectionDetailsTextBlock.Text = instance is null
+            ? "Select a copied ScriptRuntime instance for details."
+            : $"Selected copied instance: {instance.DisplayText}. Runtime control remains native-owned and read-only here.";
     }
 
     private void RenderDeveloperConsole(BridgeDeveloperConsoleSnapshot console)
