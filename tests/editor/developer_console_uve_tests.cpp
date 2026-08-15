@@ -3,6 +3,7 @@
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <string>
 
 namespace UVE::Editor::Tests {
@@ -75,6 +76,50 @@ TEST(DeveloperConsoleUVE, RegisterCVarUVEReturnsStructuredDiagnosticsForEachReje
     EXPECT_EQ(capacity.code, DeveloperConsoleCVarRegistrationCodeUVE::CapacityExceeded);
     EXPECT_FALSE(capacity.IsAcceptedUVE());
     EXPECT_FALSE(capacity.message.empty());
+}
+
+TEST(DeveloperConsoleUVE, SetCVarDetailedUVEReturnsStructuredMutationDiagnostics) {
+    DeveloperConsoleUVE console;
+    ASSERT_TRUE(console.RegisterCVar("r.mutable", "1"));
+    ASSERT_TRUE(console.RegisterCVar("r.locked", "1", true));
+
+    const DeveloperConsoleCVarMutationResultUVE unknown = console.SetCVarDetailedUVE("r.unknown", "2");
+    EXPECT_EQ(unknown.code, DeveloperConsoleCVarMutationCodeUVE::UnknownName);
+    EXPECT_FALSE(unknown.IsAcceptedUVE());
+    EXPECT_FALSE(unknown.message.empty());
+
+    const DeveloperConsoleCVarMutationResultUVE readOnly = console.SetCVarDetailedUVE("r.locked", "2");
+    EXPECT_EQ(readOnly.code, DeveloperConsoleCVarMutationCodeUVE::ReadOnly);
+    EXPECT_FALSE(readOnly.IsAcceptedUVE());
+    EXPECT_FALSE(readOnly.message.empty());
+
+    const DeveloperConsoleCVarMutationResultUVE invalidValue =
+        console.SetCVarDetailedUVE("r.mutable", "line\nbreak");
+    EXPECT_EQ(invalidValue.code, DeveloperConsoleCVarMutationCodeUVE::InvalidValue);
+    EXPECT_FALSE(invalidValue.IsAcceptedUVE());
+    EXPECT_FALSE(invalidValue.message.empty());
+
+    const DeveloperConsoleCVarMutationResultUVE unchanged = console.SetCVarDetailedUVE("r.mutable", "1");
+    EXPECT_EQ(unchanged.code, DeveloperConsoleCVarMutationCodeUVE::Unchanged);
+    EXPECT_TRUE(unchanged.IsAcceptedUVE());
+
+    const DeveloperConsoleCVarMutationResultUVE applied = console.SetCVarDetailedUVE("r.mutable", "2");
+    EXPECT_EQ(applied.code, DeveloperConsoleCVarMutationCodeUVE::Applied);
+    EXPECT_TRUE(applied.IsAcceptedUVE());
+    EXPECT_TRUE(console.SetCVarUVE("r.mutable", "3"));
+    const DeveloperConsoleSnapshotUVE snapshot = console.GetSnapshotUVE();
+    const auto mutableCVar = std::find_if(snapshot.cvars.begin(), snapshot.cvars.end(), [](const DeveloperConsoleCVarUVE& cvar) {
+        return cvar.name == "r.mutable";
+    });
+    ASSERT_NE(mutableCVar, snapshot.cvars.end());
+    EXPECT_EQ(mutableCVar->value, "3");
+
+    DeveloperConsoleUVE shipping(DeveloperConsoleBuildPolicyUVE::Shipping);
+    ASSERT_TRUE(shipping.RegisterCVar("r.shipping", "1"));
+    const DeveloperConsoleCVarMutationResultUVE unavailable = shipping.SetCVarDetailedUVE("r.shipping", "2");
+    EXPECT_EQ(unavailable.code, DeveloperConsoleCVarMutationCodeUVE::Unavailable);
+    EXPECT_FALSE(unavailable.IsAcceptedUVE());
+    EXPECT_FALSE(unavailable.message.empty());
 }
 
 TEST(DeveloperConsoleUVE, RegisterCommandUVEReturnsStructuredDiagnosticsForEachRejectionCode) {

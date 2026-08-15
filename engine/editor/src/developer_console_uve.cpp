@@ -187,20 +187,35 @@ bool DeveloperConsoleUVE::ClearUVE() noexcept {
     return true;
 }
 
-bool DeveloperConsoleUVE::SetCVarUVE(const std::string_view name, const std::string_view value) {
+DeveloperConsoleCVarMutationResultUVE DeveloperConsoleUVE::SetCVarDetailedUVE(const std::string_view name,
+                                                                                const std::string_view value) {
     if (!IsAvailableUVE()) {
-        return false;
+        return {DeveloperConsoleCVarMutationCodeUVE::Unavailable,
+                "CVAR mutation is unavailable under the Shipping build policy."};
     }
     const auto iterator = m_cvars.find(name);
-    if (iterator == m_cvars.end() || iterator->second.readOnly || !IsBoundedValueUVE(value)) {
-        return false;
+    if (iterator == m_cvars.end()) {
+        return {DeveloperConsoleCVarMutationCodeUVE::UnknownName,
+                "No CVAR is registered with this name."};
+    }
+    if (iterator->second.readOnly) {
+        return {DeveloperConsoleCVarMutationCodeUVE::ReadOnly,
+                "The registered CVAR is read-only."};
+    }
+    if (!IsBoundedValueUVE(value)) {
+        return {DeveloperConsoleCVarMutationCodeUVE::InvalidValue,
+                "CVAR value exceeds the bounded size or contains a line break."};
     }
     if (iterator->second.value == value) {
-        return true;
+        return {DeveloperConsoleCVarMutationCodeUVE::Unchanged, "CVAR value is unchanged."};
     }
     iterator->second.value = std::string(value);
     AppendUVE(DeveloperConsoleSeverityUVE::Info, std::string(name) + " = " + std::string(value));
-    return true;
+    return {DeveloperConsoleCVarMutationCodeUVE::Applied, "CVAR value updated."};
+}
+
+bool DeveloperConsoleUVE::SetCVarUVE(const std::string_view name, const std::string_view value) {
+    return SetCVarDetailedUVE(name, value).IsAcceptedUVE();
 }
 
 bool DeveloperConsoleUVE::ExecuteCVarUVE(const std::string_view arguments) {

@@ -67,6 +67,25 @@ struct DeveloperConsoleCVarRegistrationResultUVE final {
     }
 };
 
+enum class DeveloperConsoleCVarMutationCodeUVE : std::uint8_t {
+    Applied = 0,
+    Unchanged,
+    Unavailable,
+    UnknownName,
+    ReadOnly,
+    InvalidValue,
+};
+
+struct DeveloperConsoleCVarMutationResultUVE final {
+    DeveloperConsoleCVarMutationCodeUVE code = DeveloperConsoleCVarMutationCodeUVE::Applied;
+    std::string message;
+
+    [[nodiscard]] bool IsAcceptedUVE() const noexcept {
+        return code == DeveloperConsoleCVarMutationCodeUVE::Applied ||
+               code == DeveloperConsoleCVarMutationCodeUVE::Unchanged;
+    }
+};
+
 struct DeveloperConsoleCompletionUVE final {
     std::string identifier;
     std::string help;
@@ -127,6 +146,8 @@ public:
     [[nodiscard]] bool RegisterCVar(std::string name, std::string value, bool readOnly = false);
     [[nodiscard]] bool ExecuteUVE(std::string commandLine);
     [[nodiscard]] bool ClearUVE() noexcept;
+    [[nodiscard]] DeveloperConsoleCVarMutationResultUVE SetCVarDetailedUVE(std::string_view name,
+                                                                            std::string_view value);
     [[nodiscard]] bool SetCVarUVE(std::string_view name, std::string_view value);
     [[nodiscard]] bool SetBuildPolicyUVE(DeveloperConsoleBuildPolicyUVE policy) noexcept;
     [[nodiscard]] bool SetSeverityFilterUVE(DeveloperConsoleSeverityFilterUVE filter) noexcept;
