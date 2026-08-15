@@ -25,6 +25,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        VisualScriptCanvas.CommandRequested += VisualScriptCanvas_OnCommandRequested;
         shellInitialized = true;
         layoutStore = new DockShellPreferencesStore(BuildLayoutPath());
         BackendPathTextBox.Text = Environment.GetEnvironmentVariable("UVE_EDITOR_BACKEND") ?? "uve_editor";
@@ -67,6 +68,15 @@ public partial class MainWindow : Window
 
     private void ToggleBottomDockButton_OnClick(object? sender, RoutedEventArgs e) =>
         UpdateShellLayout(layoutSession.CurrentLayout with { IsBottomDockVisible = !layoutSession.CurrentLayout.IsBottomDockVisible });
+
+    private void VisualScriptCanvas_OnCommandRequested(object? sender, VisualScriptCanvasCommandEventArgs e) =>
+        DispatchCurrentCommand(e.Command);
+
+    private void VisualScriptUndoButton_OnClick(object? sender, RoutedEventArgs e) =>
+        VisualScriptCanvas.RequestUndo();
+
+    private void VisualScriptRedoButton_OnClick(object? sender, RoutedEventArgs e) =>
+        VisualScriptCanvas.RequestRedo();
 
     private void WorkspaceButton_OnClick(object? sender, RoutedEventArgs e)
     {
@@ -403,7 +413,7 @@ public partial class MainWindow : Window
             RenderInspector(snapshot.Inspector);
             RenderContentBrowser(snapshot.ContentBrowser);
             RenderViewportSurface(snapshot.ViewportSurface);
-            RenderVisualScripting(snapshot.VisualScripting);
+            RenderVisualScripting(snapshot.VisualScripting, snapshot.Revision);
         }
         finally
         {
@@ -432,9 +442,16 @@ public partial class MainWindow : Window
                scripting.Reason;
     }
 
-    private void RenderVisualScripting(BridgeVisualScriptingSnapshot scripting)
+    private void RenderVisualScripting(BridgeVisualScriptingSnapshot scripting, ulong bridgeRevision)
     {
         VisualScriptingStatusTextBlock.Text = DescribeVisualScripting(scripting);
+        string truncation = scripting.Canvas.NodesTruncated || scripting.Canvas.LinksTruncated ||
+            scripting.Canvas.PaletteTruncated || scripting.Canvas.DiagnosticsTruncated
+            ? " · truncated"
+            : string.Empty;
+        VisualScriptingDiagnosticsTextBlock.Text =
+            $"Canvas rev {scripting.Canvas.Revision}; {scripting.Canvas.Diagnostics.Count} diagnostic(s){truncation}";
+        VisualScriptCanvas.ApplySnapshot(scripting.Canvas, bridgeRevision);
     }
 
     private void RenderHierarchy(BridgeHierarchySnapshot hierarchy)
