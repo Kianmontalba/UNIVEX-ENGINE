@@ -1506,3 +1506,8 @@ Increment 75 deliberately does not introduce a bytecode VM, engine-call binding 
 ## Native Graph Editor Backend v1 (Increment 81)
 
 `ScriptGraphEditorBackendUVE` is the native command boundary for graph authoring. Each add/remove command edits a candidate graph copy and publishes it only after the structural mutation succeeds; rejected commands leave the current graph and history unchanged. Undo and redo store bounded value snapshots, redo is cleared by a new successful edit, and node removal removes incident links atomically. This backend exposes no UI widgets, managed object references, ECS pointers, or runtime execution authority; later bridge presentation must send named commands and receive copied DTOs.
+
+
+## Managed Visual-Scripting Presentation Boundary v1 (Increment 82)
+
+The managed host may receive only copied visual-scripting presentation facts: availability, graph revision, bounded node/link counts, edit-capability state, and a bounded reason. The C# layer must not deserialize native graph objects, retain native pointers, execute compiler/VM work, or write graph assets directly. A future editable graph surface must use separately named native commands and revision-protected responses; a status DTO is not an authorization to mutate the graph.

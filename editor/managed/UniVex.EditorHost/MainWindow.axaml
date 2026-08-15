@@ -97,6 +97,9 @@
                                 <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
                                     <TextBlock Text="Native Viewport Surface Lifecycle" FontSize="18" FontWeight="SemiBold" HorizontalAlignment="Center" />
                                     <TextBlock x:Name="ViewportSurfaceStatusTextBlock" Text="Connect to read the C++ surface lifecycle state." TextWrapping="Wrap" TextAlignment="Center" MaxWidth="560" Opacity="0.76" />
+                                    <TextBlock Text="Visual scripting presentation" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                                    <TextBlock x:Name="VisualScriptingStatusTextBlock" Text="Connect to read native graph presentation facts." TextWrapping="Wrap" TextAlignment="Center" MaxWidth="560" Opacity="0.76" />
+                                    <TextBlock Text="C# receives copied graph status and counts only; graph ownership, commands, compiler, VM, and runtime state remain native." TextWrapping="Wrap" TextAlignment="Center" MaxWidth="560" Opacity="0.76" />
                                     <TextBlock Text="C# owns no OpenGL context, renderer texture, picking pass, native window handle, or input-forwarding path. A managed surface is shown only when an explicit future capability permits it." TextWrapping="Wrap" TextAlignment="Center" MaxWidth="560" Opacity="0.76" />
                                 </StackPanel>
                             </Border>

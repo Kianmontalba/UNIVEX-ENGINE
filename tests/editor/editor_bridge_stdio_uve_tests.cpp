@@ -105,6 +105,13 @@ TEST(EditorBridgeStdioUVETest, ServeUVE_HandshakesAndRoutesExistingBridgeDispatc
         EXPECT_TRUE(handshakeSnapshot.at("viewportSurface").at("nativeRendererOwnsSurface").get<bool>());
         EXPECT_FALSE(handshakeSnapshot.at("viewportSurface").at("managedAttachAllowed").get<bool>());
         EXPECT_TRUE(handshakeSnapshot.at("viewportSurface").at("reason").is_string());
+        ASSERT_TRUE(handshakeSnapshot.at("visualScripting").is_object());
+        EXPECT_FALSE(handshakeSnapshot.at("visualScripting").at("available").get<bool>());
+        EXPECT_EQ(handshakeSnapshot.at("visualScripting").at("graphRevision").get<std::uint64_t>(), 0U);
+        EXPECT_EQ(handshakeSnapshot.at("visualScripting").at("nodeCount").get<std::size_t>(), 0U);
+        EXPECT_EQ(handshakeSnapshot.at("visualScripting").at("linkCount").get<std::size_t>(), 0U);
+        EXPECT_FALSE(handshakeSnapshot.at("visualScripting").at("canEdit").get<bool>());
+        EXPECT_TRUE(handshakeSnapshot.at("visualScripting").at("reason").is_string());
         EXPECT_TRUE(frames[1U].at("result").at("applied").get<bool>());
         EXPECT_EQ(frames[1U].at("result").at("code").get<std::string>(), "bridge.command.applied");
         EXPECT_TRUE(frames[1U].at("result").at("createdEntity").is_object());

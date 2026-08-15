@@ -102,6 +102,18 @@ public sealed record BridgeViewportSurfaceSnapshot(
 /// Entire immutable state copied from a single C++ bridge response. Presentation code must replace
 /// this value atomically after a response; it must never retain raw JsonElement or native objects.
 /// </summary>
+/// <summary>
+/// C++-authoritative visual-scripting presentation facts. The managed host receives counts and status
+/// only; graph ownership, command execution, and runtime state remain native.
+/// </summary>
+public sealed record BridgeVisualScriptingSnapshot(
+    bool IsAvailable,
+    ulong GraphRevision,
+    int NodeCount,
+    int LinkCount,
+    bool CanEdit,
+    string Reason);
+
 public sealed record BridgeEditorSnapshot(
     uint ProtocolVersion,
     ulong Revision,
@@ -118,6 +130,7 @@ public sealed record BridgeEditorSnapshot(
     BridgeInspectorSnapshot Inspector,
     BridgeContentBrowserSnapshot ContentBrowser,
     BridgeViewportSurfaceSnapshot ViewportSurface,
+    BridgeVisualScriptingSnapshot VisualScripting,
     IReadOnlyList<byte> Capabilities);
 
 public sealed record BridgeCommand(
@@ -176,6 +189,7 @@ public static class BridgeSnapshotParser
                 ParseInspector(RequiredObjectMember(value, "inspector")),
                 ParseContentBrowser(RequiredObjectMember(value, "contentBrowser")),
                 ParseViewportSurface(RequiredObjectMember(value, "viewportSurface")),
+                ParseVisualScripting(RequiredObjectMember(value, "visualScripting")),
                 ParseCapabilities(RequiredArray(value, "capabilities")));
         }
         catch (BridgeProtocolException)
@@ -186,6 +200,24 @@ public static class BridgeSnapshotParser
         {
             throw Invalid($"The backend returned an invalid copied snapshot: {exception.Message}");
         }
+    }
+
+    private static BridgeVisualScriptingSnapshot ParseVisualScripting(JsonElement value)
+    {
+        RequireObject(value, "visualScripting");
+        int nodeCount = RequiredInt32(value, "nodeCount");
+        int linkCount = RequiredInt32(value, "linkCount");
+        if (nodeCount < 0 || linkCount < 0)
+        {
+            throw Invalid("Visual-scripting graph counts must be non-negative.");
+        }
+        return new BridgeVisualScriptingSnapshot(
+            RequiredBoolean(value, "available"),
+            RequiredUInt64(value, "graphRevision"),
+            nodeCount,
+            linkCount,
+            RequiredBoolean(value, "canEdit"),
+            RequiredBoundedString(value, "reason"));
     }
 
     private static BridgeHierarchySnapshot ParseHierarchy(JsonElement value)
