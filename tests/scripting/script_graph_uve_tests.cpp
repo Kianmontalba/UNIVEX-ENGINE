@@ -3,6 +3,7 @@
 #include "uve/scripting/script_runtime_uve.h"
 #include "uve/scripting/script_vm_uve.h"
 #include "uve/scripting/script_compiler_ir_uve.h"
+#include "uve/scripting/script_debugger_uve.h"
 #include "uve/scripting/script_graph_editor_backend_uve.h"
 #include "uve/scripting/script_graph_persistence_uve.h"
 #include "uve/scripting/script_graph_uve.h"
@@ -370,6 +371,51 @@ TEST(ScriptGraphEditorBackendUVETest, UndoRedoRestoresSnapshotsAndNewEditClearsR
     ASSERT_TRUE(backend.AddNodeUVE({3U, "test.source"}).IsAppliedUVE());
     EXPECT_EQ(backend.GetRedoCountUVE(), 0U);
     EXPECT_EQ(backend.RedoUVE().code, ScriptGraphCommandCodeUVE::NoHistory);
+}
+
+} // namespace UVE::Scripting
+
+
+namespace UVE::Scripting {
+
+TEST(ScriptDebuggerUVETest, ContinueUVE_PausesAtSourceNodeBreakpointAndContinueResumes) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 10U, 0U, "test.source", {}, {}});
+    program.instructions.push_back({ScriptIrInstructionKindUVE::TransferValue, 20U, 30U, {}, "Out", "In"});
+    ScriptDebuggerUVE debugger;
+    ASSERT_TRUE(debugger.AttachUVE(program));
+    ASSERT_TRUE(debugger.SetBreakpointUVE(20U, true));
+    const ScriptDebuggerSnapshotUVE paused = debugger.ContinueUVE();
+    EXPECT_EQ(paused.state, ScriptDebuggerStateUVE::Paused);
+    EXPECT_EQ(paused.instructionIndex, 1U);
+    EXPECT_EQ(paused.sourceNodeId, 20U);
+    EXPECT_EQ(paused.pauseReason, "Breakpoint reached.");
+    const ScriptDebuggerSnapshotUVE completed = debugger.ContinueUVE();
+    EXPECT_EQ(completed.state, ScriptDebuggerStateUVE::Completed);
+    EXPECT_EQ(completed.executedInstructions, 2U);
+}
+
+TEST(ScriptDebuggerUVETest, StepUVE_AdvancesOneInstructionAndReportsCompletion) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.resize(2U);
+    ScriptDebuggerUVE debugger;
+    ASSERT_TRUE(debugger.AttachUVE(program));
+    const ScriptDebuggerSnapshotUVE first = debugger.StepUVE();
+    EXPECT_EQ(first.state, ScriptDebuggerStateUVE::Paused);
+    EXPECT_EQ(first.instructionIndex, 1U);
+    EXPECT_EQ(first.executedInstructions, 1U);
+    const ScriptDebuggerSnapshotUVE second = debugger.StepUVE();
+    EXPECT_EQ(second.state, ScriptDebuggerStateUVE::Completed);
+    EXPECT_EQ(second.instructionIndex, 2U);
+}
+
+TEST(ScriptDebuggerUVETest, SetBreakpointUVE_ProvidesSortedSnapshotAndRejectsEmptyNodeId) {
+    ScriptDebuggerUVE debugger;
+    EXPECT_FALSE(debugger.SetBreakpointUVE(0U, true));
+    EXPECT_TRUE(debugger.SetBreakpointUVE(20U, true));
+    EXPECT_TRUE(debugger.SetBreakpointUVE(10U, true));
+    const ScriptDebuggerSnapshotUVE snapshot = debugger.GetSnapshotUVE();
+    EXPECT_EQ(snapshot.breakpointNodeIds, (std::vector<std::uint32_t>{10U, 20U}));
 }
 
 } // namespace UVE::Scripting

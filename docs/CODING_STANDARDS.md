@@ -1511,3 +1511,8 @@ Increment 75 deliberately does not introduce a bytecode VM, engine-call binding 
 ## Managed Visual-Scripting Presentation Boundary v1 (Increment 82)
 
 The managed host may receive only copied visual-scripting presentation facts: availability, graph revision, bounded node/link counts, edit-capability state, and a bounded reason. The C# layer must not deserialize native graph objects, retain native pointers, execute compiler/VM work, or write graph assets directly. A future editable graph surface must use separately named native commands and revision-protected responses; a status DTO is not an authorization to mutate the graph.
+
+
+## Script Debugger Contract v1 (Increment 83)
+
+`ScriptDebuggerUVE` consumes copied versioned bytecode and uses each instruction's source-node ID as the stable breakpoint mapping. Breakpoints are bounded and snapshots sort IDs deterministically. Continue skips a just-hit breakpoint once to avoid a resume loop; Step executes exactly one validated instruction; completion, detachment, and faults are explicit states. The debugger does not own ECS state, editor UI state, engine services, or hot-reload replacement; later managed debugger presentation must consume copied snapshots and named commands.
