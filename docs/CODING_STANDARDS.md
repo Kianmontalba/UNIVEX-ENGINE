@@ -1544,3 +1544,10 @@ The bridge exposes only bounded copy DTOs and named revision-checked requests. C
 Canvas coordinates are derived from the copied pan/zoom view and are used only for rendering and gesture translation. Selection, node movement, view changes, Undo, and Redo are emitted as the existing named `BridgeCommand` values with the top-level bridge revision, then sent through the serialized bridge session. The managed control must not perform graph validation, link creation, compiler/VM work, persistence, or history mutation itself.
 
 Rendering must remain safe for empty and truncated snapshots. A truncated flag is displayed as status rather than silently treated as complete data. Durable canvas layout, source mapping, watches, breakpoint UI, and managed runtime ownership require separate reviewed increments.
+
+
+## Developer Console and Diagnostics v1 (Increment 88)
+
+Developer-console commands must be explicitly registered by native code with bounded identifiers, bounded help text, and a native handler. Unknown, oversized, multiline, or malformed command text is rejected without granting an implicit filesystem, process, network, ECS, renderer, or plugin capability. Built-in commands remain safe and deterministic; CVAR names and values are bounded, typed by their registered native descriptor, and read-only state is enforced by the native service.
+
+The managed Console panel renders only copied `DeveloperConsoleSnapshotUVE` DTO values. It may submit bounded text through the named bridge request `SubmitDeveloperConsoleCommand`, but it must never parse or execute commands locally, write logs/settings, or retain a native service reference. Output, history, and CVAR truncation flags must be shown rather than interpreted as deletion or completeness.

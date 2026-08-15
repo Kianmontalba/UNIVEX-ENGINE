@@ -78,6 +78,21 @@ public partial class MainWindow : Window
     private void VisualScriptRedoButton_OnClick(object? sender, RoutedEventArgs e) =>
         VisualScriptCanvas.RequestRedo();
 
+    private void DeveloperConsoleSubmitButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        string command = DeveloperConsoleCommandTextBox.Text?.Trim() ?? string.Empty;
+        if (command.Length == 0)
+        {
+            return;
+        }
+        DeveloperConsoleCommandTextBox.Text = string.Empty;
+        DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "submitDeveloperConsoleCommand",
+            DeveloperConsoleCommand: command));
+    }
+
+    private void DeveloperConsoleClearButton_OnClick(object? sender, RoutedEventArgs e) =>
+        DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "clearDeveloperConsole"));
+
     private void WorkspaceButton_OnClick(object? sender, RoutedEventArgs e)
     {
         if (sender is not Button { Tag: string workspaceText } ||
@@ -414,6 +429,7 @@ public partial class MainWindow : Window
             RenderContentBrowser(snapshot.ContentBrowser);
             RenderViewportSurface(snapshot.ViewportSurface);
             RenderVisualScripting(snapshot.VisualScripting, snapshot.Revision);
+            RenderDeveloperConsole(snapshot.DeveloperConsole);
         }
         finally
         {
@@ -440,6 +456,19 @@ public partial class MainWindow : Window
         return $"Native presentation {availability}; graph revision {scripting.GraphRevision}; " +
                $"{scripting.NodeCount} nodes, {scripting.LinkCount} links; managed edit capability: {scripting.CanEdit}. " +
                scripting.Reason;
+    }
+
+    private void RenderDeveloperConsole(BridgeDeveloperConsoleSnapshot console)
+    {
+        DeveloperConsoleOutputListBox.ItemsSource = console.Output
+            .Select(entry => $"[{entry.Severity}] {entry.Text}")
+            .ToArray();
+        string truncation = console.OutputTruncated || console.HistoryTruncated || console.CVarsTruncated
+            ? " · bounded/truncated"
+            : string.Empty;
+        DeveloperConsoleStatusTextBlock.Text =
+            $"Generation {console.Generation}; {console.Output.Count} output entr(y/ies), " +
+            $"{console.History.Count} history item(s), {console.CVars.Count} cvar(s){truncation}";
     }
 
     private void RenderVisualScripting(BridgeVisualScriptingSnapshot scripting, ulong bridgeRevision)

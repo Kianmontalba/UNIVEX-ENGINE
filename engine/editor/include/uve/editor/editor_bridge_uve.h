@@ -11,6 +11,7 @@
 
 #include "uve/editor/editor_uve.h"
 #include "uve/scripting/script_graph_canvas_uve.h"
+#include "uve/editor/developer_console_uve.h"
 
 namespace UVE::Editor {
 
@@ -59,6 +60,9 @@ enum class EditorBridgeCapabilityUVE : std::uint8_t {
     SetVisualScriptView,
     UndoVisualScript,
     RedoVisualScript,
+    ReadDeveloperConsole,
+    SubmitDeveloperConsoleCommand,
+    ClearDeveloperConsole,
 };
 
 /// The deliberately small v1 request vocabulary. No generic command string is accepted because
@@ -89,6 +93,9 @@ enum class EditorBridgeRequestKindUVE : std::uint8_t {
     SetVisualScriptView,
     UndoVisualScript,
     RedoVisualScript,
+    ReadDeveloperConsole,
+    SubmitDeveloperConsoleCommand,
+    ClearDeveloperConsole,
 };
 
 /// Explicitly describes whether this bridge session has a native-owned viewport surface. No raw
@@ -222,6 +229,11 @@ struct EditorBridgeVisualScriptingSnapshotUVE final {
 
 /// Immutable bridge-visible state. A revision is incremented whenever any field observable through
 /// this snapshot changes, whether native ImGui or the bridge initiated that change.
+struct EditorBridgeDeveloperConsoleSnapshotUVE final {
+    DeveloperConsoleSnapshotUVE console;
+    [[nodiscard]] bool operator==(const EditorBridgeDeveloperConsoleSnapshotUVE&) const = default;
+};
+
 struct EditorBridgeSnapshotUVE final {
     std::uint32_t protocolVersion = kEditorBridgeProtocolVersionUVE;
     std::uint64_t revision = 0U;
@@ -239,6 +251,7 @@ struct EditorBridgeSnapshotUVE final {
     EditorBridgeContentBrowserSnapshotUVE contentBrowser;
     EditorBridgeViewportSurfaceSnapshotUVE viewportSurface;
     EditorBridgeVisualScriptingSnapshotUVE visualScripting;
+    EditorBridgeDeveloperConsoleSnapshotUVE developerConsole;
     std::vector<EditorBridgeCapabilityUVE> capabilities;
 };
 
@@ -263,6 +276,7 @@ struct EditorBridgeRequestUVE final {
     std::optional<Scripting::ScriptLinkUVE> visualScriptLink;
     std::optional<std::vector<std::uint32_t>> visualScriptSelection;
     std::optional<Scripting::ScriptGraphCanvasViewUVE> visualScriptView;
+    std::optional<std::string> developerConsoleCommand;
 
     EditorBridgeRequestUVE() = default;
 
@@ -321,6 +335,7 @@ private:
         EditorBridgeContentBrowserSnapshotUVE contentBrowser;
         EditorBridgeViewportSurfaceSnapshotUVE viewportSurface;
         EditorBridgeVisualScriptingSnapshotUVE visualScripting;
+        EditorBridgeDeveloperConsoleSnapshotUVE developerConsole;
 
         [[nodiscard]] bool operator==(const ObservedStateUVE&) const = default;
     };
@@ -336,6 +351,7 @@ private:
     [[nodiscard]] static std::string BoundPresentationTextUVE(std::string value);
     [[nodiscard]] static std::string BoundContentPathUVE(std::string value);
     [[nodiscard]] EditorBridgeVisualScriptingSnapshotUVE CaptureVisualScriptingUVE() const;
+    [[nodiscard]] EditorBridgeDeveloperConsoleSnapshotUVE CaptureDeveloperConsoleUVE() const;
     [[nodiscard]] EditorBridgeHierarchySnapshotUVE CaptureHierarchyUVE();
     [[nodiscard]] EditorBridgeInspectorSnapshotUVE CaptureInspectorUVE() const;
     [[nodiscard]] EditorBridgeContentBrowserSnapshotUVE CaptureContentBrowserUVE();
@@ -347,6 +363,7 @@ private:
     EditorUVE* m_editor = nullptr;
     Scripting::ScriptNodeRegistryUVE m_visualScriptRegistry;
     Scripting::ScriptGraphCanvasUVE m_visualScriptCanvas;
+    DeveloperConsoleUVE m_developerConsole;
     std::optional<ObservedStateUVE> m_lastObservedState;
     std::uint64_t m_revision = 0U;
 };

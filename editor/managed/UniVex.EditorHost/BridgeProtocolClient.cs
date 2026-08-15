@@ -110,6 +110,7 @@ public sealed class BridgeProtocolClient : IAsyncDisposable
                 },
                 zoom = command.VisualScriptView.Zoom,
             },
+            developerConsoleCommand = command.DeveloperConsoleCommand,
         }, cancellationToken).ConfigureAwait(false);
         JsonElement result = GetResultOrThrow(response.RootElement);
         BridgeEntityRef? createdEntity = result.GetProperty("createdEntity").ValueKind == JsonValueKind.Null

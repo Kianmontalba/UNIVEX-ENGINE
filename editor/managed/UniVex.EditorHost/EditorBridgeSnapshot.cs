@@ -149,6 +149,26 @@ public sealed record BridgeVisualScriptingSnapshot(
     string Reason,
     BridgeVisualScriptCanvasSnapshot Canvas);
 
+public enum BridgeDeveloperConsoleSeverity : byte
+{
+    Info = 0,
+    Warning = 1,
+    Error = 2,
+}
+
+public sealed record BridgeDeveloperConsoleEntry(BridgeDeveloperConsoleSeverity Severity, string Text);
+
+public sealed record BridgeDeveloperConsoleCVar(string Name, string Value, bool IsReadOnly);
+
+public sealed record BridgeDeveloperConsoleSnapshot(
+    ulong Generation,
+    bool OutputTruncated,
+    bool HistoryTruncated,
+    bool CVarsTruncated,
+    IReadOnlyList<BridgeDeveloperConsoleEntry> Output,
+    IReadOnlyList<string> History,
+    IReadOnlyList<BridgeDeveloperConsoleCVar> CVars);
+
 public sealed record BridgeEditorSnapshot(
     uint ProtocolVersion,
     ulong Revision,
@@ -166,6 +186,7 @@ public sealed record BridgeEditorSnapshot(
     BridgeContentBrowserSnapshot ContentBrowser,
     BridgeViewportSurfaceSnapshot ViewportSurface,
     BridgeVisualScriptingSnapshot VisualScripting,
+    BridgeDeveloperConsoleSnapshot DeveloperConsole,
     IReadOnlyList<byte> Capabilities);
 
 public sealed record BridgeCommand(
@@ -183,7 +204,8 @@ public sealed record BridgeCommand(
     BridgeVisualScriptPoint? VisualScriptPosition = null,
     BridgeVisualScriptLink? VisualScriptLink = null,
     IReadOnlyList<uint>? VisualScriptSelection = null,
-    BridgeVisualScriptView? VisualScriptView = null);
+    BridgeVisualScriptView? VisualScriptView = null,
+    string? DeveloperConsoleCommand = null);
 
 public sealed record BridgeCommandResult(
     bool Applied,
@@ -231,6 +253,9 @@ public static class BridgeSnapshotParser
                 ParseContentBrowser(RequiredObjectMember(value, "contentBrowser")),
                 ParseViewportSurface(RequiredObjectMember(value, "viewportSurface")),
                 ParseVisualScripting(RequiredObjectMember(value, "visualScripting")),
+                value.TryGetProperty("developerConsole", out JsonElement consoleValue) && consoleValue.ValueKind != JsonValueKind.Null
+                    ? ParseDeveloperConsole(consoleValue)
+                    : EmptyDeveloperConsole(),
                 ParseCapabilities(RequiredArray(value, "capabilities")));
         }
         catch (BridgeProtocolException)
@@ -272,6 +297,54 @@ public static class BridgeSnapshotParser
             false, false, false, false,
             Array.Empty<BridgeVisualScriptNode>(), Array.Empty<BridgeVisualScriptLink>(),
             Array.Empty<uint>(), Array.Empty<string>(), Array.Empty<BridgeVisualScriptDiagnostic>());
+
+    private static BridgeDeveloperConsoleSnapshot EmptyDeveloperConsole() =>
+        new(0UL, false, false, false, Array.Empty<BridgeDeveloperConsoleEntry>(),
+            Array.Empty<string>(), Array.Empty<BridgeDeveloperConsoleCVar>());
+
+    private static BridgeDeveloperConsoleSnapshot ParseDeveloperConsole(JsonElement value)
+    {
+        RequireObject(value, "developerConsole");
+        JsonElement output = RequiredArray(value, "output");
+        JsonElement history = RequiredArray(value, "history");
+        JsonElement cvars = RequiredArray(value, "cvars");
+        EnsureBoundedArray(output, "developerConsole.output");
+        EnsureBoundedArray(history, "developerConsole.history");
+        EnsureBoundedArray(cvars, "developerConsole.cvars");
+
+        List<BridgeDeveloperConsoleEntry> parsedOutput = new(output.GetArrayLength());
+        foreach (JsonElement entry in output.EnumerateArray())
+        {
+            RequireObject(entry, "developer-console output entry");
+            byte severity = RequiredByte(entry, "severity");
+            if (!Enum.IsDefined((BridgeDeveloperConsoleSeverity)severity))
+            {
+                throw Invalid("The backend returned an unsupported developer-console severity.");
+            }
+            parsedOutput.Add(new BridgeDeveloperConsoleEntry((BridgeDeveloperConsoleSeverity)severity,
+                RequiredBoundedString(entry, "text")));
+        }
+
+        List<string> parsedHistory = new(history.GetArrayLength());
+        foreach (JsonElement command in history.EnumerateArray())
+        {
+            parsedHistory.Add(BoundedStringValue(command, "developer-console history command"));
+        }
+
+        List<BridgeDeveloperConsoleCVar> parsedCVars = new(cvars.GetArrayLength());
+        foreach (JsonElement cvar in cvars.EnumerateArray())
+        {
+            RequireObject(cvar, "developer-console cvar");
+            parsedCVars.Add(new BridgeDeveloperConsoleCVar(
+                RequiredBoundedString(cvar, "name"), RequiredBoundedString(cvar, "value"),
+                RequiredBoolean(cvar, "readOnly")));
+        }
+
+        return new BridgeDeveloperConsoleSnapshot(
+            RequiredUInt64(value, "generation"), RequiredBoolean(value, "outputTruncated"),
+            RequiredBoolean(value, "historyTruncated"), RequiredBoolean(value, "cvarsTruncated"),
+            parsedOutput, parsedHistory, parsedCVars);
+    }
 
     private static BridgeVisualScriptCanvasSnapshot ParseVisualScriptCanvas(JsonElement value)
     {

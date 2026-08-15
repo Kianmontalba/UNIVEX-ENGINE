@@ -40,6 +40,9 @@ namespace {
         EditorBridgeCapabilityUVE::SetVisualScriptView,
         EditorBridgeCapabilityUVE::UndoVisualScript,
         EditorBridgeCapabilityUVE::RedoVisualScript,
+        EditorBridgeCapabilityUVE::ReadDeveloperConsole,
+        EditorBridgeCapabilityUVE::SubmitDeveloperConsoleCommand,
+        EditorBridgeCapabilityUVE::ClearDeveloperConsole,
     };
     return capabilities;
 }
@@ -47,7 +50,8 @@ namespace {
 [[nodiscard]] bool IsMutationRequestUVE(const EditorBridgeRequestKindUVE kind) noexcept {
     return kind != EditorBridgeRequestKindUVE::ReadSnapshot &&
            kind != EditorBridgeRequestKindUVE::ReadViewportSurface &&
-           kind != EditorBridgeRequestKindUVE::ReadVisualScriptCanvas;
+           kind != EditorBridgeRequestKindUVE::ReadVisualScriptCanvas &&
+           kind != EditorBridgeRequestKindUVE::ReadDeveloperConsole;
 }
 
 [[nodiscard]] bool IsVisualScriptMutationRequestUVE(const EditorBridgeRequestKindUVE kind) noexcept {
@@ -118,6 +122,10 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
     if (request.kind == EditorBridgeRequestKindUVE::ReadVisualScriptCanvas) {
         return MakeResponseUVE(request, true, "bridge.visual_scripting.snapshot.read",
                                "The visual-scripting canvas snapshot was copied.");
+    }
+    if (request.kind == EditorBridgeRequestKindUVE::ReadDeveloperConsole) {
+        return MakeResponseUVE(request, true, "bridge.developer_console.snapshot.read",
+                               "The bounded developer-console snapshot was copied.");
     }
     if (m_editor->GetStateUVE() != EditorStateUVE::Running) {
         return MakeResponseUVE(request, false, "bridge.editor.not_running",
@@ -457,6 +465,27 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
             message = result.message;
             break;
         }
+        case EditorBridgeRequestKindUVE::SubmitDeveloperConsoleCommand:
+            if (!request.developerConsoleCommand.has_value() ||
+                request.developerConsoleCommand->size() > DeveloperConsoleUVE::kMaximumValueBytesUVE) {
+                return MakeResponseUVE(request, false, "bridge.developer_console.request.invalid",
+                                       "SubmitDeveloperConsoleCommand requires a bounded command payload.");
+            }
+            applied = m_developerConsole.ExecuteUVE(*request.developerConsoleCommand);
+            code = applied ? "bridge.command.applied" : "bridge.developer_console.command.rejected";
+            message = applied ? "The registered native console command executed."
+                              : "The native console rejected or could not execute the console command.";
+            break;
+        case EditorBridgeRequestKindUVE::ClearDeveloperConsole:
+            applied = m_developerConsole.ClearUVE();
+            code = applied ? "bridge.command.applied" : "bridge.developer_console.clear.noop";
+            message = applied ? "The native developer-console output was cleared."
+                              : "The native developer-console output was already empty.";
+            break;
+        case EditorBridgeRequestKindUVE::ReadDeveloperConsole:
+            code = "bridge.developer_console.snapshot.read";
+            message = "The bounded developer-console snapshot was copied.";
+            break;
         case EditorBridgeRequestKindUVE::ReadSnapshot:
             break;
     }
@@ -494,7 +523,12 @@ EditorBridgeUVE::ObservedStateUVE EditorBridgeUVE::CaptureObservedStateUVE() {
         EditorBridgeViewportSurfaceStateUVE::Unavailable, 0U, 0U, 0U, true, false,
         "No managed viewport surface transport is available in this headless bridge session."};
     observed.visualScripting = CaptureVisualScriptingUVE();
+    observed.developerConsole = CaptureDeveloperConsoleUVE();
     return observed;
+}
+
+EditorBridgeDeveloperConsoleSnapshotUVE EditorBridgeUVE::CaptureDeveloperConsoleUVE() const {
+    return EditorBridgeDeveloperConsoleSnapshotUVE{m_developerConsole.GetSnapshotUVE()};
 }
 
 EditorBridgeVisualScriptingSnapshotUVE EditorBridgeUVE::CaptureVisualScriptingUVE() const {
@@ -541,6 +575,7 @@ EditorBridgeSnapshotUVE EditorBridgeUVE::BuildSnapshotUVE() const {
     snapshot.contentBrowser = observed.contentBrowser;
     snapshot.viewportSurface = observed.viewportSurface;
     snapshot.visualScripting = observed.visualScripting;
+    snapshot.developerConsole = observed.developerConsole;
     snapshot.capabilities = GetCapabilitiesUVE();
     return snapshot;
 }
