@@ -76,6 +76,42 @@ TEST(EditorDeveloperConsoleBridgeUVE, RoutesBoundedCommandsAndCopiesGeneration) 
     engine.Shutdown();
 }
 
+TEST(EditorDeveloperConsoleBridgeUVE, CopiesReadOnlyDataTableCatalogAndAdvancesRevision) {
+    Core::EngineCoreUVE engine(MakeConsoleBridgeConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_data_table_catalog_bridge.uvescene");
+        editor.InitUVE();
+        EditorBridgeUVE bridge(editor);
+        const EditorBridgeSnapshotUVE initial = bridge.GetSnapshotUVE();
+
+        Asset::DataTableUVE table("weapons");
+        ASSERT_TRUE(table.DefineColumnUVE("damage", Asset::DataTableColumnTypeUVE::Integer));
+        ASSERT_TRUE(table.AddRowUVE("pistol", {std::int64_t{25}}));
+        Asset::DataTableCatalogUVE catalog;
+        ASSERT_TRUE(catalog.UpsertUVE(table.GetSnapshotUVE()));
+        bridge.SetDataTableCatalogSnapshotUVE(catalog.GetSnapshotUVE());
+
+        const EditorBridgeSnapshotUVE copied = bridge.GetSnapshotUVE();
+        ASSERT_GT(copied.revision, initial.revision);
+        ASSERT_EQ(copied.dataTableCatalog.entries.size(), 1U);
+        EXPECT_EQ(copied.dataTableCatalog.entries.front().name, "weapons");
+        EXPECT_EQ(copied.dataTableCatalog.entries.front().columnCount, 1U);
+        EXPECT_EQ(copied.dataTableCatalog.entries.front().rowCount, 1U);
+        EXPECT_TRUE(copied.dataTableCatalog.entries.front().valid);
+
+        EditorBridgeSnapshotUVE mutatedCopy = copied;
+        mutatedCopy.dataTableCatalog.entries.clear();
+        const EditorBridgeSnapshotUVE stillNative = bridge.GetSnapshotUVE();
+        ASSERT_EQ(stillNative.dataTableCatalog.entries.size(), 1U);
+        EXPECT_EQ(stillNative.dataTableCatalog.entries.front().name, "weapons");
+
+        editor.ShutdownUVE();
+    }
+    engine.Shutdown();
+}
+
 TEST(EditorDeveloperConsoleBridgeUVE, RoutesDiscoveryFilterAndHistoryThroughNamedRequests) {
     Core::EngineCoreUVE engine(MakeConsoleBridgeConfigUVE());
     engine.Init();

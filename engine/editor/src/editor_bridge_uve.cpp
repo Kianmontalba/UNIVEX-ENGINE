@@ -108,6 +108,16 @@ const std::vector<EditorBridgeCapabilityUVE>& EditorBridgeUVE::GetCapabilitiesUV
     return CapabilitiesUVE();
 }
 
+void EditorBridgeUVE::SetDataTableCatalogSnapshotUVE(Asset::DataTableCatalogSnapshotUVE snapshot) {
+    if (m_dataTableCatalogSnapshot == snapshot) {
+        return;
+    }
+    m_dataTableCatalogSnapshot = std::move(snapshot);
+    if (m_lastObservedState.has_value()) {
+        SynchronizeRevisionUVE();
+    }
+}
+
 EditorBridgeSnapshotUVE EditorBridgeUVE::GetSnapshotUVE() {
     SynchronizeRevisionUVE();
     return BuildSnapshotUVE();
@@ -570,11 +580,28 @@ EditorBridgeUVE::ObservedStateUVE EditorBridgeUVE::CaptureObservedStateUVE() {
         "No managed viewport surface transport is available in this headless bridge session."};
     observed.visualScripting = CaptureVisualScriptingUVE();
     observed.developerConsole = CaptureDeveloperConsoleUVE();
+    observed.dataTableCatalog = CaptureDataTableCatalogUVE();
     return observed;
 }
 
 EditorBridgeDeveloperConsoleSnapshotUVE EditorBridgeUVE::CaptureDeveloperConsoleUVE() const {
     return EditorBridgeDeveloperConsoleSnapshotUVE{m_developerConsole.GetSnapshotUVE()};
+}
+
+EditorBridgeDataTableCatalogSnapshotUVE EditorBridgeUVE::CaptureDataTableCatalogUVE() const {
+    EditorBridgeDataTableCatalogSnapshotUVE snapshot{};
+    snapshot.generation = m_dataTableCatalogSnapshot.generation;
+    snapshot.entriesTruncated = m_dataTableCatalogSnapshot.entriesTruncated;
+    snapshot.entries.reserve(m_dataTableCatalogSnapshot.entries.size());
+    for (const Asset::DataTableCatalogEntryUVE& entry : m_dataTableCatalogSnapshot.entries) {
+        if (snapshot.entries.size() >= kEditorBridgeMaximumPanelEntriesUVE) {
+            snapshot.entriesTruncated = true;
+            break;
+        }
+        snapshot.entries.push_back(EditorBridgeDataTableCatalogEntryUVE{
+            BoundPresentationTextUVE(entry.name), entry.generation, entry.columnCount, entry.rowCount, entry.valid});
+    }
+    return snapshot;
 }
 
 EditorBridgeVisualScriptingSnapshotUVE EditorBridgeUVE::CaptureVisualScriptingUVE() const {
@@ -622,6 +649,7 @@ EditorBridgeSnapshotUVE EditorBridgeUVE::BuildSnapshotUVE() const {
     snapshot.viewportSurface = observed.viewportSurface;
     snapshot.visualScripting = observed.visualScripting;
     snapshot.developerConsole = observed.developerConsole;
+    snapshot.dataTableCatalog = observed.dataTableCatalog;
     snapshot.capabilities = GetCapabilitiesUVE();
     return snapshot;
 }

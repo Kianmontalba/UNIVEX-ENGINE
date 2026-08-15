@@ -178,6 +178,22 @@ public sealed record BridgeDeveloperConsoleSnapshot(
     IReadOnlyList<BridgeDeveloperConsoleCVar> CVars,
     IReadOnlyList<BridgeDeveloperConsoleCompletion> Completions);
 
+public sealed record BridgeDataTableCatalogEntry(
+    string Name,
+    ulong Generation,
+    int ColumnCount,
+    int RowCount,
+    bool IsValid)
+{
+    public string DisplayText => $"{Name} — {RowCount} rows, {ColumnCount} columns" +
+                                 (IsValid ? string.Empty : " [diagnostics]");
+}
+
+public sealed record BridgeDataTableCatalogSnapshot(
+    ulong Generation,
+    bool EntriesTruncated,
+    IReadOnlyList<BridgeDataTableCatalogEntry> Entries);
+
 public sealed record BridgeEditorSnapshot(
     uint ProtocolVersion,
     ulong Revision,
@@ -196,6 +212,7 @@ public sealed record BridgeEditorSnapshot(
     BridgeViewportSurfaceSnapshot ViewportSurface,
     BridgeVisualScriptingSnapshot VisualScripting,
     BridgeDeveloperConsoleSnapshot DeveloperConsole,
+    BridgeDataTableCatalogSnapshot DataTableCatalog,
     IReadOnlyList<byte> Capabilities);
 
 public sealed record BridgeCommand(
@@ -268,6 +285,9 @@ public static class BridgeSnapshotParser
                 value.TryGetProperty("developerConsole", out JsonElement consoleValue) && consoleValue.ValueKind != JsonValueKind.Null
                     ? ParseDeveloperConsole(consoleValue)
                     : EmptyDeveloperConsole(),
+                value.TryGetProperty("dataTableCatalog", out JsonElement catalogValue) && catalogValue.ValueKind != JsonValueKind.Null
+                    ? ParseDataTableCatalog(catalogValue)
+                    : EmptyDataTableCatalog(),
                 ParseCapabilities(RequiredArray(value, "capabilities")));
         }
         catch (BridgeProtocolException)
@@ -314,6 +334,32 @@ public static class BridgeSnapshotParser
         new(0UL, false, true, 0, -1, string.Empty, false, false, false, false,
             Array.Empty<BridgeDeveloperConsoleEntry>(), Array.Empty<string>(), Array.Empty<BridgeDeveloperConsoleCVar>(),
             Array.Empty<BridgeDeveloperConsoleCompletion>());
+
+    private static BridgeDataTableCatalogSnapshot EmptyDataTableCatalog() =>
+        new(0UL, false, Array.Empty<BridgeDataTableCatalogEntry>());
+
+    private static BridgeDataTableCatalogSnapshot ParseDataTableCatalog(JsonElement value)
+    {
+        RequireObject(value, "dataTableCatalog");
+        JsonElement entries = RequiredArray(value, "entries");
+        EnsureBoundedArray(entries, "dataTableCatalog.entries");
+        List<BridgeDataTableCatalogEntry> parsed = new(entries.GetArrayLength());
+        foreach (JsonElement entry in entries.EnumerateArray())
+        {
+            RequireObject(entry, "data-table catalog entry");
+            int columnCount = RequiredInt32(entry, "columnCount");
+            int rowCount = RequiredInt32(entry, "rowCount");
+            if (columnCount < 0 || rowCount < 0)
+            {
+                throw Invalid("Data-table catalog counts must be non-negative.");
+            }
+            parsed.Add(new BridgeDataTableCatalogEntry(
+                RequiredBoundedString(entry, "name"), RequiredUInt64(entry, "generation"),
+                columnCount, rowCount, RequiredBoolean(entry, "valid")));
+        }
+        return new BridgeDataTableCatalogSnapshot(
+            RequiredUInt64(value, "generation"), RequiredBoolean(value, "entriesTruncated"), parsed);
+    }
 
     private static BridgeDeveloperConsoleSnapshot ParseDeveloperConsole(JsonElement value)
     {
