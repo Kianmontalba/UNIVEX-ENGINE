@@ -306,6 +306,21 @@ public sealed class BridgeProtocolClientTests
                 ["message"] = "replay fixture matches trace",
                 ["diagnosticSummary"] = "",
             },
+            ["replayBaselines"] = new JsonObject
+            {
+                ["generation"] = 2UL,
+                ["truncated"] = false,
+                ["entries"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["name"] = "ci.fixture",
+                        ["sourceGeneration"] = 9UL,
+                        ["eventCount"] = 1UL,
+                        ["truncated"] = false,
+                    },
+                },
+            },
         };
         using JsonDocument document = JsonDocument.Parse(snapshot.ToJsonString());
         BridgeEditorSnapshot parsed = BridgeSnapshotParser.Parse(document.RootElement);
@@ -344,6 +359,12 @@ public sealed class BridgeProtocolClientTests
         Assert.Equal(0U, parsed.MotionQuery.ReplayComparison.MismatchFieldMask);
         Assert.Equal("replay fixture matches trace", parsed.MotionQuery.ReplayComparison.Message);
         Assert.Equal(string.Empty, parsed.MotionQuery.ReplayComparison.DiagnosticSummary);
+        Assert.Equal(2UL, parsed.MotionQuery.ReplayBaselines.Generation);
+        Assert.False(parsed.MotionQuery.ReplayBaselines.IsTruncated);
+        Assert.Single(parsed.MotionQuery.ReplayBaselines.Entries);
+        Assert.Equal("ci.fixture", parsed.MotionQuery.ReplayBaselines.Entries[0].Name);
+        Assert.Equal(9UL, parsed.MotionQuery.ReplayBaselines.Entries[0].SourceGeneration);
+        Assert.Equal(1UL, parsed.MotionQuery.ReplayBaselines.Entries[0].EventCount);
     }
 
     [Fact]
