@@ -420,7 +420,10 @@
                                     </ListBox.ItemTemplate>
                                 </ListBox>
                                 <Grid Grid.Row="5" RowDefinitions="Auto,*" RowSpacing="4">
-                                    <TextBlock Text="LIVE DEBUG TRACE · recent native events" FontSize="10" Opacity="0.68" />
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <TextBlock Text="LIVE DEBUG TRACE · recent native events" FontSize="10" Opacity="0.68" VerticalAlignment="Center" />
+                                        <Button Grid.Column="1" Content="Export Trace as Evidence" Click="MotionQueryExportEvidenceButton_OnClick" Padding="4,2" FontSize="10" x:Name="MotionQueryExportEvidenceButton" IsEnabled="False" />
+                                    </Grid>
                                     <ListBox x:Name="MotionQueryTraceListBox" Grid.Row="1" MaxHeight="120" SelectionChanged="MotionQueryTraceListBox_OnSelectionChanged">
                                         <ListBox.ItemTemplate>
                                             <DataTemplate>

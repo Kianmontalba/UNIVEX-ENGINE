@@ -943,6 +943,9 @@ enum class FrameReadResultUVE : std::uint8_t {
     if (value == "renameMotionQueryReplayBaseline") {
         return EditorBridgeRequestKindUVE::RenameMotionQueryReplayBaseline;
     }
+    if (value == "exportMotionQueryReplayEvidence") {
+        return EditorBridgeRequestKindUVE::ExportMotionQueryReplayEvidence;
+    }
     return std::nullopt;
 }
 

@@ -975,6 +975,24 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
             }
             break;
         }
+        case EditorBridgeRequestKindUVE::ExportMotionQueryReplayEvidence: {
+            const Plugins::Editor::MotionQueryLiveDebugSnapshotUVE liveDebug =
+                m_motionQueryLiveDebugSession.GetSnapshotUVE();
+            const Plugins::Editor::MotionQueryTraceSnapshotUVE traceSnapshot{
+                liveDebug.generation, liveDebug.traceTruncated, liveDebug.traceEvents};
+            const Plugins::Editor::MotionQueryTraceReplayFixtureUVE fixture =
+                Plugins::Editor::BuildMotionQueryTraceReplayFixtureUVE(traceSnapshot);
+            const Plugins::Editor::MotionQueryTraceReplaySerializationResultUVE result =
+                Plugins::Editor::SerializeMotionQueryTraceReplayFixtureUVE(fixture);
+            applied = result.IsAcceptedUVE();
+            code = applied ? "bridge.motion_query.replay.evidence.exported"
+                           : "bridge.motion_query.replay.evidence.rejected";
+            message = result.message;
+            if (applied) {
+                responseEnvelopePayload = result.payload;
+            }
+            break;
+        }
         case EditorBridgeRequestKindUVE::ReadMotionQuery:
             code = "bridge.motion_query.snapshot.read";
             message = "The copied Motion Query authoring, debugger, and trace snapshot was returned.";

@@ -747,6 +747,7 @@ public partial class MainWindow : Window
         MotionQueryImportRegistryButton.IsEnabled = state == HostSessionState.Connected;
         MotionQueryRunBatchButton.IsEnabled = state == HostSessionState.Connected;
         MotionQueryClearReplayButton.IsEnabled = state == HostSessionState.Connected;
+        MotionQueryExportEvidenceButton.IsEnabled = state == HostSessionState.Connected && motionQuery.Trace.Events.Count > 0;
 
         MotionQueryStatusTextBlock.Text = motionQuery.ReplayWorkflow.ReadyForComparison
             ? $"Ready for regression. Registry generation {motionQuery.ReplayWorkflow.RegistryGeneration}, {motionQuery.ReplayWorkflow.BaselineCount} baseline(s)."
@@ -880,6 +881,21 @@ public partial class MainWindow : Window
                 MotionQueryDebugExpectedGeneration = session.LastSnapshot.MotionQuery.LiveDebugGeneration,
                 MotionQueryDebugEventSequence = traceEvent.Sequence
             });
+        }
+    }
+
+    private async void MotionQueryExportEvidenceButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        var result = await DispatchCommandAsync(new BridgeCommand(CurrentRevision(), "exportMotionQueryReplayEvidence")).ConfigureAwait(true);
+        if (result != null && result.Applied && result.MotionQueryReplayBaselineEnvelopePayload != null)
+        {
+            var topLevel = TopLevel.GetTopLevel(this);
+            var clipboard = topLevel?.Clipboard;
+            if (clipboard != null)
+            {
+                await clipboard.SetTextAsync(result.MotionQueryReplayBaselineEnvelopePayload).ConfigureAwait(true);
+                MotionQueryStatusTextBlock.Text = "Trace exported as evidence to clipboard.";
+            }
         }
     }
 
