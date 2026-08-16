@@ -120,6 +120,7 @@ add_executable(uve_tests
     ../engine/plugins/motion_query/Tests/motion_query_asset_sampling_uve_tests.cpp
     ../engine/plugins/motion_query/Tests/motion_query_asset_registry_cache_uve_tests.cpp
     ../engine/plugins/motion_query/Tests/motion_query_asset_ingestion_uve_tests.cpp
+    ../engine/plugins/motion_query/Tests/motion_query_runtime_integration_uve_tests.cpp
     ../engine/plugins/motion_query/Tests/motion_query_search_index_uve_tests.cpp
     ../engine/plugins/motion_query/Tests/motion_query_animation_node_uve_tests.cpp
     ../engine/plugins/motion_query/Tests/motion_query_interaction_runtime_uve_tests.cpp
