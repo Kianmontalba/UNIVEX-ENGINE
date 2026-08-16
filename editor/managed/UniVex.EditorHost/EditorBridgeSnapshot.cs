@@ -192,6 +192,28 @@ public sealed record BridgeMotionQueryReplayComparisonHistoryEntry(
     uint MismatchFieldMask,
     string DiagnosticSummary);
 
+public sealed record BridgeMotionQueryReplayWorkflowStatus(
+    ulong RegistryGeneration,
+    ulong BaselineCount,
+    bool ActiveBaselineSelected,
+    bool ActiveFixtureAvailable,
+    bool HistoryTruncated,
+    bool ReadyForComparison,
+    string Diagnostic);
+
+public sealed record BridgeMotionQueryReplayDiagnosticsView(
+    bool HasActiveComparison,
+    bool IsMatch,
+    byte ComparisonCode,
+    uint MismatchFieldMask,
+    uint CompatibilityMismatchMask,
+    bool HistoryTruncated,
+    IReadOnlyList<BridgeMotionQueryReplayBaselineEntry> Baselines,
+    IReadOnlyList<BridgeMotionQueryReplayComparisonHistoryEntry> History)
+{
+    public bool HasMismatch => HasActiveComparison && !IsMatch;
+}
+
 public sealed record BridgeMotionQuerySnapshot(
     BridgeMotionQueryAuthoringSnapshot Authoring,
     BridgeMotionQueryDebuggerSnapshot Debugger,
@@ -207,7 +229,19 @@ public sealed record BridgeMotionQuerySnapshot(
     BridgeMotionQueryReplayComparison ReplayComparison,
     BridgeMotionQueryReplayBaselineSnapshot ReplayBaselines,
     bool ReplayComparisonHistoryTruncated,
-    IReadOnlyList<BridgeMotionQueryReplayComparisonHistoryEntry> ReplayComparisonHistory);
+    IReadOnlyList<BridgeMotionQueryReplayComparisonHistoryEntry> ReplayComparisonHistory,
+    BridgeMotionQueryReplayWorkflowStatus ReplayWorkflow)
+{
+    public BridgeMotionQueryReplayDiagnosticsView ReplayDiagnostics => new(
+        ReplayComparison.Available,
+        ReplayComparison.Available && ReplayComparison.ComparisonCode == 0,
+        ReplayComparison.ComparisonCode,
+        ReplayComparison.MismatchFieldMask,
+        ReplayComparison.CompatibilityMismatchMask,
+        ReplayComparisonHistoryTruncated,
+        ReplayBaselines.Entries,
+        ReplayComparisonHistory);
+}
 
 public sealed record BridgeViewportSurfaceSnapshot(
     BridgeViewportSurfaceState State,
@@ -723,7 +757,9 @@ public static class BridgeSnapshotParser
             new BridgeMotionQueryReplayBaselineSnapshot(0UL, false,
                                                         Array.Empty<BridgeMotionQueryReplayBaselineEntry>()),
             false,
-            Array.Empty<BridgeMotionQueryReplayComparisonHistoryEntry>());
+            Array.Empty<BridgeMotionQueryReplayComparisonHistoryEntry>(),
+            new BridgeMotionQueryReplayWorkflowStatus(0UL, 0UL, false, false, false, false,
+                                                      "no native replay workflow status is attached"));
 
     private static BridgeMotionQueryResourceHandle ParseMotionQueryResource(JsonElement value, string context)
     {
@@ -876,6 +912,9 @@ public static class BridgeSnapshotParser
         }
         BridgeMotionQueryReplayBaselineSnapshot replayBaselines =
             new(0UL, false, Array.Empty<BridgeMotionQueryReplayBaselineEntry>());
+        BridgeMotionQueryReplayWorkflowStatus replayWorkflow =
+            new(0UL, 0UL, false, false, false, false,
+                "no native replay workflow status is attached");
         if (value.TryGetProperty("replayBaselines", out JsonElement replayBaselinesValue))
         {
             RequireObject(replayBaselinesValue, "motion-query replay baselines");
@@ -904,6 +943,18 @@ public static class BridgeSnapshotParser
             replayBaselines = new(
                 RequiredUInt64(replayBaselinesValue, "generation"),
                 RequiredBoolean(replayBaselinesValue, "truncated"), entries);
+        }
+        if (value.TryGetProperty("replayWorkflow", out JsonElement replayWorkflowValue))
+        {
+            RequireObject(replayWorkflowValue, "motion-query replay workflow status");
+            replayWorkflow = new BridgeMotionQueryReplayWorkflowStatus(
+                RequiredUInt64(replayWorkflowValue, "registryGeneration"),
+                RequiredUInt64(replayWorkflowValue, "baselineCount"),
+                RequiredBoolean(replayWorkflowValue, "activeBaselineSelected"),
+                RequiredBoolean(replayWorkflowValue, "activeFixtureAvailable"),
+                RequiredBoolean(replayWorkflowValue, "historyTruncated"),
+                RequiredBoolean(replayWorkflowValue, "readyForComparison"),
+                OptionalBoundedString(replayWorkflowValue, "diagnostic", string.Empty));
         }
         bool replayHistoryTruncated = OptionalBoolean(value, "replayComparisonHistoryTruncated", false);
         List<BridgeMotionQueryReplayComparisonHistoryEntry> replayHistory = new();
@@ -967,7 +1018,8 @@ public static class BridgeSnapshotParser
             replayComparison,
             replayBaselines,
             replayHistoryTruncated,
-            replayHistory);
+            replayHistory,
+            replayWorkflow);
     }
 
     private static BridgeVisualScriptingSnapshot ParseVisualScripting(JsonElement value)
