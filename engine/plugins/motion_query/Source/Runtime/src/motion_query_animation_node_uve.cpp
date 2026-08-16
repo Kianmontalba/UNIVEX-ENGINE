@@ -68,6 +68,10 @@ MotionQueryAnimationNodeResultUVE EvaluateMotionQueryAnimationNodeUVE(
         return publish(MakeResultUVE(MotionQueryAnimationNodeCodeUVE::IndexNotBuilt,
                              "motion query animation node search index is not built"));
     }
+    if (!searchIndex.IsCompatibleWithSchemaUVE(schema)) {
+        return publish(MakeResultUVE(MotionQueryAnimationNodeCodeUVE::SchemaMismatch,
+                             "motion query animation node search index schema is incompatible"));
+    }
 
     UVE::Core::MotionQueryFeatureVectorUVE queryFeature;
     const UVE::Core::MotionQueryFeatureValidationResultUVE extraction =

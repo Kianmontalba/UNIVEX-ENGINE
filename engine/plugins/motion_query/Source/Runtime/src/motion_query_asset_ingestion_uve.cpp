@@ -85,6 +85,32 @@ MotionQueryAssetIngestionResultUVE MotionQueryAssetIngestionCoordinatorUVE::Remo
 
 MotionQueryAssetIngestionResultUVE MotionQueryAssetIngestionCoordinatorUVE::SubmitDerivedDataUVE(
     MotionQueryDerivedDataUVE derivedData) noexcept {
+    return SubmitDerivedDataInternalUVE(std::move(derivedData), nullptr);
+}
+
+MotionQueryAssetIngestionResultUVE MotionQueryAssetIngestionCoordinatorUVE::SubmitDerivedDataUVE(
+    MotionQueryDerivedDataUVE derivedData,
+    const UVE::Core::MotionQueryFeatureSchemaUVE& schema) noexcept {
+    return SubmitDerivedDataInternalUVE(std::move(derivedData), &schema);
+}
+
+MotionQueryAssetIngestionResultUVE
+MotionQueryAssetIngestionCoordinatorUVE::SubmitDerivedDataInternalUVE(
+    MotionQueryDerivedDataUVE derivedData,
+    const UVE::Core::MotionQueryFeatureSchemaUVE* schema) noexcept {
+    if (schema != nullptr) {
+        const MotionQuerySchemaCompatibilityResultUVE compatibility =
+            ValidateMotionQueryDerivedDataSchemaUVE(derivedData, *schema);
+        if (!compatibility.IsCompatibleUVE()) {
+            const MotionQueryAssetIngestionCodeUVE code =
+                compatibility.code == MotionQuerySchemaCompatibilityCodeUVE::SchemaVersionMismatch
+                    ? MotionQueryAssetIngestionCodeUVE::SchemaVersionMismatch
+                    : compatibility.code == MotionQuerySchemaCompatibilityCodeUVE::FeatureDimensionMismatch
+                          ? MotionQueryAssetIngestionCodeUVE::FeatureDimensionMismatch
+                          : MotionQueryAssetIngestionCodeUVE::InvalidRequest;
+            return MotionQueryAssetIngestionResultUVE{code, compatibility.message};
+        }
+    }
     MotionQueryAssetIngestionEntryUVE* entry = FindUVE(derivedData.key.source);
     if (entry == nullptr) {
         return MakeIngestionResultUVE(MotionQueryAssetIngestionCodeUVE::RequestNotFound,
