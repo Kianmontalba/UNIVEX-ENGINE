@@ -259,6 +259,17 @@ MotionQueryEditorSnapshotUVE MotionQueryEditorAuthoringSessionUVE::GetSnapshotUV
     return snapshot;
 }
 
+bool MotionQueryEditorAuthoringSessionUVE::TryGetDatabaseCopyUVE(
+    const UVE::Asset::ResourceHandleUVE resource,
+    UVE::Core::MotionQueryDatabaseContractUVE& destination) const noexcept {
+    const MotionQueryEditorDatabaseEntryUVE* entry = FindDatabaseUVE(resource);
+    if (entry == nullptr) {
+        return false;
+    }
+    destination = entry->contract;
+    return true;
+}
+
 MotionQueryEditorResponseUVE MotionQueryEditorAuthoringSessionUVE::MakeResponseUVE(
     const MotionQueryEditorCommandUVE& command, const bool applied,
     const MotionQueryEditorResponseCodeUVE code, std::string message) const {

@@ -51,6 +51,16 @@ struct MotionQueryAnimationNodeResultUVE final {
     }
 };
 
+/// Runtime-facing value-only sink. Implementations may live in the editor/diagnostics layer, but the
+/// animation evaluator never owns or discovers them. A null sink is the normal shipping path.
+class IMotionQueryAnimationDebugSinkUVE {
+public:
+    virtual ~IMotionQueryAnimationDebugSinkUVE() = default;
+    virtual void PublishUVE(const MotionQueryAnimationNodeResultUVE& result,
+                            std::uint64_t timestampNanoseconds,
+                            std::uint64_t frameNumber) noexcept = 0;
+};
+
 // Evaluates one native motion-matching node. The database, schema, search index, and clips are
 // borrowed for the call only. The result owns copied metadata and pose values; no asset, ECS,
 // renderer, animation-tree, or managed-editor ownership crosses this adapter boundary.
@@ -60,7 +70,10 @@ struct MotionQueryAnimationNodeResultUVE final {
     const UVE::Core::MotionQueryFeatureSchemaUVE& schema,
     const MotionQuerySearchIndexUVE& searchIndex,
     const std::vector<UVE::Core::AnimationClipUVE>& clips,
-    MotionQueryAnimationNodeSettingsUVE settings) noexcept;
+    MotionQueryAnimationNodeSettingsUVE settings,
+    IMotionQueryAnimationDebugSinkUVE* debugSink = nullptr,
+    std::uint64_t timestampNanoseconds = 0U,
+    std::uint64_t frameNumber = 0U) noexcept;
 
 [[nodiscard]] MotionQueryAnimationNodeResultUVE EvaluateMotionQueryAnimationNodeFromHistoryUVE(
     const UVE::Core::MotionQueryHistoryBufferUVE& history, double evaluationTimeSeconds,
@@ -68,6 +81,9 @@ struct MotionQueryAnimationNodeResultUVE final {
     const UVE::Core::MotionQueryFeatureSchemaUVE& schema,
     const MotionQuerySearchIndexUVE& searchIndex,
     const std::vector<UVE::Core::AnimationClipUVE>& clips,
-    MotionQueryAnimationNodeSettingsUVE settings) noexcept;
+    MotionQueryAnimationNodeSettingsUVE settings,
+    IMotionQueryAnimationDebugSinkUVE* debugSink = nullptr,
+    std::uint64_t timestampNanoseconds = 0U,
+    std::uint64_t frameNumber = 0U) noexcept;
 
 } // namespace UVE::Plugins

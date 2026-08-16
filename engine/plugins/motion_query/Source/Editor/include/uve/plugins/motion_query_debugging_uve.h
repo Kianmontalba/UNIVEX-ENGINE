@@ -84,6 +84,8 @@ struct MotionQueryDebuggerSnapshotUVE final {
     std::string selectedCandidateId;
     std::string selectedSourceClipId;
     std::string message;
+
+    [[nodiscard]] bool operator==(const MotionQueryDebuggerSnapshotUVE&) const = default;
 };
 
 class MotionQueryDebuggerUVE final {

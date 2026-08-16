@@ -1,5 +1,6 @@
 // Copyright (c) 2026 UniVex Studios. All Rights Reserved.
 #include "uve/plugins/motion_query_debugging_uve.h"
+#include "uve/plugins/motion_query_live_debug_session_uve.h"
 
 #include <gtest/gtest.h>
 
@@ -77,6 +78,64 @@ TEST(MotionQueryDebuggingUVETest, DebuggerUVE_PublishesCopiedSelectedCandidateFa
 
     debugger.PublishMatchUVE(4U, 1U, 0.5F, "invalid");
     EXPECT_EQ(debugger.GetSnapshotUVE().selectedCandidateId, "candidate-0");
+}
+
+TEST(MotionQueryDebuggingUVETest, LiveDebugSessionUVE_AttachesFiltersPublishesAndRejectsStaleCommands) {
+    MotionQueryEditorAuthoringSessionUVE authoring;
+    MotionQueryEditorDatabaseEntryUVE entry;
+    entry.resource = MakeHandleUVE(31U);
+    entry.displayName = "Locomotion";
+    entry.contract = MakeContractUVE();
+    MotionQueryEditorCommandUVE registerCommand;
+    registerCommand.requestId = 1U;
+    registerCommand.kind = MotionQueryEditorCommandKindUVE::RegisterDatabase;
+    registerCommand.database = entry;
+    ASSERT_TRUE(authoring.DispatchUVE(registerCommand).applied);
+
+    MotionQueryLiveDebugSessionUVE session;
+    MotionQueryLiveDebugCommandUVE attach;
+    attach.requestId = 2U;
+    attach.kind = MotionQueryLiveDebugCommandKindUVE::Attach;
+    attach.database = entry.resource;
+    const MotionQueryLiveDebugResponseUVE attached = session.DispatchUVE(attach, authoring);
+    ASSERT_TRUE(attached.applied) << attached.message;
+    ASSERT_TRUE(attached.snapshot.active);
+    EXPECT_EQ(attached.snapshot.database, entry.resource);
+
+    UVE::Plugins::MotionQueryAnimationNodeResultUVE result;
+    result.code = UVE::Plugins::MotionQueryAnimationNodeCodeUVE::Accepted;
+    result.candidateIndex = 0U;
+    result.candidatesEvaluated = 1U;
+    result.cost = 0.25F;
+    result.sourceClipId = "walk";
+    result.message = "accepted live match";
+    session.PublishUVE(result, 100U, 4U);
+    const MotionQueryLiveDebugSnapshotUVE published = session.GetSnapshotUVE();
+    ASSERT_EQ(published.traceEvents.size(), 1U);
+    EXPECT_EQ(published.traceEvents.front().kind, "accepted");
+    EXPECT_EQ(published.debugger.selectedCandidateId, "candidate-0");
+
+    MotionQueryLiveDebugCommandUVE filter = attach;
+    filter.requestId = 3U;
+    filter.kind = MotionQueryLiveDebugCommandKindUVE::SetFilter;
+    filter.expectedGeneration = attached.snapshot.generation;
+    filter.filter = "accepted";
+    ASSERT_TRUE(session.DispatchUVE(filter, authoring).applied);
+    EXPECT_EQ(session.GetSnapshotUVE().visibleTraceEventCount, 1U);
+
+    MotionQueryLiveDebugCommandUVE stale = filter;
+    stale.requestId = 4U;
+    stale.expectedGeneration = attached.snapshot.generation;
+    stale.filter = "other";
+    EXPECT_EQ(session.DispatchUVE(stale, authoring).code,
+              MotionQueryLiveDebugResponseCodeUVE::StaleGeneration);
+
+    MotionQueryLiveDebugCommandUVE clear = filter;
+    clear.requestId = 5U;
+    clear.kind = MotionQueryLiveDebugCommandKindUVE::ClearTrace;
+    clear.expectedGeneration = session.GetSnapshotUVE().generation;
+    ASSERT_TRUE(session.DispatchUVE(clear, authoring).applied);
+    EXPECT_TRUE(session.GetSnapshotUVE().traceEvents.empty());
 }
 
 TEST(MotionQueryDebuggingUVETest, ProfilerAdapterUVE_DelegatesToExistingCaptureAuthority) {

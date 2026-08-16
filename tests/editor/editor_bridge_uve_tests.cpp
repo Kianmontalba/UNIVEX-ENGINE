@@ -547,6 +547,24 @@ TEST(EditorBridgeUVETest, MotionQueryUVE_ExposesCopiedSnapshotAndRevisionGuarded
         EXPECT_EQ(dispatchResponse.snapshot.motionQuery.authoring.revision, 1U);
         EXPECT_EQ(dispatchResponse.snapshot.revision, initial.revision + 1U);
 
+        EditorBridgeRequestUVE debugRequest{};
+        debugRequest.protocolVersion = kEditorBridgeProtocolVersionUVE;
+        debugRequest.requestId = 503U;
+        debugRequest.expectedRevision = dispatchResponse.snapshot.revision;
+        debugRequest.kind = EditorBridgeRequestKindUVE::DispatchMotionQueryDebugCommand;
+        Plugins::Editor::MotionQueryLiveDebugCommandUVE attachCommand;
+        attachCommand.requestId = 503U;
+        attachCommand.expectedGeneration = 0U;
+        attachCommand.kind = Plugins::Editor::MotionQueryLiveDebugCommandKindUVE::Attach;
+        attachCommand.database = entry.resource;
+        debugRequest.motionQueryDebugCommand = attachCommand;
+        const EditorBridgeResponseUVE debugResponse = bridge.DispatchUVE(debugRequest);
+        ASSERT_TRUE(debugResponse.applied) << debugResponse.message;
+        EXPECT_TRUE(debugResponse.snapshot.motionQuery.liveDebugActive);
+        EXPECT_EQ(debugResponse.snapshot.motionQuery.liveDebugDatabase, entry.resource);
+        EXPECT_EQ(debugResponse.snapshot.motionQuery.liveDebugGeneration, 1U);
+        EXPECT_EQ(debugResponse.snapshot.revision, dispatchResponse.snapshot.revision + 1U);
+
         dispatchRequest.requestId = 502U;
         dispatchRequest.expectedRevision = initial.revision;
         command.requestId = 502U;

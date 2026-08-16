@@ -48,7 +48,43 @@ std::vector<UVE::Core::AnimationClipUVE> MakeClipsUVE() {
     clip.samples[1].pose.rotation.w = 1.0F;
     return {clip};
 }
+class CapturingDebugSinkUVE final : public IMotionQueryAnimationDebugSinkUVE {
+public:
+    void PublishUVE(const MotionQueryAnimationNodeResultUVE& result,
+                   const std::uint64_t timestampNanoseconds,
+                   const std::uint64_t frameNumber) noexcept override {
+        last = result;
+        timestamp = timestampNanoseconds;
+        frame = frameNumber;
+        ++count;
+    }
+
+    MotionQueryAnimationNodeResultUVE last;
+    std::uint64_t timestamp = 0U;
+    std::uint64_t frame = 0U;
+    std::size_t count = 0U;
+};
 } // namespace
+
+TEST(MotionQueryAnimationNodeUVETest, EvaluateUVE_PublishesCopiedResultToOptionalDebugSink) {
+    const UVE::Core::MotionMatchingDatabaseUVE database = MakeDatabaseUVE();
+    const UVE::Core::MotionQueryFeatureSchemaUVE schema = MakeSchemaUVE();
+    MotionQuerySearchIndexUVE index;
+    ASSERT_TRUE(index.BuildUVE(database, schema).IsAcceptedUVE());
+    UVE::Core::MotionQueryUVE query;
+    query.rootVelocity = UVE::Math::Vector3UVE{1.0F, 0.0F, 0.0F};
+    query.facingDirection = UVE::Math::Vector3UVE{0.0F, 0.0F, 1.0F};
+    CapturingDebugSinkUVE sink;
+    const MotionQueryAnimationNodeResultUVE result = EvaluateMotionQueryAnimationNodeUVE(
+        query, database, schema, index, MakeClipsUVE(), MotionQueryAnimationNodeSettingsUVE{},
+        &sink, 123U, 9U);
+    ASSERT_TRUE(result.IsAcceptedUVE()) << result.message;
+    ASSERT_EQ(sink.count, 1U);
+    EXPECT_EQ(sink.last.candidateIndex, result.candidateIndex);
+    EXPECT_EQ(sink.last.sourceClipId, result.sourceClipId);
+    EXPECT_EQ(sink.timestamp, 123U);
+    EXPECT_EQ(sink.frame, 9U);
+}
 
 TEST(MotionQueryAnimationNodeUVETest, EvaluateUVE_PrefiltersThenUsesCoreMatchAndSamplesClip) {
     const UVE::Core::MotionMatchingDatabaseUVE database = MakeDatabaseUVE();
