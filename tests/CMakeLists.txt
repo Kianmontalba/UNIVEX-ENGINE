@@ -167,3 +167,16 @@ target_include_directories(uve_tests PRIVATE ${CMAKE_SOURCE_DIR}/engine/render/s
 
 include(GoogleTest)
 gtest_discover_tests(uve_tests)
+
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+add_test(
+    NAME ContractInventoryUVE.CheckGeneratedReference
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/validate_contract_inventory.py
+            --root ${CMAKE_SOURCE_DIR}
+            --inventory docs/CONTRACT_INVENTORY.md
+            --generated docs/GENERATED_CONTRACT_REFERENCE.md
+            --check
+)
+set_tests_properties(ContractInventoryUVE.CheckGeneratedReference
+    PROPERTIES WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
