@@ -113,6 +113,7 @@ add_executable(uve_tests
     scripting/script_graph_uve_tests.cpp
     scripting/script_source_mapping_uve_tests.cpp
     plugins/plugin_registry_uve_tests.cpp
+    plugins/motion_query_plugin_module_uve_tests.cpp
     project_check/project_checker_uve_tests.cpp
 )
 target_link_libraries(uve_tests PRIVATE
