@@ -78,6 +78,38 @@ MotionQueryTraceReplayFixtureUVE MakeFixtureFromSnapshotUVE(
 
 } // namespace
 
+TEST(MotionQueryTraceReplayRegressionUVETest, CaptureUVE_CopiesAcceptedLiveDebugTraceIntoFixture) {
+    MotionQueryLiveDebugSnapshotUVE snapshot;
+    MakePublishedSnapshotUVE(snapshot);
+
+    const MotionQueryTraceReplayCaptureResultUVE captured =
+        CaptureMotionQueryTraceReplayFixtureUVE(snapshot);
+    ASSERT_TRUE(captured.IsAcceptedUVE());
+    ASSERT_TRUE(captured.fixture.has_value());
+    EXPECT_EQ(captured.fixture->events.size(), 1U);
+    EXPECT_EQ(captured.fixture->events.front().kind, "accepted");
+    EXPECT_EQ(captured.fixture->events.front().provenance, "continuity_applied");
+    EXPECT_FALSE(captured.message.empty());
+}
+
+TEST(MotionQueryTraceReplayRegressionUVETest, CaptureUVE_RejectsFilteredEvidence) {
+    MotionQueryLiveDebugSnapshotUVE snapshot;
+    MakePublishedSnapshotUVE(snapshot);
+    snapshot.filter = "accepted";
+
+    const MotionQueryTraceReplayCaptureResultUVE captured =
+        CaptureMotionQueryTraceReplayFixtureUVE(snapshot);
+    EXPECT_EQ(captured.code, MotionQueryTraceReplayCaptureCodeUVE::FilteredSnapshot);
+    EXPECT_FALSE(captured.fixture.has_value());
+}
+
+TEST(MotionQueryTraceReplayRegressionUVETest, CaptureUVE_RejectsEmptyTrace) {
+    const MotionQueryTraceReplayCaptureResultUVE captured =
+        CaptureMotionQueryTraceReplayFixtureUVE(MotionQueryLiveDebugSnapshotUVE{});
+    EXPECT_EQ(captured.code, MotionQueryTraceReplayCaptureCodeUVE::EmptyTrace);
+    EXPECT_FALSE(captured.fixture.has_value());
+}
+
 TEST(MotionQueryTraceReplayRegressionUVETest, LiveDebugSnapshotUVE_MatchesAnimationEvaluationTrace) {
     MotionQueryLiveDebugSnapshotUVE snapshot;
     MakePublishedSnapshotUVE(snapshot);

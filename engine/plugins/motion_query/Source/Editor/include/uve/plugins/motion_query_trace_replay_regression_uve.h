@@ -10,6 +10,25 @@
 
 namespace UVE::Plugins::Editor {
 
+enum class MotionQueryTraceReplayCaptureCodeUVE : std::uint8_t {
+    Accepted = 0,
+    EmptyTrace,
+    FilteredSnapshot,
+};
+
+struct MotionQueryTraceReplayCaptureResultUVE final {
+    MotionQueryTraceReplayCaptureCodeUVE code = MotionQueryTraceReplayCaptureCodeUVE::EmptyTrace;
+    std::optional<MotionQueryTraceReplayFixtureUVE> fixture;
+    std::string message;
+
+    [[nodiscard]] bool IsAcceptedUVE() const noexcept {
+        return code == MotionQueryTraceReplayCaptureCodeUVE::Accepted && fixture.has_value();
+    }
+};
+
+[[nodiscard]] MotionQueryTraceReplayCaptureResultUVE CaptureMotionQueryTraceReplayFixtureUVE(
+    const MotionQueryLiveDebugSnapshotUVE& snapshot);
+
 enum class MotionQueryTraceReplayRegressionCodeUVE : std::uint8_t {
     Match = 0,
     Mismatch,
