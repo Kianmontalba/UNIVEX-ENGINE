@@ -63,8 +63,18 @@ using JsonUVE = nlohmann::json;
     return true;
 }
 
+[[nodiscard]] bool IsValidReplayCompatibilityUVE(
+    const MotionQueryTraceReplayCompatibilityUVE& compatibility) noexcept {
+    return compatibility.schemaVersion != 0U && compatibility.samplerVersion != 0U &&
+           compatibility.normalizationVersion != 0U && compatibility.sourceGeneration != 0U;
+}
+
 [[nodiscard]] bool IsValidReplayFixtureUVE(
     const MotionQueryTraceReplayFixtureUVE& fixture) noexcept {
+    if (fixture.compatibility.has_value() &&
+        !IsValidReplayCompatibilityUVE(*fixture.compatibility)) {
+        return false;
+    }
     if (fixture.events.size() > kMotionQueryMaximumTraceReplayEventsUVE ||
         !HasStrictlyIncreasingSequencesUVE(fixture.events) ||
         !HasNonDecreasingFramesUVE(fixture.events)) {
@@ -99,6 +109,24 @@ using JsonUVE = nlohmann::json;
         {"telemetryCandidatesConsidered", event.telemetryCandidatesConsidered},
         {"telemetryBudgetSaturated", event.telemetryBudgetSaturated},
         {"provenance", event.provenance},
+    };
+}
+
+[[nodiscard]] JsonUVE ReplayCompatibilityToJsonUVE(
+    const MotionQueryTraceReplayCompatibilityUVE& compatibility) {
+    return JsonUVE{{"schemaVersion", compatibility.schemaVersion},
+                   {"samplerVersion", compatibility.samplerVersion},
+                   {"normalizationVersion", compatibility.normalizationVersion},
+                   {"sourceGeneration", compatibility.sourceGeneration}};
+}
+
+[[nodiscard]] MotionQueryTraceReplayCompatibilityUVE ReplayCompatibilityFromJsonUVE(
+    const JsonUVE& document) {
+    return MotionQueryTraceReplayCompatibilityUVE{
+        document.at("schemaVersion").get<std::uint32_t>(),
+        document.at("samplerVersion").get<std::uint32_t>(),
+        document.at("normalizationVersion").get<std::uint32_t>(),
+        document.at("sourceGeneration").get<std::uint64_t>(),
     };
 }
 
@@ -171,9 +199,10 @@ MotionQueryTraceReplayFixtureUVE BuildMotionQueryTraceReplayFixtureUVE(
     return fixture;
 }
 
-MotionQueryTraceReplayComparisonUVE CompareMotionQueryTraceReplayFixtureUVE(
+[[nodiscard]] MotionQueryTraceReplayComparisonUVE CompareReplayFixtureInternalUVE(
     const MotionQueryTraceReplayFixtureUVE& fixture,
-    const MotionQueryTraceSnapshotUVE& snapshot) {
+    const MotionQueryTraceSnapshotUVE& snapshot,
+    const std::optional<MotionQueryTraceReplayCompatibilityUVE>& expectedCompatibility) {
     if (fixture.schemaVersion != kMotionQueryTraceReplayFixtureSchemaVersionUVE) {
         return MakeComparisonUVE(MotionQueryTraceReplayComparisonCodeUVE::SchemaMismatch, 0U,
                                  kMotionQueryTraceReplayNoMismatchIndexUVE, fixture.truncated,
@@ -184,9 +213,18 @@ MotionQueryTraceReplayComparisonUVE CompareMotionQueryTraceReplayFixtureUVE(
                                  kMotionQueryTraceReplayNoMismatchIndexUVE, fixture.truncated,
                                  snapshot.truncated, "motion query replay fixture is invalid");
     }
+    if (expectedCompatibility.has_value() &&
+        (!fixture.compatibility.has_value() ||
+         *fixture.compatibility != *expectedCompatibility)) {
+        return MakeComparisonUVE(MotionQueryTraceReplayComparisonCodeUVE::CompatibilityMismatch, 0U,
+                                 kMotionQueryTraceReplayNoMismatchIndexUVE, fixture.truncated,
+                                 snapshot.truncated, "motion query replay compatibility differs");
+    }
 
-    const MotionQueryTraceReplayFixtureUVE actual =
-        BuildMotionQueryTraceReplayFixtureUVE(snapshot);
+    const MotionQueryTraceReplayFixtureUVE actual = expectedCompatibility.has_value()
+                                                        ? BuildMotionQueryTraceReplayFixtureUVE(
+                                                              snapshot, *expectedCompatibility)
+                                                        : BuildMotionQueryTraceReplayFixtureUVE(snapshot);
     if (fixture.truncated != actual.truncated) {
         return MakeComparisonUVE(MotionQueryTraceReplayComparisonCodeUVE::TruncationMismatch, 0U,
                                  kMotionQueryTraceReplayNoMismatchIndexUVE, fixture.truncated,
@@ -209,6 +247,27 @@ MotionQueryTraceReplayComparisonUVE CompareMotionQueryTraceReplayFixtureUVE(
                              actual.truncated, "motion query replay fixture matches trace");
 }
 
+MotionQueryTraceReplayFixtureUVE BuildMotionQueryTraceReplayFixtureUVE(
+    const MotionQueryTraceSnapshotUVE& snapshot,
+    const MotionQueryTraceReplayCompatibilityUVE& compatibility) {
+    MotionQueryTraceReplayFixtureUVE fixture = BuildMotionQueryTraceReplayFixtureUVE(snapshot);
+    fixture.compatibility = compatibility;
+    return fixture;
+}
+
+MotionQueryTraceReplayComparisonUVE CompareMotionQueryTraceReplayFixtureUVE(
+    const MotionQueryTraceReplayFixtureUVE& fixture,
+    const MotionQueryTraceSnapshotUVE& snapshot) {
+    return CompareReplayFixtureInternalUVE(fixture, snapshot, std::nullopt);
+}
+
+MotionQueryTraceReplayComparisonUVE CompareMotionQueryTraceReplayFixtureUVE(
+    const MotionQueryTraceReplayFixtureUVE& fixture,
+    const MotionQueryTraceSnapshotUVE& snapshot,
+    const MotionQueryTraceReplayCompatibilityUVE& compatibility) {
+    return CompareReplayFixtureInternalUVE(fixture, snapshot, compatibility);
+}
+
 MotionQueryTraceReplaySerializationResultUVE SerializeMotionQueryTraceReplayFixtureUVE(
     const MotionQueryTraceReplayFixtureUVE& fixture) {
     if (fixture.schemaVersion != kMotionQueryTraceReplayFixtureSchemaVersionUVE) {
@@ -225,6 +284,9 @@ MotionQueryTraceReplaySerializationResultUVE SerializeMotionQueryTraceReplayFixt
     const JsonUVE document{
         {"schemaVersion", fixture.schemaVersion},
         {"truncated", fixture.truncated},
+        {"compatibility", fixture.compatibility.has_value()
+                              ? ReplayCompatibilityToJsonUVE(*fixture.compatibility)
+                              : JsonUVE(nullptr)},
         {"events", [&fixture] {
              JsonUVE events = JsonUVE::array();
              for (const MotionQueryTraceReplayEventUVE& event : fixture.events) {
@@ -263,6 +325,9 @@ MotionQueryTraceReplayDeserializationResultUVE DeserializeMotionQueryTraceReplay
                     "motion query replay fixture schema is unsupported"};
         }
         fixture.truncated = document.at("truncated").get<bool>();
+        if (document.contains("compatibility") && !document.at("compatibility").is_null()) {
+            fixture.compatibility = ReplayCompatibilityFromJsonUVE(document.at("compatibility"));
+        }
         const JsonUVE& events = document.at("events");
         if (!events.is_array() || events.size() > kMotionQueryMaximumTraceReplayEventsUVE) {
             return {MotionQueryTraceReplaySerializationCodeUVE::InvalidFixture, std::nullopt,

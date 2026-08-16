@@ -40,9 +40,19 @@ struct MotionQueryTraceReplayEventUVE final {
     [[nodiscard]] bool operator==(const MotionQueryTraceReplayEventUVE&) const = default;
 };
 
+struct MotionQueryTraceReplayCompatibilityUVE final {
+    std::uint32_t schemaVersion = 1U;
+    std::uint32_t samplerVersion = 1U;
+    std::uint32_t normalizationVersion = 1U;
+    std::uint64_t sourceGeneration = 0U;
+
+    [[nodiscard]] bool operator==(const MotionQueryTraceReplayCompatibilityUVE&) const = default;
+};
+
 struct MotionQueryTraceReplayFixtureUVE final {
     std::uint32_t schemaVersion = kMotionQueryTraceReplayFixtureSchemaVersionUVE;
     bool truncated = false;
+    std::optional<MotionQueryTraceReplayCompatibilityUVE> compatibility;
     std::vector<MotionQueryTraceReplayEventUVE> events;
 
     [[nodiscard]] bool operator==(const MotionQueryTraceReplayFixtureUVE&) const = default;
@@ -54,6 +64,7 @@ enum class MotionQueryTraceReplayComparisonCodeUVE : std::uint8_t {
     InvalidFixture,
     EventCountMismatch,
     EventMismatch,
+    CompatibilityMismatch,
     TruncationMismatch,
 };
 
@@ -110,9 +121,18 @@ struct MotionQueryTraceReplayDeserializationResultUVE final {
 [[nodiscard]] MotionQueryTraceReplayFixtureUVE BuildMotionQueryTraceReplayFixtureUVE(
     const MotionQueryTraceSnapshotUVE& snapshot);
 
+[[nodiscard]] MotionQueryTraceReplayFixtureUVE BuildMotionQueryTraceReplayFixtureUVE(
+    const MotionQueryTraceSnapshotUVE& snapshot,
+    const MotionQueryTraceReplayCompatibilityUVE& compatibility);
+
 [[nodiscard]] MotionQueryTraceReplayComparisonUVE CompareMotionQueryTraceReplayFixtureUVE(
     const MotionQueryTraceReplayFixtureUVE& fixture,
     const MotionQueryTraceSnapshotUVE& snapshot);
+
+[[nodiscard]] MotionQueryTraceReplayComparisonUVE CompareMotionQueryTraceReplayFixtureUVE(
+    const MotionQueryTraceReplayFixtureUVE& fixture,
+    const MotionQueryTraceSnapshotUVE& snapshot,
+    const MotionQueryTraceReplayCompatibilityUVE& compatibility);
 
 [[nodiscard]] MotionQueryTraceReplaySerializationResultUVE
 SerializeMotionQueryTraceReplayFixtureUVE(

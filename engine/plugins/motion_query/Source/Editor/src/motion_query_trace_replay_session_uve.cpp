@@ -57,6 +57,25 @@ MotionQueryTraceReplaySessionResultUVE MotionQueryTraceReplaySessionUVE::Compare
     return result;
 }
 
+MotionQueryTraceReplaySessionResultUVE MotionQueryTraceReplaySessionUVE::CompareUVE(
+    const MotionQueryTraceSnapshotUVE& snapshot,
+    const MotionQueryTraceReplayCompatibilityUVE& compatibility) const {
+    if (!fixture_.has_value()) {
+        return MakeResultUVE(MotionQueryTraceReplaySessionCodeUVE::EmptySession, false,
+                             "motion query replay session has no fixture");
+    }
+
+    const MotionQueryTraceReplayComparisonUVE comparison =
+        CompareMotionQueryTraceReplayFixtureUVE(*fixture_, snapshot, compatibility);
+    MotionQueryTraceReplaySessionResultUVE result;
+    result.code = comparison.IsMatchUVE() ? MotionQueryTraceReplaySessionCodeUVE::Match
+                                          : MotionQueryTraceReplaySessionCodeUVE::Mismatch;
+    result.generation = generation_;
+    result.comparison = comparison;
+    result.message = comparison.message;
+    return result;
+}
+
 void MotionQueryTraceReplaySessionUVE::ClearUVE() noexcept {
     fixture_.reset();
     ++generation_;

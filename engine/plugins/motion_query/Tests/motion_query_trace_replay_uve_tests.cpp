@@ -37,6 +37,10 @@ MotionQueryTraceReplayFixtureUVE MakeFixtureUVE() {
     return BuildMotionQueryTraceReplayFixtureUVE(MakeSnapshotUVE());
 }
 
+MotionQueryTraceReplayCompatibilityUVE MakeCompatibilityUVE() {
+    return MotionQueryTraceReplayCompatibilityUVE{3U, 4U, 5U, 9U};
+}
+
 } // namespace
 
 TEST(MotionQueryTraceReplayUVETest, BuildUVE_CopiesDeterministicFieldsAndRedactsRuntimeIdentity) {
@@ -180,6 +184,44 @@ TEST(MotionQueryTraceReplayUVETest, SerializationUVE_RejectsEmptyMalformedSchema
 
     MotionQueryTraceReplayFixtureUVE invalid = MakeFixtureUVE();
     invalid.events.front().candidatesEvaluated = invalid.events.front().candidatesConsidered + 1U;
+    EXPECT_EQ(SerializeMotionQueryTraceReplayFixtureUVE(invalid).code,
+              MotionQueryTraceReplaySerializationCodeUVE::InvalidFixture);
+}
+
+TEST(MotionQueryTraceReplayUVETest, CompareUVE_EnforcesRuntimeCompatibilityIdentity) {
+    const MotionQueryTraceReplayCompatibilityUVE compatibility = MakeCompatibilityUVE();
+    const MotionQueryTraceReplayFixtureUVE fixture =
+        BuildMotionQueryTraceReplayFixtureUVE(MakeSnapshotUVE(), compatibility);
+
+    EXPECT_TRUE(CompareMotionQueryTraceReplayFixtureUVE(fixture, MakeSnapshotUVE(), compatibility)
+                    .IsMatchUVE());
+    const MotionQueryTraceReplayCompatibilityUVE changed{3U, 4U, 6U, 9U};
+    const MotionQueryTraceReplayComparisonUVE mismatch =
+        CompareMotionQueryTraceReplayFixtureUVE(fixture, MakeSnapshotUVE(), changed);
+    EXPECT_EQ(mismatch.code, MotionQueryTraceReplayComparisonCodeUVE::CompatibilityMismatch);
+    EXPECT_FALSE(mismatch.IsMatchUVE());
+}
+
+TEST(MotionQueryTraceReplayUVETest, SerializationUVE_RoundTripsRuntimeCompatibilityIdentity) {
+    MotionQueryTraceReplayFixtureUVE fixture =
+        BuildMotionQueryTraceReplayFixtureUVE(MakeSnapshotUVE(), MakeCompatibilityUVE());
+    const MotionQueryTraceReplaySerializationResultUVE encoded =
+        SerializeMotionQueryTraceReplayFixtureUVE(fixture);
+    ASSERT_TRUE(encoded.IsAcceptedUVE());
+    EXPECT_NE(encoded.payload.find("sourceGeneration"), std::string::npos);
+
+    const MotionQueryTraceReplayDeserializationResultUVE decoded =
+        DeserializeMotionQueryTraceReplayFixtureUVE(encoded.payload);
+    ASSERT_TRUE(decoded.IsAcceptedUVE());
+    ASSERT_TRUE(decoded.fixture.has_value());
+    ASSERT_TRUE(decoded.fixture->compatibility.has_value());
+    EXPECT_EQ(*decoded.fixture->compatibility, MakeCompatibilityUVE());
+    EXPECT_EQ(*decoded.fixture, fixture);
+}
+
+TEST(MotionQueryTraceReplayUVETest, SerializationUVE_RejectsInvalidRuntimeCompatibilityIdentity) {
+    MotionQueryTraceReplayFixtureUVE invalid = MakeFixtureUVE();
+    invalid.compatibility = MotionQueryTraceReplayCompatibilityUVE{0U, 4U, 5U, 9U};
     EXPECT_EQ(SerializeMotionQueryTraceReplayFixtureUVE(invalid).code,
               MotionQueryTraceReplaySerializationCodeUVE::InvalidFixture);
 }

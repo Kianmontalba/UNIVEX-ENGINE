@@ -30,6 +30,10 @@ MotionQueryTraceReplayFixtureUVE MakeFixtureUVE() {
     return BuildMotionQueryTraceReplayFixtureUVE(MakeSnapshotUVE());
 }
 
+MotionQueryTraceReplayCompatibilityUVE MakeCompatibilityUVE() {
+    return MotionQueryTraceReplayCompatibilityUVE{3U, 4U, 5U, 9U};
+}
+
 } // namespace
 
 TEST(MotionQueryTraceReplaySessionUVETest, CompareUVE_RejectsEmptySessionWithoutChangingGeneration) {
@@ -98,6 +102,23 @@ TEST(MotionQueryTraceReplaySessionUVETest, CompareUVE_ReturnsMatchAndMismatchWit
     ASSERT_TRUE(mismatch.comparison.has_value());
     EXPECT_EQ(mismatch.comparison->mismatchIndex, 0U);
     EXPECT_EQ(mismatch.generation, 1U);
+}
+
+TEST(MotionQueryTraceReplaySessionUVETest, CompareUVE_EnforcesCompatibilityAtSessionBoundary) {
+    MotionQueryTraceReplaySessionUVE session;
+    ASSERT_TRUE(session.LoadFixtureUVE(
+                             BuildMotionQueryTraceReplayFixtureUVE(MakeSnapshotUVE(), MakeCompatibilityUVE()))
+                    .IsAppliedUVE());
+
+    EXPECT_EQ(session.CompareUVE(MakeSnapshotUVE(), MakeCompatibilityUVE()).code,
+              MotionQueryTraceReplaySessionCodeUVE::Match);
+    const MotionQueryTraceReplayCompatibilityUVE changed{3U, 4U, 6U, 9U};
+    const MotionQueryTraceReplaySessionResultUVE mismatch =
+        session.CompareUVE(MakeSnapshotUVE(), changed);
+    EXPECT_EQ(mismatch.code, MotionQueryTraceReplaySessionCodeUVE::Mismatch);
+    ASSERT_TRUE(mismatch.comparison.has_value());
+    EXPECT_EQ(mismatch.comparison->code,
+              MotionQueryTraceReplayComparisonCodeUVE::CompatibilityMismatch);
 }
 
 TEST(MotionQueryTraceReplaySessionUVETest, ClearUVE_RemovesFixtureAndAdvancesGeneration) {
