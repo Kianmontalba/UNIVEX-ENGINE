@@ -18,6 +18,8 @@
 #include "uve/scripting/script_graph_canvas_uve.h"
 #include "uve/scripting/script_runtime_uve.h"
 #include "uve/editor/developer_console_uve.h"
+#include "uve/plugins/motion_query_debugging_uve.h"
+#include "uve/plugins/motion_query_editor_authoring_uve.h"
 
 namespace UVE::Editor {
 
@@ -80,6 +82,8 @@ enum class EditorBridgeCapabilityUVE : std::uint8_t {
     DeserializeVisualScriptGraph,
     AddVisualScriptNodeType,
     SetVisualScriptPinDefault,
+    ReadMotionQuery,
+    DispatchMotionQueryCommand,
 };
 
 /// The deliberately small v1 request vocabulary. No generic command string is accepted because
@@ -124,6 +128,8 @@ enum class EditorBridgeRequestKindUVE : std::uint8_t {
     DeserializeVisualScriptGraph,
     AddVisualScriptNodeType,
     SetVisualScriptPinDefault,
+    ReadMotionQuery,
+    DispatchMotionQueryCommand,
 };
 
 /// Explicitly describes whether this bridge session has a native-owned viewport surface. No raw
@@ -363,6 +369,46 @@ struct EditorBridgeDataTablePreviewSnapshotUVE final {
     [[nodiscard]] bool operator==(const EditorBridgeDataTablePreviewSnapshotUVE&) const = default;
 };
 
+struct EditorBridgeMotionQueryAuthoringSnapshotUVE final {
+    std::uint64_t revision = 0U;
+    std::optional<Asset::ResourceHandleUVE> selectedResource;
+    std::vector<Plugins::Editor::MotionQueryEditorDatabaseRowUVE> databases;
+    std::string diagnostic;
+
+    [[nodiscard]] bool operator==(const EditorBridgeMotionQueryAuthoringSnapshotUVE&) const = default;
+};
+
+struct EditorBridgeMotionQueryDebuggerSnapshotUVE final {
+    bool attached = false;
+    std::uint64_t generation = 0U;
+    std::optional<Asset::ResourceHandleUVE> database;
+    std::optional<std::size_t> selectedCandidateIndex;
+    std::size_t candidateCount = 0U;
+    std::size_t candidatesEvaluated = 0U;
+    float selectedCost = 0.0F;
+    std::string selectedCandidateId;
+    std::string selectedSourceClipId;
+    std::string message;
+
+    [[nodiscard]] bool operator==(const EditorBridgeMotionQueryDebuggerSnapshotUVE&) const = default;
+};
+
+struct EditorBridgeMotionQueryTraceSnapshotUVE final {
+    std::uint64_t generation = 0U;
+    bool truncated = false;
+    std::vector<Plugins::Editor::MotionQueryTraceEventUVE> events;
+
+    [[nodiscard]] bool operator==(const EditorBridgeMotionQueryTraceSnapshotUVE&) const = default;
+};
+
+struct EditorBridgeMotionQuerySnapshotUVE final {
+    EditorBridgeMotionQueryAuthoringSnapshotUVE authoring;
+    EditorBridgeMotionQueryDebuggerSnapshotUVE debugger;
+    EditorBridgeMotionQueryTraceSnapshotUVE trace;
+
+    [[nodiscard]] bool operator==(const EditorBridgeMotionQuerySnapshotUVE&) const = default;
+};
+
 struct EditorBridgeSnapshotUVE final {
     std::uint32_t protocolVersion = kEditorBridgeProtocolVersionUVE;
     std::uint64_t revision = 0U;
@@ -387,6 +433,7 @@ struct EditorBridgeSnapshotUVE final {
     std::vector<EditorBridgeScriptRuntimeTickHistoryEntryUVE> scriptRuntimeTickHistory;
     EditorBridgeDataTableCatalogSnapshotUVE dataTableCatalog;
     EditorBridgeDataTablePreviewSnapshotUVE dataTablePreview;
+    EditorBridgeMotionQuerySnapshotUVE motionQuery;
     std::vector<EditorBridgeCapabilityUVE> capabilities;
 };
 
@@ -420,6 +467,7 @@ struct EditorBridgeRequestUVE final {
     std::optional<std::int32_t> developerConsoleHistoryDelta;
     std::optional<std::string> visualScriptPinName;
     std::optional<std::string> visualScriptDefaultValue;
+    std::optional<Plugins::Editor::MotionQueryEditorCommandUVE> motionQueryCommand;
 
     EditorBridgeRequestUVE() = default;
 
@@ -514,6 +562,7 @@ private:
     [[nodiscard]] EditorBridgeDeveloperConsoleSnapshotUVE CaptureDeveloperConsoleUVE() const;
     [[nodiscard]] EditorBridgeDataTableCatalogSnapshotUVE CaptureDataTableCatalogUVE() const;
     [[nodiscard]] EditorBridgeDataTablePreviewSnapshotUVE CaptureDataTablePreviewUVE() const;
+    [[nodiscard]] EditorBridgeMotionQuerySnapshotUVE CaptureMotionQueryUVE() const;
     [[nodiscard]] EditorBridgeHierarchySnapshotUVE CaptureHierarchyUVE();
     [[nodiscard]] EditorBridgeInspectorSnapshotUVE CaptureInspectorUVE() const;
     [[nodiscard]] EditorBridgeContentBrowserSnapshotUVE CaptureContentBrowserUVE();
@@ -537,6 +586,9 @@ private:
     std::deque<EditorBridgeScriptRuntimeTickHistoryEntryUVE> m_scriptRuntimeTickHistory;
     bool m_scriptRuntimeTickHistoryTruncated = false;
     std::uint64_t m_nextScriptRuntimeTickSequence = 1U;
+    Plugins::Editor::MotionQueryEditorAuthoringSessionUVE m_motionQueryAuthoring;
+    Plugins::Editor::MotionQueryDebuggerUVE m_motionQueryDebugger;
+    Plugins::Editor::MotionQueryTraceLoggerUVE m_motionQueryTrace;
     std::uint64_t m_revision = 0U;
 };
 

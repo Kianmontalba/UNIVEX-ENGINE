@@ -400,6 +400,81 @@ enum class FrameReadResultUVE : std::uint8_t {
     return JsonUVE{{"sequence", entry.sequence}, {"summary", ToJsonUVE(entry.summary)}};
 }
 
+[[nodiscard]] JsonUVE ToJsonUVE(const Asset::ResourceHandleUVE handle) {
+    return JsonUVE{{"guid", handle.guid.value}, {"generation", handle.generation}};
+}
+
+[[nodiscard]] JsonUVE ToJsonUVE(const Plugins::Editor::MotionQueryEditorDatabaseRowUVE& row) {
+    return JsonUVE{{"resource", ToJsonUVE(row.resource)},
+                   {"displayName", row.displayName},
+                   {"databaseId", row.databaseId},
+                   {"generation", row.generation},
+                   {"schemaVersion", row.schemaVersion},
+                   {"schemaId", row.schemaId},
+                   {"candidateCount", row.candidateCount},
+                   {"maximumCandidates", row.maximumCandidates},
+                   {"valid", row.valid},
+                   {"selected", row.selected},
+                   {"dirty", row.dirty}};
+}
+
+[[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeMotionQueryAuthoringSnapshotUVE& snapshot) {
+    JsonUVE databases = JsonUVE::array();
+    for (const auto& row : snapshot.databases) {
+        databases.push_back(ToJsonUVE(row));
+    }
+    return JsonUVE{{"revision", snapshot.revision},
+                   {"selectedResource", snapshot.selectedResource.has_value()
+                                            ? ToJsonUVE(*snapshot.selectedResource)
+                                            : JsonUVE(nullptr)},
+                   {"databases", std::move(databases)},
+                   {"diagnostic", snapshot.diagnostic}};
+}
+
+[[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeMotionQueryDebuggerSnapshotUVE& snapshot) {
+    return JsonUVE{{"attached", snapshot.attached},
+                   {"generation", snapshot.generation},
+                   {"database", snapshot.database.has_value() ? ToJsonUVE(*snapshot.database)
+                                                                  : JsonUVE(nullptr)},
+                   {"selectedCandidateIndex", snapshot.selectedCandidateIndex.has_value()
+                                                    ? JsonUVE(*snapshot.selectedCandidateIndex)
+                                                    : JsonUVE(nullptr)},
+                   {"candidateCount", snapshot.candidateCount},
+                   {"candidatesEvaluated", snapshot.candidatesEvaluated},
+                   {"selectedCost", snapshot.selectedCost},
+                   {"selectedCandidateId", snapshot.selectedCandidateId},
+                   {"selectedSourceClipId", snapshot.selectedSourceClipId},
+                   {"message", snapshot.message}};
+}
+
+[[nodiscard]] JsonUVE ToJsonUVE(const Plugins::Editor::MotionQueryTraceEventUVE& event) {
+    return JsonUVE{{"sequence", event.sequence},
+                   {"timestampNanoseconds", event.timestampNanoseconds},
+                   {"frameNumber", event.frameNumber},
+                   {"kind", event.kind},
+                   {"database", event.database.has_value() ? ToJsonUVE(*event.database) : JsonUVE(nullptr)},
+                   {"candidatesConsidered", event.candidatesConsidered},
+                   {"candidatesEvaluated", event.candidatesEvaluated},
+                   {"cost", event.cost},
+                   {"message", event.message}};
+}
+
+[[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeMotionQueryTraceSnapshotUVE& snapshot) {
+    JsonUVE events = JsonUVE::array();
+    for (const auto& event : snapshot.events) {
+        events.push_back(ToJsonUVE(event));
+    }
+    return JsonUVE{{"generation", snapshot.generation},
+                   {"truncated", snapshot.truncated},
+                   {"events", std::move(events)}};
+}
+
+[[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeMotionQuerySnapshotUVE& snapshot) {
+    return JsonUVE{{"authoring", ToJsonUVE(snapshot.authoring)},
+                   {"debugger", ToJsonUVE(snapshot.debugger)},
+                   {"trace", ToJsonUVE(snapshot.trace)}};
+}
+
 [[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeSnapshotUVE& snapshot) {
     JsonUVE selectedEntities = JsonUVE::array();
     for (const EditorBridgeEntitySnapshotUVE& entity : snapshot.selectedEntities) {
@@ -438,6 +513,7 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"scriptRuntimeTickHistory", std::move(tickHistory)},
                    {"dataTableCatalog", ToJsonUVE(snapshot.dataTableCatalog)},
                    {"dataTablePreview", ToJsonUVE(snapshot.dataTablePreview)},
+                   {"motionQuery", ToJsonUVE(snapshot.motionQuery)},
                    {"capabilities", std::move(capabilities)}};
 }
 
@@ -683,6 +759,12 @@ enum class FrameReadResultUVE : std::uint8_t {
     if (value == "setVisualScriptPinDefault") {
         return EditorBridgeRequestKindUVE::SetVisualScriptPinDefault;
     }
+    if (value == "readMotionQuery") {
+        return EditorBridgeRequestKindUVE::ReadMotionQuery;
+    }
+    if (value == "dispatchMotionQueryCommand") {
+        return EditorBridgeRequestKindUVE::DispatchMotionQueryCommand;
+    }
     return std::nullopt;
 }
 
@@ -719,6 +801,65 @@ enum class FrameReadResultUVE : std::uint8_t {
                                     json.at("generation").get<std::uint32_t>()};
 }
 
+[[nodiscard]] std::optional<Asset::ResourceHandleUVE> ParseResourceHandleUVE(const JsonUVE& json) {
+    if (!json.is_object() || !json.contains("guid") || !json.contains("generation") ||
+        !json.at("guid").is_number_unsigned() || !json.at("generation").is_number_unsigned()) {
+        return std::nullopt;
+    }
+    return Asset::ResourceHandleUVE{Asset::AssetGuidUVE{json.at("guid").get<std::uint64_t>()},
+                                   json.at("generation").get<std::uint64_t>()};
+}
+
+[[nodiscard]] std::optional<Plugins::Editor::MotionQueryEditorCommandKindUVE>
+ParseMotionQueryCommandKindUVE(const std::string_view value) {
+    using Kind = Plugins::Editor::MotionQueryEditorCommandKindUVE;
+    if (value == "readSnapshot") return Kind::ReadSnapshot;
+    if (value == "registerDatabase") return Kind::RegisterDatabase;
+    if (value == "removeDatabase") return Kind::RemoveDatabase;
+    if (value == "selectDatabase") return Kind::SelectDatabase;
+    if (value == "setDisplayName") return Kind::SetDisplayName;
+    if (value == "setSchemaId") return Kind::SetSchemaId;
+    if (value == "setMaximumCandidates") return Kind::SetMaximumCandidates;
+    if (value == "addCandidate") return Kind::AddCandidate;
+    if (value == "removeCandidate") return Kind::RemoveCandidate;
+    if (value == "validateDatabase") return Kind::ValidateDatabase;
+    return std::nullopt;
+}
+
+[[nodiscard]] std::optional<Plugins::Editor::MotionQueryEditorCommandUVE>
+ParseMotionQueryCommandUVE(const JsonUVE& json, const std::uint64_t requestId) {
+    if (!json.is_object() || !json.contains("kind") || !json.contains("expectedRevision") ||
+        !json.at("kind").is_string() || !json.at("expectedRevision").is_number_unsigned()) {
+        return std::nullopt;
+    }
+    const auto kind = ParseMotionQueryCommandKindUVE(json.at("kind").get<std::string>());
+    if (!kind.has_value()) {
+        return std::nullopt;
+    }
+    Plugins::Editor::MotionQueryEditorCommandUVE command;
+    command.requestId = requestId;
+    command.expectedRevision = json.at("expectedRevision").get<std::uint64_t>();
+    command.kind = *kind;
+    if (json.contains("protocolVersion") && !json.at("protocolVersion").is_null()) {
+        if (!json.at("protocolVersion").is_number_unsigned()) return std::nullopt;
+        command.protocolVersion = json.at("protocolVersion").get<std::uint32_t>();
+    }
+    if (json.contains("resource") && !json.at("resource").is_null()) {
+        command.resource = ParseResourceHandleUVE(json.at("resource"));
+        if (!command.resource.has_value()) return std::nullopt;
+    }
+    if (json.contains("text") && !json.at("text").is_null()) {
+        if (!json.at("text").is_string() || json.at("text").get_ref<const std::string&>().size() >
+            Plugins::Editor::kMotionQueryEditorMaximumDisplayNameBytesUVE) return std::nullopt;
+        command.text = json.at("text").get<std::string>();
+    }
+    if (json.contains("candidateIndex") && !json.at("candidateIndex").is_null()) {
+        if (!json.at("candidateIndex").is_number_unsigned()) return std::nullopt;
+        command.candidateIndex = json.at("candidateIndex").get<std::size_t>();
+    }
+    return command;
+}
+
 [[nodiscard]] std::optional<EditorBridgeRequestUVE> ParseBridgeRequestUVE(const JsonUVE& params) {
     if (!params.is_object()) {
         return std::nullopt;
@@ -732,6 +873,12 @@ enum class FrameReadResultUVE : std::uint8_t {
         return std::nullopt;
     }
     request.kind = *kind;
+    if (params.contains("motionQueryCommand") && !params.at("motionQueryCommand").is_null()) {
+        request.motionQueryCommand = ParseMotionQueryCommandUVE(params.at("motionQueryCommand"), request.requestId);
+        if (!request.motionQueryCommand.has_value()) {
+            return std::nullopt;
+        }
+    }
 
     if (params.contains("entity") && !params.at("entity").is_null()) {
         request.entity = ParseEntityUVE(params.at("entity"));

@@ -187,6 +187,13 @@ TEST(EditorBridgeStdioUVETest, ServeUVE_HandshakesAndRoutesExistingBridgeDispatc
         EXPECT_EQ(handshakeSnapshot.at("dataTablePreview").at("columns").front().at("name").get<std::string>(), "damage");
         ASSERT_EQ(handshakeSnapshot.at("dataTablePreview").at("rows").size(), 1U);
         EXPECT_EQ(handshakeSnapshot.at("dataTablePreview").at("rows").front().at("values").front().get<std::string>(), "25");
+        ASSERT_TRUE(handshakeSnapshot.at("motionQuery").is_object());
+        ASSERT_TRUE(handshakeSnapshot.at("motionQuery").at("authoring").is_object());
+        EXPECT_TRUE(handshakeSnapshot.at("motionQuery").at("authoring").at("databases").is_array());
+        ASSERT_TRUE(handshakeSnapshot.at("motionQuery").at("debugger").is_object());
+        EXPECT_FALSE(handshakeSnapshot.at("motionQuery").at("debugger").at("attached").get<bool>());
+        ASSERT_TRUE(handshakeSnapshot.at("motionQuery").at("trace").is_object());
+        EXPECT_TRUE(handshakeSnapshot.at("motionQuery").at("trace").at("events").is_array());
         EXPECT_TRUE(frames[1U].at("result").at("applied").get<bool>());
         EXPECT_EQ(frames[1U].at("result").at("code").get<std::string>(), "bridge.command.applied");
         EXPECT_TRUE(frames[2U].at("result").at("applied").get<bool>());
