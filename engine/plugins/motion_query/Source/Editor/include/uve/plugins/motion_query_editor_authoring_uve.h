@@ -105,6 +105,9 @@ public:
     void ClearUVE() noexcept;
 
     [[nodiscard]] MotionQueryEditorSnapshotUVE GetSnapshotUVE() const noexcept;
+    [[nodiscard]] bool TryGetDatabaseCopyUVE(
+        UVE::Asset::ResourceHandleUVE resource,
+        UVE::Core::MotionQueryDatabaseContractUVE& destination) const noexcept;
 
 private:
     [[nodiscard]] MotionQueryEditorResponseUVE MakeResponseUVE(

@@ -20,6 +20,7 @@
 #include "uve/editor/developer_console_uve.h"
 #include "uve/plugins/motion_query_debugging_uve.h"
 #include "uve/plugins/motion_query_editor_authoring_uve.h"
+#include "uve/plugins/motion_query_live_debug_session_uve.h"
 
 namespace UVE::Editor {
 
@@ -84,6 +85,7 @@ enum class EditorBridgeCapabilityUVE : std::uint8_t {
     SetVisualScriptPinDefault,
     ReadMotionQuery,
     DispatchMotionQueryCommand,
+    DispatchMotionQueryDebugCommand,
 };
 
 /// The deliberately small v1 request vocabulary. No generic command string is accepted because
@@ -130,6 +132,7 @@ enum class EditorBridgeRequestKindUVE : std::uint8_t {
     SetVisualScriptPinDefault,
     ReadMotionQuery,
     DispatchMotionQueryCommand,
+    DispatchMotionQueryDebugCommand,
 };
 
 /// Explicitly describes whether this bridge session has a native-owned viewport surface. No raw
@@ -405,6 +408,14 @@ struct EditorBridgeMotionQuerySnapshotUVE final {
     EditorBridgeMotionQueryAuthoringSnapshotUVE authoring;
     EditorBridgeMotionQueryDebuggerSnapshotUVE debugger;
     EditorBridgeMotionQueryTraceSnapshotUVE trace;
+    bool liveDebugActive = false;
+    std::uint64_t liveDebugGeneration = 0U;
+    std::optional<Asset::ResourceHandleUVE> liveDebugDatabase;
+    std::string liveDebugFilter;
+    std::size_t liveDebugTotalTraceEventCount = 0U;
+    std::size_t liveDebugVisibleTraceEventCount = 0U;
+    bool liveDebugTraceTruncated = false;
+    std::string liveDebugDiagnostic;
 
     [[nodiscard]] bool operator==(const EditorBridgeMotionQuerySnapshotUVE&) const = default;
 };
@@ -468,6 +479,7 @@ struct EditorBridgeRequestUVE final {
     std::optional<std::string> visualScriptPinName;
     std::optional<std::string> visualScriptDefaultValue;
     std::optional<Plugins::Editor::MotionQueryEditorCommandUVE> motionQueryCommand;
+    std::optional<Plugins::Editor::MotionQueryLiveDebugCommandUVE> motionQueryDebugCommand;
 
     EditorBridgeRequestUVE() = default;
 
@@ -587,8 +599,7 @@ private:
     bool m_scriptRuntimeTickHistoryTruncated = false;
     std::uint64_t m_nextScriptRuntimeTickSequence = 1U;
     Plugins::Editor::MotionQueryEditorAuthoringSessionUVE m_motionQueryAuthoring;
-    Plugins::Editor::MotionQueryDebuggerUVE m_motionQueryDebugger;
-    Plugins::Editor::MotionQueryTraceLoggerUVE m_motionQueryTrace;
+    Plugins::Editor::MotionQueryLiveDebugSessionUVE m_motionQueryLiveDebugSession;
     std::uint64_t m_revision = 0U;
 };
 

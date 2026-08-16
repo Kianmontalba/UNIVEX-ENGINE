@@ -29,62 +29,72 @@ MotionQueryAnimationNodeResultUVE EvaluateMotionQueryAnimationNodeUVE(
     const UVE::Core::MotionQueryFeatureSchemaUVE& schema,
     const MotionQuerySearchIndexUVE& searchIndex,
     const std::vector<UVE::Core::AnimationClipUVE>& clips,
-    MotionQueryAnimationNodeSettingsUVE settings) noexcept {
+    MotionQueryAnimationNodeSettingsUVE settings,
+    IMotionQueryAnimationDebugSinkUVE* debugSink,
+    const std::uint64_t timestampNanoseconds,
+    const std::uint64_t frameNumber) noexcept {
+    const auto publish = [debugSink, timestampNanoseconds, frameNumber](
+                             MotionQueryAnimationNodeResultUVE result) noexcept {
+        if (debugSink != nullptr) {
+            debugSink->PublishUVE(result, timestampNanoseconds, frameNumber);
+        }
+        return result;
+    };
     if (settings.maximumSearchResults == 0U ||
         settings.maximumSearchResults > MotionQuerySearchIndexUVE::kMaximumQueryResultsUVE ||
         !HasValidWeightsUVE(settings.weights)) {
-        return MakeResultUVE(MotionQueryAnimationNodeCodeUVE::InvalidSettings,
-                             "motion query animation node settings are invalid");
+        return publish(MakeResultUVE(MotionQueryAnimationNodeCodeUVE::InvalidSettings,
+                             "motion query animation node settings are invalid"));
     }
     const UVE::Core::MotionQueryValidationResultUVE queryValidation =
         UVE::Core::ValidateMotionQueryUVE(query);
     if (!queryValidation.IsValidUVE()) {
-        return MakeResultUVE(MotionQueryAnimationNodeCodeUVE::InvalidQuery,
-                             queryValidation.message.c_str());
+        return publish(MakeResultUVE(MotionQueryAnimationNodeCodeUVE::InvalidQuery,
+                             queryValidation.message.c_str()));
     }
     const UVE::Core::MotionMatchingDatabaseValidationResultUVE databaseValidation =
         UVE::Core::ValidateMotionMatchingDatabaseUVE(database);
     if (!databaseValidation.IsValidUVE()) {
-        return MakeResultUVE(MotionQueryAnimationNodeCodeUVE::InvalidDatabase,
-                             databaseValidation.message.c_str());
+        return publish(MakeResultUVE(MotionQueryAnimationNodeCodeUVE::InvalidDatabase,
+                             databaseValidation.message.c_str()));
     }
     const UVE::Core::MotionQueryFeatureValidationResultUVE schemaValidation =
         UVE::Core::ValidateMotionQueryFeatureSchemaUVE(schema);
     if (!schemaValidation.IsValidUVE()) {
-        return MakeResultUVE(MotionQueryAnimationNodeCodeUVE::InvalidSchema,
-                             schemaValidation.message.c_str());
+        return publish(MakeResultUVE(MotionQueryAnimationNodeCodeUVE::InvalidSchema,
+                             schemaValidation.message.c_str()));
     }
     if (!searchIndex.IsBuiltUVE()) {
-        return MakeResultUVE(MotionQueryAnimationNodeCodeUVE::IndexNotBuilt,
-                             "motion query animation node search index is not built");
+        return publish(MakeResultUVE(MotionQueryAnimationNodeCodeUVE::IndexNotBuilt,
+                             "motion query animation node search index is not built"));
     }
 
     UVE::Core::MotionQueryFeatureVectorUVE queryFeature;
     const UVE::Core::MotionQueryFeatureValidationResultUVE extraction =
         UVE::Core::TryBuildMotionQueryFeatureVectorUVE(query, schema, queryFeature);
     if (!extraction.IsValidUVE()) {
-        return MakeResultUVE(MotionQueryAnimationNodeCodeUVE::InvalidQuery,
-                             extraction.message.c_str());
+        return publish(MakeResultUVE(MotionQueryAnimationNodeCodeUVE::InvalidQuery,
+                             extraction.message.c_str()));
     }
 
     std::vector<std::size_t> indexedCandidates;
     const MotionQuerySearchIndexResultUVE searchResult =
         searchIndex.FindNearestUVE(queryFeature, settings.maximumSearchResults, indexedCandidates);
     if (!searchResult.IsAcceptedUVE()) {
-        return MakeResultUVE(MotionQueryAnimationNodeCodeUVE::SearchFailed,
-                             searchResult.message.c_str());
+        return publish(MakeResultUVE(MotionQueryAnimationNodeCodeUVE::SearchFailed,
+                             searchResult.message.c_str()));
     }
     if (indexedCandidates.empty()) {
-        return MakeResultUVE(MotionQueryAnimationNodeCodeUVE::NoMatch,
-                             "motion query animation node found no indexed candidates");
+        return publish(MakeResultUVE(MotionQueryAnimationNodeCodeUVE::NoMatch,
+                             "motion query animation node found no indexed candidates"));
     }
 
     UVE::Core::MotionMatchingDatabaseUVE filteredDatabase;
     filteredDatabase.candidates.reserve(indexedCandidates.size());
     for (const std::size_t candidateIndex : indexedCandidates) {
         if (candidateIndex >= database.candidates.size()) {
-            return MakeResultUVE(MotionQueryAnimationNodeCodeUVE::CandidateIndexOutOfRange,
-                                 "motion query animation node index points outside the database");
+            return publish(MakeResultUVE(MotionQueryAnimationNodeCodeUVE::CandidateIndexOutOfRange,
+                                 "motion query animation node index points outside the database"));
         }
         filteredDatabase.candidates.push_back(database.candidates[candidateIndex]);
     }
@@ -92,11 +102,11 @@ MotionQueryAnimationNodeResultUVE EvaluateMotionQueryAnimationNodeUVE(
     const UVE::Core::MotionMatchingResultUVE match = UVE::Core::FindBestMotionMatchUVE(
         query, filteredDatabase, settings.weights);
     if (!match.IsMatchUVE()) {
-        return MakeResultUVE(MotionQueryAnimationNodeCodeUVE::NoMatch, match.message.c_str());
+        return publish(MakeResultUVE(MotionQueryAnimationNodeCodeUVE::NoMatch, match.message.c_str()));
     }
     if (match.candidateIndex >= indexedCandidates.size()) {
-        return MakeResultUVE(MotionQueryAnimationNodeCodeUVE::CandidateIndexOutOfRange,
-                             "motion query animation node match index is out of range");
+            return publish(MakeResultUVE(MotionQueryAnimationNodeCodeUVE::CandidateIndexOutOfRange,
+                             "motion query animation node match index is out of range"));
     }
 
     const std::size_t originalCandidateIndex = indexedCandidates[match.candidateIndex];
@@ -113,7 +123,7 @@ MotionQueryAnimationNodeResultUVE EvaluateMotionQueryAnimationNodeUVE(
         result.candidatesEvaluated = match.candidatesEvaluated;
         result.sampleTimeSeconds = candidate.sampleTimeSeconds;
         result.sourceClipId = candidate.sourceClipId;
-        return result;
+        return publish(std::move(result));
     }
 
     UVE::Core::TransformPoseUVE pose;
@@ -127,7 +137,7 @@ MotionQueryAnimationNodeResultUVE EvaluateMotionQueryAnimationNodeUVE(
         result.candidatesEvaluated = match.candidatesEvaluated;
         result.sampleTimeSeconds = candidate.sampleTimeSeconds;
         result.sourceClipId = candidate.sourceClipId;
-        return result;
+        return publish(std::move(result));
     }
 
     MotionQueryAnimationNodeResultUVE result;
@@ -139,7 +149,7 @@ MotionQueryAnimationNodeResultUVE EvaluateMotionQueryAnimationNodeUVE(
     result.sourceClipId = candidate.sourceClipId;
     result.pose = pose;
     result.message = "motion query animation node evaluated successfully";
-    return result;
+    return publish(std::move(result));
 }
 
 MotionQueryAnimationNodeResultUVE EvaluateMotionQueryAnimationNodeFromHistoryUVE(
@@ -148,21 +158,31 @@ MotionQueryAnimationNodeResultUVE EvaluateMotionQueryAnimationNodeFromHistoryUVE
     const UVE::Core::MotionQueryFeatureSchemaUVE& schema,
     const MotionQuerySearchIndexUVE& searchIndex,
     const std::vector<UVE::Core::AnimationClipUVE>& clips,
-    MotionQueryAnimationNodeSettingsUVE settings) noexcept {
+    MotionQueryAnimationNodeSettingsUVE settings,
+    IMotionQueryAnimationDebugSinkUVE* debugSink,
+    const std::uint64_t timestampNanoseconds,
+    const std::uint64_t frameNumber) noexcept {
+    const auto publish = [debugSink, timestampNanoseconds, frameNumber](
+                             MotionQueryAnimationNodeResultUVE result) noexcept {
+        if (debugSink != nullptr) {
+            debugSink->PublishUVE(result, timestampNanoseconds, frameNumber);
+        }
+        return result;
+    };
     if (!std::isfinite(evaluationTimeSeconds)) {
-        return MakeResultUVE(MotionQueryAnimationNodeCodeUVE::InvalidEvaluationTime,
-                             "motion query animation node evaluation time is not finite");
+        return publish(MakeResultUVE(MotionQueryAnimationNodeCodeUVE::InvalidEvaluationTime,
+                             "motion query animation node evaluation time is not finite"));
     }
     const auto& frames = history.GetFramesUVE();
     const auto frame = std::find_if(frames.crbegin(), frames.crend(), [evaluationTimeSeconds](const auto& value) {
         return value.sample.timeSeconds <= evaluationTimeSeconds;
     });
     if (frame == frames.crend()) {
-        return MakeResultUVE(MotionQueryAnimationNodeCodeUVE::NoHistoryFrame,
-                             "motion query animation node has no history frame at or before evaluation time");
+        return publish(MakeResultUVE(MotionQueryAnimationNodeCodeUVE::NoHistoryFrame,
+                             "motion query animation node has no history frame at or before evaluation time"));
     }
     return EvaluateMotionQueryAnimationNodeUVE(frame->query, database, schema, searchIndex, clips,
-                                               settings);
+                                               settings, debugSink, timestampNanoseconds, frameNumber);
 }
 
 } // namespace UVE::Plugins

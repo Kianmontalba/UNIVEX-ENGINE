@@ -264,6 +264,14 @@ public sealed class BridgeProtocolClientTests
                     },
                 },
             },
+            ["liveDebugActive"] = true,
+            ["liveDebugGeneration"] = 4UL,
+            ["liveDebugDatabase"] = new JsonObject { ["guid"] = 77UL, ["generation"] = 1UL },
+            ["liveDebugFilter"] = "match",
+            ["liveDebugTotalTraceEventCount"] = 1,
+            ["liveDebugVisibleTraceEventCount"] = 1,
+            ["liveDebugTraceTruncated"] = false,
+            ["liveDebugDiagnostic"] = "active",
         };
         using JsonDocument document = JsonDocument.Parse(snapshot.ToJsonString());
         BridgeEditorSnapshot parsed = BridgeSnapshotParser.Parse(document.RootElement);
@@ -274,6 +282,11 @@ public sealed class BridgeProtocolClientTests
         Assert.Equal("candidate", parsed.MotionQuery.Debugger.SelectedCandidateId);
         Assert.Equal(1, parsed.MotionQuery.Trace.Events.Count);
         Assert.Equal("match", parsed.MotionQuery.Trace.Events[0].Kind);
+        Assert.True(parsed.MotionQuery.LiveDebugActive);
+        Assert.Equal(4UL, parsed.MotionQuery.LiveDebugGeneration);
+        Assert.Equal(77UL, parsed.MotionQuery.LiveDebugDatabase!.Guid);
+        Assert.Equal("match", parsed.MotionQuery.LiveDebugFilter);
+        Assert.Equal(1, parsed.MotionQuery.LiveDebugVisibleTraceEventCount);
     }
 
     [Fact]
@@ -374,6 +387,41 @@ public sealed class BridgeProtocolClientTests
         Assert.Equal("selectDatabase", payload.GetProperty("kind").GetString());
         Assert.Equal(3UL, payload.GetProperty("expectedRevision").GetUInt64());
         Assert.Equal(77UL, payload.GetProperty("resource").GetProperty("guid").GetUInt64());
+    }
+
+    [Fact]
+    public async Task DispatchAsync_WritesMotionQueryLiveDebugCommandPayload()
+    {
+        await using MemoryStream input = BuildFrames(new
+        {
+            jsonrpc = "2.0",
+            id = 1,
+            result = new
+            {
+                protocolVersion = BridgeProtocolClient.ProtocolVersion,
+                requestId = 1UL,
+                applied = true,
+                code = "bridge.motion_query.debug.command.applied",
+                message = "filter updated",
+                snapshot = Snapshot(sceneDirty: false),
+                createdEntity = (object?)null,
+            },
+        });
+        await using MemoryStream output = new();
+        await using BridgeProtocolClient client = new(input, output);
+        BridgeCommand command = new(8UL, "dispatchMotionQueryDebugCommand")
+        {
+            MotionQueryDebugCommandKind = "setFilter",
+            MotionQueryDebugExpectedGeneration = 3UL,
+            MotionQueryDebugFilter = "accepted",
+        };
+        await client.DispatchAsync(command, CancellationToken.None);
+        output.Position = 0;
+        using JsonDocument request = JsonDocument.Parse(await ReadFrameAsync(output));
+        JsonElement payload = request.RootElement.GetProperty("params").GetProperty("motionQueryDebugCommand");
+        Assert.Equal("setFilter", payload.GetProperty("kind").GetString());
+        Assert.Equal(3UL, payload.GetProperty("expectedGeneration").GetUInt64());
+        Assert.Equal("accepted", payload.GetProperty("filter").GetString());
     }
 
     [Fact]

@@ -59,6 +59,7 @@ namespace {
         EditorBridgeCapabilityUVE::SetVisualScriptPinDefault,
         EditorBridgeCapabilityUVE::ReadMotionQuery,
         EditorBridgeCapabilityUVE::DispatchMotionQueryCommand,
+        EditorBridgeCapabilityUVE::DispatchMotionQueryDebugCommand,
     };
     return capabilities;
 }
@@ -771,6 +772,22 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
             }
             break;
         }
+        case EditorBridgeRequestKindUVE::DispatchMotionQueryDebugCommand: {
+            if (!request.motionQueryDebugCommand.has_value()) {
+                return MakeResponseUVE(request, false, "bridge.motion_query.debug.command.invalid",
+                                       "DispatchMotionQueryDebugCommand requires a value-only debug command payload.");
+            }
+            const Plugins::Editor::MotionQueryLiveDebugResponseUVE debugResponse =
+                m_motionQueryLiveDebugSession.DispatchUVE(*request.motionQueryDebugCommand, m_motionQueryAuthoring);
+            applied = debugResponse.applied;
+            code = applied ? "bridge.motion_query.debug.command.applied"
+                           : "bridge.motion_query.debug.command.rejected";
+            message = debugResponse.message;
+            if (applied) {
+                ++m_revision;
+            }
+            break;
+        }
         case EditorBridgeRequestKindUVE::ReadMotionQuery:
             code = "bridge.motion_query.snapshot.read";
             message = "The copied Motion Query authoring, debugger, and trace snapshot was returned.";
@@ -879,8 +896,11 @@ EditorBridgeScriptRuntimeSnapshotUVE EditorBridgeUVE::CaptureScriptRuntimeUVE() 
 
 EditorBridgeMotionQuerySnapshotUVE EditorBridgeUVE::CaptureMotionQueryUVE() const {
     const Plugins::Editor::MotionQueryEditorSnapshotUVE authoring = m_motionQueryAuthoring.GetSnapshotUVE();
-    const Plugins::Editor::MotionQueryDebuggerSnapshotUVE debugger = m_motionQueryDebugger.GetSnapshotUVE();
-    const Plugins::Editor::MotionQueryTraceSnapshotUVE trace = m_motionQueryTrace.GetSnapshotUVE();
+    const Plugins::Editor::MotionQueryLiveDebugSnapshotUVE liveDebug =
+        m_motionQueryLiveDebugSession.GetSnapshotUVE();
+    const Plugins::Editor::MotionQueryDebuggerSnapshotUVE debugger = liveDebug.debugger;
+    const Plugins::Editor::MotionQueryTraceSnapshotUVE trace{
+        liveDebug.generation, liveDebug.traceTruncated, liveDebug.traceEvents};
     EditorBridgeMotionQuerySnapshotUVE snapshot{};
     snapshot.authoring.revision = authoring.revision;
     snapshot.authoring.selectedResource = authoring.selectedResource;
@@ -906,6 +926,14 @@ EditorBridgeMotionQuerySnapshotUVE EditorBridgeUVE::CaptureMotionQueryUVE() cons
     const std::size_t firstEvent = trace.events.size() > kEditorBridgeMaximumPanelEntriesUVE
         ? trace.events.size() - kEditorBridgeMaximumPanelEntriesUVE : 0U;
     snapshot.trace.events.assign(trace.events.begin() + static_cast<std::ptrdiff_t>(firstEvent), trace.events.end());
+    snapshot.liveDebugActive = liveDebug.active;
+    snapshot.liveDebugGeneration = liveDebug.generation;
+    snapshot.liveDebugDatabase = liveDebug.database;
+    snapshot.liveDebugFilter = liveDebug.filter;
+    snapshot.liveDebugTotalTraceEventCount = liveDebug.totalTraceEventCount;
+    snapshot.liveDebugVisibleTraceEventCount = liveDebug.visibleTraceEventCount;
+    snapshot.liveDebugTraceTruncated = liveDebug.traceTruncated;
+    snapshot.liveDebugDiagnostic = liveDebug.diagnostic;
     return snapshot;
 }
 

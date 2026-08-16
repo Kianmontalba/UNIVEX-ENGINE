@@ -132,6 +132,18 @@ public sealed class BridgeProtocolClient : IAsyncDisposable
                 text = command.MotionQueryText,
                 candidateIndex = command.MotionQueryCandidateIndex,
             },
+            motionQueryDebugCommand = command.MotionQueryDebugCommandKind is null ? null : new
+            {
+                protocolVersion = BridgeProtocolClient.ProtocolVersion,
+                expectedGeneration = command.MotionQueryDebugExpectedGeneration ?? 0UL,
+                kind = command.MotionQueryDebugCommandKind,
+                database = command.MotionQueryDebugDatabase is null ? null : new
+                {
+                    guid = command.MotionQueryDebugDatabase.Guid,
+                    generation = command.MotionQueryDebugDatabase.Generation,
+                },
+                filter = command.MotionQueryDebugFilter,
+            },
         }, cancellationToken).ConfigureAwait(false);
         JsonElement result = GetResultOrThrow(response.RootElement);
         BridgeEntityRef? createdEntity = result.GetProperty("createdEntity").ValueKind == JsonValueKind.Null

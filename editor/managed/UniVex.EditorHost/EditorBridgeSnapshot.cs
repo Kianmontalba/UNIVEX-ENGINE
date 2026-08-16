@@ -139,7 +139,15 @@ public sealed record BridgeMotionQueryTraceSnapshot(
 public sealed record BridgeMotionQuerySnapshot(
     BridgeMotionQueryAuthoringSnapshot Authoring,
     BridgeMotionQueryDebuggerSnapshot Debugger,
-    BridgeMotionQueryTraceSnapshot Trace);
+    BridgeMotionQueryTraceSnapshot Trace,
+    bool LiveDebugActive,
+    ulong LiveDebugGeneration,
+    BridgeMotionQueryResourceHandle? LiveDebugDatabase,
+    string LiveDebugFilter,
+    int LiveDebugTotalTraceEventCount,
+    int LiveDebugVisibleTraceEventCount,
+    bool LiveDebugTraceTruncated,
+    string LiveDebugDiagnostic);
 
 public sealed record BridgeViewportSurfaceSnapshot(
     BridgeViewportSurfaceState State,
@@ -449,6 +457,10 @@ public sealed record BridgeCommand(
     public BridgeMotionQueryResourceHandle? MotionQueryResource { get; init; }
     public string? MotionQueryText { get; init; }
     public ulong? MotionQueryCandidateIndex { get; init; }
+    public string? MotionQueryDebugCommandKind { get; init; }
+    public ulong? MotionQueryDebugExpectedGeneration { get; init; }
+    public BridgeMotionQueryResourceHandle? MotionQueryDebugDatabase { get; init; }
+    public string? MotionQueryDebugFilter { get; init; }
 }
 
 public sealed record BridgeCommandResult(
@@ -642,7 +654,9 @@ public static class BridgeSnapshotParser
                 "No native Motion Query authoring session is attached to this bridge frame."),
             new BridgeMotionQueryDebuggerSnapshot(false, 0UL, null, null, 0, 0, 0F, string.Empty, string.Empty,
                 "No native Motion Query debugger snapshot is attached to this bridge frame."),
-            new BridgeMotionQueryTraceSnapshot(0UL, false, Array.Empty<BridgeMotionQueryTraceEvent>()));
+            new BridgeMotionQueryTraceSnapshot(0UL, false, Array.Empty<BridgeMotionQueryTraceEvent>()),
+            false, 0UL, null, string.Empty, 0, 0, false,
+            "No native Motion Query live debug session is attached to this bridge frame.");
 
     private static BridgeMotionQueryResourceHandle ParseMotionQueryResource(JsonElement value, string context)
     {
@@ -736,10 +750,30 @@ public static class BridgeSnapshotParser
                 ParseNullableMotionQueryResource(eventValue.GetProperty("database"), "motion-query trace database"),
                 considered, evaluated, cost, RequiredBoundedString(eventValue, "message")));
         }
+        int liveTotal = OptionalInt32(value, "liveDebugTotalTraceEventCount", parsedEvents.Count);
+        int liveVisible = OptionalInt32(value, "liveDebugVisibleTraceEventCount", parsedEvents.Count);
+        if (liveTotal < 0 || liveVisible < 0 || liveVisible > liveTotal) {
+            throw Invalid("Motion Query live-debug trace counts are invalid.");
+        }
         return new BridgeMotionQuerySnapshot(
             parsedAuthoring, parsedDebugger,
             new BridgeMotionQueryTraceSnapshot(RequiredUInt64(trace, "generation"),
-                                                RequiredBoolean(trace, "truncated"), parsedEvents));
+                                                RequiredBoolean(trace, "truncated"), parsedEvents),
+            OptionalBoolean(value, "liveDebugActive", false),
+            value.TryGetProperty("liveDebugGeneration", out JsonElement liveGeneration) &&
+                    liveGeneration.ValueKind != JsonValueKind.Null
+                ? RequiredUInt64(value, "liveDebugGeneration")
+                : 0UL,
+            value.TryGetProperty("liveDebugDatabase", out JsonElement liveDatabase) &&
+                    liveDatabase.ValueKind != JsonValueKind.Null
+                ? ParseNullableMotionQueryResource(liveDatabase, "motion-query live-debug database")
+                : null,
+            OptionalBoundedString(value, "liveDebugFilter", string.Empty),
+            liveTotal,
+            liveVisible,
+            OptionalBoolean(value, "liveDebugTraceTruncated", false),
+            OptionalBoundedString(value, "liveDebugDiagnostic",
+                                  "No native Motion Query live debug session is attached to this bridge frame."));
     }
 
     private static BridgeVisualScriptingSnapshot ParseVisualScripting(JsonElement value)

@@ -472,7 +472,17 @@ enum class FrameReadResultUVE : std::uint8_t {
 [[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeMotionQuerySnapshotUVE& snapshot) {
     return JsonUVE{{"authoring", ToJsonUVE(snapshot.authoring)},
                    {"debugger", ToJsonUVE(snapshot.debugger)},
-                   {"trace", ToJsonUVE(snapshot.trace)}};
+                   {"trace", ToJsonUVE(snapshot.trace)},
+                   {"liveDebugActive", snapshot.liveDebugActive},
+                   {"liveDebugGeneration", snapshot.liveDebugGeneration},
+                   {"liveDebugDatabase", snapshot.liveDebugDatabase.has_value()
+                                                ? ToJsonUVE(*snapshot.liveDebugDatabase)
+                                                : JsonUVE(nullptr)},
+                   {"liveDebugFilter", snapshot.liveDebugFilter},
+                   {"liveDebugTotalTraceEventCount", snapshot.liveDebugTotalTraceEventCount},
+                   {"liveDebugVisibleTraceEventCount", snapshot.liveDebugVisibleTraceEventCount},
+                   {"liveDebugTraceTruncated", snapshot.liveDebugTraceTruncated},
+                   {"liveDebugDiagnostic", snapshot.liveDebugDiagnostic}};
 }
 
 [[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeSnapshotUVE& snapshot) {
@@ -765,6 +775,9 @@ enum class FrameReadResultUVE : std::uint8_t {
     if (value == "dispatchMotionQueryCommand") {
         return EditorBridgeRequestKindUVE::DispatchMotionQueryCommand;
     }
+    if (value == "dispatchMotionQueryDebugCommand") {
+        return EditorBridgeRequestKindUVE::DispatchMotionQueryDebugCommand;
+    }
     return std::nullopt;
 }
 
@@ -860,6 +873,48 @@ ParseMotionQueryCommandUVE(const JsonUVE& json, const std::uint64_t requestId) {
     return command;
 }
 
+[[nodiscard]] std::optional<Plugins::Editor::MotionQueryLiveDebugCommandKindUVE>
+ParseMotionQueryLiveDebugCommandKindUVE(const std::string_view value) {
+    using Kind = Plugins::Editor::MotionQueryLiveDebugCommandKindUVE;
+    if (value == "readSnapshot") return Kind::ReadSnapshot;
+    if (value == "attach") return Kind::Attach;
+    if (value == "detach") return Kind::Detach;
+    if (value == "clearTrace") return Kind::ClearTrace;
+    if (value == "clearSession") return Kind::ClearSession;
+    if (value == "setFilter") return Kind::SetFilter;
+    return std::nullopt;
+}
+
+[[nodiscard]] std::optional<Plugins::Editor::MotionQueryLiveDebugCommandUVE>
+ParseMotionQueryLiveDebugCommandUVE(const JsonUVE& json, const std::uint64_t requestId) {
+    if (!json.is_object() || !json.contains("kind") || !json.contains("expectedGeneration") ||
+        !json.at("kind").is_string() || !json.at("expectedGeneration").is_number_unsigned()) {
+        return std::nullopt;
+    }
+    const auto kind = ParseMotionQueryLiveDebugCommandKindUVE(json.at("kind").get<std::string>());
+    if (!kind.has_value()) {
+        return std::nullopt;
+    }
+    Plugins::Editor::MotionQueryLiveDebugCommandUVE command;
+    command.requestId = requestId;
+    command.expectedGeneration = json.at("expectedGeneration").get<std::uint64_t>();
+    command.kind = *kind;
+    if (json.contains("protocolVersion") && !json.at("protocolVersion").is_null()) {
+        if (!json.at("protocolVersion").is_number_unsigned()) return std::nullopt;
+        command.protocolVersion = json.at("protocolVersion").get<std::uint32_t>();
+    }
+    if (json.contains("database") && !json.at("database").is_null()) {
+        command.database = ParseResourceHandleUVE(json.at("database"));
+        if (!command.database.has_value()) return std::nullopt;
+    }
+    if (json.contains("filter") && !json.at("filter").is_null()) {
+        if (!json.at("filter").is_string() || json.at("filter").get_ref<const std::string&>().size() >
+            Plugins::Editor::kMotionQueryMaximumDebugMessageBytesUVE) return std::nullopt;
+        command.filter = json.at("filter").get<std::string>();
+    }
+    return command;
+}
+
 [[nodiscard]] std::optional<EditorBridgeRequestUVE> ParseBridgeRequestUVE(const JsonUVE& params) {
     if (!params.is_object()) {
         return std::nullopt;
@@ -876,6 +931,13 @@ ParseMotionQueryCommandUVE(const JsonUVE& json, const std::uint64_t requestId) {
     if (params.contains("motionQueryCommand") && !params.at("motionQueryCommand").is_null()) {
         request.motionQueryCommand = ParseMotionQueryCommandUVE(params.at("motionQueryCommand"), request.requestId);
         if (!request.motionQueryCommand.has_value()) {
+            return std::nullopt;
+        }
+    }
+    if (params.contains("motionQueryDebugCommand") && !params.at("motionQueryDebugCommand").is_null()) {
+        request.motionQueryDebugCommand = ParseMotionQueryLiveDebugCommandUVE(
+            params.at("motionQueryDebugCommand"), request.requestId);
+        if (!request.motionQueryDebugCommand.has_value()) {
             return std::nullopt;
         }
     }
