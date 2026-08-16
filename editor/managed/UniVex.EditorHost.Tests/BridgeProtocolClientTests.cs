@@ -203,6 +203,103 @@ public sealed class BridgeProtocolClientTests
     }
 
     [Fact]
+    public void MotionQuerySnapshot_ParsesReplayBatchHistoryAndSessionFacts()
+    {
+        JsonObject snapshot = JsonNode.Parse(JsonSerializer.Serialize(Snapshot(sceneDirty: false)))!.AsObject();
+        snapshot["motionQuery"] = new JsonObject
+        {
+            ["authoring"] = new JsonObject
+            {
+                ["revision"] = 4UL,
+                ["selectedResource"] = new JsonObject { ["guid"] = 77UL, ["generation"] = 1UL },
+                ["diagnostic"] = "native",
+                ["databases"] = new JsonArray(),
+            },
+            ["debugger"] = new JsonObject
+            {
+                ["attached"] = false,
+                ["generation"] = 0UL,
+                ["database"] = null,
+                ["selectedCandidateIndex"] = null,
+                ["candidateCount"] = 0,
+                ["candidatesEvaluated"] = 0,
+                ["selectedCost"] = 0F,
+                ["selectedCandidateId"] = "",
+                ["selectedSourceClipId"] = "",
+                ["message"] = "",
+            },
+            ["trace"] = new JsonObject
+            {
+                ["generation"] = 0UL,
+                ["truncated"] = false,
+                ["events"] = new JsonArray(),
+            },
+            ["replayBatch"] = new JsonObject
+            {
+                ["available"] = true,
+                ["code"] = 0,
+                ["registryGeneration"] = 7UL,
+                ["evaluatedBaselineCount"] = 2UL,
+                ["matchCount"] = 1UL,
+                ["mismatchCount"] = 1UL,
+                ["truncated"] = false,
+                ["message"] = "batch results published",
+                ["results"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["baselineName"] = "b1",
+                        ["regressionCode"] = 0,
+                        ["comparisonCode"] = 0,
+                        ["comparedEventCount"] = 10UL,
+                        ["mismatchIndex"] = 0UL,
+                        ["mismatchFieldMask"] = 0U,
+                        ["diagnosticSummary"] = "",
+                        ["compatibilityMismatchMask"] = 0U,
+                        ["compatibilityDiagnosticSummary"] = "",
+                    },
+                },
+            },
+            ["replayBatchHistoryTruncated"] = true,
+            ["replayBatchHistory"] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["sequence"] = 1UL,
+                    ["registryGeneration"] = 7UL,
+                    ["code"] = 0,
+                    ["evaluatedBaselineCount"] = 2UL,
+                    ["matchCount"] = 1UL,
+                    ["mismatchCount"] = 1UL,
+                    ["message"] = "batch results published",
+                },
+            },
+            ["replaySessionFacts"] = new JsonObject
+            {
+                ["totalIndividualComparisons"] = 10UL,
+                ["totalBatchRuns"] = 2UL,
+                ["totalBaselinesEvaluated"] = 4UL,
+                ["totalMatchesFound"] = 2UL,
+                ["totalMismatchesFound"] = 2UL,
+            },
+        };
+
+        using JsonDocument document = JsonDocument.Parse(snapshot.ToJsonString());
+        BridgeEditorSnapshot parsed = BridgeSnapshotParser.Parse(document.RootElement);
+
+        Assert.True(parsed.MotionQuery.ReplayBatch.Available);
+        Assert.Equal(7UL, parsed.MotionQuery.ReplayBatch.RegistryGeneration);
+        Assert.Single(parsed.MotionQuery.ReplayBatch.Results);
+        Assert.Equal("b1", parsed.MotionQuery.ReplayBatch.Results[0].BaselineName);
+        Assert.True(parsed.MotionQuery.ReplayBatchHistoryTruncated);
+        Assert.Single(parsed.MotionQuery.ReplayBatchHistory);
+        Assert.Equal(1UL, parsed.MotionQuery.ReplayBatchHistory[0].Sequence);
+        Assert.Equal(10UL, parsed.MotionQuery.ReplaySessionFacts.TotalIndividualComparisons);
+        Assert.Equal(2UL, parsed.MotionQuery.ReplaySessionFacts.TotalBatchRuns);
+        Assert.Equal(4UL, parsed.MotionQuery.ReplaySessionFacts.TotalBaselinesEvaluated);
+    }
+
+    [Fact]
     public void MotionQuerySnapshot_ParsesAuthoringDebuggerAndTraceFacts()
     {
         JsonObject snapshot = JsonNode.Parse(JsonSerializer.Serialize(Snapshot(sceneDirty: false)))!.AsObject();
