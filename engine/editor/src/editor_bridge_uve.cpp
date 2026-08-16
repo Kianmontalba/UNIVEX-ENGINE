@@ -925,6 +925,10 @@ EditorBridgeMotionQuerySnapshotUVE EditorBridgeUVE::CaptureMotionQueryUVE() cons
     snapshot.debugger.continuityApplied = debugger.continuityApplied;
     snapshot.debugger.transitionCode = debugger.transitionCode;
     snapshot.debugger.transitionHeldPrevious = debugger.transitionHeldPrevious;
+    snapshot.debugger.telemetryCode = debugger.telemetryCode;
+    snapshot.debugger.telemetryIndexEntryCount = debugger.telemetryIndexEntryCount;
+    snapshot.debugger.telemetryCandidatesConsidered = debugger.telemetryCandidatesConsidered;
+    snapshot.debugger.telemetryBudgetSaturated = debugger.telemetryBudgetSaturated;
     snapshot.debugger.provenance = debugger.provenance;
     snapshot.debugger.message = debugger.message;
     snapshot.trace.generation = trace.generation;

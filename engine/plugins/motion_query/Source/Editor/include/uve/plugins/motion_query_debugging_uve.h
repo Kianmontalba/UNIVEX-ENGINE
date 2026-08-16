@@ -37,6 +37,10 @@ struct MotionQueryTraceEventUVE final {
     bool continuityApplied = false;
     std::uint8_t transitionCode = 0U;
     bool transitionHeldPrevious = false;
+    std::uint8_t telemetryCode = 0U;
+    std::size_t telemetryIndexEntryCount = 0U;
+    std::size_t telemetryCandidatesConsidered = 0U;
+    bool telemetryBudgetSaturated = false;
     std::string provenance;
     std::string message;
 
@@ -99,6 +103,10 @@ struct MotionQueryDebuggerSnapshotUVE final {
     bool continuityApplied = false;
     std::uint8_t transitionCode = 0U;
     bool transitionHeldPrevious = false;
+    std::uint8_t telemetryCode = 0U;
+    std::size_t telemetryIndexEntryCount = 0U;
+    std::size_t telemetryCandidatesConsidered = 0U;
+    bool telemetryBudgetSaturated = false;
     std::string provenance;
     std::string message;
 

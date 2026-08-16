@@ -9,6 +9,7 @@
 #include "uve/plugins/motion_query_lod_uve.h"
 #include "uve/plugins/motion_query_continuity_uve.h"
 #include "uve/plugins/motion_query_transition_uve.h"
+#include "uve/plugins/motion_query_runtime_telemetry_uve.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -58,6 +59,10 @@ struct MotionQueryAnimationNodeResultUVE final {
     MotionQueryTransitionCodeUVE transitionCode = MotionQueryTransitionCodeUVE::NoPreviousSelection;
     float transitionCostImprovement = 0.0F;
     bool transitionHeldPrevious = false;
+    MotionQueryRuntimeTelemetryCodeUVE telemetryCode = MotionQueryRuntimeTelemetryCodeUVE::InvalidCounters;
+    std::size_t telemetryIndexEntryCount = 0U;
+    std::size_t telemetryCandidatesConsidered = 0U;
+    bool telemetryBudgetSaturated = false;
     float cost = 0.0F;
     double sampleTimeSeconds = 0.0;
     std::string sourceClipId;

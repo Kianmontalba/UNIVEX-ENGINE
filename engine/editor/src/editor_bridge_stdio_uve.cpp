@@ -449,6 +449,10 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"continuityApplied", snapshot.continuityApplied},
                    {"transitionCode", snapshot.transitionCode},
                    {"transitionHeldPrevious", snapshot.transitionHeldPrevious},
+                   {"telemetryCode", snapshot.telemetryCode},
+                   {"telemetryIndexEntryCount", snapshot.telemetryIndexEntryCount},
+                   {"telemetryCandidatesConsidered", snapshot.telemetryCandidatesConsidered},
+                   {"telemetryBudgetSaturated", snapshot.telemetryBudgetSaturated},
                    {"provenance", snapshot.provenance},
                    {"message", snapshot.message}};
 }
@@ -470,6 +474,10 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"continuityApplied", event.continuityApplied},
                    {"transitionCode", event.transitionCode},
                    {"transitionHeldPrevious", event.transitionHeldPrevious},
+                   {"telemetryCode", event.telemetryCode},
+                   {"telemetryIndexEntryCount", event.telemetryIndexEntryCount},
+                   {"telemetryCandidatesConsidered", event.telemetryCandidatesConsidered},
+                   {"telemetryBudgetSaturated", event.telemetryBudgetSaturated},
                    {"provenance", event.provenance},
                    {"message", event.message}};
 }

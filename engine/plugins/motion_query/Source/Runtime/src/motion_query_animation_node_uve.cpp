@@ -112,6 +112,12 @@ MotionQueryAnimationNodeResultUVE EvaluateMotionQueryAnimationNodeUVE(
 
     const UVE::Core::MotionMatchingResultUVE match = UVE::Core::FindBestMotionMatchUVE(
         query, filteredDatabase, settings.weights);
+    const MotionQueryRuntimeTelemetryUVE telemetry = BuildMotionQueryRuntimeTelemetryUVE(
+        searchIndex.SizeUVE(), budget, indexedCandidates.size(), match.candidatesEvaluated);
+    if (!telemetry.IsAcceptedUVE()) {
+        return publish(MakeResultUVE(MotionQueryAnimationNodeCodeUVE::SearchFailed,
+                                     telemetry.message.c_str()));
+    }
     if (!match.IsMatchUVE()) {
         return publish(MakeResultUVE(MotionQueryAnimationNodeCodeUVE::NoMatch, match.message.c_str()));
     }
@@ -138,6 +144,10 @@ MotionQueryAnimationNodeResultUVE EvaluateMotionQueryAnimationNodeUVE(
         result.candidatesEvaluated = match.candidatesEvaluated;
         result.sampleTimeSeconds = candidate.sampleTimeSeconds;
         result.sourceClipId = candidate.sourceClipId;
+        result.telemetryCode = telemetry.code;
+        result.telemetryIndexEntryCount = telemetry.indexEntryCount;
+        result.telemetryCandidatesConsidered = telemetry.candidatesConsidered;
+        result.telemetryBudgetSaturated = telemetry.searchBudgetSaturated;
         return publish(std::move(result));
     }
 
@@ -156,6 +166,10 @@ MotionQueryAnimationNodeResultUVE EvaluateMotionQueryAnimationNodeUVE(
         result.candidatesEvaluated = match.candidatesEvaluated;
         result.sampleTimeSeconds = candidate.sampleTimeSeconds;
         result.sourceClipId = candidate.sourceClipId;
+        result.telemetryCode = telemetry.code;
+        result.telemetryIndexEntryCount = telemetry.indexEntryCount;
+        result.telemetryCandidatesConsidered = telemetry.candidatesConsidered;
+        result.telemetryBudgetSaturated = telemetry.searchBudgetSaturated;
         return publish(std::move(result));
     }
 
@@ -171,6 +185,10 @@ MotionQueryAnimationNodeResultUVE EvaluateMotionQueryAnimationNodeUVE(
     result.sampleTimeSeconds = candidate.sampleTimeSeconds;
     result.sourceClipId = candidate.sourceClipId;
     result.pose = pose;
+    result.telemetryCode = telemetry.code;
+    result.telemetryIndexEntryCount = telemetry.indexEntryCount;
+    result.telemetryCandidatesConsidered = telemetry.candidatesConsidered;
+    result.telemetryBudgetSaturated = telemetry.searchBudgetSaturated;
     result.message = "motion query animation node evaluated successfully";
     return publish(std::move(result));
 }

@@ -123,6 +123,10 @@ void MotionQueryLiveDebugSessionUVE::PublishUVE(
     event.continuityApplied = result.continuityApplied;
     event.transitionCode = static_cast<std::uint8_t>(result.transitionCode);
     event.transitionHeldPrevious = result.transitionHeldPrevious;
+    event.telemetryCode = static_cast<std::uint8_t>(result.telemetryCode);
+    event.telemetryIndexEntryCount = result.telemetryIndexEntryCount;
+    event.telemetryCandidatesConsidered = result.telemetryCandidatesConsidered;
+    event.telemetryBudgetSaturated = result.telemetryBudgetSaturated;
     event.provenance = result.transitionHeldPrevious ? "history_hold" :
                        result.continuityApplied ? "continuity_applied" : "runtime_search";
     event.message = result.message;
