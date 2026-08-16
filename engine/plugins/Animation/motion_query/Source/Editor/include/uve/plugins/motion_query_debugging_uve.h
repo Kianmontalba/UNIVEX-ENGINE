@@ -77,6 +77,7 @@ class MotionQueryTraceLoggerUVE final {
 public:
     [[nodiscard]] MotionQueryTraceResultUVE RecordUVE(
         MotionQueryTraceEventUVE event) noexcept;
+    [[nodiscard]] MotionQueryTraceResultUVE RemoveEventUVE(std::uint64_t sequence) noexcept;
     void ClearUVE() noexcept;
 
     [[nodiscard]] MotionQueryTraceSnapshotUVE GetSnapshotUVE() const noexcept {

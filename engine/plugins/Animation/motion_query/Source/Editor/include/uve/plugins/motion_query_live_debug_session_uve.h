@@ -21,6 +21,7 @@ enum class MotionQueryLiveDebugCommandKindUVE : std::uint8_t {
     ClearSession,
     SetFilter,
     SelectEvent,
+    RemoveEvent,
 };
 
 struct MotionQueryLiveDebugCommandUVE final {

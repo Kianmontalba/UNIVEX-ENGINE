@@ -425,9 +425,10 @@
                                         <ListBox.ItemTemplate>
                                             <DataTemplate>
                                                 <StackPanel Spacing="1" Margin="0,2">
-                                                    <Grid ColumnDefinitions="*,Auto">
-                                                        <TextBlock Text="{Binding Kind}" FontWeight="SemiBold" />
-                                                        <TextBlock Grid.Column="1" Text="{Binding FrameNumber, StringFormat='Frame {0}'}" FontSize="10" Opacity="0.6" />
+                                                    <Grid ColumnDefinitions="*,Auto,Auto">
+                                                        <TextBlock Text="{Binding Kind}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                                        <TextBlock Grid.Column="1" Text="{Binding FrameNumber, StringFormat='Frame {0}'}" FontSize="10" Opacity="0.6" VerticalAlignment="Center" Margin="0,0,6,0" />
+                                                        <Button Grid.Column="2" Content="Remove" Click="MotionQueryRemoveTraceEventButton_OnClick" Padding="4,2" FontSize="10" />
                                                     </Grid>
                                                     <TextBlock Text="{Binding Message}" FontSize="11" TextWrapping="Wrap" Opacity="0.85" />
                                                 </StackPanel>

@@ -109,6 +109,20 @@ MotionQueryLiveDebugResponseUVE MotionQueryLiveDebugSessionUVE::DispatchUVE(
             return MakeResponseUVE(command, true, MotionQueryLiveDebugResponseCodeUVE::Applied,
                                    "live debug event selected for inspection");
         }
+        case MotionQueryLiveDebugCommandKindUVE::RemoveEvent: {
+            if (!command.eventSequence.has_value()) {
+                return MakeResponseUVE(command, false, MotionQueryLiveDebugResponseCodeUVE::InvalidCommand,
+                                       "live debug RemoveEvent requires an event sequence");
+            }
+            const auto result = trace_.RemoveEventUVE(*command.eventSequence);
+            if (!result.IsAcceptedUVE()) {
+                return MakeResponseUVE(command, false, MotionQueryLiveDebugResponseCodeUVE::InvalidCommand,
+                                       result.message);
+            }
+            ++generation_;
+            return MakeResponseUVE(command, true, MotionQueryLiveDebugResponseCodeUVE::Applied,
+                                   "live debug event removed from trace");
+        }
     }
     return MakeResponseUVE(command, false, MotionQueryLiveDebugResponseCodeUVE::InvalidCommand,
                            CodeMessageUVE(MotionQueryLiveDebugResponseCodeUVE::InvalidCommand));

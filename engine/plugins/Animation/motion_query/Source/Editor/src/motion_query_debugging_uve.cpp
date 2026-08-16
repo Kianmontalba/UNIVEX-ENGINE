@@ -72,6 +72,20 @@ MotionQueryTraceResultUVE MotionQueryTraceLoggerUVE::RecordUVE(
                               "motion query trace event recorded");
 }
 
+MotionQueryTraceResultUVE MotionQueryTraceLoggerUVE::RemoveEventUVE(const std::uint64_t sequence) noexcept {
+    const auto found = std::find_if(snapshot_.events.begin(), snapshot_.events.end(),
+                                    [&](const auto& event) { return event.sequence == sequence; });
+    if (found == snapshot_.events.end()) {
+        return MakeTraceResultUVE(MotionQueryTraceCodeUVE::InvalidEvent, 0U,
+                                  "motion query trace event sequence not found");
+    }
+    const std::size_t index = static_cast<std::size_t>(std::distance(snapshot_.events.begin(), found));
+    snapshot_.events.erase(found);
+    ++snapshot_.generation;
+    return MakeTraceResultUVE(MotionQueryTraceCodeUVE::Accepted, index,
+                              "motion query trace event removed");
+}
+
 void MotionQueryTraceLoggerUVE::ClearUVE() noexcept {
     snapshot_.events.clear();
     snapshot_.truncated = false;

@@ -869,6 +869,20 @@ public partial class MainWindow : Window
         }
     }
 
+    private void MotionQueryRemoveTraceEventButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button { DataContext: BridgeMotionQueryTraceEvent traceEvent } &&
+            session?.LastSnapshot != null)
+        {
+            DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "dispatchMotionQueryDebugCommand")
+            {
+                MotionQueryDebugCommandKind = "removeEvent",
+                MotionQueryDebugExpectedGeneration = session.LastSnapshot.MotionQuery.LiveDebugGeneration,
+                MotionQueryDebugEventSequence = traceEvent.Sequence
+            });
+        }
+    }
+
     private void RenderVisualScripting(BridgeVisualScriptingSnapshot scripting, ulong bridgeRevision)
     {
         VisualScriptingStatusTextBlock.Text = DescribeVisualScripting(scripting);

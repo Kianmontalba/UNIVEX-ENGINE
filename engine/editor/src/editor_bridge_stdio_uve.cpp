@@ -1047,6 +1047,8 @@ ParseMotionQueryLiveDebugCommandKindUVE(const std::string_view value) {
     if (value == "clearTrace") return Kind::ClearTrace;
     if (value == "clearSession") return Kind::ClearSession;
     if (value == "setFilter") return Kind::SetFilter;
+    if (value == "selectEvent") return Kind::SelectEvent;
+    if (value == "removeEvent") return Kind::RemoveEvent;
     return std::nullopt;
 }
 
