@@ -7,10 +7,12 @@ add_library(uve_plugins STATIC
     motion_query/Source/Runtime/src/motion_query_search_index_uve.cpp
     motion_query/Source/Runtime/src/motion_query_animation_node_uve.cpp
     motion_query/Source/Runtime/src/motion_query_interaction_runtime_uve.cpp
+    motion_query/Source/Editor/src/motion_query_editor_authoring_uve.cpp
 )
 target_include_directories(uve_plugins PUBLIC
     include
     motion_query/Source/Runtime/include
+    motion_query/Source/Editor/include
 )
 target_link_libraries(uve_plugins PUBLIC uve_asset uve_core)
 target_compile_features(uve_plugins PUBLIC cxx_std_20)
