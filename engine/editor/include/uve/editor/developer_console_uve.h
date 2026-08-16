@@ -39,6 +39,7 @@ enum class DeveloperConsoleCommandRegistrationCodeUVE : std::uint8_t {
     MissingHandler,
     CapacityExceeded,
     DuplicateIdentifier,
+    Unavailable,
 };
 
 struct DeveloperConsoleCommandRegistrationResultUVE final {
@@ -56,6 +57,7 @@ enum class DeveloperConsoleCVarRegistrationCodeUVE : std::uint8_t {
     InvalidValue,
     CapacityExceeded,
     DuplicateName,
+    Unavailable,
 };
 
 struct DeveloperConsoleCVarRegistrationResultUVE final {
@@ -171,6 +173,7 @@ struct DeveloperConsoleClearResultUVE final {
 enum class DeveloperConsoleBuildPolicyCodeUVE : std::uint8_t {
     Applied = 0,
     Unchanged,
+    Locked,
 };
 
 struct DeveloperConsoleBuildPolicyResultUVE final {

@@ -68,6 +68,10 @@ bool DeveloperConsoleUVE::IsAvailableUVE() const noexcept {
 
 DeveloperConsoleCommandRegistrationResultUVE DeveloperConsoleUVE::RegisterCommandUVE(
     std::string identifier, std::string help, DeveloperConsoleCommandHandlerUVE handler) {
+    if (!IsAvailableUVE()) {
+        return {DeveloperConsoleCommandRegistrationCodeUVE::Unavailable,
+                "Command registration is unavailable under the Shipping build policy."};
+    }
     if (!IsBoundedIdentifierUVE(identifier)) {
         return {DeveloperConsoleCommandRegistrationCodeUVE::InvalidIdentifier,
                 "Command identifier is empty or contains unsupported characters."};
@@ -101,6 +105,10 @@ bool DeveloperConsoleUVE::RegisterCommand(std::string identifier, std::string he
 
 DeveloperConsoleCVarRegistrationResultUVE DeveloperConsoleUVE::RegisterCVarUVE(std::string name, std::string value,
                                                                                 const bool readOnly) {
+    if (!IsAvailableUVE()) {
+        return {DeveloperConsoleCVarRegistrationCodeUVE::Unavailable,
+                "CVAR registration is unavailable under the Shipping build policy."};
+    }
     if (!IsBoundedIdentifierUVE(name)) {
         return {DeveloperConsoleCVarRegistrationCodeUVE::InvalidName,
                 "CVAR name is empty or contains unsupported characters."};
@@ -252,6 +260,11 @@ DeveloperConsoleBuildPolicyResultUVE DeveloperConsoleUVE::SetBuildPolicyDetailed
     const DeveloperConsoleBuildPolicyUVE policy) noexcept {
     if (m_policy == policy) {
         return {DeveloperConsoleBuildPolicyCodeUVE::Unchanged, "Build policy is unchanged."};
+    }
+    if (m_policy == DeveloperConsoleBuildPolicyUVE::Shipping &&
+        policy == DeveloperConsoleBuildPolicyUVE::Development) {
+        return {DeveloperConsoleBuildPolicyCodeUVE::Locked,
+                "Shipping build policy is monotonic and cannot be relaxed at runtime."};
     }
     m_policy = policy;
     m_completionPrefix.clear();
