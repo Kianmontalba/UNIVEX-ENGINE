@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
 #include <utility>
 
 namespace UVE::Plugins {
@@ -174,6 +175,44 @@ MotionQueryAnimationNodeResultUVE EvaluateMotionQueryAnimationNodeUVE(
     return publish(std::move(result));
 }
 
+MotionQueryAnimationNodeResultUVE EvaluateMotionQueryAnimationNodeWithContinuityUVE(
+    const UVE::Core::MotionQueryUVE& query,
+    const UVE::Core::MotionMatchingDatabaseUVE& database,
+    const UVE::Core::MotionQueryFeatureSchemaUVE& schema,
+    const MotionQuerySearchIndexUVE& searchIndex,
+    const std::vector<UVE::Core::AnimationClipUVE>& clips,
+    MotionQueryAnimationNodeSettingsUVE settings,
+    const UVE::Core::PoseSampleUVE* previousSample,
+    const double continuityTimeSeconds,
+    IMotionQueryAnimationDebugSinkUVE* debugSink,
+    const std::uint64_t timestampNanoseconds,
+    const std::uint64_t frameNumber) noexcept {
+    MotionQueryAnimationNodeResultUVE result = EvaluateMotionQueryAnimationNodeUVE(
+        query, database, schema, searchIndex, clips, settings, debugSink,
+        timestampNanoseconds, frameNumber);
+    if (!result.IsAcceptedUVE()) {
+        return result;
+    }
+    const double continuityTime = continuityTimeSeconds >= 0.0
+                                      ? continuityTimeSeconds
+                                      : result.sampleTimeSeconds;
+    const MotionQueryContinuityResultUVE continuity = ApplyMotionQueryContinuityUVE(
+        result.pose, previousSample, continuityTime, settings.continuity);
+    result.continuityCode = continuity.code;
+    result.continuityPreviousAgeSeconds = continuity.previousAgeSeconds;
+    result.continuityApplied = continuity.WasAppliedUVE();
+    if (!continuity.IsAcceptedUVE()) {
+        result.code = continuity.code == MotionQueryContinuityCodeUVE::InvalidSettings
+                          ? MotionQueryAnimationNodeCodeUVE::InvalidSettings
+                          : MotionQueryAnimationNodeCodeUVE::ContinuityFailed;
+        result.message = continuity.message;
+        return result;
+    }
+    result.pose = continuity.pose;
+    result.message = continuity.message;
+    return result;
+}
+
 MotionQueryAnimationNodeResultUVE EvaluateMotionQueryAnimationNodeFromHistoryUVE(
     const UVE::Core::MotionQueryHistoryBufferUVE& history, const double evaluationTimeSeconds,
     const UVE::Core::MotionMatchingDatabaseUVE& database,
@@ -203,8 +242,14 @@ MotionQueryAnimationNodeResultUVE EvaluateMotionQueryAnimationNodeFromHistoryUVE
         return publish(MakeResultUVE(MotionQueryAnimationNodeCodeUVE::NoHistoryFrame,
                              "motion query animation node has no history frame at or before evaluation time"));
     }
-    return EvaluateMotionQueryAnimationNodeUVE(frame->query, database, schema, searchIndex, clips,
-                                               settings, debugSink, timestampNanoseconds, frameNumber);
+    const UVE::Core::PoseSampleUVE* previousSample = nullptr;
+    const auto previousFrame = std::next(frame);
+    if (previousFrame != frames.crend()) {
+        previousSample = &previousFrame->sample;
+    }
+    return EvaluateMotionQueryAnimationNodeWithContinuityUVE(
+        frame->query, database, schema, searchIndex, clips, settings, previousSample,
+        evaluationTimeSeconds, debugSink, timestampNanoseconds, frameNumber);
 }
 
 } // namespace UVE::Plugins
