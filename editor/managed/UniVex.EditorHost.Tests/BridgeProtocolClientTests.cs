@@ -293,6 +293,17 @@ public sealed class BridgeProtocolClientTests
             ["liveDebugVisibleTraceEventCount"] = 1,
             ["liveDebugTraceTruncated"] = false,
             ["liveDebugDiagnostic"] = "active",
+            ["replayComparison"] = new JsonObject
+            {
+                ["available"] = true,
+                ["code"] = 0,
+                ["comparisonCode"] = 0,
+                ["comparedEventCount"] = 1UL,
+                ["mismatchIndex"] = 0UL,
+                ["fixtureTruncated"] = false,
+                ["snapshotTruncated"] = false,
+                ["message"] = "replay fixture matches trace",
+            },
         };
         using JsonDocument document = JsonDocument.Parse(snapshot.ToJsonString());
         BridgeEditorSnapshot parsed = BridgeSnapshotParser.Parse(document.RootElement);
@@ -324,6 +335,11 @@ public sealed class BridgeProtocolClientTests
         Assert.Equal(77UL, parsed.MotionQuery.LiveDebugDatabase!.Guid);
         Assert.Equal("match", parsed.MotionQuery.LiveDebugFilter);
         Assert.Equal(1, parsed.MotionQuery.LiveDebugVisibleTraceEventCount);
+        Assert.True(parsed.MotionQuery.ReplayComparison.Available);
+        Assert.Equal((byte)0, parsed.MotionQuery.ReplayComparison.Code);
+        Assert.Equal((byte)0, parsed.MotionQuery.ReplayComparison.ComparisonCode);
+        Assert.Equal(1UL, parsed.MotionQuery.ReplayComparison.ComparedEventCount);
+        Assert.Equal("replay fixture matches trace", parsed.MotionQuery.ReplayComparison.Message);
     }
 
     [Fact]

@@ -157,6 +157,16 @@ public sealed record BridgeMotionQueryTraceSnapshot(
     bool IsTruncated,
     IReadOnlyList<BridgeMotionQueryTraceEvent> Events);
 
+public sealed record BridgeMotionQueryReplayComparison(
+    bool Available,
+    byte Code,
+    byte ComparisonCode,
+    ulong ComparedEventCount,
+    ulong MismatchIndex,
+    bool FixtureTruncated,
+    bool SnapshotTruncated,
+    string Message);
+
 public sealed record BridgeMotionQuerySnapshot(
     BridgeMotionQueryAuthoringSnapshot Authoring,
     BridgeMotionQueryDebuggerSnapshot Debugger,
@@ -168,7 +178,8 @@ public sealed record BridgeMotionQuerySnapshot(
     int LiveDebugTotalTraceEventCount,
     int LiveDebugVisibleTraceEventCount,
     bool LiveDebugTraceTruncated,
-    string LiveDebugDiagnostic);
+    string LiveDebugDiagnostic,
+    BridgeMotionQueryReplayComparison ReplayComparison);
 
 public sealed record BridgeViewportSurfaceSnapshot(
     BridgeViewportSurfaceState State,
@@ -678,7 +689,8 @@ public static class BridgeSnapshotParser
                 "No native Motion Query debugger snapshot is attached to this bridge frame."),
             new BridgeMotionQueryTraceSnapshot(0UL, false, Array.Empty<BridgeMotionQueryTraceEvent>()),
             false, 0UL, null, string.Empty, 0, 0, false,
-            "No native Motion Query live debug session is attached to this bridge frame.");
+            "No native Motion Query live debug session is attached to this bridge frame.",
+            new BridgeMotionQueryReplayComparison(false, 0, 0, 0UL, 0UL, false, false, string.Empty));
 
     private static BridgeMotionQueryResourceHandle ParseMotionQueryResource(JsonElement value, string context)
     {
@@ -805,6 +817,26 @@ public static class BridgeSnapshotParser
                 OptionalBoundedString(eventValue, "provenance", string.Empty),
                 RequiredBoundedString(eventValue, "message")));
         }
+        BridgeMotionQueryReplayComparison replayComparison = new(
+            false, 0, 0, 0UL, 0UL, false, false, string.Empty);
+        if (value.TryGetProperty("replayComparison", out JsonElement replayValue))
+        {
+            RequireObject(replayValue, "motion-query replay comparison");
+            bool replayAvailable = RequiredBoolean(replayValue, "available");
+            byte replayCode = OptionalByte(replayValue, "code", 0);
+            byte replayComparisonCode = OptionalByte(replayValue, "comparisonCode", 0);
+            if (replayCode > 3U || replayComparisonCode > 6U)
+            {
+                throw Invalid("Motion Query replay comparison contains an unsupported result code.");
+            }
+            replayComparison = new BridgeMotionQueryReplayComparison(
+                replayAvailable, replayCode, replayComparisonCode,
+                OptionalUInt64(replayValue, "comparedEventCount", 0UL),
+                OptionalUInt64(replayValue, "mismatchIndex", 0UL),
+                OptionalBoolean(replayValue, "fixtureTruncated", false),
+                OptionalBoolean(replayValue, "snapshotTruncated", false),
+                OptionalBoundedString(replayValue, "message", string.Empty));
+        }
         int liveTotal = OptionalInt32(value, "liveDebugTotalTraceEventCount", parsedEvents.Count);
         int liveVisible = OptionalInt32(value, "liveDebugVisibleTraceEventCount", parsedEvents.Count);
         if (liveTotal < 0 || liveVisible < 0 || liveVisible > liveTotal) {
@@ -828,7 +860,8 @@ public static class BridgeSnapshotParser
             liveVisible,
             OptionalBoolean(value, "liveDebugTraceTruncated", false),
             OptionalBoundedString(value, "liveDebugDiagnostic",
-                                  "No native Motion Query live debug session is attached to this bridge frame."));
+                                  "No native Motion Query live debug session is attached to this bridge frame."),
+            replayComparison);
     }
 
     private static BridgeVisualScriptingSnapshot ParseVisualScripting(JsonElement value)

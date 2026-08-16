@@ -21,6 +21,7 @@
 #include "uve/plugins/motion_query_debugging_uve.h"
 #include "uve/plugins/motion_query_editor_authoring_uve.h"
 #include "uve/plugins/motion_query_live_debug_session_uve.h"
+#include "uve/plugins/motion_query_trace_replay_regression_uve.h"
 
 namespace UVE::Editor {
 
@@ -414,6 +415,19 @@ struct EditorBridgeMotionQueryTraceSnapshotUVE final {
     [[nodiscard]] bool operator==(const EditorBridgeMotionQueryTraceSnapshotUVE&) const = default;
 };
 
+struct EditorBridgeMotionQueryReplayComparisonUVE final {
+    bool available = false;
+    std::uint8_t code = 0U;
+    std::uint8_t comparisonCode = 0U;
+    std::size_t comparedEventCount = 0U;
+    std::size_t mismatchIndex = 0U;
+    bool fixtureTruncated = false;
+    bool snapshotTruncated = false;
+    std::string message;
+
+    [[nodiscard]] bool operator==(const EditorBridgeMotionQueryReplayComparisonUVE&) const = default;
+};
+
 struct EditorBridgeMotionQuerySnapshotUVE final {
     EditorBridgeMotionQueryAuthoringSnapshotUVE authoring;
     EditorBridgeMotionQueryDebuggerSnapshotUVE debugger;
@@ -426,6 +440,7 @@ struct EditorBridgeMotionQuerySnapshotUVE final {
     std::size_t liveDebugVisibleTraceEventCount = 0U;
     bool liveDebugTraceTruncated = false;
     std::string liveDebugDiagnostic;
+    EditorBridgeMotionQueryReplayComparisonUVE replayComparison;
 
     [[nodiscard]] bool operator==(const EditorBridgeMotionQuerySnapshotUVE&) const = default;
 };
@@ -542,6 +557,8 @@ public:
     [[nodiscard]] bool SetPreviewTableUVE(std::string_view name);
     void SetDataTableCatalogSnapshotUVE(Asset::DataTableCatalogSnapshotUVE snapshot);
     void SetDataTablePreviewSnapshotUVE(Asset::DataTableSnapshotUVE snapshot);
+    void SetMotionQueryReplayFixtureUVE(Plugins::Editor::MotionQueryTraceReplayFixtureUVE fixture);
+    void ClearMotionQueryReplayFixtureUVE();
 
     [[nodiscard]] static const std::vector<EditorBridgeCapabilityUVE>& GetCapabilitiesUVE() noexcept;
 
@@ -610,6 +627,7 @@ private:
     std::uint64_t m_nextScriptRuntimeTickSequence = 1U;
     Plugins::Editor::MotionQueryEditorAuthoringSessionUVE m_motionQueryAuthoring;
     Plugins::Editor::MotionQueryLiveDebugSessionUVE m_motionQueryLiveDebugSession;
+    std::optional<Plugins::Editor::MotionQueryTraceReplayFixtureUVE> m_motionQueryReplayFixture;
     std::uint64_t m_revision = 0U;
 };
 
