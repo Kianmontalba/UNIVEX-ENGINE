@@ -180,6 +180,16 @@ public sealed record BridgeMotionQueryReplayBaselineSnapshot(
     bool IsTruncated,
     IReadOnlyList<BridgeMotionQueryReplayBaselineEntry> Entries);
 
+public sealed record BridgeMotionQueryReplayComparisonHistoryEntry(
+    ulong Sequence,
+    string BaselineName,
+    ulong RegistryGeneration,
+    byte ComparisonCode,
+    ulong ComparedEventCount,
+    ulong MismatchIndex,
+    uint MismatchFieldMask,
+    string DiagnosticSummary);
+
 public sealed record BridgeMotionQuerySnapshot(
     BridgeMotionQueryAuthoringSnapshot Authoring,
     BridgeMotionQueryDebuggerSnapshot Debugger,
@@ -193,7 +203,9 @@ public sealed record BridgeMotionQuerySnapshot(
     bool LiveDebugTraceTruncated,
     string LiveDebugDiagnostic,
     BridgeMotionQueryReplayComparison ReplayComparison,
-    BridgeMotionQueryReplayBaselineSnapshot ReplayBaselines);
+    BridgeMotionQueryReplayBaselineSnapshot ReplayBaselines,
+    bool ReplayComparisonHistoryTruncated,
+    IReadOnlyList<BridgeMotionQueryReplayComparisonHistoryEntry> ReplayComparisonHistory);
 
 public sealed record BridgeViewportSurfaceSnapshot(
     BridgeViewportSurfaceState State,
@@ -707,7 +719,9 @@ public static class BridgeSnapshotParser
             new BridgeMotionQueryReplayComparison(false, 0, 0, 0UL, 0UL, false, false, 0U,
                                                    string.Empty, string.Empty),
             new BridgeMotionQueryReplayBaselineSnapshot(0UL, false,
-                                                        Array.Empty<BridgeMotionQueryReplayBaselineEntry>()));
+                                                        Array.Empty<BridgeMotionQueryReplayBaselineEntry>()),
+            false,
+            Array.Empty<BridgeMotionQueryReplayComparisonHistoryEntry>());
 
     private static BridgeMotionQueryResourceHandle ParseMotionQueryResource(JsonElement value, string context)
     {
@@ -887,6 +901,41 @@ public static class BridgeSnapshotParser
                 RequiredUInt64(replayBaselinesValue, "generation"),
                 RequiredBoolean(replayBaselinesValue, "truncated"), entries);
         }
+        bool replayHistoryTruncated = OptionalBoolean(value, "replayComparisonHistoryTruncated", false);
+        List<BridgeMotionQueryReplayComparisonHistoryEntry> replayHistory = new();
+        if (value.TryGetProperty("replayComparisonHistory", out JsonElement replayHistoryValue))
+        {
+            if (replayHistoryValue.ValueKind != JsonValueKind.Array ||
+                replayHistoryValue.GetArrayLength() > MaximumPanelEntries)
+            {
+                throw Invalid("Motion Query replay comparison history is invalid or exceeds the bounded panel limit.");
+            }
+            ulong previousHistorySequence = 0UL;
+            foreach (JsonElement historyValue in replayHistoryValue.EnumerateArray())
+            {
+                RequireObject(historyValue, "motion-query replay comparison history entry");
+                ulong sequence = RequiredUInt64(historyValue, "sequence");
+                if (sequence == 0UL || sequence <= previousHistorySequence)
+                {
+                    throw Invalid("Motion Query replay comparison history sequences must be strictly increasing.");
+                }
+                byte comparisonCode = OptionalByte(historyValue, "comparisonCode", 0);
+                if (comparisonCode > 6U)
+                {
+                    throw Invalid("Motion Query replay comparison history contains an unsupported result code.");
+                }
+                replayHistory.Add(new BridgeMotionQueryReplayComparisonHistoryEntry(
+                    sequence,
+                    OptionalBoundedString(historyValue, "baselineName", string.Empty),
+                    RequiredUInt64(historyValue, "registryGeneration"),
+                    comparisonCode,
+                    RequiredUInt64(historyValue, "comparedEventCount"),
+                    RequiredUInt64(historyValue, "mismatchIndex"),
+                    OptionalUInt32(historyValue, "mismatchFieldMask", 0U),
+                    OptionalBoundedString(historyValue, "diagnosticSummary", string.Empty)));
+                previousHistorySequence = sequence;
+            }
+        }
         int liveTotal = OptionalInt32(value, "liveDebugTotalTraceEventCount", parsedEvents.Count);
         int liveVisible = OptionalInt32(value, "liveDebugVisibleTraceEventCount", parsedEvents.Count);
         if (liveTotal < 0 || liveVisible < 0 || liveVisible > liveTotal) {
@@ -912,7 +961,9 @@ public static class BridgeSnapshotParser
             OptionalBoundedString(value, "liveDebugDiagnostic",
                                   "No native Motion Query live debug session is attached to this bridge frame."),
             replayComparison,
-            replayBaselines);
+            replayBaselines,
+            replayHistoryTruncated,
+            replayHistory);
     }
 
     private static BridgeVisualScriptingSnapshot ParseVisualScripting(JsonElement value)

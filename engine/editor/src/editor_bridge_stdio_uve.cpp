@@ -509,6 +509,17 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"entries", std::move(entries)}};
 }
 
+[[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeMotionQueryReplayComparisonHistoryEntryUVE& entry) {
+    return JsonUVE{{"sequence", entry.sequence},
+                   {"baselineName", entry.baselineName},
+                   {"registryGeneration", entry.registryGeneration},
+                   {"comparisonCode", entry.comparisonCode},
+                   {"comparedEventCount", entry.comparedEventCount},
+                   {"mismatchIndex", entry.mismatchIndex},
+                   {"mismatchFieldMask", entry.mismatchFieldMask},
+                   {"diagnosticSummary", entry.diagnosticSummary}};
+}
+
 [[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeMotionQueryReplayComparisonUVE& comparison) {
     return JsonUVE{{"available", comparison.available},
                    {"code", comparison.code},
@@ -537,7 +548,16 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"liveDebugTraceTruncated", snapshot.liveDebugTraceTruncated},
                    {"liveDebugDiagnostic", snapshot.liveDebugDiagnostic},
                    {"replayComparison", ToJsonUVE(snapshot.replayComparison)},
-                   {"replayBaselines", ToJsonUVE(snapshot.replayBaselines)}};
+                   {"replayBaselines", ToJsonUVE(snapshot.replayBaselines)},
+                   {"replayComparisonHistoryTruncated", snapshot.replayComparisonHistoryTruncated},
+                   {"replayComparisonHistory", [&snapshot] {
+                       JsonUVE history = JsonUVE::array();
+                       for (const EditorBridgeMotionQueryReplayComparisonHistoryEntryUVE& entry :
+                            snapshot.replayComparisonHistory) {
+                           history.push_back(ToJsonUVE(entry));
+                       }
+                       return history;
+                   }()}};
 }
 
 [[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeSnapshotUVE& snapshot) {

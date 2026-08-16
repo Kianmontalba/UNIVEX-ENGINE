@@ -321,6 +321,21 @@ public sealed class BridgeProtocolClientTests
                     },
                 },
             },
+            ["replayComparisonHistoryTruncated"] = false,
+            ["replayComparisonHistory"] = new JsonArray
+            {
+                new JsonObject
+                {
+                    ["sequence"] = 1UL,
+                    ["baselineName"] = "ci.fixture",
+                    ["registryGeneration"] = 2UL,
+                    ["comparisonCode"] = 0U,
+                    ["comparedEventCount"] = 1UL,
+                    ["mismatchIndex"] = 0UL,
+                    ["mismatchFieldMask"] = 0U,
+                    ["diagnosticSummary"] = "",
+                },
+            },
         };
         using JsonDocument document = JsonDocument.Parse(snapshot.ToJsonString());
         BridgeEditorSnapshot parsed = BridgeSnapshotParser.Parse(document.RootElement);
@@ -365,6 +380,12 @@ public sealed class BridgeProtocolClientTests
         Assert.Equal("ci.fixture", parsed.MotionQuery.ReplayBaselines.Entries[0].Name);
         Assert.Equal(9UL, parsed.MotionQuery.ReplayBaselines.Entries[0].SourceGeneration);
         Assert.Equal(1UL, parsed.MotionQuery.ReplayBaselines.Entries[0].EventCount);
+        Assert.False(parsed.MotionQuery.ReplayComparisonHistoryTruncated);
+        Assert.Single(parsed.MotionQuery.ReplayComparisonHistory);
+        Assert.Equal(1UL, parsed.MotionQuery.ReplayComparisonHistory[0].Sequence);
+        Assert.Equal("ci.fixture", parsed.MotionQuery.ReplayComparisonHistory[0].BaselineName);
+        Assert.Equal(2UL, parsed.MotionQuery.ReplayComparisonHistory[0].RegistryGeneration);
+        Assert.Equal(1UL, parsed.MotionQuery.ReplayComparisonHistory[0].ComparedEventCount);
     }
 
     [Fact]

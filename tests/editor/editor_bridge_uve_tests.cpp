@@ -483,6 +483,34 @@ TEST(EditorBridgeUVETest, SnapshotUVE_BoundsCopiedPanelRowsWithoutClaimingDeleti
     engine.Shutdown();
 }
 
+TEST(EditorBridgeUVETest, MotionQueryReplayHistoryUVE_IsBoundedAndSequenceOrdered) {
+    Core::EngineCoreUVE engine(MakeBridgeTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_bridge_replay_history.uvescene");
+        editor.InitUVE();
+        EditorBridgeUVE bridge(editor);
+        for (std::uint64_t sourceGeneration = 1U;
+             sourceGeneration <= kEditorBridgeMaximumMotionQueryReplayHistoryUVE + 2U;
+             ++sourceGeneration) {
+            Plugins::Editor::MotionQueryTraceReplayFixtureUVE fixture;
+            fixture.compatibility = Plugins::Editor::MotionQueryTraceReplayCompatibilityUVE{
+                1U, 2U, 3U, sourceGeneration};
+            bridge.SetMotionQueryReplayFixtureUVE(std::move(fixture));
+        }
+        const EditorBridgeSnapshotUVE snapshot = bridge.GetSnapshotUVE();
+        ASSERT_EQ(snapshot.motionQuery.replayComparisonHistory.size(),
+                  kEditorBridgeMaximumMotionQueryReplayHistoryUVE);
+        EXPECT_TRUE(snapshot.motionQuery.replayComparisonHistoryTruncated);
+        EXPECT_EQ(snapshot.motionQuery.replayComparisonHistory.front().sequence, 3U);
+        EXPECT_EQ(snapshot.motionQuery.replayComparisonHistory.back().sequence,
+                  kEditorBridgeMaximumMotionQueryReplayHistoryUVE + 2U);
+        editor.ShutdownUVE();
+    }
+    engine.Shutdown();
+}
+
 TEST(EditorBridgeUVETest, MotionQueryUVE_ExposesCopiedSnapshotAndRevisionGuardedNamedAuthoringCommand) {
     Core::EngineCoreUVE engine(MakeBridgeTestConfigUVE());
     engine.Init();
@@ -594,12 +622,16 @@ TEST(EditorBridgeUVETest, MotionQueryUVE_ExposesCopiedSnapshotAndRevisionGuarded
         loadReplayRequest.kind = EditorBridgeRequestKindUVE::LoadMotionQueryReplayBaseline;
         loadReplayRequest.motionQueryReplayBaselineName = "bridge-baseline";
         loadReplayRequest.motionQueryReplayFixturePayload = encodedFixture.payload;
+        const std::size_t historyBeforeLoad = bridge.GetSnapshotUVE().motionQuery.replayComparisonHistory.size();
         const EditorBridgeResponseUVE loadReplayResponse = bridge.DispatchUVE(loadReplayRequest);
         ASSERT_TRUE(loadReplayResponse.applied) << loadReplayResponse.message;
         EXPECT_EQ(loadReplayResponse.code, "bridge.motion_query.replay.baseline.loaded");
         EXPECT_TRUE(loadReplayResponse.snapshot.motionQuery.replayComparison.available);
         ASSERT_EQ(loadReplayResponse.snapshot.motionQuery.replayBaselines.entries.size(), 1U);
         EXPECT_EQ(loadReplayResponse.snapshot.motionQuery.replayBaselines.entries.front().name,
+                  "bridge-baseline");
+        ASSERT_EQ(loadReplayResponse.snapshot.motionQuery.replayComparisonHistory.size(), historyBeforeLoad + 1U);
+        EXPECT_EQ(loadReplayResponse.snapshot.motionQuery.replayComparisonHistory.back().baselineName,
                   "bridge-baseline");
 
         EditorBridgeRequestUVE staleClearRequest{};
@@ -618,6 +650,11 @@ TEST(EditorBridgeUVETest, MotionQueryUVE_ExposesCopiedSnapshotAndRevisionGuarded
         EXPECT_EQ(clearReplayResponse.code, "bridge.motion_query.replay.baseline.cleared");
         EXPECT_FALSE(clearReplayResponse.snapshot.motionQuery.replayComparison.available);
         EXPECT_TRUE(clearReplayResponse.snapshot.motionQuery.replayBaselines.entries.empty());
+        ASSERT_EQ(clearReplayResponse.snapshot.motionQuery.replayComparisonHistory.size(), historyBeforeLoad + 2U);
+        EXPECT_GT(clearReplayResponse.snapshot.motionQuery.replayComparisonHistory.back().sequence,
+                  loadReplayResponse.snapshot.motionQuery.replayComparisonHistory.back().sequence);
+        EXPECT_EQ(clearReplayResponse.snapshot.motionQuery.replayComparisonHistory.back().baselineName,
+                  "bridge-baseline");
 
         dispatchRequest.requestId = 502U;
         dispatchRequest.expectedRevision = initial.revision;

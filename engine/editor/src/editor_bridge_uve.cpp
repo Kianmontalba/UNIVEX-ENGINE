@@ -221,6 +221,7 @@ void EditorBridgeUVE::SetMotionQueryReplayFixtureUVE(
     if (m_lastObservedState.has_value()) {
         SynchronizeRevisionUVE();
     }
+    RecordMotionQueryReplayComparisonHistoryUVE();
 }
 
 void EditorBridgeUVE::ClearMotionQueryReplayFixtureUVE() {
@@ -232,6 +233,25 @@ void EditorBridgeUVE::ClearMotionQueryReplayFixtureUVE() {
     if (m_lastObservedState.has_value()) {
         SynchronizeRevisionUVE();
     }
+    RecordMotionQueryReplayComparisonHistoryUVE();
+}
+
+void EditorBridgeUVE::RecordMotionQueryReplayComparisonHistoryUVE(const std::string_view baselineNameOverride) {
+    const EditorBridgeMotionQuerySnapshotUVE snapshot = CaptureMotionQueryUVE();
+    const EditorBridgeMotionQueryReplayComparisonUVE& comparison = snapshot.replayComparison;
+    const std::string baselineName = baselineNameOverride.empty() && m_motionQueryActiveBaselineName.has_value()
+                                         ? *m_motionQueryActiveBaselineName
+                                         : std::string{baselineNameOverride};
+    if (m_motionQueryReplayComparisonHistory.size() >= kEditorBridgeMaximumMotionQueryReplayHistoryUVE) {
+        m_motionQueryReplayComparisonHistory.pop_front();
+        m_motionQueryReplayComparisonHistoryTruncated = true;
+    }
+    m_motionQueryReplayComparisonHistory.push_back(
+        EditorBridgeMotionQueryReplayComparisonHistoryEntryUVE{
+            m_nextMotionQueryReplayHistorySequence++, baselineName,
+            snapshot.replayBaselines.generation, comparison.comparisonCode,
+            comparison.comparedEventCount, comparison.mismatchIndex,
+            comparison.mismatchFieldMask, comparison.diagnosticSummary});
 }
 
 EditorBridgeSnapshotUVE EditorBridgeUVE::GetSnapshotUVE() {
@@ -849,6 +869,7 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
             code = "bridge.motion_query.replay.baseline.loaded";
             message = "The native replay baseline was validated, registered, and selected.";
             ++m_revision;
+            RecordMotionQueryReplayComparisonHistoryUVE();
             break;
         }
         case EditorBridgeRequestKindUVE::ClearMotionQueryReplayBaseline: {
@@ -859,8 +880,9 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
                 return MakeResponseUVE(request, false, "bridge.motion_query.replay.baseline.request.invalid",
                                        "ClearMotionQueryReplayBaseline requires a bounded baseline name.");
             }
+            const std::string clearedBaselineName = *request.motionQueryReplayBaselineName;
             const Plugins::Editor::MotionQueryTraceReplayBaselineResultUVE removed =
-                m_motionQueryReplayBaselineRegistry.RemoveUVE(*request.motionQueryReplayBaselineName);
+                m_motionQueryReplayBaselineRegistry.RemoveUVE(clearedBaselineName);
             if (!removed.IsAcceptedUVE()) {
                 return MakeResponseUVE(request, false, "bridge.motion_query.replay.baseline.rejected",
                                        removed.message);
@@ -873,6 +895,7 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
             code = "bridge.motion_query.replay.baseline.cleared";
             message = "The named native replay baseline was cleared.";
             ++m_revision;
+            RecordMotionQueryReplayComparisonHistoryUVE(clearedBaselineName);
             break;
         }
         case EditorBridgeRequestKindUVE::ReadMotionQuery:
@@ -1041,6 +1064,9 @@ EditorBridgeMotionQuerySnapshotUVE EditorBridgeUVE::CaptureMotionQueryUVE() cons
             EditorBridgeMotionQueryReplayBaselineEntryUVE{
                 entry.name, entry.sourceGeneration, entry.eventCount, entry.truncated});
     }
+    snapshot.replayComparisonHistoryTruncated = m_motionQueryReplayComparisonHistoryTruncated;
+    snapshot.replayComparisonHistory.assign(m_motionQueryReplayComparisonHistory.begin(),
+                                             m_motionQueryReplayComparisonHistory.end());
     if (m_motionQueryReplayFixture.has_value()) {
         const Plugins::Editor::MotionQueryTraceReplayRegressionResultUVE comparison =
             Plugins::Editor::CompareMotionQueryLiveDebugSnapshotAgainstFixtureUVE(
