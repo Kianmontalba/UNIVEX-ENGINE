@@ -78,6 +78,9 @@ public:
         return dimension_;
     }
 
+    [[nodiscard]] bool IsCompatibleWithSchemaUVE(
+        const UVE::Core::MotionQueryFeatureSchemaUVE& schema) const noexcept;
+
 private:
     static constexpr std::size_t kNoChildUVE = static_cast<std::size_t>(-1);
 
@@ -108,6 +111,7 @@ private:
     std::vector<NodeUVE> nodes_;
     std::size_t root_ = kNoChildUVE;
     std::size_t dimension_ = 0U;
+    std::uint32_t schemaVersion_ = 0U;
 };
 
 } // namespace UVE::Plugins

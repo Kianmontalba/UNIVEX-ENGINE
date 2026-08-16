@@ -26,6 +26,7 @@ enum class MotionQueryAnimationNodeCodeUVE : std::uint8_t {
     InvalidQuery,
     InvalidDatabase,
     InvalidSchema,
+    SchemaMismatch,
     IndexNotBuilt,
     SearchFailed,
     NoMatch,

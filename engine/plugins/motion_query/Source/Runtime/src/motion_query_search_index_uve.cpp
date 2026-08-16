@@ -69,7 +69,11 @@ MotionQuerySearchIndexResultUVE MotionQuerySearchIndexUVE::BuildUVE(
         }
         entries.push_back(MotionQuerySearchEntryUVE{index, std::move(feature)});
     }
-    return BuildFromEntriesUVE(entries);
+    MotionQuerySearchIndexResultUVE result = BuildFromEntriesUVE(entries);
+    if (result.IsAcceptedUVE()) {
+        schemaVersion_ = schema.version;
+    }
+    return result;
 }
 
 MotionQuerySearchIndexResultUVE MotionQuerySearchIndexUVE::BuildFromEntriesUVE(
@@ -231,11 +235,17 @@ void MotionQuerySearchIndexUVE::InsertRankedCandidateUVE(
     }
 }
 
+bool MotionQuerySearchIndexUVE::IsCompatibleWithSchemaUVE(
+    const UVE::Core::MotionQueryFeatureSchemaUVE& schema) const noexcept {
+    return IsBuiltUVE() && schemaVersion_ == schema.version && dimension_ == schema.channels.size();
+}
+
 void MotionQuerySearchIndexUVE::ClearUVE() noexcept {
     nodes_.clear();
     nodes_.shrink_to_fit();
     root_ = kNoChildUVE;
     dimension_ = 0U;
+    schemaVersion_ = 0U;
 }
 
 } // namespace UVE::Plugins

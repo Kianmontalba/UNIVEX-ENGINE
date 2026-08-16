@@ -6,6 +6,7 @@
 #include "uve/events/event_subscription_uve.h"
 #include "uve/events/i_event_system_uve.h"
 #include "uve/plugins/motion_query_asset_registry_cache_uve.h"
+#include "uve/plugins/motion_query_schema_compatibility_uve.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -47,6 +48,8 @@ enum class MotionQueryAssetIngestionCodeUVE : std::uint8_t {
     DuplicateRequest,
     RequestNotFound,
     CacheRejected,
+    SchemaVersionMismatch,
+    FeatureDimensionMismatch,
 };
 
 struct MotionQueryAssetIngestionResultUVE final {
@@ -78,6 +81,9 @@ public:
         Asset::ResourceHandleUVE source) noexcept;
     [[nodiscard]] MotionQueryAssetIngestionResultUVE SubmitDerivedDataUVE(
         MotionQueryDerivedDataUVE derivedData) noexcept;
+    [[nodiscard]] MotionQueryAssetIngestionResultUVE SubmitDerivedDataUVE(
+        MotionQueryDerivedDataUVE derivedData,
+        const UVE::Core::MotionQueryFeatureSchemaUVE& schema) noexcept;
     [[nodiscard]] MotionQueryAssetIngestionResultUVE MarkRebuiltUVE(
         Asset::ResourceHandleUVE source) noexcept;
     [[nodiscard]] std::vector<MotionQueryAssetIngestionEntryUVE> GetEntriesUVE() const;
@@ -85,6 +91,9 @@ public:
 private:
     void OnAssetReloadedUVE(const Asset::AssetReloadedEventUVE& event) noexcept;
     void OnAssetLoadCompletedUVE(const Asset::AssetLoadCompletedEventUVE& event) noexcept;
+    [[nodiscard]] MotionQueryAssetIngestionResultUVE SubmitDerivedDataInternalUVE(
+        MotionQueryDerivedDataUVE derivedData,
+        const UVE::Core::MotionQueryFeatureSchemaUVE* schema) noexcept;
     [[nodiscard]] static bool IsValidHandleUVE(Asset::ResourceHandleUVE handle) noexcept;
     [[nodiscard]] MotionQueryAssetIngestionEntryUVE* FindUVE(
         Asset::ResourceHandleUVE source) noexcept;
