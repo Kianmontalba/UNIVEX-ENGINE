@@ -107,6 +107,23 @@ MotionQueryTraceResultUVE MotionQueryTraceLoggerUVE::TogglePinUVE(const std::uin
                               found->pinned ? "motion query trace event pinned" : "motion query trace event unpinned");
 }
 
+MotionQueryTraceResultUVE MotionQueryTraceLoggerUVE::SetCommentUVE(
+    const std::uint64_t sequence, std::string comment) noexcept {
+    const auto found = std::find_if(snapshot_.events.begin(), snapshot_.events.end(),
+                                    [&](const auto& event) { return event.sequence == sequence; });
+    if (found == snapshot_.events.end()) {
+        return MakeTraceResultUVE(MotionQueryTraceCodeUVE::InvalidEvent, 0U,
+                                  "motion query trace event sequence not found");
+    }
+    if (comment.size() > kMotionQueryMaximumDebugMessageBytesUVE) {
+        comment.resize(kMotionQueryMaximumDebugMessageBytesUVE);
+    }
+    found->comment = std::move(comment);
+    ++snapshot_.generation;
+    return MakeTraceResultUVE(MotionQueryTraceCodeUVE::Accepted, 0U,
+                              "motion query trace event comment updated");
+}
+
 void MotionQueryTraceLoggerUVE::ClearUVE() noexcept {
     snapshot_.events.clear();
     snapshot_.truncated = false;

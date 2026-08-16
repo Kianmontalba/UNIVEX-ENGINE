@@ -898,6 +898,23 @@ public partial class MainWindow : Window
         }
     }
 
+    private void MotionQuerySetTraceEventCommentButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button button && button.DataContext is BridgeMotionQueryTraceEvent traceEvent &&
+            button.Parent is Grid grid && session?.LastSnapshot != null)
+        {
+            var textBox = grid.Children.OfType<TextBox>().FirstOrDefault();
+            string comment = textBox?.Text?.Trim() ?? string.Empty;
+            DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "dispatchMotionQueryDebugCommand")
+            {
+                MotionQueryDebugCommandKind = "setTraceEventComment",
+                MotionQueryDebugExpectedGeneration = session.LastSnapshot.MotionQuery.LiveDebugGeneration,
+                MotionQueryDebugEventSequence = traceEvent.Sequence,
+                MotionQueryDebugFilter = comment // Reusing filter field for comment
+            });
+        }
+    }
+
     private async void MotionQueryExportEvidenceButton_OnClick(object? sender, RoutedEventArgs e)
     {
         var result = await DispatchCommandAsync(new BridgeCommand(CurrentRevision(), "exportMotionQueryReplayEvidence")).ConfigureAwait(true);

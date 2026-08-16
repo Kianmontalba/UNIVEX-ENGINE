@@ -23,6 +23,7 @@ enum class MotionQueryLiveDebugCommandKindUVE : std::uint8_t {
     SelectEvent,
     RemoveEvent,
     ToggleTraceEventPin,
+    SetTraceEventComment,
 };
 
 struct MotionQueryLiveDebugCommandUVE final {

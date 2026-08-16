@@ -435,6 +435,10 @@
                                                         <Button Grid.Column="3" Content="Remove" Click="MotionQueryRemoveTraceEventButton_OnClick" Padding="4,2" FontSize="10" />
                                                     </Grid>
                                                     <TextBlock Text="{Binding Message}" FontSize="11" TextWrapping="Wrap" Opacity="0.85" />
+                                                    <Grid ColumnDefinitions="*,Auto" Margin="0,2,0,0">
+                                                        <TextBox Text="{Binding Comment, Mode=OneWay}" Watermark="Add comment" Padding="2" FontSize="10" x:Name="TraceEventCommentTextBox" />
+                                                        <Button Grid.Column="1" Content="Save" Click="MotionQuerySetTraceEventCommentButton_OnClick" Padding="4,2" FontSize="10" Margin="4,0,0,0" />
+                                                    </Grid>
                                                 </StackPanel>
                                             </DataTemplate>
                                         </ListBox.ItemTemplate>
