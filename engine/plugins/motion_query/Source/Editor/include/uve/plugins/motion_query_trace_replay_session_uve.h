@@ -56,6 +56,9 @@ public:
         std::string_view payload);
     [[nodiscard]] MotionQueryTraceReplaySessionResultUVE CompareUVE(
         const MotionQueryTraceSnapshotUVE& snapshot) const;
+    [[nodiscard]] MotionQueryTraceReplaySessionResultUVE CompareUVE(
+        const MotionQueryTraceSnapshotUVE& snapshot,
+        const MotionQueryTraceReplayCompatibilityUVE& compatibility) const;
     void ClearUVE() noexcept;
 
     [[nodiscard]] MotionQueryTraceReplaySessionSnapshotUVE GetSnapshotUVE() const noexcept;
