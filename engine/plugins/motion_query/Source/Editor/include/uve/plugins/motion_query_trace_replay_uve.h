@@ -14,6 +14,7 @@ namespace UVE::Plugins::Editor {
 inline constexpr std::uint32_t kMotionQueryTraceReplayFixtureSchemaVersionUVE = 1U;
 inline constexpr std::size_t kMotionQueryMaximumTraceReplayEventsUVE =
     kMotionQueryMaximumTraceEventsUVE;
+inline constexpr std::size_t kMotionQueryMaximumTraceReplayPayloadBytesUVE = 1024U * 1024U;
 inline constexpr std::size_t kMotionQueryTraceReplayNoMismatchIndexUVE =
     static_cast<std::size_t>(-1);
 
@@ -74,11 +75,50 @@ struct MotionQueryTraceReplayComparisonUVE final {
     }
 };
 
+enum class MotionQueryTraceReplaySerializationCodeUVE : std::uint8_t {
+    Accepted = 0,
+    EmptyPayload,
+    PayloadTooLarge,
+    ParseError,
+    SchemaMismatch,
+    InvalidFixture,
+};
+
+struct MotionQueryTraceReplaySerializationResultUVE final {
+    MotionQueryTraceReplaySerializationCodeUVE code =
+        MotionQueryTraceReplaySerializationCodeUVE::InvalidFixture;
+    std::string payload;
+    std::string message;
+
+    [[nodiscard]] bool IsAcceptedUVE() const noexcept {
+        return code == MotionQueryTraceReplaySerializationCodeUVE::Accepted;
+    }
+};
+
+struct MotionQueryTraceReplayDeserializationResultUVE final {
+    MotionQueryTraceReplaySerializationCodeUVE code =
+        MotionQueryTraceReplaySerializationCodeUVE::InvalidFixture;
+    std::optional<MotionQueryTraceReplayFixtureUVE> fixture;
+    std::string message;
+
+    [[nodiscard]] bool IsAcceptedUVE() const noexcept {
+        return code == MotionQueryTraceReplaySerializationCodeUVE::Accepted &&
+               fixture.has_value();
+    }
+};
+
 [[nodiscard]] MotionQueryTraceReplayFixtureUVE BuildMotionQueryTraceReplayFixtureUVE(
     const MotionQueryTraceSnapshotUVE& snapshot);
 
 [[nodiscard]] MotionQueryTraceReplayComparisonUVE CompareMotionQueryTraceReplayFixtureUVE(
     const MotionQueryTraceReplayFixtureUVE& fixture,
     const MotionQueryTraceSnapshotUVE& snapshot);
+
+[[nodiscard]] MotionQueryTraceReplaySerializationResultUVE
+SerializeMotionQueryTraceReplayFixtureUVE(
+    const MotionQueryTraceReplayFixtureUVE& fixture);
+
+[[nodiscard]] MotionQueryTraceReplayDeserializationResultUVE
+DeserializeMotionQueryTraceReplayFixtureUVE(std::string_view payload);
 
 } // namespace UVE::Plugins::Editor

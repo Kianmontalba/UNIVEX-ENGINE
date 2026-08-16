@@ -3,9 +3,14 @@
 
 #include <cmath>
 #include <string_view>
+#include <utility>
+
+#include <nlohmann/json.hpp>
 
 namespace UVE::Plugins::Editor {
 namespace {
+
+using JsonUVE = nlohmann::json;
 
 [[nodiscard]] MotionQueryTraceReplayEventUVE BuildReplayEventUVE(
     const MotionQueryTraceEventUVE& event) {
@@ -58,6 +63,71 @@ namespace {
     return true;
 }
 
+[[nodiscard]] bool IsValidReplayFixtureUVE(
+    const MotionQueryTraceReplayFixtureUVE& fixture) noexcept {
+    if (fixture.events.size() > kMotionQueryMaximumTraceReplayEventsUVE ||
+        !HasStrictlyIncreasingSequencesUVE(fixture.events) ||
+        !HasNonDecreasingFramesUVE(fixture.events)) {
+        return false;
+    }
+    for (const MotionQueryTraceReplayEventUVE& event : fixture.events) {
+        if (!IsValidReplayEventUVE(event)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+[[nodiscard]] JsonUVE ReplayEventToJsonUVE(const MotionQueryTraceReplayEventUVE& event) {
+    return JsonUVE{
+        {"sequence", event.sequence},
+        {"frameNumber", event.frameNumber},
+        {"kind", event.kind},
+        {"candidatesConsidered", event.candidatesConsidered},
+        {"candidatesEvaluated", event.candidatesEvaluated},
+        {"cost", event.cost},
+        {"selectedCandidateIndex", event.selectedCandidateIndex.has_value()
+                                       ? JsonUVE(*event.selectedCandidateIndex)
+                                       : JsonUVE(nullptr)},
+        {"qualityTier", event.qualityTier},
+        {"continuityCode", event.continuityCode},
+        {"continuityApplied", event.continuityApplied},
+        {"transitionCode", event.transitionCode},
+        {"transitionHeldPrevious", event.transitionHeldPrevious},
+        {"telemetryCode", event.telemetryCode},
+        {"telemetryIndexEntryCount", event.telemetryIndexEntryCount},
+        {"telemetryCandidatesConsidered", event.telemetryCandidatesConsidered},
+        {"telemetryBudgetSaturated", event.telemetryBudgetSaturated},
+        {"provenance", event.provenance},
+    };
+}
+
+[[nodiscard]] MotionQueryTraceReplayEventUVE ReplayEventFromJsonUVE(const JsonUVE& document) {
+    MotionQueryTraceReplayEventUVE event;
+    event.sequence = document.at("sequence").get<std::uint64_t>();
+    event.frameNumber = document.at("frameNumber").get<std::uint64_t>();
+    event.kind = document.at("kind").get<std::string>();
+    event.candidatesConsidered = document.at("candidatesConsidered").get<std::size_t>();
+    event.candidatesEvaluated = document.at("candidatesEvaluated").get<std::size_t>();
+    event.cost = document.at("cost").get<float>();
+    if (!document.at("selectedCandidateIndex").is_null()) {
+        event.selectedCandidateIndex =
+            document.at("selectedCandidateIndex").get<std::size_t>();
+    }
+    event.qualityTier = document.at("qualityTier").get<std::uint8_t>();
+    event.continuityCode = document.at("continuityCode").get<std::uint8_t>();
+    event.continuityApplied = document.at("continuityApplied").get<bool>();
+    event.transitionCode = document.at("transitionCode").get<std::uint8_t>();
+    event.transitionHeldPrevious = document.at("transitionHeldPrevious").get<bool>();
+    event.telemetryCode = document.at("telemetryCode").get<std::uint8_t>();
+    event.telemetryIndexEntryCount = document.at("telemetryIndexEntryCount").get<std::size_t>();
+    event.telemetryCandidatesConsidered =
+        document.at("telemetryCandidatesConsidered").get<std::size_t>();
+    event.telemetryBudgetSaturated = document.at("telemetryBudgetSaturated").get<bool>();
+    event.provenance = document.at("provenance").get<std::string>();
+    return event;
+}
+
 [[nodiscard]] MotionQueryTraceReplayComparisonUVE MakeComparisonUVE(
     const MotionQueryTraceReplayComparisonCodeUVE code,
     const std::size_t comparedEventCount,
@@ -73,6 +143,13 @@ namespace {
         snapshotTruncated,
         std::string(message),
     };
+}
+
+[[nodiscard]] MotionQueryTraceReplaySerializationResultUVE MakeSerializationResultUVE(
+    const MotionQueryTraceReplaySerializationCodeUVE code,
+    std::string payload,
+    const std::string_view message) {
+    return MotionQueryTraceReplaySerializationResultUVE{code, std::move(payload), std::string(message)};
 }
 
 } // namespace
@@ -102,19 +179,10 @@ MotionQueryTraceReplayComparisonUVE CompareMotionQueryTraceReplayFixtureUVE(
                                  kMotionQueryTraceReplayNoMismatchIndexUVE, fixture.truncated,
                                  snapshot.truncated, "motion query replay fixture schema is unsupported");
     }
-    if (fixture.events.size() > kMotionQueryMaximumTraceReplayEventsUVE ||
-        !HasStrictlyIncreasingSequencesUVE(fixture.events) ||
-        !HasNonDecreasingFramesUVE(fixture.events)) {
+    if (!IsValidReplayFixtureUVE(fixture)) {
         return MakeComparisonUVE(MotionQueryTraceReplayComparisonCodeUVE::InvalidFixture, 0U,
                                  kMotionQueryTraceReplayNoMismatchIndexUVE, fixture.truncated,
-                                 snapshot.truncated, "motion query replay fixture event retention is invalid");
-    }
-    for (const MotionQueryTraceReplayEventUVE& event : fixture.events) {
-        if (!IsValidReplayEventUVE(event)) {
-            return MakeComparisonUVE(MotionQueryTraceReplayComparisonCodeUVE::InvalidFixture, 0U,
-                                     kMotionQueryTraceReplayNoMismatchIndexUVE, fixture.truncated,
-                                     snapshot.truncated, "motion query replay fixture event is invalid");
-        }
+                                 snapshot.truncated, "motion query replay fixture is invalid");
     }
 
     const MotionQueryTraceReplayFixtureUVE actual =
@@ -139,6 +207,81 @@ MotionQueryTraceReplayComparisonUVE CompareMotionQueryTraceReplayFixtureUVE(
     return MakeComparisonUVE(MotionQueryTraceReplayComparisonCodeUVE::Match, fixture.events.size(),
                              kMotionQueryTraceReplayNoMismatchIndexUVE, fixture.truncated,
                              actual.truncated, "motion query replay fixture matches trace");
+}
+
+MotionQueryTraceReplaySerializationResultUVE SerializeMotionQueryTraceReplayFixtureUVE(
+    const MotionQueryTraceReplayFixtureUVE& fixture) {
+    if (fixture.schemaVersion != kMotionQueryTraceReplayFixtureSchemaVersionUVE) {
+        return MakeSerializationResultUVE(
+            MotionQueryTraceReplaySerializationCodeUVE::SchemaMismatch, {},
+            "motion query replay fixture schema is unsupported");
+    }
+    if (!IsValidReplayFixtureUVE(fixture)) {
+        return MakeSerializationResultUVE(
+            MotionQueryTraceReplaySerializationCodeUVE::InvalidFixture, {},
+            "motion query replay fixture is invalid");
+    }
+
+    const JsonUVE document{
+        {"schemaVersion", fixture.schemaVersion},
+        {"truncated", fixture.truncated},
+        {"events", [&fixture] {
+             JsonUVE events = JsonUVE::array();
+             for (const MotionQueryTraceReplayEventUVE& event : fixture.events) {
+                 events.push_back(ReplayEventToJsonUVE(event));
+             }
+             return events;
+         }()},
+    };
+    std::string payload = document.dump();
+    if (payload.size() > kMotionQueryMaximumTraceReplayPayloadBytesUVE) {
+        return MakeSerializationResultUVE(
+            MotionQueryTraceReplaySerializationCodeUVE::PayloadTooLarge, {},
+            "motion query replay fixture payload exceeds the bounded serialization limit");
+    }
+    return MakeSerializationResultUVE(MotionQueryTraceReplaySerializationCodeUVE::Accepted,
+                                      std::move(payload), "motion query replay fixture serialized");
+}
+
+MotionQueryTraceReplayDeserializationResultUVE DeserializeMotionQueryTraceReplayFixtureUVE(
+    const std::string_view payload) {
+    if (payload.empty()) {
+        return {MotionQueryTraceReplaySerializationCodeUVE::EmptyPayload, std::nullopt,
+                "motion query replay fixture payload is empty"};
+    }
+    if (payload.size() > kMotionQueryMaximumTraceReplayPayloadBytesUVE) {
+        return {MotionQueryTraceReplaySerializationCodeUVE::PayloadTooLarge, std::nullopt,
+                "motion query replay fixture payload exceeds the bounded serialization limit"};
+    }
+
+    try {
+        const JsonUVE document = JsonUVE::parse(payload);
+        MotionQueryTraceReplayFixtureUVE fixture;
+        fixture.schemaVersion = document.at("schemaVersion").get<std::uint32_t>();
+        if (fixture.schemaVersion != kMotionQueryTraceReplayFixtureSchemaVersionUVE) {
+            return {MotionQueryTraceReplaySerializationCodeUVE::SchemaMismatch, std::nullopt,
+                    "motion query replay fixture schema is unsupported"};
+        }
+        fixture.truncated = document.at("truncated").get<bool>();
+        const JsonUVE& events = document.at("events");
+        if (!events.is_array() || events.size() > kMotionQueryMaximumTraceReplayEventsUVE) {
+            return {MotionQueryTraceReplaySerializationCodeUVE::InvalidFixture, std::nullopt,
+                    "motion query replay fixture event retention is invalid"};
+        }
+        fixture.events.reserve(events.size());
+        for (const JsonUVE& event : events) {
+            fixture.events.push_back(ReplayEventFromJsonUVE(event));
+        }
+        if (!IsValidReplayFixtureUVE(fixture)) {
+            return {MotionQueryTraceReplaySerializationCodeUVE::InvalidFixture, std::nullopt,
+                    "motion query replay fixture event payload is invalid"};
+        }
+        return {MotionQueryTraceReplaySerializationCodeUVE::Accepted, std::move(fixture),
+                "motion query replay fixture deserialized"};
+    } catch (const nlohmann::json::exception&) {
+        return {MotionQueryTraceReplaySerializationCodeUVE::ParseError, std::nullopt,
+                "motion query replay fixture payload could not be parsed"};
+    }
 }
 
 } // namespace UVE::Plugins::Editor

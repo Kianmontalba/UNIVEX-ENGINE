@@ -33,11 +33,14 @@ MotionQueryTraceSnapshotUVE MakeSnapshotUVE() {
     return snapshot;
 }
 
+MotionQueryTraceReplayFixtureUVE MakeFixtureUVE() {
+    return BuildMotionQueryTraceReplayFixtureUVE(MakeSnapshotUVE());
+}
+
 } // namespace
 
 TEST(MotionQueryTraceReplayUVETest, BuildUVE_CopiesDeterministicFieldsAndRedactsRuntimeIdentity) {
-    const MotionQueryTraceReplayFixtureUVE fixture =
-        BuildMotionQueryTraceReplayFixtureUVE(MakeSnapshotUVE());
+    const MotionQueryTraceReplayFixtureUVE fixture = MakeFixtureUVE();
 
     ASSERT_EQ(fixture.schemaVersion, kMotionQueryTraceReplayFixtureSchemaVersionUVE);
     ASSERT_FALSE(fixture.truncated);
@@ -80,8 +83,7 @@ TEST(MotionQueryTraceReplayUVETest, CompareUVE_MatchesIdenticalTraceAndIgnoresRe
 }
 
 TEST(MotionQueryTraceReplayUVETest, CompareUVE_ReportsFirstDeterministicEventMismatch) {
-    const MotionQueryTraceReplayFixtureUVE fixture =
-        BuildMotionQueryTraceReplayFixtureUVE(MakeSnapshotUVE());
+    const MotionQueryTraceReplayFixtureUVE fixture = MakeFixtureUVE();
     MotionQueryTraceSnapshotUVE changed = MakeSnapshotUVE();
     changed.events.front().telemetryCandidatesConsidered = 3U;
 
@@ -124,17 +126,72 @@ TEST(MotionQueryTraceReplayUVETest, CompareUVE_RetainsBoundedTraceAndReportsTrun
 }
 
 TEST(MotionQueryTraceReplayUVETest, CompareUVE_RejectsUnsupportedSchemaAndInvalidEventPayload) {
-    MotionQueryTraceReplayFixtureUVE unsupported =
-        BuildMotionQueryTraceReplayFixtureUVE(MakeSnapshotUVE());
+    MotionQueryTraceReplayFixtureUVE unsupported = MakeFixtureUVE();
     unsupported.schemaVersion = kMotionQueryTraceReplayFixtureSchemaVersionUVE + 1U;
     EXPECT_EQ(CompareMotionQueryTraceReplayFixtureUVE(unsupported, MakeSnapshotUVE()).code,
               MotionQueryTraceReplayComparisonCodeUVE::SchemaMismatch);
 
-    MotionQueryTraceReplayFixtureUVE invalid =
-        BuildMotionQueryTraceReplayFixtureUVE(MakeSnapshotUVE());
+    MotionQueryTraceReplayFixtureUVE invalid = MakeFixtureUVE();
     invalid.events.front().sequence = 0U;
     EXPECT_EQ(CompareMotionQueryTraceReplayFixtureUVE(invalid, MakeSnapshotUVE()).code,
               MotionQueryTraceReplayComparisonCodeUVE::InvalidFixture);
+}
+
+TEST(MotionQueryTraceReplayUVETest, SerializationUVE_RoundTripsCanonicalValueOnlyPayload) {
+    const MotionQueryTraceReplayFixtureUVE fixture = MakeFixtureUVE();
+    const MotionQueryTraceReplaySerializationResultUVE encoded =
+        SerializeMotionQueryTraceReplayFixtureUVE(fixture);
+    ASSERT_TRUE(encoded.IsAcceptedUVE());
+    EXPECT_EQ(encoded.code, MotionQueryTraceReplaySerializationCodeUVE::Accepted);
+    EXPECT_EQ(encoded.payload.find("timestampNanoseconds"), std::string::npos);
+    EXPECT_EQ(encoded.payload.find("database"), std::string::npos);
+    EXPECT_EQ(encoded.payload.find("machine-specific diagnostic text"), std::string::npos);
+
+    const MotionQueryTraceReplayDeserializationResultUVE decoded =
+        DeserializeMotionQueryTraceReplayFixtureUVE(encoded.payload);
+    ASSERT_TRUE(decoded.IsAcceptedUVE());
+    ASSERT_TRUE(decoded.fixture.has_value());
+    EXPECT_EQ(*decoded.fixture, fixture);
+
+    const MotionQueryTraceReplaySerializationResultUVE reencoded =
+        SerializeMotionQueryTraceReplayFixtureUVE(*decoded.fixture);
+    ASSERT_TRUE(reencoded.IsAcceptedUVE());
+    EXPECT_EQ(reencoded.payload, encoded.payload);
+}
+
+TEST(MotionQueryTraceReplayUVETest, SerializationUVE_RejectsEmptyMalformedSchemaAndInvalidPayloads) {
+    EXPECT_EQ(DeserializeMotionQueryTraceReplayFixtureUVE("").code,
+              MotionQueryTraceReplaySerializationCodeUVE::EmptyPayload);
+    EXPECT_EQ(DeserializeMotionQueryTraceReplayFixtureUVE("not-json").code,
+              MotionQueryTraceReplaySerializationCodeUVE::ParseError);
+
+    const MotionQueryTraceReplaySerializationResultUVE encoded =
+        SerializeMotionQueryTraceReplayFixtureUVE(MakeFixtureUVE());
+    ASSERT_TRUE(encoded.IsAcceptedUVE());
+    const std::string unsupported =
+        "{\"schemaVersion\":2,\"truncated\":false,\"events\":[]}";
+    EXPECT_EQ(DeserializeMotionQueryTraceReplayFixtureUVE(unsupported).code,
+              MotionQueryTraceReplaySerializationCodeUVE::SchemaMismatch);
+
+    MotionQueryTraceReplayFixtureUVE unsupportedFixture = MakeFixtureUVE();
+    unsupportedFixture.schemaVersion = kMotionQueryTraceReplayFixtureSchemaVersionUVE + 1U;
+    EXPECT_EQ(SerializeMotionQueryTraceReplayFixtureUVE(unsupportedFixture).code,
+              MotionQueryTraceReplaySerializationCodeUVE::SchemaMismatch);
+
+    MotionQueryTraceReplayFixtureUVE invalid = MakeFixtureUVE();
+    invalid.events.front().candidatesEvaluated = invalid.events.front().candidatesConsidered + 1U;
+    EXPECT_EQ(SerializeMotionQueryTraceReplayFixtureUVE(invalid).code,
+              MotionQueryTraceReplaySerializationCodeUVE::InvalidFixture);
+}
+
+TEST(MotionQueryTraceReplayUVETest, SerializationUVE_EnforcesBoundedPayloadSize) {
+    MotionQueryTraceReplayFixtureUVE oversized = MakeFixtureUVE();
+    oversized.events.front().provenance.assign(kMotionQueryMaximumDebugMessageBytesUVE, 'x');
+    EXPECT_TRUE(SerializeMotionQueryTraceReplayFixtureUVE(oversized).IsAcceptedUVE());
+
+    std::string payload(kMotionQueryMaximumTraceReplayPayloadBytesUVE + 1U, 'x');
+    EXPECT_EQ(DeserializeMotionQueryTraceReplayFixtureUVE(payload).code,
+              MotionQueryTraceReplaySerializationCodeUVE::PayloadTooLarge);
 }
 
 } // namespace UVE::Plugins::Editor
