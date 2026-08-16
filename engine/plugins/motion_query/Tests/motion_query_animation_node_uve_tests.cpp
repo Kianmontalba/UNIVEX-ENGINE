@@ -156,6 +156,36 @@ TEST(MotionQueryAnimationNodeUVETest, EvaluateFromHistoryUVE_UsesAtOrBeforeFrame
               MotionQueryAnimationNodeCodeUVE::InvalidEvaluationTime);
 }
 
+TEST(MotionQueryAnimationNodeUVETest, EvaluateFromHistoryUVE_AppliesBoundedContinuityFromPreviousFrame) {
+    const UVE::Core::MotionMatchingDatabaseUVE database = MakeDatabaseUVE();
+    const UVE::Core::MotionQueryFeatureSchemaUVE schema = MakeSchemaUVE();
+    MotionQuerySearchIndexUVE index;
+    ASSERT_TRUE(index.BuildUVE(database, schema).IsAcceptedUVE());
+    UVE::Core::MotionQueryHistoryBufferUVE history;
+    UVE::Core::MotionQueryHistoryFrameUVE previous;
+    previous.sample.timeSeconds = 0.5;
+    previous.sample.pose.position = UVE::Math::Vector3UVE{0.0F, 0.0F, 0.0F};
+    previous.sample.pose.rotation.w = 1.0F;
+    previous.query.rootVelocity = UVE::Math::Vector3UVE{1.0F, 0.0F, 0.0F};
+    previous.query.facingDirection = UVE::Math::Vector3UVE{0.0F, 0.0F, 1.0F};
+    ASSERT_TRUE(history.AppendFrameUVE(previous).IsAcceptedUVE());
+    UVE::Core::MotionQueryHistoryFrameUVE current = previous;
+    current.sample.timeSeconds = 1.0;
+    ASSERT_TRUE(history.AppendFrameUVE(current).IsAcceptedUVE());
+    MotionQueryAnimationNodeSettingsUVE settings;
+    settings.continuity.policy = MotionQueryContinuityPolicyUVE::BlendPreviousWithinWindow;
+    settings.continuity.maximumPreviousAgeSeconds = 1.1;
+    const MotionQueryAnimationNodeResultUVE result =
+        EvaluateMotionQueryAnimationNodeFromHistoryUVE(history, 1.5, database, schema, index,
+                                                       MakeClipsUVE(), settings);
+    ASSERT_TRUE(result.IsAcceptedUVE()) << result.message;
+    EXPECT_EQ(result.continuityCode, MotionQueryContinuityCodeUVE::Applied);
+    EXPECT_TRUE(result.continuityApplied);
+    EXPECT_DOUBLE_EQ(result.continuityPreviousAgeSeconds, 1.0);
+    EXPECT_NEAR(result.pose.position.x, 0.75F, 1.0e-5F);
+    EXPECT_EQ(result.pose.rotation, (UVE::Math::QuaternionUVE{}));
+}
+
 TEST(MotionQueryAnimationNodeUVETest, EvaluateUVE_RejectsInvalidSettingsAndUnbuiltIndex) {
     const UVE::Core::MotionMatchingDatabaseUVE database = MakeDatabaseUVE();
     const UVE::Core::MotionQueryFeatureSchemaUVE schema = MakeSchemaUVE();

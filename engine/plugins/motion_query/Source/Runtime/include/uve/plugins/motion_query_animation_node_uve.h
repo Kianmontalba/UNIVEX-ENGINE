@@ -7,6 +7,7 @@
 #include "uve/core/motion_query_uve.h"
 #include "uve/plugins/motion_query_search_index_uve.h"
 #include "uve/plugins/motion_query_lod_uve.h"
+#include "uve/plugins/motion_query_continuity_uve.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -19,6 +20,7 @@ struct MotionQueryAnimationNodeSettingsUVE final {
     UVE::Core::MotionMatchingWeightsUVE weights;
     std::size_t maximumSearchResults = 32U;
     MotionQueryQualityTierUVE qualityTier = MotionQueryQualityTierUVE::Full;
+    MotionQueryContinuitySettingsUVE continuity;
     bool looping = true;
 };
 
@@ -29,6 +31,7 @@ enum class MotionQueryAnimationNodeCodeUVE : std::uint8_t {
     InvalidDatabase,
     InvalidSchema,
     SchemaMismatch,
+    ContinuityFailed,
     IndexNotBuilt,
     SearchFailed,
     NoMatch,
@@ -47,6 +50,9 @@ struct MotionQueryAnimationNodeResultUVE final {
     std::size_t effectiveSearchResults = 0U;
     MotionQueryQualityTierUVE qualityTier = MotionQueryQualityTierUVE::Full;
     bool searchBudgetDowngraded = false;
+    MotionQueryContinuityCodeUVE continuityCode = MotionQueryContinuityCodeUVE::Disabled;
+    double continuityPreviousAgeSeconds = 0.0;
+    bool continuityApplied = false;
     float cost = 0.0F;
     double sampleTimeSeconds = 0.0;
     std::string sourceClipId;
@@ -78,6 +84,19 @@ public:
     const MotionQuerySearchIndexUVE& searchIndex,
     const std::vector<UVE::Core::AnimationClipUVE>& clips,
     MotionQueryAnimationNodeSettingsUVE settings,
+    IMotionQueryAnimationDebugSinkUVE* debugSink = nullptr,
+    std::uint64_t timestampNanoseconds = 0U,
+    std::uint64_t frameNumber = 0U) noexcept;
+
+[[nodiscard]] MotionQueryAnimationNodeResultUVE EvaluateMotionQueryAnimationNodeWithContinuityUVE(
+    const UVE::Core::MotionQueryUVE& query,
+    const UVE::Core::MotionMatchingDatabaseUVE& database,
+    const UVE::Core::MotionQueryFeatureSchemaUVE& schema,
+    const MotionQuerySearchIndexUVE& searchIndex,
+    const std::vector<UVE::Core::AnimationClipUVE>& clips,
+    MotionQueryAnimationNodeSettingsUVE settings,
+    const UVE::Core::PoseSampleUVE* previousSample,
+    double continuityTimeSeconds = -1.0,
     IMotionQueryAnimationDebugSinkUVE* debugSink = nullptr,
     std::uint64_t timestampNanoseconds = 0U,
     std::uint64_t frameNumber = 0U) noexcept;

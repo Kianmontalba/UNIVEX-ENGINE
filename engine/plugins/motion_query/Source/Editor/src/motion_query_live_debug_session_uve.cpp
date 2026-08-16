@@ -182,6 +182,7 @@ const char* MotionQueryLiveDebugSessionUVE::ResultKindUVE(
         case UVE::Plugins::MotionQueryAnimationNodeCodeUVE::InvalidDatabase: return "invalid_database";
         case UVE::Plugins::MotionQueryAnimationNodeCodeUVE::InvalidSchema: return "invalid_schema";
         case UVE::Plugins::MotionQueryAnimationNodeCodeUVE::SchemaMismatch: return "schema_mismatch";
+        case UVE::Plugins::MotionQueryAnimationNodeCodeUVE::ContinuityFailed: return "continuity_failed";
         case UVE::Plugins::MotionQueryAnimationNodeCodeUVE::IndexNotBuilt: return "index_not_built";
         case UVE::Plugins::MotionQueryAnimationNodeCodeUVE::SearchFailed: return "search_failed";
         case UVE::Plugins::MotionQueryAnimationNodeCodeUVE::NoMatch: return "no_match";
