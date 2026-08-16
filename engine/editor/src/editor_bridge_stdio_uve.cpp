@@ -444,6 +444,12 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"selectedCost", snapshot.selectedCost},
                    {"selectedCandidateId", snapshot.selectedCandidateId},
                    {"selectedSourceClipId", snapshot.selectedSourceClipId},
+                   {"qualityTier", snapshot.qualityTier},
+                   {"continuityCode", snapshot.continuityCode},
+                   {"continuityApplied", snapshot.continuityApplied},
+                   {"transitionCode", snapshot.transitionCode},
+                   {"transitionHeldPrevious", snapshot.transitionHeldPrevious},
+                   {"provenance", snapshot.provenance},
                    {"message", snapshot.message}};
 }
 
@@ -456,6 +462,15 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"candidatesConsidered", event.candidatesConsidered},
                    {"candidatesEvaluated", event.candidatesEvaluated},
                    {"cost", event.cost},
+                   {"selectedCandidateIndex", event.selectedCandidateIndex.has_value()
+                                                    ? JsonUVE(*event.selectedCandidateIndex)
+                                                    : JsonUVE(nullptr)},
+                   {"qualityTier", event.qualityTier},
+                   {"continuityCode", event.continuityCode},
+                   {"continuityApplied", event.continuityApplied},
+                   {"transitionCode", event.transitionCode},
+                   {"transitionHeldPrevious", event.transitionHeldPrevious},
+                   {"provenance", event.provenance},
                    {"message", event.message}};
 }
 

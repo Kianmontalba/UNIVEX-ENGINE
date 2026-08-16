@@ -920,6 +920,12 @@ EditorBridgeMotionQuerySnapshotUVE EditorBridgeUVE::CaptureMotionQueryUVE() cons
     snapshot.debugger.selectedCost = debugger.selectedCost;
     snapshot.debugger.selectedCandidateId = debugger.selectedCandidateId;
     snapshot.debugger.selectedSourceClipId = debugger.selectedSourceClipId;
+    snapshot.debugger.qualityTier = debugger.qualityTier;
+    snapshot.debugger.continuityCode = debugger.continuityCode;
+    snapshot.debugger.continuityApplied = debugger.continuityApplied;
+    snapshot.debugger.transitionCode = debugger.transitionCode;
+    snapshot.debugger.transitionHeldPrevious = debugger.transitionHeldPrevious;
+    snapshot.debugger.provenance = debugger.provenance;
     snapshot.debugger.message = debugger.message;
     snapshot.trace.generation = trace.generation;
     snapshot.trace.truncated = trace.truncated || trace.events.size() > kEditorBridgeMaximumPanelEntriesUVE;

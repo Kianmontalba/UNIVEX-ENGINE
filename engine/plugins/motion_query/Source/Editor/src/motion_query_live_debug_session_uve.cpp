@@ -104,7 +104,7 @@ void MotionQueryLiveDebugSessionUVE::PublishUVE(
     }
     if (result.IsAcceptedUVE() || result.code == UVE::Plugins::MotionQueryAnimationNodeCodeUVE::MissingClip ||
         result.code == UVE::Plugins::MotionQueryAnimationNodeCodeUVE::PoseSamplingFailed) {
-        debugger_.PublishMatchUVE(result.candidateIndex, result.candidatesEvaluated, result.cost, result.message);
+        debugger_.PublishMatchUVE(result);
     }
     MotionQueryTraceEventUVE event;
     event.timestampNanoseconds = timestampNanoseconds;
@@ -114,6 +114,17 @@ void MotionQueryLiveDebugSessionUVE::PublishUVE(
     event.candidatesConsidered = result.candidatesEvaluated;
     event.candidatesEvaluated = result.candidatesEvaluated;
     event.cost = std::isfinite(result.cost) && result.cost >= 0.0F ? result.cost : 0.0F;
+    if (result.IsAcceptedUVE() || result.code == UVE::Plugins::MotionQueryAnimationNodeCodeUVE::MissingClip ||
+        result.code == UVE::Plugins::MotionQueryAnimationNodeCodeUVE::PoseSamplingFailed) {
+        event.selectedCandidateIndex = result.candidateIndex;
+    }
+    event.qualityTier = static_cast<std::uint8_t>(result.qualityTier);
+    event.continuityCode = static_cast<std::uint8_t>(result.continuityCode);
+    event.continuityApplied = result.continuityApplied;
+    event.transitionCode = static_cast<std::uint8_t>(result.transitionCode);
+    event.transitionHeldPrevious = result.transitionHeldPrevious;
+    event.provenance = result.transitionHeldPrevious ? "history_hold" :
+                       result.continuityApplied ? "continuity_applied" : "runtime_search";
     event.message = result.message;
     static_cast<void>(trace_.RecordUVE(std::move(event)));
 }

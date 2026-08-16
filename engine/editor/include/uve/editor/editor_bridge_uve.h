@@ -391,6 +391,12 @@ struct EditorBridgeMotionQueryDebuggerSnapshotUVE final {
     float selectedCost = 0.0F;
     std::string selectedCandidateId;
     std::string selectedSourceClipId;
+    std::uint8_t qualityTier = 0U;
+    std::uint8_t continuityCode = 0U;
+    bool continuityApplied = false;
+    std::uint8_t transitionCode = 0U;
+    bool transitionHeldPrevious = false;
+    std::string provenance;
     std::string message;
 
     [[nodiscard]] bool operator==(const EditorBridgeMotionQueryDebuggerSnapshotUVE&) const = default;

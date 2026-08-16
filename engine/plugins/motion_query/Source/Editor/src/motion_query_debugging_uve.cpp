@@ -1,5 +1,6 @@
 // Copyright (c) 2026 UniVex Studios. All Rights Reserved.
 #include "uve/plugins/motion_query_debugging_uve.h"
+#include "uve/plugins/motion_query_animation_node_uve.h"
 
 #include <algorithm>
 #include <cmath>
@@ -118,6 +119,21 @@ void MotionQueryDebuggerUVE::PublishMatchUVE(
         snapshot_.message.resize(kMotionQueryMaximumDebugMessageBytesUVE);
     }
     ++snapshot_.generation;
+}
+
+void MotionQueryDebuggerUVE::PublishMatchUVE(
+    const UVE::Plugins::MotionQueryAnimationNodeResultUVE& result) noexcept {
+    PublishMatchUVE(result.candidateIndex, result.candidatesEvaluated, result.cost, result.message);
+    if (!snapshot_.attached || !snapshot_.selectedCandidateIndex.has_value()) {
+        return;
+    }
+    snapshot_.qualityTier = static_cast<std::uint8_t>(result.qualityTier);
+    snapshot_.continuityCode = static_cast<std::uint8_t>(result.continuityCode);
+    snapshot_.continuityApplied = result.continuityApplied;
+    snapshot_.transitionCode = static_cast<std::uint8_t>(result.transitionCode);
+    snapshot_.transitionHeldPrevious = result.transitionHeldPrevious;
+    snapshot_.provenance = result.transitionHeldPrevious ? "history_hold" :
+                           result.continuityApplied ? "continuity_applied" : "runtime_search";
 }
 
 UVE::Core::DiagnosticCaptureResultUVE MotionQueryTraceProfilerAdapterUVE::RecordMatchUVE(

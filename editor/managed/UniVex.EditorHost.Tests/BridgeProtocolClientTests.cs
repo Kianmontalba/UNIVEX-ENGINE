@@ -242,6 +242,12 @@ public sealed class BridgeProtocolClientTests
                 ["selectedCost"] = 0.5F,
                 ["selectedCandidateId"] = "candidate",
                 ["selectedSourceClipId"] = "walk",
+                ["qualityTier"] = 2,
+                ["continuityCode"] = 1,
+                ["continuityApplied"] = true,
+                ["transitionCode"] = 2,
+                ["transitionHeldPrevious"] = false,
+                ["provenance"] = "continuity_applied",
                 ["message"] = "matched",
             },
             ["trace"] = new JsonObject
@@ -260,6 +266,13 @@ public sealed class BridgeProtocolClientTests
                         ["candidatesConsidered"] = 1,
                         ["candidatesEvaluated"] = 1,
                         ["cost"] = 0.5F,
+                        ["selectedCandidateIndex"] = 0UL,
+                        ["qualityTier"] = 2,
+                        ["continuityCode"] = 1,
+                        ["continuityApplied"] = true,
+                        ["transitionCode"] = 2,
+                        ["transitionHeldPrevious"] = false,
+                        ["provenance"] = "continuity_applied",
                         ["message"] = "matched",
                     },
                 },
@@ -280,8 +293,17 @@ public sealed class BridgeProtocolClientTests
         Assert.Equal("Bridge DB", parsed.MotionQuery.Authoring.Databases[0].DisplayName);
         Assert.True(parsed.MotionQuery.Debugger.IsAttached);
         Assert.Equal("candidate", parsed.MotionQuery.Debugger.SelectedCandidateId);
+        Assert.Equal((byte)2, parsed.MotionQuery.Debugger.QualityTier);
+        Assert.Equal((byte)1, parsed.MotionQuery.Debugger.ContinuityCode);
+        Assert.True(parsed.MotionQuery.Debugger.ContinuityApplied);
+        Assert.Equal((byte)2, parsed.MotionQuery.Debugger.TransitionCode);
+        Assert.Equal("continuity_applied", parsed.MotionQuery.Debugger.Provenance);
         Assert.Equal(1, parsed.MotionQuery.Trace.Events.Count);
         Assert.Equal("match", parsed.MotionQuery.Trace.Events[0].Kind);
+        Assert.Equal(0UL, parsed.MotionQuery.Trace.Events[0].SelectedCandidateIndex);
+        Assert.Equal((byte)2, parsed.MotionQuery.Trace.Events[0].QualityTier);
+        Assert.True(parsed.MotionQuery.Trace.Events[0].ContinuityApplied);
+        Assert.Equal("continuity_applied", parsed.MotionQuery.Trace.Events[0].Provenance);
         Assert.True(parsed.MotionQuery.LiveDebugActive);
         Assert.Equal(4UL, parsed.MotionQuery.LiveDebugGeneration);
         Assert.Equal(77UL, parsed.MotionQuery.LiveDebugDatabase!.Guid);
