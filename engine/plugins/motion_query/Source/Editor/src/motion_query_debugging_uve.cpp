@@ -132,6 +132,10 @@ void MotionQueryDebuggerUVE::PublishMatchUVE(
     snapshot_.continuityApplied = result.continuityApplied;
     snapshot_.transitionCode = static_cast<std::uint8_t>(result.transitionCode);
     snapshot_.transitionHeldPrevious = result.transitionHeldPrevious;
+    snapshot_.telemetryCode = static_cast<std::uint8_t>(result.telemetryCode);
+    snapshot_.telemetryIndexEntryCount = result.telemetryIndexEntryCount;
+    snapshot_.telemetryCandidatesConsidered = result.telemetryCandidatesConsidered;
+    snapshot_.telemetryBudgetSaturated = result.telemetryBudgetSaturated;
     snapshot_.provenance = result.transitionHeldPrevious ? "history_hold" :
                            result.continuityApplied ? "continuity_applied" : "runtime_search";
 }

@@ -123,6 +123,10 @@ public sealed record BridgeMotionQueryDebuggerSnapshot(
     bool ContinuityApplied,
     byte TransitionCode,
     bool TransitionHeldPrevious,
+    byte TelemetryCode,
+    ulong TelemetryIndexEntryCount,
+    ulong TelemetryCandidatesConsidered,
+    bool TelemetryBudgetSaturated,
     string Provenance,
     string Message);
 
@@ -141,6 +145,10 @@ public sealed record BridgeMotionQueryTraceEvent(
     bool ContinuityApplied,
     byte TransitionCode,
     bool TransitionHeldPrevious,
+    byte TelemetryCode,
+    ulong TelemetryIndexEntryCount,
+    ulong TelemetryCandidatesConsidered,
+    bool TelemetryBudgetSaturated,
     string Provenance,
     string Message);
 
@@ -666,7 +674,7 @@ public static class BridgeSnapshotParser
         new(new BridgeMotionQueryAuthoringSnapshot(0UL, null, Array.Empty<BridgeMotionQueryDatabaseRow>(),
                 "No native Motion Query authoring session is attached to this bridge frame."),
             new BridgeMotionQueryDebuggerSnapshot(false, 0UL, null, null, 0, 0, 0F, string.Empty, string.Empty,
-                0, 0, false, 0, false, string.Empty,
+                0, 0, false, 0, false, 0, 0UL, 0UL, false, string.Empty,
                 "No native Motion Query debugger snapshot is attached to this bridge frame."),
             new BridgeMotionQueryTraceSnapshot(0UL, false, Array.Empty<BridgeMotionQueryTraceEvent>()),
             false, 0UL, null, string.Empty, 0, 0, false,
@@ -744,6 +752,10 @@ public static class BridgeSnapshotParser
             OptionalByte(debugger, "qualityTier", 0), OptionalByte(debugger, "continuityCode", 0),
             OptionalBoolean(debugger, "continuityApplied", false), OptionalByte(debugger, "transitionCode", 0),
             OptionalBoolean(debugger, "transitionHeldPrevious", false),
+            OptionalByte(debugger, "telemetryCode", 0),
+            OptionalUInt64(debugger, "telemetryIndexEntryCount", 0UL),
+            OptionalUInt64(debugger, "telemetryCandidatesConsidered", 0UL),
+            OptionalBoolean(debugger, "telemetryBudgetSaturated", false),
             OptionalBoundedString(debugger, "provenance", string.Empty),
             RequiredBoundedString(debugger, "message"));
 
@@ -775,7 +787,10 @@ public static class BridgeSnapshotParser
             byte qualityTier = OptionalByte(eventValue, "qualityTier", 0);
             byte continuityCode = OptionalByte(eventValue, "continuityCode", 0);
             byte transitionCode = OptionalByte(eventValue, "transitionCode", 0);
-            if (qualityTier > 2U || continuityCode > 5U || transitionCode > 5U)
+            byte telemetryCode = OptionalByte(eventValue, "telemetryCode", 0);
+            ulong telemetryIndexEntryCount = OptionalUInt64(eventValue, "telemetryIndexEntryCount", 0UL);
+            ulong telemetryCandidatesConsidered = OptionalUInt64(eventValue, "telemetryCandidatesConsidered", 0UL);
+            if (qualityTier > 2U || continuityCode > 5U || transitionCode > 5U || telemetryCode > 1U)
             {
                 throw Invalid("Motion Query trace decision provenance contains an unsupported code.");
             }
@@ -784,7 +799,9 @@ public static class BridgeSnapshotParser
                 ParseNullableMotionQueryResource(eventValue.GetProperty("database"), "motion-query trace database"),
                 considered, evaluated, cost, selectedCandidateIndex, qualityTier, continuityCode,
                 OptionalBoolean(eventValue, "continuityApplied", false), transitionCode,
-                OptionalBoolean(eventValue, "transitionHeldPrevious", false),
+                OptionalBoolean(eventValue, "transitionHeldPrevious", false), telemetryCode,
+                telemetryIndexEntryCount, telemetryCandidatesConsidered,
+                OptionalBoolean(eventValue, "telemetryBudgetSaturated", false),
                 OptionalBoundedString(eventValue, "provenance", string.Empty),
                 RequiredBoundedString(eventValue, "message")));
         }
@@ -1511,6 +1528,9 @@ public static class BridgeSnapshotParser
 
     private static uint OptionalUInt32(JsonElement value, string name, uint fallback) =>
         value.TryGetProperty(name, out JsonElement result) ? result.GetUInt32() : fallback;
+
+    private static ulong OptionalUInt64(JsonElement value, string name, ulong fallback) =>
+        value.TryGetProperty(name, out JsonElement result) ? result.GetUInt64() : fallback;
 
     private static ulong? OptionalNullableUInt64(JsonElement value, string name) =>
         !value.TryGetProperty(name, out JsonElement result) || result.ValueKind == JsonValueKind.Null

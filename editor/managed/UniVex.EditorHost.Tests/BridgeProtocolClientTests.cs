@@ -247,6 +247,10 @@ public sealed class BridgeProtocolClientTests
                 ["continuityApplied"] = true,
                 ["transitionCode"] = 2,
                 ["transitionHeldPrevious"] = false,
+                ["telemetryCode"] = 0,
+                ["telemetryIndexEntryCount"] = 32UL,
+                ["telemetryCandidatesConsidered"] = 1UL,
+                ["telemetryBudgetSaturated"] = false,
                 ["provenance"] = "continuity_applied",
                 ["message"] = "matched",
             },
@@ -272,6 +276,10 @@ public sealed class BridgeProtocolClientTests
                         ["continuityApplied"] = true,
                         ["transitionCode"] = 2,
                         ["transitionHeldPrevious"] = false,
+                        ["telemetryCode"] = 0,
+                        ["telemetryIndexEntryCount"] = 32UL,
+                        ["telemetryCandidatesConsidered"] = 1UL,
+                        ["telemetryBudgetSaturated"] = false,
                         ["provenance"] = "continuity_applied",
                         ["message"] = "matched",
                     },
@@ -298,12 +306,19 @@ public sealed class BridgeProtocolClientTests
         Assert.True(parsed.MotionQuery.Debugger.ContinuityApplied);
         Assert.Equal((byte)2, parsed.MotionQuery.Debugger.TransitionCode);
         Assert.Equal("continuity_applied", parsed.MotionQuery.Debugger.Provenance);
+        Assert.Equal((byte)0, parsed.MotionQuery.Debugger.TelemetryCode);
+        Assert.Equal(32UL, parsed.MotionQuery.Debugger.TelemetryIndexEntryCount);
+        Assert.Equal(1UL, parsed.MotionQuery.Debugger.TelemetryCandidatesConsidered);
+        Assert.False(parsed.MotionQuery.Debugger.TelemetryBudgetSaturated);
         Assert.Equal(1, parsed.MotionQuery.Trace.Events.Count);
         Assert.Equal("match", parsed.MotionQuery.Trace.Events[0].Kind);
         Assert.Equal(0UL, parsed.MotionQuery.Trace.Events[0].SelectedCandidateIndex);
         Assert.Equal((byte)2, parsed.MotionQuery.Trace.Events[0].QualityTier);
         Assert.True(parsed.MotionQuery.Trace.Events[0].ContinuityApplied);
         Assert.Equal("continuity_applied", parsed.MotionQuery.Trace.Events[0].Provenance);
+        Assert.Equal((byte)0, parsed.MotionQuery.Trace.Events[0].TelemetryCode);
+        Assert.Equal(32UL, parsed.MotionQuery.Trace.Events[0].TelemetryIndexEntryCount);
+        Assert.False(parsed.MotionQuery.Trace.Events[0].TelemetryBudgetSaturated);
         Assert.True(parsed.MotionQuery.LiveDebugActive);
         Assert.Equal(4UL, parsed.MotionQuery.LiveDebugGeneration);
         Assert.Equal(77UL, parsed.MotionQuery.LiveDebugDatabase!.Guid);

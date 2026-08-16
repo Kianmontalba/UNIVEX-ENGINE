@@ -86,6 +86,10 @@ TEST(MotionQueryDebuggingUVETest, DebuggerUVE_PublishesCopiedSelectedCandidateFa
     provenanceResult.continuityApplied = true;
     provenanceResult.transitionCode = UVE::Plugins::MotionQueryTransitionCodeUVE::HeldPreviousCandidate;
     provenanceResult.transitionHeldPrevious = true;
+    provenanceResult.telemetryCode = UVE::Plugins::MotionQueryRuntimeTelemetryCodeUVE::Accepted;
+    provenanceResult.telemetryIndexEntryCount = 64U;
+    provenanceResult.telemetryCandidatesConsidered = 1U;
+    provenanceResult.telemetryBudgetSaturated = true;
     provenanceResult.message = "held previous candidate";
     debugger.PublishMatchUVE(provenanceResult);
     const MotionQueryDebuggerSnapshotUVE provenance = debugger.GetSnapshotUVE();
@@ -94,6 +98,10 @@ TEST(MotionQueryDebuggingUVETest, DebuggerUVE_PublishesCopiedSelectedCandidateFa
     EXPECT_TRUE(provenance.continuityApplied);
     EXPECT_EQ(provenance.transitionCode, 3U);
     EXPECT_TRUE(provenance.transitionHeldPrevious);
+    EXPECT_EQ(provenance.telemetryCode, 0U);
+    EXPECT_EQ(provenance.telemetryIndexEntryCount, 64U);
+    EXPECT_EQ(provenance.telemetryCandidatesConsidered, 1U);
+    EXPECT_TRUE(provenance.telemetryBudgetSaturated);
     EXPECT_EQ(provenance.provenance, "history_hold");
 
     debugger.PublishMatchUVE(4U, 1U, 0.5F, "invalid");
@@ -131,6 +139,10 @@ TEST(MotionQueryDebuggingUVETest, LiveDebugSessionUVE_AttachesFiltersPublishesAn
     result.continuityCode = UVE::Plugins::MotionQueryContinuityCodeUVE::Applied;
     result.continuityApplied = true;
     result.transitionCode = UVE::Plugins::MotionQueryTransitionCodeUVE::SwitchedCandidate;
+    result.telemetryCode = UVE::Plugins::MotionQueryRuntimeTelemetryCodeUVE::Accepted;
+    result.telemetryIndexEntryCount = 2U;
+    result.telemetryCandidatesConsidered = 1U;
+    result.telemetryBudgetSaturated = false;
     result.sourceClipId = "walk";
     result.message = "accepted live match";
     session.PublishUVE(result, 100U, 4U);
@@ -142,6 +154,10 @@ TEST(MotionQueryDebuggingUVETest, LiveDebugSessionUVE_AttachesFiltersPublishesAn
     EXPECT_EQ(published.traceEvents.front().continuityCode, 1U);
     EXPECT_TRUE(published.traceEvents.front().continuityApplied);
     EXPECT_EQ(published.traceEvents.front().transitionCode, 2U);
+    EXPECT_EQ(published.traceEvents.front().telemetryCode, 0U);
+    EXPECT_EQ(published.traceEvents.front().telemetryIndexEntryCount, 2U);
+    EXPECT_EQ(published.traceEvents.front().telemetryCandidatesConsidered, 1U);
+    EXPECT_FALSE(published.traceEvents.front().telemetryBudgetSaturated);
     EXPECT_EQ(published.traceEvents.front().provenance, "continuity_applied");
     EXPECT_EQ(published.debugger.selectedCandidateId, "candidate-0");
     EXPECT_EQ(published.debugger.provenance, "continuity_applied");
