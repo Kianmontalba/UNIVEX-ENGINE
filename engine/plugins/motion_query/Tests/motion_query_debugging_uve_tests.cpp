@@ -76,6 +76,26 @@ TEST(MotionQueryDebuggingUVETest, DebuggerUVE_PublishesCopiedSelectedCandidateFa
     EXPECT_EQ(snapshot.selectedSourceClipId, "walk");
     EXPECT_EQ(snapshot.candidatesEvaluated, 1U);
 
+    UVE::Plugins::MotionQueryAnimationNodeResultUVE provenanceResult;
+    provenanceResult.code = UVE::Plugins::MotionQueryAnimationNodeCodeUVE::Accepted;
+    provenanceResult.candidateIndex = 0U;
+    provenanceResult.candidatesEvaluated = 1U;
+    provenanceResult.cost = 0.25F;
+    provenanceResult.qualityTier = UVE::Plugins::MotionQueryQualityTierUVE::Reduced;
+    provenanceResult.continuityCode = UVE::Plugins::MotionQueryContinuityCodeUVE::Applied;
+    provenanceResult.continuityApplied = true;
+    provenanceResult.transitionCode = UVE::Plugins::MotionQueryTransitionCodeUVE::HeldPreviousCandidate;
+    provenanceResult.transitionHeldPrevious = true;
+    provenanceResult.message = "held previous candidate";
+    debugger.PublishMatchUVE(provenanceResult);
+    const MotionQueryDebuggerSnapshotUVE provenance = debugger.GetSnapshotUVE();
+    EXPECT_EQ(provenance.qualityTier, 1U);
+    EXPECT_EQ(provenance.continuityCode, 1U);
+    EXPECT_TRUE(provenance.continuityApplied);
+    EXPECT_EQ(provenance.transitionCode, 3U);
+    EXPECT_TRUE(provenance.transitionHeldPrevious);
+    EXPECT_EQ(provenance.provenance, "history_hold");
+
     debugger.PublishMatchUVE(4U, 1U, 0.5F, "invalid");
     EXPECT_EQ(debugger.GetSnapshotUVE().selectedCandidateId, "candidate-0");
 }
@@ -107,13 +127,24 @@ TEST(MotionQueryDebuggingUVETest, LiveDebugSessionUVE_AttachesFiltersPublishesAn
     result.candidateIndex = 0U;
     result.candidatesEvaluated = 1U;
     result.cost = 0.25F;
+    result.qualityTier = UVE::Plugins::MotionQueryQualityTierUVE::Minimal;
+    result.continuityCode = UVE::Plugins::MotionQueryContinuityCodeUVE::Applied;
+    result.continuityApplied = true;
+    result.transitionCode = UVE::Plugins::MotionQueryTransitionCodeUVE::SwitchedCandidate;
     result.sourceClipId = "walk";
     result.message = "accepted live match";
     session.PublishUVE(result, 100U, 4U);
     const MotionQueryLiveDebugSnapshotUVE published = session.GetSnapshotUVE();
     ASSERT_EQ(published.traceEvents.size(), 1U);
     EXPECT_EQ(published.traceEvents.front().kind, "accepted");
+    EXPECT_EQ(published.traceEvents.front().selectedCandidateIndex, std::optional<std::size_t>{0U});
+    EXPECT_EQ(published.traceEvents.front().qualityTier, 2U);
+    EXPECT_EQ(published.traceEvents.front().continuityCode, 1U);
+    EXPECT_TRUE(published.traceEvents.front().continuityApplied);
+    EXPECT_EQ(published.traceEvents.front().transitionCode, 2U);
+    EXPECT_EQ(published.traceEvents.front().provenance, "continuity_applied");
     EXPECT_EQ(published.debugger.selectedCandidateId, "candidate-0");
+    EXPECT_EQ(published.debugger.provenance, "continuity_applied");
 
     MotionQueryLiveDebugCommandUVE filter = attach;
     filter.requestId = 3U;

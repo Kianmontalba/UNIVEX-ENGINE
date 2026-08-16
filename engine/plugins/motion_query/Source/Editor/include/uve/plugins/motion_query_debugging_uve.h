@@ -13,6 +13,10 @@
 #include <string_view>
 #include <vector>
 
+namespace UVE::Plugins {
+struct MotionQueryAnimationNodeResultUVE;
+}
+
 namespace UVE::Plugins::Editor {
 
 inline constexpr std::size_t kMotionQueryMaximumTraceEventsUVE = 512U;
@@ -27,6 +31,13 @@ struct MotionQueryTraceEventUVE final {
     std::size_t candidatesConsidered = 0U;
     std::size_t candidatesEvaluated = 0U;
     float cost = 0.0F;
+    std::optional<std::size_t> selectedCandidateIndex;
+    std::uint8_t qualityTier = 0U;
+    std::uint8_t continuityCode = 0U;
+    bool continuityApplied = false;
+    std::uint8_t transitionCode = 0U;
+    bool transitionHeldPrevious = false;
+    std::string provenance;
     std::string message;
 
     [[nodiscard]] bool operator==(const MotionQueryTraceEventUVE&) const = default;
@@ -83,6 +94,12 @@ struct MotionQueryDebuggerSnapshotUVE final {
     float selectedCost = 0.0F;
     std::string selectedCandidateId;
     std::string selectedSourceClipId;
+    std::uint8_t qualityTier = 0U;
+    std::uint8_t continuityCode = 0U;
+    bool continuityApplied = false;
+    std::uint8_t transitionCode = 0U;
+    bool transitionHeldPrevious = false;
+    std::string provenance;
     std::string message;
 
     [[nodiscard]] bool operator==(const MotionQueryDebuggerSnapshotUVE&) const = default;
@@ -95,6 +112,7 @@ public:
     void DetachUVE() noexcept;
     void PublishMatchUVE(std::size_t candidateIndex, std::size_t candidatesEvaluated,
                          float cost, std::string_view message) noexcept;
+    void PublishMatchUVE(const UVE::Plugins::MotionQueryAnimationNodeResultUVE& result) noexcept;
 
     [[nodiscard]] MotionQueryDebuggerSnapshotUVE GetSnapshotUVE() const noexcept {
         return snapshot_;

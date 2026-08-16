@@ -118,6 +118,12 @@ public sealed record BridgeMotionQueryDebuggerSnapshot(
     float SelectedCost,
     string SelectedCandidateId,
     string SelectedSourceClipId,
+    byte QualityTier,
+    byte ContinuityCode,
+    bool ContinuityApplied,
+    byte TransitionCode,
+    bool TransitionHeldPrevious,
+    string Provenance,
     string Message);
 
 public sealed record BridgeMotionQueryTraceEvent(
@@ -129,6 +135,13 @@ public sealed record BridgeMotionQueryTraceEvent(
     int CandidatesConsidered,
     int CandidatesEvaluated,
     float Cost,
+    ulong? SelectedCandidateIndex,
+    byte QualityTier,
+    byte ContinuityCode,
+    bool ContinuityApplied,
+    byte TransitionCode,
+    bool TransitionHeldPrevious,
+    string Provenance,
     string Message);
 
 public sealed record BridgeMotionQueryTraceSnapshot(
@@ -653,6 +666,7 @@ public static class BridgeSnapshotParser
         new(new BridgeMotionQueryAuthoringSnapshot(0UL, null, Array.Empty<BridgeMotionQueryDatabaseRow>(),
                 "No native Motion Query authoring session is attached to this bridge frame."),
             new BridgeMotionQueryDebuggerSnapshot(false, 0UL, null, null, 0, 0, 0F, string.Empty, string.Empty,
+                0, 0, false, 0, false, string.Empty,
                 "No native Motion Query debugger snapshot is attached to this bridge frame."),
             new BridgeMotionQueryTraceSnapshot(0UL, false, Array.Empty<BridgeMotionQueryTraceEvent>()),
             false, 0UL, null, string.Empty, 0, 0, false,
@@ -714,12 +728,24 @@ public static class BridgeSnapshotParser
         JsonElement selectedIndexValue = debugger.GetProperty("selectedCandidateIndex");
         ulong? selectedIndex = selectedIndexValue.ValueKind == JsonValueKind.Null
             ? null : selectedIndexValue.GetUInt64();
+        byte debuggerQualityTier = OptionalByte(debugger, "qualityTier", 0);
+        byte debuggerContinuityCode = OptionalByte(debugger, "continuityCode", 0);
+        byte debuggerTransitionCode = OptionalByte(debugger, "transitionCode", 0);
+        if (debuggerQualityTier > 2U || debuggerContinuityCode > 5U || debuggerTransitionCode > 5U)
+        {
+            throw Invalid("Motion Query debugger decision provenance contains an unsupported code.");
+        }
         BridgeMotionQueryDebuggerSnapshot parsedDebugger = new(
             RequiredBoolean(debugger, "attached"), RequiredUInt64(debugger, "generation"),
             ParseNullableMotionQueryResource(debugger.GetProperty("database"), "motion-query debugger database"),
             selectedIndex, candidateCountDebugger, candidatesEvaluated, selectedCost,
             RequiredBoundedString(debugger, "selectedCandidateId"),
-            RequiredBoundedString(debugger, "selectedSourceClipId"), RequiredBoundedString(debugger, "message"));
+            RequiredBoundedString(debugger, "selectedSourceClipId"),
+            OptionalByte(debugger, "qualityTier", 0), OptionalByte(debugger, "continuityCode", 0),
+            OptionalBoolean(debugger, "continuityApplied", false), OptionalByte(debugger, "transitionCode", 0),
+            OptionalBoolean(debugger, "transitionHeldPrevious", false),
+            OptionalBoundedString(debugger, "provenance", string.Empty),
+            RequiredBoundedString(debugger, "message"));
 
         JsonElement trace = RequiredObjectMember(value, "trace");
         JsonElement events = RequiredArray(trace, "events");
@@ -745,10 +771,22 @@ public static class BridgeSnapshotParser
             previousSequence = sequence;
             previousTimestamp = timestamp;
             previousFrame = frame;
+            ulong? selectedCandidateIndex = OptionalNullableUInt64(eventValue, "selectedCandidateIndex");
+            byte qualityTier = OptionalByte(eventValue, "qualityTier", 0);
+            byte continuityCode = OptionalByte(eventValue, "continuityCode", 0);
+            byte transitionCode = OptionalByte(eventValue, "transitionCode", 0);
+            if (qualityTier > 2U || continuityCode > 5U || transitionCode > 5U)
+            {
+                throw Invalid("Motion Query trace decision provenance contains an unsupported code.");
+            }
             parsedEvents.Add(new BridgeMotionQueryTraceEvent(
                 sequence, timestamp, frame, RequiredBoundedString(eventValue, "kind"),
                 ParseNullableMotionQueryResource(eventValue.GetProperty("database"), "motion-query trace database"),
-                considered, evaluated, cost, RequiredBoundedString(eventValue, "message")));
+                considered, evaluated, cost, selectedCandidateIndex, qualityTier, continuityCode,
+                OptionalBoolean(eventValue, "continuityApplied", false), transitionCode,
+                OptionalBoolean(eventValue, "transitionHeldPrevious", false),
+                OptionalBoundedString(eventValue, "provenance", string.Empty),
+                RequiredBoundedString(eventValue, "message")));
         }
         int liveTotal = OptionalInt32(value, "liveDebugTotalTraceEventCount", parsedEvents.Count);
         int liveVisible = OptionalInt32(value, "liveDebugVisibleTraceEventCount", parsedEvents.Count);
@@ -1473,6 +1511,11 @@ public static class BridgeSnapshotParser
 
     private static uint OptionalUInt32(JsonElement value, string name, uint fallback) =>
         value.TryGetProperty(name, out JsonElement result) ? result.GetUInt32() : fallback;
+
+    private static ulong? OptionalNullableUInt64(JsonElement value, string name) =>
+        !value.TryGetProperty(name, out JsonElement result) || result.ValueKind == JsonValueKind.Null
+            ? null
+            : result.GetUInt64();
 
     private static bool OptionalBoolean(JsonElement value, string name, bool fallback) =>
         value.TryGetProperty(name, out JsonElement result) ? result.GetBoolean() : fallback;
