@@ -510,6 +510,28 @@ struct EditorBridgeMotionQueryReplayBatchSnapshotUVE final {
     [[nodiscard]] bool operator==(const EditorBridgeMotionQueryReplayBatchSnapshotUVE&) const = default;
 };
 
+struct EditorBridgeMotionQueryReplayBatchHistoryEntryUVE final {
+    std::uint64_t sequence = 0U;
+    std::uint64_t registryGeneration = 0U;
+    std::uint8_t code = 0U;
+    std::size_t evaluatedBaselineCount = 0U;
+    std::size_t matchCount = 0U;
+    std::size_t mismatchCount = 0U;
+    std::string message;
+
+    [[nodiscard]] bool operator==(const EditorBridgeMotionQueryReplayBatchHistoryEntryUVE&) const = default;
+};
+
+struct EditorBridgeMotionQueryReplaySessionFactsUVE final {
+    std::size_t totalIndividualComparisons = 0U;
+    std::size_t totalBatchRuns = 0U;
+    std::size_t totalBaselinesEvaluated = 0U;
+    std::size_t totalMatchesFound = 0U;
+    std::size_t totalMismatchesFound = 0U;
+
+    [[nodiscard]] bool operator==(const EditorBridgeMotionQueryReplaySessionFactsUVE&) const = default;
+};
+
 struct EditorBridgeMotionQuerySnapshotUVE final {
     EditorBridgeMotionQueryAuthoringSnapshotUVE authoring;
     EditorBridgeMotionQueryDebuggerSnapshotUVE debugger;
@@ -528,6 +550,9 @@ struct EditorBridgeMotionQuerySnapshotUVE final {
     std::vector<EditorBridgeMotionQueryReplayComparisonHistoryEntryUVE> replayComparisonHistory;
     EditorBridgeMotionQueryReplayWorkflowStatusUVE replayWorkflow;
     EditorBridgeMotionQueryReplayBatchSnapshotUVE replayBatch;
+    bool replayBatchHistoryTruncated = false;
+    std::vector<EditorBridgeMotionQueryReplayBatchHistoryEntryUVE> replayBatchHistory;
+    EditorBridgeMotionQueryReplaySessionFactsUVE replaySessionFacts;
 
     [[nodiscard]] bool operator==(const EditorBridgeMotionQuerySnapshotUVE&) const = default;
 };
@@ -692,6 +717,7 @@ private:
     [[nodiscard]] EditorBridgeDataTablePreviewSnapshotUVE CaptureDataTablePreviewUVE() const;
     [[nodiscard]] EditorBridgeMotionQuerySnapshotUVE CaptureMotionQueryUVE() const;
     void RecordMotionQueryReplayComparisonHistoryUVE(std::string_view baselineNameOverride = {});
+    void RecordMotionQueryReplayBatchHistoryUVE(const EditorBridgeMotionQueryReplayBatchSnapshotUVE& batch);
     [[nodiscard]] EditorBridgeHierarchySnapshotUVE CaptureHierarchyUVE();
     [[nodiscard]] EditorBridgeInspectorSnapshotUVE CaptureInspectorUVE() const;
     [[nodiscard]] EditorBridgeContentBrowserSnapshotUVE CaptureContentBrowserUVE();
@@ -718,6 +744,10 @@ private:
     std::deque<EditorBridgeMotionQueryReplayComparisonHistoryEntryUVE> m_motionQueryReplayComparisonHistory;
     bool m_motionQueryReplayComparisonHistoryTruncated = false;
     std::uint64_t m_nextMotionQueryReplayHistorySequence = 1U;
+    std::deque<EditorBridgeMotionQueryReplayBatchHistoryEntryUVE> m_motionQueryReplayBatchHistory;
+    bool m_motionQueryReplayBatchHistoryTruncated = false;
+    std::uint64_t m_nextMotionQueryReplayBatchSequence = 1U;
+    EditorBridgeMotionQueryReplaySessionFactsUVE m_motionQueryReplaySessionFacts{};
     Plugins::Editor::MotionQueryEditorAuthoringSessionUVE m_motionQueryAuthoring;
     Plugins::Editor::MotionQueryLiveDebugSessionUVE m_motionQueryLiveDebugSession;
     std::optional<Plugins::Editor::MotionQueryTraceReplayFixtureUVE> m_motionQueryReplayFixture;

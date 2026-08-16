@@ -545,6 +545,24 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"diagnostic", status.diagnostic}};
 }
 
+[[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeMotionQueryReplayBatchHistoryEntryUVE& entry) {
+    return JsonUVE{{"sequence", entry.sequence},
+                   {"registryGeneration", entry.registryGeneration},
+                   {"code", entry.code},
+                   {"evaluatedBaselineCount", entry.evaluatedBaselineCount},
+                   {"matchCount", entry.matchCount},
+                   {"mismatchCount", entry.mismatchCount},
+                   {"message", entry.message}};
+}
+
+[[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeMotionQueryReplaySessionFactsUVE& facts) {
+    return JsonUVE{{"totalIndividualComparisons", facts.totalIndividualComparisons},
+                   {"totalBatchRuns", facts.totalBatchRuns},
+                   {"totalBaselinesEvaluated", facts.totalBaselinesEvaluated},
+                   {"totalMatchesFound", facts.totalMatchesFound},
+                   {"totalMismatchesFound", facts.totalMismatchesFound}};
+}
+
 [[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeMotionQueryReplayComparisonHistoryEntryUVE& entry) {
     return JsonUVE{{"sequence", entry.sequence},
                    {"baselineName", entry.baselineName},
@@ -597,7 +615,17 @@ enum class FrameReadResultUVE : std::uint8_t {
                        return history;
                    }()},
                    {"replayWorkflow", ToJsonUVE(snapshot.replayWorkflow)},
-                   {"replayBatch", ToJsonUVE(snapshot.replayBatch)}};
+                   {"replayBatch", ToJsonUVE(snapshot.replayBatch)},
+                   {"replayBatchHistoryTruncated", snapshot.replayBatchHistoryTruncated},
+                   {"replayBatchHistory", [&snapshot] {
+                       JsonUVE history = JsonUVE::array();
+                       for (const EditorBridgeMotionQueryReplayBatchHistoryEntryUVE& entry :
+                            snapshot.replayBatchHistory) {
+                           history.push_back(ToJsonUVE(entry));
+                       }
+                       return history;
+                   }()},
+                   {"replaySessionFacts", ToJsonUVE(snapshot.replaySessionFacts)}};
 }
 
 [[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeSnapshotUVE& snapshot) {

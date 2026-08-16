@@ -644,11 +644,16 @@ TEST(EditorBridgeUVETest, MotionQueryUVE_ExposesCopiedSnapshotAndRevisionGuarded
         batchRequest.requestId = 507U;
         batchRequest.expectedRevision = loadReplayResponse.snapshot.revision;
         batchRequest.kind = EditorBridgeRequestKindUVE::RunMotionQueryReplayBaselineBatch;
+        const std::size_t batchHistoryBefore = loadReplayResponse.snapshot.motionQuery.replayBatchHistory.size();
+        const std::size_t batchRunsBefore = loadReplayResponse.snapshot.motionQuery.replaySessionFacts.totalBatchRuns;
         const EditorBridgeResponseUVE batchResponse = bridge.DispatchUVE(batchRequest);
         EXPECT_FALSE(batchResponse.applied);
         EXPECT_EQ(batchResponse.code, "bridge.motion_query.replay.baseline.batch.read");
         EXPECT_EQ(batchResponse.snapshot.revision, loadReplayResponse.snapshot.revision);
         EXPECT_EQ(batchResponse.snapshot.motionQuery.replayBatch.evaluatedBaselineCount, 1U);
+        ASSERT_EQ(batchResponse.snapshot.motionQuery.replayBatchHistory.size(), batchHistoryBefore + 1U);
+        EXPECT_EQ(batchResponse.snapshot.motionQuery.replayBatchHistory.back().evaluatedBaselineCount, 1U);
+        EXPECT_EQ(batchResponse.snapshot.motionQuery.replaySessionFacts.totalBatchRuns, batchRunsBefore + 1U);
         ASSERT_EQ(loadReplayResponse.snapshot.motionQuery.replayComparisonHistory.size(), historyBeforeLoad + 1U);
         EXPECT_EQ(loadReplayResponse.snapshot.motionQuery.replayComparisonHistory.back().baselineName,
                   "bridge-baseline");
