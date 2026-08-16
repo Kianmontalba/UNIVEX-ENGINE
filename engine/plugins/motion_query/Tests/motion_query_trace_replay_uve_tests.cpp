@@ -89,6 +89,8 @@ TEST(MotionQueryTraceReplayUVETest, CompareUVE_MatchesIdenticalTraceAndIgnoresRe
 TEST(MotionQueryTraceReplayUVETest, CompareUVE_ReportsFirstDeterministicEventMismatch) {
     const MotionQueryTraceReplayFixtureUVE fixture = MakeFixtureUVE();
     MotionQueryTraceSnapshotUVE changed = MakeSnapshotUVE();
+    changed.events.front().kind = "different_kind";
+    changed.events.front().cost = 2.0F;
     changed.events.front().telemetryCandidatesConsidered = 3U;
 
     const MotionQueryTraceReplayComparisonUVE comparison =
@@ -98,6 +100,12 @@ TEST(MotionQueryTraceReplayUVETest, CompareUVE_ReportsFirstDeterministicEventMis
     EXPECT_EQ(comparison.comparedEventCount, 0U);
     EXPECT_EQ(comparison.mismatchIndex, 0U);
     EXPECT_FALSE(comparison.IsTruncatedUVE());
+    const std::uint32_t expectedMask =
+        static_cast<std::uint32_t>(MotionQueryTraceReplayMismatchFieldUVE::Kind) |
+        static_cast<std::uint32_t>(MotionQueryTraceReplayMismatchFieldUVE::Cost) |
+        static_cast<std::uint32_t>(MotionQueryTraceReplayMismatchFieldUVE::TelemetryCandidatesConsidered);
+    EXPECT_EQ(comparison.mismatchFieldMask, expectedMask);
+    EXPECT_EQ(comparison.diagnosticSummary, "kind,cost,telemetryCandidatesConsidered");
 }
 
 TEST(MotionQueryTraceReplayUVETest, CompareUVE_RetainsBoundedTraceAndReportsTruncationFacts) {

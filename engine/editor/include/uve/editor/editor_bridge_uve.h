@@ -428,7 +428,9 @@ struct EditorBridgeMotionQueryReplayComparisonUVE final {
     std::size_t mismatchIndex = 0U;
     bool fixtureTruncated = false;
     bool snapshotTruncated = false;
+    std::uint32_t mismatchFieldMask = 0U;
     std::string message;
+    std::string diagnosticSummary;
 
     [[nodiscard]] bool operator==(const EditorBridgeMotionQueryReplayComparisonUVE&) const = default;
 };

@@ -165,7 +165,9 @@ public sealed record BridgeMotionQueryReplayComparison(
     ulong MismatchIndex,
     bool FixtureTruncated,
     bool SnapshotTruncated,
-    string Message);
+    uint MismatchFieldMask,
+    string Message,
+    string DiagnosticSummary);
 
 public sealed record BridgeMotionQuerySnapshot(
     BridgeMotionQueryAuthoringSnapshot Authoring,
@@ -690,7 +692,8 @@ public static class BridgeSnapshotParser
             new BridgeMotionQueryTraceSnapshot(0UL, false, Array.Empty<BridgeMotionQueryTraceEvent>()),
             false, 0UL, null, string.Empty, 0, 0, false,
             "No native Motion Query live debug session is attached to this bridge frame.",
-            new BridgeMotionQueryReplayComparison(false, 0, 0, 0UL, 0UL, false, false, string.Empty));
+            new BridgeMotionQueryReplayComparison(false, 0, 0, 0UL, 0UL, false, false, 0U,
+                                                   string.Empty, string.Empty));
 
     private static BridgeMotionQueryResourceHandle ParseMotionQueryResource(JsonElement value, string context)
     {
@@ -818,7 +821,7 @@ public static class BridgeSnapshotParser
                 RequiredBoundedString(eventValue, "message")));
         }
         BridgeMotionQueryReplayComparison replayComparison = new(
-            false, 0, 0, 0UL, 0UL, false, false, string.Empty);
+            false, 0, 0, 0UL, 0UL, false, false, 0U, string.Empty, string.Empty);
         if (value.TryGetProperty("replayComparison", out JsonElement replayValue))
         {
             RequireObject(replayValue, "motion-query replay comparison");
@@ -835,7 +838,9 @@ public static class BridgeSnapshotParser
                 OptionalUInt64(replayValue, "mismatchIndex", 0UL),
                 OptionalBoolean(replayValue, "fixtureTruncated", false),
                 OptionalBoolean(replayValue, "snapshotTruncated", false),
-                OptionalBoundedString(replayValue, "message", string.Empty));
+                OptionalUInt32(replayValue, "mismatchFieldMask", 0U),
+                OptionalBoundedString(replayValue, "message", string.Empty),
+                OptionalBoundedString(replayValue, "diagnosticSummary", string.Empty));
         }
         int liveTotal = OptionalInt32(value, "liveDebugTotalTraceEventCount", parsedEvents.Count);
         int liveVisible = OptionalInt32(value, "liveDebugVisibleTraceEventCount", parsedEvents.Count);

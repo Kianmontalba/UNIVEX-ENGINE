@@ -194,6 +194,9 @@ TEST(EditorBridgeStdioUVETest, ServeUVE_HandshakesAndRoutesExistingBridgeDispatc
         EXPECT_FALSE(handshakeSnapshot.at("motionQuery").at("debugger").at("attached").get<bool>());
         ASSERT_TRUE(handshakeSnapshot.at("motionQuery").at("trace").is_object());
         EXPECT_TRUE(handshakeSnapshot.at("motionQuery").at("trace").at("events").is_array());
+        ASSERT_TRUE(handshakeSnapshot.at("motionQuery").at("replayComparison").is_object());
+        EXPECT_TRUE(handshakeSnapshot.at("motionQuery").at("replayComparison").at("mismatchFieldMask").is_number_unsigned());
+        EXPECT_TRUE(handshakeSnapshot.at("motionQuery").at("replayComparison").at("diagnosticSummary").is_string());
         EXPECT_TRUE(frames[1U].at("result").at("applied").get<bool>());
         EXPECT_EQ(frames[1U].at("result").at("code").get<std::string>(), "bridge.command.applied");
         EXPECT_TRUE(frames[2U].at("result").at("applied").get<bool>());
