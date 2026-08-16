@@ -630,6 +630,10 @@ TEST(EditorBridgeUVETest, MotionQueryUVE_ExposesCopiedSnapshotAndRevisionGuarded
         ASSERT_EQ(loadReplayResponse.snapshot.motionQuery.replayBaselines.entries.size(), 1U);
         EXPECT_EQ(loadReplayResponse.snapshot.motionQuery.replayBaselines.entries.front().name,
                   "bridge-baseline");
+        EXPECT_TRUE(loadReplayResponse.snapshot.motionQuery.replayWorkflow.activeBaselineSelected);
+        EXPECT_TRUE(loadReplayResponse.snapshot.motionQuery.replayWorkflow.activeFixtureAvailable);
+        EXPECT_FALSE(loadReplayResponse.snapshot.motionQuery.replayWorkflow.readyForComparison);
+        EXPECT_FALSE(loadReplayResponse.snapshot.motionQuery.replayWorkflow.diagnostic.empty());
         ASSERT_EQ(loadReplayResponse.snapshot.motionQuery.replayComparisonHistory.size(), historyBeforeLoad + 1U);
         EXPECT_EQ(loadReplayResponse.snapshot.motionQuery.replayComparisonHistory.back().baselineName,
                   "bridge-baseline");
@@ -650,6 +654,8 @@ TEST(EditorBridgeUVETest, MotionQueryUVE_ExposesCopiedSnapshotAndRevisionGuarded
         EXPECT_EQ(clearReplayResponse.code, "bridge.motion_query.replay.baseline.cleared");
         EXPECT_FALSE(clearReplayResponse.snapshot.motionQuery.replayComparison.available);
         EXPECT_TRUE(clearReplayResponse.snapshot.motionQuery.replayBaselines.entries.empty());
+        EXPECT_FALSE(clearReplayResponse.snapshot.motionQuery.replayWorkflow.activeBaselineSelected);
+        EXPECT_FALSE(clearReplayResponse.snapshot.motionQuery.replayWorkflow.readyForComparison);
         ASSERT_EQ(clearReplayResponse.snapshot.motionQuery.replayComparisonHistory.size(), historyBeforeLoad + 2U);
         EXPECT_GT(clearReplayResponse.snapshot.motionQuery.replayComparisonHistory.back().sequence,
                   loadReplayResponse.snapshot.motionQuery.replayComparisonHistory.back().sequence);

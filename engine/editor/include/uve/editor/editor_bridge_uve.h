@@ -468,6 +468,18 @@ struct EditorBridgeMotionQueryReplayComparisonHistoryEntryUVE final {
     [[nodiscard]] bool operator==(const EditorBridgeMotionQueryReplayComparisonHistoryEntryUVE&) const = default;
 };
 
+struct EditorBridgeMotionQueryReplayWorkflowStatusUVE final {
+    std::uint64_t registryGeneration = 0U;
+    std::size_t baselineCount = 0U;
+    bool activeBaselineSelected = false;
+    bool activeFixtureAvailable = false;
+    bool historyTruncated = false;
+    bool readyForComparison = false;
+    std::string diagnostic;
+
+    [[nodiscard]] bool operator==(const EditorBridgeMotionQueryReplayWorkflowStatusUVE&) const = default;
+};
+
 struct EditorBridgeMotionQuerySnapshotUVE final {
     EditorBridgeMotionQueryAuthoringSnapshotUVE authoring;
     EditorBridgeMotionQueryDebuggerSnapshotUVE debugger;
@@ -484,6 +496,7 @@ struct EditorBridgeMotionQuerySnapshotUVE final {
     EditorBridgeMotionQueryReplayBaselineSnapshotUVE replayBaselines;
     bool replayComparisonHistoryTruncated = false;
     std::vector<EditorBridgeMotionQueryReplayComparisonHistoryEntryUVE> replayComparisonHistory;
+    EditorBridgeMotionQueryReplayWorkflowStatusUVE replayWorkflow;
 
     [[nodiscard]] bool operator==(const EditorBridgeMotionQuerySnapshotUVE&) const = default;
 };
