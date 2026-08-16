@@ -4,6 +4,12 @@
 
 ---
 
+## **Motion Query Inventory Execution Authority**
+
+The complete filename inventory supplied for Motion Query/Motion Matching is maintained in [`MOTION_QUERY_INVENTORY_ROADMAP.md`](MOTION_QUERY_INVENTORY_ROADMAP.md). That document preserves every original filename, adds the UVE-native `_uve.h`/`_uve.cpp` target, maps each item to `engine/plugins/Animation/motion_query/`, and records whether the work is **COMPLETED**, **PARTIAL**, or **PLANNED**. It is an implementation planning authority, not permission to copy foreign-engine code blindly. Existing UNIVEX runtime, editor, diagnostics, and plugin contracts remain authoritative, and `control_rig` remains the sibling plugin under `engine/plugins/Animation/`.
+
+---
+
 ## **Animation Authoring & Runtime**
 
 | Capability | What it adds |
