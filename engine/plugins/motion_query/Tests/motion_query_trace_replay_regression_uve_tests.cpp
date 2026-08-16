@@ -146,6 +146,57 @@ TEST(MotionQueryTraceReplayRegressionUVETest, NamedBaselineUVE_MatchesCopiedFixt
     EXPECT_EQ(result.comparison->comparedEventCount, 1U);
 }
 
+TEST(MotionQueryTraceReplayRegressionUVETest, BatchUVE_EvaluatesSortedBaselinesWithDeterministicCounters) {
+    MotionQueryLiveDebugSnapshotUVE snapshot;
+    MakePublishedSnapshotUVE(snapshot);
+    const MotionQueryTraceReplayFixtureUVE fixture = MakeFixtureFromSnapshotUVE(snapshot);
+    MotionQueryTraceReplayFixtureUVE mismatchFixture = fixture;
+    mismatchFixture.events.front().cost = 0.5F;
+    MotionQueryTraceReplayBaselineRegistryUVE registry;
+    ASSERT_TRUE(registry.RegisterUVE("zeta", mismatchFixture).IsAcceptedUVE());
+    ASSERT_TRUE(registry.RegisterUVE("alpha", fixture).IsAcceptedUVE());
+    const std::uint64_t generation = registry.GetSnapshotUVE().generation;
+
+    const MotionQueryTraceReplayBaselineBatchResultUVE batch =
+        CompareMotionQueryLiveDebugSnapshotAgainstAllBaselinesUVE(registry, snapshot, generation);
+    EXPECT_EQ(batch.code, MotionQueryTraceReplayBaselineBatchCodeUVE::Accepted);
+    EXPECT_TRUE(batch.IsCompleteUVE());
+    EXPECT_EQ(batch.registryGeneration, generation);
+    EXPECT_EQ(batch.evaluatedBaselineCount, 2U);
+    EXPECT_EQ(batch.matchCount, 1U);
+    EXPECT_EQ(batch.mismatchCount, 1U);
+    ASSERT_EQ(batch.results.size(), 2U);
+    EXPECT_EQ(batch.results[0].baselineName, "alpha");
+    EXPECT_EQ(batch.results[0].code, MotionQueryTraceReplayBaselineRegressionCodeUVE::Match);
+    EXPECT_EQ(batch.results[1].baselineName, "zeta");
+    EXPECT_EQ(batch.results[1].code, MotionQueryTraceReplayBaselineRegressionCodeUVE::Mismatch);
+
+    const MotionQueryTraceReplayBaselineBatchResultUVE stale =
+        CompareMotionQueryLiveDebugSnapshotAgainstAllBaselinesUVE(registry, snapshot, generation - 1U);
+    EXPECT_EQ(stale.code, MotionQueryTraceReplayBaselineBatchCodeUVE::StaleGeneration);
+    EXPECT_TRUE(stale.results.empty());
+}
+
+TEST(MotionQueryTraceReplayRegressionUVETest, BatchUVE_ReportsFilteredEvidenceForEachBoundedBaseline) {
+    MotionQueryLiveDebugSnapshotUVE snapshot;
+    MakePublishedSnapshotUVE(snapshot);
+    const MotionQueryTraceReplayFixtureUVE fixture = MakeFixtureFromSnapshotUVE(snapshot);
+    MotionQueryTraceReplayBaselineRegistryUVE registry;
+    ASSERT_TRUE(registry.RegisterUVE("alpha", fixture).IsAcceptedUVE());
+    ASSERT_TRUE(registry.RegisterUVE("beta", fixture).IsAcceptedUVE());
+    snapshot.filter = "accepted";
+
+    const MotionQueryTraceReplayBaselineBatchResultUVE batch =
+        CompareMotionQueryLiveDebugSnapshotAgainstAllBaselinesUVE(registry, snapshot);
+    EXPECT_EQ(batch.code, MotionQueryTraceReplayBaselineBatchCodeUVE::FilteredSnapshot);
+    EXPECT_FALSE(batch.IsCompleteUVE());
+    EXPECT_EQ(batch.evaluatedBaselineCount, 2U);
+    EXPECT_EQ(batch.mismatchCount, 2U);
+    ASSERT_EQ(batch.results.size(), 2U);
+    EXPECT_EQ(batch.results[0].code, MotionQueryTraceReplayBaselineRegressionCodeUVE::FilteredSnapshot);
+    EXPECT_EQ(batch.results[1].code, MotionQueryTraceReplayBaselineRegressionCodeUVE::FilteredSnapshot);
+}
+
 TEST(MotionQueryTraceReplayRegressionUVETest, NamedBaselineUVE_ReportsFieldMismatchAndRejectsStaleGeneration) {
     MotionQueryLiveDebugSnapshotUVE snapshot;
     MakePublishedSnapshotUVE(snapshot);

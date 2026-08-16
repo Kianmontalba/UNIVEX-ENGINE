@@ -9,6 +9,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 namespace UVE::Plugins::Editor {
 
@@ -49,6 +50,9 @@ struct MotionQueryTraceReplayRegressionResultUVE final {
     }
 };
 
+inline constexpr std::size_t kMotionQueryMaximumReplayRegressionBatchResultsUVE =
+    kMotionQueryMaximumReplayBaselinesUVE;
+
 enum class MotionQueryTraceReplayBaselineRegressionCodeUVE : std::uint8_t {
     Match = 0,
     Mismatch,
@@ -70,6 +74,36 @@ struct MotionQueryTraceReplayBaselineRegressionResultUVE final {
         return code == MotionQueryTraceReplayBaselineRegressionCodeUVE::Match;
     }
 };
+
+enum class MotionQueryTraceReplayBaselineBatchCodeUVE : std::uint8_t {
+    Accepted = 0,
+    StaleGeneration,
+    EmptyRegistry,
+    FilteredSnapshot,
+    EmptyTrace,
+};
+
+struct MotionQueryTraceReplayBaselineBatchResultUVE final {
+    MotionQueryTraceReplayBaselineBatchCodeUVE code = MotionQueryTraceReplayBaselineBatchCodeUVE::EmptyRegistry;
+    std::uint64_t registryGeneration = 0U;
+    std::size_t evaluatedBaselineCount = 0U;
+    std::size_t matchCount = 0U;
+    std::size_t mismatchCount = 0U;
+    bool truncated = false;
+    std::vector<MotionQueryTraceReplayBaselineRegressionResultUVE> results;
+    std::string message;
+
+    [[nodiscard]] bool IsCompleteUVE() const noexcept {
+        return code == MotionQueryTraceReplayBaselineBatchCodeUVE::Accepted && !truncated;
+    }
+};
+
+[[nodiscard]] MotionQueryTraceReplayBaselineBatchResultUVE
+CompareMotionQueryLiveDebugSnapshotAgainstAllBaselinesUVE(
+    const MotionQueryTraceReplayBaselineRegistryUVE& registry,
+    const MotionQueryLiveDebugSnapshotUVE& snapshot,
+    std::optional<std::uint64_t> expectedRegistryGeneration = std::nullopt,
+    std::optional<MotionQueryTraceReplayCompatibilityUVE> expectedCompatibility = std::nullopt);
 
 [[nodiscard]] MotionQueryTraceReplayBaselineRegressionResultUVE
 CompareMotionQueryLiveDebugSnapshotAgainstNamedBaselineUVE(
