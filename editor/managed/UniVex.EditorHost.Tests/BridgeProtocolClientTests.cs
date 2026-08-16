@@ -305,6 +305,8 @@ public sealed class BridgeProtocolClientTests
                 ["mismatchFieldMask"] = 0U,
                 ["message"] = "replay fixture matches trace",
                 ["diagnosticSummary"] = "",
+                ["compatibilityMismatchMask"] = 0U,
+                ["compatibilityDiagnosticSummary"] = "",
             },
             ["replayBaselines"] = new JsonObject
             {
@@ -374,6 +376,8 @@ public sealed class BridgeProtocolClientTests
         Assert.Equal(0U, parsed.MotionQuery.ReplayComparison.MismatchFieldMask);
         Assert.Equal("replay fixture matches trace", parsed.MotionQuery.ReplayComparison.Message);
         Assert.Equal(string.Empty, parsed.MotionQuery.ReplayComparison.DiagnosticSummary);
+        Assert.Equal(0U, parsed.MotionQuery.ReplayComparison.CompatibilityMismatchMask);
+        Assert.Equal(string.Empty, parsed.MotionQuery.ReplayComparison.CompatibilityDiagnosticSummary);
         Assert.Equal(2UL, parsed.MotionQuery.ReplayBaselines.Generation);
         Assert.False(parsed.MotionQuery.ReplayBaselines.IsTruncated);
         Assert.Single(parsed.MotionQuery.ReplayBaselines.Entries);

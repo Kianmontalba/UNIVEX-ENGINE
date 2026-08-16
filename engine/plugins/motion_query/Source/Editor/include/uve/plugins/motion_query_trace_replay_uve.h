@@ -90,6 +90,15 @@ enum class MotionQueryTraceReplayMismatchFieldUVE : std::uint32_t {
     Provenance = 1U << 16U,
 };
 
+enum class MotionQueryTraceReplayCompatibilityMismatchFieldUVE : std::uint32_t {
+    None = 0U,
+    FixtureCompatibilityMissing = 1U << 0U,
+    SchemaVersion = 1U << 1U,
+    SamplerVersion = 1U << 2U,
+    NormalizationVersion = 1U << 3U,
+    SourceGeneration = 1U << 4U,
+};
+
 struct MotionQueryTraceReplayComparisonUVE final {
     MotionQueryTraceReplayComparisonCodeUVE code =
         MotionQueryTraceReplayComparisonCodeUVE::InvalidFixture;
@@ -101,6 +110,9 @@ struct MotionQueryTraceReplayComparisonUVE final {
         static_cast<std::uint32_t>(MotionQueryTraceReplayMismatchFieldUVE::None);
     std::string message;
     std::string diagnosticSummary;
+    std::uint32_t compatibilityMismatchMask =
+        static_cast<std::uint32_t>(MotionQueryTraceReplayCompatibilityMismatchFieldUVE::None);
+    std::string compatibilityDiagnosticSummary;
 
     [[nodiscard]] bool IsMatchUVE() const noexcept {
         return code == MotionQueryTraceReplayComparisonCodeUVE::Match;
