@@ -6,6 +6,7 @@ add_library(uve_plugins STATIC
     motion_query/Source/Runtime/src/motion_query_asset_sampling_uve.cpp
     motion_query/Source/Runtime/src/motion_query_search_index_uve.cpp
     motion_query/Source/Runtime/src/motion_query_animation_node_uve.cpp
+    motion_query/Source/Runtime/src/motion_query_interaction_runtime_uve.cpp
 )
 target_include_directories(uve_plugins PUBLIC
     include
