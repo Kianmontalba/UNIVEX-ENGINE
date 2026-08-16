@@ -492,6 +492,23 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"events", std::move(events)}};
 }
 
+[[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeMotionQueryReplayBaselineEntryUVE& entry) {
+    return JsonUVE{{"name", entry.name},
+                   {"sourceGeneration", entry.sourceGeneration},
+                   {"eventCount", entry.eventCount},
+                   {"truncated", entry.truncated}};
+}
+
+[[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeMotionQueryReplayBaselineSnapshotUVE& snapshot) {
+    JsonUVE entries = JsonUVE::array();
+    for (const EditorBridgeMotionQueryReplayBaselineEntryUVE& entry : snapshot.entries) {
+        entries.push_back(ToJsonUVE(entry));
+    }
+    return JsonUVE{{"generation", snapshot.generation},
+                   {"truncated", snapshot.truncated},
+                   {"entries", std::move(entries)}};
+}
+
 [[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeMotionQueryReplayComparisonUVE& comparison) {
     return JsonUVE{{"available", comparison.available},
                    {"code", comparison.code},
@@ -519,7 +536,8 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"liveDebugVisibleTraceEventCount", snapshot.liveDebugVisibleTraceEventCount},
                    {"liveDebugTraceTruncated", snapshot.liveDebugTraceTruncated},
                    {"liveDebugDiagnostic", snapshot.liveDebugDiagnostic},
-                   {"replayComparison", ToJsonUVE(snapshot.replayComparison)}};
+                   {"replayComparison", ToJsonUVE(snapshot.replayComparison)},
+                   {"replayBaselines", ToJsonUVE(snapshot.replayBaselines)}};
 }
 
 [[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeSnapshotUVE& snapshot) {

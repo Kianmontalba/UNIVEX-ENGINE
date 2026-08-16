@@ -1031,6 +1031,16 @@ EditorBridgeMotionQuerySnapshotUVE EditorBridgeUVE::CaptureMotionQueryUVE() cons
     snapshot.liveDebugVisibleTraceEventCount = liveDebug.visibleTraceEventCount;
     snapshot.liveDebugTraceTruncated = liveDebug.traceTruncated;
     snapshot.liveDebugDiagnostic = liveDebug.diagnostic;
+    const Plugins::Editor::MotionQueryTraceReplayBaselineSnapshotUVE baselineSnapshot =
+        m_motionQueryReplayBaselineRegistry.GetSnapshotUVE();
+    snapshot.replayBaselines.generation = baselineSnapshot.generation;
+    snapshot.replayBaselines.truncated = baselineSnapshot.truncated;
+    snapshot.replayBaselines.entries.reserve(baselineSnapshot.entries.size());
+    for (const Plugins::Editor::MotionQueryTraceReplayBaselineEntryUVE& entry : baselineSnapshot.entries) {
+        snapshot.replayBaselines.entries.push_back(
+            EditorBridgeMotionQueryReplayBaselineEntryUVE{
+                entry.name, entry.sourceGeneration, entry.eventCount, entry.truncated});
+    }
     if (m_motionQueryReplayFixture.has_value()) {
         const Plugins::Editor::MotionQueryTraceReplayRegressionResultUVE comparison =
             Plugins::Editor::CompareMotionQueryLiveDebugSnapshotAgainstFixtureUVE(

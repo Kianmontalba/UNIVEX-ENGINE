@@ -598,6 +598,9 @@ TEST(EditorBridgeUVETest, MotionQueryUVE_ExposesCopiedSnapshotAndRevisionGuarded
         ASSERT_TRUE(loadReplayResponse.applied) << loadReplayResponse.message;
         EXPECT_EQ(loadReplayResponse.code, "bridge.motion_query.replay.baseline.loaded");
         EXPECT_TRUE(loadReplayResponse.snapshot.motionQuery.replayComparison.available);
+        ASSERT_EQ(loadReplayResponse.snapshot.motionQuery.replayBaselines.entries.size(), 1U);
+        EXPECT_EQ(loadReplayResponse.snapshot.motionQuery.replayBaselines.entries.front().name,
+                  "bridge-baseline");
 
         EditorBridgeRequestUVE staleClearRequest{};
         staleClearRequest.protocolVersion = kEditorBridgeProtocolVersionUVE;
@@ -614,6 +617,7 @@ TEST(EditorBridgeUVETest, MotionQueryUVE_ExposesCopiedSnapshotAndRevisionGuarded
         ASSERT_TRUE(clearReplayResponse.applied) << clearReplayResponse.message;
         EXPECT_EQ(clearReplayResponse.code, "bridge.motion_query.replay.baseline.cleared");
         EXPECT_FALSE(clearReplayResponse.snapshot.motionQuery.replayComparison.available);
+        EXPECT_TRUE(clearReplayResponse.snapshot.motionQuery.replayBaselines.entries.empty());
 
         dispatchRequest.requestId = 502U;
         dispatchRequest.expectedRevision = initial.revision;
