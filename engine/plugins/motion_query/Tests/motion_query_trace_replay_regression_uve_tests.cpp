@@ -1,0 +1,151 @@
+// Copyright (c) 2026 UniVex Studios. All Rights Reserved.
+#include "uve/plugins/motion_query_trace_replay_regression_uve.h"
+
+#include <gtest/gtest.h>
+
+namespace UVE::Plugins::Editor {
+namespace {
+
+UVE::Asset::ResourceHandleUVE MakeHandleUVE(const std::uint64_t guid) {
+    return UVE::Asset::ResourceHandleUVE{UVE::Asset::AssetGuidUVE{guid}, 1U};
+}
+
+UVE::Core::MotionMatchingDatabaseUVE MakeDatabaseUVE() {
+    UVE::Core::MotionMatchingDatabaseUVE database;
+    UVE::Core::MotionMatchingCandidateUVE candidate;
+    candidate.candidateId = "candidate-0";
+    candidate.sourceClipId = "walk";
+    candidate.feature.facingDirection = UVE::Math::Vector3UVE{0.0F, 0.0F, 1.0F};
+    database.candidates = {candidate};
+    return database;
+}
+
+UVE::Core::MotionQueryDatabaseContractUVE MakeContractUVE() {
+    UVE::Core::MotionQueryDatabaseContractUVE contract;
+    contract.context.databaseId = "locomotion";
+    contract.context.generation = 1U;
+    contract.schema.schemaId = "locomotion-v1";
+    contract.settings.maximumCandidates = 8U;
+    contract.database = MakeDatabaseUVE();
+    return contract;
+}
+
+void MakePublishedSnapshotUVE(MotionQueryLiveDebugSnapshotUVE& outSnapshot) {
+    MotionQueryEditorAuthoringSessionUVE authoring;
+    MotionQueryEditorDatabaseEntryUVE entry;
+    entry.resource = MakeHandleUVE(31U);
+    entry.displayName = "Locomotion";
+    entry.contract = MakeContractUVE();
+    MotionQueryEditorCommandUVE registerCommand;
+    registerCommand.requestId = 1U;
+    registerCommand.kind = MotionQueryEditorCommandKindUVE::RegisterDatabase;
+    registerCommand.database = entry;
+    EXPECT_TRUE(authoring.DispatchUVE(registerCommand).applied);
+
+    MotionQueryLiveDebugSessionUVE session;
+    MotionQueryLiveDebugCommandUVE attach;
+    attach.requestId = 2U;
+    attach.kind = MotionQueryLiveDebugCommandKindUVE::Attach;
+    attach.database = entry.resource;
+    ASSERT_TRUE(session.DispatchUVE(attach, authoring).applied);
+
+    UVE::Plugins::MotionQueryAnimationNodeResultUVE result;
+    result.code = UVE::Plugins::MotionQueryAnimationNodeCodeUVE::Accepted;
+    result.candidateIndex = 0U;
+    result.candidatesEvaluated = 1U;
+    result.cost = 0.25F;
+    result.qualityTier = UVE::Plugins::MotionQueryQualityTierUVE::Minimal;
+    result.continuityCode = UVE::Plugins::MotionQueryContinuityCodeUVE::Applied;
+    result.continuityApplied = true;
+    result.transitionCode = UVE::Plugins::MotionQueryTransitionCodeUVE::SwitchedCandidate;
+    result.telemetryCode = UVE::Plugins::MotionQueryRuntimeTelemetryCodeUVE::Accepted;
+    result.telemetryIndexEntryCount = 2U;
+    result.telemetryCandidatesConsidered = 1U;
+    result.telemetryBudgetSaturated = false;
+    result.sourceClipId = "walk";
+    result.message = "accepted live match";
+    session.PublishUVE(result, 100U, 4U);
+    outSnapshot = session.GetSnapshotUVE();
+}
+
+MotionQueryTraceReplayFixtureUVE MakeFixtureFromSnapshotUVE(
+    const MotionQueryLiveDebugSnapshotUVE& snapshot) {
+    MotionQueryTraceSnapshotUVE trace;
+    trace.truncated = snapshot.traceTruncated;
+    trace.events = snapshot.traceEvents;
+    return BuildMotionQueryTraceReplayFixtureUVE(trace);
+}
+
+} // namespace
+
+TEST(MotionQueryTraceReplayRegressionUVETest, LiveDebugSnapshotUVE_MatchesAnimationEvaluationTrace) {
+    MotionQueryLiveDebugSnapshotUVE snapshot;
+    MakePublishedSnapshotUVE(snapshot);
+    const MotionQueryTraceReplayFixtureUVE fixture = MakeFixtureFromSnapshotUVE(snapshot);
+
+    const MotionQueryTraceReplayRegressionResultUVE result =
+        CompareMotionQueryLiveDebugSnapshotAgainstFixtureUVE(fixture, snapshot);
+    EXPECT_TRUE(result.IsMatchUVE());
+    ASSERT_TRUE(result.comparison.has_value());
+    EXPECT_EQ(result.comparison->comparedEventCount, 1U);
+}
+
+TEST(MotionQueryTraceReplayRegressionUVETest, LiveDebugSnapshotUVE_ReportsDeterministicEventMismatch) {
+    MotionQueryLiveDebugSnapshotUVE snapshot;
+    MakePublishedSnapshotUVE(snapshot);
+    const MotionQueryTraceReplayFixtureUVE fixture = MakeFixtureFromSnapshotUVE(snapshot);
+    snapshot.traceEvents.front().telemetryCandidatesConsidered = 2U;
+
+    const MotionQueryTraceReplayRegressionResultUVE result =
+        CompareMotionQueryLiveDebugSnapshotAgainstFixtureUVE(fixture, snapshot);
+    EXPECT_EQ(result.code, MotionQueryTraceReplayRegressionCodeUVE::Mismatch);
+    ASSERT_TRUE(result.comparison.has_value());
+    EXPECT_EQ(result.comparison->code, MotionQueryTraceReplayComparisonCodeUVE::EventMismatch);
+    EXPECT_EQ(result.comparison->mismatchIndex, 0U);
+}
+
+TEST(MotionQueryTraceReplayRegressionUVETest, LiveDebugSnapshotUVE_RejectsFilteredViewAsIncompleteEvidence) {
+    MotionQueryLiveDebugSnapshotUVE snapshot;
+    MakePublishedSnapshotUVE(snapshot);
+    const MotionQueryTraceReplayFixtureUVE fixture = MakeFixtureFromSnapshotUVE(snapshot);
+    snapshot.filter = "accepted";
+
+    const MotionQueryTraceReplayRegressionResultUVE result =
+        CompareMotionQueryLiveDebugSnapshotAgainstFixtureUVE(fixture, snapshot);
+    EXPECT_EQ(result.code, MotionQueryTraceReplayRegressionCodeUVE::FilteredSnapshot);
+    EXPECT_FALSE(result.comparison.has_value());
+}
+
+TEST(MotionQueryTraceReplayRegressionUVETest, LiveDebugSnapshotUVE_RejectsEmptyTrace) {
+    MotionQueryLiveDebugSnapshotUVE snapshot;
+    const MotionQueryTraceReplayFixtureUVE fixture = BuildMotionQueryTraceReplayFixtureUVE(
+        MotionQueryTraceSnapshotUVE{});
+
+    const MotionQueryTraceReplayRegressionResultUVE result =
+        CompareMotionQueryLiveDebugSnapshotAgainstFixtureUVE(fixture, snapshot);
+    EXPECT_EQ(result.code, MotionQueryTraceReplayRegressionCodeUVE::EmptyTrace);
+    EXPECT_FALSE(result.comparison.has_value());
+}
+
+TEST(MotionQueryTraceReplayRegressionUVETest, LiveDebugSnapshotUVE_EnforcesCompatibilityIdentity) {
+    MotionQueryLiveDebugSnapshotUVE snapshot;
+    MakePublishedSnapshotUVE(snapshot);
+    const MotionQueryTraceReplayCompatibilityUVE compatibility{3U, 4U, 5U, 9U};
+    MotionQueryTraceSnapshotUVE trace;
+    trace.truncated = snapshot.traceTruncated;
+    trace.events = snapshot.traceEvents;
+    const MotionQueryTraceReplayFixtureUVE fixture =
+        BuildMotionQueryTraceReplayFixtureUVE(trace, compatibility);
+
+    EXPECT_TRUE(CompareMotionQueryLiveDebugSnapshotAgainstFixtureUVE(fixture, snapshot, compatibility)
+                    .IsMatchUVE());
+    const MotionQueryTraceReplayCompatibilityUVE changed{3U, 4U, 6U, 9U};
+    const MotionQueryTraceReplayRegressionResultUVE mismatch =
+        CompareMotionQueryLiveDebugSnapshotAgainstFixtureUVE(fixture, snapshot, changed);
+    EXPECT_EQ(mismatch.code, MotionQueryTraceReplayRegressionCodeUVE::Mismatch);
+    ASSERT_TRUE(mismatch.comparison.has_value());
+    EXPECT_EQ(mismatch.comparison->code,
+              MotionQueryTraceReplayComparisonCodeUVE::CompatibilityMismatch);
+}
+
+} // namespace UVE::Plugins::Editor
