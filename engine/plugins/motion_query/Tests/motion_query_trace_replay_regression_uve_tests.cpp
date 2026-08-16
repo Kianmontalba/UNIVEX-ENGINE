@@ -122,6 +122,74 @@ TEST(MotionQueryTraceReplayRegressionUVETest, LiveDebugSnapshotUVE_MatchesAnimat
     EXPECT_EQ(result.comparison->comparedEventCount, 1U);
 }
 
+TEST(MotionQueryTraceReplayRegressionUVETest, NamedBaselineUVE_MatchesCopiedFixtureAndPublishesGeneration) {
+    MotionQueryLiveDebugSnapshotUVE snapshot;
+    MakePublishedSnapshotUVE(snapshot);
+    MotionQueryTraceSnapshotUVE trace;
+    trace.truncated = snapshot.traceTruncated;
+    trace.events = snapshot.traceEvents;
+    const MotionQueryTraceReplayCompatibilityUVE compatibility{3U, 4U, 5U, 9U};
+    const MotionQueryTraceReplayFixtureUVE fixture =
+        BuildMotionQueryTraceReplayFixtureUVE(trace, compatibility);
+    MotionQueryTraceReplayBaselineRegistryUVE registry;
+    const MotionQueryTraceReplayBaselineResultUVE registered = registry.RegisterUVE("ci.fixture", fixture);
+    ASSERT_TRUE(registered.IsAcceptedUVE());
+
+    const MotionQueryTraceReplayBaselineRegressionResultUVE result =
+        CompareMotionQueryLiveDebugSnapshotAgainstNamedBaselineUVE(
+            registry, "ci.fixture", snapshot, registered.registryGeneration, compatibility);
+    EXPECT_TRUE(result.IsMatchUVE());
+    EXPECT_EQ(result.code, MotionQueryTraceReplayBaselineRegressionCodeUVE::Match);
+    EXPECT_EQ(result.baselineName, "ci.fixture");
+    EXPECT_EQ(result.registryGeneration, registered.registryGeneration);
+    ASSERT_TRUE(result.comparison.has_value());
+    EXPECT_EQ(result.comparison->comparedEventCount, 1U);
+}
+
+TEST(MotionQueryTraceReplayRegressionUVETest, NamedBaselineUVE_ReportsFieldMismatchAndRejectsStaleGeneration) {
+    MotionQueryLiveDebugSnapshotUVE snapshot;
+    MakePublishedSnapshotUVE(snapshot);
+    const MotionQueryTraceReplayFixtureUVE fixture = MakeFixtureFromSnapshotUVE(snapshot);
+    MotionQueryTraceReplayBaselineRegistryUVE registry;
+    const MotionQueryTraceReplayBaselineResultUVE registered = registry.RegisterUVE("ci.fixture", fixture);
+    ASSERT_TRUE(registered.IsAcceptedUVE());
+    snapshot.traceEvents.front().telemetryCandidatesConsidered = 2U;
+
+    const MotionQueryTraceReplayBaselineRegressionResultUVE mismatch =
+        CompareMotionQueryLiveDebugSnapshotAgainstNamedBaselineUVE(
+            registry, "ci.fixture", snapshot, registered.registryGeneration);
+    EXPECT_EQ(mismatch.code, MotionQueryTraceReplayBaselineRegressionCodeUVE::Mismatch);
+    ASSERT_TRUE(mismatch.comparison.has_value());
+    EXPECT_EQ(mismatch.comparison->mismatchFieldMask,
+              static_cast<std::uint32_t>(MotionQueryTraceReplayMismatchFieldUVE::TelemetryCandidatesConsidered));
+    EXPECT_EQ(mismatch.comparison->diagnosticSummary, "telemetryCandidatesConsidered");
+
+    const MotionQueryTraceReplayBaselineRegressionResultUVE stale =
+        CompareMotionQueryLiveDebugSnapshotAgainstNamedBaselineUVE(
+            registry, "ci.fixture", snapshot, registered.registryGeneration - 1U);
+    EXPECT_EQ(stale.code, MotionQueryTraceReplayBaselineRegressionCodeUVE::StaleGeneration);
+    EXPECT_FALSE(stale.comparison.has_value());
+}
+
+TEST(MotionQueryTraceReplayRegressionUVETest, NamedBaselineUVE_RejectsMissingAndFilteredEvidence) {
+    MotionQueryLiveDebugSnapshotUVE snapshot;
+    MakePublishedSnapshotUVE(snapshot);
+    const MotionQueryTraceReplayFixtureUVE fixture = MakeFixtureFromSnapshotUVE(snapshot);
+    MotionQueryTraceReplayBaselineRegistryUVE registry;
+    ASSERT_TRUE(registry.RegisterUVE("ci.fixture", fixture).IsAcceptedUVE());
+
+    const MotionQueryTraceReplayBaselineRegressionResultUVE missing =
+        CompareMotionQueryLiveDebugSnapshotAgainstNamedBaselineUVE(registry, "missing", snapshot);
+    EXPECT_EQ(missing.code, MotionQueryTraceReplayBaselineRegressionCodeUVE::BaselineNotFound);
+    EXPECT_FALSE(missing.comparison.has_value());
+
+    snapshot.filter = "accepted";
+    const MotionQueryTraceReplayBaselineRegressionResultUVE filtered =
+        CompareMotionQueryLiveDebugSnapshotAgainstNamedBaselineUVE(registry, "ci.fixture", snapshot);
+    EXPECT_EQ(filtered.code, MotionQueryTraceReplayBaselineRegressionCodeUVE::FilteredSnapshot);
+    EXPECT_FALSE(filtered.comparison.has_value());
+}
+
 TEST(MotionQueryTraceReplayRegressionUVETest, LiveDebugSnapshotUVE_ReportsDeterministicEventMismatch) {
     MotionQueryLiveDebugSnapshotUVE snapshot;
     MakePublishedSnapshotUVE(snapshot);
