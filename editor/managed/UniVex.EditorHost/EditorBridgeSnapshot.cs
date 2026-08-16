@@ -87,6 +87,60 @@ public enum BridgeViewportSurfaceState : byte
 /// C++-authoritative viewport surface lifecycle facts. It deliberately carries no native window,
 /// OpenGL context, texture, or input-forwarding handle across the managed boundary.
 /// </summary>
+public sealed record BridgeMotionQueryResourceHandle(ulong Guid, ulong Generation);
+
+public sealed record BridgeMotionQueryDatabaseRow(
+    BridgeMotionQueryResourceHandle Resource,
+    string DisplayName,
+    string DatabaseId,
+    ulong Generation,
+    uint SchemaVersion,
+    string SchemaId,
+    int CandidateCount,
+    int MaximumCandidates,
+    bool IsValid,
+    bool IsSelected,
+    bool IsDirty);
+
+public sealed record BridgeMotionQueryAuthoringSnapshot(
+    ulong Revision,
+    BridgeMotionQueryResourceHandle? SelectedResource,
+    IReadOnlyList<BridgeMotionQueryDatabaseRow> Databases,
+    string Diagnostic);
+
+public sealed record BridgeMotionQueryDebuggerSnapshot(
+    bool IsAttached,
+    ulong Generation,
+    BridgeMotionQueryResourceHandle? Database,
+    ulong? SelectedCandidateIndex,
+    int CandidateCount,
+    int CandidatesEvaluated,
+    float SelectedCost,
+    string SelectedCandidateId,
+    string SelectedSourceClipId,
+    string Message);
+
+public sealed record BridgeMotionQueryTraceEvent(
+    ulong Sequence,
+    ulong TimestampNanoseconds,
+    ulong FrameNumber,
+    string Kind,
+    BridgeMotionQueryResourceHandle? Database,
+    int CandidatesConsidered,
+    int CandidatesEvaluated,
+    float Cost,
+    string Message);
+
+public sealed record BridgeMotionQueryTraceSnapshot(
+    ulong Generation,
+    bool IsTruncated,
+    IReadOnlyList<BridgeMotionQueryTraceEvent> Events);
+
+public sealed record BridgeMotionQuerySnapshot(
+    BridgeMotionQueryAuthoringSnapshot Authoring,
+    BridgeMotionQueryDebuggerSnapshot Debugger,
+    BridgeMotionQueryTraceSnapshot Trace);
+
 public sealed record BridgeViewportSurfaceSnapshot(
     BridgeViewportSurfaceState State,
     ulong Generation,
@@ -359,7 +413,10 @@ public sealed record BridgeEditorSnapshot(
     IReadOnlyList<BridgeScriptRuntimeTickHistoryEntry> ScriptRuntimeTickHistory,
     BridgeDataTableCatalogSnapshot DataTableCatalog,
     BridgeDataTablePreviewSnapshot DataTablePreview,
-    IReadOnlyList<byte> Capabilities);
+    IReadOnlyList<byte> Capabilities)
+{
+    public BridgeMotionQuerySnapshot MotionQuery { get; init; } = BridgeSnapshotParser.EmptyMotionQuery();
+}
 
 public sealed record BridgeCommand(
     ulong ExpectedRevision,
@@ -385,7 +442,14 @@ public sealed record BridgeCommand(
     string? DeveloperConsoleCompletionPrefix = null,
     int? DeveloperConsoleHistoryDelta = null,
     string? VisualScriptPinName = null,
-    string? VisualScriptDefaultValue = null);
+    string? VisualScriptDefaultValue = null)
+{
+    public string? MotionQueryCommandKind { get; init; }
+    public ulong? MotionQueryCommandExpectedRevision { get; init; }
+    public BridgeMotionQueryResourceHandle? MotionQueryResource { get; init; }
+    public string? MotionQueryText { get; init; }
+    public ulong? MotionQueryCandidateIndex { get; init; }
+}
 
 public sealed record BridgeCommandResult(
     bool Applied,
@@ -462,7 +526,13 @@ public static class BridgeSnapshotParser
                 value.TryGetProperty("dataTablePreview", out JsonElement previewValue) && previewValue.ValueKind != JsonValueKind.Null
                     ? ParseDataTablePreview(previewValue)
                     : EmptyDataTablePreview(),
-                ParseCapabilities(RequiredArray(value, "capabilities")));
+                ParseCapabilities(RequiredArray(value, "capabilities")))
+            {
+                MotionQuery = value.TryGetProperty("motionQuery", out JsonElement motionQueryValue) &&
+                              motionQueryValue.ValueKind != JsonValueKind.Null
+                    ? ParseMotionQuery(motionQueryValue)
+                    : EmptyMotionQuery(),
+            };
         }
         catch (BridgeProtocolException)
         {
@@ -565,6 +635,111 @@ public static class BridgeSnapshotParser
         {
             throw Invalid($"The backend returned an invalid visual-scripting graph schema: {exception.Message}");
         }
+    }
+
+    public static BridgeMotionQuerySnapshot EmptyMotionQuery() =>
+        new(new BridgeMotionQueryAuthoringSnapshot(0UL, null, Array.Empty<BridgeMotionQueryDatabaseRow>(),
+                "No native Motion Query authoring session is attached to this bridge frame."),
+            new BridgeMotionQueryDebuggerSnapshot(false, 0UL, null, null, 0, 0, 0F, string.Empty, string.Empty,
+                "No native Motion Query debugger snapshot is attached to this bridge frame."),
+            new BridgeMotionQueryTraceSnapshot(0UL, false, Array.Empty<BridgeMotionQueryTraceEvent>()));
+
+    private static BridgeMotionQueryResourceHandle ParseMotionQueryResource(JsonElement value, string context)
+    {
+        RequireObject(value, context);
+        ulong guid = RequiredUInt64(value, "guid");
+        ulong generation = RequiredUInt64(value, "generation");
+        if (guid == 0UL || generation == 0UL)
+        {
+            throw Invalid($"{context} must contain a non-zero resource handle.");
+        }
+        return new BridgeMotionQueryResourceHandle(guid, generation);
+    }
+
+    private static BridgeMotionQueryResourceHandle? ParseNullableMotionQueryResource(JsonElement value, string context) =>
+        value.ValueKind == JsonValueKind.Null ? null : ParseMotionQueryResource(value, context);
+
+    private static BridgeMotionQuerySnapshot ParseMotionQuery(JsonElement value)
+    {
+        RequireObject(value, "motionQuery");
+        JsonElement authoring = RequiredObjectMember(value, "authoring");
+        JsonElement databases = RequiredArray(authoring, "databases");
+        EnsureBoundedArray(databases, "motionQuery.authoring.databases");
+        List<BridgeMotionQueryDatabaseRow> rows = new(databases.GetArrayLength());
+        foreach (JsonElement row in databases.EnumerateArray())
+        {
+            RequireObject(row, "motion-query authoring database row");
+            int candidateCount = RequiredInt32(row, "candidateCount");
+            int maximumCandidates = RequiredInt32(row, "maximumCandidates");
+            if (candidateCount < 0 || maximumCandidates <= 0 || candidateCount > maximumCandidates)
+            {
+                throw Invalid("Motion Query authoring candidate counts are invalid.");
+            }
+            rows.Add(new BridgeMotionQueryDatabaseRow(
+                ParseMotionQueryResource(RequiredObjectMember(row, "resource"), "motion-query database resource"),
+                RequiredBoundedString(row, "displayName"), RequiredBoundedString(row, "databaseId"),
+                RequiredUInt64(row, "generation"), RequiredUInt32(row, "schemaVersion"),
+                RequiredBoundedString(row, "schemaId"), candidateCount, maximumCandidates,
+                RequiredBoolean(row, "valid"), RequiredBoolean(row, "selected"), RequiredBoolean(row, "dirty")));
+        }
+        BridgeMotionQueryAuthoringSnapshot parsedAuthoring = new(
+            RequiredUInt64(authoring, "revision"),
+            ParseNullableMotionQueryResource(authoring.GetProperty("selectedResource"),
+                                             "motion-query authoring selected resource"),
+            rows, RequiredBoundedString(authoring, "diagnostic"));
+
+        JsonElement debugger = RequiredObjectMember(value, "debugger");
+        int candidateCountDebugger = RequiredInt32(debugger, "candidateCount");
+        int candidatesEvaluated = RequiredInt32(debugger, "candidatesEvaluated");
+        float selectedCost = debugger.GetProperty("selectedCost").GetSingle();
+        if (candidateCountDebugger < 0 || candidatesEvaluated < 0 || candidatesEvaluated > candidateCountDebugger ||
+            !float.IsFinite(selectedCost) || selectedCost < 0F)
+        {
+            throw Invalid("Motion Query debugger counters or selected cost are invalid.");
+        }
+        JsonElement selectedIndexValue = debugger.GetProperty("selectedCandidateIndex");
+        ulong? selectedIndex = selectedIndexValue.ValueKind == JsonValueKind.Null
+            ? null : selectedIndexValue.GetUInt64();
+        BridgeMotionQueryDebuggerSnapshot parsedDebugger = new(
+            RequiredBoolean(debugger, "attached"), RequiredUInt64(debugger, "generation"),
+            ParseNullableMotionQueryResource(debugger.GetProperty("database"), "motion-query debugger database"),
+            selectedIndex, candidateCountDebugger, candidatesEvaluated, selectedCost,
+            RequiredBoundedString(debugger, "selectedCandidateId"),
+            RequiredBoundedString(debugger, "selectedSourceClipId"), RequiredBoundedString(debugger, "message"));
+
+        JsonElement trace = RequiredObjectMember(value, "trace");
+        JsonElement events = RequiredArray(trace, "events");
+        EnsureBoundedArray(events, "motionQuery.trace.events");
+        List<BridgeMotionQueryTraceEvent> parsedEvents = new(events.GetArrayLength());
+        ulong previousSequence = 0UL;
+        ulong previousTimestamp = 0UL;
+        ulong previousFrame = 0UL;
+        foreach (JsonElement eventValue in events.EnumerateArray())
+        {
+            RequireObject(eventValue, "motion-query trace event");
+            ulong sequence = RequiredUInt64(eventValue, "sequence");
+            ulong timestamp = RequiredUInt64(eventValue, "timestampNanoseconds");
+            ulong frame = RequiredUInt64(eventValue, "frameNumber");
+            int considered = RequiredInt32(eventValue, "candidatesConsidered");
+            int evaluated = RequiredInt32(eventValue, "candidatesEvaluated");
+            float cost = eventValue.GetProperty("cost").GetSingle();
+            if (sequence == 0UL || sequence <= previousSequence || timestamp < previousTimestamp || frame < previousFrame ||
+                considered < 0 || evaluated < 0 || evaluated > considered || !float.IsFinite(cost) || cost < 0F)
+            {
+                throw Invalid("Motion Query trace events must be monotonic and bounded.");
+            }
+            previousSequence = sequence;
+            previousTimestamp = timestamp;
+            previousFrame = frame;
+            parsedEvents.Add(new BridgeMotionQueryTraceEvent(
+                sequence, timestamp, frame, RequiredBoundedString(eventValue, "kind"),
+                ParseNullableMotionQueryResource(eventValue.GetProperty("database"), "motion-query trace database"),
+                considered, evaluated, cost, RequiredBoundedString(eventValue, "message")));
+        }
+        return new BridgeMotionQuerySnapshot(
+            parsedAuthoring, parsedDebugger,
+            new BridgeMotionQueryTraceSnapshot(RequiredUInt64(trace, "generation"),
+                                                RequiredBoolean(trace, "truncated"), parsedEvents));
     }
 
     private static BridgeVisualScriptingSnapshot ParseVisualScripting(JsonElement value)

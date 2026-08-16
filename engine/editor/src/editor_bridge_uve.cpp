@@ -57,6 +57,8 @@ namespace {
         EditorBridgeCapabilityUVE::DeserializeVisualScriptGraph,
         EditorBridgeCapabilityUVE::AddVisualScriptNodeType,
         EditorBridgeCapabilityUVE::SetVisualScriptPinDefault,
+        EditorBridgeCapabilityUVE::ReadMotionQuery,
+        EditorBridgeCapabilityUVE::DispatchMotionQueryCommand,
     };
     return capabilities;
 }
@@ -69,7 +71,8 @@ namespace {
            kind != EditorBridgeRequestKindUVE::ReadDeveloperConsole &&
            kind != EditorBridgeRequestKindUVE::ReadScriptRuntime &&
            kind != EditorBridgeRequestKindUVE::ReadScriptRuntimeTickDiagnostics &&
-           kind != EditorBridgeRequestKindUVE::SerializeVisualScriptGraph;
+           kind != EditorBridgeRequestKindUVE::SerializeVisualScriptGraph &&
+           kind != EditorBridgeRequestKindUVE::ReadMotionQuery;
 }
 
 [[nodiscard]] bool IsVisualScriptMutationRequestUVE(const EditorBridgeRequestKindUVE kind) noexcept {
@@ -282,6 +285,10 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
         response.snapshot.scriptRuntimeTickHistory.assign(m_scriptRuntimeTickHistory.begin(),
                                                           m_scriptRuntimeTickHistory.end());
         return response;
+    }
+    if (request.kind == EditorBridgeRequestKindUVE::ReadMotionQuery) {
+        return MakeResponseUVE(request, true, "bridge.motion_query.snapshot.read",
+                               "The copied Motion Query authoring, debugger, and trace snapshot was returned.");
     }
     if (m_editor->GetStateUVE() != EditorStateUVE::Running) {
         return MakeResponseUVE(request, false, "bridge.editor.not_running",
@@ -749,6 +756,25 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
             code = "bridge.script_runtime.tick.completed";
             message = "The native ScriptRuntime diagnostic tick completed and its counters were copied.";
             break;
+        case EditorBridgeRequestKindUVE::DispatchMotionQueryCommand: {
+            if (!request.motionQueryCommand.has_value()) {
+                return MakeResponseUVE(request, false, "bridge.motion_query.command.invalid",
+                                       "DispatchMotionQueryCommand requires a value-only Motion Query command payload.");
+            }
+            const Plugins::Editor::MotionQueryEditorResponseUVE commandResponse =
+                m_motionQueryAuthoring.DispatchUVE(*request.motionQueryCommand);
+            applied = commandResponse.applied;
+            code = applied ? "bridge.motion_query.command.applied" : "bridge.motion_query.command.rejected";
+            message = commandResponse.message;
+            if (applied) {
+                ++m_revision;
+            }
+            break;
+        }
+        case EditorBridgeRequestKindUVE::ReadMotionQuery:
+            code = "bridge.motion_query.snapshot.read";
+            message = "The copied Motion Query authoring, debugger, and trace snapshot was returned.";
+            break;
         case EditorBridgeRequestKindUVE::SerializeVisualScriptGraph:
             code = "bridge.visual_scripting.graph_schema.serialized";
             message = "The native visual-scripting graph schema was copied in deterministic order.";
@@ -848,6 +874,38 @@ EditorBridgeScriptRuntimeSnapshotUVE EditorBridgeUVE::CaptureScriptRuntimeUVE() 
             instance.stateValueCount,
             instance.enabled});
     }
+    return snapshot;
+}
+
+EditorBridgeMotionQuerySnapshotUVE EditorBridgeUVE::CaptureMotionQueryUVE() const {
+    const Plugins::Editor::MotionQueryEditorSnapshotUVE authoring = m_motionQueryAuthoring.GetSnapshotUVE();
+    const Plugins::Editor::MotionQueryDebuggerSnapshotUVE debugger = m_motionQueryDebugger.GetSnapshotUVE();
+    const Plugins::Editor::MotionQueryTraceSnapshotUVE trace = m_motionQueryTrace.GetSnapshotUVE();
+    EditorBridgeMotionQuerySnapshotUVE snapshot{};
+    snapshot.authoring.revision = authoring.revision;
+    snapshot.authoring.selectedResource = authoring.selectedResource;
+    snapshot.authoring.diagnostic = authoring.diagnostic;
+    for (const auto& row : authoring.databases) {
+        if (snapshot.authoring.databases.size() >= kEditorBridgeMaximumPanelEntriesUVE) {
+            break;
+        }
+        snapshot.authoring.databases.push_back(row);
+    }
+    snapshot.debugger.attached = debugger.attached;
+    snapshot.debugger.generation = debugger.generation;
+    snapshot.debugger.database = debugger.database;
+    snapshot.debugger.selectedCandidateIndex = debugger.selectedCandidateIndex;
+    snapshot.debugger.candidateCount = debugger.candidateCount;
+    snapshot.debugger.candidatesEvaluated = debugger.candidatesEvaluated;
+    snapshot.debugger.selectedCost = debugger.selectedCost;
+    snapshot.debugger.selectedCandidateId = debugger.selectedCandidateId;
+    snapshot.debugger.selectedSourceClipId = debugger.selectedSourceClipId;
+    snapshot.debugger.message = debugger.message;
+    snapshot.trace.generation = trace.generation;
+    snapshot.trace.truncated = trace.truncated || trace.events.size() > kEditorBridgeMaximumPanelEntriesUVE;
+    const std::size_t firstEvent = trace.events.size() > kEditorBridgeMaximumPanelEntriesUVE
+        ? trace.events.size() - kEditorBridgeMaximumPanelEntriesUVE : 0U;
+    snapshot.trace.events.assign(trace.events.begin() + static_cast<std::ptrdiff_t>(firstEvent), trace.events.end());
     return snapshot;
 }
 
@@ -988,6 +1046,7 @@ EditorBridgeSnapshotUVE EditorBridgeUVE::BuildSnapshotUVE() const {
     snapshot.scriptRuntimeTickHistory.assign(m_scriptRuntimeTickHistory.begin(), m_scriptRuntimeTickHistory.end());
     snapshot.dataTableCatalog = observed.dataTableCatalog;
     snapshot.dataTablePreview = observed.dataTablePreview;
+    snapshot.motionQuery = CaptureMotionQueryUVE();
     snapshot.capabilities = GetCapabilitiesUVE();
     return snapshot;
 }

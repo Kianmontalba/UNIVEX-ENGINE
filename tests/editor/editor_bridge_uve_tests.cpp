@@ -483,5 +483,83 @@ TEST(EditorBridgeUVETest, SnapshotUVE_BoundsCopiedPanelRowsWithoutClaimingDeleti
     engine.Shutdown();
 }
 
+TEST(EditorBridgeUVETest, MotionQueryUVE_ExposesCopiedSnapshotAndRevisionGuardedNamedAuthoringCommand) {
+    Core::EngineCoreUVE engine(MakeBridgeTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_bridge_motion_query.uvescene");
+        editor.InitUVE();
+        EditorBridgeUVE bridge(editor);
+        const EditorBridgeSnapshotUVE initial = bridge.GetSnapshotUVE();
+        bool readAdvertised = false;
+        bool dispatchAdvertised = false;
+        for (const EditorBridgeCapabilityUVE capability : initial.capabilities) {
+            readAdvertised = readAdvertised || capability == EditorBridgeCapabilityUVE::ReadMotionQuery;
+            dispatchAdvertised = dispatchAdvertised ||
+                                 capability == EditorBridgeCapabilityUVE::DispatchMotionQueryCommand;
+        }
+        ASSERT_TRUE(readAdvertised);
+        ASSERT_TRUE(dispatchAdvertised);
+
+        EditorBridgeRequestUVE readRequest{};
+        readRequest.protocolVersion = kEditorBridgeProtocolVersionUVE;
+        readRequest.requestId = 500U;
+        readRequest.expectedRevision = initial.revision + 100U;
+        readRequest.kind = EditorBridgeRequestKindUVE::ReadMotionQuery;
+        const EditorBridgeResponseUVE readResponse = bridge.DispatchUVE(readRequest);
+        ASSERT_TRUE(readResponse.applied);
+        EXPECT_EQ(readResponse.code, "bridge.motion_query.snapshot.read");
+        EXPECT_TRUE(readResponse.snapshot.motionQuery.authoring.databases.empty());
+
+        Core::MotionQueryDatabaseContractUVE contract;
+        contract.context.databaseId = "bridge-db";
+        contract.context.generation = 1U;
+        contract.schema.schemaId = "bridge-schema";
+        contract.settings.maximumCandidates = 4U;
+        Core::MotionMatchingCandidateUVE candidate;
+        candidate.candidateId = "bridge-candidate";
+        candidate.sourceClipId = "walk";
+        candidate.feature.facingDirection = Math::Vector3UVE{0.0F, 0.0F, 1.0F};
+        contract.database.candidates = {candidate};
+        Plugins::Editor::MotionQueryEditorDatabaseEntryUVE entry;
+        entry.resource = Asset::ResourceHandleUVE{Asset::AssetGuidUVE{77U}, 1U};
+        entry.displayName = "Bridge Motion Database";
+        entry.contract = contract;
+
+        EditorBridgeRequestUVE dispatchRequest{};
+        dispatchRequest.protocolVersion = kEditorBridgeProtocolVersionUVE;
+        dispatchRequest.requestId = 501U;
+        dispatchRequest.expectedRevision = initial.revision;
+        dispatchRequest.kind = EditorBridgeRequestKindUVE::DispatchMotionQueryCommand;
+        Plugins::Editor::MotionQueryEditorCommandUVE command;
+        command.requestId = 501U;
+        command.expectedRevision = 0U;
+        command.kind = Plugins::Editor::MotionQueryEditorCommandKindUVE::RegisterDatabase;
+        command.database = entry;
+        dispatchRequest.motionQueryCommand = command;
+        const EditorBridgeResponseUVE dispatchResponse = bridge.DispatchUVE(dispatchRequest);
+        ASSERT_TRUE(dispatchResponse.applied) << dispatchResponse.message;
+        EXPECT_EQ(dispatchResponse.code, "bridge.motion_query.command.applied");
+        ASSERT_EQ(dispatchResponse.snapshot.motionQuery.authoring.databases.size(), 1U);
+        EXPECT_EQ(dispatchResponse.snapshot.motionQuery.authoring.databases.front().displayName,
+                  "Bridge Motion Database");
+        EXPECT_EQ(dispatchResponse.snapshot.motionQuery.authoring.revision, 1U);
+        EXPECT_EQ(dispatchResponse.snapshot.revision, initial.revision + 1U);
+
+        dispatchRequest.requestId = 502U;
+        dispatchRequest.expectedRevision = initial.revision;
+        command.requestId = 502U;
+        command.expectedRevision = 1U;
+        dispatchRequest.motionQueryCommand = command;
+        const EditorBridgeResponseUVE staleBridge = bridge.DispatchUVE(dispatchRequest);
+        EXPECT_FALSE(staleBridge.applied);
+        EXPECT_EQ(staleBridge.code, "bridge.snapshot.stale");
+
+        editor.ShutdownUVE();
+    }
+    engine.Shutdown();
+}
+
 } // namespace
 } // namespace UVE::Editor::Tests

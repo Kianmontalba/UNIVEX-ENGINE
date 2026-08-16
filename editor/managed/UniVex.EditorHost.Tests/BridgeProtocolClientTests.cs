@@ -203,6 +203,180 @@ public sealed class BridgeProtocolClientTests
     }
 
     [Fact]
+    public void MotionQuerySnapshot_ParsesAuthoringDebuggerAndTraceFacts()
+    {
+        JsonObject snapshot = JsonNode.Parse(JsonSerializer.Serialize(Snapshot(sceneDirty: false)))!.AsObject();
+        snapshot["motionQuery"] = new JsonObject
+        {
+            ["authoring"] = new JsonObject
+            {
+                ["revision"] = 4UL,
+                ["selectedResource"] = new JsonObject { ["guid"] = 77UL, ["generation"] = 1UL },
+                ["diagnostic"] = "native",
+                ["databases"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["resource"] = new JsonObject { ["guid"] = 77UL, ["generation"] = 1UL },
+                        ["displayName"] = "Bridge DB",
+                        ["databaseId"] = "bridge-db",
+                        ["generation"] = 1UL,
+                        ["schemaVersion"] = 1U,
+                        ["schemaId"] = "schema",
+                        ["candidateCount"] = 1,
+                        ["maximumCandidates"] = 4,
+                        ["valid"] = true,
+                        ["selected"] = true,
+                        ["dirty"] = false,
+                    },
+                },
+            },
+            ["debugger"] = new JsonObject
+            {
+                ["attached"] = true,
+                ["generation"] = 2UL,
+                ["database"] = new JsonObject { ["guid"] = 77UL, ["generation"] = 1UL },
+                ["selectedCandidateIndex"] = 0UL,
+                ["candidateCount"] = 1,
+                ["candidatesEvaluated"] = 1,
+                ["selectedCost"] = 0.5F,
+                ["selectedCandidateId"] = "candidate",
+                ["selectedSourceClipId"] = "walk",
+                ["message"] = "matched",
+            },
+            ["trace"] = new JsonObject
+            {
+                ["generation"] = 3UL,
+                ["truncated"] = false,
+                ["events"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["sequence"] = 1UL,
+                        ["timestampNanoseconds"] = 10UL,
+                        ["frameNumber"] = 1UL,
+                        ["kind"] = "match",
+                        ["database"] = new JsonObject { ["guid"] = 77UL, ["generation"] = 1UL },
+                        ["candidatesConsidered"] = 1,
+                        ["candidatesEvaluated"] = 1,
+                        ["cost"] = 0.5F,
+                        ["message"] = "matched",
+                    },
+                },
+            },
+        };
+        using JsonDocument document = JsonDocument.Parse(snapshot.ToJsonString());
+        BridgeEditorSnapshot parsed = BridgeSnapshotParser.Parse(document.RootElement);
+        Assert.Equal(4UL, parsed.MotionQuery.Authoring.Revision);
+        Assert.Equal(77UL, parsed.MotionQuery.Authoring.SelectedResource!.Guid);
+        Assert.Equal("Bridge DB", parsed.MotionQuery.Authoring.Databases[0].DisplayName);
+        Assert.True(parsed.MotionQuery.Debugger.IsAttached);
+        Assert.Equal("candidate", parsed.MotionQuery.Debugger.SelectedCandidateId);
+        Assert.Equal(1, parsed.MotionQuery.Trace.Events.Count);
+        Assert.Equal("match", parsed.MotionQuery.Trace.Events[0].Kind);
+    }
+
+    [Fact]
+    public void MotionQuerySnapshot_RejectsNonMonotonicTraceEvents()
+    {
+        JsonObject snapshot = JsonNode.Parse(JsonSerializer.Serialize(Snapshot(sceneDirty: false)))!.AsObject();
+        snapshot["motionQuery"] = new JsonObject
+        {
+            ["authoring"] = new JsonObject
+            {
+                ["revision"] = 0UL,
+                ["selectedResource"] = null,
+                ["diagnostic"] = "native",
+                ["databases"] = new JsonArray(),
+            },
+            ["debugger"] = new JsonObject
+            {
+                ["attached"] = false,
+                ["generation"] = 0UL,
+                ["database"] = null,
+                ["selectedCandidateIndex"] = null,
+                ["candidateCount"] = 0,
+                ["candidatesEvaluated"] = 0,
+                ["selectedCost"] = 0F,
+                ["selectedCandidateId"] = string.Empty,
+                ["selectedSourceClipId"] = string.Empty,
+                ["message"] = "none",
+            },
+            ["trace"] = new JsonObject
+            {
+                ["generation"] = 1UL,
+                ["truncated"] = false,
+                ["events"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["sequence"] = 2UL,
+                        ["timestampNanoseconds"] = 10UL,
+                        ["frameNumber"] = 1UL,
+                        ["kind"] = "match",
+                        ["database"] = null,
+                        ["candidatesConsidered"] = 1,
+                        ["candidatesEvaluated"] = 1,
+                        ["cost"] = 0F,
+                        ["message"] = string.Empty,
+                    },
+                    new JsonObject
+                    {
+                        ["sequence"] = 1UL,
+                        ["timestampNanoseconds"] = 11UL,
+                        ["frameNumber"] = 1UL,
+                        ["kind"] = "match",
+                        ["database"] = null,
+                        ["candidatesConsidered"] = 1,
+                        ["candidatesEvaluated"] = 1,
+                        ["cost"] = 0F,
+                        ["message"] = string.Empty,
+                    },
+                },
+            },
+        };
+        using JsonDocument document = JsonDocument.Parse(snapshot.ToJsonString());
+        BridgeProtocolException exception = Assert.Throws<BridgeProtocolException>(
+            () => BridgeSnapshotParser.Parse(document.RootElement));
+        Assert.Contains("monotonic", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task DispatchAsync_WritesMotionQueryNamedCommandPayload()
+    {
+        await using MemoryStream input = BuildFrames(new
+        {
+            jsonrpc = "2.0",
+            id = 1,
+            result = new
+            {
+                protocolVersion = BridgeProtocolClient.ProtocolVersion,
+                requestId = 1UL,
+                applied = true,
+                code = "bridge.motion_query.command.applied",
+                message = "applied",
+                snapshot = Snapshot(sceneDirty: false),
+                createdEntity = (object?)null,
+            },
+        });
+        await using MemoryStream output = new();
+        await using BridgeProtocolClient client = new(input, output);
+        BridgeCommand command = new(7UL, "dispatchMotionQueryCommand")
+        {
+            MotionQueryCommandKind = "selectDatabase",
+            MotionQueryCommandExpectedRevision = 3UL,
+            MotionQueryResource = new BridgeMotionQueryResourceHandle(77UL, 1UL),
+        };
+        await client.DispatchAsync(command, CancellationToken.None);
+        output.Position = 0;
+        using JsonDocument request = JsonDocument.Parse(await ReadFrameAsync(output));
+        JsonElement payload = request.RootElement.GetProperty("params").GetProperty("motionQueryCommand");
+        Assert.Equal("selectDatabase", payload.GetProperty("kind").GetString());
+        Assert.Equal(3UL, payload.GetProperty("expectedRevision").GetUInt64());
+        Assert.Equal(77UL, payload.GetProperty("resource").GetProperty("guid").GetUInt64());
+    }
+
+    [Fact]
     public void ReadScriptRuntimeCapability_UsesAppendOnlyProtocolId()
     {
         Assert.Equal((byte)76, BridgeSnapshotParser.ReadScriptRuntimeCapability);
