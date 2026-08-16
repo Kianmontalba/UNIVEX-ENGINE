@@ -72,6 +72,12 @@ MotionQueryAnimationNodeResultUVE EvaluateMotionQueryAnimationNodeUVE(
         return publish(MakeResultUVE(MotionQueryAnimationNodeCodeUVE::SchemaMismatch,
                              "motion query animation node search index schema is incompatible"));
     }
+    const MotionQuerySearchBudgetUVE budget =
+        ResolveMotionQuerySearchBudgetUVE(settings.qualityTier, settings.maximumSearchResults);
+    if (!budget.IsAcceptedUVE()) {
+        return publish(MakeResultUVE(MotionQueryAnimationNodeCodeUVE::InvalidSettings,
+                             budget.message.c_str()));
+    }
 
     UVE::Core::MotionQueryFeatureVectorUVE queryFeature;
     const UVE::Core::MotionQueryFeatureValidationResultUVE extraction =
@@ -83,7 +89,7 @@ MotionQueryAnimationNodeResultUVE EvaluateMotionQueryAnimationNodeUVE(
 
     std::vector<std::size_t> indexedCandidates;
     const MotionQuerySearchIndexResultUVE searchResult =
-        searchIndex.FindNearestUVE(queryFeature, settings.maximumSearchResults, indexedCandidates);
+        searchIndex.FindNearestUVE(queryFeature, budget.effectiveResults, indexedCandidates);
     if (!searchResult.IsAcceptedUVE()) {
         return publish(MakeResultUVE(MotionQueryAnimationNodeCodeUVE::SearchFailed,
                              searchResult.message.c_str()));
@@ -123,6 +129,10 @@ MotionQueryAnimationNodeResultUVE EvaluateMotionQueryAnimationNodeUVE(
             MotionQueryAnimationNodeCodeUVE::MissingClip,
             "motion query animation node candidate references a missing animation clip");
         result.candidateIndex = originalCandidateIndex;
+        result.requestedSearchResults = budget.requestedResults;
+        result.effectiveSearchResults = budget.effectiveResults;
+        result.qualityTier = settings.qualityTier;
+        result.searchBudgetDowngraded = budget.WasDowngradedUVE();
         result.cost = match.cost;
         result.candidatesEvaluated = match.candidatesEvaluated;
         result.sampleTimeSeconds = candidate.sampleTimeSeconds;
@@ -137,6 +147,10 @@ MotionQueryAnimationNodeResultUVE EvaluateMotionQueryAnimationNodeUVE(
             MotionQueryAnimationNodeCodeUVE::PoseSamplingFailed,
             "motion query animation node failed to sample the selected animation clip");
         result.candidateIndex = originalCandidateIndex;
+        result.requestedSearchResults = budget.requestedResults;
+        result.effectiveSearchResults = budget.effectiveResults;
+        result.qualityTier = settings.qualityTier;
+        result.searchBudgetDowngraded = budget.WasDowngradedUVE();
         result.cost = match.cost;
         result.candidatesEvaluated = match.candidatesEvaluated;
         result.sampleTimeSeconds = candidate.sampleTimeSeconds;
@@ -148,6 +162,10 @@ MotionQueryAnimationNodeResultUVE EvaluateMotionQueryAnimationNodeUVE(
     result.code = MotionQueryAnimationNodeCodeUVE::Accepted;
     result.candidateIndex = originalCandidateIndex;
     result.candidatesEvaluated = match.candidatesEvaluated;
+    result.requestedSearchResults = budget.requestedResults;
+    result.effectiveSearchResults = budget.effectiveResults;
+    result.qualityTier = settings.qualityTier;
+    result.searchBudgetDowngraded = budget.WasDowngradedUVE();
     result.cost = match.cost;
     result.sampleTimeSeconds = candidate.sampleTimeSeconds;
     result.sourceClipId = candidate.sourceClipId;
