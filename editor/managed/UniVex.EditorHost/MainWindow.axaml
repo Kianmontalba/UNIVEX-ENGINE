@@ -354,7 +354,7 @@
                         </TabItem>
                         <TabItem Header="Debugger"><Border Padding="12" Background="#20242B" CornerRadius="3"><TextBlock Text="Managed debugger presentation is deferred. This shell does not attach to or control a runtime." TextWrapping="Wrap" /></Border></TabItem>
                         <TabItem Header="Animator">
-                            <Grid RowDefinitions="Auto,Auto,Auto,*,*,Auto" RowSpacing="8">
+                            <Grid RowDefinitions="Auto,Auto,Auto,*,*,*,Auto" RowSpacing="8">
                                 <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="8">
                                     <TextBlock x:Name="MotionQueryStatusTextBlock" Text="Connect to read native Motion Query state." TextWrapping="Wrap" Opacity="0.76" VerticalAlignment="Center" />
                                     <Button Grid.Column="1" Content="Export Registry" Click="MotionQueryExportRegistryButton_OnClick" IsEnabled="False" x:Name="MotionQueryExportRegistryButton" />
@@ -406,7 +406,7 @@
                                         </ListBox>
                                     </Grid>
                                 </Grid>
-                                <ListBox x:Name="MotionQueryBaselinesListBox" Grid.Row="4" MaxHeight="120">
+                                <ListBox x:Name="MotionQueryBaselinesListBox" Grid.Row="4" MaxHeight="80">
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
                                             <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="6" Margin="0,2">
@@ -419,7 +419,23 @@
                                         </DataTemplate>
                                     </ListBox.ItemTemplate>
                                 </ListBox>
-                                <TextBlock x:Name="MotionQueryDiagnosticsTextBlock" Grid.Row="5" Text="No active comparison diagnostics." TextWrapping="Wrap" Opacity="0.72" />
+                                <Grid Grid.Row="5" RowDefinitions="Auto,*" RowSpacing="4">
+                                    <TextBlock Text="LIVE DEBUG TRACE · recent native events" FontSize="10" Opacity="0.68" />
+                                    <ListBox x:Name="MotionQueryTraceListBox" Grid.Row="1" MaxHeight="120" SelectionChanged="MotionQueryTraceListBox_OnSelectionChanged">
+                                        <ListBox.ItemTemplate>
+                                            <DataTemplate>
+                                                <StackPanel Spacing="1" Margin="0,2">
+                                                    <Grid ColumnDefinitions="*,Auto">
+                                                        <TextBlock Text="{Binding Kind}" FontWeight="SemiBold" />
+                                                        <TextBlock Grid.Column="1" Text="{Binding FrameNumber, StringFormat='Frame {0}'}" FontSize="10" Opacity="0.6" />
+                                                    </Grid>
+                                                    <TextBlock Text="{Binding Message}" FontSize="11" TextWrapping="Wrap" Opacity="0.85" />
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ListBox.ItemTemplate>
+                                    </ListBox>
+                                </Grid>
+                                <TextBlock x:Name="MotionQueryDiagnosticsTextBlock" Grid.Row="6" Text="No active comparison diagnostics." TextWrapping="Wrap" Opacity="0.72" />
                             </Grid>
                         </TabItem>
                         <TabItem Header="AI Toolbar"><Border Padding="12" Background="#20242B" CornerRadius="3"><TextBlock Text="AI tooling is deferred. This shell owns no background jobs or asset mutations." TextWrapping="Wrap" /></Border></TabItem>

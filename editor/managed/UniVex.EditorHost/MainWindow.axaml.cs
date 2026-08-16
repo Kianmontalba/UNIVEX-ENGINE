@@ -762,6 +762,7 @@ public partial class MainWindow : Window
         MotionQueryBatchHistoryListBox.ItemsSource = motionQuery.ReplayBatchHistory;
         MotionQueryIndividualHistoryListBox.ItemsSource = motionQuery.ReplayDiagnostics.History;
         MotionQueryBaselinesListBox.ItemsSource = motionQuery.ReplayDiagnostics.Baselines;
+        MotionQueryTraceListBox.ItemsSource = motionQuery.Trace.Events;
 
         MotionQueryDiagnosticsTextBlock.Text = motionQuery.ReplayDiagnostics.HasActiveComparison
             ? motionQuery.ReplayDiagnostics.IsMatch
@@ -847,6 +848,24 @@ public partial class MainWindow : Window
                     MotionQueryReplayBaselineNewName = newName
                 });
             }
+        }
+    }
+
+    private void MotionQueryTraceListBox_OnSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (applyingSnapshot || MotionQueryTraceListBox.SelectedItem is not BridgeMotionQueryTraceEvent traceEvent)
+        {
+            return;
+        }
+
+        if (session?.LastSnapshot != null)
+        {
+            DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "dispatchMotionQueryDebugCommand")
+            {
+                MotionQueryDebugCommandKind = "selectEvent",
+                MotionQueryDebugExpectedGeneration = session.LastSnapshot.MotionQuery.LiveDebugGeneration,
+                MotionQueryDebugEventSequence = traceEvent.Sequence
+            });
         }
     }
 

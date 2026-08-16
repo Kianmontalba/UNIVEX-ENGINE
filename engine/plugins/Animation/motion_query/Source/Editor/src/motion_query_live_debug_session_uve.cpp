@@ -90,6 +90,25 @@ MotionQueryLiveDebugResponseUVE MotionQueryLiveDebugSessionUVE::DispatchUVE(
             ++generation_;
             return MakeResponseUVE(command, true, MotionQueryLiveDebugResponseCodeUVE::Applied,
                                    "motion query live debug trace filter updated");
+        case MotionQueryLiveDebugCommandKindUVE::SelectEvent: {
+            if (!command.eventSequence.has_value()) {
+                return MakeResponseUVE(command, false, MotionQueryLiveDebugResponseCodeUVE::InvalidCommand,
+                                       "live debug SelectEvent requires an event sequence");
+            }
+            const auto traceSnapshot = trace_.GetSnapshotUVE();
+            const auto found = std::find_if(traceSnapshot.events.begin(), traceSnapshot.events.end(),
+                                            [&](const auto& event) {
+                                                return event.sequence == *command.eventSequence;
+                                            });
+            if (found == traceSnapshot.events.end()) {
+                return MakeResponseUVE(command, false, MotionQueryLiveDebugResponseCodeUVE::InvalidCommand,
+                                       "live debug event sequence not found in trace");
+            }
+            debugger_.InspectEventUVE(*found);
+            ++generation_;
+            return MakeResponseUVE(command, true, MotionQueryLiveDebugResponseCodeUVE::Applied,
+                                   "live debug event selected for inspection");
+        }
     }
     return MakeResponseUVE(command, false, MotionQueryLiveDebugResponseCodeUVE::InvalidCommand,
                            CodeMessageUVE(MotionQueryLiveDebugResponseCodeUVE::InvalidCommand));

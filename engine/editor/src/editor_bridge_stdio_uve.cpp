@@ -1077,6 +1077,10 @@ ParseMotionQueryLiveDebugCommandUVE(const JsonUVE& json, const std::uint64_t req
             Plugins::Editor::kMotionQueryMaximumDebugMessageBytesUVE) return std::nullopt;
         command.filter = json.at("filter").get<std::string>();
     }
+    if (json.contains("eventSequence") && !json.at("eventSequence").is_null()) {
+        if (!json.at("eventSequence").is_number_unsigned()) return std::nullopt;
+        command.eventSequence = json.at("eventSequence").get<std::uint64_t>();
+    }
     return command;
 }
 

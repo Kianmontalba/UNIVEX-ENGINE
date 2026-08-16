@@ -121,6 +121,7 @@ public:
     void PublishMatchUVE(std::size_t candidateIndex, std::size_t candidatesEvaluated,
                          float cost, std::string_view message) noexcept;
     void PublishMatchUVE(const UVE::Plugins::MotionQueryAnimationNodeResultUVE& result) noexcept;
+    void InspectEventUVE(const MotionQueryTraceEventUVE& event) noexcept;
 
     [[nodiscard]] MotionQueryDebuggerSnapshotUVE GetSnapshotUVE() const noexcept {
         return snapshot_;

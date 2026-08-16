@@ -601,6 +601,7 @@ public sealed record BridgeCommand(
     public ulong? MotionQueryDebugExpectedGeneration { get; init; }
     public BridgeMotionQueryResourceHandle? MotionQueryDebugDatabase { get; init; }
     public string? MotionQueryDebugFilter { get; init; }
+    public ulong? MotionQueryDebugEventSequence { get; init; }
     public string? MotionQueryReplayBaselineName { get; init; }
     public string? MotionQueryReplayFixturePayload { get; init; }
     public string? MotionQueryReplayBaselineEnvelopePayload { get; init; }

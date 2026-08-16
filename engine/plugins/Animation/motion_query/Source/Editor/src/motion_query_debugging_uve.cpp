@@ -140,6 +140,30 @@ void MotionQueryDebuggerUVE::PublishMatchUVE(
                            result.continuityApplied ? "continuity_applied" : "runtime_search";
 }
 
+void MotionQueryDebuggerUVE::InspectEventUVE(const MotionQueryTraceEventUVE& event) noexcept {
+    snapshot_.selectedCandidateIndex = event.selectedCandidateIndex;
+    snapshot_.candidatesEvaluated = event.candidatesEvaluated;
+    snapshot_.selectedCost = event.cost;
+    snapshot_.selectedCandidateId = ""; // Metadata not available in trace event
+    snapshot_.selectedSourceClipId = "";
+    snapshot_.message = event.message;
+    snapshot_.qualityTier = event.qualityTier;
+    snapshot_.continuityCode = event.continuityCode;
+    snapshot_.continuityApplied = event.continuityApplied;
+    snapshot_.transitionCode = event.transitionCode;
+    snapshot_.transitionHeldPrevious = event.transitionHeldPrevious;
+    snapshot_.telemetryCode = event.telemetryCode;
+    snapshot_.telemetryIndexEntryCount = event.telemetryIndexEntryCount;
+    snapshot_.telemetryCandidatesConsidered = event.telemetryCandidatesConsidered;
+    snapshot_.telemetryBudgetSaturated = event.telemetryBudgetSaturated;
+    snapshot_.provenance = event.provenance;
+    snapshot_.database = event.database;
+    if (snapshot_.message.size() > kMotionQueryMaximumDebugMessageBytesUVE) {
+        snapshot_.message.resize(kMotionQueryMaximumDebugMessageBytesUVE);
+    }
+    ++snapshot_.generation;
+}
+
 UVE::Core::DiagnosticCaptureResultUVE MotionQueryTraceProfilerAdapterUVE::RecordMatchUVE(
     UVE::Core::ProfilerCaptureUVE& profiler, const MotionQueryTraceEventUVE& event) const {
     const std::string spanName = event.kind.empty() ? "motion_query" : event.kind;

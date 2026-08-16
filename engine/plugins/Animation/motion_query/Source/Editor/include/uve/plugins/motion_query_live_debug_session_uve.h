@@ -20,6 +20,7 @@ enum class MotionQueryLiveDebugCommandKindUVE : std::uint8_t {
     ClearTrace,
     ClearSession,
     SetFilter,
+    SelectEvent,
 };
 
 struct MotionQueryLiveDebugCommandUVE final {
@@ -29,6 +30,7 @@ struct MotionQueryLiveDebugCommandUVE final {
     MotionQueryLiveDebugCommandKindUVE kind = MotionQueryLiveDebugCommandKindUVE::ReadSnapshot;
     std::optional<UVE::Asset::ResourceHandleUVE> database;
     std::string filter;
+    std::optional<std::uint64_t> eventSequence;
 };
 
 struct MotionQueryLiveDebugSnapshotUVE final {

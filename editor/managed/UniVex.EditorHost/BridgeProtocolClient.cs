@@ -143,6 +143,7 @@ public sealed class BridgeProtocolClient : IAsyncDisposable
                     generation = command.MotionQueryDebugDatabase.Generation,
                 },
                 filter = command.MotionQueryDebugFilter,
+                eventSequence = command.MotionQueryDebugEventSequence,
             },
             motionQueryReplayBaselineName = command.MotionQueryReplayBaselineName,
             motionQueryReplayFixturePayload = command.MotionQueryReplayFixturePayload,
