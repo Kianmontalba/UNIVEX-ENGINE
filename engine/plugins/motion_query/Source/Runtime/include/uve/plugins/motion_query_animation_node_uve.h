@@ -6,6 +6,7 @@
 #include "uve/core/motion_query_history_uve.h"
 #include "uve/core/motion_query_uve.h"
 #include "uve/plugins/motion_query_search_index_uve.h"
+#include "uve/plugins/motion_query_lod_uve.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -17,6 +18,7 @@ namespace UVE::Plugins {
 struct MotionQueryAnimationNodeSettingsUVE final {
     UVE::Core::MotionMatchingWeightsUVE weights;
     std::size_t maximumSearchResults = 32U;
+    MotionQueryQualityTierUVE qualityTier = MotionQueryQualityTierUVE::Full;
     bool looping = true;
 };
 
@@ -41,6 +43,10 @@ struct MotionQueryAnimationNodeResultUVE final {
     MotionQueryAnimationNodeCodeUVE code = MotionQueryAnimationNodeCodeUVE::InvalidSettings;
     std::size_t candidateIndex = 0U;
     std::size_t candidatesEvaluated = 0U;
+    std::size_t requestedSearchResults = 0U;
+    std::size_t effectiveSearchResults = 0U;
+    MotionQueryQualityTierUVE qualityTier = MotionQueryQualityTierUVE::Full;
+    bool searchBudgetDowngraded = false;
     float cost = 0.0F;
     double sampleTimeSeconds = 0.0;
     std::string sourceClipId;
