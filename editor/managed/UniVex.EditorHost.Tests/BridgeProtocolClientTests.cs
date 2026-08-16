@@ -338,6 +338,16 @@ public sealed class BridgeProtocolClientTests
                     ["diagnosticSummary"] = "",
                 },
             },
+            ["replayWorkflow"] = new JsonObject
+            {
+                ["registryGeneration"] = 2UL,
+                ["baselineCount"] = 1UL,
+                ["activeBaselineSelected"] = true,
+                ["activeFixtureAvailable"] = true,
+                ["historyTruncated"] = false,
+                ["readyForComparison"] = true,
+                ["diagnostic"] = "replay workflow is ready for deterministic comparison",
+            },
         };
         using JsonDocument document = JsonDocument.Parse(snapshot.ToJsonString());
         BridgeEditorSnapshot parsed = BridgeSnapshotParser.Parse(document.RootElement);
@@ -390,6 +400,21 @@ public sealed class BridgeProtocolClientTests
         Assert.Equal("ci.fixture", parsed.MotionQuery.ReplayComparisonHistory[0].BaselineName);
         Assert.Equal(2UL, parsed.MotionQuery.ReplayComparisonHistory[0].RegistryGeneration);
         Assert.Equal(1UL, parsed.MotionQuery.ReplayComparisonHistory[0].ComparedEventCount);
+        BridgeMotionQueryReplayDiagnosticsView diagnostics = parsed.MotionQuery.ReplayDiagnostics;
+        Assert.True(diagnostics.HasActiveComparison);
+        Assert.True(diagnostics.IsMatch);
+        Assert.False(diagnostics.HasMismatch);
+        Assert.Equal(0U, diagnostics.MismatchFieldMask);
+        Assert.Equal(0U, diagnostics.CompatibilityMismatchMask);
+        Assert.Single(diagnostics.Baselines);
+        Assert.Single(diagnostics.History);
+        Assert.Equal(2UL, parsed.MotionQuery.ReplayWorkflow.RegistryGeneration);
+        Assert.Equal(1UL, parsed.MotionQuery.ReplayWorkflow.BaselineCount);
+        Assert.True(parsed.MotionQuery.ReplayWorkflow.ActiveBaselineSelected);
+        Assert.True(parsed.MotionQuery.ReplayWorkflow.ActiveFixtureAvailable);
+        Assert.True(parsed.MotionQuery.ReplayWorkflow.ReadyForComparison);
+        Assert.Equal("replay workflow is ready for deterministic comparison",
+                     parsed.MotionQuery.ReplayWorkflow.Diagnostic);
     }
 
     [Fact]
