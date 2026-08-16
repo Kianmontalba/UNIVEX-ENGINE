@@ -96,6 +96,47 @@ TEST(MotionQueryTraceReplayBaselineRegistryUVETest, RegisterUVE_EnforcesBoundedC
     EXPECT_EQ(registry.GetSnapshotUVE().entries.size(), kMotionQueryMaximumReplayBaselinesUVE);
 }
 
+TEST(MotionQueryTraceReplayBaselineRegistryUVETest, EnvelopeUVE_RoundTripsSortedCopiedFixtures) {
+    MotionQueryTraceReplayBaselineRegistryUVE registry;
+    ASSERT_TRUE(registry.RegisterUVE("zeta", MakeFixtureUVE(17U)).IsAcceptedUVE());
+    ASSERT_TRUE(registry.RegisterUVE("alpha", MakeFixtureUVE(19U)).IsAcceptedUVE());
+
+    const MotionQueryTraceReplayBaselineEnvelopeSerializationResultUVE exported =
+        registry.SerializeEnvelopeUVE();
+    ASSERT_TRUE(exported.IsAcceptedUVE());
+    EXPECT_NE(exported.payload.find("schemaVersion"), std::string::npos);
+
+    MotionQueryTraceReplayBaselineRegistryUVE imported;
+    const MotionQueryTraceReplayBaselineEnvelopeDeserializationResultUVE restored =
+        imported.DeserializeEnvelopeUVE(exported.payload);
+    ASSERT_TRUE(restored.IsAcceptedUVE());
+    EXPECT_EQ(restored.importedBaselineCount, 2U);
+    const MotionQueryTraceReplayBaselineSnapshotUVE snapshot = imported.GetSnapshotUVE();
+    ASSERT_EQ(snapshot.entries.size(), 2U);
+    EXPECT_EQ(snapshot.entries[0].name, "alpha");
+    EXPECT_EQ(snapshot.entries[1].name, "zeta");
+    ASSERT_TRUE(imported.SelectUVE("zeta").IsAcceptedUVE());
+    EXPECT_EQ(imported.SelectUVE("zeta").fixture->compatibility->sourceGeneration, 17U);
+    ASSERT_TRUE(imported.SerializeEnvelopeUVE().IsAcceptedUVE());
+    EXPECT_EQ(imported.SerializeEnvelopeUVE().payload, exported.payload);
+}
+
+TEST(MotionQueryTraceReplayBaselineRegistryUVETest, EnvelopeUVE_RejectsMalformedPayloadWithoutMutation) {
+    MotionQueryTraceReplayBaselineRegistryUVE registry;
+    ASSERT_TRUE(registry.RegisterUVE("existing", MakeFixtureUVE()).IsAcceptedUVE());
+    const MotionQueryTraceReplayBaselineSnapshotUVE before = registry.GetSnapshotUVE();
+
+    const MotionQueryTraceReplayBaselineEnvelopeDeserializationResultUVE rejected =
+        registry.DeserializeEnvelopeUVE(R"({"schemaVersion":999,"baselines":[]})");
+    EXPECT_EQ(rejected.code, MotionQueryTraceReplaySerializationCodeUVE::SchemaMismatch);
+    EXPECT_EQ(registry.GetSnapshotUVE(), before);
+
+    const MotionQueryTraceReplayBaselineEnvelopeDeserializationResultUVE oversized =
+        registry.DeserializeEnvelopeUVE(std::string(kMotionQueryMaximumReplayBaselineEnvelopeBytesUVE + 1U, 'x'));
+    EXPECT_EQ(oversized.code, MotionQueryTraceReplaySerializationCodeUVE::PayloadTooLarge);
+    EXPECT_EQ(registry.GetSnapshotUVE(), before);
+}
+
 TEST(MotionQueryTraceReplayBaselineRegistryUVETest, SelectUVE_RejectsStaleGenerationAndMissingNames) {
     MotionQueryTraceReplayBaselineRegistryUVE registry;
     ASSERT_TRUE(registry.RegisterUVE("baseline", MakeFixtureUVE()).IsAcceptedUVE());
