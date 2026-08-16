@@ -44,6 +44,7 @@
 | **COMPLETED** | **Increment 223 — Motion Query Live Debug Trace Event Selection v1** | Add trace event selection and inspection to the managed UI and native debugger. | `SelectEvent` live-debug command; `InspectEventUVE` in native debugger; managed Trace list with selection sync; managed tests passed. |
 | **COMPLETED** | **Increment 224 — Motion Query Live Debug Trace Event Removal v1** | Implement individual trace event removal in the native logger, bridge, and managed UI. | `RemoveEventUVE` in trace logger; `RemoveEvent` live-debug command; managed UI per-event Remove buttons; managed tests passed. |
 | **COMPLETED** | **Increment 225 — Motion Query Replay Baseline Evidence Export v1** | Add a way to export the current live debug trace as a replay fixture. | `ExportMotionQueryReplayEvidence` bridge command; `BuildMotionQueryTraceReplayFixtureUVE` usage; managed UI button for evidence export; managed tests passed. |
+| **COMPLETED** | **Increment 226 — Motion Query Live Debug Trace Event Pinning v1** | Implement trace event pinning to prevent removal during buffer truncation. | `pinned` flag in trace event; `TogglePinUVE` in trace logger; `ToggleTraceEventPin` live-debug command; managed UI pin toggle; managed tests passed. |
 
 <div align="center">
 
