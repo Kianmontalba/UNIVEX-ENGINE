@@ -681,7 +681,11 @@ enum class FrameReadResultUVE : std::uint8_t {
                                                                          : JsonUVE(nullptr)},
                    {"graphSchema", response.visualScriptGraphSchema.has_value()
                                         ? ToJsonUVE(*response.visualScriptGraphSchema)
-                                        : JsonUVE(nullptr)}};
+                                        : JsonUVE(nullptr)},
+                   {"motionQueryReplayBaselineEnvelopePayload",
+                    response.motionQueryReplayBaselineEnvelopePayload.has_value()
+                        ? JsonUVE(*response.motionQueryReplayBaselineEnvelopePayload)
+                        : JsonUVE(nullptr)}};
 }
 
 [[nodiscard]] FrameReadResultUVE ReadFrameUVE(std::istream& input, std::string& body) {
@@ -930,6 +934,15 @@ enum class FrameReadResultUVE : std::uint8_t {
     if (value == "runMotionQueryReplayBaselineBatch") {
         return EditorBridgeRequestKindUVE::RunMotionQueryReplayBaselineBatch;
     }
+    if (value == "exportMotionQueryReplayBaselineRegistry") {
+        return EditorBridgeRequestKindUVE::ExportMotionQueryReplayBaselineRegistry;
+    }
+    if (value == "importMotionQueryReplayBaselineRegistry") {
+        return EditorBridgeRequestKindUVE::ImportMotionQueryReplayBaselineRegistry;
+    }
+    if (value == "renameMotionQueryReplayBaseline") {
+        return EditorBridgeRequestKindUVE::RenameMotionQueryReplayBaseline;
+    }
     return std::nullopt;
 }
 
@@ -1121,6 +1134,16 @@ ParseMotionQueryLiveDebugCommandUVE(const JsonUVE& json, const std::uint64_t req
         }
         request.motionQueryReplayBaselineEnvelopePayload =
             params.at("motionQueryReplayBaselineEnvelopePayload").get<std::string>();
+    }
+    if (params.contains("motionQueryReplayBaselineNewName") &&
+        !params.at("motionQueryReplayBaselineNewName").is_null()) {
+        if (!params.at("motionQueryReplayBaselineNewName").is_string() ||
+            params.at("motionQueryReplayBaselineNewName").get_ref<const std::string&>().empty() ||
+            params.at("motionQueryReplayBaselineNewName").get_ref<const std::string&>().size() >
+                Plugins::Editor::kMotionQueryMaximumReplayBaselineNameBytesUVE) {
+            return std::nullopt;
+        }
+        request.motionQueryReplayBaselineNewName = params.at("motionQueryReplayBaselineNewName").get<std::string>();
     }
 
     if (params.contains("entity") && !params.at("entity").is_null()) {

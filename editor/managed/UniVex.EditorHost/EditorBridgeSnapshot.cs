@@ -604,6 +604,7 @@ public sealed record BridgeCommand(
     public string? MotionQueryReplayBaselineName { get; init; }
     public string? MotionQueryReplayFixturePayload { get; init; }
     public string? MotionQueryReplayBaselineEnvelopePayload { get; init; }
+    public string? MotionQueryReplayBaselineNewName { get; init; }
 }
 
 public sealed record BridgeCommandResult(

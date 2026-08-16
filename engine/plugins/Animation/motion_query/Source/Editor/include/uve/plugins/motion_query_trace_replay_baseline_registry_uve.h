@@ -96,6 +96,7 @@ public:
     [[nodiscard]] MotionQueryTraceReplayBaselineResultUVE RegisterUVE(
         std::string_view name, const MotionQueryTraceReplayFixtureUVE& fixture);
     [[nodiscard]] MotionQueryTraceReplayBaselineResultUVE RemoveUVE(std::string_view name);
+    [[nodiscard]] MotionQueryTraceReplayBaselineResultUVE RenameUVE(std::string_view oldName, std::string_view newName);
     [[nodiscard]] MotionQueryTraceReplayBaselineResultUVE ClearUVE() noexcept;
 
     [[nodiscard]] MotionQueryTraceReplayBaselineSelectionUVE SelectUVE(

@@ -94,6 +94,7 @@ enum class EditorBridgeCapabilityUVE : std::uint8_t {
     RunMotionQueryReplayBaselineBatch,
     ExportMotionQueryReplayBaselineRegistry,
     ImportMotionQueryReplayBaselineRegistry,
+    RenameMotionQueryReplayBaseline,
 };
 
 /// The deliberately small v1 request vocabulary. No generic command string is accepted because
@@ -146,6 +147,7 @@ enum class EditorBridgeRequestKindUVE : std::uint8_t {
     RunMotionQueryReplayBaselineBatch,
     ExportMotionQueryReplayBaselineRegistry,
     ImportMotionQueryReplayBaselineRegistry,
+    RenameMotionQueryReplayBaseline,
 };
 
 /// Explicitly describes whether this bridge session has a native-owned viewport surface. No raw
@@ -624,6 +626,7 @@ struct EditorBridgeRequestUVE final {
     std::optional<std::string> motionQueryReplayBaselineName;
     std::optional<std::string> motionQueryReplayFixturePayload;
     std::optional<std::string> motionQueryReplayBaselineEnvelopePayload;
+    std::optional<std::string> motionQueryReplayBaselineNewName;
 
     EditorBridgeRequestUVE() = default;
 

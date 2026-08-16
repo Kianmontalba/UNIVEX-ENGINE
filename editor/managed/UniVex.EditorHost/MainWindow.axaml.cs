@@ -832,6 +832,24 @@ public partial class MainWindow : Window
         }
     }
 
+    private void MotionQueryRenameBaselineButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button button && button.DataContext is BridgeMotionQueryReplayBaselineEntry baseline &&
+            button.Parent is Grid grid)
+        {
+            var textBox = grid.Children.OfType<TextBox>().FirstOrDefault();
+            string newName = textBox?.Text?.Trim() ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(newName))
+            {
+                DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "renameMotionQueryReplayBaseline")
+                {
+                    MotionQueryReplayBaselineName = baseline.Name,
+                    MotionQueryReplayBaselineNewName = newName
+                });
+            }
+        }
+    }
+
     private void RenderVisualScripting(BridgeVisualScriptingSnapshot scripting, ulong bridgeRevision)
     {
         VisualScriptingStatusTextBlock.Text = DescribeVisualScripting(scripting);

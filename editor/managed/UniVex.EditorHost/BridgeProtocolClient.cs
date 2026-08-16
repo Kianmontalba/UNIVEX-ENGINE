@@ -147,6 +147,7 @@ public sealed class BridgeProtocolClient : IAsyncDisposable
             motionQueryReplayBaselineName = command.MotionQueryReplayBaselineName,
             motionQueryReplayFixturePayload = command.MotionQueryReplayFixturePayload,
             motionQueryReplayBaselineEnvelopePayload = command.MotionQueryReplayBaselineEnvelopePayload,
+            motionQueryReplayBaselineNewName = command.MotionQueryReplayBaselineNewName,
         }, cancellationToken).ConfigureAwait(false);
         JsonElement result = GetResultOrThrow(response.RootElement);
         BridgeEntityRef? createdEntity = result.GetProperty("createdEntity").ValueKind == JsonValueKind.Null

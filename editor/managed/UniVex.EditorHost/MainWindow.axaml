@@ -409,10 +409,12 @@
                                 <ListBox x:Name="MotionQueryBaselinesListBox" Grid.Row="4" MaxHeight="120">
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
-                                            <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6" Margin="0,2">
+                                            <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="6" Margin="0,2">
                                                 <TextBlock Text="{Binding Name, StringFormat='Baseline: {0}'}" VerticalAlignment="Center" />
-                                                <Button Grid.Column="1" Content="Load" Click="MotionQueryLoadBaselineButton_OnClick" Padding="4,2" FontSize="10" />
-                                                <Button Grid.Column="2" Content="Remove" Click="MotionQueryRemoveBaselineButton_OnClick" Padding="4,2" FontSize="10" />
+                                                <TextBox Width="80" Watermark="New name" Padding="2" FontSize="10" Grid.Column="1" />
+                                                <Button Grid.Column="2" Content="Rename" Click="MotionQueryRenameBaselineButton_OnClick" Padding="4,2" FontSize="10" />
+                                                <Button Grid.Column="3" Content="Load" Click="MotionQueryLoadBaselineButton_OnClick" Padding="4,2" FontSize="10" />
+                                                <Button Grid.Column="4" Content="Remove" Click="MotionQueryRemoveBaselineButton_OnClick" Padding="4,2" FontSize="10" />
                                             </Grid>
                                         </DataTemplate>
                                     </ListBox.ItemTemplate>

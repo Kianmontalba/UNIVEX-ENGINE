@@ -87,6 +87,54 @@ MotionQueryTraceReplayBaselineResultUVE MotionQueryTraceReplayBaselineRegistryUV
             "replay baseline removed"};
 }
 
+MotionQueryTraceReplayBaselineResultUVE MotionQueryTraceReplayBaselineRegistryUVE::RenameUVE(
+    const std::string_view oldName, const std::string_view newName) {
+    if (!IsValidNameUVE(newName)) {
+        return {MotionQueryTraceReplayBaselineCodeUVE::InvalidName, 0U, generation_,
+                "new replay baseline name is empty, overlong, or contains a forbidden character"};
+    }
+    if (oldName == newName) {
+        return {MotionQueryTraceReplayBaselineCodeUVE::Accepted, 0U, generation_,
+                "replay baseline name is already set to the requested value"};
+    }
+
+    const auto oldEntry = std::lower_bound(
+        baselines_.begin(), baselines_.end(), oldName,
+        [](const StoredBaselineUVE& entry, const std::string_view candidate) {
+            return entry.name < candidate;
+        });
+    if (oldEntry == baselines_.end() || oldEntry->name != oldName) {
+        return {MotionQueryTraceReplayBaselineCodeUVE::NotFound, 0U, generation_,
+                "source replay baseline name was not found"};
+    }
+
+    const auto newEntry = std::lower_bound(
+        baselines_.begin(), baselines_.end(), newName,
+        [](const StoredBaselineUVE& entry, const std::string_view candidate) {
+            return entry.name < candidate;
+        });
+    if (newEntry != baselines_.end() && newEntry->name == newName) {
+        return {MotionQueryTraceReplayBaselineCodeUVE::DuplicateReplacement, 0U, generation_,
+                "target replay baseline name already exists"};
+    }
+
+    MotionQueryTraceReplayFixtureUVE fixture = std::move(oldEntry->fixture);
+    baselines_.erase(oldEntry);
+    
+    // Re-find the insertion point since erase might have invalidated iterators
+    const auto insertionPoint = std::lower_bound(
+        baselines_.begin(), baselines_.end(), newName,
+        [](const StoredBaselineUVE& entry, const std::string_view candidate) {
+            return entry.name < candidate;
+        });
+    const std::size_t index = static_cast<std::size_t>(insertionPoint - baselines_.begin());
+    baselines_.insert(insertionPoint, StoredBaselineUVE{std::string{newName}, std::move(fixture)});
+    
+    IncrementGenerationUVE();
+    return {MotionQueryTraceReplayBaselineCodeUVE::Accepted, index, generation_,
+            "replay baseline renamed"};
+}
+
 MotionQueryTraceReplayBaselineResultUVE MotionQueryTraceReplayBaselineRegistryUVE::ClearUVE() noexcept {
     if (baselines_.empty()) {
         return {MotionQueryTraceReplayBaselineCodeUVE::Accepted, 0U, generation_,
