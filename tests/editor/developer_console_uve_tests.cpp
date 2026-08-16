@@ -115,7 +115,14 @@ TEST(DeveloperConsoleUVE, SetCVarDetailedUVEReturnsStructuredMutationDiagnostics
     EXPECT_EQ(mutableCVar->value, "3");
 
     DeveloperConsoleUVE shipping(DeveloperConsoleBuildPolicyUVE::Shipping);
-    ASSERT_TRUE(shipping.RegisterCVar("r.shipping", "1"));
+    const DeveloperConsoleCommandRegistrationResultUVE commandUnavailable = shipping.RegisterCommandUVE(
+        "r.shipping.command", "Unavailable command.", [](DeveloperConsoleUVE&, std::string_view) {});
+    EXPECT_EQ(commandUnavailable.code, DeveloperConsoleCommandRegistrationCodeUVE::Unavailable);
+    EXPECT_FALSE(commandUnavailable.IsAcceptedUVE());
+    const DeveloperConsoleCVarRegistrationResultUVE cvarUnavailable =
+        shipping.RegisterCVarUVE("r.shipping", "1");
+    EXPECT_EQ(cvarUnavailable.code, DeveloperConsoleCVarRegistrationCodeUVE::Unavailable);
+    EXPECT_FALSE(cvarUnavailable.IsAcceptedUVE());
     const DeveloperConsoleCVarMutationResultUVE unavailable = shipping.SetCVarDetailedUVE("r.shipping", "2");
     EXPECT_EQ(unavailable.code, DeveloperConsoleCVarMutationCodeUVE::Unavailable);
     EXPECT_FALSE(unavailable.IsAcceptedUVE());
@@ -292,10 +299,39 @@ TEST(DeveloperConsoleUVE, SetBuildPolicyDetailedUVEReturnsStructuredDiagnostics)
     EXPECT_EQ(applied.code, DeveloperConsoleBuildPolicyCodeUVE::Applied);
     EXPECT_TRUE(applied.IsAcceptedUVE());
     EXPECT_FALSE(applied.message.empty());
-    EXPECT_FALSE(console.GetSnapshotUVE().available);
-    EXPECT_TRUE(console.SetBuildPolicyUVE(DeveloperConsoleBuildPolicyUVE::Development));
-    EXPECT_TRUE(console.GetSnapshotUVE().available);
+    const DeveloperConsoleSnapshotUVE shippingSnapshot = console.GetSnapshotUVE();
+    EXPECT_FALSE(shippingSnapshot.available);
+    const DeveloperConsoleBuildPolicyResultUVE locked =
+        console.SetBuildPolicyDetailedUVE(DeveloperConsoleBuildPolicyUVE::Development);
+    EXPECT_EQ(locked.code, DeveloperConsoleBuildPolicyCodeUVE::Locked);
+    EXPECT_FALSE(locked.IsAcceptedUVE());
+    EXPECT_FALSE(locked.message.empty());
+    const DeveloperConsoleSnapshotUVE afterRejectedDowngrade = console.GetSnapshotUVE();
+    EXPECT_FALSE(afterRejectedDowngrade.available);
+    EXPECT_EQ(afterRejectedDowngrade.generation, shippingSnapshot.generation);
     EXPECT_FALSE(console.SetBuildPolicyUVE(DeveloperConsoleBuildPolicyUVE::Development));
+}
+
+TEST(DeveloperConsoleUVE, ShippingPolicyUVE_ClosesRegistrationAndPreservesGenerationOnDowngrade) {
+    DeveloperConsoleUVE shipping(DeveloperConsoleBuildPolicyUVE::Shipping);
+    const DeveloperConsoleSnapshotUVE initial = shipping.GetSnapshotUVE();
+    EXPECT_FALSE(initial.available);
+    EXPECT_TRUE(initial.developmentOnly);
+    EXPECT_TRUE(initial.completions.empty());
+
+    const DeveloperConsoleCommandRegistrationResultUVE command = shipping.RegisterCommandUVE(
+        "late.command", "Late command.", [](DeveloperConsoleUVE&, std::string_view) {});
+    EXPECT_EQ(command.code, DeveloperConsoleCommandRegistrationCodeUVE::Unavailable);
+    const DeveloperConsoleCVarRegistrationResultUVE cvar = shipping.RegisterCVarUVE("late.cvar", "0");
+    EXPECT_EQ(cvar.code, DeveloperConsoleCVarRegistrationCodeUVE::Unavailable);
+    const DeveloperConsoleSnapshotUVE afterRegistration = shipping.GetSnapshotUVE();
+    EXPECT_EQ(afterRegistration.generation, initial.generation);
+
+    const DeveloperConsoleBuildPolicyResultUVE downgrade =
+        shipping.SetBuildPolicyDetailedUVE(DeveloperConsoleBuildPolicyUVE::Development);
+    EXPECT_EQ(downgrade.code, DeveloperConsoleBuildPolicyCodeUVE::Locked);
+    EXPECT_EQ(shipping.GetSnapshotUVE().generation, initial.generation);
+    EXPECT_FALSE(shipping.IsAvailableUVE());
 }
 
 TEST(DeveloperConsoleUVE, MoveHistoryDetailedUVEReturnsStructuredDiagnostics) {
