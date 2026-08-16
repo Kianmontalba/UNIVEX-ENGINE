@@ -280,6 +280,58 @@ constexpr std::array<std::string_view, 3U> kForbiddenReplayFieldNamesUVE = {
     return summary;
 }
 
+[[nodiscard]] std::uint32_t ClassifyReplayCompatibilityMismatchUVE(
+    const MotionQueryTraceReplayFixtureUVE& fixture,
+    const MotionQueryTraceReplayCompatibilityUVE& expected) noexcept {
+    if (!fixture.compatibility.has_value()) {
+        return static_cast<std::uint32_t>(MotionQueryTraceReplayCompatibilityMismatchFieldUVE::
+                                              FixtureCompatibilityMissing);
+    }
+    const MotionQueryTraceReplayCompatibilityUVE& actual = *fixture.compatibility;
+    std::uint32_t mask = static_cast<std::uint32_t>(MotionQueryTraceReplayCompatibilityMismatchFieldUVE::None);
+    const auto addIfDifferent = [&mask](const bool differs,
+                                        const MotionQueryTraceReplayCompatibilityMismatchFieldUVE field) {
+        if (differs) {
+            mask |= static_cast<std::uint32_t>(field);
+        }
+    };
+    addIfDifferent(actual.schemaVersion != expected.schemaVersion,
+                   MotionQueryTraceReplayCompatibilityMismatchFieldUVE::SchemaVersion);
+    addIfDifferent(actual.samplerVersion != expected.samplerVersion,
+                   MotionQueryTraceReplayCompatibilityMismatchFieldUVE::SamplerVersion);
+    addIfDifferent(actual.normalizationVersion != expected.normalizationVersion,
+                   MotionQueryTraceReplayCompatibilityMismatchFieldUVE::NormalizationVersion);
+    addIfDifferent(actual.sourceGeneration != expected.sourceGeneration,
+                   MotionQueryTraceReplayCompatibilityMismatchFieldUVE::SourceGeneration);
+    return mask;
+}
+
+[[nodiscard]] std::string SummarizeReplayCompatibilityMismatchUVE(const std::uint32_t mask) {
+    constexpr std::array<std::pair<MotionQueryTraceReplayCompatibilityMismatchFieldUVE, std::string_view>, 5U>
+        fields = {{
+            {MotionQueryTraceReplayCompatibilityMismatchFieldUVE::FixtureCompatibilityMissing, "compatibilityMissing"},
+            {MotionQueryTraceReplayCompatibilityMismatchFieldUVE::SchemaVersion, "schemaVersion"},
+            {MotionQueryTraceReplayCompatibilityMismatchFieldUVE::SamplerVersion, "samplerVersion"},
+            {MotionQueryTraceReplayCompatibilityMismatchFieldUVE::NormalizationVersion, "normalizationVersion"},
+            {MotionQueryTraceReplayCompatibilityMismatchFieldUVE::SourceGeneration, "sourceGeneration"},
+        }};
+    std::string summary;
+    for (const auto& [field, label] : fields) {
+        if ((mask & static_cast<std::uint32_t>(field)) == 0U) {
+            continue;
+        }
+        if (!summary.empty()) {
+            summary.push_back(',');
+        }
+        summary += label;
+        if (summary.size() >= kMotionQueryMaximumReplayDiagnosticSummaryBytesUVE) {
+            summary.resize(kMotionQueryMaximumReplayDiagnosticSummaryBytesUVE);
+            break;
+        }
+    }
+    return summary;
+}
+
 [[nodiscard]] MotionQueryTraceReplayComparisonUVE MakeComparisonUVE(
     const MotionQueryTraceReplayComparisonCodeUVE code,
     const std::size_t comparedEventCount,
@@ -289,7 +341,10 @@ constexpr std::array<std::string_view, 3U> kForbiddenReplayFieldNamesUVE = {
     const std::string_view message,
     const std::uint32_t mismatchFieldMask =
         static_cast<std::uint32_t>(MotionQueryTraceReplayMismatchFieldUVE::None),
-    const std::string_view diagnosticSummary = {}) {
+    const std::string_view diagnosticSummary = {},
+    const std::uint32_t compatibilityMismatchMask =
+        static_cast<std::uint32_t>(MotionQueryTraceReplayCompatibilityMismatchFieldUVE::None),
+    const std::string_view compatibilityDiagnosticSummary = {}) {
     return MotionQueryTraceReplayComparisonUVE{
         code,
         comparedEventCount,
@@ -299,6 +354,8 @@ constexpr std::array<std::string_view, 3U> kForbiddenReplayFieldNamesUVE = {
         mismatchFieldMask,
         std::string(message),
         std::string(diagnosticSummary),
+        compatibilityMismatchMask,
+        std::string(compatibilityDiagnosticSummary),
     };
 }
 
@@ -345,9 +402,13 @@ MotionQueryTraceReplayFixtureUVE BuildMotionQueryTraceReplayFixtureUVE(
     if (expectedCompatibility.has_value() &&
         (!fixture.compatibility.has_value() ||
          *fixture.compatibility != *expectedCompatibility)) {
+        const std::uint32_t compatibilityMismatchMask =
+            ClassifyReplayCompatibilityMismatchUVE(fixture, *expectedCompatibility);
         return MakeComparisonUVE(MotionQueryTraceReplayComparisonCodeUVE::CompatibilityMismatch, 0U,
                                  kMotionQueryTraceReplayNoMismatchIndexUVE, fixture.truncated,
-                                 snapshot.truncated, "motion query replay compatibility differs");
+                                 snapshot.truncated, "motion query replay compatibility differs", 0U, {},
+                                 compatibilityMismatchMask,
+                                 SummarizeReplayCompatibilityMismatchUVE(compatibilityMismatchMask));
     }
 
     const MotionQueryTraceReplayFixtureUVE actual = expectedCompatibility.has_value()

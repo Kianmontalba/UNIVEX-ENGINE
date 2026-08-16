@@ -167,7 +167,9 @@ public sealed record BridgeMotionQueryReplayComparison(
     bool SnapshotTruncated,
     uint MismatchFieldMask,
     string Message,
-    string DiagnosticSummary);
+    string DiagnosticSummary,
+    uint CompatibilityMismatchMask,
+    string CompatibilityDiagnosticSummary);
 
 public sealed record BridgeMotionQueryReplayBaselineEntry(
     string Name,
@@ -717,7 +719,7 @@ public static class BridgeSnapshotParser
             false, 0UL, null, string.Empty, 0, 0, false,
             "No native Motion Query live debug session is attached to this bridge frame.",
             new BridgeMotionQueryReplayComparison(false, 0, 0, 0UL, 0UL, false, false, 0U,
-                                                   string.Empty, string.Empty),
+                                                   string.Empty, string.Empty, 0U, string.Empty),
             new BridgeMotionQueryReplayBaselineSnapshot(0UL, false,
                                                         Array.Empty<BridgeMotionQueryReplayBaselineEntry>()),
             false,
@@ -849,7 +851,7 @@ public static class BridgeSnapshotParser
                 RequiredBoundedString(eventValue, "message")));
         }
         BridgeMotionQueryReplayComparison replayComparison = new(
-            false, 0, 0, 0UL, 0UL, false, false, 0U, string.Empty, string.Empty);
+            false, 0, 0, 0UL, 0UL, false, false, 0U, string.Empty, string.Empty, 0U, string.Empty);
         if (value.TryGetProperty("replayComparison", out JsonElement replayValue))
         {
             RequireObject(replayValue, "motion-query replay comparison");
@@ -868,7 +870,9 @@ public static class BridgeSnapshotParser
                 OptionalBoolean(replayValue, "snapshotTruncated", false),
                 OptionalUInt32(replayValue, "mismatchFieldMask", 0U),
                 OptionalBoundedString(replayValue, "message", string.Empty),
-                OptionalBoundedString(replayValue, "diagnosticSummary", string.Empty));
+                OptionalBoundedString(replayValue, "diagnosticSummary", string.Empty),
+                OptionalUInt32(replayValue, "compatibilityMismatchMask", 0U),
+                OptionalBoundedString(replayValue, "compatibilityDiagnosticSummary", string.Empty));
         }
         BridgeMotionQueryReplayBaselineSnapshot replayBaselines =
             new(0UL, false, Array.Empty<BridgeMotionQueryReplayBaselineEntry>());

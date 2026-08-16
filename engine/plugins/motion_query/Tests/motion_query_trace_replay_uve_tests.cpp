@@ -207,6 +207,9 @@ TEST(MotionQueryTraceReplayUVETest, CompareUVE_EnforcesRuntimeCompatibilityIdent
     const MotionQueryTraceReplayComparisonUVE mismatch =
         CompareMotionQueryTraceReplayFixtureUVE(fixture, MakeSnapshotUVE(), changed);
     EXPECT_EQ(mismatch.code, MotionQueryTraceReplayComparisonCodeUVE::CompatibilityMismatch);
+    EXPECT_EQ(mismatch.compatibilityMismatchMask,
+              static_cast<std::uint32_t>(MotionQueryTraceReplayCompatibilityMismatchFieldUVE::NormalizationVersion));
+    EXPECT_EQ(mismatch.compatibilityDiagnosticSummary, "normalizationVersion");
     EXPECT_FALSE(mismatch.IsMatchUVE());
 }
 

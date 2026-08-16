@@ -432,6 +432,8 @@ struct EditorBridgeMotionQueryReplayComparisonUVE final {
     std::uint32_t mismatchFieldMask = 0U;
     std::string message;
     std::string diagnosticSummary;
+    std::uint32_t compatibilityMismatchMask = 0U;
+    std::string compatibilityDiagnosticSummary;
 
     [[nodiscard]] bool operator==(const EditorBridgeMotionQueryReplayComparisonUVE&) const = default;
 };
