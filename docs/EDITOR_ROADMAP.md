@@ -290,6 +290,10 @@
 | **PARTIAL** | Advanced editor tools | Animation, terrain, world streaming, profiling, cinematics, source control, and collaboration. | Proven viewport, scene, asset, and session foundations. |
 | **PARTIAL** | Platform and shipping workflow | Cooking, packaging, deployment, and sample-project growth. | Stable asset pipeline, project validation, and renderer presentation. |
 
+---
+
+> **AAA & Core Engine Direction:** For the comprehensive high-level roadmap covering Animation Trees, Control Rig, Task Graphs, Reflection, and advanced rendering, refer to the [**AAA CORE ROADMAP**](AAA_CORE_ROADMAP.md).
+
 <div align="center">
 
 <h2><strong>FIRST-GENERATION SCENE EDITOR — COMPLETION GATE</strong></h2>
