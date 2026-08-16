@@ -209,6 +209,27 @@ void EditorBridgeUVE::SetDataTablePreviewSnapshotUVE(Asset::DataTableSnapshotUVE
     }
 }
 
+void EditorBridgeUVE::SetMotionQueryReplayFixtureUVE(
+    Plugins::Editor::MotionQueryTraceReplayFixtureUVE fixture) {
+    if (m_motionQueryReplayFixture == fixture) {
+        return;
+    }
+    m_motionQueryReplayFixture = std::move(fixture);
+    if (m_lastObservedState.has_value()) {
+        SynchronizeRevisionUVE();
+    }
+}
+
+void EditorBridgeUVE::ClearMotionQueryReplayFixtureUVE() {
+    if (!m_motionQueryReplayFixture.has_value()) {
+        return;
+    }
+    m_motionQueryReplayFixture.reset();
+    if (m_lastObservedState.has_value()) {
+        SynchronizeRevisionUVE();
+    }
+}
+
 EditorBridgeSnapshotUVE EditorBridgeUVE::GetSnapshotUVE() {
     SynchronizeRevisionUVE();
     return BuildSnapshotUVE();
@@ -944,6 +965,22 @@ EditorBridgeMotionQuerySnapshotUVE EditorBridgeUVE::CaptureMotionQueryUVE() cons
     snapshot.liveDebugVisibleTraceEventCount = liveDebug.visibleTraceEventCount;
     snapshot.liveDebugTraceTruncated = liveDebug.traceTruncated;
     snapshot.liveDebugDiagnostic = liveDebug.diagnostic;
+    if (m_motionQueryReplayFixture.has_value()) {
+        const Plugins::Editor::MotionQueryTraceReplayRegressionResultUVE comparison =
+            Plugins::Editor::CompareMotionQueryLiveDebugSnapshotAgainstFixtureUVE(
+                *m_motionQueryReplayFixture, liveDebug);
+        snapshot.replayComparison.available = true;
+        snapshot.replayComparison.code = static_cast<std::uint8_t>(comparison.code);
+        snapshot.replayComparison.message = comparison.message;
+        if (comparison.comparison.has_value()) {
+            snapshot.replayComparison.comparisonCode =
+                static_cast<std::uint8_t>(comparison.comparison->code);
+            snapshot.replayComparison.comparedEventCount = comparison.comparison->comparedEventCount;
+            snapshot.replayComparison.mismatchIndex = comparison.comparison->mismatchIndex;
+            snapshot.replayComparison.fixtureTruncated = comparison.comparison->fixtureTruncated;
+            snapshot.replayComparison.snapshotTruncated = comparison.comparison->snapshotTruncated;
+        }
+    }
     return snapshot;
 }
 

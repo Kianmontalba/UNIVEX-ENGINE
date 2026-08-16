@@ -565,6 +565,16 @@ TEST(EditorBridgeUVETest, MotionQueryUVE_ExposesCopiedSnapshotAndRevisionGuarded
         EXPECT_EQ(debugResponse.snapshot.motionQuery.liveDebugGeneration, 1U);
         EXPECT_EQ(debugResponse.snapshot.revision, dispatchResponse.snapshot.revision + 1U);
 
+        Plugins::Editor::MotionQueryTraceReplayFixtureUVE replayFixture;
+        bridge.SetMotionQueryReplayFixtureUVE(replayFixture);
+        const EditorBridgeSnapshotUVE replaySnapshot = bridge.GetSnapshotUVE();
+        EXPECT_TRUE(replaySnapshot.motionQuery.replayComparison.available);
+        EXPECT_EQ(replaySnapshot.motionQuery.replayComparison.code,
+                  static_cast<std::uint8_t>(Plugins::Editor::MotionQueryTraceReplayRegressionCodeUVE::EmptyTrace));
+        EXPECT_FALSE(replaySnapshot.motionQuery.replayComparison.message.empty());
+        bridge.ClearMotionQueryReplayFixtureUVE();
+        EXPECT_FALSE(bridge.GetSnapshotUVE().motionQuery.replayComparison.available);
+
         dispatchRequest.requestId = 502U;
         dispatchRequest.expectedRevision = initial.revision;
         command.requestId = 502U;
