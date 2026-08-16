@@ -100,6 +100,7 @@ add_executable(uve_tests
     core/animation_retargeting_uve_tests.cpp
     core/motion_query_uve_tests.cpp
     core/motion_query_feature_channels_uve_tests.cpp
+    core/motion_query_history_uve_tests.cpp
     core/motion_query_database_contract_uve_tests.cpp
     core/frame_scheduler_uve_tests.cpp
     core/profiler_diagnostics_uve_tests.cpp
