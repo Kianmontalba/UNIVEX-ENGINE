@@ -38,7 +38,7 @@
 | **COMPLETED** | **Increment 217 — Managed Bridge Parsing of Bounded Replay Batch History and Session Facts v1** | Parse additive batch-result, batch-history, and session-facts DTOs in the managed bridge client. | `BridgeMotionQueryReplayBatchSnapshot`, `BridgeMotionQueryReplayBatchHistoryEntry`, and `BridgeMotionQueryReplaySessionFacts` parsed from copied stdio JSON; managed parser tests passed. |
 | **COMPLETED** | **Increment 218 — Managed Presentation of Replay Batch History and Session Facts v1** | Display bounded batch regression history and cumulative session facts in the Avalonia Animator panel. | Animator panel renders `ReplayBatchHistory` and `ReplaySessionFacts` from the copied DTO; managed UI tests passed. |
 | **COMPLETED** | **Increment 219 — Managed Presentation of Motion Query Replay Comparison History v1** | Display bounded individual comparison history in the Avalonia Animator panel. | Animator panel renders `ReplayComparisonHistory` from the copied diagnostics view; managed UI tests passed. |
-| **PARTIAL — planned** | **Increment 220 — Managed Motion Query Replay Baseline Export/Import v1** | Expose native registry export/import commands through the managed bridge and Avalonia UI. | Deterministic envelope serialization/deserialization via bridge requests; managed UI buttons for export/import; regression tests passed. |
+| **COMPLETED** | **Increment 220 — Managed Motion Query Replay Baseline Export/Import v1** | Expose native registry export/import commands through the managed bridge and Avalonia UI. | Deterministic envelope serialization/deserialization via bridge requests; managed UI buttons for export/import; regression tests passed. |
 
 <div align="center">
 

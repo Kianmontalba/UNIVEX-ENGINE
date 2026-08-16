@@ -810,6 +810,28 @@ public partial class MainWindow : Window
     private void MotionQueryClearReplayButton_OnClick(object? sender, RoutedEventArgs e) =>
         DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "clearMotionQueryReplayBaseline"));
 
+    private void MotionQueryLoadBaselineButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button { DataContext: BridgeMotionQueryReplayBaselineEntry baseline })
+        {
+            DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "loadMotionQueryReplayBaseline")
+            {
+                MotionQueryReplayBaselineName = baseline.Name
+            });
+        }
+    }
+
+    private void MotionQueryRemoveBaselineButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button { DataContext: BridgeMotionQueryReplayBaselineEntry baseline })
+        {
+            DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "clearMotionQueryReplayBaseline")
+            {
+                MotionQueryReplayBaselineName = baseline.Name
+            });
+        }
+    }
+
     private void RenderVisualScripting(BridgeVisualScriptingSnapshot scripting, ulong bridgeRevision)
     {
         VisualScriptingStatusTextBlock.Text = DescribeVisualScripting(scripting);
