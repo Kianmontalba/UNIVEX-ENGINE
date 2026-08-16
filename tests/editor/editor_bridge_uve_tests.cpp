@@ -494,13 +494,21 @@ TEST(EditorBridgeUVETest, MotionQueryUVE_ExposesCopiedSnapshotAndRevisionGuarded
         const EditorBridgeSnapshotUVE initial = bridge.GetSnapshotUVE();
         bool readAdvertised = false;
         bool dispatchAdvertised = false;
+        bool replayLoadAdvertised = false;
+        bool replayClearAdvertised = false;
         for (const EditorBridgeCapabilityUVE capability : initial.capabilities) {
             readAdvertised = readAdvertised || capability == EditorBridgeCapabilityUVE::ReadMotionQuery;
             dispatchAdvertised = dispatchAdvertised ||
                                  capability == EditorBridgeCapabilityUVE::DispatchMotionQueryCommand;
+            replayLoadAdvertised = replayLoadAdvertised ||
+                                   capability == EditorBridgeCapabilityUVE::LoadMotionQueryReplayBaseline;
+            replayClearAdvertised = replayClearAdvertised ||
+                                    capability == EditorBridgeCapabilityUVE::ClearMotionQueryReplayBaseline;
         }
         ASSERT_TRUE(readAdvertised);
         ASSERT_TRUE(dispatchAdvertised);
+        ASSERT_TRUE(replayLoadAdvertised);
+        ASSERT_TRUE(replayClearAdvertised);
 
         EditorBridgeRequestUVE readRequest{};
         readRequest.protocolVersion = kEditorBridgeProtocolVersionUVE;
@@ -574,6 +582,38 @@ TEST(EditorBridgeUVETest, MotionQueryUVE_ExposesCopiedSnapshotAndRevisionGuarded
         EXPECT_FALSE(replaySnapshot.motionQuery.replayComparison.message.empty());
         bridge.ClearMotionQueryReplayFixtureUVE();
         EXPECT_FALSE(bridge.GetSnapshotUVE().motionQuery.replayComparison.available);
+
+        Plugins::Editor::MotionQueryTraceReplayFixtureUVE commandFixture;
+        const Plugins::Editor::MotionQueryTraceReplaySerializationResultUVE encodedFixture =
+            Plugins::Editor::SerializeMotionQueryTraceReplayFixtureUVE(commandFixture);
+        ASSERT_TRUE(encodedFixture.IsAcceptedUVE());
+        EditorBridgeRequestUVE loadReplayRequest{};
+        loadReplayRequest.protocolVersion = kEditorBridgeProtocolVersionUVE;
+        loadReplayRequest.requestId = 504U;
+        loadReplayRequest.expectedRevision = bridge.GetSnapshotUVE().revision;
+        loadReplayRequest.kind = EditorBridgeRequestKindUVE::LoadMotionQueryReplayBaseline;
+        loadReplayRequest.motionQueryReplayBaselineName = "bridge-baseline";
+        loadReplayRequest.motionQueryReplayFixturePayload = encodedFixture.payload;
+        const EditorBridgeResponseUVE loadReplayResponse = bridge.DispatchUVE(loadReplayRequest);
+        ASSERT_TRUE(loadReplayResponse.applied) << loadReplayResponse.message;
+        EXPECT_EQ(loadReplayResponse.code, "bridge.motion_query.replay.baseline.loaded");
+        EXPECT_TRUE(loadReplayResponse.snapshot.motionQuery.replayComparison.available);
+
+        EditorBridgeRequestUVE staleClearRequest{};
+        staleClearRequest.protocolVersion = kEditorBridgeProtocolVersionUVE;
+        staleClearRequest.requestId = 505U;
+        staleClearRequest.expectedRevision = loadReplayRequest.expectedRevision;
+        staleClearRequest.kind = EditorBridgeRequestKindUVE::ClearMotionQueryReplayBaseline;
+        staleClearRequest.motionQueryReplayBaselineName = "bridge-baseline";
+        EXPECT_EQ(bridge.DispatchUVE(staleClearRequest).code, "bridge.snapshot.stale");
+
+        EditorBridgeRequestUVE clearReplayRequest = staleClearRequest;
+        clearReplayRequest.requestId = 506U;
+        clearReplayRequest.expectedRevision = loadReplayResponse.snapshot.revision;
+        const EditorBridgeResponseUVE clearReplayResponse = bridge.DispatchUVE(clearReplayRequest);
+        ASSERT_TRUE(clearReplayResponse.applied) << clearReplayResponse.message;
+        EXPECT_EQ(clearReplayResponse.code, "bridge.motion_query.replay.baseline.cleared");
+        EXPECT_FALSE(clearReplayResponse.snapshot.motionQuery.replayComparison.available);
 
         dispatchRequest.requestId = 502U;
         dispatchRequest.expectedRevision = initial.revision;
