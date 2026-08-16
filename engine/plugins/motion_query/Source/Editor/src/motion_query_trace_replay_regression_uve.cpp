@@ -2,6 +2,27 @@
 #include "uve/plugins/motion_query_trace_replay_regression_uve.h"
 
 namespace UVE::Plugins::Editor {
+
+MotionQueryTraceReplayCaptureResultUVE CaptureMotionQueryTraceReplayFixtureUVE(
+    const MotionQueryLiveDebugSnapshotUVE& snapshot) {
+    if (!snapshot.filter.empty() ||
+        snapshot.totalTraceEventCount != snapshot.visibleTraceEventCount) {
+        return {MotionQueryTraceReplayCaptureCodeUVE::FilteredSnapshot, std::nullopt,
+                "motion query live debug snapshot is filtered and cannot be captured as a full fixture"};
+    }
+    if (snapshot.visibleTraceEventCount == 0U) {
+        return {MotionQueryTraceReplayCaptureCodeUVE::EmptyTrace, std::nullopt,
+                "motion query live debug snapshot contains no trace events"};
+    }
+
+    MotionQueryTraceSnapshotUVE trace;
+    trace.truncated = snapshot.traceTruncated;
+    trace.events = snapshot.traceEvents;
+    return {MotionQueryTraceReplayCaptureCodeUVE::Accepted,
+            BuildMotionQueryTraceReplayFixtureUVE(trace),
+            "motion query replay fixture captured from copied live debug trace"};
+}
+
 namespace {
 
 [[nodiscard]] MotionQueryTraceReplayRegressionResultUVE CompareSnapshotInternalUVE(
