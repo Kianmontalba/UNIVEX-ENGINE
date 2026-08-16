@@ -119,6 +119,7 @@ add_executable(uve_tests
     ../engine/plugins/motion_query/Tests/motion_query_plugin_module_uve_tests.cpp
     ../engine/plugins/motion_query/Tests/motion_query_asset_sampling_uve_tests.cpp
     ../engine/plugins/motion_query/Tests/motion_query_search_index_uve_tests.cpp
+    ../engine/plugins/motion_query/Tests/motion_query_animation_node_uve_tests.cpp
     project_check/project_checker_uve_tests.cpp
 )
 target_link_libraries(uve_tests PRIVATE
