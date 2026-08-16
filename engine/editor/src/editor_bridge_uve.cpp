@@ -60,6 +60,8 @@ namespace {
         EditorBridgeCapabilityUVE::ReadMotionQuery,
         EditorBridgeCapabilityUVE::DispatchMotionQueryCommand,
         EditorBridgeCapabilityUVE::DispatchMotionQueryDebugCommand,
+        EditorBridgeCapabilityUVE::LoadMotionQueryReplayBaseline,
+        EditorBridgeCapabilityUVE::ClearMotionQueryReplayBaseline,
     };
     return capabilities;
 }
@@ -211,10 +213,11 @@ void EditorBridgeUVE::SetDataTablePreviewSnapshotUVE(Asset::DataTableSnapshotUVE
 
 void EditorBridgeUVE::SetMotionQueryReplayFixtureUVE(
     Plugins::Editor::MotionQueryTraceReplayFixtureUVE fixture) {
-    if (m_motionQueryReplayFixture == fixture) {
+    if (m_motionQueryReplayFixture == fixture && !m_motionQueryActiveBaselineName.has_value()) {
         return;
     }
     m_motionQueryReplayFixture = std::move(fixture);
+    m_motionQueryActiveBaselineName.reset();
     if (m_lastObservedState.has_value()) {
         SynchronizeRevisionUVE();
     }
@@ -225,6 +228,7 @@ void EditorBridgeUVE::ClearMotionQueryReplayFixtureUVE() {
         return;
     }
     m_motionQueryReplayFixture.reset();
+    m_motionQueryActiveBaselineName.reset();
     if (m_lastObservedState.has_value()) {
         SynchronizeRevisionUVE();
     }
@@ -807,6 +811,68 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
             if (applied) {
                 ++m_revision;
             }
+            break;
+        }
+        case EditorBridgeRequestKindUVE::LoadMotionQueryReplayBaseline: {
+            if (!request.motionQueryReplayBaselineName.has_value() ||
+                !request.motionQueryReplayFixturePayload.has_value() ||
+                request.motionQueryReplayBaselineName->empty() ||
+                request.motionQueryReplayBaselineName->size() >
+                    Plugins::Editor::kMotionQueryMaximumReplayBaselineNameBytesUVE) {
+                return MakeResponseUVE(request, false, "bridge.motion_query.replay.baseline.request.invalid",
+                                       "LoadMotionQueryReplayBaseline requires a bounded baseline name and payload.");
+            }
+            const Plugins::Editor::MotionQueryTraceReplayDeserializationResultUVE decoded =
+                Plugins::Editor::DeserializeMotionQueryTraceReplayFixtureUVE(
+                    *request.motionQueryReplayFixturePayload);
+            if (!decoded.IsAcceptedUVE()) {
+                return MakeResponseUVE(request, false, "bridge.motion_query.replay.baseline.invalid",
+                                       decoded.message);
+            }
+            const Plugins::Editor::MotionQueryTraceReplayBaselineResultUVE registered =
+                m_motionQueryReplayBaselineRegistry.RegisterUVE(*request.motionQueryReplayBaselineName,
+                                                                *decoded.fixture);
+            if (!registered.IsAcceptedUVE()) {
+                return MakeResponseUVE(request, false, "bridge.motion_query.replay.baseline.rejected",
+                                       registered.message);
+            }
+            const Plugins::Editor::MotionQueryTraceReplayBaselineSelectionUVE selected =
+                m_motionQueryReplayBaselineRegistry.SelectUVE(*request.motionQueryReplayBaselineName,
+                                                              registered.registryGeneration);
+            if (!selected.IsAcceptedUVE()) {
+                return MakeResponseUVE(request, false, "bridge.motion_query.replay.baseline.selection.failed",
+                                       selected.message);
+            }
+            m_motionQueryReplayFixture = std::move(selected.fixture);
+            m_motionQueryActiveBaselineName = *request.motionQueryReplayBaselineName;
+            applied = true;
+            code = "bridge.motion_query.replay.baseline.loaded";
+            message = "The native replay baseline was validated, registered, and selected.";
+            ++m_revision;
+            break;
+        }
+        case EditorBridgeRequestKindUVE::ClearMotionQueryReplayBaseline: {
+            if (!request.motionQueryReplayBaselineName.has_value() ||
+                request.motionQueryReplayBaselineName->empty() ||
+                request.motionQueryReplayBaselineName->size() >
+                    Plugins::Editor::kMotionQueryMaximumReplayBaselineNameBytesUVE) {
+                return MakeResponseUVE(request, false, "bridge.motion_query.replay.baseline.request.invalid",
+                                       "ClearMotionQueryReplayBaseline requires a bounded baseline name.");
+            }
+            const Plugins::Editor::MotionQueryTraceReplayBaselineResultUVE removed =
+                m_motionQueryReplayBaselineRegistry.RemoveUVE(*request.motionQueryReplayBaselineName);
+            if (!removed.IsAcceptedUVE()) {
+                return MakeResponseUVE(request, false, "bridge.motion_query.replay.baseline.rejected",
+                                       removed.message);
+            }
+            if (m_motionQueryActiveBaselineName == request.motionQueryReplayBaselineName) {
+                m_motionQueryReplayFixture.reset();
+                m_motionQueryActiveBaselineName.reset();
+            }
+            applied = true;
+            code = "bridge.motion_query.replay.baseline.cleared";
+            message = "The named native replay baseline was cleared.";
+            ++m_revision;
             break;
         }
         case EditorBridgeRequestKindUVE::ReadMotionQuery:

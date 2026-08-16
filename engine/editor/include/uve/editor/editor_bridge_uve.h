@@ -22,6 +22,7 @@
 #include "uve/plugins/motion_query_editor_authoring_uve.h"
 #include "uve/plugins/motion_query_live_debug_session_uve.h"
 #include "uve/plugins/motion_query_trace_replay_regression_uve.h"
+#include "uve/plugins/motion_query_trace_replay_baseline_registry_uve.h"
 
 namespace UVE::Editor {
 
@@ -87,6 +88,8 @@ enum class EditorBridgeCapabilityUVE : std::uint8_t {
     ReadMotionQuery,
     DispatchMotionQueryCommand,
     DispatchMotionQueryDebugCommand,
+    LoadMotionQueryReplayBaseline,
+    ClearMotionQueryReplayBaseline,
 };
 
 /// The deliberately small v1 request vocabulary. No generic command string is accepted because
@@ -134,6 +137,8 @@ enum class EditorBridgeRequestKindUVE : std::uint8_t {
     ReadMotionQuery,
     DispatchMotionQueryCommand,
     DispatchMotionQueryDebugCommand,
+    LoadMotionQueryReplayBaseline,
+    ClearMotionQueryReplayBaseline,
 };
 
 /// Explicitly describes whether this bridge session has a native-owned viewport surface. No raw
@@ -505,6 +510,8 @@ struct EditorBridgeRequestUVE final {
     std::optional<std::string> visualScriptDefaultValue;
     std::optional<Plugins::Editor::MotionQueryEditorCommandUVE> motionQueryCommand;
     std::optional<Plugins::Editor::MotionQueryLiveDebugCommandUVE> motionQueryDebugCommand;
+    std::optional<std::string> motionQueryReplayBaselineName;
+    std::optional<std::string> motionQueryReplayFixturePayload;
 
     EditorBridgeRequestUVE() = default;
 
@@ -628,6 +635,8 @@ private:
     Plugins::Editor::MotionQueryEditorAuthoringSessionUVE m_motionQueryAuthoring;
     Plugins::Editor::MotionQueryLiveDebugSessionUVE m_motionQueryLiveDebugSession;
     std::optional<Plugins::Editor::MotionQueryTraceReplayFixtureUVE> m_motionQueryReplayFixture;
+    std::optional<std::string> m_motionQueryActiveBaselineName;
+    Plugins::Editor::MotionQueryTraceReplayBaselineRegistryUVE m_motionQueryReplayBaselineRegistry;
     std::uint64_t m_revision = 0U;
 };
 

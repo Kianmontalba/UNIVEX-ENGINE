@@ -813,6 +813,12 @@ enum class FrameReadResultUVE : std::uint8_t {
     if (value == "dispatchMotionQueryDebugCommand") {
         return EditorBridgeRequestKindUVE::DispatchMotionQueryDebugCommand;
     }
+    if (value == "loadMotionQueryReplayBaseline") {
+        return EditorBridgeRequestKindUVE::LoadMotionQueryReplayBaseline;
+    }
+    if (value == "clearMotionQueryReplayBaseline") {
+        return EditorBridgeRequestKindUVE::ClearMotionQueryReplayBaseline;
+    }
     return std::nullopt;
 }
 
@@ -975,6 +981,25 @@ ParseMotionQueryLiveDebugCommandUVE(const JsonUVE& json, const std::uint64_t req
         if (!request.motionQueryDebugCommand.has_value()) {
             return std::nullopt;
         }
+    }
+    if (params.contains("motionQueryReplayBaselineName") &&
+        !params.at("motionQueryReplayBaselineName").is_null()) {
+        if (!params.at("motionQueryReplayBaselineName").is_string() ||
+            params.at("motionQueryReplayBaselineName").get_ref<const std::string&>().empty() ||
+            params.at("motionQueryReplayBaselineName").get_ref<const std::string&>().size() >
+                Plugins::Editor::kMotionQueryMaximumReplayBaselineNameBytesUVE) {
+            return std::nullopt;
+        }
+        request.motionQueryReplayBaselineName = params.at("motionQueryReplayBaselineName").get<std::string>();
+    }
+    if (params.contains("motionQueryReplayFixturePayload") &&
+        !params.at("motionQueryReplayFixturePayload").is_null()) {
+        if (!params.at("motionQueryReplayFixturePayload").is_string() ||
+            params.at("motionQueryReplayFixturePayload").get_ref<const std::string&>().size() >
+                Plugins::Editor::kMotionQueryMaximumTraceReplayPayloadBytesUVE) {
+            return std::nullopt;
+        }
+        request.motionQueryReplayFixturePayload = params.at("motionQueryReplayFixturePayload").get<std::string>();
     }
 
     if (params.contains("entity") && !params.at("entity").is_null()) {
