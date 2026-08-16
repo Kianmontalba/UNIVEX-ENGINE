@@ -1045,6 +1045,8 @@ EditorBridgeMotionQuerySnapshotUVE EditorBridgeUVE::CaptureMotionQueryUVE() cons
             snapshot.replayComparison.mismatchIndex = comparison.comparison->mismatchIndex;
             snapshot.replayComparison.fixtureTruncated = comparison.comparison->fixtureTruncated;
             snapshot.replayComparison.snapshotTruncated = comparison.comparison->snapshotTruncated;
+            snapshot.replayComparison.mismatchFieldMask = comparison.comparison->mismatchFieldMask;
+            snapshot.replayComparison.diagnosticSummary = comparison.comparison->diagnosticSummary;
         }
     }
     return snapshot;

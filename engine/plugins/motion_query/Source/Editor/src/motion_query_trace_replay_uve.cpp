@@ -193,20 +193,112 @@ constexpr std::array<std::string_view, 3U> kForbiddenReplayFieldNamesUVE = {
     return event;
 }
 
+[[nodiscard]] std::uint32_t ClassifyReplayEventMismatchFieldsUVE(
+    const MotionQueryTraceReplayEventUVE& expected,
+    const MotionQueryTraceReplayEventUVE& actual) noexcept {
+    std::uint32_t mask = static_cast<std::uint32_t>(MotionQueryTraceReplayMismatchFieldUVE::None);
+    const auto addIfDifferent = [&mask](const bool different,
+                                        const MotionQueryTraceReplayMismatchFieldUVE field) {
+        if (different) {
+            mask |= static_cast<std::uint32_t>(field);
+        }
+    };
+    addIfDifferent(expected.sequence != actual.sequence, MotionQueryTraceReplayMismatchFieldUVE::Sequence);
+    addIfDifferent(expected.frameNumber != actual.frameNumber,
+                   MotionQueryTraceReplayMismatchFieldUVE::FrameNumber);
+    addIfDifferent(expected.kind != actual.kind, MotionQueryTraceReplayMismatchFieldUVE::Kind);
+    addIfDifferent(expected.candidatesConsidered != actual.candidatesConsidered,
+                   MotionQueryTraceReplayMismatchFieldUVE::CandidatesConsidered);
+    addIfDifferent(expected.candidatesEvaluated != actual.candidatesEvaluated,
+                   MotionQueryTraceReplayMismatchFieldUVE::CandidatesEvaluated);
+    addIfDifferent(expected.cost != actual.cost, MotionQueryTraceReplayMismatchFieldUVE::Cost);
+    addIfDifferent(expected.selectedCandidateIndex != actual.selectedCandidateIndex,
+                   MotionQueryTraceReplayMismatchFieldUVE::SelectedCandidateIndex);
+    addIfDifferent(expected.qualityTier != actual.qualityTier,
+                   MotionQueryTraceReplayMismatchFieldUVE::QualityTier);
+    addIfDifferent(expected.continuityCode != actual.continuityCode,
+                   MotionQueryTraceReplayMismatchFieldUVE::ContinuityCode);
+    addIfDifferent(expected.continuityApplied != actual.continuityApplied,
+                   MotionQueryTraceReplayMismatchFieldUVE::ContinuityApplied);
+    addIfDifferent(expected.transitionCode != actual.transitionCode,
+                   MotionQueryTraceReplayMismatchFieldUVE::TransitionCode);
+    addIfDifferent(expected.transitionHeldPrevious != actual.transitionHeldPrevious,
+                   MotionQueryTraceReplayMismatchFieldUVE::TransitionHeldPrevious);
+    addIfDifferent(expected.telemetryCode != actual.telemetryCode,
+                   MotionQueryTraceReplayMismatchFieldUVE::TelemetryCode);
+    addIfDifferent(expected.telemetryIndexEntryCount != actual.telemetryIndexEntryCount,
+                   MotionQueryTraceReplayMismatchFieldUVE::TelemetryIndexEntryCount);
+    addIfDifferent(expected.telemetryCandidatesConsidered != actual.telemetryCandidatesConsidered,
+                   MotionQueryTraceReplayMismatchFieldUVE::TelemetryCandidatesConsidered);
+    addIfDifferent(expected.telemetryBudgetSaturated != actual.telemetryBudgetSaturated,
+                   MotionQueryTraceReplayMismatchFieldUVE::TelemetryBudgetSaturated);
+    addIfDifferent(expected.provenance != actual.provenance,
+                   MotionQueryTraceReplayMismatchFieldUVE::Provenance);
+    return mask;
+}
+
+[[nodiscard]] std::string SummarizeReplayEventMismatchFieldsUVE(const std::uint32_t mask) {
+    constexpr std::array<std::pair<MotionQueryTraceReplayMismatchFieldUVE, std::string_view>, 17U> fields = {{
+        {MotionQueryTraceReplayMismatchFieldUVE::Sequence, "sequence"},
+        {MotionQueryTraceReplayMismatchFieldUVE::FrameNumber, "frameNumber"},
+        {MotionQueryTraceReplayMismatchFieldUVE::Kind, "kind"},
+        {MotionQueryTraceReplayMismatchFieldUVE::CandidatesConsidered, "candidatesConsidered"},
+        {MotionQueryTraceReplayMismatchFieldUVE::CandidatesEvaluated, "candidatesEvaluated"},
+        {MotionQueryTraceReplayMismatchFieldUVE::Cost, "cost"},
+        {MotionQueryTraceReplayMismatchFieldUVE::SelectedCandidateIndex, "selectedCandidateIndex"},
+        {MotionQueryTraceReplayMismatchFieldUVE::QualityTier, "qualityTier"},
+        {MotionQueryTraceReplayMismatchFieldUVE::ContinuityCode, "continuityCode"},
+        {MotionQueryTraceReplayMismatchFieldUVE::ContinuityApplied, "continuityApplied"},
+        {MotionQueryTraceReplayMismatchFieldUVE::TransitionCode, "transitionCode"},
+        {MotionQueryTraceReplayMismatchFieldUVE::TransitionHeldPrevious, "transitionHeldPrevious"},
+        {MotionQueryTraceReplayMismatchFieldUVE::TelemetryCode, "telemetryCode"},
+        {MotionQueryTraceReplayMismatchFieldUVE::TelemetryIndexEntryCount, "telemetryIndexEntryCount"},
+        {MotionQueryTraceReplayMismatchFieldUVE::TelemetryCandidatesConsidered, "telemetryCandidatesConsidered"},
+        {MotionQueryTraceReplayMismatchFieldUVE::TelemetryBudgetSaturated, "telemetryBudgetSaturated"},
+        {MotionQueryTraceReplayMismatchFieldUVE::Provenance, "provenance"},
+    }};
+    std::string summary;
+    for (const auto& [field, label] : fields) {
+        if ((mask & static_cast<std::uint32_t>(field)) == 0U) {
+            continue;
+        }
+        const std::size_t separatorBytes = summary.empty() ? 0U : 1U;
+        if (summary.size() + separatorBytes + label.size() >
+            kMotionQueryMaximumReplayDiagnosticSummaryBytesUVE) {
+            if (summary.size() + separatorBytes + 3U <=
+                kMotionQueryMaximumReplayDiagnosticSummaryBytesUVE) {
+                summary.append(separatorBytes, ',');
+                summary += "...";
+            }
+            break;
+        }
+        if (separatorBytes != 0U) {
+            summary.push_back(',');
+        }
+        summary += label;
+    }
+    return summary;
+}
+
 [[nodiscard]] MotionQueryTraceReplayComparisonUVE MakeComparisonUVE(
     const MotionQueryTraceReplayComparisonCodeUVE code,
     const std::size_t comparedEventCount,
     const std::size_t mismatchIndex,
     const bool fixtureTruncated,
     const bool snapshotTruncated,
-    const std::string_view message) {
+    const std::string_view message,
+    const std::uint32_t mismatchFieldMask =
+        static_cast<std::uint32_t>(MotionQueryTraceReplayMismatchFieldUVE::None),
+    const std::string_view diagnosticSummary = {}) {
     return MotionQueryTraceReplayComparisonUVE{
         code,
         comparedEventCount,
         mismatchIndex,
         fixtureTruncated,
         snapshotTruncated,
+        mismatchFieldMask,
         std::string(message),
+        std::string(diagnosticSummary),
     };
 }
 
@@ -274,9 +366,12 @@ MotionQueryTraceReplayFixtureUVE BuildMotionQueryTraceReplayFixtureUVE(
     }
     for (std::size_t index = 0U; index < fixture.events.size(); ++index) {
         if (fixture.events[index] != actual.events[index]) {
+            const std::uint32_t mismatchFieldMask = ClassifyReplayEventMismatchFieldsUVE(
+                fixture.events[index], actual.events[index]);
             return MakeComparisonUVE(MotionQueryTraceReplayComparisonCodeUVE::EventMismatch, index,
                                      index, fixture.truncated, actual.truncated,
-                                     "motion query replay event differs");
+                                     "motion query replay event differs", mismatchFieldMask,
+                                     SummarizeReplayEventMismatchFieldsUVE(mismatchFieldMask));
         }
     }
     return MakeComparisonUVE(MotionQueryTraceReplayComparisonCodeUVE::Match, fixture.events.size(),

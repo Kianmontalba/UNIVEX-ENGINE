@@ -302,7 +302,9 @@ public sealed class BridgeProtocolClientTests
                 ["mismatchIndex"] = 0UL,
                 ["fixtureTruncated"] = false,
                 ["snapshotTruncated"] = false,
+                ["mismatchFieldMask"] = 0U,
                 ["message"] = "replay fixture matches trace",
+                ["diagnosticSummary"] = "",
             },
         };
         using JsonDocument document = JsonDocument.Parse(snapshot.ToJsonString());
@@ -339,7 +341,9 @@ public sealed class BridgeProtocolClientTests
         Assert.Equal((byte)0, parsed.MotionQuery.ReplayComparison.Code);
         Assert.Equal((byte)0, parsed.MotionQuery.ReplayComparison.ComparisonCode);
         Assert.Equal(1UL, parsed.MotionQuery.ReplayComparison.ComparedEventCount);
+        Assert.Equal(0U, parsed.MotionQuery.ReplayComparison.MismatchFieldMask);
         Assert.Equal("replay fixture matches trace", parsed.MotionQuery.ReplayComparison.Message);
+        Assert.Equal(string.Empty, parsed.MotionQuery.ReplayComparison.DiagnosticSummary);
     }
 
     [Fact]

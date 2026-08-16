@@ -500,7 +500,9 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"mismatchIndex", comparison.mismatchIndex},
                    {"fixtureTruncated", comparison.fixtureTruncated},
                    {"snapshotTruncated", comparison.snapshotTruncated},
-                   {"message", comparison.message}};
+                   {"mismatchFieldMask", comparison.mismatchFieldMask},
+                   {"message", comparison.message},
+                   {"diagnosticSummary", comparison.diagnosticSummary}};
 }
 
 [[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeMotionQuerySnapshotUVE& snapshot) {
