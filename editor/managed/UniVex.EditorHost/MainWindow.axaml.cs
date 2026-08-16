@@ -548,6 +548,7 @@ public partial class MainWindow : Window
             RenderDeveloperConsole(snapshot.DeveloperConsole);
             RenderDataTableCatalog(snapshot.DataTableCatalog, snapshot.DataTablePreview);
             RenderDataTablePreview(snapshot.DataTablePreview);
+            RenderMotionQuery(snapshot.MotionQuery);
         }
         finally
         {
@@ -734,6 +735,38 @@ public partial class MainWindow : Window
               preview.Reason
             : preview.Reason;
     }
+
+    private void RenderMotionQuery(BridgeMotionQuerySnapshot motionQuery)
+    {
+        MotionQueryRunBatchButton.IsEnabled = state == HostSessionState.Connected;
+        MotionQueryClearReplayButton.IsEnabled = state == HostSessionState.Connected;
+
+        MotionQueryStatusTextBlock.Text = motionQuery.ReplayWorkflow.ReadyForComparison
+            ? $"Ready for regression. Registry generation {motionQuery.ReplayWorkflow.RegistryGeneration}, {motionQuery.ReplayWorkflow.BaselineCount} baseline(s)."
+            : $"Not ready for regression: {motionQuery.ReplayWorkflow.Diagnostic}";
+
+        MotionQuerySessionFactsTextBlock.Text =
+            $"{motionQuery.ReplaySessionFacts.TotalIndividualComparisons} individual comparisons | " +
+            $"{motionQuery.ReplaySessionFacts.TotalBatchRuns} batch runs | " +
+            $"{motionQuery.ReplaySessionFacts.TotalBaselinesEvaluated} baselines evaluated | " +
+            $"{motionQuery.ReplaySessionFacts.TotalMatchesFound} matches | " +
+            $"{motionQuery.ReplaySessionFacts.TotalMismatchesFound} mismatches";
+
+        MotionQueryBatchHistoryListBox.ItemsSource = motionQuery.ReplayBatchHistory;
+        MotionQueryBaselinesListBox.ItemsSource = motionQuery.ReplayDiagnostics.Baselines;
+
+        MotionQueryDiagnosticsTextBlock.Text = motionQuery.ReplayDiagnostics.HasActiveComparison
+            ? motionQuery.ReplayDiagnostics.IsMatch
+                ? "Match: No regression detected."
+                : $"Mismatch: Comparison code {motionQuery.ReplayDiagnostics.ComparisonCode}, Field mask {motionQuery.ReplayDiagnostics.MismatchFieldMask}, Compatibility mask {motionQuery.ReplayDiagnostics.CompatibilityMismatchMask}."
+            : "No active comparison.";
+    }
+
+    private void MotionQueryRunBatchButton_OnClick(object? sender, RoutedEventArgs e) =>
+        DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "runMotionQueryReplayBaselineBatch"));
+
+    private void MotionQueryClearReplayButton_OnClick(object? sender, RoutedEventArgs e) =>
+        DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "clearMotionQueryReplayBaseline"));
 
     private void RenderVisualScripting(BridgeVisualScriptingSnapshot scripting, ulong bridgeRevision)
     {
