@@ -4,6 +4,7 @@ add_library(uve_plugins STATIC
     src/plugin_registry_uve.cpp
     motion_query/Source/Runtime/src/motion_query_plugin_module_uve.cpp
     motion_query/Source/Runtime/src/motion_query_asset_sampling_uve.cpp
+    motion_query/Source/Runtime/src/motion_query_asset_registry_cache_uve.cpp
     motion_query/Source/Runtime/src/motion_query_search_index_uve.cpp
     motion_query/Source/Runtime/src/motion_query_animation_node_uve.cpp
     motion_query/Source/Runtime/src/motion_query_interaction_runtime_uve.cpp
