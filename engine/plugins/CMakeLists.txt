@@ -24,6 +24,6 @@ target_include_directories(uve_plugins PUBLIC
     motion_query/Source/Runtime/include
     motion_query/Source/Editor/include
 )
-target_link_libraries(uve_plugins PUBLIC uve_asset uve_core)
+target_link_libraries(uve_plugins PUBLIC uve_asset uve_core PRIVATE nlohmann_json::nlohmann_json)
 target_compile_features(uve_plugins PUBLIC cxx_std_20)
 uve_set_warnings(uve_plugins)
