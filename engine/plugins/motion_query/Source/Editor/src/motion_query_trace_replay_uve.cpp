@@ -1,6 +1,7 @@
 // Copyright (c) 2026 UniVex Studios. All Rights Reserved.
 #include "uve/plugins/motion_query_trace_replay_uve.h"
 
+#include <array>
 #include <cmath>
 #include <string_view>
 #include <utility>
@@ -11,6 +12,42 @@ namespace UVE::Plugins::Editor {
 namespace {
 
 using JsonUVE = nlohmann::json;
+
+constexpr std::array<std::string_view, 3U> kForbiddenReplayFieldNamesUVE = {
+    "timestampNanoseconds",
+    "database",
+    "message",
+};
+
+[[nodiscard]] bool HasAnyKeyUVE(const JsonUVE& document,
+                                const std::array<std::string_view, 3U>& keys) {
+    for (const std::string_view key : keys) {
+        if (document.contains(key)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+[[nodiscard]] bool HasOnlyKeysUVE(const JsonUVE& document,
+                                  const std::vector<std::string_view>& allowedKeys) {
+    if (!document.is_object()) {
+        return false;
+    }
+    for (const auto& item : document.items()) {
+        bool allowed = false;
+        for (const std::string_view key : allowedKeys) {
+            if (item.key() == key) {
+                allowed = true;
+                break;
+            }
+        }
+        if (!allowed) {
+            return false;
+        }
+    }
+    return true;
+}
 
 [[nodiscard]] MotionQueryTraceReplayEventUVE BuildReplayEventUVE(
     const MotionQueryTraceEventUVE& event) {
@@ -324,8 +361,19 @@ MotionQueryTraceReplayDeserializationResultUVE DeserializeMotionQueryTraceReplay
             return {MotionQueryTraceReplaySerializationCodeUVE::SchemaMismatch, std::nullopt,
                     "motion query replay fixture schema is unsupported"};
         }
+        if (!HasOnlyKeysUVE(document, {"schemaVersion", "truncated", "compatibility", "events"})) {
+            return {MotionQueryTraceReplaySerializationCodeUVE::UnexpectedField, std::nullopt,
+                    "motion query replay fixture contains an unexpected field"};
+        }
         fixture.truncated = document.at("truncated").get<bool>();
         if (document.contains("compatibility") && !document.at("compatibility").is_null()) {
+            if (!document.at("compatibility").is_object() ||
+                !HasOnlyKeysUVE(document.at("compatibility"), {"schemaVersion", "samplerVersion",
+                                                                 "normalizationVersion",
+                                                                 "sourceGeneration"})) {
+                return {MotionQueryTraceReplaySerializationCodeUVE::UnexpectedField, std::nullopt,
+                        "motion query replay compatibility contains an unexpected field"};
+            }
             fixture.compatibility = ReplayCompatibilityFromJsonUVE(document.at("compatibility"));
         }
         const JsonUVE& events = document.at("events");
@@ -335,6 +383,23 @@ MotionQueryTraceReplayDeserializationResultUVE DeserializeMotionQueryTraceReplay
         }
         fixture.events.reserve(events.size());
         for (const JsonUVE& event : events) {
+            if (!event.is_object()) {
+                return {MotionQueryTraceReplaySerializationCodeUVE::InvalidFixture, std::nullopt,
+                        "motion query replay event is not an object"};
+            }
+            if (HasAnyKeyUVE(event, kForbiddenReplayFieldNamesUVE)) {
+                return {MotionQueryTraceReplaySerializationCodeUVE::ForbiddenField, std::nullopt,
+                        "motion query replay event contains a forbidden runtime field"};
+            }
+            if (!HasOnlyKeysUVE(event, {"sequence", "frameNumber", "kind", "candidatesConsidered",
+                                        "candidatesEvaluated", "cost", "selectedCandidateIndex",
+                                        "qualityTier", "continuityCode", "continuityApplied",
+                                        "transitionCode", "transitionHeldPrevious", "telemetryCode",
+                                        "telemetryIndexEntryCount", "telemetryCandidatesConsidered",
+                                        "telemetryBudgetSaturated", "provenance"})) {
+                return {MotionQueryTraceReplaySerializationCodeUVE::UnexpectedField, std::nullopt,
+                        "motion query replay event contains an unexpected field"};
+            }
             fixture.events.push_back(ReplayEventFromJsonUVE(event));
         }
         if (!IsValidReplayFixtureUVE(fixture)) {

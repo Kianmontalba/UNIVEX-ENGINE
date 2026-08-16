@@ -226,6 +226,45 @@ TEST(MotionQueryTraceReplayUVETest, SerializationUVE_RejectsInvalidRuntimeCompat
               MotionQueryTraceReplaySerializationCodeUVE::InvalidFixture);
 }
 
+TEST(MotionQueryTraceReplayUVETest, SerializationUVE_RejectsForbiddenAndUnexpectedFields) {
+    const MotionQueryTraceReplaySerializationResultUVE encoded =
+        SerializeMotionQueryTraceReplayFixtureUVE(MakeFixtureUVE());
+    ASSERT_TRUE(encoded.IsAcceptedUVE());
+    std::string forbidden = encoded.payload;
+    const std::string eventPrefix = "{\"candidatesConsidered\":8";
+    const std::size_t eventPosition = forbidden.find(eventPrefix);
+    ASSERT_NE(eventPosition, std::string::npos);
+    forbidden.insert(eventPosition + eventPrefix.size(), ",\"message\":\"raw\"");
+    EXPECT_EQ(DeserializeMotionQueryTraceReplayFixtureUVE(forbidden).code,
+              MotionQueryTraceReplaySerializationCodeUVE::ForbiddenField);
+
+    std::string unexpected = encoded.payload;
+    const std::size_t schemaPosition = unexpected.find("\"schemaVersion\":1");
+    ASSERT_NE(schemaPosition, std::string::npos);
+    unexpected.insert(schemaPosition + std::string("\"schemaVersion\":1").size(),
+                      ",\"futureField\":1");
+    EXPECT_EQ(DeserializeMotionQueryTraceReplayFixtureUVE(unexpected).code,
+              MotionQueryTraceReplaySerializationCodeUVE::UnexpectedField);
+}
+
+TEST(MotionQueryTraceReplayUVETest, SerializationUVE_AcceptsLegacyPayloadWithoutCompatibilityKey) {
+    const MotionQueryTraceReplaySerializationResultUVE encoded =
+        SerializeMotionQueryTraceReplayFixtureUVE(MakeFixtureUVE());
+    ASSERT_TRUE(encoded.IsAcceptedUVE());
+    const std::string compatibilityField = "\"compatibility\":null,";
+    const std::size_t fieldPosition = encoded.payload.find(compatibilityField);
+    ASSERT_NE(fieldPosition, std::string::npos);
+
+    std::string legacy = encoded.payload;
+    legacy.erase(fieldPosition, compatibilityField.size());
+    const MotionQueryTraceReplayDeserializationResultUVE decoded =
+        DeserializeMotionQueryTraceReplayFixtureUVE(legacy);
+    ASSERT_TRUE(decoded.IsAcceptedUVE());
+    ASSERT_TRUE(decoded.fixture.has_value());
+    EXPECT_FALSE(decoded.fixture->compatibility.has_value());
+    EXPECT_EQ(decoded.fixture->events, MakeFixtureUVE().events);
+}
+
 TEST(MotionQueryTraceReplayUVETest, SerializationUVE_EnforcesBoundedPayloadSize) {
     MotionQueryTraceReplayFixtureUVE oversized = MakeFixtureUVE();
     oversized.events.front().provenance.assign(kMotionQueryMaximumDebugMessageBytesUVE, 'x');

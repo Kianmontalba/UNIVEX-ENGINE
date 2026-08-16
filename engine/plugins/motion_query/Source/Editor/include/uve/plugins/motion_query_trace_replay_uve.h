@@ -92,6 +92,8 @@ enum class MotionQueryTraceReplaySerializationCodeUVE : std::uint8_t {
     PayloadTooLarge,
     ParseError,
     SchemaMismatch,
+    ForbiddenField,
+    UnexpectedField,
     InvalidFixture,
 };
 
