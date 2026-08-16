@@ -39,6 +39,7 @@
 | **COMPLETED** | **Increment 218 — Managed Presentation of Replay Batch History and Session Facts v1** | Display bounded batch regression history and cumulative session facts in the Avalonia Animator panel. | Animator panel renders `ReplayBatchHistory` and `ReplaySessionFacts` from the copied DTO; managed UI tests passed. |
 | **COMPLETED** | **Increment 219 — Managed Presentation of Motion Query Replay Comparison History v1** | Display bounded individual comparison history in the Avalonia Animator panel. | Animator panel renders `ReplayComparisonHistory` from the copied diagnostics view; managed UI tests passed. |
 | **COMPLETED** | **Increment 220 — Managed Motion Query Replay Baseline Export/Import v1** | Expose native registry export/import commands through the managed bridge and Avalonia UI. | Deterministic envelope serialization/deserialization via bridge requests; managed UI buttons for export/import; regression tests passed. |
+| **COMPLETED** | **Increment 221 — Motion Query Replay Baseline Selection and Removal UI v1** | Add Load and Remove buttons to the managed baseline list. | Per-baseline Load/Remove buttons in Avalonia; bridge command routing for named baseline removal; managed UI tests passed. |
 
 <div align="center">
 
