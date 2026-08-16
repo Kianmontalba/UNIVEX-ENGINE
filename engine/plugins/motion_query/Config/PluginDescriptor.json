@@ -1,0 +1,19 @@
+{
+  "copyright": "Copyright (c) 2026 UniVex Studios. All Rights Reserved.",
+  "pluginId": "uve.motion_query",
+  "displayName": "UniVex Motion Query",
+  "version": "1.0.0",
+  "requiredEngineProtocol": 1,
+  "capabilities": [
+    "motion_query.runtime",
+    "motion_query.asset_sampling",
+    "motion_query.editor",
+    "motion_query.diagnostics"
+  ],
+  "layout": {
+    "runtime": "Source/Runtime",
+    "editor": "Source/Editor",
+    "shared": "Source/Shared",
+    "tests": "Tests"
+  }
+}
