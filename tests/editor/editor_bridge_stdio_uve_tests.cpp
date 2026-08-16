@@ -419,5 +419,69 @@ TEST(EditorBridgeStdioUVETest, ServeUVE_ClassifiesTruncatedAndOversizedFramesBef
     engine.Shutdown();
 }
 
+TEST(EditorBridgeStdioUVETest, ServeUVE_LoadsAndClearsNamedReplayBaselineThroughFramedContract) {
+    Core::EngineCoreUVE engine(MakeBridgeStdioTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_bridge_stdio_replay_baseline.uvescene");
+        editor.InitUVE();
+        EditorBridgeUVE bridge(editor);
+        EditorBridgeStdioServerUVE server(bridge);
+        const Plugins::Editor::MotionQueryTraceReplayFixtureUVE fixture;
+        const Plugins::Editor::MotionQueryTraceReplaySerializationResultUVE serialized =
+            Plugins::Editor::SerializeMotionQueryTraceReplayFixtureUVE(fixture);
+        ASSERT_TRUE(serialized.IsAcceptedUVE());
+
+        std::stringstream loadInput;
+        std::stringstream loadOutput;
+        std::stringstream loadDiagnostics;
+        AppendFrameUVE(loadInput, JsonUVE{{"jsonrpc", "2.0"},
+                                         {"id", 1U},
+                                         {"method", "bridge.hello"},
+                                         {"params", {{"protocolVersion", kEditorBridgeProtocolVersionUVE}}}});
+        AppendFrameUVE(loadInput, JsonUVE{{"jsonrpc", "2.0"},
+                                         {"id", 2U},
+                                         {"method", "bridge.dispatch"},
+                                         {"params", {{"protocolVersion", kEditorBridgeProtocolVersionUVE},
+                                                     {"requestId", 91U},
+                                                     {"expectedRevision", bridge.GetSnapshotUVE().revision},
+                                                     {"kind", "loadMotionQueryReplayBaseline"},
+                                                     {"motionQueryReplayBaselineName", "stdio.fixture"},
+                                                     {"motionQueryReplayFixturePayload", serialized.payload}}}});
+        EXPECT_EQ(server.ServeUVE(loadInput, loadOutput, loadDiagnostics), 0);
+        EXPECT_TRUE(loadDiagnostics.str().empty());
+        const std::vector<JsonUVE> loadFrames = ReadFramesUVE(loadOutput);
+        ASSERT_EQ(loadFrames.size(), 2U);
+        const JsonUVE& loadResult = loadFrames[1U].at("result");
+        EXPECT_TRUE(loadResult.at("applied").get<bool>());
+        EXPECT_EQ(loadResult.at("code").get<std::string>(), "bridge.motion_query.replay.baseline.loaded");
+        const std::uint64_t loadedRevision = loadResult.at("snapshot").at("revision").get<std::uint64_t>();
+
+        std::stringstream clearInput;
+        std::stringstream clearOutput;
+        std::stringstream clearDiagnostics;
+        AppendFrameUVE(clearInput, JsonUVE{{"jsonrpc", "2.0"},
+                                          {"id", 3U},
+                                          {"method", "bridge.dispatch"},
+                                          {"params", {{"protocolVersion", kEditorBridgeProtocolVersionUVE},
+                                                      {"requestId", 92U},
+                                                      {"expectedRevision", loadedRevision},
+                                                      {"kind", "clearMotionQueryReplayBaseline"},
+                                                      {"motionQueryReplayBaselineName", "stdio.fixture"}}}});
+        EXPECT_EQ(server.ServeUVE(clearInput, clearOutput, clearDiagnostics), 0);
+        EXPECT_TRUE(clearDiagnostics.str().empty());
+        const std::vector<JsonUVE> clearFrames = ReadFramesUVE(clearOutput);
+        ASSERT_EQ(clearFrames.size(), 1U);
+        const JsonUVE& clearResult = clearFrames.front().at("result");
+        EXPECT_TRUE(clearResult.at("applied").get<bool>());
+        EXPECT_EQ(clearResult.at("code").get<std::string>(), "bridge.motion_query.replay.baseline.cleared");
+        EXPECT_FALSE(clearResult.at("snapshot").at("motionQuery").at("replayComparison").at("available").get<bool>());
+
+        editor.ShutdownUVE();
+    }
+    engine.Shutdown();
+}
+
 } // namespace
 } // namespace UVE::Editor::Tests
