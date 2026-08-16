@@ -1,0 +1,286 @@
+// Copyright (c) 2026 UniVex Studios. All Rights Reserved.
+
+#include "uve/plugins/motion_query_uve.h"
+
+#include "uve/math/quaternion_uve.h"
+#include "uve/math/vector3_uve.h"
+
+#include <algorithm>
+#include <cmath>
+#include <limits>
+#include <utility>
+
+namespace UVE::Core {
+namespace {
+
+constexpr float kMinimumVectorLengthSquaredUVE = 1.0e-8F;
+constexpr float kTieToleranceUVE = 1.0e-6F;
+
+[[nodiscard]] bool IsFiniteVectorUVE(const Math::Vector3UVE& value) noexcept {
+    return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+}
+
+[[nodiscard]] bool IsFiniteNonNegativeUVE(double value) noexcept {
+    return std::isfinite(value) && value >= 0.0;
+}
+
+[[nodiscard]] MotionQueryValidationResultUVE MakeQueryErrorUVE(
+    MotionQueryValidationCodeUVE code, std::size_t index, const char* message) noexcept {
+    return MotionQueryValidationResultUVE{code, index, message};
+}
+
+[[nodiscard]] MotionMatchingDatabaseValidationResultUVE MakeDatabaseErrorUVE(
+    MotionMatchingDatabaseValidationCodeUVE code, std::size_t index,
+    const char* message) noexcept {
+    return MotionMatchingDatabaseValidationResultUVE{code, index, message};
+}
+
+[[nodiscard]] float DistanceSquaredUVE(const Math::Vector3UVE& lhs,
+                                       const Math::Vector3UVE& rhs) noexcept {
+    return Math::LengthSquaredUVE(lhs - rhs);
+}
+
+[[nodiscard]] bool TryNormalizeDirectionUVE(const Math::Vector3UVE& value,
+                                            Math::Vector3UVE& outDirection) noexcept {
+    if (!IsFiniteVectorUVE(value) || Math::LengthSquaredUVE(value) < kMinimumVectorLengthSquaredUVE) {
+        return false;
+    }
+    outDirection = Math::NormalizeUVE(value);
+    return IsFiniteVectorUVE(outDirection);
+}
+
+[[nodiscard]] bool HasCandidateIdentifierUVE(const MotionMatchingDatabaseUVE& database,
+                                             const std::string& identifier,
+                                             std::size_t beforeIndex) noexcept {
+    for (std::size_t index = 0U; index < beforeIndex; ++index) {
+        if (database.candidates[index].candidateId == identifier) {
+            return true;
+        }
+    }
+    return false;
+}
+
+[[nodiscard]] bool HasSameTrajectorySchemaUVE(
+    const std::vector<MotionTrajectorySampleUVE>& lhs,
+    const std::vector<MotionTrajectorySampleUVE>& rhs) noexcept {
+    if (lhs.size() != rhs.size()) {
+        return false;
+    }
+    for (std::size_t index = 0U; index < lhs.size(); ++index) {
+        if (lhs[index].offsetSeconds != rhs[index].offsetSeconds) {
+            return false;
+        }
+    }
+    return true;
+}
+
+[[nodiscard]] bool IsBetterMatchUVE(float candidateCost, const std::string& candidateId,
+                                    double candidateTime, std::size_t candidateIndex,
+                                    float bestCost, const std::string& bestId,
+                                    double bestTime, std::size_t bestIndex) noexcept {
+    if (candidateCost + kTieToleranceUVE < bestCost) {
+        return true;
+    }
+    if (std::fabs(candidateCost - bestCost) > kTieToleranceUVE) {
+        return false;
+    }
+    if (candidateId != bestId) {
+        return candidateId < bestId;
+    }
+    if (candidateTime != bestTime) {
+        return candidateTime < bestTime;
+    }
+    return candidateIndex < bestIndex;
+}
+
+} // namespace
+
+MotionQueryValidationResultUVE ValidateMotionQueryUVE(const MotionQueryUVE& query) noexcept {
+    if (query.trajectory.size() > MotionQueryUVE::kMaximumTrajectorySamplesUVE) {
+        return MakeQueryErrorUVE(MotionQueryValidationCodeUVE::CapacityExceeded, 0U,
+                                 "motion query trajectory exceeds its bounded capacity");
+    }
+    if (!IsFiniteVectorUVE(query.rootVelocity) || !IsFiniteVectorUVE(query.facingDirection)) {
+        return MakeQueryErrorUVE(MotionQueryValidationCodeUVE::InvalidVector, 0U,
+                                 "motion query contains a non-finite vector");
+    }
+    if (Math::LengthSquaredUVE(query.facingDirection) < kMinimumVectorLengthSquaredUVE) {
+        return MakeQueryErrorUVE(MotionQueryValidationCodeUVE::InvalidVector, 0U,
+                                 "motion query facing direction must be non-zero");
+    }
+
+    double previousOffsetSeconds = -std::numeric_limits<double>::infinity();
+    for (std::size_t index = 0U; index < query.trajectory.size(); ++index) {
+        const MotionTrajectorySampleUVE& sample = query.trajectory[index];
+        if (!IsFiniteNonNegativeUVE(sample.offsetSeconds) ||
+            !IsFiniteVectorUVE(sample.relativePosition)) {
+            return MakeQueryErrorUVE(MotionQueryValidationCodeUVE::InvalidTrajectoryTime, index,
+                                     "motion query trajectory contains invalid time or position");
+        }
+        if (sample.offsetSeconds < previousOffsetSeconds) {
+            return MakeQueryErrorUVE(MotionQueryValidationCodeUVE::UnsortedTrajectory, index,
+                                     "motion query trajectory offsets must be sorted");
+        }
+        previousOffsetSeconds = sample.offsetSeconds;
+    }
+
+    return MotionQueryValidationResultUVE{MotionQueryValidationCodeUVE::Valid, 0U, "valid"};
+}
+
+MotionMatchingDatabaseValidationResultUVE ValidateMotionMatchingDatabaseUVE(
+    const MotionMatchingDatabaseUVE& database) noexcept {
+    if (database.candidates.empty()) {
+        return MakeDatabaseErrorUVE(MotionMatchingDatabaseValidationCodeUVE::EmptyDatabase, 0U,
+                                    "motion matching database must contain a candidate");
+    }
+    if (database.candidates.size() > MotionMatchingDatabaseUVE::kMaximumCandidatesUVE) {
+        return MakeDatabaseErrorUVE(MotionMatchingDatabaseValidationCodeUVE::CapacityExceeded, 0U,
+                                    "motion matching database exceeds its bounded capacity");
+    }
+
+    const std::vector<MotionTrajectorySampleUVE>& schema = database.candidates.front().feature.trajectory;
+    for (std::size_t index = 0U; index < database.candidates.size(); ++index) {
+        const MotionMatchingCandidateUVE& candidate = database.candidates[index];
+        if (candidate.candidateId.empty() ||
+            candidate.candidateId.size() > MotionMatchingCandidateUVE::kMaximumIdentifierBytesUVE) {
+            return MakeDatabaseErrorUVE(
+                MotionMatchingDatabaseValidationCodeUVE::InvalidCandidateIdentifier, index,
+                "motion matching candidate identifier is empty or too long");
+        }
+        if (HasCandidateIdentifierUVE(database, candidate.candidateId, index)) {
+            return MakeDatabaseErrorUVE(
+                MotionMatchingDatabaseValidationCodeUVE::DuplicateCandidateIdentifier, index,
+                "motion matching candidate identifiers must be unique");
+        }
+        if (!IsFiniteNonNegativeUVE(candidate.sampleTimeSeconds)) {
+            return MakeDatabaseErrorUVE(MotionMatchingDatabaseValidationCodeUVE::InvalidSampleTime,
+                                        index, "motion matching candidate sample time is invalid");
+        }
+        if (!ValidateMotionQueryUVE(candidate.feature).IsValidUVE()) {
+            return MakeDatabaseErrorUVE(MotionMatchingDatabaseValidationCodeUVE::InvalidFeature,
+                                        index, "motion matching candidate feature is invalid");
+        }
+        if (!HasSameTrajectorySchemaUVE(schema, candidate.feature.trajectory)) {
+            return MakeDatabaseErrorUVE(
+                MotionMatchingDatabaseValidationCodeUVE::InconsistentTrajectorySchema, index,
+                "motion matching candidates must share one trajectory schema");
+        }
+    }
+
+    return MotionMatchingDatabaseValidationResultUVE{
+        MotionMatchingDatabaseValidationCodeUVE::Valid, 0U, "valid"};
+}
+
+bool TryBuildMotionQueryUVE(const TransformPoseUVE& previousPose,
+                           const TransformPoseUVE& currentPose, double deltaSeconds,
+                           const std::vector<MotionTrajectorySampleUVE>& futureTrajectory,
+                           MotionQueryUVE& outQuery) noexcept {
+    TransformPoseUVE normalizedPreviousPose;
+    TransformPoseUVE normalizedCurrentPose;
+    if (!TryNormalizeTransformPoseUVE(previousPose, normalizedPreviousPose) ||
+        !TryNormalizeTransformPoseUVE(currentPose, normalizedCurrentPose) ||
+        !std::isfinite(deltaSeconds) || deltaSeconds <= 0.0 ||
+        futureTrajectory.size() > MotionQueryUVE::kMaximumTrajectorySamplesUVE) {
+        return false;
+    }
+
+    const Math::Vector3UVE displacement = normalizedCurrentPose.position - normalizedPreviousPose.position;
+    MotionQueryUVE candidate;
+    candidate.rootVelocity = displacement * static_cast<float>(1.0 / deltaSeconds);
+    candidate.facingDirection = Math::RotateVectorUVE(
+        normalizedCurrentPose.rotation, Math::Vector3UVE{0.0F, 0.0F, 1.0F});
+    candidate.trajectory = futureTrajectory;
+    if (!ValidateMotionQueryUVE(candidate).IsValidUVE()) {
+        return false;
+    }
+
+    outQuery = std::move(candidate);
+    return true;
+}
+
+MotionMatchingResultUVE FindBestMotionMatchUVE(const MotionQueryUVE& query,
+                                               const MotionMatchingDatabaseUVE& database,
+                                               MotionMatchingWeightsUVE weights) noexcept {
+    const MotionQueryValidationResultUVE queryValidation = ValidateMotionQueryUVE(query);
+    if (!queryValidation.IsValidUVE()) {
+        return MotionMatchingResultUVE{MotionMatchingResultCodeUVE::InvalidQuery, 0U, 0U, 0.0F,
+                                      queryValidation.message};
+    }
+    const MotionMatchingDatabaseValidationResultUVE databaseValidation =
+        ValidateMotionMatchingDatabaseUVE(database);
+    if (!databaseValidation.IsValidUVE()) {
+        return MotionMatchingResultUVE{MotionMatchingResultCodeUVE::InvalidDatabase, 0U, 0U, 0.0F,
+                                      databaseValidation.message};
+    }
+    if (!std::isfinite(weights.velocityWeight) || !std::isfinite(weights.facingWeight) ||
+        !std::isfinite(weights.trajectoryWeight) || weights.velocityWeight < 0.0F ||
+        weights.facingWeight < 0.0F || weights.trajectoryWeight < 0.0F ||
+        (weights.velocityWeight + weights.facingWeight + weights.trajectoryWeight) <= 0.0F) {
+        return MotionMatchingResultUVE{MotionMatchingResultCodeUVE::InvalidWeights, 0U, 0U, 0.0F,
+                                      "motion matching weights must be finite, non-negative, and non-zero"};
+    }
+
+    Math::Vector3UVE normalizedQueryFacing;
+    if (!TryNormalizeDirectionUVE(query.facingDirection, normalizedQueryFacing)) {
+        return MotionMatchingResultUVE{MotionMatchingResultCodeUVE::InvalidQuery, 0U, 0U, 0.0F,
+                                      "motion query facing direction cannot be normalized"};
+    }
+
+    const std::vector<MotionTrajectorySampleUVE>& schema = database.candidates.front().feature.trajectory;
+    bool hasBest = false;
+    std::size_t bestIndex = 0U;
+    float bestCost = std::numeric_limits<float>::infinity();
+    std::size_t evaluated = 0U;
+    std::string bestId;
+    double bestTime = 0.0;
+
+    for (std::size_t index = 0U; index < database.candidates.size(); ++index) {
+        const MotionMatchingCandidateUVE& candidate = database.candidates[index];
+        if (!HasSameTrajectorySchemaUVE(query.trajectory, schema)) {
+            break;
+        }
+
+        Math::Vector3UVE normalizedCandidateFacing;
+        if (!TryNormalizeDirectionUVE(candidate.feature.facingDirection, normalizedCandidateFacing)) {
+            continue;
+        }
+
+        float cost = weights.velocityWeight *
+                     DistanceSquaredUVE(query.rootVelocity, candidate.feature.rootVelocity);
+        const float facingDot = std::clamp(Math::DotUVE(normalizedQueryFacing,
+                                                         normalizedCandidateFacing), -1.0F, 1.0F);
+        cost += weights.facingWeight * (1.0F - facingDot);
+        if (!query.trajectory.empty()) {
+            float trajectoryCost = 0.0F;
+            for (std::size_t sampleIndex = 0U; sampleIndex < query.trajectory.size(); ++sampleIndex) {
+                trajectoryCost += DistanceSquaredUVE(
+                    query.trajectory[sampleIndex].relativePosition,
+                    candidate.feature.trajectory[sampleIndex].relativePosition);
+            }
+            cost += weights.trajectoryWeight * trajectoryCost /
+                    static_cast<float>(query.trajectory.size());
+        }
+        if (!std::isfinite(cost)) {
+            continue;
+        }
+
+        ++evaluated;
+        if (!hasBest || IsBetterMatchUVE(cost, candidate.candidateId, candidate.sampleTimeSeconds,
+                                         index, bestCost, bestId, bestTime, bestIndex)) {
+            hasBest = true;
+            bestIndex = index;
+            bestCost = cost;
+            bestId = candidate.candidateId;
+            bestTime = candidate.sampleTimeSeconds;
+        }
+    }
+
+    if (!hasBest) {
+        return MotionMatchingResultUVE{MotionMatchingResultCodeUVE::NoComparableCandidate, 0U,
+                                      evaluated, 0.0F, "no comparable motion matching candidate"};
+    }
+    return MotionMatchingResultUVE{MotionMatchingResultCodeUVE::Matched, bestIndex, evaluated,
+                                   bestCost, "matched"};
+}
+
+} // namespace UVE::Core

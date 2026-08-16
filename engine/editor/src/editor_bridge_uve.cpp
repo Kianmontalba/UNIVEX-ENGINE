@@ -62,6 +62,7 @@ namespace {
         EditorBridgeCapabilityUVE::DispatchMotionQueryDebugCommand,
         EditorBridgeCapabilityUVE::LoadMotionQueryReplayBaseline,
         EditorBridgeCapabilityUVE::ClearMotionQueryReplayBaseline,
+        EditorBridgeCapabilityUVE::RunMotionQueryReplayBaselineBatch,
     };
     return capabilities;
 }
@@ -75,7 +76,8 @@ namespace {
            kind != EditorBridgeRequestKindUVE::ReadScriptRuntime &&
            kind != EditorBridgeRequestKindUVE::ReadScriptRuntimeTickDiagnostics &&
            kind != EditorBridgeRequestKindUVE::SerializeVisualScriptGraph &&
-           kind != EditorBridgeRequestKindUVE::ReadMotionQuery;
+           kind != EditorBridgeRequestKindUVE::ReadMotionQuery &&
+           kind != EditorBridgeRequestKindUVE::RunMotionQueryReplayBaselineBatch;
 }
 
 [[nodiscard]] bool IsVisualScriptMutationRequestUVE(const EditorBridgeRequestKindUVE kind) noexcept {
@@ -898,6 +900,10 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
             RecordMotionQueryReplayComparisonHistoryUVE(clearedBaselineName);
             break;
         }
+        case EditorBridgeRequestKindUVE::RunMotionQueryReplayBaselineBatch:
+            code = "bridge.motion_query.replay.baseline.batch.read";
+            message = "The bounded native replay baseline batch result was copied without mutation.";
+            break;
         case EditorBridgeRequestKindUVE::ReadMotionQuery:
             code = "bridge.motion_query.snapshot.read";
             message = "The copied Motion Query authoring, debugger, and trace snapshot was returned.";
@@ -1086,6 +1092,33 @@ EditorBridgeMotionQuerySnapshotUVE EditorBridgeUVE::CaptureMotionQueryUVE() cons
     } else {
         snapshot.replayWorkflow.readyForComparison = true;
         snapshot.replayWorkflow.diagnostic = "replay workflow is ready for deterministic comparison";
+    }
+    const Plugins::Editor::MotionQueryTraceReplayBaselineBatchResultUVE batch =
+        Plugins::Editor::CompareMotionQueryLiveDebugSnapshotAgainstAllBaselinesUVE(
+            m_motionQueryReplayBaselineRegistry, liveDebug);
+    snapshot.replayBatch.available = true;
+    snapshot.replayBatch.code = static_cast<std::uint8_t>(batch.code);
+    snapshot.replayBatch.registryGeneration = batch.registryGeneration;
+    snapshot.replayBatch.evaluatedBaselineCount = batch.evaluatedBaselineCount;
+    snapshot.replayBatch.matchCount = batch.matchCount;
+    snapshot.replayBatch.mismatchCount = batch.mismatchCount;
+    snapshot.replayBatch.truncated = batch.truncated;
+    snapshot.replayBatch.message = batch.message;
+    snapshot.replayBatch.results.reserve(batch.results.size());
+    for (const Plugins::Editor::MotionQueryTraceReplayBaselineRegressionResultUVE& result : batch.results) {
+        EditorBridgeMotionQueryReplayBatchEntryUVE entry;
+        entry.baselineName = result.baselineName;
+        entry.regressionCode = static_cast<std::uint8_t>(result.code);
+        if (result.comparison.has_value()) {
+            entry.comparisonCode = static_cast<std::uint8_t>(result.comparison->code);
+            entry.comparedEventCount = result.comparison->comparedEventCount;
+            entry.mismatchIndex = result.comparison->mismatchIndex;
+            entry.mismatchFieldMask = result.comparison->mismatchFieldMask;
+            entry.diagnosticSummary = result.comparison->diagnosticSummary;
+            entry.compatibilityMismatchMask = result.comparison->compatibilityMismatchMask;
+            entry.compatibilityDiagnosticSummary = result.comparison->compatibilityDiagnosticSummary;
+        }
+        snapshot.replayBatch.results.push_back(std::move(entry));
     }
     if (m_motionQueryReplayFixture.has_value()) {
         const Plugins::Editor::MotionQueryTraceReplayRegressionResultUVE comparison =

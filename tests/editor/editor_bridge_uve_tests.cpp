@@ -634,6 +634,21 @@ TEST(EditorBridgeUVETest, MotionQueryUVE_ExposesCopiedSnapshotAndRevisionGuarded
         EXPECT_TRUE(loadReplayResponse.snapshot.motionQuery.replayWorkflow.activeFixtureAvailable);
         EXPECT_FALSE(loadReplayResponse.snapshot.motionQuery.replayWorkflow.readyForComparison);
         EXPECT_FALSE(loadReplayResponse.snapshot.motionQuery.replayWorkflow.diagnostic.empty());
+        EXPECT_TRUE(loadReplayResponse.snapshot.motionQuery.replayBatch.available);
+        EXPECT_EQ(loadReplayResponse.snapshot.motionQuery.replayBatch.evaluatedBaselineCount, 1U);
+        ASSERT_EQ(loadReplayResponse.snapshot.motionQuery.replayBatch.results.size(), 1U);
+        EXPECT_EQ(loadReplayResponse.snapshot.motionQuery.replayBatch.results.front().baselineName,
+                  "bridge-baseline");
+        EditorBridgeRequestUVE batchRequest{};
+        batchRequest.protocolVersion = kEditorBridgeProtocolVersionUVE;
+        batchRequest.requestId = 507U;
+        batchRequest.expectedRevision = loadReplayResponse.snapshot.revision;
+        batchRequest.kind = EditorBridgeRequestKindUVE::RunMotionQueryReplayBaselineBatch;
+        const EditorBridgeResponseUVE batchResponse = bridge.DispatchUVE(batchRequest);
+        EXPECT_FALSE(batchResponse.applied);
+        EXPECT_EQ(batchResponse.code, "bridge.motion_query.replay.baseline.batch.read");
+        EXPECT_EQ(batchResponse.snapshot.revision, loadReplayResponse.snapshot.revision);
+        EXPECT_EQ(batchResponse.snapshot.motionQuery.replayBatch.evaluatedBaselineCount, 1U);
         ASSERT_EQ(loadReplayResponse.snapshot.motionQuery.replayComparisonHistory.size(), historyBeforeLoad + 1U);
         EXPECT_EQ(loadReplayResponse.snapshot.motionQuery.replayComparisonHistory.back().baselineName,
                   "bridge-baseline");
@@ -656,6 +671,9 @@ TEST(EditorBridgeUVETest, MotionQueryUVE_ExposesCopiedSnapshotAndRevisionGuarded
         EXPECT_TRUE(clearReplayResponse.snapshot.motionQuery.replayBaselines.entries.empty());
         EXPECT_FALSE(clearReplayResponse.snapshot.motionQuery.replayWorkflow.activeBaselineSelected);
         EXPECT_FALSE(clearReplayResponse.snapshot.motionQuery.replayWorkflow.readyForComparison);
+        EXPECT_TRUE(clearReplayResponse.snapshot.motionQuery.replayBatch.available);
+        EXPECT_EQ(clearReplayResponse.snapshot.motionQuery.replayBatch.evaluatedBaselineCount, 0U);
+        EXPECT_TRUE(clearReplayResponse.snapshot.motionQuery.replayBatch.results.empty());
         ASSERT_EQ(clearReplayResponse.snapshot.motionQuery.replayComparisonHistory.size(), historyBeforeLoad + 2U);
         EXPECT_GT(clearReplayResponse.snapshot.motionQuery.replayComparisonHistory.back().sequence,
                   loadReplayResponse.snapshot.motionQuery.replayComparisonHistory.back().sequence);

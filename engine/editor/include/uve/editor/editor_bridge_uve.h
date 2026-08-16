@@ -91,6 +91,7 @@ enum class EditorBridgeCapabilityUVE : std::uint8_t {
     DispatchMotionQueryDebugCommand,
     LoadMotionQueryReplayBaseline,
     ClearMotionQueryReplayBaseline,
+    RunMotionQueryReplayBaselineBatch,
 };
 
 /// The deliberately small v1 request vocabulary. No generic command string is accepted because
@@ -140,6 +141,7 @@ enum class EditorBridgeRequestKindUVE : std::uint8_t {
     DispatchMotionQueryDebugCommand,
     LoadMotionQueryReplayBaseline,
     ClearMotionQueryReplayBaseline,
+    RunMotionQueryReplayBaselineBatch,
 };
 
 /// Explicitly describes whether this bridge session has a native-owned viewport surface. No raw
@@ -480,6 +482,34 @@ struct EditorBridgeMotionQueryReplayWorkflowStatusUVE final {
     [[nodiscard]] bool operator==(const EditorBridgeMotionQueryReplayWorkflowStatusUVE&) const = default;
 };
 
+struct EditorBridgeMotionQueryReplayBatchEntryUVE final {
+    std::string baselineName;
+    std::uint8_t regressionCode = 0U;
+    std::uint8_t comparisonCode = 0U;
+    std::size_t comparedEventCount = 0U;
+    std::size_t mismatchIndex = 0U;
+    std::uint32_t mismatchFieldMask = 0U;
+    std::string diagnosticSummary;
+    std::uint32_t compatibilityMismatchMask = 0U;
+    std::string compatibilityDiagnosticSummary;
+
+    [[nodiscard]] bool operator==(const EditorBridgeMotionQueryReplayBatchEntryUVE&) const = default;
+};
+
+struct EditorBridgeMotionQueryReplayBatchSnapshotUVE final {
+    bool available = false;
+    std::uint8_t code = 0U;
+    std::uint64_t registryGeneration = 0U;
+    std::size_t evaluatedBaselineCount = 0U;
+    std::size_t matchCount = 0U;
+    std::size_t mismatchCount = 0U;
+    bool truncated = false;
+    std::string message;
+    std::vector<EditorBridgeMotionQueryReplayBatchEntryUVE> results;
+
+    [[nodiscard]] bool operator==(const EditorBridgeMotionQueryReplayBatchSnapshotUVE&) const = default;
+};
+
 struct EditorBridgeMotionQuerySnapshotUVE final {
     EditorBridgeMotionQueryAuthoringSnapshotUVE authoring;
     EditorBridgeMotionQueryDebuggerSnapshotUVE debugger;
@@ -497,6 +527,7 @@ struct EditorBridgeMotionQuerySnapshotUVE final {
     bool replayComparisonHistoryTruncated = false;
     std::vector<EditorBridgeMotionQueryReplayComparisonHistoryEntryUVE> replayComparisonHistory;
     EditorBridgeMotionQueryReplayWorkflowStatusUVE replayWorkflow;
+    EditorBridgeMotionQueryReplayBatchSnapshotUVE replayBatch;
 
     [[nodiscard]] bool operator==(const EditorBridgeMotionQuerySnapshotUVE&) const = default;
 };

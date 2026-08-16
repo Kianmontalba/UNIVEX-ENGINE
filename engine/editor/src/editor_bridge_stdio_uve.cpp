@@ -509,6 +509,32 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"entries", std::move(entries)}};
 }
 
+[[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeMotionQueryReplayBatchEntryUVE& entry) {
+    return JsonUVE{{"baselineName", entry.baselineName},
+                   {"regressionCode", entry.regressionCode},
+                   {"comparisonCode", entry.comparisonCode},
+                   {"comparedEventCount", entry.comparedEventCount},
+                   {"mismatchIndex", entry.mismatchIndex},
+                   {"mismatchFieldMask", entry.mismatchFieldMask},
+                   {"diagnosticSummary", entry.diagnosticSummary},
+                   {"compatibilityMismatchMask", entry.compatibilityMismatchMask},
+                   {"compatibilityDiagnosticSummary", entry.compatibilityDiagnosticSummary}};
+}
+[[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeMotionQueryReplayBatchSnapshotUVE& batch) {
+    JsonUVE results = JsonUVE::array();
+    for (const EditorBridgeMotionQueryReplayBatchEntryUVE& entry : batch.results) {
+        results.push_back(ToJsonUVE(entry));
+    }
+    return JsonUVE{{"available", batch.available},
+                   {"code", batch.code},
+                   {"registryGeneration", batch.registryGeneration},
+                   {"evaluatedBaselineCount", batch.evaluatedBaselineCount},
+                   {"matchCount", batch.matchCount},
+                   {"mismatchCount", batch.mismatchCount},
+                   {"truncated", batch.truncated},
+                   {"message", batch.message},
+                   {"results", std::move(results)}};
+}
 [[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeMotionQueryReplayWorkflowStatusUVE& status) {
     return JsonUVE{{"registryGeneration", status.registryGeneration},
                    {"baselineCount", status.baselineCount},
@@ -570,7 +596,8 @@ enum class FrameReadResultUVE : std::uint8_t {
                        }
                        return history;
                    }()},
-                   {"replayWorkflow", ToJsonUVE(snapshot.replayWorkflow)}};
+                   {"replayWorkflow", ToJsonUVE(snapshot.replayWorkflow)},
+                   {"replayBatch", ToJsonUVE(snapshot.replayBatch)}};
 }
 
 [[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeSnapshotUVE& snapshot) {
@@ -871,6 +898,9 @@ enum class FrameReadResultUVE : std::uint8_t {
     }
     if (value == "clearMotionQueryReplayBaseline") {
         return EditorBridgeRequestKindUVE::ClearMotionQueryReplayBaseline;
+    }
+    if (value == "runMotionQueryReplayBaselineBatch") {
+        return EditorBridgeRequestKindUVE::RunMotionQueryReplayBaselineBatch;
     }
     return std::nullopt;
 }
