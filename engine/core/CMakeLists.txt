@@ -18,12 +18,7 @@ add_library(uve_core STATIC
     src/animation_clip_uve.cpp
     src/animation_tree_uve.cpp
     src/animation_state_machine_uve.cpp
-    src/control_rig_uve.cpp
     src/animation_retargeting_uve.cpp
-    src/motion_query_uve.cpp
-    src/motion_query_feature_channels_uve.cpp
-    src/motion_query_history_uve.cpp
-    src/motion_query_database_contract_uve.cpp
     src/frame_scheduler_uve.cpp
     src/profiler_diagnostics_uve.cpp
 )

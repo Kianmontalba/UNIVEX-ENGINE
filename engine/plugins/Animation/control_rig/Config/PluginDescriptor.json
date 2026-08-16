@@ -1,0 +1,15 @@
+{
+  "copyright": "Copyright (c) 2026 UniVex Studios. All Rights Reserved.",
+  "pluginId": "uve.control_rig",
+  "displayName": "UniVex Control Rig",
+  "version": "1.0.0",
+  "requiredEngineProtocol": 1,
+  "capabilities": [
+    "control_rig.runtime",
+    "control_rig.solver"
+  ],
+  "layout": {
+    "runtime": "Source/Runtime",
+    "tests": "Tests"
+  }
+}
