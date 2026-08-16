@@ -2,11 +2,13 @@
 #pragma once
 
 #include "uve/plugins/motion_query_live_debug_session_uve.h"
+#include "uve/plugins/motion_query_trace_replay_baseline_registry_uve.h"
 #include "uve/plugins/motion_query_trace_replay_uve.h"
 
 #include <cstddef>
 #include <optional>
 #include <string>
+#include <string_view>
 
 namespace UVE::Plugins::Editor {
 
@@ -46,6 +48,36 @@ struct MotionQueryTraceReplayRegressionResultUVE final {
         return code == MotionQueryTraceReplayRegressionCodeUVE::Match;
     }
 };
+
+enum class MotionQueryTraceReplayBaselineRegressionCodeUVE : std::uint8_t {
+    Match = 0,
+    Mismatch,
+    BaselineNotFound,
+    StaleGeneration,
+    EmptyTrace,
+    FilteredSnapshot,
+};
+
+struct MotionQueryTraceReplayBaselineRegressionResultUVE final {
+    MotionQueryTraceReplayBaselineRegressionCodeUVE code =
+        MotionQueryTraceReplayBaselineRegressionCodeUVE::BaselineNotFound;
+    std::uint64_t registryGeneration = 0U;
+    std::string baselineName;
+    std::optional<MotionQueryTraceReplayComparisonUVE> comparison;
+    std::string message;
+
+    [[nodiscard]] bool IsMatchUVE() const noexcept {
+        return code == MotionQueryTraceReplayBaselineRegressionCodeUVE::Match;
+    }
+};
+
+[[nodiscard]] MotionQueryTraceReplayBaselineRegressionResultUVE
+CompareMotionQueryLiveDebugSnapshotAgainstNamedBaselineUVE(
+    const MotionQueryTraceReplayBaselineRegistryUVE& registry,
+    std::string_view baselineName,
+    const MotionQueryLiveDebugSnapshotUVE& snapshot,
+    std::optional<std::uint64_t> expectedRegistryGeneration = std::nullopt,
+    std::optional<MotionQueryTraceReplayCompatibilityUVE> expectedCompatibility = std::nullopt);
 
 [[nodiscard]] MotionQueryTraceReplayRegressionResultUVE
 CompareMotionQueryLiveDebugSnapshotAgainstFixtureUVE(
