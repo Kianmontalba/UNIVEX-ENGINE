@@ -184,6 +184,7 @@ MotionQueryAnimationNodeResultUVE EvaluateMotionQueryAnimationNodeWithContinuity
     MotionQueryAnimationNodeSettingsUVE settings,
     const UVE::Core::PoseSampleUVE* previousSample,
     const double continuityTimeSeconds,
+    const MotionQueryAnimationNodeResultUVE* previousResult,
     IMotionQueryAnimationDebugSinkUVE* debugSink,
     const std::uint64_t timestampNanoseconds,
     const std::uint64_t frameNumber) noexcept {
@@ -210,6 +211,35 @@ MotionQueryAnimationNodeResultUVE EvaluateMotionQueryAnimationNodeWithContinuity
     }
     result.pose = continuity.pose;
     result.message = continuity.message;
+
+    MotionQueryTransitionRequestUVE transitionRequest;
+    transitionRequest.hasPreviousSelection = previousResult != nullptr && previousResult->IsAcceptedUVE();
+    if (transitionRequest.hasPreviousSelection) {
+        transitionRequest.previousCandidateIndex = previousResult->candidateIndex;
+        transitionRequest.previousCost = previousResult->cost;
+        transitionRequest.elapsedSeconds = continuityTime - previousResult->sampleTimeSeconds;
+    }
+    transitionRequest.currentCandidateIndex = result.candidateIndex;
+    transitionRequest.currentCost = result.cost;
+    const MotionQueryTransitionResultUVE transition =
+        ArbitrateMotionQueryTransitionUVE(transitionRequest, settings.transition);
+    result.transitionCode = transition.code;
+    result.transitionCostImprovement = transition.costImprovement;
+    result.transitionHeldPrevious = transition.ShouldHoldPreviousUVE();
+    if (!transition.IsAcceptedUVE()) {
+        result.code = MotionQueryAnimationNodeCodeUVE::InvalidSettings;
+        result.message = transition.message;
+        return result;
+    }
+    if (transition.ShouldHoldPreviousUVE()) {
+        MotionQueryAnimationNodeResultUVE held = *previousResult;
+        held.transitionCode = transition.code;
+        held.transitionCostImprovement = transition.costImprovement;
+        held.transitionHeldPrevious = true;
+        held.message = transition.message;
+        return held;
+    }
+    result.message = transition.message;
     return result;
 }
 
@@ -243,13 +273,20 @@ MotionQueryAnimationNodeResultUVE EvaluateMotionQueryAnimationNodeFromHistoryUVE
                              "motion query animation node has no history frame at or before evaluation time"));
     }
     const UVE::Core::PoseSampleUVE* previousSample = nullptr;
+    MotionQueryAnimationNodeResultUVE previousResult;
+    const MotionQueryAnimationNodeResultUVE* previousResultPointer = nullptr;
     const auto previousFrame = std::next(frame);
     if (previousFrame != frames.crend()) {
         previousSample = &previousFrame->sample;
+        previousResult = EvaluateMotionQueryAnimationNodeUVE(
+            previousFrame->query, database, schema, searchIndex, clips, settings, nullptr);
+        if (previousResult.IsAcceptedUVE()) {
+            previousResultPointer = &previousResult;
+        }
     }
     return EvaluateMotionQueryAnimationNodeWithContinuityUVE(
         frame->query, database, schema, searchIndex, clips, settings, previousSample,
-        evaluationTimeSeconds, debugSink, timestampNanoseconds, frameNumber);
+        evaluationTimeSeconds, previousResultPointer, debugSink, timestampNanoseconds, frameNumber);
 }
 
 } // namespace UVE::Plugins

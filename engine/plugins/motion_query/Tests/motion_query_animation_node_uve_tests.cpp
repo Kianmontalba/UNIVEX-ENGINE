@@ -186,6 +186,34 @@ TEST(MotionQueryAnimationNodeUVETest, EvaluateFromHistoryUVE_AppliesBoundedConti
     EXPECT_EQ(result.pose.rotation, (UVE::Math::QuaternionUVE{}));
 }
 
+TEST(MotionQueryAnimationNodeUVETest, EvaluateFromHistoryUVE_HoldsPreviousCandidateWithinWindow) {
+    const UVE::Core::MotionMatchingDatabaseUVE database = MakeDatabaseUVE();
+    const UVE::Core::MotionQueryFeatureSchemaUVE schema = MakeSchemaUVE();
+    MotionQuerySearchIndexUVE index;
+    ASSERT_TRUE(index.BuildUVE(database, schema).IsAcceptedUVE());
+    UVE::Core::MotionQueryHistoryBufferUVE history;
+    UVE::Core::MotionQueryHistoryFrameUVE previous;
+    previous.sample.timeSeconds = 0.1;
+    previous.sample.pose.rotation.w = 1.0F;
+    previous.query.rootVelocity = UVE::Math::Vector3UVE{5.0F, 0.0F, 0.0F};
+    previous.query.facingDirection = UVE::Math::Vector3UVE{0.0F, 0.0F, 1.0F};
+    ASSERT_TRUE(history.AppendFrameUVE(previous).IsAcceptedUVE());
+    UVE::Core::MotionQueryHistoryFrameUVE current = previous;
+    current.sample.timeSeconds = 0.2;
+    current.query.rootVelocity = UVE::Math::Vector3UVE{1.0F, 0.0F, 0.0F};
+    ASSERT_TRUE(history.AppendFrameUVE(current).IsAcceptedUVE());
+    MotionQueryAnimationNodeSettingsUVE settings;
+    settings.transition.minimumHoldSeconds = 0.1;
+    settings.transition.maximumHoldWindowSeconds = 0.5;
+    const MotionQueryAnimationNodeResultUVE result =
+        EvaluateMotionQueryAnimationNodeFromHistoryUVE(history, 0.3, database, schema, index,
+                                                       MakeClipsUVE(), settings);
+    ASSERT_TRUE(result.IsAcceptedUVE()) << result.message;
+    EXPECT_EQ(result.candidateIndex, 0U);
+    EXPECT_EQ(result.transitionCode, MotionQueryTransitionCodeUVE::HeldPreviousCandidate);
+    EXPECT_TRUE(result.transitionHeldPrevious);
+}
+
 TEST(MotionQueryAnimationNodeUVETest, EvaluateUVE_RejectsInvalidSettingsAndUnbuiltIndex) {
     const UVE::Core::MotionMatchingDatabaseUVE database = MakeDatabaseUVE();
     const UVE::Core::MotionQueryFeatureSchemaUVE schema = MakeSchemaUVE();

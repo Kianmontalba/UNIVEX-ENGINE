@@ -9,6 +9,7 @@ add_library(uve_plugins STATIC
     motion_query/Source/Runtime/src/motion_query_schema_compatibility_uve.cpp
     motion_query/Source/Runtime/src/motion_query_lod_uve.cpp
     motion_query/Source/Runtime/src/motion_query_continuity_uve.cpp
+    motion_query/Source/Runtime/src/motion_query_transition_uve.cpp
     motion_query/Source/Runtime/src/motion_query_search_index_uve.cpp
     motion_query/Source/Runtime/src/motion_query_animation_node_uve.cpp
     motion_query/Source/Runtime/src/motion_query_interaction_runtime_uve.cpp
