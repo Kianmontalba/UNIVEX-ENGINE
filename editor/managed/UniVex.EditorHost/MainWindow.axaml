@@ -367,22 +367,43 @@
                                     </StackPanel>
                                 </Border>
                                 <TextBlock Grid.Row="2" Text="REPLAY BATCH HISTORY · recent regression outcomes" FontSize="10" Opacity="0.68" />
-                                <ListBox x:Name="MotionQueryBatchHistoryListBox" Grid.Row="3" MaxHeight="140">
-                                    <ListBox.ItemTemplate>
-                                        <DataTemplate>
-                                            <StackPanel Spacing="1" Margin="0,2">
-                                                <TextBlock Text="{Binding Message}" FontWeight="SemiBold" />
-                                                <Grid ColumnDefinitions="Auto,*,Auto">
-                                                    <TextBlock Text="{Binding Sequence, StringFormat='Sequence #{0}'}" FontSize="10" Opacity="0.6" />
-                                                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
-                                                        <TextBlock Text="{Binding MatchCount, StringFormat='Matches: {0}'}" FontSize="10" Foreground="#4CAF50" />
-                                                        <TextBlock Text="{Binding MismatchCount, StringFormat='Mismatches: {0}'}" FontSize="10" Foreground="#F44336" />
+                                <Grid Grid.Row="3" ColumnDefinitions="*,*" ColumnSpacing="8">
+                                    <Grid RowDefinitions="Auto,*">
+                                        <TextBlock Text="BATCH HISTORY" FontSize="10" Opacity="0.68" Margin="0,0,0,4" />
+                                        <ListBox x:Name="MotionQueryBatchHistoryListBox" Grid.Row="1" MaxHeight="140">
+                                            <ListBox.ItemTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel Spacing="1" Margin="0,2">
+                                                        <TextBlock Text="{Binding Message}" FontWeight="SemiBold" />
+                                                        <Grid ColumnDefinitions="Auto,*,Auto">
+                                                            <TextBlock Text="{Binding Sequence, StringFormat='Sequence #{0}'}" FontSize="10" Opacity="0.6" />
+                                                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8">
+                                                                <TextBlock Text="{Binding MatchCount, StringFormat='Matches: {0}'}" FontSize="10" Foreground="#4CAF50" />
+                                                                <TextBlock Text="{Binding MismatchCount, StringFormat='Mismatches: {0}'}" FontSize="10" Foreground="#F44336" />
+                                                            </StackPanel>
+                                                        </Grid>
                                                     </StackPanel>
-                                                </Grid>
-                                            </StackPanel>
-                                        </DataTemplate>
-                                    </ListBox.ItemTemplate>
-                                </ListBox>
+                                                </DataTemplate>
+                                            </ListBox.ItemTemplate>
+                                        </ListBox>
+                                    </Grid>
+                                    <Grid Grid.Column="1" RowDefinitions="Auto,*">
+                                        <TextBlock Text="INDIVIDUAL HISTORY" FontSize="10" Opacity="0.68" Margin="0,0,0,4" />
+                                        <ListBox x:Name="MotionQueryIndividualHistoryListBox" Grid.Row="1" MaxHeight="140">
+                                            <ListBox.ItemTemplate>
+                                                <DataTemplate>
+                                                    <StackPanel Spacing="1" Margin="0,2">
+                                                        <TextBlock Text="{Binding BaselineName}" FontWeight="SemiBold" />
+                                                        <Grid ColumnDefinitions="Auto,*,Auto">
+                                                            <TextBlock Text="{Binding Sequence, StringFormat='Sequence #{0}'}" FontSize="10" Opacity="0.6" />
+                                                            <TextBlock Grid.Column="2" Text="{Binding ComparedEventCount, StringFormat='Events: {0}'}" FontSize="10" Opacity="0.8" />
+                                                        </Grid>
+                                                    </StackPanel>
+                                                </DataTemplate>
+                                            </ListBox.ItemTemplate>
+                                        </ListBox>
+                                    </Grid>
+                                </Grid>
                                 <ListBox x:Name="MotionQueryBaselinesListBox" Grid.Row="4" MaxHeight="120">
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>

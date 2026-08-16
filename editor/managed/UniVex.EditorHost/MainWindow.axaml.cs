@@ -753,6 +753,7 @@ public partial class MainWindow : Window
             $"{motionQuery.ReplaySessionFacts.TotalMismatchesFound} mismatches";
 
         MotionQueryBatchHistoryListBox.ItemsSource = motionQuery.ReplayBatchHistory;
+        MotionQueryIndividualHistoryListBox.ItemsSource = motionQuery.ReplayDiagnostics.History;
         MotionQueryBaselinesListBox.ItemsSource = motionQuery.ReplayDiagnostics.Baselines;
 
         MotionQueryDiagnosticsTextBlock.Text = motionQuery.ReplayDiagnostics.HasActiveComparison
