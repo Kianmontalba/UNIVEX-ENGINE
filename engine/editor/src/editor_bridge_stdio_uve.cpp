@@ -509,6 +509,16 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"entries", std::move(entries)}};
 }
 
+[[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeMotionQueryReplayWorkflowStatusUVE& status) {
+    return JsonUVE{{"registryGeneration", status.registryGeneration},
+                   {"baselineCount", status.baselineCount},
+                   {"activeBaselineSelected", status.activeBaselineSelected},
+                   {"activeFixtureAvailable", status.activeFixtureAvailable},
+                   {"historyTruncated", status.historyTruncated},
+                   {"readyForComparison", status.readyForComparison},
+                   {"diagnostic", status.diagnostic}};
+}
+
 [[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeMotionQueryReplayComparisonHistoryEntryUVE& entry) {
     return JsonUVE{{"sequence", entry.sequence},
                    {"baselineName", entry.baselineName},
@@ -559,7 +569,8 @@ enum class FrameReadResultUVE : std::uint8_t {
                            history.push_back(ToJsonUVE(entry));
                        }
                        return history;
-                   }()}};
+                   }()},
+                   {"replayWorkflow", ToJsonUVE(snapshot.replayWorkflow)}};
 }
 
 [[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeSnapshotUVE& snapshot) {

@@ -1067,6 +1067,26 @@ EditorBridgeMotionQuerySnapshotUVE EditorBridgeUVE::CaptureMotionQueryUVE() cons
     snapshot.replayComparisonHistoryTruncated = m_motionQueryReplayComparisonHistoryTruncated;
     snapshot.replayComparisonHistory.assign(m_motionQueryReplayComparisonHistory.begin(),
                                              m_motionQueryReplayComparisonHistory.end());
+    snapshot.replayWorkflow.registryGeneration = baselineSnapshot.generation;
+    snapshot.replayWorkflow.baselineCount = baselineSnapshot.entries.size();
+    snapshot.replayWorkflow.activeBaselineSelected = m_motionQueryActiveBaselineName.has_value();
+    snapshot.replayWorkflow.activeFixtureAvailable = m_motionQueryReplayFixture.has_value();
+    snapshot.replayWorkflow.historyTruncated = m_motionQueryReplayComparisonHistoryTruncated;
+    if (!snapshot.replayWorkflow.activeBaselineSelected) {
+        snapshot.replayWorkflow.diagnostic = "no named replay baseline is selected";
+    } else if (!snapshot.replayWorkflow.activeFixtureAvailable) {
+        snapshot.replayWorkflow.diagnostic = "the selected replay baseline has no active copied fixture";
+    } else if (!liveDebug.active) {
+        snapshot.replayWorkflow.diagnostic = "live debug is not active for replay comparison";
+    } else if (!liveDebug.filter.empty() ||
+               liveDebug.totalTraceEventCount != liveDebug.visibleTraceEventCount) {
+        snapshot.replayWorkflow.diagnostic = "live debug evidence is filtered for replay comparison";
+    } else if (liveDebug.visibleTraceEventCount == 0U) {
+        snapshot.replayWorkflow.diagnostic = "live debug contains no trace events for replay comparison";
+    } else {
+        snapshot.replayWorkflow.readyForComparison = true;
+        snapshot.replayWorkflow.diagnostic = "replay workflow is ready for deterministic comparison";
+    }
     if (m_motionQueryReplayFixture.has_value()) {
         const Plugins::Editor::MotionQueryTraceReplayRegressionResultUVE comparison =
             Plugins::Editor::CompareMotionQueryLiveDebugSnapshotAgainstFixtureUVE(
