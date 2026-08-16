@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <utility>
 
 namespace UVE::Plugins::Editor {
@@ -139,6 +140,44 @@ MotionQueryTraceResultUVE MotionQueryTraceLoggerUVE::SetCategoryUVE(
     ++snapshot_.generation;
     return MakeTraceResultUVE(MotionQueryTraceCodeUVE::Accepted, 0U,
                               "motion query trace event category updated");
+}
+
+MotionQueryTraceResultUVE MotionQueryTraceLoggerUVE::RestoreUVE(
+    MotionQueryTraceSnapshotUVE snapshot) noexcept {
+    if (snapshot.events.size() > kMotionQueryMaximumTraceEventsUVE) {
+        return MakeTraceResultUVE(MotionQueryTraceCodeUVE::CapacityExceeded, snapshot.events.size(),
+                                  "motion query trace restore exceeds the event capacity");
+    }
+    std::uint64_t nextSequence = 1U;
+    std::uint64_t previousSequence = 0U;
+    std::uint64_t previousFrame = 0U;
+    bool first = true;
+    for (const auto& event : snapshot.events) {
+        if (event.sequence == 0U || event.sequence <= previousSequence ||
+            (!first && event.frameNumber < previousFrame) || event.kind.empty() ||
+            event.kind.size() > kMotionQueryMaximumDebugMessageBytesUVE ||
+            event.provenance.size() > kMotionQueryMaximumDebugMessageBytesUVE ||
+            event.message.size() > kMotionQueryMaximumDebugMessageBytesUVE ||
+            event.comment.size() > kMotionQueryMaximumDebugMessageBytesUVE ||
+            event.category.size() > 32U || !std::isfinite(event.cost) || event.cost < 0.0F ||
+            event.candidatesEvaluated > event.candidatesConsidered) {
+            return MakeTraceResultUVE(MotionQueryTraceCodeUVE::InvalidEvent, snapshot.events.size(),
+                                      "motion query trace restore contains an invalid event");
+        }
+        previousSequence = event.sequence;
+        previousFrame = event.frameNumber;
+        first = false;
+        if (event.sequence == std::numeric_limits<std::uint64_t>::max()) {
+            nextSequence = event.sequence;
+        } else {
+            nextSequence = event.sequence + 1U;
+        }
+    }
+    snapshot.generation = snapshot_.generation + 1U;
+    snapshot_ = std::move(snapshot);
+    nextSequence_ = nextSequence;
+    return MakeTraceResultUVE(MotionQueryTraceCodeUVE::Accepted, snapshot_.events.size(),
+                              "motion query trace restored");
 }
 
 void MotionQueryTraceLoggerUVE::ClearUVE() noexcept {

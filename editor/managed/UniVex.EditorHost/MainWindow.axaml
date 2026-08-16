@@ -419,12 +419,18 @@
                                         </DataTemplate>
                                     </ListBox.ItemTemplate>
                                 </ListBox>
-                                <Grid Grid.Row="5" RowDefinitions="Auto,*" RowSpacing="4">
-                                    <Grid ColumnDefinitions="*,Auto">
+                                <Grid Grid.Row="5" RowDefinitions="Auto,Auto,*" RowSpacing="4">
+                                    <Grid ColumnDefinitions="*,Auto,Auto,Auto">
                                         <TextBlock Text="LIVE DEBUG TRACE · recent native events" FontSize="10" Opacity="0.68" VerticalAlignment="Center" />
-                                        <Button Grid.Column="1" Content="Export Trace as Evidence" Click="MotionQueryExportEvidenceButton_OnClick" Padding="4,2" FontSize="10" x:Name="MotionQueryExportEvidenceButton" IsEnabled="False" />
+                                        <Button Grid.Column="1" Content="Export Trace" Click="MotionQueryExportTraceButton_OnClick" Padding="4,2" FontSize="10" x:Name="MotionQueryExportTraceButton" IsEnabled="False" Margin="0,0,4,0" />
+                                        <Button Grid.Column="2" Content="Import Trace" Click="MotionQueryImportTraceButton_OnClick" Padding="4,2" FontSize="10" x:Name="MotionQueryImportTraceButton" IsEnabled="False" Margin="0,0,4,0" />
+                                        <Button Grid.Column="3" Content="Export as Evidence" Click="MotionQueryExportEvidenceButton_OnClick" Padding="4,2" FontSize="10" x:Name="MotionQueryExportEvidenceButton" IsEnabled="False" />
                                     </Grid>
-                                    <ListBox x:Name="MotionQueryTraceListBox" Grid.Row="1" MaxHeight="120" SelectionChanged="MotionQueryTraceListBox_OnSelectionChanged">
+                                    <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="0,2,0,0">
+                                        <TextBox x:Name="MotionQueryTracePersistencePayloadTextBox" Watermark="Paste a persisted live trace JSON payload" TextWrapping="NoWrap" Padding="3" FontSize="10" />
+                                        <TextBlock Grid.Column="1" Text="value-only · no handles/timestamps" FontSize="9" Opacity="0.55" VerticalAlignment="Center" Margin="6,0,0,0" />
+                                    </Grid>
+                                    <ListBox x:Name="MotionQueryTraceListBox" Grid.Row="2" MaxHeight="120" SelectionChanged="MotionQueryTraceListBox_OnSelectionChanged">
                                         <ListBox.ItemTemplate>
                                             <DataTemplate>
                                                 <StackPanel Spacing="1" Margin="0,2">

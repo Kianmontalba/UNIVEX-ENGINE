@@ -143,6 +143,7 @@ public sealed class BridgeProtocolClient : IAsyncDisposable
                     generation = command.MotionQueryDebugDatabase.Generation,
                 },
                 filter = command.MotionQueryDebugFilter,
+                payload = command.MotionQueryDebugPayload,
                 eventSequence = command.MotionQueryDebugEventSequence,
             },
             motionQueryReplayBaselineName = command.MotionQueryReplayBaselineName,
@@ -162,6 +163,10 @@ public sealed class BridgeProtocolClient : IAsyncDisposable
                                    envelopeValue.ValueKind == JsonValueKind.String
             ? envelopeValue.GetString()
             : null;
+        string? liveDebugTracePayload = result.TryGetProperty("motionQueryLiveDebugTracePayload", out JsonElement liveTraceValue) &&
+                                        liveTraceValue.ValueKind == JsonValueKind.String
+            ? liveTraceValue.GetString()
+            : null;
         return new BridgeCommandResult(
             result.GetProperty("applied").GetBoolean(),
             result.GetProperty("code").GetString() ?? "bridge.response.invalid",
@@ -169,7 +174,8 @@ public sealed class BridgeProtocolClient : IAsyncDisposable
             BridgeSnapshotParser.Parse(result.GetProperty("snapshot")),
             createdEntity,
             graphSchema,
-            envelopePayload);
+            envelopePayload,
+            liveDebugTracePayload);
     }
 
     public async ValueTask DisposeAsync()

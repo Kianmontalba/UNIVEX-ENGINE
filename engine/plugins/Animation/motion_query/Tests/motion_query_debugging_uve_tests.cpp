@@ -185,6 +185,95 @@ TEST(MotionQueryDebuggingUVETest, LiveDebugSessionUVE_AttachesFiltersPublishesAn
     EXPECT_TRUE(session.GetSnapshotUVE().traceEvents.empty());
 }
 
+TEST(MotionQueryDebuggingUVETest, LiveDebugTracePersistenceUVE_RoundTripsAnnotationsWithoutRuntimeIdentity) {
+    MotionQueryTraceSnapshotUVE snapshot;
+    snapshot.generation = 9U;
+    snapshot.truncated = true;
+    MotionQueryTraceEventUVE event;
+    event.sequence = 4U;
+    event.timestampNanoseconds = 987654321U;
+    event.frameNumber = 12U;
+    event.kind = "accepted";
+    event.database = MakeHandleUVE(77U);
+    event.candidatesConsidered = 2U;
+    event.candidatesEvaluated = 1U;
+    event.cost = 0.25F;
+    event.selectedCandidateIndex = 0U;
+    event.provenance = "runtime_search";
+    event.message = "accepted live match";
+    event.comment = "investigate foot slide";
+    event.category = "locomotion";
+    event.pinned = true;
+    snapshot.events.push_back(event);
+
+    const auto serialized = SerializeMotionQueryLiveDebugTraceUVE(snapshot, "locomotion");
+    ASSERT_TRUE(serialized.IsAcceptedUVE()) << serialized.message;
+    EXPECT_EQ(serialized.payload.find("timestampNanoseconds"), std::string::npos);
+    EXPECT_EQ(serialized.payload.find("database"), std::string::npos);
+
+    const auto restored = DeserializeMotionQueryLiveDebugTraceUVE(serialized.payload);
+    ASSERT_TRUE(restored.IsAcceptedUVE()) << restored.message;
+    ASSERT_EQ(restored.envelope->events.size(), 1U);
+    EXPECT_EQ(restored.envelope->filter, "locomotion");
+    EXPECT_TRUE(restored.envelope->truncated);
+    EXPECT_EQ(restored.envelope->events.front().sequence, 4U);
+    EXPECT_EQ(restored.envelope->events.front().comment, "investigate foot slide");
+    EXPECT_EQ(restored.envelope->events.front().category, "locomotion");
+    EXPECT_TRUE(restored.envelope->events.front().pinned);
+    EXPECT_FALSE(restored.envelope->events.front().database.has_value());
+    EXPECT_EQ(restored.envelope->events.front().timestampNanoseconds, 0U);
+}
+
+TEST(MotionQueryDebuggingUVETest, LiveDebugTracePersistenceUVE_RejectsUnexpectedAndNonMonotonicPayloads) {
+    MotionQueryTraceSnapshotUVE snapshot;
+    MotionQueryTraceEventUVE first;
+    first.sequence = 1U;
+    first.frameNumber = 2U;
+    first.kind = "tick";
+    snapshot.events.push_back(first);
+    const auto serialized = SerializeMotionQueryLiveDebugTraceUVE(snapshot, "");
+    ASSERT_TRUE(serialized.IsAcceptedUVE());
+
+    const auto unexpected = DeserializeMotionQueryLiveDebugTraceUVE(
+        serialized.payload.substr(0, serialized.payload.size() - 1U) + ",\"unexpected\":true}");
+    EXPECT_EQ(unexpected.code, MotionQueryLiveDebugTracePersistenceCodeUVE::UnexpectedField);
+
+    const std::string nonMonotonic =
+        "{\"schemaVersion\":1,\"truncated\":false,\"filter\":\"\",\"events\":["
+        "{\"sequence\":2,\"frameNumber\":3,\"kind\":\"a\",\"candidatesConsidered\":0,"
+        "\"candidatesEvaluated\":0,\"cost\":0.0,\"selectedCandidateIndex\":null,"
+        "\"qualityTier\":0,\"continuityCode\":0,\"continuityApplied\":false,\"transitionCode\":0,"
+        "\"transitionHeldPrevious\":false,\"telemetryCode\":0,\"telemetryIndexEntryCount\":0,"
+        "\"telemetryCandidatesConsidered\":0,\"telemetryBudgetSaturated\":false,"
+        "\"provenance\":\"\",\"message\":\"\",\"comment\":\"\",\"category\":\"\",\"pinned\":false},"
+        "{\"sequence\":1,\"frameNumber\":4,\"kind\":\"b\",\"candidatesConsidered\":0,"
+        "\"candidatesEvaluated\":0,\"cost\":0.0,\"selectedCandidateIndex\":null,"
+        "\"qualityTier\":0,\"continuityCode\":0,\"continuityApplied\":false,\"transitionCode\":0,"
+        "\"transitionHeldPrevious\":false,\"telemetryCode\":0,\"telemetryIndexEntryCount\":0,"
+        "\"telemetryCandidatesConsidered\":0,\"telemetryBudgetSaturated\":false,"
+        "\"provenance\":\"\",\"message\":\"\",\"comment\":\"\",\"category\":\"\",\"pinned\":false}]}";
+    EXPECT_EQ(DeserializeMotionQueryLiveDebugTraceUVE(nonMonotonic).code,
+              MotionQueryLiveDebugTracePersistenceCodeUVE::InvalidTrace);
+}
+
+TEST(MotionQueryDebuggingUVETest, LiveDebugSessionUVE_ExportsAndImportsTraceForOfflineInspection) {
+    MotionQueryLiveDebugSessionUVE session;
+    MotionQueryLiveDebugCommandUVE exportCommand;
+    exportCommand.kind = MotionQueryLiveDebugCommandKindUVE::ExportTrace;
+    const MotionQueryLiveDebugResponseUVE emptyExport = session.DispatchUVE(exportCommand, MotionQueryEditorAuthoringSessionUVE{});
+    ASSERT_TRUE(emptyExport.applied) << emptyExport.message;
+    ASSERT_TRUE(emptyExport.payload.has_value());
+
+    MotionQueryLiveDebugCommandUVE importCommand;
+    importCommand.kind = MotionQueryLiveDebugCommandKindUVE::ImportTrace;
+    importCommand.expectedGeneration = session.GetSnapshotUVE().generation;
+    importCommand.payload = *emptyExport.payload;
+    const MotionQueryLiveDebugResponseUVE imported = session.DispatchUVE(importCommand, MotionQueryEditorAuthoringSessionUVE{});
+    ASSERT_TRUE(imported.applied) << imported.message;
+    EXPECT_FALSE(imported.snapshot.active);
+    EXPECT_TRUE(imported.snapshot.traceEvents.empty());
+}
+
 TEST(MotionQueryDebuggingUVETest, ProfilerAdapterUVE_DelegatesToExistingCaptureAuthority) {
     UVE::Core::ProfilerCaptureUVE profiler;
     ASSERT_TRUE(profiler.BeginUVE("motion-query", 1U).IsAcceptedUVE());

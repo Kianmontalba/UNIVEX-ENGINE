@@ -29,6 +29,7 @@ MotionQueryLiveDebugResponseUVE MotionQueryLiveDebugSessionUVE::DispatchUVE(
                                "motion query live debug protocol version is unsupported");
     }
     if (command.kind != MotionQueryLiveDebugCommandKindUVE::ReadSnapshot &&
+        command.kind != MotionQueryLiveDebugCommandKindUVE::ExportTrace &&
         command.expectedGeneration != generation_) {
         return MakeResponseUVE(command, false, MotionQueryLiveDebugResponseCodeUVE::StaleGeneration,
                                "motion query live debug command was based on an older session generation");
@@ -164,6 +165,40 @@ MotionQueryLiveDebugResponseUVE MotionQueryLiveDebugSessionUVE::DispatchUVE(
             ++generation_;
             return MakeResponseUVE(command, true, MotionQueryLiveDebugResponseCodeUVE::Applied,
                                    "live debug event category updated");
+        }
+        case MotionQueryLiveDebugCommandKindUVE::ExportTrace: {
+            const auto result = SerializeMotionQueryLiveDebugTraceUVE(trace_.GetSnapshotUVE(), filter_);
+            if (!result.IsAcceptedUVE()) {
+                return MakeResponseUVE(command, false, MotionQueryLiveDebugResponseCodeUVE::InvalidCommand,
+                                       result.message);
+            }
+            MotionQueryLiveDebugResponseUVE response = MakeResponseUVE(
+                command, true, MotionQueryLiveDebugResponseCodeUVE::Applied,
+                "motion query live debug trace exported");
+            response.payload = result.payload;
+            return response;
+        }
+        case MotionQueryLiveDebugCommandKindUVE::ImportTrace: {
+            const auto result = DeserializeMotionQueryLiveDebugTraceUVE(command.payload);
+            if (!result.IsAcceptedUVE()) {
+                return MakeResponseUVE(command, false, MotionQueryLiveDebugResponseCodeUVE::InvalidCommand,
+                                       result.message);
+            }
+            MotionQueryTraceSnapshotUVE restoredSnapshot;
+            restoredSnapshot.truncated = result.envelope->truncated;
+            restoredSnapshot.events = result.envelope->events;
+            const auto restoreResult = trace_.RestoreUVE(std::move(restoredSnapshot));
+            if (!restoreResult.IsAcceptedUVE()) {
+                return MakeResponseUVE(command, false, MotionQueryLiveDebugResponseCodeUVE::InvalidCommand,
+                                       restoreResult.message);
+            }
+            debugger_.DetachUVE();
+            database_.reset();
+            filter_ = result.envelope->filter;
+            active_ = false;
+            ++generation_;
+            return MakeResponseUVE(command, true, MotionQueryLiveDebugResponseCodeUVE::Applied,
+                                   "motion query live debug trace imported for offline inspection");
         }
     }
     return MakeResponseUVE(command, false, MotionQueryLiveDebugResponseCodeUVE::InvalidCommand,

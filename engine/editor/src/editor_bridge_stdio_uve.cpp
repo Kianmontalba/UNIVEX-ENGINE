@@ -685,10 +685,14 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"graphSchema", response.visualScriptGraphSchema.has_value()
                                         ? ToJsonUVE(*response.visualScriptGraphSchema)
                                         : JsonUVE(nullptr)},
-                   {"motionQueryReplayBaselineEnvelopePayload",
-                    response.motionQueryReplayBaselineEnvelopePayload.has_value()
-                        ? JsonUVE(*response.motionQueryReplayBaselineEnvelopePayload)
-                        : JsonUVE(nullptr)}};
+                    {"motionQueryReplayBaselineEnvelopePayload",
+                     response.motionQueryReplayBaselineEnvelopePayload.has_value()
+                         ? JsonUVE(*response.motionQueryReplayBaselineEnvelopePayload)
+                         : JsonUVE(nullptr)},
+                    {"motionQueryLiveDebugTracePayload",
+                     response.motionQueryLiveDebugTracePayload.has_value()
+                         ? JsonUVE(*response.motionQueryLiveDebugTracePayload)
+                         : JsonUVE(nullptr)}};
 }
 
 [[nodiscard]] FrameReadResultUVE ReadFrameUVE(std::istream& input, std::string& body) {
@@ -1058,6 +1062,8 @@ ParseMotionQueryLiveDebugCommandKindUVE(const std::string_view value) {
     if (value == "toggleTraceEventPin") return Kind::ToggleTraceEventPin;
     if (value == "setTraceEventComment") return Kind::SetTraceEventComment;
     if (value == "setTraceEventCategory") return Kind::SetTraceEventCategory;
+    if (value == "exportTrace") return Kind::ExportTrace;
+    if (value == "importTrace") return Kind::ImportTrace;
     return std::nullopt;
 }
 
@@ -1087,6 +1093,12 @@ ParseMotionQueryLiveDebugCommandUVE(const JsonUVE& json, const std::uint64_t req
         if (!json.at("filter").is_string() || json.at("filter").get_ref<const std::string&>().size() >
             Plugins::Editor::kMotionQueryMaximumDebugMessageBytesUVE) return std::nullopt;
         command.filter = json.at("filter").get<std::string>();
+    }
+    if (json.contains("payload") && !json.at("payload").is_null()) {
+        if (!json.at("payload").is_string() ||
+            json.at("payload").get_ref<const std::string&>().size() >
+                Plugins::Editor::kMotionQueryMaximumLiveDebugTraceEnvelopeBytesUVE) return std::nullopt;
+        command.payload = json.at("payload").get<std::string>();
     }
     if (json.contains("eventSequence") && !json.at("eventSequence").is_null()) {
         if (!json.at("eventSequence").is_number_unsigned()) return std::nullopt;

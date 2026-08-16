@@ -26,6 +26,7 @@ add_library(uve_plugins STATIC
     Animation/motion_query/Source/Editor/src/motion_query_trace_replay_regression_uve.cpp
     Animation/motion_query/Source/Editor/src/motion_query_trace_replay_baseline_registry_uve.cpp
     Animation/motion_query/Source/Editor/src/motion_query_live_debug_session_uve.cpp
+    Animation/motion_query/Source/Editor/src/motion_query_live_debug_trace_persistence_uve.cpp
 )
 target_include_directories(uve_plugins PUBLIC
     include

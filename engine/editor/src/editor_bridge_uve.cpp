@@ -376,6 +376,7 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
     std::optional<EditorBridgeEntityRefUVE> createdEntity;
     std::optional<Scripting::ScriptGraphSchemaUVE> responseSchema;
     std::optional<std::string> responseEnvelopePayload;
+    std::optional<std::string> responseLiveDebugTracePayload;
     switch (request.kind) {
         case EditorBridgeRequestKindUVE::SelectEntity: {
             if (!request.entity.has_value() || !request.entity->IsValidUVE() ||
@@ -850,6 +851,7 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
                            : "bridge.motion_query.debug.command.rejected";
             message = debugResponse.message;
             if (applied) {
+                responseLiveDebugTracePayload = debugResponse.payload;
                 ++m_revision;
             }
             break;
@@ -1034,6 +1036,7 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
     response.createdEntity = createdEntity;
     response.visualScriptGraphSchema = std::move(responseSchema);
     response.motionQueryReplayBaselineEnvelopePayload = std::move(responseEnvelopePayload);
+    response.motionQueryLiveDebugTracePayload = std::move(responseLiveDebugTracePayload);
     return response;
 }
 
@@ -1386,7 +1389,7 @@ EditorBridgeResponseUVE EditorBridgeUVE::MakeResponseUVE(const EditorBridgeReque
                                                            std::string code, std::string message) const {
     return EditorBridgeResponseUVE{kEditorBridgeProtocolVersionUVE, request.requestId, applied,
                                    std::move(code), std::move(message), BuildSnapshotUVE(), std::nullopt,
-                                   std::nullopt, std::nullopt};
+                                   std::nullopt, std::nullopt, std::nullopt};
 }
 
 Scene::EntityUVE EditorBridgeUVE::ToEntityUVE(const EditorBridgeEntityRefUVE entity) noexcept {

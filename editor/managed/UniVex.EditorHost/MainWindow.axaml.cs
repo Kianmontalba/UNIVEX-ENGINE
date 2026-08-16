@@ -747,6 +747,8 @@ public partial class MainWindow : Window
         MotionQueryImportRegistryButton.IsEnabled = state == HostSessionState.Connected;
         MotionQueryRunBatchButton.IsEnabled = state == HostSessionState.Connected;
         MotionQueryClearReplayButton.IsEnabled = state == HostSessionState.Connected;
+        MotionQueryExportTraceButton.IsEnabled = state == HostSessionState.Connected && motionQuery.Trace.Events.Count > 0;
+        MotionQueryImportTraceButton.IsEnabled = state == HostSessionState.Connected;
         MotionQueryExportEvidenceButton.IsEnabled = state == HostSessionState.Connected && motionQuery.Trace.Events.Count > 0;
 
         MotionQueryStatusTextBlock.Text = motionQuery.ReplayWorkflow.ReadyForComparison
@@ -932,6 +934,45 @@ public partial class MainWindow : Window
         }
     }
 
+    private async void MotionQueryExportTraceButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        var result = await DispatchCommandAsync(new BridgeCommand(CurrentRevision(), "dispatchMotionQueryDebugCommand")
+        {
+            MotionQueryDebugCommandKind = "exportTrace",
+            MotionQueryDebugExpectedGeneration = session?.LastSnapshot?.MotionQuery.LiveDebugGeneration ?? 0UL,
+        }).ConfigureAwait(true);
+        if (result != null && result.Applied && result.MotionQueryLiveDebugTracePayload != null)
+        {
+            MotionQueryTracePersistencePayloadTextBox.Text = result.MotionQueryLiveDebugTracePayload;
+            var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+            if (clipboard != null)
+            {
+                await clipboard.SetTextAsync(result.MotionQueryLiveDebugTracePayload).ConfigureAwait(false);
+            }
+            MotionQueryStatusTextBlock.Text = "Live debug trace exported to the persistence field and clipboard.";
+        }
+    }
+
+    private async void MotionQueryImportTraceButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        string payload = MotionQueryTracePersistencePayloadTextBox.Text?.Trim() ?? string.Empty;
+        if (payload.Length == 0)
+        {
+            MotionQueryStatusTextBlock.Text = "Paste a persisted live debug trace JSON payload first.";
+            return;
+        }
+        var result = await DispatchCommandAsync(new BridgeCommand(CurrentRevision(), "dispatchMotionQueryDebugCommand")
+        {
+            MotionQueryDebugCommandKind = "importTrace",
+            MotionQueryDebugExpectedGeneration = session?.LastSnapshot?.MotionQuery.LiveDebugGeneration ?? 0UL,
+            MotionQueryDebugPayload = payload,
+        }).ConfigureAwait(true);
+        if (result != null && result.Applied)
+        {
+            MotionQueryStatusTextBlock.Text = "Live debug trace imported for offline inspection.";
+        }
+    }
+
     private async void MotionQueryExportEvidenceButton_OnClick(object? sender, RoutedEventArgs e)
     {
         var result = await DispatchCommandAsync(new BridgeCommand(CurrentRevision(), "exportMotionQueryReplayEvidence")).ConfigureAwait(true);
@@ -941,7 +982,7 @@ public partial class MainWindow : Window
             var clipboard = topLevel?.Clipboard;
             if (clipboard != null)
             {
-                await clipboard.SetTextAsync(result.MotionQueryReplayBaselineEnvelopePayload).ConfigureAwait(true);
+                await clipboard.SetTextAsync(result.MotionQueryReplayBaselineEnvelopePayload).ConfigureAwait(false);
                 MotionQueryStatusTextBlock.Text = "Trace exported as evidence to clipboard.";
             }
         }

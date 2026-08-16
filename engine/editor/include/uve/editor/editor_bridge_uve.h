@@ -660,6 +660,7 @@ struct EditorBridgeResponseUVE final {
     std::optional<EditorBridgeEntityRefUVE> createdEntity;
     std::optional<Scripting::ScriptGraphSchemaUVE> visualScriptGraphSchema;
     std::optional<std::string> motionQueryReplayBaselineEnvelopePayload;
+    std::optional<std::string> motionQueryLiveDebugTracePayload;
 };
 
 /// Main-thread adapter over EditorUVE. It supports coexistence with the native ImGui editor: every

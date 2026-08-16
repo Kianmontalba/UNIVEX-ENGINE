@@ -604,6 +604,7 @@ public sealed record BridgeCommand(
     public ulong? MotionQueryDebugExpectedGeneration { get; init; }
     public BridgeMotionQueryResourceHandle? MotionQueryDebugDatabase { get; init; }
     public string? MotionQueryDebugFilter { get; init; }
+    public string? MotionQueryDebugPayload { get; init; }
     public ulong? MotionQueryDebugEventSequence { get; init; }
     public string? MotionQueryReplayBaselineName { get; init; }
     public string? MotionQueryReplayFixturePayload { get; init; }
@@ -618,7 +619,8 @@ public sealed record BridgeCommandResult(
     BridgeEditorSnapshot Snapshot,
     BridgeEntityRef? CreatedEntity,
     BridgeVisualScriptGraphSchema? VisualScriptGraphSchema = null,
-    string? MotionQueryReplayBaselineEnvelopePayload = null);
+    string? MotionQueryReplayBaselineEnvelopePayload = null,
+    string? MotionQueryLiveDebugTracePayload = null);
 
 /// <summary>
 /// Strict parser for the copied snapshot schema. Unknown additive fields are ignored for protocol

@@ -84,6 +84,7 @@ public:
     [[nodiscard]] MotionQueryTraceResultUVE TogglePinUVE(std::uint64_t sequence) noexcept;
     [[nodiscard]] MotionQueryTraceResultUVE SetCommentUVE(std::uint64_t sequence, std::string comment) noexcept;
     [[nodiscard]] MotionQueryTraceResultUVE SetCategoryUVE(std::uint64_t sequence, std::string category) noexcept;
+    [[nodiscard]] MotionQueryTraceResultUVE RestoreUVE(MotionQueryTraceSnapshotUVE snapshot) noexcept;
     void ClearUVE() noexcept;
 
     [[nodiscard]] MotionQueryTraceSnapshotUVE GetSnapshotUVE() const noexcept {
