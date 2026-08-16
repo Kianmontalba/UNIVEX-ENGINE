@@ -152,6 +152,7 @@ public sealed record BridgeMotionQueryTraceEvent(
     string Provenance,
     string Message,
     string Comment,
+    string Category,
     bool Pinned);
 
 public sealed record BridgeMotionQueryTraceSnapshot(
@@ -946,6 +947,7 @@ public static class BridgeSnapshotParser
                 OptionalBoundedString(eventValue, "provenance", string.Empty),
                 RequiredBoundedString(eventValue, "message"),
                 OptionalBoundedString(eventValue, "comment", string.Empty),
+                OptionalBoundedString(eventValue, "category", string.Empty),
                 OptionalBoolean(eventValue, "pinned", false)));
         }
         BridgeMotionQueryReplayComparison replayComparison = new(

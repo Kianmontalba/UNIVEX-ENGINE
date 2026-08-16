@@ -124,6 +124,23 @@ MotionQueryTraceResultUVE MotionQueryTraceLoggerUVE::SetCommentUVE(
                               "motion query trace event comment updated");
 }
 
+MotionQueryTraceResultUVE MotionQueryTraceLoggerUVE::SetCategoryUVE(
+    const std::uint64_t sequence, std::string category) noexcept {
+    const auto found = std::find_if(snapshot_.events.begin(), snapshot_.events.end(),
+                                    [&](const auto& event) { return event.sequence == sequence; });
+    if (found == snapshot_.events.end()) {
+        return MakeTraceResultUVE(MotionQueryTraceCodeUVE::InvalidEvent, 0U,
+                                  "motion query trace event sequence not found");
+    }
+    if (category.size() > 32U) {
+        category.resize(32U);
+    }
+    found->category = std::move(category);
+    ++snapshot_.generation;
+    return MakeTraceResultUVE(MotionQueryTraceCodeUVE::Accepted, 0U,
+                              "motion query trace event category updated");
+}
+
 void MotionQueryTraceLoggerUVE::ClearUVE() noexcept {
     snapshot_.events.clear();
     snapshot_.truncated = false;

@@ -439,6 +439,10 @@
                                                         <TextBox Text="{Binding Comment, Mode=OneWay}" Watermark="Add comment" Padding="2" FontSize="10" x:Name="TraceEventCommentTextBox" />
                                                         <Button Grid.Column="1" Content="Save" Click="MotionQuerySetTraceEventCommentButton_OnClick" Padding="4,2" FontSize="10" Margin="4,0,0,0" />
                                                     </Grid>
+                                                    <Grid ColumnDefinitions="*,Auto" Margin="0,2,0,0">
+                                                        <TextBox Text="{Binding Category, Mode=OneWay}" Watermark="Category" Padding="2" FontSize="10" x:Name="TraceEventCategoryTextBox" />
+                                                        <Button Grid.Column="1" Content="Set Category" Click="MotionQuerySetTraceEventCategoryButton_OnClick" Padding="4,2" FontSize="10" Margin="4,0,0,0" />
+                                                    </Grid>
                                                 </StackPanel>
                                             </DataTemplate>
                                         </ListBox.ItemTemplate>

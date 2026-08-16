@@ -1386,7 +1386,7 @@ EditorBridgeResponseUVE EditorBridgeUVE::MakeResponseUVE(const EditorBridgeReque
                                                            std::string code, std::string message) const {
     return EditorBridgeResponseUVE{kEditorBridgeProtocolVersionUVE, request.requestId, applied,
                                    std::move(code), std::move(message), BuildSnapshotUVE(), std::nullopt,
-                                   std::nullopt};
+                                   std::nullopt, std::nullopt};
 }
 
 Scene::EntityUVE EditorBridgeUVE::ToEntityUVE(const EditorBridgeEntityRefUVE entity) noexcept {

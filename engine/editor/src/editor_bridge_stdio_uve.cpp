@@ -481,6 +481,7 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"provenance", event.provenance},
                    {"message", event.message},
                    {"comment", event.comment},
+                   {"category", event.category},
                    {"pinned", event.pinned}};
 }
 
@@ -1056,6 +1057,7 @@ ParseMotionQueryLiveDebugCommandKindUVE(const std::string_view value) {
     if (value == "removeEvent") return Kind::RemoveEvent;
     if (value == "toggleTraceEventPin") return Kind::ToggleTraceEventPin;
     if (value == "setTraceEventComment") return Kind::SetTraceEventComment;
+    if (value == "setTraceEventCategory") return Kind::SetTraceEventCategory;
     return std::nullopt;
 }
 

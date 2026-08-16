@@ -46,6 +46,7 @@
 | **COMPLETED** | **Increment 225 — Motion Query Replay Baseline Evidence Export v1** | Add a way to export the current live debug trace as a replay fixture. | `ExportMotionQueryReplayEvidence` bridge command; `BuildMotionQueryTraceReplayFixtureUVE` usage; managed UI button for evidence export; managed tests passed. |
 | **COMPLETED** | **Increment 226 — Motion Query Live Debug Trace Event Pinning v1** | Implement trace event pinning to prevent removal during buffer truncation. | `pinned` flag in trace event; `TogglePinUVE` in trace logger; `ToggleTraceEventPin` live-debug command; managed UI pin toggle; managed tests passed. |
 | **COMPLETED** | **Increment 227 — Motion Query Live Debug Trace Event Commenting v1** | Add support for adding and editing comments on trace events. | `comment` field in trace event; `SetCommentUVE` in trace logger; `SetTraceEventComment` live-debug command; managed UI comment TextBox; managed tests passed. |
+| **COMPLETED** | **Increment 228 — Motion Query Live Debug Trace Event Categorization v1** | Implement event categorization, category filter logic, bridge serialization, and managed UI categorization controls. | `category` field in trace event; `SetCategoryUVE` in trace logger; `SetTraceEventCategory` live-debug command; expanded filter logic; managed UI category TextBox; all native and managed tests passed. |
 
 <div align="center">
 

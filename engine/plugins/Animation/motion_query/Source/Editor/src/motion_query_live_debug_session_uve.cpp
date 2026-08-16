@@ -151,6 +151,20 @@ MotionQueryLiveDebugResponseUVE MotionQueryLiveDebugSessionUVE::DispatchUVE(
             return MakeResponseUVE(command, true, MotionQueryLiveDebugResponseCodeUVE::Applied,
                                    "live debug event comment updated");
         }
+        case MotionQueryLiveDebugCommandKindUVE::SetTraceEventCategory: {
+            if (!command.eventSequence.has_value()) {
+                return MakeResponseUVE(command, false, MotionQueryLiveDebugResponseCodeUVE::InvalidCommand,
+                                       "live debug SetTraceEventCategory requires an event sequence");
+            }
+            const auto result = trace_.SetCategoryUVE(*command.eventSequence, command.filter); // Reusing filter field for category
+            if (!result.IsAcceptedUVE()) {
+                return MakeResponseUVE(command, false, MotionQueryLiveDebugResponseCodeUVE::InvalidCommand,
+                                       result.message);
+            }
+            ++generation_;
+            return MakeResponseUVE(command, true, MotionQueryLiveDebugResponseCodeUVE::Applied,
+                                   "live debug event category updated");
+        }
     }
     return MakeResponseUVE(command, false, MotionQueryLiveDebugResponseCodeUVE::InvalidCommand,
                            CodeMessageUVE(MotionQueryLiveDebugResponseCodeUVE::InvalidCommand));
@@ -246,7 +260,9 @@ bool MotionQueryLiveDebugSessionUVE::IsValidHandleUVE(
 bool MotionQueryLiveDebugSessionUVE::ContainsFilterUVE(
     const MotionQueryTraceEventUVE& event, const std::string& filter) noexcept {
     return filter.empty() || event.kind.find(filter) != std::string::npos ||
-           event.message.find(filter) != std::string::npos;
+           event.message.find(filter) != std::string::npos ||
+           event.category.find(filter) != std::string::npos ||
+           event.comment.find(filter) != std::string::npos;
 }
 
 const char* MotionQueryLiveDebugSessionUVE::ResultKindUVE(

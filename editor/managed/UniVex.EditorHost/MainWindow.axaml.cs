@@ -915,6 +915,23 @@ public partial class MainWindow : Window
         }
     }
 
+    private void MotionQuerySetTraceEventCategoryButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button button && button.DataContext is BridgeMotionQueryTraceEvent traceEvent &&
+            button.Parent is Grid grid && session?.LastSnapshot != null)
+        {
+            var textBox = grid.Children.OfType<TextBox>().FirstOrDefault();
+            string category = textBox?.Text?.Trim() ?? string.Empty;
+            DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "dispatchMotionQueryDebugCommand")
+            {
+                MotionQueryDebugCommandKind = "setTraceEventCategory",
+                MotionQueryDebugExpectedGeneration = session.LastSnapshot.MotionQuery.LiveDebugGeneration,
+                MotionQueryDebugEventSequence = traceEvent.Sequence,
+                MotionQueryDebugFilter = category // Reusing filter field for category
+            });
+        }
+    }
+
     private async void MotionQueryExportEvidenceButton_OnClick(object? sender, RoutedEventArgs e)
     {
         var result = await DispatchCommandAsync(new BridgeCommand(CurrentRevision(), "exportMotionQueryReplayEvidence")).ConfigureAwait(true);
