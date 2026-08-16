@@ -41,6 +41,7 @@
 | **COMPLETED** | **Increment 220 — Managed Motion Query Replay Baseline Export/Import v1** | Expose native registry export/import commands through the managed bridge and Avalonia UI. | Deterministic envelope serialization/deserialization via bridge requests; managed UI buttons for export/import; regression tests passed. |
 | **COMPLETED** | **Increment 221 — Motion Query Replay Baseline Selection and Removal UI v1** | Add Load and Remove buttons to the managed baseline list. | Per-baseline Load/Remove buttons in Avalonia; bridge command routing for named baseline removal; managed UI tests passed. |
 | **COMPLETED** | **Increment 222 — Motion Query Replay Baseline Rename Support v1** | Implement baseline renaming in the native registry, bridge, and managed UI. | `RenameUVE` in baseline registry; `RenameMotionQueryReplayBaseline` bridge command; managed UI rename controls; managed tests passed. |
+| **COMPLETED** | **Increment 223 — Motion Query Live Debug Trace Event Selection v1** | Add trace event selection and inspection to the managed UI and native debugger. | `SelectEvent` live-debug command; `InspectEventUVE` in native debugger; managed Trace list with selection sync; managed tests passed. |
 
 <div align="center">
 
