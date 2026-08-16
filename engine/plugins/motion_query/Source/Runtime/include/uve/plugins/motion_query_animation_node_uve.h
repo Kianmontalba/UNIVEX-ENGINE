@@ -8,6 +8,7 @@
 #include "uve/plugins/motion_query_search_index_uve.h"
 #include "uve/plugins/motion_query_lod_uve.h"
 #include "uve/plugins/motion_query_continuity_uve.h"
+#include "uve/plugins/motion_query_transition_uve.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -21,6 +22,7 @@ struct MotionQueryAnimationNodeSettingsUVE final {
     std::size_t maximumSearchResults = 32U;
     MotionQueryQualityTierUVE qualityTier = MotionQueryQualityTierUVE::Full;
     MotionQueryContinuitySettingsUVE continuity;
+    MotionQueryTransitionSettingsUVE transition;
     bool looping = true;
 };
 
@@ -53,6 +55,9 @@ struct MotionQueryAnimationNodeResultUVE final {
     MotionQueryContinuityCodeUVE continuityCode = MotionQueryContinuityCodeUVE::Disabled;
     double continuityPreviousAgeSeconds = 0.0;
     bool continuityApplied = false;
+    MotionQueryTransitionCodeUVE transitionCode = MotionQueryTransitionCodeUVE::NoPreviousSelection;
+    float transitionCostImprovement = 0.0F;
+    bool transitionHeldPrevious = false;
     float cost = 0.0F;
     double sampleTimeSeconds = 0.0;
     std::string sourceClipId;
@@ -97,6 +102,7 @@ public:
     MotionQueryAnimationNodeSettingsUVE settings,
     const UVE::Core::PoseSampleUVE* previousSample,
     double continuityTimeSeconds = -1.0,
+    const MotionQueryAnimationNodeResultUVE* previousResult = nullptr,
     IMotionQueryAnimationDebugSinkUVE* debugSink = nullptr,
     std::uint64_t timestampNanoseconds = 0U,
     std::uint64_t frameNumber = 0U) noexcept;
