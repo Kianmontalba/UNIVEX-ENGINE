@@ -487,31 +487,36 @@ public partial class MainWindow : Window
 
     private async void DispatchCurrentCommand(BridgeCommand command)
     {
+        BridgeCommandResult? result = await DispatchCommandAsync(command).ConfigureAwait(true);
+        if (result != null && !result.Applied)
+        {
+            StatusTextBlock.Text = $"Native command not applied — {result.Code}";
+            DetailsTextBlock.Text = result.Message;
+        }
+    }
+
+    private async Task<BridgeCommandResult?> DispatchCommandAsync(BridgeCommand command)
+    {
         if (session is null || state != HostSessionState.Connected)
         {
-            return;
+            return null;
         }
 
         try
         {
             BridgeCommandResult result = await session.DispatchAsync(command, CancellationToken.None).ConfigureAwait(true);
-            if (result.Applied)
-            {
-                DisplayConnectedSnapshot(result.Snapshot);
-                return;
-            }
-
             DisplayConnectedSnapshot(result.Snapshot);
-            StatusTextBlock.Text = $"Native command not applied — {result.Code}";
-            DetailsTextBlock.Text = result.Message;
+            return result;
         }
         catch (BridgeProtocolException exception)
         {
             EnterFailure(exception.Code, exception.Message);
+            return null;
         }
         catch (Exception exception)
         {
             EnterFailure("bridge.command.failed", exception.Message);
+            return null;
         }
     }
 
@@ -738,6 +743,8 @@ public partial class MainWindow : Window
 
     private void RenderMotionQuery(BridgeMotionQuerySnapshot motionQuery)
     {
+        MotionQueryExportRegistryButton.IsEnabled = state == HostSessionState.Connected;
+        MotionQueryImportRegistryButton.IsEnabled = state == HostSessionState.Connected;
         MotionQueryRunBatchButton.IsEnabled = state == HostSessionState.Connected;
         MotionQueryClearReplayButton.IsEnabled = state == HostSessionState.Connected;
 
@@ -761,6 +768,40 @@ public partial class MainWindow : Window
                 ? "Match: No regression detected."
                 : $"Mismatch: Comparison code {motionQuery.ReplayDiagnostics.ComparisonCode}, Field mask {motionQuery.ReplayDiagnostics.MismatchFieldMask}, Compatibility mask {motionQuery.ReplayDiagnostics.CompatibilityMismatchMask}."
             : "No active comparison.";
+    }
+
+    private async void MotionQueryExportRegistryButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        var result = await DispatchCommandAsync(new BridgeCommand(CurrentRevision(), "exportMotionQueryReplayBaselineRegistry")).ConfigureAwait(true);
+        if (result != null && result.Applied && result.MotionQueryReplayBaselineEnvelopePayload != null)
+        {
+            var topLevel = TopLevel.GetTopLevel(this);
+            var clipboard = topLevel?.Clipboard;
+            if (clipboard != null)
+            {
+                await clipboard.SetTextAsync(result.MotionQueryReplayBaselineEnvelopePayload).ConfigureAwait(true);
+                MotionQueryStatusTextBlock.Text = "Registry exported to clipboard.";
+            }
+        }
+    }
+
+    private async void MotionQueryImportRegistryButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        var topLevel = TopLevel.GetTopLevel(this);
+        var clipboard = topLevel?.Clipboard;
+        if (clipboard != null)
+        {
+#pragma warning disable CS0618
+            var payload = await clipboard.GetTextAsync().ConfigureAwait(true);
+#pragma warning restore CS0618
+            if (!string.IsNullOrWhiteSpace(payload))
+            {
+                DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "importMotionQueryReplayBaselineRegistry")
+                {
+                    MotionQueryReplayBaselineEnvelopePayload = payload
+                });
+            }
+        }
     }
 
     private void MotionQueryRunBatchButton_OnClick(object? sender, RoutedEventArgs e) =>

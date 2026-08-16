@@ -355,10 +355,12 @@
                         <TabItem Header="Debugger"><Border Padding="12" Background="#20242B" CornerRadius="3"><TextBlock Text="Managed debugger presentation is deferred. This shell does not attach to or control a runtime." TextWrapping="Wrap" /></Border></TabItem>
                         <TabItem Header="Animator">
                             <Grid RowDefinitions="Auto,Auto,Auto,*,*,Auto" RowSpacing="8">
-                                <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="8">
+                                <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="8">
                                     <TextBlock x:Name="MotionQueryStatusTextBlock" Text="Connect to read native Motion Query state." TextWrapping="Wrap" Opacity="0.76" VerticalAlignment="Center" />
-                                    <Button Grid.Column="1" Content="Run Batch Regression" Click="MotionQueryRunBatchButton_OnClick" IsEnabled="False" x:Name="MotionQueryRunBatchButton" />
-                                    <Button Grid.Column="2" Content="Clear Replay" Click="MotionQueryClearReplayButton_OnClick" IsEnabled="False" x:Name="MotionQueryClearReplayButton" />
+                                    <Button Grid.Column="1" Content="Export Registry" Click="MotionQueryExportRegistryButton_OnClick" IsEnabled="False" x:Name="MotionQueryExportRegistryButton" />
+                                    <Button Grid.Column="2" Content="Import Registry" Click="MotionQueryImportRegistryButton_OnClick" IsEnabled="False" x:Name="MotionQueryImportRegistryButton" />
+                                    <Button Grid.Column="3" Content="Run Batch Regression" Click="MotionQueryRunBatchButton_OnClick" IsEnabled="False" x:Name="MotionQueryRunBatchButton" />
+                                    <Button Grid.Column="4" Content="Clear Replay" Click="MotionQueryClearReplayButton_OnClick" IsEnabled="False" x:Name="MotionQueryClearReplayButton" />
                                 </Grid>
                                 <Border Grid.Row="1" Padding="6" Background="#20242B" BorderBrush="#394150" BorderThickness="1" CornerRadius="3">
                                     <StackPanel Spacing="4">

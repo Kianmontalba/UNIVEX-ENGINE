@@ -144,6 +144,9 @@ public sealed class BridgeProtocolClient : IAsyncDisposable
                 },
                 filter = command.MotionQueryDebugFilter,
             },
+            motionQueryReplayBaselineName = command.MotionQueryReplayBaselineName,
+            motionQueryReplayFixturePayload = command.MotionQueryReplayFixturePayload,
+            motionQueryReplayBaselineEnvelopePayload = command.MotionQueryReplayBaselineEnvelopePayload,
         }, cancellationToken).ConfigureAwait(false);
         JsonElement result = GetResultOrThrow(response.RootElement);
         BridgeEntityRef? createdEntity = result.GetProperty("createdEntity").ValueKind == JsonValueKind.Null
@@ -153,13 +156,18 @@ public sealed class BridgeProtocolClient : IAsyncDisposable
                                                        graphSchemaValue.ValueKind != JsonValueKind.Null
             ? BridgeSnapshotParser.ParseVisualScriptGraphSchema(graphSchemaValue)
             : null;
+        string? envelopePayload = result.TryGetProperty("motionQueryReplayBaselineEnvelopePayload", out JsonElement envelopeValue) &&
+                                   envelopeValue.ValueKind == JsonValueKind.String
+            ? envelopeValue.GetString()
+            : null;
         return new BridgeCommandResult(
             result.GetProperty("applied").GetBoolean(),
             result.GetProperty("code").GetString() ?? "bridge.response.invalid",
             result.GetProperty("message").GetString() ?? "The backend returned no bridge command message.",
             BridgeSnapshotParser.Parse(result.GetProperty("snapshot")),
             createdEntity,
-            graphSchema);
+            graphSchema,
+            envelopePayload);
     }
 
     public async ValueTask DisposeAsync()

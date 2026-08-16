@@ -1112,6 +1112,16 @@ ParseMotionQueryLiveDebugCommandUVE(const JsonUVE& json, const std::uint64_t req
         }
         request.motionQueryReplayFixturePayload = params.at("motionQueryReplayFixturePayload").get<std::string>();
     }
+    if (params.contains("motionQueryReplayBaselineEnvelopePayload") &&
+        !params.at("motionQueryReplayBaselineEnvelopePayload").is_null()) {
+        if (!params.at("motionQueryReplayBaselineEnvelopePayload").is_string() ||
+            params.at("motionQueryReplayBaselineEnvelopePayload").get_ref<const std::string&>().size() >
+                Plugins::Editor::kMotionQueryMaximumReplayBaselineEnvelopeBytesUVE) {
+            return std::nullopt;
+        }
+        request.motionQueryReplayBaselineEnvelopePayload =
+            params.at("motionQueryReplayBaselineEnvelopePayload").get<std::string>();
+    }
 
     if (params.contains("entity") && !params.at("entity").is_null()) {
         request.entity = ParseEntityUVE(params.at("entity"));
