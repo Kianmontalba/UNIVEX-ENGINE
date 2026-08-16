@@ -5,7 +5,33 @@
 #include <limits>
 #include <utility>
 
+#include <nlohmann/json.hpp>
+
 namespace UVE::Plugins::Editor {
+namespace {
+using JsonUVE = nlohmann::json;
+
+[[nodiscard]] bool HasOnlyKeysUVE(const JsonUVE& object,
+                                  const std::initializer_list<std::string_view> allowedKeys) {
+    if (!object.is_object()) {
+        return false;
+    }
+    for (const auto& item : object.items()) {
+        bool allowed = false;
+        for (const std::string_view key : allowedKeys) {
+            if (item.key() == key) {
+                allowed = true;
+                break;
+            }
+        }
+        if (!allowed) {
+            return false;
+        }
+    }
+    return true;
+}
+} // namespace
+
 
 MotionQueryTraceReplayBaselineResultUVE MotionQueryTraceReplayBaselineRegistryUVE::RegisterUVE(
     const std::string_view name, const MotionQueryTraceReplayFixtureUVE& fixture) {
@@ -103,6 +129,105 @@ MotionQueryTraceReplayBaselineSnapshotUVE MotionQueryTraceReplayBaselineRegistry
             baseline.fixture.truncated});
     }
     return snapshot;
+}
+
+MotionQueryTraceReplayBaselineEnvelopeSerializationResultUVE
+MotionQueryTraceReplayBaselineRegistryUVE::SerializeEnvelopeUVE() const {
+    JsonUVE baselines = JsonUVE::array();
+    for (const StoredBaselineUVE& baseline : baselines_) {
+        const MotionQueryTraceReplaySerializationResultUVE serializedFixture =
+            SerializeMotionQueryTraceReplayFixtureUVE(baseline.fixture);
+        if (!serializedFixture.IsAcceptedUVE()) {
+            return {serializedFixture.code, {},
+                    "replay baseline envelope export rejected a fixture: " + serializedFixture.message};
+        }
+        try {
+            baselines.push_back(JsonUVE{{"name", baseline.name},
+                                       {"fixture", JsonUVE::parse(serializedFixture.payload)}});
+        } catch (const JsonUVE::exception& exception) {
+            return {MotionQueryTraceReplaySerializationCodeUVE::ParseError, {},
+                    "replay baseline envelope export could not embed a canonical fixture: " +
+                        std::string(exception.what())};
+        }
+    }
+    const JsonUVE document{{"schemaVersion", kMotionQueryReplayBaselineEnvelopeSchemaVersionUVE},
+                           {"baselines", std::move(baselines)}};
+    const std::string payload = document.dump();
+    if (payload.empty()) {
+        return {MotionQueryTraceReplaySerializationCodeUVE::EmptyPayload, {},
+                "replay baseline envelope export produced an empty payload"};
+    }
+    if (payload.size() > kMotionQueryMaximumReplayBaselineEnvelopeBytesUVE) {
+        return {MotionQueryTraceReplaySerializationCodeUVE::PayloadTooLarge, {},
+                "replay baseline envelope exceeded its bounded payload size"};
+    }
+    return {MotionQueryTraceReplaySerializationCodeUVE::Accepted, payload,
+            "replay baseline envelope exported"};
+}
+
+MotionQueryTraceReplayBaselineEnvelopeDeserializationResultUVE
+MotionQueryTraceReplayBaselineRegistryUVE::DeserializeEnvelopeUVE(const std::string_view payload) {
+    if (payload.empty()) {
+        return {MotionQueryTraceReplaySerializationCodeUVE::EmptyPayload, 0U,
+                "replay baseline envelope payload is empty"};
+    }
+    if (payload.size() > kMotionQueryMaximumReplayBaselineEnvelopeBytesUVE) {
+        return {MotionQueryTraceReplaySerializationCodeUVE::PayloadTooLarge, 0U,
+                "replay baseline envelope exceeded its bounded payload size"};
+    }
+
+    JsonUVE document;
+    try {
+        document = JsonUVE::parse(payload.begin(), payload.end());
+    } catch (const JsonUVE::exception& exception) {
+        return {MotionQueryTraceReplaySerializationCodeUVE::ParseError, 0U,
+                "replay baseline envelope JSON could not be parsed: " + std::string(exception.what())};
+    }
+    if (!HasOnlyKeysUVE(document, {"schemaVersion", "baselines"}) ||
+        !document.contains("schemaVersion") || !document.contains("baselines") ||
+        !document.at("schemaVersion").is_number_unsigned() ||
+        document.at("schemaVersion").get<std::uint32_t>() != kMotionQueryReplayBaselineEnvelopeSchemaVersionUVE) {
+        return {MotionQueryTraceReplaySerializationCodeUVE::SchemaMismatch, 0U,
+                "replay baseline envelope schema is unsupported or malformed"};
+    }
+    const JsonUVE& serializedBaselines = document.at("baselines");
+    if (!serializedBaselines.is_array() || serializedBaselines.size() > kMotionQueryMaximumReplayBaselinesUVE) {
+        return {MotionQueryTraceReplaySerializationCodeUVE::InvalidFixture, 0U,
+                "replay baseline envelope entries exceed the bounded registry capacity"};
+    }
+
+    MotionQueryTraceReplayBaselineRegistryUVE imported;
+    std::string previousName;
+    for (const JsonUVE& entry : serializedBaselines) {
+        if (!HasOnlyKeysUVE(entry, {"name", "fixture"}) || !entry.contains("name") ||
+            !entry.contains("fixture") || !entry.at("name").is_string()) {
+            return {MotionQueryTraceReplaySerializationCodeUVE::InvalidFixture, 0U,
+                    "replay baseline envelope entry is malformed"};
+        }
+        const std::string name = entry.at("name").get<std::string>();
+        if (!IsValidNameUVE(name) || (!previousName.empty() && previousName >= name)) {
+            return {MotionQueryTraceReplaySerializationCodeUVE::InvalidFixture, 0U,
+                    "replay baseline envelope names must be valid, unique, and strictly sorted"};
+        }
+        const MotionQueryTraceReplayDeserializationResultUVE fixture =
+            DeserializeMotionQueryTraceReplayFixtureUVE(entry.at("fixture").dump());
+        if (!fixture.IsAcceptedUVE()) {
+            return {fixture.code, 0U,
+                    "replay baseline envelope fixture rejected by the canonical codec: " + fixture.message};
+        }
+        const MotionQueryTraceReplayBaselineResultUVE registered =
+            imported.RegisterUVE(name, *fixture.fixture);
+        if (!registered.IsAcceptedUVE()) {
+            return {MotionQueryTraceReplaySerializationCodeUVE::InvalidFixture, 0U,
+                    "replay baseline envelope could not register an imported fixture: " + registered.message};
+        }
+        previousName = name;
+    }
+
+    baselines_ = std::move(imported.baselines_);
+    IncrementGenerationUVE();
+    return {MotionQueryTraceReplaySerializationCodeUVE::Accepted, serializedBaselines.size(),
+            "replay baseline envelope imported atomically"};
 }
 
 bool MotionQueryTraceReplayBaselineRegistryUVE::IsValidNameUVE(const std::string_view name) noexcept {

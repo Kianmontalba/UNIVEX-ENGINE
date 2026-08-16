@@ -14,6 +14,9 @@ namespace UVE::Plugins::Editor {
 
 inline constexpr std::size_t kMotionQueryMaximumReplayBaselinesUVE = 32U;
 inline constexpr std::size_t kMotionQueryMaximumReplayBaselineNameBytesUVE = 128U;
+inline constexpr std::uint32_t kMotionQueryReplayBaselineEnvelopeSchemaVersionUVE = 1U;
+inline constexpr std::size_t kMotionQueryMaximumReplayBaselineEnvelopeBytesUVE =
+    kMotionQueryMaximumTraceReplayPayloadBytesUVE;
 
 enum class MotionQueryTraceReplayBaselineCodeUVE : std::uint8_t {
     Accepted = 0,
@@ -55,6 +58,28 @@ struct MotionQueryTraceReplayBaselineSnapshotUVE final {
     [[nodiscard]] bool operator==(const MotionQueryTraceReplayBaselineSnapshotUVE&) const = default;
 };
 
+struct MotionQueryTraceReplayBaselineEnvelopeSerializationResultUVE final {
+    MotionQueryTraceReplaySerializationCodeUVE code =
+        MotionQueryTraceReplaySerializationCodeUVE::InvalidFixture;
+    std::string payload;
+    std::string message;
+
+    [[nodiscard]] bool IsAcceptedUVE() const noexcept {
+        return code == MotionQueryTraceReplaySerializationCodeUVE::Accepted;
+    }
+};
+
+struct MotionQueryTraceReplayBaselineEnvelopeDeserializationResultUVE final {
+    MotionQueryTraceReplaySerializationCodeUVE code =
+        MotionQueryTraceReplaySerializationCodeUVE::InvalidFixture;
+    std::size_t importedBaselineCount = 0U;
+    std::string message;
+
+    [[nodiscard]] bool IsAcceptedUVE() const noexcept {
+        return code == MotionQueryTraceReplaySerializationCodeUVE::Accepted;
+    }
+};
+
 struct MotionQueryTraceReplayBaselineSelectionUVE final {
     MotionQueryTraceReplayBaselineCodeUVE code = MotionQueryTraceReplayBaselineCodeUVE::NotFound;
     std::uint64_t registryGeneration = 0U;
@@ -76,6 +101,9 @@ public:
     [[nodiscard]] MotionQueryTraceReplayBaselineSelectionUVE SelectUVE(
         std::string_view name, std::optional<std::uint64_t> expectedRegistryGeneration = std::nullopt) const;
     [[nodiscard]] MotionQueryTraceReplayBaselineSnapshotUVE GetSnapshotUVE() const;
+    [[nodiscard]] MotionQueryTraceReplayBaselineEnvelopeSerializationResultUVE SerializeEnvelopeUVE() const;
+    [[nodiscard]] MotionQueryTraceReplayBaselineEnvelopeDeserializationResultUVE DeserializeEnvelopeUVE(
+        std::string_view payload);
 
 private:
     struct StoredBaselineUVE final {
