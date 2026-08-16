@@ -132,6 +132,7 @@ add_executable(uve_tests
     ../engine/plugins/motion_query/Tests/motion_query_editor_authoring_uve_tests.cpp
     ../engine/plugins/motion_query/Tests/motion_query_debugging_uve_tests.cpp
     ../engine/plugins/motion_query/Tests/motion_query_trace_replay_uve_tests.cpp
+    ../engine/plugins/motion_query/Tests/motion_query_trace_replay_session_uve_tests.cpp
     project_check/project_checker_uve_tests.cpp
 )
 target_link_libraries(uve_tests PRIVATE
