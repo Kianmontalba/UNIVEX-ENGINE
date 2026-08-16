@@ -123,6 +123,20 @@ MotionQueryLiveDebugResponseUVE MotionQueryLiveDebugSessionUVE::DispatchUVE(
             return MakeResponseUVE(command, true, MotionQueryLiveDebugResponseCodeUVE::Applied,
                                    "live debug event removed from trace");
         }
+        case MotionQueryLiveDebugCommandKindUVE::ToggleTraceEventPin: {
+            if (!command.eventSequence.has_value()) {
+                return MakeResponseUVE(command, false, MotionQueryLiveDebugResponseCodeUVE::InvalidCommand,
+                                       "live debug ToggleTraceEventPin requires an event sequence");
+            }
+            const auto result = trace_.TogglePinUVE(*command.eventSequence);
+            if (!result.IsAcceptedUVE()) {
+                return MakeResponseUVE(command, false, MotionQueryLiveDebugResponseCodeUVE::InvalidCommand,
+                                       result.message);
+            }
+            ++generation_;
+            return MakeResponseUVE(command, true, MotionQueryLiveDebugResponseCodeUVE::Applied,
+                                   result.message);
+        }
     }
     return MakeResponseUVE(command, false, MotionQueryLiveDebugResponseCodeUVE::InvalidCommand,
                            CodeMessageUVE(MotionQueryLiveDebugResponseCodeUVE::InvalidCommand));

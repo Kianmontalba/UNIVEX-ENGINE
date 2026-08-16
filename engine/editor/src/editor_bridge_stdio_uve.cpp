@@ -479,7 +479,8 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"telemetryCandidatesConsidered", event.telemetryCandidatesConsidered},
                    {"telemetryBudgetSaturated", event.telemetryBudgetSaturated},
                    {"provenance", event.provenance},
-                   {"message", event.message}};
+                   {"message", event.message},
+                   {"pinned", event.pinned}};
 }
 
 [[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeMotionQueryTraceSnapshotUVE& snapshot) {
@@ -1052,6 +1053,7 @@ ParseMotionQueryLiveDebugCommandKindUVE(const std::string_view value) {
     if (value == "setFilter") return Kind::SetFilter;
     if (value == "selectEvent") return Kind::SelectEvent;
     if (value == "removeEvent") return Kind::RemoveEvent;
+    if (value == "toggleTraceEventPin") return Kind::ToggleTraceEventPin;
     return std::nullopt;
 }
 

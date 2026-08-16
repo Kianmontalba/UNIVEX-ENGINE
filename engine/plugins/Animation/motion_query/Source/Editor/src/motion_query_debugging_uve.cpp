@@ -63,8 +63,16 @@ MotionQueryTraceResultUVE MotionQueryTraceLoggerUVE::RecordUVE(
                                   "motion query trace evaluated count exceeds considered count");
     }
     if (snapshot_.events.size() >= kMotionQueryMaximumTraceEventsUVE) {
-        snapshot_.events.erase(snapshot_.events.begin());
-        snapshot_.truncated = true;
+        const auto victim = std::find_if(snapshot_.events.begin(), snapshot_.events.end(),
+                                         [](const auto& entry) { return !entry.pinned; });
+        if (victim != snapshot_.events.end()) {
+            snapshot_.events.erase(victim);
+            snapshot_.truncated = true;
+        } else {
+            // All events are pinned, we must discard the oldest pinned event or reject
+            snapshot_.events.erase(snapshot_.events.begin());
+            snapshot_.truncated = true;
+        }
     }
     snapshot_.events.push_back(std::move(event));
     ++snapshot_.generation;
@@ -84,6 +92,19 @@ MotionQueryTraceResultUVE MotionQueryTraceLoggerUVE::RemoveEventUVE(const std::u
     ++snapshot_.generation;
     return MakeTraceResultUVE(MotionQueryTraceCodeUVE::Accepted, index,
                               "motion query trace event removed");
+}
+
+MotionQueryTraceResultUVE MotionQueryTraceLoggerUVE::TogglePinUVE(const std::uint64_t sequence) noexcept {
+    const auto found = std::find_if(snapshot_.events.begin(), snapshot_.events.end(),
+                                    [&](const auto& event) { return event.sequence == sequence; });
+    if (found == snapshot_.events.end()) {
+        return MakeTraceResultUVE(MotionQueryTraceCodeUVE::InvalidEvent, 0U,
+                                  "motion query trace event sequence not found");
+    }
+    found->pinned = !found->pinned;
+    ++snapshot_.generation;
+    return MakeTraceResultUVE(MotionQueryTraceCodeUVE::Accepted, 0U,
+                              found->pinned ? "motion query trace event pinned" : "motion query trace event unpinned");
 }
 
 void MotionQueryTraceLoggerUVE::ClearUVE() noexcept {

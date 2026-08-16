@@ -884,6 +884,20 @@ public partial class MainWindow : Window
         }
     }
 
+    private void MotionQueryToggleTraceEventPinButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button { DataContext: BridgeMotionQueryTraceEvent traceEvent } &&
+            session?.LastSnapshot != null)
+        {
+            DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "dispatchMotionQueryDebugCommand")
+            {
+                MotionQueryDebugCommandKind = "toggleTraceEventPin",
+                MotionQueryDebugExpectedGeneration = session.LastSnapshot.MotionQuery.LiveDebugGeneration,
+                MotionQueryDebugEventSequence = traceEvent.Sequence
+            });
+        }
+    }
+
     private async void MotionQueryExportEvidenceButton_OnClick(object? sender, RoutedEventArgs e)
     {
         var result = await DispatchCommandAsync(new BridgeCommand(CurrentRevision(), "exportMotionQueryReplayEvidence")).ConfigureAwait(true);

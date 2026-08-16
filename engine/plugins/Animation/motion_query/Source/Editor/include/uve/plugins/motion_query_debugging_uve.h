@@ -43,6 +43,7 @@ struct MotionQueryTraceEventUVE final {
     bool telemetryBudgetSaturated = false;
     std::string provenance;
     std::string message;
+    bool pinned = false;
 
     [[nodiscard]] bool operator==(const MotionQueryTraceEventUVE&) const = default;
 };
@@ -78,6 +79,7 @@ public:
     [[nodiscard]] MotionQueryTraceResultUVE RecordUVE(
         MotionQueryTraceEventUVE event) noexcept;
     [[nodiscard]] MotionQueryTraceResultUVE RemoveEventUVE(std::uint64_t sequence) noexcept;
+    [[nodiscard]] MotionQueryTraceResultUVE TogglePinUVE(std::uint64_t sequence) noexcept;
     void ClearUVE() noexcept;
 
     [[nodiscard]] MotionQueryTraceSnapshotUVE GetSnapshotUVE() const noexcept {

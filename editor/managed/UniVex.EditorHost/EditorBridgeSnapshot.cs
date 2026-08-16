@@ -150,7 +150,8 @@ public sealed record BridgeMotionQueryTraceEvent(
     ulong TelemetryCandidatesConsidered,
     bool TelemetryBudgetSaturated,
     string Provenance,
-    string Message);
+    string Message,
+    bool Pinned);
 
 public sealed record BridgeMotionQueryTraceSnapshot(
     ulong Generation,
@@ -942,7 +943,8 @@ public static class BridgeSnapshotParser
                 telemetryIndexEntryCount, telemetryCandidatesConsidered,
                 OptionalBoolean(eventValue, "telemetryBudgetSaturated", false),
                 OptionalBoundedString(eventValue, "provenance", string.Empty),
-                RequiredBoundedString(eventValue, "message")));
+                RequiredBoundedString(eventValue, "message"),
+                OptionalBoolean(eventValue, "pinned", false)));
         }
         BridgeMotionQueryReplayComparison replayComparison = new(
             false, 0, 0, 0UL, 0UL, false, false, 0U, string.Empty, string.Empty, 0U, string.Empty);
