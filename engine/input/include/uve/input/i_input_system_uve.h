@@ -13,9 +13,10 @@
 namespace UVE::Input {
 
 /// IInputSystemUVE is the spec's `InputSystemUVE` (Part 7.7): abstract keyboard/mouse input plus
-/// a named action-mapping layer (`InputActionUVE`/`InputBindingUVE`). Gamepad/Touch/Gyroscope are
-/// deferred as a group this increment — Touch/Gyroscope are mobile-only (no mobile target or
-/// WindowManagerUVE exists to source events from) and Gamepad has no concrete consumer yet.
+/// a named action-mapping layer (`InputActionUVE`/`InputBindingUVE`). The legacy action layer remains
+/// keyboard/mouse-only for compatibility; bounded gamepad device snapshots are provided separately
+/// by `GamepadInputSystemUVE`. Touch/Gyroscope remain deferred because no mobile target or
+/// WindowManagerUVE source exists yet.
 /// Unlike ICollisionSystemUVE/IRaycastSystemUVE, an implementation is expected to be stateful
 /// (current/previous device state for edge detection) and driven once per frame via UpdateUVE() —
 /// closer in shape to IEventSystemUVE's own "self-contained stateful service" than to
