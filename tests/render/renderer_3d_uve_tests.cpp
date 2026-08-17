@@ -358,6 +358,12 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_VisiblePrimitive_ReportsEvidenceSpecifi
     editorVisualState.viewportMinY = 0.10F;
     editorVisualState.viewportMaxX = 0.90F;
     editorVisualState.viewportMaxY = 0.90F;
+    editorVisualState.activeSelectionVisible = true;
+    editorVisualState.selectionMinX = 0.25F;
+    editorVisualState.selectionMinY = 0.30F;
+    editorVisualState.selectionMaxX = 0.65F;
+    editorVisualState.selectionMaxY = 0.70F;
+    editorVisualState.activeGizmoAxis = 3;
     editorVisualState.cameraForward = Math::Vector3UVE{0.0F, 0.0F, -1.0F};
     renderer3D->SetEditorViewportVisualStateUVE(editorVisualState);
     renderer3D->RenderFrameUVE(entityManager, cameraEntity);
@@ -372,6 +378,28 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_VisiblePrimitive_ReportsEvidenceSpecifi
     EXPECT_TRUE(afterProgramReady.editorVisualProgramReady);
     EXPECT_TRUE(afterProgramReady.editorVisualPassRecorded);
     EXPECT_EQ(afterProgramReady.glDrawCallsIssued, 0U);
+
+    bool selectionUniformPublished = false;
+    bool gizmoAxisUniformPublished = false;
+    bool cameraForwardUniformPublished = false;
+    for (const RecordedCommandUVE& command : renderDevice.GetLastSubmittedCommandsUVE()) {
+        if (const auto* integerUniform = std::get_if<SetUniformIntCommandUVE>(&command)) {
+            if (integerUniform->name == "uSelectionVisible") {
+                selectionUniformPublished = integerUniform->value == 1;
+            } else if (integerUniform->name == "uActiveGizmoAxis") {
+                gizmoAxisUniformPublished = integerUniform->value == 3;
+            }
+        } else if (const auto* vectorUniform = std::get_if<SetUniformVector3CommandUVE>(&command)) {
+            if (vectorUniform->name == "uCameraForward") {
+                cameraForwardUniformPublished = vectorUniform->value.x == 0.0F &&
+                                               vectorUniform->value.y == 0.0F &&
+                                               vectorUniform->value.z == -1.0F;
+            }
+        }
+    }
+    EXPECT_TRUE(selectionUniformPublished);
+    EXPECT_TRUE(gizmoAxisUniformPublished);
+    EXPECT_TRUE(cameraForwardUniformPublished);
 }
 
 TEST_F(Renderer3DUVETest, RenderFrameUVE_VisibleMesh_RecordsExpectedCommandSequence) {
