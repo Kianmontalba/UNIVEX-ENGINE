@@ -287,7 +287,7 @@
 
 | Status | Roadmap area | Intended direction | Entry condition |
 |---|---|---|---|
-| **PARTIAL** | Native C++ Visual Scripting | Continue the native C++ node registry, graph compiler, typed Vector3 value kernel, and bounded typed runtime storage toward actual typed node execution. | Stable scene/editor command and property contracts; typed VM lowering, engine-call binding, and broader node runtime coverage remain separate increments. |
+| **PARTIAL** | Native C++ Visual Scripting | Continue the native C++ node registry, graph compiler, typed Vector3 value kernel, bounded typed runtime storage, and explicit dependency-aware VM dispatch toward per-entity graph execution. | Stable scene/editor command and property contracts; ScriptRuntimeUVE state-to-context wiring, engine-call binding, and broader node runtime coverage remain separate increments. |
 | **PARTIAL** | Plugin architecture | Design a native extension contract with lifecycle, ownership, ABI/versioning, and safety rules. | Stable editor and scripting foundations. |
 | **PARTIAL** | Asset pipeline depth | Add format-specific model, texture, audio, material, and thumbnail workflows only after format/licensing/derived-data contracts are selected. | Project Health and Content Browser foundations. |
 | **PARTIAL** | Advanced editor tools | Animation, terrain, world streaming, profiling, cinematics, source control, and collaboration. | Proven viewport, scene, asset, and session foundations. |
