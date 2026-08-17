@@ -27,6 +27,7 @@
 #include "uve/render/i_light_system_uve.h"
 #include "uve/render/render_graph_uve.h"
 #include "uve/render/primitive_geometry_uve.h"
+#include "uve/render/particle_render_bridge_uve.h"
 #include "uve/render/render_queue_uve.h"
 #include "uve/render/shader/built_in_shaders_uve.h"
 #include "uve/render/shader/shader_program_desc_uve.h"
@@ -326,6 +327,7 @@ struct Renderer3DUVE::ImplUVE {
     std::unordered_map<Asset::AssetGuidUVE, TextureHandleUVE> textureCache;
 
     Events::EventSubscriptionUVE reloadSubscription;
+    const Scene::ParticleRuntimeUVE* particleRuntimeForFrame = nullptr;
 
     ImplUVE(IRenderDeviceUVE& renderDeviceIn, IRenderSystemUVE& renderSystemIn, IMeshRendererUVE& meshRendererIn,
             ICameraSystemUVE& cameraSystemIn, ILightSystemUVE& lightSystemIn,
@@ -841,6 +843,13 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
 
     RenderQueueUVE queue =
         m_impl->meshRenderer.ExtractRenderQueueUVE(entityManager, m_impl->assetManager, m_impl->assetDatabase, frustum);
+    if (m_impl->particleRuntimeForFrame != nullptr) {
+        const ParticleRenderSnapshotUVE particleSnapshot =
+            ParticleRenderBridgeUVE::ExtractUVE(*m_impl->particleRuntimeForFrame);
+        queue.AppendParticleSnapshotUVE(particleSnapshot);
+        m_impl->lastFrameDiagnostics.particleItemsExtracted = particleSnapshot.items.size();
+        m_impl->lastFrameDiagnostics.particleItemsTruncated = particleSnapshot.truncated;
+    }
     queue.SortUVE();
     m_impl->lastFrameDiagnostics.meshItemsExtracted = queue.opaqueItems.size() + queue.transparentItems.size();
     m_impl->lastFrameDiagnostics.invalidAssetReferences = queue.invalidAssetReferences;
@@ -945,6 +954,19 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
     const bool graphExecuted = renderGraph.ExecuteUVE(commandBuffer);
     UVE_ASSERT(graphExecuted && "Renderer3DUVE must build a valid render graph");
     m_impl->renderSystem.EndFrameUVE();
+}
+
+void Renderer3DUVE::RenderFrameWithParticleRuntimeUVE(Scene::IEntityManagerUVE& entityManager,
+                                                         Scene::EntityUVE cameraEntity,
+                                                         const Scene::ParticleRuntimeUVE& particleRuntime) {
+    const Scene::ParticleRuntimeUVE* const previousRuntime = m_impl->particleRuntimeForFrame;
+    m_impl->particleRuntimeForFrame = &particleRuntime;
+    struct RuntimeFrameScopeUVE final {
+        const Scene::ParticleRuntimeUVE*& slot;
+        const Scene::ParticleRuntimeUVE* previous;
+        ~RuntimeFrameScopeUVE() { slot = previous; }
+    } scope{m_impl->particleRuntimeForFrame, previousRuntime};
+    RenderFrameUVE(entityManager, cameraEntity);
 }
 
 void Renderer3DUVE::SetEditorViewportVisualStateUVE(const EditorViewportVisualStateUVE& state) {

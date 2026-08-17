@@ -57,6 +57,8 @@ public:
     Renderer3DUVE& operator=(const Renderer3DUVE&) = delete;
 
     void RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scene::EntityUVE cameraEntity) override;
+    void RenderFrameWithParticleRuntimeUVE(Scene::IEntityManagerUVE& entityManager, Scene::EntityUVE cameraEntity,
+                                           const Scene::ParticleRuntimeUVE& particleRuntime) override;
     void SetEditorViewportVisualStateUVE(const EditorViewportVisualStateUVE& state) override;
     [[nodiscard]] Renderer3DFrameDiagnosticsUVE GetLastFrameDiagnosticsUVE() const noexcept override;
 
