@@ -223,6 +223,9 @@ ScriptRuntimeTickBatchResultUVE ScriptRuntimeUVE::TickDetailedUVE(
         case ScriptVmStatusUVE::InvalidInstruction:
             ++batch.summary.invalidInstructionCount;
             break;
+        case ScriptVmStatusUVE::NodeExecutionFailed:
+            ++batch.summary.nodeExecutionFailedCount;
+            break;
         }
         batch.summary.diagnosticCount += execution.diagnostics.size();
         batch.results.push_back({entity, std::move(execution)});

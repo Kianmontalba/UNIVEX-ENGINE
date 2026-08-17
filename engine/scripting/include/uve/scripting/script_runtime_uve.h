@@ -106,11 +106,12 @@ struct ScriptRuntimeTickSummaryUVE final {
     std::size_t completedCount = 0U;
     std::size_t instructionBudgetExceededCount = 0U;
     std::size_t invalidInstructionCount = 0U;
+    std::size_t nodeExecutionFailedCount = 0U;
     std::size_t diagnosticCount = 0U;
 
     [[nodiscard]] bool IsSuccessUVE() const noexcept {
         return instructionBudgetExceededCount == 0U && invalidInstructionCount == 0U &&
-               diagnosticCount == 0U;
+               nodeExecutionFailedCount == 0U && diagnosticCount == 0U;
     }
 
     [[nodiscard]] bool operator==(const ScriptRuntimeTickSummaryUVE&) const = default;

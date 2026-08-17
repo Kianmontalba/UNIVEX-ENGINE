@@ -415,6 +415,114 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_CompletesValidProgramWithinBudget
     EXPECT_EQ(result.instructionsExecuted, 2U);
 }
 
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_DispatchesAllBuiltInVector3Nodes) {
+    const auto makeProgram = [](const std::uint32_t nodeId, const char* nodeTypeId) {
+        ScriptBytecodeProgramUVE program;
+        program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, nodeId, 0U, nodeTypeId, {}, {}});
+        return program;
+    };
+
+    ScriptVmExecutionContextUVE makeContext;
+    ASSERT_TRUE(makeContext.SetInputUVE(1U, "X", 1.0F));
+    ASSERT_TRUE(makeContext.SetInputUVE(1U, "Y", -2.0F));
+    ASSERT_TRUE(makeContext.SetInputUVE(1U, "Z", 3.0F));
+    EXPECT_TRUE(ExecuteScriptBytecodeUVE(makeProgram(1U, "math.vector3.make"), makeContext).IsSuccessUVE());
+    const auto makeOutput = makeContext.FindOutputUVE(1U, "Vector");
+    ASSERT_TRUE(makeOutput.has_value());
+    ASSERT_TRUE(std::holds_alternative<ScriptVector3ValueUVE>(*makeOutput));
+    EXPECT_EQ(std::get<ScriptVector3ValueUVE>(*makeOutput), (ScriptVector3ValueUVE{{1.0F, -2.0F, 3.0F}}));
+
+    ScriptVmExecutionContextUVE addContext;
+    ASSERT_TRUE(addContext.SetInputUVE(2U, "A", ScriptVector3ValueUVE{{1.0F, 2.0F, 3.0F}}));
+    ASSERT_TRUE(addContext.SetInputUVE(2U, "B", ScriptVector3ValueUVE{{4.0F, 5.0F, 6.0F}}));
+    EXPECT_TRUE(ExecuteScriptBytecodeUVE(makeProgram(2U, "math.vector3.add"), addContext).IsSuccessUVE());
+    EXPECT_EQ(std::get<ScriptVector3ValueUVE>(*addContext.FindOutputUVE(2U, "Result")),
+              (ScriptVector3ValueUVE{{5.0F, 7.0F, 9.0F}}));
+
+    ScriptVmExecutionContextUVE subtractContext;
+    ASSERT_TRUE(subtractContext.SetInputUVE(3U, "A", ScriptVector3ValueUVE{{4.0F, 5.0F, 6.0F}}));
+    ASSERT_TRUE(subtractContext.SetInputUVE(3U, "B", ScriptVector3ValueUVE{{1.0F, 2.0F, 3.0F}}));
+    EXPECT_TRUE(ExecuteScriptBytecodeUVE(makeProgram(3U, "math.vector3.subtract"), subtractContext).IsSuccessUVE());
+    EXPECT_EQ(std::get<ScriptVector3ValueUVE>(*subtractContext.FindOutputUVE(3U, "Result")),
+              (ScriptVector3ValueUVE{{3.0F, 3.0F, 3.0F}}));
+
+    ScriptVmExecutionContextUVE multiplyContext;
+    ASSERT_TRUE(multiplyContext.SetInputUVE(4U, "Vector", ScriptVector3ValueUVE{{1.0F, -2.0F, 3.0F}}));
+    ASSERT_TRUE(multiplyContext.SetInputUVE(4U, "Scale", 2.0F));
+    EXPECT_TRUE(ExecuteScriptBytecodeUVE(makeProgram(4U, "math.vector3.multiply"), multiplyContext).IsSuccessUVE());
+    EXPECT_EQ(std::get<ScriptVector3ValueUVE>(*multiplyContext.FindOutputUVE(4U, "Result")),
+              (ScriptVector3ValueUVE{{2.0F, -4.0F, 6.0F}}));
+
+    ScriptVmExecutionContextUVE dotContext;
+    ASSERT_TRUE(dotContext.SetInputUVE(5U, "A", ScriptVector3ValueUVE{{1.0F, 2.0F, 3.0F}}));
+    ASSERT_TRUE(dotContext.SetInputUVE(5U, "B", ScriptVector3ValueUVE{{4.0F, 5.0F, 6.0F}}));
+    EXPECT_TRUE(ExecuteScriptBytecodeUVE(makeProgram(5U, "math.vector3.dot"), dotContext).IsSuccessUVE());
+    EXPECT_FLOAT_EQ(std::get<float>(*dotContext.FindOutputUVE(5U, "Result")), 32.0F);
+
+    ScriptVmExecutionContextUVE crossContext;
+    ASSERT_TRUE(crossContext.SetInputUVE(6U, "A", ScriptVector3ValueUVE{{1.0F, 0.0F, 0.0F}}));
+    ASSERT_TRUE(crossContext.SetInputUVE(6U, "B", ScriptVector3ValueUVE{{0.0F, 1.0F, 0.0F}}));
+    EXPECT_TRUE(ExecuteScriptBytecodeUVE(makeProgram(6U, "math.vector3.cross"), crossContext).IsSuccessUVE());
+    EXPECT_EQ(std::get<ScriptVector3ValueUVE>(*crossContext.FindOutputUVE(6U, "Result")),
+              (ScriptVector3ValueUVE{{0.0F, 0.0F, 1.0F}}));
+
+    ScriptVmExecutionContextUVE lengthContext;
+    ASSERT_TRUE(lengthContext.SetInputUVE(7U, "Vector", ScriptVector3ValueUVE{{3.0F, 4.0F, 0.0F}}));
+    EXPECT_TRUE(ExecuteScriptBytecodeUVE(makeProgram(7U, "math.vector3.length"), lengthContext).IsSuccessUVE());
+    EXPECT_FLOAT_EQ(std::get<float>(*lengthContext.FindOutputUVE(7U, "Length")), 5.0F);
+
+    ScriptVmExecutionContextUVE normalizeContext;
+    ASSERT_TRUE(normalizeContext.SetInputUVE(8U, "Vector", ScriptVector3ValueUVE{{0.0F, 3.0F, 4.0F}}));
+    EXPECT_TRUE(ExecuteScriptBytecodeUVE(makeProgram(8U, "math.vector3.normalize"), normalizeContext).IsSuccessUVE());
+    EXPECT_EQ(std::get<ScriptVector3ValueUVE>(*normalizeContext.FindOutputUVE(8U, "Result")),
+              (ScriptVector3ValueUVE{{0.0F, 0.6F, 0.8F}}));
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_ResolvesCompilerStyleNodeThenTransferOrdering) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back(
+        {ScriptIrInstructionKindUVE::ExecuteNode, 20U, 0U, "math.vector3.make", {}, {}});
+    program.instructions.push_back(
+        {ScriptIrInstructionKindUVE::ExecuteNode, 30U, 0U, "math.vector3.add", {}, {}});
+    program.instructions.push_back(
+        {ScriptIrInstructionKindUVE::TransferValue, 20U, 30U, {}, "Vector", "A"});
+
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(20U, "X", 1.0F));
+    ASSERT_TRUE(context.SetInputUVE(20U, "Y", 2.0F));
+    ASSERT_TRUE(context.SetInputUVE(20U, "Z", 3.0F));
+    ASSERT_TRUE(context.SetInputUVE(30U, "B", ScriptVector3ValueUVE{{4.0F, 5.0F, 6.0F}}));
+
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(program, context);
+    EXPECT_TRUE(result.IsSuccessUVE());
+    EXPECT_EQ(result.instructionsExecuted, 3U);
+    EXPECT_EQ(std::get<ScriptVector3ValueUVE>(*context.FindOutputUVE(30U, "Result")),
+              (ScriptVector3ValueUVE{{5.0F, 7.0F, 9.0F}}));
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_TransfersTypedValuesAndRejectsNodeFailure) {
+    ScriptBytecodeProgramUVE transferProgram;
+    transferProgram.instructions.push_back(
+        {ScriptIrInstructionKindUVE::TransferValue, 10U, 11U, {}, "Result", "Vector"});
+    ScriptVmExecutionContextUVE transferContext;
+    ASSERT_TRUE(transferContext.SetOutputUVE(10U, "Result", ScriptVector3ValueUVE{{7.0F, 8.0F, 9.0F}}));
+    const ScriptVmExecutionResultUVE transferred = ExecuteScriptBytecodeUVE(transferProgram, transferContext);
+    EXPECT_TRUE(transferred.IsSuccessUVE());
+    EXPECT_EQ(std::get<ScriptVector3ValueUVE>(*transferContext.FindInputUVE(11U, "Vector")),
+              (ScriptVector3ValueUVE{{7.0F, 8.0F, 9.0F}}));
+
+    ScriptBytecodeProgramUVE failingProgram;
+    failingProgram.instructions.push_back(
+        {ScriptIrInstructionKindUVE::ExecuteNode, 12U, 0U, "math.vector3.normalize", {}, {}});
+    ScriptVmExecutionContextUVE failingContext;
+    ASSERT_TRUE(failingContext.SetInputUVE(12U, "Vector", ScriptVector3ValueUVE{{0.0F, 0.0F, 0.0F}}));
+    const ScriptVmExecutionResultUVE failed = ExecuteScriptBytecodeUVE(failingProgram, failingContext);
+    EXPECT_FALSE(failed.IsSuccessUVE());
+    EXPECT_EQ(failed.status, ScriptVmStatusUVE::NodeExecutionFailed);
+    ASSERT_EQ(failed.diagnostics.size(), 1U);
+    EXPECT_EQ(failed.diagnostics[0].instructionIndex, 0U);
+}
+
 TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_StopsAtInstructionBudget) {
     ScriptBytecodeProgramUVE program;
     program.instructions.resize(3U);
