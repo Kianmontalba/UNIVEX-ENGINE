@@ -3,11 +3,12 @@
 
 > This reference is generated from `docs/CONTRACT_INVENTORY.md`. Native and editor code remain authoritative; this file is documentation only.
 
-Inventory revision: `0331c8433de5b99e`
+Inventory revision: `4ddf176c41ba7388`
 
 | ID | Authority | Anchor | Contract role | Allowed consumers | Ownership boundary |
 |---|---|---|---|---|---|
 | `ASSET-LOAD-DIAGNOSTICS` | `engine/asset/include/uve/asset/i_asset_manager_uve.h` | `GetFailureReasonUVE` | Thread-safe copied failure reason for the most recent failed asset load/reload, with deterministic empty semantics for non-failed records. | Native asset consumers, editor diagnostics, and tests through `IAssetManagerUVE`/`AssetHandleUVE`. | AssetManager owns the record and mutex; consumers receive strings only and never acquire asset data or mutate load state. |
+| `ASSET-SOURCE-CLASSIFICATION` | `engine/asset/include/uve/asset/i_asset_importer_uve.h` | `struct AssetImportSourceClassificationUVE final` | Deterministic, value-only source extension classification with explicit raw model/texture/material parser requirements and unsupported-format diagnostics. | Asset import UI, import queue policy, EngineCore service consumers, and native tests. | Classification performs no conversion and touches no filesystem content; importer registration remains mutex-owned and parser authority stays explicit. |
 | `CORE-MQ-DATABASE` | `engine/plugins/Animation/motion_query/Source/Runtime/include/uve/plugins/motion_query_database_contract_uve.h` | `struct MotionQueryDatabaseContractUVE final` | Shared Motion Query database/schema/settings validation contract. | Native Motion Query runtime, editor authoring, debugger, and integration tests. | C++ owns validation and copied contract state; managed code receives DTOs only. |
 | `EDITOR-ASSET-BINDING` | `engine/editor/include/uve/editor/editor_bridge_uve.h` | `struct EditorBridgeAssetBindingSnapshotUVE final` | Read-only mesh/material AssetGuid facts for the selected entity's Inspector presentation. | Native Inspector capture, stdio serialization, managed DTO parser, and Avalonia Inspector presentation. | GUID values are copied only; AssetManager, loading, resource ownership, ECS mutation, and import authority remain native. |
 | `EDITOR-BRIDGE` | `engine/editor/include/uve/editor/editor_bridge_uve.h` | `class EditorBridgeUVE final` | Revision-checked native-to-managed snapshot and named-command boundary. | Native editor services, stdio transport, and managed presentation. | C++ owns engine state; C# receives copied DTOs and never receives native pointers or renderer resources. |

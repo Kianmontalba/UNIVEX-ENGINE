@@ -12,6 +12,33 @@
 
 namespace UVE::Asset {
 
+/// The source-kind vocabulary is intentionally explicit even while raw format parsers remain
+/// deferred; future format-specific importers extend this classification rather than hiding parser
+/// authority inside generic copy behavior.
+enum class AssetImportSourceKindUVE {
+    Unknown,
+    PlainText,
+    SceneEnvelope,
+    PrefabEnvelope,
+    MeshEnvelope,
+    TextureEnvelope,
+    ShaderEnvelope,
+    MaterialEnvelope,
+    RawModel,
+    RawTexture,
+    RawMaterial,
+};
+
+/// Value-only classification of an import source. It describes the source format and current
+/// importer/parser authority; it does not perform conversion or transfer filesystem ownership.
+struct AssetImportSourceClassificationUVE final {
+    AssetImportSourceKindUVE kind = AssetImportSourceKindUVE::Unknown;
+    std::string normalizedExtension;
+    bool importerRegistered = false;
+    bool requiresFormatSpecificParser = false;
+    std::string diagnostic;
+};
+
 /// Base for per-asset-type import settings (e.g. a future MeshImportSettingsUVE adding a
 /// normal-map-flip flag or LOD generation count). Empty this increment — no format-specific
 /// importer exists yet to need settings beyond the generic copy-and-register behavior — but the
@@ -48,6 +75,15 @@ public:
         std::function<bool(const std::filesystem::path&, const std::filesystem::path&,
                             const AssetImportSettingsUVE&)>
             importFunc) = 0;
+
+    /// Classifies a source path without touching the filesystem. Raw model/texture/material kinds
+    /// explicitly report that a format-specific parser is required; current built-in UVE envelope
+    /// kinds report the deterministic generic copy importer authority.
+    [[nodiscard]] virtual AssetImportSourceClassificationUVE ClassifySourceUVE(
+        const std::filesystem::path& sourcePath) const {
+        static_cast<void>(sourcePath);
+        return {};
+    }
 
     /// Imports `sourcePath` to `destinationPath` using whichever importer is registered for
     /// `sourcePath`'s extension, registers `destinationPath` in `assetDatabase`, and returns its
