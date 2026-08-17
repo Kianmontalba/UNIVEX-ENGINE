@@ -14,8 +14,8 @@ namespace UVE::Math {
 
 /// An axis-aligned bounding box, used for mesh bounds and frustum culling (Part 7.2,
 /// Increments 11-14) and AABB broad/narrow-phase collision (Part 7.5, Increment 15).
-/// Deliberately minimal, matching Vector3UVE/QuaternionUVE's precedent: no ray intersection, no
-/// sphere bounds, no oriented bounding box — not needed by anything built so far.
+/// Deliberately minimal, matching Vector3UVE/QuaternionUVE's precedent: it provides AABB/ray/TOI
+/// math only; exact sphere bounds and oriented bounding boxes remain outside this value contract.
 /// Thread-safety: value type; safe to copy/pass freely, no shared state.
 struct AabbUVE {
     Vector3UVE min{0.0F, 0.0F, 0.0F};
@@ -54,8 +54,9 @@ struct AabbUVE {
     [[nodiscard]] AabbUVE TransformUVE(const Matrix4x4UVE& matrix) const noexcept;
 
     /// True iff `*this` and `other` overlap on all three axes (touching-but-not-overlapping
-    /// edges count as not intersecting). The broad-phase (and, for an axis-aligned-box-only
-    /// world, narrow-phase) overlap test CollisionSystemUVE (Part 7.5) is built on.
+    /// edges count as not intersecting). CollisionSystemUVE's broad-phase and current AABB
+    /// narrow-phase are built on this overlap test; expanded sphere/capsule descriptors use
+    /// conservative bounds until exact narrow phases exist.
     [[nodiscard]] constexpr bool IntersectsUVE(const AabbUVE& other) const noexcept {
         return min.x < other.max.x && max.x > other.min.x && min.y < other.max.y && max.y > other.min.y &&
                min.z < other.max.z && max.z > other.min.z;
@@ -85,6 +86,21 @@ struct RayHitUVE {
     float distance = 0.0F;
     Vector3UVE normal;
 };
+
+/// A normalized swept-AABB impact report. `normal` points from the moving AABB toward the target
+/// along the first entered face, which is the direction to remove from remaining motion when
+/// producing a sliding response.
+struct SweptAabbHitUVE {
+    float time = 0.0F;
+    Vector3UVE normal;
+};
+
+/// Returns the first normalized time in [0, 1] at which `moving` translated by `displacement`
+/// reaches `target`, or nullopt when the boxes miss or already overlap. This is conservative for
+/// expanded collider shapes because callers pass their broad-phase AABBs; it is not an exact
+/// sphere/capsule or oriented-shape narrow phase.
+[[nodiscard]] std::optional<SweptAabbHitUVE> SweepAabbUVE(
+    const AabbUVE& moving, const Vector3UVE& displacement, const AabbUVE& target) noexcept;
 
 /// Returns the closest hit of `ray` against `aabb` within `[0, maxDistance]`, or std::nullopt if
 /// the ray misses or the box is beyond `maxDistance`. Standard slab method — pure AABB geometry,

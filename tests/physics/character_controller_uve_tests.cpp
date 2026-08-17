@@ -114,6 +114,52 @@ TEST_F(CharacterControllerUVETest, MoveUVE_IncompatibleLayerMaskPassesThroughCol
     EXPECT_NEAR(GetWorldPositionUVE(controller).x, 3.0F, 1.0e-4F);
 }
 
+TEST_F(CharacterControllerUVETest, MoveWithToIUVE_StopsBeforeThinWallWithoutTunneling) {
+    const Scene::EntityUVE controller = MakeControllerEntityUVE({}, {0.5F, 0.5F, 0.5F});
+    MakeColliderEntityUVE({2.0F, 0.0F, 0.0F}, {0.05F, 2.0F, 2.0F});
+
+    const CharacterControllerMoveResultUVE result = CharacterControllerUVE::MoveWithToIUVE(
+        entityManager, sceneGraph, collisionSystem,
+        CharacterControllerInputUVE{controller, {10.0F, 0.0F, 0.0F}, 1U, 100.0F});
+
+    ASSERT_TRUE(result.IsAcceptedUVE());
+    EXPECT_TRUE(result.blocked);
+    EXPECT_TRUE(result.toiUsed);
+    EXPECT_EQ(result.contactCount, 1U);
+    EXPECT_NEAR(result.earliestImpactTime, 0.145F, 1.0e-4F);
+    EXPECT_NEAR(GetWorldPositionUVE(controller).x, 1.449F, 2.0e-3F);
+    EXPECT_LT(GetWorldPositionUVE(controller).x, 1.5F);
+}
+
+TEST_F(CharacterControllerUVETest, MoveWithToIUVE_PreservesTangentialDisplacementAfterImpact) {
+    const Scene::EntityUVE controller = MakeControllerEntityUVE({}, {0.5F, 0.5F, 0.5F});
+    MakeColliderEntityUVE({2.0F, 0.0F, 0.0F}, {0.5F, 2.0F, 2.0F});
+
+    const CharacterControllerMoveResultUVE result = CharacterControllerUVE::MoveWithToIUVE(
+        entityManager, sceneGraph, collisionSystem,
+        CharacterControllerInputUVE{controller, {10.0F, 3.0F, 0.0F}, 8U, 100.0F});
+
+    ASSERT_TRUE(result.IsAcceptedUVE());
+    EXPECT_TRUE(result.blocked);
+    EXPECT_TRUE(result.toiUsed);
+    EXPECT_NEAR(GetWorldPositionUVE(controller).x, 0.999F, 2.0e-3F);
+    EXPECT_NEAR(GetWorldPositionUVE(controller).y, 3.0F, 2.0e-3F);
+}
+
+TEST_F(CharacterControllerUVETest, MoveWithToIUVE_IncompatibleLayerMaskPassesThrough) {
+    const Scene::EntityUVE controller = MakeControllerEntityUVE({}, {0.5F, 0.5F, 0.5F}, 1U, 1U);
+    MakeColliderEntityUVE({2.0F, 0.0F, 0.0F}, {0.05F, 2.0F, 2.0F}, 2U, 0xFFFFFFFFU);
+
+    const CharacterControllerMoveResultUVE result = CharacterControllerUVE::MoveWithToIUVE(
+        entityManager, sceneGraph, collisionSystem,
+        CharacterControllerInputUVE{controller, {10.0F, 0.0F, 0.0F}, 1U, 100.0F});
+
+    ASSERT_TRUE(result.IsAcceptedUVE());
+    EXPECT_FALSE(result.blocked);
+    EXPECT_FALSE(result.toiUsed);
+    EXPECT_NEAR(GetWorldPositionUVE(controller).x, 10.0F, 1.0e-4F);
+}
+
 TEST_F(CharacterControllerUVETest, MoveUVE_RejectsDynamicBodyAndClampsInvalidBudget) {
     const Scene::EntityUVE dynamic = MakeColliderEntityUVE({5.0F, 0.0F, 0.0F}, {0.5F, 0.5F, 0.5F});
     entityManager.AddComponentUVE<Scene::RigidBodyComponentUVE>(dynamic, Scene::RigidBodyComponentUVE{});
