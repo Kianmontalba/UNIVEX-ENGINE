@@ -27,7 +27,7 @@
 | **PARTIAL** | Core 2D/UI nodes | `Node2D`, sprite, label, button, panel, and progress UI elements. | Requires an actual runtime UI/render/input architecture; editor UI does not substitute for game UI. |
 | **PARTIAL** | Character and interaction | Kinematic character controller, triggers/areas, component querying, spawning/destruction, and gameplay state conventions. | Defined behavior under physics/input tests and a representative sample scene. |
 | **PARTIAL** | Animation | Animation assets, playback, blending, events, state graphs, and later IK. | Asset format/import/runtime binding must exist before Animation Editor work. |
-| **PARTIAL** | Particles/VFX | GPU particle emitter, render integration, authoring controls, and lifecycle/culling policy. | Particle emitter budget validation and rollback are proven; runtime allocation, render integration, authoring controls, lifecycle, culling, and measured renderer/compute design remain partial. |
+| **PARTIAL** | Particles/VFX | GPU particle emitter, render integration, authoring controls, and lifecycle/culling policy. | Particle emitter budget validation and rollback are proven; bounded ParticleRuntimeUVE ownership now enforces per-entity/aggregate budgets, enabled state, and live-count bounds without allocating particle storage; runtime simulation, render integration, authoring controls, culling, and measured renderer/compute design remain partial. |
 | **PARTIAL** | Audio gameplay | Source/listener binding, music/SFX routing, attenuation, mixer groups, and effects. | AudioSource value validation, spatial distance semantics, and invalid-scene rollback are proven; listener binding, routing, mixer groups, effects, streaming, and asset resolution remain partial. |
 
 <div align="center">

@@ -87,6 +87,7 @@ add_executable(uve_tests
     scene/scene_graph_uve_tests.cpp
     scene/scene_serializer_uve_tests.cpp
     scene/prefab_system_uve_tests.cpp
+    scene/particle_runtime_uve_tests.cpp
     core/engine_state_uve_tests.cpp
     core/engine_core_uve_tests.cpp
     core/engine_services_uve_tests.cpp
