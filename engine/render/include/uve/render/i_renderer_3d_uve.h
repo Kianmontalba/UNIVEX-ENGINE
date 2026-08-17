@@ -47,6 +47,7 @@ struct Renderer3DFrameDiagnosticsUVE final {
     std::size_t meshDrawCallsRecorded = 0U;
     std::size_t primitiveDrawCallsRecorded = 0U;
     std::size_t particleItemsExtracted = 0U;
+    std::size_t particleDrawCommandsRecorded = 0U;
     std::size_t glDrawCallsIssued = 0U;
     bool primitiveProgramReady = false;
     bool mainPassRecorded = false;
