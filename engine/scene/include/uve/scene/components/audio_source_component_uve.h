@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <cmath>
 #include <cstdint>
 #include <string>
 
@@ -41,5 +42,20 @@ struct AudioSourceComponentUVE final {
     /// the only way an ECS-authored sound can start without one.
     bool playOnAwake = true;
 };
+
+[[nodiscard]] inline bool IsAudioAttenuationCurveValidUVE(const AudioAttenuationCurveUVE curve) noexcept {
+    return curve == AudioAttenuationCurveUVE::Linear || curve == AudioAttenuationCurveUVE::InverseSquare;
+}
+
+/// Validates source parameters before persistence and audio-source synchronization. An empty path
+/// remains valid as the existing default/no-clip source state; a future asset resolver owns path
+/// existence. Distance ordering is required only for spatial sources because 2D sources ignore it.
+[[nodiscard]] inline bool IsAudioSourceComponentValidUVE(const AudioSourceComponentUVE& source) noexcept {
+    const bool spatialDistanceValid =
+        !source.spatial || (std::isfinite(source.minDistance) && source.minDistance > 0.0F &&
+                            std::isfinite(source.maxDistance) && source.maxDistance > source.minDistance);
+    return std::isfinite(source.volume) && source.volume >= 0.0F && std::isfinite(source.pitch) && source.pitch > 0.0F &&
+           IsAudioAttenuationCurveValidUVE(source.attenuationCurve) && spatialDistanceValid;
+}
 
 } // namespace UVE::Scene

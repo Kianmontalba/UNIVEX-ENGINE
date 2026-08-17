@@ -4,6 +4,7 @@
 #include "uve/audio/audio_source_system_uve.h"
 
 #include <algorithm>
+#include <limits>
 #include <variant>
 #include <vector>
 
@@ -45,6 +46,34 @@ protected:
                             [](const RecordedAudioCallUVE& call) { return std::holds_alternative<PlayVoiceCallUVE>(call); });
     }
 };
+
+TEST(AudioSourceComponentUVETest, IsAudioSourceComponentValidUVE_RejectsUnsafeParameters) {
+    EXPECT_TRUE(Scene::IsAudioSourceComponentValidUVE(Scene::AudioSourceComponentUVE{}));
+
+    Scene::AudioSourceComponentUVE invalid = {};
+    invalid.volume = -0.1F;
+    EXPECT_FALSE(Scene::IsAudioSourceComponentValidUVE(invalid));
+    invalid = {};
+    invalid.pitch = 0.0F;
+    EXPECT_FALSE(Scene::IsAudioSourceComponentValidUVE(invalid));
+    invalid = {};
+    invalid.pitch = std::numeric_limits<float>::quiet_NaN();
+    EXPECT_FALSE(Scene::IsAudioSourceComponentValidUVE(invalid));
+    invalid = {};
+    invalid.minDistance = 0.0F;
+    EXPECT_FALSE(Scene::IsAudioSourceComponentValidUVE(invalid));
+    invalid = {};
+    invalid.maxDistance = invalid.minDistance;
+    EXPECT_FALSE(Scene::IsAudioSourceComponentValidUVE(invalid));
+    invalid = {};
+    invalid.spatial = false;
+    invalid.minDistance = 0.0F;
+    invalid.maxDistance = 0.0F;
+    EXPECT_TRUE(Scene::IsAudioSourceComponentValidUVE(invalid));
+    invalid = {};
+    invalid.attenuationCurve = static_cast<Scene::AudioAttenuationCurveUVE>(99U);
+    EXPECT_FALSE(Scene::IsAudioSourceComponentValidUVE(invalid));
+}
 
 TEST_F(AudioSourceSystemUVETest, PlayOnAwakeEntity_CreatesAndPlaysSourceOnFirstSync) {
     Scene::AudioSourceComponentUVE audioSource;
@@ -135,6 +164,16 @@ TEST_F(AudioSourceSystemUVETest, RepeatedSyncUVE_UnchangedScene_DoesNotCreateASe
 
     EXPECT_EQ(device.GetLiveVoiceCountUVE(), 1U);
 }
+
+#if UVE_DEBUG
+TEST_F(AudioSourceSystemUVETest, SyncUVE_InvalidSpatialDistance_Asserts) {
+    Scene::AudioSourceComponentUVE invalid = {};
+    invalid.maxDistance = invalid.minDistance;
+    MakeAudioEntityUVE(invalid);
+
+    EXPECT_DEATH({ audioSourceSystem.SyncUVE(entityManager, audioSystem); }, "");
+}
+#endif
 
 } // namespace
 } // namespace UVE::Audio::Tests

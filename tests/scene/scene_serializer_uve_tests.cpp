@@ -288,6 +288,24 @@ TEST_F(SceneSerializerUVETest, RestoreUVE_InvalidRigidBodyPayload_RollsBackCreat
     EXPECT_EQ(entityManager.GetEntityCountUVE(), entityCountBefore);
 }
 
+TEST_F(SceneSerializerUVETest, RestoreUVE_InvalidAudioSourcePayload_RollsBackCreatedEntities) {
+    const EntityUVE existing = entityManager.CreateEntityUVE();
+    const std::size_t entityCountBefore = entityManager.GetEntityCountUVE();
+    const std::string payloadText =
+        R"({"entities":[{"localId":0,"components":{"AudioSourceComponentUVE":{"audioAssetPath":"","volume":1.0,"looping":false,"pitch":1.0,"spatial":true,"minDistance":1.0,"maxDistance":1.0,"attenuationCurve":0,"playOnAwake":true}}}]})";
+    const auto* const payloadBytes = reinterpret_cast<const std::byte*>(payloadText.data());
+    const SceneSnapshotUVE snapshot{
+        Asset::EncodeUveFileEnvelopeUVE(SceneAssetTypeUVE::Scene,
+                                        std::vector<std::byte>{payloadBytes, payloadBytes + payloadText.size()}),
+        SceneAssetTypeUVE::Scene};
+
+    const std::vector<EntityUVE> roots = serializer.RestoreUVE(entityManager, snapshot);
+
+    EXPECT_TRUE(roots.empty());
+    EXPECT_TRUE(entityManager.IsAliveUVE(existing));
+    EXPECT_EQ(entityManager.GetEntityCountUVE(), entityCountBefore);
+}
+
 TEST_F(SceneSerializerUVETest, SaveThenLoad_SingleEntityWithMultipleComponents_RoundTripsExactly) {
     const EntityUVE entity = entityManager.CreateEntityUVE();
     entityManager.AddComponentUVE<MeshComponentUVE>(
