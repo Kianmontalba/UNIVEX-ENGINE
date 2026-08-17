@@ -5,6 +5,7 @@
 
 #include <cstddef>
 
+#include "uve/debug/assert_uve.h"
 #include "uve/math/quaternion_uve.h"
 #include "uve/scene/components/light_component_uve.h"
 #include "uve/scene/components/world_transform_component_uve.h"
@@ -21,6 +22,7 @@ LightListUVE LightSystemUVE::ExtractActiveLightsUVE(Scene::IEntityManagerUVE& en
             if (filledCount >= kMaxLightsUVE) {
                 return;
             }
+            UVE_ASSERT(Scene::IsLightComponentValidUVE(light));
             LightDataUVE& slot = result[filledCount];
             slot.type = light.type;
             slot.position = worldTransform.worldPosition;
