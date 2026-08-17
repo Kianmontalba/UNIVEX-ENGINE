@@ -267,11 +267,19 @@ template <typename T, typename FromJsonFunc>
                           return source;
                       }));
         table.emplace("ScriptComponentUVE", MakeRegistrationUVE<ScriptComponentUVE>([](const nlohmann::json& json) {
-                          return ScriptComponentUVE{json.at("scriptAssetPath").get<std::string>()};
+                          const ScriptComponentUVE script{json.at("scriptAssetPath").get<std::string>()};
+                          if (!IsScriptComponentValidUVE(script)) {
+                              throw std::runtime_error("Invalid ScriptComponentUVE payload");
+                          }
+                          return script;
                       }));
         table.emplace("ParticleEmitterComponentUVE",
                       MakeRegistrationUVE<ParticleEmitterComponentUVE>([](const nlohmann::json& json) {
-                          return ParticleEmitterComponentUVE{json.at("maxParticles").get<std::uint32_t>()};
+                          const ParticleEmitterComponentUVE emitter{json.at("maxParticles").get<std::uint32_t>()};
+                          if (!IsParticleEmitterComponentValidUVE(emitter)) {
+                              throw std::runtime_error("Invalid ParticleEmitterComponentUVE payload");
+                          }
+                          return emitter;
                       }));
         table.emplace("PrefabInstanceComponentUVE",
                       MakeRegistrationUVE<PrefabInstanceComponentUVE>([](const nlohmann::json& json) {
