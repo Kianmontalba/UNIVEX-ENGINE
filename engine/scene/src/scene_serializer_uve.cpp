@@ -24,6 +24,7 @@
 #include "uve/debug/logging_macros_uve.h"
 #include "uve/math/quaternion_uve.h"
 #include "uve/math/vector3_uve.h"
+#include "uve/scene/components/area_component_uve.h"
 #include "uve/scene/components/audio_source_component_uve.h"
 #include "uve/scene/components/camera_component_uve.h"
 #include "uve/scene/components/collider_component_uve.h"
@@ -114,6 +115,12 @@ namespace {
             {"friction", component.friction},
             {"restitution", component.restitution},
             {"density", component.density}};
+}
+
+[[nodiscard]] nlohmann::json ToJsonUVE(const AreaComponentUVE& component) {
+    return {{"halfExtents", ToJsonUVE(component.halfExtents)},
+            {"collisionLayer", component.collisionLayer},
+            {"collisionMask", component.collisionMask}};
 }
 
 [[nodiscard]] nlohmann::json ToJsonUVE(const RigidBodyComponentUVE& component) {
@@ -267,6 +274,16 @@ template <typename T, typename FromJsonFunc>
                               throw std::runtime_error("Invalid ColliderComponentUVE payload");
                           }
                           return collider;
+                      }));
+        table.emplace("AreaComponentUVE", MakeRegistrationUVE<AreaComponentUVE>([](const nlohmann::json& json) {
+                          AreaComponentUVE area;
+                          area.halfExtents = Vector3FromJsonUVE(json.at("halfExtents"));
+                          area.collisionLayer = json.value("collisionLayer", std::uint32_t{1});
+                          area.collisionMask = json.value("collisionMask", std::uint32_t{0xFFFFFFFFU});
+                          if (!IsAreaComponentValidUVE(area)) {
+                              throw std::runtime_error("Invalid AreaComponentUVE payload");
+                          }
+                          return area;
                       }));
         table.emplace("RigidBodyComponentUVE", MakeRegistrationUVE<RigidBodyComponentUVE>([](const nlohmann::json& json) {
                           RigidBodyComponentUVE rigidBody;
