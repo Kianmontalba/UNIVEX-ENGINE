@@ -2,6 +2,7 @@
 
 
 add_library(uve_physics STATIC
+    src/area_overlap_lifecycle_tracker_uve.cpp
     src/area_overlap_system_uve.cpp
     src/collider_world_aabb_cache_uve.cpp
     src/collision_system_uve.cpp
