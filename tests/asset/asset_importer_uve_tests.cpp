@@ -4,10 +4,12 @@
 #include "uve/asset/asset_importer_uve.h"
 
 #include <algorithm>
+#include <array>
 #include <filesystem>
 #include <fstream>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -51,6 +53,30 @@ TEST_F(AssetImporterUVETest, ImportUVE_GenericImporter_CopiesFileAndRegistersGui
 
     std::filesystem::remove(sourcePath);
     std::filesystem::remove(destinationPath);
+}
+
+TEST_F(AssetImporterUVETest, ImportUVE_TypedUVEEnvelopeExtensions_CopyAndRegisterGuid) {
+    constexpr std::array<std::string_view, 4> kTypedEnvelopeExtensions = {
+        ".uvemodel", ".uvetex", ".uveshader", ".uvemat"};
+
+    for (const std::string_view extension : kTypedEnvelopeExtensions) {
+        const std::filesystem::path sourcePath =
+            std::string("uve_asset_importer_typed_source") + std::string(extension);
+        const std::filesystem::path destinationPath =
+            std::string("uve_asset_importer_typed_dest") + std::string(extension);
+        std::filesystem::remove(sourcePath);
+        std::filesystem::remove(destinationPath);
+        WriteFixtureFileUVE(sourcePath, "typed UVE envelope import");
+
+        const AssetGuidUVE guid = importer.ImportUVE(sourcePath, destinationPath, assetDatabase);
+        ASSERT_NE(guid, kInvalidAssetGuidUVE) << extension;
+        EXPECT_TRUE(std::filesystem::exists(destinationPath));
+        EXPECT_EQ(ReadFileUVE(destinationPath), "typed UVE envelope import");
+        EXPECT_EQ(assetDatabase.ResolveUVE(guid), destinationPath);
+
+        std::filesystem::remove(sourcePath);
+        std::filesystem::remove(destinationPath);
+    }
 }
 
 TEST_F(AssetImporterUVETest, ImportUVE_UnregisteredExtension_ReturnsInvalidAndLogsError) {

@@ -56,6 +56,14 @@ AssetImporterUVE::AssetImporterUVE() : m_impl(std::make_unique<ImplUVE>()) {
     RegisterImporterUVE("txt", &GenericFileImportUVE);
     RegisterImporterUVE("uvescene", &GenericFileImportUVE);
     RegisterImporterUVE("uveprefab", &GenericFileImportUVE);
+
+    // Typed UVE envelopes are already validated by their corresponding asset loaders. Importing
+    // them here is an intentionally format-neutral, deterministic copy/re-register operation;
+    // source-format conversion (FBX/OBJ/glTF/PNG/etc.) remains a separate parser-owned increment.
+    RegisterImporterUVE("uvemodel", &GenericFileImportUVE);
+    RegisterImporterUVE("uvetex", &GenericFileImportUVE);
+    RegisterImporterUVE("uveshader", &GenericFileImportUVE);
+    RegisterImporterUVE("uvemat", &GenericFileImportUVE);
 }
 
 AssetImporterUVE::~AssetImporterUVE() = default;

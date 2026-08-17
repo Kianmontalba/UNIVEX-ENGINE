@@ -11,8 +11,10 @@ namespace UVE::Asset {
 
 /// AssetImporterUVE is the concrete, engine-standard implementation of IAssetImporterUVE. Its
 /// constructor registers the one built-in generic importer (copy source -> destination, then
-/// register the destination in the asset database) for ".txt", ".uvescene", and ".uveprefab" —
-/// the only source kinds this increment has any real, non-format-specific import need for.
+/// register the destination in the asset database) for plain project documents and the existing
+/// typed UVE envelopes: `.uvemodel`, `.uvetex`, `.uveshader`, and `.uvemat`. Those envelope imports
+/// are deterministic reimport/copy contracts; raw FBX/OBJ/glTF/PNG/material-source conversion is
+/// deliberately not claimed until a format-specific parser and fixture policy exists.
 class AssetImporterUVE final : public IAssetImporterUVE {
 public:
     AssetImporterUVE();
