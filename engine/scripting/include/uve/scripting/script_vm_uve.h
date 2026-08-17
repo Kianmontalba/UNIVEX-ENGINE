@@ -43,6 +43,8 @@ struct ScriptVmExecutionContextUVE final {
     [[nodiscard]] std::optional<ScriptVmValueUVE> FindOutputUVE(std::uint32_t nodeId,
                                                                  const std::string& pinName) const;
     void ClearOutputsUVE() noexcept;
+
+    [[nodiscard]] bool operator==(const ScriptVmExecutionContextUVE&) const = default;
 };
 
 struct ScriptVmDiagnosticUVE final {

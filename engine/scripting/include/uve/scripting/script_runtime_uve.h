@@ -18,6 +18,7 @@ struct ScriptRuntimeStateUVE final {
     // Legacy scalar slots remain stable until typed VM lowering consumes the typed stores.
     std::vector<std::int64_t> values;
     std::vector<ScriptVector3ValueUVE> vector3Values;
+    ScriptVmExecutionContextUVE executionContext;
 
     [[nodiscard]] bool operator==(const ScriptRuntimeStateUVE&) const = default;
 };
@@ -60,6 +61,7 @@ enum class ScriptRuntimeStateUpdateCodeUVE : std::uint8_t {
     NoActiveInstance,
     CapacityExceeded,
     NonFiniteVector3,
+    InvalidVmBinding,
 };
 
 struct ScriptRuntimeStateUpdateResultUVE final {
@@ -159,6 +161,7 @@ public:
     static constexpr std::size_t kMaximumInstancesUVE = 4096U;
     static constexpr std::size_t kMaximumStateValuesUVE = 256U;
     static constexpr std::size_t kMaximumStateVector3ValuesUVE = 256U;
+    static constexpr std::size_t kMaximumStateVmBindingsUVE = ScriptVmExecutionContextUVE::kMaximumBindingsUVE;
 
     ScriptRuntimeUVE() = default;
     ScriptRuntimeUVE(const ScriptRuntimeUVE&) = delete;
@@ -182,9 +185,9 @@ public:
     [[nodiscard]] bool HasInstanceUVE(Scene::EntityUVE entity) const noexcept;
     [[nodiscard]] std::size_t GetInstanceCountUVE() const noexcept;
     [[nodiscard]] ScriptRuntimeTickBatchResultUVE TickDetailedUVE(
-        ScriptVmExecutionOptionsUVE options = {}) const;
+        ScriptVmExecutionOptionsUVE options = {});
     [[nodiscard]] std::vector<ScriptRuntimeTickResultUVE> TickUVE(
-        ScriptVmExecutionOptionsUVE options = {}) const;
+        ScriptVmExecutionOptionsUVE options = {});
 
 private:
     std::unordered_map<Scene::EntityUVE, ScriptRuntimeInstanceUVE> m_instances;

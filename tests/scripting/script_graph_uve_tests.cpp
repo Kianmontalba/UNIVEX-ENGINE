@@ -641,6 +641,51 @@ TEST(ScriptRuntimeUVETest, TickDetailedUVE_SummarizesEnabledCompletedAndDisabled
               detailed.results[0].execution.instructionsExecuted);
 }
 
+TEST(ScriptRuntimeUVETest, TickDetailedUVE_ExecutesTypedVector3ThroughPerEntityContext) {
+    ScriptRuntimeUVE runtime;
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back(
+        {ScriptIrInstructionKindUVE::ExecuteNode, 21U, 0U, "math.vector3.make", {}, {}});
+    const Scene::EntityUVE entity{21U, 1U};
+    ASSERT_TRUE(runtime.AttachUVE(entity, program));
+
+    ScriptRuntimeStateUVE state;
+    ASSERT_TRUE(state.executionContext.SetInputUVE(21U, "X", 2.0F));
+    ASSERT_TRUE(state.executionContext.SetInputUVE(21U, "Y", -4.0F));
+    ASSERT_TRUE(state.executionContext.SetInputUVE(21U, "Z", 8.0F));
+    ASSERT_TRUE(runtime.SetStateUVE(entity, state));
+
+    const ScriptRuntimeTickBatchResultUVE detailed = runtime.TickDetailedUVE();
+    ASSERT_TRUE(detailed.IsSuccessUVE());
+    ASSERT_EQ(detailed.results.size(), 1U);
+    EXPECT_EQ(detailed.summary.completedCount, 1U);
+    EXPECT_EQ(detailed.results.front().execution.instructionsExecuted, 1U);
+
+    const auto stored = runtime.GetStateUVE(entity);
+    ASSERT_TRUE(stored.has_value());
+    const auto output = stored->executionContext.FindOutputUVE(21U, "Vector");
+    ASSERT_TRUE(output.has_value());
+    EXPECT_EQ(std::get<ScriptVector3ValueUVE>(*output), (ScriptVector3ValueUVE{{2.0F, -4.0F, 8.0F}}));
+}
+
+TEST(ScriptRuntimeUVETest, SetStateDetailedUVE_RejectsInvalidVmBindingWithoutMutation) {
+    ScriptRuntimeUVE runtime;
+    ScriptBytecodeProgramUVE program;
+    const Scene::EntityUVE entity{22U, 1U};
+    ASSERT_TRUE(runtime.AttachUVE(entity, program));
+
+    ScriptRuntimeStateUVE valid;
+    ASSERT_TRUE(valid.executionContext.SetInputUVE(22U, "Value", 3.0F));
+    ASSERT_TRUE(runtime.SetStateUVE(entity, valid));
+
+    ScriptRuntimeStateUVE invalid = valid;
+    invalid.executionContext.inputs.front().value = std::numeric_limits<float>::infinity();
+    const ScriptRuntimeStateUpdateResultUVE rejected = runtime.SetStateDetailedUVE(entity, invalid);
+    EXPECT_EQ(rejected.code, ScriptRuntimeStateUpdateCodeUVE::InvalidVmBinding);
+    EXPECT_FALSE(rejected.IsAcceptedUVE());
+    EXPECT_EQ(runtime.GetStateUVE(entity), std::optional<ScriptRuntimeStateUVE>(valid));
+}
+
 TEST(ScriptRuntimeUVETest, TickDetailedUVE_SummarizesInstructionBudgetDiagnostics) {
     ScriptRuntimeUVE runtime;
     ScriptBytecodeProgramUVE program;

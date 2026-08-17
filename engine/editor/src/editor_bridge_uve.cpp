@@ -196,7 +196,7 @@ namespace {
 EditorBridgeUVE::EditorBridgeUVE(EditorUVE& editor,
                                    const Asset::DataTableRegistryUVE* dataTableRegistry,
                                    const Scripting::ScriptDebuggerUVE* scriptDebugger,
-                                   const Scripting::ScriptRuntimeUVE* scriptRuntime)
+                                   Scripting::ScriptRuntimeUVE* scriptRuntime)
     : m_editor(&editor),
       m_visualScriptCanvas(m_visualScriptRegistry),
       m_dataTableRegistry(dataTableRegistry),

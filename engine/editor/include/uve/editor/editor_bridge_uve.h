@@ -704,7 +704,7 @@ public:
     explicit EditorBridgeUVE(EditorUVE& editor,
                              const Asset::DataTableRegistryUVE* dataTableRegistry = nullptr,
                              const Scripting::ScriptDebuggerUVE* scriptDebugger = nullptr,
-                             const Scripting::ScriptRuntimeUVE* scriptRuntime = nullptr);
+                             Scripting::ScriptRuntimeUVE* scriptRuntime = nullptr);
 
     [[nodiscard]] EditorBridgeSnapshotUVE GetSnapshotUVE();
     [[nodiscard]] EditorBridgeResponseUVE DispatchUVE(const EditorBridgeRequestUVE& request);
@@ -774,7 +774,7 @@ private:
     DeveloperConsoleUVE m_developerConsole;
     const Asset::DataTableRegistryUVE* m_dataTableRegistry = nullptr;
     const Scripting::ScriptDebuggerUVE* m_scriptDebugger = nullptr;
-    const Scripting::ScriptRuntimeUVE* m_scriptRuntime = nullptr;
+    Scripting::ScriptRuntimeUVE* m_scriptRuntime = nullptr;
     std::optional<std::string> m_dataTablePreviewName;
     Asset::DataTableCatalogSnapshotUVE m_dataTableCatalogSnapshot;
     Asset::DataTableSnapshotUVE m_dataTablePreviewSnapshot;
