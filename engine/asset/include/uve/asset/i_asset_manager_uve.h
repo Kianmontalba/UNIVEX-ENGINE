@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <filesystem>
 #include <functional>
+#include <string>
 #include <typeindex>
 #include <utility>
 
@@ -95,6 +96,14 @@ public:
     /// Number of asset records currently tracked with state `Loaded` (debugging/query only).
     [[nodiscard]] virtual std::size_t GetLoadedAssetCountUVE() const = 0;
 
+    /// Returns a copied, thread-safe diagnostic for the most recent failed load/reload of `guid`.
+    /// Returns an empty string for an untracked, loading, or successfully loaded record. The
+    /// returned value is intentionally detached from AssetManagerUVE-owned data so callers may
+    /// retain it without extending asset lifetime or holding the manager mutex.
+    [[nodiscard]] std::string GetFailureReasonUVE(AssetGuidUVE guid) const {
+        return GetFailureReasonErased(guid);
+    }
+
     /// Public non-virtual wrappers around the protected erased primitives below, so
     /// AssetHandleUVE<T> — a separate class template, not a member of this class hierarchy — can
     /// reach them (mirrors IEntityManagerUVE::GetComponentPointerUVE()'s exact same reasoning).
@@ -107,6 +116,7 @@ protected:
     virtual void RegisterLoaderErased(std::type_index type, AssetLoaderInfoUVE info) = 0;
     virtual void LoadErased(AssetGuidUVE guid, std::type_index type, IAssetDatabaseUVE& assetDatabase) = 0;
     [[nodiscard]] virtual AssetLoadStateUVE GetStateErased(AssetGuidUVE guid) const = 0;
+    [[nodiscard]] virtual std::string GetFailureReasonErased(AssetGuidUVE guid) const = 0;
     [[nodiscard]] virtual void* TryGetErased(AssetGuidUVE guid) = 0;
     virtual void AddRefErased(AssetGuidUVE guid) = 0;
     virtual void ReleaseErased(AssetGuidUVE guid) = 0;

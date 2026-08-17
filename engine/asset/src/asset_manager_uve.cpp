@@ -5,6 +5,8 @@
 
 #include <functional>
 #include <mutex>
+#include <string>
+#include <system_error>
 #include <typeindex>
 #include <unordered_map>
 #include <utility>
@@ -25,6 +27,7 @@ struct AssetManagerRecordUVE {
     AssetLoadStateUVE state = AssetLoadStateUVE::Loading;
     void* data = nullptr;
     std::function<void(void*)> destroy;
+    std::string failureReason;
     int refCount = 0;
 };
 
@@ -95,6 +98,7 @@ void AssetManagerUVE::ReloadUVE(AssetGuidUVE guid, IAssetDatabaseUVE& assetDatab
             return;
         }
         it->second.state = AssetLoadStateUVE::Loading;
+        it->second.failureReason.clear();
         type = it->second.type;
     }
 
@@ -119,6 +123,21 @@ void AssetManagerUVE::ExecuteLoadUVE(AssetGuidUVE guid, std::type_index type, st
         newData = loadFunc(path, success);
     }
 
+    std::string failureReason;
+    if (path.empty()) {
+        failureReason = "asset database resolved no path";
+    } else if (!loadFunc) {
+        failureReason = "no loader registered for asset type";
+    } else {
+        std::error_code existsError;
+        if (!std::filesystem::exists(path, existsError)) {
+            failureReason = existsError ? "asset file existence check failed: " + existsError.message()
+                                        : "asset file does not exist";
+        } else if (!success) {
+            failureReason = "registered asset loader rejected file";
+        }
+    }
+
     void* oldData = nullptr;
     std::function<void(void*)> destroyFunc;
     {
@@ -129,6 +148,7 @@ void AssetManagerUVE::ExecuteLoadUVE(AssetGuidUVE guid, std::type_index type, st
             destroyFunc = it->second.destroy;
             it->second.data = success ? newData : nullptr;
             it->second.state = success ? AssetLoadStateUVE::Loaded : AssetLoadStateUVE::Failed;
+            it->second.failureReason = success ? std::string{} : failureReason;
         }
     }
     // Free the previous value only after releasing the lock, and only on a successful reload
@@ -185,6 +205,12 @@ AssetLoadStateUVE AssetManagerUVE::GetStateErased(AssetGuidUVE guid) const {
     const std::lock_guard<std::mutex> lock(m_impl->mutex);
     const auto it = m_impl->records.find(guid);
     return it == m_impl->records.end() ? AssetLoadStateUVE::NotLoaded : it->second.state;
+}
+
+std::string AssetManagerUVE::GetFailureReasonErased(AssetGuidUVE guid) const {
+    const std::lock_guard<std::mutex> lock(m_impl->mutex);
+    const auto it = m_impl->records.find(guid);
+    return it == m_impl->records.end() ? std::string{} : it->second.failureReason;
 }
 
 void* AssetManagerUVE::TryGetErased(AssetGuidUVE guid) {

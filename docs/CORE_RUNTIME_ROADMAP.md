@@ -24,6 +24,7 @@
 | **COMPLETED** | **Increment 20** | GLFW window manager and desktop OpenGL backend. | Window/context ownership remains isolated from the renderer. |
 | **COMPLETED** | **Increments 59–61** | Project index, import queue/cache, portable change watch, and targeted stale-cache marking. | No automatic reimport, source mutation, or native directory-watch backend is claimed. |
 | **COMPLETED** | **Legacy Partial Slice — Typed UVE Envelope Importer Contracts** | The existing generic `AssetImporterUVE` now composes deterministic copy-and-register support for `.uvemodel`, `.uvetex`, `.uveshader`, and `.uvemat`, and EngineCore exposes the same registrations through `EngineServicesUVE`. | Typed envelope reimport is proven; raw FBX/OBJ/glTF/PNG/material-source conversion, parser licensing, derived-data generation, and format-specific diagnostics remain PARTIAL. |
+| **COMPLETED** | **Legacy Partial Slice — Asset Load Failure Diagnostics v1** | `IAssetManagerUVE` and `AssetHandleUVE` expose a thread-safe copied reason for the most recent failed load/reload, with deterministic categories for unresolved paths, missing files, missing loaders, and loader rejection. | Diagnostics are observability only; AssetManager remains the sole owner of records/load state, and renderer fallback resources, source conversion, and automatic recovery remain separate PARTIAL work. |
 
 <div align="center">
 
