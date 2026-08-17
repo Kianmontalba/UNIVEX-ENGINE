@@ -33,6 +33,7 @@ add_executable(uve_tests
     math/aabb_uve_tests.cpp
     math/plane_uve_tests.cpp
     math/frustum_uve_tests.cpp
+    physics/area_overlap_system_uve_tests.cpp
     physics/collision_system_uve_tests.cpp
     physics/physics_system_uve_tests.cpp
     physics/physics_material_uve_tests.cpp

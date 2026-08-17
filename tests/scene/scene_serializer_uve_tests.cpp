@@ -20,6 +20,7 @@
 #include "uve/events/event_system_uve.h"
 #include "uve/math/vector3_uve.h"
 #include "uve/memory/memory_manager_uve.h"
+#include "uve/scene/components/area_component_uve.h"
 #include "uve/scene/components/audio_source_component_uve.h"
 #include "uve/scene/components/camera_component_uve.h"
 #include "uve/scene/components/collider_component_uve.h"
@@ -496,6 +497,27 @@ TEST_F(SceneSerializerUVETest, LoadUVE_LegacyDocumentWithoutNameComponent_Remain
     const std::vector<EntityUVE> roots = serializer.LoadUVE(entityManager, path);
     ASSERT_EQ(roots.size(), 1U);
     EXPECT_FALSE(entityManager.HasComponentUVE<NameComponentUVE>(roots[0]));
+
+    std::filesystem::remove(path);
+}
+
+TEST_F(SceneSerializerUVETest, SaveThenLoad_AreaComponentUVE_RoundTripsExtentsAndMasks) {
+    const EntityUVE entity = entityManager.CreateEntityUVE();
+    const AreaComponentUVE area{Math::Vector3UVE{2.0F, 3.0F, 4.0F}, 4U, 0x0000FFFFU};
+    entityManager.AddComponentUVE<AreaComponentUVE>(entity, area);
+
+    const std::filesystem::path path = "uve_scene_serializer_tests_area.uvescene";
+    std::filesystem::remove(path);
+    ASSERT_TRUE(serializer.SaveUVE(entityManager, {entity}, path, SceneAssetTypeUVE::Scene));
+
+    EntityManagerUVE loadedManager(memoryManager.GetDefaultAllocatorUVE(), eventSystem);
+    const std::vector<EntityUVE> roots = serializer.LoadUVE(loadedManager, path);
+    ASSERT_EQ(roots.size(), 1U);
+    const AreaComponentUVE& loaded = loadedManager.GetComponentUVE<AreaComponentUVE>(roots[0]);
+
+    EXPECT_EQ(loaded.halfExtents, area.halfExtents);
+    EXPECT_EQ(loaded.collisionLayer, 4U);
+    EXPECT_EQ(loaded.collisionMask, 0x0000FFFFU);
 
     std::filesystem::remove(path);
 }
