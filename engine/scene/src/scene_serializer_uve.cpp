@@ -204,9 +204,13 @@ template <typename T, typename FromJsonFunc>
                           return light;
                       }));
         table.emplace("CameraComponentUVE", MakeRegistrationUVE<CameraComponentUVE>([](const nlohmann::json& json) {
-                          return CameraComponentUVE{json.at("fieldOfViewDegrees").get<float>(),
-                                                     json.at("nearPlane").get<float>(),
-                                                     json.at("farPlane").get<float>()};
+                          const CameraComponentUVE camera{json.at("fieldOfViewDegrees").get<float>(),
+                                                          json.at("nearPlane").get<float>(),
+                                                          json.at("farPlane").get<float>()};
+                          if (!IsCameraComponentValidUVE(camera)) {
+                              throw std::runtime_error("Invalid CameraComponentUVE payload");
+                          }
+                          return camera;
                       }));
         table.emplace("NameComponentUVE", MakeRegistrationUVE<NameComponentUVE>([](const nlohmann::json& json) {
                           return NameComponentUVE{json.at("name").get<std::string>()};
