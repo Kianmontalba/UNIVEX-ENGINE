@@ -283,8 +283,12 @@ template <typename T, typename FromJsonFunc>
                       }));
         table.emplace("PrefabInstanceComponentUVE",
                       MakeRegistrationUVE<PrefabInstanceComponentUVE>([](const nlohmann::json& json) {
-                          return PrefabInstanceComponentUVE{
+                          const PrefabInstanceComponentUVE instance{
                               Asset::AssetGuidUVE{json.at("sourcePrefabGuid").get<std::uint64_t>()}};
+                          if (!IsPrefabInstanceComponentValidUVE(instance)) {
+                              throw std::runtime_error("Invalid PrefabInstanceComponentUVE payload");
+                          }
+                          return instance;
                       }));
 
         return table;

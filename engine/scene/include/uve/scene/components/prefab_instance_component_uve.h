@@ -18,4 +18,12 @@ struct PrefabInstanceComponentUVE final {
     Asset::AssetGuidUVE sourcePrefabGuid;
 };
 
+/// Validates the persisted source reference without resolving the prefab or reading the asset
+/// database. A prefab-instance tag must identify a real source asset; nested instances preserve
+/// this value and are still loaded as data rather than recursively re-instantiated.
+[[nodiscard]] constexpr bool IsPrefabInstanceComponentValidUVE(
+    const PrefabInstanceComponentUVE& component) noexcept {
+    return component.sourcePrefabGuid != Asset::kInvalidAssetGuidUVE;
+}
+
 } // namespace UVE::Scene

@@ -37,6 +37,12 @@ protected:
     PrefabSystemUVE prefabSystem;
 };
 
+TEST(PrefabInstanceComponentUVE, IsPrefabInstanceComponentValidUVE_RequiresSourceGuid) {
+    EXPECT_FALSE(IsPrefabInstanceComponentValidUVE(
+        PrefabInstanceComponentUVE{Asset::kInvalidAssetGuidUVE}));
+    EXPECT_TRUE(IsPrefabInstanceComponentValidUVE(PrefabInstanceComponentUVE{Asset::AssetGuidUVE{7U}}));
+}
+
 TEST_F(PrefabSystemUVETest, SaveThenInstantiate_ProducesEntityWithSameComponentValues) {
     const EntityUVE source = entityManager.CreateEntityUVE();
     entityManager.AddComponentUVE<MeshComponentUVE>(source, MeshComponentUVE{Asset::AssetGuidUVE{11}, Asset::AssetGuidUVE{12}});
