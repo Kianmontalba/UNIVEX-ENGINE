@@ -26,6 +26,9 @@ struct MotionQueryUVE final {
     Math::Vector3UVE rootVelocity;
     Math::Vector3UVE facingDirection{0.0F, 0.0F, 1.0F};
     std::vector<MotionTrajectorySampleUVE> trajectory;
+    SkeletonDefinitionUVE skeleton;
+    PoseBufferUVE pose;
+    AnimationEvaluationContextUVE evaluationContext;
 };
 
 enum class MotionQueryValidationCodeUVE : std::uint8_t {
@@ -34,6 +37,8 @@ enum class MotionQueryValidationCodeUVE : std::uint8_t {
     InvalidVector,
     InvalidTrajectoryTime,
     UnsortedTrajectory,
+    InvalidPose,
+    InvalidEvaluationTime,
 };
 
 struct MotionQueryValidationResultUVE final {

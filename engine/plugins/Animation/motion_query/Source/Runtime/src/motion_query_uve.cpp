@@ -108,6 +108,24 @@ MotionQueryValidationResultUVE ValidateMotionQueryUVE(const MotionQueryUVE& quer
         return MakeQueryErrorUVE(MotionQueryValidationCodeUVE::InvalidVector, 0U,
                                  "motion query facing direction must be non-zero");
     }
+    const AnimationContractValidationResultUVE skeletonValidation =
+        ValidateSkeletonDefinitionUVE(query.skeleton);
+    if (!skeletonValidation.IsValidUVE()) {
+        return MakeQueryErrorUVE(MotionQueryValidationCodeUVE::InvalidPose, skeletonValidation.index,
+                                 "motion query skeleton contract is invalid");
+    }
+    const AnimationContractValidationResultUVE poseValidation =
+        ValidatePoseBufferUVE(query.pose, query.skeleton);
+    if (!poseValidation.IsValidUVE()) {
+        return MakeQueryErrorUVE(MotionQueryValidationCodeUVE::InvalidPose, poseValidation.index,
+                                 "motion query pose contract is invalid");
+    }
+    const AnimationContractValidationResultUVE timeValidation =
+        ValidateAnimationEvaluationContextUVE(query.evaluationContext);
+    if (!timeValidation.IsValidUVE()) {
+        return MakeQueryErrorUVE(MotionQueryValidationCodeUVE::InvalidEvaluationTime, 0U,
+                                 "motion query evaluation context is invalid");
+    }
 
     double previousOffsetSeconds = -std::numeric_limits<double>::infinity();
     for (std::size_t index = 0U; index < query.trajectory.size(); ++index) {

@@ -51,6 +51,21 @@ ControlRigValidationResultUVE ValidateControlRigUVE(const ControlRigUVE& rig) no
         return {ControlRigValidationCodeUVE::CapacityExceeded, {},
                 "Control Rig exceeds the bounded control or constraint limit."};
     }
+    const AnimationContractValidationResultUVE skeletonValidation =
+        ValidateSkeletonDefinitionUVE(rig.skeleton);
+    if (!skeletonValidation.IsValidUVE()) {
+        return {ControlRigValidationCodeUVE::InvalidSkeleton, {}, skeletonValidation.message};
+    }
+    const AnimationContractValidationResultUVE poseValidation =
+        ValidatePoseBufferUVE(rig.pose, rig.skeleton);
+    if (!poseValidation.IsValidUVE()) {
+        return {ControlRigValidationCodeUVE::InvalidPose, {}, poseValidation.message};
+    }
+    const AnimationContractValidationResultUVE timeValidation =
+        ValidateAnimationEvaluationContextUVE(rig.evaluationContext);
+    if (!timeValidation.IsValidUVE()) {
+        return {ControlRigValidationCodeUVE::InvalidEvaluationTime, {}, timeValidation.message};
+    }
     std::vector<std::string> controlIds;
     controlIds.reserve(rig.controls.size());
     for (const ControlRigControlUVE& control : rig.controls) {
@@ -179,6 +194,9 @@ ControlRigEvaluationResultUVE EvaluateControlRigUVE(const ControlRigUVE& rig) {
         return result;
     }
     result.controls = rig.controls;
+    result.skeleton = rig.skeleton;
+    result.pose = rig.pose;
+    result.evaluationContext = rig.evaluationContext;
     for (const ControlRigConstraintUVE& constraint : rig.constraints) {
         auto findMutable = [&result](const std::string& id) {
             return std::find_if(result.controls.begin(), result.controls.end(), [&id](auto& control) {
