@@ -319,6 +319,13 @@ TEST(EngineCoreUVETest, AssetManagerImporterHotReloadBundle_ReachableAndRoundTri
 
     Asset::IAssetDatabaseUVE& assetDatabase = engine.GetServicesUVE().GetAssetDatabaseUVE();
     Asset::IAssetImporterUVE& importer = engine.GetServicesUVE().GetAssetImporterUVE();
+    const Asset::AssetImportSourceClassificationUVE rawModelClassification =
+        importer.ClassifySourceUVE("engine_core_tests_character.fbx");
+    EXPECT_EQ(rawModelClassification.kind, Asset::AssetImportSourceKindUVE::RawModel);
+    EXPECT_EQ(rawModelClassification.normalizedExtension, "fbx");
+    EXPECT_FALSE(rawModelClassification.importerRegistered);
+    EXPECT_TRUE(rawModelClassification.requiresFormatSpecificParser);
+    EXPECT_EQ(rawModelClassification.diagnostic, "format-specific parser is not registered");
     Asset::IAssetManagerUVE& assetManager = engine.GetServicesUVE().GetAssetManagerUVE();
     static_cast<void>(engine.GetServicesUVE().GetHotReloadUVE());
     static_cast<void>(engine.GetServicesUVE().GetAssetBundleUVE());

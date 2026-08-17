@@ -38,6 +38,49 @@ protected:
     AssetDatabaseUVE assetDatabase;
 };
 
+TEST_F(AssetImporterUVETest, ClassifySourceUVE_ReportsAuthorityAndRawParserBoundary) {
+    struct ClassificationCaseUVE {
+        std::string_view path;
+        AssetImportSourceKindUVE kind;
+        std::string_view normalizedExtension;
+        bool importerRegistered;
+        bool requiresFormatSpecificParser;
+        std::string_view diagnostic;
+    };
+
+    constexpr std::array<ClassificationCaseUVE, 6> kCases = {{
+        {"Readme.TXT", AssetImportSourceKindUVE::PlainText, "txt", true, false,
+         "built-in generic copy importer is registered"},
+        {"Character.UVEMODEL", AssetImportSourceKindUVE::MeshEnvelope, "uvemodel", true, false,
+         "built-in generic copy importer is registered"},
+        {"Character.FBX", AssetImportSourceKindUVE::RawModel, "fbx", false, true,
+         "format-specific parser is not registered"},
+        {"Albedo.PNG", AssetImportSourceKindUVE::RawTexture, "png", false, true,
+         "format-specific parser is not registered"},
+        {"Surface.MTL", AssetImportSourceKindUVE::RawMaterial, "mtl", false, true,
+         "format-specific parser is not registered"},
+        {"Notes.UNKNOWN", AssetImportSourceKindUVE::Unknown, "unknown", false, false,
+         "unsupported source extension"},
+    }};
+
+    for (const ClassificationCaseUVE& expected : kCases) {
+        const AssetImportSourceClassificationUVE actual = importer.ClassifySourceUVE(expected.path);
+        EXPECT_EQ(actual.kind, expected.kind) << expected.path;
+        EXPECT_EQ(actual.normalizedExtension, expected.normalizedExtension) << expected.path;
+        EXPECT_EQ(actual.importerRegistered, expected.importerRegistered) << expected.path;
+        EXPECT_EQ(actual.requiresFormatSpecificParser, expected.requiresFormatSpecificParser) << expected.path;
+        EXPECT_EQ(actual.diagnostic, expected.diagnostic) << expected.path;
+    }
+
+    importer.RegisterImporterUVE("custom", [](const std::filesystem::path&, const std::filesystem::path&,
+                                               const AssetImportSettingsUVE&) { return true; });
+    const AssetImportSourceClassificationUVE custom = importer.ClassifySourceUVE("asset.custom");
+    EXPECT_EQ(custom.kind, AssetImportSourceKindUVE::Unknown);
+    EXPECT_TRUE(custom.importerRegistered);
+    EXPECT_FALSE(custom.requiresFormatSpecificParser);
+    EXPECT_EQ(custom.diagnostic, "custom importer is registered without built-in classification");
+}
+
 TEST_F(AssetImporterUVETest, ImportUVE_GenericImporter_CopiesFileAndRegistersGuid) {
     const std::filesystem::path sourcePath = "uve_asset_importer_tests_source.txt";
     const std::filesystem::path destinationPath = "uve_asset_importer_tests_dest.txt";
