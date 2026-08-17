@@ -144,8 +144,41 @@ namespace {
     return {{"maxParticles", component.maxParticles}};
 }
 
+[[nodiscard]] nlohmann::json ToJsonUVE(const PrefabPropertyOverrideUVE& override) {
+    return {{"propertyPath", override.propertyPath}, {"serializedValue", override.serializedValue}};
+}
+
 [[nodiscard]] nlohmann::json ToJsonUVE(const PrefabInstanceComponentUVE& component) {
-    return {{"sourcePrefabGuid", component.sourcePrefabGuid.value}};
+    nlohmann::json overrides = nlohmann::json::array();
+    for (const PrefabPropertyOverrideUVE& override : component.overrides) {
+        overrides.push_back(ToJsonUVE(override));
+    }
+    return {{"sourcePrefabGuid", component.sourcePrefabGuid.value}, {"overrides", std::move(overrides)}};
+}
+
+[[nodiscard]] PrefabInstanceComponentUVE PrefabInstanceFromJsonUVE(const nlohmann::json& json) {
+    const nlohmann::json overridesJson = json.value("overrides", nlohmann::json::array());
+    if (!overridesJson.is_array()) {
+        throw std::runtime_error("PrefabInstanceComponentUVE overrides must be an array");
+    }
+
+    std::vector<PrefabPropertyOverrideUVE> overrides;
+    overrides.reserve(overridesJson.size());
+    for (const nlohmann::json& overrideJson : overridesJson) {
+        if (!overrideJson.is_object()) {
+            throw std::runtime_error("PrefabInstanceComponentUVE override must be an object");
+        }
+        overrides.push_back(PrefabPropertyOverrideUVE{
+            overrideJson.at("propertyPath").get<std::string>(),
+            overrideJson.at("serializedValue").get<std::string>()});
+    }
+
+    const PrefabInstanceComponentUVE instance{
+        Asset::AssetGuidUVE{json.at("sourcePrefabGuid").get<std::uint64_t>()}, std::move(overrides)};
+    if (!IsPrefabInstanceComponentValidUVE(instance)) {
+        throw std::runtime_error("Invalid PrefabInstanceComponentUVE payload");
+    }
+    return instance;
 }
 
 /// One entry in the component-serializer table: `toJson` reads `entity`'s component of the
@@ -282,14 +315,8 @@ template <typename T, typename FromJsonFunc>
                           return emitter;
                       }));
         table.emplace("PrefabInstanceComponentUVE",
-                      MakeRegistrationUVE<PrefabInstanceComponentUVE>([](const nlohmann::json& json) {
-                          const PrefabInstanceComponentUVE instance{
-                              Asset::AssetGuidUVE{json.at("sourcePrefabGuid").get<std::uint64_t>()}};
-                          if (!IsPrefabInstanceComponentValidUVE(instance)) {
-                              throw std::runtime_error("Invalid PrefabInstanceComponentUVE payload");
-                          }
-                          return instance;
-                      }));
+                      MakeRegistrationUVE<PrefabInstanceComponentUVE>(
+                          [](const nlohmann::json& json) { return PrefabInstanceFromJsonUVE(json); }));
 
         return table;
     }();

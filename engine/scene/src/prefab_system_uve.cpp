@@ -50,7 +50,7 @@ EntityUVE PrefabSystemUVE::InstantiateUVE(IEntityManagerUVE& entityManager, ISce
     if (entityManager.HasComponentUVE<PrefabInstanceComponentUVE>(root)) {
         entityManager.RemoveComponentUVE<PrefabInstanceComponentUVE>(root);
     }
-    entityManager.AddComponentUVE<PrefabInstanceComponentUVE>(root, PrefabInstanceComponentUVE{prefabGuid});
+    entityManager.AddComponentUVE<PrefabInstanceComponentUVE>(root, PrefabInstanceComponentUVE{prefabGuid, {}});
 
     if (parent != kInvalidEntityUVE) {
         sceneGraph.SetParentUVE(entityManager, root, parent);
