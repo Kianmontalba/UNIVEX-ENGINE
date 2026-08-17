@@ -65,6 +65,7 @@ add_executable(uve_tests
     render/render_graph_uve_tests.cpp
     render/camera_system_uve_tests.cpp
     render/render_queue_uve_tests.cpp
+    render/particle_render_bridge_uve_tests.cpp
     render/mesh_renderer_uve_tests.cpp
     render/primitive_geometry_uve_tests.cpp
     render/light_system_uve_tests.cpp

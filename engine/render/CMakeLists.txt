@@ -14,6 +14,7 @@ add_library(uve_render STATIC
     src/render_graph_uve.cpp
     src/camera_system_uve.cpp
     src/render_queue_uve.cpp
+    src/particle_render_bridge_uve.cpp
     src/mesh_renderer_uve.cpp
     src/primitive_geometry_uve.cpp
     src/light_system_uve.cpp
