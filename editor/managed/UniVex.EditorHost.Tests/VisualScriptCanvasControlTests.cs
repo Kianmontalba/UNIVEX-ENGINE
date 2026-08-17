@@ -97,6 +97,39 @@ public sealed class VisualScriptCanvasControlTests
     }
 
     [Fact]
+    public void RequestPaletteInsertion_PreservesCanvasCursorPosition()
+    {
+        VisualScriptCanvasControl control = CreateControl();
+        control.ApplySnapshot(Snapshot(), 24UL);
+        BridgeVisualScriptPaletteEntry entry = new(
+            "math.add", "Add", "Math", "node.math", 1U, 0U, Array.Empty<BridgeVisualScriptPin>());
+        List<BridgeCommand> commands = new();
+        control.CommandRequested += (_, args) => commands.Add(args.Command);
+
+        control.RequestPaletteInsertion(entry, new BridgeVisualScriptPoint(120F, -48F));
+
+        Assert.Single(commands);
+        Assert.Equal("math.add", commands[0].VisualScriptNodeTypeId);
+        Assert.Equal(new BridgeVisualScriptPoint(120F, -48F), commands[0].VisualScriptPosition);
+    }
+
+    [Fact]
+    public void ScreenToCanvasPoint_AccountsForPanAndZoom()
+    {
+        VisualScriptCanvasControl control = CreateControl();
+        BridgeVisualScriptCanvasSnapshot snapshot = Snapshot() with
+        {
+            View = new BridgeVisualScriptView(new BridgeVisualScriptPoint(10F, -20F), 2F),
+        };
+        control.ApplySnapshot(snapshot, 25UL);
+
+        BridgeVisualScriptPoint canvasPoint = control.ScreenToCanvasPoint(new Point(400D, 300D));
+
+        Assert.Equal(-10F, canvasPoint.X);
+        Assert.Equal(20F, canvasPoint.Y);
+    }
+
+    [Fact]
     public void LinkAuthoring_EmitsNamedCommandOnlyForCompatibleInputTarget()
     {
         VisualScriptCanvasControl control = CreateControl();
