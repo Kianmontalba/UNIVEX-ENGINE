@@ -2,6 +2,7 @@
 
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
@@ -29,11 +30,17 @@ public partial class MainWindow : Window
     private bool scriptRuntimeTickAvailable;
     private BridgeScriptRuntimeSnapshot? scriptRuntimeSnapshot;
     private bool shellInitialized;
+    private Popup? visualScriptNodeSearchPopup;
+    private TextBox? visualScriptNodeSearchTextBox;
+    private ListBox? visualScriptNodeSearchListBox;
+    private BridgeVisualScriptPoint visualScriptNodeSearchPosition = new(0F, 0F);
+    private bool applyingVisualScriptNodeSearchResults;
 
     public MainWindow()
     {
         InitializeComponent();
         VisualScriptCanvas.CommandRequested += VisualScriptCanvas_OnCommandRequested;
+        VisualScriptCanvas.NodeSearchRequested += VisualScriptCanvas_OnNodeSearchRequested;
         shellInitialized = true;
         layoutStore = new DockShellPreferencesStore(BuildLayoutPath());
         BackendPathTextBox.Text = Environment.GetEnvironmentVariable("UVE_EDITOR_BACKEND") ?? "uve_editor";
@@ -79,6 +86,150 @@ public partial class MainWindow : Window
 
     private void VisualScriptCanvas_OnCommandRequested(object? sender, VisualScriptCanvasCommandEventArgs e) =>
         DispatchCurrentCommand(e.Command);
+
+    private void VisualScriptCanvas_OnNodeSearchRequested(object? sender, VisualScriptNodeSearchRequestedEventArgs e)
+    {
+        visualScriptNodeSearchPosition = VisualScriptCanvas.ScreenToCanvasPoint(e.Position);
+        OpenVisualScriptNodeSearchPopup();
+    }
+
+    private void OpenVisualScriptNodeSearchPopup()
+    {
+        CloseVisualScriptNodeSearchPopup();
+
+        TextBox searchBox = new()
+        {
+            Width = 300D,
+            Watermark = "Search nodes…",
+            FontSize = 13D,
+            Margin = new Avalonia.Thickness(8D),
+        };
+        ListBox results = new()
+        {
+            Width = 300D,
+            MaxHeight = 280D,
+            SelectionMode = SelectionMode.Single,
+            Margin = new Avalonia.Thickness(8D, 0D, 8D, 8D),
+        };
+        StackPanel content = new()
+        {
+            Spacing = 0D,
+            Background = Avalonia.Media.Brushes.Transparent,
+            Children = { searchBox, results },
+        };
+        Border surface = new()
+        {
+            Child = content,
+            Background = Avalonia.Media.Brushes.Black,
+            BorderBrush = Avalonia.Media.Brushes.Gray,
+            BorderThickness = new Avalonia.Thickness(1D),
+            CornerRadius = new Avalonia.CornerRadius(4D),
+            Padding = new Avalonia.Thickness(1D),
+        };
+        Popup popup = new()
+        {
+            PlacementTarget = VisualScriptCanvas,
+            Placement = PlacementMode.Pointer,
+            IsLightDismissEnabled = true,
+            Child = surface,
+        };
+
+        visualScriptNodeSearchPopup = popup;
+        visualScriptNodeSearchTextBox = searchBox;
+        visualScriptNodeSearchListBox = results;
+        searchBox.TextChanged += VisualScriptNodeSearchTextBox_OnTextChanged;
+        searchBox.KeyDown += VisualScriptNodeSearchTextBox_OnKeyDown;
+        results.SelectionChanged += VisualScriptNodeSearchListBox_OnSelectionChanged;
+        popup.Closed += VisualScriptNodeSearchPopup_OnClosed;
+        UpdateVisualScriptNodeSearchResults();
+        popup.IsOpen = true;
+        searchBox.Focus();
+    }
+
+    private void VisualScriptNodeSearchTextBox_OnTextChanged(object? sender, TextChangedEventArgs e) =>
+        UpdateVisualScriptNodeSearchResults();
+
+    private void UpdateVisualScriptNodeSearchResults()
+    {
+        if (visualScriptNodeSearchListBox is null)
+        {
+            return;
+        }
+        applyingVisualScriptNodeSearchResults = true;
+        try
+        {
+            IReadOnlyList<BridgeVisualScriptPaletteEntry> matches = VisualScriptCanvasControl.FilterPalette(
+                visualScriptPalette, visualScriptNodeSearchTextBox?.Text);
+            visualScriptNodeSearchListBox.ItemsSource = matches;
+            visualScriptNodeSearchListBox.SelectedIndex = matches.Count == 0 ? -1 : 0;
+        }
+        finally
+        {
+            applyingVisualScriptNodeSearchResults = false;
+        }
+    }
+
+    private void VisualScriptNodeSearchTextBox_OnKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape)
+        {
+            CloseVisualScriptNodeSearchPopup();
+            e.Handled = true;
+        }
+        else if (e.Key is Key.Down or Key.Up && visualScriptNodeSearchListBox is { } results &&
+                 results.ItemCount > 0)
+        {
+            int delta = e.Key == Key.Down ? 1 : -1;
+            int nextIndex = results.SelectedIndex < 0 ? 0 : results.SelectedIndex + delta;
+            results.SelectedIndex = Math.Clamp(nextIndex, 0, results.ItemCount - 1);
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Enter)
+        {
+            CommitVisualScriptNodeSearchSelection();
+            e.Handled = true;
+        }
+    }
+
+    private void VisualScriptNodeSearchListBox_OnSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (!applyingVisualScriptNodeSearchResults && e.AddedItems.Count > 0)
+        {
+            CommitVisualScriptNodeSearchSelection();
+        }
+    }
+
+    private void CommitVisualScriptNodeSearchSelection()
+    {
+        if (visualScriptNodeSearchListBox?.SelectedItem is BridgeVisualScriptPaletteEntry entry)
+        {
+            VisualScriptCanvas.RequestPaletteInsertion(entry, visualScriptNodeSearchPosition);
+            CloseVisualScriptNodeSearchPopup();
+        }
+    }
+
+    private void VisualScriptNodeSearchPopup_OnClosed(object? sender, EventArgs e)
+    {
+        if (ReferenceEquals(sender, visualScriptNodeSearchPopup))
+        {
+            visualScriptNodeSearchPopup = null;
+            visualScriptNodeSearchTextBox = null;
+            visualScriptNodeSearchListBox = null;
+        }
+    }
+
+    private void CloseVisualScriptNodeSearchPopup()
+    {
+        if (visualScriptNodeSearchPopup is { } popup)
+        {
+            popup.Closed -= VisualScriptNodeSearchPopup_OnClosed;
+            popup.IsOpen = false;
+            popup.Child = null;
+        }
+        visualScriptNodeSearchPopup = null;
+        visualScriptNodeSearchTextBox = null;
+        visualScriptNodeSearchListBox = null;
+    }
 
     private void VisualScriptUndoButton_OnClick(object? sender, RoutedEventArgs e) =>
         VisualScriptCanvas.RequestUndo();

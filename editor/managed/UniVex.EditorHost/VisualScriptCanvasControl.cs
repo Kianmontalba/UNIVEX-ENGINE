@@ -26,6 +26,16 @@ public sealed class VisualScriptCanvasCommandEventArgs : EventArgs
     public BridgeCommand Command { get; }
 }
 
+public sealed class VisualScriptNodeSearchRequestedEventArgs : EventArgs
+{
+    public VisualScriptNodeSearchRequestedEventArgs(Point position)
+    {
+        Position = position;
+    }
+
+    public Point Position { get; }
+}
+
 /// <summary>
 /// Managed presentation-only visual-scripting canvas. It renders copied native DTOs and emits
 /// named value-only commands; it never retains native graph, ECS, renderer, or filesystem objects.
@@ -78,6 +88,8 @@ public sealed class VisualScriptCanvasControl : Control
     private string linkAuthoringFeedback = string.Empty;
 
     public event EventHandler<VisualScriptCanvasCommandEventArgs>? CommandRequested;
+
+    public event EventHandler<VisualScriptNodeSearchRequestedEventArgs>? NodeSearchRequested;
 
     public BridgeVisualScriptCanvasSnapshot CanvasSnapshot => canvas;
 
@@ -228,6 +240,12 @@ public sealed class VisualScriptCanvasControl : Control
     {
         base.OnPointerPressed(e);
         PointerPoint point = e.GetCurrentPoint(this);
+        if (point.Properties.IsRightButtonPressed)
+        {
+            NodeSearchRequested?.Invoke(this, new VisualScriptNodeSearchRequestedEventArgs(point.Position));
+            e.Handled = true;
+            return;
+        }
         if (!point.Properties.IsLeftButtonPressed && !point.Properties.IsMiddleButtonPressed)
         {
             return;
@@ -363,11 +381,23 @@ public sealed class VisualScriptCanvasControl : Control
         e.Handled = true;
     }
 
-    public void RequestPaletteInsertion(BridgeVisualScriptPaletteEntry entry) {
+    public void RequestPaletteInsertion(BridgeVisualScriptPaletteEntry entry) =>
+        RequestPaletteInsertion(entry, new BridgeVisualScriptPoint(0F, 0F));
+
+    public void RequestPaletteInsertion(BridgeVisualScriptPaletteEntry entry, BridgeVisualScriptPoint position)
+    {
         ArgumentNullException.ThrowIfNull(entry);
         Emit(new BridgeCommand(bridgeRevision, "addVisualScriptNodeType",
             VisualScriptNodeTypeId: entry.TypeId,
-            VisualScriptPosition: new BridgeVisualScriptPoint(0F, 0F)));
+            VisualScriptPosition: position));
+    }
+
+    public BridgeVisualScriptPoint ScreenToCanvasPoint(Point position)
+    {
+        double zoom = Math.Max(canvas.View.Zoom, 0.1F);
+        return new BridgeVisualScriptPoint(
+            (float)((position.X - Bounds.Width / 2D) / zoom - canvas.View.Pan.X),
+            (float)((position.Y - Bounds.Height / 2D) / zoom - canvas.View.Pan.Y));
     }
 
     public void RequestUndo() => EmitSimple("undoVisualScript");
