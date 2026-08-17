@@ -4,6 +4,7 @@
 #include "uve/render/camera_system_uve.h"
 
 #include <cmath>
+#include <limits>
 
 #include <gtest/gtest.h>
 
@@ -138,6 +139,28 @@ TEST_F(CameraSystemUVETest, GetWorldPositionUVE_ReturnsEntityWorldPosition) {
     EXPECT_EQ(cameraSystem.GetWorldPositionUVE(entityManager, cameraEntity), position);
 }
 
+TEST(CameraComponentUVETest, IsCameraComponentValidUVE_RejectsProjectionUnsafeValues) {
+    EXPECT_TRUE(Scene::IsCameraComponentValidUVE(Scene::CameraComponentUVE{}));
+
+    Scene::CameraComponentUVE invalidFov = {};
+    invalidFov.fieldOfViewDegrees = 0.0F;
+    EXPECT_FALSE(Scene::IsCameraComponentValidUVE(invalidFov));
+    invalidFov.fieldOfViewDegrees = 180.0F;
+    EXPECT_FALSE(Scene::IsCameraComponentValidUVE(invalidFov));
+    invalidFov.fieldOfViewDegrees = std::numeric_limits<float>::quiet_NaN();
+    EXPECT_FALSE(Scene::IsCameraComponentValidUVE(invalidFov));
+
+    Scene::CameraComponentUVE invalidPlanes = {};
+    invalidPlanes.nearPlane = 0.0F;
+    EXPECT_FALSE(Scene::IsCameraComponentValidUVE(invalidPlanes));
+    invalidPlanes = {};
+    invalidPlanes.farPlane = invalidPlanes.nearPlane;
+    EXPECT_FALSE(Scene::IsCameraComponentValidUVE(invalidPlanes));
+    invalidPlanes = {};
+    invalidPlanes.farPlane = std::numeric_limits<float>::infinity();
+    EXPECT_FALSE(Scene::IsCameraComponentValidUVE(invalidPlanes));
+}
+
 #if UVE_DEBUG
 TEST_F(CameraSystemUVETest, ComputeViewMatrixUVE_EntityWithoutWorldTransform_Asserts) {
     const Scene::EntityUVE entity = entityManager.CreateEntityUVE();
@@ -147,6 +170,12 @@ TEST_F(CameraSystemUVETest, ComputeViewMatrixUVE_EntityWithoutWorldTransform_Ass
 TEST_F(CameraSystemUVETest, ComputeProjectionMatrixUVE_EntityWithoutCameraComponent_Asserts) {
     const Scene::EntityUVE entity = entityManager.CreateEntityUVE();
     sceneGraph.AttachTransformUVE(entityManager, entity, Scene::TransformComponentUVE{});
+    EXPECT_DEATH({ static_cast<void>(cameraSystem.ComputeProjectionMatrixUVE(entityManager, entity, 1.0F)); }, "");
+}
+
+TEST_F(CameraSystemUVETest, ComputeProjectionMatrixUVE_InvalidCameraParameters_Asserts) {
+    const Scene::EntityUVE entity = MakeCameraEntityUVE(Math::Vector3UVE{}, Math::QuaternionUVE{},
+                                                        Scene::CameraComponentUVE{180.0F, 0.1F, 100.0F});
     EXPECT_DEATH({ static_cast<void>(cameraSystem.ComputeProjectionMatrixUVE(entityManager, entity, 1.0F)); }, "");
 }
 

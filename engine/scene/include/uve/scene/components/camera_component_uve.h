@@ -3,16 +3,26 @@
 
 #pragma once
 
+#include <cmath>
+
 namespace UVE::Scene {
 
-/// One of the master spec's named built-in components (Part 7.3). Deliberately minimal
-/// placeholder data — the universally-understood basics of a perspective camera, nothing
-/// rendering-pipeline-specific (projection matrices, render targets, etc.) invented ahead of
-/// CameraSystemUVE (Part 7.2).
+/// One of the master spec's named built-in components (Part 7.3). It contains only the
+/// universally-understood perspective-camera basics; projection matrices and render-target policy
+/// remain owned by CameraSystemUVE (Part 7.2).
 struct CameraComponentUVE final {
     float fieldOfViewDegrees = 60.0F;
     float nearPlane = 0.1F;
     float farPlane = 1000.0F;
 };
+
+/// Camera values are validated before scene persistence and runtime projection use. The strict
+/// open FOV interval avoids tan(FOV/2) singularities, and the positive ordered clip planes keep
+/// perspective depth math finite and meaningful.
+[[nodiscard]] inline bool IsCameraComponentValidUVE(const CameraComponentUVE& camera) noexcept {
+    return std::isfinite(camera.fieldOfViewDegrees) && camera.fieldOfViewDegrees > 0.0F &&
+           camera.fieldOfViewDegrees < 180.0F && std::isfinite(camera.nearPlane) && camera.nearPlane > 0.0F &&
+           std::isfinite(camera.farPlane) && camera.farPlane > camera.nearPlane;
+}
 
 } // namespace UVE::Scene
