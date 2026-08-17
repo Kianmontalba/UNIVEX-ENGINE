@@ -381,6 +381,53 @@ TEST(EngineCoreUVETest, AssetManagerImporterHotReloadBundle_ReachableAndRoundTri
     engine.Shutdown();
 }
 
+TEST(EngineCoreUVETest, TypedUVEEnvelopeImporters_ComposedAndReachableAfterInit) {
+    EngineConfigUVE config = MakeTestConfigUVE();
+    const std::filesystem::path root = std::filesystem::temp_directory_path();
+    config.assetDatabaseFilePath = root / "uve_engine_core_typed_envelope_tests.uveassetdb";
+
+    constexpr std::array<std::string_view, 4> kTypedEnvelopeExtensions = {
+        ".uvemodel", ".uvetex", ".uveshader", ".uvemat"};
+    struct CleanupUVE final {
+        std::filesystem::path database;
+        std::array<std::filesystem::path, 4> sources;
+        std::array<std::filesystem::path, 4> destinations;
+        ~CleanupUVE() {
+            std::filesystem::remove(database);
+            for (const auto& path : sources) {
+                std::filesystem::remove(path);
+            }
+            for (const auto& path : destinations) {
+                std::filesystem::remove(path);
+            }
+        }
+    } cleanup{config.assetDatabaseFilePath, {}, {}};
+
+    for (std::size_t index = 0; index < kTypedEnvelopeExtensions.size(); ++index) {
+        const std::string suffix(kTypedEnvelopeExtensions[index]);
+        cleanup.sources[index] = root / ("uve_engine_core_typed_source_" + std::to_string(index) + suffix);
+        cleanup.destinations[index] = root / ("uve_engine_core_typed_dest_" + std::to_string(index) + suffix);
+        std::ofstream source(cleanup.sources[index], std::ios::binary | std::ios::trunc);
+        ASSERT_TRUE(source.is_open());
+        source << "typed envelope composition proof";
+    }
+
+    EngineCoreUVE engine(config);
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    Asset::IAssetDatabaseUVE& assetDatabase = engine.GetServicesUVE().GetAssetDatabaseUVE();
+    Asset::IAssetImporterUVE& importer = engine.GetServicesUVE().GetAssetImporterUVE();
+    for (std::size_t index = 0; index < kTypedEnvelopeExtensions.size(); ++index) {
+        const Asset::AssetGuidUVE guid =
+            importer.ImportUVE(cleanup.sources[index], cleanup.destinations[index], assetDatabase);
+        ASSERT_NE(guid, Asset::kInvalidAssetGuidUVE) << kTypedEnvelopeExtensions[index];
+        EXPECT_EQ(assetDatabase.ResolveUVE(guid), cleanup.destinations[index]);
+    }
+
+    engine.Shutdown();
+}
+
 TEST(EngineCoreUVETest, DataTablePipeline_RegisteredAndReachableThroughServicesAfterInit) {
     EngineConfigUVE config = MakeTestConfigUVE();
     const std::filesystem::path root = std::filesystem::temp_directory_path();

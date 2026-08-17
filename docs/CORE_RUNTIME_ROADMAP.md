@@ -23,6 +23,7 @@
 | **COMPLETED** | **Increment 19** | Save-game and checkpoint foundations. | Compression, encryption, cloud sync, migration, screenshots, and gameplay-state sections remain partial. |
 | **COMPLETED** | **Increment 20** | GLFW window manager and desktop OpenGL backend. | Window/context ownership remains isolated from the renderer. |
 | **COMPLETED** | **Increments 59–61** | Project index, import queue/cache, portable change watch, and targeted stale-cache marking. | No automatic reimport, source mutation, or native directory-watch backend is claimed. |
+| **COMPLETED** | **Legacy Partial Slice — Typed UVE Envelope Importer Contracts** | The existing generic `AssetImporterUVE` now composes deterministic copy-and-register support for `.uvemodel`, `.uvetex`, `.uveshader`, and `.uvemat`, and EngineCore exposes the same registrations through `EngineServicesUVE`. | Typed envelope reimport is proven; raw FBX/OBJ/glTF/PNG/material-source conversion, parser licensing, derived-data generation, and format-specific diagnostics remain PARTIAL. |
 
 <div align="center">
 
@@ -34,7 +35,7 @@
 |---|---|---|---|
 | **PARTIAL** | Scene components and user-facing nodes | Introduce only supported components/nodes such as richer camera, mesh, light, collider, rigid-body, audio-source, animation, particle, and script attachments. | Each component requires serialization, runtime ownership, editor command path, and tests; no placeholder node catalog. |
 | **PARTIAL** | Prefab maturity | Nested prefabs, override tracking, safe apply/revert, and deterministic conflict handling. | Requires a stable serialized override model; no ad-hoc prefab mutation. |
-| **PARTIAL** | Asset-type importers | Deliberately select and implement model, texture, audio, material, animation, and shader import contracts. | Parser licensing, source/derived-data boundaries, deterministic metadata, and test fixtures are required first. |
+| **PARTIAL** | Asset-type importers | Extend the typed-envelope foundation with deliberately selected model, texture, audio, material, animation, and shader source-import contracts. | `.uvemodel`/`.uvetex`/`.uvemat`/`.uveshader` copy-and-register is complete; raw-source parser licensing, source/derived-data boundaries, deterministic metadata, and representative fixtures are still required. |
 | **PARTIAL** | Physics depth | Rigid bodies, expanded shapes, character controller, trigger areas, broad-phase acceleration, and measured simulation hardening. | Must not replace current collision behavior without a migration/test plan. |
 | **PARTIAL** | Audio depth | Source/listener components, mixer groups, effects, streaming, and platform backend selection. | Audio behavior must be testable without conflating it with editor UI. |
 | **PARTIAL** | Input breadth | Gamepad, touch, gyro, mobile gesture, remapping, and platform-specific input policy. | Requires explicit platform targets and responsiveness measurements. |
