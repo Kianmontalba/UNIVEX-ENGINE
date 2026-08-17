@@ -11,7 +11,7 @@ namespace UVE::Physics::Detail {
 std::vector<ColliderWorldAabbUVE> BuildColliderWorldAabbCacheUVE(Scene::IEntityManagerUVE& entityManager) {
     std::vector<ColliderWorldAabbUVE> cache;
     entityManager.ForEachUVE<Scene::WorldTransformComponentUVE, Scene::ColliderComponentUVE>(
-        [&cache](Scene::EntityUVE entity, const Scene::WorldTransformComponentUVE& worldTransform,
+        [&](Scene::EntityUVE entity, const Scene::WorldTransformComponentUVE& worldTransform,
                  const Scene::ColliderComponentUVE& collider) {
             cache.push_back(ColliderWorldAabbUVE{
                 entity, Math::AabbUVE::FromCenterExtentsUVE(worldTransform.worldPosition, collider.halfExtents),
