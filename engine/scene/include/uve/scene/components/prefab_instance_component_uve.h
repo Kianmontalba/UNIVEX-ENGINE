@@ -4,6 +4,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -34,6 +35,105 @@ struct PrefabInstanceComponentUVE final {
     Asset::AssetGuidUVE sourcePrefabGuid;
     std::vector<PrefabPropertyOverrideUVE> overrides;
 };
+
+enum class PrefabOverrideOperationCodeUVE : std::uint8_t {
+    Applied = 0,
+    InvalidInstance,
+    InvalidBaseline,
+    ReadFailed,
+    WriteFailed,
+    RollbackFailed,
+};
+
+struct PrefabOverrideOperationResultUVE final {
+    PrefabOverrideOperationCodeUVE code = PrefabOverrideOperationCodeUVE::InvalidInstance;
+    std::size_t affectedCount = 0U;
+    std::string message;
+
+    [[nodiscard]] bool IsAppliedUVE() const noexcept {
+        return code == PrefabOverrideOperationCodeUVE::Applied;
+    }
+};
+
+/// Main-thread value boundary for applying serialized override values to one live instance. The
+/// target resolves property paths for a concrete component/property implementation; it never owns
+/// the prefab asset or the instance entity lifetime.
+[[nodiscard]] inline bool IsPrefabInstanceComponentValidUVE(
+    const PrefabInstanceComponentUVE& component) noexcept;
+
+class IPrefabOverrideTargetUVE {
+public:
+    virtual ~IPrefabOverrideTargetUVE() = default;
+
+    [[nodiscard]] virtual bool ReadPropertyUVE(std::string_view propertyPath,
+                                               std::string& serializedValue) const = 0;
+    [[nodiscard]] virtual bool WritePropertyUVE(std::string_view propertyPath,
+                                                std::string_view serializedValue) = 0;
+};
+
+/// Applies the instance's sorted override records with rollback if any target write fails. The
+/// instance record and source prefab remain unchanged; only the caller-owned live target mutates.
+[[nodiscard]] inline PrefabOverrideOperationResultUVE ApplyPrefabOverridesUVE(
+    const PrefabInstanceComponentUVE& instance, IPrefabOverrideTargetUVE& target) {
+    if (!IsPrefabInstanceComponentValidUVE(instance)) {
+        return {PrefabOverrideOperationCodeUVE::InvalidInstance, 0U,
+                "Prefab override apply rejected because the instance data is invalid."};
+    }
+    std::vector<PrefabPropertyOverrideUVE> previousValues;
+    previousValues.reserve(instance.overrides.size());
+    for (const PrefabPropertyOverrideUVE& override : instance.overrides) {
+        std::string previousValue;
+        if (!target.ReadPropertyUVE(override.propertyPath, previousValue) || previousValue.empty() ||
+            previousValue.size() > kMaximumPrefabOverrideValueBytesUVE ||
+            previousValue.find('\0') != std::string::npos) {
+            return {PrefabOverrideOperationCodeUVE::ReadFailed, previousValues.size(),
+                    "Prefab override apply could not read the existing target property."};
+        }
+        if (!target.WritePropertyUVE(override.propertyPath, override.serializedValue)) {
+            for (std::size_t index = previousValues.size(); index > 0U; --index) {
+                const PrefabPropertyOverrideUVE& previous = previousValues[index - 1U];
+                if (!target.WritePropertyUVE(previous.propertyPath, previous.serializedValue)) {
+                    return {PrefabOverrideOperationCodeUVE::RollbackFailed, index - 1U,
+                            "Prefab override apply failed and rollback could not restore the target."};
+                }
+            }
+            return {PrefabOverrideOperationCodeUVE::WriteFailed, previousValues.size(),
+                    "Prefab override apply failed; target writes were rolled back."};
+        }
+        previousValues.push_back({override.propertyPath, std::move(previousValue)});
+    }
+    return {PrefabOverrideOperationCodeUVE::Applied, instance.overrides.size(),
+            "Prefab overrides applied to the live target."};
+}
+
+/// Restores a caller-supplied sorted baseline and clears the instance override records only after
+/// the target is fully restored. The baseline is explicit because persistence intentionally does
+/// not invent or silently fetch source-prefab state.
+[[nodiscard]] inline PrefabOverrideOperationResultUVE RevertPrefabOverridesUVE(
+    PrefabInstanceComponentUVE& instance, const std::vector<PrefabPropertyOverrideUVE>& baseline,
+    IPrefabOverrideTargetUVE& target) {
+    if (!IsPrefabInstanceComponentValidUVE(instance)) {
+        return {PrefabOverrideOperationCodeUVE::InvalidInstance, 0U,
+                "Prefab override revert rejected because the instance data is invalid."};
+    }
+    PrefabInstanceComponentUVE baselineInstance{instance.sourcePrefabGuid, baseline};
+    if (!IsPrefabInstanceComponentValidUVE(baselineInstance) || baseline.size() != instance.overrides.size() ||
+        !std::equal(baseline.begin(), baseline.end(), instance.overrides.begin(),
+                    [](const PrefabPropertyOverrideUVE& lhs, const PrefabPropertyOverrideUVE& rhs) {
+                        return lhs.propertyPath == rhs.propertyPath;
+                    })) {
+        return {PrefabOverrideOperationCodeUVE::InvalidBaseline, 0U,
+                "Prefab override revert rejected because the baseline paths do not match the instance overrides."};
+    }
+    const PrefabOverrideOperationResultUVE applied = ApplyPrefabOverridesUVE(baselineInstance, target);
+    if (!applied.IsAppliedUVE()) {
+        return applied;
+    }
+    const std::size_t revertedCount = instance.overrides.size();
+    instance.overrides.clear();
+    return {PrefabOverrideOperationCodeUVE::Applied, revertedCount,
+            "Prefab overrides reverted to the supplied baseline."};
+}
 
 /// Validates the persisted source reference without resolving the prefab or reading the asset
 /// database. A prefab-instance tag must identify a real source asset; nested instances preserve
