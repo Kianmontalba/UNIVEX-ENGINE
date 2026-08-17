@@ -44,6 +44,7 @@ enum class ResourceDependencyCodeUVE : std::uint8_t {
     CycleDetected,
     HasDependents,
     CapacityExceeded,
+    DependentClosureReady,
 };
 
 struct ResourceDependencyResultUVE final {
@@ -54,6 +55,23 @@ struct ResourceDependencyResultUVE final {
         return code == ResourceDependencyCodeUVE::Registered ||
                code == ResourceDependencyCodeUVE::Updated ||
                code == ResourceDependencyCodeUVE::Removed;
+    }
+};
+
+/// A copied, deterministic breadth-first list of every registered resource that transitively
+/// depends on `root`. The root is excluded from `dependents`; consumers invalidate the returned
+/// dependents before reprocessing the changed root. The graph generation identifies the snapshot
+/// revision and callers must discard the plan if their graph has moved since capture.
+struct ResourceDependencyInvalidationPlanUVE final {
+    ResourceDependencyCodeUVE code = ResourceDependencyCodeUVE::InvalidHandle;
+    std::string message;
+    std::uint64_t graphGeneration = 0U;
+    ResourceHandleUVE root{};
+    bool dependentsTruncated = false;
+    std::vector<ResourceHandleUVE> dependents;
+
+    [[nodiscard]] bool IsReadyUVE() const noexcept {
+        return code == ResourceDependencyCodeUVE::DependentClosureReady;
     }
 };
 
@@ -70,6 +88,10 @@ public:
     [[nodiscard]] ResourceDependencyResultUVE SetDependenciesUVE(
         ResourceHandleUVE handle, std::vector<ResourceHandleUVE> dependencies);
     [[nodiscard]] ResourceDependencyResultUVE RemoveResourceUVE(ResourceHandleUVE handle);
+    /// Returns a copied breadth-first reverse-dependent closure. `maximumDependents` bounds the
+    /// result; a true `dependentsTruncated` flag means additional dependents exist beyond the copy.
+    [[nodiscard]] ResourceDependencyInvalidationPlanUVE GetDependentClosureUVE(
+        ResourceHandleUVE root, std::size_t maximumDependents = kMaximumResourcesUVE) const;
     [[nodiscard]] bool HasResourceUVE(ResourceHandleUVE handle) const noexcept;
     [[nodiscard]] ResourceDependencySnapshotUVE GetSnapshotUVE() const;
 
