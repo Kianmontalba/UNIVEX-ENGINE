@@ -122,6 +122,27 @@ TEST_F(CollisionSystemUVETest, DetectCollisionsUVE_OneSidedMaskAcceptance_StillR
     EXPECT_FALSE(entityManager.GetComponentUVE<Scene::ColliderComponentUVE>(b).collisionMask & 1U);
 }
 
+TEST_F(CollisionSystemUVETest, DetectCollisionsUVE_BvhPreservesLegacyPairOrderAcrossSpatialClusters) {
+    const Scene::EntityUVE a = MakeColliderEntityUVE({0.0F, 0.0F, 0.0F}, {0.75F, 0.75F, 0.75F});
+    const Scene::EntityUVE b = MakeColliderEntityUVE({10.0F, 0.0F, 0.0F}, {0.75F, 0.75F, 0.75F});
+    const Scene::EntityUVE c = MakeColliderEntityUVE({0.5F, 0.0F, 0.0F}, {0.75F, 0.75F, 0.75F});
+    const Scene::EntityUVE d = MakeColliderEntityUVE({10.5F, 0.0F, 0.0F}, {0.75F, 0.75F, 0.75F});
+    const Scene::EntityUVE e = MakeColliderEntityUVE({1.0F, 0.0F, 0.0F}, {0.75F, 0.75F, 0.75F});
+    MakeColliderEntityUVE({100.0F, 0.0F, 0.0F}, {0.75F, 0.75F, 0.75F});
+
+    const std::vector<CollisionPairUVE> pairs = collisionSystem.DetectCollisionsUVE(entityManager);
+
+    ASSERT_EQ(pairs.size(), 4U);
+    EXPECT_EQ(pairs[0].first, a);
+    EXPECT_EQ(pairs[0].second, c);
+    EXPECT_EQ(pairs[1].first, a);
+    EXPECT_EQ(pairs[1].second, e);
+    EXPECT_EQ(pairs[2].first, b);
+    EXPECT_EQ(pairs[2].second, d);
+    EXPECT_EQ(pairs[3].first, c);
+    EXPECT_EQ(pairs[3].second, e);
+}
+
 TEST_F(CollisionSystemUVETest, DetectCollisionsUVE_StaticVsStaticOverlap_IsStillReported) {
     // Both entities have ColliderComponentUVE but neither has RigidBodyComponentUVE — pure
     // static world geometry. Detection doesn't care; resolution (PhysicsSystemUVE) does.
