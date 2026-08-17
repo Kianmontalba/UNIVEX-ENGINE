@@ -17,6 +17,13 @@ std::vector<CollisionPairUVE> CollisionSystemUVE::DetectCollisionsUVE(Scene::IEn
     std::vector<CollisionPairUVE> pairs;
     for (std::size_t i = 0; i < colliders.size(); ++i) {
         for (std::size_t j = i + 1; j < colliders.size(); ++j) {
+            const bool layersAcceptPair =
+                (colliders[i].collisionMask & colliders[j].collisionLayer) != 0U &&
+                (colliders[j].collisionMask & colliders[i].collisionLayer) != 0U;
+            if (!layersAcceptPair) {
+                continue;
+            }
+
             const std::optional<Math::PenetrationUVE> penetration =
                 Math::ComputePenetrationUVE(colliders[i].worldAabb, colliders[j].worldAabb);
             if (penetration.has_value()) {

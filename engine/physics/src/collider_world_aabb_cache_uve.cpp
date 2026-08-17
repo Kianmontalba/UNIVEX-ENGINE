@@ -15,7 +15,7 @@ std::vector<ColliderWorldAabbUVE> BuildColliderWorldAabbCacheUVE(Scene::IEntityM
                  const Scene::ColliderComponentUVE& collider) {
             cache.push_back(ColliderWorldAabbUVE{
                 entity, Math::AabbUVE::FromCenterExtentsUVE(worldTransform.worldPosition, collider.halfExtents),
-                collider.collisionLayer});
+                collider.collisionLayer, collider.collisionMask});
         });
     return cache;
 }
