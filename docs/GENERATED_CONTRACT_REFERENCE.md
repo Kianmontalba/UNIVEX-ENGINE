@@ -3,7 +3,7 @@
 
 > This reference is generated from `docs/CONTRACT_INVENTORY.md`. Native and editor code remain authoritative; this file is documentation only.
 
-Inventory revision: `527b60ff999fd355`
+Inventory revision: `3a747d474bf4f652`
 
 | ID | Authority | Anchor | Contract role | Allowed consumers | Ownership boundary |
 |---|---|---|---|---|---|
@@ -28,3 +28,4 @@ Inventory revision: `527b60ff999fd355`
 | `MQ-SEARCH` | `engine/plugins/Animation/motion_query/Source/Runtime/include/uve/plugins/motion_query_search_index_uve.h` | `class MotionQuerySearchIndexUVE final` | Bounded copied feature index and deterministic nearest-candidate search contract. | Motion Query animation node and native runtime tests. | Index owns copied entries only; it does not own databases, ECS entities, assets, or renderer resources. |
 | `RENDER-ASSET-DIAGNOSTICS` | `engine/render/include/uve/render/i_renderer_3d_uve.h` | `struct Renderer3DFrameDiagnosticsUVE final` | Copied per-frame asset-resolution counts for invalid references, pending/failed mesh-material loads, and renderer texture fallbacks. | Renderer tests, engine diagnostics, and future editor presentation through the existing Renderer3D snapshot. | Renderer owns GPU fallback resources; the DTO contains counts only and cannot mutate ECS, AssetManager state, or GPU handles. |
 | `SCENE-CAMERA-VALIDATION` | `engine/scene/include/uve/scene/components/camera_component_uve.h` | `IsCameraComponentValidUVE` | Projection-safe camera component validity contract for finite open-range FOV and positive ordered near/far clip planes. | Scene serializer restore, CameraSystemUVE consumers, editor camera creation, and native tests. | Validation rejects malformed persisted values before restore; it does not own camera projection matrices, render targets, or silently repair invalid authoring data. |
+| `SCENE-LIGHT-VALIDATION` | `engine/scene/include/uve/scene/components/light_component_uve.h` | `IsLightComponentValidUVE` | Renderer-safe light component validity contract for finite non-negative HDR color/intensity, known light type, positive range, and open spot-cone angle. | Scene serializer restore, LightSystemUVE extraction, editor light creation, and native tests. | Validation rejects malformed persisted/runtime values; it does not own light selection, lighting equations, GPU resources, or silently repair authoring data. |

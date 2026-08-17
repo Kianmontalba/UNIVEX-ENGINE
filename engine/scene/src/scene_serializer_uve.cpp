@@ -201,6 +201,9 @@ template <typename T, typename FromJsonFunc>
                               json.value("type", static_cast<std::uint8_t>(LightTypeUVE::Directional)));
                           light.range = json.value("range", 10.0F);
                           light.spotAngleDegrees = json.value("spotAngleDegrees", 45.0F);
+                          if (!IsLightComponentValidUVE(light)) {
+                              throw std::runtime_error("Invalid LightComponentUVE payload");
+                          }
                           return light;
                       }));
         table.emplace("CameraComponentUVE", MakeRegistrationUVE<CameraComponentUVE>([](const nlohmann::json& json) {

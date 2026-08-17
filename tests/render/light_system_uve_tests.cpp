@@ -3,7 +3,9 @@
 
 #include "uve/render/light_system_uve.h"
 
+#include <cmath>
 #include <cstddef>
+#include <limits>
 
 #include <gtest/gtest.h>
 
@@ -37,6 +39,32 @@ protected:
         return entity;
     }
 };
+
+TEST(LightComponentUVETest, IsLightComponentValidUVE_RejectsUnsafeValues) {
+    EXPECT_TRUE(Scene::IsLightComponentValidUVE(Scene::LightComponentUVE{}));
+
+    Scene::LightComponentUVE invalid = {};
+    invalid.color.x = -0.1F;
+    EXPECT_FALSE(Scene::IsLightComponentValidUVE(invalid));
+    invalid = {};
+    invalid.color.y = std::numeric_limits<float>::quiet_NaN();
+    EXPECT_FALSE(Scene::IsLightComponentValidUVE(invalid));
+    invalid = {};
+    invalid.intensity = -1.0F;
+    EXPECT_FALSE(Scene::IsLightComponentValidUVE(invalid));
+    invalid = {};
+    invalid.type = static_cast<Scene::LightTypeUVE>(99U);
+    EXPECT_FALSE(Scene::IsLightComponentValidUVE(invalid));
+    invalid = {};
+    invalid.range = 0.0F;
+    EXPECT_FALSE(Scene::IsLightComponentValidUVE(invalid));
+    invalid = {};
+    invalid.spotAngleDegrees = 180.0F;
+    EXPECT_FALSE(Scene::IsLightComponentValidUVE(invalid));
+    invalid = {};
+    invalid.spotAngleDegrees = std::numeric_limits<float>::infinity();
+    EXPECT_FALSE(Scene::IsLightComponentValidUVE(invalid));
+}
 
 TEST_F(LightSystemUVETest, ExtractActiveLightsUVE_NoLightEntities_AllSlotsReturnIntensityZeroSentinel) {
     const LightListUVE result = lightSystem.ExtractActiveLightsUVE(entityManager);
@@ -177,6 +205,16 @@ TEST_F(LightSystemUVETest, ExtractActiveLightsUVE_EntityWithExtraComponents_Stil
 
     EXPECT_FLOAT_EQ(result[0].intensity, 7.0F);
 }
+
+#if UVE_DEBUG
+TEST_F(LightSystemUVETest, ExtractActiveLightsUVE_InvalidLightParameters_Asserts) {
+    Scene::LightComponentUVE invalid = {};
+    invalid.intensity = -1.0F;
+    static_cast<void>(MakeLightEntityUVE(Math::Vector3UVE{}, Math::QuaternionUVE{}, invalid));
+
+    EXPECT_DEATH({ static_cast<void>(lightSystem.ExtractActiveLightsUVE(entityManager)); }, "");
+}
+#endif
 
 } // namespace
 } // namespace UVE::Render::Tests
