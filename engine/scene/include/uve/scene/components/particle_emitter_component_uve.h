@@ -15,4 +15,14 @@ struct ParticleEmitterComponentUVE final {
     std::uint32_t maxParticles = 100;
 };
 
+inline constexpr std::uint32_t kMaximumParticleEmitterParticlesUVE = 1'000'000U;
+
+/// Validates the authored particle budget before persistence. Zero is not a usable emitter budget,
+/// while the explicit ceiling prevents a malformed scene from requesting an unbounded allocation
+/// when a future particle runtime consumes this component.
+[[nodiscard]] constexpr bool IsParticleEmitterComponentValidUVE(
+    const ParticleEmitterComponentUVE& component) noexcept {
+    return component.maxParticles > 0U && component.maxParticles <= kMaximumParticleEmitterParticlesUVE;
+}
+
 } // namespace UVE::Scene

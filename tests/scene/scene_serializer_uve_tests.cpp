@@ -324,6 +324,62 @@ TEST_F(SceneSerializerUVETest, RestoreUVE_InvalidAudioSourcePayload_RollsBackCre
     EXPECT_EQ(entityManager.GetEntityCountUVE(), entityCountBefore);
 }
 
+TEST(ScriptComponentUVE, IsScriptComponentValidUVE_AllowsEmptyAndCanonicalRelativePaths) {
+    EXPECT_TRUE(IsScriptComponentValidUVE(ScriptComponentUVE{""}));
+    EXPECT_TRUE(IsScriptComponentValidUVE(ScriptComponentUVE{"scripts/player.lua"}));
+    EXPECT_FALSE(IsScriptComponentValidUVE(ScriptComponentUVE{"/scripts/player.lua"}));
+    EXPECT_FALSE(IsScriptComponentValidUVE(ScriptComponentUVE{"scripts/../player.lua"}));
+    EXPECT_FALSE(IsScriptComponentValidUVE(ScriptComponentUVE{"scripts\\player.lua"}));
+
+    std::string embeddedNulPath{"scripts/player"};
+    embeddedNulPath.push_back('\0');
+    embeddedNulPath += ".lua";
+    EXPECT_FALSE(IsScriptComponentValidUVE(ScriptComponentUVE{embeddedNulPath}));
+    EXPECT_FALSE(IsScriptComponentValidUVE(
+        ScriptComponentUVE{std::string(kMaximumScriptAssetPathBytesUVE + 1U, 'x')}));
+}
+
+TEST(ParticleEmitterComponentUVE, IsParticleEmitterComponentValidUVE_EnforcesBoundedBudget) {
+    EXPECT_FALSE(IsParticleEmitterComponentValidUVE(ParticleEmitterComponentUVE{0U}));
+    EXPECT_TRUE(IsParticleEmitterComponentValidUVE(ParticleEmitterComponentUVE{1U}));
+    EXPECT_TRUE(IsParticleEmitterComponentValidUVE(
+        ParticleEmitterComponentUVE{kMaximumParticleEmitterParticlesUVE}));
+    EXPECT_FALSE(IsParticleEmitterComponentValidUVE(
+        ParticleEmitterComponentUVE{kMaximumParticleEmitterParticlesUVE + 1U}));
+}
+
+TEST_F(SceneSerializerUVETest, RestoreUVE_InvalidScriptPayload_RollsBackCreatedEntities) {
+    const EntityUVE existing = entityManager.CreateEntityUVE();
+    const std::size_t entityCountBefore = entityManager.GetEntityCountUVE();
+    const std::string payloadText =
+        R"({"entities":[{"localId":0,"components":{"ScriptComponentUVE":{"scriptAssetPath":"../escape.lua"}}}]})";
+    const auto* const payloadBytes = reinterpret_cast<const std::byte*>(payloadText.data());
+    const SceneSnapshotUVE snapshot{
+        Asset::EncodeUveFileEnvelopeUVE(SceneAssetTypeUVE::Scene,
+                                        std::vector<std::byte>{payloadBytes, payloadBytes + payloadText.size()}),
+        SceneAssetTypeUVE::Scene};
+    const std::vector<EntityUVE> roots = serializer.RestoreUVE(entityManager, snapshot);
+    EXPECT_TRUE(roots.empty());
+    EXPECT_TRUE(entityManager.IsAliveUVE(existing));
+    EXPECT_EQ(entityManager.GetEntityCountUVE(), entityCountBefore);
+}
+
+TEST_F(SceneSerializerUVETest, RestoreUVE_InvalidParticlePayload_RollsBackCreatedEntities) {
+    const EntityUVE existing = entityManager.CreateEntityUVE();
+    const std::size_t entityCountBefore = entityManager.GetEntityCountUVE();
+    const std::string payloadText =
+        R"({"entities":[{"localId":0,"components":{"ParticleEmitterComponentUVE":{"maxParticles":0}}}]})";
+    const auto* const payloadBytes = reinterpret_cast<const std::byte*>(payloadText.data());
+    const SceneSnapshotUVE snapshot{
+        Asset::EncodeUveFileEnvelopeUVE(SceneAssetTypeUVE::Scene,
+                                        std::vector<std::byte>{payloadBytes, payloadBytes + payloadText.size()}),
+        SceneAssetTypeUVE::Scene};
+    const std::vector<EntityUVE> roots = serializer.RestoreUVE(entityManager, snapshot);
+    EXPECT_TRUE(roots.empty());
+    EXPECT_TRUE(entityManager.IsAliveUVE(existing));
+    EXPECT_EQ(entityManager.GetEntityCountUVE(), entityCountBefore);
+}
+
 TEST_F(SceneSerializerUVETest, SaveThenLoad_SingleEntityWithMultipleComponents_RoundTripsExactly) {
     const EntityUVE entity = entityManager.CreateEntityUVE();
     entityManager.AddComponentUVE<MeshComponentUVE>(
