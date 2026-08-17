@@ -13,6 +13,7 @@
 
 #include "uve/core/engine_core_uve.h"
 #include "uve/editor/editor_bridge_stdio_uve.h"
+#include "uve/scene/components/mesh_component_uve.h"
 #include "uve/scripting/script_debugger_uve.h"
 
 namespace UVE::Editor::Tests {
@@ -80,6 +81,8 @@ TEST(EditorBridgeStdioUVETest, ServeUVE_HandshakesAndRoutesExistingBridgeDispatc
         ASSERT_EQ(debugger.ContinueUVE().state, Scripting::ScriptDebuggerStateUVE::Paused);
         const Scene::EntityUVE runtimeEntity = editor.CreateDocumentEntityUVE(EditorEntityKindUVE::Cube);
         ASSERT_NE(runtimeEntity, Scene::kInvalidEntityUVE);
+        engine.GetServicesUVE().GetEntityManagerUVE().AddComponentUVE<Scene::MeshComponentUVE>(
+            runtimeEntity, Scene::MeshComponentUVE{Asset::AssetGuidUVE{0x3333U}, Asset::AssetGuidUVE{0x4444U}});
         Scripting::ScriptRuntimeUVE runtime;
         Scripting::ScriptBytecodeProgramUVE runtimeProgram;
         runtimeProgram.instructions.resize(2U);
@@ -139,6 +142,9 @@ TEST(EditorBridgeStdioUVETest, ServeUVE_HandshakesAndRoutesExistingBridgeDispatc
         EXPECT_TRUE(handshakeSnapshot.at("selectedEntitiesTruncated").is_boolean());
         EXPECT_TRUE(handshakeSnapshot.at("hierarchy").at("entries").is_array());
         EXPECT_TRUE(handshakeSnapshot.at("inspector").at("eligibleDrawerIds").is_array());
+        ASSERT_TRUE(handshakeSnapshot.at("inspector").at("assetBinding").is_object());
+        EXPECT_EQ(handshakeSnapshot.at("inspector").at("assetBinding").at("meshGuid").get<std::uint64_t>(), 0x3333U);
+        EXPECT_EQ(handshakeSnapshot.at("inspector").at("assetBinding").at("materialGuid").get<std::uint64_t>(), 0x4444U);
         EXPECT_TRUE(handshakeSnapshot.at("contentBrowser").at("breadcrumbs").is_array());
         ASSERT_TRUE(handshakeSnapshot.at("viewportSurface").is_object());
         EXPECT_EQ(handshakeSnapshot.at("viewportSurface").at("state").get<std::uint8_t>(), 0U);

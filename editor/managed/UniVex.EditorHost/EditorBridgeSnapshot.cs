@@ -40,6 +40,12 @@ public enum BridgeInspectorMode : byte
     SingleSelection = 2,
 }
 
+public sealed record BridgeAssetBindingSnapshot(ulong? MeshGuid, ulong? MaterialGuid)
+{
+    public string DisplayText => $"Mesh: {(MeshGuid.HasValue ? MeshGuid.Value.ToString("X16") : "none")} | " +
+                                 $"Material: {(MaterialGuid.HasValue ? MaterialGuid.Value.ToString("X16") : "none")}";
+}
+
 public sealed record BridgeInspectorSnapshot(
     BridgeInspectorMode Mode,
     bool SelectedEntitiesTruncated,
@@ -48,7 +54,10 @@ public sealed record BridgeInspectorSnapshot(
     BridgeEntitySnapshot? Parent,
     IReadOnlyList<BridgeEntitySnapshot> Ancestry,
     IReadOnlyList<string> EligibleDrawerIds,
-    bool CanEditSelectedName);
+    bool CanEditSelectedName)
+{
+    public BridgeAssetBindingSnapshot? AssetBinding { get; init; }
+}
 
 public sealed record BridgeContentBrowserEntry(
     string RelativePath,
@@ -1679,7 +1688,16 @@ public static class BridgeSnapshotParser
             parsedDrawerIds.Add(BoundedStringValue(identifier, "inspector drawer identifier"));
         }
 
-        return new BridgeInspectorSnapshot(
+        BridgeAssetBindingSnapshot? assetBinding = null;
+        if (value.TryGetProperty("assetBinding", out JsonElement assetBindingValue) &&
+            assetBindingValue.ValueKind != JsonValueKind.Null)
+        {
+            assetBinding = new BridgeAssetBindingSnapshot(
+                OptionalNullableUInt64(assetBindingValue, "meshGuid"),
+                OptionalNullableUInt64(assetBindingValue, "materialGuid"));
+        }
+
+        BridgeInspectorSnapshot snapshot = new(
             (BridgeInspectorMode)rawMode,
             RequiredBoolean(value, "selectedEntitiesTruncated"),
             ParseEntitySnapshots(RequiredArray(value, "selectedEntities"), "inspector.selectedEntities"),
@@ -1688,6 +1706,7 @@ public static class BridgeSnapshotParser
             parsedAncestry,
             parsedDrawerIds,
             RequiredBoolean(value, "canEditSelectedName"));
+        return snapshot with { AssetBinding = assetBinding };
     }
 
     private static BridgeViewportSurfaceSnapshot ParseViewportSurface(JsonElement value)

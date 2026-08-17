@@ -70,6 +70,15 @@ enum class FrameReadResultUVE : std::uint8_t {
     for (const std::string& identifier : snapshot.eligibleDrawerIds) {
         drawerIds.push_back(identifier);
     }
+    JsonUVE assetBinding = JsonUVE(nullptr);
+    if (snapshot.assetBinding.has_value()) {
+        assetBinding = JsonUVE{{"meshGuid", snapshot.assetBinding->meshGuid.has_value()
+                                                   ? JsonUVE(*snapshot.assetBinding->meshGuid)
+                                                   : JsonUVE(nullptr)},
+                               {"materialGuid", snapshot.assetBinding->materialGuid.has_value()
+                                                       ? JsonUVE(*snapshot.assetBinding->materialGuid)
+                                                       : JsonUVE(nullptr)}};
+    }
     return JsonUVE{{"mode", static_cast<std::uint8_t>(snapshot.mode)},
                    {"selectedEntitiesTruncated", snapshot.selectedEntitiesTruncated},
                    {"selectedEntities", std::move(selectedEntities)},
@@ -78,6 +87,7 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"parent", snapshot.parent.has_value() ? ToJsonUVE(*snapshot.parent) : JsonUVE(nullptr)},
                    {"ancestry", std::move(ancestry)},
                    {"eligibleDrawerIds", std::move(drawerIds)},
+                   {"assetBinding", std::move(assetBinding)},
                    {"canEditSelectedName", snapshot.canEditSelectedName}};
 }
 

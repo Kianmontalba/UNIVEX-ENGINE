@@ -45,6 +45,31 @@ public sealed class BridgeProtocolClientTests
     }
 
     [Fact]
+    public void SnapshotParser_ParsesAssetBindingAndAcceptsLegacyMissingField()
+    {
+        JsonObject snapshot = JsonSerializer.SerializeToNode(Snapshot(sceneDirty: false))!.AsObject();
+        snapshot["inspector"]!["assetBinding"] = new JsonObject
+        {
+            ["meshGuid"] = 0x1111UL,
+            ["materialGuid"] = 0x2222UL,
+        };
+
+        using JsonDocument parsedDocument = JsonDocument.Parse(snapshot.ToJsonString());
+        BridgeEditorSnapshot parsed = BridgeSnapshotParser.Parse(parsedDocument.RootElement);
+
+        Assert.NotNull(parsed.Inspector.AssetBinding);
+        Assert.Equal(0x1111UL, parsed.Inspector.AssetBinding!.MeshGuid);
+        Assert.Equal(0x2222UL, parsed.Inspector.AssetBinding.MaterialGuid);
+        Assert.Equal("Mesh: 0000000000001111 | Material: 0000000000002222",
+            parsed.Inspector.AssetBinding.DisplayText);
+
+        snapshot["inspector"]!.AsObject().Remove("assetBinding");
+        using JsonDocument legacyDocument = JsonDocument.Parse(snapshot.ToJsonString());
+        BridgeEditorSnapshot legacy = BridgeSnapshotParser.Parse(legacyDocument.RootElement);
+        Assert.Null(legacy.Inspector.AssetBinding);
+    }
+
+    [Fact]
     public async Task HelloAsync_RejectsMismatchedResponseIdentifier()
     {
         await using MemoryStream input = BuildFrames(new

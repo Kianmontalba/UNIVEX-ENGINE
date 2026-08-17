@@ -181,6 +181,15 @@ struct EditorBridgeEntitySnapshotUVE final {
     [[nodiscard]] bool operator==(const EditorBridgeEntitySnapshotUVE&) const = default;
 };
 
+/// Read-only asset references copied from the selected native MeshComponentUVE. GUIDs are values,
+/// not asset handles; the bridge never transfers resource ownership or loading authority.
+struct EditorBridgeAssetBindingSnapshotUVE final {
+    std::optional<std::uint64_t> meshGuid;
+    std::optional<std::uint64_t> materialGuid;
+
+    [[nodiscard]] bool operator==(const EditorBridgeAssetBindingSnapshotUVE&) const = default;
+};
+
 /// The bridge deliberately bounds presentation records before serializing them. A client must show
 /// the explicit truncation fact and never infer that an omitted entry was deleted from the editor.
 inline constexpr std::size_t kEditorBridgeMaximumPanelEntriesUVE = 128U;
@@ -231,6 +240,7 @@ struct EditorBridgeInspectorSnapshotUVE final {
     std::optional<EditorBridgeEntitySnapshotUVE> parent;
     std::vector<EditorBridgeEntitySnapshotUVE> ancestry;
     std::vector<std::string> eligibleDrawerIds;
+    std::optional<EditorBridgeAssetBindingSnapshotUVE> assetBinding;
     bool canEditSelectedName = false;
 
     [[nodiscard]] bool operator==(const EditorBridgeInspectorSnapshotUVE&) const = default;
