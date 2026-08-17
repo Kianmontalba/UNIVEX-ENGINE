@@ -25,13 +25,18 @@ protected:
     Scene::SceneGraphUVE sceneGraph;
     CollisionSystemUVE collisionSystem;
 
-    Scene::EntityUVE MakeColliderEntityUVE(Math::Vector3UVE position, Math::Vector3UVE halfExtents) {
+    Scene::EntityUVE MakeColliderEntityUVE(Math::Vector3UVE position, Math::Vector3UVE halfExtents,
+                                           std::uint32_t collisionLayer = 1U,
+                                           std::uint32_t collisionMask = 0xFFFFFFFFU) {
         const Scene::EntityUVE entity = entityManager.CreateEntityUVE();
         Scene::TransformComponentUVE local;
         local.localPosition = position;
         sceneGraph.AttachTransformUVE(entityManager, entity, local);
         sceneGraph.UpdateUVE(entityManager);
-        entityManager.AddComponentUVE<Scene::ColliderComponentUVE>(entity, Scene::ColliderComponentUVE{halfExtents});
+        Scene::ColliderComponentUVE collider{halfExtents};
+        collider.collisionLayer = collisionLayer;
+        collider.collisionMask = collisionMask;
+        entityManager.AddComponentUVE<Scene::ColliderComponentUVE>(entity, collider);
         return entity;
     }
 
@@ -81,6 +86,40 @@ TEST_F(CollisionSystemUVETest, DetectCollisionsUVE_MultipleSimultaneousOverlaps_
     EXPECT_TRUE(ContainsPairUVE(pairs, a, b));
     EXPECT_TRUE(ContainsPairUVE(pairs, b, c));
     EXPECT_FALSE(ContainsPairUVE(pairs, a, c));
+}
+
+TEST_F(CollisionSystemUVETest, DetectCollisionsUVE_CompatibleLayerMasks_ReportOverlap) {
+    const Scene::EntityUVE a = MakeColliderEntityUVE(
+        Math::Vector3UVE{0.0F, 0.0F, 0.0F}, Math::Vector3UVE{1.0F, 1.0F, 1.0F}, 1U, 2U);
+    const Scene::EntityUVE b = MakeColliderEntityUVE(
+        Math::Vector3UVE{0.5F, 0.0F, 0.0F}, Math::Vector3UVE{1.0F, 1.0F, 1.0F}, 2U, 1U);
+
+    const std::vector<CollisionPairUVE> pairs = collisionSystem.DetectCollisionsUVE(entityManager);
+
+    ASSERT_EQ(pairs.size(), 1U);
+    EXPECT_TRUE(ContainsPairUVE(pairs, a, b));
+}
+
+TEST_F(CollisionSystemUVETest, DetectCollisionsUVE_IncompatibleLayerMask_RejectsOverlap) {
+    const Scene::EntityUVE a = MakeColliderEntityUVE(
+        Math::Vector3UVE{0.0F, 0.0F, 0.0F}, Math::Vector3UVE{1.0F, 1.0F, 1.0F}, 1U, 1U);
+    const Scene::EntityUVE b = MakeColliderEntityUVE(
+        Math::Vector3UVE{0.5F, 0.0F, 0.0F}, Math::Vector3UVE{1.0F, 1.0F, 1.0F}, 2U, 1U);
+
+    EXPECT_TRUE(collisionSystem.DetectCollisionsUVE(entityManager).empty());
+    EXPECT_EQ(entityManager.GetComponentUVE<Scene::ColliderComponentUVE>(a).collisionMask, 1U);
+    EXPECT_EQ(entityManager.GetComponentUVE<Scene::ColliderComponentUVE>(b).collisionMask, 1U);
+}
+
+TEST_F(CollisionSystemUVETest, DetectCollisionsUVE_OneSidedMaskAcceptance_StillRejectsOverlap) {
+    const Scene::EntityUVE a = MakeColliderEntityUVE(
+        Math::Vector3UVE{0.0F, 0.0F, 0.0F}, Math::Vector3UVE{1.0F, 1.0F, 1.0F}, 1U, 2U);
+    const Scene::EntityUVE b = MakeColliderEntityUVE(
+        Math::Vector3UVE{0.5F, 0.0F, 0.0F}, Math::Vector3UVE{1.0F, 1.0F, 1.0F}, 2U, 4U);
+
+    EXPECT_TRUE(collisionSystem.DetectCollisionsUVE(entityManager).empty());
+    EXPECT_TRUE(entityManager.GetComponentUVE<Scene::ColliderComponentUVE>(a).collisionMask & 2U);
+    EXPECT_FALSE(entityManager.GetComponentUVE<Scene::ColliderComponentUVE>(b).collisionMask & 1U);
 }
 
 TEST_F(CollisionSystemUVETest, DetectCollisionsUVE_StaticVsStaticOverlap_IsStillReported) {

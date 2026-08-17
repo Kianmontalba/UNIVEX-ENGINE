@@ -11,8 +11,7 @@
 
 namespace UVE::Physics::Detail {
 
-/// One entity's world-space AABB and collision layer, computed once and reused across every
-/// query against it. NOT a stable public contract — this is an internal implementation detail
+/// One entity's world-space AABB and collision layer/mask, computed once and reused across every query against it. NOT a stable public contract — this is an internal implementation detail
 /// shared by CollisionSystemUVE and RaycastSystemUVE (Increment 16) so their iteration logic
 /// doesn't independently drift apart, and is expected to be replaced or subsumed by a real BVH
 /// broad-phase builder once entity counts justify one; nothing outside engine/physics should
@@ -21,6 +20,7 @@ struct ColliderWorldAabbUVE {
     Scene::EntityUVE entity;
     Math::AabbUVE worldAabb;
     std::uint32_t collisionLayer;
+    std::uint32_t collisionMask;
 };
 
 /// Builds a flat cache of every entity with both WorldTransformComponentUVE and
