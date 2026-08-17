@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "uve/audio/audio_mixer_group_uve.h"
 #include "uve/audio/audio_source_desc_uve.h"
 #include "uve/audio/voice_handle_uve.h"
 #include "uve/audio/voice_playback_state_uve.h"
@@ -46,6 +47,16 @@ public:
     virtual void SetSourcePositionUVE(VoiceHandleUVE source, Math::Vector3UVE position) = 0;
     virtual void SetSourceVolumeUVE(VoiceHandleUVE source, float volume) = 0;
     virtual void SetSourcePitchUVE(VoiceHandleUVE source, float pitch) = 0;
+
+    // --- Bounded mixer-group routing. ---
+    virtual bool RegisterMixerGroupUVE(std::string_view name, float volumeMultiplier = 1.0F,
+                                       float pitchMultiplier = 1.0F) = 0;
+    virtual bool RemoveMixerGroupUVE(std::string_view name) = 0;
+    virtual bool SetMixerGroupVolumeUVE(std::string_view name, float volumeMultiplier) = 0;
+    virtual bool SetMixerGroupPitchUVE(std::string_view name, float pitchMultiplier) = 0;
+    virtual bool SetSourceMixerGroupUVE(VoiceHandleUVE source, std::string_view name) = 0;
+    [[nodiscard]] virtual AudioMixerDiagnosticsUVE GetMixerDiagnosticsUVE(
+        std::size_t maximumGroups = kMaximumAudioMixerGroupsUVE) const = 0;
 
     // --- Frame advance. ---
     /// Recomputes ComputeDistanceAttenuationUVE() for every live spatial source against the

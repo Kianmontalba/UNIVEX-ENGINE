@@ -37,6 +37,15 @@ public:
     void SetSourceVolumeUVE(VoiceHandleUVE source, float volume) override;
     void SetSourcePitchUVE(VoiceHandleUVE source, float pitch) override;
 
+    bool RegisterMixerGroupUVE(std::string_view name, float volumeMultiplier = 1.0F,
+                               float pitchMultiplier = 1.0F) override;
+    bool RemoveMixerGroupUVE(std::string_view name) override;
+    bool SetMixerGroupVolumeUVE(std::string_view name, float volumeMultiplier) override;
+    bool SetMixerGroupPitchUVE(std::string_view name, float pitchMultiplier) override;
+    bool SetSourceMixerGroupUVE(VoiceHandleUVE source, std::string_view name) override;
+    [[nodiscard]] AudioMixerDiagnosticsUVE GetMixerDiagnosticsUVE(
+        std::size_t maximumGroups = kMaximumAudioMixerGroupsUVE) const override;
+
     void UpdateUVE() override;
 
 private:

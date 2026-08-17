@@ -14,6 +14,7 @@ namespace {
 
 struct SourceStateUVE {
     AudioSourceDescUVE desc;
+    std::string mixerGroup = std::string(kMasterAudioMixerGroupNameUVE);
     Math::Vector3UVE position{};
     float volume = 1.0F;
     float pitch = 1.0F;
@@ -27,6 +28,7 @@ struct AudioSystemUVE::ImplUVE {
     Math::Vector3UVE listenerForward{0.0F, 0.0F, -1.0F};
     Math::Vector3UVE listenerUp{0.0F, 1.0F, 0.0F};
     std::unordered_map<std::uint32_t, SourceStateUVE> sources;
+    AudioMixerGroupUVE mixerGroups;
 
     explicit ImplUVE(IAudioDeviceUVE& device) : audioDevice(device) {}
 };
@@ -52,14 +54,21 @@ VoiceHandleUVE AudioSystemUVE::CreateSourceUVE(const AudioSourceDescUVE& desc) {
     const VoiceHandleUVE voice = m_impl->audioDevice.CreateVoiceUVE(AudioVoiceDescUVE{desc.audioAssetPath, desc.looping});
     SourceStateUVE state;
     state.desc = desc;
+    state.mixerGroup = m_impl->mixerGroups.ResolveGroupNameUVE(desc.mixerGroup);
+    state.desc.mixerGroup = state.mixerGroup;
     state.volume = desc.volume;
     state.pitch = desc.pitch;
+    static_cast<void>(m_impl->mixerGroups.AttachSourceUVE(state.mixerGroup));
     m_impl->sources.emplace(voice.value, std::move(state));
     return voice;
 }
 
 void AudioSystemUVE::DestroySourceUVE(VoiceHandleUVE source) {
-    m_impl->sources.erase(source.value);
+    const auto iterator = m_impl->sources.find(source.value);
+    if (iterator != m_impl->sources.end()) {
+        static_cast<void>(m_impl->mixerGroups.DetachSourceUVE(iterator->second.mixerGroup));
+        m_impl->sources.erase(iterator);
+    }
     m_impl->audioDevice.DestroyVoiceUVE(source);
 }
 
@@ -102,19 +111,60 @@ void AudioSystemUVE::SetSourcePitchUVE(VoiceHandleUVE source, float pitch) {
     iterator->second.pitch = pitch;
 }
 
+bool AudioSystemUVE::RegisterMixerGroupUVE(const std::string_view name, const float volumeMultiplier,
+                                            const float pitchMultiplier) {
+    return m_impl->mixerGroups.RegisterGroupUVE(name, volumeMultiplier, pitchMultiplier);
+}
+
+bool AudioSystemUVE::RemoveMixerGroupUVE(const std::string_view name) {
+    return m_impl->mixerGroups.RemoveGroupUVE(name);
+}
+
+bool AudioSystemUVE::SetMixerGroupVolumeUVE(const std::string_view name, const float volumeMultiplier) {
+    return m_impl->mixerGroups.SetGroupVolumeUVE(name, volumeMultiplier);
+}
+
+bool AudioSystemUVE::SetMixerGroupPitchUVE(const std::string_view name, const float pitchMultiplier) {
+    return m_impl->mixerGroups.SetGroupPitchUVE(name, pitchMultiplier);
+}
+
+bool AudioSystemUVE::SetSourceMixerGroupUVE(const VoiceHandleUVE source, const std::string_view name) {
+    const auto iterator = m_impl->sources.find(source.value);
+    if (iterator == m_impl->sources.end() || !m_impl->mixerGroups.HasGroupUVE(name)) {
+        return false;
+    }
+    const std::string resolvedName(name);
+    if (iterator->second.mixerGroup == resolvedName) {
+        return true;
+    }
+    if (!m_impl->mixerGroups.AttachSourceUVE(resolvedName)) {
+        return false;
+    }
+    static_cast<void>(m_impl->mixerGroups.DetachSourceUVE(iterator->second.mixerGroup));
+    iterator->second.mixerGroup = resolvedName;
+    iterator->second.desc.mixerGroup = resolvedName;
+    return true;
+}
+
+AudioMixerDiagnosticsUVE AudioSystemUVE::GetMixerDiagnosticsUVE(const std::size_t maximumGroups) const {
+    return m_impl->mixerGroups.GetDiagnosticsUVE(maximumGroups);
+}
+
 void AudioSystemUVE::UpdateUVE() {
     for (auto& [handleValue, state] : m_impl->sources) {
+        const float groupVolume = m_impl->mixerGroups.GetGroupVolumeUVE(state.mixerGroup);
+        const float groupPitch = m_impl->mixerGroups.GetGroupPitchUVE(state.mixerGroup);
         float gain = 0.0F;
         if (!state.desc.spatial) {
-            gain = std::clamp(state.volume, 0.0F, 1.0F);
+            gain = std::clamp(state.volume * groupVolume, 0.0F, 1.0F);
         } else {
             const float distance = Math::LengthUVE(state.position - m_impl->listenerPosition);
             const float attenuation = ComputeDistanceAttenuationUVE(distance, state.desc.minDistance,
                                                                       state.desc.maxDistance, state.desc.attenuationModel);
-            gain = std::clamp(state.volume * attenuation, 0.0F, 1.0F);
+            gain = std::clamp(state.volume * groupVolume * attenuation, 0.0F, 1.0F);
         }
         static_cast<void>(m_impl->audioDevice.SetVoiceParamsUVE(
-            VoiceHandleUVE{handleValue}, AudioVoiceParamsUVE{state.position, gain, state.pitch}));
+            VoiceHandleUVE{handleValue}, AudioVoiceParamsUVE{state.position, gain, state.pitch * groupPitch}));
     }
 }
 

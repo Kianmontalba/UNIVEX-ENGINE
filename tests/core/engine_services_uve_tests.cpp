@@ -750,6 +750,12 @@ public:
     void SetSourcePositionUVE(Audio::VoiceHandleUVE, Math::Vector3UVE) override {}
     void SetSourceVolumeUVE(Audio::VoiceHandleUVE, float) override {}
     void SetSourcePitchUVE(Audio::VoiceHandleUVE, float) override {}
+    bool RegisterMixerGroupUVE(std::string_view, float, float) override { return false; }
+    bool RemoveMixerGroupUVE(std::string_view) override { return false; }
+    bool SetMixerGroupVolumeUVE(std::string_view, float) override { return false; }
+    bool SetMixerGroupPitchUVE(std::string_view, float) override { return false; }
+    bool SetSourceMixerGroupUVE(Audio::VoiceHandleUVE, std::string_view) override { return false; }
+    [[nodiscard]] Audio::AudioMixerDiagnosticsUVE GetMixerDiagnosticsUVE(std::size_t) const override { return {}; }
     void UpdateUVE() override { ++updateCallCount; }
 
     int updateCallCount = 0;

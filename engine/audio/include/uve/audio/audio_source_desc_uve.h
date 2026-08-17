@@ -6,6 +6,7 @@
 #include <string>
 
 #include "uve/audio/audio_attenuation_model_uve.h"
+#include "uve/audio/audio_mixer_group_uve.h"
 
 namespace UVE::Audio {
 
@@ -15,6 +16,7 @@ namespace UVE::Audio {
 /// Desc-struct convention (Render::BufferDescUVE, Physics::RaycastQueryUVE).
 struct AudioSourceDescUVE {
     std::string audioAssetPath;
+    std::string mixerGroup = std::string(kMasterAudioMixerGroupNameUVE);
     bool looping = false;
     float volume = 1.0F;
     float pitch = 1.0F;
