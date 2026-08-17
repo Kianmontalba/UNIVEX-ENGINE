@@ -546,8 +546,59 @@ TEST_F(SceneSerializerUVETest, SaveThenLoad_ColliderComponentUVE_RoundTripsFrict
     EXPECT_FLOAT_EQ(loaded.friction, 0.4F);
     EXPECT_FLOAT_EQ(loaded.restitution, 0.9F);
     EXPECT_FLOAT_EQ(loaded.density, 2.5F);
+    EXPECT_EQ(loaded.shapeType, ColliderShapeTypeUVE::Box);
+    EXPECT_FLOAT_EQ(loaded.radius, 0.5F);
+    EXPECT_FLOAT_EQ(loaded.height, 1.0F);
 
     std::filesystem::remove(path);
+}
+
+TEST_F(SceneSerializerUVETest, SaveThenLoad_ColliderComponentUVE_RoundTripsSphereAndCapsuleDescriptors) {
+    const EntityUVE sphereEntity = entityManager.CreateEntityUVE();
+    ColliderComponentUVE sphere{Math::Vector3UVE{0.5F, 0.5F, 0.5F}};
+    sphere.shapeType = ColliderShapeTypeUVE::Sphere;
+    sphere.radius = 1.25F;
+    entityManager.AddComponentUVE<ColliderComponentUVE>(sphereEntity, sphere);
+
+    const EntityUVE capsuleEntity = entityManager.CreateEntityUVE();
+    ColliderComponentUVE capsule{Math::Vector3UVE{0.5F, 0.5F, 0.5F}};
+    capsule.shapeType = ColliderShapeTypeUVE::Capsule;
+    capsule.radius = 0.4F;
+    capsule.height = 2.4F;
+    entityManager.AddComponentUVE<ColliderComponentUVE>(capsuleEntity, capsule);
+
+    const std::filesystem::path path = "uve_scene_serializer_tests_expanded_collider.uvescene";
+    std::filesystem::remove(path);
+    ASSERT_TRUE(serializer.SaveUVE(entityManager, {sphereEntity, capsuleEntity}, path, SceneAssetTypeUVE::Scene));
+
+    EntityManagerUVE loadedManager(memoryManager.GetDefaultAllocatorUVE(), eventSystem);
+    const std::vector<EntityUVE> roots = serializer.LoadUVE(loadedManager, path);
+    ASSERT_EQ(roots.size(), 2U);
+    const ColliderComponentUVE& loadedSphere = loadedManager.GetComponentUVE<ColliderComponentUVE>(roots[0]);
+    const ColliderComponentUVE& loadedCapsule = loadedManager.GetComponentUVE<ColliderComponentUVE>(roots[1]);
+
+    EXPECT_EQ(loadedSphere.shapeType, ColliderShapeTypeUVE::Sphere);
+    EXPECT_FLOAT_EQ(loadedSphere.radius, 1.25F);
+    EXPECT_EQ(loadedCapsule.shapeType, ColliderShapeTypeUVE::Capsule);
+    EXPECT_FLOAT_EQ(loadedCapsule.radius, 0.4F);
+    EXPECT_FLOAT_EQ(loadedCapsule.height, 2.4F);
+
+    std::filesystem::remove(path);
+}
+
+TEST_F(SceneSerializerUVETest, CaptureThenRestore_InvalidExpandedColliderShape_RollsBackCreatedEntities) {
+    const EntityUVE entity = entityManager.CreateEntityUVE();
+    ColliderComponentUVE collider{Math::Vector3UVE{0.5F, 0.5F, 0.5F}};
+    collider.shapeType = ColliderShapeTypeUVE::Sphere;
+    collider.radius = 0.0F;
+    entityManager.AddComponentUVE<ColliderComponentUVE>(entity, collider);
+    const std::optional<SceneSnapshotUVE> snapshot =
+        serializer.CaptureUVE(entityManager, {entity}, SceneAssetTypeUVE::Scene);
+    ASSERT_TRUE(snapshot.has_value());
+
+    EntityManagerUVE loadedManager(memoryManager.GetDefaultAllocatorUVE(), eventSystem);
+    EXPECT_TRUE(serializer.RestoreUVE(loadedManager, *snapshot).empty());
+    EXPECT_EQ(loadedManager.GetEntityCountUVE(), 0U);
 }
 
 TEST_F(SceneSerializerUVETest, SaveThenLoad_LightComponentUVE_RoundTripsTypeRangeSpotAngle) {
