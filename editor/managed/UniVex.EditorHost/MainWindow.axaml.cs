@@ -487,31 +487,36 @@ public partial class MainWindow : Window
 
     private async void DispatchCurrentCommand(BridgeCommand command)
     {
+        BridgeCommandResult? result = await DispatchCommandAsync(command).ConfigureAwait(true);
+        if (result != null && !result.Applied)
+        {
+            StatusTextBlock.Text = $"Native command not applied — {result.Code}";
+            DetailsTextBlock.Text = result.Message;
+        }
+    }
+
+    private async Task<BridgeCommandResult?> DispatchCommandAsync(BridgeCommand command)
+    {
         if (session is null || state != HostSessionState.Connected)
         {
-            return;
+            return null;
         }
 
         try
         {
             BridgeCommandResult result = await session.DispatchAsync(command, CancellationToken.None).ConfigureAwait(true);
-            if (result.Applied)
-            {
-                DisplayConnectedSnapshot(result.Snapshot);
-                return;
-            }
-
             DisplayConnectedSnapshot(result.Snapshot);
-            StatusTextBlock.Text = $"Native command not applied — {result.Code}";
-            DetailsTextBlock.Text = result.Message;
+            return result;
         }
         catch (BridgeProtocolException exception)
         {
             EnterFailure(exception.Code, exception.Message);
+            return null;
         }
         catch (Exception exception)
         {
             EnterFailure("bridge.command.failed", exception.Message);
+            return null;
         }
     }
 
@@ -548,6 +553,7 @@ public partial class MainWindow : Window
             RenderDeveloperConsole(snapshot.DeveloperConsole);
             RenderDataTableCatalog(snapshot.DataTableCatalog, snapshot.DataTablePreview);
             RenderDataTablePreview(snapshot.DataTablePreview);
+            RenderMotionQuery(snapshot.MotionQuery);
         }
         finally
         {
@@ -733,6 +739,253 @@ public partial class MainWindow : Window
               $"{preview.TotalRowCount} row(s); {preview.Columns.Count} visible column descriptor(s){truncation}. " +
               preview.Reason
             : preview.Reason;
+    }
+
+    private void RenderMotionQuery(BridgeMotionQuerySnapshot motionQuery)
+    {
+        MotionQueryExportRegistryButton.IsEnabled = state == HostSessionState.Connected;
+        MotionQueryImportRegistryButton.IsEnabled = state == HostSessionState.Connected;
+        MotionQueryRunBatchButton.IsEnabled = state == HostSessionState.Connected;
+        MotionQueryClearReplayButton.IsEnabled = state == HostSessionState.Connected;
+        MotionQueryExportTraceButton.IsEnabled = state == HostSessionState.Connected && motionQuery.Trace.Events.Count > 0;
+        MotionQueryImportTraceButton.IsEnabled = state == HostSessionState.Connected;
+        MotionQueryExportEvidenceButton.IsEnabled = state == HostSessionState.Connected && motionQuery.Trace.Events.Count > 0;
+
+        MotionQueryStatusTextBlock.Text = motionQuery.ReplayWorkflow.ReadyForComparison
+            ? $"Ready for regression. Registry generation {motionQuery.ReplayWorkflow.RegistryGeneration}, {motionQuery.ReplayWorkflow.BaselineCount} baseline(s)."
+            : $"Not ready for regression: {motionQuery.ReplayWorkflow.Diagnostic}";
+
+        MotionQuerySessionFactsTextBlock.Text =
+            $"{motionQuery.ReplaySessionFacts.TotalIndividualComparisons} individual comparisons | " +
+            $"{motionQuery.ReplaySessionFacts.TotalBatchRuns} batch runs | " +
+            $"{motionQuery.ReplaySessionFacts.TotalBaselinesEvaluated} baselines evaluated | " +
+            $"{motionQuery.ReplaySessionFacts.TotalMatchesFound} matches | " +
+            $"{motionQuery.ReplaySessionFacts.TotalMismatchesFound} mismatches";
+
+        MotionQueryBatchHistoryListBox.ItemsSource = motionQuery.ReplayBatchHistory;
+        MotionQueryIndividualHistoryListBox.ItemsSource = motionQuery.ReplayDiagnostics.History;
+        MotionQueryBaselinesListBox.ItemsSource = motionQuery.ReplayDiagnostics.Baselines;
+        MotionQueryTraceListBox.ItemsSource = motionQuery.Trace.Events;
+
+        MotionQueryDiagnosticsTextBlock.Text = motionQuery.ReplayDiagnostics.HasActiveComparison
+            ? motionQuery.ReplayDiagnostics.IsMatch
+                ? "Match: No regression detected."
+                : $"Mismatch: Comparison code {motionQuery.ReplayDiagnostics.ComparisonCode}, Field mask {motionQuery.ReplayDiagnostics.MismatchFieldMask}, Compatibility mask {motionQuery.ReplayDiagnostics.CompatibilityMismatchMask}."
+            : "No active comparison.";
+    }
+
+    private async void MotionQueryExportRegistryButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        var result = await DispatchCommandAsync(new BridgeCommand(CurrentRevision(), "exportMotionQueryReplayBaselineRegistry")).ConfigureAwait(true);
+        if (result != null && result.Applied && result.MotionQueryReplayBaselineEnvelopePayload != null)
+        {
+            var topLevel = TopLevel.GetTopLevel(this);
+            var clipboard = topLevel?.Clipboard;
+            if (clipboard != null)
+            {
+                await clipboard.SetTextAsync(result.MotionQueryReplayBaselineEnvelopePayload).ConfigureAwait(true);
+                MotionQueryStatusTextBlock.Text = "Registry exported to clipboard.";
+            }
+        }
+    }
+
+    private async void MotionQueryImportRegistryButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        var topLevel = TopLevel.GetTopLevel(this);
+        var clipboard = topLevel?.Clipboard;
+        if (clipboard != null)
+        {
+#pragma warning disable CS0618
+            var payload = await clipboard.GetTextAsync().ConfigureAwait(true);
+#pragma warning restore CS0618
+            if (!string.IsNullOrWhiteSpace(payload))
+            {
+                DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "importMotionQueryReplayBaselineRegistry")
+                {
+                    MotionQueryReplayBaselineEnvelopePayload = payload
+                });
+            }
+        }
+    }
+
+    private void MotionQueryRunBatchButton_OnClick(object? sender, RoutedEventArgs e) =>
+        DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "runMotionQueryReplayBaselineBatch"));
+
+    private void MotionQueryClearReplayButton_OnClick(object? sender, RoutedEventArgs e) =>
+        DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "clearMotionQueryReplayBaseline"));
+
+    private void MotionQueryLoadBaselineButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button { DataContext: BridgeMotionQueryReplayBaselineEntry baseline })
+        {
+            DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "loadMotionQueryReplayBaseline")
+            {
+                MotionQueryReplayBaselineName = baseline.Name
+            });
+        }
+    }
+
+    private void MotionQueryRemoveBaselineButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button { DataContext: BridgeMotionQueryReplayBaselineEntry baseline })
+        {
+            DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "clearMotionQueryReplayBaseline")
+            {
+                MotionQueryReplayBaselineName = baseline.Name
+            });
+        }
+    }
+
+    private void MotionQueryRenameBaselineButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button button && button.DataContext is BridgeMotionQueryReplayBaselineEntry baseline &&
+            button.Parent is Grid grid)
+        {
+            var textBox = grid.Children.OfType<TextBox>().FirstOrDefault();
+            string newName = textBox?.Text?.Trim() ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(newName))
+            {
+                DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "renameMotionQueryReplayBaseline")
+                {
+                    MotionQueryReplayBaselineName = baseline.Name,
+                    MotionQueryReplayBaselineNewName = newName
+                });
+            }
+        }
+    }
+
+    private void MotionQueryTraceListBox_OnSelectionChanged(object? sender, SelectionChangedEventArgs e)
+    {
+        if (applyingSnapshot || MotionQueryTraceListBox.SelectedItem is not BridgeMotionQueryTraceEvent traceEvent)
+        {
+            return;
+        }
+
+        if (session?.LastSnapshot != null)
+        {
+            DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "dispatchMotionQueryDebugCommand")
+            {
+                MotionQueryDebugCommandKind = "selectEvent",
+                MotionQueryDebugExpectedGeneration = session.LastSnapshot.MotionQuery.LiveDebugGeneration,
+                MotionQueryDebugEventSequence = traceEvent.Sequence
+            });
+        }
+    }
+
+    private void MotionQueryRemoveTraceEventButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button { DataContext: BridgeMotionQueryTraceEvent traceEvent } &&
+            session?.LastSnapshot != null)
+        {
+            DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "dispatchMotionQueryDebugCommand")
+            {
+                MotionQueryDebugCommandKind = "removeEvent",
+                MotionQueryDebugExpectedGeneration = session.LastSnapshot.MotionQuery.LiveDebugGeneration,
+                MotionQueryDebugEventSequence = traceEvent.Sequence
+            });
+        }
+    }
+
+    private void MotionQueryToggleTraceEventPinButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button { DataContext: BridgeMotionQueryTraceEvent traceEvent } &&
+            session?.LastSnapshot != null)
+        {
+            DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "dispatchMotionQueryDebugCommand")
+            {
+                MotionQueryDebugCommandKind = "toggleTraceEventPin",
+                MotionQueryDebugExpectedGeneration = session.LastSnapshot.MotionQuery.LiveDebugGeneration,
+                MotionQueryDebugEventSequence = traceEvent.Sequence
+            });
+        }
+    }
+
+    private void MotionQuerySetTraceEventCommentButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button button && button.DataContext is BridgeMotionQueryTraceEvent traceEvent &&
+            button.Parent is Grid grid && session?.LastSnapshot != null)
+        {
+            var textBox = grid.Children.OfType<TextBox>().FirstOrDefault();
+            string comment = textBox?.Text?.Trim() ?? string.Empty;
+            DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "dispatchMotionQueryDebugCommand")
+            {
+                MotionQueryDebugCommandKind = "setTraceEventComment",
+                MotionQueryDebugExpectedGeneration = session.LastSnapshot.MotionQuery.LiveDebugGeneration,
+                MotionQueryDebugEventSequence = traceEvent.Sequence,
+                MotionQueryDebugFilter = comment // Reusing filter field for comment
+            });
+        }
+    }
+
+    private void MotionQuerySetTraceEventCategoryButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button button && button.DataContext is BridgeMotionQueryTraceEvent traceEvent &&
+            button.Parent is Grid grid && session?.LastSnapshot != null)
+        {
+            var textBox = grid.Children.OfType<TextBox>().FirstOrDefault();
+            string category = textBox?.Text?.Trim() ?? string.Empty;
+            DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "dispatchMotionQueryDebugCommand")
+            {
+                MotionQueryDebugCommandKind = "setTraceEventCategory",
+                MotionQueryDebugExpectedGeneration = session.LastSnapshot.MotionQuery.LiveDebugGeneration,
+                MotionQueryDebugEventSequence = traceEvent.Sequence,
+                MotionQueryDebugFilter = category // Reusing filter field for category
+            });
+        }
+    }
+
+    private async void MotionQueryExportTraceButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        var result = await DispatchCommandAsync(new BridgeCommand(CurrentRevision(), "dispatchMotionQueryDebugCommand")
+        {
+            MotionQueryDebugCommandKind = "exportTrace",
+            MotionQueryDebugExpectedGeneration = session?.LastSnapshot?.MotionQuery.LiveDebugGeneration ?? 0UL,
+        }).ConfigureAwait(true);
+        if (result != null && result.Applied && result.MotionQueryLiveDebugTracePayload != null)
+        {
+            MotionQueryTracePersistencePayloadTextBox.Text = result.MotionQueryLiveDebugTracePayload;
+            var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+            if (clipboard != null)
+            {
+                await clipboard.SetTextAsync(result.MotionQueryLiveDebugTracePayload).ConfigureAwait(false);
+            }
+            MotionQueryStatusTextBlock.Text = "Live debug trace exported to the persistence field and clipboard.";
+        }
+    }
+
+    private async void MotionQueryImportTraceButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        string payload = MotionQueryTracePersistencePayloadTextBox.Text?.Trim() ?? string.Empty;
+        if (payload.Length == 0)
+        {
+            MotionQueryStatusTextBlock.Text = "Paste a persisted live debug trace JSON payload first.";
+            return;
+        }
+        var result = await DispatchCommandAsync(new BridgeCommand(CurrentRevision(), "dispatchMotionQueryDebugCommand")
+        {
+            MotionQueryDebugCommandKind = "importTrace",
+            MotionQueryDebugExpectedGeneration = session?.LastSnapshot?.MotionQuery.LiveDebugGeneration ?? 0UL,
+            MotionQueryDebugPayload = payload,
+        }).ConfigureAwait(true);
+        if (result != null && result.Applied)
+        {
+            MotionQueryStatusTextBlock.Text = "Live debug trace imported for offline inspection.";
+        }
+    }
+
+    private async void MotionQueryExportEvidenceButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        var result = await DispatchCommandAsync(new BridgeCommand(CurrentRevision(), "exportMotionQueryReplayEvidence")).ConfigureAwait(true);
+        if (result != null && result.Applied && result.MotionQueryReplayBaselineEnvelopePayload != null)
+        {
+            var topLevel = TopLevel.GetTopLevel(this);
+            var clipboard = topLevel?.Clipboard;
+            if (clipboard != null)
+            {
+                await clipboard.SetTextAsync(result.MotionQueryReplayBaselineEnvelopePayload).ConfigureAwait(false);
+                MotionQueryStatusTextBlock.Text = "Trace exported as evidence to clipboard.";
+            }
+        }
     }
 
     private void RenderVisualScripting(BridgeVisualScriptingSnapshot scripting, ulong bridgeRevision)

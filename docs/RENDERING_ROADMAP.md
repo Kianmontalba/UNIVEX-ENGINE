@@ -28,7 +28,7 @@
 
 | Status | Priority | Area | Required completion proof |
 |---|---:|---|---|
-| **PARTIAL — planned** | **1** | **Increment 63 — Viewport Presentation & Render Verification v1** | Root-cause and correct the primitive final-presentation path. A real OpenGL/Xvfb capture must visibly show Cube, UV Sphere, and Plane. Add the restrained empty-scene background, subtle gradient, world origin, grid, and localized RGB orientation feedback only through actual renderer/editor presentation paths. |
+| **COMPLETED** | **1** | **Increment 63 — Viewport Presentation & Render Verification v1** | Renderer-owned viewport presentation now preserves the actual primitive final-output path, adds a restrained blue-gray gradient through the alpha-over editor visual pass, and retains GPU grid/world-axis/orientation feedback without a parallel presentation owner. Renderer tests assert the editor visual pass is recorded; built-in shader physical/embedded parity passes; full native CTest 1013/1013, managed .NET 8 71/71, and a real 30-frame OpenGL/Xvfb editor smoke run passed. |
 | **PARTIAL** | **2** | Selection and viewport visual feedback | Add only proven selection outline/effect improvements, orientation indicator, and diagnostics after visible primitive output is correct. |
 | **PARTIAL** | **3** | Material and mesh asset workflow | Asset-backed meshes, texture/material import contracts, fallback resources, and Inspector/browser bindings. |
 | **PARTIAL** | **4** | Post-processing | Bloom, ambient occlusion, anti-aliasing, exposure, and project-configured quality only after renderer profiling and pass contracts. |

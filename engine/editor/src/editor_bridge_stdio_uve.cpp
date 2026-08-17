@@ -479,7 +479,10 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"telemetryCandidatesConsidered", event.telemetryCandidatesConsidered},
                    {"telemetryBudgetSaturated", event.telemetryBudgetSaturated},
                    {"provenance", event.provenance},
-                   {"message", event.message}};
+                   {"message", event.message},
+                   {"comment", event.comment},
+                   {"category", event.category},
+                   {"pinned", event.pinned}};
 }
 
 [[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeMotionQueryTraceSnapshotUVE& snapshot) {
@@ -681,7 +684,15 @@ enum class FrameReadResultUVE : std::uint8_t {
                                                                          : JsonUVE(nullptr)},
                    {"graphSchema", response.visualScriptGraphSchema.has_value()
                                         ? ToJsonUVE(*response.visualScriptGraphSchema)
-                                        : JsonUVE(nullptr)}};
+                                        : JsonUVE(nullptr)},
+                    {"motionQueryReplayBaselineEnvelopePayload",
+                     response.motionQueryReplayBaselineEnvelopePayload.has_value()
+                         ? JsonUVE(*response.motionQueryReplayBaselineEnvelopePayload)
+                         : JsonUVE(nullptr)},
+                    {"motionQueryLiveDebugTracePayload",
+                     response.motionQueryLiveDebugTracePayload.has_value()
+                         ? JsonUVE(*response.motionQueryLiveDebugTracePayload)
+                         : JsonUVE(nullptr)}};
 }
 
 [[nodiscard]] FrameReadResultUVE ReadFrameUVE(std::istream& input, std::string& body) {
@@ -930,6 +941,18 @@ enum class FrameReadResultUVE : std::uint8_t {
     if (value == "runMotionQueryReplayBaselineBatch") {
         return EditorBridgeRequestKindUVE::RunMotionQueryReplayBaselineBatch;
     }
+    if (value == "exportMotionQueryReplayBaselineRegistry") {
+        return EditorBridgeRequestKindUVE::ExportMotionQueryReplayBaselineRegistry;
+    }
+    if (value == "importMotionQueryReplayBaselineRegistry") {
+        return EditorBridgeRequestKindUVE::ImportMotionQueryReplayBaselineRegistry;
+    }
+    if (value == "renameMotionQueryReplayBaseline") {
+        return EditorBridgeRequestKindUVE::RenameMotionQueryReplayBaseline;
+    }
+    if (value == "exportMotionQueryReplayEvidence") {
+        return EditorBridgeRequestKindUVE::ExportMotionQueryReplayEvidence;
+    }
     return std::nullopt;
 }
 
@@ -1034,6 +1057,13 @@ ParseMotionQueryLiveDebugCommandKindUVE(const std::string_view value) {
     if (value == "clearTrace") return Kind::ClearTrace;
     if (value == "clearSession") return Kind::ClearSession;
     if (value == "setFilter") return Kind::SetFilter;
+    if (value == "selectEvent") return Kind::SelectEvent;
+    if (value == "removeEvent") return Kind::RemoveEvent;
+    if (value == "toggleTraceEventPin") return Kind::ToggleTraceEventPin;
+    if (value == "setTraceEventComment") return Kind::SetTraceEventComment;
+    if (value == "setTraceEventCategory") return Kind::SetTraceEventCategory;
+    if (value == "exportTrace") return Kind::ExportTrace;
+    if (value == "importTrace") return Kind::ImportTrace;
     return std::nullopt;
 }
 
@@ -1063,6 +1093,16 @@ ParseMotionQueryLiveDebugCommandUVE(const JsonUVE& json, const std::uint64_t req
         if (!json.at("filter").is_string() || json.at("filter").get_ref<const std::string&>().size() >
             Plugins::Editor::kMotionQueryMaximumDebugMessageBytesUVE) return std::nullopt;
         command.filter = json.at("filter").get<std::string>();
+    }
+    if (json.contains("payload") && !json.at("payload").is_null()) {
+        if (!json.at("payload").is_string() ||
+            json.at("payload").get_ref<const std::string&>().size() >
+                Plugins::Editor::kMotionQueryMaximumLiveDebugTraceEnvelopeBytesUVE) return std::nullopt;
+        command.payload = json.at("payload").get<std::string>();
+    }
+    if (json.contains("eventSequence") && !json.at("eventSequence").is_null()) {
+        if (!json.at("eventSequence").is_number_unsigned()) return std::nullopt;
+        command.eventSequence = json.at("eventSequence").get<std::uint64_t>();
     }
     return command;
 }
@@ -1111,6 +1151,26 @@ ParseMotionQueryLiveDebugCommandUVE(const JsonUVE& json, const std::uint64_t req
             return std::nullopt;
         }
         request.motionQueryReplayFixturePayload = params.at("motionQueryReplayFixturePayload").get<std::string>();
+    }
+    if (params.contains("motionQueryReplayBaselineEnvelopePayload") &&
+        !params.at("motionQueryReplayBaselineEnvelopePayload").is_null()) {
+        if (!params.at("motionQueryReplayBaselineEnvelopePayload").is_string() ||
+            params.at("motionQueryReplayBaselineEnvelopePayload").get_ref<const std::string&>().size() >
+                Plugins::Editor::kMotionQueryMaximumReplayBaselineEnvelopeBytesUVE) {
+            return std::nullopt;
+        }
+        request.motionQueryReplayBaselineEnvelopePayload =
+            params.at("motionQueryReplayBaselineEnvelopePayload").get<std::string>();
+    }
+    if (params.contains("motionQueryReplayBaselineNewName") &&
+        !params.at("motionQueryReplayBaselineNewName").is_null()) {
+        if (!params.at("motionQueryReplayBaselineNewName").is_string() ||
+            params.at("motionQueryReplayBaselineNewName").get_ref<const std::string&>().empty() ||
+            params.at("motionQueryReplayBaselineNewName").get_ref<const std::string&>().size() >
+                Plugins::Editor::kMotionQueryMaximumReplayBaselineNameBytesUVE) {
+            return std::nullopt;
+        }
+        request.motionQueryReplayBaselineNewName = params.at("motionQueryReplayBaselineNewName").get<std::string>();
     }
 
     if (params.contains("entity") && !params.at("entity").is_null()) {

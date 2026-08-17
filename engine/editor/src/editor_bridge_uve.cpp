@@ -375,6 +375,8 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
     std::string message = "The editor command was rejected without applying a mutation.";
     std::optional<EditorBridgeEntityRefUVE> createdEntity;
     std::optional<Scripting::ScriptGraphSchemaUVE> responseSchema;
+    std::optional<std::string> responseEnvelopePayload;
+    std::optional<std::string> responseLiveDebugTracePayload;
     switch (request.kind) {
         case EditorBridgeRequestKindUVE::SelectEntity: {
             if (!request.entity.has_value() || !request.entity->IsValidUVE() ||
@@ -849,6 +851,7 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
                            : "bridge.motion_query.debug.command.rejected";
             message = debugResponse.message;
             if (applied) {
+                responseLiveDebugTracePayload = debugResponse.payload;
                 ++m_revision;
             }
             break;
@@ -925,6 +928,73 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
             message = "The bounded native replay baseline batch result was copied without mutation.";
             break;
         }
+        case EditorBridgeRequestKindUVE::ExportMotionQueryReplayBaselineRegistry: {
+            const Plugins::Editor::MotionQueryTraceReplayBaselineEnvelopeSerializationResultUVE result =
+                m_motionQueryReplayBaselineRegistry.SerializeEnvelopeUVE();
+            applied = result.IsAcceptedUVE();
+            code = applied ? "bridge.motion_query.replay.baseline.registry.exported"
+                           : "bridge.motion_query.replay.baseline.registry.rejected";
+            message = result.message;
+            if (applied) {
+                responseEnvelopePayload = result.payload;
+            }
+            break;
+        }
+        case EditorBridgeRequestKindUVE::ImportMotionQueryReplayBaselineRegistry: {
+            if (!request.motionQueryReplayBaselineEnvelopePayload.has_value()) {
+                return MakeResponseUVE(request, false, "bridge.motion_query.replay.baseline.registry.invalid",
+                                       "ImportMotionQueryReplayBaselineRegistry requires a bounded envelope payload.");
+            }
+            const Plugins::Editor::MotionQueryTraceReplayBaselineEnvelopeDeserializationResultUVE result =
+                m_motionQueryReplayBaselineRegistry.DeserializeEnvelopeUVE(*request.motionQueryReplayBaselineEnvelopePayload);
+            applied = result.IsAcceptedUVE();
+            code = applied ? "bridge.motion_query.replay.baseline.registry.imported"
+                           : "bridge.motion_query.replay.baseline.registry.rejected";
+            message = result.message;
+            if (applied) {
+                ++m_revision;
+            }
+            break;
+        }
+        case EditorBridgeRequestKindUVE::RenameMotionQueryReplayBaseline: {
+            if (!request.motionQueryReplayBaselineName.has_value() ||
+                !request.motionQueryReplayBaselineNewName.has_value()) {
+                return MakeResponseUVE(request, false, "bridge.motion_query.replay.baseline.invalid",
+                                       "RenameMotionQueryReplayBaseline requires source and target baseline names.");
+            }
+            const Plugins::Editor::MotionQueryTraceReplayBaselineResultUVE result =
+                m_motionQueryReplayBaselineRegistry.RenameUVE(*request.motionQueryReplayBaselineName,
+                                                              *request.motionQueryReplayBaselineNewName);
+            applied = result.IsAcceptedUVE();
+            code = applied ? "bridge.motion_query.replay.baseline.renamed"
+                           : "bridge.motion_query.replay.baseline.rejected";
+            message = result.message;
+            if (applied) {
+                if (m_motionQueryActiveBaselineName == request.motionQueryReplayBaselineName) {
+                    m_motionQueryActiveBaselineName = request.motionQueryReplayBaselineNewName;
+                }
+                ++m_revision;
+            }
+            break;
+        }
+        case EditorBridgeRequestKindUVE::ExportMotionQueryReplayEvidence: {
+            const Plugins::Editor::MotionQueryLiveDebugSnapshotUVE liveDebug =
+                m_motionQueryLiveDebugSession.GetSnapshotUVE();
+            const Plugins::Editor::MotionQueryTraceSnapshotUVE traceSnapshot{
+                liveDebug.generation, liveDebug.traceTruncated, liveDebug.traceEvents};
+            const Plugins::Editor::MotionQueryTraceReplayFixtureUVE fixture =
+                Plugins::Editor::BuildMotionQueryTraceReplayFixtureUVE(traceSnapshot);
+            const Plugins::Editor::MotionQueryTraceReplaySerializationResultUVE result =
+                Plugins::Editor::SerializeMotionQueryTraceReplayFixtureUVE(fixture);
+            applied = result.IsAcceptedUVE();
+            code = applied ? "bridge.motion_query.replay.evidence.exported"
+                           : "bridge.motion_query.replay.evidence.rejected";
+            message = result.message;
+            if (applied) {
+                responseEnvelopePayload = result.payload;
+            }
+            break;
+        }
         case EditorBridgeRequestKindUVE::ReadMotionQuery:
             code = "bridge.motion_query.snapshot.read";
             message = "The copied Motion Query authoring, debugger, and trace snapshot was returned.";
@@ -965,6 +1035,8 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
     EditorBridgeResponseUVE response = MakeResponseUVE(request, applied, std::move(code), std::move(message));
     response.createdEntity = createdEntity;
     response.visualScriptGraphSchema = std::move(responseSchema);
+    response.motionQueryReplayBaselineEnvelopePayload = std::move(responseEnvelopePayload);
+    response.motionQueryLiveDebugTracePayload = std::move(responseLiveDebugTracePayload);
     return response;
 }
 
@@ -1317,7 +1389,7 @@ EditorBridgeResponseUVE EditorBridgeUVE::MakeResponseUVE(const EditorBridgeReque
                                                            std::string code, std::string message) const {
     return EditorBridgeResponseUVE{kEditorBridgeProtocolVersionUVE, request.requestId, applied,
                                    std::move(code), std::move(message), BuildSnapshotUVE(), std::nullopt,
-                                   std::nullopt};
+                                   std::nullopt, std::nullopt, std::nullopt};
 }
 
 Scene::EntityUVE EditorBridgeUVE::ToEntityUVE(const EditorBridgeEntityRefUVE entity) noexcept {

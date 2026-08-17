@@ -43,6 +43,9 @@ struct MotionQueryTraceEventUVE final {
     bool telemetryBudgetSaturated = false;
     std::string provenance;
     std::string message;
+    std::string comment;
+    std::string category;
+    bool pinned = false;
 
     [[nodiscard]] bool operator==(const MotionQueryTraceEventUVE&) const = default;
 };
@@ -77,6 +80,11 @@ class MotionQueryTraceLoggerUVE final {
 public:
     [[nodiscard]] MotionQueryTraceResultUVE RecordUVE(
         MotionQueryTraceEventUVE event) noexcept;
+    [[nodiscard]] MotionQueryTraceResultUVE RemoveEventUVE(std::uint64_t sequence) noexcept;
+    [[nodiscard]] MotionQueryTraceResultUVE TogglePinUVE(std::uint64_t sequence) noexcept;
+    [[nodiscard]] MotionQueryTraceResultUVE SetCommentUVE(std::uint64_t sequence, std::string comment) noexcept;
+    [[nodiscard]] MotionQueryTraceResultUVE SetCategoryUVE(std::uint64_t sequence, std::string category) noexcept;
+    [[nodiscard]] MotionQueryTraceResultUVE RestoreUVE(MotionQueryTraceSnapshotUVE snapshot) noexcept;
     void ClearUVE() noexcept;
 
     [[nodiscard]] MotionQueryTraceSnapshotUVE GetSnapshotUVE() const noexcept {
@@ -121,6 +129,7 @@ public:
     void PublishMatchUVE(std::size_t candidateIndex, std::size_t candidatesEvaluated,
                          float cost, std::string_view message) noexcept;
     void PublishMatchUVE(const UVE::Plugins::MotionQueryAnimationNodeResultUVE& result) noexcept;
+    void InspectEventUVE(const MotionQueryTraceEventUVE& event) noexcept;
 
     [[nodiscard]] MotionQueryDebuggerSnapshotUVE GetSnapshotUVE() const noexcept {
         return snapshot_;

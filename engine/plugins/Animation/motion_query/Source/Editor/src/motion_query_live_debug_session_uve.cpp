@@ -29,6 +29,7 @@ MotionQueryLiveDebugResponseUVE MotionQueryLiveDebugSessionUVE::DispatchUVE(
                                "motion query live debug protocol version is unsupported");
     }
     if (command.kind != MotionQueryLiveDebugCommandKindUVE::ReadSnapshot &&
+        command.kind != MotionQueryLiveDebugCommandKindUVE::ExportTrace &&
         command.expectedGeneration != generation_) {
         return MakeResponseUVE(command, false, MotionQueryLiveDebugResponseCodeUVE::StaleGeneration,
                                "motion query live debug command was based on an older session generation");
@@ -90,6 +91,115 @@ MotionQueryLiveDebugResponseUVE MotionQueryLiveDebugSessionUVE::DispatchUVE(
             ++generation_;
             return MakeResponseUVE(command, true, MotionQueryLiveDebugResponseCodeUVE::Applied,
                                    "motion query live debug trace filter updated");
+        case MotionQueryLiveDebugCommandKindUVE::SelectEvent: {
+            if (!command.eventSequence.has_value()) {
+                return MakeResponseUVE(command, false, MotionQueryLiveDebugResponseCodeUVE::InvalidCommand,
+                                       "live debug SelectEvent requires an event sequence");
+            }
+            const auto traceSnapshot = trace_.GetSnapshotUVE();
+            const auto found = std::find_if(traceSnapshot.events.begin(), traceSnapshot.events.end(),
+                                            [&](const auto& event) {
+                                                return event.sequence == *command.eventSequence;
+                                            });
+            if (found == traceSnapshot.events.end()) {
+                return MakeResponseUVE(command, false, MotionQueryLiveDebugResponseCodeUVE::InvalidCommand,
+                                       "live debug event sequence not found in trace");
+            }
+            debugger_.InspectEventUVE(*found);
+            ++generation_;
+            return MakeResponseUVE(command, true, MotionQueryLiveDebugResponseCodeUVE::Applied,
+                                   "live debug event selected for inspection");
+        }
+        case MotionQueryLiveDebugCommandKindUVE::RemoveEvent: {
+            if (!command.eventSequence.has_value()) {
+                return MakeResponseUVE(command, false, MotionQueryLiveDebugResponseCodeUVE::InvalidCommand,
+                                       "live debug RemoveEvent requires an event sequence");
+            }
+            const auto result = trace_.RemoveEventUVE(*command.eventSequence);
+            if (!result.IsAcceptedUVE()) {
+                return MakeResponseUVE(command, false, MotionQueryLiveDebugResponseCodeUVE::InvalidCommand,
+                                       result.message);
+            }
+            ++generation_;
+            return MakeResponseUVE(command, true, MotionQueryLiveDebugResponseCodeUVE::Applied,
+                                   "live debug event removed from trace");
+        }
+        case MotionQueryLiveDebugCommandKindUVE::ToggleTraceEventPin: {
+            if (!command.eventSequence.has_value()) {
+                return MakeResponseUVE(command, false, MotionQueryLiveDebugResponseCodeUVE::InvalidCommand,
+                                       "live debug ToggleTraceEventPin requires an event sequence");
+            }
+            const auto result = trace_.TogglePinUVE(*command.eventSequence);
+            if (!result.IsAcceptedUVE()) {
+                return MakeResponseUVE(command, false, MotionQueryLiveDebugResponseCodeUVE::InvalidCommand,
+                                       result.message);
+            }
+            ++generation_;
+            return MakeResponseUVE(command, true, MotionQueryLiveDebugResponseCodeUVE::Applied,
+                                   result.message);
+        }
+        case MotionQueryLiveDebugCommandKindUVE::SetTraceEventComment: {
+            if (!command.eventSequence.has_value()) {
+                return MakeResponseUVE(command, false, MotionQueryLiveDebugResponseCodeUVE::InvalidCommand,
+                                       "live debug SetTraceEventComment requires an event sequence");
+            }
+            const auto result = trace_.SetCommentUVE(*command.eventSequence, command.filter); // Reusing filter field for comment
+            if (!result.IsAcceptedUVE()) {
+                return MakeResponseUVE(command, false, MotionQueryLiveDebugResponseCodeUVE::InvalidCommand,
+                                       result.message);
+            }
+            ++generation_;
+            return MakeResponseUVE(command, true, MotionQueryLiveDebugResponseCodeUVE::Applied,
+                                   "live debug event comment updated");
+        }
+        case MotionQueryLiveDebugCommandKindUVE::SetTraceEventCategory: {
+            if (!command.eventSequence.has_value()) {
+                return MakeResponseUVE(command, false, MotionQueryLiveDebugResponseCodeUVE::InvalidCommand,
+                                       "live debug SetTraceEventCategory requires an event sequence");
+            }
+            const auto result = trace_.SetCategoryUVE(*command.eventSequence, command.filter); // Reusing filter field for category
+            if (!result.IsAcceptedUVE()) {
+                return MakeResponseUVE(command, false, MotionQueryLiveDebugResponseCodeUVE::InvalidCommand,
+                                       result.message);
+            }
+            ++generation_;
+            return MakeResponseUVE(command, true, MotionQueryLiveDebugResponseCodeUVE::Applied,
+                                   "live debug event category updated");
+        }
+        case MotionQueryLiveDebugCommandKindUVE::ExportTrace: {
+            const auto result = SerializeMotionQueryLiveDebugTraceUVE(trace_.GetSnapshotUVE(), filter_);
+            if (!result.IsAcceptedUVE()) {
+                return MakeResponseUVE(command, false, MotionQueryLiveDebugResponseCodeUVE::InvalidCommand,
+                                       result.message);
+            }
+            MotionQueryLiveDebugResponseUVE response = MakeResponseUVE(
+                command, true, MotionQueryLiveDebugResponseCodeUVE::Applied,
+                "motion query live debug trace exported");
+            response.payload = result.payload;
+            return response;
+        }
+        case MotionQueryLiveDebugCommandKindUVE::ImportTrace: {
+            const auto result = DeserializeMotionQueryLiveDebugTraceUVE(command.payload);
+            if (!result.IsAcceptedUVE()) {
+                return MakeResponseUVE(command, false, MotionQueryLiveDebugResponseCodeUVE::InvalidCommand,
+                                       result.message);
+            }
+            MotionQueryTraceSnapshotUVE restoredSnapshot;
+            restoredSnapshot.truncated = result.envelope->truncated;
+            restoredSnapshot.events = result.envelope->events;
+            const auto restoreResult = trace_.RestoreUVE(std::move(restoredSnapshot));
+            if (!restoreResult.IsAcceptedUVE()) {
+                return MakeResponseUVE(command, false, MotionQueryLiveDebugResponseCodeUVE::InvalidCommand,
+                                       restoreResult.message);
+            }
+            debugger_.DetachUVE();
+            database_.reset();
+            filter_ = result.envelope->filter;
+            active_ = false;
+            ++generation_;
+            return MakeResponseUVE(command, true, MotionQueryLiveDebugResponseCodeUVE::Applied,
+                                   "motion query live debug trace imported for offline inspection");
+        }
     }
     return MakeResponseUVE(command, false, MotionQueryLiveDebugResponseCodeUVE::InvalidCommand,
                            CodeMessageUVE(MotionQueryLiveDebugResponseCodeUVE::InvalidCommand));
@@ -185,7 +295,9 @@ bool MotionQueryLiveDebugSessionUVE::IsValidHandleUVE(
 bool MotionQueryLiveDebugSessionUVE::ContainsFilterUVE(
     const MotionQueryTraceEventUVE& event, const std::string& filter) noexcept {
     return filter.empty() || event.kind.find(filter) != std::string::npos ||
-           event.message.find(filter) != std::string::npos;
+           event.message.find(filter) != std::string::npos ||
+           event.category.find(filter) != std::string::npos ||
+           event.comment.find(filter) != std::string::npos;
 }
 
 const char* MotionQueryLiveDebugSessionUVE::ResultKindUVE(

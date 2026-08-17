@@ -4,6 +4,7 @@
 #include "uve/plugins/motion_query_animation_node_uve.h"
 #include "uve/plugins/motion_query_debugging_uve.h"
 #include "uve/plugins/motion_query_editor_authoring_uve.h"
+#include "uve/plugins/motion_query_live_debug_trace_persistence_uve.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -20,6 +21,13 @@ enum class MotionQueryLiveDebugCommandKindUVE : std::uint8_t {
     ClearTrace,
     ClearSession,
     SetFilter,
+    SelectEvent,
+    RemoveEvent,
+    ToggleTraceEventPin,
+    SetTraceEventComment,
+    SetTraceEventCategory,
+    ExportTrace,
+    ImportTrace,
 };
 
 struct MotionQueryLiveDebugCommandUVE final {
@@ -29,6 +37,8 @@ struct MotionQueryLiveDebugCommandUVE final {
     MotionQueryLiveDebugCommandKindUVE kind = MotionQueryLiveDebugCommandKindUVE::ReadSnapshot;
     std::optional<UVE::Asset::ResourceHandleUVE> database;
     std::string filter;
+    std::string payload;
+    std::optional<std::uint64_t> eventSequence;
 };
 
 struct MotionQueryLiveDebugSnapshotUVE final {
@@ -63,6 +73,7 @@ struct MotionQueryLiveDebugResponseUVE final {
     bool applied = false;
     MotionQueryLiveDebugResponseCodeUVE code = MotionQueryLiveDebugResponseCodeUVE::InvalidCommand;
     std::string message;
+    std::optional<std::string> payload;
     MotionQueryLiveDebugSnapshotUVE snapshot;
 };
 

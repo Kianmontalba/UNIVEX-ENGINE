@@ -143,7 +143,13 @@ public sealed class BridgeProtocolClient : IAsyncDisposable
                     generation = command.MotionQueryDebugDatabase.Generation,
                 },
                 filter = command.MotionQueryDebugFilter,
+                payload = command.MotionQueryDebugPayload,
+                eventSequence = command.MotionQueryDebugEventSequence,
             },
+            motionQueryReplayBaselineName = command.MotionQueryReplayBaselineName,
+            motionQueryReplayFixturePayload = command.MotionQueryReplayFixturePayload,
+            motionQueryReplayBaselineEnvelopePayload = command.MotionQueryReplayBaselineEnvelopePayload,
+            motionQueryReplayBaselineNewName = command.MotionQueryReplayBaselineNewName,
         }, cancellationToken).ConfigureAwait(false);
         JsonElement result = GetResultOrThrow(response.RootElement);
         BridgeEntityRef? createdEntity = result.GetProperty("createdEntity").ValueKind == JsonValueKind.Null
@@ -153,13 +159,23 @@ public sealed class BridgeProtocolClient : IAsyncDisposable
                                                        graphSchemaValue.ValueKind != JsonValueKind.Null
             ? BridgeSnapshotParser.ParseVisualScriptGraphSchema(graphSchemaValue)
             : null;
+        string? envelopePayload = result.TryGetProperty("motionQueryReplayBaselineEnvelopePayload", out JsonElement envelopeValue) &&
+                                   envelopeValue.ValueKind == JsonValueKind.String
+            ? envelopeValue.GetString()
+            : null;
+        string? liveDebugTracePayload = result.TryGetProperty("motionQueryLiveDebugTracePayload", out JsonElement liveTraceValue) &&
+                                        liveTraceValue.ValueKind == JsonValueKind.String
+            ? liveTraceValue.GetString()
+            : null;
         return new BridgeCommandResult(
             result.GetProperty("applied").GetBoolean(),
             result.GetProperty("code").GetString() ?? "bridge.response.invalid",
             result.GetProperty("message").GetString() ?? "The backend returned no bridge command message.",
             BridgeSnapshotParser.Parse(result.GetProperty("snapshot")),
             createdEntity,
-            graphSchema);
+            graphSchema,
+            envelopePayload,
+            liveDebugTracePayload);
     }
 
     public async ValueTask DisposeAsync()

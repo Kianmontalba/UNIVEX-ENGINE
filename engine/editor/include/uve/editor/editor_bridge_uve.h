@@ -92,6 +92,10 @@ enum class EditorBridgeCapabilityUVE : std::uint8_t {
     LoadMotionQueryReplayBaseline,
     ClearMotionQueryReplayBaseline,
     RunMotionQueryReplayBaselineBatch,
+    ExportMotionQueryReplayBaselineRegistry,
+    ImportMotionQueryReplayBaselineRegistry,
+    RenameMotionQueryReplayBaseline,
+    ExportMotionQueryReplayEvidence,
 };
 
 /// The deliberately small v1 request vocabulary. No generic command string is accepted because
@@ -142,6 +146,10 @@ enum class EditorBridgeRequestKindUVE : std::uint8_t {
     LoadMotionQueryReplayBaseline,
     ClearMotionQueryReplayBaseline,
     RunMotionQueryReplayBaselineBatch,
+    ExportMotionQueryReplayBaselineRegistry,
+    ImportMotionQueryReplayBaselineRegistry,
+    RenameMotionQueryReplayBaseline,
+    ExportMotionQueryReplayEvidence,
 };
 
 /// Explicitly describes whether this bridge session has a native-owned viewport surface. No raw
@@ -619,6 +627,8 @@ struct EditorBridgeRequestUVE final {
     std::optional<Plugins::Editor::MotionQueryLiveDebugCommandUVE> motionQueryDebugCommand;
     std::optional<std::string> motionQueryReplayBaselineName;
     std::optional<std::string> motionQueryReplayFixturePayload;
+    std::optional<std::string> motionQueryReplayBaselineEnvelopePayload;
+    std::optional<std::string> motionQueryReplayBaselineNewName;
 
     EditorBridgeRequestUVE() = default;
 
@@ -649,6 +659,8 @@ struct EditorBridgeResponseUVE final {
     EditorBridgeSnapshotUVE snapshot;
     std::optional<EditorBridgeEntityRefUVE> createdEntity;
     std::optional<Scripting::ScriptGraphSchemaUVE> visualScriptGraphSchema;
+    std::optional<std::string> motionQueryReplayBaselineEnvelopePayload;
+    std::optional<std::string> motionQueryLiveDebugTracePayload;
 };
 
 /// Main-thread adapter over EditorUVE. It supports coexistence with the native ImGui editor: every
