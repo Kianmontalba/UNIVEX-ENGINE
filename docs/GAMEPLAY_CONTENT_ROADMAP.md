@@ -12,7 +12,7 @@
 |---|---|---|---|
 | **COMPLETED** | **Increments 5–6** | ECS scene graph, transforms, serializable scenes, and prefabs. | These are the base for all later gameplay/component work. |
 | **COMPLETED** | **Increments 15–16** | Collision, simulation foundation, raycasts, and physics materials. | Character/rigid-body/area feature depth remains partial. |
-| **COMPLETED** | **Increments 17–19** | Input, audio, and save/checkpoint foundations. | Full gameplay integration, mixer, and save-domain modeling remain partial. |
+| **COMPLETED** | **Increments 17–19** | Input, audio, and save/checkpoint foundations. | GamepadInputSystemUVE bounded snapshots, AudioSystemUVE mixer-group routing/multiplier diagnostics, and SaveGameSystemUVE current-schema dispatch with unsupported-version diagnostics are now proven foundations; full gameplay integration, effects, cloud/save-domain modeling, and content policy remain partial. |
 | **COMPLETED** | **Increments 38–58** | Real Scene Editor authoring: selection, transforms, hierarchy, history, Play sandbox, and built-in primitives. | Editor primitives are not a complete gameplay-node catalog. |
 
 <div align="center">

@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <fstream>
 #include <optional>
+#include <string>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -242,6 +243,57 @@ TEST_F(SaveGameSystemUVETest, LoadUVE_PayloadWithBogusLengthPrefix_ReturnsEmptyV
     EntityManagerUVE freshManager(memoryManager.GetDefaultAllocatorUVE(), eventSystem);
     EXPECT_TRUE(saveGameSystem.LoadUVE(12, freshManager).empty());
     EXPECT_FALSE(saveGameSystem.GetSaveMetadataUVE(12).has_value());
+}
+
+TEST_F(SaveGameSystemUVETest, SaveThenLoad_CurrentSchemaReportsNoMigrationRequired) {
+    const EntityUVE entity = entityManager.CreateEntityUVE();
+    ASSERT_TRUE(saveGameSystem.SaveUVE(13, entityManager, {entity}, GameStateMetadataUVE{}));
+
+    EntityManagerUVE loadedManager(memoryManager.GetDefaultAllocatorUVE(), eventSystem);
+    ASSERT_FALSE(saveGameSystem.LoadUVE(13, loadedManager).empty());
+    const SaveMigrationDiagnosticsUVE diagnostics = saveGameSystem.GetLastMigrationDiagnosticsUVE();
+    EXPECT_EQ(diagnostics.status, SaveMigrationStatusUVE::NotRequired);
+    EXPECT_EQ(diagnostics.sourceSchemaVersion, kCurrentSavePayloadSchemaVersionUVE);
+    EXPECT_EQ(diagnostics.targetSchemaVersion, kCurrentSavePayloadSchemaVersionUVE);
+    EXPECT_TRUE(diagnostics.reason.empty());
+}
+
+TEST_F(SaveGameSystemUVETest, LoadUVE_UnsupportedSchemaReportsBoundedMigrationDiagnostics) {
+    const EntityUVE entity = entityManager.CreateEntityUVE();
+    ASSERT_TRUE(saveGameSystem.SaveUVE(14, entityManager, {entity}, GameStateMetadataUVE{}));
+
+    const std::filesystem::path slotPath = saveDirectory / "slot_14.uvesave";
+    std::optional<std::pair<Asset::UveFileHeaderUVE, std::vector<std::byte>>> file =
+        Asset::ReadUveFileUVE(slotPath);
+    ASSERT_TRUE(file.has_value());
+    std::vector<std::byte> payload = file->second;
+    ASSERT_GE(payload.size(), sizeof(std::uint32_t));
+
+    std::uint32_t metadataLength = 0U;
+    std::memcpy(&metadataLength, payload.data(), sizeof(metadataLength));
+    ASSERT_GT(metadataLength, 0U);
+    ASSERT_LE(sizeof(metadataLength) + metadataLength, payload.size());
+    std::string metadataText(reinterpret_cast<const char*>(payload.data() + sizeof(metadataLength)), metadataLength);
+    const std::string currentVersionToken = "\"payloadSchemaVersion\":1";
+    const std::size_t tokenOffset = metadataText.find(currentVersionToken);
+    ASSERT_NE(tokenOffset, std::string::npos);
+    metadataText.replace(tokenOffset, currentVersionToken.size(), "\"payloadSchemaVersion\":9");
+    ASSERT_EQ(metadataText.size(), metadataLength);
+    std::memcpy(payload.data() + sizeof(metadataLength), metadataText.data(), metadataLength);
+    ASSERT_TRUE(Asset::WriteUveFileUVE(slotPath, Asset::AssetKindUVE::Save, payload));
+
+    EntityManagerUVE freshManager(memoryManager.GetDefaultAllocatorUVE(), eventSystem);
+    EXPECT_TRUE(saveGameSystem.LoadUVE(14, freshManager).empty());
+    SaveMigrationDiagnosticsUVE diagnostics = saveGameSystem.GetLastMigrationDiagnosticsUVE();
+    EXPECT_EQ(diagnostics.status, SaveMigrationStatusUVE::UnsupportedSourceVersion);
+    EXPECT_EQ(diagnostics.sourceSchemaVersion, 9U);
+    EXPECT_EQ(diagnostics.targetSchemaVersion, kCurrentSavePayloadSchemaVersionUVE);
+    EXPECT_FALSE(diagnostics.reason.empty());
+
+    EXPECT_FALSE(saveGameSystem.GetSaveMetadataUVE(14).has_value());
+    diagnostics = saveGameSystem.GetLastMigrationDiagnosticsUVE();
+    EXPECT_EQ(diagnostics.status, SaveMigrationStatusUVE::UnsupportedSourceVersion);
+    EXPECT_EQ(diagnostics.sourceSchemaVersion, 9U);
 }
 
 TEST_F(SaveGameSystemUVETest, SaveUVE_DirectoryCannotBeCreated_FailsWithoutLeavingAnyFile) {
