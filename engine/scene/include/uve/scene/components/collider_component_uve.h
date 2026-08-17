@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <cmath>
 #include <cstdint>
 
 #include "uve/math/vector3_uve.h"
@@ -27,5 +28,17 @@ struct ColliderComponentUVE final {
     float restitution = 0.0F;
     float density = 1.0F;
 };
+
+/// Validates the value-only collider contract before broad-phase AABB construction, material
+/// extraction, or scene persistence. Collision masks remain opaque bit fields; a zero layer is
+/// rejected because it would make the collider unreachable by the layer-mask raycast contract.
+[[nodiscard]] inline bool IsColliderComponentValidUVE(const ColliderComponentUVE& collider) noexcept {
+    return std::isfinite(collider.halfExtents.x) && std::isfinite(collider.halfExtents.y) &&
+           std::isfinite(collider.halfExtents.z) && collider.halfExtents.x > 0.0F &&
+           collider.halfExtents.y > 0.0F && collider.halfExtents.z > 0.0F && collider.collisionLayer != 0U &&
+           std::isfinite(collider.friction) && collider.friction >= 0.0F && collider.friction <= 1.0F &&
+           std::isfinite(collider.restitution) && collider.restitution >= 0.0F && collider.restitution <= 1.0F &&
+           std::isfinite(collider.density) && collider.density > 0.0F;
+}
 
 } // namespace UVE::Scene

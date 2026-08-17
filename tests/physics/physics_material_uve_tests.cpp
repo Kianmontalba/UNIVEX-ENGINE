@@ -3,6 +3,8 @@
 
 #include "uve/physics/physics_material_uve.h"
 
+#include <limits>
+
 #include <gtest/gtest.h>
 
 #include "uve/scene/components/collider_component_uve.h"
@@ -11,6 +13,32 @@ namespace UVE::Physics::Tests {
 namespace {
 
 constexpr float kEpsilon = 1e-5F;
+
+TEST(ColliderComponentUVETest, IsColliderComponentValidUVE_RejectsUnsafeValues) {
+    EXPECT_TRUE(Scene::IsColliderComponentValidUVE(Scene::ColliderComponentUVE{}));
+
+    Scene::ColliderComponentUVE invalid = {};
+    invalid.halfExtents.x = 0.0F;
+    EXPECT_FALSE(Scene::IsColliderComponentValidUVE(invalid));
+    invalid = {};
+    invalid.halfExtents.y = std::numeric_limits<float>::quiet_NaN();
+    EXPECT_FALSE(Scene::IsColliderComponentValidUVE(invalid));
+    invalid = {};
+    invalid.collisionLayer = 0U;
+    EXPECT_FALSE(Scene::IsColliderComponentValidUVE(invalid));
+    invalid = {};
+    invalid.friction = 1.1F;
+    EXPECT_FALSE(Scene::IsColliderComponentValidUVE(invalid));
+    invalid = {};
+    invalid.restitution = -0.1F;
+    EXPECT_FALSE(Scene::IsColliderComponentValidUVE(invalid));
+    invalid = {};
+    invalid.density = 0.0F;
+    EXPECT_FALSE(Scene::IsColliderComponentValidUVE(invalid));
+    invalid = {};
+    invalid.density = std::numeric_limits<float>::infinity();
+    EXPECT_FALSE(Scene::IsColliderComponentValidUVE(invalid));
+}
 
 TEST(PhysicsMaterialUVETest, CombineMaterialsUVE_KnownValues_AverageCorrectly) {
     constexpr PhysicsMaterialUVE a{0.2F, 0.4F, 1.0F};

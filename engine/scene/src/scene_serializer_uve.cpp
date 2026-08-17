@@ -226,6 +226,9 @@ template <typename T, typename FromJsonFunc>
                           collider.friction = json.value("friction", 0.0F);
                           collider.restitution = json.value("restitution", 0.0F);
                           collider.density = json.value("density", 1.0F);
+                          if (!IsColliderComponentValidUVE(collider)) {
+                              throw std::runtime_error("Invalid ColliderComponentUVE payload");
+                          }
                           return collider;
                       }));
         table.emplace("RigidBodyComponentUVE", MakeRegistrationUVE<RigidBodyComponentUVE>([](const nlohmann::json& json) {

@@ -3,6 +3,7 @@
 
 #include "uve/physics/detail/collider_world_aabb_cache_uve.h"
 
+#include "uve/debug/assert_uve.h"
 #include "uve/scene/components/collider_component_uve.h"
 #include "uve/scene/components/world_transform_component_uve.h"
 
@@ -11,8 +12,9 @@ namespace UVE::Physics::Detail {
 std::vector<ColliderWorldAabbUVE> BuildColliderWorldAabbCacheUVE(Scene::IEntityManagerUVE& entityManager) {
     std::vector<ColliderWorldAabbUVE> cache;
     entityManager.ForEachUVE<Scene::WorldTransformComponentUVE, Scene::ColliderComponentUVE>(
-        [&cache](Scene::EntityUVE entity, const Scene::WorldTransformComponentUVE& worldTransform,
+        [&](Scene::EntityUVE entity, const Scene::WorldTransformComponentUVE& worldTransform,
                  const Scene::ColliderComponentUVE& collider) {
+            UVE_ASSERT(Scene::IsColliderComponentValidUVE(collider));
             cache.push_back(ColliderWorldAabbUVE{
                 entity, Math::AabbUVE::FromCenterExtentsUVE(worldTransform.worldPosition, collider.halfExtents),
                 collider.collisionLayer});
