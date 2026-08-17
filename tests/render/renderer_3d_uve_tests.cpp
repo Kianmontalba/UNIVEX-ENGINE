@@ -747,6 +747,30 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_Rgba16FloatAlbedoTexture_UploadsSuccess
     }));
 }
 
+TEST_F(Renderer3DUVETest, RenderFrameUVE_FailedTextureUsesFallbackAndReportsDiagnostic) {
+    const Scene::EntityUVE cameraEntity = MakeCameraEntityUVE();
+    const Asset::AssetGuidUVE meshGuid = assetDatabase.RegisterUVE("renderer3d_tests_failed_texture_mesh.uvemodel");
+    const Asset::AssetGuidUVE materialGuid = assetDatabase.RegisterUVE("renderer3d_tests_failed_texture_material.uvemat");
+    const Asset::AssetGuidUVE textureGuid = assetDatabase.RegisterUVE("renderer3d_tests_failed_texture.uvetex");
+    UseAlbedoTextureInMaterialUVE(textureGuid);
+    assetManager.RegisterLoaderUVE<Asset::TextureAssetUVE>(
+        [](const std::filesystem::path&, Asset::TextureAssetUVE&) { return false; });
+
+    MakeMeshEntityUVE(Math::Vector3UVE{0.0F, 0.0F, -10.0F}, meshGuid, materialGuid);
+    WaitUntilAssetsReadyUVE(meshGuid, materialGuid);
+    Asset::AssetHandleUVE<Asset::TextureAssetUVE> textureHandle =
+        assetManager.LoadUVE<Asset::TextureAssetUVE>(textureGuid, assetDatabase);
+    for (int iteration = 0; iteration < kMaxPollIterationsUVE && !textureHandle.HasFailedUVE(); ++iteration) {
+        std::this_thread::yield();
+    }
+    ASSERT_TRUE(textureHandle.HasFailedUVE());
+
+    renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+    const Renderer3DFrameDiagnosticsUVE diagnostics = renderer3D->GetLastFrameDiagnosticsUVE();
+    EXPECT_EQ(diagnostics.failedAssetLoads, 0U);
+    EXPECT_EQ(diagnostics.textureFallbacks, 1U);
+}
+
 TEST_F(Renderer3DUVETest, RenderFrameUVE_TextureAssetNotYetReady_SkipsItemUntilLoaded) {
     const Scene::EntityUVE cameraEntity = MakeCameraEntityUVE();
     const Asset::AssetGuidUVE meshGuid = assetDatabase.RegisterUVE("renderer3d_tests_pending_mesh.uvemodel");

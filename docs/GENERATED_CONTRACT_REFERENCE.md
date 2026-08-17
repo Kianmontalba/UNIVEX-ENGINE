@@ -3,7 +3,7 @@
 
 > This reference is generated from `docs/CONTRACT_INVENTORY.md`. Native and editor code remain authoritative; this file is documentation only.
 
-Inventory revision: `b41073b48a4cfd36`
+Inventory revision: `0331c8433de5b99e`
 
 | ID | Authority | Anchor | Contract role | Allowed consumers | Ownership boundary |
 |---|---|---|---|---|---|
@@ -22,3 +22,4 @@ Inventory revision: `b41073b48a4cfd36`
 | `MQ-REPLAY-FIXTURE` | `engine/plugins/Animation/motion_query/Source/Editor/include/uve/plugins/motion_query_trace_replay_uve.h` | `struct MotionQueryTraceReplayFixtureUVE final` | Versioned bounded value-only replay fixture, deterministic comparator, compatibility identity, and field-level mismatch facts. | Native regression harness, baseline registry, editor bridge, stdio transport, and managed parser through copied DTOs. | Fixture data excludes raw runtime handles, timestamps, database ownership, and unbounded diagnostics; comparison is deterministic and sequence-ordered. |
 | `MQ-REPLAY-REGRESSION` | `engine/plugins/Animation/motion_query/Source/Editor/include/uve/plugins/motion_query_trace_replay_regression_uve.h` | `CompareMotionQueryLiveDebugSnapshotAgainstNamedBaselineUVE` | Generation/compatibility-guarded comparison of complete copied live-debug evidence against a named baseline. | Native regression tests, editor bridge workflow, and CI validation. | The harness rejects filtered/empty evidence and returns copied result facts; it never transfers logger, runtime, filesystem, or managed ownership. |
 | `MQ-SEARCH` | `engine/plugins/Animation/motion_query/Source/Runtime/include/uve/plugins/motion_query_search_index_uve.h` | `class MotionQuerySearchIndexUVE final` | Bounded copied feature index and deterministic nearest-candidate search contract. | Motion Query animation node and native runtime tests. | Index owns copied entries only; it does not own databases, ECS entities, assets, or renderer resources. |
+| `RENDER-ASSET-DIAGNOSTICS` | `engine/render/include/uve/render/i_renderer_3d_uve.h` | `struct Renderer3DFrameDiagnosticsUVE final` | Copied per-frame asset-resolution counts for invalid references, pending/failed mesh-material loads, and renderer texture fallbacks. | Renderer tests, engine diagnostics, and future editor presentation through the existing Renderer3D snapshot. | Renderer owns GPU fallback resources; the DTO contains counts only and cannot mutate ECS, AssetManager state, or GPU handles. |

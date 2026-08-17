@@ -29,6 +29,12 @@ RenderQueueUVE MeshRendererUVE::ExtractRenderQueueUVE(Scene::IEntityManagerUVE& 
     entityManager.ForEachUVE<Scene::WorldTransformComponentUVE, Scene::MeshComponentUVE>(
         [&](Scene::EntityUVE, const Scene::WorldTransformComponentUVE& worldTransform,
             const Scene::MeshComponentUVE& meshComponent) {
+            if (meshComponent.meshGuid == Asset::kInvalidAssetGuidUVE) {
+                ++queue.invalidAssetReferences;
+            }
+            if (meshComponent.materialGuid == Asset::kInvalidAssetGuidUVE) {
+                ++queue.invalidAssetReferences;
+            }
             if (meshComponent.meshGuid == Asset::kInvalidAssetGuidUVE ||
                 meshComponent.materialGuid == Asset::kInvalidAssetGuidUVE) {
                 return;
@@ -38,7 +44,13 @@ RenderQueueUVE MeshRendererUVE::ExtractRenderQueueUVE(Scene::IEntityManagerUVE& 
                 assetManager.LoadUVE<Asset::MeshAssetUVE>(meshComponent.meshGuid, assetDatabase);
             Asset::AssetHandleUVE<Asset::MaterialAssetUVE> materialHandle =
                 assetManager.LoadUVE<Asset::MaterialAssetUVE>(meshComponent.materialGuid, assetDatabase);
-            if (!meshHandle.IsReadyUVE() || !materialHandle.IsReadyUVE()) {
+            const bool meshFailed = meshHandle.HasFailedUVE();
+            const bool materialFailed = materialHandle.HasFailedUVE();
+            queue.failedAssetLoads += static_cast<std::size_t>(meshFailed) + static_cast<std::size_t>(materialFailed);
+            const bool meshPending = !meshFailed && !meshHandle.IsReadyUVE();
+            const bool materialPending = !materialFailed && !materialHandle.IsReadyUVE();
+            queue.pendingAssetLoads += static_cast<std::size_t>(meshPending) + static_cast<std::size_t>(materialPending);
+            if (meshPending || materialPending || meshFailed || materialFailed) {
                 return;
             }
 

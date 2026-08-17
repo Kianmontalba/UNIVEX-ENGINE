@@ -37,6 +37,10 @@ struct EditorViewportVisualStateUVE final {
 /// Thread-safety: returned by value; RenderFrameUVE() and this accessor remain main-thread only.
 struct Renderer3DFrameDiagnosticsUVE final {
     std::size_t meshItemsExtracted = 0U;
+    std::size_t invalidAssetReferences = 0U;
+    std::size_t pendingAssetLoads = 0U;
+    std::size_t failedAssetLoads = 0U;
+    std::size_t textureFallbacks = 0U;
     std::size_t primitiveCandidates = 0U;
     std::size_t primitiveItemsExtracted = 0U;
     std::size_t meshDrawCallsRecorded = 0U;
