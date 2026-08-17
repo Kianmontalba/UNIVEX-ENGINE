@@ -4,6 +4,7 @@
 #include "uve/physics/physics_system_uve.h"
 
 #include <cmath>
+#include <limits>
 #include <optional>
 
 #include <gtest/gtest.h>
@@ -67,6 +68,30 @@ protected:
         }
     }
 };
+
+TEST(RigidBodyComponentUVETest, IsRigidBodyComponentValidUVE_RejectsUnsafeValuesAndPreservesZeroMass) {
+    EXPECT_TRUE(Scene::IsRigidBodyComponentValidUVE(Scene::RigidBodyComponentUVE{}));
+
+    Scene::RigidBodyComponentUVE zeroMass = {};
+    zeroMass.mass = 0.0F;
+    EXPECT_TRUE(Scene::IsRigidBodyComponentValidUVE(zeroMass));
+
+    Scene::RigidBodyComponentUVE invalid = {};
+    invalid.mass = -1.0F;
+    EXPECT_FALSE(Scene::IsRigidBodyComponentValidUVE(invalid));
+    invalid = {};
+    invalid.velocity.x = std::numeric_limits<float>::quiet_NaN();
+    EXPECT_FALSE(Scene::IsRigidBodyComponentValidUVE(invalid));
+    invalid = {};
+    invalid.drag = -0.1F;
+    EXPECT_FALSE(Scene::IsRigidBodyComponentValidUVE(invalid));
+    invalid = {};
+    invalid.gravityScale = std::numeric_limits<float>::infinity();
+    EXPECT_FALSE(Scene::IsRigidBodyComponentValidUVE(invalid));
+    invalid = {};
+    invalid.gravityScale = -1.0F;
+    EXPECT_FALSE(Scene::IsRigidBodyComponentValidUVE(invalid));
+}
 
 TEST_F(PhysicsSystemUVETest, StepUVE_DynamicBodyUnderGravity_MatchesHandComputedSemiImplicitEuler) {
     PhysicsSystemUVE physicsSystem(collisionSystem, Math::Vector3UVE{0.0F, -10.0F, 0.0F});
@@ -253,6 +278,18 @@ TEST_F(PhysicsSystemUVETest, StepUVE_StaticVsStaticOverlap_NeitherMovesAndNoDivi
     EXPECT_EQ(GetWorldPositionUVE(a), (Math::Vector3UVE{0.0F, 0.0F, 0.0F}));
     EXPECT_EQ(GetWorldPositionUVE(b), (Math::Vector3UVE{0.5F, 0.0F, 0.0F}));
 }
+
+#if UVE_DEBUG
+TEST_F(PhysicsSystemUVETest, StepUVE_InvalidRigidBodyParameters_Asserts) {
+    Scene::RigidBodyComponentUVE invalid = {};
+    invalid.drag = -1.0F;
+    const Scene::EntityUVE body = MakeBodyEntityUVE(Math::Vector3UVE{}, invalid);
+    PhysicsSystemUVE physicsSystem(collisionSystem);
+
+    ASSERT_NE(body, Scene::kInvalidEntityUVE);
+    EXPECT_DEATH({ physicsSystem.StepUVE(entityManager, sceneGraph, 1.0F / 60.0F); }, "");
+}
+#endif
 
 } // namespace
 } // namespace UVE::Physics::Tests

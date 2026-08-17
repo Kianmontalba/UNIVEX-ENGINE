@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <vector>
 
+#include "uve/debug/assert_uve.h"
 #include "uve/physics/collision_pair_uve.h"
 #include "uve/physics/physics_material_uve.h"
 #include "uve/scene/components/collider_component_uve.h"
@@ -106,6 +107,7 @@ void PhysicsSystemUVE::StepUVE(Scene::IEntityManagerUVE& entityManager, Scene::I
         [&entityManager, &sceneGraph, this, fixedDeltaTimeSeconds](
             Scene::EntityUVE entity, const Scene::TransformComponentUVE& transform,
             Scene::RigidBodyComponentUVE& rigidBody) {
+            UVE_ASSERT(Scene::IsRigidBodyComponentValidUVE(rigidBody));
             if (rigidBody.isKinematic) {
                 return;
             }

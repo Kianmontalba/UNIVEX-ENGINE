@@ -239,6 +239,9 @@ template <typename T, typename FromJsonFunc>
                               json.contains("velocity") ? Vector3FromJsonUVE(json.at("velocity")) : Math::Vector3UVE{};
                           rigidBody.drag = json.value("drag", 0.0F);
                           rigidBody.gravityScale = json.value("gravityScale", 1.0F);
+                          if (!IsRigidBodyComponentValidUVE(rigidBody)) {
+                              throw std::runtime_error("Invalid RigidBodyComponentUVE payload");
+                          }
                           return rigidBody;
                       }));
         table.emplace("AudioSourceComponentUVE",
