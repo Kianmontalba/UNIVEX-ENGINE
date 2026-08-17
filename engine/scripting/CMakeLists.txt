@@ -15,6 +15,7 @@ add_library(uve_scripting
     src/script_hot_reload_uve.cpp
     src/script_graph_runtime_binding_uve.cpp
     src/script_component_runtime_ownership_uve.cpp
+    src/script_asset_loader_uve.cpp
     src/script_source_mapping_uve.cpp
 )
 target_include_directories(uve_scripting PUBLIC include)
