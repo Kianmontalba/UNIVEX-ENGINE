@@ -1,0 +1,39 @@
+# UNIVEX Engine — Loops Execution Queue
+
+> This is the execution queue for the autonomous loops workflow. It preserves the existing roadmaps and the supplied DOCX-derived Motion Query inventory as authorities. The queue is dependency-ordered; it is not permission to generate speculative source files in bulk.
+
+## Operating contract
+
+Each loop selects one bounded, reviewable capability. The implementation must extend the existing engine authority, preserve ownership and thread boundaries, add focused tests, run the full validation matrix, update the domain roadmaps, create a signed commit, push the working branch, wait for required CI, and merge only when the review state is green.
+
+| Review state | Required action |
+|---|---|
+| **Red** | Stop. Treat the issue as a blocker, find the root cause, fix it, and repeat review and validation. Do not merge. |
+| **Orange** | Stop before merge. Re-review architecture, ownership, failure paths, and test evidence; add the missing proof or reduce scope. |
+| **Green** | Required checks and review are clear. Push and merge autonomously, then continue to the next queue item. |
+
+## Execution order
+
+| Phase | Queue | Entry condition | Completion gate |
+|---:|---|---|---|
+| 1 | **Viewport presentation** | Legacy Rendering Increment 63 was already implemented and verified. | Real renderer presentation, shader parity, native/managed validation, and OpenGL/Xvfb smoke. **Completed.** |
+| 2 | **Selection and viewport visual feedback** | Uses the renderer-owned editor visual pass from Phase 1. | Bounded selection rectangle, gizmo-axis, and camera-orientation facts reach the GPU pass through copied value-only state. **Completed.** |
+| 3 | **Material and mesh asset workflow** | Existing mesh/material/texture assets, renderer fallback resources, Inspector, and Content Browser contracts must be audited first. | Asset-backed mesh/material/texture path is deterministic, editor-visible, failure-safe, and covered by import, renderer, Inspector, and smoke tests. |
+| 4 | **Core asset-type importers and data table pipeline** | Stable virtual paths, asset identity, derived-data boundaries, and explicit parser/licensing choices. | Model, texture, audio, material, animation, shader, and typed CSV/JSON/TSV import contracts are selected and implemented only where fixtures and validation exist. |
+| 5 | **Scene components and prefab maturity** | Runtime scene ownership and serialization are authoritative. | Supported component/node contracts, nested prefabs, overrides, apply/revert, conflict handling, editor commands, and persistence tests. |
+| 6 | **Tooling partial closure** | Audit stale or partial implementations before adding code. | Bytecode reload/last-known-good, plugin capability/lifecycle, developer console security, and documentation delivery each have implementation and proof or an explicit deferred disposition. |
+| 7 | **Simulation, input, audio, and save depth** | Core services and platform targets are explicit. | Physics bodies/character/areas, broader input, audio source/listener/mixer, and versioned save migration are independently tested and profiled. |
+| 8 | **Animation runtime convergence** | Shared pose, skeleton, time, resource, and evaluation contracts are stable. | Animation assets/player/tree, Control Rig/IK, retargeting, procedural animation, Motion Query, and Visual Scripting use one authoritative evaluation model. |
+| 9 | **Gameplay and content systems** | Runtime/editor foundations above are complete enough for user-facing content. | Nodes/components, character interaction, particles/VFX, splines, procedural generation, data-driven gameplay, Sequencer, decals, impostors, and lightmap workflows have real runtime/editor proof. |
+| 10 | **Renderer expansion** | Material/mesh workflow and profiling budgets are stable. | Post-processing, render-path breadth, skinning, particles, occlusion, dynamic resolution, platform backends, and mobile visual quality are measured and validated. |
+| 11 | **DOCX Motion Query inventory execution** | Legacy partial queue and shared animation foundations are closed or have explicit approved dispositions. | Every one of the 198 source filenames is accounted for in `MOTION_QUERY_INVENTORY_ROADMAP.md`, adapted to UVE-native naming and ownership, and implemented only when its runtime/editor/diagnostic/test dependencies are ready. |
+| 12 | **Platform, release, sample, and documentation** | Installable runtime, asset cooking, project CLI, and stable editor workflows exist. | Windows/Linux/mobile targets, build configurations, cooking, packaging, release automation, sample project, API/manual/plugin/build guides. |
+| 13 | **Ecosystem** | Stable release artifacts, project format, security, and operational ownership exist. | Hub, project management, engine integration, account/privacy, public site, cloud collaboration, marketplace safety, beta, and launch gates. |
+
+## Legacy partial audit rules
+
+A `PARTIAL` row may be promoted to `COMPLETED` only after inspecting the actual repository. If the implementation already exists, the loop should close the stale status with tests and documentation rather than duplicate code. If only part exists, the increment must identify the missing authority and implement only that boundary. If the capability depends on unavailable platform or service infrastructure, it remains `PARTIAL` with a written disposition instead of receiving a false completion claim.
+
+## Source authorities
+
+The detailed domain roadmaps remain authoritative for their own capabilities: [`CORE_RUNTIME_ROADMAP.md`](CORE_RUNTIME_ROADMAP.md), [`RENDERING_ROADMAP.md`](RENDERING_ROADMAP.md), [`EDITOR_ROADMAP.md`](EDITOR_ROADMAP.md), [`TOOLING_ROADMAP.md`](TOOLING_ROADMAP.md), [`GAMEPLAY_CONTENT_ROADMAP.md`](GAMEPLAY_CONTENT_ROADMAP.md), [`PLATFORM_RELEASE_ROADMAP.md`](PLATFORM_RELEASE_ROADMAP.md), and [`ECOSYSTEM_ROADMAP.md`](ECOSYSTEM_ROADMAP.md). The DOCX-derived Motion Query filename and target-path authority is [`MOTION_QUERY_INVENTORY_ROADMAP.md`](MOTION_QUERY_INVENTORY_ROADMAP.md). The master AAA intent is [`AAA_CORE_ROADMAP.md`](AAA_CORE_ROADMAP.md).
