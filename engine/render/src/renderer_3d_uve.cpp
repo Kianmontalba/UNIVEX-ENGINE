@@ -28,6 +28,7 @@
 #include "uve/render/render_graph_uve.h"
 #include "uve/render/primitive_geometry_uve.h"
 #include "uve/render/particle_render_bridge_uve.h"
+#include "uve/render/particle_draw_command_uve.h"
 #include "uve/render/render_queue_uve.h"
 #include "uve/render/shader/built_in_shaders_uve.h"
 #include "uve/render/shader/shader_program_desc_uve.h"
@@ -851,6 +852,8 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
         m_impl->lastFrameDiagnostics.particleItemsTruncated = particleSnapshot.truncated;
     }
     queue.SortUVE();
+    const ParticleDrawRecordingUVE particleDrawRecording = ParticleDrawRecorderUVE::RecordUVE(queue);
+    m_impl->lastFrameDiagnostics.particleDrawCommandsRecorded = particleDrawRecording.commands.size();
     m_impl->lastFrameDiagnostics.meshItemsExtracted = queue.opaqueItems.size() + queue.transparentItems.size();
     m_impl->lastFrameDiagnostics.invalidAssetReferences = queue.invalidAssetReferences;
     m_impl->lastFrameDiagnostics.pendingAssetLoads = queue.pendingAssetLoads;

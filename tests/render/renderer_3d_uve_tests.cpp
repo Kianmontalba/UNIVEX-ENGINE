@@ -896,11 +896,13 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_ParticleRuntimeInput_ExtractsCopiedItem
     EXPECT_NO_FATAL_FAILURE(renderer3D->RenderFrameWithParticleRuntimeUVE(entityManager, cameraEntity, particleRuntime));
     const Renderer3DFrameDiagnosticsUVE particleDiagnostics = renderer3D->GetLastFrameDiagnosticsUVE();
     EXPECT_EQ(particleDiagnostics.particleItemsExtracted, 2U);
+    EXPECT_EQ(particleDiagnostics.particleDrawCommandsRecorded, 2U);
     EXPECT_FALSE(particleDiagnostics.particleItemsTruncated);
 
     EXPECT_NO_FATAL_FAILURE(renderer3D->RenderFrameUVE(entityManager, cameraEntity));
     const Renderer3DFrameDiagnosticsUVE legacyDiagnostics = renderer3D->GetLastFrameDiagnosticsUVE();
     EXPECT_EQ(legacyDiagnostics.particleItemsExtracted, 0U);
+    EXPECT_EQ(legacyDiagnostics.particleDrawCommandsRecorded, 0U);
     EXPECT_FALSE(legacyDiagnostics.particleItemsTruncated);
 }
 
