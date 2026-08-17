@@ -18,6 +18,7 @@ add_library(uve_scene STATIC
     src/scene_graph_uve.cpp
     src/scene_serializer_uve.cpp
     src/prefab_system_uve.cpp
+    src/particle_runtime_uve.cpp
 )
 target_include_directories(uve_scene PUBLIC include)
 target_link_libraries(uve_scene
