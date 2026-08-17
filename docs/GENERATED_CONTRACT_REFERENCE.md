@@ -3,7 +3,7 @@
 
 > This reference is generated from `docs/CONTRACT_INVENTORY.md`. Native and editor code remain authoritative; this file is documentation only.
 
-Inventory revision: `129be9668f8fb684`
+Inventory revision: `467288fd6a8866f5`
 
 | ID | Authority | Anchor | Contract role | Allowed consumers | Ownership boundary |
 |---|---|---|---|---|---|
@@ -37,3 +37,4 @@ Inventory revision: `129be9668f8fb684`
 | `SCENE-PREFAB-OVERRIDE-PERSISTENCE` | `engine/scene/include/uve/scene/components/prefab_instance_component_uve.h` | `PrefabPropertyOverrideUVE` | Deterministic bounded override persistence using strictly increasing property paths, non-empty serialized values, explicit path/value byte caps, and a maximum override count. | Scene serializer capture/restore, prefab instance round-trip tests, future apply/revert tooling, and native tests. | Persistence does not apply values, resolve component types, mutate source prefabs, compute conflicts, or claim runtime override ownership. |
 | `SCENE-RIGIDBODY-VALIDATION` | `engine/scene/include/uve/scene/components/rigid_body_component_uve.h` | `IsRigidBodyComponentValidUVE` | Physics-safe rigid-body validity contract for finite non-negative mass, finite velocity, non-negative drag, and finite non-negative gravity scale. | Scene serializer restore, PhysicsSystemUVE integration, editor rigid-body creation, and native tests. | Zero mass remains a valid immovable-body state; validation does not add body types, mass/inertia solving, constraint systems, or silently repair malformed authoring data. |
 | `SCENE-SCRIPT-VALIDATION` | `engine/scene/include/uve/scene/components/script_component_uve.h` | `IsScriptComponentValidUVE` | Bounded project-relative script virtual-path contract with an explicit empty no-script state, canonical forward-slash segments, traversal/absolute-path rejection, NUL rejection, and maximum input size. | Scene serializer restore, future script runtime ownership, editor script attachment, and native tests. | Validation does not resolve or execute scripts, access the filesystem, own VM state, or silently normalize malformed authoring data. |
+| `SCRIPT-VECTOR3-NODE-FAMILY` | `engine/scripting/include/uve/scripting/script_builtin_nodes_uve.h` | `RegisterBuiltInScriptNodesUVE` | Production palette contract for eight Vector3 graph node descriptors with exact typed pins, deterministic display order, and a dedicated Math/icon presentation identity. | EditorBridgeUVE production registry initialization, canvas palette snapshots, graph validation/compiler tests, managed search filtering, and native tests. | This increment defines descriptors and graph typing only; it does not execute Vector3 operations, allocate typed runtime values, or alter VM bytecode semantics. |

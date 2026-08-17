@@ -501,6 +501,10 @@ TEST(EditorBridgeUVETest, SnapshotUVE_CopiesHierarchyInspectorAndNativePanelSess
         EXPECT_EQ(snapshot.visualScripting.linkCount, 0U);
         EXPECT_EQ(snapshot.visualScripting.canvas.nodes.size(), 0U);
         EXPECT_EQ(snapshot.visualScripting.canvas.links.size(), 0U);
+        ASSERT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds.size(), 8U);
+        ASSERT_EQ(snapshot.visualScripting.canvas.paletteDescriptors.size(), 8U);
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds.front(), "math.vector3.make");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds.back(), "math.vector3.normalize");
         EXPECT_FALSE(snapshot.visualScripting.canvas.nodesTruncated);
         EXPECT_FALSE(snapshot.visualScripting.canvas.linksTruncated);
 

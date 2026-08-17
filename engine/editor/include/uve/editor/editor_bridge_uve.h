@@ -704,7 +704,7 @@ public:
     explicit EditorBridgeUVE(EditorUVE& editor,
                              const Asset::DataTableRegistryUVE* dataTableRegistry = nullptr,
                              const Scripting::ScriptDebuggerUVE* scriptDebugger = nullptr,
-                             const Scripting::ScriptRuntimeUVE* scriptRuntime = nullptr) noexcept;
+                             const Scripting::ScriptRuntimeUVE* scriptRuntime = nullptr);
 
     [[nodiscard]] EditorBridgeSnapshotUVE GetSnapshotUVE();
     [[nodiscard]] EditorBridgeResponseUVE DispatchUVE(const EditorBridgeRequestUVE& request);

@@ -54,6 +54,6 @@
 | Requirement | Meaning |
 |---|---|
 | **No fake components** | A component appears in menus/Inspector only after it has real runtime, persistence, and test behavior. |
-| **One scene model** | Gameplay, editor, serializer, visual scripting, and physics operate on the same scene/entity ownership model. The Visual Scripting canvas now has copied native palette descriptors, managed search filtering, right-click node search, keyboard/click selection, and cursor-position insertion; broader node registration and runtime coverage remain partial. |
+| **One scene model** | Gameplay, editor, serializer, visual scripting, and physics operate on the same scene/entity ownership model. The Visual Scripting canvas now has copied native palette descriptors, managed search filtering, right-click node search, keyboard/click selection, cursor-position insertion, and eight production Vector3 graph descriptors; typed Vector3 VM execution and broader runtime coverage remain partial. |
 | **Deterministic authoring** | Commands, simulation state, saves, and procedural seeds must have explicit replay/validation behavior where appropriate. |
 | **Sample project last** | A full sample game becomes a completion proof after the required runtime/content systems exist; it is not a substitute for their implementation. |

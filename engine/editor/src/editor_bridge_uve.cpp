@@ -1,6 +1,7 @@
 // Copyright (c) 2026 UniVex Studios. All Rights Reserved.
 
 #include "uve/editor/editor_bridge_uve.h"
+#include "uve/scripting/script_builtin_nodes_uve.h"
 
 #include <algorithm>
 #include <cctype>
@@ -8,6 +9,7 @@
 #include <cmath>
 #include <filesystem>
 #include <memory>
+#include <stdexcept>
 #include <type_traits>
 #include <utility>
 
@@ -194,12 +196,16 @@ namespace {
 EditorBridgeUVE::EditorBridgeUVE(EditorUVE& editor,
                                    const Asset::DataTableRegistryUVE* dataTableRegistry,
                                    const Scripting::ScriptDebuggerUVE* scriptDebugger,
-                                   const Scripting::ScriptRuntimeUVE* scriptRuntime) noexcept
+                                   const Scripting::ScriptRuntimeUVE* scriptRuntime)
     : m_editor(&editor),
       m_visualScriptCanvas(m_visualScriptRegistry),
       m_dataTableRegistry(dataTableRegistry),
       m_scriptDebugger(scriptDebugger),
-      m_scriptRuntime(scriptRuntime) {}
+      m_scriptRuntime(scriptRuntime) {
+    if (!Scripting::RegisterBuiltInScriptNodesUVE(m_visualScriptRegistry)) {
+        throw std::logic_error("Failed to register built-in Visual Scripting nodes.");
+    }
+}
 
 const std::vector<EditorBridgeCapabilityUVE>& EditorBridgeUVE::GetCapabilitiesUVE() noexcept {
     return CapabilitiesUVE();
