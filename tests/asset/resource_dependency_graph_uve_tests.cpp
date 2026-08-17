@@ -71,4 +71,57 @@ TEST(ResourceDependencyGraphUVETest, RemoveResourceUVE_BlocksDependentsAndAccept
     EXPECT_FALSE(graph.HasResourceUVE(parent));
 }
 
+TEST(ResourceDependencyGraphUVETest, GetDependentClosureUVE_ReturnsDeterministicTransitivePlan) {
+    ResourceDependencyGraphUVE graph;
+    const ResourceHandleUVE root = HandleUVE(10U);
+    const ResourceHandleUVE directA = HandleUVE(20U);
+    const ResourceHandleUVE directB = HandleUVE(30U);
+    const ResourceHandleUVE transitiveA = HandleUVE(40U);
+    const ResourceHandleUVE transitiveB = HandleUVE(50U);
+    for (const ResourceHandleUVE handle : {transitiveB, directB, root, transitiveA, directA}) {
+        ASSERT_TRUE(graph.RegisterResourceUVE(handle).IsAppliedUVE());
+    }
+    ASSERT_TRUE(graph.SetDependenciesUVE(directA, {root}).IsAppliedUVE());
+    ASSERT_TRUE(graph.SetDependenciesUVE(directB, {root}).IsAppliedUVE());
+    ASSERT_TRUE(graph.SetDependenciesUVE(transitiveA, {directA}).IsAppliedUVE());
+    ASSERT_TRUE(graph.SetDependenciesUVE(transitiveB, {directB}).IsAppliedUVE());
+
+    const ResourceDependencyInvalidationPlanUVE plan = graph.GetDependentClosureUVE(root);
+
+    ASSERT_TRUE(plan.IsReadyUVE());
+    EXPECT_EQ(plan.code, ResourceDependencyCodeUVE::DependentClosureReady);
+    EXPECT_EQ(plan.graphGeneration, 9U);
+    EXPECT_EQ(plan.root, root);
+    EXPECT_FALSE(plan.dependentsTruncated);
+    ASSERT_EQ(plan.dependents.size(), 4U);
+    EXPECT_EQ(plan.dependents[0], directA);
+    EXPECT_EQ(plan.dependents[1], directB);
+    EXPECT_EQ(plan.dependents[2], transitiveA);
+    EXPECT_EQ(plan.dependents[3], transitiveB);
+}
+
+TEST(ResourceDependencyGraphUVETest, GetDependentClosureUVE_BoundsResultAndClassifiesRoot) {
+    ResourceDependencyGraphUVE graph;
+    const ResourceHandleUVE root = HandleUVE(1U, 3U);
+    const ResourceHandleUVE dependentA = HandleUVE(2U);
+    const ResourceHandleUVE dependentB = HandleUVE(3U);
+    ASSERT_TRUE(graph.RegisterResourceUVE(root).IsAppliedUVE());
+    ASSERT_TRUE(graph.RegisterResourceUVE(dependentA).IsAppliedUVE());
+    ASSERT_TRUE(graph.RegisterResourceUVE(dependentB).IsAppliedUVE());
+    ASSERT_TRUE(graph.SetDependenciesUVE(dependentA, {root}).IsAppliedUVE());
+    ASSERT_TRUE(graph.SetDependenciesUVE(dependentB, {root}).IsAppliedUVE());
+
+    const ResourceDependencyInvalidationPlanUVE bounded = graph.GetDependentClosureUVE(root, 1U);
+    EXPECT_TRUE(bounded.IsReadyUVE());
+    EXPECT_TRUE(bounded.dependentsTruncated);
+    ASSERT_EQ(bounded.dependents.size(), 1U);
+    EXPECT_EQ(bounded.dependents.front(), dependentA);
+    EXPECT_EQ(graph.GetDependentClosureUVE(ResourceHandleUVE{root.guid, 2U}).code,
+              ResourceDependencyCodeUVE::StaleGeneration);
+    EXPECT_EQ(graph.GetDependentClosureUVE(HandleUVE(99U)).code,
+              ResourceDependencyCodeUVE::UnknownDependency);
+    EXPECT_EQ(graph.GetDependentClosureUVE(ResourceHandleUVE{}).code,
+              ResourceDependencyCodeUVE::InvalidHandle);
+}
+
 } // namespace UVE::Asset

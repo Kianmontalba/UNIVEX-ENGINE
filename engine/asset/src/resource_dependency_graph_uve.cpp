@@ -92,6 +92,61 @@ ResourceDependencyResultUVE ResourceDependencyGraphUVE::SetDependenciesUVE(
     return {ResourceDependencyCodeUVE::Updated, "Resource dependencies were updated."};
 }
 
+ResourceDependencyInvalidationPlanUVE ResourceDependencyGraphUVE::GetDependentClosureUVE(
+    const ResourceHandleUVE root, const std::size_t maximumDependents) const {
+    ResourceDependencyInvalidationPlanUVE plan;
+    plan.graphGeneration = m_graphGeneration;
+    plan.root = root;
+    if (!IsValidHandleUVE(root)) {
+        plan.code = ResourceDependencyCodeUVE::InvalidHandle;
+        plan.message = "Dependent closure requires a non-zero GUID and generation.";
+        return plan;
+    }
+    if (FindExactUVE(root) == nullptr) {
+        plan.code = FindGuidUVE(root.guid) == nullptr ? ResourceDependencyCodeUVE::UnknownDependency
+                                                        : ResourceDependencyCodeUVE::StaleGeneration;
+        plan.message = plan.code == ResourceDependencyCodeUVE::UnknownDependency
+                           ? "Dependent closure referenced an unknown resource."
+                           : "Dependent closure used a stale resource generation.";
+        return plan;
+    }
+
+    std::vector<ResourceHandleUVE> frontier{root};
+    std::vector<ResourceHandleUVE> discovered;
+    while (!frontier.empty()) {
+        std::vector<ResourceHandleUVE> nextFrontier;
+        for (const ResourceHandleUVE current : frontier) {
+            for (const EntryUVE& entry : m_entries) {
+                if (!ContainsHandleUVE(entry.dependencies, current) ||
+                    ContainsHandleUVE(discovered, entry.handle) || ContainsHandleUVE(nextFrontier, entry.handle) ||
+                    entry.handle == root) {
+                    continue;
+                }
+                nextFrontier.push_back(entry.handle);
+            }
+        }
+        std::sort(nextFrontier.begin(), nextFrontier.end(), [](const ResourceHandleUVE left,
+                                                                const ResourceHandleUVE right) {
+            if (left.guid.value != right.guid.value) {
+                return left.guid.value < right.guid.value;
+            }
+            return left.generation < right.generation;
+        });
+        discovered.insert(discovered.end(), nextFrontier.begin(), nextFrontier.end());
+        frontier = std::move(nextFrontier);
+    }
+
+    plan.dependentsTruncated = discovered.size() > maximumDependents;
+    if (plan.dependentsTruncated) {
+        discovered.resize(maximumDependents);
+    }
+    plan.dependents = std::move(discovered);
+    plan.code = ResourceDependencyCodeUVE::DependentClosureReady;
+    plan.message = plan.dependentsTruncated ? "Dependent closure was bounded and truncated."
+                                             : "Dependent closure was captured.";
+    return plan;
+}
+
 ResourceDependencyResultUVE ResourceDependencyGraphUVE::RemoveResourceUVE(const ResourceHandleUVE handle) {
     EntryUVE* entry = FindExactUVE(handle);
     if (entry == nullptr) {
