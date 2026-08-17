@@ -1,6 +1,7 @@
 # Copyright (c) 2026 UniVex Studios. All Rights Reserved.
 add_library(uve_scripting
     src/script_graph_uve.cpp
+    src/script_builtin_nodes_uve.cpp
     src/script_compiler_ir_uve.cpp
     src/script_bytecode_uve.cpp
     src/script_vm_uve.cpp

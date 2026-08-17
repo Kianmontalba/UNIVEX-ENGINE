@@ -1,4 +1,5 @@
 // Copyright (c) 2026 UniVex Studios. All Rights Reserved.
+#include "uve/scripting/script_builtin_nodes_uve.h"
 #include "uve/scripting/script_bytecode_uve.h"
 #include "uve/scripting/script_runtime_uve.h"
 #include "uve/scripting/script_vm_uve.h"
@@ -17,6 +18,7 @@
 #include <cstdint>
 #include <limits>
 #include <optional>
+#include <vector>
 
 namespace UVE::Scripting {
 namespace {
@@ -58,6 +60,45 @@ TEST(ScriptNodeRegistryUVETest, RegisterNodeTypeUVE_RejectsDuplicateAndMalformed
     EXPECT_TRUE(registry.RegisterNodeTypeUVE(MakeSourceNodeUVE()));
     EXPECT_FALSE(registry.RegisterNodeTypeUVE(MakeSourceNodeUVE()));
     EXPECT_EQ(registry.GetNodeTypeCountUVE(), 1U);
+}
+
+TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDescriptorContracts) {
+    ScriptNodeRegistryUVE registry;
+
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+    EXPECT_FALSE(RegisterBuiltInScriptNodesUVE(registry));
+    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 8U);
+
+    const std::vector<ScriptNodeTypeDescriptorUVE> descriptors = registry.GetNodeTypeDescriptorsUVE();
+    ASSERT_EQ(descriptors.size(), 8U);
+    const std::vector<std::string> expectedIds{
+        "math.vector3.make", "math.vector3.add", "math.vector3.subtract", "math.vector3.multiply",
+        "math.vector3.dot", "math.vector3.cross", "math.vector3.length", "math.vector3.normalize"};
+    for (std::size_t index = 0U; index < expectedIds.size(); ++index) {
+        EXPECT_EQ(descriptors[index].typeId, expectedIds[index]);
+        EXPECT_EQ(descriptors[index].category, "Math");
+        EXPECT_EQ(descriptors[index].iconId, "node.math.vector3");
+    }
+
+    const ScriptNodeTypeDescriptorUVE* make = registry.FindNodeTypeUVE("math.vector3.make");
+    ASSERT_NE(make, nullptr);
+    ASSERT_EQ(make->pins.size(), 4U);
+    EXPECT_EQ(make->pins[0].type, ScriptValueTypeUVE::Number);
+    EXPECT_EQ(make->pins[3].direction, ScriptPinDirectionUVE::Output);
+    EXPECT_EQ(make->pins[3].type, ScriptValueTypeUVE::Vector3);
+
+    const ScriptNodeTypeDescriptorUVE* dot = registry.FindNodeTypeUVE("math.vector3.dot");
+    ASSERT_NE(dot, nullptr);
+    ASSERT_EQ(dot->pins.size(), 3U);
+    EXPECT_EQ(dot->pins[0].type, ScriptValueTypeUVE::Vector3);
+    EXPECT_EQ(dot->pins[2].type, ScriptValueTypeUVE::Number);
+
+    const ScriptNodeTypeDescriptorUVE* multiply = registry.FindNodeTypeUVE("math.vector3.multiply");
+    ASSERT_NE(multiply, nullptr);
+    ASSERT_EQ(multiply->pins.size(), 3U);
+    EXPECT_EQ(multiply->pins[0].type, ScriptValueTypeUVE::Vector3);
+    EXPECT_EQ(multiply->pins[1].type, ScriptValueTypeUVE::Number);
+    EXPECT_EQ(multiply->pins[2].type, ScriptValueTypeUVE::Vector3);
 }
 
 TEST(ScriptNodeRegistryUVETest, FindNodeTypeUVE_ReturnsCopiedStableDescriptorView) {
