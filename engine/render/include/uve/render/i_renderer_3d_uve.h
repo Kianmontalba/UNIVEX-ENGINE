@@ -48,14 +48,18 @@ struct Renderer3DFrameDiagnosticsUVE final {
     std::size_t primitiveDrawCallsRecorded = 0U;
     std::size_t particleItemsExtracted = 0U;
     std::size_t particleDrawCommandsRecorded = 0U;
+    std::size_t particleDrawCommandsSubmitted = 0U;
+    std::size_t particleDrawCallsRecorded = 0U;
     std::size_t glDrawCallsIssued = 0U;
     bool primitiveProgramReady = false;
+    bool particleProgramReady = false;
     bool mainPassRecorded = false;
     bool toneMappingProgramReady = false;
     bool toneMappingPassRecorded = false;
     bool editorVisualProgramReady = false;
     bool editorVisualPassRecorded = false;
     bool particleItemsTruncated = false;
+    bool particleDrawCommandsSubmissionTruncated = false;
 };
 
 /// IRenderer3DUVE is the engine's final per-frame render orchestrator (the spec's `Renderer3DUVE`,

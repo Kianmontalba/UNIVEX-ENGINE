@@ -37,4 +37,7 @@ extern const std::string_view kLitShadowed3DSource;
 inline constexpr std::string_view kEditorViewportVisualsVirtualPath = "shaders/editor_viewport_visuals.glsl";
 extern const std::string_view kEditorViewportVisualsSource;
 
+inline constexpr std::string_view kParticleVirtualPath = "shaders/particle.glsl";
+extern const std::string_view kParticleSource;
+
 } // namespace UVE::Render::Shader::BuiltIn

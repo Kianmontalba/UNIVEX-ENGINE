@@ -893,16 +893,36 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_ParticleRuntimeInput_ExtractsCopiedItem
                        Scene::ParticleEmissionUVE{2U, Math::Vector3UVE{0.0F, 0.0F, -4.0F}, {}, 2.0F})
                     .IsAcceptedUVE());
 
-    EXPECT_NO_FATAL_FAILURE(renderer3D->RenderFrameWithParticleRuntimeUVE(entityManager, cameraEntity, particleRuntime));
+    for (int iteration = 0; iteration < kMaxPollIterationsUVE; ++iteration) {
+        EXPECT_NO_FATAL_FAILURE(
+            renderer3D->RenderFrameWithParticleRuntimeUVE(entityManager, cameraEntity, particleRuntime));
+        if (renderer3D->GetLastFrameDiagnosticsUVE().particleProgramReady) {
+            break;
+        }
+        shaderManager.UpdateUVE(0.0);
+    }
     const Renderer3DFrameDiagnosticsUVE particleDiagnostics = renderer3D->GetLastFrameDiagnosticsUVE();
+    ASSERT_TRUE(particleDiagnostics.particleProgramReady);
     EXPECT_EQ(particleDiagnostics.particleItemsExtracted, 2U);
     EXPECT_EQ(particleDiagnostics.particleDrawCommandsRecorded, 2U);
+    EXPECT_EQ(particleDiagnostics.particleDrawCommandsSubmitted, 2U);
+    EXPECT_EQ(particleDiagnostics.particleDrawCallsRecorded, 1U);
     EXPECT_FALSE(particleDiagnostics.particleItemsTruncated);
+    EXPECT_FALSE(particleDiagnostics.particleDrawCommandsSubmissionTruncated);
+
+    const std::vector<RecordedCommandUVE>& particleCommands = renderDevice.GetLastSubmittedCommandsUVE();
+    const auto particleDraw = std::find_if(particleCommands.cbegin(), particleCommands.cend(), [](const RecordedCommandUVE& command) {
+        return std::holds_alternative<DrawCommandUVE>(command) &&
+               std::get<DrawCommandUVE>(command).vertexCount == 12U;
+    });
+    ASSERT_NE(particleDraw, particleCommands.cend());
 
     EXPECT_NO_FATAL_FAILURE(renderer3D->RenderFrameUVE(entityManager, cameraEntity));
     const Renderer3DFrameDiagnosticsUVE legacyDiagnostics = renderer3D->GetLastFrameDiagnosticsUVE();
     EXPECT_EQ(legacyDiagnostics.particleItemsExtracted, 0U);
     EXPECT_EQ(legacyDiagnostics.particleDrawCommandsRecorded, 0U);
+    EXPECT_EQ(legacyDiagnostics.particleDrawCommandsSubmitted, 0U);
+    EXPECT_EQ(legacyDiagnostics.particleDrawCallsRecorded, 0U);
     EXPECT_FALSE(legacyDiagnostics.particleItemsTruncated);
 }
 
