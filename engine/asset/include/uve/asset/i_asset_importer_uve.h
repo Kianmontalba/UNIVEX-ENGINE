@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
 #include <functional>
 #include <string>
@@ -39,11 +40,9 @@ struct AssetImportSourceClassificationUVE final {
     std::string diagnostic;
 };
 
-/// Base for per-asset-type import settings (e.g. a future MeshImportSettingsUVE adding a
-/// normal-map-flip flag or LOD generation count). Empty this increment — no format-specific
-/// importer exists yet to need settings beyond the generic copy-and-register behavior — but the
-/// type exists now so future importers extend it rather than ImportUVE() gaining a new parameter
-/// per format later.
+/// Base for per-asset-type import settings. Format-specific importers derive from this and add
+/// only settings that affect conversion; the bounded text parser below is the first such importer.
+/// ImportUVE() therefore keeps one stable settings parameter as future formats add their own policy.
 struct AssetImportSettingsUVE {
     virtual ~AssetImportSettingsUVE() = default;
 
@@ -53,13 +52,28 @@ struct AssetImportSettingsUVE {
     [[nodiscard]] virtual std::string GetCacheVersionUVE() const { return "generic-v1"; }
 };
 
+enum class TextImportLineEndingUVE : std::uint8_t {
+    Preserve,
+    LineFeed,
+    CarriageReturnLineFeed,
+};
+
+/// Settings for the bounded text-source parser. The parser rejects NUL bytes, normalizes CR/CRLF
+/// according to this policy, and can add one terminal line ending. It does not infer encodings,
+/// rewrite arbitrary Unicode, or become a general-purpose text-processing runtime.
+struct TextImportSettingsUVE final : AssetImportSettingsUVE {
+    TextImportLineEndingUVE lineEnding = TextImportLineEndingUVE::Preserve;
+    bool ensureTrailingLineEnding = false;
+
+    [[nodiscard]] std::string GetCacheVersionUVE() const override;
+};
+
 /// IAssetImporterUVE is the spec's "import pipeline with settings per asset type" (Part 7.4):
 /// register an import function per source file extension, then ImportUVE() any source file
-/// through whichever one matches. Ships with exactly one built-in importer this increment — a
-/// generic "copy the source file into the project and register its GUID" importer, registered
-/// for a handful of extensions that have no format-specific parsing need — since no FBX/OBJ/
-/// GLTF/PNG/WAV parsing library exists in this codebase yet. Format-specific importers are
-/// registered by future Rendering/Audio increments via RegisterImporterUVE().
+/// through whichever one matches. Built-in registrations include the bounded text parser for `.txt`
+/// and deterministic generic envelope copying for UVE-owned formats. No FBX/OBJ/GLTF/PNG/WAV parsing
+/// library exists in this codebase yet. Format-specific importers are registered by future
+/// Rendering/Audio increments via RegisterImporterUVE().
 /// Thread-safety: thread-safe. Every method is guarded by an internal mutex, matching
 /// ConfigManagerUVE's/AssetDatabaseUVE's contract.
 class IAssetImporterUVE {
@@ -78,7 +92,8 @@ public:
 
     /// Classifies a source path without touching the filesystem. Raw model/texture/material kinds
     /// explicitly report that a format-specific parser is required; current built-in UVE envelope
-    /// kinds report the deterministic generic copy importer authority.
+    /// kinds report deterministic generic copy authority, while PlainText reports the
+    /// bounded text parser authority.
     [[nodiscard]] virtual AssetImportSourceClassificationUVE ClassifySourceUVE(
         const std::filesystem::path& sourcePath) const {
         static_cast<void>(sourcePath);

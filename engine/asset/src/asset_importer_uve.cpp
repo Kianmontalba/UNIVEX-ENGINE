@@ -4,6 +4,8 @@
 #include "uve/asset/asset_importer_uve.h"
 
 #include <cctype>
+#include <fstream>
+#include <iterator>
 #include <mutex>
 #include <system_error>
 #include <unordered_map>
@@ -28,9 +30,8 @@ using ImportFuncUVE = std::function<bool(const std::filesystem::path&, const std
     return extension;
 }
 
-/// The one built-in importer: copies `source` to `destination` verbatim, applying no
-/// format-specific transformation. `settings` is unused (AssetImportSettingsUVE carries nothing
-/// yet) — a future format-specific importer would read fields off a derived settings type here.
+/// The generic envelope importer: copies `source` to `destination` verbatim, applying no
+/// format-specific transformation. Format-specific source parsers are registered separately.
 [[nodiscard]] bool GenericFileImportUVE(const std::filesystem::path& source,
                                          const std::filesystem::path& destination,
                                          const AssetImportSettingsUVE& /*settings*/) {
@@ -40,6 +41,82 @@ using ImportFuncUVE = std::function<bool(const std::filesystem::path&, const std
     if (errorCode) {
         UVE_ERROR("AssetImporterUVE: failed to copy \"{}\" to \"{}\": {}", source.string(),
                    destination.string(), errorCode.message());
+        return false;
+    }
+    return true;
+}
+
+[[nodiscard]] bool TextFileImportUVE(const std::filesystem::path& source,
+                                     const std::filesystem::path& destination,
+                                     const AssetImportSettingsUVE& baseSettings) {
+    std::ifstream input(source, std::ios::binary);
+    if (!input.is_open()) {
+        UVE_ERROR("AssetImporterUVE: failed to open text source \"{}\"", source.string());
+        return false;
+    }
+    std::string sourceText{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
+    if (sourceText.find('\0') != std::string::npos) {
+        UVE_ERROR("AssetImporterUVE: text source contains a NUL byte \"{}\"", source.string());
+        return false;
+    }
+
+    const auto* const textSettings = dynamic_cast<const TextImportSettingsUVE*>(&baseSettings);
+    const TextImportLineEndingUVE lineEnding =
+        textSettings == nullptr ? TextImportLineEndingUVE::Preserve : textSettings->lineEnding;
+    const bool ensureTrailingLineEnding = textSettings != nullptr && textSettings->ensureTrailingLineEnding;
+    const std::string lineEndingBytes =
+        lineEnding == TextImportLineEndingUVE::CarriageReturnLineFeed ? "\r\n" : "\n";
+    std::string normalized;
+    normalized.reserve(sourceText.size() + 1U);
+    if (lineEnding == TextImportLineEndingUVE::Preserve) {
+        normalized = sourceText;
+    } else {
+        for (std::size_t index = 0U; index < sourceText.size(); ++index) {
+            if (sourceText[index] == '\r') {
+                if (index + 1U < sourceText.size() && sourceText[index + 1U] == '\n') {
+                    ++index;
+                }
+                normalized += lineEndingBytes;
+            } else if (sourceText[index] == '\n') {
+                normalized += lineEndingBytes;
+            } else {
+                normalized.push_back(sourceText[index]);
+            }
+        }
+    }
+    if (ensureTrailingLineEnding && (normalized.empty() || normalized.back() != '\n')) {
+        normalized += lineEnding == TextImportLineEndingUVE::CarriageReturnLineFeed ? "\r\n" : "\n";
+    }
+
+    std::error_code errorCode;
+    if (const std::filesystem::path parent = destination.parent_path(); !parent.empty()) {
+        std::filesystem::create_directories(parent, errorCode);
+        if (errorCode) {
+            UVE_ERROR("AssetImporterUVE: failed to create text destination directory \"{}\": {}",
+                      parent.string(), errorCode.message());
+            return false;
+        }
+    }
+    const std::filesystem::path temporaryPath = destination.string() + ".uve_text_tmp";
+    std::filesystem::remove(temporaryPath, errorCode);
+    std::ofstream output(temporaryPath, std::ios::binary | std::ios::trunc);
+    if (!output.is_open()) {
+        UVE_ERROR("AssetImporterUVE: failed to open text temporary destination \"{}\"",
+                  temporaryPath.string());
+        return false;
+    }
+    output.write(normalized.data(), static_cast<std::streamsize>(normalized.size()));
+    output.close();
+    if (!output) {
+        UVE_ERROR("AssetImporterUVE: failed to write text destination \"{}\"", destination.string());
+        std::filesystem::remove(temporaryPath, errorCode);
+        return false;
+    }
+    std::filesystem::rename(temporaryPath, destination, errorCode);
+    if (errorCode) {
+        UVE_ERROR("AssetImporterUVE: failed to publish text destination \"{}\": {}",
+                  destination.string(), errorCode.message());
+        std::filesystem::remove(temporaryPath, errorCode);
         return false;
     }
     return true;
@@ -94,7 +171,7 @@ struct AssetImporterUVE::ImplUVE {
 };
 
 AssetImporterUVE::AssetImporterUVE() : m_impl(std::make_unique<ImplUVE>()) {
-    RegisterImporterUVE("txt", &GenericFileImportUVE);
+    RegisterImporterUVE("txt", &TextFileImportUVE);
     RegisterImporterUVE("uvescene", &GenericFileImportUVE);
     RegisterImporterUVE("uveprefab", &GenericFileImportUVE);
 
@@ -108,6 +185,14 @@ AssetImporterUVE::AssetImporterUVE() : m_impl(std::make_unique<ImplUVE>()) {
 }
 
 AssetImporterUVE::~AssetImporterUVE() = default;
+
+std::string TextImportSettingsUVE::GetCacheVersionUVE() const {
+    const char* const lineEndingName = lineEnding == TextImportLineEndingUVE::Preserve
+                                           ? "preserve"
+                                           : lineEnding == TextImportLineEndingUVE::LineFeed ? "lf" : "crlf";
+    return std::string{"text-v1;line-ending="} + lineEndingName +
+           ";trailing-newline=" + (ensureTrailingLineEnding ? "true" : "false");
+}
 
 void AssetImporterUVE::RegisterImporterUVE(
     std::string sourceExtension,
@@ -138,6 +223,10 @@ AssetImportSourceClassificationUVE AssetImporterUVE::ClassifySourceUVE(
         classification.diagnostic = classification.importerRegistered
                                          ? "custom importer is registered without built-in classification"
                                          : "unsupported source extension";
+    } else if (classification.kind == AssetImportSourceKindUVE::PlainText) {
+        classification.diagnostic = classification.importerRegistered
+                                         ? "built-in text parser is registered"
+                                         : "source format is classified but no importer is registered";
     } else {
         classification.diagnostic = classification.importerRegistered
                                          ? "built-in generic copy importer is registered"

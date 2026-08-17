@@ -50,7 +50,7 @@ TEST_F(AssetImporterUVETest, ClassifySourceUVE_ReportsAuthorityAndRawParserBound
 
     constexpr std::array<ClassificationCaseUVE, 6> kCases = {{
         {"Readme.TXT", AssetImportSourceKindUVE::PlainText, "txt", true, false,
-         "built-in generic copy importer is registered"},
+         "built-in text parser is registered"},
         {"Character.UVEMODEL", AssetImportSourceKindUVE::MeshEnvelope, "uvemodel", true, false,
          "built-in generic copy importer is registered"},
         {"Character.FBX", AssetImportSourceKindUVE::RawModel, "fbx", false, true,
@@ -96,6 +96,103 @@ TEST_F(AssetImporterUVETest, ImportUVE_GenericImporter_CopiesFileAndRegistersGui
 
     std::filesystem::remove(sourcePath);
     std::filesystem::remove(destinationPath);
+}
+
+TEST_F(AssetImporterUVETest, TextImportUVE_PreservesTextVerbatim) {
+    const std::filesystem::path sourcePath = "uve_text_parser_preserve_source.txt";
+    const std::filesystem::path destinationPath = "uve_text_parser_preserve_destination.txt";
+    std::filesystem::remove(sourcePath);
+    std::filesystem::remove(destinationPath);
+    const std::string source = "first\r\nsecond\rthird\nfourth";
+    WriteFixtureFileUVE(sourcePath, source);
+
+    const AssetGuidUVE guid = importer.ImportUVE(sourcePath, destinationPath, assetDatabase);
+
+    ASSERT_NE(guid, kInvalidAssetGuidUVE);
+    EXPECT_EQ(ReadFileUVE(destinationPath), source);
+    std::filesystem::remove(sourcePath);
+    std::filesystem::remove(destinationPath);
+}
+
+TEST_F(AssetImporterUVETest, TextImportUVE_RejectsNulByte) {
+    const std::filesystem::path sourcePath = "uve_text_parser_nul_source.txt";
+    const std::filesystem::path destinationPath = "uve_text_parser_nul_destination.txt";
+    std::filesystem::remove(sourcePath);
+    std::filesystem::remove(destinationPath);
+    WriteFixtureFileUVE(sourcePath, std::string{"prefix\0suffix", 13U});
+
+    const AssetGuidUVE guid = importer.ImportUVE(sourcePath, destinationPath, assetDatabase);
+
+    EXPECT_EQ(guid, kInvalidAssetGuidUVE);
+    EXPECT_FALSE(std::filesystem::exists(destinationPath));
+    std::filesystem::remove(sourcePath);
+    std::filesystem::remove(destinationPath);
+}
+
+TEST_F(AssetImporterUVETest, TextImportUVE_NormalizesLineEndingsToLF) {
+    const std::filesystem::path sourcePath = "uve_text_parser_lf_source.txt";
+    const std::filesystem::path destinationPath = "uve_text_parser_lf_destination.txt";
+    std::filesystem::remove(sourcePath);
+    std::filesystem::remove(destinationPath);
+    WriteFixtureFileUVE(sourcePath, "first\r\nsecond\rthird\nfourth");
+    TextImportSettingsUVE settings;
+    settings.lineEnding = TextImportLineEndingUVE::LineFeed;
+
+    const AssetGuidUVE guid = importer.ImportUVE(sourcePath, destinationPath, assetDatabase, settings);
+
+    ASSERT_NE(guid, kInvalidAssetGuidUVE);
+    EXPECT_EQ(ReadFileUVE(destinationPath), "first\nsecond\nthird\nfourth");
+    std::filesystem::remove(sourcePath);
+    std::filesystem::remove(destinationPath);
+}
+
+TEST_F(AssetImporterUVETest, TextImportUVE_NormalizesLineEndingsToCRLF) {
+    const std::filesystem::path sourcePath = "uve_text_parser_crlf_source.txt";
+    const std::filesystem::path destinationPath = "uve_text_parser_crlf_destination.txt";
+    std::filesystem::remove(sourcePath);
+    std::filesystem::remove(destinationPath);
+    WriteFixtureFileUVE(sourcePath, "first\nsecond\rthird\r\nfourth");
+    TextImportSettingsUVE settings;
+    settings.lineEnding = TextImportLineEndingUVE::CarriageReturnLineFeed;
+
+    const AssetGuidUVE guid = importer.ImportUVE(sourcePath, destinationPath, assetDatabase, settings);
+
+    ASSERT_NE(guid, kInvalidAssetGuidUVE);
+    EXPECT_EQ(ReadFileUVE(destinationPath), "first\r\nsecond\r\nthird\r\nfourth");
+    std::filesystem::remove(sourcePath);
+    std::filesystem::remove(destinationPath);
+}
+
+TEST_F(AssetImporterUVETest, TextImportUVE_EnsuresTrailingNewline) {
+    const std::filesystem::path sourcePath = "uve_text_parser_trailing_source.txt";
+    const std::filesystem::path destinationPath = "uve_text_parser_trailing_destination.txt";
+    std::filesystem::remove(sourcePath);
+    std::filesystem::remove(destinationPath);
+    WriteFixtureFileUVE(sourcePath, "text without final newline");
+    TextImportSettingsUVE settings;
+    settings.lineEnding = TextImportLineEndingUVE::LineFeed;
+    settings.ensureTrailingLineEnding = true;
+
+    const AssetGuidUVE guid = importer.ImportUVE(sourcePath, destinationPath, assetDatabase, settings);
+
+    ASSERT_NE(guid, kInvalidAssetGuidUVE);
+    EXPECT_EQ(ReadFileUVE(destinationPath), "text without final newline\n");
+    std::filesystem::remove(sourcePath);
+    std::filesystem::remove(destinationPath);
+}
+
+TEST(AssetImportSettingsUVETest, TextImportSettingsUVE_CacheVersionIsStable) {
+    TextImportSettingsUVE preserve;
+    TextImportSettingsUVE same = preserve;
+    TextImportSettingsUVE normalized = preserve;
+    normalized.lineEnding = TextImportLineEndingUVE::LineFeed;
+    TextImportSettingsUVE trailing = normalized;
+    trailing.ensureTrailingLineEnding = true;
+
+    EXPECT_EQ(preserve.GetCacheVersionUVE(), "text-v1;line-ending=preserve;trailing-newline=false");
+    EXPECT_EQ(preserve.GetCacheVersionUVE(), same.GetCacheVersionUVE());
+    EXPECT_NE(preserve.GetCacheVersionUVE(), normalized.GetCacheVersionUVE());
+    EXPECT_NE(normalized.GetCacheVersionUVE(), trailing.GetCacheVersionUVE());
 }
 
 TEST_F(AssetImporterUVETest, ImportUVE_TypedUVEEnvelopeExtensions_CopyAndRegisterGuid) {
