@@ -114,7 +114,10 @@ namespace {
             {"collisionMask", component.collisionMask},
             {"friction", component.friction},
             {"restitution", component.restitution},
-            {"density", component.density}};
+            {"density", component.density},
+            {"shapeType", static_cast<std::uint8_t>(component.shapeType)},
+            {"radius", component.radius},
+            {"height", component.height}};
 }
 
 [[nodiscard]] nlohmann::json ToJsonUVE(const AreaComponentUVE& component) {
@@ -270,6 +273,10 @@ template <typename T, typename FromJsonFunc>
                           collider.friction = json.value("friction", 0.0F);
                           collider.restitution = json.value("restitution", 0.0F);
                           collider.density = json.value("density", 1.0F);
+                          collider.shapeType = static_cast<ColliderShapeTypeUVE>(
+                              json.value("shapeType", std::uint8_t{0}));
+                          collider.radius = json.value("radius", 0.5F);
+                          collider.height = json.value("height", 1.0F);
                           if (!IsColliderComponentValidUVE(collider)) {
                               throw std::runtime_error("Invalid ColliderComponentUVE payload");
                           }

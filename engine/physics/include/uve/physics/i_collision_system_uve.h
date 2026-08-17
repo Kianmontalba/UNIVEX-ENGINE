@@ -14,9 +14,9 @@ namespace UVE::Physics {
 /// over every entity with both `Scene::WorldTransformComponentUVE` and
 /// `Scene::ColliderComponentUVE`. This increment's broad-phase is a naive O(n^2) pairwise AABB
 /// overlap test (a BVH is real future work once entity counts justify it — matches
-/// `ISceneGraphUVE::GetChildrenUVE()`'s own "profile before optimizing" precedent); since the
-/// only collider shape is an axis-aligned box, the overlap test IS the narrow-phase result too —
-/// there is no false positive left to refine away. Deliberately returns plain
+/// `ISceneGraphUVE::GetChildrenUVE()`'s own "profile before optimizing" precedent); the legacy box
+/// overlap is exact, while sphere/capsule descriptors use conservative AABB bounds in v1 and need
+/// a future exact narrow phase. Deliberately returns plain
 /// `CollisionPairUVE` values rather than mutating anything: resolving overlaps (deciding which
 /// body moves, by how much) is `IPhysicsSystemUVE`'s job, not this one's.
 /// Thread-safety: implementations should be stateless (holding no members), matching

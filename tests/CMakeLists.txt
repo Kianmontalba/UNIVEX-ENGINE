@@ -35,6 +35,7 @@ add_executable(uve_tests
     math/frustum_uve_tests.cpp
     physics/area_overlap_lifecycle_tracker_uve_tests.cpp
     physics/character_controller_uve_tests.cpp
+    physics/collider_shape_uve_tests.cpp
     physics/area_overlap_system_uve_tests.cpp
     physics/collision_system_uve_tests.cpp
     physics/physics_system_uve_tests.cpp
