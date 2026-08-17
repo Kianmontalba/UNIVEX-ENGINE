@@ -15,6 +15,34 @@
 namespace UVE::Editor {
 namespace {
 
+[[nodiscard]] std::string SourceKindLabelUVE(const Asset::AssetImportSourceKindUVE kind) {
+    switch (kind) {
+        case Asset::AssetImportSourceKindUVE::PlainText:
+            return "plainText";
+        case Asset::AssetImportSourceKindUVE::SceneEnvelope:
+            return "sceneEnvelope";
+        case Asset::AssetImportSourceKindUVE::PrefabEnvelope:
+            return "prefabEnvelope";
+        case Asset::AssetImportSourceKindUVE::MeshEnvelope:
+            return "meshEnvelope";
+        case Asset::AssetImportSourceKindUVE::TextureEnvelope:
+            return "textureEnvelope";
+        case Asset::AssetImportSourceKindUVE::ShaderEnvelope:
+            return "shaderEnvelope";
+        case Asset::AssetImportSourceKindUVE::MaterialEnvelope:
+            return "materialEnvelope";
+        case Asset::AssetImportSourceKindUVE::RawModel:
+            return "rawModel";
+        case Asset::AssetImportSourceKindUVE::RawTexture:
+            return "rawTexture";
+        case Asset::AssetImportSourceKindUVE::RawMaterial:
+            return "rawMaterial";
+        case Asset::AssetImportSourceKindUVE::Unknown:
+            return "unknown";
+    }
+    return "unknown";
+}
+
 [[nodiscard]] const std::vector<EditorBridgeCapabilityUVE>& CapabilitiesUVE() noexcept {
     static const std::vector<EditorBridgeCapabilityUVE> capabilities{
         EditorBridgeCapabilityUVE::ReadSnapshot,
@@ -1569,7 +1597,26 @@ EditorBridgeContentBrowserSnapshotUVE EditorBridgeUVE::CaptureContentBrowserUVE(
     }
 
     if (m_editor->m_selectedProjectFile.has_value()) {
-        snapshot.selectedEntry = ToContentEntryUVE(*m_editor->m_selectedProjectFile);
+        const Asset::ProjectFileEntryUVE& selected = *m_editor->m_selectedProjectFile;
+        snapshot.selectedEntry = ToContentEntryUVE(selected);
+        snapshot.importAction.hasSelection = true;
+        if (selected.kind == Asset::ProjectFileEntryKindUVE::Directory) {
+            snapshot.importAction.sourceKind = "directory";
+            snapshot.importAction.diagnostic = "directories cannot be imported or reimported";
+        } else {
+            const Asset::AssetImportSourceClassificationUVE classification =
+                m_editor->m_services->GetAssetImporterUVE().ClassifySourceUVE(selected.relativePath);
+            snapshot.importAction.importerRegistered = classification.importerRegistered;
+            snapshot.importAction.requiresFormatSpecificParser = classification.requiresFormatSpecificParser;
+            snapshot.importAction.sourceKind = SourceKindLabelUVE(classification.kind);
+            snapshot.importAction.canImport = !selected.registeredAssetGuid.has_value() &&
+                                              classification.importerRegistered;
+            snapshot.importAction.canReimport = selected.registeredAssetGuid.has_value() &&
+                                                 classification.importerRegistered;
+            snapshot.importAction.diagnostic = classification.diagnostic;
+        }
+    } else {
+        snapshot.importAction.diagnostic = "no Content Browser entry is selected";
     }
     return snapshot;
 }

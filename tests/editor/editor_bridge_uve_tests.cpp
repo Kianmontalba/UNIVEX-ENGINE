@@ -1,6 +1,7 @@
 // Copyright (c) 2026 UniVex Studios. All Rights Reserved.
 
 #include <filesystem>
+#include <fstream>
 #include <string>
 #include <vector>
 
@@ -28,6 +29,60 @@ namespace {
 
 [[nodiscard]] std::vector<Scene::EntityUVE> GetRootsUVE(EditorUVE& editor) {
     return editor.GetDocumentRootsUVE();
+}
+
+TEST(EditorBridgeUVETest, ContentBrowserImportCapabilityUVE_ReportsRawParserBoundaryForSelectedEntry) {
+    const std::filesystem::path contentRoot = "uve_editor_bridge_content_import_capability";
+    std::filesystem::remove_all(contentRoot);
+    std::filesystem::create_directories(contentRoot);
+    {
+        std::ofstream fixture(contentRoot / "character.fbx", std::ios::binary);
+        ASSERT_TRUE(fixture.is_open());
+        fixture << "raw model source";
+    }
+
+    Core::EngineConfigUVE config = MakeBridgeTestConfigUVE();
+    config.projectContentRootUVE = contentRoot;
+    Core::EngineCoreUVE engine(config);
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_bridge_content_import_capability.uvescene");
+        editor.InitUVE();
+        EditorBridgeUVE bridge(editor);
+
+        const EditorBridgeSnapshotUVE initial = bridge.GetSnapshotUVE();
+        EditorBridgeRequestUVE refresh{};
+        refresh.protocolVersion = kEditorBridgeProtocolVersionUVE;
+        refresh.requestId = 1U;
+        refresh.expectedRevision = initial.revision;
+        refresh.kind = EditorBridgeRequestKindUVE::RefreshContentBrowser;
+        const EditorBridgeResponseUVE refreshed = bridge.DispatchUVE(refresh);
+        ASSERT_TRUE(refreshed.applied);
+
+        EditorBridgeRequestUVE select{};
+        select.protocolVersion = kEditorBridgeProtocolVersionUVE;
+        select.requestId = 2U;
+        select.expectedRevision = refreshed.snapshot.revision;
+        select.kind = EditorBridgeRequestKindUVE::SelectContentBrowserEntry;
+        select.contentEntryPath = "character.fbx";
+        const EditorBridgeResponseUVE selected = bridge.DispatchUVE(select);
+        ASSERT_TRUE(selected.applied);
+        ASSERT_TRUE(selected.snapshot.contentBrowser.selectedEntry.has_value());
+        EXPECT_EQ(selected.snapshot.contentBrowser.selectedEntry->relativePath, "character.fbx");
+        EXPECT_TRUE(selected.snapshot.contentBrowser.importAction.hasSelection);
+        EXPECT_FALSE(selected.snapshot.contentBrowser.importAction.canImport);
+        EXPECT_FALSE(selected.snapshot.contentBrowser.importAction.canReimport);
+        EXPECT_FALSE(selected.snapshot.contentBrowser.importAction.importerRegistered);
+        EXPECT_TRUE(selected.snapshot.contentBrowser.importAction.requiresFormatSpecificParser);
+        EXPECT_EQ(selected.snapshot.contentBrowser.importAction.sourceKind, "rawModel");
+        EXPECT_EQ(selected.snapshot.contentBrowser.importAction.diagnostic,
+                  "format-specific parser is not registered");
+
+        editor.ShutdownUVE();
+    }
+    engine.Shutdown();
+    std::filesystem::remove_all(contentRoot);
 }
 
 TEST(EditorBridgeUVETest, EntityRefUVE_ValidatesTheFullGenerationalIdentity) {

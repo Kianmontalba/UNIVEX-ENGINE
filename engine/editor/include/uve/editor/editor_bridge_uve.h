@@ -257,6 +257,21 @@ struct EditorBridgeContentBrowserEntryUVE final {
     [[nodiscard]] bool operator==(const EditorBridgeContentBrowserEntryUVE&) const = default;
 };
 
+/// Value-only import/reimport facts for the selected Content Browser entry. This is capability
+/// presentation, not an execution token: native importer registration, filesystem access, and
+/// AssetDatabase ownership remain on the C++ side.
+struct EditorBridgeContentImportActionSnapshotUVE final {
+    bool hasSelection = false;
+    bool canImport = false;
+    bool canReimport = false;
+    bool importerRegistered = false;
+    bool requiresFormatSpecificParser = false;
+    std::string sourceKind;
+    std::string diagnostic;
+
+    [[nodiscard]] bool operator==(const EditorBridgeContentImportActionSnapshotUVE&) const = default;
+};
+
 /// Copied current-folder view over the native ProjectFileIndexUVE cache. UI filtering, navigation,
 /// refresh, and selection all remain C++ editor session state and never trigger managed filesystem I/O.
 struct EditorBridgeContentBrowserSnapshotUVE final {
@@ -274,6 +289,7 @@ struct EditorBridgeContentBrowserSnapshotUVE final {
     bool truncated = false;
     std::vector<EditorBridgeContentBrowserEntryUVE> entries;
     std::optional<EditorBridgeContentBrowserEntryUVE> selectedEntry;
+    EditorBridgeContentImportActionSnapshotUVE importAction;
 
     [[nodiscard]] bool operator==(const EditorBridgeContentBrowserSnapshotUVE&) const = default;
 };

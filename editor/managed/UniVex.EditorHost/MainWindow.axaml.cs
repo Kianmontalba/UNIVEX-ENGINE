@@ -1132,6 +1132,8 @@ public partial class MainWindow : Window
             status += " The native bridge truncated this copied view.";
         }
         ContentStatusTextBlock.Text = status;
+        ContentImportActionTextBlock.Text = contentBrowser.ImportAction?.DisplayText ??
+                                            "Import actions: backend capability field unavailable (legacy snapshot).";
     }
 
     private void EnterFailure(string code, string detail)
