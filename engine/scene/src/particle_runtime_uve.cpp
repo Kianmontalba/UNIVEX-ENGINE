@@ -3,11 +3,15 @@
 #include "uve/scene/particle_runtime_uve.h"
 
 #include <algorithm>
-#include <limits>
+#include <cmath>
 #include <utility>
 
 namespace UVE::Scene {
 namespace {
+
+[[nodiscard]] bool IsFiniteVectorUVE(const Math::Vector3UVE& value) noexcept {
+    return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+}
 
 [[nodiscard]] ParticleRuntimeResultUVE MakeResultUVE(const ParticleRuntimeCodeUVE code,
                                                       std::string message) {
@@ -39,7 +43,7 @@ ParticleRuntimeResultUVE ParticleRuntimeUVE::AttachDetailedUVE(
                              "Particle runtime attach rejected the aggregate particle budget limit.");
     }
 
-    m_instances.emplace(entity, InstanceUVE{entity, component.maxParticles, 0U, 1U, true});
+    m_instances.emplace(entity, InstanceUVE{entity, component.maxParticles, 0U, 1U, 1U, true, {}});
     m_totalBudget += component.maxParticles;
     return MakeResultUVE(ParticleRuntimeCodeUVE::Applied,
                          "Particle emitter ownership attached without allocating particle storage.");
@@ -93,6 +97,103 @@ ParticleRuntimeResultUVE ParticleRuntimeUVE::SetLiveParticleCountDetailedUVE(
                          "Particle runtime live count updated within the authored budget.");
 }
 
+ParticleRuntimeResultUVE ParticleRuntimeUVE::EmitDetailedUVE(const EntityUVE entity,
+                                                              const ParticleEmissionUVE& emission) {
+    const auto iterator = m_instances.find(entity);
+    if (iterator == m_instances.end()) {
+        return MakeResultUVE(ParticleRuntimeCodeUVE::NoActiveInstance,
+                             "Particle emission found no active entity instance.");
+    }
+    if (!iterator->second.enabled) {
+        return MakeResultUVE(ParticleRuntimeCodeUVE::DisabledInstance,
+                             "Particle emission was rejected for a disabled entity instance.");
+    }
+    if (emission.count == 0U) {
+        return MakeResultUVE(ParticleRuntimeCodeUVE::Unchanged,
+                             "Particle emission requested zero new particles.");
+    }
+    if (emission.lifetimeSeconds <= 0.0F ||
+        emission.lifetimeSeconds > kMaximumParticleLifetimeSecondsUVE ||
+        !std::isfinite(emission.lifetimeSeconds) || !IsFiniteVectorUVE(emission.position) ||
+        !IsFiniteVectorUVE(emission.velocity)) {
+        return MakeResultUVE(ParticleRuntimeCodeUVE::InvalidSimulationInput,
+                             "Particle emission requires finite position/velocity and bounded positive lifetime.");
+    }
+    const std::size_t currentCount = iterator->second.particles.size();
+    if (static_cast<std::uint64_t>(emission.count) >
+        static_cast<std::uint64_t>(iterator->second.maxParticles) - currentCount) {
+        return MakeResultUVE(ParticleRuntimeCodeUVE::LiveParticleCountExceeded,
+                             "Particle emission exceeds the emitter particle budget.");
+    }
+
+    iterator->second.particles.reserve(currentCount + emission.count);
+    for (std::uint32_t index = 0U; index < emission.count; ++index) {
+        iterator->second.particles.push_back(
+            {emission.position, emission.velocity, emission.lifetimeSeconds, iterator->second.nextSequence++});
+    }
+    iterator->second.liveParticles = static_cast<std::uint32_t>(iterator->second.particles.size());
+    return MakeResultUVE(ParticleRuntimeCodeUVE::Applied,
+                         "Particle emission appended deterministic CPU particle state.");
+}
+
+ParticleRuntimeResultUVE ParticleRuntimeUVE::SimulateDetailedUVE(
+    const float deltaSeconds, const Math::Vector3UVE& acceleration) noexcept {
+    if (deltaSeconds < 0.0F || deltaSeconds > kMaximumSimulationDeltaSecondsUVE ||
+        !std::isfinite(deltaSeconds) || !IsFiniteVectorUVE(acceleration)) {
+        return MakeResultUVE(ParticleRuntimeCodeUVE::InvalidSimulationInput,
+                             "Particle simulation requires finite acceleration and bounded non-negative delta time.");
+    }
+    if (deltaSeconds == 0.0F) {
+        return MakeResultUVE(ParticleRuntimeCodeUVE::Unchanged,
+                             "Particle simulation received a zero delta time.");
+    }
+
+    bool hasWork = false;
+    for (const auto& [entity, instance] : m_instances) {
+        static_cast<void>(entity);
+        if (!instance.enabled || instance.particles.empty()) {
+            continue;
+        }
+        for (const ParticleStateUVE& particle : instance.particles) {
+            const Math::Vector3UVE nextVelocity = particle.velocity + acceleration * deltaSeconds;
+            const Math::Vector3UVE nextPosition = particle.position + nextVelocity * deltaSeconds;
+            const float nextLifetime = particle.remainingLifetimeSeconds - deltaSeconds;
+            if (!IsFiniteVectorUVE(nextVelocity) || !IsFiniteVectorUVE(nextPosition) ||
+                !std::isfinite(nextLifetime)) {
+                return MakeResultUVE(ParticleRuntimeCodeUVE::NonFiniteSimulation,
+                                     "Particle simulation rejected a non-finite integrated state atomically.");
+            }
+        }
+        hasWork = true;
+    }
+    if (!hasWork) {
+        return MakeResultUVE(ParticleRuntimeCodeUVE::Unchanged,
+                             "Particle simulation found no enabled live particle state.");
+    }
+
+    for (auto& [entity, instance] : m_instances) {
+        static_cast<void>(entity);
+        if (!instance.enabled || instance.particles.empty()) {
+            continue;
+        }
+        std::size_t writeIndex = 0U;
+        for (const ParticleStateUVE& particle : instance.particles) {
+            const Math::Vector3UVE nextVelocity = particle.velocity + acceleration * deltaSeconds;
+            const Math::Vector3UVE nextPosition = particle.position + nextVelocity * deltaSeconds;
+            const float nextLifetime = particle.remainingLifetimeSeconds - deltaSeconds;
+            if (nextLifetime <= 0.0F) {
+                continue;
+            }
+            instance.particles[writeIndex++] =
+                {nextPosition, nextVelocity, nextLifetime, particle.sequence};
+        }
+        instance.particles.resize(writeIndex);
+        instance.liveParticles = static_cast<std::uint32_t>(writeIndex);
+    }
+    return MakeResultUVE(ParticleRuntimeCodeUVE::Applied,
+                         "Particle simulation advanced enabled CPU particle state deterministically.");
+}
+
 ParticleRuntimeSnapshotUVE ParticleRuntimeUVE::GetSnapshotUVE() const {
     ParticleRuntimeSnapshotUVE snapshot;
     snapshot.instanceCount = m_instances.size();
@@ -110,6 +211,15 @@ ParticleRuntimeSnapshotUVE ParticleRuntimeUVE::GetSnapshotUVE() const {
                   return lhs.entity.generation < rhs.entity.generation;
               });
     return snapshot;
+}
+
+std::optional<ParticleStateSnapshotUVE> ParticleRuntimeUVE::GetParticleSnapshotUVE(
+    const EntityUVE entity) const {
+    const auto iterator = m_instances.find(entity);
+    if (iterator == m_instances.end()) {
+        return std::nullopt;
+    }
+    return ParticleStateSnapshotUVE{entity, iterator->second.generation, iterator->second.particles};
 }
 
 bool ParticleRuntimeUVE::HasInstanceUVE(const EntityUVE entity) const noexcept {
