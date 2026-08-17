@@ -48,8 +48,11 @@ void main() {
     }
 
     vec2 local = (vTexCoord - viewportMin) / max(viewportMax - viewportMin, vec2(0.0001));
-    vec3 color = vec3(0.0);
-    float alpha = 0.0;
+    float verticalGradient = smoothstep(0.0, 1.0, local.y);
+    vec3 backgroundTop = vec3(0.060, 0.082, 0.108);
+    vec3 backgroundBottom = vec3(0.028, 0.043, 0.060);
+    vec3 color = mix(backgroundBottom, backgroundTop, verticalGradient);
+    float alpha = 0.30;
 
     vec2 grid = abs(fract((local - 0.5) * 24.0) - 0.5);
     float fineLine = 1.0 - smoothstep(0.47, 0.50, max(grid.x, grid.y));

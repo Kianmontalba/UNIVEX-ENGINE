@@ -352,6 +352,14 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_VisiblePrimitive_ReportsEvidenceSpecifi
     }
     ASSERT_EQ(shaderManager.GetPendingJobCountUVE(), 0U);
 
+    EditorViewportVisualStateUVE editorVisualState;
+    editorVisualState.enabled = true;
+    editorVisualState.viewportMinX = 0.10F;
+    editorVisualState.viewportMinY = 0.10F;
+    editorVisualState.viewportMaxX = 0.90F;
+    editorVisualState.viewportMaxY = 0.90F;
+    editorVisualState.cameraForward = Math::Vector3UVE{0.0F, 0.0F, -1.0F};
+    renderer3D->SetEditorViewportVisualStateUVE(editorVisualState);
     renderer3D->RenderFrameUVE(entityManager, cameraEntity);
     const Renderer3DFrameDiagnosticsUVE afterProgramReady = renderer3D->GetLastFrameDiagnosticsUVE();
     EXPECT_EQ(afterProgramReady.primitiveCandidates, 1U);
@@ -361,6 +369,8 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_VisiblePrimitive_ReportsEvidenceSpecifi
     EXPECT_TRUE(afterProgramReady.mainPassRecorded);
     EXPECT_TRUE(afterProgramReady.toneMappingProgramReady);
     EXPECT_TRUE(afterProgramReady.toneMappingPassRecorded);
+    EXPECT_TRUE(afterProgramReady.editorVisualProgramReady);
+    EXPECT_TRUE(afterProgramReady.editorVisualPassRecorded);
     EXPECT_EQ(afterProgramReady.glDrawCallsIssued, 0U);
 }
 
