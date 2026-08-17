@@ -1065,6 +1065,7 @@ public partial class MainWindow : Window
                 RenameSelectedEntityButton.IsEnabled = false;
                 InspectorDrawersTextBlock.Text = "Native drawer facts: none";
                 InspectorSelectionTextBlock.Text = string.Empty;
+                InspectorAssetBindingTextBlock.Text = string.Empty;
                 break;
             case BridgeInspectorMode.MultiSelection:
                 InspectorTitleTextBlock.Text = $"{inspector.SelectedEntities.Count} entities selected";
@@ -1076,7 +1077,8 @@ public partial class MainWindow : Window
                 RenameSelectedEntityButton.IsEnabled = false;
                 InspectorDrawersTextBlock.Text = "Native drawer facts are available only for single selection.";
                 InspectorSelectionTextBlock.Text = string.Join("\n", inspector.SelectedEntities.Select(entity => entity.DisplayLabel)) +
-                                                   (inspector.SelectedEntitiesTruncated ? "\nSelection list truncated by native bridge." : string.Empty);
+                                                      (inspector.SelectedEntitiesTruncated ? "\nNative selection list truncated." : string.Empty);
+                InspectorAssetBindingTextBlock.Text = "Asset binding facts are available only for single selection.";
                 break;
             case BridgeInspectorMode.SingleSelection:
                 BridgeEntitySnapshot active = inspector.ActiveEntity!;
@@ -1093,6 +1095,9 @@ public partial class MainWindow : Window
                 InspectorSelectionTextBlock.Text = inspector.Ancestry.Count == 0
                     ? "Native ancestry: unavailable"
                     : $"Native ancestry: {string.Join(" > ", inspector.Ancestry.Select(entity => entity.DisplayLabel))}";
+                InspectorAssetBindingTextBlock.Text = inspector.AssetBinding is null
+                    ? "Asset binding facts: none"
+                    : $"Asset binding: {inspector.AssetBinding.DisplayText}";
                 break;
         }
     }

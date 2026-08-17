@@ -8,6 +8,7 @@
 
 #include "uve/core/engine_core_uve.h"
 #include "uve/editor/editor_bridge_uve.h"
+#include "uve/scene/components/mesh_component_uve.h"
 
 namespace UVE::Editor::Tests {
 namespace {
@@ -370,6 +371,9 @@ TEST(EditorBridgeUVETest, SnapshotUVE_CopiesHierarchyInspectorAndNativePanelSess
         ASSERT_NE(child, Scene::kInvalidEntityUVE);
         ASSERT_TRUE(editor.ReparentSelectedEntityUVE(root));
         ASSERT_TRUE(editor.SetSelectedEntityNameUVE("Bridge Child"));
+        auto& entityManager = engine.GetServicesUVE().GetEntityManagerUVE();
+        entityManager.AddComponentUVE<Scene::MeshComponentUVE>(
+            child, Scene::MeshComponentUVE{Asset::AssetGuidUVE{0x1111U}, Asset::AssetGuidUVE{0x2222U}});
 
         EditorBridgeSnapshotUVE snapshot = bridge.GetSnapshotUVE();
         ASSERT_EQ(snapshot.hierarchy.entries.size(), 2U);
@@ -388,6 +392,11 @@ TEST(EditorBridgeUVETest, SnapshotUVE_CopiesHierarchyInspectorAndNativePanelSess
         EXPECT_TRUE(snapshot.inspector.parent->displayLabel.starts_with("Bridge Root [Cube] (Entity "));
         EXPECT_EQ(snapshot.inspector.eligibleDrawerIds,
                   (std::vector<std::string>{"name", "hierarchy", "transform", "primitive-mesh"}));
+        ASSERT_TRUE(snapshot.inspector.assetBinding.has_value());
+        ASSERT_TRUE(snapshot.inspector.assetBinding->meshGuid.has_value());
+        ASSERT_TRUE(snapshot.inspector.assetBinding->materialGuid.has_value());
+        EXPECT_EQ(*snapshot.inspector.assetBinding->meshGuid, 0x1111U);
+        EXPECT_EQ(*snapshot.inspector.assetBinding->materialGuid, 0x2222U);
         EXPECT_TRUE(snapshot.inspector.canEditSelectedName);
         EXPECT_FALSE(snapshot.contentBrowser.initialized);
         EXPECT_EQ(snapshot.viewportSurface.state, EditorBridgeViewportSurfaceStateUVE::Unavailable);

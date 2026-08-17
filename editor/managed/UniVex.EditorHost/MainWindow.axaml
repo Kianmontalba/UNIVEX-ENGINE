@@ -227,7 +227,7 @@
                     <TextBlock Text="TOOLS" FontWeight="SemiBold" Opacity="0.8" />
                     <TabControl x:Name="RightTabControl" Grid.Row="1" SelectionChanged="DockTabControl_OnSelectionChanged">
                         <TabItem Header="Inspector">
-                            <Grid RowDefinitions="Auto,Auto,Auto,Auto,*" RowSpacing="8">
+                            <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,*" RowSpacing="8">
                                 <TextBlock x:Name="InspectorTitleTextBlock" Text="No entity selection" FontWeight="SemiBold" />
                                 <TextBlock x:Name="InspectorContextTextBlock" Grid.Row="1" Text="Select a hierarchy entity to inspect copied native context." TextWrapping="Wrap" Opacity="0.76" />
                                 <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="6">
@@ -236,6 +236,7 @@
                                 </StackPanel>
                                 <TextBlock x:Name="InspectorDrawersTextBlock" Grid.Row="3" Text="Native drawer facts: none" TextWrapping="Wrap" Opacity="0.72" />
                                 <TextBlock x:Name="InspectorSelectionTextBlock" Grid.Row="4" TextWrapping="Wrap" Opacity="0.72" />
+                                <TextBlock x:Name="InspectorAssetBindingTextBlock" Grid.Row="5" TextWrapping="Wrap" Opacity="0.72" />
                             </Grid>
                         </TabItem>
                         <TabItem Header="Import">

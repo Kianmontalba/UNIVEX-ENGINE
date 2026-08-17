@@ -10,6 +10,8 @@
 #include <type_traits>
 #include <utility>
 
+#include "uve/scene/components/mesh_component_uve.h"
+
 namespace UVE::Editor {
 namespace {
 
@@ -1494,6 +1496,17 @@ EditorBridgeInspectorSnapshotUVE EditorBridgeUVE::CaptureInspectorUVE() const {
     }
 
     snapshot.mode = EditorBridgeInspectorModeUVE::SingleSelection;
+    Scene::IEntityManagerUVE& entityManager = m_editor->m_services->GetEntityManagerUVE();
+    if (entityManager.HasComponentUVE<Scene::MeshComponentUVE>(active)) {
+        const Scene::MeshComponentUVE& meshComponent =
+            entityManager.GetComponentUVE<Scene::MeshComponentUVE>(active);
+        snapshot.assetBinding = EditorBridgeAssetBindingSnapshotUVE{
+            meshComponent.meshGuid != Asset::kInvalidAssetGuidUVE ? std::optional<std::uint64_t>{meshComponent.meshGuid.value}
+                                                                  : std::nullopt,
+            meshComponent.materialGuid != Asset::kInvalidAssetGuidUVE
+                ? std::optional<std::uint64_t>{meshComponent.materialGuid.value}
+                : std::nullopt};
+    }
     Scene::EntityUVE parent = Scene::kInvalidEntityUVE;
     if (m_editor->TryGetDocumentParentUVE(active, parent) && parent != Scene::kInvalidEntityUVE) {
         snapshot.parent = EditorBridgeEntitySnapshotUVE{
