@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <filesystem>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -27,6 +28,35 @@
 namespace UVE::Scene::Tests {
 namespace {
 
+class FakePrefabOverrideTargetUVE final : public IPrefabOverrideTargetUVE {
+public:
+    std::map<std::string, std::string> values;
+    std::string failingWritePath;
+
+    [[nodiscard]] bool ReadPropertyUVE(const std::string_view propertyPath,
+                                       std::string& serializedValue) const override {
+        const auto iterator = values.find(std::string{propertyPath});
+        if (iterator == values.end()) {
+            return false;
+        }
+        serializedValue = iterator->second;
+        return true;
+    }
+
+    [[nodiscard]] bool WritePropertyUVE(const std::string_view propertyPath,
+                                        const std::string_view serializedValue) override {
+        if (!failingWritePath.empty() && propertyPath == failingWritePath) {
+            return false;
+        }
+        const auto iterator = values.find(std::string{propertyPath});
+        if (iterator == values.end()) {
+            return false;
+        }
+        iterator->second = serializedValue;
+        return true;
+    }
+};
+
 class PrefabSystemUVETest : public ::testing::Test {
 protected:
     Memory::MemoryManagerUVE memoryManager;
@@ -36,6 +66,57 @@ protected:
     Asset::AssetDatabaseUVE assetDatabase;
     PrefabSystemUVE prefabSystem;
 };
+
+TEST(PrefabInstanceComponentUVE, ApplyAndRevertPrefabOverridesUVE_RestoresExplicitBaseline) {
+    PrefabInstanceComponentUVE instance{
+        Asset::AssetGuidUVE{7U},
+        {{"Transform.position", "[1,2,3]"}, {"Transform.rotation", "[0,0,0,1]"}}};
+    const std::vector<PrefabPropertyOverrideUVE> baseline{
+        {"Transform.position", "[0,0,0]"}, {"Transform.rotation", "[0,0,0,1]"}};
+    FakePrefabOverrideTargetUVE target;
+    target.values = {{"Transform.position", "[0,0,0]"}, {"Transform.rotation", "[0,0,0,1]"}};
+
+    const PrefabOverrideOperationResultUVE applied = ApplyPrefabOverridesUVE(instance, target);
+    ASSERT_TRUE(applied.IsAppliedUVE());
+    EXPECT_EQ(applied.affectedCount, 2U);
+    EXPECT_EQ(target.values.at("Transform.position"), "[1,2,3]");
+    EXPECT_EQ(instance.overrides.size(), 2U);
+
+    const PrefabOverrideOperationResultUVE reverted = RevertPrefabOverridesUVE(instance, baseline, target);
+    ASSERT_TRUE(reverted.IsAppliedUVE());
+    EXPECT_EQ(reverted.affectedCount, 2U);
+    EXPECT_EQ(target.values.at("Transform.position"), "[0,0,0]");
+    EXPECT_EQ(target.values.at("Transform.rotation"), "[0,0,0,1]");
+    EXPECT_TRUE(instance.overrides.empty());
+}
+
+TEST(PrefabInstanceComponentUVE, ApplyPrefabOverridesUVE_RollsBackEarlierWritesOnFailure) {
+    const PrefabInstanceComponentUVE instance{
+        Asset::AssetGuidUVE{8U},
+        {{"A.value", "new-a"}, {"B.value", "new-b"}}};
+    FakePrefabOverrideTargetUVE target;
+    target.values = {{"A.value", "old-a"}, {"B.value", "old-b"}};
+    target.failingWritePath = "B.value";
+
+    const PrefabOverrideOperationResultUVE result = ApplyPrefabOverridesUVE(instance, target);
+    EXPECT_EQ(result.code, PrefabOverrideOperationCodeUVE::WriteFailed);
+    EXPECT_EQ(target.values.at("A.value"), "old-a");
+    EXPECT_EQ(target.values.at("B.value"), "old-b");
+    EXPECT_EQ(instance.overrides.size(), 2U);
+}
+
+TEST(PrefabInstanceComponentUVE, RevertPrefabOverridesUVE_RejectsInvalidBaselineWithoutMutation) {
+    PrefabInstanceComponentUVE instance{Asset::AssetGuidUVE{9U}, {{"A.value", "new-a"}}};
+    FakePrefabOverrideTargetUVE target;
+    target.values = {{"A.value", "current-a"}};
+    const std::vector<PrefabPropertyOverrideUVE> invalidBaseline{{"B.value", "one"}, {"A.value", "two"}};
+
+    const PrefabOverrideOperationResultUVE result = RevertPrefabOverridesUVE(instance, invalidBaseline, target);
+    EXPECT_EQ(result.code, PrefabOverrideOperationCodeUVE::InvalidBaseline);
+    EXPECT_EQ(target.values.at("A.value"), "current-a");
+    ASSERT_EQ(instance.overrides.size(), 1U);
+    EXPECT_EQ(instance.overrides.front().serializedValue, "new-a");
+}
 
 TEST(PrefabInstanceComponentUVE, IsPrefabInstanceComponentValidUVE_RequiresSourceGuidAndSortedOverrides) {
     EXPECT_FALSE(IsPrefabInstanceComponentValidUVE(
