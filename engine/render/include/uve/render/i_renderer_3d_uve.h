@@ -8,6 +8,7 @@
 #include "uve/math/vector3_uve.h"
 #include "uve/scene/entity_uve.h"
 #include "uve/scene/i_entity_manager_uve.h"
+#include "uve/scene/particle_runtime_uve.h"
 
 namespace UVE::Render {
 
@@ -45,6 +46,7 @@ struct Renderer3DFrameDiagnosticsUVE final {
     std::size_t primitiveItemsExtracted = 0U;
     std::size_t meshDrawCallsRecorded = 0U;
     std::size_t primitiveDrawCallsRecorded = 0U;
+    std::size_t particleItemsExtracted = 0U;
     std::size_t glDrawCallsIssued = 0U;
     bool primitiveProgramReady = false;
     bool mainPassRecorded = false;
@@ -52,6 +54,7 @@ struct Renderer3DFrameDiagnosticsUVE final {
     bool toneMappingPassRecorded = false;
     bool editorVisualProgramReady = false;
     bool editorVisualPassRecorded = false;
+    bool particleItemsTruncated = false;
 };
 
 /// IRenderer3DUVE is the engine's final per-frame render orchestrator (the spec's `Renderer3DUVE`,
@@ -74,6 +77,16 @@ public:
     /// WorldTransformComponentUVE and CameraComponentUVE (the same contract ICameraSystemUVE
     /// already enforces).
     virtual void RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scene::EntityUVE cameraEntity) = 0;
+
+    /// Renders the scene while extracting a copied particle snapshot from the caller-owned runtime
+    /// into the frame queue. The runtime reference is borrowed for this call only; implementations
+    /// must not retain it after returning. The distinct name avoids hiding the legacy virtual in test doubles.
+    virtual void RenderFrameWithParticleRuntimeUVE(Scene::IEntityManagerUVE& entityManager,
+                                                   Scene::EntityUVE cameraEntity,
+                                                   const Scene::ParticleRuntimeUVE& particleRuntime) {
+        static_cast<void>(particleRuntime);
+        RenderFrameUVE(entityManager, cameraEntity);
+    }
 
     /// Updates optional copied editor-only visual facts for a later native render frame. The default
     /// implementation is intentionally a no-op so non-Renderer3D test doubles need not own editor state.

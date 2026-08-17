@@ -883,6 +883,27 @@ TEST_F(Renderer3DUVETest, AssetReloadedEventUVE_ForCachedTexture_EvictsTextureAn
     EXPECT_GT(liveResourcesAfterRerender, liveResourcesAfterReload);
 }
 
+TEST_F(Renderer3DUVETest, RenderFrameUVE_ParticleRuntimeInput_ExtractsCopiedItemsAndDoesNotLeakAcrossFrames) {
+    const Scene::EntityUVE cameraEntity = MakeCameraEntityUVE();
+    Scene::ParticleRuntimeUVE particleRuntime;
+    const Scene::EntityUVE particleEntity{31U, 1U};
+    ASSERT_TRUE(particleRuntime.AttachUVE(particleEntity, Scene::ParticleEmitterComponentUVE{4U}));
+    ASSERT_TRUE(particleRuntime.EmitDetailedUVE(
+                       particleEntity,
+                       Scene::ParticleEmissionUVE{2U, Math::Vector3UVE{0.0F, 0.0F, -4.0F}, {}, 2.0F})
+                    .IsAcceptedUVE());
+
+    EXPECT_NO_FATAL_FAILURE(renderer3D->RenderFrameWithParticleRuntimeUVE(entityManager, cameraEntity, particleRuntime));
+    const Renderer3DFrameDiagnosticsUVE particleDiagnostics = renderer3D->GetLastFrameDiagnosticsUVE();
+    EXPECT_EQ(particleDiagnostics.particleItemsExtracted, 2U);
+    EXPECT_FALSE(particleDiagnostics.particleItemsTruncated);
+
+    EXPECT_NO_FATAL_FAILURE(renderer3D->RenderFrameUVE(entityManager, cameraEntity));
+    const Renderer3DFrameDiagnosticsUVE legacyDiagnostics = renderer3D->GetLastFrameDiagnosticsUVE();
+    EXPECT_EQ(legacyDiagnostics.particleItemsExtracted, 0U);
+    EXPECT_FALSE(legacyDiagnostics.particleItemsTruncated);
+}
+
 TEST_F(Renderer3DUVETest, RenderFrameUVE_ActiveCameraPath_MatchesEngineCoreIntegration) {
     // Exercises the exact call shape EngineCoreUVE::Render() uses once SetActiveCameraUVE() has
     // been called: RenderFrameUVE(*entityManager, activeCamera) against a scene with both a
