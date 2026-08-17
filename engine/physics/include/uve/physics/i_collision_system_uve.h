@@ -12,11 +12,11 @@ namespace UVE::Physics {
 
 /// ICollisionSystemUVE is the spec's `CollisionSystemUVE` (Part 7.5): pure collision *detection*
 /// over every entity with both `Scene::WorldTransformComponentUVE` and
-/// `Scene::ColliderComponentUVE`. This increment's broad-phase is a naive O(n^2) pairwise AABB
-/// overlap test (a BVH is real future work once entity counts justify it — matches
-/// `ISceneGraphUVE::GetChildrenUVE()`'s own "profile before optimizing" precedent); the legacy box
-/// overlap is exact, while sphere/capsule descriptors use conservative AABB bounds in v1 and need
-/// a future exact narrow phase. Deliberately returns plain
+/// `Scene::ColliderComponentUVE`. The implementation uses a rebuilt per-query static AABB BVH to
+/// reduce broad-phase candidate work while preserving the legacy world-AABB narrow phase; each
+/// returned pair remains oriented and ordered by the original cache encounter indices so
+/// sequential resolution is unchanged. The legacy box overlap is exact, while sphere/capsule
+/// descriptors use conservative AABB bounds in v1 and need a future exact narrow phase. Deliberately returns plain
 /// `CollisionPairUVE` values rather than mutating anything: resolving overlaps (deciding which
 /// body moves, by how much) is `IPhysicsSystemUVE`'s job, not this one's.
 /// Thread-safety: implementations should be stateless (holding no members), matching
@@ -27,8 +27,8 @@ public:
     virtual ~ICollisionSystemUVE() = default;
 
     /// Returns every overlapping pair of entities with both `WorldTransformComponentUVE` and
-    /// `ColliderComponentUVE`, in a deterministic order (fixed by `ForEachUVE`'s own chunk-order
-    /// iteration, then nested pairwise comparison order) — callers that resolve pairs
+    /// `ColliderComponentUVE`, in a deterministic order matching the cache's encounter-index
+    /// nested-pair order, independent of BVH traversal order — callers that resolve pairs
     /// sequentially can rely on this order being stable run-to-run given the same entity
     /// creation sequence.
     [[nodiscard]] virtual std::vector<CollisionPairUVE> DetectCollisionsUVE(
