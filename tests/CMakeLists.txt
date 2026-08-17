@@ -75,6 +75,7 @@ add_executable(uve_tests
     render/light_system_uve_tests.cpp
     render/renderer_3d_uve_tests.cpp
     audio/audio_attenuation_model_uve_tests.cpp
+    audio/audio_mixer_group_uve_tests.cpp
     audio/null_audio_device_uve_tests.cpp
     audio/audio_system_uve_tests.cpp
     audio/audio_source_system_uve_tests.cpp

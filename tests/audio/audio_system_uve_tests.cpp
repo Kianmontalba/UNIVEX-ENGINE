@@ -110,6 +110,63 @@ TEST_F(AudioSystemUVETest, SpatialSource_GainMatchesHandComputedInverseSquareAtt
     EXPECT_FLOAT_EQ(std::get<SetVoiceParamsCallUVE>(recorded[0]).params.gain, 0.25F);
 }
 
+TEST_F(AudioSystemUVETest, MixerGroup_ScalesFinalGainAndPitchBeforeDeviceSubmission) {
+    ASSERT_TRUE(audioSystem.RegisterMixerGroupUVE("SFX", 0.5F, 1.5F));
+
+    AudioSourceDescUVE desc;
+    desc.spatial = false;
+    desc.volume = 0.8F;
+    desc.pitch = 1.2F;
+    desc.mixerGroup = "SFX";
+    const VoiceHandleUVE source = audioSystem.CreateSourceUVE(desc);
+
+    device.ClearRecordedCallsUVE();
+    audioSystem.UpdateUVE();
+
+    const std::vector<RecordedAudioCallUVE>& recorded = device.GetRecordedCallsUVE();
+    ASSERT_EQ(recorded.size(), 1U);
+    ASSERT_TRUE(std::holds_alternative<SetVoiceParamsCallUVE>(recorded[0]));
+    EXPECT_FLOAT_EQ(std::get<SetVoiceParamsCallUVE>(recorded[0]).params.gain, 0.4F);
+    EXPECT_FLOAT_EQ(std::get<SetVoiceParamsCallUVE>(recorded[0]).params.pitch, 1.8F);
+
+    const AudioMixerDiagnosticsUVE diagnostics = audioSystem.GetMixerDiagnosticsUVE();
+    ASSERT_EQ(diagnostics.routedSourceCount, 1U);
+    ASSERT_EQ(diagnostics.groups.back().name, "SFX");
+    EXPECT_EQ(diagnostics.groups.back().sourceCount, 1U);
+    EXPECT_EQ(source, VoiceHandleUVE{1U});
+}
+
+TEST_F(AudioSystemUVETest, MixerGroup_RerouteAndDestroyKeepsCopiedCountsConsistent) {
+    ASSERT_TRUE(audioSystem.RegisterMixerGroupUVE("Music"));
+    const VoiceHandleUVE source = audioSystem.CreateSourceUVE(AudioSourceDescUVE{});
+
+    ASSERT_TRUE(audioSystem.SetSourceMixerGroupUVE(source, "Music"));
+    AudioMixerDiagnosticsUVE diagnostics = audioSystem.GetMixerDiagnosticsUVE();
+    ASSERT_EQ(diagnostics.routedSourceCount, 1U);
+    ASSERT_EQ(diagnostics.groups[0].name, kMasterAudioMixerGroupNameUVE);
+    EXPECT_EQ(diagnostics.groups[0].sourceCount, 0U);
+    EXPECT_EQ(diagnostics.groups[1].name, "Music");
+    EXPECT_EQ(diagnostics.groups[1].sourceCount, 1U);
+    EXPECT_FALSE(audioSystem.RemoveMixerGroupUVE("Music"));
+
+    audioSystem.DestroySourceUVE(source);
+    diagnostics = audioSystem.GetMixerDiagnosticsUVE();
+    EXPECT_EQ(diagnostics.routedSourceCount, 0U);
+    EXPECT_TRUE(audioSystem.RemoveMixerGroupUVE("Music"));
+}
+
+TEST_F(AudioSystemUVETest, MixerGroup_UnknownSourceGroupFallsBackToMaster) {
+    AudioSourceDescUVE desc;
+    desc.mixerGroup = "Missing";
+    const VoiceHandleUVE source = audioSystem.CreateSourceUVE(desc);
+
+    const AudioMixerDiagnosticsUVE diagnostics = audioSystem.GetMixerDiagnosticsUVE();
+    ASSERT_EQ(diagnostics.routedSourceCount, 1U);
+    EXPECT_EQ(diagnostics.groups[0].name, kMasterAudioMixerGroupNameUVE);
+    EXPECT_EQ(diagnostics.groups[0].sourceCount, 1U);
+    EXPECT_FALSE(audioSystem.SetSourceMixerGroupUVE(source, "Missing"));
+}
+
 TEST_F(AudioSystemUVETest, SetListenerPositionAndGetListenerPositionUVE_RoundTrip) {
     audioSystem.SetListenerPositionUVE(Math::Vector3UVE{1.0F, 2.0F, 3.0F});
     EXPECT_EQ(audioSystem.GetListenerPositionUVE(), (Math::Vector3UVE{1.0F, 2.0F, 3.0F}));
