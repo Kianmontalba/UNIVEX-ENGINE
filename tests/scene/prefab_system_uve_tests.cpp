@@ -37,10 +37,18 @@ protected:
     PrefabSystemUVE prefabSystem;
 };
 
-TEST(PrefabInstanceComponentUVE, IsPrefabInstanceComponentValidUVE_RequiresSourceGuid) {
+TEST(PrefabInstanceComponentUVE, IsPrefabInstanceComponentValidUVE_RequiresSourceGuidAndSortedOverrides) {
     EXPECT_FALSE(IsPrefabInstanceComponentValidUVE(
-        PrefabInstanceComponentUVE{Asset::kInvalidAssetGuidUVE}));
-    EXPECT_TRUE(IsPrefabInstanceComponentValidUVE(PrefabInstanceComponentUVE{Asset::AssetGuidUVE{7U}}));
+        PrefabInstanceComponentUVE{Asset::kInvalidAssetGuidUVE, {}}));
+    EXPECT_TRUE(IsPrefabInstanceComponentValidUVE(PrefabInstanceComponentUVE{Asset::AssetGuidUVE{7U}, {}}));
+    EXPECT_TRUE(IsPrefabInstanceComponentValidUVE(PrefabInstanceComponentUVE{
+        Asset::AssetGuidUVE{7U}, {{"Transform.position", "[1,2,3]"}, {"Transform.rotation", "[0,0,0,1]"}}}));
+    EXPECT_FALSE(IsPrefabInstanceComponentValidUVE(PrefabInstanceComponentUVE{
+        Asset::AssetGuidUVE{7U}, {{"Transform.rotation", "[0,0,0,1]"}, {"Transform.position", "[1,2,3]"}}}));
+    EXPECT_FALSE(IsPrefabInstanceComponentValidUVE(
+        PrefabInstanceComponentUVE{Asset::AssetGuidUVE{7U}, {{"Transform.position", ""}}}));
+    EXPECT_FALSE(IsPrefabInstanceComponentValidUVE(PrefabInstanceComponentUVE{
+        Asset::AssetGuidUVE{7U}, std::vector<PrefabPropertyOverrideUVE>(kMaximumPrefabOverridesUVE + 1U)}));
 }
 
 TEST_F(PrefabSystemUVETest, SaveThenInstantiate_ProducesEntityWithSameComponentValues) {

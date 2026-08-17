@@ -134,7 +134,7 @@ TEST_F(SceneSerializerUVETest, CaptureThenRestore_AllRegisteredComponentTypes_Ro
     entityManager.AddComponentUVE<ScriptComponentUVE>(source, ScriptComponentUVE{"scripts/lifecycle.lua"});
     entityManager.AddComponentUVE<ParticleEmitterComponentUVE>(source, ParticleEmitterComponentUVE{128U});
     entityManager.AddComponentUVE<PrefabInstanceComponentUVE>(source,
-                                                               PrefabInstanceComponentUVE{Asset::AssetGuidUVE{9001}});
+                                                               PrefabInstanceComponentUVE{Asset::AssetGuidUVE{9001}, {}});
 
     const std::optional<SceneSnapshotUVE> snapshot =
         serializer.CaptureUVE(entityManager, {source}, SceneAssetTypeUVE::Scene);
@@ -385,6 +385,48 @@ TEST_F(SceneSerializerUVETest, RestoreUVE_InvalidPrefabInstancePayload_RollsBack
     const std::size_t entityCountBefore = entityManager.GetEntityCountUVE();
     const std::string payloadText =
         R"({"entities":[{"localId":0,"components":{"PrefabInstanceComponentUVE":{"sourcePrefabGuid":0}}}]})";
+    const auto* const payloadBytes = reinterpret_cast<const std::byte*>(payloadText.data());
+    const SceneSnapshotUVE snapshot{
+        Asset::EncodeUveFileEnvelopeUVE(SceneAssetTypeUVE::Scene,
+                                        std::vector<std::byte>{payloadBytes, payloadBytes + payloadText.size()}),
+        SceneAssetTypeUVE::Scene};
+    const std::vector<EntityUVE> roots = serializer.RestoreUVE(entityManager, snapshot);
+    EXPECT_TRUE(roots.empty());
+    EXPECT_TRUE(entityManager.IsAliveUVE(existing));
+    EXPECT_EQ(entityManager.GetEntityCountUVE(), entityCountBefore);
+}
+
+TEST_F(SceneSerializerUVETest, SaveThenLoad_PrefabInstanceOverrides_RoundTripsDeterministically) {
+    const EntityUVE entity = entityManager.CreateEntityUVE();
+    const PrefabInstanceComponentUVE component{
+        Asset::AssetGuidUVE{77U},
+        {{"Transform.position", "[1,2,3]"}, {"Transform.rotation", "[0,0,0,1]"}}};
+    entityManager.AddComponentUVE<PrefabInstanceComponentUVE>(entity, component);
+
+    const std::filesystem::path path = "uve_scene_serializer_tests_prefab_overrides.uvescene";
+    std::filesystem::remove(path);
+    ASSERT_TRUE(serializer.SaveUVE(entityManager, {entity}, path, SceneAssetTypeUVE::Scene));
+
+    EntityManagerUVE loadedManager(memoryManager.GetDefaultAllocatorUVE(), eventSystem);
+    const std::vector<EntityUVE> roots = serializer.LoadUVE(loadedManager, path);
+    ASSERT_EQ(roots.size(), 1U);
+    const PrefabInstanceComponentUVE& loaded =
+        loadedManager.GetComponentUVE<PrefabInstanceComponentUVE>(roots.front());
+    ASSERT_EQ(loaded.sourcePrefabGuid, Asset::AssetGuidUVE{77U});
+    ASSERT_EQ(loaded.overrides.size(), 2U);
+    EXPECT_EQ(loaded.overrides[0].propertyPath, "Transform.position");
+    EXPECT_EQ(loaded.overrides[0].serializedValue, "[1,2,3]");
+    EXPECT_EQ(loaded.overrides[1].propertyPath, "Transform.rotation");
+    EXPECT_EQ(loaded.overrides[1].serializedValue, "[0,0,0,1]");
+
+    std::filesystem::remove(path);
+}
+
+TEST_F(SceneSerializerUVETest, RestoreUVE_UnsortedPrefabOverrides_RollsBackCreatedEntities) {
+    const EntityUVE existing = entityManager.CreateEntityUVE();
+    const std::size_t entityCountBefore = entityManager.GetEntityCountUVE();
+    const std::string payloadText =
+        R"({"entities":[{"localId":0,"components":{"PrefabInstanceComponentUVE":{"sourcePrefabGuid":77,"overrides":[{"propertyPath":"Transform.rotation","serializedValue":"[0,0,0,1]"},{"propertyPath":"Transform.position","serializedValue":"[1,2,3]"}]}}}]})";
     const auto* const payloadBytes = reinterpret_cast<const std::byte*>(payloadText.data());
     const SceneSnapshotUVE snapshot{
         Asset::EncodeUveFileEnvelopeUVE(SceneAssetTypeUVE::Scene,
