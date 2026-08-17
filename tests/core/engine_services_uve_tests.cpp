@@ -436,6 +436,7 @@ protected:
     [[nodiscard]] Asset::AssetLoadStateUVE GetStateErased(Asset::AssetGuidUVE) const override {
         return Asset::AssetLoadStateUVE::NotLoaded;
     }
+    [[nodiscard]] std::string GetFailureReasonErased(Asset::AssetGuidUVE) const override { return {}; }
     [[nodiscard]] void* TryGetErased(Asset::AssetGuidUVE) override { return nullptr; }
     void AddRefErased(Asset::AssetGuidUVE) override {}
     void ReleaseErased(Asset::AssetGuidUVE) override {}

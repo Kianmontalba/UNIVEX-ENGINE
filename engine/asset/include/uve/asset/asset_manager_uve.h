@@ -43,6 +43,7 @@ protected:
     void RegisterLoaderErased(std::type_index type, AssetLoaderInfoUVE info) override;
     void LoadErased(AssetGuidUVE guid, std::type_index type, IAssetDatabaseUVE& assetDatabase) override;
     [[nodiscard]] AssetLoadStateUVE GetStateErased(AssetGuidUVE guid) const override;
+    [[nodiscard]] std::string GetFailureReasonErased(AssetGuidUVE guid) const override;
     [[nodiscard]] void* TryGetErased(AssetGuidUVE guid) override;
     void AddRefErased(AssetGuidUVE guid) override;
     void ReleaseErased(AssetGuidUVE guid) override;

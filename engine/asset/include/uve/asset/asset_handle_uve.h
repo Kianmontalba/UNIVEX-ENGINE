@@ -59,6 +59,10 @@ public:
         return m_manager->GetLoadStateUVE(m_guid) == AssetLoadStateUVE::Failed;
     }
 
+    /// Returns a copied diagnostic for the most recent failed load/reload, or an empty string when
+    /// this handle is not failed. The copy remains valid independently of the manager record.
+    [[nodiscard]] std::string GetFailureReasonUVE() const { return m_manager->GetFailureReasonUVE(m_guid); }
+
     /// Returns a pointer to the loaded `T`, or `nullptr` if the load hasn't finished (or failed)
     /// yet. The pointer may be invalidated by a future HotReloadUVE-triggered reload — callers
     /// that need a stable reference across frames should re-call TryGetUVE() each time.

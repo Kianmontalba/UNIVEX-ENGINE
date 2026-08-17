@@ -171,10 +171,33 @@ TEST_F(AssetManagerUVETest, LoadUVE_UnknownGuid_BecomesFailedAndLogsError) {
     ASSERT_TRUE(WaitForTerminalStateUVE(handle));
     EXPECT_TRUE(handle.HasFailedUVE());
     EXPECT_EQ(handle.TryGetUVE(), nullptr);
+    EXPECT_EQ(handle.GetFailureReasonUVE(), "asset database resolved no path");
+    EXPECT_EQ(assetManager.GetFailureReasonUVE(AssetGuidUVE{424242}), "asset database resolved no path");
 
     EXPECT_TRUE(WaitForLogMessageUVE(*memorySinkPtr, Debug::LogLevelUVE::Error, "failed to load asset"));
 
     logger.Shutdown();
+}
+
+TEST_F(AssetManagerUVETest, LoadUVE_LoaderRejectsExistingFile_ReportsReasonAndSuccessfulReloadClearsIt) {
+    const std::filesystem::path path = "uve_asset_manager_tests_failure_reason.uveblob";
+    std::filesystem::remove(path);
+    ASSERT_TRUE(WriteUveFileUVE(path, AssetKindUVE::Blob, {}));
+    const AssetGuidUVE guid = assetDatabase.RegisterUVE(path);
+
+    assetManager.RegisterLoaderUVE<BlobAssetUVE>([](const std::filesystem::path&, BlobAssetUVE&) { return false; });
+    const AssetHandleUVE<BlobAssetUVE> handle = assetManager.LoadUVE<BlobAssetUVE>(guid, assetDatabase);
+    ASSERT_TRUE(WaitForTerminalStateUVE(handle));
+    EXPECT_TRUE(handle.HasFailedUVE());
+    EXPECT_EQ(handle.GetFailureReasonUVE(), "registered asset loader rejected file");
+
+    assetManager.RegisterLoaderUVE<BlobAssetUVE>(LoadBlobUVE);
+    assetManager.ReloadUVE(guid, assetDatabase);
+    ASSERT_TRUE(WaitForTerminalStateUVE(handle));
+    EXPECT_TRUE(handle.IsReadyUVE());
+    EXPECT_TRUE(handle.GetFailureReasonUVE().empty());
+
+    std::filesystem::remove(path);
 }
 
 TEST_F(AssetManagerUVETest, LoadCompletion_PublishesAssetLoadCompletedEvent) {
