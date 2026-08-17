@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <type_traits>
 #include <utility>
 
 namespace UVE::Scripting {
@@ -12,6 +13,29 @@ namespace {
 [[nodiscard]] bool IsFiniteScriptVector3UVE(const ScriptVector3ValueUVE& value) noexcept {
     return std::isfinite(value.value.x) && std::isfinite(value.value.y) &&
            std::isfinite(value.value.z);
+}
+
+[[nodiscard]] bool IsFiniteScriptVmValueUVE(const ScriptVmValueUVE& value) noexcept {
+    return std::visit(
+        [](const auto& typedValue) noexcept {
+            using ValueType = std::decay_t<decltype(typedValue)>;
+            if constexpr (std::is_same_v<ValueType, float>) {
+                return std::isfinite(typedValue);
+            } else {
+                return IsFiniteScriptVector3UVE(typedValue);
+            }
+        },
+        value);
+}
+
+[[nodiscard]] bool IsValidScriptVmBindingsUVE(const ScriptVmExecutionContextUVE& context) noexcept {
+    const auto validBinding = [](const ScriptVmValueBindingUVE& binding) noexcept {
+        return binding.nodeId != 0U && !binding.pinName.empty() && IsFiniteScriptVmValueUVE(binding.value);
+    };
+    return context.inputs.size() <= ScriptVmExecutionContextUVE::kMaximumBindingsUVE &&
+           context.outputs.size() <= ScriptVmExecutionContextUVE::kMaximumBindingsUVE &&
+           std::all_of(context.inputs.begin(), context.inputs.end(), validBinding) &&
+           std::all_of(context.outputs.begin(), context.outputs.end(), validBinding);
 }
 
 [[nodiscard]] std::vector<ScriptBytecodeDiagnosticUVE> ValidateRuntimeProgramUVE(
@@ -83,7 +107,7 @@ ScriptRuntimeReloadResultUVE ScriptRuntimeUVE::ReloadUVE(const Scene::EntityUVE 
     const bool compatibleStatePreserved = iterator->second.program.version == program.version;
     iterator->second.program = std::move(program);
     if (!compatibleStatePreserved) {
-        iterator->second.state.values.clear();
+        iterator->second.state = {};
     }
     if (iterator->second.generation < std::numeric_limits<std::uint64_t>::max()) {
         ++iterator->second.generation;
@@ -137,6 +161,15 @@ ScriptRuntimeStateUpdateResultUVE ScriptRuntimeUVE::SetStateDetailedUVE(const Sc
     if (state.vector3Values.size() > kMaximumStateVector3ValuesUVE) {
         return {ScriptRuntimeStateUpdateCodeUVE::CapacityExceeded,
                 "State update rejected because the typed Vector3 state exceeds its bounded capacity."};
+    }
+    if (state.executionContext.inputs.size() > kMaximumStateVmBindingsUVE ||
+        state.executionContext.outputs.size() > kMaximumStateVmBindingsUVE) {
+        return {ScriptRuntimeStateUpdateCodeUVE::CapacityExceeded,
+                "State update rejected because the VM binding context exceeds its bounded capacity."};
+    }
+    if (!IsValidScriptVmBindingsUVE(state.executionContext)) {
+        return {ScriptRuntimeStateUpdateCodeUVE::InvalidVmBinding,
+                "State update rejected because a VM binding has an invalid identity or non-finite value."};
     }
     if (std::any_of(state.vector3Values.begin(), state.vector3Values.end(),
                     [](const ScriptVector3ValueUVE& value) { return !IsFiniteScriptVector3UVE(value); })) {
@@ -192,7 +225,7 @@ std::size_t ScriptRuntimeUVE::GetInstanceCountUVE() const noexcept {
 }
 
 ScriptRuntimeTickBatchResultUVE ScriptRuntimeUVE::TickDetailedUVE(
-    const ScriptVmExecutionOptionsUVE options) const {
+    const ScriptVmExecutionOptionsUVE options) {
     std::vector<Scene::EntityUVE> entities;
     entities.reserve(m_instances.size());
     for (const auto& [entity, instance] : m_instances) {
@@ -212,7 +245,8 @@ ScriptRuntimeTickBatchResultUVE ScriptRuntimeUVE::TickDetailedUVE(
     batch.results.reserve(entities.size());
     for (const Scene::EntityUVE entity : entities) {
         const auto iterator = m_instances.find(entity);
-        ScriptVmExecutionResultUVE execution = ExecuteScriptBytecodeUVE(iterator->second.program, options);
+        ScriptVmExecutionResultUVE execution = ExecuteScriptBytecodeUVE(
+            iterator->second.program, iterator->second.state.executionContext, options);
         switch (execution.status) {
         case ScriptVmStatusUVE::Completed:
             ++batch.summary.completedCount;
@@ -234,7 +268,7 @@ ScriptRuntimeTickBatchResultUVE ScriptRuntimeUVE::TickDetailedUVE(
 }
 
 std::vector<ScriptRuntimeTickResultUVE> ScriptRuntimeUVE::TickUVE(
-    const ScriptVmExecutionOptionsUVE options) const {
+    const ScriptVmExecutionOptionsUVE options) {
     return TickDetailedUVE(options).results;
 }
 
