@@ -11,6 +11,7 @@
 #include "uve/scripting/script_graph_persistence_uve.h"
 #include "uve/scripting/script_graph_uve.h"
 #include "uve/scripting/script_graph_runtime_binding_uve.h"
+#include "uve/scripting/script_component_runtime_ownership_uve.h"
 #include "uve/scripting/script_hot_reload_uve.h"
 
 #include <gtest/gtest.h>
@@ -366,6 +367,79 @@ TEST(ScriptGraphRuntimeBindingUVETest, BindUVE_RejectsInvalidEntityWithoutCompil
     EXPECT_EQ(result.code, ScriptGraphRuntimeBindingCodeUVE::InvalidEntity);
     EXPECT_TRUE(result.compileDiagnostics.empty());
     EXPECT_EQ(runtime.GetInstanceCountUVE(), 0U);
+}
+
+TEST(ScriptComponentRuntimeOwnershipUVETest, ReconcileUVE_AttachesValidatedPathThroughGraphBinding) {
+    ScriptNodeRegistryUVE registry;
+    RegisterTestNodesUVE(registry);
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({1U, "test.source"}));
+    ScriptRuntimeUVE runtime;
+
+    const ScriptComponentRuntimeOwnershipResultUVE result =
+        ScriptComponentRuntimeOwnershipUVE::ReconcileUVE(
+            Scene::ScriptComponentUVE{"scripts/player.uvescript"}, graph, registry, runtime, {8U, 1U});
+
+    EXPECT_EQ(result.code, ScriptComponentRuntimeOwnershipCodeUVE::Attached);
+    EXPECT_TRUE(result.IsAcceptedUVE());
+    EXPECT_EQ(runtime.GetInstanceCountUVE(), 1U);
+}
+
+TEST(ScriptComponentRuntimeOwnershipUVETest, ReconcileUVE_EmptyPathDetachesIdempotently) {
+    ScriptRuntimeUVE runtime;
+    ASSERT_TRUE(runtime.AttachUVE({9U, 1U}, ScriptBytecodeProgramUVE{}));
+    ScriptNodeRegistryUVE registry;
+    ScriptGraphUVE graph;
+
+    const ScriptComponentRuntimeOwnershipResultUVE detached =
+        ScriptComponentRuntimeOwnershipUVE::ReconcileUVE(
+            Scene::ScriptComponentUVE{}, graph, registry, runtime, {9U, 1U});
+    EXPECT_EQ(detached.code, ScriptComponentRuntimeOwnershipCodeUVE::Detached);
+    EXPECT_EQ(runtime.GetInstanceCountUVE(), 0U);
+
+    const ScriptComponentRuntimeOwnershipResultUVE alreadyDetached =
+        ScriptComponentRuntimeOwnershipUVE::ReconcileUVE(
+            Scene::ScriptComponentUVE{}, graph, registry, runtime, {9U, 1U});
+    EXPECT_EQ(alreadyDetached.code, ScriptComponentRuntimeOwnershipCodeUVE::Detached);
+    EXPECT_EQ(runtime.GetInstanceCountUVE(), 0U);
+}
+
+TEST(ScriptComponentRuntimeOwnershipUVETest, ReconcileUVE_RejectsInvalidPathAndGraphWithoutRuntimeMutation) {
+    ScriptNodeRegistryUVE registry;
+    RegisterTestNodesUVE(registry);
+    ScriptGraphUVE invalidGraph;
+    ASSERT_TRUE(invalidGraph.AddNodeUVE({1U, "unknown.node"}));
+    ScriptRuntimeUVE runtime;
+    const Scene::EntityUVE entity{10U, 1U};
+
+    const ScriptComponentRuntimeOwnershipResultUVE invalidPath =
+        ScriptComponentRuntimeOwnershipUVE::ReconcileUVE(
+            Scene::ScriptComponentUVE{"../outside.uvescript"}, invalidGraph, registry, runtime, entity);
+    EXPECT_EQ(invalidPath.code, ScriptComponentRuntimeOwnershipCodeUVE::InvalidComponent);
+    EXPECT_EQ(runtime.GetInstanceCountUVE(), 0U);
+
+    const ScriptComponentRuntimeOwnershipResultUVE rejectedGraph =
+        ScriptComponentRuntimeOwnershipUVE::ReconcileUVE(
+            Scene::ScriptComponentUVE{"scripts/player.uvescript"}, invalidGraph, registry, runtime, entity);
+    EXPECT_EQ(rejectedGraph.code, ScriptComponentRuntimeOwnershipCodeUVE::GraphRejected);
+    EXPECT_EQ(runtime.GetInstanceCountUVE(), 0U);
+}
+
+TEST(ScriptComponentRuntimeOwnershipUVETest, ReconcileUVE_RejectsReplacementWhileRuntimeIsActive) {
+    ScriptNodeRegistryUVE registry;
+    RegisterTestNodesUVE(registry);
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({1U, "test.source"}));
+    ScriptRuntimeUVE runtime;
+    const Scene::EntityUVE entity{11U, 1U};
+    ASSERT_TRUE(runtime.AttachUVE(entity, ScriptBytecodeProgramUVE{}));
+
+    const ScriptComponentRuntimeOwnershipResultUVE result =
+        ScriptComponentRuntimeOwnershipUVE::ReconcileUVE(
+            Scene::ScriptComponentUVE{"scripts/replacement.uvescript"}, graph, registry, runtime, entity);
+
+    EXPECT_EQ(result.code, ScriptComponentRuntimeOwnershipCodeUVE::DuplicateRuntime);
+    EXPECT_EQ(runtime.GetInstanceCountUVE(), 1U);
 }
 
 TEST(ScriptBytecodeUVETest, EncodeDecodeScriptBytecodeUVE_RoundTripsVersionedProgram) {
