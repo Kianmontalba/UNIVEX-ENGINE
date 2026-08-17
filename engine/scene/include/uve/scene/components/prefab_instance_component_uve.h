@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -16,6 +17,7 @@ namespace UVE::Scene {
 inline constexpr std::size_t kMaximumPrefabOverridesUVE = 256U;
 inline constexpr std::size_t kMaximumPrefabOverridePathBytesUVE = 256U;
 inline constexpr std::size_t kMaximumPrefabOverrideValueBytesUVE = 4096U;
+inline constexpr std::size_t kMaximumPrefabConflictsUVE = 64U;
 
 /// A copied property-path/value pair persisted on a prefab instance. The value is serialized data;
 /// this foundation deliberately does not interpret or apply it.
@@ -40,6 +42,7 @@ enum class PrefabOverrideOperationCodeUVE : std::uint8_t {
     Applied = 0,
     InvalidInstance,
     InvalidBaseline,
+    ConflictDetected,
     ReadFailed,
     WriteFailed,
     RollbackFailed,
@@ -104,6 +107,67 @@ public:
     }
     return {PrefabOverrideOperationCodeUVE::Applied, instance.overrides.size(),
             "Prefab overrides applied to the live target."};
+}
+
+struct PrefabOverrideConflictUVE final {
+    std::string propertyPath;
+    std::string expectedSerializedValue;
+    std::string actualSerializedValue;
+};
+
+struct PrefabOverrideConflictReportUVE final {
+    PrefabOverrideOperationCodeUVE code = PrefabOverrideOperationCodeUVE::Applied;
+    std::size_t inspectedCount = 0U;
+    bool truncated = false;
+    std::vector<PrefabOverrideConflictUVE> conflicts;
+
+    [[nodiscard]] bool IsConflictFreeUVE() const noexcept {
+        return code == PrefabOverrideOperationCodeUVE::Applied;
+    }
+};
+
+/// Compares the caller-supplied source-prefab baseline with the current live target without writing
+/// anything. A conflict means another edit changed a property after the baseline was captured; the
+/// caller must resolve or reject the conflict before calling ApplyPrefabOverridesUVE().
+[[nodiscard]] inline PrefabOverrideConflictReportUVE DetectPrefabOverrideConflictsUVE(
+    const PrefabInstanceComponentUVE& instance, const std::vector<PrefabPropertyOverrideUVE>& baseline,
+    const IPrefabOverrideTargetUVE& target,
+    std::size_t maximumConflicts = kMaximumPrefabConflictsUVE) {
+    if (!IsPrefabInstanceComponentValidUVE(instance)) {
+        return {PrefabOverrideOperationCodeUVE::InvalidInstance, 0U, false, {}};
+    }
+    const PrefabInstanceComponentUVE baselineInstance{instance.sourcePrefabGuid, baseline};
+    if (!IsPrefabInstanceComponentValidUVE(baselineInstance) || baseline.size() != instance.overrides.size() ||
+        !std::equal(baseline.begin(), baseline.end(), instance.overrides.begin(),
+                    [](const PrefabPropertyOverrideUVE& lhs, const PrefabPropertyOverrideUVE& rhs) {
+                        return lhs.propertyPath == rhs.propertyPath;
+                    })) {
+        return {PrefabOverrideOperationCodeUVE::InvalidBaseline, 0U, false, {}};
+    }
+
+    PrefabOverrideConflictReportUVE report;
+    report.conflicts.reserve(std::min(baseline.size(), maximumConflicts));
+    for (const PrefabPropertyOverrideUVE& expected : baseline) {
+        std::string actualValue;
+        if (!target.ReadPropertyUVE(expected.propertyPath, actualValue) || actualValue.empty() ||
+            actualValue.size() > kMaximumPrefabOverrideValueBytesUVE ||
+            actualValue.find('\0') != std::string::npos) {
+            report.code = PrefabOverrideOperationCodeUVE::ReadFailed;
+            return report;
+        }
+        ++report.inspectedCount;
+        if (actualValue == expected.serializedValue) {
+            continue;
+        }
+        report.code = PrefabOverrideOperationCodeUVE::ConflictDetected;
+        if (report.conflicts.size() < maximumConflicts) {
+            report.conflicts.push_back(
+                {expected.propertyPath, expected.serializedValue, std::move(actualValue)});
+        } else {
+            report.truncated = true;
+        }
+    }
+    return report;
 }
 
 /// Restores a caller-supplied sorted baseline and clears the instance override records only after

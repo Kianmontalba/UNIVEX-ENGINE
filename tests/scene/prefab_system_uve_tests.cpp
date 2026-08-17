@@ -32,9 +32,12 @@ class FakePrefabOverrideTargetUVE final : public IPrefabOverrideTargetUVE {
 public:
     std::map<std::string, std::string> values;
     std::string failingWritePath;
+    std::size_t readCount = 0U;
+    std::size_t writeCount = 0U;
 
     [[nodiscard]] bool ReadPropertyUVE(const std::string_view propertyPath,
                                        std::string& serializedValue) const override {
+        ++const_cast<FakePrefabOverrideTargetUVE*>(this)->readCount;
         const auto iterator = values.find(std::string{propertyPath});
         if (iterator == values.end()) {
             return false;
@@ -45,6 +48,7 @@ public:
 
     [[nodiscard]] bool WritePropertyUVE(const std::string_view propertyPath,
                                         const std::string_view serializedValue) override {
+        ++writeCount;
         if (!failingWritePath.empty() && propertyPath == failingWritePath) {
             return false;
         }
@@ -103,6 +107,52 @@ TEST(PrefabInstanceComponentUVE, ApplyPrefabOverridesUVE_RollsBackEarlierWritesO
     EXPECT_EQ(target.values.at("A.value"), "old-a");
     EXPECT_EQ(target.values.at("B.value"), "old-b");
     EXPECT_EQ(instance.overrides.size(), 2U);
+}
+
+TEST(PrefabInstanceComponentUVE, DetectPrefabOverrideConflictsUVE_CleanBaselineIsReadOnly) {
+    const PrefabInstanceComponentUVE instance{
+        Asset::AssetGuidUVE{10U}, {{"A.value", "new-a"}, {"B.value", "new-b"}}};
+    const std::vector<PrefabPropertyOverrideUVE> baseline{{"A.value", "old-a"}, {"B.value", "old-b"}};
+    FakePrefabOverrideTargetUVE target;
+    target.values = {{"A.value", "old-a"}, {"B.value", "old-b"}};
+
+    const PrefabOverrideConflictReportUVE report = DetectPrefabOverrideConflictsUVE(instance, baseline, target);
+    EXPECT_TRUE(report.IsConflictFreeUVE());
+    EXPECT_EQ(report.inspectedCount, 2U);
+    EXPECT_TRUE(report.conflicts.empty());
+    EXPECT_FALSE(report.truncated);
+    EXPECT_EQ(target.writeCount, 0U);
+}
+
+TEST(PrefabInstanceComponentUVE, DetectPrefabOverrideConflictsUVE_ReportsExternalMutationWithoutWriting) {
+    const PrefabInstanceComponentUVE instance{Asset::AssetGuidUVE{11U}, {{"A.value", "new-a"}}};
+    const std::vector<PrefabPropertyOverrideUVE> baseline{{"A.value", "old-a"}};
+    FakePrefabOverrideTargetUVE target;
+    target.values = {{"A.value", "external-a"}};
+
+    const PrefabOverrideConflictReportUVE report = DetectPrefabOverrideConflictsUVE(instance, baseline, target);
+    ASSERT_EQ(report.code, PrefabOverrideOperationCodeUVE::ConflictDetected);
+    ASSERT_EQ(report.conflicts.size(), 1U);
+    EXPECT_EQ(report.conflicts.front().propertyPath, "A.value");
+    EXPECT_EQ(report.conflicts.front().expectedSerializedValue, "old-a");
+    EXPECT_EQ(report.conflicts.front().actualSerializedValue, "external-a");
+    EXPECT_EQ(target.writeCount, 0U);
+    EXPECT_EQ(target.values.at("A.value"), "external-a");
+}
+
+TEST(PrefabInstanceComponentUVE, DetectPrefabOverrideConflictsUVE_HonorsConflictHardCap) {
+    const PrefabInstanceComponentUVE instance{
+        Asset::AssetGuidUVE{12U}, {{"A.value", "new-a"}, {"B.value", "new-b"}}};
+    const std::vector<PrefabPropertyOverrideUVE> baseline{{"A.value", "old-a"}, {"B.value", "old-b"}};
+    FakePrefabOverrideTargetUVE target;
+    target.values = {{"A.value", "external-a"}, {"B.value", "external-b"}};
+
+    const PrefabOverrideConflictReportUVE report = DetectPrefabOverrideConflictsUVE(instance, baseline, target, 1U);
+    EXPECT_EQ(report.code, PrefabOverrideOperationCodeUVE::ConflictDetected);
+    EXPECT_EQ(report.inspectedCount, 2U);
+    EXPECT_EQ(report.conflicts.size(), 1U);
+    EXPECT_TRUE(report.truncated);
+    EXPECT_EQ(target.writeCount, 0U);
 }
 
 TEST(PrefabInstanceComponentUVE, RevertPrefabOverridesUVE_RejectsInvalidBaselineWithoutMutation) {
