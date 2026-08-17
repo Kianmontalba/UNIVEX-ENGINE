@@ -133,6 +133,20 @@ TEST_F(MeshRendererUVETest, ExtractRenderQueueUVE_EntityOutsideFrustum_Excluded)
     EXPECT_TRUE(queue.transparentItems.empty());
 }
 
+TEST(MeshComponentUVE, IsMeshComponentValidUVE_AllowsUnassignedPair) {
+    EXPECT_TRUE(Scene::IsMeshComponentValidUVE(
+        Scene::MeshComponentUVE{Asset::kInvalidAssetGuidUVE, Asset::kInvalidAssetGuidUVE}));
+}
+
+TEST(MeshComponentUVE, IsMeshComponentValidUVE_RejectsPartialAssignment) {
+    EXPECT_FALSE(Scene::IsMeshComponentValidUVE(Scene::MeshComponentUVE{Asset::AssetGuidUVE{1U},
+                                                                         Asset::kInvalidAssetGuidUVE}));
+    EXPECT_FALSE(Scene::IsMeshComponentValidUVE(Scene::MeshComponentUVE{Asset::kInvalidAssetGuidUVE,
+                                                                         Asset::AssetGuidUVE{2U}}));
+    EXPECT_TRUE(Scene::IsMeshComponentValidUVE(Scene::MeshComponentUVE{Asset::AssetGuidUVE{1U},
+                                                                        Asset::AssetGuidUVE{2U}}));
+}
+
 TEST_F(MeshRendererUVETest, ExtractRenderQueueUVE_InvalidGuid_Skipped) {
     MakeMeshEntityUVE(Math::Vector3UVE{0.0F, 0.0F, -10.0F}, Asset::kInvalidAssetGuidUVE, Asset::kInvalidAssetGuidUVE);
 
@@ -145,6 +159,18 @@ TEST_F(MeshRendererUVETest, ExtractRenderQueueUVE_InvalidGuid_Skipped) {
     EXPECT_EQ(queue.pendingAssetLoads, 0U);
     EXPECT_EQ(queue.failedAssetLoads, 0U);
 }
+
+#if UVE_DEBUG
+TEST_F(MeshRendererUVETest, ExtractRenderQueueUVE_PartialReference_Asserts) {
+    MakeMeshEntityUVE(Math::Vector3UVE{0.0F, 0.0F, -10.0F}, Asset::AssetGuidUVE{1U},
+                      Asset::kInvalidAssetGuidUVE);
+
+    EXPECT_DEATH(
+        { static_cast<void>(meshRenderer.ExtractRenderQueueUVE(entityManager, assetManager, assetDatabase,
+                                                                MakeTestFrustumUVE())); },
+        "");
+}
+#endif
 
 TEST_F(MeshRendererUVETest, ExtractRenderQueueUVE_FailedAssetLoad_IsCountedAndSkipped) {
     assetManager.RegisterLoaderUVE<Asset::MeshAssetUVE>(

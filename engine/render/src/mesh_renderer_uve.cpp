@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "uve/asset/asset_guid_uve.h"
+#include "uve/debug/assert_uve.h"
 #include "uve/math/aabb_uve.h"
 #include "uve/scene/components/mesh_component_uve.h"
 #include "uve/scene/components/world_transform_component_uve.h"
@@ -29,6 +30,7 @@ RenderQueueUVE MeshRendererUVE::ExtractRenderQueueUVE(Scene::IEntityManagerUVE& 
     entityManager.ForEachUVE<Scene::WorldTransformComponentUVE, Scene::MeshComponentUVE>(
         [&](Scene::EntityUVE, const Scene::WorldTransformComponentUVE& worldTransform,
             const Scene::MeshComponentUVE& meshComponent) {
+            UVE_ASSERT(Scene::IsMeshComponentValidUVE(meshComponent));
             if (meshComponent.meshGuid == Asset::kInvalidAssetGuidUVE) {
                 ++queue.invalidAssetReferences;
             }

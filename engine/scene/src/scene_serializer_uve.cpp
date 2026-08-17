@@ -180,8 +180,12 @@ template <typename T, typename FromJsonFunc>
                                                         Vector3FromJsonUVE(json.at("localScale"))};
                       }));
         table.emplace("MeshComponentUVE", MakeRegistrationUVE<MeshComponentUVE>([](const nlohmann::json& json) {
-                          return MeshComponentUVE{Asset::AssetGuidUVE{json.at("meshGuid").get<std::uint64_t>()},
-                                                   Asset::AssetGuidUVE{json.at("materialGuid").get<std::uint64_t>()}};
+                          const MeshComponentUVE mesh{Asset::AssetGuidUVE{json.at("meshGuid").get<std::uint64_t>()},
+                                                     Asset::AssetGuidUVE{json.at("materialGuid").get<std::uint64_t>()}};
+                          if (!IsMeshComponentValidUVE(mesh)) {
+                              throw std::runtime_error("Invalid MeshComponentUVE payload");
+                          }
+                          return mesh;
                       }));
         table.emplace("PrimitiveMeshComponentUVE",
                       MakeRegistrationUVE<PrimitiveMeshComponentUVE>([](const nlohmann::json& json) {
