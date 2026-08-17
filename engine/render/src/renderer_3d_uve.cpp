@@ -106,6 +106,21 @@ struct PrimitiveRenderItemUVE {
     float sortDepth = 0.0F;
 };
 
+/// CPU-expanded particle vertex consumed by the minimal built-in particle pipeline. The four
+/// color floats carry a stable warm tint plus lifetime-derived alpha; keeping this as a private
+/// renderer DTO prevents particle authoring data from crossing the RHI boundary.
+struct ParticleVertexUVE {
+    Math::Vector3UVE position{};
+    float red = 1.0F;
+    float green = 0.45F;
+    float blue = 0.08F;
+    float alpha = 1.0F;
+};
+
+inline constexpr std::size_t kMaximumParticleGpuDrawCommandsUVE = 16'384U;
+inline constexpr std::size_t kParticleVerticesPerCommandUVE = 6U;
+inline constexpr float kParticleHalfExtentUVE = 0.05F;
+
 /// A material's manager-owned linked program plus its resolved texture handles, cached by
 /// MaterialAssetUVE's AssetGuidUVE. `program` owns its linked pipeline through ShaderManagerUVE;
 /// Renderer3DUVE only retains a shared reference and must never destroy that pipeline directly.
@@ -300,6 +315,13 @@ struct Renderer3DUVE::ImplUVE {
     std::shared_ptr<Shader::ShaderProgramUVE> shadowProgram;
     std::shared_ptr<Shader::ShaderProgramUVE> toneMappingProgram;
     std::shared_ptr<Shader::ShaderProgramUVE> editorViewportVisualsProgram;
+
+    /// Minimal built-in particle program and reusable CPU-expanded vertex buffer. ShaderManagerUVE
+    /// owns the linked pipeline lifetime; Renderer3DUVE owns only the buffer and releases it in its
+    /// destructor. The fixed capacity bounds both per-frame upload bytes and draw vertices.
+    std::shared_ptr<Shader::ShaderProgramUVE> particleProgram;
+    BufferHandleUVE particleVertexBuffer;
+    std::vector<ParticleVertexUVE> particleVertexStaging;
 
     /// Built-in primitive visualization program. Its Basic3D contract contains only model,
     /// view-projection, and authored base-color uniforms; primitives intentionally do not bind
@@ -669,6 +691,44 @@ struct Renderer3DUVE::ImplUVE {
         return drawCalls;
     }
 
+    [[nodiscard]] std::size_t RecordParticleItemsUVE(const ParticleDrawRecordingUVE& recording,
+                                                       const FrameUniformsUVE& frameUniforms,
+                                                       ICommandBufferUVE& commandBuffer) {
+        if (!particleProgram->IsValidUVE() || recording.commands.empty() ||
+            particleVertexBuffer == kInvalidBufferHandleUVE) {
+            return 0U;
+        }
+
+        const std::size_t commandCount =
+            std::min(recording.commands.size(), kMaximumParticleGpuDrawCommandsUVE);
+        particleVertexStaging.clear();
+        particleVertexStaging.reserve(commandCount * kParticleVerticesPerCommandUVE);
+        const auto appendVertex = [this](const ParticleDrawCommandUVE& command, float xOffset, float yOffset) {
+            const float alpha = std::clamp(command.remainingLifetimeSeconds, 0.15F, 1.0F);
+            particleVertexStaging.push_back(ParticleVertexUVE{
+                Math::Vector3UVE{command.position.x + xOffset, command.position.y + yOffset, command.position.z},
+                1.0F, 0.45F, 0.08F, alpha});
+        };
+        for (std::size_t commandIndex = 0U; commandIndex < commandCount; ++commandIndex) {
+            const ParticleDrawCommandUVE& command = recording.commands[commandIndex];
+            appendVertex(command, -kParticleHalfExtentUVE, -kParticleHalfExtentUVE);
+            appendVertex(command, kParticleHalfExtentUVE, -kParticleHalfExtentUVE);
+            appendVertex(command, kParticleHalfExtentUVE, kParticleHalfExtentUVE);
+            appendVertex(command, -kParticleHalfExtentUVE, -kParticleHalfExtentUVE);
+            appendVertex(command, kParticleHalfExtentUVE, kParticleHalfExtentUVE);
+            appendVertex(command, -kParticleHalfExtentUVE, kParticleHalfExtentUVE);
+        }
+
+        if (!renderDevice.UpdateBufferUVE(particleVertexBuffer, std::as_bytes(std::span(particleVertexStaging)))) {
+            return 0U;
+        }
+        particleProgram->SetMatrix4x4UVE("uViewProjection", frameUniforms.viewProjection);
+        particleProgram->ApplyToUVE(commandBuffer);
+        commandBuffer.BindVertexBufferUVE(particleVertexBuffer);
+        commandBuffer.DrawUVE(static_cast<std::uint32_t>(particleVertexStaging.size()));
+        return commandCount;
+    }
+
     [[nodiscard]] std::size_t RecordPrimitiveItemsUVE(const std::vector<PrimitiveRenderItemUVE>& items,
                                                        const FrameUniformsUVE& frameUniforms,
                                                        ICommandBufferUVE& commandBuffer) {
@@ -748,6 +808,24 @@ Renderer3DUVE::Renderer3DUVE(IRenderDeviceUVE& renderDevice, IRenderSystemUVE& r
     editorViewportVisualsProgramDesc.debugNameUVE = "EditorViewportVisuals";
     m_impl->editorViewportVisualsProgram = shaderManager.CreateProgramUVE(editorViewportVisualsProgramDesc);
 
+    Shader::ShaderProgramDescUVE particleProgramDesc;
+    particleProgramDesc.virtualFilePath = std::string(Shader::BuiltIn::kParticleVirtualPath);
+    particleProgramDesc.embeddedFallbackSourceCode = std::string(Shader::BuiltIn::kParticleSource);
+    particleProgramDesc.vertexLayout = {
+        VertexAttributeUVE{"POSITION", VertexAttributeFormatUVE::Float3, offsetof(ParticleVertexUVE, position)},
+        VertexAttributeUVE{"COLOR", VertexAttributeFormatUVE::Float4, offsetof(ParticleVertexUVE, red)},
+    };
+    particleProgramDesc.vertexStride = static_cast<std::uint32_t>(sizeof(ParticleVertexUVE));
+    particleProgramDesc.depthTestEnabled = true;
+    particleProgramDesc.depthWriteEnabled = false;
+    particleProgramDesc.blendMode = PipelineBlendModeUVE::SourceAlphaOver;
+    particleProgramDesc.debugNameUVE = "Particle";
+    m_impl->particleProgram = shaderManager.CreateProgramUVE(particleProgramDesc);
+    m_impl->particleVertexStaging.reserve(kMaximumParticleGpuDrawCommandsUVE * kParticleVerticesPerCommandUVE);
+    m_impl->particleVertexBuffer = renderDevice.CreateBufferUVE(
+        BufferDescUVE{sizeof(ParticleVertexUVE) * kMaximumParticleGpuDrawCommandsUVE * kParticleVerticesPerCommandUVE,
+                      BufferUsageUVE::Vertex});
+
     Shader::ShaderProgramDescUVE primitiveProgramDesc;
     primitiveProgramDesc.virtualFilePath = std::string(Shader::BuiltIn::kBasic3DVirtualPath);
     primitiveProgramDesc.embeddedFallbackSourceCode = std::string(Shader::BuiltIn::kBasic3DSource);
@@ -786,11 +864,13 @@ Renderer3DUVE::~Renderer3DUVE() {
     for (const TextureHandleUVE shadowMapTarget : m_impl->shadowMapTargets) {
         m_impl->renderDevice.DestroyTextureUVE(shadowMapTarget);
     }
+    m_impl->renderDevice.DestroyBufferUVE(m_impl->particleVertexBuffer);
 }
 
 void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scene::EntityUVE cameraEntity) {
     m_impl->lastFrameDiagnostics = Renderer3DFrameDiagnosticsUVE{};
     m_impl->lastFrameDiagnostics.primitiveProgramReady = m_impl->primitiveProgram->IsValidUVE();
+    m_impl->lastFrameDiagnostics.particleProgramReady = m_impl->particleProgram->IsValidUVE();
     m_impl->lastFrameDiagnostics.toneMappingProgramReady = m_impl->toneMappingProgram->IsValidUVE();
     m_impl->lastFrameDiagnostics.editorVisualProgramReady = m_impl->editorViewportVisualsProgram->IsValidUVE();
 
@@ -854,6 +934,8 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
     queue.SortUVE();
     const ParticleDrawRecordingUVE particleDrawRecording = ParticleDrawRecorderUVE::RecordUVE(queue);
     m_impl->lastFrameDiagnostics.particleDrawCommandsRecorded = particleDrawRecording.commands.size();
+    m_impl->lastFrameDiagnostics.particleDrawCommandsSubmissionTruncated =
+        particleDrawRecording.commands.size() > kMaximumParticleGpuDrawCommandsUVE;
     m_impl->lastFrameDiagnostics.meshItemsExtracted = queue.opaqueItems.size() + queue.transparentItems.size();
     m_impl->lastFrameDiagnostics.invalidAssetReferences = queue.invalidAssetReferences;
     m_impl->lastFrameDiagnostics.pendingAssetLoads = queue.pendingAssetLoads;
@@ -887,7 +969,7 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
     }
     renderGraph.AddPassUVE(RenderGraphPassDescUVE{
         "MainColor", std::move(mainResources),
-        [this, &queue, &primitiveItems, &frameUniforms](ICommandBufferUVE& commandBuffer) {
+        [this, &queue, &particleDrawRecording, &primitiveItems, &frameUniforms](ICommandBufferUVE& commandBuffer) {
             RenderPassDescUVE passDesc;
             passDesc.colorAttachment = m_impl->colorTarget;
             passDesc.depthAttachment = m_impl->depthTarget;
@@ -898,12 +980,17 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
                 m_impl->RecordItemsUVE(queue.opaqueItems, frameUniforms, commandBuffer);
             m_impl->lastFrameDiagnostics.meshDrawCallsRecorded +=
                 m_impl->RecordItemsUVE(queue.transparentItems, frameUniforms, commandBuffer);
+            m_impl->lastFrameDiagnostics.particleDrawCommandsSubmitted =
+                m_impl->RecordParticleItemsUVE(particleDrawRecording, frameUniforms, commandBuffer);
+            m_impl->lastFrameDiagnostics.particleDrawCallsRecorded =
+                m_impl->lastFrameDiagnostics.particleDrawCommandsSubmitted > 0U ? 1U : 0U;
             m_impl->lastFrameDiagnostics.primitiveDrawCallsRecorded +=
                 m_impl->RecordPrimitiveItemsUVE(primitiveItems, frameUniforms, commandBuffer);
             if (m_impl->renderDevice.GetBackendNameUVE() == "OpenGL") {
                 m_impl->lastFrameDiagnostics.glDrawCallsIssued =
                     m_impl->lastFrameDiagnostics.meshDrawCallsRecorded +
-                    m_impl->lastFrameDiagnostics.primitiveDrawCallsRecorded;
+                    m_impl->lastFrameDiagnostics.primitiveDrawCallsRecorded +
+                    m_impl->lastFrameDiagnostics.particleDrawCallsRecorded;
             }
             commandBuffer.EndRenderPassUVE();
         }});
