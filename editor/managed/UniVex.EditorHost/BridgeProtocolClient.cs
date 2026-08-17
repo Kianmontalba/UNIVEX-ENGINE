@@ -76,6 +76,7 @@ public sealed class BridgeProtocolClient : IAsyncDisposable
             contentFilter = command.ContentFilter,
             contentFocus = command.ContentFocus,
             contentEntryPath = command.ContentEntryPath,
+            contentImportDestinationPath = command.ContentImportDestinationPath,
             visualScriptNodeId = command.VisualScriptNodeId,
             visualScriptNode = command.VisualScriptNode is null ? null : new
             {
@@ -167,6 +168,10 @@ public sealed class BridgeProtocolClient : IAsyncDisposable
                                         liveTraceValue.ValueKind == JsonValueKind.String
             ? liveTraceValue.GetString()
             : null;
+        ulong? contentImportJobId = result.TryGetProperty("contentImportJobId", out JsonElement contentImportJobValue) &&
+                                    contentImportJobValue.ValueKind == JsonValueKind.Number
+            ? contentImportJobValue.GetUInt64()
+            : null;
         return new BridgeCommandResult(
             result.GetProperty("applied").GetBoolean(),
             result.GetProperty("code").GetString() ?? "bridge.response.invalid",
@@ -175,7 +180,8 @@ public sealed class BridgeProtocolClient : IAsyncDisposable
             createdEntity,
             graphSchema,
             envelopePayload,
-            liveDebugTracePayload);
+            liveDebugTracePayload,
+            contentImportJobId);
     }
 
     public async ValueTask DisposeAsync()

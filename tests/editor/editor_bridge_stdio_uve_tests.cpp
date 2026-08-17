@@ -130,11 +130,20 @@ TEST(EditorBridgeStdioUVETest, ServeUVE_HandshakesAndRoutesExistingBridgeDispatc
                                                   {"requestId", 45U},
                                                   {"expectedRevision", 0U},
                                                   {"kind", "serializeGraph"}}}});
+        AppendFrameUVE(input, JsonUVE{{"jsonrpc", "2.0"},
+                                      {"id", 6U},
+                                      {"method", "bridge.dispatch"},
+                                      {"params", {{"protocolVersion", kEditorBridgeProtocolVersionUVE},
+                                                  {"requestId", 46U},
+                                                  {"expectedRevision", 2U},
+                                                  {"kind", "queueContentBrowserImport"},
+                                                  {"contentEntryPath", "notes.txt"},
+                                                  {"contentImportDestinationPath", "notes_imported.txt"}}}});
 
         EXPECT_EQ(server.ServeUVE(input, output, diagnostics), 0);
         EXPECT_TRUE(diagnostics.str().empty());
         const std::vector<JsonUVE> frames = ReadFramesUVE(output);
-        ASSERT_EQ(frames.size(), 5U);
+        ASSERT_EQ(frames.size(), 6U);
         EXPECT_TRUE(frames[0U].at("result").at("compatible").get<bool>());
         EXPECT_EQ(frames[0U].at("result").at("protocolVersion").get<std::uint32_t>(),
                   kEditorBridgeProtocolVersionUVE);
@@ -239,6 +248,10 @@ TEST(EditorBridgeStdioUVETest, ServeUVE_HandshakesAndRoutesExistingBridgeDispatc
         EXPECT_TRUE(frames[4U].at("result").at("applied").get<bool>());
         EXPECT_EQ(frames[4U].at("result").at("code").get<std::string>(),
                   "bridge.visual_scripting.graph_schema.serialized");
+        EXPECT_FALSE(frames[5U].at("result").at("applied").get<bool>());
+        EXPECT_EQ(frames[5U].at("result").at("code").get<std::string>(),
+                  "bridge.snapshot.stale");
+        EXPECT_TRUE(frames[5U].at("result").at("contentImportJobId").is_null());
         const JsonUVE& graphSchema = frames[4U].at("result").at("graphSchema");
         EXPECT_EQ(graphSchema.at("schemaVersion").get<std::uint32_t>(), 1U);
         EXPECT_TRUE(graphSchema.at("nodes").is_array());

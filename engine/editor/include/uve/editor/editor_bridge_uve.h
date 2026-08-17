@@ -61,6 +61,7 @@ enum class EditorBridgeCapabilityUVE : std::uint8_t {
     SetContentBrowserFocus,
     RefreshContentBrowser,
     SelectContentBrowserEntry,
+    QueueContentBrowserImport,
     ReadViewportSurface,
     ReadVisualScriptCanvas,
     ReadVisualScriptDebugger,
@@ -115,6 +116,7 @@ enum class EditorBridgeRequestKindUVE : std::uint8_t {
     SetContentBrowserFocus,
     RefreshContentBrowser,
     SelectContentBrowserEntry,
+    QueueContentBrowserImport,
     ReadViewportSurface,
     ReadVisualScriptCanvas,
     ReadVisualScriptDebugger,
@@ -634,6 +636,7 @@ struct EditorBridgeRequestUVE final {
     std::optional<std::string> contentFilter;
     std::optional<std::string> contentFocus;
     std::optional<std::string> contentEntryPath;
+    std::optional<std::string> contentImportDestinationPath;
     std::optional<std::uint32_t> visualScriptNodeId;
     std::optional<Scripting::ScriptNodeUVE> visualScriptNode;
     std::optional<std::string> visualScriptNodeTypeId;
@@ -684,6 +687,7 @@ struct EditorBridgeResponseUVE final {
     std::string message;
     EditorBridgeSnapshotUVE snapshot;
     std::optional<EditorBridgeEntityRefUVE> createdEntity;
+    std::optional<std::uint64_t> contentImportJobId;
     std::optional<Scripting::ScriptGraphSchemaUVE> visualScriptGraphSchema;
     std::optional<std::string> motionQueryReplayBaselineEnvelopePayload;
     std::optional<std::string> motionQueryLiveDebugTracePayload;

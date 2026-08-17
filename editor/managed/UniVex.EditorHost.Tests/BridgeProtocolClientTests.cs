@@ -102,6 +102,44 @@ public sealed class BridgeProtocolClientTests
     }
 
     [Fact]
+    public async Task DispatchAsync_WritesContentImportDestinationAndReadsJobId()
+    {
+        await using MemoryStream input = BuildFrames(new
+        {
+            jsonrpc = "2.0",
+            id = 1,
+            result = new
+            {
+                protocolVersion = BridgeProtocolClient.ProtocolVersion,
+                requestId = 1UL,
+                applied = true,
+                code = "bridge.content.import.queued",
+                message = "queued",
+                snapshot = Snapshot(sceneDirty: false),
+                createdEntity = (object?)null,
+                contentImportJobId = 17UL,
+            },
+        });
+        await using MemoryStream output = new();
+        await using BridgeProtocolClient client = new(input, output);
+
+        BridgeCommandResult result = await client.DispatchAsync(
+            new BridgeCommand(4UL, "queueContentBrowserImport",
+                ContentEntryPath: "notes.txt", ContentImportDestinationPath: "notes_imported.txt"),
+            CancellationToken.None);
+
+        Assert.True(result.Applied);
+        Assert.Equal("bridge.content.import.queued", result.Code);
+        Assert.Equal(17UL, result.ContentImportJobId);
+        output.Position = 0;
+        using JsonDocument request = JsonDocument.Parse(await ReadFrameAsync(output));
+        JsonElement parameters = request.RootElement.GetProperty("params");
+        Assert.Equal("queueContentBrowserImport", parameters.GetProperty("kind").GetString());
+        Assert.Equal("notes.txt", parameters.GetProperty("contentEntryPath").GetString());
+        Assert.Equal("notes_imported.txt", parameters.GetProperty("contentImportDestinationPath").GetString());
+    }
+
+    [Fact]
     public async Task HelloAsync_RejectsMismatchedResponseIdentifier()
     {
         await using MemoryStream input = BuildFrames(new
