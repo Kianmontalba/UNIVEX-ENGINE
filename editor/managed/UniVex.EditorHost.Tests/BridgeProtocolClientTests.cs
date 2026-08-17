@@ -102,6 +102,32 @@ public sealed class BridgeProtocolClientTests
     }
 
     [Fact]
+    public void SnapshotParser_ParsesPlainTextImportCapability()
+    {
+        JsonObject snapshot = JsonSerializer.SerializeToNode(Snapshot(sceneDirty: false))!.AsObject();
+        snapshot["contentBrowser"]!["importAction"] = new JsonObject
+        {
+            ["hasSelection"] = true,
+            ["canImport"] = true,
+            ["canReimport"] = false,
+            ["importerRegistered"] = true,
+            ["requiresFormatSpecificParser"] = false,
+            ["sourceKind"] = "plainText",
+            ["diagnostic"] = "built-in text parser is registered",
+        };
+
+        using JsonDocument parsedDocument = JsonDocument.Parse(snapshot.ToJsonString());
+        BridgeEditorSnapshot parsed = BridgeSnapshotParser.Parse(parsedDocument.RootElement);
+
+        Assert.NotNull(parsed.ContentBrowser.ImportAction);
+        Assert.True(parsed.ContentBrowser.ImportAction!.CanImport);
+        Assert.False(parsed.ContentBrowser.ImportAction.RequiresFormatSpecificParser);
+        Assert.Equal("plainText", parsed.ContentBrowser.ImportAction.SourceKind);
+        Assert.Contains("built-in text parser is registered",
+            parsed.ContentBrowser.ImportAction.DisplayText, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task DispatchAsync_WritesContentImportDestinationAndReadsJobId()
     {
         await using MemoryStream input = BuildFrames(new
