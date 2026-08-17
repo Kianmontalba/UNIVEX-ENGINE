@@ -28,8 +28,9 @@ public:
     /// calls `sceneGraph.UpdateUVE()` so `WorldTransformComponentUVE` reflects this step's new
     /// positions, detects collisions among every `ColliderComponentUVE` entity, resolves
     /// overlaps with mass-weighted positional correction and into-surface-only velocity removal
-    /// (preserves sliding), then calls `sceneGraph.UpdateUVE()` again so the resolved positions
-    /// are immediately visible too. Every position write goes through
+    /// (preserves sliding), optionally solves a caller-attached bounded positional constraint
+    /// system, then calls `sceneGraph.UpdateUVE()` again so the resolved positions are immediately
+    /// visible too. Every position write goes through
     /// `ISceneGraphUVE::SetLocalTransformUVE()` — never `GetComponentUVE()` directly, so
     /// dirty-flag propagation stays correct throughout.
     virtual void StepUVE(Scene::IEntityManagerUVE& entityManager, Scene::ISceneGraphUVE& sceneGraph,

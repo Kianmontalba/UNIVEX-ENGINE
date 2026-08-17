@@ -8,6 +8,10 @@
 #include "uve/physics/i_physics_system_uve.h"
 
 namespace UVE::Physics {
+class PhysicsConstraintSystemUVE;
+}
+
+namespace UVE::Physics {
 
 /// PhysicsSystemUVE is the concrete, engine-standard implementation of IPhysicsSystemUVE.
 /// Composes an ICollisionSystemUVE& (dependency injection, matching Renderer3DUVE's precedent
@@ -25,8 +29,13 @@ public:
     void StepUVE(Scene::IEntityManagerUVE& entityManager, Scene::ISceneGraphUVE& sceneGraph,
                  float fixedDeltaTimeSeconds) override;
 
+    /// Attaches a caller-owned bounded positional constraint system. The solver is invoked after
+    /// collision resolution; passing nullptr restores the legacy integration-only behavior.
+    void SetConstraintSystemUVE(PhysicsConstraintSystemUVE* constraintSystem) noexcept;
+
 private:
     ICollisionSystemUVE* m_collisionSystem;
+    PhysicsConstraintSystemUVE* m_constraintSystem = nullptr;
     Math::Vector3UVE m_gravity;
 };
 

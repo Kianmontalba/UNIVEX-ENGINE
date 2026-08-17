@@ -3,6 +3,8 @@
 
 #include "uve/physics/physics_system_uve.h"
 
+#include "uve/physics/physics_constraint_system_uve.h"
+
 #include <algorithm>
 #include <vector>
 
@@ -101,6 +103,10 @@ void ResolvePairUVE(Scene::IEntityManagerUVE& entityManager, Scene::ISceneGraphU
 PhysicsSystemUVE::PhysicsSystemUVE(ICollisionSystemUVE& collisionSystem, Math::Vector3UVE gravity)
     : m_collisionSystem(&collisionSystem), m_gravity(gravity) {}
 
+void PhysicsSystemUVE::SetConstraintSystemUVE(PhysicsConstraintSystemUVE* constraintSystem) noexcept {
+    m_constraintSystem = constraintSystem;
+}
+
 void PhysicsSystemUVE::StepUVE(Scene::IEntityManagerUVE& entityManager, Scene::ISceneGraphUVE& sceneGraph,
                                 float fixedDeltaTimeSeconds) {
     entityManager.ForEachUVE<Scene::TransformComponentUVE, Scene::RigidBodyComponentUVE>(
@@ -130,6 +136,10 @@ void PhysicsSystemUVE::StepUVE(Scene::IEntityManagerUVE& entityManager, Scene::I
     const std::vector<CollisionPairUVE> pairs = m_collisionSystem->DetectCollisionsUVE(entityManager);
     for (const CollisionPairUVE& pair : pairs) {
         ResolvePairUVE(entityManager, sceneGraph, pair);
+    }
+
+    if (m_constraintSystem != nullptr) {
+        static_cast<void>(m_constraintSystem->SolveUVE(entityManager, sceneGraph));
     }
 
     // Propagate resolution positions too, so a caller inspecting WorldTransformComponentUVE

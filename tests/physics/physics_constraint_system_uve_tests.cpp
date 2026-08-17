@@ -1,0 +1,137 @@
+// Copyright (c) 2026 UniVex Studios. All Rights Reserved.
+
+
+#include "uve/physics/physics_constraint_system_uve.h"
+
+#include <gtest/gtest.h>
+
+#include "uve/events/event_system_uve.h"
+#include "uve/memory/memory_manager_uve.h"
+#include "uve/physics/collision_system_uve.h"
+#include "uve/physics/physics_system_uve.h"
+#include "uve/scene/components/collider_component_uve.h"
+#include "uve/scene/components/rigid_body_component_uve.h"
+#include "uve/scene/components/transform_component_uve.h"
+#include "uve/scene/components/world_transform_component_uve.h"
+#include "uve/scene/entity_manager_uve.h"
+#include "uve/scene/scene_graph_uve.h"
+
+namespace UVE::Physics::Tests {
+namespace {
+
+constexpr float kEpsilon = 1.0e-3F;
+
+class PhysicsConstraintSystemUVETest : public ::testing::Test {
+protected:
+    Memory::MemoryManagerUVE memoryManager;
+    Events::EventSystemUVE eventSystem;
+    Scene::EntityManagerUVE entityManager{memoryManager.GetDefaultAllocatorUVE(), eventSystem};
+    Scene::SceneGraphUVE sceneGraph;
+    CollisionSystemUVE collisionSystem;
+    PhysicsConstraintSystemUVE constraintSystem;
+
+    Scene::EntityUVE MakeBodyUVE(Math::Vector3UVE position, float mass = 1.0F) {
+        const Scene::EntityUVE entity = entityManager.CreateEntityUVE();
+        Scene::TransformComponentUVE transform;
+        transform.localPosition = position;
+        sceneGraph.AttachTransformUVE(entityManager, entity, transform);
+        sceneGraph.UpdateUVE(entityManager);
+        entityManager.AddComponentUVE<Scene::RigidBodyComponentUVE>(entity,
+                                                                     Scene::RigidBodyComponentUVE{mass, false});
+        return entity;
+    }
+
+    Scene::EntityUVE MakeStaticUVE(Math::Vector3UVE position) {
+        const Scene::EntityUVE entity = entityManager.CreateEntityUVE();
+        Scene::TransformComponentUVE transform;
+        transform.localPosition = position;
+        sceneGraph.AttachTransformUVE(entityManager, entity, transform);
+        sceneGraph.UpdateUVE(entityManager);
+        entityManager.AddComponentUVE<Scene::ColliderComponentUVE>(entity,
+                                                                    Scene::ColliderComponentUVE{{0.5F, 0.5F, 0.5F}});
+        return entity;
+    }
+
+    [[nodiscard]] Math::Vector3UVE WorldPositionUVE(Scene::EntityUVE entity) const {
+        return entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(entity).worldPosition;
+    }
+};
+
+TEST_F(PhysicsConstraintSystemUVETest, AddDistanceAndSolveUVE_MassWeightedCorrectionPreservesRestLength) {
+    const Scene::EntityUVE first = MakeBodyUVE({0.0F, 0.0F, 0.0F}, 1.0F);
+    const Scene::EntityUVE second = MakeBodyUVE({10.0F, 0.0F, 0.0F}, 1.0F);
+
+    const PhysicsConstraintMutationResultUVE added = constraintSystem.AddDistanceConstraintUVE(
+        DistanceConstraintUVE{first, second, {}, {}, 4.0F});
+    ASSERT_TRUE(added.IsAcceptedUVE());
+
+    const PhysicsConstraintSolveResultUVE solved = constraintSystem.SolveUVE(entityManager, sceneGraph);
+
+    EXPECT_GT(solved.solvedConstraintCount, 0U);
+    EXPECT_NEAR(WorldPositionUVE(first).x, 3.0F, kEpsilon);
+    EXPECT_NEAR(WorldPositionUVE(second).x, 7.0F, kEpsilon);
+}
+
+TEST_F(PhysicsConstraintSystemUVETest, SolveHingeUVE_CoincidesAnchorsAndLeavesStaticBodyUnmoved) {
+    const Scene::EntityUVE dynamicBody = MakeBodyUVE({0.0F, 0.0F, 0.0F}, 1.0F);
+    const Scene::EntityUVE staticBody = MakeStaticUVE({6.0F, 0.0F, 0.0F});
+    const Math::Vector3UVE axis{0.0F, 1.0F, 0.0F};
+
+    const PhysicsConstraintMutationResultUVE added = constraintSystem.AddHingeConstraintUVE(
+        HingeConstraintUVE{dynamicBody, staticBody, {}, {}, axis});
+    ASSERT_TRUE(added.IsAcceptedUVE());
+
+    const PhysicsConstraintSolveResultUVE solved = constraintSystem.SolveUVE(entityManager, sceneGraph);
+
+    EXPECT_GT(solved.solvedConstraintCount, 0U);
+    EXPECT_NEAR(WorldPositionUVE(dynamicBody).x, 6.0F, kEpsilon);
+    EXPECT_NEAR(WorldPositionUVE(staticBody).x, 6.0F, kEpsilon);
+}
+
+TEST_F(PhysicsConstraintSystemUVETest, RemoveConstraintUVE_RejectsStaleGenerationAfterSlotReuse) {
+    const Scene::EntityUVE first = MakeBodyUVE({});
+    const Scene::EntityUVE second = MakeBodyUVE({2.0F, 0.0F, 0.0F});
+    const DistanceConstraintUVE descriptor{first, second, {}, {}, 1.0F};
+
+    const PhysicsConstraintMutationResultUVE firstAdd = constraintSystem.AddDistanceConstraintUVE(descriptor);
+    ASSERT_TRUE(firstAdd.IsAcceptedUVE());
+    ASSERT_TRUE(constraintSystem.RemoveConstraintUVE(firstAdd.handle).IsAcceptedUVE());
+    const PhysicsConstraintMutationResultUVE secondAdd = constraintSystem.AddDistanceConstraintUVE(descriptor);
+    ASSERT_TRUE(secondAdd.IsAcceptedUVE());
+    EXPECT_EQ(secondAdd.handle.index, firstAdd.handle.index);
+    EXPECT_NE(secondAdd.handle.generation, firstAdd.handle.generation);
+
+    EXPECT_EQ(constraintSystem.RemoveConstraintUVE(firstAdd.handle).code,
+              PhysicsConstraintCodeUVE::StaleGeneration);
+}
+
+TEST_F(PhysicsConstraintSystemUVETest, AddDistanceConstraintUVE_EnforcesBoundedCapacity) {
+    const Scene::EntityUVE first = MakeBodyUVE({});
+    const Scene::EntityUVE second = MakeBodyUVE({2.0F, 0.0F, 0.0F});
+    const DistanceConstraintUVE descriptor{first, second, {}, {}, 1.0F};
+
+    for (std::size_t index = 0U; index < PhysicsConstraintSystemUVE::kMaximumConstraintsUVE; ++index) {
+        EXPECT_TRUE(constraintSystem.AddDistanceConstraintUVE(descriptor).IsAcceptedUVE());
+    }
+    EXPECT_EQ(constraintSystem.GetConstraintCountUVE(), PhysicsConstraintSystemUVE::kMaximumConstraintsUVE);
+    EXPECT_EQ(constraintSystem.AddDistanceConstraintUVE(descriptor).code,
+              PhysicsConstraintCodeUVE::CapacityExceeded);
+}
+
+TEST_F(PhysicsConstraintSystemUVETest, PhysicsSystemStepUVE_InvokesAttachedConstraintSolver) {
+    const Scene::EntityUVE first = MakeBodyUVE({0.0F, 0.0F, 0.0F});
+    const Scene::EntityUVE second = MakeBodyUVE({4.0F, 0.0F, 0.0F});
+    ASSERT_TRUE(constraintSystem.AddDistanceConstraintUVE(
+                    DistanceConstraintUVE{first, second, {}, {}, 2.0F})
+                    .IsAcceptedUVE());
+
+    PhysicsSystemUVE physicsSystem(collisionSystem, Math::Vector3UVE{});
+    physicsSystem.SetConstraintSystemUVE(&constraintSystem);
+    physicsSystem.StepUVE(entityManager, sceneGraph, 0.0F);
+
+    EXPECT_NEAR(WorldPositionUVE(first).x, 1.0F, kEpsilon);
+    EXPECT_NEAR(WorldPositionUVE(second).x, 3.0F, kEpsilon);
+}
+
+} // namespace
+} // namespace UVE::Physics::Tests
