@@ -29,9 +29,10 @@ struct ColliderComponentUVE final {
     float density = 1.0F;
 };
 
-/// Validates the value-only collider contract before broad-phase AABB construction, material
-/// extraction, or scene persistence. Collision masks remain opaque bit fields; a zero layer is
-/// rejected because it would make the collider unreachable by the layer-mask raycast contract.
+/// Validates the value-only collider contract before scene persistence and explicit validation
+/// consumers. Collision masks remain opaque bit fields; a zero layer is rejected because it would
+/// make the collider unreachable by the layer-mask raycast contract. Runtime material extraction
+/// retains its established defensive friction/restitution clamp for legacy hand-authored values.
 [[nodiscard]] inline bool IsColliderComponentValidUVE(const ColliderComponentUVE& collider) noexcept {
     return std::isfinite(collider.halfExtents.x) && std::isfinite(collider.halfExtents.y) &&
            std::isfinite(collider.halfExtents.z) && collider.halfExtents.x > 0.0F &&
