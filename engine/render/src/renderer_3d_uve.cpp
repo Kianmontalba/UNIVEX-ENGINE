@@ -457,6 +457,7 @@ struct Renderer3DUVE::ImplUVE {
         Asset::AssetHandleUVE<Asset::TextureAssetUVE> textureHandle =
             assetManager.LoadUVE<Asset::TextureAssetUVE>(textureGuid, assetDatabase);
         if (textureHandle.HasFailedUVE()) {
+            ++lastFrameDiagnostics.textureFallbacks;
             UVE_WARNING("Renderer3DUVE: texture asset load failed - falling back to the default texture");
             return fallbackHandle;
         }
@@ -842,6 +843,9 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
         m_impl->meshRenderer.ExtractRenderQueueUVE(entityManager, m_impl->assetManager, m_impl->assetDatabase, frustum);
     queue.SortUVE();
     m_impl->lastFrameDiagnostics.meshItemsExtracted = queue.opaqueItems.size() + queue.transparentItems.size();
+    m_impl->lastFrameDiagnostics.invalidAssetReferences = queue.invalidAssetReferences;
+    m_impl->lastFrameDiagnostics.pendingAssetLoads = queue.pendingAssetLoads;
+    m_impl->lastFrameDiagnostics.failedAssetLoads = queue.failedAssetLoads;
     const std::vector<PrimitiveRenderItemUVE> primitiveItems = m_impl->ExtractPrimitiveItemsUVE(entityManager, frustum);
     m_impl->lastFrameDiagnostics.primitiveItemsExtracted = primitiveItems.size();
 

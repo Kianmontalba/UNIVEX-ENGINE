@@ -141,6 +141,40 @@ TEST_F(MeshRendererUVETest, ExtractRenderQueueUVE_InvalidGuid_Skipped) {
 
     EXPECT_TRUE(queue.opaqueItems.empty());
     EXPECT_TRUE(queue.transparentItems.empty());
+    EXPECT_EQ(queue.invalidAssetReferences, 2U);
+    EXPECT_EQ(queue.pendingAssetLoads, 0U);
+    EXPECT_EQ(queue.failedAssetLoads, 0U);
+}
+
+TEST_F(MeshRendererUVETest, ExtractRenderQueueUVE_FailedAssetLoad_IsCountedAndSkipped) {
+    assetManager.RegisterLoaderUVE<Asset::MeshAssetUVE>(
+        [](const std::filesystem::path&, Asset::MeshAssetUVE&) { return false; });
+    assetManager.RegisterLoaderUVE<Asset::MaterialAssetUVE>(
+        [](const std::filesystem::path&, Asset::MaterialAssetUVE&) { return true; });
+    const Asset::AssetGuidUVE meshGuid = assetDatabase.RegisterUVE("mesh_renderer_tests_failed.uvemodel");
+    const Asset::AssetGuidUVE materialGuid = assetDatabase.RegisterUVE("mesh_renderer_tests_failed.uvemat");
+    MakeMeshEntityUVE(Math::Vector3UVE{0.0F, 0.0F, -10.0F}, meshGuid, materialGuid);
+    Asset::AssetHandleUVE<Asset::MeshAssetUVE> meshHandle =
+        assetManager.LoadUVE<Asset::MeshAssetUVE>(meshGuid, assetDatabase);
+    Asset::AssetHandleUVE<Asset::MaterialAssetUVE> materialHandle =
+        assetManager.LoadUVE<Asset::MaterialAssetUVE>(materialGuid, assetDatabase);
+    for (int iteration = 0; iteration < kMaxPollIterationsUVE &&
+                             (!(meshHandle.HasFailedUVE() || meshHandle.IsReadyUVE()) ||
+                              !(materialHandle.HasFailedUVE() || materialHandle.IsReadyUVE()));
+         ++iteration) {
+        std::this_thread::yield();
+    }
+    ASSERT_TRUE(meshHandle.HasFailedUVE());
+    ASSERT_TRUE(materialHandle.IsReadyUVE());
+
+    const RenderQueueUVE queue =
+        meshRenderer.ExtractRenderQueueUVE(entityManager, assetManager, assetDatabase, MakeTestFrustumUVE());
+
+    EXPECT_TRUE(queue.opaqueItems.empty());
+    EXPECT_TRUE(queue.transparentItems.empty());
+    EXPECT_EQ(queue.invalidAssetReferences, 0U);
+    EXPECT_EQ(queue.pendingAssetLoads, 0U);
+    EXPECT_EQ(queue.failedAssetLoads, 1U);
 }
 
 TEST_F(MeshRendererUVETest, ExtractRenderQueueUVE_MixOfVisibleAndCulledEntities_OnlyVisibleOneIncluded) {
@@ -178,9 +212,17 @@ TEST_F(MeshRendererUVETest, ExtractRenderQueueUVE_AssetNotReadyYet_ExcludedThenI
     const Asset::AssetGuidUVE materialGuid = assetDatabase.RegisterUVE("mesh_renderer_tests_gate.uvemat");
     MakeMeshEntityUVE(Math::Vector3UVE{0.0F, 0.0F, -10.0F}, meshGuid, materialGuid);
     const Math::FrustumUVE frustum = MakeTestFrustumUVE();
+    Asset::AssetHandleUVE<Asset::MaterialAssetUVE> materialHandle =
+        assetManager.LoadUVE<Asset::MaterialAssetUVE>(materialGuid, assetDatabase);
+    for (int iteration = 0; iteration < kMaxPollIterationsUVE && !materialHandle.IsReadyUVE(); ++iteration) {
+        std::this_thread::yield();
+    }
+    ASSERT_TRUE(materialHandle.IsReadyUVE());
 
     const RenderQueueUVE firstAttempt = meshRenderer.ExtractRenderQueueUVE(entityManager, assetManager, assetDatabase, frustum);
     EXPECT_TRUE(firstAttempt.opaqueItems.empty());
+    EXPECT_EQ(firstAttempt.pendingAssetLoads, 1U);
+    EXPECT_EQ(firstAttempt.failedAssetLoads, 0U);
 
     allowMeshLoad.store(true);
 
@@ -193,6 +235,9 @@ TEST_F(MeshRendererUVETest, ExtractRenderQueueUVE_AssetNotReadyYet_ExcludedThenI
         std::this_thread::yield();
     }
     ASSERT_EQ(secondAttempt.opaqueItems.size(), 1U);
+    EXPECT_EQ(secondAttempt.invalidAssetReferences, 0U);
+    EXPECT_EQ(secondAttempt.pendingAssetLoads, 0U);
+    EXPECT_EQ(secondAttempt.failedAssetLoads, 0U);
 }
 
 } // namespace
