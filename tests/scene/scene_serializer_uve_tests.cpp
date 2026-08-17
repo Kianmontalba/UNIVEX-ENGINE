@@ -198,6 +198,24 @@ TEST_F(SceneSerializerUVETest, RestoreUVE_MalformedComponentData_RollsBackCreate
     EXPECT_EQ(entityManager.GetEntityCountUVE(), entityCountBefore);
 }
 
+TEST_F(SceneSerializerUVETest, RestoreUVE_InvalidMeshPayload_RollsBackCreatedEntities) {
+    const EntityUVE existing = entityManager.CreateEntityUVE();
+    const std::size_t entityCountBefore = entityManager.GetEntityCountUVE();
+    const std::string payloadText =
+        R"({"entities":[{"localId":0,"components":{"MeshComponentUVE":{"meshGuid":5,"materialGuid":0}}}]})";
+    const auto* const payloadBytes = reinterpret_cast<const std::byte*>(payloadText.data());
+    const SceneSnapshotUVE snapshot{
+        Asset::EncodeUveFileEnvelopeUVE(SceneAssetTypeUVE::Scene,
+                                        std::vector<std::byte>{payloadBytes, payloadBytes + payloadText.size()}),
+        SceneAssetTypeUVE::Scene};
+
+    const std::vector<EntityUVE> roots = serializer.RestoreUVE(entityManager, snapshot);
+
+    EXPECT_TRUE(roots.empty());
+    EXPECT_TRUE(entityManager.IsAliveUVE(existing));
+    EXPECT_EQ(entityManager.GetEntityCountUVE(), entityCountBefore);
+}
+
 TEST_F(SceneSerializerUVETest, RestoreUVE_InvalidPrimitivePayload_RollsBackCreatedEntities) {
     const EntityUVE existing = entityManager.CreateEntityUVE();
     const std::size_t entityCountBefore = entityManager.GetEntityCountUVE();
