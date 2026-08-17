@@ -100,6 +100,16 @@ enum class FrameReadResultUVE : std::uint8_t {
                                                : JsonUVE(nullptr)}};
 }
 
+[[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeContentImportActionSnapshotUVE& action) {
+    return JsonUVE{{"hasSelection", action.hasSelection},
+                   {"canImport", action.canImport},
+                   {"canReimport", action.canReimport},
+                   {"importerRegistered", action.importerRegistered},
+                   {"requiresFormatSpecificParser", action.requiresFormatSpecificParser},
+                   {"sourceKind", action.sourceKind},
+                   {"diagnostic", action.diagnostic}};
+}
+
 [[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeContentBrowserSnapshotUVE& snapshot) {
     JsonUVE entries = JsonUVE::array();
     for (const EditorBridgeContentBrowserEntryUVE& entry : snapshot.entries) {
@@ -123,7 +133,8 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"truncated", snapshot.truncated},
                    {"entries", std::move(entries)},
                    {"selectedEntry", snapshot.selectedEntry.has_value() ? ToJsonUVE(*snapshot.selectedEntry)
-                                                                           : JsonUVE(nullptr)}};
+                                                                           : JsonUVE(nullptr)},
+                   {"importAction", ToJsonUVE(snapshot.importAction)}};
 }
 
 [[nodiscard]] JsonUVE ToJsonUVE(const DeveloperConsoleEntryUVE& entry) {

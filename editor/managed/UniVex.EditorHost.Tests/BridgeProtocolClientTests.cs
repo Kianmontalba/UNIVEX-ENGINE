@@ -70,6 +70,38 @@ public sealed class BridgeProtocolClientTests
     }
 
     [Fact]
+    public void SnapshotParser_ParsesContentImportActionAndAcceptsLegacyMissingField()
+    {
+        JsonObject snapshot = JsonSerializer.SerializeToNode(Snapshot(sceneDirty: false))!.AsObject();
+        snapshot["contentBrowser"]!["importAction"] = new JsonObject
+        {
+            ["hasSelection"] = true,
+            ["canImport"] = false,
+            ["canReimport"] = false,
+            ["importerRegistered"] = false,
+            ["requiresFormatSpecificParser"] = true,
+            ["sourceKind"] = "rawModel",
+            ["diagnostic"] = "format-specific parser is not registered",
+        };
+
+        using JsonDocument parsedDocument = JsonDocument.Parse(snapshot.ToJsonString());
+        BridgeEditorSnapshot parsed = BridgeSnapshotParser.Parse(parsedDocument.RootElement);
+
+        Assert.NotNull(parsed.ContentBrowser.ImportAction);
+        Assert.True(parsed.ContentBrowser.ImportAction!.HasSelection);
+        Assert.False(parsed.ContentBrowser.ImportAction.CanImport);
+        Assert.True(parsed.ContentBrowser.ImportAction.RequiresFormatSpecificParser);
+        Assert.Equal("rawModel", parsed.ContentBrowser.ImportAction.SourceKind);
+        Assert.Contains("format-specific parser is not registered",
+            parsed.ContentBrowser.ImportAction.DisplayText, StringComparison.Ordinal);
+
+        snapshot["contentBrowser"]!.AsObject().Remove("importAction");
+        using JsonDocument legacyDocument = JsonDocument.Parse(snapshot.ToJsonString());
+        BridgeEditorSnapshot legacy = BridgeSnapshotParser.Parse(legacyDocument.RootElement);
+        Assert.Null(legacy.ContentBrowser.ImportAction);
+    }
+
+    [Fact]
     public async Task HelloAsync_RejectsMismatchedResponseIdentifier()
     {
         await using MemoryStream input = BuildFrames(new

@@ -259,7 +259,7 @@
                     <TextBlock Text="LOWER DOCK" FontWeight="SemiBold" Opacity="0.8" />
                     <TabControl x:Name="BottomTabControl" Grid.Row="1" SelectionChanged="DockTabControl_OnSelectionChanged">
                         <TabItem Header="FileSystem">
-                            <Grid RowDefinitions="Auto,Auto,Auto,*,Auto" RowSpacing="6">
+                            <Grid RowDefinitions="Auto,Auto,Auto,*,Auto,Auto" RowSpacing="6">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <Button Content="Refresh Native Cache" Click="RefreshContentBrowserButton_OnClick" />
                                     <Button Content="Root" Click="ContentRootButton_OnClick" />
@@ -294,6 +294,7 @@
                                     </ListBox.ItemTemplate>
                                 </ListBox>
                                 <TextBlock x:Name="ContentStatusTextBlock" Grid.Row="4" Text="Connect to read the native cached project index." TextWrapping="Wrap" Opacity="0.72" />
+                                <TextBlock x:Name="ContentImportActionTextBlock" Grid.Row="5" Text="Import actions: no selected entry." TextWrapping="Wrap" Opacity="0.72" />
                             </Grid>
                         </TabItem>
                         <TabItem Header="Console">

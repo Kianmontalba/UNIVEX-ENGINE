@@ -69,6 +69,22 @@ public sealed record BridgeContentBrowserEntry(
                                  (RegisteredAssetGuid.HasValue ? $" [Registered {RegisteredAssetGuid.Value:X16}]" : string.Empty);
 }
 
+public sealed record BridgeContentImportActionSnapshot(
+    bool HasSelection,
+    bool CanImport,
+    bool CanReimport,
+    bool ImporterRegistered,
+    bool RequiresFormatSpecificParser,
+    string SourceKind,
+    string Diagnostic)
+{
+    public string DisplayText => HasSelection
+        ? $"Import: {(CanImport ? "available" : "unavailable")}; " +
+          $"Reimport: {(CanReimport ? "available" : "unavailable")}; " +
+          $"Source: {SourceKind}; {Diagnostic}"
+        : $"Import actions: {Diagnostic}";
+}
+
 public sealed record BridgeContentBrowserSnapshot(
     string ContentRoot,
     string CurrentDirectory,
@@ -83,7 +99,10 @@ public sealed record BridgeContentBrowserSnapshot(
     bool LastRefreshSucceeded,
     bool IsTruncated,
     IReadOnlyList<BridgeContentBrowserEntry> Entries,
-    BridgeContentBrowserEntry? SelectedEntry);
+    BridgeContentBrowserEntry? SelectedEntry)
+{
+    public BridgeContentImportActionSnapshot? ImportAction { get; init; }
+}
 
 public enum BridgeViewportSurfaceState : byte
 {
@@ -1758,7 +1777,7 @@ public static class BridgeSnapshotParser
             parsedBreadcrumbs.Add(BoundedStringValue(breadcrumb, "content browser breadcrumb"));
         }
 
-        return new BridgeContentBrowserSnapshot(
+        BridgeContentBrowserSnapshot snapshot = new(
             RequiredBoundedString(value, "contentRoot"),
             RequiredBoundedContentPath(value, "currentDirectory"),
             RequiredBoundedString(value, "filter"),
@@ -1773,6 +1792,13 @@ public static class BridgeSnapshotParser
             RequiredBoolean(value, "truncated"),
             parsed,
             ParseNullableContentEntry(value.GetProperty("selectedEntry")));
+
+        return snapshot with
+        {
+            ImportAction = value.TryGetProperty("importAction", out JsonElement importAction)
+                ? ParseContentImportAction(importAction)
+                : null,
+        };
     }
 
     private static List<BridgeEntitySnapshot> ParseEntitySnapshots(JsonElement array, string name)
@@ -1808,6 +1834,19 @@ public static class BridgeSnapshotParser
     private static BridgeEntityRef? ParseNullableEntityRef(JsonElement value, string name)
     {
         return value.ValueKind == JsonValueKind.Null ? null : ParseEntityRef(value, name);
+    }
+
+    private static BridgeContentImportActionSnapshot ParseContentImportAction(JsonElement value)
+    {
+        RequireObject(value, "content browser import action");
+        return new BridgeContentImportActionSnapshot(
+            RequiredBoolean(value, "hasSelection"),
+            RequiredBoolean(value, "canImport"),
+            RequiredBoolean(value, "canReimport"),
+            RequiredBoolean(value, "importerRegistered"),
+            RequiredBoolean(value, "requiresFormatSpecificParser"),
+            RequiredBoundedString(value, "sourceKind"),
+            RequiredBoundedString(value, "diagnostic"));
     }
 
     private static BridgeContentBrowserEntry ParseContentEntry(JsonElement value)
