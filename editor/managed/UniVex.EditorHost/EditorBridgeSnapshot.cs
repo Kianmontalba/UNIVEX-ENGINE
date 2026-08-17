@@ -607,6 +607,7 @@ public sealed record BridgeCommand(
     string? ContentFilter = null,
     string? ContentFocus = null,
     string? ContentEntryPath = null,
+    string? ContentImportDestinationPath = null,
     uint? VisualScriptNodeId = null,
     BridgeVisualScriptNode? VisualScriptNode = null,
     string? VisualScriptNodeTypeId = null,
@@ -648,7 +649,8 @@ public sealed record BridgeCommandResult(
     BridgeEntityRef? CreatedEntity,
     BridgeVisualScriptGraphSchema? VisualScriptGraphSchema = null,
     string? MotionQueryReplayBaselineEnvelopePayload = null,
-    string? MotionQueryLiveDebugTracePayload = null);
+    string? MotionQueryLiveDebugTracePayload = null,
+    ulong? ContentImportJobId = null);
 
 /// <summary>
 /// Strict parser for the copied snapshot schema. Unknown additive fields are ignored for protocol

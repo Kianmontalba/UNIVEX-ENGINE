@@ -703,6 +703,9 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"snapshot", ToJsonUVE(response.snapshot)},
                    {"createdEntity", response.createdEntity.has_value() ? ToJsonUVE(*response.createdEntity)
                                                                          : JsonUVE(nullptr)},
+                   {"contentImportJobId", response.contentImportJobId.has_value()
+                                                ? JsonUVE(*response.contentImportJobId)
+                                                : JsonUVE(nullptr)},
                    {"graphSchema", response.visualScriptGraphSchema.has_value()
                                         ? ToJsonUVE(*response.visualScriptGraphSchema)
                                         : JsonUVE(nullptr)},
@@ -871,6 +874,9 @@ enum class FrameReadResultUVE : std::uint8_t {
     }
     if (value == "selectContentBrowserEntry") {
         return EditorBridgeRequestKindUVE::SelectContentBrowserEntry;
+    }
+    if (value == "queueContentBrowserImport") {
+        return EditorBridgeRequestKindUVE::QueueContentBrowserImport;
     }
     if (value == "readVisualScriptCanvas") {
         return EditorBridgeRequestKindUVE::ReadVisualScriptCanvas;
@@ -1223,6 +1229,9 @@ ParseMotionQueryLiveDebugCommandUVE(const JsonUVE& json, const std::uint64_t req
     }
     if (params.contains("contentEntryPath") && !params.at("contentEntryPath").is_null()) {
         request.contentEntryPath = params.at("contentEntryPath").get<std::string>();
+    }
+    if (params.contains("contentImportDestinationPath") && !params.at("contentImportDestinationPath").is_null()) {
+        request.contentImportDestinationPath = params.at("contentImportDestinationPath").get<std::string>();
     }
     if (params.contains("visualScriptNodeId") && !params.at("visualScriptNodeId").is_null()) {
         request.visualScriptNodeId = params.at("visualScriptNodeId").get<std::uint32_t>();

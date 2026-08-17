@@ -40,6 +40,11 @@ TEST(EditorBridgeUVETest, ContentBrowserImportCapabilityUVE_ReportsRawParserBoun
         ASSERT_TRUE(fixture.is_open());
         fixture << "raw model source";
     }
+    {
+        std::ofstream fixture(contentRoot / "notes.txt", std::ios::binary);
+        ASSERT_TRUE(fixture.is_open());
+        fixture << "plain source document";
+    }
 
     Core::EngineConfigUVE config = MakeBridgeTestConfigUVE();
     config.projectContentRootUVE = contentRoot;
@@ -78,6 +83,36 @@ TEST(EditorBridgeUVETest, ContentBrowserImportCapabilityUVE_ReportsRawParserBoun
         EXPECT_EQ(selected.snapshot.contentBrowser.importAction.sourceKind, "rawModel");
         EXPECT_EQ(selected.snapshot.contentBrowser.importAction.diagnostic,
                   "format-specific parser is not registered");
+
+        EditorBridgeRequestUVE selectPlain{};
+        selectPlain.protocolVersion = kEditorBridgeProtocolVersionUVE;
+        selectPlain.requestId = 3U;
+        selectPlain.expectedRevision = selected.snapshot.revision;
+        selectPlain.kind = EditorBridgeRequestKindUVE::SelectContentBrowserEntry;
+        selectPlain.contentEntryPath = "notes.txt";
+        const EditorBridgeResponseUVE selectedPlain = bridge.DispatchUVE(selectPlain);
+        ASSERT_TRUE(selectedPlain.applied);
+
+        EditorBridgeRequestUVE queueImport{};
+        queueImport.protocolVersion = kEditorBridgeProtocolVersionUVE;
+        queueImport.requestId = 4U;
+        queueImport.expectedRevision = selectedPlain.snapshot.revision;
+        queueImport.kind = EditorBridgeRequestKindUVE::QueueContentBrowserImport;
+        queueImport.contentEntryPath = "notes.txt";
+        queueImport.contentImportDestinationPath = "notes_imported.txt";
+        const EditorBridgeResponseUVE queued = bridge.DispatchUVE(queueImport);
+        ASSERT_TRUE(queued.applied);
+        EXPECT_EQ(queued.code, "bridge.content.import.queued");
+        ASSERT_TRUE(queued.contentImportJobId.has_value());
+        EXPECT_EQ(*queued.contentImportJobId, 1U);
+
+        Asset::IAssetImportQueueUVE& importQueue = engine.GetServicesUVE().GetAssetImportQueueUVE();
+        ASSERT_TRUE(importQueue.TickUVE());
+        const std::vector<Asset::AssetImportJobUVE> jobs = importQueue.GetJobsUVE();
+        ASSERT_EQ(jobs.size(), 1U);
+        EXPECT_EQ(jobs.front().state, Asset::AssetImportJobStateUVE::Succeeded);
+        EXPECT_TRUE(jobs.front().resultGuid.has_value());
+        EXPECT_TRUE(std::filesystem::exists(contentRoot / "notes_imported.txt"));
 
         editor.ShutdownUVE();
     }

@@ -7,6 +7,7 @@
 #include <charconv>
 #include <cmath>
 #include <filesystem>
+#include <memory>
 #include <type_traits>
 #include <utility>
 
@@ -62,6 +63,7 @@ namespace {
         EditorBridgeCapabilityUVE::SetContentBrowserFocus,
         EditorBridgeCapabilityUVE::RefreshContentBrowser,
         EditorBridgeCapabilityUVE::SelectContentBrowserEntry,
+        EditorBridgeCapabilityUVE::QueueContentBrowserImport,
         EditorBridgeCapabilityUVE::ReadViewportSurface,
         EditorBridgeCapabilityUVE::ReadVisualScriptCanvas,
         EditorBridgeCapabilityUVE::ReadVisualScriptDebugger,
@@ -404,6 +406,7 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
     std::string code = "bridge.command.rejected";
     std::string message = "The editor command was rejected without applying a mutation.";
     std::optional<EditorBridgeEntityRefUVE> createdEntity;
+    std::optional<std::uint64_t> responseContentImportJobId;
     std::optional<Scripting::ScriptGraphSchemaUVE> responseSchema;
     std::optional<std::string> responseEnvelopePayload;
     std::optional<std::string> responseLiveDebugTracePayload;
@@ -603,6 +606,62 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
                 code = "bridge.command.applied";
                 message = "The cached project content entry became the native content-browser selection.";
             }
+            break;
+        }
+        case EditorBridgeRequestKindUVE::QueueContentBrowserImport: {
+            if (!request.contentEntryPath.has_value() || !request.contentImportDestinationPath.has_value() ||
+                !IsBoundedContentPathUVE(*request.contentEntryPath) ||
+                !IsBoundedContentPathUVE(*request.contentImportDestinationPath)) {
+                return MakeResponseUVE(request, false, "bridge.content.import.request.invalid",
+                                       "QueueContentBrowserImport requires bounded source and destination paths.");
+            }
+            if (!m_editor->m_selectedProjectFile.has_value() ||
+                m_editor->m_selectedProjectFile->relativePath.generic_string() != *request.contentEntryPath) {
+                return MakeResponseUVE(request, false, "bridge.content.import.selection_mismatch",
+                                       "The import request must target the currently selected Content Browser entry.");
+            }
+            const Asset::ProjectFileEntryUVE& selected = *m_editor->m_selectedProjectFile;
+            if (selected.kind == Asset::ProjectFileEntryKindUVE::Directory) {
+                return MakeResponseUVE(request, false, "bridge.content.import.directory",
+                                       "Directories cannot be queued for import.");
+            }
+            const auto isNormalizedRelativePath = [](const std::string& value) {
+                const std::filesystem::path path = std::filesystem::path{value}.lexically_normal();
+                return !path.empty() && !path.is_absolute() && !path.has_root_name() &&
+                       std::find(path.begin(), path.end(), std::filesystem::path{".."}) == path.end() &&
+                       path.generic_string() == value;
+            };
+            if (!isNormalizedRelativePath(*request.contentEntryPath) ||
+                !isNormalizedRelativePath(*request.contentImportDestinationPath) ||
+                *request.contentEntryPath == *request.contentImportDestinationPath) {
+                return MakeResponseUVE(request, false, "bridge.content.import.path.invalid",
+                                       "Import source and destination must be distinct normalized relative paths.");
+            }
+            const Asset::AssetImportSourceClassificationUVE classification =
+                m_editor->m_services->GetAssetImporterUVE().ClassifySourceUVE(selected.relativePath);
+            if (!classification.importerRegistered) {
+                return MakeResponseUVE(request, false, "bridge.content.import.unsupported",
+                                       classification.diagnostic);
+            }
+            const Asset::ProjectFileSnapshotUVE projectSnapshot =
+                m_editor->m_services->GetProjectFileIndexUVE().GetSnapshotUVE();
+            const std::filesystem::path sourcePath = projectSnapshot.contentRoot / selected.relativePath;
+            const std::filesystem::path destinationPath =
+                projectSnapshot.contentRoot / std::filesystem::path{*request.contentImportDestinationPath};
+            Asset::AssetImportRequestUVE importRequest;
+            importRequest.sourcePath = sourcePath;
+            importRequest.destinationPath = destinationPath;
+            importRequest.settings = std::make_shared<const Asset::AssetImportSettingsUVE>();
+            const std::optional<Asset::AssetImportJobIdUVE> jobId =
+                m_editor->m_services->GetAssetImportQueueUVE().EnqueueUVE(std::move(importRequest));
+            if (!jobId.has_value()) {
+                return MakeResponseUVE(request, false, "bridge.content.import.rejected",
+                                       "The native import queue rejected the bounded request.");
+            }
+            applied = true;
+            code = "bridge.content.import.queued";
+            message = "The selected Content Browser entry was queued for native import.";
+            responseContentImportJobId = jobId->value;
             break;
         }
         case EditorBridgeRequestKindUVE::ReadViewportSurface:
@@ -1064,6 +1123,7 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
     SynchronizeRevisionUVE();
     EditorBridgeResponseUVE response = MakeResponseUVE(request, applied, std::move(code), std::move(message));
     response.createdEntity = createdEntity;
+    response.contentImportJobId = responseContentImportJobId;
     response.visualScriptGraphSchema = std::move(responseSchema);
     response.motionQueryReplayBaselineEnvelopePayload = std::move(responseEnvelopePayload);
     response.motionQueryLiveDebugTracePayload = std::move(responseLiveDebugTracePayload);
@@ -1419,7 +1479,7 @@ EditorBridgeResponseUVE EditorBridgeUVE::MakeResponseUVE(const EditorBridgeReque
                                                            std::string code, std::string message) const {
     return EditorBridgeResponseUVE{kEditorBridgeProtocolVersionUVE, request.requestId, applied,
                                    std::move(code), std::move(message), BuildSnapshotUVE(), std::nullopt,
-                                   std::nullopt, std::nullopt, std::nullopt};
+                                   std::nullopt, std::nullopt, std::nullopt, std::nullopt};
 }
 
 Scene::EntityUVE EditorBridgeUVE::ToEntityUVE(const EditorBridgeEntityRefUVE entity) noexcept {
