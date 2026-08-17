@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <cmath>
+
 #include "uve/math/vector3_uve.h"
 
 namespace UVE::Scene {
@@ -24,5 +26,15 @@ struct RigidBodyComponentUVE final {
     /// unaffected by gravity (but still collides/integrates other forces), > 1 = falls faster.
     float gravityScale = 1.0F;
 };
+
+/// Validates the value-only rigid-body contract before scene persistence and physics integration.
+/// Zero mass remains valid and means an immovable body under the existing inverse-mass policy;
+/// kinematic state is orthogonal to mass and remains an explicit authoring choice.
+[[nodiscard]] inline bool IsRigidBodyComponentValidUVE(const RigidBodyComponentUVE& rigidBody) noexcept {
+    return std::isfinite(rigidBody.mass) && rigidBody.mass >= 0.0F && std::isfinite(rigidBody.velocity.x) &&
+           std::isfinite(rigidBody.velocity.y) && std::isfinite(rigidBody.velocity.z) &&
+           std::isfinite(rigidBody.drag) && rigidBody.drag >= 0.0F && std::isfinite(rigidBody.gravityScale) &&
+           rigidBody.gravityScale >= 0.0F;
+}
 
 } // namespace UVE::Scene
