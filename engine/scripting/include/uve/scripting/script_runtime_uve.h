@@ -2,6 +2,7 @@
 #pragma once
 
 #include "uve/scene/entity_uve.h"
+#include "uve/scripting/script_vector3_value_uve.h"
 #include "uve/scripting/script_vm_uve.h"
 
 #include <cstddef>
@@ -14,7 +15,9 @@
 namespace UVE::Scripting {
 
 struct ScriptRuntimeStateUVE final {
+    // Legacy scalar slots remain stable until typed VM lowering consumes the typed stores.
     std::vector<std::int64_t> values;
+    std::vector<ScriptVector3ValueUVE> vector3Values;
 
     [[nodiscard]] bool operator==(const ScriptRuntimeStateUVE&) const = default;
 };
@@ -56,6 +59,7 @@ enum class ScriptRuntimeStateUpdateCodeUVE : std::uint8_t {
     Unchanged,
     NoActiveInstance,
     CapacityExceeded,
+    NonFiniteVector3,
 };
 
 struct ScriptRuntimeStateUpdateResultUVE final {
@@ -153,6 +157,7 @@ class ScriptRuntimeUVE final {
 public:
     static constexpr std::size_t kMaximumInstancesUVE = 4096U;
     static constexpr std::size_t kMaximumStateValuesUVE = 256U;
+    static constexpr std::size_t kMaximumStateVector3ValuesUVE = 256U;
 
     ScriptRuntimeUVE() = default;
     ScriptRuntimeUVE(const ScriptRuntimeUVE&) = delete;

@@ -708,6 +708,91 @@ TEST(ScriptRuntimeUVETest, StateUVE_IsBoundedAndPreservedAcrossCompatibleReload)
     EXPECT_FALSE(runtime.SetStateUVE({9U, 1U}, state));
 }
 
+TEST(ScriptRuntimeUVETest, StateUVE_SupportsTypedVector3ValuesWithoutChangingScalarSlots) {
+    ScriptRuntimeUVE runtime;
+    ScriptBytecodeProgramUVE program;
+    const Scene::EntityUVE entity{10U, 1U};
+    ASSERT_TRUE(runtime.AttachUVE(entity, program));
+
+    const ScriptVector3ValueUVE position{{1.0F, -2.0F, 3.5F}};
+    const ScriptVector3ValueUVE direction{{0.0F, 1.0F, 0.0F}};
+    ScriptRuntimeStateUVE state;
+    state.values = {17, -4};
+    state.vector3Values = {position, direction};
+
+    const ScriptRuntimeStateUpdateResultUVE applied = runtime.SetStateDetailedUVE(entity, state);
+    EXPECT_EQ(applied.code, ScriptRuntimeStateUpdateCodeUVE::Applied);
+    EXPECT_TRUE(applied.IsAcceptedUVE());
+
+    const auto stored = runtime.GetStateUVE(entity);
+    ASSERT_EQ(stored, std::optional<ScriptRuntimeStateUVE>(state));
+    ASSERT_EQ(stored->values, (std::vector<std::int64_t>{17, -4}));
+    ASSERT_EQ(stored->vector3Values.size(), 2U);
+    EXPECT_EQ(stored->vector3Values[0], position);
+    EXPECT_EQ(stored->vector3Values[1], direction);
+}
+
+TEST(ScriptRuntimeUVETest, StateUVE_RejectsNonFiniteTypedVector3WithoutMutation) {
+    ScriptRuntimeUVE runtime;
+    ScriptBytecodeProgramUVE program;
+    const Scene::EntityUVE entity{11U, 1U};
+    ASSERT_TRUE(runtime.AttachUVE(entity, program));
+
+    ScriptRuntimeStateUVE validState;
+    validState.vector3Values = {ScriptVector3ValueUVE{{1.0F, 2.0F, 3.0F}}};
+    ASSERT_TRUE(runtime.SetStateUVE(entity, validState));
+
+    ScriptRuntimeStateUVE invalidState = validState;
+    invalidState.vector3Values.front().value.y = std::numeric_limits<float>::quiet_NaN();
+    const ScriptRuntimeStateUpdateResultUVE rejected = runtime.SetStateDetailedUVE(entity, invalidState);
+    EXPECT_EQ(rejected.code, ScriptRuntimeStateUpdateCodeUVE::NonFiniteVector3);
+    EXPECT_FALSE(rejected.IsAcceptedUVE());
+    EXPECT_FALSE(rejected.message.empty());
+    EXPECT_EQ(runtime.GetStateUVE(entity), std::optional<ScriptRuntimeStateUVE>(validState));
+}
+
+TEST(ScriptRuntimeUVETest, StateUVE_BoundsTypedVector3ValuesIndependentlyFromScalarSlots) {
+    ScriptRuntimeUVE runtime;
+    ScriptBytecodeProgramUVE program;
+    const Scene::EntityUVE entity{12U, 1U};
+    ASSERT_TRUE(runtime.AttachUVE(entity, program));
+
+    ScriptRuntimeStateUVE oversized;
+    oversized.values = {1};
+    oversized.vector3Values.resize(ScriptRuntimeUVE::kMaximumStateVector3ValuesUVE + 1U);
+    const ScriptRuntimeStateUpdateResultUVE rejected = runtime.SetStateDetailedUVE(entity, oversized);
+    EXPECT_EQ(rejected.code, ScriptRuntimeStateUpdateCodeUVE::CapacityExceeded);
+    EXPECT_FALSE(rejected.IsAcceptedUVE());
+    EXPECT_FALSE(rejected.message.empty());
+    EXPECT_EQ(runtime.GetStateUVE(entity), std::optional<ScriptRuntimeStateUVE>(ScriptRuntimeStateUVE{}));
+
+    ScriptRuntimeStateUVE valid;
+    valid.values.resize(ScriptRuntimeUVE::kMaximumStateValuesUVE);
+    valid.vector3Values = {ScriptVector3ValueUVE{{4.0F, 5.0F, 6.0F}}};
+    const ScriptRuntimeStateUpdateResultUVE applied = runtime.SetStateDetailedUVE(entity, valid);
+    EXPECT_EQ(applied.code, ScriptRuntimeStateUpdateCodeUVE::Applied);
+    EXPECT_EQ(runtime.GetStateUVE(entity), std::optional<ScriptRuntimeStateUVE>(valid));
+}
+
+TEST(ScriptRuntimeUVETest, StateUVE_PreservesTypedValuesAcrossCompatibleReload) {
+    ScriptRuntimeUVE runtime;
+    ScriptBytecodeProgramUVE initial;
+    const Scene::EntityUVE entity{13U, 1U};
+    ASSERT_TRUE(runtime.AttachUVE(entity, initial));
+
+    ScriptRuntimeStateUVE state;
+    state.values = {8};
+    state.vector3Values = {ScriptVector3ValueUVE{{-1.0F, 0.5F, 9.0F}}};
+    ASSERT_TRUE(runtime.SetStateUVE(entity, state));
+
+    ScriptBytecodeProgramUVE replacement;
+    replacement.instructions.resize(2U);
+    const ScriptRuntimeReloadResultUVE reloaded = runtime.ReloadUVE(entity, replacement);
+    ASSERT_TRUE(reloaded.IsAcceptedUVE());
+    EXPECT_TRUE(reloaded.compatibleStatePreserved);
+    EXPECT_EQ(runtime.GetStateUVE(entity), std::optional<ScriptRuntimeStateUVE>(state));
+}
+
 TEST(ScriptRuntimeUVETest, ReloadUVE_AcceptsValidReplacementAndRejectsMissingInstance) {
     ScriptRuntimeUVE runtime;
     ScriptBytecodeProgramUVE initial;

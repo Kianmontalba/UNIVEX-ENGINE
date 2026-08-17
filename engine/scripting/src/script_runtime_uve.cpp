@@ -2,11 +2,17 @@
 #include "uve/scripting/script_runtime_uve.h"
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include <utility>
 
 namespace UVE::Scripting {
 namespace {
+
+[[nodiscard]] bool IsFiniteScriptVector3UVE(const ScriptVector3ValueUVE& value) noexcept {
+    return std::isfinite(value.value.x) && std::isfinite(value.value.y) &&
+           std::isfinite(value.value.z);
+}
 
 [[nodiscard]] std::vector<ScriptBytecodeDiagnosticUVE> ValidateRuntimeProgramUVE(
     const ScriptBytecodeProgramUVE& program) {
@@ -126,7 +132,16 @@ ScriptRuntimeStateUpdateResultUVE ScriptRuntimeUVE::SetStateDetailedUVE(const Sc
     }
     if (state.values.size() > kMaximumStateValuesUVE) {
         return {ScriptRuntimeStateUpdateCodeUVE::CapacityExceeded,
-                "State update rejected because the state vector exceeds its bounded capacity."};
+                "State update rejected because the scalar state vector exceeds its bounded capacity."};
+    }
+    if (state.vector3Values.size() > kMaximumStateVector3ValuesUVE) {
+        return {ScriptRuntimeStateUpdateCodeUVE::CapacityExceeded,
+                "State update rejected because the typed Vector3 state exceeds its bounded capacity."};
+    }
+    if (std::any_of(state.vector3Values.begin(), state.vector3Values.end(),
+                    [](const ScriptVector3ValueUVE& value) { return !IsFiniteScriptVector3UVE(value); })) {
+        return {ScriptRuntimeStateUpdateCodeUVE::NonFiniteVector3,
+                "State update rejected because a typed Vector3 value contains a non-finite component."};
     }
     if (iterator->second.state == state) {
         return {ScriptRuntimeStateUpdateCodeUVE::Unchanged, "Runtime state is unchanged."};

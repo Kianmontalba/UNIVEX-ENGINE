@@ -1503,7 +1503,7 @@ Increment 75 deliberately does not introduce a bytecode VM, engine-call binding 
 
 ## Script Component Runtime Boundary v1 (Increment 79)
 
-`ScriptRuntimeUVE` owns only copied script-instance values keyed by generational `Scene::EntityUVE` handles. It does not own entities, components, ECS pointers, scene lifetime, or engine services. Attach rejects invalid or duplicate handles, incompatible bytecode versions, oversized programs, and instance-cap overflow without mutation. Tick order is canonicalized by entity index and generation; disabled instances are skipped; each execution returns a copied VM result. Entity-handle generation is part of identity and must never be reduced to an index-only key.
+`ScriptRuntimeUVE` owns only copied script-instance values keyed by generational `Scene::EntityUVE` handles. It does not own entities, components, ECS pointers, scene lifetime, or engine services. Attach rejects invalid or duplicate handles, incompatible bytecode versions, oversized programs, and instance-cap overflow without mutation. Runtime state preserves legacy bounded int64 scalar slots and now also exposes a separate bounded typed Vector3 store with finite-component validation; compatible reloads preserve both stores. Tick order is canonicalized by entity index and generation; disabled instances are skipped; each execution returns a copied VM result. Entity-handle generation is part of identity and must never be reduced to an index-only key. Typed state storage does not execute nodes or change bytecode dispatch; typed VM lowering remains a separate increment.
 
 
 ## Native Graph Persistence v1 (Increment 80)
