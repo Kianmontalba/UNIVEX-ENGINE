@@ -41,6 +41,7 @@
 #include "uve/events/i_event_system_uve.h"
 #include "uve/input/i_input_system_uve.h"
 #include "uve/memory/i_memory_manager_uve.h"
+#include "uve/physics/area_overlap_lifecycle_tracker_uve.h"
 #include "uve/physics/i_collision_system_uve.h"
 #include "uve/physics/i_physics_system_uve.h"
 #include "uve/physics/i_raycast_system_uve.h"
@@ -338,6 +339,11 @@ private:
     /// (the main) thread, and polling hot-reload-tracked programs for on-disk changes.
     void Update();
 
+    /// Queries the bounded area-overlap snapshot, advances the copied lifecycle baseline, and queues
+    /// typed Entered/Exited DTOs in the tracker-provided deterministic order. Truncated snapshots
+    /// intentionally produce no inferred exits, and this seam does not mutate ECS/physics state.
+    void PublishAreaOverlapLifecycleEventsUVE();
+
     /// Recomputes FrameStatsUVE::fps (an exponential moving average of
     /// 1/deltaTime). Then, if SetActiveCameraUVE() has set a valid camera entity, syncs the audio
     /// listener to that entity's WorldTransformComponentUVE (the spec's "AudioListenerUVE —
@@ -400,6 +406,7 @@ private:
     std::unique_ptr<Physics::ICollisionSystemUVE> m_collisionSystem;
     std::unique_ptr<Physics::IPhysicsSystemUVE> m_physicsSystem;
     std::unique_ptr<Physics::IRaycastSystemUVE> m_raycastSystem;
+    Physics::AreaOverlapLifecycleTrackerUVE m_areaOverlapLifecycleTracker;
     std::unique_ptr<Input::IInputSystemUVE> m_inputSystem;
     std::unique_ptr<Audio::IAudioDeviceUVE> m_audioDevice;
     std::unique_ptr<Audio::IAudioSystemUVE> m_audioSystem;

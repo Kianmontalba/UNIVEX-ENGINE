@@ -31,6 +31,7 @@
 #include "uve/input/i_input_system_uve.h"
 #include "uve/math/aabb_uve.h"
 #include "uve/math/vector3_uve.h"
+#include "uve/physics/area_overlap_events_uve.h"
 #include "uve/physics/i_collision_system_uve.h"
 #include "uve/physics/i_physics_system_uve.h"
 #include "uve/physics/i_raycast_system_uve.h"
@@ -41,6 +42,7 @@
 #include "uve/render/i_render_system_uve.h"
 #include "uve/save/i_checkpoint_manager_uve.h"
 #include "uve/save/i_save_game_system_uve.h"
+#include "uve/scene/components/area_component_uve.h"
 #include "uve/scene/components/audio_source_component_uve.h"
 #include "uve/scene/components/camera_component_uve.h"
 #include "uve/scene/components/collider_component_uve.h"
@@ -140,6 +142,59 @@ TEST(EngineCoreUVETest, QueuedEvent_DeliveredDuringTickFrame) {
     ASSERT_EQ(received, -1);
     engine.TickFrameUVE();
     EXPECT_EQ(received, 99);
+
+    engine.Shutdown();
+}
+
+TEST(EngineCoreUVETest, AreaOverlapLifecycle_QueuesEnteredAndExitedEvents) {
+    EngineCoreUVE engine(MakeTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    auto& services = engine.GetServicesUVE();
+    auto& entityManager = services.GetEntityManagerUVE();
+    auto& sceneGraph = services.GetSceneGraphUVE();
+
+    const Scene::EntityUVE area = entityManager.CreateEntityUVE();
+    Scene::TransformComponentUVE areaTransform;
+    areaTransform.localPosition = Math::Vector3UVE{0.0F, 0.0F, 0.0F};
+    sceneGraph.AttachTransformUVE(entityManager, area, areaTransform);
+    entityManager.AddComponentUVE<Scene::AreaComponentUVE>(
+        area, Scene::AreaComponentUVE{Math::Vector3UVE{1.0F, 1.0F, 1.0F}, 1U, 0xFFFFFFFFU});
+
+    const Scene::EntityUVE collider = entityManager.CreateEntityUVE();
+    Scene::TransformComponentUVE colliderTransform;
+    colliderTransform.localPosition = Math::Vector3UVE{0.5F, 0.0F, 0.0F};
+    sceneGraph.AttachTransformUVE(entityManager, collider, colliderTransform);
+    entityManager.AddComponentUVE<Scene::ColliderComponentUVE>(
+        collider, Scene::ColliderComponentUVE{Math::Vector3UVE{1.0F, 1.0F, 1.0F}, 1U, 0xFFFFFFFFU});
+    sceneGraph.UpdateUVE(entityManager);
+
+    std::vector<Physics::AreaOverlapPairUVE> entered;
+    std::vector<Physics::AreaOverlapPairUVE> exited;
+    services.GetEventSystemUVE().Subscribe<Physics::AreaOverlapEnteredEventUVE>(
+        [&entered](const Physics::AreaOverlapEnteredEventUVE& event) { entered.push_back(event.pair); });
+    services.GetEventSystemUVE().Subscribe<Physics::AreaOverlapExitedEventUVE>(
+        [&exited](const Physics::AreaOverlapExitedEventUVE& event) { exited.push_back(event.pair); });
+
+    engine.TickFrameUVE();
+    EXPECT_TRUE(entered.empty());
+    EXPECT_TRUE(exited.empty());
+
+    engine.TickFrameUVE();
+    ASSERT_EQ(entered.size(), 1U);
+    EXPECT_EQ(entered.front().area, area);
+    EXPECT_EQ(entered.front().other, collider);
+    EXPECT_TRUE(exited.empty());
+
+    entityManager.DestroyEntityUVE(collider);
+    engine.TickFrameUVE();
+    EXPECT_TRUE(exited.empty());
+
+    engine.TickFrameUVE();
+    ASSERT_EQ(exited.size(), 1U);
+    EXPECT_EQ(exited.front().area, area);
+    EXPECT_EQ(exited.front().other, collider);
 
     engine.Shutdown();
 }

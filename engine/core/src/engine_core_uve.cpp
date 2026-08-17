@@ -41,6 +41,7 @@
 #include "uve/debug/logging_macros_uve.h"
 #include "uve/events/event_system_uve.h"
 #include "uve/input/input_system_uve.h"
+#include "uve/physics/area_overlap_events_uve.h"
 #include "uve/math/matrix4x4_uve.h"
 #include "uve/math/quaternion_uve.h"
 #include "uve/memory/memory_manager_uve.h"
@@ -440,6 +441,21 @@ void EngineCoreUVE::Update() {
     }
 }
 
+void EngineCoreUVE::PublishAreaOverlapLifecycleEventsUVE() {
+    const Physics::AreaOverlapQueryResultUVE snapshot =
+        Physics::AreaOverlapSystemUVE::QueryUVE(*m_entityManager);
+    const Physics::AreaOverlapLifecycleReportUVE report =
+        m_areaOverlapLifecycleTracker.UpdateUVE(snapshot);
+
+    for (const Physics::AreaOverlapTransitionUVE& transition : report.transitions) {
+        if (transition.kind == Physics::AreaOverlapTransitionKindUVE::Entered) {
+            m_eventSystem->QueueEvent(Physics::AreaOverlapEnteredEventUVE{transition.pair});
+        } else {
+            m_eventSystem->QueueEvent(Physics::AreaOverlapExitedEventUVE{transition.pair});
+        }
+    }
+}
+
 void EngineCoreUVE::LateUpdate() {
     if (m_frameStats.deltaTimeSeconds > 0.0) {
         const double instantaneousFps = 1.0 / m_frameStats.deltaTimeSeconds;
@@ -450,6 +466,8 @@ void EngineCoreUVE::LateUpdate() {
                                    instantaneousFps * kFpsSmoothingFactor);
     }
     UVE_TRACE("LateUpdate: fps={}", m_frameStats.fps);
+
+    PublishAreaOverlapLifecycleEventsUVE();
 
     if (m_activeCamera != Scene::kInvalidEntityUVE) {
         const auto& worldTransform =
@@ -543,6 +561,7 @@ void EngineCoreUVE::Shutdown() {
     m_raycastSystem.reset();
     m_physicsSystem.reset();
     m_collisionSystem.reset();
+    m_areaOverlapLifecycleTracker.ResetUVE();
     m_renderer3D.reset();
     m_lightSystem.reset();
     m_meshRenderer.reset();
