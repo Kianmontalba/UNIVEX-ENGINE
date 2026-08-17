@@ -40,6 +40,8 @@ struct CharacterControllerMoveResultUVE final {
     bool blocked = false;
     bool inputClamped = false;
     bool contactsTruncated = false;
+    bool toiUsed = false;
+    float earliestImpactTime = 1.0F;
 
     [[nodiscard]] bool IsAcceptedUVE() const noexcept {
         return code == CharacterControllerMoveCodeUVE::Moved;
@@ -47,18 +49,30 @@ struct CharacterControllerMoveResultUVE final {
 };
 
 /// Bounded main-thread kinematic movement over the existing AABB collision/layer contracts.
-/// Movement is advanced in capped discrete substeps, then existing minimum-translation-vector
-/// contacts are applied to the controller and the remaining displacement is projected away from
-/// contacted normals. This v1 seam is deliberately not continuous collision detection, a shape
-/// sweep, a dynamic-body push policy, a ground/step solver, or a character locomotion state owner.
+/// The default MoveUVE path advances in capped discrete substeps, then existing minimum-translation-
+/// vector contacts are applied and remaining displacement is projected away from contacted normals.
+/// The opt-in MoveWithToIUVE path adds capped conservative swept-AABB TOI; neither path owns exact
+/// non-box narrow phases, dynamic-body push policy, a ground/step solver, or locomotion state.
 class CharacterControllerUVE final {
 public:
     static constexpr std::size_t kMaximumSubstepsUVE = 32U;
     static constexpr std::size_t kMaximumContactsUVE = 64U;
     static constexpr float kMinimumMovementDistanceUVE = 1.0e-5F;
     static constexpr float kDefaultMaximumSubstepDistanceUVE = 0.25F;
+    static constexpr std::size_t kMaximumToIIterationsUVE = 8U;
+    static constexpr std::size_t kMaximumToITargetsUVE = 256U;
+    static constexpr float kToIEpsilonUVE = 1.0e-4F;
 
     [[nodiscard]] static CharacterControllerMoveResultUVE MoveUVE(
+        Scene::IEntityManagerUVE& entityManager, Scene::ISceneGraphUVE& sceneGraph,
+        ICollisionSystemUVE& collisionSystem, const CharacterControllerInputUVE& input);
+
+    /// Opt-in bounded TOI-assisted movement. It scans the shared conservative world-AABB cache,
+    /// advances to the earliest swept-AABB impact, removes the contacted normal from remaining
+    /// displacement, and repeats for a capped number of iterations. It does not replace the
+    /// overlap resolver or claim backend-wide CCD, exact non-box narrow phases, or dynamic-body
+    /// continuous response.
+    [[nodiscard]] static CharacterControllerMoveResultUVE MoveWithToIUVE(
         Scene::IEntityManagerUVE& entityManager, Scene::ISceneGraphUVE& sceneGraph,
         ICollisionSystemUVE& collisionSystem, const CharacterControllerInputUVE& input);
 };

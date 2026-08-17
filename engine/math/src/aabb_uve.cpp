@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 
 namespace UVE::Math {
 
@@ -51,6 +52,71 @@ std::optional<PenetrationUVE> ComputePenetrationUVE(const AabbUVE& a, const Aabb
         return PenetrationUVE{Vector3UVE{0.0F, centerB.y >= centerA.y ? 1.0F : -1.0F, 0.0F}, overlapY};
     }
     return PenetrationUVE{Vector3UVE{0.0F, 0.0F, centerB.z >= centerA.z ? 1.0F : -1.0F}, overlapZ};
+}
+
+std::optional<SweptAabbHitUVE> SweepAabbUVE(const AabbUVE& moving, const Vector3UVE& displacement,
+                                                   const AabbUVE& target) noexcept {
+    const auto IsFiniteVectorUVE = [](const Vector3UVE& value) noexcept {
+        return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+    };
+    if (!IsFiniteVectorUVE(moving.min) || !IsFiniteVectorUVE(moving.max) ||
+        !IsFiniteVectorUVE(displacement) || !IsFiniteVectorUVE(target.min) ||
+        !IsFiniteVectorUVE(target.max) || moving.IntersectsUVE(target)) {
+        return std::nullopt;
+    }
+
+    const Vector3UVE movingExtents = moving.GetExtentsUVE();
+    if (!IsFiniteVectorUVE(movingExtents) || movingExtents.x < 0.0F || movingExtents.y < 0.0F ||
+        movingExtents.z < 0.0F) {
+        return std::nullopt;
+    }
+    const AabbUVE expandedTarget{
+        Vector3UVE{target.min.x - movingExtents.x, target.min.y - movingExtents.y,
+                   target.min.z - movingExtents.z},
+        Vector3UVE{target.max.x + movingExtents.x, target.max.y + movingExtents.y,
+                   target.max.z + movingExtents.z}};
+    const Vector3UVE origin = moving.GetCenterUVE();
+    const std::array<float, 3> origins{origin.x, origin.y, origin.z};
+    const std::array<float, 3> directions{displacement.x, displacement.y, displacement.z};
+    const std::array<float, 3> boxMin{expandedTarget.min.x, expandedTarget.min.y, expandedTarget.min.z};
+    const std::array<float, 3> boxMax{expandedTarget.max.x, expandedTarget.max.y, expandedTarget.max.z};
+
+    float entryTime = 0.0F;
+    float exitTime = 1.0F;
+    Vector3UVE normal{};
+    for (std::size_t axis = 0U; axis < 3U; ++axis) {
+        if (directions[axis] == 0.0F) {
+            if (origins[axis] < boxMin[axis] || origins[axis] > boxMax[axis]) {
+                return std::nullopt;
+            }
+            continue;
+        }
+        float nearTime = (boxMin[axis] - origins[axis]) / directions[axis];
+        float farTime = (boxMax[axis] - origins[axis]) / directions[axis];
+        if (nearTime > farTime) {
+            std::swap(nearTime, farTime);
+        }
+        if (nearTime > entryTime || (nearTime == entryTime && normal == Vector3UVE{})) {
+            entryTime = nearTime;
+            normal = Vector3UVE{};
+            const float directionSign = directions[axis] > 0.0F ? 1.0F : -1.0F;
+            if (axis == 0U) {
+                normal.x = directionSign;
+            } else if (axis == 1U) {
+                normal.y = directionSign;
+            } else {
+                normal.z = directionSign;
+            }
+        }
+        exitTime = std::min(exitTime, farTime);
+        if (entryTime > exitTime) {
+            return std::nullopt;
+        }
+    }
+    if (entryTime < 0.0F || entryTime > 1.0F || normal == Vector3UVE{}) {
+        return std::nullopt;
+    }
+    return SweptAabbHitUVE{entryTime, normal};
 }
 
 std::optional<RayHitUVE> IntersectRayUVE(const RayUVE& ray, const AabbUVE& aabb, float maxDistance) noexcept {

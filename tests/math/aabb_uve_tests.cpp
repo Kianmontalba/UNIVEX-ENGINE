@@ -213,6 +213,49 @@ TEST(AabbUVETest, IntersectRayUVE_HitBeyondMaxDistance_ReturnsNullopt) {
     EXPECT_FALSE(IntersectRayUVE(ray, box, 2.0F).has_value()); // box starts at distance 4
 }
 
+TEST(AabbUVETest, SweepAabbUVE_ReportsFirstImpactTimeAndMoverToTargetNormal) {
+    const AabbUVE moving{Vector3UVE{-0.5F, -0.5F, -0.5F}, Vector3UVE{0.5F, 0.5F, 0.5F}};
+    const AabbUVE target{Vector3UVE{2.0F, -1.0F, -1.0F}, Vector3UVE{3.0F, 1.0F, 1.0F}};
+
+    const std::optional<SweptAabbHitUVE> hit = SweepAabbUVE(moving, Vector3UVE{4.0F, 0.0F, 0.0F}, target);
+
+    ASSERT_TRUE(hit.has_value());
+    EXPECT_NEAR(hit->time, 0.375F, kEpsilon);
+    EXPECT_EQ(hit->normal, (Vector3UVE{1.0F, 0.0F, 0.0F}));
+}
+
+TEST(AabbUVETest, SweepAabbUVE_MissesWhenMovingAwayOrAlreadyOverlapping) {
+    const AabbUVE moving{Vector3UVE{-0.5F, -0.5F, -0.5F}, Vector3UVE{0.5F, 0.5F, 0.5F}};
+    const AabbUVE target{Vector3UVE{2.0F, -1.0F, -1.0F}, Vector3UVE{3.0F, 1.0F, 1.0F}};
+    EXPECT_FALSE(SweepAabbUVE(moving, Vector3UVE{-4.0F, 0.0F, 0.0F}, target).has_value());
+
+    const AabbUVE overlapping{Vector3UVE{1.75F, -0.5F, -0.5F}, Vector3UVE{2.25F, 0.5F, 0.5F}};
+    EXPECT_FALSE(SweepAabbUVE(overlapping, Vector3UVE{4.0F, 0.0F, 0.0F}, target).has_value());
+}
+
+TEST(AabbUVETest, SweepAabbUVE_PreservesTangentialMotionAndRejectsParallelMiss) {
+    const AabbUVE moving{Vector3UVE{-0.5F, -0.5F, -0.5F}, Vector3UVE{0.5F, 0.5F, 0.5F}};
+    const AabbUVE target{Vector3UVE{2.0F, -1.0F, -1.0F}, Vector3UVE{3.0F, 1.0F, 1.0F}};
+    const std::optional<SweptAabbHitUVE> hit = SweepAabbUVE(moving, Vector3UVE{4.0F, 2.0F, 0.0F}, target);
+    ASSERT_TRUE(hit.has_value());
+    EXPECT_NEAR(hit->time, 0.375F, kEpsilon);
+    EXPECT_EQ(hit->normal, (Vector3UVE{1.0F, 0.0F, 0.0F}));
+
+    const AabbUVE farTarget{Vector3UVE{2.0F, 2.0F, -1.0F}, Vector3UVE{3.0F, 3.0F, 1.0F}};
+    EXPECT_FALSE(SweepAabbUVE(moving, Vector3UVE{4.0F, 0.0F, 0.0F}, farTarget).has_value());
+}
+
+TEST(AabbUVETest, SweepAabbUVE_TouchingFaceMovingIntoTargetReportsZeroTimeNormal) {
+    const AabbUVE moving{Vector3UVE{0.0F, -0.5F, -0.5F}, Vector3UVE{1.0F, 0.5F, 0.5F}};
+    const AabbUVE target{Vector3UVE{1.0F, -1.0F, -1.0F}, Vector3UVE{2.0F, 1.0F, 1.0F}};
+
+    const std::optional<SweptAabbHitUVE> hit = SweepAabbUVE(moving, Vector3UVE{2.0F, 0.0F, 0.0F}, target);
+
+    ASSERT_TRUE(hit.has_value());
+    EXPECT_NEAR(hit->time, 0.0F, kEpsilon);
+    EXPECT_EQ(hit->normal, (Vector3UVE{1.0F, 0.0F, 0.0F}));
+}
+
 TEST(AabbUVETest, ToStringUVE_ContainsMinAndMax) {
     const AabbUVE box{Vector3UVE{0.0F, 0.0F, 0.0F}, Vector3UVE{1.0F, 2.0F, 3.0F}};
     const std::string text = ToStringUVE(box);
