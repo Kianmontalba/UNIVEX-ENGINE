@@ -23,12 +23,12 @@
 
 | Status | System | Intended capability | Completion proof / boundary |
 |---|---|---|---|
-| **PARTIAL** | Core 3D nodes | `Node3D`, mesh/material references, camera variants, directional/point/spot lights, collision shapes, rigid/static/character bodies, areas, audio sources, and script attachments. | Camera, light, collider, and rigid-body component validity plus invalid-scene rollback are proven; camera/light/collider/rigid-body authoring commands, shape breadth, constraints, character depth, and each remaining node/component still require runtime behavior, serialization, validation, and tests; no empty node shells. |
+| **PARTIAL** | Core 3D nodes | `Node3D`, mesh/material references, camera variants, directional/point/spot lights, collision shapes, rigid/static/character bodies, areas, audio sources, and script attachments. | Camera, light, collider, rigid-body, and audio-source component validity plus invalid-scene rollback are proven; camera/light/collider/rigid-body/audio authoring commands, shape breadth, constraints, character depth, mixer behavior, and each remaining node/component still require runtime behavior, serialization, validation, and tests; no empty node shells. |
 | **PARTIAL** | Core 2D/UI nodes | `Node2D`, sprite, label, button, panel, and progress UI elements. | Requires an actual runtime UI/render/input architecture; editor UI does not substitute for game UI. |
 | **PARTIAL** | Character and interaction | Kinematic character controller, triggers/areas, component querying, spawning/destruction, and gameplay state conventions. | Defined behavior under physics/input tests and a representative sample scene. |
 | **PARTIAL** | Animation | Animation assets, playback, blending, events, state graphs, and later IK. | Asset format/import/runtime binding must exist before Animation Editor work. |
 | **PARTIAL** | Particles/VFX | GPU particle emitter, render integration, authoring controls, and lifecycle/culling policy. | Requires measured renderer/compute design and a bounded first effect set. |
-| **PARTIAL** | Audio gameplay | Source/listener binding, music/SFX routing, attenuation, mixer groups, and effects. | Requires runtime audio component contracts and automated/non-interactive validation strategy. |
+| **PARTIAL** | Audio gameplay | Source/listener binding, music/SFX routing, attenuation, mixer groups, and effects. | AudioSource value validation, spatial distance semantics, and invalid-scene rollback are proven; listener binding, routing, mixer groups, effects, streaming, and asset resolution remain partial. |
 
 <div align="center">
 

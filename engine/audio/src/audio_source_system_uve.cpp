@@ -6,6 +6,7 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#include "uve/debug/assert_uve.h"
 #include "uve/scene/components/audio_source_component_uve.h"
 #include "uve/scene/components/world_transform_component_uve.h"
 
@@ -42,6 +43,7 @@ void AudioSourceSystemUVE::SyncUVE(Scene::IEntityManagerUVE& entityManager, IAud
     entityManager.ForEachUVE<Scene::WorldTransformComponentUVE, Scene::AudioSourceComponentUVE>(
         [&](Scene::EntityUVE entity, const Scene::WorldTransformComponentUVE& worldTransform,
             const Scene::AudioSourceComponentUVE& audioSource) {
+            UVE_ASSERT(Scene::IsAudioSourceComponentValidUVE(audioSource));
             seen.insert(entity);
 
             auto iterator = m_impl->entityToVoice.find(entity);

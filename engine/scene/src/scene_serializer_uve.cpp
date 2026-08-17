@@ -257,6 +257,9 @@ template <typename T, typename FromJsonFunc>
                           source.attenuationCurve = static_cast<AudioAttenuationCurveUVE>(
                               json.value("attenuationCurve", std::uint8_t{0}));
                           source.playOnAwake = json.value("playOnAwake", true);
+                          if (!IsAudioSourceComponentValidUVE(source)) {
+                              throw std::runtime_error("Invalid AudioSourceComponentUVE payload");
+                          }
                           return source;
                       }));
         table.emplace("ScriptComponentUVE", MakeRegistrationUVE<ScriptComponentUVE>([](const nlohmann::json& json) {
