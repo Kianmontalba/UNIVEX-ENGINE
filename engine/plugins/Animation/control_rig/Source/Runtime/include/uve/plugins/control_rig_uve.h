@@ -46,6 +46,9 @@ struct ControlRigUVE final {
 
     std::vector<ControlRigControlUVE> controls;
     std::vector<ControlRigConstraintUVE> constraints;
+    SkeletonDefinitionUVE skeleton;
+    PoseBufferUVE pose;
+    AnimationEvaluationContextUVE evaluationContext;
 };
 
 enum class ControlRigValidationCodeUVE : std::uint8_t {
@@ -58,6 +61,8 @@ enum class ControlRigValidationCodeUVE : std::uint8_t {
     InvalidConstraint,
     DuplicateConstraint,
     InvalidPose,
+    InvalidSkeleton,
+    InvalidEvaluationTime,
 };
 
 struct ControlRigValidationResultUVE final {
@@ -84,6 +89,9 @@ struct TwoBoneIKSolveResultUVE final {
 
 struct ControlRigEvaluationResultUVE final {
     std::vector<ControlRigControlUVE> controls;
+    SkeletonDefinitionUVE skeleton;
+    PoseBufferUVE pose;
+    AnimationEvaluationContextUVE evaluationContext;
     std::size_t appliedConstraintCount = 0U;
     bool evaluated = false;
     std::string message;

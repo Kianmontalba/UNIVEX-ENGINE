@@ -72,6 +72,87 @@ UnifiedTimeStateUVE UnifiedTimeContractUVE::AdvanceUVE(
     return next;
 }
 
+AnimationContractValidationResultUVE ValidateSkeletonDefinitionUVE(
+    const SkeletonDefinitionUVE& skeleton) noexcept {
+    if (skeleton.skeletonId.empty() && skeleton.joints.empty()) {
+        return {AnimationContractValidationCodeUVE::Valid, 0U, "empty skeleton contract"};
+    }
+    if (skeleton.skeletonId.empty() || skeleton.skeletonId.size() > kMaximumAnimationIdentifierBytesUVE) {
+        return {AnimationContractValidationCodeUVE::InvalidIdentifier, 0U,
+                "skeleton identifier is empty or exceeds its bound"};
+    }
+    if (skeleton.joints.empty() || skeleton.joints.size() > kMaximumSkeletonJointsUVE) {
+        return {AnimationContractValidationCodeUVE::CapacityExceeded, 0U,
+                "skeleton joint count is empty or exceeds its bound"};
+    }
+    for (std::size_t index = 0U; index < skeleton.joints.size(); ++index) {
+        const SkeletonJointUVE& joint = skeleton.joints[index];
+        if (joint.jointId.empty() || joint.jointId.size() > kMaximumAnimationIdentifierBytesUVE ||
+            joint.parentJointId.size() > kMaximumAnimationIdentifierBytesUVE) {
+            return {AnimationContractValidationCodeUVE::InvalidIdentifier, index,
+                    "skeleton joint identifier exceeds its bound"};
+        }
+        if (std::find_if(skeleton.joints.cbegin(), skeleton.joints.cbegin() + static_cast<std::ptrdiff_t>(index),
+                         [&joint](const SkeletonJointUVE& previous) {
+                             return previous.jointId == joint.jointId;
+                         }) != skeleton.joints.cbegin() + static_cast<std::ptrdiff_t>(index)) {
+            return {AnimationContractValidationCodeUVE::DuplicateJoint, index,
+                    "skeleton joint identifiers must be unique"};
+        }
+    }
+    for (std::size_t index = 0U; index < skeleton.joints.size(); ++index) {
+        const std::string& parentId = skeleton.joints[index].parentJointId;
+        if (!parentId.empty() && std::find_if(
+                skeleton.joints.cbegin(), skeleton.joints.cend(), [&parentId](const SkeletonJointUVE& joint) {
+                    return joint.jointId == parentId;
+                }) == skeleton.joints.cend()) {
+            return {AnimationContractValidationCodeUVE::UnknownParent, index,
+                    "skeleton joint parent references an unknown joint"};
+        }
+    }
+    return {AnimationContractValidationCodeUVE::Valid, 0U, "valid skeleton contract"};
+}
+
+AnimationContractValidationResultUVE ValidatePoseBufferUVE(
+    const PoseBufferUVE& pose, const SkeletonDefinitionUVE& skeleton) noexcept {
+    const AnimationContractValidationResultUVE skeletonValidation = ValidateSkeletonDefinitionUVE(skeleton);
+    if (!skeletonValidation.IsValidUVE()) {
+        return skeletonValidation;
+    }
+    if (skeleton.skeletonId.empty() && pose.skeletonId.empty() && pose.localJoints.empty()) {
+        return {AnimationContractValidationCodeUVE::Valid, 0U, "empty pose contract"};
+    }
+    if (pose.skeletonId != skeleton.skeletonId || pose.localJoints.size() != skeleton.joints.size()) {
+        return {AnimationContractValidationCodeUVE::SkeletonMismatch, 0U,
+                "pose buffer skeleton identity or joint count does not match"};
+    }
+    for (std::size_t index = 0U; index < pose.localJoints.size(); ++index) {
+        TransformPoseUVE normalized;
+        if (!TryNormalizeTransformPoseUVE(pose.localJoints[index], normalized)) {
+            return {AnimationContractValidationCodeUVE::InvalidPose, index,
+                    "pose buffer contains a non-finite or non-normalizable joint transform"};
+        }
+    }
+    return {AnimationContractValidationCodeUVE::Valid, 0U, "valid pose contract"};
+}
+
+AnimationContractValidationResultUVE ValidateAnimationEvaluationContextUVE(
+    const AnimationEvaluationContextUVE& context) noexcept {
+    const UnifiedTimeStateUVE& time = context.time;
+    const auto finiteNonNegative = [](const double value) noexcept {
+        return std::isfinite(value) && value >= 0.0;
+    };
+    if (!finiteNonNegative(time.realTimeSeconds) || !finiteNonNegative(time.gameTimeSeconds) ||
+        !finiteNonNegative(time.fixedTimeSeconds) || !finiteNonNegative(time.animationTimeSeconds) ||
+        !finiteNonNegative(time.fixedAccumulatorSeconds) || !finiteNonNegative(time.realDeltaSeconds) ||
+        !finiteNonNegative(time.gameDeltaSeconds) || !finiteNonNegative(time.animationDeltaSeconds) ||
+        !finiteNonNegative(context.sampleTimeSeconds)) {
+        return {AnimationContractValidationCodeUVE::InvalidTime, 0U,
+                "animation evaluation time contains a non-finite or negative value"};
+    }
+    return {AnimationContractValidationCodeUVE::Valid, 0U, "valid evaluation context"};
+}
+
 bool IsFiniteTransformPoseUVE(const TransformPoseUVE& pose) noexcept {
     return IsFiniteVectorUVE(pose.position) && IsFiniteVectorUVE(pose.scale) &&
            Math::IsFiniteUVE(pose.rotation);

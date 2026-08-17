@@ -25,6 +25,14 @@ ControlRigUVE MakeRigUVE() {
         ControlRigConstraintUVE{"arm_ik", ControlRigConstraintKindUVE::TwoBoneIK,
                                 "root", "mid", "end", "target", "pole", 1.0F},
     };
+    rig.skeleton = SkeletonDefinitionUVE{
+        "arm", {SkeletonJointUVE{"root", ""}, SkeletonJointUVE{"mid", "root"},
+                 SkeletonJointUVE{"end", "mid"}}};
+    rig.pose = PoseBufferUVE{
+        "arm", {rig.controls[0].pose, rig.controls[1].pose, rig.controls[2].pose}};
+    rig.evaluationContext.time.animationTimeSeconds = 0.5;
+    rig.evaluationContext.time.animationDeltaSeconds = 1.0 / 60.0;
+    rig.evaluationContext.sampleTimeSeconds = 0.5;
     return rig;
 }
 
@@ -68,6 +76,19 @@ TEST(ControlRigUVETest, EvaluateControlRigUVE_ReturnsCopiedControlsWithAppliedCo
     EXPECT_EQ(result.appliedConstraintCount, 1U);
     EXPECT_NEAR(result.controls[1].pose.position.y, 1.0F, 1.0e-4F);
     EXPECT_NEAR(result.controls[2].pose.position.x, 1.0F, 1.0e-4F);
+    EXPECT_EQ(result.skeleton.skeletonId, "arm");
+    EXPECT_EQ(result.pose.skeletonId, "arm");
+    EXPECT_DOUBLE_EQ(result.evaluationContext.sampleTimeSeconds, 0.5);
+}
+
+TEST(ControlRigUVETest, ValidateControlRigUVE_RejectsSharedPoseMismatch) {
+    ControlRigUVE rig = MakeRigUVE();
+    rig.pose.skeletonId = "other";
+    EXPECT_EQ(ValidateControlRigUVE(rig).code, ControlRigValidationCodeUVE::InvalidPose);
+
+    rig = MakeRigUVE();
+    rig.evaluationContext.time.animationDeltaSeconds = -0.1;
+    EXPECT_EQ(ValidateControlRigUVE(rig).code, ControlRigValidationCodeUVE::InvalidEvaluationTime);
 }
 
 TEST(ControlRigUVETest, ValidateControlRigUVE_RejectsUnknownParentAndInvalidWeight) {

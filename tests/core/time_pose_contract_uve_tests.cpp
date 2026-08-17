@@ -61,6 +61,48 @@ TEST(TransformPoseUVETest, TryNormalizeTransformPoseUVE_NormalizesRotationAndPre
     EXPECT_TRUE(IsFiniteTransformPoseUVE(normalized));
 }
 
+TEST(AnimationPoseContractUVETest, ValidatesSkeletonPoseAndEvaluationContextTogether) {
+    const SkeletonDefinitionUVE skeleton{
+        "humanoid", {SkeletonJointUVE{"root", ""}, SkeletonJointUVE{"hand", "root"}}};
+    const PoseBufferUVE pose{
+        "humanoid",
+        {TransformPoseUVE{{}, {}, {1.0F, 1.0F, 1.0F}},
+         TransformPoseUVE{{1.0F, 0.0F, 0.0F}, {}, {1.0F, 1.0F, 1.0F}}}};
+    AnimationEvaluationContextUVE context;
+    context.time.animationTimeSeconds = 1.25;
+    context.time.animationDeltaSeconds = 1.0 / 60.0;
+    context.sampleTimeSeconds = 0.5;
+
+    EXPECT_TRUE(ValidateSkeletonDefinitionUVE(skeleton).IsValidUVE());
+    EXPECT_TRUE(ValidatePoseBufferUVE(pose, skeleton).IsValidUVE());
+    EXPECT_TRUE(ValidateAnimationEvaluationContextUVE(context).IsValidUVE());
+}
+
+TEST(AnimationPoseContractUVETest, RejectsDuplicateOrUnknownJointsAndMismatchedPose) {
+    const SkeletonDefinitionUVE duplicate{
+        "humanoid", {SkeletonJointUVE{"root", ""}, SkeletonJointUVE{"root", ""}}};
+    EXPECT_EQ(ValidateSkeletonDefinitionUVE(duplicate).code,
+              AnimationContractValidationCodeUVE::DuplicateJoint);
+
+    const SkeletonDefinitionUVE unknownParent{
+        "humanoid", {SkeletonJointUVE{"root", "missing"}}};
+    EXPECT_EQ(ValidateSkeletonDefinitionUVE(unknownParent).code,
+              AnimationContractValidationCodeUVE::UnknownParent);
+
+    const SkeletonDefinitionUVE skeleton{
+        "humanoid", {SkeletonJointUVE{"root", ""}}};
+    const PoseBufferUVE mismatched{"other", {TransformPoseUVE{}}};
+    EXPECT_EQ(ValidatePoseBufferUVE(mismatched, skeleton).code,
+              AnimationContractValidationCodeUVE::SkeletonMismatch);
+}
+
+TEST(AnimationPoseContractUVETest, RejectsNegativeEvaluationTime) {
+    AnimationEvaluationContextUVE context;
+    context.time.animationDeltaSeconds = -0.01;
+    EXPECT_EQ(ValidateAnimationEvaluationContextUVE(context).code,
+              AnimationContractValidationCodeUVE::InvalidTime);
+}
+
 TEST(TransformPoseUVETest, TryNormalizeTransformPoseUVE_RejectsNonFiniteAndZeroRotation) {
     TransformPoseUVE output;
     EXPECT_FALSE(TryNormalizeTransformPoseUVE(

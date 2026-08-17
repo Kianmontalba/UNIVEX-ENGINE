@@ -7,6 +7,8 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <string>
+#include <vector>
 
 namespace UVE::Core {
 
@@ -65,12 +67,71 @@ struct TransformPoseUVE final {
     [[nodiscard]] bool operator==(const TransformPoseUVE&) const noexcept = default;
 };
 
+inline constexpr std::size_t kMaximumSkeletonJointsUVE = 256U;
+inline constexpr std::size_t kMaximumAnimationIdentifierBytesUVE = 128U;
+
+struct SkeletonJointUVE final {
+    std::string jointId;
+    std::string parentJointId;
+
+    [[nodiscard]] bool operator==(const SkeletonJointUVE&) const noexcept = default;
+};
+
+struct SkeletonDefinitionUVE final {
+    std::string skeletonId;
+    std::vector<SkeletonJointUVE> joints;
+
+    [[nodiscard]] bool operator==(const SkeletonDefinitionUVE&) const noexcept = default;
+};
+
+struct PoseBufferUVE final {
+    std::string skeletonId;
+    std::vector<TransformPoseUVE> localJoints;
+
+    [[nodiscard]] bool operator==(const PoseBufferUVE&) const noexcept = default;
+};
+
+struct AnimationEvaluationContextUVE final {
+    UnifiedTimeStateUVE time;
+    double sampleTimeSeconds = 0.0;
+
+    [[nodiscard]] bool operator==(const AnimationEvaluationContextUVE&) const noexcept = default;
+};
+
+enum class AnimationContractValidationCodeUVE : std::uint8_t {
+    Valid = 0,
+    InvalidIdentifier,
+    CapacityExceeded,
+    DuplicateJoint,
+    UnknownParent,
+    InvalidPose,
+    SkeletonMismatch,
+    InvalidTime,
+};
+
+struct AnimationContractValidationResultUVE final {
+    AnimationContractValidationCodeUVE code = AnimationContractValidationCodeUVE::Valid;
+    std::size_t index = 0U;
+    std::string message;
+
+    [[nodiscard]] bool IsValidUVE() const noexcept {
+        return code == AnimationContractValidationCodeUVE::Valid;
+    }
+};
+
 struct PoseSampleUVE final {
     double timeSeconds = 0.0;
     TransformPoseUVE pose;
 
     [[nodiscard]] bool operator==(const PoseSampleUVE&) const noexcept = default;
 };
+
+[[nodiscard]] AnimationContractValidationResultUVE ValidateSkeletonDefinitionUVE(
+    const SkeletonDefinitionUVE& skeleton) noexcept;
+[[nodiscard]] AnimationContractValidationResultUVE ValidatePoseBufferUVE(
+    const PoseBufferUVE& pose, const SkeletonDefinitionUVE& skeleton) noexcept;
+[[nodiscard]] AnimationContractValidationResultUVE ValidateAnimationEvaluationContextUVE(
+    const AnimationEvaluationContextUVE& context) noexcept;
 
 [[nodiscard]] bool IsFiniteTransformPoseUVE(const TransformPoseUVE& pose) noexcept;
 [[nodiscard]] bool TryNormalizeTransformPoseUVE(const TransformPoseUVE& pose,

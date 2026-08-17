@@ -100,6 +100,35 @@ TEST(MotionQueryUVETest, FindBestMotionMatchUVE_UsesStableIdentifierTieBreak) {
     EXPECT_EQ(result.candidateIndex, 1U);
 }
 
+TEST(MotionQueryUVETest, SharedSkeletonPoseAndEvaluationContext_AreAcceptedAndCopied) {
+    MotionQueryUVE query = MakeFeatureUVE(1.0F, 1.0F);
+    query.skeleton = SkeletonDefinitionUVE{
+        "locomotion", {SkeletonJointUVE{"root", ""}, SkeletonJointUVE{"spine", "root"}}};
+    query.pose = PoseBufferUVE{
+        "locomotion", {MakePoseUVE(0.0F), MakePoseUVE(0.0F, 1.0F)}};
+    query.evaluationContext.time.animationTimeSeconds = 2.0;
+    query.evaluationContext.time.animationDeltaSeconds = 1.0 / 60.0;
+    query.evaluationContext.sampleTimeSeconds = 2.0;
+
+    EXPECT_TRUE(ValidateMotionQueryUVE(query).IsValidUVE());
+    const MotionQueryUVE copied = query;
+    EXPECT_EQ(copied.skeleton, query.skeleton);
+    EXPECT_EQ(copied.pose, query.pose);
+    EXPECT_EQ(copied.evaluationContext, query.evaluationContext);
+}
+
+TEST(MotionQueryUVETest, SharedSkeletonPoseAndEvaluationContext_RejectMismatches) {
+    MotionQueryUVE query = MakeFeatureUVE(1.0F);
+    query.skeleton = SkeletonDefinitionUVE{"locomotion", {SkeletonJointUVE{"root", ""}}};
+    query.pose = PoseBufferUVE{"other", {MakePoseUVE(0.0F)}};
+    EXPECT_EQ(ValidateMotionQueryUVE(query).code, MotionQueryValidationCodeUVE::InvalidPose);
+
+    query = MakeFeatureUVE(1.0F);
+    query.evaluationContext.time.animationDeltaSeconds = -0.01;
+    EXPECT_EQ(ValidateMotionQueryUVE(query).code,
+              MotionQueryValidationCodeUVE::InvalidEvaluationTime);
+}
+
 TEST(MotionQueryUVETest, FindBestMotionMatchUVE_RejectsInvalidWeights) {
     MotionMatchingWeightsUVE weights;
     weights.velocityWeight = 0.0F;
