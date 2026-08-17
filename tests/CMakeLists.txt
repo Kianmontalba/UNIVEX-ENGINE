@@ -109,6 +109,7 @@ add_executable(uve_tests
     editor/editor_uve_tests.cpp
     editor/inspector_drawer_registry_uve_tests.cpp
     scripting/script_graph_uve_tests.cpp
+    scripting/script_vector3_value_uve_tests.cpp
     scripting/script_source_mapping_uve_tests.cpp
     plugins/plugin_registry_uve_tests.cpp
     ../engine/plugins/Animation/control_rig/Tests/control_rig_uve_tests.cpp
