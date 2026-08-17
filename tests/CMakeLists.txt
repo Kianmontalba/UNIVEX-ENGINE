@@ -39,6 +39,7 @@ add_executable(uve_tests
     physics/physics_system_uve_tests.cpp
     physics/physics_material_uve_tests.cpp
     physics/raycast_system_uve_tests.cpp
+    input/gamepad_input_system_uve_tests.cpp
     input/input_system_uve_tests.cpp
     asset/asset_database_uve_tests.cpp
     asset/uve_file_envelope_uve_tests.cpp

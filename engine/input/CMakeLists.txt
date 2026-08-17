@@ -2,6 +2,7 @@
 
 
 add_library(uve_input STATIC
+    src/gamepad_input_system_uve.cpp
     src/input_system_uve.cpp
 )
 target_include_directories(uve_input PUBLIC include)
