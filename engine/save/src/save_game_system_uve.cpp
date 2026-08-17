@@ -206,7 +206,7 @@ bool SaveGameSystemUVE::SaveUVE(int slotIndex, Scene::IEntityManagerUVE& entityM
     finalMetadata.savedAtUnixSecondsUVE =
         static_cast<std::int64_t>(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
     finalMetadata.slotIndex = slotIndex;
-    finalMetadata.payloadSchemaVersion = 1;
+    finalMetadata.payloadSchemaVersion = kCurrentSavePayloadSchemaVersionUVE;
 
     const std::vector<std::byte> metadataJsonBytes = EncodeMetadataJsonUVE(finalMetadata);
     const std::vector<std::byte> payload = BuildSavePayloadUVE(metadataJsonBytes, scratchFile->second);
@@ -241,7 +241,7 @@ std::vector<Scene::EntityUVE> SaveGameSystemUVE::LoadUVE(int slotIndex, Scene::I
     if (!file.has_value()) {
         return {}; // ReadUveFileUVE already logged the specific reason.
     }
-    const auto& [header, payload] = file.value();
+    auto& [header, payload] = file.value();
     if (header.assetType != Asset::AssetKindUVE::Save) {
         UVE_ERROR("SaveGameSystemUVE: \"{}\" has unexpected asset type {}", finalPath.string(),
                    static_cast<std::uint32_t>(header.assetType));
@@ -251,7 +251,30 @@ std::vector<Scene::EntityUVE> SaveGameSystemUVE::LoadUVE(int slotIndex, Scene::I
     std::vector<std::byte> metadataJsonBytes;
     std::vector<std::byte> worldJsonBytes;
     if (!SplitSavePayloadUVE(payload, metadataJsonBytes, worldJsonBytes)) {
+        std::vector<std::byte> emptyPayload;
+        m_lastMigrationDiagnostics = MigrateSavePayloadUVE(kCurrentSavePayloadSchemaVersionUVE,
+                                                            kCurrentSavePayloadSchemaVersionUVE, emptyPayload);
         UVE_ERROR("SaveGameSystemUVE: \"{}\" has a corrupt or truncated save payload", finalPath.string());
+        return {};
+    }
+
+    const std::optional<GameStateMetadataUVE> metadata = DecodeMetadataJsonUVE(metadataJsonBytes);
+    if (!metadata.has_value()) {
+        std::vector<std::byte> emptyPayload;
+        m_lastMigrationDiagnostics = MigrateSavePayloadUVE(kCurrentSavePayloadSchemaVersionUVE,
+                                                            kCurrentSavePayloadSchemaVersionUVE, emptyPayload);
+        return {};
+    }
+    m_lastMigrationDiagnostics = MigrateSavePayloadUVE(metadata->payloadSchemaVersion,
+                                                        kCurrentSavePayloadSchemaVersionUVE, payload);
+    if (!m_lastMigrationDiagnostics.SucceededUVE()) {
+        UVE_ERROR("SaveGameSystemUVE: \"{}\" cannot load schema v{}: {}", finalPath.string(),
+                   metadata->payloadSchemaVersion, m_lastMigrationDiagnostics.reason);
+        return {};
+    }
+    if (m_lastMigrationDiagnostics.status == SaveMigrationStatusUVE::Migrated &&
+        !SplitSavePayloadUVE(payload, metadataJsonBytes, worldJsonBytes)) {
+        UVE_ERROR("SaveGameSystemUVE: \"{}\" migration produced an invalid payload", finalPath.string());
         return {};
     }
 
@@ -317,7 +340,19 @@ std::optional<GameStateMetadataUVE> SaveGameSystemUVE::GetSaveMetadataUVE(int sl
         return std::nullopt;
     }
 
-    return DecodeMetadataJsonUVE(metadataJsonBytes);
+    const std::optional<GameStateMetadataUVE> metadata = DecodeMetadataJsonUVE(metadataJsonBytes);
+    if (!metadata.has_value()) {
+        return std::nullopt;
+    }
+    std::vector<std::byte> migrationProbe{std::byte{0}};
+    m_lastMigrationDiagnostics = MigrateSavePayloadUVE(metadata->payloadSchemaVersion,
+                                                        kCurrentSavePayloadSchemaVersionUVE, migrationProbe);
+    if (!m_lastMigrationDiagnostics.SucceededUVE()) {
+        UVE_ERROR("SaveGameSystemUVE: \"{}\" metadata schema v{} is unsupported: {}", finalPath.string(),
+                   metadata->payloadSchemaVersion, m_lastMigrationDiagnostics.reason);
+        return std::nullopt;
+    }
+    return metadata;
 }
 
 std::vector<int> SaveGameSystemUVE::ListUsedSlotsUVE() const {
@@ -333,6 +368,10 @@ std::vector<int> SaveGameSystemUVE::ListUsedSlotsUVE() const {
         }
     }
     return slots;
+}
+
+SaveMigrationDiagnosticsUVE SaveGameSystemUVE::GetLastMigrationDiagnosticsUVE() const {
+    return m_lastMigrationDiagnostics;
 }
 
 } // namespace UVE::Save

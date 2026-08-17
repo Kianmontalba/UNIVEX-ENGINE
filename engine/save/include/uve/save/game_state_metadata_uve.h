@@ -8,6 +8,8 @@
 
 namespace UVE::Save {
 
+inline constexpr std::uint32_t kCurrentSavePayloadSchemaVersionUVE = 1U;
+
 /// Metadata section of a `.uvesave` file: timestamp, engine version, playtime — the spec's
 /// "Metadata (timestamp, version, playtime)" (Part 17). Carries engine version as four raw
 /// uint32 fields rather than reusing Core::VersionUVE: engine/save sits below engine/core in the
@@ -29,11 +31,11 @@ struct GameStateMetadataUVE {
     std::uint32_t engineVersionPatch = 0;
     std::uint32_t engineVersionBuild = 0;
 
-    /// The `.uvesave` payload layout version this save was written with (starts at 1, independent
-    /// of `engineVersion*` above) — a dedicated, documented hook for a future "Migration:
-    /// Auto-upgrade old save files" feature to key off of. Not itself validated or acted on this
-    /// increment; SaveGameSystemUVE::SaveUVE() always writes the current value.
-    std::uint32_t payloadSchemaVersion = 1;
+    /// The `.uvesave` payload layout version this save was written with (independent of
+    /// `engineVersion*` above). SaveGameSystemUVE writes the current
+    /// `kCurrentSavePayloadSchemaVersionUVE`; LoadUVE dispatches this value through the bounded
+    /// migration seam before scene deserialization.
+    std::uint32_t payloadSchemaVersion = kCurrentSavePayloadSchemaVersionUVE;
 
     /// Total elapsed gameplay seconds at the moment of this save. CheckpointManagerUVE fills this
     /// from its own GetTotalPlaytimeSecondsUVE() for auto-saves/checkpoints; a caller driving

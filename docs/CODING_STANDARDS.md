@@ -264,9 +264,10 @@ splitting the slots.
 crypto library exists), cloud sync hooks (not even a Null-backend stub — unlike
 `NullAudioDeviceUVE`'s recorded gain/position state, a `NullCloudSyncUVE` would have no
 interesting behavior to bookkeep), screenshot thumbnails (needs a real render-to-texture/readback
-path, no GPU backend exists), save migration/versioning logic (no old format exists yet to migrate
-from — `payloadSchemaVersion` above is the hook a future increment keys off of), and Player
-State/Inventory/Quest Progress sections (no gameplay component types exist anywhere in the repo —
+path, no GPU backend exists), explicit vN-to-vN+1 save payload transforms and migration rewrite policy
+(the bounded v1 `MigrateSavePayloadUVE` seam now dispatches current payloads and rejects unsupported
+versions with copied diagnostics), and Player State/Inventory/Quest Progress sections (no gameplay
+component types exist anywhere in the repo —
 "world state" is exactly the generic ECS/component data `SceneSerializerUVE` already round-trips).
 
 ## Virtual paths (`IFileSystemUVE`)

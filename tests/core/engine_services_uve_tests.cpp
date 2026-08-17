@@ -782,6 +782,7 @@ public:
         return std::nullopt;
     }
     [[nodiscard]] std::vector<int> ListUsedSlotsUVE() const override { return {}; }
+    [[nodiscard]] Save::SaveMigrationDiagnosticsUVE GetLastMigrationDiagnosticsUVE() const override { return {}; }
 
     int saveCallCount = 0;
 };

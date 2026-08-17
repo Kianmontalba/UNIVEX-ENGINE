@@ -9,6 +9,7 @@
 
 add_library(uve_save STATIC
     src/save_game_system_uve.cpp
+    src/save_payload_migration_uve.cpp
     src/checkpoint_manager_uve.cpp
 )
 target_include_directories(uve_save PUBLIC include)

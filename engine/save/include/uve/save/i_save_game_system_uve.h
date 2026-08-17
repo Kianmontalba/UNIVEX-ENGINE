@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "uve/save/game_state_metadata_uve.h"
+#include "uve/save/save_payload_migration_uve.h"
 #include "uve/scene/entity_uve.h"
 #include "uve/scene/i_entity_manager_uve.h"
 
@@ -78,6 +79,11 @@ public:
     /// ascending. Returns an empty vector (not an error) if the save directory doesn't exist yet
     /// (a first-run engine has no saves).
     [[nodiscard]] virtual std::vector<int> ListUsedSlotsUVE() const = 0;
+
+    /// Returns the copied result of the most recent load/metadata schema dispatch. The result is
+    /// deterministic and does not expose the save payload; NotRequired means the file already
+    /// matched the current schema.
+    [[nodiscard]] virtual SaveMigrationDiagnosticsUVE GetLastMigrationDiagnosticsUVE() const = 0;
 };
 
 } // namespace UVE::Save

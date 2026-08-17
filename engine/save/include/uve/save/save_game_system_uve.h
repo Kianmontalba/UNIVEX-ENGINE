@@ -43,10 +43,12 @@ public:
     [[nodiscard]] bool HasSaveUVE(int slotIndex) const override;
     [[nodiscard]] std::optional<GameStateMetadataUVE> GetSaveMetadataUVE(int slotIndex) const override;
     [[nodiscard]] std::vector<int> ListUsedSlotsUVE() const override;
+    [[nodiscard]] SaveMigrationDiagnosticsUVE GetLastMigrationDiagnosticsUVE() const override;
 
 private:
     Scene::ISceneSerializerUVE* m_sceneSerializer;
     std::filesystem::path m_saveDirectory;
+    mutable SaveMigrationDiagnosticsUVE m_lastMigrationDiagnostics;
 };
 
 } // namespace UVE::Save
