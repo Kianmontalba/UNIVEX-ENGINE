@@ -118,16 +118,18 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
 
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
     EXPECT_FALSE(RegisterBuiltInScriptNodesUVE(registry));
-    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 22U);
+    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 28U);
 
     const std::vector<ScriptNodeTypeDescriptorUVE> descriptors = registry.GetNodeTypeDescriptorsUVE();
-    ASSERT_EQ(descriptors.size(), 22U);
+    ASSERT_EQ(descriptors.size(), 28U);
     const std::vector<std::string> expectedIds{
         "flow.sequence", "flow.branch",
         "math.float.add", "math.float.subtract", "math.float.multiply", "math.float.divide",
         "math.vector3.make", "math.vector3.add", "math.vector3.subtract", "math.vector3.multiply",
         "math.vector3.dot", "math.vector3.cross", "math.vector3.length", "math.vector3.normalize",
         "logic.boolean.not", "logic.boolean.and", "logic.boolean.or", "logic.boolean.xor",
+        "logic.boolean.equal", "logic.boolean.not_equal", "logic.boolean.greater", "logic.boolean.less",
+        "logic.boolean.greater_equal", "logic.boolean.less_equal",
         "query.entity.has_component", "query.entity.get_component", "engine.log", "engine.get_time"};
     ASSERT_EQ(expectedIds.size(), descriptors.size());
     for (std::size_t index = 0U; index < expectedIds.size(); ++index) {
@@ -145,15 +147,15 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
         EXPECT_EQ(descriptors[index].category, "Math");
         EXPECT_EQ(descriptors[index].iconId, "node.math.vector3");
     }
-    for (std::size_t index = 14U; index < 18U; ++index) {
+    for (std::size_t index = 14U; index < 24U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Logic");
         EXPECT_EQ(descriptors[index].iconId, "node.logic.boolean");
     }
-    for (std::size_t index = 18U; index < 20U; ++index) {
+    for (std::size_t index = 24U; index < 26U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Entity Query");
         EXPECT_EQ(descriptors[index].iconId, "node.entity.query");
     }
-    for (std::size_t index = 20U; index < descriptors.size(); ++index) {
+    for (std::size_t index = 26U; index < descriptors.size(); ++index) {
         EXPECT_EQ(descriptors[index].category, "Engine");
         EXPECT_EQ(descriptors[index].iconId, "node.engine");
     }
@@ -882,6 +884,86 @@ TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesEngineTimeBeforeFl
     EXPECT_EQ(result.program->instructions[1].sourcePinName, "Value");
     EXPECT_EQ(result.program->instructions[1].targetPinName, "A");
     EXPECT_EQ(result.program->instructions[2].nodeTypeId, "math.float.add");
+}
+
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesTwoNumbersBeforeComparison) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({10U, "engine.get_time"}));
+    ASSERT_TRUE(graph.AddNodeUVE({11U, "engine.get_time"}));
+    ASSERT_TRUE(graph.AddNodeUVE({20U, "logic.boolean.greater_equal"}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{10U, "Value"}, {20U, "A"}}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{11U, "Value"}, {20U, "B"}}));
+
+    const ScriptIrCompileResultUVE result = CompileScriptGraphToIrUVE(graph, registry);
+    ASSERT_TRUE(result.IsSuccessUVE());
+    ASSERT_EQ(result.program->instructions.size(), 5U);
+    EXPECT_EQ(result.program->instructions[0].nodeTypeId, "engine.get_time");
+    EXPECT_EQ(result.program->instructions[1].kind, ScriptIrInstructionKindUVE::TransferValue);
+    EXPECT_TRUE(result.program->instructions[1].isStagedTransfer);
+    EXPECT_EQ(result.program->instructions[1].sourceNodeId, 10U);
+    EXPECT_EQ(result.program->instructions[1].targetNodeId, 20U);
+    EXPECT_EQ(result.program->instructions[1].targetPinName, "A");
+    EXPECT_EQ(result.program->instructions[2].nodeTypeId, "engine.get_time");
+    EXPECT_EQ(result.program->instructions[3].kind, ScriptIrInstructionKindUVE::TransferValue);
+    EXPECT_TRUE(result.program->instructions[3].isStagedTransfer);
+    EXPECT_EQ(result.program->instructions[3].sourceNodeId, 11U);
+    EXPECT_EQ(result.program->instructions[3].targetNodeId, 20U);
+    EXPECT_EQ(result.program->instructions[3].targetPinName, "B");
+    EXPECT_EQ(result.program->instructions[4].nodeTypeId, "logic.boolean.greater_equal");
+}
+
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsSecondComparisonConsumer) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({10U, "engine.get_time"}));
+    ASSERT_TRUE(graph.AddNodeUVE({11U, "engine.get_time"}));
+    ASSERT_TRUE(graph.AddNodeUVE({20U, "logic.boolean.greater"}));
+    ASSERT_TRUE(graph.AddNodeUVE({30U, "logic.boolean.less"}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{10U, "Value"}, {20U, "A"}}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{11U, "Value"}, {20U, "B"}}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{10U, "Value"}, {30U, "A"}}));
+
+    const ScriptIrCompileResultUVE result = CompileScriptGraphToIrUVE(graph, registry);
+    EXPECT_FALSE(result.IsSuccessUVE());
+    ASSERT_EQ(result.diagnostics.size(), 1U);
+    EXPECT_EQ(result.diagnostics.front().code, ScriptValidationCodeUVE::UnsupportedRuntimeNode);
+    EXPECT_EQ(result.diagnostics.front().nodeId, 30U);
+    EXPECT_EQ(result.diagnostics.front().pinName, "A");
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_RunsStagedNumbersIntoComparison) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({10U, "engine.get_time"}));
+    ASSERT_TRUE(graph.AddNodeUVE({11U, "engine.get_time"}));
+    ASSERT_TRUE(graph.AddNodeUVE({20U, "logic.boolean.greater_equal"}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{10U, "Value"}, {20U, "A"}}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{11U, "Value"}, {20U, "B"}}));
+    const ScriptIrCompileResultUVE compiled = CompileScriptGraphToIrUVE(graph, registry);
+    ASSERT_TRUE(compiled.IsSuccessUVE());
+    std::vector<ScriptBytecodeDiagnosticUVE> diagnostics;
+    const std::optional<ScriptBytecodeProgramUVE> bytecode =
+        LowerIrToBytecodeUVE(*compiled.program, diagnostics);
+    ASSERT_TRUE(bytecode.has_value());
+    ASSERT_TRUE(diagnostics.empty());
+
+    EngineTimeCaptureUVE capture;
+    capture.value = 2.5F;
+    const ScriptEngineCallBindingsUVE bindings{nullptr, &capture, CaptureEngineTimeUVE};
+    ScriptVmExecutionOptionsUVE options;
+    options.engineCallBindings = &bindings;
+    ScriptVmExecutionContextUVE context;
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(*bytecode, context, options);
+
+    EXPECT_TRUE(result.IsSuccessUVE());
+    EXPECT_EQ(result.instructionsExecuted, 5U);
+    EXPECT_EQ(capture.callCount, 2U);
+    ASSERT_TRUE(context.FindOutputUVE(20U, "Result").has_value());
+    EXPECT_TRUE(std::get<bool>(*context.FindOutputUVE(20U, "Result")));
 }
 
 TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsComposedFloatDependencyScheduling) {
@@ -2085,6 +2167,40 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_DispatchesFloatAndBooleanNodes) {
     ASSERT_TRUE(notContext.SetInputUVE(21U, "Value", false));
     ASSERT_TRUE(ExecuteScriptBytecodeUVE(makeProgram(21U, "logic.boolean.not"), notContext).IsSuccessUVE());
     EXPECT_TRUE(std::get<bool>(*notContext.FindOutputUVE(21U, "Result")));
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_DispatchesNumberComparisonNodes) {
+    const auto makeProgram = [](const char* nodeTypeId) {
+        ScriptBytecodeProgramUVE program;
+        program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 40U, 0U, nodeTypeId, {}, {}});
+        return program;
+    };
+    const auto runComparison = [&](const char* nodeTypeId, const float lhs, const float rhs) {
+        ScriptVmExecutionContextUVE context;
+        EXPECT_TRUE(context.SetInputUVE(40U, "A", lhs));
+        EXPECT_TRUE(context.SetInputUVE(40U, "B", rhs));
+        const ScriptVmExecutionResultUVE result =
+            ExecuteScriptBytecodeUVE(makeProgram(nodeTypeId), context);
+        EXPECT_TRUE(result.IsSuccessUVE());
+        const auto output = context.FindOutputUVE(40U, "Result");
+        EXPECT_TRUE(output.has_value());
+        EXPECT_TRUE(output.has_value() && std::holds_alternative<bool>(*output));
+        return output.has_value() && std::holds_alternative<bool>(*output) && std::get<bool>(*output);
+    };
+    EXPECT_TRUE(runComparison("logic.boolean.equal", 2.0F, 2.0F));
+    EXPECT_FALSE(runComparison("logic.boolean.equal", 2.0F, 3.0F));
+    EXPECT_TRUE(runComparison("logic.boolean.not_equal", 2.0F, 3.0F));
+    EXPECT_TRUE(runComparison("logic.boolean.greater", 3.0F, 2.0F));
+    EXPECT_TRUE(runComparison("logic.boolean.less", 2.0F, 3.0F));
+    EXPECT_TRUE(runComparison("logic.boolean.greater_equal", 3.0F, 3.0F));
+    EXPECT_TRUE(runComparison("logic.boolean.less_equal", 2.0F, 2.0F));
+
+    ScriptVmExecutionContextUVE nonFiniteContext;
+    ASSERT_TRUE(nonFiniteContext.SetInputUVE(40U, "A", std::numeric_limits<float>::quiet_NaN()));
+    ASSERT_TRUE(nonFiniteContext.SetInputUVE(40U, "B", 1.0F));
+    const ScriptVmExecutionResultUVE nonFiniteResult =
+        ExecuteScriptBytecodeUVE(makeProgram("logic.boolean.equal"), nonFiniteContext);
+    EXPECT_EQ(nonFiniteResult.status, ScriptVmStatusUVE::NodeExecutionFailed);
 }
 
 TEST(ScriptEntityQueryAdapterUVETest, PopulateComponentFactsUVE_StagesEcsPresenceInBindingOrder) {

@@ -17,7 +17,7 @@ struct BuiltInNodeDefinitionUVE final {
     std::uint32_t displayOrder;
 };
 
-[[nodiscard]] std::array<BuiltInNodeDefinitionUVE, 22U> MakeBuiltInDefinitionsUVE() {
+[[nodiscard]] std::array<BuiltInNodeDefinitionUVE, 28U> MakeBuiltInDefinitionsUVE() {
     return {
         BuiltInNodeDefinitionUVE{
             "flow.sequence", "Sequence",
@@ -127,6 +127,42 @@ struct BuiltInNodeDefinitionUVE final {
              ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
             "Logic", "node.logic.boolean", 503U},
         BuiltInNodeDefinitionUVE{
+            "logic.boolean.equal", "Equal Number",
+            {ScriptPinDescriptorUVE{"A", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"B", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Logic", "node.logic.boolean", 504U},
+        BuiltInNodeDefinitionUVE{
+            "logic.boolean.not_equal", "Not Equal Number",
+            {ScriptPinDescriptorUVE{"A", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"B", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Logic", "node.logic.boolean", 505U},
+        BuiltInNodeDefinitionUVE{
+            "logic.boolean.greater", "Greater Number",
+            {ScriptPinDescriptorUVE{"A", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"B", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Logic", "node.logic.boolean", 506U},
+        BuiltInNodeDefinitionUVE{
+            "logic.boolean.less", "Less Number",
+            {ScriptPinDescriptorUVE{"A", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"B", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Logic", "node.logic.boolean", 507U},
+        BuiltInNodeDefinitionUVE{
+            "logic.boolean.greater_equal", "Greater Equal Number",
+            {ScriptPinDescriptorUVE{"A", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"B", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Logic", "node.logic.boolean", 508U},
+        BuiltInNodeDefinitionUVE{
+            "logic.boolean.less_equal", "Less Equal Number",
+            {ScriptPinDescriptorUVE{"A", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"B", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Logic", "node.logic.boolean", 509U},
+        BuiltInNodeDefinitionUVE{
             "query.entity.has_component", "Has Component",
             {ScriptPinDescriptorUVE{"Entity", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
              ScriptPinDescriptorUVE{"Component", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Component},
@@ -152,7 +188,7 @@ struct BuiltInNodeDefinitionUVE final {
 } // namespace
 
 bool RegisterBuiltInScriptNodesUVE(ScriptNodeRegistryUVE& registry) {
-    std::array<BuiltInNodeDefinitionUVE, 22U> definitions = MakeBuiltInDefinitionsUVE();
+    std::array<BuiltInNodeDefinitionUVE, 28U> definitions = MakeBuiltInDefinitionsUVE();
     for (const BuiltInNodeDefinitionUVE& definition : definitions) {
         if (registry.FindNodeTypeUVE(definition.typeId) != nullptr) {
             return false;

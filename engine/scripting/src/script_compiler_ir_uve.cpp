@@ -101,6 +101,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
     std::vector<ScriptLinkUVE> stagedComponentLinks;
     std::vector<ScriptLinkUVE> stagedBooleanLinks;
     std::vector<ScriptLinkUVE> stagedNumberLinks;
+    std::vector<ScriptLinkUVE> stagedComparisonNumberLinks;
     std::vector<ScriptLinkUVE> stagedVector3ScaleLinks;
     std::vector<ScriptLinkUVE> stagedVector3Links;
     for (const ScriptNodeUVE& node : nodes) {
@@ -140,8 +141,11 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
                 const ScriptNodeUVE* sourceNode = FindNodeUVE(nodes, link.output.nodeId);
                 const bool supportedProducer =
                     sourceNode != nullptr &&
-                    (sourceNode->typeId == "logic.boolean.not" || sourceNode->typeId == "logic.boolean.and" ||
+                     (sourceNode->typeId == "logic.boolean.not" || sourceNode->typeId == "logic.boolean.and" ||
                      sourceNode->typeId == "logic.boolean.or" || sourceNode->typeId == "logic.boolean.xor" ||
+                     sourceNode->typeId == "logic.boolean.equal" || sourceNode->typeId == "logic.boolean.not_equal" ||
+                     sourceNode->typeId == "logic.boolean.greater" || sourceNode->typeId == "logic.boolean.less" ||
+                     sourceNode->typeId == "logic.boolean.greater_equal" || sourceNode->typeId == "logic.boolean.less_equal" ||
                      sourceNode->typeId == "query.entity.has_component");
                 if (!supportedProducer) {
                     result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode, node.id,
@@ -227,8 +231,13 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
         }
         const ScriptNodeUVE* sourceNode = FindNodeUVE(nodes, link.output.nodeId);
         const ScriptNodeUVE* consumerNode = FindNodeUVE(nodes, link.input.nodeId);
+        const bool isNumberComparisonConsumer =
+            consumerNode != nullptr &&
+            (consumerNode->typeId == "logic.boolean.equal" || consumerNode->typeId == "logic.boolean.not_equal" ||
+             consumerNode->typeId == "logic.boolean.greater" || consumerNode->typeId == "logic.boolean.less" ||
+             consumerNode->typeId == "logic.boolean.greater_equal" || consumerNode->typeId == "logic.boolean.less_equal");
         if (sourceNode == nullptr || consumerNode == nullptr ||
-            consumerNode->typeId.rfind("logic.boolean.", 0U) != 0U) {
+            consumerNode->typeId.rfind("logic.boolean.", 0U) != 0U || isNumberComparisonConsumer) {
             continue;
         }
         if (branchConditionDependencyLink.has_value() &&
@@ -278,6 +287,43 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             continue;
         }
         stagedNumberLinks.push_back(link);
+    }
+    for (const ScriptLinkUVE& link : links) {
+        if (IsExecutionLinkUVE(link, nodes, registry)) {
+            continue;
+        }
+        const ScriptNodeUVE* sourceNode = FindNodeUVE(nodes, link.output.nodeId);
+        const ScriptNodeUVE* consumerNode = FindNodeUVE(nodes, link.input.nodeId);
+        if (sourceNode == nullptr || consumerNode == nullptr ||
+            (consumerNode->typeId != "logic.boolean.equal" && consumerNode->typeId != "logic.boolean.not_equal" &&
+             consumerNode->typeId != "logic.boolean.greater" && consumerNode->typeId != "logic.boolean.less" &&
+             consumerNode->typeId != "logic.boolean.greater_equal" && consumerNode->typeId != "logic.boolean.less_equal")) {
+            continue;
+        }
+        const bool approvedNumberProducer =
+            (sourceNode->typeId == "engine.get_time" && link.output.pinName == "Value") ||
+            (sourceNode->typeId == "math.vector3.dot" && link.output.pinName == "Result") ||
+            (sourceNode->typeId == "math.vector3.length" && link.output.pinName == "Length") ||
+            (sourceNode->typeId.rfind("math.float.", 0U) == 0U && link.output.pinName == "Result");
+        const bool validComparisonInput = link.input.pinName == "A" || link.input.pinName == "B";
+        const bool sameComparisonConsumer = std::any_of(
+            stagedComparisonNumberLinks.begin(), stagedComparisonNumberLinks.end(),
+            [&](const ScriptLinkUVE& stagedLink) { return stagedLink.input.nodeId == link.input.nodeId; });
+        const bool duplicateComparisonInput = std::any_of(
+            stagedComparisonNumberLinks.begin(), stagedComparisonNumberLinks.end(),
+            [&](const ScriptLinkUVE& stagedLink) {
+                return stagedLink.input.nodeId == link.input.nodeId &&
+                       stagedLink.input.pinName == link.input.pinName;
+            });
+        if (!approvedNumberProducer || !validComparisonInput || duplicateComparisonInput ||
+            stagedComparisonNumberLinks.size() >= 2U ||
+            (!stagedComparisonNumberLinks.empty() && !sameComparisonConsumer)) {
+            result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode, link.input.nodeId,
+                                          link.input.pinName,
+                                          "Boolean comparison staging supports up to two direct Number producers on one comparison A/B pair; composed dependencies and multiple comparison consumers remain deferred."});
+            continue;
+        }
+        stagedComparisonNumberLinks.push_back(link);
     }
     for (const ScriptLinkUVE& link : links) {
         if (IsExecutionLinkUVE(link, nodes, registry)) {
@@ -373,7 +419,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
                                                        return node.id == stagedLink.input.nodeId;
                                                    });
         if (sourceIterator != instructionNodes.end() && consumerIterator != instructionNodes.end() &&
-            sourceIterator != consumerIterator) {
+            sourceIterator != consumerIterator && sourceIterator > consumerIterator) {
             const ScriptNodeUVE sourceNode = *sourceIterator;
             instructionNodes.erase(sourceIterator);
             const auto updatedConsumerIterator = std::find_if(instructionNodes.begin(), instructionNodes.end(),
@@ -386,12 +432,13 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
     moveStagedProducerBeforeConsumer(stagedComponentLinks);
     moveStagedProducerBeforeConsumer(stagedBooleanLinks);
     moveStagedProducerBeforeConsumer(stagedNumberLinks);
+    moveStagedProducerBeforeConsumer(stagedComparisonNumberLinks);
     moveStagedProducerBeforeConsumer(stagedVector3ScaleLinks);
     moveStagedProducerBeforeConsumer(stagedVector3Links);
 
     const std::size_t stagedInstructionCount = instructionNodes.size() + stagedConditionLinks.size() +
                                                 stagedComponentLinks.size() + stagedBooleanLinks.size() + stagedNumberLinks.size() +
-                                                stagedVector3ScaleLinks.size() + stagedVector3Links.size();
+                                                stagedComparisonNumberLinks.size() + stagedVector3ScaleLinks.size() + stagedVector3Links.size();
     const auto findStagedInstructionIndex = [&](const std::uint32_t nodeId) -> std::optional<std::size_t> {
         const std::optional<std::size_t> baseIndex = FindNodeInstructionIndexUVE(instructionNodes, nodeId);
         if (!baseIndex.has_value()) {
@@ -411,6 +458,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
         countStagedBefore(stagedComponentLinks);
         countStagedBefore(stagedBooleanLinks);
         countStagedBefore(stagedNumberLinks);
+        countStagedBefore(stagedComparisonNumberLinks);
         countStagedBefore(stagedVector3ScaleLinks);
         countStagedBefore(stagedVector3Links);
         return *baseIndex + stagedBefore;
@@ -501,6 +549,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             emitStagedLinks(stagedComponentLinks);
             emitStagedLinks(stagedBooleanLinks);
             emitStagedLinks(stagedNumberLinks);
+            emitStagedLinks(stagedComparisonNumberLinks);
             emitStagedLinks(stagedVector3ScaleLinks);
             emitStagedLinks(stagedVector3Links);
     }
@@ -517,7 +566,8 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
         };
                 if (isStagedLink(stagedConditionLinks) || isStagedLink(stagedComponentLinks) ||
                     isStagedLink(stagedBooleanLinks) ||
-            isStagedLink(stagedNumberLinks) || isStagedLink(stagedVector3ScaleLinks) ||
+            isStagedLink(stagedNumberLinks) || isStagedLink(stagedComparisonNumberLinks) ||
+            isStagedLink(stagedVector3ScaleLinks) ||
             isStagedLink(stagedVector3Links)) {
             continue;
         }
