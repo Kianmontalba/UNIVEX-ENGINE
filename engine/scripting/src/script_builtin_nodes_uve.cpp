@@ -17,7 +17,7 @@ struct BuiltInNodeDefinitionUVE final {
     std::uint32_t displayOrder;
 };
 
-[[nodiscard]] std::array<BuiltInNodeDefinitionUVE, 34U> MakeBuiltInDefinitionsUVE() {
+[[nodiscard]] std::array<BuiltInNodeDefinitionUVE, 43U> MakeBuiltInDefinitionsUVE() {
     return {
         BuiltInNodeDefinitionUVE{
             "flow.sequence", "Sequence",
@@ -218,13 +218,64 @@ struct BuiltInNodeDefinitionUVE final {
             "engine.get_time", "Get Time",
             {ScriptPinDescriptorUVE{"Value", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Number}},
             "Engine", "node.engine", 701U},
+        BuiltInNodeDefinitionUVE{
+            "variable.make_number", "Make Number Variable",
+            {ScriptPinDescriptorUVE{"Slot", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number, ScriptPinRoleUVE::Data, "0"},
+             ScriptPinDescriptorUVE{"Value", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number, ScriptPinRoleUVE::Data, "0"},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Number}},
+            "Variable", "node.variable", 800U},
+        BuiltInNodeDefinitionUVE{
+            "variable.get_number", "Get Number Variable",
+            {ScriptPinDescriptorUVE{"Slot", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number, ScriptPinRoleUVE::Data, "0"},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Number}},
+            "Variable", "node.variable", 801U},
+        BuiltInNodeDefinitionUVE{
+            "variable.set_number", "Set Number Variable",
+            {ScriptPinDescriptorUVE{"Slot", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number, ScriptPinRoleUVE::Data, "0"},
+             ScriptPinDescriptorUVE{"Value", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Number}},
+            "Variable", "node.variable", 802U},
+        BuiltInNodeDefinitionUVE{
+            "variable.make_boolean", "Make Boolean Variable",
+            {ScriptPinDescriptorUVE{"Slot", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number, ScriptPinRoleUVE::Data, "0"},
+             ScriptPinDescriptorUVE{"Value", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Boolean},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Variable", "node.variable", 803U},
+        BuiltInNodeDefinitionUVE{
+            "variable.get_boolean", "Get Boolean Variable",
+            {ScriptPinDescriptorUVE{"Slot", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number, ScriptPinRoleUVE::Data, "0"},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Variable", "node.variable", 804U},
+        BuiltInNodeDefinitionUVE{
+            "variable.set_boolean", "Set Boolean Variable",
+            {ScriptPinDescriptorUVE{"Slot", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number, ScriptPinRoleUVE::Data, "0"},
+             ScriptPinDescriptorUVE{"Value", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Boolean},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Variable", "node.variable", 805U},
+        BuiltInNodeDefinitionUVE{
+            "variable.make_vector3", "Make Vector3 Variable",
+            {ScriptPinDescriptorUVE{"Slot", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number, ScriptPinRoleUVE::Data, "0"},
+             ScriptPinDescriptorUVE{"Value", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Vector3}},
+            "Variable", "node.variable", 806U},
+        BuiltInNodeDefinitionUVE{
+            "variable.get_vector3", "Get Vector3 Variable",
+            {ScriptPinDescriptorUVE{"Slot", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number, ScriptPinRoleUVE::Data, "0"},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Vector3}},
+            "Variable", "node.variable", 807U},
+        BuiltInNodeDefinitionUVE{
+            "variable.set_vector3", "Set Vector3 Variable",
+            {ScriptPinDescriptorUVE{"Slot", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number, ScriptPinRoleUVE::Data, "0"},
+             ScriptPinDescriptorUVE{"Value", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Vector3}},
+            "Variable", "node.variable", 808U},
     };
 }
 
 } // namespace
 
 bool RegisterBuiltInScriptNodesUVE(ScriptNodeRegistryUVE& registry) {
-    std::array<BuiltInNodeDefinitionUVE, 34U> definitions = MakeBuiltInDefinitionsUVE();
+    std::array<BuiltInNodeDefinitionUVE, 43U> definitions = MakeBuiltInDefinitionsUVE();
     for (const BuiltInNodeDefinitionUVE& definition : definitions) {
         if (registry.FindNodeTypeUVE(definition.typeId) != nullptr) {
             return false;

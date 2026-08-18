@@ -502,8 +502,8 @@ TEST(EditorBridgeUVETest, SnapshotUVE_CopiesHierarchyInspectorAndNativePanelSess
         EXPECT_EQ(snapshot.visualScripting.linkCount, 0U);
         EXPECT_EQ(snapshot.visualScripting.canvas.nodes.size(), 0U);
         EXPECT_EQ(snapshot.visualScripting.canvas.links.size(), 0U);
-        ASSERT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds.size(), 34U);
-        ASSERT_EQ(snapshot.visualScripting.canvas.paletteDescriptors.size(), 34U);
+        ASSERT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds.size(), 43U);
+        ASSERT_EQ(snapshot.visualScripting.canvas.paletteDescriptors.size(), 43U);
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[0], "flow.sequence");
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[1], "flow.branch");
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[2], "math.float.add");
@@ -522,7 +522,16 @@ TEST(EditorBridgeUVETest, SnapshotUVE_CopiesHierarchyInspectorAndNativePanelSess
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[30], "query.entity.has_component");
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[31], "query.entity.get_component");
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[32], "engine.log");
-        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds.back(), "engine.get_time");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[33], "engine.get_time");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[34], "variable.make_number");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[35], "variable.get_number");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[36], "variable.set_number");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[37], "variable.make_boolean");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[38], "variable.get_boolean");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[39], "variable.set_boolean");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[40], "variable.make_vector3");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[41], "variable.get_vector3");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[42], "variable.set_vector3");
         EXPECT_FALSE(snapshot.visualScripting.canvas.nodesTruncated);
         EXPECT_FALSE(snapshot.visualScripting.canvas.linksTruncated);
 

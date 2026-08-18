@@ -118,10 +118,10 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
 
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
     EXPECT_FALSE(RegisterBuiltInScriptNodesUVE(registry));
-    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 34U);
+    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 43U);
 
     const std::vector<ScriptNodeTypeDescriptorUVE> descriptors = registry.GetNodeTypeDescriptorsUVE();
-    ASSERT_EQ(descriptors.size(), 34U);
+    ASSERT_EQ(descriptors.size(), 43U);
     const std::vector<std::string> expectedIds{
         "flow.sequence", "flow.branch",
         "math.float.add", "math.float.subtract", "math.float.multiply", "math.float.divide",
@@ -131,7 +131,10 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
         "logic.boolean.not", "logic.boolean.and", "logic.boolean.or", "logic.boolean.xor",
         "logic.boolean.equal", "logic.boolean.not_equal", "logic.boolean.greater", "logic.boolean.less",
         "logic.boolean.greater_equal", "logic.boolean.less_equal",
-        "query.entity.has_component", "query.entity.get_component", "engine.log", "engine.get_time"};
+        "query.entity.has_component", "query.entity.get_component", "engine.log", "engine.get_time",
+        "variable.make_number", "variable.get_number", "variable.set_number",
+        "variable.make_boolean", "variable.get_boolean", "variable.set_boolean",
+        "variable.make_vector3", "variable.get_vector3", "variable.set_vector3"};
     ASSERT_EQ(expectedIds.size(), descriptors.size());
     for (std::size_t index = 0U; index < expectedIds.size(); ++index) {
         EXPECT_EQ(descriptors[index].typeId, expectedIds[index]);
@@ -156,9 +159,13 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
         EXPECT_EQ(descriptors[index].category, "Entity Query");
         EXPECT_EQ(descriptors[index].iconId, "node.entity.query");
     }
-    for (std::size_t index = 32U; index < descriptors.size(); ++index) {
+    for (std::size_t index = 32U; index < 34U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Engine");
         EXPECT_EQ(descriptors[index].iconId, "node.engine");
+    }
+    for (std::size_t index = 34U; index < descriptors.size(); ++index) {
+        EXPECT_EQ(descriptors[index].category, "Variable");
+        EXPECT_EQ(descriptors[index].iconId, "node.variable");
     }
 
     const ScriptNodeTypeDescriptorUVE* sequence = registry.FindNodeTypeUVE("flow.sequence");
@@ -225,6 +232,30 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
     EXPECT_EQ(engineGetTime->pins[0].name, "Value");
     EXPECT_EQ(engineGetTime->pins[0].direction, ScriptPinDirectionUVE::Output);
     EXPECT_EQ(engineGetTime->pins[0].type, ScriptValueTypeUVE::Number);
+
+    const ScriptNodeTypeDescriptorUVE* makeNumber = registry.FindNodeTypeUVE("variable.make_number");
+    ASSERT_NE(makeNumber, nullptr);
+    ASSERT_EQ(makeNumber->pins.size(), 3U);
+    EXPECT_EQ(makeNumber->pins[0].name, "Slot");
+    EXPECT_EQ(makeNumber->pins[0].type, ScriptValueTypeUVE::Number);
+    EXPECT_EQ(makeNumber->pins[1].name, "Value");
+    EXPECT_EQ(makeNumber->pins[2].name, "Result");
+    EXPECT_EQ(makeNumber->pins[2].direction, ScriptPinDirectionUVE::Output);
+
+    const ScriptNodeTypeDescriptorUVE* getBoolean = registry.FindNodeTypeUVE("variable.get_boolean");
+    ASSERT_NE(getBoolean, nullptr);
+    ASSERT_EQ(getBoolean->pins.size(), 2U);
+    EXPECT_EQ(getBoolean->pins[0].type, ScriptValueTypeUVE::Number);
+    EXPECT_EQ(getBoolean->pins[1].type, ScriptValueTypeUVE::Boolean);
+    EXPECT_EQ(getBoolean->pins[1].direction, ScriptPinDirectionUVE::Output);
+
+    const ScriptNodeTypeDescriptorUVE* setVector3 = registry.FindNodeTypeUVE("variable.set_vector3");
+    ASSERT_NE(setVector3, nullptr);
+    ASSERT_EQ(setVector3->pins.size(), 3U);
+    EXPECT_EQ(setVector3->pins[0].type, ScriptValueTypeUVE::Number);
+    EXPECT_EQ(setVector3->pins[1].type, ScriptValueTypeUVE::Vector3);
+    EXPECT_EQ(setVector3->pins[2].type, ScriptValueTypeUVE::Vector3);
+    EXPECT_EQ(setVector3->pins[2].direction, ScriptPinDirectionUVE::Output);
 
     const ScriptNodeTypeDescriptorUVE* make = registry.FindNodeTypeUVE("math.vector3.make");
     ASSERT_NE(make, nullptr);
@@ -3513,6 +3544,121 @@ TEST(ScriptHotReloadManagerUVETest, ReloadUVE_ReportsNoActiveProgramWhenInitialC
     EXPECT_EQ(result.code, ScriptHotReloadCodeUVE::NoActiveProgram);
     EXPECT_FALSE(result.lastKnownGoodRetained);
     EXPECT_FALSE(manager.GetSnapshotUVE().hasActiveProgram);
+}
+
+} // namespace UVE::Scripting
+
+
+namespace UVE::Scripting {
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_PersistsTypedLocalVariablesAcrossMakeGetAndSet) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U,
+                                    "variable.make_number", {}, {}});
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 2U, 0U,
+                                    "variable.set_number", {}, {}});
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 3U, 0U,
+                                    "variable.get_number", {}, {}});
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 4U, 0U,
+                                    "variable.make_boolean", {}, {}});
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 5U, 0U,
+                                    "variable.get_boolean", {}, {}});
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 6U, 0U,
+                                    "variable.make_vector3", {}, {}});
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 7U, 0U,
+                                    "variable.set_vector3", {}, {}});
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 8U, 0U,
+                                    "variable.get_vector3", {}, {}});
+
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(1U, "Slot", 0.0F));
+    ASSERT_TRUE(context.SetInputUVE(1U, "Value", 1.5F));
+    ASSERT_TRUE(context.SetInputUVE(2U, "Slot", 0.0F));
+    ASSERT_TRUE(context.SetInputUVE(2U, "Value", 4.0F));
+    ASSERT_TRUE(context.SetInputUVE(3U, "Slot", 0.0F));
+    ASSERT_TRUE(context.SetInputUVE(4U, "Slot", 1.0F));
+    ASSERT_TRUE(context.SetInputUVE(4U, "Value", true));
+    ASSERT_TRUE(context.SetInputUVE(5U, "Slot", 1.0F));
+    ASSERT_TRUE(context.SetInputUVE(6U, "Slot", 2.0F));
+    ASSERT_TRUE(context.SetInputUVE(6U, "Value", ScriptVector3ValueUVE{{1.0F, 2.0F, 3.0F}}));
+    ASSERT_TRUE(context.SetInputUVE(7U, "Slot", 2.0F));
+    ASSERT_TRUE(context.SetInputUVE(7U, "Value", ScriptVector3ValueUVE{{4.0F, 5.0F, 6.0F}}));
+    ASSERT_TRUE(context.SetInputUVE(8U, "Slot", 2.0F));
+
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(program, context);
+    ASSERT_TRUE(result.IsSuccessUVE());
+    ASSERT_EQ(context.localVariables.size(), 3U);
+    ASSERT_TRUE(context.FindOutputUVE(3U, "Result").has_value());
+    EXPECT_FLOAT_EQ(std::get<float>(*context.FindOutputUVE(3U, "Result")), 4.0F);
+    ASSERT_TRUE(context.FindOutputUVE(5U, "Result").has_value());
+    EXPECT_TRUE(std::get<bool>(*context.FindOutputUVE(5U, "Result")));
+    ASSERT_TRUE(context.FindOutputUVE(8U, "Result").has_value());
+    EXPECT_EQ(std::get<ScriptVector3ValueUVE>(*context.FindOutputUVE(8U, "Result")),
+              (ScriptVector3ValueUVE{{4.0F, 5.0F, 6.0F}}));
+
+    EXPECT_TRUE(context.SetLocalVariableUVE(0U, 9.0F));
+    EXPECT_FLOAT_EQ(std::get<float>(*context.FindLocalVariableUVE(0U)), 9.0F);
+}
+
+TEST(ScriptVmUVETest, LocalVariableContextUVE_RejectsTypeCollisionsAndExhaustedSlots) {
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.InitializeLocalVariableUVE(0U, 1.0F));
+    EXPECT_TRUE(context.InitializeLocalVariableUVE(0U, 2.0F));
+    EXPECT_FALSE(context.InitializeLocalVariableUVE(0U, true));
+    EXPECT_FALSE(context.SetLocalVariableUVE(0U, true));
+    EXPECT_TRUE(context.SetLocalVariableUVE(0U, 3.0F));
+    EXPECT_FALSE(context.SetLocalVariableUVE(0U, std::numeric_limits<float>::quiet_NaN()));
+    EXPECT_FALSE(context.InitializeLocalVariableUVE(250U, ScriptVector3ValueUVE{{
+        std::numeric_limits<float>::infinity(), 0.0F, 0.0F}}));
+    for (std::uint32_t slot = 1U; slot < ScriptVmExecutionContextUVE::kMaximumLocalVariablesUVE; ++slot) {
+        ASSERT_TRUE(context.InitializeLocalVariableUVE(slot, false));
+    }
+    EXPECT_EQ(context.localVariables.size(), ScriptVmExecutionContextUVE::kMaximumLocalVariablesUVE);
+    EXPECT_FALSE(context.InitializeLocalVariableUVE(
+        static_cast<std::uint32_t>(ScriptVmExecutionContextUVE::kMaximumLocalVariablesUVE), 0.0F));
+}
+
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesBooleanVariableGetIntoBranchCondition) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({10U, "variable.get_boolean"}));
+    ASSERT_TRUE(graph.AddNodeUVE({20U, "flow.branch"}));
+    ASSERT_TRUE(graph.AddLinkUVE({{10U, "Result"}, {20U, "Condition"}}));
+
+    const ScriptIrCompileResultUVE compiled = CompileScriptGraphToIrUVE(graph, registry);
+    ASSERT_TRUE(compiled.IsSuccessUVE());
+    ASSERT_TRUE(compiled.program.has_value());
+    ASSERT_GE(compiled.program->instructions.size(), 3U);
+    EXPECT_EQ(compiled.program->instructions[0].nodeTypeId, "variable.get_boolean");
+    EXPECT_EQ(compiled.program->instructions[1].kind, ScriptIrInstructionKindUVE::TransferValue);
+    EXPECT_TRUE(compiled.program->instructions[1].isStagedTransfer);
+    EXPECT_EQ(compiled.program->instructions[1].targetPinName, "Condition");
+    EXPECT_EQ(compiled.program->instructions[2].kind, ScriptIrInstructionKindUVE::ConditionalJump);
+}
+
+TEST(ScriptRuntimeUVETest, TickDetailedUVE_PreservesLocalVariablesAndReportsSnapshotCount) {
+    ScriptRuntimeUVE runtime;
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U,
+                                    "variable.make_number", {}, {}});
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 2U, 0U,
+                                    "variable.get_number", {}, {}});
+    ASSERT_TRUE(runtime.AttachUVE({44U, 1U}, program));
+    ScriptRuntimeStateUVE state;
+    ASSERT_TRUE(state.executionContext.SetInputUVE(1U, "Slot", 3.0F));
+    ASSERT_TRUE(state.executionContext.SetInputUVE(1U, "Value", 6.0F));
+    ASSERT_TRUE(state.executionContext.SetInputUVE(2U, "Slot", 3.0F));
+    ASSERT_TRUE(runtime.SetStateUVE({44U, 1U}, state));
+
+    ASSERT_TRUE(runtime.TickDetailedUVE().IsSuccessUVE());
+    const auto snapshot = runtime.GetSnapshotUVE();
+    ASSERT_EQ(snapshot.size(), 1U);
+    EXPECT_EQ(snapshot[0].stateLocalVariableCount, 1U);
+    const auto storedState = runtime.GetStateUVE({44U, 1U});
+    ASSERT_TRUE(storedState.has_value());
+    ASSERT_EQ(storedState->executionContext.localVariables.size(), 1U);
+    EXPECT_FLOAT_EQ(std::get<float>(*storedState->executionContext.FindLocalVariableUVE(3U)), 6.0F);
 }
 
 } // namespace UVE::Scripting

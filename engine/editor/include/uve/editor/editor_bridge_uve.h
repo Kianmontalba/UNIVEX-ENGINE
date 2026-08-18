@@ -368,6 +368,7 @@ struct EditorBridgeScriptRuntimeInstanceEntryUVE final {
     std::uint32_t programVersion = 0U;
     std::size_t instructionCount = 0U;
     std::size_t stateValueCount = 0U;
+    std::size_t stateLocalVariableCount = 0U;
     bool enabled = false;
 
     [[nodiscard]] bool operator==(const EditorBridgeScriptRuntimeInstanceEntryUVE&) const = default;
