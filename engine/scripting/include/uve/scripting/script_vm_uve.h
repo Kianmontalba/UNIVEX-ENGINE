@@ -108,8 +108,16 @@ struct ScriptVmTraceEventUVE final {
     [[nodiscard]] bool operator==(const ScriptVmTraceEventUVE&) const = default;
 };
 
+using ScriptEngineLogFunctionUVE = bool (*)(void* userData, float value) noexcept;
+
+struct ScriptEngineCallBindingsUVE final {
+    ScriptEngineLogFunctionUVE log = nullptr;
+    void* userData = nullptr;
+};
+
 struct ScriptVmExecutionOptionsUVE final {
     std::size_t instructionBudget = 4096U;
+    const ScriptEngineCallBindingsUVE* engineCallBindings = nullptr;
 };
 
 struct ScriptVmExecutionResultUVE final {

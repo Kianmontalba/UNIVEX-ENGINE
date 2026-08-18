@@ -56,6 +56,22 @@ ScriptNodeTypeDescriptorUVE MakeBooleanSourceNodeUVE() {
     };
 }
 
+struct EngineLogCaptureUVE final {
+    std::size_t callCount = 0U;
+    float lastValue = 0.0F;
+    bool accept = true;
+};
+
+bool CaptureEngineLogUVE(void* userData, const float value) noexcept {
+    auto* capture = static_cast<EngineLogCaptureUVE*>(userData);
+    if (capture == nullptr) {
+        return false;
+    }
+    ++capture->callCount;
+    capture->lastValue = value;
+    return capture->accept;
+}
+
 void RegisterTestNodesUVE(ScriptNodeRegistryUVE& registry) {
     ASSERT_TRUE(registry.RegisterNodeTypeUVE(MakeSourceNodeUVE()));
     ASSERT_TRUE(registry.RegisterNodeTypeUVE(MakeSinkNodeUVE()));
@@ -82,17 +98,17 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
 
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
     EXPECT_FALSE(RegisterBuiltInScriptNodesUVE(registry));
-    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 20U);
+    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 21U);
 
     const std::vector<ScriptNodeTypeDescriptorUVE> descriptors = registry.GetNodeTypeDescriptorsUVE();
-    ASSERT_EQ(descriptors.size(), 20U);
+    ASSERT_EQ(descriptors.size(), 21U);
     const std::vector<std::string> expectedIds{
         "flow.sequence", "flow.branch",
         "math.float.add", "math.float.subtract", "math.float.multiply", "math.float.divide",
         "math.vector3.make", "math.vector3.add", "math.vector3.subtract", "math.vector3.multiply",
         "math.vector3.dot", "math.vector3.cross", "math.vector3.length", "math.vector3.normalize",
         "logic.boolean.not", "logic.boolean.and", "logic.boolean.or", "logic.boolean.xor",
-        "query.entity.has_component", "query.entity.get_component"};
+        "query.entity.has_component", "query.entity.get_component", "engine.log"};
     ASSERT_EQ(expectedIds.size(), descriptors.size());
     for (std::size_t index = 0U; index < expectedIds.size(); ++index) {
         EXPECT_EQ(descriptors[index].typeId, expectedIds[index]);
@@ -113,10 +129,12 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
         EXPECT_EQ(descriptors[index].category, "Logic");
         EXPECT_EQ(descriptors[index].iconId, "node.logic.boolean");
     }
-    for (std::size_t index = 18U; index < descriptors.size(); ++index) {
+    for (std::size_t index = 18U; index < 20U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Entity Query");
         EXPECT_EQ(descriptors[index].iconId, "node.entity.query");
     }
+    EXPECT_EQ(descriptors[20U].category, "Engine");
+    EXPECT_EQ(descriptors[20U].iconId, "node.engine");
 
     const ScriptNodeTypeDescriptorUVE* sequence = registry.FindNodeTypeUVE("flow.sequence");
     ASSERT_NE(sequence, nullptr);
@@ -148,6 +166,14 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
     EXPECT_EQ(getComponent->pins[0].type, ScriptValueTypeUVE::Entity);
     EXPECT_EQ(getComponent->pins[1].type, ScriptValueTypeUVE::Component);
     EXPECT_EQ(getComponent->pins[2].type, ScriptValueTypeUVE::Component);
+
+    const ScriptNodeTypeDescriptorUVE* engineLog = registry.FindNodeTypeUVE("engine.log");
+    ASSERT_NE(engineLog, nullptr);
+    ASSERT_EQ(engineLog->pins.size(), 1U);
+    EXPECT_EQ(engineLog->category, "Engine");
+    EXPECT_EQ(engineLog->iconId, "node.engine");
+    EXPECT_EQ(engineLog->pins[0].name, "Value");
+    EXPECT_EQ(engineLog->pins[0].type, ScriptValueTypeUVE::Number);
 
     const ScriptNodeTypeDescriptorUVE* make = registry.FindNodeTypeUVE("math.vector3.make");
     ASSERT_NE(make, nullptr);
@@ -187,6 +213,20 @@ TEST(ScriptGraphUVETest, ValidateUVE_EnforcesExecutionLinkCardinality) {
     EXPECT_EQ(diagnostics[0].nodeId, 1U);
     EXPECT_EQ(diagnostics[1].code, ScriptValidationCodeUVE::ExecutionLinkCardinality);
     EXPECT_EQ(diagnostics[1].nodeId, 3U);
+}
+
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_PreservesEngineLogBindingNode) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({70U, "engine.log"}));
+
+    const ScriptIrCompileResultUVE result = CompileScriptGraphToIrUVE(graph, registry);
+    ASSERT_TRUE(result.IsSuccessUVE());
+    ASSERT_EQ(result.program->instructions.size(), 1U);
+    EXPECT_EQ(result.program->instructions.front().kind, ScriptIrInstructionKindUVE::ExecuteNode);
+    EXPECT_EQ(result.program->instructions.front().sourceNodeId, 70U);
+    EXPECT_EQ(result.program->instructions.front().nodeTypeId, "engine.log");
 }
 
 TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_LowersFlowSequenceDirectDispatch) {
@@ -363,6 +403,44 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_RunsCompiledStagedBooleanConditio
     EXPECT_EQ(result.instructionsExecuted, 6U);
     EXPECT_FALSE(std::get<bool>(*context.FindOutputUVE(3U, "Result")));
     EXPECT_TRUE(std::get<bool>(*context.FindOutputUVE(2U, "Result")));
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_EngineLogUsesCallerOwnedBinding) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 70U, 0U, "engine.log", {}, {}});
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(70U, "Value", 42.5F));
+    EngineLogCaptureUVE capture;
+    const ScriptEngineCallBindingsUVE bindings{CaptureEngineLogUVE, &capture};
+    ScriptVmExecutionOptionsUVE options;
+    options.engineCallBindings = &bindings;
+
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(program, context, options);
+    EXPECT_TRUE(result.IsSuccessUVE());
+    EXPECT_EQ(capture.callCount, 1U);
+    EXPECT_FLOAT_EQ(capture.lastValue, 42.5F);
+    ASSERT_EQ(result.trace.size(), 2U);
+    EXPECT_EQ(result.trace.front().nodeTypeId, "engine.log");
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_EngineLogRejectsUnboundOrRejectedCall) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 71U, 0U, "engine.log", {}, {}});
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(71U, "Value", 1.0F));
+
+    const ScriptVmExecutionResultUVE unbound = ExecuteScriptBytecodeUVE(program, context);
+    EXPECT_EQ(unbound.status, ScriptVmStatusUVE::NodeExecutionFailed);
+    ASSERT_EQ(unbound.diagnostics.size(), 1U);
+
+    EngineLogCaptureUVE capture;
+    capture.accept = false;
+    const ScriptEngineCallBindingsUVE bindings{CaptureEngineLogUVE, &capture};
+    ScriptVmExecutionOptionsUVE options;
+    options.engineCallBindings = &bindings;
+    const ScriptVmExecutionResultUVE rejected = ExecuteScriptBytecodeUVE(program, context, options);
+    EXPECT_EQ(rejected.status, ScriptVmStatusUVE::NodeExecutionFailed);
+    EXPECT_EQ(capture.callCount, 1U);
 }
 
 TEST(ScriptNodeRegistryUVETest, FindNodeTypeUVE_ReturnsCopiedStableDescriptorView) {
@@ -1326,6 +1404,29 @@ TEST(ScriptRuntimeUVETest, AttachDetailedUVEReturnsStructuredDiagnosticsForValid
     EXPECT_EQ(capacity.code, ScriptRuntimeAttachCodeUVE::CapacityExceeded);
     EXPECT_FALSE(capacity.IsAcceptedUVE());
     EXPECT_FALSE(capacity.message.empty());
+}
+
+TEST(ScriptRuntimeUVETest, TickDetailedUVE_UsesBorrowedEngineLogBinding) {
+    ScriptRuntimeUVE runtime;
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 70U, 0U, "engine.log", {}, {}});
+    const Scene::EntityUVE entity{70U, 1U};
+    ASSERT_TRUE(runtime.AttachUVE(entity, program));
+    std::optional<ScriptRuntimeStateUVE> state = runtime.GetStateUVE(entity);
+    ASSERT_TRUE(state.has_value());
+    ASSERT_TRUE(state->executionContext.SetInputUVE(70U, "Value", 9.25F));
+    ASSERT_TRUE(runtime.SetStateUVE(entity, *state));
+
+    EngineLogCaptureUVE capture;
+    const ScriptEngineCallBindingsUVE bindings{CaptureEngineLogUVE, &capture};
+    ScriptVmExecutionOptionsUVE options;
+    options.engineCallBindings = &bindings;
+    const ScriptRuntimeTickBatchResultUVE tick = runtime.TickDetailedUVE(options);
+    ASSERT_TRUE(tick.IsSuccessUVE());
+    ASSERT_EQ(tick.results.size(), 1U);
+    EXPECT_EQ(tick.results.front().execution.status, ScriptVmStatusUVE::Completed);
+    EXPECT_EQ(capture.callCount, 1U);
+    EXPECT_FLOAT_EQ(capture.lastValue, 9.25F);
 }
 
 TEST(ScriptRuntimeUVETest, TickUVE_IsDeterministicAndSkipsDisabledInstances) {
