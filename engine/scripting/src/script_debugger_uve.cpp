@@ -215,7 +215,9 @@ bool ScriptDebuggerUVE::ExecuteOneUVE() {
     ++m_executedInstructions;
     AppendTraceEventUVE({kind == ScriptIrInstructionKindUVE::ExecuteNode
                              ? ScriptVmTraceEventKindUVE::NodeExecuted
-                             : ScriptVmTraceEventKindUVE::ValueTransferred,
+                             : (instruction.isStagedTransfer
+                                    ? ScriptVmTraceEventKindUVE::StagedValueTransferred
+                                    : ScriptVmTraceEventKindUVE::ValueTransferred),
                          Scene::kInvalidEntityUVE, instructionIndex, instruction.sourceNodeId,
                          instruction.targetNodeId, instruction.nodeTypeId, {}});
     return true;

@@ -639,6 +639,7 @@ TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesQueryComponentToke
     EXPECT_EQ(result.program->instructions[1].targetNodeId, 20U);
     EXPECT_EQ(result.program->instructions[1].sourcePinName, "Result");
     EXPECT_EQ(result.program->instructions[1].targetPinName, "Component");
+    EXPECT_TRUE(result.program->instructions[1].isStagedTransfer);
     EXPECT_EQ(result.program->instructions[2].nodeTypeId, "query.entity.has_component");
 }
 
@@ -691,6 +692,50 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_RunsStagedQueryComponentToken) {
     ASSERT_TRUE(std::holds_alternative<ScriptComponentValueUVE>(*copied));
     EXPECT_TRUE(std::get<ScriptComponentValueUVE>(*copied).present);
     EXPECT_TRUE(std::get<bool>(*context.FindOutputUVE(20U, "Result")));
+}
+
+TEST(ScriptBytecodeUVETest, EncodeDecodeScriptBytecodeUVE_RoundTripsStagedTransferMarker) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::TransferValue, 4U, 9U, {}, "Out", "In",
+                                    0U, 0U, 0U, 0U, true});
+    std::vector<ScriptBytecodeDiagnosticUVE> diagnostics;
+    const std::vector<std::uint8_t> bytes = EncodeScriptBytecodeUVE(program, diagnostics);
+    ASSERT_TRUE(diagnostics.empty());
+    const ScriptBytecodeDecodeResultUVE decoded = DecodeScriptBytecodeUVE(bytes);
+    ASSERT_TRUE(decoded.IsSuccessUVE());
+    ASSERT_EQ(decoded.program->version, ScriptBytecodeProgramUVE::kStagedTransferVersionUVE);
+    ASSERT_EQ(decoded.program->instructions.size(), 1U);
+    EXPECT_TRUE(decoded.program->instructions.front().isStagedTransfer);
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_EmitsStagedValueTransferTrace) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::TransferValue, 4U, 9U, {}, "Out", "In",
+                                    0U, 0U, 0U, 0U, true});
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetOutputUVE(4U, "Out", 7.0F));
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(program, context);
+    ASSERT_TRUE(result.IsSuccessUVE());
+    ASSERT_FALSE(result.trace.empty());
+    EXPECT_EQ(result.trace.front().kind, ScriptVmTraceEventKindUVE::StagedValueTransferred);
+    EXPECT_EQ(result.trace.front().sourceNodeId, 4U);
+    EXPECT_EQ(result.trace.front().targetNodeId, 9U);
+    const auto copied = context.FindInputUVE(9U, "In");
+    ASSERT_TRUE(copied.has_value());
+    EXPECT_FLOAT_EQ(std::get<float>(*copied), 7.0F);
+}
+
+TEST(ScriptDebuggerUVETest, StepUVE_ReportsStagedValueTransferTrace) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::TransferValue, 4U, 9U, {}, "Out", "In",
+                                    0U, 0U, 0U, 0U, true});
+    ScriptDebuggerUVE debugger;
+    ASSERT_TRUE(debugger.AttachUVE(program));
+    const ScriptDebuggerSnapshotUVE stepped = debugger.StepUVE();
+    ASSERT_FALSE(stepped.trace.empty());
+    EXPECT_EQ(stepped.trace.front().kind, ScriptVmTraceEventKindUVE::StagedValueTransferred);
+    EXPECT_EQ(stepped.trace.front().sourceNodeId, 4U);
+    EXPECT_EQ(stepped.trace.front().targetNodeId, 9U);
 }
 
 TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsSecondBooleanStagedConsumer) {
@@ -1549,6 +1594,7 @@ TEST(ScriptBytecodeUVETest, LegacyV1DataOnlyBytecode_DecodesAndExecutes) {
     bytes[5U] = 0U;
     bytes[6U] = 0U;
     bytes[7U] = 0U;
+    bytes.pop_back(); // v1 has no per-instruction staged-transfer metadata.
 
     const ScriptBytecodeDecodeResultUVE decoded = DecodeScriptBytecodeUVE(bytes);
     ASSERT_TRUE(decoded.IsSuccessUVE());

@@ -488,6 +488,11 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
                         {},
                         stagedLink.output.pinName,
                         stagedLink.input.pinName,
+                        0U,
+                        0U,
+                        0U,
+                        0U,
+                        true,
                     });
                     program.sourceNodeIds.push_back(stagedLink.output.nodeId);
                 }

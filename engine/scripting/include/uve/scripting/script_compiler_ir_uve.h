@@ -29,10 +29,12 @@ struct ScriptIrInstructionUVE final {
     std::uint32_t falseTargetInstructionIndex = 0U;
     std::uint32_t firstTargetInstructionIndex = 0U;
     std::uint32_t secondTargetInstructionIndex = 0U;
+    // True only for compiler-ordered staging transfers; ordinary graph transfers remain false.
+    bool isStagedTransfer = false;
 };
 
 struct ScriptIrProgramUVE final {
-    static constexpr std::uint32_t kCurrentVersionUVE = 3U;
+    static constexpr std::uint32_t kCurrentVersionUVE = 4U;
 
     std::uint32_t version = kCurrentVersionUVE;
     std::vector<ScriptIrInstructionUVE> instructions;
