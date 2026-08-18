@@ -313,9 +313,13 @@ ScriptRuntimeTickBatchResultUVE ScriptRuntimeUVE::TickWithEntityQueryDetailedUVE
         if (!refresh.IsAppliedUVE()) {
             execution.status = ScriptVmStatusUVE::NodeExecutionFailed;
             execution.diagnostics.push_back({0U, refresh.message});
+            execution.AppendTraceEventUVE({ScriptVmTraceEventKindUVE::Failed, entity, 0U, 0U, 0U, {},
+                                           refresh.message});
         } else {
             execution = ExecuteScriptBytecodeUVE(iterator->second.program,
                                                  iterator->second.state.executionContext, options);
+            execution.PrependTraceEventsUVE({{ScriptVmTraceEventKindUVE::QueryFactsRefreshed,
+                                               entity, 0U, 0U, 0U, {}, refresh.message}});
         }
         switch (execution.status) {
         case ScriptVmStatusUVE::Completed:

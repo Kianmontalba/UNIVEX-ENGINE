@@ -88,18 +88,48 @@ struct ScriptVmDiagnosticUVE final {
     std::string message;
 };
 
+enum class ScriptVmTraceEventKindUVE : std::uint8_t {
+    NodeExecuted = 0,
+    ValueTransferred,
+    QueryFactsRefreshed,
+    Completed,
+    Failed,
+};
+
+struct ScriptVmTraceEventUVE final {
+    ScriptVmTraceEventKindUVE kind = ScriptVmTraceEventKindUVE::Failed;
+    Scene::EntityUVE entity = Scene::kInvalidEntityUVE;
+    std::size_t instructionIndex = 0U;
+    std::uint32_t sourceNodeId = 0U;
+    std::uint32_t targetNodeId = 0U;
+    std::string nodeTypeId;
+    std::string message;
+
+    [[nodiscard]] bool operator==(const ScriptVmTraceEventUVE&) const = default;
+};
+
 struct ScriptVmExecutionOptionsUVE final {
     std::size_t instructionBudget = 4096U;
 };
 
 struct ScriptVmExecutionResultUVE final {
+    static constexpr std::size_t kMaximumTraceEventsUVE = 512U;
+    static constexpr std::size_t kMaximumTraceMessageBytesUVE = 256U;
+
     ScriptVmStatusUVE status = ScriptVmStatusUVE::Completed;
     std::size_t instructionsExecuted = 0U;
     std::vector<ScriptVmDiagnosticUVE> diagnostics;
+    std::vector<ScriptVmTraceEventUVE> trace;
+    bool traceTruncated = false;
 
     [[nodiscard]] bool IsSuccessUVE() const noexcept {
         return status == ScriptVmStatusUVE::Completed && diagnostics.empty();
     }
+
+    void AppendTraceEventUVE(ScriptVmTraceEventUVE event);
+    void PrependTraceEventsUVE(std::vector<ScriptVmTraceEventUVE> prefix, bool prefixTruncated = false);
+
+    [[nodiscard]] bool operator==(const ScriptVmExecutionResultUVE&) const = default;
 };
 
 [[nodiscard]] ScriptVmExecutionResultUVE ExecuteScriptBytecodeUVE(

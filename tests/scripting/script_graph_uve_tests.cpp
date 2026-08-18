@@ -526,6 +526,67 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_CompletesValidProgramWithinBudget
     EXPECT_EQ(result.instructionsExecuted, 2U);
 }
 
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_CapturesNodeAndCompletionTraceInOrder) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back(
+        {ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U, "math.float.add", {}, {}});
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(1U, "A", 2.0F));
+    ASSERT_TRUE(context.SetInputUVE(1U, "B", 3.0F));
+
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(program, context);
+    ASSERT_TRUE(result.IsSuccessUVE());
+    ASSERT_EQ(result.trace.size(), 2U);
+    EXPECT_EQ(result.trace[0].kind, ScriptVmTraceEventKindUVE::NodeExecuted);
+    EXPECT_EQ(result.trace[0].instructionIndex, 0U);
+    EXPECT_EQ(result.trace[0].sourceNodeId, 1U);
+    EXPECT_EQ(result.trace[0].nodeTypeId, "math.float.add");
+    EXPECT_EQ(result.trace[1].kind, ScriptVmTraceEventKindUVE::Completed);
+    EXPECT_FALSE(result.traceTruncated);
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_CapturesTypedValueTransferTrace) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back(
+        {ScriptIrInstructionKindUVE::TransferValue, 4U, 9U, {}, "Result", "A"});
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetOutputUVE(4U, "Result", ScriptVector3ValueUVE{{1.0F, 2.0F, 3.0F}}));
+
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(program, context);
+    ASSERT_TRUE(result.IsSuccessUVE());
+    ASSERT_EQ(result.trace.size(), 2U);
+    EXPECT_EQ(result.trace[0].kind, ScriptVmTraceEventKindUVE::ValueTransferred);
+    EXPECT_EQ(result.trace[0].sourceNodeId, 4U);
+    EXPECT_EQ(result.trace[0].targetNodeId, 9U);
+    EXPECT_EQ(result.trace[1].kind, ScriptVmTraceEventKindUVE::Completed);
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_CapturesFailureTraceWithDiagnosticMessage) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back(
+        {ScriptIrInstructionKindUVE::ExecuteNode, 12U, 0U, "math.vector3.normalize", {}, {}});
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(12U, "Vector", ScriptVector3ValueUVE{{0.0F, 0.0F, 0.0F}}));
+
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(program, context);
+    ASSERT_FALSE(result.IsSuccessUVE());
+    ASSERT_EQ(result.trace.size(), 1U);
+    EXPECT_EQ(result.trace.front().kind, ScriptVmTraceEventKindUVE::Failed);
+    EXPECT_EQ(result.trace.front().instructionIndex, 0U);
+    ASSERT_EQ(result.diagnostics.size(), 1U);
+    EXPECT_EQ(result.trace.front().message, result.diagnostics.front().message);
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_BoundsTraceEventCount) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.resize(ScriptVmExecutionResultUVE::kMaximumTraceEventsUVE + 3U);
+
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(program);
+    EXPECT_TRUE(result.IsSuccessUVE());
+    EXPECT_EQ(result.trace.size(), ScriptVmExecutionResultUVE::kMaximumTraceEventsUVE);
+    EXPECT_TRUE(result.traceTruncated);
+}
+
 TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_DispatchesAllBuiltInVector3Nodes) {
     const auto makeProgram = [](const std::uint32_t nodeId, const char* nodeTypeId) {
         ScriptBytecodeProgramUVE program;
@@ -925,7 +986,15 @@ TEST(ScriptRuntimeUVETest, TickWithEntityQueryDetailedUVE_RefreshesFactsAndAccou
     EXPECT_EQ(detailed.summary.diagnosticCount, 1U);
     EXPECT_FALSE(detailed.IsSuccessUVE());
     ASSERT_TRUE(detailed.results[0].execution.IsSuccessUVE());
+    ASSERT_GE(detailed.results[0].execution.trace.size(), 3U);
+    EXPECT_EQ(detailed.results[0].execution.trace[0].kind,
+              ScriptVmTraceEventKindUVE::QueryFactsRefreshed);
+    EXPECT_EQ(detailed.results[0].execution.trace[0].entity, aliveEntity);
     EXPECT_EQ(detailed.results[1].execution.status, ScriptVmStatusUVE::NodeExecutionFailed);
+    ASSERT_EQ(detailed.results[1].execution.trace.size(), 1U);
+    EXPECT_EQ(detailed.results[1].execution.trace.front().kind, ScriptVmTraceEventKindUVE::Failed);
+    EXPECT_EQ(detailed.results[1].execution.trace.front().entity, notAliveEntity);
+    EXPECT_FALSE(detailed.results[1].execution.trace.front().message.empty());
 
     const auto refreshedState = runtime.GetStateUVE(aliveEntity);
     ASSERT_TRUE(refreshedState.has_value());

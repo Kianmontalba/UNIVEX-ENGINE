@@ -28,11 +28,14 @@ namespace {
     return iterator == bindings.end() ? nullptr : &*iterator;
 }
 
+
 [[nodiscard]] ScriptVmExecutionResultUVE MakeNodeFailureUVE(const std::size_t instructionIndex,
                                                              std::string message) {
     ScriptVmExecutionResultUVE result;
     result.status = ScriptVmStatusUVE::NodeExecutionFailed;
-    result.diagnostics.push_back({instructionIndex, std::move(message)});
+    result.diagnostics.push_back({instructionIndex, message});
+    result.AppendTraceEventUVE({ScriptVmTraceEventKindUVE::Failed, Scene::kInvalidEntityUVE,
+                                instructionIndex, 0U, 0U, {}, std::move(message)});
     return result;
 }
 
@@ -318,6 +321,8 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
     if (program.version != ScriptBytecodeProgramUVE::kCurrentVersionUVE) {
         result.status = ScriptVmStatusUVE::InvalidInstruction;
         result.diagnostics.push_back({0U, "Unsupported bytecode version."});
+        result.AppendTraceEventUVE({ScriptVmTraceEventKindUVE::Failed, Scene::kInvalidEntityUVE,
+                                     0U, 0U, 0U, {}, "Unsupported bytecode version."});
         return result;
     }
     if (options.instructionBudget > ScriptBytecodeProgramUVE::kMaximumInstructionsUVE) {
@@ -328,16 +333,28 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
             if (result.instructionsExecuted >= options.instructionBudget) {
                 result.status = ScriptVmStatusUVE::InstructionBudgetExceeded;
                 result.diagnostics.push_back({index, "Instruction budget exceeded."});
+                result.AppendTraceEventUVE({ScriptVmTraceEventKindUVE::Failed, Scene::kInvalidEntityUVE,
+                                             index, 0U, 0U, {}, "Instruction budget exceeded."});
                 return result;
             }
             const ScriptIrInstructionKindUVE kind = program.instructions[index].kind;
             if (kind != ScriptIrInstructionKindUVE::ExecuteNode && kind != ScriptIrInstructionKindUVE::TransferValue) {
                 result.status = ScriptVmStatusUVE::InvalidInstruction;
                 result.diagnostics.push_back({index, "Invalid instruction kind."});
+                result.AppendTraceEventUVE({ScriptVmTraceEventKindUVE::Failed, Scene::kInvalidEntityUVE,
+                                             index, 0U, 0U, {}, "Invalid instruction kind."});
                 return result;
             }
             ++result.instructionsExecuted;
+            const ScriptIrInstructionUVE& instruction = program.instructions[index];
+            result.AppendTraceEventUVE({kind == ScriptIrInstructionKindUVE::ExecuteNode
+                                             ? ScriptVmTraceEventKindUVE::NodeExecuted
+                                             : ScriptVmTraceEventKindUVE::ValueTransferred,
+                                         Scene::kInvalidEntityUVE, index, instruction.sourceNodeId,
+                                         instruction.targetNodeId, instruction.nodeTypeId, {}});
         }
+        result.AppendTraceEventUVE({ScriptVmTraceEventKindUVE::Completed, Scene::kInvalidEntityUVE,
+                                     program.instructions.size(), 0U, 0U, {}, {}});
         return result;
     }
 
@@ -354,6 +371,9 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                 instruction.kind != ScriptIrInstructionKindUVE::TransferValue) {
                 result.status = ScriptVmStatusUVE::InvalidInstruction;
                 result.diagnostics.push_back({index, "Invalid instruction kind."});
+                result.AppendTraceEventUVE({ScriptVmTraceEventKindUVE::Failed, Scene::kInvalidEntityUVE,
+                                             index, instruction.sourceNodeId, instruction.targetNodeId,
+                                             instruction.nodeTypeId, "Invalid instruction kind."});
                 return result;
             }
             if (instruction.kind == ScriptIrInstructionKindUVE::TransferValue) {
@@ -365,14 +385,21 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                 if (result.instructionsExecuted >= options.instructionBudget) {
                     result.status = ScriptVmStatusUVE::InstructionBudgetExceeded;
                     result.diagnostics.push_back({index, "Instruction budget exceeded."});
+                    result.AppendTraceEventUVE({ScriptVmTraceEventKindUVE::Failed, Scene::kInvalidEntityUVE,
+                                                 index, instruction.sourceNodeId, instruction.targetNodeId,
+                                                 {}, "Instruction budget exceeded."});
                     return result;
                 }
                 if (!context->SetInputUVE(instruction.targetNodeId, instruction.targetPinName, output->value)) {
                     ScriptVmExecutionResultUVE failure = MakeNodeFailureUVE(
                         index, "TransferValue could not publish a typed input or input capacity was exhausted.");
                     failure.instructionsExecuted = result.instructionsExecuted;
+                    failure.PrependTraceEventsUVE(std::move(result.trace), result.traceTruncated);
                     return failure;
                 }
+                result.AppendTraceEventUVE({ScriptVmTraceEventKindUVE::ValueTransferred,
+                                             Scene::kInvalidEntityUVE, index, instruction.sourceNodeId,
+                                             instruction.targetNodeId, {}, {}});
             } else {
                 const bool isVector3Node = instruction.nodeTypeId.rfind("math.vector3.", 0U) == 0U;
                 const bool isFloatNode = instruction.nodeTypeId.rfind("math.float.", 0U) == 0U;
@@ -387,6 +414,9 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                 if (result.instructionsExecuted >= options.instructionBudget) {
                     result.status = ScriptVmStatusUVE::InstructionBudgetExceeded;
                     result.diagnostics.push_back({index, "Instruction budget exceeded."});
+                    result.AppendTraceEventUVE({ScriptVmTraceEventKindUVE::Failed, Scene::kInvalidEntityUVE,
+                                                 index, instruction.sourceNodeId, instruction.targetNodeId,
+                                                 instruction.nodeTypeId, "Instruction budget exceeded."});
                     return result;
                 }
                 ScriptVmExecutionResultUVE nodeResult;
@@ -401,8 +431,12 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                 }
                 if (!nodeResult.IsSuccessUVE()) {
                     nodeResult.instructionsExecuted = result.instructionsExecuted;
+                    nodeResult.PrependTraceEventsUVE(std::move(result.trace), result.traceTruncated);
                     return nodeResult;
                 }
+                result.AppendTraceEventUVE({ScriptVmTraceEventKindUVE::NodeExecuted,
+                                             Scene::kInvalidEntityUVE, index, instruction.sourceNodeId,
+                                             instruction.targetNodeId, instruction.nodeTypeId, {}});
             }
             ++result.instructionsExecuted;
             completed[index] = true;
@@ -412,15 +446,49 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
         if (!madeProgress) {
             for (std::size_t index = 0U; index < program.instructions.size(); ++index) {
                 if (!completed[index]) {
-                    return MakeNodeFailureUVE(index, "VM could not resolve typed node dependencies.");
+                    ScriptVmExecutionResultUVE failure =
+                        MakeNodeFailureUVE(index, "VM could not resolve typed node dependencies.");
+                    failure.instructionsExecuted = result.instructionsExecuted;
+                    failure.PrependTraceEventsUVE(std::move(result.trace), result.traceTruncated);
+                    return failure;
                 }
             }
         }
     }
+    result.AppendTraceEventUVE({ScriptVmTraceEventKindUVE::Completed, Scene::kInvalidEntityUVE,
+                                 result.instructionsExecuted, 0U, 0U, {}, {}});
     return result;
 }
 
 } // namespace
+
+void ScriptVmExecutionResultUVE::AppendTraceEventUVE(ScriptVmTraceEventUVE event) {
+    if (trace.size() >= kMaximumTraceEventsUVE) {
+        traceTruncated = true;
+        return;
+    }
+    if (event.nodeTypeId.size() > kMaximumTraceMessageBytesUVE) {
+        event.nodeTypeId.resize(kMaximumTraceMessageBytesUVE);
+    }
+    if (event.message.size() > kMaximumTraceMessageBytesUVE) {
+        event.message.resize(kMaximumTraceMessageBytesUVE);
+    }
+    trace.push_back(std::move(event));
+}
+
+void ScriptVmExecutionResultUVE::PrependTraceEventsUVE(std::vector<ScriptVmTraceEventUVE> prefix,
+                                                       const bool prefixTruncated) {
+    std::vector<ScriptVmTraceEventUVE> existing = std::move(trace);
+    const bool existingTruncated = traceTruncated;
+    trace.clear();
+    traceTruncated = prefixTruncated || existingTruncated;
+    for (ScriptVmTraceEventUVE& event : prefix) {
+        AppendTraceEventUVE(std::move(event));
+    }
+    for (ScriptVmTraceEventUVE& event : existing) {
+        AppendTraceEventUVE(std::move(event));
+    }
+}
 
 bool ScriptVmExecutionContextUVE::SetInputUVE(const std::uint32_t nodeId, std::string pinName,
                                               ScriptVmValueUVE value) {
