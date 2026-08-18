@@ -835,6 +835,47 @@ public sealed class BridgeProtocolClientTests
     }
 
     [Fact]
+    public async Task DispatchAsync_WritesMotionQueryPasteTargetPayload()
+    {
+        await using MemoryStream input = BuildFrames(new
+        {
+            jsonrpc = "2.0",
+            id = 1,
+            result = new
+            {
+                protocolVersion = BridgeProtocolClient.ProtocolVersion,
+                requestId = 1UL,
+                applied = true,
+                code = "bridge.motion_query.command.applied",
+                message = "pasted",
+                snapshot = Snapshot(sceneDirty: false),
+                createdEntity = (object?)null,
+            },
+        });
+        await using MemoryStream output = new();
+        await using BridgeProtocolClient client = new(input, output);
+        BridgeCommand command = new(12UL, "dispatchMotionQueryCommand")
+        {
+            MotionQueryCommandKind = "pasteDatabase",
+            MotionQueryPasteTarget = new BridgeMotionQueryPasteTarget(
+                new BridgeMotionQueryResourceHandle(901UL, 2UL),
+                "Copied Locomotion",
+                "locomotion.copy",
+                7UL),
+        };
+        await client.DispatchAsync(command, CancellationToken.None);
+        output.Position = 0;
+        using JsonDocument request = JsonDocument.Parse(await ReadFrameAsync(output));
+        JsonElement payload = request.RootElement.GetProperty("params").GetProperty("motionQueryCommand");
+        JsonElement pasteTarget = payload.GetProperty("pasteTarget");
+        Assert.Equal("pasteDatabase", payload.GetProperty("kind").GetString());
+        Assert.Equal(901UL, pasteTarget.GetProperty("resource").GetProperty("guid").GetUInt64());
+        Assert.Equal("Copied Locomotion", pasteTarget.GetProperty("displayName").GetString());
+        Assert.Equal("locomotion.copy", pasteTarget.GetProperty("context").GetProperty("databaseId").GetString());
+        Assert.Equal(7UL, pasteTarget.GetProperty("context").GetProperty("generation").GetUInt64());
+    }
+
+    [Fact]
     public async Task DispatchAsync_WritesMotionQueryLiveDebugCommandPayload()
     {
         await using MemoryStream input = BuildFrames(new

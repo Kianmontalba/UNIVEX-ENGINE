@@ -117,6 +117,12 @@ public enum BridgeViewportSurfaceState : byte
 /// </summary>
 public sealed record BridgeMotionQueryResourceHandle(ulong Guid, ulong Generation);
 
+public sealed record BridgeMotionQueryPasteTarget(
+    BridgeMotionQueryResourceHandle Resource,
+    string DisplayName,
+    string DatabaseId,
+    ulong Generation);
+
 public sealed record BridgeMotionQueryDatabaseRow(
     BridgeMotionQueryResourceHandle Resource,
     string DisplayName,
@@ -664,6 +670,7 @@ public sealed record BridgeCommand(
     public string? MotionQueryReplayFixturePayload { get; init; }
     public string? MotionQueryReplayBaselineEnvelopePayload { get; init; }
     public string? MotionQueryReplayBaselineNewName { get; init; }
+    public BridgeMotionQueryPasteTarget? MotionQueryPasteTarget { get; init; }
 }
 
 public sealed record BridgeCommandResult(

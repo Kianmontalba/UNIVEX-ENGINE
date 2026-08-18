@@ -1102,6 +1102,34 @@ ParseMotionQueryCommandUVE(const JsonUVE& json, const std::uint64_t requestId) {
         if (!json.at("candidateIndex").is_number_unsigned()) return std::nullopt;
         command.candidateIndex = json.at("candidateIndex").get<std::size_t>();
     }
+    if (json.contains("pasteTarget") && !json.at("pasteTarget").is_null()) {
+        const JsonUVE& pasteTarget = json.at("pasteTarget");
+        if (!pasteTarget.is_object() || !pasteTarget.contains("resource") ||
+            !pasteTarget.contains("displayName") || !pasteTarget.contains("context") ||
+            !pasteTarget.at("displayName").is_string() ||
+            pasteTarget.at("displayName").get_ref<const std::string&>().empty() ||
+            pasteTarget.at("displayName").get_ref<const std::string&>().size() >
+                Plugins::Editor::kMotionQueryEditorMaximumDisplayNameBytesUVE ||
+            !pasteTarget.at("context").is_object() ||
+            !pasteTarget.at("context").contains("databaseId") ||
+            !pasteTarget.at("context").contains("generation") ||
+            !pasteTarget.at("context").at("databaseId").is_string() ||
+            pasteTarget.at("context").at("databaseId").get_ref<const std::string&>().empty() ||
+            pasteTarget.at("context").at("databaseId").get_ref<const std::string&>().size() >
+                Plugins::Editor::kMotionQueryEditorMaximumDisplayNameBytesUVE ||
+            !pasteTarget.at("context").at("generation").is_number_unsigned() ||
+            pasteTarget.at("context").at("generation").get<std::uint64_t>() == 0U) {
+            return std::nullopt;
+        }
+        const auto resource = ParseResourceHandleUVE(pasteTarget.at("resource"));
+        if (!resource.has_value()) return std::nullopt;
+        command.pasteTarget = Plugins::Editor::MotionQueryEditorPasteTargetUVE{
+            *resource,
+            pasteTarget.at("displayName").get<std::string>(),
+            UVE::Core::MotionQueryDatabaseContextUVE{
+                pasteTarget.at("context").at("databaseId").get<std::string>(),
+                pasteTarget.at("context").at("generation").get<std::uint64_t>()}};
+    }
     return command;
 }
 

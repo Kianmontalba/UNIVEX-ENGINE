@@ -132,6 +132,20 @@ public sealed class BridgeProtocolClient : IAsyncDisposable
                 },
                 text = command.MotionQueryText,
                 candidateIndex = command.MotionQueryCandidateIndex,
+                pasteTarget = command.MotionQueryPasteTarget is null ? null : new
+                {
+                    resource = new
+                    {
+                        guid = command.MotionQueryPasteTarget.Resource.Guid,
+                        generation = command.MotionQueryPasteTarget.Resource.Generation,
+                    },
+                    displayName = command.MotionQueryPasteTarget.DisplayName,
+                    context = new
+                    {
+                        databaseId = command.MotionQueryPasteTarget.DatabaseId,
+                        generation = command.MotionQueryPasteTarget.Generation,
+                    },
+                },
             },
             motionQueryDebugCommand = command.MotionQueryDebugCommandKind is null ? null : new
             {
