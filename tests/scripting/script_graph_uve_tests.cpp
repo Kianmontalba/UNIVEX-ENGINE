@@ -500,6 +500,72 @@ TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesBooleanProducerBef
     EXPECT_EQ(result.program->instructions[2].nodeTypeId, "logic.boolean.and");
 }
 
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesEntityQueryBooleanProducerBeforeConsumer) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({30U, "query.entity.has_component"}));
+    ASSERT_TRUE(graph.AddNodeUVE({20U, "logic.boolean.and"}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{30U, "Result"}, {20U, "A"}}));
+
+    const ScriptIrCompileResultUVE result = CompileScriptGraphToIrUVE(graph, registry);
+    ASSERT_TRUE(result.IsSuccessUVE());
+    ASSERT_EQ(result.program->instructions.size(), 3U);
+    EXPECT_EQ(result.program->instructions[0].nodeTypeId, "query.entity.has_component");
+    EXPECT_EQ(result.program->instructions[1].kind, ScriptIrInstructionKindUVE::TransferValue);
+    EXPECT_EQ(result.program->instructions[1].sourceNodeId, 30U);
+    EXPECT_EQ(result.program->instructions[1].targetNodeId, 20U);
+    EXPECT_EQ(result.program->instructions[2].nodeTypeId, "logic.boolean.and");
+}
+
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsSecondEntityQueryBooleanConsumer) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({10U, "query.entity.has_component"}));
+    ASSERT_TRUE(graph.AddNodeUVE({20U, "logic.boolean.and"}));
+    ASSERT_TRUE(graph.AddNodeUVE({30U, "logic.boolean.or"}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{10U, "Result"}, {20U, "A"}}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{10U, "Result"}, {30U, "B"}}));
+
+    const ScriptIrCompileResultUVE result = CompileScriptGraphToIrUVE(graph, registry);
+    EXPECT_FALSE(result.IsSuccessUVE());
+    ASSERT_EQ(result.diagnostics.size(), 1U);
+    EXPECT_EQ(result.diagnostics.front().code, ScriptValidationCodeUVE::UnsupportedRuntimeNode);
+    EXPECT_EQ(result.diagnostics.front().nodeId, 30U);
+    EXPECT_EQ(result.diagnostics.front().pinName, "B");
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_RunsStagedEntityQueryBooleanChain) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({30U, "query.entity.has_component"}));
+    ASSERT_TRUE(graph.AddNodeUVE({20U, "logic.boolean.and"}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{30U, "Result"}, {20U, "A"}}));
+    const ScriptIrCompileResultUVE compiled = CompileScriptGraphToIrUVE(graph, registry);
+    ASSERT_TRUE(compiled.IsSuccessUVE());
+    std::vector<ScriptBytecodeDiagnosticUVE> diagnostics;
+    const std::optional<ScriptBytecodeProgramUVE> bytecode =
+        LowerIrToBytecodeUVE(*compiled.program, diagnostics);
+    ASSERT_TRUE(bytecode.has_value());
+    ASSERT_TRUE(diagnostics.empty());
+
+    const Scene::EntityUVE entity{42U, 3U};
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(30U, "Entity", ScriptEntityValueUVE{entity}));
+    ASSERT_TRUE(context.SetInputUVE(
+        30U, "Component", ScriptComponentValueUVE{Scene::kInvalidEntityUVE, "MeshComponentUVE", false}));
+    ASSERT_TRUE(context.SetComponentFactUVE(entity, "MeshComponentUVE", true));
+    ASSERT_TRUE(context.SetInputUVE(20U, "B", true));
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(*bytecode, context);
+
+    EXPECT_TRUE(result.IsSuccessUVE());
+    EXPECT_EQ(result.instructionsExecuted, 3U);
+    EXPECT_TRUE(std::get<bool>(*context.FindOutputUVE(30U, "Result")));
+    EXPECT_TRUE(std::get<bool>(*context.FindOutputUVE(20U, "Result")));
+}
+
 TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsSecondBooleanStagedConsumer) {
     ScriptNodeRegistryUVE registry;
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));

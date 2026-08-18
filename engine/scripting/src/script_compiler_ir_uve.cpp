@@ -213,7 +213,9 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             continue;
         }
         const bool approvedBooleanProducer =
-            sourceNode->typeId.rfind("logic.boolean.", 0U) == 0U && link.output.pinName == "Result";
+            (sourceNode->typeId.rfind("logic.boolean.", 0U) == 0U ||
+             sourceNode->typeId == "query.entity.has_component") &&
+            link.output.pinName == "Result";
         const bool validBooleanInput =
             (consumerNode->typeId == "logic.boolean.not" && link.input.pinName == "Value") ||
             (consumerNode->typeId != "logic.boolean.not" &&
@@ -221,7 +223,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
         if (!approvedBooleanProducer || !validBooleanInput || !stagedBooleanLinks.empty()) {
             result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode, link.input.nodeId,
                                           link.input.pinName,
-                                          "Boolean data-link staging supports one direct built-in logic.boolean.*.Result producer; additional consumers and composed/deeper Boolean dependencies remain deferred."});
+                                          "Boolean data-link staging supports one direct logic.boolean.*.Result or query.entity.has_component.Result producer; additional consumers and composed/deeper Boolean dependencies remain deferred."});
             continue;
         }
         stagedBooleanLinks.push_back(link);
