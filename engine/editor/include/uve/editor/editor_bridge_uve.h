@@ -417,10 +417,24 @@ struct EditorBridgeDataTablePreviewSnapshotUVE final {
     [[nodiscard]] bool operator==(const EditorBridgeDataTablePreviewSnapshotUVE&) const = default;
 };
 
+struct EditorBridgeMotionQueryCommandMetadataUVE final {
+    std::uint8_t kind = 0U;
+    std::uint8_t payloadKind = 0U;
+    std::string name;
+    std::string label;
+    bool mutatesAuthoring = false;
+    bool requiresResource = false;
+    bool requiresPayload = false;
+    bool supportsUndo = false;
+
+    [[nodiscard]] bool operator==(const EditorBridgeMotionQueryCommandMetadataUVE&) const = default;
+};
+
 struct EditorBridgeMotionQueryAuthoringSnapshotUVE final {
     std::uint64_t revision = 0U;
     std::optional<Asset::ResourceHandleUVE> selectedResource;
     std::vector<Plugins::Editor::MotionQueryEditorDatabaseRowUVE> databases;
+    std::vector<EditorBridgeMotionQueryCommandMetadataUVE> commandMetadata;
     std::string diagnostic;
 
     [[nodiscard]] bool operator==(const EditorBridgeMotionQueryAuthoringSnapshotUVE&) const = default;

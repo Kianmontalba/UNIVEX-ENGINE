@@ -642,6 +642,17 @@ TEST(EditorBridgeUVETest, MotionQueryUVE_ExposesCopiedSnapshotAndRevisionGuarded
         ASSERT_TRUE(dispatchAdvertised);
         ASSERT_TRUE(replayLoadAdvertised);
         ASSERT_TRUE(replayClearAdvertised);
+        ASSERT_EQ(initial.motionQuery.authoring.commandMetadata.size(), 14U);
+        EXPECT_EQ(initial.motionQuery.authoring.commandMetadata.front().name, "read snapshot");
+        const auto& registerMetadata = initial.motionQuery.authoring.commandMetadata[1];
+        EXPECT_EQ(registerMetadata.label, "Register Database");
+        EXPECT_EQ(registerMetadata.kind,
+                  static_cast<std::uint8_t>(Plugins::Editor::MotionQueryEditorCommandKindUVE::RegisterDatabase));
+        EXPECT_EQ(registerMetadata.payloadKind,
+                  static_cast<std::uint8_t>(Plugins::Editor::MotionQueryEditorCommandPayloadKindUVE::Database));
+        EXPECT_TRUE(registerMetadata.mutatesAuthoring);
+        EXPECT_TRUE(registerMetadata.requiresPayload);
+        EXPECT_TRUE(registerMetadata.supportsUndo);
 
         EditorBridgeRequestUVE readRequest{};
         readRequest.protocolVersion = kEditorBridgeProtocolVersionUVE;

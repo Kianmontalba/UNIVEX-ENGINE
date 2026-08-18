@@ -1210,6 +1210,19 @@ EditorBridgeMotionQuerySnapshotUVE EditorBridgeUVE::CaptureMotionQueryUVE() cons
     snapshot.authoring.revision = authoring.revision;
     snapshot.authoring.selectedResource = authoring.selectedResource;
     snapshot.authoring.diagnostic = authoring.diagnostic;
+    snapshot.authoring.commandMetadata.reserve(authoring.commandMetadata.size());
+    for (const auto& metadata : authoring.commandMetadata) {
+        snapshot.authoring.commandMetadata.push_back(
+            EditorBridgeMotionQueryCommandMetadataUVE{
+                static_cast<std::uint8_t>(metadata.kind),
+                static_cast<std::uint8_t>(metadata.payloadKind),
+                metadata.name,
+                metadata.label,
+                metadata.mutatesAuthoring,
+                metadata.requiresResource,
+                metadata.requiresPayload,
+                metadata.supportsUndo});
+    }
     for (const auto& row : authoring.databases) {
         if (snapshot.authoring.databases.size() >= kEditorBridgeMaximumPanelEntriesUVE) {
             break;

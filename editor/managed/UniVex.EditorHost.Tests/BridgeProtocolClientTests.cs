@@ -431,6 +431,31 @@ public sealed class BridgeProtocolClientTests
                 ["revision"] = 4UL,
                 ["selectedResource"] = new JsonObject { ["guid"] = 77UL, ["generation"] = 1UL },
                 ["diagnostic"] = "native",
+                ["commandMetadata"] = new JsonArray
+                {
+                    new JsonObject
+                    {
+                        ["kind"] = 0,
+                        ["payloadKind"] = 0,
+                        ["name"] = "read snapshot",
+                        ["label"] = "Read Snapshot",
+                        ["mutatesAuthoring"] = false,
+                        ["requiresResource"] = false,
+                        ["requiresPayload"] = false,
+                        ["supportsUndo"] = false,
+                    },
+                    new JsonObject
+                    {
+                        ["kind"] = 1,
+                        ["payloadKind"] = 1,
+                        ["name"] = "register database",
+                        ["label"] = "Register Database",
+                        ["mutatesAuthoring"] = true,
+                        ["requiresResource"] = false,
+                        ["requiresPayload"] = true,
+                        ["supportsUndo"] = true,
+                    },
+                },
                 ["databases"] = new JsonArray
                 {
                     new JsonObject
@@ -572,6 +597,11 @@ public sealed class BridgeProtocolClientTests
         Assert.Equal(4UL, parsed.MotionQuery.Authoring.Revision);
         Assert.Equal(77UL, parsed.MotionQuery.Authoring.SelectedResource!.Guid);
         Assert.Equal("Bridge DB", parsed.MotionQuery.Authoring.Databases[0].DisplayName);
+        Assert.Equal(2, parsed.MotionQuery.Authoring.CommandMetadata.Count);
+        Assert.Equal("read snapshot", parsed.MotionQuery.Authoring.CommandMetadata[0].Name);
+        Assert.Equal("Register Database", parsed.MotionQuery.Authoring.CommandMetadata[1].Label);
+        Assert.True(parsed.MotionQuery.Authoring.CommandMetadata[1].MutatesAuthoring);
+        Assert.True(parsed.MotionQuery.Authoring.CommandMetadata[1].SupportsUndo);
         Assert.True(parsed.MotionQuery.Debugger.IsAttached);
         Assert.Equal("candidate", parsed.MotionQuery.Debugger.SelectedCandidateId);
         Assert.Equal((byte)2, parsed.MotionQuery.Debugger.QualityTier);

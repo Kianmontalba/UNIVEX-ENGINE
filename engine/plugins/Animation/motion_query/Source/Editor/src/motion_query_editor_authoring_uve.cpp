@@ -7,38 +7,11 @@
 namespace UVE::Plugins::Editor {
 namespace {
 [[nodiscard]] const char* CommandNameUVE(const MotionQueryEditorCommandKindUVE kind) noexcept {
-    switch (kind) {
-        case MotionQueryEditorCommandKindUVE::ReadSnapshot:
-            return "read snapshot";
-        case MotionQueryEditorCommandKindUVE::RegisterDatabase:
-            return "register database";
-        case MotionQueryEditorCommandKindUVE::RemoveDatabase:
-            return "remove database";
-        case MotionQueryEditorCommandKindUVE::SelectDatabase:
-            return "select database";
-        case MotionQueryEditorCommandKindUVE::SetDisplayName:
-            return "set display name";
-        case MotionQueryEditorCommandKindUVE::SetSchemaId:
-            return "set schema ID";
-        case MotionQueryEditorCommandKindUVE::SetMaximumCandidates:
-            return "set maximum candidates";
-        case MotionQueryEditorCommandKindUVE::AddCandidate:
-            return "add candidate";
-        case MotionQueryEditorCommandKindUVE::RemoveCandidate:
-            return "remove candidate";
-        case MotionQueryEditorCommandKindUVE::ValidateDatabase:
-            return "validate database";
-        case MotionQueryEditorCommandKindUVE::CopyDatabase:
-            return "copy database";
-        case MotionQueryEditorCommandKindUVE::PasteDatabase:
-            return "paste database";
-        case MotionQueryEditorCommandKindUVE::Undo:
-            return "undo";
-        case MotionQueryEditorCommandKindUVE::Redo:
-            return "redo";
-        }
-
-    return "unknown command";
+    const auto& metadata = GetMotionQueryEditorCommandMetadataUVE();
+    const auto iterator = std::find_if(metadata.cbegin(), metadata.cend(), [kind](const auto& entry) {
+        return entry.kind == kind;
+    });
+    return iterator == metadata.cend() ? "unknown command" : iterator->name.c_str();
 }
 
 [[nodiscard]] bool IsHandleBeforeUVE(const UVE::Asset::ResourceHandleUVE lhs,
@@ -49,6 +22,43 @@ namespace {
     return lhs.generation < rhs.generation;
 }
 } // namespace
+
+const std::vector<MotionQueryEditorCommandMetadataUVE>&
+GetMotionQueryEditorCommandMetadataUVE() noexcept {
+    static const std::vector<MotionQueryEditorCommandMetadataUVE> metadata = {
+        {MotionQueryEditorCommandKindUVE::ReadSnapshot, MotionQueryEditorCommandPayloadKindUVE::None,
+         "read snapshot", "Read Snapshot", false, false, false, false},
+        {MotionQueryEditorCommandKindUVE::RegisterDatabase, MotionQueryEditorCommandPayloadKindUVE::Database,
+         "register database", "Register Database", true, false, true, true},
+        {MotionQueryEditorCommandKindUVE::RemoveDatabase, MotionQueryEditorCommandPayloadKindUVE::Resource,
+         "remove database", "Remove Database", true, true, true, true},
+        {MotionQueryEditorCommandKindUVE::SelectDatabase, MotionQueryEditorCommandPayloadKindUVE::Resource,
+         "select database", "Select Database", true, true, false, true},
+        {MotionQueryEditorCommandKindUVE::SetDisplayName, MotionQueryEditorCommandPayloadKindUVE::Text,
+         "set display name", "Set Display Name", true, true, true, true},
+        {MotionQueryEditorCommandKindUVE::SetSchemaId, MotionQueryEditorCommandPayloadKindUVE::Text,
+         "set schema ID", "Set Schema ID", true, true, true, true},
+        {MotionQueryEditorCommandKindUVE::SetMaximumCandidates,
+         MotionQueryEditorCommandPayloadKindUVE::CandidateIndex, "set maximum candidates",
+         "Set Maximum Candidates", true, true, true, true},
+        {MotionQueryEditorCommandKindUVE::AddCandidate, MotionQueryEditorCommandPayloadKindUVE::Candidate,
+         "add candidate", "Add Candidate", true, true, true, true},
+        {MotionQueryEditorCommandKindUVE::RemoveCandidate,
+         MotionQueryEditorCommandPayloadKindUVE::CandidateIndex, "remove candidate",
+         "Remove Candidate", true, true, true, true},
+        {MotionQueryEditorCommandKindUVE::ValidateDatabase, MotionQueryEditorCommandPayloadKindUVE::None,
+         "validate database", "Validate Database", false, true, false, false},
+        {MotionQueryEditorCommandKindUVE::CopyDatabase, MotionQueryEditorCommandPayloadKindUVE::Resource,
+         "copy database", "Copy Database", true, true, false, true},
+        {MotionQueryEditorCommandKindUVE::PasteDatabase, MotionQueryEditorCommandPayloadKindUVE::PasteTarget,
+         "paste database", "Paste Database", true, false, true, true},
+        {MotionQueryEditorCommandKindUVE::Undo, MotionQueryEditorCommandPayloadKindUVE::None,
+         "undo", "Undo", true, false, false, false},
+        {MotionQueryEditorCommandKindUVE::Redo, MotionQueryEditorCommandPayloadKindUVE::None,
+         "redo", "Redo", true, false, false, false},
+    };
+    return metadata;
+}
 
 MotionQueryEditorResponseUVE MotionQueryEditorAuthoringSessionUVE::DispatchUVE(
     const MotionQueryEditorCommandUVE& command) noexcept {
@@ -366,6 +376,7 @@ MotionQueryEditorSnapshotUVE MotionQueryEditorAuthoringSessionUVE::GetSnapshotUV
     MotionQueryEditorSnapshotUVE snapshot;
     snapshot.revision = revision_;
     snapshot.selectedResource = selectedResource_;
+    snapshot.commandMetadata = GetMotionQueryEditorCommandMetadataUVE();
     snapshot.clipboardAvailable = clipboard_.has_value();
     snapshot.canUndo = !undoHistory_.empty();
     snapshot.canRedo = !redoHistory_.empty();

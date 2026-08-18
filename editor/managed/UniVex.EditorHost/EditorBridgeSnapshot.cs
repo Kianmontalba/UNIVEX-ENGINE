@@ -130,10 +130,21 @@ public sealed record BridgeMotionQueryDatabaseRow(
     bool IsSelected,
     bool IsDirty);
 
+public sealed record BridgeMotionQueryCommandMetadata(
+    byte Kind,
+    byte PayloadKind,
+    string Name,
+    string Label,
+    bool MutatesAuthoring,
+    bool RequiresResource,
+    bool RequiresPayload,
+    bool SupportsUndo);
+
 public sealed record BridgeMotionQueryAuthoringSnapshot(
     ulong Revision,
     BridgeMotionQueryResourceHandle? SelectedResource,
     IReadOnlyList<BridgeMotionQueryDatabaseRow> Databases,
+    IReadOnlyList<BridgeMotionQueryCommandMetadata> CommandMetadata,
     string Diagnostic);
 
 public sealed record BridgeMotionQueryDebuggerSnapshot(
@@ -832,7 +843,9 @@ public static class BridgeSnapshotParser
 
     public static BridgeMotionQuerySnapshot EmptyMotionQuery() =>
         new(new BridgeMotionQueryAuthoringSnapshot(0UL, null, Array.Empty<BridgeMotionQueryDatabaseRow>(),
+                Array.Empty<BridgeMotionQueryCommandMetadata>(),
                 "No native Motion Query authoring session is attached to this bridge frame."),
+
             new BridgeMotionQueryDebuggerSnapshot(false, 0UL, null, null, 0, 0, 0F, string.Empty, string.Empty,
                 0, 0, false, 0, false, 0, 0UL, 0UL, false, string.Empty,
                 "No native Motion Query debugger snapshot is attached to this bridge frame."),
@@ -892,11 +905,33 @@ public static class BridgeSnapshotParser
                 RequiredBoundedString(row, "schemaId"), candidateCount, maximumCandidates,
                 RequiredBoolean(row, "valid"), RequiredBoolean(row, "selected"), RequiredBoolean(row, "dirty")));
         }
+        List<BridgeMotionQueryCommandMetadata> commandMetadata = new();
+        if (authoring.TryGetProperty("commandMetadata", out JsonElement metadataValue) &&
+            metadataValue.ValueKind != JsonValueKind.Null)
+        {
+            EnsureBoundedArray(metadataValue, "motionQuery.authoring.commandMetadata");
+            commandMetadata = new List<BridgeMotionQueryCommandMetadata>(metadataValue.GetArrayLength());
+            foreach (JsonElement metadata in metadataValue.EnumerateArray())
+            {
+                RequireObject(metadata, "motion-query command metadata");
+                byte kind = RequiredByte(metadata, "kind");
+                byte payloadKind = RequiredByte(metadata, "payloadKind");
+                if (kind > 13U || payloadKind > 6U)
+                {
+                    throw Invalid("Motion Query command metadata contains an unsupported enum value.");
+                }
+                commandMetadata.Add(new BridgeMotionQueryCommandMetadata(
+                    kind, payloadKind, RequiredBoundedString(metadata, "name"),
+                    RequiredBoundedString(metadata, "label"), RequiredBoolean(metadata, "mutatesAuthoring"),
+                    RequiredBoolean(metadata, "requiresResource"), RequiredBoolean(metadata, "requiresPayload"),
+                    RequiredBoolean(metadata, "supportsUndo")));
+            }
+        }
         BridgeMotionQueryAuthoringSnapshot parsedAuthoring = new(
             RequiredUInt64(authoring, "revision"),
             ParseNullableMotionQueryResource(authoring.GetProperty("selectedResource"),
                                              "motion-query authoring selected resource"),
-            rows, RequiredBoundedString(authoring, "diagnostic"));
+            rows, commandMetadata, RequiredBoundedString(authoring, "diagnostic"));
 
         JsonElement debugger = RequiredObjectMember(value, "debugger");
         int candidateCountDebugger = RequiredInt32(debugger, "candidateCount");
