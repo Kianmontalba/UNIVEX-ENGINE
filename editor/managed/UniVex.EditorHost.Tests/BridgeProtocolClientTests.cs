@@ -9,6 +9,35 @@ namespace UniVex.EditorHost.Tests;
 public sealed class BridgeProtocolClientTests
 {
     [Fact]
+    public async Task DispatchAsync_WritesMotionQueryContentBrowserFocusToken()
+    {
+        await using MemoryStream input = BuildFrames(new
+        {
+            jsonrpc = "2.0",
+            id = 1,
+            result = new
+            {
+                protocolVersion = BridgeProtocolClient.ProtocolVersion,
+                requestId = 1UL,
+                applied = true,
+                code = "bridge.command.applied",
+                message = "focus applied",
+                snapshot = Snapshot(sceneDirty: false),
+                createdEntity = (object?)null,
+            },
+        });
+        await using MemoryStream output = new();
+        await using BridgeProtocolClient client = new(input, output);
+
+        await client.DispatchAsync(new BridgeCommand(4UL, "setContentBrowserFocus", ContentFocus: "motionQuery"),
+            CancellationToken.None);
+
+        output.Position = 0;
+        using JsonDocument request = JsonDocument.Parse(await ReadFrameAsync(output));
+        Assert.Equal("motionQuery", request.RootElement.GetProperty("params").GetProperty("contentFocus").GetString());
+    }
+
+    [Fact]
     public async Task HelloAsync_WritesVersionedRequestAndReadsCompatibleCopiedSnapshot()
     {
         await using MemoryStream input = BuildFrames(new

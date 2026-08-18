@@ -1,5 +1,6 @@
 // Copyright (c) 2026 UniVex Studios. All Rights Reserved.
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -114,6 +115,63 @@ TEST(EditorBridgeUVETest, ContentBrowserImportCapabilityUVE_ReportsRawParserBoun
         EXPECT_EQ(jobs.front().state, Asset::AssetImportJobStateUVE::Succeeded);
         EXPECT_TRUE(jobs.front().resultGuid.has_value());
         EXPECT_TRUE(std::filesystem::exists(contentRoot / "notes_imported.txt"));
+
+        editor.ShutdownUVE();
+    }
+    engine.Shutdown();
+    std::filesystem::remove_all(contentRoot);
+}
+
+TEST(EditorBridgeUVETest, ContentBrowserMotionQueryFocusUVE_ParsesFocusAndCopiesTypedEntry) {
+    const std::filesystem::path contentRoot = "uve_editor_bridge_motion_query_focus";
+    std::filesystem::remove_all(contentRoot);
+    std::filesystem::create_directories(contentRoot / "Queries");
+    {
+        std::ofstream fixture(contentRoot / "Queries" / "Locomotion.uvemotionquery", std::ios::binary);
+        ASSERT_TRUE(fixture.is_open());
+        fixture << "typed motion query asset placeholder";
+    }
+
+    Core::EngineConfigUVE config = MakeBridgeTestConfigUVE();
+    config.projectContentRootUVE = contentRoot;
+    Core::EngineCoreUVE engine(config);
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_bridge_motion_query_focus.uvescene");
+        editor.InitUVE();
+        EditorBridgeUVE bridge(editor);
+        const EditorBridgeSnapshotUVE initial = bridge.GetSnapshotUVE();
+
+        EditorBridgeRequestUVE refresh{};
+        refresh.protocolVersion = kEditorBridgeProtocolVersionUVE;
+        refresh.requestId = 1U;
+        refresh.expectedRevision = initial.revision;
+        refresh.kind = EditorBridgeRequestKindUVE::RefreshContentBrowser;
+        const EditorBridgeResponseUVE refreshed = bridge.DispatchUVE(refresh);
+        ASSERT_TRUE(refreshed.applied);
+
+        EditorBridgeRequestUVE directory{};
+        directory.protocolVersion = kEditorBridgeProtocolVersionUVE;
+        directory.requestId = 2U;
+        directory.expectedRevision = refreshed.snapshot.revision;
+        directory.kind = EditorBridgeRequestKindUVE::SetContentBrowserDirectory;
+        directory.contentDirectory = "Queries";
+        const EditorBridgeResponseUVE navigated = bridge.DispatchUVE(directory);
+        ASSERT_TRUE(navigated.applied);
+
+        EditorBridgeRequestUVE focus{};
+        focus.protocolVersion = kEditorBridgeProtocolVersionUVE;
+        focus.requestId = 3U;
+        focus.expectedRevision = navigated.snapshot.revision;
+        focus.kind = EditorBridgeRequestKindUVE::SetContentBrowserFocus;
+        focus.contentFocus = "motionQuery";
+        const EditorBridgeResponseUVE focused = bridge.DispatchUVE(focus);
+        ASSERT_TRUE(focused.applied);
+        EXPECT_EQ(focused.snapshot.contentBrowser.typeFocus, "Motion Query");
+        ASSERT_EQ(focused.snapshot.contentBrowser.entries.size(), 1U);
+        EXPECT_EQ(focused.snapshot.contentBrowser.entries.front().relativePath, "Queries/Locomotion.uvemotionquery");
+        EXPECT_EQ(focused.snapshot.contentBrowser.entries.front().typeLabel, "Motion Query");
 
         editor.ShutdownUVE();
     }
