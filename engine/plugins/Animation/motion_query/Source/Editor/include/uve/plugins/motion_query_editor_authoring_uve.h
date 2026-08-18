@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace UVE::Plugins::Editor {
@@ -56,6 +57,31 @@ enum class MotionQueryEditorCommandKindUVE : std::uint8_t {
     Undo,
     Redo,
 };
+
+enum class MotionQueryEditorUtilityValidationCodeUVE : std::uint8_t {
+    Valid = 0,
+    InvalidCandidateIdentifier,
+    DuplicateCandidateIdentifier,
+};
+
+struct MotionQueryEditorUtilityValidationResultUVE final {
+    MotionQueryEditorUtilityValidationCodeUVE code =
+        MotionQueryEditorUtilityValidationCodeUVE::InvalidCandidateIdentifier;
+    std::size_t index = 0U;
+    std::string message;
+
+    [[nodiscard]] bool IsValidUVE() const noexcept {
+        return code == MotionQueryEditorUtilityValidationCodeUVE::Valid;
+    }
+};
+
+[[nodiscard]] bool IsValidMotionQueryEditorDisplayNameUVE(std::string_view displayName) noexcept;
+
+[[nodiscard]] std::string NormalizeMotionQueryEditorSchemaIdUVE(std::string_view schemaId);
+
+[[nodiscard]] MotionQueryEditorUtilityValidationResultUVE
+ValidateMotionQueryEditorCandidateIdentifiersUVE(
+    const std::vector<UVE::Core::MotionMatchingCandidateUVE>& candidates) noexcept;
 
 struct MotionQueryEditorCommandMetadataUVE final {
     MotionQueryEditorCommandKindUVE kind = MotionQueryEditorCommandKindUVE::ReadSnapshot;
@@ -174,7 +200,6 @@ private:
         UVE::Asset::ResourceHandleUVE resource) const noexcept;
     [[nodiscard]] static bool IsValidResourceUVE(
         UVE::Asset::ResourceHandleUVE resource) noexcept;
-    [[nodiscard]] static bool IsValidDisplayNameUVE(const std::string& displayName) noexcept;
     [[nodiscard]] static MotionQueryEditorDatabaseRowUVE BuildRowUVE(
         const MotionQueryEditorDatabaseEntryUVE& entry,
         std::optional<UVE::Asset::ResourceHandleUVE> selectedResource);
