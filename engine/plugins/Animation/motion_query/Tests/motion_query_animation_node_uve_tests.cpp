@@ -214,6 +214,42 @@ TEST(MotionQueryAnimationNodeUVETest, EvaluateFromHistoryUVE_HoldsPreviousCandid
     EXPECT_TRUE(result.transitionHeldPrevious);
 }
 
+TEST(MotionQueryAnimationNodeUVETest, SettingsValidationUVE_AcceptsDefaultAndRejectsBoundedPolicyErrors) {
+    const MotionQueryAnimationNodeSettingsUVE defaults;
+    EXPECT_TRUE(ValidateMotionQueryAnimationNodeSettingsUVE(defaults).IsValidUVE());
+
+    MotionQueryAnimationNodeSettingsUVE invalidResults = defaults;
+    invalidResults.maximumSearchResults = 0U;
+    EXPECT_EQ(ValidateMotionQueryAnimationNodeSettingsUVE(invalidResults).code,
+              MotionQueryAnimationSettingsValidationCodeUVE::InvalidSearchResults);
+
+    MotionQueryAnimationNodeSettingsUVE invalidQuality = defaults;
+    invalidQuality.qualityTier = static_cast<MotionQueryQualityTierUVE>(255U);
+    EXPECT_EQ(ValidateMotionQueryAnimationNodeSettingsUVE(invalidQuality).code,
+              MotionQueryAnimationSettingsValidationCodeUVE::InvalidQualityTier);
+
+    MotionQueryAnimationNodeSettingsUVE invalidWeights = defaults;
+    invalidWeights.weights.velocityWeight = -1.0F;
+    EXPECT_EQ(ValidateMotionQueryAnimationNodeSettingsUVE(invalidWeights).code,
+              MotionQueryAnimationSettingsValidationCodeUVE::InvalidWeights);
+
+    MotionQueryAnimationNodeSettingsUVE invalidContinuity = defaults;
+    invalidContinuity.continuity.policy = static_cast<MotionQueryContinuityPolicyUVE>(255U);
+    EXPECT_EQ(ValidateMotionQueryAnimationNodeSettingsUVE(invalidContinuity).code,
+              MotionQueryAnimationSettingsValidationCodeUVE::InvalidContinuityPolicy);
+
+    invalidContinuity = defaults;
+    invalidContinuity.continuity.maximumPreviousAgeSeconds = -1.0;
+    EXPECT_EQ(ValidateMotionQueryAnimationNodeSettingsUVE(invalidContinuity).code,
+              MotionQueryAnimationSettingsValidationCodeUVE::InvalidContinuityAge);
+
+    MotionQueryAnimationNodeSettingsUVE invalidTransition = defaults;
+    invalidTransition.transition.minimumHoldSeconds = 1.0;
+    invalidTransition.transition.maximumHoldWindowSeconds = 0.5;
+    EXPECT_EQ(ValidateMotionQueryAnimationNodeSettingsUVE(invalidTransition).code,
+              MotionQueryAnimationSettingsValidationCodeUVE::InvalidTransitionSettings);
+}
+
 TEST(MotionQueryAnimationNodeUVETest, EvaluateUVE_RejectsInvalidSettingsAndUnbuiltIndex) {
     const UVE::Core::MotionMatchingDatabaseUVE database = MakeDatabaseUVE();
     const UVE::Core::MotionQueryFeatureSchemaUVE schema = MakeSchemaUVE();
