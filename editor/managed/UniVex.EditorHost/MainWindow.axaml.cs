@@ -896,7 +896,14 @@ public partial class MainWindow : Window
 
     private void RenderMotionQuery(BridgeMotionQuerySnapshot motionQuery)
     {
-        MotionQueryExportRegistryButton.IsEnabled = state == HostSessionState.Connected;
+        bool connected = state == HostSessionState.Connected;
+        MotionQueryAuthoringDatabasesListBox.ItemsSource = motionQuery.Authoring.Databases;
+        MotionQueryAuthoringDatabasesListBox.IsEnabled = connected && motionQuery.Authoring.Databases.Count > 0;
+        MotionQueryAuthoringStatusTextBlock.Text = connected
+            ? $"Authoring revision {motionQuery.Authoring.Revision}; {motionQuery.Authoring.Databases.Count} native database(s). {motionQuery.Authoring.Diagnostic}"
+            : motionQuery.Authoring.Diagnostic;
+
+        MotionQueryExportRegistryButton.IsEnabled = connected;
         MotionQueryImportRegistryButton.IsEnabled = state == HostSessionState.Connected;
         MotionQueryRunBatchButton.IsEnabled = state == HostSessionState.Connected;
         MotionQueryClearReplayButton.IsEnabled = state == HostSessionState.Connected;
@@ -925,6 +932,96 @@ public partial class MainWindow : Window
                 ? "Match: No regression detected."
                 : $"Mismatch: Comparison code {motionQuery.ReplayDiagnostics.ComparisonCode}, Field mask {motionQuery.ReplayDiagnostics.MismatchFieldMask}, Compatibility mask {motionQuery.ReplayDiagnostics.CompatibilityMismatchMask}."
             : "No active comparison.";
+    }
+
+    private static string? ReadMotionQueryAuthoringText(Button button, int textBoxIndex)
+    {
+        return button.Parent is Grid grid
+            ? grid.Children.OfType<TextBox>().ElementAtOrDefault(textBoxIndex)?.Text?.Trim()
+            : null;
+    }
+
+    private void MotionQuerySelectDatabaseButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button { DataContext: BridgeMotionQueryDatabaseRow row })
+        {
+            DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "dispatchMotionQueryCommand")
+            {
+                MotionQueryCommandKind = "selectDatabase",
+                MotionQueryResource = row.Resource,
+            });
+        }
+    }
+
+    private void MotionQueryRemoveDatabaseButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button { DataContext: BridgeMotionQueryDatabaseRow row })
+        {
+            DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "dispatchMotionQueryCommand")
+            {
+                MotionQueryCommandKind = "removeDatabase",
+                MotionQueryResource = row.Resource,
+            });
+        }
+    }
+
+    private void MotionQuerySetDisplayNameButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button button && button.DataContext is BridgeMotionQueryDatabaseRow row)
+        {
+            DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "dispatchMotionQueryCommand")
+            {
+                MotionQueryCommandKind = "setDisplayName",
+                MotionQueryResource = row.Resource,
+                MotionQueryText = ReadMotionQueryAuthoringText(button, 0),
+            });
+        }
+    }
+
+    private void MotionQuerySetSchemaIdButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button button && button.DataContext is BridgeMotionQueryDatabaseRow row)
+        {
+            DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "dispatchMotionQueryCommand")
+            {
+                MotionQueryCommandKind = "setSchemaId",
+                MotionQueryResource = row.Resource,
+                MotionQueryText = ReadMotionQueryAuthoringText(button, 1),
+            });
+        }
+    }
+
+    private void MotionQuerySetMaximumCandidatesButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Button button || button.DataContext is not BridgeMotionQueryDatabaseRow row)
+        {
+            return;
+        }
+        string? text = ReadMotionQueryAuthoringText(button, 2);
+        if (!uint.TryParse(text, out uint maximumCandidates) || maximumCandidates == 0U || maximumCandidates > 4096U)
+        {
+            StatusTextBlock.Text = "Maximum candidates was not changed.";
+            DetailsTextBlock.Text = "Enter a positive bounded integer before applying the native Motion Query limit.";
+            return;
+        }
+        DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "dispatchMotionQueryCommand")
+        {
+            MotionQueryCommandKind = "setMaximumCandidates",
+            MotionQueryResource = row.Resource,
+            MotionQueryCandidateIndex = maximumCandidates,
+        });
+    }
+
+    private void MotionQueryValidateDatabaseButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button { DataContext: BridgeMotionQueryDatabaseRow row })
+        {
+            DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "dispatchMotionQueryCommand")
+            {
+                MotionQueryCommandKind = "validateDatabase",
+                MotionQueryResource = row.Resource,
+            });
+        }
     }
 
     private async void MotionQueryExportRegistryButton_OnClick(object? sender, RoutedEventArgs e)

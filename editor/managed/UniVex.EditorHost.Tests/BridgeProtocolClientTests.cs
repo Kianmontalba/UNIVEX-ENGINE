@@ -766,6 +766,75 @@ public sealed class BridgeProtocolClientTests
     }
 
     [Fact]
+    public async Task DispatchAsync_WritesMotionQueryAuthoringTextPayload()
+    {
+        await using MemoryStream input = BuildFrames(new
+        {
+            jsonrpc = "2.0",
+            id = 1,
+            result = new
+            {
+                protocolVersion = BridgeProtocolClient.ProtocolVersion,
+                requestId = 1UL,
+                applied = true,
+                code = "bridge.motion_query.command.applied",
+                message = "applied",
+                snapshot = Snapshot(sceneDirty: false),
+                createdEntity = (object?)null,
+            },
+        });
+        await using MemoryStream output = new();
+        await using BridgeProtocolClient client = new(input, output);
+        BridgeCommand command = new(7UL, "dispatchMotionQueryCommand")
+        {
+            MotionQueryCommandKind = "setSchemaId",
+            MotionQueryResource = new BridgeMotionQueryResourceHandle(77UL, 1UL),
+            MotionQueryText = "  locomotion.v2  ",
+        };
+        await client.DispatchAsync(command, CancellationToken.None);
+        output.Position = 0;
+        using JsonDocument request = JsonDocument.Parse(await ReadFrameAsync(output));
+        JsonElement payload = request.RootElement.GetProperty("params").GetProperty("motionQueryCommand");
+        Assert.Equal("setSchemaId", payload.GetProperty("kind").GetString());
+        Assert.Equal("  locomotion.v2  ", payload.GetProperty("text").GetString());
+        Assert.Equal(77UL, payload.GetProperty("resource").GetProperty("guid").GetUInt64());
+    }
+
+    [Fact]
+    public async Task DispatchAsync_WritesMotionQueryMaximumCandidatesPayload()
+    {
+        await using MemoryStream input = BuildFrames(new
+        {
+            jsonrpc = "2.0",
+            id = 1,
+            result = new
+            {
+                protocolVersion = BridgeProtocolClient.ProtocolVersion,
+                requestId = 1UL,
+                applied = true,
+                code = "bridge.motion_query.command.applied",
+                message = "applied",
+                snapshot = Snapshot(sceneDirty: false),
+                createdEntity = (object?)null,
+            },
+        });
+        await using MemoryStream output = new();
+        await using BridgeProtocolClient client = new(input, output);
+        BridgeCommand command = new(7UL, "dispatchMotionQueryCommand")
+        {
+            MotionQueryCommandKind = "setMaximumCandidates",
+            MotionQueryResource = new BridgeMotionQueryResourceHandle(77UL, 1UL),
+            MotionQueryCandidateIndex = 256UL,
+        };
+        await client.DispatchAsync(command, CancellationToken.None);
+        output.Position = 0;
+        using JsonDocument request = JsonDocument.Parse(await ReadFrameAsync(output));
+        JsonElement payload = request.RootElement.GetProperty("params").GetProperty("motionQueryCommand");
+        Assert.Equal("setMaximumCandidates", payload.GetProperty("kind").GetString());
+        Assert.Equal(256UL, payload.GetProperty("candidateIndex").GetUInt64());
+    }
+
+    [Fact]
     public async Task DispatchAsync_WritesMotionQueryLiveDebugCommandPayload()
     {
         await using MemoryStream input = BuildFrames(new
