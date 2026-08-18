@@ -17,7 +17,7 @@ struct BuiltInNodeDefinitionUVE final {
     std::uint32_t displayOrder;
 };
 
-[[nodiscard]] std::array<BuiltInNodeDefinitionUVE, 65U> MakeBuiltInDefinitionsUVE() {
+[[nodiscard]] std::array<BuiltInNodeDefinitionUVE, 72U> MakeBuiltInDefinitionsUVE() {
     return {
         BuiltInNodeDefinitionUVE{
             "flow.sequence", "Sequence",
@@ -224,6 +224,31 @@ struct BuiltInNodeDefinitionUVE final {
              ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Vector2}},
             "Math", "node.math.vector2", 355U},
         BuiltInNodeDefinitionUVE{
+            "math.vector2.dot", "Dot Vector2",
+            {ScriptPinDescriptorUVE{"A", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector2},
+             ScriptPinDescriptorUVE{"B", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector2},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Number}},
+            "Math", "node.math.vector2", 356U},
+        BuiltInNodeDefinitionUVE{
+            "math.vector2.distance", "Distance Vector2",
+            {ScriptPinDescriptorUVE{"A", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector2},
+             ScriptPinDescriptorUVE{"B", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector2},
+             ScriptPinDescriptorUVE{"Distance", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Number}},
+            "Math", "node.math.vector2", 357U},
+        BuiltInNodeDefinitionUVE{
+            "math.vector2.direction", "Direction Vector2",
+            {ScriptPinDescriptorUVE{"From", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector2},
+             ScriptPinDescriptorUVE{"To", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector2},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Vector2}},
+            "Math", "node.math.vector2", 358U},
+        BuiltInNodeDefinitionUVE{
+            "math.vector2.lerp", "Lerp Vector2",
+            {ScriptPinDescriptorUVE{"A", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector2},
+             ScriptPinDescriptorUVE{"B", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector2},
+             ScriptPinDescriptorUVE{"Alpha", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Vector2}},
+            "Math", "node.math.vector2", 359U},
+        BuiltInNodeDefinitionUVE{
             "math.vector3.make", "Make Vector3",
             {ScriptPinDescriptorUVE{"X", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
              ScriptPinDescriptorUVE{"Y", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
@@ -270,6 +295,25 @@ struct BuiltInNodeDefinitionUVE final {
             {ScriptPinDescriptorUVE{"Vector", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
              ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Vector3}},
             "Math", "node.math.vector3", 407U},
+        BuiltInNodeDefinitionUVE{
+            "math.vector3.distance", "Distance Vector3",
+            {ScriptPinDescriptorUVE{"A", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"B", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Distance", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Number}},
+            "Math", "node.math.vector3", 408U},
+        BuiltInNodeDefinitionUVE{
+            "math.vector3.direction", "Direction Vector3",
+            {ScriptPinDescriptorUVE{"From", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"To", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Vector3}},
+            "Math", "node.math.vector3", 409U},
+        BuiltInNodeDefinitionUVE{
+            "math.vector3.lerp", "Lerp Vector3",
+            {ScriptPinDescriptorUVE{"A", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"B", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Alpha", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Vector3}},
+            "Math", "node.math.vector3", 410U},
         BuiltInNodeDefinitionUVE{
             "logic.boolean.not", "Not Boolean",
             {ScriptPinDescriptorUVE{"Value", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Boolean},
@@ -406,7 +450,7 @@ struct BuiltInNodeDefinitionUVE final {
 } // namespace
 
 bool RegisterBuiltInScriptNodesUVE(ScriptNodeRegistryUVE& registry) {
-    std::array<BuiltInNodeDefinitionUVE, 65U> definitions = MakeBuiltInDefinitionsUVE();
+    std::array<BuiltInNodeDefinitionUVE, 72U> definitions = MakeBuiltInDefinitionsUVE();
     for (const BuiltInNodeDefinitionUVE& definition : definitions) {
         if (registry.FindNodeTypeUVE(definition.typeId) != nullptr) {
             return false;

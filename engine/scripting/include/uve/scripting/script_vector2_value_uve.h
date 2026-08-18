@@ -48,5 +48,13 @@ struct ScriptVector2NumberResultUVE final {
     const ScriptVector2ValueUVE& vector) noexcept;
 [[nodiscard]] ScriptVector2ValueResultUVE EvaluateScriptVector2NormalizeUVE(
     const ScriptVector2ValueUVE& vector) noexcept;
+[[nodiscard]] ScriptVector2NumberResultUVE EvaluateScriptVector2DotUVE(
+    const ScriptVector2ValueUVE& lhs, const ScriptVector2ValueUVE& rhs) noexcept;
+[[nodiscard]] ScriptVector2NumberResultUVE EvaluateScriptVector2DistanceUVE(
+    const ScriptVector2ValueUVE& lhs, const ScriptVector2ValueUVE& rhs) noexcept;
+[[nodiscard]] ScriptVector2ValueResultUVE EvaluateScriptVector2DirectionUVE(
+    const ScriptVector2ValueUVE& from, const ScriptVector2ValueUVE& to) noexcept;
+[[nodiscard]] ScriptVector2ValueResultUVE EvaluateScriptVector2LerpUVE(
+    const ScriptVector2ValueUVE& lhs, const ScriptVector2ValueUVE& rhs, float alpha) noexcept;
 
 } // namespace UVE::Scripting
