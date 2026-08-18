@@ -41,6 +41,8 @@ struct ControlRigConstraintUVE final {
     float weight = 1.0F;
     float stiffness = 8.0F;
     float damping = 0.0F;
+    float minAimAngleDegrees = 0.0F;
+    float maxAimAngleDegrees = 180.0F;
 };
 
 struct ControlRigUVE final {

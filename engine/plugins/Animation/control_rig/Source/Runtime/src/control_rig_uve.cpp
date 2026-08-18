@@ -33,6 +33,30 @@ constexpr float kEpsilonUVE = 1.0e-5F;
     return Math::NormalizeUVE(value);
 }
 
+[[nodiscard]] bool TryClampAimLookAtAngleUVE(const Math::QuaternionUVE& rotation,
+                                              const float minDegrees, const float maxDegrees,
+                                              Math::QuaternionUVE& outRotation) noexcept {
+    constexpr float kPiUVE = 3.14159265358979323846F;
+    if (!Math::IsFiniteUVE(rotation) || !std::isfinite(minDegrees) || !std::isfinite(maxDegrees) ||
+        minDegrees < 0.0F || maxDegrees < minDegrees || maxDegrees > 180.0F) {
+        return false;
+    }
+    Math::QuaternionUVE normalized;
+    if (!Math::TryNormalizeUVE(rotation, normalized)) {
+        return false;
+    }
+    const float halfAngle = std::acos(std::clamp(std::fabs(normalized.w), 0.0F, 1.0F));
+    const float angleDegrees = (2.0F * halfAngle * 180.0F) / kPiUVE;
+    if (angleDegrees >= minDegrees && angleDegrees <= maxDegrees) {
+        outRotation = normalized;
+        return true;
+    }
+    const Math::Vector3UVE axis = NormalizeVectorUVE(
+        {normalized.x, normalized.y, normalized.z}, {0.0F, 1.0F, 0.0F});
+    const float clampedDegrees = std::clamp(angleDegrees, minDegrees, maxDegrees);
+    return Math::TryMakeAxisAngleUVE(axis, clampedDegrees * kPiUVE / 180.0F, outRotation);
+}
+
 } // namespace
 
 ControlRigValidationResultUVE ValidateControlRigUVE(const ControlRigUVE& rig) noexcept {
@@ -99,6 +123,13 @@ ControlRigValidationResultUVE ValidateControlRigUVE(const ControlRigUVE& rig) no
              constraint.damping < 0.0F || constraint.damping > 1.0F)) {
             return {ControlRigValidationCodeUVE::InvalidConstraint, constraint.constraintId,
                     "Spring constraint stiffness or damping is outside its stable bounded range."};
+        }
+        if (constraint.kind == ControlRigConstraintKindUVE::AimLookAt &&
+            (!std::isfinite(constraint.minAimAngleDegrees) || !std::isfinite(constraint.maxAimAngleDegrees) ||
+             constraint.minAimAngleDegrees < 0.0F || constraint.maxAimAngleDegrees < constraint.minAimAngleDegrees ||
+             constraint.maxAimAngleDegrees > 180.0F)) {
+            return {ControlRigValidationCodeUVE::InvalidConstraint, constraint.constraintId,
+                    "Aim/look-at angle limits must be finite and ordered within 0 to 180 degrees."};
         }
         if (std::find(constraintIds.begin(), constraintIds.end(), constraint.constraintId) != constraintIds.end()) {
             return {ControlRigValidationCodeUVE::DuplicateConstraint, constraint.constraintId,
@@ -282,6 +313,11 @@ ControlRigEvaluationResultUVE EvaluateControlRigUVE(const ControlRigUVE& rig) {
                 }
                 if (!TryMakeAimLookAtRotationUVE(source->pose.position, target->pose.position, up, rotation)) {
                     result.message = "Control Rig aim/look-at solve failed.";
+                    return result;
+                }
+                if (!TryClampAimLookAtAngleUVE(rotation, constraint.minAimAngleDegrees,
+                                               constraint.maxAimAngleDegrees, rotation)) {
+                    result.message = "Control Rig aim/look-at angle limit is invalid.";
                     return result;
                 }
                 source->pose.rotation = rotation;
