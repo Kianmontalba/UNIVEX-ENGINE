@@ -7,6 +7,17 @@
 namespace UVE::Scripting {
 
 bool ScriptDebuggerUVE::AttachUVE(ScriptBytecodeProgramUVE program) {
+    m_context.reset();
+    return AttachProgramUVE(std::move(program));
+}
+
+bool ScriptDebuggerUVE::AttachWithContextUVE(ScriptBytecodeProgramUVE program,
+                                             ScriptVmExecutionContextUVE context) {
+    m_context = std::move(context);
+    return AttachProgramUVE(std::move(program));
+}
+
+bool ScriptDebuggerUVE::AttachProgramUVE(ScriptBytecodeProgramUVE program) {
     m_trace.clear();
     m_traceTruncated = false;
     if ((program.version != ScriptBytecodeProgramUVE::kLegacyVersionUVE &&
@@ -33,6 +44,7 @@ void ScriptDebuggerUVE::DetachUVE() noexcept {
     m_trace.clear();
     m_traceTruncated = false;
     m_skipCurrentBreakpoint = false;
+    m_context.reset();
     m_state = ScriptDebuggerStateUVE::Detached;
 }
 
@@ -119,6 +131,47 @@ bool ScriptDebuggerUVE::ExecuteOneUVE() {
     const std::size_t instructionIndex = m_instructionIndex;
     const ScriptIrInstructionUVE& instruction = m_program.instructions[instructionIndex];
     const ScriptIrInstructionKindUVE kind = instruction.kind;
+    if (kind == ScriptIrInstructionKindUVE::ConditionalJump) {
+        if (instruction.trueTargetInstructionIndex > m_program.instructions.size() ||
+            instruction.falseTargetInstructionIndex > m_program.instructions.size()) {
+            m_state = ScriptDebuggerStateUVE::Faulted;
+            m_pauseReason = "ConditionalJump target is outside the bytecode instruction range.";
+            AppendTraceEventUVE({ScriptVmTraceEventKindUVE::Failed, Scene::kInvalidEntityUVE,
+                                 instructionIndex, instruction.sourceNodeId, instruction.targetNodeId,
+                                 instruction.nodeTypeId, m_pauseReason});
+            return false;
+        }
+        if (!m_context.has_value()) {
+            m_state = ScriptDebuggerStateUVE::Faulted;
+            m_pauseReason = "ConditionalJump requires an attached execution context.";
+            AppendTraceEventUVE({ScriptVmTraceEventKindUVE::Failed, Scene::kInvalidEntityUVE,
+                                 instructionIndex, instruction.sourceNodeId, instruction.targetNodeId,
+                                 instruction.nodeTypeId, m_pauseReason});
+            return false;
+        }
+        const std::string& conditionPin = instruction.sourcePinName.empty()
+            ? std::string{"Condition"}
+            : instruction.sourcePinName;
+        const auto conditionBinding = m_context->FindInputUVE(instruction.sourceNodeId, conditionPin);
+        const bool* condition = conditionBinding.has_value() ? std::get_if<bool>(&*conditionBinding) : nullptr;
+        if (condition == nullptr) {
+            m_state = ScriptDebuggerStateUVE::Faulted;
+            m_pauseReason = "ConditionalJump requires a Boolean condition input.";
+            AppendTraceEventUVE({ScriptVmTraceEventKindUVE::Failed, Scene::kInvalidEntityUVE,
+                                 instructionIndex, instruction.sourceNodeId, instruction.targetNodeId,
+                                 instruction.nodeTypeId, m_pauseReason});
+            return false;
+        }
+        m_instructionIndex = *condition ? instruction.trueTargetInstructionIndex
+                                        : instruction.falseTargetInstructionIndex;
+        ++m_executedInstructions;
+        AppendTraceEventUVE({ScriptVmTraceEventKindUVE::NodeExecuted,
+                             Scene::kInvalidEntityUVE, instructionIndex, instruction.sourceNodeId,
+                             instruction.targetNodeId, instruction.nodeTypeId,
+                             *condition ? "ConditionalJump evaluated true."
+                                        : "ConditionalJump evaluated false."});
+        return true;
+    }
     if (kind != ScriptIrInstructionKindUVE::ExecuteNode && kind != ScriptIrInstructionKindUVE::TransferValue) {
         m_state = ScriptDebuggerStateUVE::Faulted;
         m_pauseReason = "Invalid instruction kind.";

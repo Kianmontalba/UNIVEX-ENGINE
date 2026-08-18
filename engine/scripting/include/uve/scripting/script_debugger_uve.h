@@ -5,6 +5,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <unordered_set>
 #include <vector>
@@ -41,6 +42,8 @@ public:
     ScriptDebuggerUVE& operator=(const ScriptDebuggerUVE&) = delete;
 
     [[nodiscard]] bool AttachUVE(ScriptBytecodeProgramUVE program);
+    [[nodiscard]] bool AttachWithContextUVE(ScriptBytecodeProgramUVE program,
+                                             ScriptVmExecutionContextUVE context);
     void DetachUVE() noexcept;
     [[nodiscard]] bool SetBreakpointUVE(std::uint32_t sourceNodeId, bool enabled);
     [[nodiscard]] ScriptDebuggerSnapshotUVE ContinueUVE(std::size_t instructionBudget = kMaximumExecutionBudgetUVE);
@@ -48,6 +51,7 @@ public:
     [[nodiscard]] ScriptDebuggerSnapshotUVE GetSnapshotUVE() const;
 
 private:
+    [[nodiscard]] bool AttachProgramUVE(ScriptBytecodeProgramUVE program);
     [[nodiscard]] bool IsBreakpointUVE(std::uint32_t sourceNodeId) const noexcept;
     [[nodiscard]] ScriptDebuggerSnapshotUVE MakeSnapshotUVE() const;
     [[nodiscard]] bool ExecuteOneUVE();
@@ -63,6 +67,7 @@ private:
     std::vector<ScriptVmTraceEventUVE> m_trace;
     bool m_traceTruncated = false;
     bool m_skipCurrentBreakpoint = false;
+    std::optional<ScriptVmExecutionContextUVE> m_context;
 };
 
 } // namespace UVE::Scripting

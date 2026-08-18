@@ -636,6 +636,76 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_CompletesValidProgramWithinBudget
     EXPECT_EQ(result.instructionsExecuted, 2U);
 }
 
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_ConditionalJumpSelectsTrueAndFalseTargets) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ConditionalJump, 1U, 0U, "flow.branch",
+                                    "Condition", {}, 1U, 2U});
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 20U, 0U, "math.float.add", {}, {}});
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 30U, 0U, "math.float.subtract", {}, {}});
+
+    ScriptVmExecutionContextUVE trueContext;
+    ASSERT_TRUE(trueContext.SetInputUVE(1U, "Condition", true));
+    ASSERT_TRUE(trueContext.SetInputUVE(20U, "A", 5.0F));
+    ASSERT_TRUE(trueContext.SetInputUVE(20U, "B", 2.0F));
+    ASSERT_TRUE(trueContext.SetInputUVE(30U, "A", 5.0F));
+    ASSERT_TRUE(trueContext.SetInputUVE(30U, "B", 2.0F));
+    const ScriptVmExecutionResultUVE trueResult = ExecuteScriptBytecodeUVE(program, trueContext);
+    ASSERT_TRUE(trueResult.IsSuccessUVE());
+    ASSERT_EQ(trueResult.trace.size(), 4U);
+    EXPECT_EQ(trueResult.trace[0].message, "ConditionalJump evaluated true.");
+    EXPECT_EQ(trueResult.trace[1].sourceNodeId, 20U);
+    EXPECT_EQ(trueResult.trace[2].sourceNodeId, 30U);
+    EXPECT_EQ(trueResult.trace[3].kind, ScriptVmTraceEventKindUVE::Completed);
+
+    ScriptVmExecutionContextUVE falseContext = trueContext;
+    ASSERT_TRUE(falseContext.SetInputUVE(1U, "Condition", false));
+    const ScriptVmExecutionResultUVE falseResult = ExecuteScriptBytecodeUVE(program, falseContext);
+    ASSERT_TRUE(falseResult.IsSuccessUVE());
+    ASSERT_EQ(falseResult.trace.size(), 3U);
+    EXPECT_EQ(falseResult.trace[0].message, "ConditionalJump evaluated false.");
+    EXPECT_EQ(falseResult.trace[1].sourceNodeId, 30U);
+    EXPECT_EQ(falseResult.trace[2].kind, ScriptVmTraceEventKindUVE::Completed);
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_ConditionalJumpRequiresBooleanCondition) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ConditionalJump, 1U, 0U, "flow.branch",
+                                    "Condition", {}, 1U, 1U});
+    ScriptVmExecutionContextUVE context;
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(program, context);
+    EXPECT_EQ(result.status, ScriptVmStatusUVE::NodeExecutionFailed);
+    ASSERT_EQ(result.trace.size(), 1U);
+    EXPECT_EQ(result.trace.front().kind, ScriptVmTraceEventKindUVE::Failed);
+    EXPECT_EQ(result.trace.front().message, "ConditionalJump requires a Boolean condition input.");
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_ConditionalJumpSelfLoopStopsAtBudget) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ConditionalJump, 1U, 0U, "flow.branch",
+                                    "Condition", {}, 0U, 0U});
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(1U, "Condition", true));
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(program, context, {3U});
+    EXPECT_EQ(result.status, ScriptVmStatusUVE::InstructionBudgetExceeded);
+    EXPECT_EQ(result.instructionsExecuted, 3U);
+    ASSERT_EQ(result.trace.size(), 4U);
+    EXPECT_EQ(result.trace.back().kind, ScriptVmTraceEventKindUVE::Failed);
+    EXPECT_TRUE(result.trace.back().message.find("Instruction budget") != std::string::npos);
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_ConditionalJumpRejectsInvalidTarget) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ConditionalJump, 1U, 0U, "flow.branch",
+                                    "Condition", {}, 2U, 0U});
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(1U, "Condition", true));
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(program, context);
+    EXPECT_EQ(result.status, ScriptVmStatusUVE::NodeExecutionFailed);
+    ASSERT_EQ(result.trace.size(), 1U);
+    EXPECT_EQ(result.trace.front().kind, ScriptVmTraceEventKindUVE::Failed);
+    EXPECT_TRUE(result.trace.front().message.find("outside") != std::string::npos);
+}
+
 TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_CapturesNodeAndCompletionTraceInOrder) {
     ScriptBytecodeProgramUVE program;
     program.instructions.push_back(
@@ -1776,6 +1846,26 @@ TEST(ScriptDebuggerUVETest, StepUVE_AdvancesOneInstructionAndReportsCompletion) 
     const ScriptDebuggerSnapshotUVE second = debugger.StepUVE();
     EXPECT_EQ(second.state, ScriptDebuggerStateUVE::Completed);
     EXPECT_EQ(second.instructionIndex, 2U);
+}
+
+TEST(ScriptDebuggerUVETest, StepUVE_ConditionalJumpUsesAttachedCopiedContext) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ConditionalJump, 1U, 0U, "flow.branch",
+                                    "Condition", {}, 2U, 1U});
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 20U, 0U, "test.false", {}, {}});
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 30U, 0U, "test.true", {}, {}});
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(1U, "Condition", true));
+
+    ScriptDebuggerUVE debugger;
+    ASSERT_TRUE(debugger.AttachWithContextUVE(program, context));
+    const ScriptDebuggerSnapshotUVE stepped = debugger.StepUVE();
+    EXPECT_EQ(stepped.state, ScriptDebuggerStateUVE::Paused);
+    EXPECT_EQ(stepped.instructionIndex, 2U);
+    EXPECT_EQ(stepped.executedInstructions, 1U);
+    ASSERT_EQ(stepped.trace.size(), 1U);
+    EXPECT_EQ(stepped.trace.front().kind, ScriptVmTraceEventKindUVE::NodeExecuted);
+    EXPECT_EQ(stepped.trace.front().message, "ConditionalJump evaluated true.");
 }
 
 TEST(ScriptDebuggerUVETest, ContinueUVE_BoundsCopiedTraceHistory) {
