@@ -39,6 +39,8 @@ namespace {
             } else if constexpr (std::is_same_v<ValueType, ScriptVector3ValueUVE>) {
                 return std::isfinite(typedValue.value.x) && std::isfinite(typedValue.value.y) &&
                        std::isfinite(typedValue.value.z);
+            } else if constexpr (std::is_same_v<ValueType, ScriptVector2ValueUVE>) {
+                return std::isfinite(typedValue.value.x) && std::isfinite(typedValue.value.y);
             } else {
                 return typedValue.IsValidUVE();
             }
@@ -89,6 +91,12 @@ namespace {
     const ScriptVmExecutionContextUVE& context, const std::uint32_t nodeId, const char* pinName) {
     const ScriptVmValueBindingUVE* binding = FindBindingUVE(context.inputs, nodeId, pinName);
     return binding == nullptr ? nullptr : std::get_if<ScriptVector3ValueUVE>(&binding->value);
+}
+
+[[nodiscard]] const ScriptVector2ValueUVE* FindVector2InputUVE(
+    const ScriptVmExecutionContextUVE& context, const std::uint32_t nodeId, const char* pinName) {
+    const ScriptVmValueBindingUVE* binding = FindBindingUVE(context.inputs, nodeId, pinName);
+    return binding == nullptr ? nullptr : std::get_if<ScriptVector2ValueUVE>(&binding->value);
 }
 
 [[nodiscard]] const bool* FindBooleanInputUVE(const ScriptVmExecutionContextUVE& context,
@@ -430,6 +438,74 @@ namespace {
     return {};
 }
 
+[[nodiscard]] ScriptVmExecutionResultUVE ExecuteVector2NodeUVE(
+    const ScriptIrInstructionUVE& instruction, const std::size_t instructionIndex,
+    ScriptVmExecutionContextUVE& context) {
+    const std::uint32_t nodeId = instruction.sourceNodeId;
+    if (instruction.nodeTypeId == "math.vector2.make") {
+        const float* x = FindNumberInputUVE(context, nodeId, "X");
+        const float* y = FindNumberInputUVE(context, nodeId, "Y");
+        if (x == nullptr || y == nullptr) {
+            return MakeNodeFailureUVE(instructionIndex, "Make Vector2 requires Number inputs X and Y.");
+        }
+        const ScriptVector2ValueResultUVE evaluated = EvaluateScriptVector2MakeUVE(*x, *y);
+        if (!evaluated.IsAppliedUVE() || !SetNodeOutputUVE(context, nodeId, "Vector", evaluated.value)) {
+            return MakeNodeFailureUVE(instructionIndex, "Make Vector2 rejected its inputs or output capacity.");
+        }
+        return {};
+    }
+    if (instruction.nodeTypeId == "math.vector2.add" || instruction.nodeTypeId == "math.vector2.subtract") {
+        const ScriptVector2ValueUVE* lhs = FindVector2InputUVE(context, nodeId, "A");
+        const ScriptVector2ValueUVE* rhs = FindVector2InputUVE(context, nodeId, "B");
+        if (lhs == nullptr || rhs == nullptr) {
+            return MakeNodeFailureUVE(instructionIndex, "Vector2 binary node requires Vector2 inputs A and B.");
+        }
+        const ScriptVector2ValueResultUVE evaluated =
+            instruction.nodeTypeId == "math.vector2.add"
+                ? EvaluateScriptVector2AddUVE(*lhs, *rhs)
+                : EvaluateScriptVector2SubtractUVE(*lhs, *rhs);
+        if (!evaluated.IsAppliedUVE() || !SetNodeOutputUVE(context, nodeId, "Result", evaluated.value)) {
+            return MakeNodeFailureUVE(instructionIndex, "Vector2 binary node rejected its inputs or output capacity.");
+        }
+        return {};
+    }
+    if (instruction.nodeTypeId == "math.vector2.multiply") {
+        const ScriptVector2ValueUVE* vector = FindVector2InputUVE(context, nodeId, "Vector");
+        const float* scale = FindNumberInputUVE(context, nodeId, "Scale");
+        if (vector == nullptr || scale == nullptr) {
+            return MakeNodeFailureUVE(instructionIndex, "Multiply Vector2 requires Vector2 Vector and Number Scale inputs.");
+        }
+        const ScriptVector2ValueResultUVE evaluated = EvaluateScriptVector2MultiplyUVE(*vector, *scale);
+        if (!evaluated.IsAppliedUVE() || !SetNodeOutputUVE(context, nodeId, "Result", evaluated.value)) {
+            return MakeNodeFailureUVE(instructionIndex, "Multiply Vector2 rejected its inputs or output capacity.");
+        }
+        return {};
+    }
+    if (instruction.nodeTypeId == "math.vector2.length") {
+        const ScriptVector2ValueUVE* vector = FindVector2InputUVE(context, nodeId, "Vector");
+        if (vector == nullptr) {
+            return MakeNodeFailureUVE(instructionIndex, "Length Vector2 requires a Vector2 Vector input.");
+        }
+        const ScriptVector2NumberResultUVE evaluated = EvaluateScriptVector2LengthUVE(*vector);
+        if (!evaluated.IsAppliedUVE() || !SetNodeOutputUVE(context, nodeId, "Length", evaluated.value)) {
+            return MakeNodeFailureUVE(instructionIndex, "Length Vector2 rejected its input or output capacity.");
+        }
+        return {};
+    }
+    if (instruction.nodeTypeId == "math.vector2.normalize") {
+        const ScriptVector2ValueUVE* vector = FindVector2InputUVE(context, nodeId, "Vector");
+        if (vector == nullptr) {
+            return MakeNodeFailureUVE(instructionIndex, "Normalize Vector2 requires a Vector2 Vector input.");
+        }
+        const ScriptVector2ValueResultUVE evaluated = EvaluateScriptVector2NormalizeUVE(*vector);
+        if (!evaluated.IsAppliedUVE() || !SetNodeOutputUVE(context, nodeId, "Result", evaluated.value)) {
+            return MakeNodeFailureUVE(instructionIndex, "Normalize Vector2 rejected its input, zero length, or output capacity.");
+        }
+        return {};
+    }
+    return {};
+}
+
 [[nodiscard]] ScriptVmExecutionResultUVE ExecuteVector3NodeUVE(
     const ScriptIrInstructionUVE& instruction, const std::size_t instructionIndex,
     ScriptVmExecutionContextUVE& context) {
@@ -517,6 +593,24 @@ namespace {
     }
 
     return {};
+}
+
+[[nodiscard]] bool HasRequiredVector2InputsUVE(const ScriptIrInstructionUVE& instruction,
+                                                  const ScriptVmExecutionContextUVE& context) {
+    const std::uint32_t nodeId = instruction.sourceNodeId;
+    if (instruction.nodeTypeId == "math.vector2.make") {
+        return FindNumberInputUVE(context, nodeId, "X") != nullptr &&
+               FindNumberInputUVE(context, nodeId, "Y") != nullptr;
+    }
+    if (instruction.nodeTypeId == "math.vector2.add" || instruction.nodeTypeId == "math.vector2.subtract") {
+        return FindVector2InputUVE(context, nodeId, "A") != nullptr &&
+               FindVector2InputUVE(context, nodeId, "B") != nullptr;
+    }
+    if (instruction.nodeTypeId == "math.vector2.multiply") {
+        return FindVector2InputUVE(context, nodeId, "Vector") != nullptr &&
+               FindNumberInputUVE(context, nodeId, "Scale") != nullptr;
+    }
+    return FindVector2InputUVE(context, nodeId, "Vector") != nullptr;
 }
 
 [[nodiscard]] bool HasRequiredVariableInputsUVE(const ScriptIrInstructionUVE& instruction,
@@ -725,6 +819,7 @@ namespace {
         }
 
         const bool isVariableNode = instruction.nodeTypeId.rfind("variable.", 0U) == 0U;
+        const bool isVector2Node = instruction.nodeTypeId.rfind("math.vector2.", 0U) == 0U;
         const bool isVector3Node = instruction.nodeTypeId.rfind("math.vector3.", 0U) == 0U;
         const bool isFloatNode = instruction.nodeTypeId.rfind("math.float.", 0U) == 0U;
         const bool isBooleanNode = instruction.nodeTypeId.rfind("logic.boolean.", 0U) == 0U;
@@ -732,6 +827,7 @@ namespace {
         const bool isEngineLogNode = instruction.nodeTypeId == "engine.log";
         const bool isEngineGetTimeNode = instruction.nodeTypeId == "engine.get_time";
         if ((isVariableNode && !HasRequiredVariableInputsUVE(instruction, context)) ||
+            (isVector2Node && !HasRequiredVector2InputsUVE(instruction, context)) ||
             (isVector3Node && !HasRequiredVector3InputsUVE(instruction, context)) ||
             (isFloatNode && !HasRequiredFloatInputsUVE(instruction, context)) ||
             (isBooleanNode && !HasRequiredBooleanInputsUVE(instruction, context)) ||
@@ -746,6 +842,8 @@ namespace {
         ScriptVmExecutionResultUVE nodeResult;
         if (isVariableNode) {
             nodeResult = ExecuteVariableNodeUVE(instruction, instructionIndex, context);
+        } else if (isVector2Node) {
+            nodeResult = ExecuteVector2NodeUVE(instruction, instructionIndex, context);
         } else if (isVector3Node) {
             nodeResult = ExecuteVector3NodeUVE(instruction, instructionIndex, context);
         } else if (isFloatNode) {
@@ -887,6 +985,7 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                                              instruction.targetNodeId, {}, {}});
             } else {
                 const bool isVariableNode = instruction.nodeTypeId.rfind("variable.", 0U) == 0U;
+                const bool isVector2Node = instruction.nodeTypeId.rfind("math.vector2.", 0U) == 0U;
                 const bool isVector3Node = instruction.nodeTypeId.rfind("math.vector3.", 0U) == 0U;
                 const bool isFloatNode = instruction.nodeTypeId.rfind("math.float.", 0U) == 0U;
                 const bool isBooleanNode = instruction.nodeTypeId.rfind("logic.boolean.", 0U) == 0U;
@@ -894,6 +993,7 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                 const bool isEngineLogNode = instruction.nodeTypeId == "engine.log";
                 const bool isEngineGetTimeNode = instruction.nodeTypeId == "engine.get_time";
                 if ((isVariableNode && !HasRequiredVariableInputsUVE(instruction, *context)) ||
+                    (isVector2Node && !HasRequiredVector2InputsUVE(instruction, *context)) ||
                     (isVector3Node && !HasRequiredVector3InputsUVE(instruction, *context)) ||
                     (isFloatNode && !HasRequiredFloatInputsUVE(instruction, *context)) ||
                     (isBooleanNode && !HasRequiredBooleanInputsUVE(instruction, *context)) ||
@@ -912,6 +1012,8 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                 ScriptVmExecutionResultUVE nodeResult;
                 if (isVariableNode) {
                     nodeResult = ExecuteVariableNodeUVE(instruction, index, *context);
+                } else if (isVector2Node) {
+                    nodeResult = ExecuteVector2NodeUVE(instruction, index, *context);
                 } else if (isVector3Node) {
                     nodeResult = ExecuteVector3NodeUVE(instruction, index, *context);
                 } else if (isFloatNode) {

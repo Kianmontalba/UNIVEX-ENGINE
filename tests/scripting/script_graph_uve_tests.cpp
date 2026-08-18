@@ -118,14 +118,16 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
 
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
     EXPECT_FALSE(RegisterBuiltInScriptNodesUVE(registry));
-    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 43U);
+    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 49U);
 
     const std::vector<ScriptNodeTypeDescriptorUVE> descriptors = registry.GetNodeTypeDescriptorsUVE();
-    ASSERT_EQ(descriptors.size(), 43U);
+    ASSERT_EQ(descriptors.size(), 49U);
     const std::vector<std::string> expectedIds{
         "flow.sequence", "flow.branch",
         "math.float.add", "math.float.subtract", "math.float.multiply", "math.float.divide",
         "math.float.modulo", "math.float.abs", "math.float.min", "math.float.max", "math.float.clamp", "math.float.power",
+        "math.vector2.make", "math.vector2.add", "math.vector2.subtract", "math.vector2.multiply",
+        "math.vector2.length", "math.vector2.normalize",
         "math.vector3.make", "math.vector3.add", "math.vector3.subtract", "math.vector3.multiply",
         "math.vector3.dot", "math.vector3.cross", "math.vector3.length", "math.vector3.normalize",
         "logic.boolean.not", "logic.boolean.and", "logic.boolean.or", "logic.boolean.xor",
@@ -147,23 +149,27 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
         EXPECT_EQ(descriptors[index].category, "Math");
         EXPECT_EQ(descriptors[index].iconId, "node.math.float");
     }
-    for (std::size_t index = 12U; index < 20U; ++index) {
+    for (std::size_t index = 12U; index < 18U; ++index) {
+        EXPECT_EQ(descriptors[index].category, "Math");
+        EXPECT_EQ(descriptors[index].iconId, "node.math.vector2");
+    }
+    for (std::size_t index = 18U; index < 26U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Math");
         EXPECT_EQ(descriptors[index].iconId, "node.math.vector3");
     }
-    for (std::size_t index = 20U; index < 30U; ++index) {
+    for (std::size_t index = 26U; index < 36U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Logic");
         EXPECT_EQ(descriptors[index].iconId, "node.logic.boolean");
     }
-    for (std::size_t index = 30U; index < 32U; ++index) {
+    for (std::size_t index = 36U; index < 38U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Entity Query");
         EXPECT_EQ(descriptors[index].iconId, "node.entity.query");
     }
-    for (std::size_t index = 32U; index < 34U; ++index) {
+    for (std::size_t index = 38U; index < 40U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Engine");
         EXPECT_EQ(descriptors[index].iconId, "node.engine");
     }
-    for (std::size_t index = 34U; index < descriptors.size(); ++index) {
+    for (std::size_t index = 40U; index < descriptors.size(); ++index) {
         EXPECT_EQ(descriptors[index].category, "Variable");
         EXPECT_EQ(descriptors[index].iconId, "node.variable");
     }
@@ -256,6 +262,31 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
     EXPECT_EQ(setVector3->pins[1].type, ScriptValueTypeUVE::Vector3);
     EXPECT_EQ(setVector3->pins[2].type, ScriptValueTypeUVE::Vector3);
     EXPECT_EQ(setVector3->pins[2].direction, ScriptPinDirectionUVE::Output);
+
+    const ScriptNodeTypeDescriptorUVE* makeVector2 = registry.FindNodeTypeUVE("math.vector2.make");
+    ASSERT_NE(makeVector2, nullptr);
+    ASSERT_EQ(makeVector2->pins.size(), 3U);
+    EXPECT_EQ(makeVector2->pins[0].type, ScriptValueTypeUVE::Number);
+    EXPECT_EQ(makeVector2->pins[1].type, ScriptValueTypeUVE::Number);
+    EXPECT_EQ(makeVector2->pins[2].direction, ScriptPinDirectionUVE::Output);
+    EXPECT_EQ(makeVector2->pins[2].type, ScriptValueTypeUVE::Vector2);
+
+    const ScriptNodeTypeDescriptorUVE* multiplyVector2 = registry.FindNodeTypeUVE("math.vector2.multiply");
+    ASSERT_NE(multiplyVector2, nullptr);
+    ASSERT_EQ(multiplyVector2->pins.size(), 3U);
+    EXPECT_EQ(multiplyVector2->pins[0].type, ScriptValueTypeUVE::Vector2);
+    EXPECT_EQ(multiplyVector2->pins[1].type, ScriptValueTypeUVE::Number);
+    EXPECT_EQ(multiplyVector2->pins[2].type, ScriptValueTypeUVE::Vector2);
+
+    const ScriptNodeTypeDescriptorUVE* lengthVector2 = registry.FindNodeTypeUVE("math.vector2.length");
+    ASSERT_NE(lengthVector2, nullptr);
+    EXPECT_EQ(lengthVector2->pins[0].type, ScriptValueTypeUVE::Vector2);
+    EXPECT_EQ(lengthVector2->pins[1].type, ScriptValueTypeUVE::Number);
+
+    const ScriptNodeTypeDescriptorUVE* normalizeVector2 = registry.FindNodeTypeUVE("math.vector2.normalize");
+    ASSERT_NE(normalizeVector2, nullptr);
+    EXPECT_EQ(normalizeVector2->pins[0].type, ScriptValueTypeUVE::Vector2);
+    EXPECT_EQ(normalizeVector2->pins[1].type, ScriptValueTypeUVE::Vector2);
 
     const ScriptNodeTypeDescriptorUVE* make = registry.FindNodeTypeUVE("math.vector3.make");
     ASSERT_NE(make, nullptr);
@@ -3659,6 +3690,81 @@ TEST(ScriptRuntimeUVETest, TickDetailedUVE_PreservesLocalVariablesAndReportsSnap
     ASSERT_TRUE(storedState.has_value());
     ASSERT_EQ(storedState->executionContext.localVariables.size(), 1U);
     EXPECT_FLOAT_EQ(std::get<float>(*storedState->executionContext.FindLocalVariableUVE(3U)), 6.0F);
+}
+
+} // namespace UVE::Scripting
+
+
+namespace UVE::Scripting {
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_EvaluatesVector2FunctionFamily) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U,
+                                    "math.vector2.make", {}, {}});
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 2U, 0U,
+                                    "math.vector2.add", {}, {}});
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 3U, 0U,
+                                    "math.vector2.subtract", {}, {}});
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 4U, 0U,
+                                    "math.vector2.multiply", {}, {}});
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 5U, 0U,
+                                    "math.vector2.length", {}, {}});
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 6U, 0U,
+                                    "math.vector2.normalize", {}, {}});
+
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(1U, "X", 3.0F));
+    ASSERT_TRUE(context.SetInputUVE(1U, "Y", 4.0F));
+    ASSERT_TRUE(context.SetInputUVE(2U, "A", ScriptVector2ValueUVE{{3.0F, 4.0F}}));
+    ASSERT_TRUE(context.SetInputUVE(2U, "B", ScriptVector2ValueUVE{{1.0F, 2.0F}}));
+    ASSERT_TRUE(context.SetInputUVE(3U, "A", ScriptVector2ValueUVE{{3.0F, 4.0F}}));
+    ASSERT_TRUE(context.SetInputUVE(3U, "B", ScriptVector2ValueUVE{{1.0F, 2.0F}}));
+    ASSERT_TRUE(context.SetInputUVE(4U, "Vector", ScriptVector2ValueUVE{{3.0F, 4.0F}}));
+    ASSERT_TRUE(context.SetInputUVE(4U, "Scale", 2.0F));
+    ASSERT_TRUE(context.SetInputUVE(5U, "Vector", ScriptVector2ValueUVE{{3.0F, 4.0F}}));
+    ASSERT_TRUE(context.SetInputUVE(6U, "Vector", ScriptVector2ValueUVE{{3.0F, 4.0F}}));
+
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(program, context);
+    ASSERT_TRUE(result.IsSuccessUVE());
+    EXPECT_EQ(std::get<ScriptVector2ValueUVE>(*context.FindOutputUVE(1U, "Vector")),
+              (ScriptVector2ValueUVE{{3.0F, 4.0F}}));
+    EXPECT_EQ(std::get<ScriptVector2ValueUVE>(*context.FindOutputUVE(2U, "Result")),
+              (ScriptVector2ValueUVE{{4.0F, 6.0F}}));
+    EXPECT_EQ(std::get<ScriptVector2ValueUVE>(*context.FindOutputUVE(3U, "Result")),
+              (ScriptVector2ValueUVE{{2.0F, 2.0F}}));
+    EXPECT_EQ(std::get<ScriptVector2ValueUVE>(*context.FindOutputUVE(4U, "Result")),
+              (ScriptVector2ValueUVE{{6.0F, 8.0F}}));
+    EXPECT_FLOAT_EQ(std::get<float>(*context.FindOutputUVE(5U, "Length")), 5.0F);
+    EXPECT_EQ(std::get<ScriptVector2ValueUVE>(*context.FindOutputUVE(6U, "Result")),
+              (ScriptVector2ValueUVE{{0.6F, 0.8F}}));
+
+    ScriptBytecodeProgramUVE zeroProgram;
+    zeroProgram.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 7U, 0U,
+                                        "math.vector2.normalize", {}, {}});
+    ScriptVmExecutionContextUVE zeroContext;
+    ASSERT_TRUE(zeroContext.SetInputUVE(7U, "Vector", ScriptVector2ValueUVE{{0.0F, 0.0F}}));
+    const ScriptVmExecutionResultUVE zeroResult = ExecuteScriptBytecodeUVE(zeroProgram, zeroContext);
+    EXPECT_FALSE(zeroResult.IsSuccessUVE());
+    EXPECT_EQ(zeroResult.status, ScriptVmStatusUVE::NodeExecutionFailed);
+}
+
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesVector2ProducerBeforeLengthConsumer) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({10U, "math.vector2.make"}));
+    ASSERT_TRUE(graph.AddNodeUVE({20U, "math.vector2.length"}));
+    ASSERT_TRUE(graph.AddLinkUVE({{10U, "Vector"}, {20U, "Vector"}}));
+
+    const ScriptIrCompileResultUVE compiled = CompileScriptGraphToIrUVE(graph, registry);
+    ASSERT_TRUE(compiled.IsSuccessUVE());
+    ASSERT_TRUE(compiled.program.has_value());
+    ASSERT_GE(compiled.program->instructions.size(), 3U);
+    EXPECT_EQ(compiled.program->instructions[0].nodeTypeId, "math.vector2.make");
+    EXPECT_EQ(compiled.program->instructions[1].kind, ScriptIrInstructionKindUVE::TransferValue);
+    EXPECT_TRUE(compiled.program->instructions[1].isStagedTransfer);
+    EXPECT_EQ(compiled.program->instructions[1].targetPinName, "Vector");
+    EXPECT_EQ(compiled.program->instructions[2].nodeTypeId, "math.vector2.length");
 }
 
 } // namespace UVE::Scripting

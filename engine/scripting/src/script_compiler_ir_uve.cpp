@@ -102,6 +102,8 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
     std::vector<ScriptLinkUVE> stagedBooleanLinks;
     std::vector<ScriptLinkUVE> stagedNumberLinks;
     std::vector<ScriptLinkUVE> stagedComparisonNumberLinks;
+    std::vector<ScriptLinkUVE> stagedVector2ScaleLinks;
+    std::vector<ScriptLinkUVE> stagedVector2Links;
     std::vector<ScriptLinkUVE> stagedVector3ScaleLinks;
     std::vector<ScriptLinkUVE> stagedVector3Links;
     for (const ScriptNodeUVE& node : nodes) {
@@ -278,6 +280,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             (sourceNode->typeId == "engine.get_time" && link.output.pinName == "Value") ||
             (sourceNode->typeId == "math.vector3.dot" && link.output.pinName == "Result") ||
             (sourceNode->typeId == "math.vector3.length" && link.output.pinName == "Length") ||
+            (sourceNode->typeId == "math.vector2.length" && link.output.pinName == "Length") ||
             (sourceNode->typeId.rfind("math.float.", 0U) == 0U && link.output.pinName == "Result") ||
             (sourceNode->typeId == "variable.get_number" && link.output.pinName == "Result");
         const bool validDirectNumberLink = approvedNumberProducer &&
@@ -306,6 +309,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             (sourceNode->typeId == "engine.get_time" && link.output.pinName == "Value") ||
             (sourceNode->typeId == "math.vector3.dot" && link.output.pinName == "Result") ||
             (sourceNode->typeId == "math.vector3.length" && link.output.pinName == "Length") ||
+            (sourceNode->typeId == "math.vector2.length" && link.output.pinName == "Length") ||
             (sourceNode->typeId.rfind("math.float.", 0U) == 0U && link.output.pinName == "Result") ||
             (sourceNode->typeId == "variable.get_number" && link.output.pinName == "Result");
         const bool validComparisonInput = link.input.pinName == "A" || link.input.pinName == "B";
@@ -335,6 +339,36 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
         const ScriptNodeUVE* sourceNode = FindNodeUVE(nodes, link.output.nodeId);
         const ScriptNodeUVE* consumerNode = FindNodeUVE(nodes, link.input.nodeId);
         if (sourceNode == nullptr || consumerNode == nullptr ||
+            consumerNode->typeId != "math.vector2.multiply" || link.input.pinName != "Scale") {
+            continue;
+        }
+        const bool approvedNumberProducer =
+            (sourceNode->typeId == "engine.get_time" && link.output.pinName == "Value") ||
+            (sourceNode->typeId == "math.vector3.dot" && link.output.pinName == "Result") ||
+            (sourceNode->typeId == "math.vector3.length" && link.output.pinName == "Length") ||
+            (sourceNode->typeId == "math.vector2.length" && link.output.pinName == "Length") ||
+            (sourceNode->typeId.rfind("math.float.", 0U) == 0U && link.output.pinName == "Result") ||
+            (sourceNode->typeId == "variable.get_number" && link.output.pinName == "Result");
+        const bool hasProducerDependency = std::find_if(
+            links.begin(), links.end(), [&](const ScriptLinkUVE& dependency) {
+                return dependency.input.nodeId == sourceNode->id &&
+                       !IsExecutionLinkUVE(dependency, nodes, registry);
+            }) != links.end();
+        if (!approvedNumberProducer || hasProducerDependency || !stagedVector2ScaleLinks.empty()) {
+            result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode, link.input.nodeId,
+                                          link.input.pinName,
+                                          "Vector2 Scale staging supports one direct Number producer; additional Scale consumers and composed/deeper dependencies remain deferred."});
+            continue;
+        }
+        stagedVector2ScaleLinks.push_back(link);
+    }
+    for (const ScriptLinkUVE& link : links) {
+        if (IsExecutionLinkUVE(link, nodes, registry)) {
+            continue;
+        }
+        const ScriptNodeUVE* sourceNode = FindNodeUVE(nodes, link.output.nodeId);
+        const ScriptNodeUVE* consumerNode = FindNodeUVE(nodes, link.input.nodeId);
+        if (sourceNode == nullptr || consumerNode == nullptr ||
             consumerNode->typeId != "math.vector3.multiply" || link.input.pinName != "Scale") {
             continue;
         }
@@ -354,6 +388,32 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             continue;
         }
         stagedVector3ScaleLinks.push_back(link);
+    }
+    for (const ScriptLinkUVE& link : links) {
+        if (IsExecutionLinkUVE(link, nodes, registry)) {
+            continue;
+        }
+        const ScriptNodeUVE* sourceNode = FindNodeUVE(nodes, link.output.nodeId);
+        const ScriptNodeUVE* consumerNode = FindNodeUVE(nodes, link.input.nodeId);
+        if (sourceNode == nullptr || consumerNode == nullptr ||
+            consumerNode->typeId.rfind("math.vector2.", 0U) != 0U ||
+            (consumerNode->typeId == "math.vector2.multiply" && link.input.pinName == "Scale")) {
+            continue;
+        }
+        const bool approvedProducer =
+            sourceNode->typeId == "math.vector2.make" || sourceNode->typeId == "math.vector2.add" ||
+            sourceNode->typeId == "math.vector2.subtract" || sourceNode->typeId == "math.vector2.multiply" ||
+            sourceNode->typeId == "math.vector2.normalize";
+        const bool approvedOutput = link.output.pinName == "Vector" || link.output.pinName == "Result";
+        const bool approvedInput = link.input.pinName == "A" || link.input.pinName == "B" ||
+                                   link.input.pinName == "Vector";
+        if (!approvedProducer || !approvedOutput || !approvedInput || !stagedVector2Links.empty()) {
+            result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode, link.input.nodeId,
+                                          link.input.pinName,
+                                          "Vector2 data-link staging supports one direct Vector2 producer; composed and deeper vector dependencies remain deferred."});
+            continue;
+        }
+        stagedVector2Links.push_back(link);
     }
     for (const ScriptLinkUVE& link : links) {
         if (IsExecutionLinkUVE(link, nodes, registry)) {
@@ -438,12 +498,15 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
     moveStagedProducerBeforeConsumer(stagedBooleanLinks);
     moveStagedProducerBeforeConsumer(stagedNumberLinks);
     moveStagedProducerBeforeConsumer(stagedComparisonNumberLinks);
+    moveStagedProducerBeforeConsumer(stagedVector2ScaleLinks);
+    moveStagedProducerBeforeConsumer(stagedVector2Links);
     moveStagedProducerBeforeConsumer(stagedVector3ScaleLinks);
     moveStagedProducerBeforeConsumer(stagedVector3Links);
 
     const std::size_t stagedInstructionCount = instructionNodes.size() + stagedConditionLinks.size() +
                                                 stagedComponentLinks.size() + stagedBooleanLinks.size() + stagedNumberLinks.size() +
-                                                stagedComparisonNumberLinks.size() + stagedVector3ScaleLinks.size() + stagedVector3Links.size();
+                                                stagedComparisonNumberLinks.size() + stagedVector2ScaleLinks.size() +
+                                                stagedVector2Links.size() + stagedVector3ScaleLinks.size() + stagedVector3Links.size();
     const auto findStagedInstructionIndex = [&](const std::uint32_t nodeId) -> std::optional<std::size_t> {
         const std::optional<std::size_t> baseIndex = FindNodeInstructionIndexUVE(instructionNodes, nodeId);
         if (!baseIndex.has_value()) {
@@ -464,6 +527,8 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
         countStagedBefore(stagedBooleanLinks);
         countStagedBefore(stagedNumberLinks);
         countStagedBefore(stagedComparisonNumberLinks);
+        countStagedBefore(stagedVector2ScaleLinks);
+        countStagedBefore(stagedVector2Links);
         countStagedBefore(stagedVector3ScaleLinks);
         countStagedBefore(stagedVector3Links);
         return *baseIndex + stagedBefore;
@@ -555,6 +620,8 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             emitStagedLinks(stagedBooleanLinks);
             emitStagedLinks(stagedNumberLinks);
             emitStagedLinks(stagedComparisonNumberLinks);
+            emitStagedLinks(stagedVector2ScaleLinks);
+            emitStagedLinks(stagedVector2Links);
             emitStagedLinks(stagedVector3ScaleLinks);
             emitStagedLinks(stagedVector3Links);
     }
@@ -571,7 +638,9 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
         };
                 if (isStagedLink(stagedConditionLinks) || isStagedLink(stagedComponentLinks) ||
                     isStagedLink(stagedBooleanLinks) ||
-            isStagedLink(stagedNumberLinks) || isStagedLink(stagedComparisonNumberLinks) ||
+            isStagedLink(stagedNumberLinks) ||             isStagedLink(stagedComparisonNumberLinks) ||
+            isStagedLink(stagedVector2ScaleLinks) ||
+            isStagedLink(stagedVector2Links) ||
             isStagedLink(stagedVector3ScaleLinks) ||
             isStagedLink(stagedVector3Links)) {
             continue;
