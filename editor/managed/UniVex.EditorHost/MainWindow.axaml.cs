@@ -901,6 +901,7 @@ public partial class MainWindow : Window
         MotionQueryAuthoringCommandMetadataListBox.ItemsSource = motionQuery.Authoring.CommandMetadata;
         MotionQueryAuthoringDatabasesListBox.IsEnabled = connected && motionQuery.Authoring.Databases.Count > 0;
         MotionQueryAuthoringCommandMetadataListBox.IsEnabled = connected && motionQuery.Authoring.CommandMetadata.Count > 0;
+        MotionQueryPasteDatabaseButton.IsEnabled = connected;
         MotionQueryAuthoringStatusTextBlock.Text = connected
             ? $"Authoring revision {motionQuery.Authoring.Revision}; {motionQuery.Authoring.Databases.Count} native database(s). {motionQuery.Authoring.Diagnostic}"
             : motionQuery.Authoring.Diagnostic;
@@ -941,6 +942,47 @@ public partial class MainWindow : Window
         return button.Parent is Grid grid
             ? grid.Children.OfType<TextBox>().ElementAtOrDefault(textBoxIndex)?.Text?.Trim()
             : null;
+    }
+
+    private void MotionQueryCopyDatabaseButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button { DataContext: BridgeMotionQueryDatabaseRow row })
+        {
+            DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "dispatchMotionQueryCommand")
+            {
+                MotionQueryCommandKind = "copyDatabase",
+                MotionQueryResource = row.Resource,
+            });
+        }
+    }
+
+    private void MotionQueryPasteDatabaseButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (!ulong.TryParse(MotionQueryPasteResourceGuidTextBox.Text?.Trim(), out ulong resourceGuid) || resourceGuid == 0UL ||
+            !ulong.TryParse(MotionQueryPasteResourceGenerationTextBox.Text?.Trim(), out ulong resourceGeneration) || resourceGeneration == 0UL ||
+            !ulong.TryParse(MotionQueryPasteContextGenerationTextBox.Text?.Trim(), out ulong contextGeneration) || contextGeneration == 0UL)
+        {
+            StatusTextBlock.Text = "Motion Query database was not pasted.";
+            DetailsTextBlock.Text = "Enter positive resource and context generations before pasting.";
+            return;
+        }
+        string displayName = MotionQueryPasteDisplayNameTextBox.Text?.Trim() ?? string.Empty;
+        string databaseId = MotionQueryPasteDatabaseIdTextBox.Text?.Trim() ?? string.Empty;
+        if (displayName.Length == 0 || displayName.Length > 128 || databaseId.Length == 0 || databaseId.Length > 128)
+        {
+            StatusTextBlock.Text = "Motion Query database was not pasted.";
+            DetailsTextBlock.Text = "Display name and database ID must be bounded, non-empty text.";
+            return;
+        }
+        DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "dispatchMotionQueryCommand")
+        {
+            MotionQueryCommandKind = "pasteDatabase",
+            MotionQueryPasteTarget = new BridgeMotionQueryPasteTarget(
+                new BridgeMotionQueryResourceHandle(resourceGuid, resourceGeneration),
+                displayName,
+                databaseId,
+                contextGeneration),
+        });
     }
 
     private void MotionQuerySelectDatabaseButton_OnClick(object? sender, RoutedEventArgs e)

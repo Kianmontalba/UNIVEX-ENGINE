@@ -744,10 +744,48 @@ TEST(EditorBridgeUVETest, MotionQueryUVE_ExposesCopiedSnapshotAndRevisionGuarded
         EXPECT_EQ(dispatchResponse.snapshot.motionQuery.authoring.revision, 1U);
         EXPECT_EQ(dispatchResponse.snapshot.revision, initial.revision + 1U);
 
+        EditorBridgeRequestUVE copyRequest{};
+        copyRequest.protocolVersion = kEditorBridgeProtocolVersionUVE;
+        copyRequest.requestId = 502U;
+        copyRequest.expectedRevision = dispatchResponse.snapshot.revision;
+        copyRequest.kind = EditorBridgeRequestKindUVE::DispatchMotionQueryCommand;
+        Plugins::Editor::MotionQueryEditorCommandUVE copyCommand;
+        copyCommand.requestId = 502U;
+        copyCommand.expectedRevision = dispatchResponse.snapshot.motionQuery.authoring.revision;
+        copyCommand.kind = Plugins::Editor::MotionQueryEditorCommandKindUVE::CopyDatabase;
+        copyCommand.resource = entry.resource;
+        copyRequest.motionQueryCommand = copyCommand;
+        const EditorBridgeResponseUVE copyResponse = bridge.DispatchUVE(copyRequest);
+        ASSERT_TRUE(copyResponse.applied) << copyResponse.message;
+        EXPECT_EQ(copyResponse.snapshot.motionQuery.authoring.revision, 2U);
+        EXPECT_EQ(copyResponse.snapshot.revision, dispatchResponse.snapshot.revision + 1U);
+
+        EditorBridgeRequestUVE pasteRequest{};
+        pasteRequest.protocolVersion = kEditorBridgeProtocolVersionUVE;
+        pasteRequest.requestId = 504U;
+        pasteRequest.expectedRevision = copyResponse.snapshot.revision;
+        pasteRequest.kind = EditorBridgeRequestKindUVE::DispatchMotionQueryCommand;
+        Plugins::Editor::MotionQueryEditorCommandUVE pasteCommand;
+        pasteCommand.requestId = 504U;
+        pasteCommand.expectedRevision = copyResponse.snapshot.motionQuery.authoring.revision;
+        pasteCommand.kind = Plugins::Editor::MotionQueryEditorCommandKindUVE::PasteDatabase;
+        pasteCommand.pasteTarget = Plugins::Editor::MotionQueryEditorPasteTargetUVE{
+            Asset::ResourceHandleUVE{Asset::AssetGuidUVE{88U}, 1U},
+            "Pasted Motion Database",
+            Core::MotionQueryDatabaseContextUVE{"bridge-db-copy", 2U}};
+        pasteRequest.motionQueryCommand = pasteCommand;
+        const EditorBridgeResponseUVE pasteResponse = bridge.DispatchUVE(pasteRequest);
+        ASSERT_TRUE(pasteResponse.applied) << pasteResponse.message;
+        ASSERT_EQ(pasteResponse.snapshot.motionQuery.authoring.databases.size(), 2U);
+        EXPECT_EQ(pasteResponse.snapshot.motionQuery.authoring.databases.back().displayName,
+                  "Pasted Motion Database");
+        EXPECT_EQ(pasteResponse.snapshot.motionQuery.authoring.revision, 3U);
+        EXPECT_EQ(pasteResponse.snapshot.revision, copyResponse.snapshot.revision + 1U);
+
         EditorBridgeRequestUVE debugRequest{};
         debugRequest.protocolVersion = kEditorBridgeProtocolVersionUVE;
         debugRequest.requestId = 503U;
-        debugRequest.expectedRevision = dispatchResponse.snapshot.revision;
+        debugRequest.expectedRevision = pasteResponse.snapshot.revision;
         debugRequest.kind = EditorBridgeRequestKindUVE::DispatchMotionQueryDebugCommand;
         Plugins::Editor::MotionQueryLiveDebugCommandUVE attachCommand;
         attachCommand.requestId = 503U;
@@ -760,7 +798,7 @@ TEST(EditorBridgeUVETest, MotionQueryUVE_ExposesCopiedSnapshotAndRevisionGuarded
         EXPECT_TRUE(debugResponse.snapshot.motionQuery.liveDebugActive);
         EXPECT_EQ(debugResponse.snapshot.motionQuery.liveDebugDatabase, entry.resource);
         EXPECT_EQ(debugResponse.snapshot.motionQuery.liveDebugGeneration, 1U);
-        EXPECT_EQ(debugResponse.snapshot.revision, dispatchResponse.snapshot.revision + 1U);
+        EXPECT_EQ(debugResponse.snapshot.revision, pasteResponse.snapshot.revision + 1U);
 
         Plugins::Editor::MotionQueryTraceReplayFixtureUVE replayFixture;
         bridge.SetMotionQueryReplayFixtureUVE(replayFixture);
