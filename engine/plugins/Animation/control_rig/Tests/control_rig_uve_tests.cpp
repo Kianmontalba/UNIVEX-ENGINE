@@ -83,6 +83,29 @@ TEST(ControlRigUVETest, SolveTwoBoneIKUVE_ReachesTargetWithPoleVectorDeterminist
     EXPECT_NEAR(result.endPose.position.y, 1.0F, 1.0e-4F);
 }
 
+TEST(ControlRigUVETest, SolveTwoBoneIKUVE_AlignsRootAndMidRotationsToSolvedBones) {
+    const ControlRigUVE rig = MakeRigUVE();
+    const TwoBoneIKSolveResultUVE result = SolveTwoBoneIKUVE(
+        rig.controls[0].pose, rig.controls[1].pose, rig.controls[2].pose,
+        rig.controls[3].pose.position, rig.controls[4].pose.position, 1.0F);
+
+    ASSERT_TRUE(result.IsSuccessUVE());
+    const Math::Vector3UVE rootDirection = Math::NormalizeUVE(
+        result.midPose.position - result.rootPose.position);
+    const Math::Vector3UVE midDirection = Math::NormalizeUVE(
+        result.endPose.position - result.midPose.position);
+    const Math::Vector3UVE rootAxis = Math::RotateVectorUVE(
+        result.rootPose.rotation, {1.0F, 0.0F, 0.0F});
+    const Math::Vector3UVE midAxis = Math::RotateVectorUVE(
+        result.midPose.rotation, {1.0F, 0.0F, 0.0F});
+    EXPECT_NEAR(rootAxis.x, rootDirection.x, 1.0e-4F);
+    EXPECT_NEAR(rootAxis.y, rootDirection.y, 1.0e-4F);
+    EXPECT_NEAR(rootAxis.z, rootDirection.z, 1.0e-4F);
+    EXPECT_NEAR(midAxis.x, midDirection.x, 1.0e-4F);
+    EXPECT_NEAR(midAxis.y, midDirection.y, 1.0e-4F);
+    EXPECT_NEAR(midAxis.z, midDirection.z, 1.0e-4F);
+}
+
 TEST(ControlRigUVETest, SolveTwoBoneIKUVE_UsesBoundedWeightedPoseBlend) {
     const ControlRigUVE rig = MakeRigUVE();
     const TwoBoneIKSolveResultUVE result = SolveTwoBoneIKUVE(
