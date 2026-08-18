@@ -1597,6 +1597,27 @@ TEST(ScriptComponentRuntimeOwnershipUVETest, ReconcileUVE_RejectsReplacementWhil
     EXPECT_EQ(runtime.GetInstanceCountUVE(), 1U);
 }
 
+TEST(ScriptBytecodeUVETest, LowerIrToBytecodeUVE_EnforcesInstructionCountCap) {
+    ScriptIrProgramUVE boundary;
+    boundary.instructions.resize(ScriptIrProgramUVE::kMaximumInstructionsUVE);
+    std::vector<ScriptBytecodeDiagnosticUVE> boundaryDiagnostics;
+    const std::optional<ScriptBytecodeProgramUVE> accepted =
+        LowerIrToBytecodeUVE(boundary, boundaryDiagnostics);
+    ASSERT_TRUE(accepted.has_value());
+    EXPECT_TRUE(boundaryDiagnostics.empty());
+
+    ScriptIrProgramUVE oversized;
+    oversized.instructions.resize(ScriptIrProgramUVE::kMaximumInstructionsUVE + 1U);
+    std::vector<ScriptBytecodeDiagnosticUVE> oversizedDiagnostics;
+    const std::optional<ScriptBytecodeProgramUVE> rejected =
+        LowerIrToBytecodeUVE(oversized, oversizedDiagnostics);
+    EXPECT_FALSE(rejected.has_value());
+    ASSERT_EQ(oversizedDiagnostics.size(), 1U);
+    EXPECT_EQ(oversizedDiagnostics.front().code, ScriptBytecodeDiagnosticCodeUVE::InstructionLimitExceeded);
+    EXPECT_EQ(oversizedDiagnostics.front().offset, 0U);
+    EXPECT_EQ(oversizedDiagnostics.front().message, "IR instruction count exceeds the maximum of 256.");
+}
+
 TEST(ScriptBytecodeUVETest, EncodeDecodeScriptBytecodeUVE_RoundTripsVersionedProgram) {
     ScriptBytecodeProgramUVE program;
     program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 4U, 0U, "test.source", {}, {}});

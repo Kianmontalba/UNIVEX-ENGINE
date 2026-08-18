@@ -34,6 +34,7 @@ struct ScriptIrInstructionUVE final {
 };
 
 struct ScriptIrProgramUVE final {
+    static constexpr std::size_t kMaximumInstructionsUVE = 256U;
     static constexpr std::uint32_t kCurrentVersionUVE = 4U;
 
     std::uint32_t version = kCurrentVersionUVE;

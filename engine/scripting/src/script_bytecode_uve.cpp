@@ -45,9 +45,10 @@ std::optional<ScriptBytecodeProgramUVE> LowerIrToBytecodeUVE(
                       "Unsupported IR version.");
         return std::nullopt;
     }
-    if (ir.instructions.size() > ScriptBytecodeProgramUVE::kMaximumInstructionsUVE) {
+    if (ir.instructions.size() > ScriptIrProgramUVE::kMaximumInstructionsUVE) {
         AddDiagnostic(diagnostics, ScriptBytecodeDiagnosticCodeUVE::InstructionLimitExceeded, 0U,
-                      "IR instruction limit exceeded.");
+                      "IR instruction count exceeds the maximum of " +
+                          std::to_string(ScriptIrProgramUVE::kMaximumInstructionsUVE) + ".");
         return std::nullopt;
     }
     ScriptBytecodeProgramUVE program;
