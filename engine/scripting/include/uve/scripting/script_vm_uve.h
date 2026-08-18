@@ -52,6 +52,13 @@ struct ScriptComponentValueUVE final {
 using ScriptVmValueUVE =
     std::variant<float, ScriptVector3ValueUVE, bool, ScriptEntityValueUVE, ScriptComponentValueUVE>;
 
+struct ScriptVmLocalVariableUVE final {
+    std::uint32_t slot = 0U;
+    ScriptVmValueUVE value = 0.0F;
+
+    [[nodiscard]] bool operator==(const ScriptVmLocalVariableUVE&) const = default;
+};
+
 struct ScriptVmValueBindingUVE final {
     std::uint32_t nodeId = 0U;
     std::string pinName;
@@ -63,10 +70,16 @@ struct ScriptVmValueBindingUVE final {
 struct ScriptVmExecutionContextUVE final {
     static constexpr std::size_t kMaximumBindingsUVE = 1024U;
     static constexpr std::size_t kMaximumComponentFactsUVE = 256U;
+    static constexpr std::size_t kMaximumLocalVariablesUVE = 256U;
 
     std::vector<ScriptVmValueBindingUVE> inputs;
     std::vector<ScriptVmValueBindingUVE> outputs;
     std::vector<ScriptComponentValueUVE> componentFacts;
+    std::vector<ScriptVmLocalVariableUVE> localVariables;
+
+    [[nodiscard]] bool InitializeLocalVariableUVE(std::uint32_t slot, ScriptVmValueUVE value);
+    [[nodiscard]] bool SetLocalVariableUVE(std::uint32_t slot, ScriptVmValueUVE value);
+    [[nodiscard]] std::optional<ScriptVmValueUVE> FindLocalVariableUVE(std::uint32_t slot) const;
 
     [[nodiscard]] bool SetInputUVE(std::uint32_t nodeId, std::string pinName, ScriptVmValueUVE value);
     [[nodiscard]] bool SetOutputUVE(std::uint32_t nodeId, std::string pinName, ScriptVmValueUVE value);

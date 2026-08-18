@@ -1080,6 +1080,7 @@ public sealed class BridgeProtocolClientTests
                     programVersion = 4U,
                     instructionCount = 12,
                     stateValueCount = 2,
+                    stateLocalVariableCount = 0,
                     enabled = true,
                 },
                 new
@@ -1090,6 +1091,7 @@ public sealed class BridgeProtocolClientTests
                     programVersion = 5U,
                     instructionCount = 3,
                     stateValueCount = 0,
+                    stateLocalVariableCount = 0,
                     enabled = false,
                 },
             },
@@ -1312,6 +1314,7 @@ public sealed class BridgeProtocolClientTests
                 programVersion = 1U,
                 instructionCount = 1,
                 stateValueCount = 0,
+                stateLocalVariableCount = 0,
                 enabled = true,
             }).ToArray();
         Dictionary<string, JsonElement> members = document.RootElement.EnumerateObject()
@@ -1629,6 +1632,7 @@ public sealed class BridgeProtocolClientTests
                     programVersion = 4U,
                     instructionCount = 12,
                     stateValueCount = 2,
+                    stateLocalVariableCount = 0,
                     enabled = true,
                 },
                 new
@@ -1639,6 +1643,7 @@ public sealed class BridgeProtocolClientTests
                     programVersion = 5U,
                     instructionCount = 3,
                     stateValueCount = 0,
+                    stateLocalVariableCount = 0,
                     enabled = false,
                 },
             },
@@ -1838,6 +1843,7 @@ public sealed class BridgeProtocolClientTests
                     programVersion = 4U,
                     instructionCount = 12,
                     stateValueCount = 2,
+                    stateLocalVariableCount = 0,
                     enabled = true,
                 },
                 new
@@ -1848,6 +1854,7 @@ public sealed class BridgeProtocolClientTests
                     programVersion = 5U,
                     instructionCount = 3,
                     stateValueCount = 0,
+                    stateLocalVariableCount = 0,
                     enabled = false,
                 },
             },

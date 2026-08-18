@@ -146,7 +146,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
                      sourceNode->typeId == "logic.boolean.equal" || sourceNode->typeId == "logic.boolean.not_equal" ||
                      sourceNode->typeId == "logic.boolean.greater" || sourceNode->typeId == "logic.boolean.less" ||
                      sourceNode->typeId == "logic.boolean.greater_equal" || sourceNode->typeId == "logic.boolean.less_equal" ||
-                     sourceNode->typeId == "query.entity.has_component");
+                     sourceNode->typeId == "query.entity.has_component" || sourceNode->typeId == "variable.get_boolean");
                 if (!supportedProducer) {
                     result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode, node.id,
                                                   "Condition",
@@ -249,7 +249,8 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
         }
         const bool approvedBooleanProducer =
             (sourceNode->typeId.rfind("logic.boolean.", 0U) == 0U ||
-             sourceNode->typeId == "query.entity.has_component") &&
+             sourceNode->typeId == "query.entity.has_component" ||
+             sourceNode->typeId == "variable.get_boolean") &&
             link.output.pinName == "Result";
         const bool validBooleanInput =
             (consumerNode->typeId == "logic.boolean.not" && link.input.pinName == "Value") ||
@@ -277,13 +278,14 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             (sourceNode->typeId == "engine.get_time" && link.output.pinName == "Value") ||
             (sourceNode->typeId == "math.vector3.dot" && link.output.pinName == "Result") ||
             (sourceNode->typeId == "math.vector3.length" && link.output.pinName == "Length") ||
-            (sourceNode->typeId.rfind("math.float.", 0U) == 0U && link.output.pinName == "Result");
+            (sourceNode->typeId.rfind("math.float.", 0U) == 0U && link.output.pinName == "Result") ||
+            (sourceNode->typeId == "variable.get_number" && link.output.pinName == "Result");
         const bool validDirectNumberLink = approvedNumberProducer &&
                                            (link.input.pinName == "A" || link.input.pinName == "B");
         if (!validDirectNumberLink || !stagedNumberLinks.empty()) {
             result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode, link.input.nodeId,
                                           link.input.pinName,
-                                          "Float data-link staging supports one direct built-in Number producer (engine.get_time, Vector3 dot/length, or Float Result); additional composed and deeper Number dependencies remain deferred."});
+                                          "Float data-link staging supports one direct built-in Number or variable.get_number.Result producer; additional composed and deeper Number dependencies remain deferred."});
             continue;
         }
         stagedNumberLinks.push_back(link);
@@ -304,7 +306,8 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             (sourceNode->typeId == "engine.get_time" && link.output.pinName == "Value") ||
             (sourceNode->typeId == "math.vector3.dot" && link.output.pinName == "Result") ||
             (sourceNode->typeId == "math.vector3.length" && link.output.pinName == "Length") ||
-            (sourceNode->typeId.rfind("math.float.", 0U) == 0U && link.output.pinName == "Result");
+            (sourceNode->typeId.rfind("math.float.", 0U) == 0U && link.output.pinName == "Result") ||
+            (sourceNode->typeId == "variable.get_number" && link.output.pinName == "Result");
         const bool validComparisonInput = link.input.pinName == "A" || link.input.pinName == "B";
         const bool sameComparisonConsumer = std::any_of(
             stagedComparisonNumberLinks.begin(), stagedComparisonNumberLinks.end(),
@@ -320,7 +323,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             (!stagedComparisonNumberLinks.empty() && !sameComparisonConsumer)) {
             result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode, link.input.nodeId,
                                           link.input.pinName,
-                                          "Boolean comparison staging supports up to two direct Number producers on one comparison A/B pair; composed dependencies and multiple comparison consumers remain deferred."});
+                                          "Boolean comparison staging supports up to two direct Number or variable.get_number producers on one comparison A/B pair; composed dependencies and multiple comparison consumers remain deferred."});
             continue;
         }
         stagedComparisonNumberLinks.push_back(link);
@@ -337,7 +340,8 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
         }
         const bool approvedNumberProducer =
             (sourceNode->typeId == "engine.get_time" && link.output.pinName == "Value") ||
-            (sourceNode->typeId.rfind("math.float.", 0U) == 0U && link.output.pinName == "Result");
+            (sourceNode->typeId.rfind("math.float.", 0U) == 0U && link.output.pinName == "Result") ||
+            (sourceNode->typeId == "variable.get_number" && link.output.pinName == "Result");
         const bool hasProducerDependency = std::find_if(
             links.begin(), links.end(), [&](const ScriptLinkUVE& dependency) {
                 return dependency.input.nodeId == sourceNode->id &&
@@ -346,7 +350,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
         if (!approvedNumberProducer || hasProducerDependency || !stagedVector3ScaleLinks.empty()) {
             result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode, link.input.nodeId,
                                           link.input.pinName,
-                                          "Vector3 Scale staging supports one direct engine.get_time.Value or math.float.*.Result Number producer; additional Scale consumers and composed/deeper dependencies remain deferred."});
+                                          "Vector3 Scale staging supports one direct Number or variable.get_number.Result producer; additional Scale consumers and composed/deeper dependencies remain deferred."});
             continue;
         }
         stagedVector3ScaleLinks.push_back(link);
@@ -365,14 +369,15 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
         const bool approvedProducer =
             sourceNode->typeId == "math.vector3.make" || sourceNode->typeId == "math.vector3.add" ||
             sourceNode->typeId == "math.vector3.subtract" || sourceNode->typeId == "math.vector3.multiply" ||
-            sourceNode->typeId == "math.vector3.cross" || sourceNode->typeId == "math.vector3.normalize";
+            sourceNode->typeId == "math.vector3.cross" || sourceNode->typeId == "math.vector3.normalize" ||
+            sourceNode->typeId == "variable.get_vector3";
         const bool approvedOutput = link.output.pinName == "Vector" || link.output.pinName == "Result";
         const bool approvedInput = link.input.pinName == "A" || link.input.pinName == "B" ||
                                    link.input.pinName == "Vector";
         if (!approvedProducer || !approvedOutput || !approvedInput || !stagedVector3Links.empty()) {
             result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode, link.input.nodeId,
                                           link.input.pinName,
-                                          "Vector3 data-link staging supports only one direct built-in Vector3 producer; composed and deeper vector dependencies remain deferred."});
+                                          "Vector3 data-link staging supports one direct built-in or variable.get_vector3.Result producer; composed and deeper vector dependencies remain deferred."});
             continue;
         }
         stagedVector3Links.push_back(link);

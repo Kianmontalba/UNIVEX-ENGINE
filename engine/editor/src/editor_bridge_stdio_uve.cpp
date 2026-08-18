@@ -405,6 +405,7 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"programVersion", entry.programVersion},
                    {"instructionCount", entry.instructionCount},
                    {"stateValueCount", entry.stateValueCount},
+                   {"stateLocalVariableCount", entry.stateLocalVariableCount},
                    {"enabled", entry.enabled}};
 }
 

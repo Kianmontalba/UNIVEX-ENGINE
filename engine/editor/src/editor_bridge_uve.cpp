@@ -1194,6 +1194,7 @@ EditorBridgeScriptRuntimeSnapshotUVE EditorBridgeUVE::CaptureScriptRuntimeUVE() 
             instance.programVersion,
             instance.instructionCount,
             instance.stateValueCount,
+            instance.stateLocalVariableCount,
             instance.enabled});
     }
     return snapshot;

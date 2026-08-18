@@ -41,10 +41,16 @@ namespace {
     return context.inputs.size() <= ScriptVmExecutionContextUVE::kMaximumBindingsUVE &&
            context.outputs.size() <= ScriptVmExecutionContextUVE::kMaximumBindingsUVE &&
            context.componentFacts.size() <= ScriptVmExecutionContextUVE::kMaximumComponentFactsUVE &&
+           context.localVariables.size() <= ScriptVmExecutionContextUVE::kMaximumLocalVariablesUVE &&
            std::all_of(context.inputs.begin(), context.inputs.end(), validBinding) &&
            std::all_of(context.outputs.begin(), context.outputs.end(), validBinding) &&
            std::all_of(context.componentFacts.begin(), context.componentFacts.end(),
-                       [](const ScriptComponentValueUVE& fact) { return fact.IsValidQueryFactUVE(); });
+                       [](const ScriptComponentValueUVE& fact) { return fact.IsValidQueryFactUVE(); }) &&
+           std::all_of(context.localVariables.begin(), context.localVariables.end(),
+                       [](const ScriptVmLocalVariableUVE& variable) {
+                           return variable.slot < ScriptVmExecutionContextUVE::kMaximumLocalVariablesUVE &&
+                                  IsFiniteScriptVmValueUVE(variable.value);
+                       });
 }
 
 [[nodiscard]] std::vector<ScriptBytecodeDiagnosticUVE> ValidateRuntimeProgramUVE(
@@ -173,9 +179,10 @@ ScriptRuntimeStateUpdateResultUVE ScriptRuntimeUVE::SetStateDetailedUVE(const Sc
     }
     if (state.executionContext.inputs.size() > kMaximumStateVmBindingsUVE ||
         state.executionContext.outputs.size() > kMaximumStateVmBindingsUVE ||
-        state.executionContext.componentFacts.size() > ScriptVmExecutionContextUVE::kMaximumComponentFactsUVE) {
+        state.executionContext.componentFacts.size() > ScriptVmExecutionContextUVE::kMaximumComponentFactsUVE ||
+        state.executionContext.localVariables.size() > ScriptVmExecutionContextUVE::kMaximumLocalVariablesUVE) {
         return {ScriptRuntimeStateUpdateCodeUVE::CapacityExceeded,
-                "State update rejected because the VM binding or query fact context exceeds its bounded capacity."};
+                "State update rejected because the VM binding, query fact, or local-variable context exceeds its bounded capacity."};
     }
     if (!IsValidScriptVmBindingsUVE(state.executionContext)) {
         return {ScriptRuntimeStateUpdateCodeUVE::InvalidVmBinding,
@@ -214,6 +221,7 @@ std::vector<ScriptRuntimeInstanceSnapshotUVE> ScriptRuntimeUVE::GetSnapshotUVE()
                              instance.program.version,
                              instance.program.instructions.size(),
                              instance.state.values.size(),
+                             instance.state.executionContext.localVariables.size(),
                              instance.enabled});
     }
     std::sort(snapshots.begin(), snapshots.end(), [](const ScriptRuntimeInstanceSnapshotUVE& lhs,

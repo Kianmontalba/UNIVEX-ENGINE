@@ -504,11 +504,13 @@ public sealed record BridgeScriptRuntimeInstanceEntry(
     uint ProgramVersion,
     int InstructionCount,
     int StateValueCount,
+    int StateLocalVariableCount,
     bool Enabled)
 {
     public string DisplayText =>
         $"Entity {EntityIndex}:{EntityGeneration} · generation {Generation} · program v{ProgramVersion} · " +
         $"{InstructionCount} instruction(s) · {StateValueCount} state value(s) · " +
+        $"{StateLocalVariableCount} local variable(s) · " +
         (Enabled ? "enabled" : "disabled");
 
     public bool MatchesFilter(string? filter) =>
@@ -1365,7 +1367,8 @@ public static class BridgeSnapshotParser
             RequireObject(entry, "ScriptRuntime instance entry");
             int instructionCount = RequiredInt32(entry, "instructionCount");
             int stateValueCount = RequiredInt32(entry, "stateValueCount");
-            if (instructionCount < 0 || stateValueCount < 0)
+            int stateLocalVariableCount = RequiredInt32(entry, "stateLocalVariableCount");
+            if (instructionCount < 0 || stateValueCount < 0 || stateLocalVariableCount < 0)
             {
                 throw Invalid("ScriptRuntime instance counts must be non-negative.");
             }
@@ -1376,6 +1379,7 @@ public static class BridgeSnapshotParser
                 RequiredUInt32(entry, "programVersion"),
                 instructionCount,
                 stateValueCount,
+                stateLocalVariableCount,
                 RequiredBoolean(entry, "enabled")));
         }
 

@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <type_traits>
 #include <utility>
 
 namespace UVE::Scripting {
@@ -26,6 +27,45 @@ namespace {
                                            return binding.nodeId == nodeId && binding.pinName == pinName;
                                        });
     return iterator == bindings.end() ? nullptr : &*iterator;
+}
+[[nodiscard]] bool IsFiniteScriptVmValueUVE(const ScriptVmValueUVE& value) noexcept {
+    return std::visit(
+        [](const auto& typedValue) noexcept {
+            using ValueType = std::decay_t<decltype(typedValue)>;
+            if constexpr (std::is_same_v<ValueType, float>) {
+                return std::isfinite(typedValue);
+            } else if constexpr (std::is_same_v<ValueType, bool>) {
+                return true;
+            } else if constexpr (std::is_same_v<ValueType, ScriptVector3ValueUVE>) {
+                return std::isfinite(typedValue.value.x) && std::isfinite(typedValue.value.y) &&
+                       std::isfinite(typedValue.value.z);
+            } else {
+                return typedValue.IsValidUVE();
+            }
+        },
+        value);
+}
+
+[[nodiscard]] bool IsSupportedLocalVariableValueUVE(const ScriptVmValueUVE& value) noexcept {
+    return std::holds_alternative<float>(value) || std::holds_alternative<bool>(value) ||
+           std::holds_alternative<ScriptVector3ValueUVE>(value);
+}
+
+[[nodiscard]] ScriptVmLocalVariableUVE* FindMutableLocalVariableUVE(
+    std::vector<ScriptVmLocalVariableUVE>& variables, const std::uint32_t slot) noexcept {
+    const auto iterator = std::find_if(variables.begin(), variables.end(),
+                                       [slot](const ScriptVmLocalVariableUVE& variable) {
+                                           return variable.slot == slot;
+                                       });
+    return iterator == variables.end() ? nullptr : &*iterator;
+}
+[[nodiscard]] const ScriptVmLocalVariableUVE* FindLocalVariableRecordUVE(
+    const std::vector<ScriptVmLocalVariableUVE>& variables, const std::uint32_t slot) noexcept {
+    const auto iterator = std::find_if(variables.begin(), variables.end(),
+                                       [slot](const ScriptVmLocalVariableUVE& variable) {
+                                           return variable.slot == slot;
+                                       });
+    return iterator == variables.end() ? nullptr : &*iterator;
 }
 
 
@@ -72,6 +112,123 @@ namespace {
 [[nodiscard]] bool SetNodeOutputUVE(ScriptVmExecutionContextUVE& context, const std::uint32_t nodeId,
                                     const char* pinName, ScriptVmValueUVE value) {
     return context.SetOutputUVE(nodeId, pinName, std::move(value));
+}
+
+[[nodiscard]] ScriptVmExecutionResultUVE ExecuteVariableNodeUVE(
+    const ScriptIrInstructionUVE& instruction, const std::size_t instructionIndex,
+    ScriptVmExecutionContextUVE& context) {
+    const std::uint32_t nodeId = instruction.sourceNodeId;
+    const bool isNumber = instruction.nodeTypeId.ends_with("_number");
+    const bool isBoolean = instruction.nodeTypeId.ends_with("_boolean");
+    const bool isVector3 = instruction.nodeTypeId.ends_with("_vector3");
+    const bool isMake = instruction.nodeTypeId.rfind("variable.make_", 0U) == 0U;
+    const bool isSet = instruction.nodeTypeId.rfind("variable.set_", 0U) == 0U;
+    const bool isGet = instruction.nodeTypeId.rfind("variable.get_", 0U) == 0U;
+    if ((!isNumber && !isBoolean && !isVector3) || (!isMake && !isSet && !isGet)) {
+        return {};
+    }
+    const float* slotInput = FindNumberInputUVE(context, nodeId, "Slot");
+    if (slotInput == nullptr || !std::isfinite(*slotInput) || *slotInput < 0.0F ||
+        *slotInput > static_cast<float>(ScriptVmExecutionContextUVE::kMaximumLocalVariablesUVE - 1U) ||
+        std::floor(*slotInput) != *slotInput) {
+        return MakeNodeFailureUVE(instructionIndex, "Variable node requires an integral finite Slot within local capacity.");
+    }
+    const std::uint32_t slot = static_cast<std::uint32_t>(*slotInput);
+    const auto setResult = [&](ScriptVmValueUVE value) -> ScriptVmExecutionResultUVE {
+        if (!context.SetOutputUVE(nodeId, "Result", value)) {
+            return MakeNodeFailureUVE(instructionIndex, "Variable node rejected its Result output capacity.");
+        }
+        return {};
+    };
+    const auto rejectType = [&]() {
+        return MakeNodeFailureUVE(instructionIndex, "Variable node found a missing or type-incompatible local slot.");
+    };
+    if (isNumber) {
+        if (isMake) {
+            const float* value = FindNumberInputUVE(context, nodeId, "Value");
+            if (value == nullptr || !std::isfinite(*value)) {
+                return MakeNodeFailureUVE(instructionIndex, "Make Number Variable requires a finite Value.");
+            }
+            ScriptVmLocalVariableUVE* existing = FindMutableLocalVariableUVE(context.localVariables, slot);
+            if (existing == nullptr) {
+                if (context.localVariables.size() >= ScriptVmExecutionContextUVE::kMaximumLocalVariablesUVE ||
+                    !context.InitializeLocalVariableUVE(slot, *value)) {
+                    return MakeNodeFailureUVE(instructionIndex, "Make Number Variable rejected local capacity.");
+                }
+                return setResult(*value);
+            }
+            if (!std::holds_alternative<float>(existing->value)) {
+                return rejectType();
+            }
+            return setResult(existing->value);
+        }
+        if (isSet) {
+            const float* value = FindNumberInputUVE(context, nodeId, "Value");
+            if (value == nullptr || !std::isfinite(*value)) {
+                return MakeNodeFailureUVE(instructionIndex, "Set Number Variable requires a finite Value.");
+            }
+            if (!context.SetLocalVariableUVE(slot, *value)) {
+                return rejectType();
+            }
+            return setResult(*value);
+        }
+        const auto value = context.FindLocalVariableUVE(slot);
+        return value.has_value() && std::holds_alternative<float>(*value) ? setResult(*value) : rejectType();
+    }
+    if (isBoolean) {
+        if (isMake) {
+            const bool* value = FindBooleanInputUVE(context, nodeId, "Value");
+            if (value == nullptr) {
+                return MakeNodeFailureUVE(instructionIndex, "Make Boolean Variable requires a Boolean Value.");
+            }
+            ScriptVmLocalVariableUVE* existing = FindMutableLocalVariableUVE(context.localVariables, slot);
+            if (existing == nullptr) {
+                if (context.localVariables.size() >= ScriptVmExecutionContextUVE::kMaximumLocalVariablesUVE ||
+                    !context.InitializeLocalVariableUVE(slot, *value)) {
+                    return MakeNodeFailureUVE(instructionIndex, "Make Boolean Variable rejected local capacity.");
+                }
+                return setResult(*value);
+            }
+            if (!std::holds_alternative<bool>(existing->value)) {
+                return rejectType();
+            }
+            return setResult(existing->value);
+        }
+        if (isSet) {
+            const bool* value = FindBooleanInputUVE(context, nodeId, "Value");
+            if (value == nullptr || !context.SetLocalVariableUVE(slot, *value)) {
+                return rejectType();
+            }
+            return setResult(*value);
+        }
+        const auto value = context.FindLocalVariableUVE(slot);
+        return value.has_value() && std::holds_alternative<bool>(*value) ? setResult(*value) : rejectType();
+    }
+    if (isMake) {
+        const ScriptVector3ValueUVE* value = FindVector3InputUVE(context, nodeId, "Value");
+        if (value == nullptr || !std::isfinite(value->value.x) || !std::isfinite(value->value.y) ||
+            !std::isfinite(value->value.z)) {
+            return MakeNodeFailureUVE(instructionIndex, "Make Vector3 Variable requires a finite Value.");
+        }
+        ScriptVmLocalVariableUVE* existing = FindMutableLocalVariableUVE(context.localVariables, slot);
+        if (existing == nullptr) {
+            if (context.localVariables.size() >= ScriptVmExecutionContextUVE::kMaximumLocalVariablesUVE ||
+                !context.InitializeLocalVariableUVE(slot, *value)) {
+                return MakeNodeFailureUVE(instructionIndex, "Make Vector3 Variable rejected local capacity.");
+            }
+            return setResult(*value);
+        }
+        return std::holds_alternative<ScriptVector3ValueUVE>(existing->value) ? setResult(existing->value) : rejectType();
+    }
+    if (isSet) {
+        const ScriptVector3ValueUVE* value = FindVector3InputUVE(context, nodeId, "Value");
+        if (value == nullptr || !context.SetLocalVariableUVE(slot, *value)) {
+            return rejectType();
+        }
+        return setResult(*value);
+    }
+    const auto value = context.FindLocalVariableUVE(slot);
+    return value.has_value() && std::holds_alternative<ScriptVector3ValueUVE>(*value) ? setResult(*value) : rejectType();
 }
 
 [[nodiscard]] ScriptVmExecutionResultUVE ExecuteFloatNodeUVE(
@@ -362,6 +519,28 @@ namespace {
     return {};
 }
 
+[[nodiscard]] bool HasRequiredVariableInputsUVE(const ScriptIrInstructionUVE& instruction,
+                                                  const ScriptVmExecutionContextUVE& context) {
+    if (instruction.nodeTypeId.rfind("variable.", 0U) != 0U) {
+        return true;
+    }
+    if (FindNumberInputUVE(context, instruction.sourceNodeId, "Slot") == nullptr) {
+        return false;
+    }
+    const bool requiresValue = instruction.nodeTypeId.rfind("variable.make_", 0U) == 0U ||
+                               instruction.nodeTypeId.rfind("variable.set_", 0U) == 0U;
+    if (!requiresValue || instruction.nodeTypeId.rfind("variable.get_", 0U) == 0U) {
+        return true;
+    }
+    if (instruction.nodeTypeId.ends_with("_number")) {
+        return FindNumberInputUVE(context, instruction.sourceNodeId, "Value") != nullptr;
+    }
+    if (instruction.nodeTypeId.ends_with("_boolean")) {
+        return FindBooleanInputUVE(context, instruction.sourceNodeId, "Value") != nullptr;
+    }
+    return FindVector3InputUVE(context, instruction.sourceNodeId, "Value") != nullptr;
+}
+
 [[nodiscard]] bool HasRequiredFloatInputsUVE(const ScriptIrInstructionUVE& instruction,
                                               const ScriptVmExecutionContextUVE& context) {
     if (instruction.nodeTypeId.rfind("math.float.", 0U) != 0U) {
@@ -545,13 +724,15 @@ namespace {
             return failure;
         }
 
+        const bool isVariableNode = instruction.nodeTypeId.rfind("variable.", 0U) == 0U;
         const bool isVector3Node = instruction.nodeTypeId.rfind("math.vector3.", 0U) == 0U;
         const bool isFloatNode = instruction.nodeTypeId.rfind("math.float.", 0U) == 0U;
         const bool isBooleanNode = instruction.nodeTypeId.rfind("logic.boolean.", 0U) == 0U;
         const bool isEntityQueryNode = instruction.nodeTypeId.rfind("query.entity.", 0U) == 0U;
         const bool isEngineLogNode = instruction.nodeTypeId == "engine.log";
         const bool isEngineGetTimeNode = instruction.nodeTypeId == "engine.get_time";
-        if ((isVector3Node && !HasRequiredVector3InputsUVE(instruction, context)) ||
+        if ((isVariableNode && !HasRequiredVariableInputsUVE(instruction, context)) ||
+            (isVector3Node && !HasRequiredVector3InputsUVE(instruction, context)) ||
             (isFloatNode && !HasRequiredFloatInputsUVE(instruction, context)) ||
             (isBooleanNode && !HasRequiredBooleanInputsUVE(instruction, context)) ||
             (isEntityQueryNode && !HasRequiredEntityQueryInputsUVE(instruction, context)) ||
@@ -563,7 +744,9 @@ namespace {
             return failure;
         }
         ScriptVmExecutionResultUVE nodeResult;
-        if (isVector3Node) {
+        if (isVariableNode) {
+            nodeResult = ExecuteVariableNodeUVE(instruction, instructionIndex, context);
+        } else if (isVector3Node) {
             nodeResult = ExecuteVector3NodeUVE(instruction, instructionIndex, context);
         } else if (isFloatNode) {
             nodeResult = ExecuteFloatNodeUVE(instruction, instructionIndex, context);
@@ -703,13 +886,15 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                                              Scene::kInvalidEntityUVE, index, instruction.sourceNodeId,
                                              instruction.targetNodeId, {}, {}});
             } else {
+                const bool isVariableNode = instruction.nodeTypeId.rfind("variable.", 0U) == 0U;
                 const bool isVector3Node = instruction.nodeTypeId.rfind("math.vector3.", 0U) == 0U;
                 const bool isFloatNode = instruction.nodeTypeId.rfind("math.float.", 0U) == 0U;
                 const bool isBooleanNode = instruction.nodeTypeId.rfind("logic.boolean.", 0U) == 0U;
                 const bool isEntityQueryNode = instruction.nodeTypeId.rfind("query.entity.", 0U) == 0U;
                 const bool isEngineLogNode = instruction.nodeTypeId == "engine.log";
                 const bool isEngineGetTimeNode = instruction.nodeTypeId == "engine.get_time";
-                if ((isVector3Node && !HasRequiredVector3InputsUVE(instruction, *context)) ||
+                if ((isVariableNode && !HasRequiredVariableInputsUVE(instruction, *context)) ||
+                    (isVector3Node && !HasRequiredVector3InputsUVE(instruction, *context)) ||
                     (isFloatNode && !HasRequiredFloatInputsUVE(instruction, *context)) ||
                     (isBooleanNode && !HasRequiredBooleanInputsUVE(instruction, *context)) ||
                     (isEntityQueryNode && !HasRequiredEntityQueryInputsUVE(instruction, *context)) ||
@@ -725,7 +910,9 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                     return result;
                 }
                 ScriptVmExecutionResultUVE nodeResult;
-                if (isVector3Node) {
+                if (isVariableNode) {
+                    nodeResult = ExecuteVariableNodeUVE(instruction, index, *context);
+                } else if (isVector3Node) {
                     nodeResult = ExecuteVector3NodeUVE(instruction, index, *context);
                 } else if (isFloatNode) {
                     nodeResult = ExecuteFloatNodeUVE(instruction, index, *context);
@@ -831,6 +1018,43 @@ bool ScriptVmExecutionContextUVE::SetOutputUVE(const std::uint32_t nodeId, std::
     }
     outputs.push_back({nodeId, std::move(pinName), std::move(value)});
     return true;
+}
+
+bool ScriptVmExecutionContextUVE::InitializeLocalVariableUVE(const std::uint32_t slot,
+                                                              ScriptVmValueUVE value) {
+    if (slot >= kMaximumLocalVariablesUVE || !IsSupportedLocalVariableValueUVE(value) ||
+        !IsFiniteScriptVmValueUVE(value)) {
+        return false;
+    }
+    if (ScriptVmLocalVariableUVE* existing = FindMutableLocalVariableUVE(localVariables, slot);
+        existing != nullptr) {
+        return existing->value.index() == value.index();
+    }
+    if (localVariables.size() >= kMaximumLocalVariablesUVE) {
+        return false;
+    }
+    localVariables.push_back({slot, std::move(value)});
+    return true;
+}
+
+bool ScriptVmExecutionContextUVE::SetLocalVariableUVE(const std::uint32_t slot,
+                                                       ScriptVmValueUVE value) {
+    if (slot >= kMaximumLocalVariablesUVE || !IsSupportedLocalVariableValueUVE(value) ||
+        !IsFiniteScriptVmValueUVE(value)) {
+        return false;
+    }
+    ScriptVmLocalVariableUVE* existing = FindMutableLocalVariableUVE(localVariables, slot);
+    if (existing == nullptr || existing->value.index() != value.index()) {
+        return false;
+    }
+    existing->value = std::move(value);
+    return true;
+}
+
+std::optional<ScriptVmValueUVE> ScriptVmExecutionContextUVE::FindLocalVariableUVE(
+    const std::uint32_t slot) const {
+    const ScriptVmLocalVariableUVE* variable = FindLocalVariableRecordUVE(localVariables, slot);
+    return variable == nullptr ? std::nullopt : std::optional<ScriptVmValueUVE>(variable->value);
 }
 
 std::optional<ScriptVmValueUVE> ScriptVmExecutionContextUVE::FindInputUVE(

@@ -191,17 +191,17 @@ public sealed class VisualScriptCanvasControlTests
     [Fact]
     public void ScriptRuntimeInstanceEntry_DisplayTextPresentsCopiedExecutionFacts()
     {
-        BridgeScriptRuntimeInstanceEntry entry = new(7U, 3U, 9UL, 4U, 12, 2, true);
+        BridgeScriptRuntimeInstanceEntry entry = new(7U, 3U, 9UL, 4U, 12, 2, 0, true);
 
-        Assert.Equal("Entity 7:3 · generation 9 · program v4 · 12 instruction(s) · 2 state value(s) · enabled",
+        Assert.Equal("Entity 7:3 · generation 9 · program v4 · 12 instruction(s) · 2 state value(s) · 0 local variable(s) · enabled",
             entry.DisplayText);
-        Assert.Contains("disabled", new BridgeScriptRuntimeInstanceEntry(8U, 1U, 10UL, 5U, 3, 0, false).DisplayText);
+        Assert.Contains("disabled", new BridgeScriptRuntimeInstanceEntry(8U, 1U, 10UL, 5U, 3, 0, 0, false).DisplayText);
     }
 
     [Fact]
     public void ScriptRuntimeInstanceEntry_MatchesLocalFilterWithoutNativeMutation()
     {
-        BridgeScriptRuntimeInstanceEntry entry = new(7U, 3U, 9UL, 4U, 12, 2, true);
+        BridgeScriptRuntimeInstanceEntry entry = new(7U, 3U, 9UL, 4U, 12, 2, 0, true);
 
         Assert.True(entry.MatchesFilter("ENTITY 7:3"));
         Assert.True(entry.MatchesFilter("enabled"));
