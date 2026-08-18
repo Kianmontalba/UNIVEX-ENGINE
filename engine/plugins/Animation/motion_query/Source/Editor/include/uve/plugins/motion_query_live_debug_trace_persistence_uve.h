@@ -60,5 +60,40 @@ struct MotionQueryLiveDebugTraceDeserializationResultUVE final {
 [[nodiscard]] MotionQueryLiveDebugTraceDeserializationResultUVE DeserializeMotionQueryLiveDebugTraceUVE(
     std::string_view payload);
 
+struct MotionQueryLiveDebugTraceKindCountUVE final {
+    std::string kind;
+    std::size_t count = 0U;
+
+    [[nodiscard]] bool operator==(const MotionQueryLiveDebugTraceKindCountUVE&) const = default;
+};
+
+struct MotionQueryLiveDebugTraceAnalysisUVE final {
+    std::size_t eventCount = 0U;
+    double totalCost = 0.0;
+    std::size_t maximumCandidatesEvaluated = 0U;
+    std::vector<MotionQueryLiveDebugTraceKindCountUVE> kindCounts;
+
+    [[nodiscard]] bool operator==(const MotionQueryLiveDebugTraceAnalysisUVE&) const = default;
+};
+
+enum class MotionQueryLiveDebugTraceAnalysisCodeUVE : std::uint8_t {
+    Accepted = 0,
+    InvalidTrace,
+    CapacityExceeded,
+};
+
+struct MotionQueryLiveDebugTraceAnalysisResultUVE final {
+    MotionQueryLiveDebugTraceAnalysisCodeUVE code = MotionQueryLiveDebugTraceAnalysisCodeUVE::InvalidTrace;
+    std::optional<MotionQueryLiveDebugTraceAnalysisUVE> analysis;
+    std::string message;
+
+    [[nodiscard]] bool IsAcceptedUVE() const noexcept {
+        return code == MotionQueryLiveDebugTraceAnalysisCodeUVE::Accepted && analysis.has_value();
+    }
+};
+
+[[nodiscard]] MotionQueryLiveDebugTraceAnalysisResultUVE AnalyzeMotionQueryLiveDebugTraceUVE(
+    const MotionQueryTraceSnapshotUVE& snapshot);
+
 } // namespace UVE::Plugins::Editor
 

@@ -1,7 +1,9 @@
 #include "uve/plugins/motion_query_live_debug_trace_persistence_uve.h"
 
+#include <algorithm>
 #include <cmath>
 #include <initializer_list>
+#include <map>
 #include <string_view>
 #include <utility>
 
@@ -206,6 +208,36 @@ MotionQueryLiveDebugTraceDeserializationResultUVE DeserializeMotionQueryLiveDebu
         return {MotionQueryLiveDebugTracePersistenceCodeUVE::ParseError, std::nullopt,
                 "motion query live debug trace payload could not be parsed"};
     }
+}
+
+MotionQueryLiveDebugTraceAnalysisResultUVE AnalyzeMotionQueryLiveDebugTraceUVE(
+    const MotionQueryTraceSnapshotUVE& snapshot) {
+    if (snapshot.events.size() > kMotionQueryMaximumTraceEventsUVE) {
+        return {MotionQueryLiveDebugTraceAnalysisCodeUVE::CapacityExceeded, std::nullopt,
+                "motion query live debug trace exceeds the bounded analysis event limit"};
+    }
+
+    MotionQueryLiveDebugTraceAnalysisUVE analysis;
+    analysis.eventCount = snapshot.events.size();
+    std::map<std::string, std::size_t> kindCounts;
+    std::optional<MotionQueryTraceEventUVE> previous;
+    for (const MotionQueryTraceEventUVE& event : snapshot.events) {
+        if (!IsValidPersistedEventUVE(event, previous)) {
+            return {MotionQueryLiveDebugTraceAnalysisCodeUVE::InvalidTrace, std::nullopt,
+                    "motion query live debug trace contains an invalid event"};
+        }
+        analysis.totalCost += static_cast<double>(event.cost);
+        analysis.maximumCandidatesEvaluated =
+            std::max(analysis.maximumCandidatesEvaluated, event.candidatesEvaluated);
+        ++kindCounts[event.kind];
+        previous = event;
+    }
+    analysis.kindCounts.reserve(kindCounts.size());
+    for (const auto& [kind, count] : kindCounts) {
+        analysis.kindCounts.push_back({kind, count});
+    }
+    return {MotionQueryLiveDebugTraceAnalysisCodeUVE::Accepted, std::move(analysis),
+            "motion query live debug trace analyzed"};
 }
 
 } // namespace UVE::Plugins::Editor

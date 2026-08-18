@@ -275,6 +275,48 @@ TEST(MotionQueryDebuggingUVETest, LiveDebugTracePersistenceUVE_EnforcesSchemaAnd
     EXPECT_TRUE(oversizedResult.payload.empty());
 }
 
+TEST(MotionQueryDebuggingUVETest, LiveDebugTraceAnalyzerUVE_ProducesDeterministicBoundedSummary) {
+    MotionQueryTraceSnapshotUVE snapshot;
+    MotionQueryTraceEventUVE first;
+    first.sequence = 1U;
+    first.frameNumber = 4U;
+    first.kind = "zeta";
+    first.candidatesConsidered = 5U;
+    first.candidatesEvaluated = 3U;
+    first.cost = 1.25F;
+    snapshot.events.push_back(first);
+    MotionQueryTraceEventUVE second = first;
+    second.sequence = 2U;
+    second.kind = "alpha";
+    second.candidatesEvaluated = 4U;
+    second.cost = 0.5F;
+    snapshot.events.push_back(second);
+    MotionQueryTraceEventUVE third = first;
+    third.sequence = 3U;
+    third.frameNumber = 5U;
+    third.candidatesEvaluated = 1U;
+    third.cost = 0.25F;
+    snapshot.events.push_back(third);
+
+    const auto result = AnalyzeMotionQueryLiveDebugTraceUVE(snapshot);
+    ASSERT_TRUE(result.IsAcceptedUVE()) << result.message;
+    ASSERT_TRUE(result.analysis.has_value());
+    EXPECT_EQ(result.analysis->eventCount, 3U);
+    EXPECT_DOUBLE_EQ(result.analysis->totalCost, 2.0);
+    EXPECT_EQ(result.analysis->maximumCandidatesEvaluated, 4U);
+    ASSERT_EQ(result.analysis->kindCounts.size(), 2U);
+    EXPECT_EQ(result.analysis->kindCounts[0], (MotionQueryLiveDebugTraceKindCountUVE{"alpha", 1U}));
+    EXPECT_EQ(result.analysis->kindCounts[1], (MotionQueryLiveDebugTraceKindCountUVE{"zeta", 2U}));
+
+    snapshot.events[2].sequence = 2U;
+    EXPECT_EQ(AnalyzeMotionQueryLiveDebugTraceUVE(snapshot).code,
+              MotionQueryLiveDebugTraceAnalysisCodeUVE::InvalidTrace);
+
+    snapshot.events.resize(kMotionQueryMaximumTraceEventsUVE + 1U);
+    EXPECT_EQ(AnalyzeMotionQueryLiveDebugTraceUVE(snapshot).code,
+              MotionQueryLiveDebugTraceAnalysisCodeUVE::CapacityExceeded);
+}
+
 TEST(MotionQueryDebuggingUVETest, LiveDebugSessionUVE_ExportsAndImportsTraceForOfflineInspection) {
     MotionQueryLiveDebugSessionUVE session;
     MotionQueryLiveDebugCommandUVE exportCommand;
