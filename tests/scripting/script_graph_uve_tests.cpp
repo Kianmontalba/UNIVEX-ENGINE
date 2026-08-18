@@ -17,6 +17,7 @@
 
 #include <gtest/gtest.h>
 
+#include <cmath>
 #include <cstdint>
 #include <limits>
 #include <optional>
@@ -118,15 +119,17 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
 
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
     EXPECT_FALSE(RegisterBuiltInScriptNodesUVE(registry));
-    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 57U);
+    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 65U);
 
     const std::vector<ScriptNodeTypeDescriptorUVE> descriptors = registry.GetNodeTypeDescriptorsUVE();
-    ASSERT_EQ(descriptors.size(), 57U);
+    ASSERT_EQ(descriptors.size(), 65U);
     const std::vector<std::string> expectedIds{
         "flow.sequence", "flow.branch", "flow.return", "flow.do_once", "flow.gate", "flow.switch",
         "convert.number_to_boolean", "convert.boolean_to_number", "convert.vector2_to_vector3", "convert.vector3_to_vector2",
         "math.float.add", "math.float.subtract", "math.float.multiply", "math.float.divide",
         "math.float.modulo", "math.float.abs", "math.float.min", "math.float.max", "math.float.clamp", "math.float.power",
+        "math.float.lerp", "math.float.remap", "math.float.sin", "math.float.cos", "math.float.tan", "math.float.sqrt",
+        "math.float.random", "math.float.random_range",
         "math.vector2.make", "math.vector2.add", "math.vector2.subtract", "math.vector2.multiply",
         "math.vector2.length", "math.vector2.normalize",
         "math.vector3.make", "math.vector3.add", "math.vector3.subtract", "math.vector3.multiply",
@@ -150,34 +153,48 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
         EXPECT_EQ(descriptors[index].category, "Conversion");
         EXPECT_EQ(descriptors[index].iconId, "node.conversion");
     }
-    for (std::size_t index = 10U; index < 20U; ++index) {
+    for (std::size_t index = 10U; index < 28U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Math");
         EXPECT_EQ(descriptors[index].iconId, "node.math.float");
     }
-    for (std::size_t index = 20U; index < 26U; ++index) {
+    for (std::size_t index = 28U; index < 34U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Math");
         EXPECT_EQ(descriptors[index].iconId, "node.math.vector2");
     }
-    for (std::size_t index = 26U; index < 34U; ++index) {
+    for (std::size_t index = 34U; index < 42U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Math");
         EXPECT_EQ(descriptors[index].iconId, "node.math.vector3");
     }
-    for (std::size_t index = 34U; index < 44U; ++index) {
+    for (std::size_t index = 42U; index < 52U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Logic");
         EXPECT_EQ(descriptors[index].iconId, "node.logic.boolean");
     }
-    for (std::size_t index = 44U; index < 46U; ++index) {
+    for (std::size_t index = 52U; index < 54U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Entity Query");
         EXPECT_EQ(descriptors[index].iconId, "node.entity.query");
     }
-    for (std::size_t index = 46U; index < 48U; ++index) {
+    for (std::size_t index = 54U; index < 56U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Engine");
         EXPECT_EQ(descriptors[index].iconId, "node.engine");
     }
-    for (std::size_t index = 48U; index < descriptors.size(); ++index) {
+    for (std::size_t index = 56U; index < descriptors.size(); ++index) {
         EXPECT_EQ(descriptors[index].category, "Variable");
         EXPECT_EQ(descriptors[index].iconId, "node.variable");
     }
+
+    const ScriptNodeTypeDescriptorUVE* lerp = registry.FindNodeTypeUVE("math.float.lerp");
+    ASSERT_NE(lerp, nullptr);
+    ASSERT_EQ(lerp->pins.size(), 4U);
+    EXPECT_EQ(lerp->pins[2].name, "Alpha");
+    EXPECT_EQ(lerp->pins[2].type, ScriptValueTypeUVE::Number);
+    const ScriptNodeTypeDescriptorUVE* remap = registry.FindNodeTypeUVE("math.float.remap");
+    ASSERT_NE(remap, nullptr);
+    ASSERT_EQ(remap->pins.size(), 6U);
+    EXPECT_EQ(remap->pins[1].name, "FromMin");
+    const ScriptNodeTypeDescriptorUVE* randomRange = registry.FindNodeTypeUVE("math.float.random_range");
+    ASSERT_NE(randomRange, nullptr);
+    ASSERT_EQ(randomRange->pins.size(), 4U);
+    EXPECT_EQ(randomRange->pins[0].name, "Seed");
 
     const ScriptNodeTypeDescriptorUVE* sequence = registry.FindNodeTypeUVE("flow.sequence");
     ASSERT_NE(sequence, nullptr);
@@ -2548,6 +2565,78 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_DispatchesScalarMathUtilityNodes)
     ASSERT_TRUE(nonFinitePowerContext.SetInputUVE(35U, "A", -2.0F));
     ASSERT_TRUE(nonFinitePowerContext.SetInputUVE(35U, "B", 0.5F));
     EXPECT_EQ(ExecuteScriptBytecodeUVE(makeProgram(35U, "math.float.power"), nonFinitePowerContext).status,
+              ScriptVmStatusUVE::NodeExecutionFailed);
+
+    ScriptVmExecutionContextUVE lerpContext;
+    ASSERT_TRUE(lerpContext.SetInputUVE(36U, "A", 10.0F));
+    ASSERT_TRUE(lerpContext.SetInputUVE(36U, "B", 20.0F));
+    ASSERT_TRUE(lerpContext.SetInputUVE(36U, "Alpha", 0.25F));
+    ASSERT_TRUE(ExecuteScriptBytecodeUVE(makeProgram(36U, "math.float.lerp"), lerpContext).IsSuccessUVE());
+    EXPECT_FLOAT_EQ(std::get<float>(*lerpContext.FindOutputUVE(36U, "Result")), 12.5F);
+
+    ScriptVmExecutionContextUVE remapContext;
+    ASSERT_TRUE(remapContext.SetInputUVE(37U, "Value", 5.0F));
+    ASSERT_TRUE(remapContext.SetInputUVE(37U, "FromMin", 0.0F));
+    ASSERT_TRUE(remapContext.SetInputUVE(37U, "FromMax", 10.0F));
+    ASSERT_TRUE(remapContext.SetInputUVE(37U, "ToMin", 100.0F));
+    ASSERT_TRUE(remapContext.SetInputUVE(37U, "ToMax", 200.0F));
+    ASSERT_TRUE(ExecuteScriptBytecodeUVE(makeProgram(37U, "math.float.remap"), remapContext).IsSuccessUVE());
+    EXPECT_FLOAT_EQ(std::get<float>(*remapContext.FindOutputUVE(37U, "Result")), 150.0F);
+
+    const auto runUnary = [&](const std::uint32_t nodeId, const char* nodeTypeId, const float value) {
+        ScriptVmExecutionContextUVE context;
+        EXPECT_TRUE(context.SetInputUVE(nodeId, "Value", value));
+        EXPECT_TRUE(ExecuteScriptBytecodeUVE(makeProgram(nodeId, nodeTypeId), context).IsSuccessUVE());
+        const auto output = context.FindOutputUVE(nodeId, "Result");
+        EXPECT_TRUE(output.has_value() && std::holds_alternative<float>(*output));
+        return output.has_value() && std::holds_alternative<float>(*output) ?
+                   std::get<float>(*output) : 0.0F;
+    };
+    EXPECT_NEAR(runUnary(38U, "math.float.sin", 0.5F), std::sin(0.5F), 1.0e-6F);
+    EXPECT_NEAR(runUnary(39U, "math.float.cos", 0.5F), std::cos(0.5F), 1.0e-6F);
+    EXPECT_NEAR(runUnary(40U, "math.float.tan", 0.5F), std::tan(0.5F), 1.0e-6F);
+    EXPECT_FLOAT_EQ(runUnary(41U, "math.float.sqrt", 9.0F), 3.0F);
+
+    ScriptVmExecutionContextUVE randomContextA;
+    ScriptVmExecutionContextUVE randomContextB;
+    ASSERT_TRUE(randomContextA.SetInputUVE(42U, "Seed", 123.0F));
+    ASSERT_TRUE(randomContextB.SetInputUVE(42U, "Seed", 123.0F));
+    ASSERT_TRUE(ExecuteScriptBytecodeUVE(makeProgram(42U, "math.float.random"), randomContextA).IsSuccessUVE());
+    ASSERT_TRUE(ExecuteScriptBytecodeUVE(makeProgram(42U, "math.float.random"), randomContextB).IsSuccessUVE());
+    const float randomA = std::get<float>(*randomContextA.FindOutputUVE(42U, "Result"));
+    const float randomB = std::get<float>(*randomContextB.FindOutputUVE(42U, "Result"));
+    EXPECT_FLOAT_EQ(randomA, randomB);
+    EXPECT_GE(randomA, 0.0F);
+    EXPECT_LT(randomA, 1.0F);
+
+    ScriptVmExecutionContextUVE randomRangeContext;
+    ASSERT_TRUE(randomRangeContext.SetInputUVE(43U, "Seed", 123.0F));
+    ASSERT_TRUE(randomRangeContext.SetInputUVE(43U, "Min", -4.0F));
+    ASSERT_TRUE(randomRangeContext.SetInputUVE(43U, "Max", 6.0F));
+    ASSERT_TRUE(ExecuteScriptBytecodeUVE(makeProgram(43U, "math.float.random_range"), randomRangeContext).IsSuccessUVE());
+    const float randomRange = std::get<float>(*randomRangeContext.FindOutputUVE(43U, "Result"));
+    EXPECT_GE(randomRange, -4.0F);
+    EXPECT_LE(randomRange, 6.0F);
+
+    ScriptVmExecutionContextUVE negativeSqrtContext;
+    ASSERT_TRUE(negativeSqrtContext.SetInputUVE(44U, "Value", -1.0F));
+    EXPECT_EQ(ExecuteScriptBytecodeUVE(makeProgram(44U, "math.float.sqrt"), negativeSqrtContext).status,
+              ScriptVmStatusUVE::NodeExecutionFailed);
+
+    ScriptVmExecutionContextUVE flatRemapContext;
+    ASSERT_TRUE(flatRemapContext.SetInputUVE(45U, "Value", 1.0F));
+    ASSERT_TRUE(flatRemapContext.SetInputUVE(45U, "FromMin", 2.0F));
+    ASSERT_TRUE(flatRemapContext.SetInputUVE(45U, "FromMax", 2.0F));
+    ASSERT_TRUE(flatRemapContext.SetInputUVE(45U, "ToMin", 0.0F));
+    ASSERT_TRUE(flatRemapContext.SetInputUVE(45U, "ToMax", 1.0F));
+    EXPECT_EQ(ExecuteScriptBytecodeUVE(makeProgram(45U, "math.float.remap"), flatRemapContext).status,
+              ScriptVmStatusUVE::NodeExecutionFailed);
+
+    ScriptVmExecutionContextUVE reversedRandomRangeContext;
+    ASSERT_TRUE(reversedRandomRangeContext.SetInputUVE(46U, "Seed", 1.0F));
+    ASSERT_TRUE(reversedRandomRangeContext.SetInputUVE(46U, "Min", 2.0F));
+    ASSERT_TRUE(reversedRandomRangeContext.SetInputUVE(46U, "Max", 1.0F));
+    EXPECT_EQ(ExecuteScriptBytecodeUVE(makeProgram(46U, "math.float.random_range"), reversedRandomRangeContext).status,
               ScriptVmStatusUVE::NodeExecutionFailed);
 }
 
