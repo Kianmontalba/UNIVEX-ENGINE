@@ -68,17 +68,29 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
 
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
     EXPECT_FALSE(RegisterBuiltInScriptNodesUVE(registry));
-    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 8U);
+    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 16U);
 
     const std::vector<ScriptNodeTypeDescriptorUVE> descriptors = registry.GetNodeTypeDescriptorsUVE();
-    ASSERT_EQ(descriptors.size(), 8U);
+    ASSERT_EQ(descriptors.size(), 16U);
     const std::vector<std::string> expectedIds{
+        "math.float.add", "math.float.subtract", "math.float.multiply", "math.float.divide",
         "math.vector3.make", "math.vector3.add", "math.vector3.subtract", "math.vector3.multiply",
-        "math.vector3.dot", "math.vector3.cross", "math.vector3.length", "math.vector3.normalize"};
+        "math.vector3.dot", "math.vector3.cross", "math.vector3.length", "math.vector3.normalize",
+        "logic.boolean.not", "logic.boolean.and", "logic.boolean.or", "logic.boolean.xor"};
     for (std::size_t index = 0U; index < expectedIds.size(); ++index) {
         EXPECT_EQ(descriptors[index].typeId, expectedIds[index]);
+    }
+    for (std::size_t index = 0U; index < 4U; ++index) {
+        EXPECT_EQ(descriptors[index].category, "Math");
+        EXPECT_EQ(descriptors[index].iconId, "node.math.float");
+    }
+    for (std::size_t index = 4U; index < 12U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Math");
         EXPECT_EQ(descriptors[index].iconId, "node.math.vector3");
+    }
+    for (std::size_t index = 12U; index < descriptors.size(); ++index) {
+        EXPECT_EQ(descriptors[index].category, "Logic");
+        EXPECT_EQ(descriptors[index].iconId, "node.logic.boolean");
     }
 
     const ScriptNodeTypeDescriptorUVE* make = registry.FindNodeTypeUVE("math.vector3.make");
@@ -550,6 +562,59 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_DispatchesAllBuiltInVector3Nodes)
     EXPECT_TRUE(ExecuteScriptBytecodeUVE(makeProgram(8U, "math.vector3.normalize"), normalizeContext).IsSuccessUVE());
     EXPECT_EQ(std::get<ScriptVector3ValueUVE>(*normalizeContext.FindOutputUVE(8U, "Result")),
               (ScriptVector3ValueUVE{{0.0F, 0.6F, 0.8F}}));
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_DispatchesFloatAndBooleanNodes) {
+    const auto makeProgram = [](const std::uint32_t nodeId, const char* nodeTypeId) {
+        ScriptBytecodeProgramUVE program;
+        program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, nodeId, 0U, nodeTypeId, {}, {}});
+        return program;
+    };
+
+    const auto runFloat = [&](const char* nodeTypeId, float lhs, float rhs) {
+        ScriptVmExecutionContextUVE context;
+        EXPECT_TRUE(context.SetInputUVE(10U, "A", lhs));
+        EXPECT_TRUE(context.SetInputUVE(10U, "B", rhs));
+        EXPECT_TRUE(ExecuteScriptBytecodeUVE(makeProgram(10U, nodeTypeId), context).IsSuccessUVE());
+        const auto output = context.FindOutputUVE(10U, "Result");
+        EXPECT_TRUE(output.has_value());
+        if (!output.has_value() || !std::holds_alternative<float>(*output)) {
+            return 0.0F;
+        }
+        return std::get<float>(*output);
+    };
+    EXPECT_FLOAT_EQ(runFloat("math.float.add", 2.0F, 3.0F), 5.0F);
+    EXPECT_FLOAT_EQ(runFloat("math.float.subtract", 2.0F, 3.0F), -1.0F);
+    EXPECT_FLOAT_EQ(runFloat("math.float.multiply", 2.0F, 3.0F), 6.0F);
+    EXPECT_FLOAT_EQ(runFloat("math.float.divide", 6.0F, 3.0F), 2.0F);
+
+    ScriptVmExecutionContextUVE divideByZeroContext;
+    ASSERT_TRUE(divideByZeroContext.SetInputUVE(11U, "A", 1.0F));
+    ASSERT_TRUE(divideByZeroContext.SetInputUVE(11U, "B", 0.0F));
+    const ScriptVmExecutionResultUVE divideByZero =
+        ExecuteScriptBytecodeUVE(makeProgram(11U, "math.float.divide"), divideByZeroContext);
+    EXPECT_EQ(divideByZero.status, ScriptVmStatusUVE::NodeExecutionFailed);
+
+    const auto runBoolean = [&](const char* nodeTypeId, bool lhs, bool rhs) {
+        ScriptVmExecutionContextUVE context;
+        EXPECT_TRUE(context.SetInputUVE(20U, "A", lhs));
+        EXPECT_TRUE(context.SetInputUVE(20U, "B", rhs));
+        EXPECT_TRUE(ExecuteScriptBytecodeUVE(makeProgram(20U, nodeTypeId), context).IsSuccessUVE());
+        const auto output = context.FindOutputUVE(20U, "Result");
+        EXPECT_TRUE(output.has_value());
+        if (!output.has_value() || !std::holds_alternative<bool>(*output)) {
+            return false;
+        }
+        return std::get<bool>(*output);
+    };
+    EXPECT_FALSE(runBoolean("logic.boolean.and", true, false));
+    EXPECT_TRUE(runBoolean("logic.boolean.or", true, false));
+    EXPECT_TRUE(runBoolean("logic.boolean.xor", true, false));
+
+    ScriptVmExecutionContextUVE notContext;
+    ASSERT_TRUE(notContext.SetInputUVE(21U, "Value", false));
+    ASSERT_TRUE(ExecuteScriptBytecodeUVE(makeProgram(21U, "logic.boolean.not"), notContext).IsSuccessUVE());
+    EXPECT_TRUE(std::get<bool>(*notContext.FindOutputUVE(21U, "Result")));
 }
 
 TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_ResolvesCompilerStyleNodeThenTransferOrdering) {
