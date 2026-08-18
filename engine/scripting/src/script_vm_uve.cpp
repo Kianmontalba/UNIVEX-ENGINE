@@ -141,6 +141,29 @@ namespace {
     return {};
 }
 
+[[nodiscard]] ScriptVmExecutionResultUVE ExecuteEngineGetTimeNodeUVE(
+    const ScriptIrInstructionUVE& instruction, const std::size_t instructionIndex,
+    ScriptVmExecutionContextUVE& context, const ScriptEngineCallBindingsUVE* bindings) {
+    if (bindings == nullptr || bindings->getTime == nullptr) {
+        return MakeNodeFailureUVE(instructionIndex,
+                                  "engine.get_time requires a caller-owned engine time binding.");
+    }
+    float seconds = 0.0F;
+    if (!bindings->getTime(bindings->userData, &seconds)) {
+        return MakeNodeFailureUVE(instructionIndex,
+                                  "engine.get_time callback rejected the copied output request.");
+    }
+    if (!std::isfinite(seconds)) {
+        return MakeNodeFailureUVE(instructionIndex,
+                                  "engine.get_time callback returned a non-finite Number.");
+    }
+    if (!SetNodeOutputUVE(context, instruction.sourceNodeId, "Value", seconds)) {
+        return MakeNodeFailureUVE(instructionIndex,
+                                  "engine.get_time could not store its bounded Number output.");
+    }
+    return {};
+}
+
 [[nodiscard]] ScriptVmExecutionResultUVE ExecuteEngineLogNodeUVE(
     const ScriptIrInstructionUVE& instruction, const std::size_t instructionIndex,
     ScriptVmExecutionContextUVE& context, const ScriptEngineCallBindingsUVE* bindings) {
@@ -448,6 +471,7 @@ namespace {
         const bool isBooleanNode = instruction.nodeTypeId.rfind("logic.boolean.", 0U) == 0U;
         const bool isEntityQueryNode = instruction.nodeTypeId.rfind("query.entity.", 0U) == 0U;
         const bool isEngineLogNode = instruction.nodeTypeId == "engine.log";
+        const bool isEngineGetTimeNode = instruction.nodeTypeId == "engine.get_time";
         if ((isVector3Node && !HasRequiredVector3InputsUVE(instruction, context)) ||
             (isFloatNode && !HasRequiredFloatInputsUVE(instruction, context)) ||
             (isBooleanNode && !HasRequiredBooleanInputsUVE(instruction, context)) ||
@@ -470,6 +494,8 @@ namespace {
             nodeResult = ExecuteEntityQueryNodeUVE(instruction, instructionIndex, context);
         } else if (isEngineLogNode) {
             nodeResult = ExecuteEngineLogNodeUVE(instruction, instructionIndex, context, options.engineCallBindings);
+        } else if (isEngineGetTimeNode) {
+            nodeResult = ExecuteEngineGetTimeNodeUVE(instruction, instructionIndex, context, options.engineCallBindings);
         }
         if (!nodeResult.IsSuccessUVE()) {
             nodeResult.instructionsExecuted = result.instructionsExecuted;
@@ -523,13 +549,14 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
             }
             const ScriptIrInstructionKindUVE kind = program.instructions[index].kind;
             if (kind == ScriptIrInstructionKindUVE::ExecuteNode &&
-                program.instructions[index].nodeTypeId == "engine.log") {
+                (program.instructions[index].nodeTypeId == "engine.log" ||
+                 program.instructions[index].nodeTypeId == "engine.get_time")) {
                 result.status = ScriptVmStatusUVE::NodeExecutionFailed;
-                result.diagnostics.push_back({index, "engine.log requires a caller-owned execution context and binding."});
+                result.diagnostics.push_back({index, "engine call requires a caller-owned execution context and binding."});
                 result.AppendTraceEventUVE({ScriptVmTraceEventKindUVE::Failed, Scene::kInvalidEntityUVE,
                                              index, program.instructions[index].sourceNodeId, 0U,
                                              program.instructions[index].nodeTypeId,
-                                             "engine.log requires a caller-owned execution context and binding."});
+                                             "engine call requires a caller-owned execution context and binding."});
                 return result;
             }
             if (kind != ScriptIrInstructionKindUVE::ExecuteNode && kind != ScriptIrInstructionKindUVE::TransferValue) {
@@ -600,6 +627,7 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                 const bool isBooleanNode = instruction.nodeTypeId.rfind("logic.boolean.", 0U) == 0U;
                 const bool isEntityQueryNode = instruction.nodeTypeId.rfind("query.entity.", 0U) == 0U;
                 const bool isEngineLogNode = instruction.nodeTypeId == "engine.log";
+                const bool isEngineGetTimeNode = instruction.nodeTypeId == "engine.get_time";
                 if ((isVector3Node && !HasRequiredVector3InputsUVE(instruction, *context)) ||
                     (isFloatNode && !HasRequiredFloatInputsUVE(instruction, *context)) ||
                     (isBooleanNode && !HasRequiredBooleanInputsUVE(instruction, *context)) ||
@@ -626,6 +654,8 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                     nodeResult = ExecuteEntityQueryNodeUVE(instruction, index, *context);
                 } else if (isEngineLogNode) {
                     nodeResult = ExecuteEngineLogNodeUVE(instruction, index, *context, options.engineCallBindings);
+                } else if (isEngineGetTimeNode) {
+                    nodeResult = ExecuteEngineGetTimeNodeUVE(instruction, index, *context, options.engineCallBindings);
                 }
                 if (!nodeResult.IsSuccessUVE()) {
                     nodeResult.instructionsExecuted = result.instructionsExecuted;

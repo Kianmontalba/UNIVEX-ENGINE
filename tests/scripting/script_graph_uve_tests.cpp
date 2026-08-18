@@ -72,6 +72,26 @@ bool CaptureEngineLogUVE(void* userData, const float value) noexcept {
     return capture->accept;
 }
 
+struct EngineTimeCaptureUVE final {
+    std::size_t callCount = 0U;
+    float value = 0.0F;
+    bool accept = true;
+    bool finite = true;
+};
+
+bool CaptureEngineTimeUVE(void* userData, float* outSeconds) noexcept {
+    auto* capture = static_cast<EngineTimeCaptureUVE*>(userData);
+    if (capture == nullptr || outSeconds == nullptr) {
+        return false;
+    }
+    ++capture->callCount;
+    if (!capture->accept) {
+        return false;
+    }
+    *outSeconds = capture->finite ? capture->value : std::numeric_limits<float>::quiet_NaN();
+    return true;
+}
+
 void RegisterTestNodesUVE(ScriptNodeRegistryUVE& registry) {
     ASSERT_TRUE(registry.RegisterNodeTypeUVE(MakeSourceNodeUVE()));
     ASSERT_TRUE(registry.RegisterNodeTypeUVE(MakeSinkNodeUVE()));
@@ -98,17 +118,17 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
 
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
     EXPECT_FALSE(RegisterBuiltInScriptNodesUVE(registry));
-    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 21U);
+    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 22U);
 
     const std::vector<ScriptNodeTypeDescriptorUVE> descriptors = registry.GetNodeTypeDescriptorsUVE();
-    ASSERT_EQ(descriptors.size(), 21U);
+    ASSERT_EQ(descriptors.size(), 22U);
     const std::vector<std::string> expectedIds{
         "flow.sequence", "flow.branch",
         "math.float.add", "math.float.subtract", "math.float.multiply", "math.float.divide",
         "math.vector3.make", "math.vector3.add", "math.vector3.subtract", "math.vector3.multiply",
         "math.vector3.dot", "math.vector3.cross", "math.vector3.length", "math.vector3.normalize",
         "logic.boolean.not", "logic.boolean.and", "logic.boolean.or", "logic.boolean.xor",
-        "query.entity.has_component", "query.entity.get_component", "engine.log"};
+        "query.entity.has_component", "query.entity.get_component", "engine.log", "engine.get_time"};
     ASSERT_EQ(expectedIds.size(), descriptors.size());
     for (std::size_t index = 0U; index < expectedIds.size(); ++index) {
         EXPECT_EQ(descriptors[index].typeId, expectedIds[index]);
@@ -133,8 +153,10 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
         EXPECT_EQ(descriptors[index].category, "Entity Query");
         EXPECT_EQ(descriptors[index].iconId, "node.entity.query");
     }
-    EXPECT_EQ(descriptors[20U].category, "Engine");
-    EXPECT_EQ(descriptors[20U].iconId, "node.engine");
+    for (std::size_t index = 20U; index < descriptors.size(); ++index) {
+        EXPECT_EQ(descriptors[index].category, "Engine");
+        EXPECT_EQ(descriptors[index].iconId, "node.engine");
+    }
 
     const ScriptNodeTypeDescriptorUVE* sequence = registry.FindNodeTypeUVE("flow.sequence");
     ASSERT_NE(sequence, nullptr);
@@ -174,6 +196,13 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
     EXPECT_EQ(engineLog->iconId, "node.engine");
     EXPECT_EQ(engineLog->pins[0].name, "Value");
     EXPECT_EQ(engineLog->pins[0].type, ScriptValueTypeUVE::Number);
+
+    const ScriptNodeTypeDescriptorUVE* engineGetTime = registry.FindNodeTypeUVE("engine.get_time");
+    ASSERT_NE(engineGetTime, nullptr);
+    ASSERT_EQ(engineGetTime->pins.size(), 1U);
+    EXPECT_EQ(engineGetTime->pins[0].name, "Value");
+    EXPECT_EQ(engineGetTime->pins[0].direction, ScriptPinDirectionUVE::Output);
+    EXPECT_EQ(engineGetTime->pins[0].type, ScriptValueTypeUVE::Number);
 
     const ScriptNodeTypeDescriptorUVE* make = registry.FindNodeTypeUVE("math.vector3.make");
     ASSERT_NE(make, nullptr);
@@ -227,6 +256,20 @@ TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_PreservesEngineLogBindin
     EXPECT_EQ(result.program->instructions.front().kind, ScriptIrInstructionKindUVE::ExecuteNode);
     EXPECT_EQ(result.program->instructions.front().sourceNodeId, 70U);
     EXPECT_EQ(result.program->instructions.front().nodeTypeId, "engine.log");
+}
+
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_PreservesEngineGetTimeBindingNode) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({72U, "engine.get_time"}));
+
+    const ScriptIrCompileResultUVE result = CompileScriptGraphToIrUVE(graph, registry);
+    ASSERT_TRUE(result.IsSuccessUVE());
+    ASSERT_EQ(result.program->instructions.size(), 1U);
+    EXPECT_EQ(result.program->instructions.front().kind, ScriptIrInstructionKindUVE::ExecuteNode);
+    EXPECT_EQ(result.program->instructions.front().sourceNodeId, 72U);
+    EXPECT_EQ(result.program->instructions.front().nodeTypeId, "engine.get_time");
 }
 
 TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_LowersFlowSequenceDirectDispatch) {
@@ -421,6 +464,45 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_EngineLogUsesCallerOwnedBinding) 
     EXPECT_FLOAT_EQ(capture.lastValue, 42.5F);
     ASSERT_EQ(result.trace.size(), 2U);
     EXPECT_EQ(result.trace.front().nodeTypeId, "engine.log");
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_EngineGetTimeWritesFiniteCopiedOutput) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 72U, 0U, "engine.get_time", {}, {}});
+    ScriptVmExecutionContextUVE context;
+    EngineTimeCaptureUVE capture;
+    capture.value = 12.75F;
+    const ScriptEngineCallBindingsUVE bindings{nullptr, &capture, CaptureEngineTimeUVE};
+    ScriptVmExecutionOptionsUVE options;
+    options.engineCallBindings = &bindings;
+
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(program, context, options);
+    EXPECT_TRUE(result.IsSuccessUVE());
+    EXPECT_EQ(capture.callCount, 1U);
+    ASSERT_TRUE(context.FindOutputUVE(72U, "Value").has_value());
+    EXPECT_FLOAT_EQ(std::get<float>(*context.FindOutputUVE(72U, "Value")), 12.75F);
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_EngineGetTimeRejectsUnboundRejectedOrNonFiniteOutput) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 73U, 0U, "engine.get_time", {}, {}});
+    ScriptVmExecutionContextUVE context;
+
+    const ScriptVmExecutionResultUVE unbound = ExecuteScriptBytecodeUVE(program, context);
+    EXPECT_EQ(unbound.status, ScriptVmStatusUVE::NodeExecutionFailed);
+
+    EngineTimeCaptureUVE capture;
+    const ScriptEngineCallBindingsUVE bindings{nullptr, &capture, CaptureEngineTimeUVE};
+    ScriptVmExecutionOptionsUVE options;
+    options.engineCallBindings = &bindings;
+    capture.accept = false;
+    EXPECT_EQ(ExecuteScriptBytecodeUVE(program, context, options).status,
+              ScriptVmStatusUVE::NodeExecutionFailed);
+    capture.accept = true;
+    capture.finite = false;
+    EXPECT_EQ(ExecuteScriptBytecodeUVE(program, context, options).status,
+              ScriptVmStatusUVE::NodeExecutionFailed);
+    EXPECT_EQ(capture.callCount, 2U);
 }
 
 TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_EngineLogRejectsUnboundOrRejectedCall) {
@@ -1404,6 +1486,28 @@ TEST(ScriptRuntimeUVETest, AttachDetailedUVEReturnsStructuredDiagnosticsForValid
     EXPECT_EQ(capacity.code, ScriptRuntimeAttachCodeUVE::CapacityExceeded);
     EXPECT_FALSE(capacity.IsAcceptedUVE());
     EXPECT_FALSE(capacity.message.empty());
+}
+
+TEST(ScriptRuntimeUVETest, TickDetailedUVE_UsesBorrowedEngineTimeBinding) {
+    ScriptRuntimeUVE runtime;
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 72U, 0U, "engine.get_time", {}, {}});
+    const Scene::EntityUVE entity{72U, 1U};
+    ASSERT_TRUE(runtime.AttachUVE(entity, program));
+
+    EngineTimeCaptureUVE capture;
+    capture.value = 4.5F;
+    const ScriptEngineCallBindingsUVE bindings{nullptr, &capture, CaptureEngineTimeUVE};
+    ScriptVmExecutionOptionsUVE options;
+    options.engineCallBindings = &bindings;
+    const ScriptRuntimeTickBatchResultUVE tick = runtime.TickDetailedUVE(options);
+    ASSERT_TRUE(tick.IsSuccessUVE());
+    ASSERT_EQ(tick.results.size(), 1U);
+    EXPECT_EQ(capture.callCount, 1U);
+    const auto state = runtime.GetStateUVE(entity);
+    ASSERT_TRUE(state.has_value());
+    ASSERT_TRUE(state->executionContext.FindOutputUVE(72U, "Value").has_value());
+    EXPECT_FLOAT_EQ(std::get<float>(*state->executionContext.FindOutputUVE(72U, "Value")), 4.5F);
 }
 
 TEST(ScriptRuntimeUVETest, TickDetailedUVE_UsesBorrowedEngineLogBinding) {
