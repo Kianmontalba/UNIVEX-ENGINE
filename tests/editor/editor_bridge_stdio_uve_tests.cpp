@@ -202,7 +202,8 @@ TEST(EditorBridgeStdioUVETest, ServeUVE_HandshakesAndRoutesExistingBridgeDispatc
         EXPECT_EQ(runtimeEntry.at("entityIndex").get<std::uint32_t>(), runtimeEntity.index);
         EXPECT_EQ(runtimeEntry.at("entityGeneration").get<std::uint32_t>(), runtimeEntity.generation);
         EXPECT_EQ(runtimeEntry.at("generation").get<std::uint64_t>(), 1U);
-        EXPECT_EQ(runtimeEntry.at("programVersion").get<std::uint32_t>(), 1U);
+        EXPECT_EQ(runtimeEntry.at("programVersion").get<std::uint32_t>(),
+                  Scripting::ScriptBytecodeProgramUVE::kCurrentVersionUVE);
         EXPECT_EQ(runtimeEntry.at("instructionCount").get<std::size_t>(), 2U);
         EXPECT_EQ(runtimeEntry.at("stateValueCount").get<std::size_t>(), 0U);
         EXPECT_TRUE(runtimeEntry.at("enabled").get<bool>());
