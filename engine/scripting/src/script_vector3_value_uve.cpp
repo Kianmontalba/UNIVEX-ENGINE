@@ -118,5 +118,42 @@ ScriptVector3ValueResultUVE EvaluateScriptVector3NormalizeUVE(
         : MakeValueResultUVE(ScriptVector3EvaluationCodeUVE::NonFiniteInput);
 }
 
+ScriptVector3NumberResultUVE EvaluateScriptVector3DistanceUVE(
+    const ScriptVector3ValueUVE& lhs, const ScriptVector3ValueUVE& rhs) noexcept {
+    if (!IsFiniteInputUVE(lhs) || !IsFiniteInputUVE(rhs)) {
+        return MakeNumberResultUVE(ScriptVector3EvaluationCodeUVE::NonFiniteInput);
+    }
+    const float value = std::hypot(lhs.value.x - rhs.value.x,
+                                   lhs.value.y - rhs.value.y,
+                                   lhs.value.z - rhs.value.z);
+    return IsFiniteUVE(value)
+        ? MakeNumberResultUVE(ScriptVector3EvaluationCodeUVE::Applied, value)
+        : MakeNumberResultUVE(ScriptVector3EvaluationCodeUVE::NonFiniteInput);
+}
+
+ScriptVector3ValueResultUVE EvaluateScriptVector3DirectionUVE(
+    const ScriptVector3ValueUVE& from, const ScriptVector3ValueUVE& to) noexcept {
+    if (!IsFiniteInputUVE(from) || !IsFiniteInputUVE(to)) {
+        return MakeValueResultUVE(ScriptVector3EvaluationCodeUVE::NonFiniteInput);
+    }
+    return EvaluateScriptVector3NormalizeUVE(
+        ScriptVector3ValueUVE{Math::Vector3UVE{to.value.x - from.value.x,
+                                              to.value.y - from.value.y,
+                                              to.value.z - from.value.z}});
+}
+
+ScriptVector3ValueResultUVE EvaluateScriptVector3LerpUVE(
+    const ScriptVector3ValueUVE& lhs, const ScriptVector3ValueUVE& rhs, const float alpha) noexcept {
+    if (!IsFiniteInputUVE(lhs) || !IsFiniteInputUVE(rhs) || !IsFiniteUVE(alpha)) {
+        return MakeValueResultUVE(ScriptVector3EvaluationCodeUVE::NonFiniteInput);
+    }
+    const Math::Vector3UVE value{lhs.value.x + ((rhs.value.x - lhs.value.x) * alpha),
+                                 lhs.value.y + ((rhs.value.y - lhs.value.y) * alpha),
+                                 lhs.value.z + ((rhs.value.z - lhs.value.z) * alpha)};
+    return IsFiniteUVE(value)
+        ? MakeValueResultUVE(ScriptVector3EvaluationCodeUVE::Applied, value)
+        : MakeValueResultUVE(ScriptVector3EvaluationCodeUVE::NonFiniteInput);
+}
+
 } // namespace UVE::Scripting
 

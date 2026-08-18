@@ -578,18 +578,31 @@ namespace {
         }
         return {};
     }
-    if (instruction.nodeTypeId == "math.vector2.add" || instruction.nodeTypeId == "math.vector2.subtract") {
+    if (instruction.nodeTypeId == "math.vector2.add" || instruction.nodeTypeId == "math.vector2.subtract" ||
+        instruction.nodeTypeId == "math.vector2.dot" || instruction.nodeTypeId == "math.vector2.distance") {
         const ScriptVector2ValueUVE* lhs = FindVector2InputUVE(context, nodeId, "A");
         const ScriptVector2ValueUVE* rhs = FindVector2InputUVE(context, nodeId, "B");
         if (lhs == nullptr || rhs == nullptr) {
             return MakeNodeFailureUVE(instructionIndex, "Vector2 binary node requires Vector2 inputs A and B.");
         }
-        const ScriptVector2ValueResultUVE evaluated =
-            instruction.nodeTypeId == "math.vector2.add"
-                ? EvaluateScriptVector2AddUVE(*lhs, *rhs)
-                : EvaluateScriptVector2SubtractUVE(*lhs, *rhs);
-        if (!evaluated.IsAppliedUVE() || !SetNodeOutputUVE(context, nodeId, "Result", evaluated.value)) {
-            return MakeNodeFailureUVE(instructionIndex, "Vector2 binary node rejected its inputs or output capacity.");
+        if (instruction.nodeTypeId == "math.vector2.add" || instruction.nodeTypeId == "math.vector2.subtract") {
+            const ScriptVector2ValueResultUVE evaluated =
+                instruction.nodeTypeId == "math.vector2.add"
+                    ? EvaluateScriptVector2AddUVE(*lhs, *rhs)
+                    : EvaluateScriptVector2SubtractUVE(*lhs, *rhs);
+            if (!evaluated.IsAppliedUVE() || !SetNodeOutputUVE(context, nodeId, "Result", evaluated.value)) {
+                return MakeNodeFailureUVE(instructionIndex, "Vector2 binary node rejected its inputs or output capacity.");
+            }
+        } else if (instruction.nodeTypeId == "math.vector2.dot") {
+            const ScriptVector2NumberResultUVE evaluated = EvaluateScriptVector2DotUVE(*lhs, *rhs);
+            if (!evaluated.IsAppliedUVE() || !SetNodeOutputUVE(context, nodeId, "Result", evaluated.value)) {
+                return MakeNodeFailureUVE(instructionIndex, "Dot Vector2 rejected its inputs or output capacity.");
+            }
+        } else {
+            const ScriptVector2NumberResultUVE evaluated = EvaluateScriptVector2DistanceUVE(*lhs, *rhs);
+            if (!evaluated.IsAppliedUVE() || !SetNodeOutputUVE(context, nodeId, "Distance", evaluated.value)) {
+                return MakeNodeFailureUVE(instructionIndex, "Distance Vector2 rejected its inputs or output capacity.");
+            }
         }
         return {};
     }
@@ -627,6 +640,31 @@ namespace {
         }
         return {};
     }
+    if (instruction.nodeTypeId == "math.vector2.direction") {
+        const ScriptVector2ValueUVE* from = FindVector2InputUVE(context, nodeId, "From");
+        const ScriptVector2ValueUVE* to = FindVector2InputUVE(context, nodeId, "To");
+        if (from == nullptr || to == nullptr) {
+            return MakeNodeFailureUVE(instructionIndex, "Direction Vector2 requires Vector2 inputs From and To.");
+        }
+        const ScriptVector2ValueResultUVE evaluated = EvaluateScriptVector2DirectionUVE(*from, *to);
+        if (!evaluated.IsAppliedUVE() || !SetNodeOutputUVE(context, nodeId, "Result", evaluated.value)) {
+            return MakeNodeFailureUVE(instructionIndex, "Direction Vector2 rejected its inputs, zero length, or output capacity.");
+        }
+        return {};
+    }
+    if (instruction.nodeTypeId == "math.vector2.lerp") {
+        const ScriptVector2ValueUVE* lhs = FindVector2InputUVE(context, nodeId, "A");
+        const ScriptVector2ValueUVE* rhs = FindVector2InputUVE(context, nodeId, "B");
+        const float* alpha = FindNumberInputUVE(context, nodeId, "Alpha");
+        if (lhs == nullptr || rhs == nullptr || alpha == nullptr) {
+            return MakeNodeFailureUVE(instructionIndex, "Lerp Vector2 requires Vector2 inputs A and B plus Number Alpha.");
+        }
+        const ScriptVector2ValueResultUVE evaluated = EvaluateScriptVector2LerpUVE(*lhs, *rhs, *alpha);
+        if (!evaluated.IsAppliedUVE() || !SetNodeOutputUVE(context, nodeId, "Result", evaluated.value)) {
+            return MakeNodeFailureUVE(instructionIndex, "Lerp Vector2 rejected its inputs or output capacity.");
+        }
+        return {};
+    }
     return {};
 }
 
@@ -649,7 +687,8 @@ namespace {
     }
 
     if (instruction.nodeTypeId == "math.vector3.add" || instruction.nodeTypeId == "math.vector3.subtract" ||
-        instruction.nodeTypeId == "math.vector3.cross" || instruction.nodeTypeId == "math.vector3.dot") {
+        instruction.nodeTypeId == "math.vector3.cross" || instruction.nodeTypeId == "math.vector3.dot" ||
+        instruction.nodeTypeId == "math.vector3.distance") {
         const ScriptVector3ValueUVE* lhs = FindVector3InputUVE(context, nodeId, "A");
         const ScriptVector3ValueUVE* rhs = FindVector3InputUVE(context, nodeId, "B");
         if (lhs == nullptr || rhs == nullptr) {
@@ -670,10 +709,15 @@ namespace {
             if (!evaluated.IsAppliedUVE() || !SetNodeOutputUVE(context, nodeId, "Result", evaluated.value)) {
                 return MakeNodeFailureUVE(instructionIndex, "Cross Vector3 rejected its inputs or output capacity.");
             }
-        } else {
+        } else if (instruction.nodeTypeId == "math.vector3.dot") {
             const ScriptVector3NumberResultUVE evaluated = EvaluateScriptVector3DotUVE(*lhs, *rhs);
             if (!evaluated.IsAppliedUVE() || !SetNodeOutputUVE(context, nodeId, "Result", evaluated.value)) {
                 return MakeNodeFailureUVE(instructionIndex, "Dot Vector3 rejected its inputs or output capacity.");
+            }
+        } else {
+            const ScriptVector3NumberResultUVE evaluated = EvaluateScriptVector3DistanceUVE(*lhs, *rhs);
+            if (!evaluated.IsAppliedUVE() || !SetNodeOutputUVE(context, nodeId, "Distance", evaluated.value)) {
+                return MakeNodeFailureUVE(instructionIndex, "Distance Vector3 rejected its inputs or output capacity.");
             }
         }
         return {};
@@ -715,6 +759,31 @@ namespace {
         }
         return {};
     }
+    if (instruction.nodeTypeId == "math.vector3.direction") {
+        const ScriptVector3ValueUVE* from = FindVector3InputUVE(context, nodeId, "From");
+        const ScriptVector3ValueUVE* to = FindVector3InputUVE(context, nodeId, "To");
+        if (from == nullptr || to == nullptr) {
+            return MakeNodeFailureUVE(instructionIndex, "Direction Vector3 requires Vector3 inputs From and To.");
+        }
+        const ScriptVector3ValueResultUVE evaluated = EvaluateScriptVector3DirectionUVE(*from, *to);
+        if (!evaluated.IsAppliedUVE() || !SetNodeOutputUVE(context, nodeId, "Result", evaluated.value)) {
+            return MakeNodeFailureUVE(instructionIndex, "Direction Vector3 rejected its inputs, zero length, or output capacity.");
+        }
+        return {};
+    }
+    if (instruction.nodeTypeId == "math.vector3.lerp") {
+        const ScriptVector3ValueUVE* lhs = FindVector3InputUVE(context, nodeId, "A");
+        const ScriptVector3ValueUVE* rhs = FindVector3InputUVE(context, nodeId, "B");
+        const float* alpha = FindNumberInputUVE(context, nodeId, "Alpha");
+        if (lhs == nullptr || rhs == nullptr || alpha == nullptr) {
+            return MakeNodeFailureUVE(instructionIndex, "Lerp Vector3 requires Vector3 inputs A and B plus Number Alpha.");
+        }
+        const ScriptVector3ValueResultUVE evaluated = EvaluateScriptVector3LerpUVE(*lhs, *rhs, *alpha);
+        if (!evaluated.IsAppliedUVE() || !SetNodeOutputUVE(context, nodeId, "Result", evaluated.value)) {
+            return MakeNodeFailureUVE(instructionIndex, "Lerp Vector3 rejected its inputs or output capacity.");
+        }
+        return {};
+    }
 
     return {};
 }
@@ -726,13 +795,23 @@ namespace {
         return FindNumberInputUVE(context, nodeId, "X") != nullptr &&
                FindNumberInputUVE(context, nodeId, "Y") != nullptr;
     }
-    if (instruction.nodeTypeId == "math.vector2.add" || instruction.nodeTypeId == "math.vector2.subtract") {
+    if (instruction.nodeTypeId == "math.vector2.add" || instruction.nodeTypeId == "math.vector2.subtract" ||
+        instruction.nodeTypeId == "math.vector2.dot" || instruction.nodeTypeId == "math.vector2.distance") {
         return FindVector2InputUVE(context, nodeId, "A") != nullptr &&
                FindVector2InputUVE(context, nodeId, "B") != nullptr;
     }
     if (instruction.nodeTypeId == "math.vector2.multiply") {
         return FindVector2InputUVE(context, nodeId, "Vector") != nullptr &&
                FindNumberInputUVE(context, nodeId, "Scale") != nullptr;
+    }
+    if (instruction.nodeTypeId == "math.vector2.direction") {
+        return FindVector2InputUVE(context, nodeId, "From") != nullptr &&
+               FindVector2InputUVE(context, nodeId, "To") != nullptr;
+    }
+    if (instruction.nodeTypeId == "math.vector2.lerp") {
+        return FindVector2InputUVE(context, nodeId, "A") != nullptr &&
+               FindVector2InputUVE(context, nodeId, "B") != nullptr &&
+               FindNumberInputUVE(context, nodeId, "Alpha") != nullptr;
     }
     return FindVector2InputUVE(context, nodeId, "Vector") != nullptr;
 }
@@ -854,7 +933,8 @@ namespace {
                FindNumberInputUVE(context, nodeId, "Z") != nullptr;
     }
     if (instruction.nodeTypeId == "math.vector3.add" || instruction.nodeTypeId == "math.vector3.subtract" ||
-        instruction.nodeTypeId == "math.vector3.cross" || instruction.nodeTypeId == "math.vector3.dot") {
+        instruction.nodeTypeId == "math.vector3.cross" || instruction.nodeTypeId == "math.vector3.dot" ||
+        instruction.nodeTypeId == "math.vector3.distance") {
         return FindVector3InputUVE(context, nodeId, "A") != nullptr &&
                FindVector3InputUVE(context, nodeId, "B") != nullptr;
     }
@@ -864,6 +944,15 @@ namespace {
     }
     if (instruction.nodeTypeId == "math.vector3.length" || instruction.nodeTypeId == "math.vector3.normalize") {
         return FindVector3InputUVE(context, nodeId, "Vector") != nullptr;
+    }
+    if (instruction.nodeTypeId == "math.vector3.direction") {
+        return FindVector3InputUVE(context, nodeId, "From") != nullptr &&
+               FindVector3InputUVE(context, nodeId, "To") != nullptr;
+    }
+    if (instruction.nodeTypeId == "math.vector3.lerp") {
+        return FindVector3InputUVE(context, nodeId, "A") != nullptr &&
+               FindVector3InputUVE(context, nodeId, "B") != nullptr &&
+               FindNumberInputUVE(context, nodeId, "Alpha") != nullptr;
     }
     return true;
 }

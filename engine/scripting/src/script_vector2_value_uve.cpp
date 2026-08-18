@@ -100,4 +100,47 @@ ScriptVector2ValueResultUVE EvaluateScriptVector2NormalizeUVE(
         : MakeValueResultUVE(ScriptVector2EvaluationCodeUVE::NonFiniteInput);
 }
 
+ScriptVector2NumberResultUVE EvaluateScriptVector2DotUVE(
+    const ScriptVector2ValueUVE& lhs, const ScriptVector2ValueUVE& rhs) noexcept {
+    if (!IsFiniteInputUVE(lhs) || !IsFiniteInputUVE(rhs)) {
+        return MakeNumberResultUVE(ScriptVector2EvaluationCodeUVE::NonFiniteInput);
+    }
+    const float value = (lhs.value.x * rhs.value.x) + (lhs.value.y * rhs.value.y);
+    return IsFiniteUVE(value)
+        ? MakeNumberResultUVE(ScriptVector2EvaluationCodeUVE::Applied, value)
+        : MakeNumberResultUVE(ScriptVector2EvaluationCodeUVE::NonFiniteInput);
+}
+
+ScriptVector2NumberResultUVE EvaluateScriptVector2DistanceUVE(
+    const ScriptVector2ValueUVE& lhs, const ScriptVector2ValueUVE& rhs) noexcept {
+    if (!IsFiniteInputUVE(lhs) || !IsFiniteInputUVE(rhs)) {
+        return MakeNumberResultUVE(ScriptVector2EvaluationCodeUVE::NonFiniteInput);
+    }
+    const float value = std::hypot(lhs.value.x - rhs.value.x, lhs.value.y - rhs.value.y);
+    return IsFiniteUVE(value)
+        ? MakeNumberResultUVE(ScriptVector2EvaluationCodeUVE::Applied, value)
+        : MakeNumberResultUVE(ScriptVector2EvaluationCodeUVE::NonFiniteInput);
+}
+
+ScriptVector2ValueResultUVE EvaluateScriptVector2DirectionUVE(
+    const ScriptVector2ValueUVE& from, const ScriptVector2ValueUVE& to) noexcept {
+    if (!IsFiniteInputUVE(from) || !IsFiniteInputUVE(to)) {
+        return MakeValueResultUVE(ScriptVector2EvaluationCodeUVE::NonFiniteInput);
+    }
+    return EvaluateScriptVector2NormalizeUVE(
+        ScriptVector2ValueUVE{Math::Vector2UVE{to.value.x - from.value.x, to.value.y - from.value.y}});
+}
+
+ScriptVector2ValueResultUVE EvaluateScriptVector2LerpUVE(
+    const ScriptVector2ValueUVE& lhs, const ScriptVector2ValueUVE& rhs, const float alpha) noexcept {
+    if (!IsFiniteInputUVE(lhs) || !IsFiniteInputUVE(rhs) || !IsFiniteUVE(alpha)) {
+        return MakeValueResultUVE(ScriptVector2EvaluationCodeUVE::NonFiniteInput);
+    }
+    const Math::Vector2UVE value{lhs.value.x + ((rhs.value.x - lhs.value.x) * alpha),
+                                 lhs.value.y + ((rhs.value.y - lhs.value.y) * alpha)};
+    return IsFiniteUVE(value)
+        ? MakeValueResultUVE(ScriptVector2EvaluationCodeUVE::Applied, value)
+        : MakeValueResultUVE(ScriptVector2EvaluationCodeUVE::NonFiniteInput);
+}
+
 } // namespace UVE::Scripting

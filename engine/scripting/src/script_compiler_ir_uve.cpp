@@ -302,6 +302,9 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             (sourceNode->typeId == "engine.get_time" && link.output.pinName == "Value") ||
             (sourceNode->typeId == "math.vector3.dot" && link.output.pinName == "Result") ||
             (sourceNode->typeId == "math.vector3.length" && link.output.pinName == "Length") ||
+            (sourceNode->typeId == "math.vector2.dot" && link.output.pinName == "Result") ||
+            (sourceNode->typeId == "math.vector2.distance" && link.output.pinName == "Distance") ||
+            (sourceNode->typeId == "math.vector3.distance" && link.output.pinName == "Distance") ||
             (sourceNode->typeId == "math.vector2.length" && link.output.pinName == "Length") ||
             (sourceNode->typeId.rfind("math.float.", 0U) == 0U && link.output.pinName == "Result") ||
             (sourceNode->typeId == "variable.get_number" && link.output.pinName == "Result") ||
@@ -334,6 +337,9 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             (sourceNode->typeId == "engine.get_time" && link.output.pinName == "Value") ||
             (sourceNode->typeId == "math.vector3.dot" && link.output.pinName == "Result") ||
             (sourceNode->typeId == "math.vector3.length" && link.output.pinName == "Length") ||
+            (sourceNode->typeId == "math.vector2.dot" && link.output.pinName == "Result") ||
+            (sourceNode->typeId == "math.vector2.distance" && link.output.pinName == "Distance") ||
+            (sourceNode->typeId == "math.vector3.distance" && link.output.pinName == "Distance") ||
             (sourceNode->typeId == "math.vector2.length" && link.output.pinName == "Length") ||
             (sourceNode->typeId.rfind("math.float.", 0U) == 0U && link.output.pinName == "Result") ||
             (sourceNode->typeId == "variable.get_number" && link.output.pinName == "Result") ||
@@ -372,6 +378,9 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             (sourceNode->typeId == "engine.get_time" && link.output.pinName == "Value") ||
             (sourceNode->typeId == "math.vector3.dot" && link.output.pinName == "Result") ||
             (sourceNode->typeId == "math.vector3.length" && link.output.pinName == "Length") ||
+            (sourceNode->typeId == "math.vector2.dot" && link.output.pinName == "Result") ||
+            (sourceNode->typeId == "math.vector2.distance" && link.output.pinName == "Distance") ||
+            (sourceNode->typeId == "math.vector3.distance" && link.output.pinName == "Distance") ||
             (sourceNode->typeId == "math.vector2.length" && link.output.pinName == "Length") ||
             (sourceNode->typeId.rfind("math.float.", 0U) == 0U && link.output.pinName == "Result") ||
             (sourceNode->typeId == "variable.get_number" && link.output.pinName == "Result") ||
@@ -431,7 +440,8 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
         const bool approvedProducer =
             sourceNode->typeId == "math.vector2.make" || sourceNode->typeId == "math.vector2.add" ||
             sourceNode->typeId == "math.vector2.subtract" || sourceNode->typeId == "math.vector2.multiply" ||
-            sourceNode->typeId == "math.vector2.normalize" || sourceNode->typeId == "convert.vector3_to_vector2";
+            sourceNode->typeId == "math.vector2.normalize" || sourceNode->typeId == "math.vector2.direction" ||
+            sourceNode->typeId == "math.vector2.lerp" || sourceNode->typeId == "convert.vector3_to_vector2";
         const bool approvedOutput = link.output.pinName == "Vector" || link.output.pinName == "Result";
         const bool approvedInput = link.input.pinName == "A" || link.input.pinName == "B" ||
                                    link.input.pinName == "Vector";
@@ -459,6 +469,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             sourceNode->typeId == "math.vector3.make" || sourceNode->typeId == "math.vector3.add" ||
             sourceNode->typeId == "math.vector3.subtract" || sourceNode->typeId == "math.vector3.multiply" ||
             sourceNode->typeId == "math.vector3.cross" || sourceNode->typeId == "math.vector3.normalize" ||
+            sourceNode->typeId == "math.vector3.direction" || sourceNode->typeId == "math.vector3.lerp" ||
             sourceNode->typeId == "variable.get_vector3" || sourceNode->typeId == "convert.vector2_to_vector3";
         const bool approvedOutput = link.output.pinName == "Vector" || link.output.pinName == "Result";
         const bool approvedInput = link.input.pinName == "A" || link.input.pinName == "B" ||
