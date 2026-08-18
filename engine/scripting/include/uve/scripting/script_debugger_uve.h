@@ -67,6 +67,7 @@ private:
     std::vector<ScriptVmTraceEventUVE> m_trace;
     bool m_traceTruncated = false;
     bool m_skipCurrentBreakpoint = false;
+    std::optional<std::size_t> m_sequenceContinuationTarget;
     std::optional<ScriptVmExecutionContextUVE> m_context;
 };
 

@@ -181,11 +181,46 @@ TEST(ScriptGraphUVETest, ValidateUVE_EnforcesExecutionLinkCardinality) {
     EXPECT_EQ(diagnostics[1].nodeId, 3U);
 }
 
-TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_DefersFlowRuntimeUntilConditionalJump) {
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_LowersFlowSequenceDirectDispatch) {
     ScriptNodeRegistryUVE registry;
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
     ScriptGraphUVE graph;
     ASSERT_TRUE(graph.AddNodeUVE({1U, "flow.sequence"}));
+
+    const ScriptIrCompileResultUVE result = CompileScriptGraphToIrUVE(graph, registry);
+    ASSERT_TRUE(result.IsSuccessUVE());
+    ASSERT_EQ(result.program->instructions.size(), 1U);
+    EXPECT_EQ(result.program->instructions.front().kind, ScriptIrInstructionKindUVE::SequenceDispatch);
+    EXPECT_EQ(result.program->instructions.front().firstTargetInstructionIndex, 1U);
+    EXPECT_EQ(result.program->instructions.front().secondTargetInstructionIndex, 1U);
+}
+
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_LowersDirectSequenceExecutionLinks) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+    ASSERT_TRUE(registry.RegisterNodeTypeUVE(MakeSinkNodeUVE()));
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({1U, "flow.sequence"}));
+    ASSERT_TRUE(graph.AddNodeUVE({2U, "test.sink"}));
+    ASSERT_TRUE(graph.AddNodeUVE({3U, "test.sink"}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{1U, "Then"}, {2U, "Exec"}}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{1U, "Then2"}, {3U, "Exec"}}));
+
+    const ScriptIrCompileResultUVE result = CompileScriptGraphToIrUVE(graph, registry);
+    ASSERT_TRUE(result.IsSuccessUVE());
+    ASSERT_EQ(result.program->instructions.size(), 3U);
+    EXPECT_EQ(result.program->instructions[0].kind, ScriptIrInstructionKindUVE::SequenceDispatch);
+    EXPECT_EQ(result.program->instructions[0].firstTargetInstructionIndex, 1U);
+    EXPECT_EQ(result.program->instructions[0].secondTargetInstructionIndex, 2U);
+    EXPECT_EQ(result.program->instructions[1].kind, ScriptIrInstructionKindUVE::ExecuteNode);
+    EXPECT_EQ(result.program->instructions[2].kind, ScriptIrInstructionKindUVE::ExecuteNode);
+}
+
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_DefersFlowBranchRuntime) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({1U, "flow.branch"}));
 
     const ScriptIrCompileResultUVE result = CompileScriptGraphToIrUVE(graph, registry);
     EXPECT_FALSE(result.IsSuccessUVE());
@@ -593,6 +628,22 @@ TEST(ScriptBytecodeUVETest, ConditionalJumpV2_RoundTripsTargetsAndRejectsLegacyE
     EXPECT_EQ(legacy.diagnostics.front().code, ScriptBytecodeDiagnosticCodeUVE::InvalidInstruction);
 }
 
+TEST(ScriptBytecodeUVETest, SequenceDispatchV3_RoundTripsOrderedTargets) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::SequenceDispatch, 7U, 0U, "flow.sequence",
+                                    "Then", "Then2", 0U, 0U, 1U, 0U});
+    std::vector<ScriptBytecodeDiagnosticUVE> diagnostics;
+    const std::vector<std::uint8_t> bytes = EncodeScriptBytecodeUVE(program, diagnostics);
+    ASSERT_TRUE(diagnostics.empty());
+    const ScriptBytecodeDecodeResultUVE decoded = DecodeScriptBytecodeUVE(bytes);
+    ASSERT_TRUE(decoded.IsSuccessUVE());
+    ASSERT_EQ(decoded.program->instructions.size(), 1U);
+    EXPECT_EQ(decoded.program->version, ScriptBytecodeProgramUVE::kCurrentVersionUVE);
+    EXPECT_EQ(decoded.program->instructions.front().kind, ScriptIrInstructionKindUVE::SequenceDispatch);
+    EXPECT_EQ(decoded.program->instructions.front().firstTargetInstructionIndex, 1U);
+    EXPECT_EQ(decoded.program->instructions.front().secondTargetInstructionIndex, 0U);
+}
+
 TEST(ScriptBytecodeUVETest, EncodeScriptBytecodeUVE_RejectsOutOfRangeConditionalJumpTarget) {
     ScriptBytecodeProgramUVE program;
     program.instructions.push_back({ScriptIrInstructionKindUVE::ConditionalJump, 1U, 0U, "flow.branch",
@@ -665,6 +716,57 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_ConditionalJumpSelectsTrueAndFals
     EXPECT_EQ(falseResult.trace[0].message, "ConditionalJump evaluated false.");
     EXPECT_EQ(falseResult.trace[1].sourceNodeId, 30U);
     EXPECT_EQ(falseResult.trace[2].kind, ScriptVmTraceEventKindUVE::Completed);
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_SequenceDispatchExecutesOrderedDirectTargets) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::SequenceDispatch, 1U, 0U, "flow.sequence",
+                                    "Then", "Then2", 0U, 0U, 1U, 2U});
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 20U, 0U, "math.float.add", {}, {}});
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 30U, 0U, "math.float.subtract", {}, {}});
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(20U, "A", 5.0F));
+    ASSERT_TRUE(context.SetInputUVE(20U, "B", 2.0F));
+    ASSERT_TRUE(context.SetInputUVE(30U, "A", 5.0F));
+    ASSERT_TRUE(context.SetInputUVE(30U, "B", 2.0F));
+
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(program, context);
+    ASSERT_TRUE(result.IsSuccessUVE());
+    EXPECT_EQ(result.instructionsExecuted, 3U);
+    ASSERT_EQ(result.trace.size(), 4U);
+    EXPECT_EQ(result.trace[0].message, "SequenceDispatch selected ordered execution targets.");
+    EXPECT_EQ(result.trace[1].sourceNodeId, 20U);
+    EXPECT_EQ(result.trace[2].sourceNodeId, 30U);
+    EXPECT_EQ(result.trace[3].kind, ScriptVmTraceEventKindUVE::Completed);
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_SequenceDispatchSkipsMissingFirstOutput) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::SequenceDispatch, 1U, 0U, "flow.sequence",
+                                    "Then", "Then2", 0U, 0U, 2U, 1U});
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 30U, 0U, "math.float.add", {}, {}});
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(30U, "A", 5.0F));
+    ASSERT_TRUE(context.SetInputUVE(30U, "B", 2.0F));
+
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(program, context);
+    ASSERT_TRUE(result.IsSuccessUVE());
+    EXPECT_EQ(result.instructionsExecuted, 2U);
+    ASSERT_EQ(result.trace.size(), 3U);
+    EXPECT_EQ(result.trace[1].sourceNodeId, 30U);
+    EXPECT_EQ(result.trace[2].kind, ScriptVmTraceEventKindUVE::Completed);
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_SequenceDispatchSelfLoopStopsAtBudget) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::SequenceDispatch, 1U, 0U, "flow.sequence",
+                                    "Then", "Then2", 0U, 0U, 0U, 0U});
+    ScriptVmExecutionContextUVE context;
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(program, context, {2U});
+    EXPECT_EQ(result.status, ScriptVmStatusUVE::InstructionBudgetExceeded);
+    EXPECT_EQ(result.instructionsExecuted, 2U);
+    ASSERT_EQ(result.trace.size(), 3U);
+    EXPECT_EQ(result.trace.back().kind, ScriptVmTraceEventKindUVE::Failed);
 }
 
 TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_ConditionalJumpRequiresBooleanCondition) {
@@ -1866,6 +1968,32 @@ TEST(ScriptDebuggerUVETest, StepUVE_ConditionalJumpUsesAttachedCopiedContext) {
     ASSERT_EQ(stepped.trace.size(), 1U);
     EXPECT_EQ(stepped.trace.front().kind, ScriptVmTraceEventKindUVE::NodeExecuted);
     EXPECT_EQ(stepped.trace.front().message, "ConditionalJump evaluated true.");
+}
+
+TEST(ScriptDebuggerUVETest, StepUVE_SequenceDispatchContinuesToSecondTarget) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::SequenceDispatch, 1U, 0U, "flow.sequence",
+                                    "Then", "Then2", 0U, 0U, 1U, 2U});
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 20U, 0U, "test.first", {}, {}});
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 30U, 0U, "test.second", {}, {}});
+
+    ScriptDebuggerUVE debugger;
+    ASSERT_TRUE(debugger.AttachUVE(program));
+    const ScriptDebuggerSnapshotUVE sequence = debugger.StepUVE();
+    EXPECT_EQ(sequence.state, ScriptDebuggerStateUVE::Paused);
+    EXPECT_EQ(sequence.instructionIndex, 1U);
+    ASSERT_EQ(sequence.trace.size(), 1U);
+    EXPECT_EQ(sequence.trace.front().message, "SequenceDispatch selected ordered execution targets.");
+
+    const ScriptDebuggerSnapshotUVE first = debugger.StepUVE();
+    EXPECT_EQ(first.state, ScriptDebuggerStateUVE::Paused);
+    EXPECT_EQ(first.instructionIndex, 2U);
+    EXPECT_EQ(first.executedInstructions, 2U);
+
+    const ScriptDebuggerSnapshotUVE second = debugger.StepUVE();
+    EXPECT_EQ(second.state, ScriptDebuggerStateUVE::Completed);
+    EXPECT_EQ(second.instructionIndex, 3U);
+    EXPECT_EQ(second.executedInstructions, 3U);
 }
 
 TEST(ScriptDebuggerUVETest, ContinueUVE_BoundsCopiedTraceHistory) {

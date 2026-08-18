@@ -21,6 +21,7 @@ bool ScriptDebuggerUVE::AttachProgramUVE(ScriptBytecodeProgramUVE program) {
     m_trace.clear();
     m_traceTruncated = false;
     if ((program.version != ScriptBytecodeProgramUVE::kLegacyVersionUVE &&
+         program.version != ScriptBytecodeProgramUVE::kConditionalJumpVersionUVE &&
          program.version != ScriptBytecodeProgramUVE::kCurrentVersionUVE) ||
         program.instructions.size() > ScriptBytecodeProgramUVE::kMaximumInstructionsUVE) {
         m_state = ScriptDebuggerStateUVE::Faulted;
@@ -32,6 +33,7 @@ bool ScriptDebuggerUVE::AttachProgramUVE(ScriptBytecodeProgramUVE program) {
     m_executedInstructions = 0U;
     m_pauseReason.clear();
     m_skipCurrentBreakpoint = false;
+    m_sequenceContinuationTarget.reset();
     m_state = ScriptDebuggerStateUVE::Running;
     return true;
 }
@@ -44,6 +46,7 @@ void ScriptDebuggerUVE::DetachUVE() noexcept {
     m_trace.clear();
     m_traceTruncated = false;
     m_skipCurrentBreakpoint = false;
+    m_sequenceContinuationTarget.reset();
     m_context.reset();
     m_state = ScriptDebuggerStateUVE::Detached;
 }
@@ -131,6 +134,29 @@ bool ScriptDebuggerUVE::ExecuteOneUVE() {
     const std::size_t instructionIndex = m_instructionIndex;
     const ScriptIrInstructionUVE& instruction = m_program.instructions[instructionIndex];
     const ScriptIrInstructionKindUVE kind = instruction.kind;
+    if (kind == ScriptIrInstructionKindUVE::SequenceDispatch) {
+        if (instruction.firstTargetInstructionIndex > m_program.instructions.size() ||
+            instruction.secondTargetInstructionIndex > m_program.instructions.size()) {
+            m_state = ScriptDebuggerStateUVE::Faulted;
+            m_pauseReason = "SequenceDispatch target is outside the bytecode instruction range.";
+            AppendTraceEventUVE({ScriptVmTraceEventKindUVE::Failed, Scene::kInvalidEntityUVE,
+                                 instructionIndex, instruction.sourceNodeId, instruction.targetNodeId,
+                                 instruction.nodeTypeId, m_pauseReason});
+            return false;
+        }
+        ++m_executedInstructions;
+        AppendTraceEventUVE({ScriptVmTraceEventKindUVE::NodeExecuted,
+                             Scene::kInvalidEntityUVE, instructionIndex, instruction.sourceNodeId,
+                             instruction.targetNodeId, instruction.nodeTypeId,
+                             "SequenceDispatch selected ordered execution targets."});
+        if (instruction.firstTargetInstructionIndex == m_program.instructions.size()) {
+            m_instructionIndex = instruction.secondTargetInstructionIndex;
+        } else {
+            m_sequenceContinuationTarget = instruction.secondTargetInstructionIndex;
+            m_instructionIndex = instruction.firstTargetInstructionIndex;
+        }
+        return true;
+    }
     if (kind == ScriptIrInstructionKindUVE::ConditionalJump) {
         if (instruction.trueTargetInstructionIndex > m_program.instructions.size() ||
             instruction.falseTargetInstructionIndex > m_program.instructions.size()) {
@@ -180,7 +206,12 @@ bool ScriptDebuggerUVE::ExecuteOneUVE() {
                              instruction.nodeTypeId, m_pauseReason});
         return false;
     }
-    ++m_instructionIndex;
+    if (m_sequenceContinuationTarget.has_value()) {
+        m_instructionIndex = *m_sequenceContinuationTarget;
+        m_sequenceContinuationTarget.reset();
+    } else {
+        ++m_instructionIndex;
+    }
     ++m_executedInstructions;
     AppendTraceEventUVE({kind == ScriptIrInstructionKindUVE::ExecuteNode
                              ? ScriptVmTraceEventKindUVE::NodeExecuted
