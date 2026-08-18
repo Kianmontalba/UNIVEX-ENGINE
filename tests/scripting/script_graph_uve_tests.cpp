@@ -3,6 +3,7 @@
 #include "uve/scripting/script_bytecode_uve.h"
 #include "uve/scripting/script_runtime_uve.h"
 #include "uve/scripting/script_vm_uve.h"
+#include "uve/scripting/script_entity_query_adapter_uve.h"
 #include "uve/scripting/script_compiler_ir_uve.h"
 #include "uve/scripting/script_debugger_uve.h"
 #include "uve/scripting/script_graph_editor_backend_uve.h"
@@ -20,6 +21,11 @@
 #include <limits>
 #include <optional>
 #include <vector>
+
+#include "uve/events/event_system_uve.h"
+#include "uve/memory/memory_manager_uve.h"
+#include "uve/scene/components/name_component_uve.h"
+#include "uve/scene/entity_manager_uve.h"
 
 namespace UVE::Scripting {
 namespace {
@@ -634,6 +640,58 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_DispatchesFloatAndBooleanNodes) {
     ASSERT_TRUE(notContext.SetInputUVE(21U, "Value", false));
     ASSERT_TRUE(ExecuteScriptBytecodeUVE(makeProgram(21U, "logic.boolean.not"), notContext).IsSuccessUVE());
     EXPECT_TRUE(std::get<bool>(*notContext.FindOutputUVE(21U, "Result")));
+}
+
+TEST(ScriptEntityQueryAdapterUVETest, PopulateComponentFactsUVE_StagesEcsPresenceInBindingOrder) {
+    Memory::MemoryManagerUVE memoryManager;
+    Events::EventSystemUVE eventSystem;
+    Scene::EntityManagerUVE entityManager{memoryManager.GetDefaultAllocatorUVE(), eventSystem};
+    const Scene::EntityUVE entity = entityManager.CreateEntityUVE();
+    entityManager.AddComponentUVE<Scene::NameComponentUVE>(entity, Scene::NameComponentUVE{"Hero"});
+
+    struct MissingComponentUVE final {};
+    const std::vector<ScriptEntityComponentTypeBindingUVE> bindings{
+        {"NameComponentUVE", std::type_index(typeid(Scene::NameComponentUVE))},
+        {"MissingComponentUVE", std::type_index(typeid(MissingComponentUVE))},
+    };
+    ScriptVmExecutionContextUVE context;
+    const ScriptEntityQueryAdapterResultUVE populated =
+        ScriptEntityQueryAdapterUVE::PopulateComponentFactsUVE(entityManager, entity, bindings, context);
+    ASSERT_TRUE(populated.IsAppliedUVE());
+    EXPECT_EQ(populated.factsWritten, 2U);
+    const auto present = context.FindComponentFactUVE(entity, "NameComponentUVE");
+    ASSERT_TRUE(present.has_value());
+    EXPECT_TRUE(present->present);
+    const auto absent = context.FindComponentFactUVE(entity, "MissingComponentUVE");
+    ASSERT_TRUE(absent.has_value());
+    EXPECT_FALSE(absent->present);
+
+    ASSERT_TRUE(context.SetInputUVE(50U, "Entity", ScriptEntityValueUVE{entity}));
+    ASSERT_TRUE(context.SetInputUVE(
+        50U, "Component", ScriptComponentValueUVE{Scene::kInvalidEntityUVE, "NameComponentUVE", false}));
+    ScriptBytecodeProgramUVE hasProgram;
+    hasProgram.instructions.push_back(
+        {ScriptIrInstructionKindUVE::ExecuteNode, 50U, 0U, "query.entity.has_component", {}, {}});
+    ASSERT_TRUE(ExecuteScriptBytecodeUVE(hasProgram, context).IsSuccessUVE());
+    EXPECT_TRUE(std::get<bool>(*context.FindOutputUVE(50U, "Result")));
+
+    ASSERT_TRUE(context.SetInputUVE(51U, "Entity", ScriptEntityValueUVE{entity}));
+    ASSERT_TRUE(context.SetInputUVE(
+        51U, "Component", ScriptComponentValueUVE{Scene::kInvalidEntityUVE, "MissingComponentUVE", false}));
+    ScriptBytecodeProgramUVE getProgram;
+    getProgram.instructions.push_back(
+        {ScriptIrInstructionKindUVE::ExecuteNode, 51U, 0U, "query.entity.get_component", {}, {}});
+    ASSERT_TRUE(ExecuteScriptBytecodeUVE(getProgram, context).IsSuccessUVE());
+    const auto copied = context.FindOutputUVE(51U, "Result");
+    ASSERT_TRUE(copied.has_value());
+    ASSERT_TRUE(std::holds_alternative<ScriptComponentValueUVE>(*copied));
+    EXPECT_FALSE(std::get<ScriptComponentValueUVE>(*copied).present);
+
+    const std::size_t factCountBeforeInvalid = context.componentFacts.size();
+    const auto rejected = ScriptEntityQueryAdapterUVE::PopulateComponentFactsUVE(
+        entityManager, Scene::kInvalidEntityUVE, bindings, context);
+    EXPECT_EQ(rejected.code, ScriptEntityQueryAdapterCodeUVE::InvalidEntity);
+    EXPECT_EQ(context.componentFacts.size(), factCountBeforeInvalid);
 }
 
 TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_DispatchesEntityQueryNodesFromCopiedFacts) {
