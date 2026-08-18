@@ -1210,6 +1210,9 @@ EditorBridgeMotionQuerySnapshotUVE EditorBridgeUVE::CaptureMotionQueryUVE() cons
     EditorBridgeMotionQuerySnapshotUVE snapshot{};
     snapshot.authoring.revision = authoring.revision;
     snapshot.authoring.selectedResource = authoring.selectedResource;
+    snapshot.authoring.clipboardAvailable = authoring.clipboardAvailable;
+    snapshot.authoring.canUndo = authoring.canUndo;
+    snapshot.authoring.canRedo = authoring.canRedo;
     snapshot.authoring.diagnostic = authoring.diagnostic;
     snapshot.authoring.commandMetadata.reserve(authoring.commandMetadata.size());
     for (const auto& metadata : authoring.commandMetadata) {
