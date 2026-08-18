@@ -48,3 +48,76 @@ TEST(MotionQueryPluginModuleUVETest, RegisterMotionQueryPluginUVE_RejectsDuplica
 }
 
 } // namespace UVE::Plugins
+
+namespace UVE::Plugins {
+namespace {
+
+constexpr std::string_view kMotionQueryPluginConfigurationJsonUVE = R"json({
+  "copyright": "Copyright (c) 2026 UniVex Studios. All Rights Reserved.",
+  "pluginId": "uve.motion_query",
+  "displayName": "UniVex Motion Query",
+  "version": "1.0.0",
+  "requiredEngineProtocol": 1,
+  "capabilities": [
+    "motion_query.runtime",
+    "motion_query.asset_sampling",
+    "motion_query.editor",
+    "motion_query.diagnostics"
+  ],
+  "layout": {
+    "runtime": "Source/Runtime",
+    "editor": "Source/Editor",
+    "shared": "Source/Shared",
+    "tests": "Tests"
+  }
+})json";
+
+} // namespace
+
+TEST(MotionQueryPluginModuleUVETest, ConfigurationUVE_ParsesAndMatchesNativeDescriptor) {
+    const MotionQueryPluginConfigurationResultUVE parsed =
+        ParseMotionQueryPluginConfigurationUVE(kMotionQueryPluginConfigurationJsonUVE);
+    ASSERT_TRUE(parsed.IsValidUVE()) << parsed.message;
+    ASSERT_TRUE(parsed.configuration.has_value());
+
+    const MotionQueryPluginConfigurationResultUVE parity =
+        ValidateMotionQueryPluginConfigurationParityUVE(*parsed.configuration,
+                                                        MakeMotionQueryPluginDescriptorUVE());
+    EXPECT_TRUE(parity.IsValidUVE()) << parity.message;
+}
+
+TEST(MotionQueryPluginModuleUVETest, ConfigurationUVE_RejectsMalformedVersionAndUnsafeLayout) {
+    const std::string malformedVersion = R"json({
+      "copyright":"Copyright (c) 2026 UniVex Studios. All Rights Reserved.",
+      "pluginId":"uve.motion_query", "displayName":"UniVex Motion Query", "version":"1.0",
+      "requiredEngineProtocol":1,
+      "capabilities":["motion_query.runtime"],
+      "layout":{"runtime":"Source/Runtime","editor":"Source/Editor","shared":"Source/Shared","tests":"Tests"}
+    })json";
+    EXPECT_EQ(ParseMotionQueryPluginConfigurationUVE(malformedVersion).code,
+              MotionQueryPluginConfigurationCodeUVE::InvalidVersion);
+
+    const std::string unsafeLayout = R"json({
+      "copyright":"Copyright (c) 2026 UniVex Studios. All Rights Reserved.",
+      "pluginId":"uve.motion_query", "displayName":"UniVex Motion Query", "version":"1.0.0",
+      "requiredEngineProtocol":1,
+      "capabilities":["motion_query.runtime"],
+      "layout":{"runtime":"../Runtime","editor":"Source/Editor","shared":"Source/Shared","tests":"Tests"}
+    })json";
+    EXPECT_EQ(ParseMotionQueryPluginConfigurationUVE(unsafeLayout).code,
+              MotionQueryPluginConfigurationCodeUVE::InvalidLayout);
+}
+
+TEST(MotionQueryPluginModuleUVETest, ConfigurationUVE_RejectsNativeManifestDrift) {
+    const MotionQueryPluginConfigurationResultUVE parsed =
+        ParseMotionQueryPluginConfigurationUVE(kMotionQueryPluginConfigurationJsonUVE);
+    ASSERT_TRUE(parsed.IsValidUVE());
+    ASSERT_TRUE(parsed.configuration.has_value());
+
+    MotionQueryPluginDescriptorUVE descriptor = MakeMotionQueryPluginDescriptorUVE();
+    descriptor.manifest.version.patch = 1U;
+    EXPECT_EQ(ValidateMotionQueryPluginConfigurationParityUVE(*parsed.configuration, descriptor).code,
+              MotionQueryPluginConfigurationCodeUVE::ManifestMismatch);
+}
+
+} // namespace UVE::Plugins
