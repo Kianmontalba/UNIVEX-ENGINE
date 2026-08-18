@@ -123,6 +123,90 @@ public sealed record BridgeMotionQueryPasteTarget(
     string DatabaseId,
     ulong Generation);
 
+public sealed record BridgeMotionQueryVector3(float X, float Y, float Z);
+
+public sealed record BridgeMotionQueryQuaternion(float X, float Y, float Z, float W);
+
+public sealed record BridgeMotionQueryTransform(
+    BridgeMotionQueryVector3 Position,
+    BridgeMotionQueryQuaternion Rotation,
+    BridgeMotionQueryVector3 Scale);
+
+public sealed record BridgeMotionQueryTrajectorySample(
+    double OffsetSeconds,
+    BridgeMotionQueryVector3 RelativePosition);
+
+public sealed record BridgeMotionQuerySkeletonJoint(string JointId, string ParentJointId);
+
+public sealed record BridgeMotionQuerySkeleton(
+    string SkeletonId,
+    IReadOnlyList<BridgeMotionQuerySkeletonJoint> Joints);
+
+public sealed record BridgeMotionQueryPose(
+    string SkeletonId,
+    IReadOnlyList<BridgeMotionQueryTransform> LocalJoints);
+
+public sealed record BridgeMotionQueryTimeState(
+    ulong FrameNumber,
+    double RealTimeSeconds,
+    double GameTimeSeconds,
+    double FixedTimeSeconds,
+    double AnimationTimeSeconds,
+    double FixedAccumulatorSeconds,
+    double RealDeltaSeconds,
+    double GameDeltaSeconds,
+    double AnimationDeltaSeconds,
+    bool Paused);
+
+public sealed record BridgeMotionQueryEvaluationContext(
+    BridgeMotionQueryTimeState Time,
+    double SampleTimeSeconds);
+
+public sealed record BridgeMotionQueryFeature(
+    BridgeMotionQueryVector3 RootVelocity,
+    BridgeMotionQueryVector3 FacingDirection,
+    IReadOnlyList<BridgeMotionQueryTrajectorySample> Trajectory,
+    BridgeMotionQuerySkeleton Skeleton,
+    BridgeMotionQueryPose Pose,
+    BridgeMotionQueryEvaluationContext EvaluationContext);
+
+public sealed record BridgeMotionQueryCandidate(
+    string CandidateId,
+    string SourceClipId,
+    double SampleTimeSeconds,
+    BridgeMotionQueryFeature Feature);
+
+public sealed record BridgeMotionQueryDatabaseContext(string DatabaseId, ulong Generation);
+
+public sealed record BridgeMotionQueryDatabaseSchema(
+    uint Version,
+    string SchemaId,
+    IReadOnlyList<double> TrajectoryOffsets,
+    IReadOnlyList<string> FeatureChannelIds);
+
+public sealed record BridgeMotionQueryDatabaseSettings(
+    ulong MaximumCandidates,
+    bool RequireTrajectorySchema);
+
+public sealed record BridgeMotionQueryDatabaseEvent(
+    byte Kind,
+    ulong Sequence,
+    string CandidateId,
+    string Message);
+
+public sealed record BridgeMotionQueryDatabaseContract(
+    BridgeMotionQueryDatabaseContext Context,
+    BridgeMotionQueryDatabaseSchema Schema,
+    BridgeMotionQueryDatabaseSettings Settings,
+    IReadOnlyList<BridgeMotionQueryCandidate> Candidates,
+    IReadOnlyList<BridgeMotionQueryDatabaseEvent> Events);
+
+public sealed record BridgeMotionQueryDatabaseEntry(
+    BridgeMotionQueryResourceHandle Resource,
+    string DisplayName,
+    bool Dirty,
+    BridgeMotionQueryDatabaseContract Contract);
+
 public sealed record BridgeMotionQueryDatabaseRow(
     BridgeMotionQueryResourceHandle Resource,
     string DisplayName,
@@ -663,6 +747,8 @@ public sealed record BridgeCommand(
     public BridgeMotionQueryResourceHandle? MotionQueryResource { get; init; }
     public string? MotionQueryText { get; init; }
     public ulong? MotionQueryCandidateIndex { get; init; }
+    public BridgeMotionQueryDatabaseEntry? MotionQueryDatabase { get; init; }
+    public BridgeMotionQueryCandidate? MotionQueryCandidate { get; init; }
     public string? MotionQueryDebugCommandKind { get; init; }
     public ulong? MotionQueryDebugExpectedGeneration { get; init; }
     public BridgeMotionQueryResourceHandle? MotionQueryDebugDatabase { get; init; }

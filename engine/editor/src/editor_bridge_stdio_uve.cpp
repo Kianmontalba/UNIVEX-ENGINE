@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <istream>
 #include <ostream>
@@ -1058,6 +1059,286 @@ enum class FrameReadResultUVE : std::uint8_t {
                                    json.at("generation").get<std::uint64_t>()};
 }
 
+[[nodiscard]] std::optional<double> ParseFiniteDoubleUVE(const JsonUVE& value) {
+    if (!value.is_number()) {
+        return std::nullopt;
+    }
+    const double parsed = value.get<double>();
+    return std::isfinite(parsed) ? std::optional<double>{parsed} : std::nullopt;
+}
+
+[[nodiscard]] std::optional<std::string> ParseBoundedStringUVE(const JsonUVE& value,
+                                                                const std::size_t maximumBytes,
+                                                                const bool requireNonEmpty = false) {
+    if (!value.is_string()) {
+        return std::nullopt;
+    }
+    const std::string& parsed = value.get_ref<const std::string&>();
+    if (parsed.size() > maximumBytes || (requireNonEmpty && parsed.empty())) {
+        return std::nullopt;
+    }
+    return parsed;
+}
+
+[[nodiscard]] std::optional<UVE::Math::Vector3UVE> ParseVector3UVE(const JsonUVE& json) {
+    if (!json.is_object() || !json.contains("x") || !json.contains("y") || !json.contains("z")) {
+        return std::nullopt;
+    }
+    const auto x = ParseFiniteDoubleUVE(json.at("x"));
+    const auto y = ParseFiniteDoubleUVE(json.at("y"));
+    const auto z = ParseFiniteDoubleUVE(json.at("z"));
+    if (!x.has_value() || !y.has_value() || !z.has_value()) {
+        return std::nullopt;
+    }
+    return UVE::Math::Vector3UVE{static_cast<float>(*x), static_cast<float>(*y), static_cast<float>(*z)};
+}
+
+[[nodiscard]] std::optional<UVE::Math::QuaternionUVE> ParseQuaternionUVE(const JsonUVE& json) {
+    if (!json.is_object() || !json.contains("x") || !json.contains("y") ||
+        !json.contains("z") || !json.contains("w")) {
+        return std::nullopt;
+    }
+    const auto x = ParseFiniteDoubleUVE(json.at("x"));
+    const auto y = ParseFiniteDoubleUVE(json.at("y"));
+    const auto z = ParseFiniteDoubleUVE(json.at("z"));
+    const auto w = ParseFiniteDoubleUVE(json.at("w"));
+    if (!x.has_value() || !y.has_value() || !z.has_value() || !w.has_value()) {
+        return std::nullopt;
+    }
+    return UVE::Math::QuaternionUVE{static_cast<float>(*x), static_cast<float>(*y),
+                                    static_cast<float>(*z), static_cast<float>(*w)};
+}
+
+[[nodiscard]] std::optional<UVE::Core::TransformPoseUVE> ParseTransformPoseUVE(const JsonUVE& json) {
+    if (!json.is_object() || !json.contains("position") || !json.contains("rotation") ||
+        !json.contains("scale")) {
+        return std::nullopt;
+    }
+    const auto position = ParseVector3UVE(json.at("position"));
+    const auto rotation = ParseQuaternionUVE(json.at("rotation"));
+    const auto scale = ParseVector3UVE(json.at("scale"));
+    if (!position.has_value() || !rotation.has_value() || !scale.has_value()) {
+        return std::nullopt;
+    }
+    return UVE::Core::TransformPoseUVE{*position, *rotation, *scale};
+}
+
+[[nodiscard]] std::optional<UVE::Core::UnifiedTimeStateUVE> ParseUnifiedTimeStateUVE(
+    const JsonUVE& json) {
+    if (!json.is_object() || !json.contains("frameNumber") || !json.at("frameNumber").is_number_unsigned()) {
+        return std::nullopt;
+    }
+    const auto realTime = json.contains("realTimeSeconds") ? ParseFiniteDoubleUVE(json.at("realTimeSeconds")) : std::nullopt;
+    const auto gameTime = json.contains("gameTimeSeconds") ? ParseFiniteDoubleUVE(json.at("gameTimeSeconds")) : std::nullopt;
+    const auto fixedTime = json.contains("fixedTimeSeconds") ? ParseFiniteDoubleUVE(json.at("fixedTimeSeconds")) : std::nullopt;
+    const auto animationTime = json.contains("animationTimeSeconds") ? ParseFiniteDoubleUVE(json.at("animationTimeSeconds")) : std::nullopt;
+    const auto fixedAccumulator = json.contains("fixedAccumulatorSeconds") ? ParseFiniteDoubleUVE(json.at("fixedAccumulatorSeconds")) : std::nullopt;
+    const auto realDelta = json.contains("realDeltaSeconds") ? ParseFiniteDoubleUVE(json.at("realDeltaSeconds")) : std::nullopt;
+    const auto gameDelta = json.contains("gameDeltaSeconds") ? ParseFiniteDoubleUVE(json.at("gameDeltaSeconds")) : std::nullopt;
+    const auto animationDelta = json.contains("animationDeltaSeconds") ? ParseFiniteDoubleUVE(json.at("animationDeltaSeconds")) : std::nullopt;
+    if (!realTime.has_value() || !gameTime.has_value() || !fixedTime.has_value() ||
+        !animationTime.has_value() || !fixedAccumulator.has_value() || !realDelta.has_value() ||
+        !gameDelta.has_value() || !animationDelta.has_value() || !json.contains("paused") ||
+        !json.at("paused").is_boolean()) {
+        return std::nullopt;
+    }
+    return UVE::Core::UnifiedTimeStateUVE{
+        json.at("frameNumber").get<std::uint64_t>(), *realTime, *gameTime, *fixedTime,
+        *animationTime, *fixedAccumulator, *realDelta, *gameDelta, *animationDelta,
+        json.at("paused").get<bool>()};
+}
+
+[[nodiscard]] std::optional<UVE::Core::MotionQueryUVE> ParseMotionQueryFeatureUVE(const JsonUVE& json) {
+    if (!json.is_object() || !json.contains("rootVelocity") || !json.contains("facingDirection") ||
+        !json.contains("trajectory") || !json.contains("skeleton") || !json.contains("pose") ||
+        !json.contains("evaluationContext")) {
+        return std::nullopt;
+    }
+    const auto rootVelocity = ParseVector3UVE(json.at("rootVelocity"));
+    const auto facingDirection = ParseVector3UVE(json.at("facingDirection"));
+    const JsonUVE& trajectory = json.at("trajectory");
+    const JsonUVE& skeleton = json.at("skeleton");
+    const JsonUVE& pose = json.at("pose");
+    const JsonUVE& evaluationContext = json.at("evaluationContext");
+    if (!rootVelocity.has_value() || !facingDirection.has_value() || !trajectory.is_array() ||
+        trajectory.size() > UVE::Core::MotionQueryUVE::kMaximumTrajectorySamplesUVE ||
+        !skeleton.is_object() || !pose.is_object() || !evaluationContext.is_object()) {
+        return std::nullopt;
+    }
+    UVE::Core::MotionQueryUVE feature;
+    feature.rootVelocity = *rootVelocity;
+    feature.facingDirection = *facingDirection;
+    for (const JsonUVE& sample : trajectory) {
+        if (!sample.is_object() || !sample.contains("offsetSeconds") || !sample.contains("relativePosition")) {
+            return std::nullopt;
+        }
+        const auto offset = ParseFiniteDoubleUVE(sample.at("offsetSeconds"));
+        const auto position = ParseVector3UVE(sample.at("relativePosition"));
+        if (!offset.has_value() || !position.has_value()) {
+            return std::nullopt;
+        }
+        feature.trajectory.push_back(UVE::Core::MotionTrajectorySampleUVE{*offset, *position});
+    }
+    const auto skeletonId = ParseBoundedStringUVE(skeleton.value("skeletonId", JsonUVE{}),
+                                                   UVE::Core::kMaximumAnimationIdentifierBytesUVE);
+    const JsonUVE& joints = skeleton.value("joints", JsonUVE::array());
+    if (!skeletonId.has_value() || !joints.is_array() || joints.size() > UVE::Core::kMaximumSkeletonJointsUVE) {
+        return std::nullopt;
+    }
+    feature.skeleton.skeletonId = *skeletonId;
+    for (const JsonUVE& joint : joints) {
+        if (!joint.is_object()) {
+            return std::nullopt;
+        }
+        const auto jointId = ParseBoundedStringUVE(joint.value("jointId", JsonUVE{}),
+                                                    UVE::Core::kMaximumAnimationIdentifierBytesUVE, true);
+        const auto parentJointId = ParseBoundedStringUVE(joint.value("parentJointId", JsonUVE{}),
+                                                          UVE::Core::kMaximumAnimationIdentifierBytesUVE);
+        if (!jointId.has_value() || !parentJointId.has_value()) {
+            return std::nullopt;
+        }
+        feature.skeleton.joints.push_back(UVE::Core::SkeletonJointUVE{*jointId, *parentJointId});
+    }
+    const auto poseSkeletonId = ParseBoundedStringUVE(pose.value("skeletonId", JsonUVE{}),
+                                                       UVE::Core::kMaximumAnimationIdentifierBytesUVE);
+    const JsonUVE& localJoints = pose.value("localJoints", JsonUVE::array());
+    if (!poseSkeletonId.has_value() || !localJoints.is_array() ||
+        localJoints.size() > UVE::Core::kMaximumSkeletonJointsUVE) {
+        return std::nullopt;
+    }
+    feature.pose.skeletonId = *poseSkeletonId;
+    for (const JsonUVE& localJoint : localJoints) {
+        const auto transform = ParseTransformPoseUVE(localJoint);
+        if (!transform.has_value()) {
+            return std::nullopt;
+        }
+        feature.pose.localJoints.push_back(*transform);
+    }
+    const auto time = ParseUnifiedTimeStateUVE(evaluationContext.value("time", JsonUVE{}));
+    const auto sampleTime = ParseFiniteDoubleUVE(evaluationContext.value("sampleTimeSeconds", JsonUVE{}));
+    if (!time.has_value() || !sampleTime.has_value()) {
+        return std::nullopt;
+    }
+    feature.evaluationContext.time = *time;
+    feature.evaluationContext.sampleTimeSeconds = *sampleTime;
+    return feature;
+}
+
+[[nodiscard]] std::optional<UVE::Core::MotionMatchingCandidateUVE> ParseMotionQueryCandidateUVE(
+    const JsonUVE& json) {
+    if (!json.is_object()) {
+        return std::nullopt;
+    }
+    const auto candidateId = ParseBoundedStringUVE(
+        json.value("candidateId", JsonUVE{}), UVE::Core::MotionMatchingCandidateUVE::kMaximumIdentifierBytesUVE, true);
+    const auto sourceClipId = ParseBoundedStringUVE(
+        json.value("sourceClipId", JsonUVE{}), UVE::Core::kMaximumAnimationIdentifierBytesUVE, true);
+    const auto sampleTime = ParseFiniteDoubleUVE(json.value("sampleTimeSeconds", JsonUVE{}));
+    const auto feature = ParseMotionQueryFeatureUVE(json.value("feature", JsonUVE{}));
+    if (!candidateId.has_value() || !sourceClipId.has_value() || !sampleTime.has_value() || !feature.has_value()) {
+        return std::nullopt;
+    }
+    return UVE::Core::MotionMatchingCandidateUVE{*candidateId, *sourceClipId, *sampleTime, *feature};
+}
+
+[[nodiscard]] std::optional<Plugins::Editor::MotionQueryEditorDatabaseEntryUVE>
+ParseMotionQueryDatabaseEntryUVE(const JsonUVE& json) {
+    if (!json.is_object() || !json.contains("resource") || !json.contains("displayName") ||
+        !json.contains("contract")) {
+        return std::nullopt;
+    }
+    const auto resource = ParseResourceHandleUVE(json.at("resource"));
+    const auto displayName = ParseBoundedStringUVE(
+        json.at("displayName"), Plugins::Editor::kMotionQueryEditorMaximumDisplayNameBytesUVE, true);
+    const JsonUVE& contract = json.at("contract");
+    if (!resource.has_value() || !displayName.has_value() || !contract.is_object()) {
+        return std::nullopt;
+    }
+    Plugins::Editor::MotionQueryEditorDatabaseEntryUVE entry;
+    entry.resource = *resource;
+    entry.displayName = *displayName;
+    if (json.contains("dirty") && !json.at("dirty").is_boolean()) {
+        return std::nullopt;
+    }
+    entry.dirty = json.value("dirty", false);
+    const JsonUVE& context = contract.value("context", JsonUVE{});
+    const JsonUVE& schema = contract.value("schema", JsonUVE{});
+    const JsonUVE& settings = contract.value("settings", JsonUVE{});
+    const JsonUVE& candidates = contract.value("candidates", JsonUVE::array());
+    const JsonUVE& events = contract.value("events", JsonUVE::array());
+    if (!context.is_object() || !schema.is_object() || !settings.is_object() || !candidates.is_array() ||
+        !events.is_array() || candidates.empty() ||
+        candidates.size() > UVE::Core::MotionMatchingDatabaseUVE::kMaximumCandidatesUVE ||
+        events.size() > UVE::Core::kMaximumMotionQueryDatabaseEventsUVE) {
+        return std::nullopt;
+    }
+    const auto databaseId = ParseBoundedStringUVE(context.value("databaseId", JsonUVE{}),
+                                                    UVE::Core::kMaximumAnimationIdentifierBytesUVE, true);
+    const auto generation = context.value("generation", JsonUVE{});
+    const auto schemaId = ParseBoundedStringUVE(schema.value("schemaId", JsonUVE{}),
+                                                 UVE::Core::kMaximumAnimationIdentifierBytesUVE, true);
+    if (!databaseId.has_value() || !generation.is_number_unsigned() || generation.get<std::uint64_t>() == 0U ||
+        !schemaId.has_value() || !schema.value("version", JsonUVE{}).is_number_unsigned() ||
+        !settings.value("maximumCandidates", JsonUVE{}).is_number_unsigned() ||
+        !settings.value("requireTrajectorySchema", JsonUVE{}).is_boolean()) {
+        return std::nullopt;
+    }
+    entry.contract.context = UVE::Core::MotionQueryDatabaseContextUVE{*databaseId, generation.get<std::uint64_t>()};
+    entry.contract.schema.version = schema.at("version").get<std::uint32_t>();
+    entry.contract.schema.schemaId = *schemaId;
+    const JsonUVE& trajectoryOffsets = schema.value("trajectoryOffsets", JsonUVE::array());
+    const JsonUVE& featureChannelIds = schema.value("featureChannelIds", JsonUVE::array());
+    if (!trajectoryOffsets.is_array() || !featureChannelIds.is_array() ||
+        trajectoryOffsets.size() > UVE::Core::MotionQueryUVE::kMaximumTrajectorySamplesUVE ||
+        featureChannelIds.size() > UVE::Core::kMaximumMotionQueryFeatureChannelsUVE) {
+        return std::nullopt;
+    }
+    for (const JsonUVE& offset : trajectoryOffsets) {
+        const auto parsed = ParseFiniteDoubleUVE(offset);
+        if (!parsed.has_value()) {
+            return std::nullopt;
+        }
+        entry.contract.schema.trajectoryOffsets.push_back(*parsed);
+    }
+    for (const JsonUVE& channelId : featureChannelIds) {
+        const auto parsed = ParseBoundedStringUVE(channelId, UVE::Core::kMaximumAnimationIdentifierBytesUVE, true);
+        if (!parsed.has_value()) {
+            return std::nullopt;
+        }
+        entry.contract.schema.featureChannelIds.push_back(*parsed);
+    }
+    entry.contract.settings.maximumCandidates = settings.at("maximumCandidates").get<std::size_t>();
+    entry.contract.settings.requireTrajectorySchema = settings.at("requireTrajectorySchema").get<bool>();
+    if (entry.contract.settings.maximumCandidates == 0U ||
+        entry.contract.settings.maximumCandidates > UVE::Core::MotionMatchingDatabaseUVE::kMaximumCandidatesUVE) {
+        return std::nullopt;
+    }
+    for (const JsonUVE& candidate : candidates) {
+        const auto parsed = ParseMotionQueryCandidateUVE(candidate);
+        if (!parsed.has_value()) {
+            return std::nullopt;
+        }
+        entry.contract.database.candidates.push_back(*parsed);
+    }
+    for (const JsonUVE& event : events) {
+        if (!event.is_object() || !event.value("kind", JsonUVE{}).is_number_unsigned() ||
+            !event.value("sequence", JsonUVE{}).is_number_unsigned()) {
+            return std::nullopt;
+        }
+        const auto candidateId = ParseBoundedStringUVE(event.value("candidateId", JsonUVE{}),
+                                                         UVE::Core::MotionMatchingCandidateUVE::kMaximumIdentifierBytesUVE);
+        const auto message = ParseBoundedStringUVE(event.value("message", JsonUVE{}),
+                                                    UVE::Core::kMaximumMotionQueryDatabaseEventMessageBytesUVE);
+        if (!candidateId.has_value() || !message.has_value() || event.at("kind").get<std::uint8_t>() > 5U) {
+            return std::nullopt;
+        }
+        entry.contract.events.push_back(UVE::Core::MotionQueryDatabaseEventUVE{
+            static_cast<UVE::Core::MotionQueryDatabaseEventKindUVE>(event.at("kind").get<std::uint8_t>()),
+            event.at("sequence").get<std::uint64_t>(), *candidateId, *message});
+    }
+    return entry;
+}
+
 [[nodiscard]] std::optional<Plugins::Editor::MotionQueryEditorCommandKindUVE>
 ParseMotionQueryCommandKindUVE(const std::string_view value) {
     using Kind = Plugins::Editor::MotionQueryEditorCommandKindUVE;
@@ -1071,6 +1352,10 @@ ParseMotionQueryCommandKindUVE(const std::string_view value) {
     if (value == "addCandidate") return Kind::AddCandidate;
     if (value == "removeCandidate") return Kind::RemoveCandidate;
     if (value == "validateDatabase") return Kind::ValidateDatabase;
+    if (value == "copyDatabase") return Kind::CopyDatabase;
+    if (value == "pasteDatabase") return Kind::PasteDatabase;
+    if (value == "undo") return Kind::Undo;
+    if (value == "redo") return Kind::Redo;
     return std::nullopt;
 }
 
@@ -1104,6 +1389,14 @@ ParseMotionQueryCommandUVE(const JsonUVE& json, const std::uint64_t requestId) {
     if (json.contains("candidateIndex") && !json.at("candidateIndex").is_null()) {
         if (!json.at("candidateIndex").is_number_unsigned()) return std::nullopt;
         command.candidateIndex = json.at("candidateIndex").get<std::size_t>();
+    }
+    if (json.contains("database") && !json.at("database").is_null()) {
+        command.database = ParseMotionQueryDatabaseEntryUVE(json.at("database"));
+        if (!command.database.has_value()) return std::nullopt;
+    }
+    if (json.contains("candidate") && !json.at("candidate").is_null()) {
+        command.candidate = ParseMotionQueryCandidateUVE(json.at("candidate"));
+        if (!command.candidate.has_value()) return std::nullopt;
     }
     if (json.contains("pasteTarget") && !json.at("pasteTarget").is_null()) {
         const JsonUVE& pasteTarget = json.at("pasteTarget");
