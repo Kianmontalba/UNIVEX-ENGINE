@@ -99,6 +99,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
     std::optional<ScriptLinkUVE> branchConditionDependencyLink;
     std::vector<ScriptLinkUVE> stagedConditionLinks;
     std::vector<ScriptLinkUVE> stagedNumberLinks;
+    std::vector<ScriptLinkUVE> stagedVector3Links;
     for (const ScriptNodeUVE& node : nodes) {
         if (node.typeId == "flow.sequence") {
             ++sequenceNodeCount;
@@ -213,6 +214,31 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
         }
         stagedNumberLinks.push_back(link);
     }
+    for (const ScriptLinkUVE& link : links) {
+        if (IsExecutionLinkUVE(link, nodes, registry)) {
+            continue;
+        }
+        const ScriptNodeUVE* sourceNode = FindNodeUVE(nodes, link.output.nodeId);
+        const ScriptNodeUVE* consumerNode = FindNodeUVE(nodes, link.input.nodeId);
+        if (sourceNode == nullptr || consumerNode == nullptr ||
+            consumerNode->typeId.rfind("math.vector3.", 0U) != 0U) {
+            continue;
+        }
+        const bool approvedProducer =
+            sourceNode->typeId == "math.vector3.make" || sourceNode->typeId == "math.vector3.add" ||
+            sourceNode->typeId == "math.vector3.subtract" || sourceNode->typeId == "math.vector3.multiply" ||
+            sourceNode->typeId == "math.vector3.cross" || sourceNode->typeId == "math.vector3.normalize";
+        const bool approvedOutput = link.output.pinName == "Vector" || link.output.pinName == "Result";
+        const bool approvedInput = link.input.pinName == "A" || link.input.pinName == "B" ||
+                                   link.input.pinName == "Vector";
+        if (!approvedProducer || !approvedOutput || !approvedInput || !stagedVector3Links.empty()) {
+            result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode, link.input.nodeId,
+                                          link.input.pinName,
+                                          "Vector3 data-link staging supports only one direct built-in Vector3 producer; composed and deeper vector dependencies remain deferred."});
+            continue;
+        }
+        stagedVector3Links.push_back(link);
+    }
     if (!result.diagnostics.empty()) {
         return result;
     }
@@ -241,8 +267,11 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
                                                  });
         instructionNodes.insert(branchIterator, conditionNodes.begin(), conditionNodes.end());
     }
-    if (!stagedNumberLinks.empty()) {
-        const ScriptLinkUVE& stagedLink = stagedNumberLinks.front();
+    const auto moveStagedProducerBeforeConsumer = [&](const std::vector<ScriptLinkUVE>& stagedLinks) {
+        if (stagedLinks.empty()) {
+            return;
+        }
+        const ScriptLinkUVE& stagedLink = stagedLinks.front();
         const auto sourceIterator = std::find_if(instructionNodes.begin(), instructionNodes.end(),
                                                  [&](const ScriptNodeUVE& node) {
                                                      return node.id == stagedLink.output.nodeId;
@@ -261,9 +290,12 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
                                                               });
             instructionNodes.insert(updatedConsumerIterator, sourceNode);
         }
-    }
+    };
+    moveStagedProducerBeforeConsumer(stagedNumberLinks);
+    moveStagedProducerBeforeConsumer(stagedVector3Links);
 
-    const std::size_t stagedInstructionCount = instructionNodes.size() + stagedConditionLinks.size() + stagedNumberLinks.size();
+    const std::size_t stagedInstructionCount = instructionNodes.size() + stagedConditionLinks.size() +
+                                                stagedNumberLinks.size() + stagedVector3Links.size();
     const auto findStagedInstructionIndex = [&](const std::uint32_t nodeId) -> std::optional<std::size_t> {
         const std::optional<std::size_t> baseIndex = FindNodeInstructionIndexUVE(instructionNodes, nodeId);
         if (!baseIndex.has_value()) {
@@ -281,6 +313,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
         };
         countStagedBefore(stagedConditionLinks);
         countStagedBefore(stagedNumberLinks);
+        countStagedBefore(stagedVector3Links);
         return *baseIndex + stagedBefore;
     };
 
@@ -362,6 +395,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             };
             emitStagedLinks(stagedConditionLinks);
             emitStagedLinks(stagedNumberLinks);
+            emitStagedLinks(stagedVector3Links);
     }
 
     for (const ScriptLinkUVE& link : links) {
@@ -374,7 +408,8 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
                                            stagedLink.input.pinName == link.input.pinName;
                                 }) != stagedLinks.end();
         };
-        if (isStagedLink(stagedConditionLinks) || isStagedLink(stagedNumberLinks)) {
+        if (isStagedLink(stagedConditionLinks) || isStagedLink(stagedNumberLinks) ||
+            isStagedLink(stagedVector3Links)) {
             continue;
         }
         if (IsExecutionLinkUVE(link, nodes, registry)) {
