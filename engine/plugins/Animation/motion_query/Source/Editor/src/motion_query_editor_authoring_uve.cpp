@@ -28,7 +28,12 @@ namespace {
             return "remove candidate";
         case MotionQueryEditorCommandKindUVE::ValidateDatabase:
             return "validate database";
-    }
+        case MotionQueryEditorCommandKindUVE::CopyDatabase:
+            return "copy database";
+        case MotionQueryEditorCommandKindUVE::PasteDatabase:
+            return "paste database";
+        }
+
     return "unknown command";
 }
 
@@ -101,6 +106,46 @@ MotionQueryEditorResponseUVE MotionQueryEditorAuthoringSessionUVE::DispatchUVE(
         ++revision_;
         return MakeResponseUVE(command, true, MotionQueryEditorResponseCodeUVE::Applied,
                                "motion query editor database removed");
+    }
+
+    if (command.kind == MotionQueryEditorCommandKindUVE::PasteDatabase) {
+        if (!clipboard_.has_value()) {
+            return MakeResponseUVE(command, false, MotionQueryEditorResponseCodeUVE::ClipboardEmpty,
+                                   "paste database requires a copied database");
+        }
+        if (!command.pasteTarget.has_value() ||
+            !IsValidResourceUVE(command.pasteTarget->resource) ||
+            !IsValidDisplayNameUVE(command.pasteTarget->displayName) ||
+            !command.pasteTarget->context.IsValidUVE()) {
+            return MakeResponseUVE(command, false, MotionQueryEditorResponseCodeUVE::InvalidPasteTarget,
+                                   "paste database requires a valid destination identity");
+        }
+        if (FindDatabaseUVE(command.pasteTarget->resource) != nullptr ||
+            std::any_of(databases_.cbegin(), databases_.cend(), [&](const auto& entry) {
+                return entry.contract.context.databaseId == command.pasteTarget->context.databaseId;
+            })) {
+            return MakeResponseUVE(command, false, MotionQueryEditorResponseCodeUVE::DuplicateDatabase,
+                                   "paste database destination identity is already registered");
+        }
+        if (databases_.size() >= kMotionQueryEditorMaximumDatabasesUVE) {
+            return MakeResponseUVE(command, false, MotionQueryEditorResponseCodeUVE::InvalidPasteTarget,
+                                   "motion query editor database capacity is full");
+        }
+        MotionQueryEditorDatabaseEntryUVE pasted = *clipboard_;
+        pasted.resource = command.pasteTarget->resource;
+        pasted.displayName = command.pasteTarget->displayName;
+        pasted.contract.context = command.pasteTarget->context;
+        pasted.contract.events.clear();
+        pasted.dirty = true;
+        const auto validation = UVE::Core::ValidateMotionQueryDatabaseContractUVE(pasted.contract);
+        if (!validation.IsValidUVE()) {
+            return MakeResponseUVE(command, false, MotionQueryEditorResponseCodeUVE::InvalidPasteTarget,
+                                   validation.message);
+        }
+        databases_.push_back(std::move(pasted));
+        ++revision_;
+        return MakeResponseUVE(command, true, MotionQueryEditorResponseCodeUVE::Applied,
+                               "motion query editor database pasted");
     }
 
     if (!command.resource.has_value() || !IsValidResourceUVE(*command.resource)) {
@@ -226,9 +271,15 @@ MotionQueryEditorResponseUVE MotionQueryEditorAuthoringSessionUVE::DispatchUVE(
                                                            : MotionQueryEditorResponseCodeUVE::ValidationFailed,
                                    validation.message);
         }
+        case MotionQueryEditorCommandKindUVE::CopyDatabase:
+            clipboard_ = *entry;
+            ++revision_;
+            return MakeResponseUVE(command, true, MotionQueryEditorResponseCodeUVE::Applied,
+                                   "motion query editor database copied");
         case MotionQueryEditorCommandKindUVE::ReadSnapshot:
         case MotionQueryEditorCommandKindUVE::RegisterDatabase:
         case MotionQueryEditorCommandKindUVE::RemoveDatabase:
+        case MotionQueryEditorCommandKindUVE::PasteDatabase:
             break;
     }
     return MakeResponseUVE(command, false, MotionQueryEditorResponseCodeUVE::InvalidCommand,
@@ -238,6 +289,7 @@ MotionQueryEditorResponseUVE MotionQueryEditorAuthoringSessionUVE::DispatchUVE(
 void MotionQueryEditorAuthoringSessionUVE::ClearUVE() noexcept {
     databases_.clear();
     selectedResource_.reset();
+    clipboard_.reset();
     revision_ = 0U;
 }
 
@@ -245,6 +297,7 @@ MotionQueryEditorSnapshotUVE MotionQueryEditorAuthoringSessionUVE::GetSnapshotUV
     MotionQueryEditorSnapshotUVE snapshot;
     snapshot.revision = revision_;
     snapshot.selectedResource = selectedResource_;
+    snapshot.clipboardAvailable = clipboard_.has_value();
     snapshot.databases.reserve(databases_.size());
     for (const MotionQueryEditorDatabaseEntryUVE& entry : databases_) {
         snapshot.databases.push_back(BuildRowUVE(entry, selectedResource_));

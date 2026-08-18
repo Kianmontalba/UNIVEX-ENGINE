@@ -21,7 +21,12 @@ struct MotionQueryEditorDatabaseEntryUVE final {
     std::string displayName;
     UVE::Core::MotionQueryDatabaseContractUVE contract;
     bool dirty = false;
+};
 
+struct MotionQueryEditorPasteTargetUVE final {
+    UVE::Asset::ResourceHandleUVE resource;
+    std::string displayName;
+    UVE::Core::MotionQueryDatabaseContextUVE context;
 };
 
 enum class MotionQueryEditorCommandKindUVE : std::uint8_t {
@@ -35,6 +40,8 @@ enum class MotionQueryEditorCommandKindUVE : std::uint8_t {
     AddCandidate,
     RemoveCandidate,
     ValidateDatabase,
+    CopyDatabase,
+    PasteDatabase,
 };
 
 struct MotionQueryEditorCommandUVE final {
@@ -47,6 +54,7 @@ struct MotionQueryEditorCommandUVE final {
     std::optional<std::string> text;
     std::optional<std::size_t> candidateIndex;
     std::optional<UVE::Core::MotionMatchingCandidateUVE> candidate;
+    std::optional<MotionQueryEditorPasteTargetUVE> pasteTarget;
 };
 
 struct MotionQueryEditorDatabaseRowUVE final {
@@ -71,6 +79,7 @@ struct MotionQueryEditorSnapshotUVE final {
     bool authoringAvailable = true;
     std::optional<UVE::Asset::ResourceHandleUVE> selectedResource;
     std::vector<MotionQueryEditorDatabaseRowUVE> databases;
+    bool clipboardAvailable = false;
     std::string diagnostic;
 
     [[nodiscard]] bool operator==(const MotionQueryEditorSnapshotUVE&) const = default;
@@ -86,6 +95,8 @@ enum class MotionQueryEditorResponseCodeUVE : std::uint8_t {
     DuplicateDatabase,
     CandidateNotFound,
     ValidationFailed,
+    ClipboardEmpty,
+    InvalidPasteTarget,
 };
 
 struct MotionQueryEditorResponseUVE final {
@@ -126,6 +137,7 @@ private:
 
     std::vector<MotionQueryEditorDatabaseEntryUVE> databases_;
     std::optional<UVE::Asset::ResourceHandleUVE> selectedResource_;
+    std::optional<MotionQueryEditorDatabaseEntryUVE> clipboard_;
     std::uint64_t revision_ = 0U;
 };
 
