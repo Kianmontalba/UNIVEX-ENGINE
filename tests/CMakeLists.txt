@@ -125,6 +125,7 @@ add_executable(uve_tests
     plugins/plugin_registry_uve_tests.cpp
     ../engine/plugins/Animation/control_rig/Tests/control_rig_uve_tests.cpp
     ../engine/plugins/Animation/motion_query/Tests/motion_query_plugin_module_uve_tests.cpp
+    ../engine/plugins/Animation/motion_query/Tests/motion_query_database_contract_uve_tests.cpp
     ../engine/plugins/Animation/motion_query/Tests/motion_query_asset_sampling_uve_tests.cpp
     ../engine/plugins/Animation/motion_query/Tests/motion_query_asset_registry_cache_uve_tests.cpp
     ../engine/plugins/Animation/motion_query/Tests/motion_query_asset_ingestion_uve_tests.cpp

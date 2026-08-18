@@ -35,6 +35,46 @@ MotionQueryDatabaseContractUVE MakeContractUVE() {
 
 } // namespace
 
+TEST(MotionQueryDatabaseContractUVETest, FactoryUVE_CreatesValidatedDeterministicDefaultContract) {
+    const MotionQueryDatabaseFactoryResultUVE first =
+        CreateDefaultMotionQueryDatabaseContractUVE("locomotion", 7U, "locomotion-v1");
+    ASSERT_TRUE(first.IsCreatedUVE()) << first.validation.message;
+    EXPECT_EQ(first.contract.context.databaseId, "locomotion");
+    EXPECT_EQ(first.contract.context.generation, 7U);
+    EXPECT_EQ(first.contract.schema.schemaId, "locomotion-v1");
+    EXPECT_EQ(first.contract.schema.trajectoryOffsets, (std::vector<double>{0.0, 0.25}));
+    EXPECT_EQ(first.contract.schema.featureChannelIds, (std::vector<std::string>{"root_velocity"}));
+    EXPECT_EQ(first.contract.settings.maximumCandidates, 4U);
+    ASSERT_EQ(first.contract.database.candidates.size(), 1U);
+    EXPECT_EQ(first.contract.database.candidates.front().candidateId, "default-candidate-0");
+
+    const MotionQueryDatabaseFactoryResultUVE second =
+        CreateDefaultMotionQueryDatabaseContractUVE("locomotion", 7U, "locomotion-v1");
+    ASSERT_TRUE(second.IsCreatedUVE());
+    EXPECT_EQ(second.contract.context, first.contract.context);
+    EXPECT_EQ(second.contract.schema, first.contract.schema);
+    EXPECT_EQ(second.contract.settings.maximumCandidates, first.contract.settings.maximumCandidates);
+    EXPECT_EQ(ValidateMotionQueryDatabaseContractUVE(first.contract).code,
+              MotionQueryDatabaseContractCodeUVE::Valid);
+}
+
+TEST(MotionQueryDatabaseContractUVETest, FactoryUVE_UsesSharedValidationForInvalidInputs) {
+    const MotionQueryDatabaseFactoryResultUVE invalidContext =
+        CreateDefaultMotionQueryDatabaseContractUVE("", 1U, "locomotion-v1");
+    EXPECT_FALSE(invalidContext.IsCreatedUVE());
+    EXPECT_EQ(invalidContext.validation.code, MotionQueryDatabaseContractCodeUVE::InvalidContext);
+
+    const MotionQueryDatabaseFactoryResultUVE invalidSchema =
+        CreateDefaultMotionQueryDatabaseContractUVE("locomotion", 1U, "");
+    EXPECT_FALSE(invalidSchema.IsCreatedUVE());
+    EXPECT_EQ(invalidSchema.validation.code, MotionQueryDatabaseContractCodeUVE::InvalidSchema);
+
+    const MotionQueryDatabaseFactoryResultUVE invalidSettings =
+        CreateDefaultMotionQueryDatabaseContractUVE("locomotion", 1U, "locomotion-v1", 0U);
+    EXPECT_FALSE(invalidSettings.IsCreatedUVE());
+    EXPECT_EQ(invalidSettings.validation.code, MotionQueryDatabaseContractCodeUVE::InvalidSettings);
+}
+
 TEST(MotionQueryDatabaseContractUVETest, ValidateUVE_AcceptsBoundedSharedDatabaseContract) {
     MotionQueryDatabaseContractUVE contract = MakeContractUVE();
 
