@@ -10,11 +10,11 @@ The target root is `engine/plugins/Animation/motion_query/`; `control_rig` remai
 
 | Original inventory count | Completed/existing UVE authority | Partial/merge into UVE authority | Planned UVE-native adaptation |
 |---:|---:|---:|---:|
-| 198 | 5 | 178 | 15 |
+| 198 | 7 | 176 | 15 |
 
 ## Dependency-ordered implementation phases
 
-1. **Foundation and configuration:** plugin manifest/build seams, shared reflection/type metadata, resource handles, serialization/versioning, asset dependency and derived-data contracts.
+1. **Foundation and configuration:** plugin manifest/build seams, shared reflection/type metadata, resource handles, serialization/versioning, asset dependency and derived-data contracts. Increment 313 closes the Motion Query plugin JSON/native manifest and organized-layout parity seam with bounded semantic version validation.
 2. **Runtime Motion Query:** database/schema/settings/context/result/event contracts, feature channels, sampling, history, trajectory, search, interaction, and animation-node integration.
 3. **Editor authoring:** database editor, asset browser/tree, details, viewport, factories, clipboard, chooser columns, and editor view models using copied DTOs.
 4. **Diagnostics and trace tooling:** debugger, trace provider/analyzer, bounded trace logging, replay evidence, persistence, and managed presentation through the existing bridge.

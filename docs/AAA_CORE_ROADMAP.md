@@ -131,8 +131,8 @@ The following inventory is taken from the supplied `motion_query_foundation.zip`
 ### **Build / Configuration**
 | File | Integration status |
 |---|---|
-| CMakeLists.txt | To audit → adapt → integrate → verify |
-| Config/PluginDescriptor.json | To audit → adapt → integrate → verify |
+| CMakeLists.txt | **COMPLETED** — Increment 313 verified the existing Animation plugin CMake target compiles the organized Motion Query runtime/editor sources and exports the correct include roots. |
+| Config/PluginDescriptor.json | **COMPLETED** — Increment 313 added bounded JSON parsing, semantic version checks, relative layout validation, and parity against the native Motion Query descriptor. |
 
 ### **Editor — Private**
 | File | Integration status |
