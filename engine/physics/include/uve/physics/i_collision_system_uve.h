@@ -12,14 +12,15 @@ namespace UVE::Physics {
 
 /// ICollisionSystemUVE is the spec's `CollisionSystemUVE` (Part 7.5): pure collision *detection*
 /// over every entity with both `Scene::WorldTransformComponentUVE` and
-/// `Scene::ColliderComponentUVE`. The implementation uses a rebuilt per-query static AABB BVH to
-/// reduce broad-phase candidate work while preserving the legacy world-AABB narrow phase; each
+/// `Scene::ColliderComponentUVE`. The implementation uses a copied per-query median-split AABB BVH to
+/// reduce broad-phase candidate work while preserving the legacy world-AABB narrow phase; the
+/// detail-level DynamicAabbBvhUVE policy also supports refit-only updates for moved copied proxies; each
 /// returned pair remains oriented and ordered by the original cache encounter indices so
 /// sequential resolution is unchanged. The legacy box overlap is exact, while sphere/capsule
 /// descriptors use conservative AABB bounds in v1 and need a future exact narrow phase. Deliberately returns plain
 /// `CollisionPairUVE` values rather than mutating anything: resolving overlaps (deciding which
 /// body moves, by how much) is `IPhysicsSystemUVE`'s job, not this one's.
-/// Thread-safety: implementations should be stateless (holding no members), matching
+/// Thread-safety: the public collision service remains stateless (holding no members), matching
 /// `CameraSystemUVE`'s/`MeshRendererUVE`'s contract — every method only reads the
 /// `IEntityManagerUVE` passed in.
 class ICollisionSystemUVE {

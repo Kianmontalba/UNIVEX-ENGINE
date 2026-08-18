@@ -2,8 +2,10 @@
 
 
 #include "uve/physics/collision_system_uve.h"
+#include "uve/physics/detail/collider_world_aabb_cache_uve.h"
 
 #include <algorithm>
+#include <limits>
 
 #include <gtest/gtest.h>
 
@@ -153,6 +155,58 @@ TEST_F(CollisionSystemUVETest, DetectCollisionsUVE_StaticVsStaticOverlap_IsStill
 
     ASSERT_EQ(pairs.size(), 1U);
     EXPECT_TRUE(ContainsPairUVE(pairs, a, b));
+}
+
+TEST(DynamicAabbBvhUVETest, UpdateAabbUVE_RefitsMovedProxyAndPreservesCacheIndexOrder) {
+    const Scene::EntityUVE firstEntity{1U, 1U};
+    const Scene::EntityUVE secondEntity{2U, 1U};
+    Detail::DynamicAabbBvhUVE bvh(std::vector<Detail::ColliderWorldAabbUVE>{
+        {firstEntity, Math::AabbUVE::FromCenterExtentsUVE({0.0F, 0.0F, 0.0F}, {1.0F, 1.0F, 1.0F}), 1U, 0xFFFFFFFFU},
+        {secondEntity, Math::AabbUVE::FromCenterExtentsUVE({100.0F, 0.0F, 0.0F}, {1.0F, 1.0F, 1.0F}), 1U, 0xFFFFFFFFU},
+    });
+    ASSERT_TRUE(bvh.IsValidUVE());
+
+    const Math::AabbUVE farBounds =
+        Math::AabbUVE::FromCenterExtentsUVE({1000.0F, 0.0F, 0.0F}, {2.0F, 2.0F, 2.0F});
+    std::vector<std::size_t> candidates;
+    ASSERT_TRUE(bvh.QueryUVE(farBounds, candidates));
+    EXPECT_TRUE(candidates.empty());
+
+    const Math::AabbUVE movedAabb =
+        Math::AabbUVE::FromCenterExtentsUVE({1000.0F, 0.0F, 0.0F}, {1.0F, 1.0F, 1.0F});
+    const auto update = bvh.UpdateAabbUVE(firstEntity, movedAabb);
+    ASSERT_TRUE(update.IsAppliedUVE());
+    ASSERT_TRUE(bvh.QueryUVE(farBounds, candidates));
+    ASSERT_FALSE(candidates.empty());
+    EXPECT_TRUE(std::is_sorted(candidates.begin(), candidates.end()));
+    EXPECT_NE(std::find(candidates.begin(), candidates.end(), 0U), candidates.end());
+    EXPECT_EQ(bvh.GetCollidersUVE()[0].entity, firstEntity);
+    EXPECT_FLOAT_EQ(bvh.GetCollidersUVE()[0].worldAabb.min.x, 999.0F);
+
+    ASSERT_TRUE(bvh.UpdateAabbUVE(
+                    firstEntity, Math::AabbUVE::FromCenterExtentsUVE({0.0F, 0.0F, 0.0F}, {1.0F, 1.0F, 1.0F}))
+                    .IsAppliedUVE());
+    ASSERT_TRUE(bvh.QueryUVE(farBounds, candidates));
+    EXPECT_TRUE(candidates.empty());
+}
+
+TEST(DynamicAabbBvhUVETest, UpdateAabbUVE_RejectsInvalidAndStaleProxyIdentities) {
+    const Scene::EntityUVE entity{7U, 4U};
+    Detail::DynamicAabbBvhUVE bvh(std::vector<Detail::ColliderWorldAabbUVE>{
+        {entity, Math::AabbUVE::FromCenterExtentsUVE({0.0F, 0.0F, 0.0F}, {1.0F, 1.0F, 1.0F}), 1U, 0xFFFFFFFFU},
+    });
+    const Math::AabbUVE validAabb = Math::AabbUVE::FromCenterExtentsUVE({1.0F, 0.0F, 0.0F}, {1.0F, 1.0F, 1.0F});
+
+    EXPECT_EQ(bvh.UpdateAabbUVE(Scene::kInvalidEntityUVE, validAabb).code,
+              Detail::DynamicColliderWorldAabbUpdateCodeUVE::InvalidEntity);
+    EXPECT_EQ(bvh.UpdateAabbUVE({7U, 3U}, validAabb).code,
+              Detail::DynamicColliderWorldAabbUpdateCodeUVE::StaleGeneration);
+    EXPECT_EQ(bvh.UpdateAabbUVE({8U, 1U}, validAabb).code,
+              Detail::DynamicColliderWorldAabbUpdateCodeUVE::UnknownProxy);
+    const Math::AabbUVE invalidAabb{
+        {std::numeric_limits<float>::quiet_NaN(), 0.0F, 0.0F}, {1.0F, 1.0F, 1.0F}};
+    EXPECT_EQ(bvh.UpdateAabbUVE(entity, invalidAabb).code,
+              Detail::DynamicColliderWorldAabbUpdateCodeUVE::InvalidAabb);
 }
 
 } // namespace
