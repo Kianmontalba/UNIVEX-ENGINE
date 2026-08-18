@@ -6,6 +6,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
+using System.Globalization;
 
 namespace UniVex.EditorHost;
 
@@ -655,6 +656,13 @@ public partial class MainWindow : Window
 
         try
         {
+            if (command.MotionQueryCommandKind is not null && command.MotionQueryCommandExpectedRevision is null)
+            {
+                command = command with
+                {
+                    MotionQueryCommandExpectedRevision = session.LastSnapshot?.MotionQuery.Authoring.Revision ?? 0UL,
+                };
+            }
             BridgeCommandResult result = await session.DispatchAsync(command, CancellationToken.None).ConfigureAwait(true);
             DisplayConnectedSnapshot(result.Snapshot);
             return result;
@@ -902,6 +910,7 @@ public partial class MainWindow : Window
         MotionQueryAuthoringDatabasesListBox.IsEnabled = connected && motionQuery.Authoring.Databases.Count > 0;
         MotionQueryAuthoringCommandMetadataListBox.IsEnabled = connected && motionQuery.Authoring.CommandMetadata.Count > 0;
         MotionQueryPasteDatabaseButton.IsEnabled = connected;
+        MotionQueryRegisterDatabaseButton.IsEnabled = connected;
         MotionQueryUndoButton.IsEnabled = connected && motionQuery.Authoring.CanUndo;
         MotionQueryRedoButton.IsEnabled = connected && motionQuery.Authoring.CanRedo;
         MotionQueryReadSnapshotButton.IsEnabled = connected;
@@ -1009,6 +1018,109 @@ public partial class MainWindow : Window
                 displayName,
                 databaseId,
                 contextGeneration),
+        });
+    }
+
+    private static bool IsBoundedMotionQueryText(string value, bool requireNonEmpty = true) =>
+        value.Length <= 128 && (!requireNonEmpty || value.Length > 0);
+
+    private static BridgeMotionQueryFeature CreateDefaultMotionQueryFeature()
+    {
+        return new BridgeMotionQueryFeature(
+            new BridgeMotionQueryVector3(0F, 0F, 0F),
+            new BridgeMotionQueryVector3(0F, 0F, 1F),
+            Array.Empty<BridgeMotionQueryTrajectorySample>(),
+            new BridgeMotionQuerySkeleton(string.Empty, Array.Empty<BridgeMotionQuerySkeletonJoint>()),
+            new BridgeMotionQueryPose(string.Empty, Array.Empty<BridgeMotionQueryTransform>()),
+            new BridgeMotionQueryEvaluationContext(
+                new BridgeMotionQueryTimeState(0UL, 0D, 0D, 0D, 0D, 0D, 0D, 0D, 0D, false), 0D));
+    }
+
+    private void MotionQueryRegisterDatabaseButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (!ulong.TryParse(MotionQueryRegisterResourceGuidTextBox.Text?.Trim(), out ulong resourceGuid) || resourceGuid == 0UL ||
+            !ulong.TryParse(MotionQueryRegisterResourceGenerationTextBox.Text?.Trim(), out ulong resourceGeneration) || resourceGeneration == 0UL ||
+            !ulong.TryParse(MotionQueryRegisterMaximumCandidatesTextBox.Text?.Trim(), out ulong maximumCandidates) ||
+            maximumCandidates == 0UL || maximumCandidates > 4096UL ||
+            !double.TryParse(MotionQueryRegisterSampleTimeTextBox.Text?.Trim(), NumberStyles.Float,
+                CultureInfo.InvariantCulture, out double sampleTime) || !double.IsFinite(sampleTime))
+        {
+            StatusTextBlock.Text = "Motion Query database was not registered.";
+            DetailsTextBlock.Text = "Enter positive resource identity, maximum candidates, and a finite sample time.";
+            return;
+        }
+        string displayName = MotionQueryRegisterDisplayNameTextBox.Text?.Trim() ?? string.Empty;
+        string databaseId = MotionQueryRegisterDatabaseIdTextBox.Text?.Trim() ?? string.Empty;
+        string schemaId = MotionQueryRegisterSchemaIdTextBox.Text?.Trim() ?? string.Empty;
+        string candidateId = MotionQueryRegisterCandidateIdTextBox.Text?.Trim() ?? string.Empty;
+        string sourceClipId = MotionQueryRegisterSourceClipIdTextBox.Text?.Trim() ?? string.Empty;
+        if (!IsBoundedMotionQueryText(displayName) || !IsBoundedMotionQueryText(databaseId) ||
+            !IsBoundedMotionQueryText(schemaId) || !IsBoundedMotionQueryText(candidateId) ||
+            !IsBoundedMotionQueryText(sourceClipId))
+        {
+            StatusTextBlock.Text = "Motion Query database was not registered.";
+            DetailsTextBlock.Text = "Display name, database ID, schema ID, candidate ID, and source clip must be bounded text.";
+            return;
+        }
+        BridgeMotionQueryCandidate candidate = new(
+            candidateId, sourceClipId, sampleTime, CreateDefaultMotionQueryFeature());
+        BridgeMotionQueryDatabaseEntry database = new(
+            new BridgeMotionQueryResourceHandle(resourceGuid, resourceGeneration),
+            displayName,
+            false,
+            new BridgeMotionQueryDatabaseContract(
+                new BridgeMotionQueryDatabaseContext(databaseId, resourceGeneration),
+                new BridgeMotionQueryDatabaseSchema(1U, schemaId, Array.Empty<double>(), Array.Empty<string>()),
+                new BridgeMotionQueryDatabaseSettings(maximumCandidates, true),
+                new[] { candidate },
+                Array.Empty<BridgeMotionQueryDatabaseEvent>()));
+        DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "dispatchMotionQueryCommand")
+        {
+            MotionQueryCommandKind = "registerDatabase",
+            MotionQueryDatabase = database,
+        });
+    }
+
+    private void MotionQueryAddCandidateButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { DataContext: BridgeMotionQueryDatabaseRow row } button)
+        {
+            return;
+        }
+        string candidateId = ReadMotionQueryAuthoringText(button, 0) ?? string.Empty;
+        string sourceClipId = ReadMotionQueryAuthoringText(button, 1) ?? string.Empty;
+        string sampleTimeText = ReadMotionQueryAuthoringText(button, 2) ?? string.Empty;
+        if (!IsBoundedMotionQueryText(candidateId) || !IsBoundedMotionQueryText(sourceClipId) ||
+            !double.TryParse(sampleTimeText, NumberStyles.Float, CultureInfo.InvariantCulture, out double sampleTime) ||
+            !double.IsFinite(sampleTime))
+        {
+            StatusTextBlock.Text = "Motion Query candidate was not added.";
+            DetailsTextBlock.Text = "Candidate ID and source clip must be bounded text with a finite sample time.";
+            return;
+        }
+        DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "dispatchMotionQueryCommand")
+        {
+            MotionQueryCommandKind = "addCandidate",
+            MotionQueryResource = row.Resource,
+            MotionQueryCandidate = new BridgeMotionQueryCandidate(
+                candidateId, sourceClipId, sampleTime, CreateDefaultMotionQueryFeature()),
+        });
+    }
+
+    private void MotionQueryRemoveCandidateButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { DataContext: BridgeMotionQueryDatabaseRow row } button ||
+            !ulong.TryParse(ReadMotionQueryAuthoringText(button, 3), out ulong candidateIndex))
+        {
+            StatusTextBlock.Text = "Motion Query candidate was not removed.";
+            DetailsTextBlock.Text = "Enter a valid zero-based candidate index.";
+            return;
+        }
+        DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "dispatchMotionQueryCommand")
+        {
+            MotionQueryCommandKind = "removeCandidate",
+            MotionQueryResource = row.Resource,
+            MotionQueryCandidateIndex = candidateIndex,
         });
     }
 

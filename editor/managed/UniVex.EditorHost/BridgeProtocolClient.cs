@@ -3,6 +3,7 @@
 using System.Buffers.Binary;
 using System.Text;
 using System.Text.Json;
+using System.Linq;
 
 namespace UniVex.EditorHost;
 
@@ -132,6 +133,8 @@ public sealed class BridgeProtocolClient : IAsyncDisposable
                 },
                 text = command.MotionQueryText,
                 candidateIndex = command.MotionQueryCandidateIndex,
+                database = SerializeMotionQueryDatabase(command.MotionQueryDatabase),
+                candidate = SerializeOptionalMotionQueryCandidate(command.MotionQueryCandidate),
                 pasteTarget = command.MotionQueryPasteTarget is null ? null : new
                 {
                     resource = new
@@ -208,6 +211,116 @@ public sealed class BridgeProtocolClient : IAsyncDisposable
         await input.DisposeAsync().ConfigureAwait(false);
         await output.DisposeAsync().ConfigureAwait(false);
     }
+
+    private static object SerializeMotionQueryVector3(BridgeMotionQueryVector3 value) =>
+        new { x = value.X, y = value.Y, z = value.Z };
+
+    private static object SerializeMotionQueryQuaternion(BridgeMotionQueryQuaternion value) =>
+        new { x = value.X, y = value.Y, z = value.Z, w = value.W };
+
+    private static object SerializeMotionQueryTransform(BridgeMotionQueryTransform value) =>
+        new
+        {
+            position = SerializeMotionQueryVector3(value.Position),
+            rotation = SerializeMotionQueryQuaternion(value.Rotation),
+            scale = SerializeMotionQueryVector3(value.Scale),
+        };
+
+    private static object SerializeMotionQueryTimeState(BridgeMotionQueryTimeState value) =>
+        new
+        {
+            frameNumber = value.FrameNumber,
+            realTimeSeconds = value.RealTimeSeconds,
+            gameTimeSeconds = value.GameTimeSeconds,
+            fixedTimeSeconds = value.FixedTimeSeconds,
+            animationTimeSeconds = value.AnimationTimeSeconds,
+            fixedAccumulatorSeconds = value.FixedAccumulatorSeconds,
+            realDeltaSeconds = value.RealDeltaSeconds,
+            gameDeltaSeconds = value.GameDeltaSeconds,
+            animationDeltaSeconds = value.AnimationDeltaSeconds,
+            paused = value.Paused,
+        };
+
+    private static object SerializeMotionQueryFeature(BridgeMotionQueryFeature value) =>
+        new
+        {
+            rootVelocity = SerializeMotionQueryVector3(value.RootVelocity),
+            facingDirection = SerializeMotionQueryVector3(value.FacingDirection),
+            trajectory = value.Trajectory.Select(sample => new
+            {
+                offsetSeconds = sample.OffsetSeconds,
+                relativePosition = SerializeMotionQueryVector3(sample.RelativePosition),
+            }).ToArray(),
+            skeleton = new
+            {
+                skeletonId = value.Skeleton.SkeletonId,
+                joints = value.Skeleton.Joints.Select(joint => new
+                {
+                    jointId = joint.JointId,
+                    parentJointId = joint.ParentJointId,
+                }).ToArray(),
+            },
+            pose = new
+            {
+                skeletonId = value.Pose.SkeletonId,
+                localJoints = value.Pose.LocalJoints.Select(SerializeMotionQueryTransform).ToArray(),
+            },
+            evaluationContext = new
+            {
+                time = SerializeMotionQueryTimeState(value.EvaluationContext.Time),
+                sampleTimeSeconds = value.EvaluationContext.SampleTimeSeconds,
+            },
+        };
+
+    private static object SerializeMotionQueryCandidate(BridgeMotionQueryCandidate value) =>
+        new
+        {
+            candidateId = value.CandidateId,
+            sourceClipId = value.SourceClipId,
+            sampleTimeSeconds = value.SampleTimeSeconds,
+            feature = SerializeMotionQueryFeature(value.Feature),
+        };
+
+    private static object? SerializeOptionalMotionQueryCandidate(BridgeMotionQueryCandidate? value) =>
+        value is null ? null : SerializeMotionQueryCandidate(value);
+
+    private static object? SerializeMotionQueryDatabase(BridgeMotionQueryDatabaseEntry? value) =>
+        value is null
+            ? null
+            : new
+            {
+                resource = new { guid = value.Resource.Guid, generation = value.Resource.Generation },
+                displayName = value.DisplayName,
+                dirty = value.Dirty,
+                contract = new
+                {
+                    context = new
+                    {
+                        databaseId = value.Contract.Context.DatabaseId,
+                        generation = value.Contract.Context.Generation,
+                    },
+                    schema = new
+                    {
+                        version = value.Contract.Schema.Version,
+                        schemaId = value.Contract.Schema.SchemaId,
+                        trajectoryOffsets = value.Contract.Schema.TrajectoryOffsets,
+                        featureChannelIds = value.Contract.Schema.FeatureChannelIds,
+                    },
+                    settings = new
+                    {
+                        maximumCandidates = value.Contract.Settings.MaximumCandidates,
+                        requireTrajectorySchema = value.Contract.Settings.RequireTrajectorySchema,
+                    },
+                    candidates = value.Contract.Candidates.Select(SerializeMotionQueryCandidate).ToArray(),
+                    events = value.Contract.Events.Select(entry => new
+                    {
+                        kind = entry.Kind,
+                        sequence = entry.Sequence,
+                        candidateId = entry.CandidateId,
+                        message = entry.Message,
+                    }).ToArray(),
+                },
+            };
 
     private async Task<JsonDocument> InvokeAsync(string method, object parameters, CancellationToken cancellationToken)
     {

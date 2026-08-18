@@ -365,7 +365,7 @@
                                     <Button Grid.Column="4" Content="Clear Replay" Click="MotionQueryClearReplayButton_OnClick" IsEnabled="False" x:Name="MotionQueryClearReplayButton" />
                                 </Grid>
                                 <Border Grid.Row="1" Padding="6" Background="#20242B" BorderBrush="#394150" BorderThickness="1" CornerRadius="3">
-                                    <Grid RowDefinitions="Auto,Auto,Auto,*" ColumnDefinitions="*,*" ColumnSpacing="8" RowSpacing="4">
+                                    <Grid RowDefinitions="Auto,Auto,Auto,Auto,*" ColumnDefinitions="*,*" ColumnSpacing="8" RowSpacing="4">
                                         <Grid Grid.ColumnSpan="2" ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="6">
                                             <TextBlock x:Name="MotionQueryAuthoringStatusTextBlock" Text="Connect to read native Motion Query databases." TextWrapping="Wrap" Opacity="0.76" />
                                             <TextBlock Grid.Column="1" Text="C++ authority · copied state only" FontSize="9" Opacity="0.55" VerticalAlignment="Center" />
@@ -382,10 +382,22 @@
                                             <TextBox Grid.Column="4" x:Name="MotionQueryPasteContextGenerationTextBox" Watermark="Context gen" Padding="2" FontSize="10" />
                                             <Button Grid.Column="5" x:Name="MotionQueryPasteDatabaseButton" Content="Paste Database" Click="MotionQueryPasteDatabaseButton_OnClick" Padding="4,2" FontSize="10" IsEnabled="False" />
                                         </Grid>
-                                        <ListBox x:Name="MotionQueryAuthoringDatabasesListBox" Grid.Row="3" MaxHeight="180" IsEnabled="False">
+                                        <Grid Grid.Row="3" Grid.ColumnSpan="2" ColumnDefinitions="*,*,*,*,*,*,*,*,*,Auto" ColumnSpacing="4">
+                                            <TextBox x:Name="MotionQueryRegisterResourceGuidTextBox" Watermark="Resource GUID" Padding="2" FontSize="10" />
+                                            <TextBox Grid.Column="1" x:Name="MotionQueryRegisterResourceGenerationTextBox" Watermark="Resource gen" Padding="2" FontSize="10" />
+                                            <TextBox Grid.Column="2" x:Name="MotionQueryRegisterDisplayNameTextBox" Watermark="Display name" Padding="2" FontSize="10" />
+                                            <TextBox Grid.Column="3" x:Name="MotionQueryRegisterDatabaseIdTextBox" Watermark="Database ID" Padding="2" FontSize="10" />
+                                            <TextBox Grid.Column="4" x:Name="MotionQueryRegisterSchemaIdTextBox" Watermark="Schema ID" Padding="2" FontSize="10" />
+                                            <TextBox Grid.Column="5" x:Name="MotionQueryRegisterMaximumCandidatesTextBox" Watermark="Max" Padding="2" FontSize="10" />
+                                            <TextBox Grid.Column="6" x:Name="MotionQueryRegisterCandidateIdTextBox" Watermark="Candidate ID" Padding="2" FontSize="10" />
+                                            <TextBox Grid.Column="7" x:Name="MotionQueryRegisterSourceClipIdTextBox" Watermark="Source clip" Padding="2" FontSize="10" />
+                                            <TextBox Grid.Column="8" x:Name="MotionQueryRegisterSampleTimeTextBox" Watermark="Sample time" Padding="2" FontSize="10" />
+                                            <Button Grid.Column="9" x:Name="MotionQueryRegisterDatabaseButton" Content="Register" Click="MotionQueryRegisterDatabaseButton_OnClick" Padding="4,2" FontSize="10" IsEnabled="False" />
+                                        </Grid>
+                                        <ListBox x:Name="MotionQueryAuthoringDatabasesListBox" Grid.Row="4" MaxHeight="180" IsEnabled="False">
                                             <ListBox.ItemTemplate>
                                                 <DataTemplate>
-                                                    <Grid RowDefinitions="Auto,Auto,Auto,Auto" ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="4" RowSpacing="3" Margin="0,2">
+                                                    <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto" ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="4" RowSpacing="3" Margin="0,2">
                                                         <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" TextWrapping="Wrap" />
                                                         <Button Grid.Column="1" Content="Select" Click="MotionQuerySelectDatabaseButton_OnClick" Padding="4,2" FontSize="10" />
                                                         <Button Grid.Column="2" Content="Remove" Click="MotionQueryRemoveDatabaseButton_OnClick" Padding="4,2" FontSize="10" />
@@ -405,11 +417,19 @@
                                                             <TextBlock Grid.Column="3" Text="{Binding IsValid, StringFormat='Valid: {0}'}" FontSize="9" Opacity="0.62" />
                                                             <TextBlock Grid.Column="4" Text="{Binding IsDirty, StringFormat='Dirty: {0}'}" FontSize="9" Opacity="0.62" />
                                                         </Grid>
+                                                        <Grid Grid.Row="4" Grid.ColumnSpan="7" ColumnDefinitions="*,*,*,*,Auto,Auto" ColumnSpacing="4">
+                                                            <TextBox x:Name="MotionQueryCandidateIdTextBox" Watermark="Candidate ID" Padding="2" FontSize="10" />
+                                                            <TextBox Grid.Column="1" x:Name="MotionQuerySourceClipIdTextBox" Watermark="Source clip" Padding="2" FontSize="10" />
+                                                            <TextBox Grid.Column="2" x:Name="MotionQueryCandidateSampleTimeTextBox" Watermark="Sample time" Padding="2" FontSize="10" />
+                                                            <TextBox Grid.Column="3" x:Name="MotionQueryRemoveCandidateIndexTextBox" Watermark="Index" Padding="2" FontSize="10" />
+                                                            <Button Grid.Column="4" x:Name="MotionQueryAddCandidateButton" Content="Add Candidate" Click="MotionQueryAddCandidateButton_OnClick" Padding="4,2" FontSize="10" />
+                                                            <Button Grid.Column="5" x:Name="MotionQueryRemoveCandidateButton" Content="Remove #" Click="MotionQueryRemoveCandidateButton_OnClick" Padding="4,2" FontSize="10" />
+                                                        </Grid>
                                                     </Grid>
                                                 </DataTemplate>
                                             </ListBox.ItemTemplate>
                                         </ListBox>
-                                        <ListBox Grid.Row="3" Grid.Column="1" x:Name="MotionQueryAuthoringCommandMetadataListBox" MaxHeight="180" IsEnabled="False">
+                                        <ListBox Grid.Row="4" Grid.Column="1" x:Name="MotionQueryAuthoringCommandMetadataListBox" MaxHeight="180" IsEnabled="False">
                                             <ListBox.ItemTemplate>
                                                 <DataTemplate>
                                                     <StackPanel Spacing="2" Margin="0,2">

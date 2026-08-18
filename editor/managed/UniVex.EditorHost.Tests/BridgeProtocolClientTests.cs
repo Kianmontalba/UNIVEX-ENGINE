@@ -888,6 +888,92 @@ public sealed class BridgeProtocolClientTests
     }
 
     [Fact]
+    public async Task DispatchAsync_WritesTypedMotionQueryDatabaseAndCandidatePayload()
+    {
+        static object Response(ulong requestId) => new
+        {
+            jsonrpc = "2.0",
+            id = requestId,
+            result = new
+            {
+                protocolVersion = BridgeProtocolClient.ProtocolVersion,
+                requestId,
+                applied = true,
+                code = "bridge.motion_query.command.applied",
+                message = "applied",
+                snapshot = Snapshot(sceneDirty: false),
+                createdEntity = (object?)null,
+            },
+        };
+        BridgeMotionQueryFeature feature = new(
+            new BridgeMotionQueryVector3(1F, 2F, 3F),
+            new BridgeMotionQueryVector3(0F, 0F, 1F),
+            new[] { new BridgeMotionQueryTrajectorySample(0.25D, new BridgeMotionQueryVector3(4F, 5F, 6F)) },
+            new BridgeMotionQuerySkeleton("skeleton", new[] { new BridgeMotionQuerySkeletonJoint("root", string.Empty) }),
+            new BridgeMotionQueryPose("skeleton", new[]
+            {
+                new BridgeMotionQueryTransform(
+                    new BridgeMotionQueryVector3(0F, 0F, 0F),
+                    new BridgeMotionQueryQuaternion(0F, 0F, 0F, 1F),
+                    new BridgeMotionQueryVector3(1F, 1F, 1F)),
+            }),
+            new BridgeMotionQueryEvaluationContext(
+                new BridgeMotionQueryTimeState(4UL, 1D, 0.8D, 0.75D, 0.5D, 0.1D, 0.016D, 0.016D, 0.016D, false),
+                0.5D));
+        BridgeMotionQueryCandidate candidate = new("candidate-0", "walk", 0.5D, feature);
+        BridgeMotionQueryDatabaseEntry database = new(
+            new BridgeMotionQueryResourceHandle(77UL, 2UL),
+            "Locomotion",
+            false,
+            new BridgeMotionQueryDatabaseContract(
+                new BridgeMotionQueryDatabaseContext("locomotion", 3UL),
+                new BridgeMotionQueryDatabaseSchema(1U, "locomotion-v1", new[] { 0D, 0.25D }, new[] { "velocity" }),
+                new BridgeMotionQueryDatabaseSettings(16UL, true),
+                new[] { candidate },
+                Array.Empty<BridgeMotionQueryDatabaseEvent>()));
+        await using MemoryStream input = BuildFrames(Response(1UL), Response(2UL));
+        await using MemoryStream output = new();
+        await using BridgeProtocolClient client = new(input, output);
+        await client.DispatchAsync(new BridgeCommand(0UL, "dispatchMotionQueryCommand")
+        {
+            MotionQueryCommandExpectedRevision = 0UL,
+            MotionQueryCommandKind = "registerDatabase",
+            MotionQueryDatabase = database,
+        }, CancellationToken.None);
+        await client.DispatchAsync(new BridgeCommand(1UL, "dispatchMotionQueryCommand")
+        {
+            MotionQueryCommandExpectedRevision = 1UL,
+            MotionQueryCommandKind = "addCandidate",
+            MotionQueryResource = database.Resource,
+            MotionQueryCandidate = candidate,
+        }, CancellationToken.None);
+
+        output.Position = 0;
+        using JsonDocument registerRequest = JsonDocument.Parse(await ReadFrameAsync(output));
+        using JsonDocument addRequest = JsonDocument.Parse(await ReadFrameAsync(output));
+        JsonElement registerPayload = registerRequest.RootElement.GetProperty("params")
+            .GetProperty("motionQueryCommand");
+        JsonElement databasePayload = registerPayload.GetProperty("database");
+        Assert.Equal("registerDatabase", registerPayload.GetProperty("kind").GetString());
+        Assert.Equal("locomotion", databasePayload.GetProperty("contract").GetProperty("context")
+            .GetProperty("databaseId").GetString());
+        Assert.Equal("locomotion-v1", databasePayload.GetProperty("contract").GetProperty("schema")
+            .GetProperty("schemaId").GetString());
+        Assert.Equal(16UL, databasePayload.GetProperty("contract").GetProperty("settings")
+            .GetProperty("maximumCandidates").GetUInt64());
+        Assert.Equal("candidate-0", databasePayload.GetProperty("contract").GetProperty("candidates")[0]
+            .GetProperty("candidateId").GetString());
+        Assert.Equal(1F, databasePayload.GetProperty("contract").GetProperty("candidates")[0]
+            .GetProperty("feature").GetProperty("rootVelocity").GetProperty("x").GetSingle());
+        Assert.Equal(4UL, databasePayload.GetProperty("contract").GetProperty("candidates")[0]
+            .GetProperty("feature").GetProperty("evaluationContext").GetProperty("time")
+            .GetProperty("frameNumber").GetUInt64());
+        JsonElement addPayload = addRequest.RootElement.GetProperty("params").GetProperty("motionQueryCommand");
+        Assert.Equal("addCandidate", addPayload.GetProperty("kind").GetString());
+        Assert.Equal("walk", addPayload.GetProperty("candidate").GetProperty("sourceClipId").GetString());
+    }
+
+    [Fact]
     public async Task DispatchAsync_WritesMotionQueryHistoryCommandsAsOneWorkflow()
     {
         static object Response(ulong requestId) => new
