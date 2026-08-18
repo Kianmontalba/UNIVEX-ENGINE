@@ -314,6 +314,131 @@ namespace {
     return true;
 }
 
+[[nodiscard]] bool ContainsConditionalJumpUVE(const ScriptBytecodeProgramUVE& program) noexcept {
+    return std::any_of(program.instructions.begin(), program.instructions.end(), [](const ScriptIrInstructionUVE& instruction) {
+        return instruction.kind == ScriptIrInstructionKindUVE::ConditionalJump;
+    });
+}
+
+[[nodiscard]] ScriptVmExecutionResultUVE ExecuteControlFlowProgramUVE(
+    const ScriptBytecodeProgramUVE& program, ScriptVmExecutionContextUVE& context,
+    const ScriptVmExecutionOptionsUVE options) {
+    ScriptVmExecutionResultUVE result;
+    std::size_t instructionIndex = 0U;
+    while (instructionIndex < program.instructions.size()) {
+        if (result.instructionsExecuted >= options.instructionBudget) {
+            result.status = ScriptVmStatusUVE::InstructionBudgetExceeded;
+            result.diagnostics.push_back({instructionIndex, "Instruction budget exceeded."});
+            result.AppendTraceEventUVE({ScriptVmTraceEventKindUVE::Failed, Scene::kInvalidEntityUVE,
+                                         instructionIndex, 0U, 0U, {}, "Instruction budget exceeded."});
+            return result;
+        }
+
+        const ScriptIrInstructionUVE& instruction = program.instructions[instructionIndex];
+        if (instruction.kind == ScriptIrInstructionKindUVE::ConditionalJump) {
+            if (instruction.trueTargetInstructionIndex > program.instructions.size() ||
+                instruction.falseTargetInstructionIndex > program.instructions.size()) {
+                ScriptVmExecutionResultUVE failure = MakeNodeFailureUVE(
+                    instructionIndex, "ConditionalJump target is outside the bytecode instruction range.");
+                failure.instructionsExecuted = result.instructionsExecuted;
+                failure.PrependTraceEventsUVE(std::move(result.trace), result.traceTruncated);
+                return failure;
+            }
+            const char* conditionPin = instruction.sourcePinName.empty() ? "Condition" : instruction.sourcePinName.c_str();
+            const bool* condition = FindBooleanInputUVE(context, instruction.sourceNodeId, conditionPin);
+            if (condition == nullptr) {
+                ScriptVmExecutionResultUVE failure = MakeNodeFailureUVE(
+                    instructionIndex, "ConditionalJump requires a Boolean condition input.");
+                failure.instructionsExecuted = result.instructionsExecuted;
+                failure.PrependTraceEventsUVE(std::move(result.trace), result.traceTruncated);
+                return failure;
+            }
+            ++result.instructionsExecuted;
+            const std::size_t target = *condition ? instruction.trueTargetInstructionIndex
+                                                   : instruction.falseTargetInstructionIndex;
+            result.AppendTraceEventUVE({ScriptVmTraceEventKindUVE::NodeExecuted,
+                                         Scene::kInvalidEntityUVE, instructionIndex,
+                                         instruction.sourceNodeId, instruction.targetNodeId,
+                                         instruction.nodeTypeId,
+                                         *condition ? "ConditionalJump evaluated true."
+                                                    : "ConditionalJump evaluated false."});
+            instructionIndex = target;
+            continue;
+        }
+
+        if (instruction.kind == ScriptIrInstructionKindUVE::TransferValue) {
+            const ScriptVmValueBindingUVE* output =
+                FindBindingUVE(context.outputs, instruction.sourceNodeId, instruction.sourcePinName);
+            if (output == nullptr) {
+                ScriptVmExecutionResultUVE failure = MakeNodeFailureUVE(
+                    instructionIndex, "TransferValue requires a typed source output binding.");
+                failure.instructionsExecuted = result.instructionsExecuted;
+                failure.PrependTraceEventsUVE(std::move(result.trace), result.traceTruncated);
+                return failure;
+            }
+            if (!context.SetInputUVE(instruction.targetNodeId, instruction.targetPinName, output->value)) {
+                ScriptVmExecutionResultUVE failure = MakeNodeFailureUVE(
+                    instructionIndex, "TransferValue could not publish a typed input or input capacity was exhausted.");
+                failure.instructionsExecuted = result.instructionsExecuted;
+                failure.PrependTraceEventsUVE(std::move(result.trace), result.traceTruncated);
+                return failure;
+            }
+            ++result.instructionsExecuted;
+            result.AppendTraceEventUVE({ScriptVmTraceEventKindUVE::ValueTransferred,
+                                         Scene::kInvalidEntityUVE, instructionIndex,
+                                         instruction.sourceNodeId, instruction.targetNodeId, {}, {}});
+            ++instructionIndex;
+            continue;
+        }
+
+        if (instruction.kind != ScriptIrInstructionKindUVE::ExecuteNode) {
+            ScriptVmExecutionResultUVE failure = MakeNodeFailureUVE(instructionIndex, "Invalid instruction kind.");
+            failure.instructionsExecuted = result.instructionsExecuted;
+            failure.PrependTraceEventsUVE(std::move(result.trace), result.traceTruncated);
+            return failure;
+        }
+
+        const bool isVector3Node = instruction.nodeTypeId.rfind("math.vector3.", 0U) == 0U;
+        const bool isFloatNode = instruction.nodeTypeId.rfind("math.float.", 0U) == 0U;
+        const bool isBooleanNode = instruction.nodeTypeId.rfind("logic.boolean.", 0U) == 0U;
+        const bool isEntityQueryNode = instruction.nodeTypeId.rfind("query.entity.", 0U) == 0U;
+        if ((isVector3Node && !HasRequiredVector3InputsUVE(instruction, context)) ||
+            (isFloatNode && !HasRequiredFloatInputsUVE(instruction, context)) ||
+            (isBooleanNode && !HasRequiredBooleanInputsUVE(instruction, context)) ||
+            (isEntityQueryNode && !HasRequiredEntityQueryInputsUVE(instruction, context))) {
+            ScriptVmExecutionResultUVE failure = MakeNodeFailureUVE(
+                instructionIndex, "Control-flow execution could not resolve typed node inputs.");
+            failure.instructionsExecuted = result.instructionsExecuted;
+            failure.PrependTraceEventsUVE(std::move(result.trace), result.traceTruncated);
+            return failure;
+        }
+        ScriptVmExecutionResultUVE nodeResult;
+        if (isVector3Node) {
+            nodeResult = ExecuteVector3NodeUVE(instruction, instructionIndex, context);
+        } else if (isFloatNode) {
+            nodeResult = ExecuteFloatNodeUVE(instruction, instructionIndex, context);
+        } else if (isBooleanNode) {
+            nodeResult = ExecuteBooleanNodeUVE(instruction, instructionIndex, context);
+        } else if (isEntityQueryNode) {
+            nodeResult = ExecuteEntityQueryNodeUVE(instruction, instructionIndex, context);
+        }
+        if (!nodeResult.IsSuccessUVE()) {
+            nodeResult.instructionsExecuted = result.instructionsExecuted;
+            nodeResult.PrependTraceEventsUVE(std::move(result.trace), result.traceTruncated);
+            return nodeResult;
+        }
+        ++result.instructionsExecuted;
+        result.AppendTraceEventUVE({ScriptVmTraceEventKindUVE::NodeExecuted,
+                                     Scene::kInvalidEntityUVE, instructionIndex,
+                                     instruction.sourceNodeId, instruction.targetNodeId,
+                                     instruction.nodeTypeId, {}});
+        ++instructionIndex;
+    }
+    result.AppendTraceEventUVE({ScriptVmTraceEventKindUVE::Completed, Scene::kInvalidEntityUVE,
+                                 result.instructionsExecuted, 0U, 0U, {}, {}});
+    return result;
+}
+
 ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgramUVE& program,
                                                        ScriptVmExecutionContextUVE* context,
                                                        ScriptVmExecutionOptionsUVE options) {
@@ -328,6 +453,9 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
     }
     if (options.instructionBudget > ScriptBytecodeProgramUVE::kMaximumInstructionsUVE) {
         options.instructionBudget = ScriptBytecodeProgramUVE::kMaximumInstructionsUVE;
+    }
+    if (context != nullptr && ContainsConditionalJumpUVE(program)) {
+        return ExecuteControlFlowProgramUVE(program, *context, options);
     }
     if (context == nullptr) {
         for (std::size_t index = 0U; index < program.instructions.size(); ++index) {
