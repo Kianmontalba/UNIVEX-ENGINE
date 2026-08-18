@@ -93,6 +93,9 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
 
     std::size_t sequenceNodeCount = 0U;
     std::size_t branchNodeCount = 0U;
+    std::optional<std::uint32_t> branchNodeId;
+    std::optional<std::uint32_t> branchConditionSourceNodeId;
+    std::optional<ScriptLinkUVE> branchConditionLink;
     for (const ScriptNodeUVE& node : nodes) {
         if (node.typeId == "flow.sequence") {
             ++sequenceNodeCount;
@@ -115,16 +118,36 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             }
         } else if (node.typeId == "flow.branch") {
             ++branchNodeCount;
+            branchNodeId = node.id;
             if (branchNodeCount > 1U) {
                 result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode, node.id, {},
                                               "Only one flow.branch direct-dispatch node is supported per compiled graph."});
             }
             for (const ScriptLinkUVE& link : links) {
-                if (link.input.nodeId == node.id && link.input.pinName == "Condition" &&
-                    !IsExecutionLinkUVE(link, nodes, registry)) {
+                if (link.input.nodeId != node.id || link.input.pinName != "Condition" ||
+                    IsExecutionLinkUVE(link, nodes, registry)) {
+                    continue;
+                }
+                branchConditionLink = link;
+                branchConditionSourceNodeId = link.output.nodeId;
+                const ScriptNodeUVE* sourceNode = FindNodeUVE(nodes, link.output.nodeId);
+                const bool supportedProducer =
+                    sourceNode != nullptr &&
+                    (sourceNode->typeId == "logic.boolean.not" || sourceNode->typeId == "logic.boolean.and" ||
+                     sourceNode->typeId == "logic.boolean.or" || sourceNode->typeId == "logic.boolean.xor" ||
+                     sourceNode->typeId == "query.entity.has_component");
+                if (!supportedProducer) {
                     result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode, node.id,
                                                   "Condition",
-                                                  "flow.branch requires a caller-bound Boolean Condition; graph data-condition staging remains deferred."});
+                                                  "flow.branch data-condition staging supports only built-in Boolean producer nodes."});
+                }
+                for (const ScriptLinkUVE& dependency : links) {
+                    if (dependency.input.nodeId == link.output.nodeId &&
+                        !IsExecutionLinkUVE(dependency, nodes, registry)) {
+                        result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode,
+                                                      dependency.input.nodeId, dependency.input.pinName,
+                                                      "flow.branch data-condition staging does not yet traverse producer data dependencies."});
+                    }
                 }
             }
             for (const char* outputPin : {"True", "False"}) {
@@ -146,21 +169,59 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
         return result;
     }
 
-    ScriptIrProgramUVE program;
-    program.instructions.reserve(nodes.size() + links.size());
-    program.sourceNodeIds.reserve(nodes.size() + links.size());
+    std::vector<ScriptNodeUVE> instructionNodes = nodes;
+    if (branchNodeId.has_value() && branchConditionSourceNodeId.has_value()) {
+        const auto sourceIterator = std::find_if(instructionNodes.begin(), instructionNodes.end(),
+                                                 [&](const ScriptNodeUVE& node) {
+                                                     return node.id == *branchConditionSourceNodeId;
+                                                 });
+        const auto branchIterator = std::find_if(instructionNodes.begin(), instructionNodes.end(),
+                                                 [&](const ScriptNodeUVE& node) {
+                                                     return node.id == *branchNodeId;
+                                                 });
+        if (sourceIterator != instructionNodes.end() && branchIterator != instructionNodes.end() &&
+            sourceIterator > branchIterator) {
+            ScriptNodeUVE sourceNode = *sourceIterator;
+            instructionNodes.erase(sourceIterator);
+            const auto newBranchIterator = std::find_if(instructionNodes.begin(), instructionNodes.end(),
+                                                        [&](const ScriptNodeUVE& node) {
+                                                            return node.id == *branchNodeId;
+                                                        });
+            instructionNodes.insert(newBranchIterator, std::move(sourceNode));
+        }
+    }
 
-    for (const ScriptNodeUVE& node : nodes) {
+    const std::size_t stagedInstructionCount = instructionNodes.size() +
+        (branchConditionLink.has_value() ? 1U : 0U);
+    const auto findStagedInstructionIndex = [&](const std::uint32_t nodeId) -> std::optional<std::size_t> {
+        const std::optional<std::size_t> baseIndex = FindNodeInstructionIndexUVE(instructionNodes, nodeId);
+        if (!baseIndex.has_value()) {
+            return std::nullopt;
+        }
+        if (branchConditionSourceNodeId.has_value()) {
+            const std::optional<std::size_t> sourceIndex =
+                FindNodeInstructionIndexUVE(instructionNodes, *branchConditionSourceNodeId);
+            if (sourceIndex.has_value() && *baseIndex > *sourceIndex) {
+                return *baseIndex + 1U;
+            }
+        }
+        return baseIndex;
+    };
+
+    ScriptIrProgramUVE program;
+    program.instructions.reserve(stagedInstructionCount + links.size());
+    program.sourceNodeIds.reserve(stagedInstructionCount + links.size());
+
+    for (const ScriptNodeUVE& node : instructionNodes) {
         if (node.typeId == "flow.sequence") {
             const auto resolveTarget = [&](const char* pinName) -> std::uint32_t {
                 const std::optional<std::uint32_t> targetNodeId = FindExecutionTargetUVE(links, node.id, pinName);
                 if (!targetNodeId.has_value()) {
-                    return static_cast<std::uint32_t>(nodes.size());
+                    return static_cast<std::uint32_t>(stagedInstructionCount);
                 }
-                const std::optional<std::size_t> targetIndex =
-                    FindNodeInstructionIndexUVE(nodes, *targetNodeId);
+                const std::optional<std::size_t> targetIndex = findStagedInstructionIndex(*targetNodeId);
                 return targetIndex.has_value() ? static_cast<std::uint32_t>(*targetIndex)
-                                               : static_cast<std::uint32_t>(nodes.size());
+                                               : static_cast<std::uint32_t>(stagedInstructionCount);
             };
             program.instructions.push_back(ScriptIrInstructionUVE{
                 ScriptIrInstructionKindUVE::SequenceDispatch,
@@ -178,12 +239,11 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             const auto resolveTarget = [&](const char* pinName) -> std::uint32_t {
                 const std::optional<std::uint32_t> targetNodeId = FindExecutionTargetUVE(links, node.id, pinName);
                 if (!targetNodeId.has_value()) {
-                    return static_cast<std::uint32_t>(nodes.size());
+                    return static_cast<std::uint32_t>(stagedInstructionCount);
                 }
-                const std::optional<std::size_t> targetIndex =
-                    FindNodeInstructionIndexUVE(nodes, *targetNodeId);
+                const std::optional<std::size_t> targetIndex = findStagedInstructionIndex(*targetNodeId);
                 return targetIndex.has_value() ? static_cast<std::uint32_t>(*targetIndex)
-                                               : static_cast<std::uint32_t>(nodes.size());
+                                               : static_cast<std::uint32_t>(stagedInstructionCount);
             };
             program.instructions.push_back(ScriptIrInstructionUVE{
                 ScriptIrInstructionKindUVE::ConditionalJump,
@@ -208,9 +268,26 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             });
         }
         program.sourceNodeIds.push_back(node.id);
+        if (branchConditionLink.has_value() && branchConditionSourceNodeId.has_value() &&
+            node.id == *branchConditionSourceNodeId) {
+            const ScriptLinkUVE& conditionLink = *branchConditionLink;
+            program.instructions.push_back(ScriptIrInstructionUVE{
+                ScriptIrInstructionKindUVE::TransferValue,
+                conditionLink.output.nodeId,
+                conditionLink.input.nodeId,
+                {},
+                conditionLink.output.pinName,
+                conditionLink.input.pinName,
+            });
+            program.sourceNodeIds.push_back(conditionLink.output.nodeId);
+        }
     }
 
     for (const ScriptLinkUVE& link : links) {
+        if (branchConditionLink.has_value() && link.input.nodeId == branchConditionLink->input.nodeId &&
+            link.input.pinName == branchConditionLink->input.pinName) {
+            continue;
+        }
         if (IsExecutionLinkUVE(link, nodes, registry)) {
             continue;
         }
