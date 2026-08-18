@@ -314,9 +314,10 @@ namespace {
     return true;
 }
 
-[[nodiscard]] bool ContainsConditionalJumpUVE(const ScriptBytecodeProgramUVE& program) noexcept {
+[[nodiscard]] bool ContainsControlFlowUVE(const ScriptBytecodeProgramUVE& program) noexcept {
     return std::any_of(program.instructions.begin(), program.instructions.end(), [](const ScriptIrInstructionUVE& instruction) {
-        return instruction.kind == ScriptIrInstructionKindUVE::ConditionalJump;
+        return instruction.kind == ScriptIrInstructionKindUVE::ConditionalJump ||
+               instruction.kind == ScriptIrInstructionKindUVE::SequenceDispatch;
     });
 }
 
@@ -325,6 +326,7 @@ namespace {
     const ScriptVmExecutionOptionsUVE options) {
     ScriptVmExecutionResultUVE result;
     std::size_t instructionIndex = 0U;
+    std::optional<std::size_t> sequenceContinuation;
     while (instructionIndex < program.instructions.size()) {
         if (result.instructionsExecuted >= options.instructionBudget) {
             result.status = ScriptVmStatusUVE::InstructionBudgetExceeded;
@@ -335,6 +337,28 @@ namespace {
         }
 
         const ScriptIrInstructionUVE& instruction = program.instructions[instructionIndex];
+        if (instruction.kind == ScriptIrInstructionKindUVE::SequenceDispatch) {
+            if (instruction.firstTargetInstructionIndex > program.instructions.size() ||
+                instruction.secondTargetInstructionIndex > program.instructions.size()) {
+                ScriptVmExecutionResultUVE failure = MakeNodeFailureUVE(
+                    instructionIndex, "SequenceDispatch target is outside the bytecode instruction range.");
+                failure.instructionsExecuted = result.instructionsExecuted;
+                failure.PrependTraceEventsUVE(std::move(result.trace), result.traceTruncated);
+                return failure;
+            }
+            ++result.instructionsExecuted;
+            result.AppendTraceEventUVE({ScriptVmTraceEventKindUVE::NodeExecuted,
+                                         Scene::kInvalidEntityUVE, instructionIndex,
+                                         instruction.sourceNodeId, instruction.targetNodeId,
+                                         instruction.nodeTypeId, "SequenceDispatch selected ordered execution targets."});
+            if (instruction.firstTargetInstructionIndex == program.instructions.size()) {
+                instructionIndex = instruction.secondTargetInstructionIndex;
+            } else {
+                sequenceContinuation = instruction.secondTargetInstructionIndex;
+                instructionIndex = instruction.firstTargetInstructionIndex;
+            }
+            continue;
+        }
         if (instruction.kind == ScriptIrInstructionKindUVE::ConditionalJump) {
             if (instruction.trueTargetInstructionIndex > program.instructions.size() ||
                 instruction.falseTargetInstructionIndex > program.instructions.size()) {
@@ -387,7 +411,12 @@ namespace {
             result.AppendTraceEventUVE({ScriptVmTraceEventKindUVE::ValueTransferred,
                                          Scene::kInvalidEntityUVE, instructionIndex,
                                          instruction.sourceNodeId, instruction.targetNodeId, {}, {}});
-            ++instructionIndex;
+            if (sequenceContinuation.has_value()) {
+                instructionIndex = *sequenceContinuation;
+                sequenceContinuation.reset();
+            } else {
+                ++instructionIndex;
+            }
             continue;
         }
 
@@ -432,7 +461,12 @@ namespace {
                                      Scene::kInvalidEntityUVE, instructionIndex,
                                      instruction.sourceNodeId, instruction.targetNodeId,
                                      instruction.nodeTypeId, {}});
-        ++instructionIndex;
+        if (sequenceContinuation.has_value()) {
+            instructionIndex = *sequenceContinuation;
+            sequenceContinuation.reset();
+        } else {
+            ++instructionIndex;
+        }
     }
     result.AppendTraceEventUVE({ScriptVmTraceEventKindUVE::Completed, Scene::kInvalidEntityUVE,
                                  result.instructionsExecuted, 0U, 0U, {}, {}});
@@ -444,6 +478,7 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                                                        ScriptVmExecutionOptionsUVE options) {
     ScriptVmExecutionResultUVE result;
     if (program.version != ScriptBytecodeProgramUVE::kLegacyVersionUVE &&
+        program.version != ScriptBytecodeProgramUVE::kConditionalJumpVersionUVE &&
         program.version != ScriptBytecodeProgramUVE::kCurrentVersionUVE) {
         result.status = ScriptVmStatusUVE::InvalidInstruction;
         result.diagnostics.push_back({0U, "Unsupported bytecode version."});
@@ -454,7 +489,7 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
     if (options.instructionBudget > ScriptBytecodeProgramUVE::kMaximumInstructionsUVE) {
         options.instructionBudget = ScriptBytecodeProgramUVE::kMaximumInstructionsUVE;
     }
-    if (context != nullptr && ContainsConditionalJumpUVE(program)) {
+    if (context != nullptr && ContainsControlFlowUVE(program)) {
         return ExecuteControlFlowProgramUVE(program, *context, options);
     }
     if (context == nullptr) {

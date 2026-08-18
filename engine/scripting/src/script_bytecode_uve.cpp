@@ -8,7 +8,7 @@ namespace UVE::Scripting {
 namespace {
 constexpr std::uint8_t kMagic[] = {'U', 'V', 'E', 'S'};
 constexpr std::size_t kHeaderSize = 8U;
-constexpr std::size_t kInstructionSize = 21U;
+constexpr std::size_t kInstructionSize = 29U;
 
 void WriteU32(std::vector<std::uint8_t>& bytes, const std::uint32_t value) {
     for (std::size_t index = 0U; index < 4U; ++index) {
@@ -86,6 +86,15 @@ std::vector<std::uint8_t> EncodeScriptBytecodeUVE(
             }
             WriteU32(bytes, instruction.trueTargetInstructionIndex);
             WriteU32(bytes, instruction.falseTargetInstructionIndex);
+        } else if (instruction.kind == ScriptIrInstructionKindUVE::SequenceDispatch) {
+            if (instruction.firstTargetInstructionIndex > program.instructions.size() ||
+                instruction.secondTargetInstructionIndex > program.instructions.size()) {
+                AddDiagnostic(diagnostics, ScriptBytecodeDiagnosticCodeUVE::InvalidInstruction, bytes.size(),
+                              "SequenceDispatch target is outside the bytecode instruction range.");
+                return {};
+            }
+            WriteU32(bytes, instruction.firstTargetInstructionIndex);
+            WriteU32(bytes, instruction.secondTargetInstructionIndex);
         }
         bytes.push_back(static_cast<std::uint8_t>(instruction.nodeTypeId.size()));
         bytes.push_back(static_cast<std::uint8_t>(instruction.sourcePinName.size()));
@@ -118,6 +127,7 @@ ScriptBytecodeDecodeResultUVE DecodeScriptBytecodeUVE(const std::vector<std::uin
         return result;
     }
     if (version != ScriptBytecodeProgramUVE::kLegacyVersionUVE &&
+        version != ScriptBytecodeProgramUVE::kConditionalJumpVersionUVE &&
         version != ScriptBytecodeProgramUVE::kCurrentVersionUVE) {
         AddDiagnostic(result.diagnostics, ScriptBytecodeDiagnosticCodeUVE::UnsupportedVersion, 4U,
                       "Unsupported bytecode version.");
@@ -143,7 +153,13 @@ ScriptBytecodeDecodeResultUVE DecodeScriptBytecodeUVE(const std::vector<std::uin
         if (kind == ScriptIrInstructionKindUVE::ConditionalJump &&
             version == ScriptBytecodeProgramUVE::kLegacyVersionUVE) {
             AddDiagnostic(result.diagnostics, ScriptBytecodeDiagnosticCodeUVE::InvalidInstruction, offset - 1U,
-                          "ConditionalJump requires bytecode version 2.");
+                          "ConditionalJump requires bytecode version 2 or newer.");
+            return result;
+        }
+        if (kind == ScriptIrInstructionKindUVE::SequenceDispatch &&
+            version != ScriptBytecodeProgramUVE::kCurrentVersionUVE) {
+            AddDiagnostic(result.diagnostics, ScriptBytecodeDiagnosticCodeUVE::InvalidInstruction, offset - 1U,
+                          "SequenceDispatch requires bytecode version 3.");
             return result;
         }
         if (!ReadU32(bytes, offset, instruction.sourceNodeId) ||
@@ -157,6 +173,13 @@ ScriptBytecodeDecodeResultUVE DecodeScriptBytecodeUVE(const std::vector<std::uin
              !ReadU32(bytes, offset, instruction.falseTargetInstructionIndex))) {
             AddDiagnostic(result.diagnostics, ScriptBytecodeDiagnosticCodeUVE::Truncated, offset,
                           "Truncated ConditionalJump targets.");
+            return result;
+        }
+        if (kind == ScriptIrInstructionKindUVE::SequenceDispatch &&
+            (!ReadU32(bytes, offset, instruction.firstTargetInstructionIndex) ||
+             !ReadU32(bytes, offset, instruction.secondTargetInstructionIndex))) {
+            AddDiagnostic(result.diagnostics, ScriptBytecodeDiagnosticCodeUVE::Truncated, offset,
+                          "Truncated SequenceDispatch targets.");
             return result;
         }
         const std::size_t typeLength = bytes[offset++];
@@ -176,7 +199,8 @@ ScriptBytecodeDecodeResultUVE DecodeScriptBytecodeUVE(const std::vector<std::uin
         offset += targetLength;
         if (kind != ScriptIrInstructionKindUVE::ExecuteNode &&
             kind != ScriptIrInstructionKindUVE::TransferValue &&
-            kind != ScriptIrInstructionKindUVE::ConditionalJump) {
+            kind != ScriptIrInstructionKindUVE::ConditionalJump &&
+            kind != ScriptIrInstructionKindUVE::SequenceDispatch) {
             AddDiagnostic(result.diagnostics, ScriptBytecodeDiagnosticCodeUVE::InvalidInstruction, offset,
                           "Unknown bytecode instruction kind.");
             return result;
@@ -185,6 +209,12 @@ ScriptBytecodeDecodeResultUVE DecodeScriptBytecodeUVE(const std::vector<std::uin
             (instruction.trueTargetInstructionIndex > count || instruction.falseTargetInstructionIndex > count)) {
             AddDiagnostic(result.diagnostics, ScriptBytecodeDiagnosticCodeUVE::InvalidInstruction, offset,
                           "ConditionalJump target is outside the bytecode instruction range.");
+            return result;
+        }
+        if (kind == ScriptIrInstructionKindUVE::SequenceDispatch &&
+            (instruction.firstTargetInstructionIndex > count || instruction.secondTargetInstructionIndex > count)) {
+            AddDiagnostic(result.diagnostics, ScriptBytecodeDiagnosticCodeUVE::InvalidInstruction, offset,
+                          "SequenceDispatch target is outside the bytecode instruction range.");
             return result;
         }
         program.instructions.push_back(std::move(instruction));

@@ -15,6 +15,7 @@ enum class ScriptIrInstructionKindUVE : std::uint8_t {
     ExecuteNode = 0,
     TransferValue = 1,
     ConditionalJump = 2,
+    SequenceDispatch = 3,
 };
 
 struct ScriptIrInstructionUVE final {
@@ -26,10 +27,12 @@ struct ScriptIrInstructionUVE final {
     std::string targetPinName;
     std::uint32_t trueTargetInstructionIndex = 0U;
     std::uint32_t falseTargetInstructionIndex = 0U;
+    std::uint32_t firstTargetInstructionIndex = 0U;
+    std::uint32_t secondTargetInstructionIndex = 0U;
 };
 
 struct ScriptIrProgramUVE final {
-    static constexpr std::uint32_t kCurrentVersionUVE = 2U;
+    static constexpr std::uint32_t kCurrentVersionUVE = 3U;
 
     std::uint32_t version = kCurrentVersionUVE;
     std::vector<ScriptIrInstructionUVE> instructions;
