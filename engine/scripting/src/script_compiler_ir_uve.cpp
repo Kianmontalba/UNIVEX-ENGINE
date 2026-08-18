@@ -636,12 +636,10 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
                                            stagedLink.input.pinName == link.input.pinName;
                                 }) != stagedLinks.end();
         };
-                if (isStagedLink(stagedConditionLinks) || isStagedLink(stagedComponentLinks) ||
-                    isStagedLink(stagedBooleanLinks) ||
-            isStagedLink(stagedNumberLinks) ||             isStagedLink(stagedComparisonNumberLinks) ||
-            isStagedLink(stagedVector2ScaleLinks) ||
-            isStagedLink(stagedVector2Links) ||
-            isStagedLink(stagedVector3ScaleLinks) ||
+        if (isStagedLink(stagedConditionLinks) || isStagedLink(stagedComponentLinks) ||
+            isStagedLink(stagedBooleanLinks) || isStagedLink(stagedNumberLinks) ||
+            isStagedLink(stagedComparisonNumberLinks) || isStagedLink(stagedVector2ScaleLinks) ||
+            isStagedLink(stagedVector2Links) || isStagedLink(stagedVector3ScaleLinks) ||
             isStagedLink(stagedVector3Links)) {
             continue;
         }
