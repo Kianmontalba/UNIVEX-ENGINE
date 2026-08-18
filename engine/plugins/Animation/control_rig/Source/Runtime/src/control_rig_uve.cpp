@@ -33,6 +33,26 @@ constexpr float kEpsilonUVE = 1.0e-5F;
     return Math::NormalizeUVE(value);
 }
 
+[[nodiscard]] bool TryMakeBoneDirectionRotationUVE(const Math::Vector3UVE& direction,
+                                                      Math::QuaternionUVE& outRotation) noexcept {
+    const Math::Vector3UVE normalizedDirection = NormalizeVectorUVE(direction, {});
+    if (Math::LengthSquaredUVE(normalizedDirection) <= kEpsilonUVE * kEpsilonUVE) {
+        return false;
+    }
+    const Math::Vector3UVE boneAxis{1.0F, 0.0F, 0.0F};
+    const float dot = std::clamp(Math::DotUVE(boneAxis, normalizedDirection), -1.0F, 1.0F);
+    const Math::Vector3UVE cross = Math::CrossUVE(boneAxis, normalizedDirection);
+    if (Math::LengthSquaredUVE(cross) <= kEpsilonUVE * kEpsilonUVE) {
+        if (dot >= 0.0F) {
+            outRotation = {};
+            return true;
+        }
+        return Math::TryMakeAxisAngleUVE({0.0F, 1.0F, 0.0F}, 3.14159265358979323846F, outRotation);
+    }
+    return Math::TryMakeAxisAngleUVE(NormalizeVectorUVE(cross, {0.0F, 0.0F, 1.0F}),
+                                       std::acos(dot), outRotation);
+}
+
 [[nodiscard]] bool TryClampAimLookAtAngleUVE(const Math::QuaternionUVE& rotation,
                                               const float minDegrees, const float maxDegrees,
                                               Math::QuaternionUVE& outRotation) noexcept {
@@ -216,9 +236,18 @@ TwoBoneIKSolveResultUVE SolveTwoBoneIKUVE(const TransformPoseUVE& rootPose,
     solvedMidPose.position = solvedMid;
     TransformPoseUVE solvedEndPose = endPose;
     solvedEndPose.position = solvedEnd;
+    Math::QuaternionUVE rootRotation;
+    Math::QuaternionUVE midRotation;
+    if (TryMakeBoneDirectionRotationUVE(solvedMid - root, rootRotation)) {
+        TransformPoseUVE solvedRootPose = rootPose;
+        solvedRootPose.rotation = rootRotation;
+        result.rootPose = BlendControlRigPoseUVE(rootPose, solvedRootPose, weight);
+    }
+    if (TryMakeBoneDirectionRotationUVE(solvedEnd - solvedMid, midRotation)) {
+        solvedMidPose.rotation = midRotation;
+    }
     result.midPose = BlendControlRigPoseUVE(midPose, solvedMidPose, weight);
     result.endPose = BlendControlRigPoseUVE(endPose, solvedEndPose, weight);
-    result.rootPose.position = rootPose.position;
     return result;
 }
 
