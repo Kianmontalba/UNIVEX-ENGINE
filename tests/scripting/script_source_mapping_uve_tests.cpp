@@ -43,6 +43,15 @@ TEST(ScriptSourceMappingUVETest, BuildPresentationUVE_BuildsNodeLabelsBreakpoint
     EXPECT_EQ(snapshot.watches[0].watchId, "w1");
     EXPECT_EQ(snapshot.watches[0].expression, "player.health");
     EXPECT_TRUE(snapshot.watches[0].valid);
+    EXPECT_TRUE(snapshot.trace.empty());
+    EXPECT_FALSE(snapshot.traceTruncated);
+
+    ASSERT_EQ(debugger.StepUVE().trace.size(), 1U);
+    const ScriptDebugPresentationSnapshotUVE stepped = mapping.BuildPresentationUVE(debugger);
+    ASSERT_EQ(stepped.trace.size(), 1U);
+    EXPECT_EQ(stepped.trace.front().kind, ScriptVmTraceEventKindUVE::NodeExecuted);
+    EXPECT_EQ(stepped.trace.front().sourceNodeId, 10U);
+    EXPECT_FALSE(stepped.traceTruncated);
 }
 
 TEST(ScriptSourceMappingUVETest, WatchManagement_EnforcesCapacityAndUniqueness) {

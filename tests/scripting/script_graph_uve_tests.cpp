@@ -1642,9 +1642,16 @@ TEST(ScriptDebuggerUVETest, ContinueUVE_PausesAtSourceNodeBreakpointAndContinueR
     EXPECT_EQ(paused.instructionIndex, 1U);
     EXPECT_EQ(paused.sourceNodeId, 20U);
     EXPECT_EQ(paused.pauseReason, "Breakpoint reached.");
+    ASSERT_EQ(paused.trace.size(), 1U);
+    EXPECT_EQ(paused.trace.front().kind, ScriptVmTraceEventKindUVE::NodeExecuted);
+    EXPECT_EQ(paused.trace.front().sourceNodeId, 10U);
+    EXPECT_EQ(paused.trace.front().nodeTypeId, "test.source");
     const ScriptDebuggerSnapshotUVE completed = debugger.ContinueUVE();
     EXPECT_EQ(completed.state, ScriptDebuggerStateUVE::Completed);
     EXPECT_EQ(completed.executedInstructions, 2U);
+    ASSERT_EQ(completed.trace.size(), 3U);
+    EXPECT_EQ(completed.trace[1].kind, ScriptVmTraceEventKindUVE::ValueTransferred);
+    EXPECT_EQ(completed.trace[2].kind, ScriptVmTraceEventKindUVE::Completed);
 }
 
 TEST(ScriptDebuggerUVETest, StepUVE_AdvancesOneInstructionAndReportsCompletion) {
@@ -1659,6 +1666,18 @@ TEST(ScriptDebuggerUVETest, StepUVE_AdvancesOneInstructionAndReportsCompletion) 
     const ScriptDebuggerSnapshotUVE second = debugger.StepUVE();
     EXPECT_EQ(second.state, ScriptDebuggerStateUVE::Completed);
     EXPECT_EQ(second.instructionIndex, 2U);
+}
+
+TEST(ScriptDebuggerUVETest, ContinueUVE_BoundsCopiedTraceHistory) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.resize(ScriptDebuggerUVE::kMaximumTraceEventsUVE + 1U);
+    ScriptDebuggerUVE debugger;
+    ASSERT_TRUE(debugger.AttachUVE(std::move(program)));
+
+    const ScriptDebuggerSnapshotUVE snapshot = debugger.ContinueUVE();
+    EXPECT_EQ(snapshot.state, ScriptDebuggerStateUVE::Completed);
+    EXPECT_EQ(snapshot.trace.size(), ScriptDebuggerUVE::kMaximumTraceEventsUVE);
+    EXPECT_TRUE(snapshot.traceTruncated);
 }
 
 TEST(ScriptDebuggerUVETest, SetBreakpointUVE_ProvidesSortedSnapshotAndRejectsEmptyNodeId) {

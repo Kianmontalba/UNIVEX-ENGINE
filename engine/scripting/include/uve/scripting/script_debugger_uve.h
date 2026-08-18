@@ -1,7 +1,7 @@
 // Copyright (c) 2026 UniVex Studios. All Rights Reserved.
 #pragma once
 
-#include "uve/scripting/script_bytecode_uve.h"
+#include "uve/scripting/script_vm_uve.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -26,12 +26,15 @@ struct ScriptDebuggerSnapshotUVE final {
     std::size_t executedInstructions = 0U;
     std::string pauseReason;
     std::vector<std::uint32_t> breakpointNodeIds;
+    std::vector<ScriptVmTraceEventUVE> trace;
+    bool traceTruncated = false;
 };
 
 class ScriptDebuggerUVE final {
 public:
     static constexpr std::size_t kMaximumBreakpointsUVE = 256U;
     static constexpr std::size_t kMaximumExecutionBudgetUVE = 4096U;
+    static constexpr std::size_t kMaximumTraceEventsUVE = ScriptVmExecutionResultUVE::kMaximumTraceEventsUVE;
 
     ScriptDebuggerUVE() = default;
     ScriptDebuggerUVE(const ScriptDebuggerUVE&) = delete;
@@ -48,6 +51,8 @@ private:
     [[nodiscard]] bool IsBreakpointUVE(std::uint32_t sourceNodeId) const noexcept;
     [[nodiscard]] ScriptDebuggerSnapshotUVE MakeSnapshotUVE() const;
     [[nodiscard]] bool ExecuteOneUVE();
+    void AppendTraceEventUVE(ScriptVmTraceEventUVE event);
+    void MarkCompletedUVE();
 
     ScriptBytecodeProgramUVE m_program;
     ScriptDebuggerStateUVE m_state = ScriptDebuggerStateUVE::Detached;
@@ -55,6 +60,8 @@ private:
     std::size_t m_executedInstructions = 0U;
     std::string m_pauseReason;
     std::unordered_set<std::uint32_t> m_breakpoints;
+    std::vector<ScriptVmTraceEventUVE> m_trace;
+    bool m_traceTruncated = false;
     bool m_skipCurrentBreakpoint = false;
 };
 

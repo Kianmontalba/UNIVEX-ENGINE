@@ -1442,7 +1442,7 @@ EditorBridgeVisualScriptingSnapshotUVE EditorBridgeUVE::CaptureVisualScriptingUV
         const Scripting::ScriptDebuggerSnapshotUVE source = m_scriptDebugger->GetSnapshotUVE();
         debugger = EditorBridgeVisualScriptDebuggerSnapshotUVE{
             true, source.state, source.instructionIndex, source.sourceNodeId, source.executedInstructions,
-            source.pauseReason, source.breakpointNodeIds,
+            source.pauseReason, source.breakpointNodeIds, source.trace, source.traceTruncated,
             "The native visual-scripting debugger snapshot is available as copied read-only state."};
     } else {
         debugger.reason = "No visual-scripting debugger is attached to this bridge session.";

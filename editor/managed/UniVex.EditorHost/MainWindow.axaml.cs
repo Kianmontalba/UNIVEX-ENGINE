@@ -748,9 +748,11 @@ public partial class MainWindow : Window
         string pauseReason = string.IsNullOrWhiteSpace(debugger.PauseReason)
             ? string.Empty
             : $" Pause: {debugger.PauseReason}";
+        string traceSummary = $" Trace: {debugger.Trace.Count} event(s)" +
+                              (debugger.TraceTruncated ? ", truncated." : ".");
         return $"Debugger state {debugger.State}; instruction {debugger.InstructionIndex}; source node {sourceNode}; " +
                $"{debugger.ExecutedInstructions} executed; {debugger.BreakpointNodeIds.Count} breakpoint(s)." +
-               $"{pauseReason} {debugger.Reason}";
+               $"{traceSummary}{pauseReason} {debugger.Reason}";
     }
 
     private void RenderScriptRuntime(BridgeScriptRuntimeSnapshot runtime, bool requestAvailable,

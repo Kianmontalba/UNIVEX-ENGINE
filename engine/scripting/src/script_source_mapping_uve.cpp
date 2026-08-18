@@ -45,6 +45,8 @@ ScriptDebugPresentationSnapshotUVE ScriptSourceMappingUVE::BuildPresentationUVE(
     snapshot.state = debuggerSnapshot.state;
     snapshot.instructionIndex = debuggerSnapshot.instructionIndex;
     snapshot.activeNodeId = debuggerSnapshot.sourceNodeId;
+    snapshot.trace = debuggerSnapshot.trace;
+    snapshot.traceTruncated = debuggerSnapshot.traceTruncated;
 
     const auto& nodes = m_graph->GetNodesUVE();
     snapshot.entries.reserve(nodes.size());

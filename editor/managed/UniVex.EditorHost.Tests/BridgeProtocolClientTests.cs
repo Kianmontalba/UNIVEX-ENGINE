@@ -1161,6 +1161,11 @@ public sealed class BridgeProtocolClientTests
         Assert.Equal(20U, snapshot.VisualScripting.Debugger.SourceNodeId);
         Assert.Equal("Breakpoint reached.", snapshot.VisualScripting.Debugger.PauseReason);
         Assert.Equal(new uint[] { 20U }, snapshot.VisualScripting.Debugger.BreakpointNodeIds);
+        Assert.Single(snapshot.VisualScripting.Debugger.Trace);
+        Assert.Equal((byte)0, snapshot.VisualScripting.Debugger.Trace[0].Kind);
+        Assert.Equal(10U, snapshot.VisualScripting.Debugger.Trace[0].SourceNodeId);
+        Assert.Equal("test.source", snapshot.VisualScripting.Debugger.Trace[0].NodeTypeId);
+        Assert.False(snapshot.VisualScripting.Debugger.TraceTruncated);
         Assert.Single(snapshot.VisualScripting.Canvas.PaletteDescriptors);
         Assert.Equal("EVENT", snapshot.VisualScripting.Canvas.PaletteDescriptors[0].Category);
         Assert.Equal("node.event", snapshot.VisualScripting.Canvas.PaletteDescriptors[0].IconId);
@@ -1527,6 +1532,12 @@ public sealed class BridgeProtocolClientTests
                 executedInstructions = includeCanvas ? 1UL : 0UL,
                 pauseReason = includeCanvas ? "Breakpoint reached." : string.Empty,
                 breakpointNodeIds = includeCanvas ? new[] { 20U } : Array.Empty<uint>(),
+                trace = includeCanvas
+                    ? new[] { new { kind = (byte)0, entityIndex = uint.MaxValue, entityGeneration = uint.MaxValue,
+                                    instructionIndex = 0UL, sourceNodeId = 10U, targetNodeId = 0U,
+                                    nodeTypeId = "test.source", message = string.Empty } }
+                    : Array.Empty<object>(),
+                traceTruncated = false,
                 reason = includeCanvas ? "The native visual-scripting debugger snapshot is available as copied read-only state." : "No visual-scripting debugger is attached to this bridge session.",
             },
             canvas = includeCanvas ? new
@@ -1730,6 +1741,12 @@ public sealed class BridgeProtocolClientTests
                 executedInstructions = includeCanvas ? 1UL : 0UL,
                 pauseReason = includeCanvas ? "Breakpoint reached." : string.Empty,
                 breakpointNodeIds = includeCanvas ? new[] { 20U } : Array.Empty<uint>(),
+                trace = includeCanvas
+                    ? new[] { new { kind = (byte)0, entityIndex = uint.MaxValue, entityGeneration = uint.MaxValue,
+                                    instructionIndex = 0UL, sourceNodeId = 10U, targetNodeId = 0U,
+                                    nodeTypeId = "test.source", message = string.Empty } }
+                    : Array.Empty<object>(),
+                traceTruncated = false,
                 reason = includeCanvas ? "The native visual-scripting debugger snapshot is available as copied read-only state." : "No visual-scripting debugger is attached to this bridge session.",
             },
             canvas = includeCanvas ? new

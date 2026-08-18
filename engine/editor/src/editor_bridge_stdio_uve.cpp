@@ -364,6 +364,17 @@ enum class FrameReadResultUVE : std::uint8_t {
     for (const std::uint32_t nodeId : debugger.breakpointNodeIds) {
         breakpoints.push_back(nodeId);
     }
+    JsonUVE trace = JsonUVE::array();
+    for (const Scripting::ScriptVmTraceEventUVE& event : debugger.trace) {
+        trace.push_back(JsonUVE{{"kind", static_cast<std::uint8_t>(event.kind)},
+                                {"entityIndex", event.entity.index},
+                                {"entityGeneration", event.entity.generation},
+                                {"instructionIndex", event.instructionIndex},
+                                {"sourceNodeId", event.sourceNodeId},
+                                {"targetNodeId", event.targetNodeId},
+                                {"nodeTypeId", event.nodeTypeId},
+                                {"message", event.message}});
+    }
     return JsonUVE{{"available", debugger.available},
                    {"state", static_cast<std::uint8_t>(debugger.state)},
                    {"instructionIndex", debugger.instructionIndex},
@@ -371,6 +382,8 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"executedInstructions", debugger.executedInstructions},
                    {"pauseReason", debugger.pauseReason},
                    {"breakpointNodeIds", std::move(breakpoints)},
+                   {"trace", std::move(trace)},
+                   {"traceTruncated", debugger.traceTruncated},
                    {"reason", debugger.reason}};
 }
 
