@@ -3,7 +3,7 @@
 
 > This reference is generated from `docs/CONTRACT_INVENTORY.md`. Native and editor code remain authoritative; this file is documentation only.
 
-Inventory revision: `fcc30fc3c76e6ae6`
+Inventory revision: `3c36a95cefff9288`
 
 | ID | Authority | Anchor | Contract role | Allowed consumers | Ownership boundary |
 |---|---|---|---|---|---|
@@ -77,3 +77,4 @@ Inventory revision: `fcc30fc3c76e6ae6`
 | `SCRIPT-VECTOR3-RUNTIME-STATE` | `engine/scripting/include/uve/scripting/script_runtime_uve.h` | `vector3Values` | Bounded copied typed Vector3 runtime storage alongside legacy int64 scalar slots, with finite-component validation, independent capacity, deterministic value equality, and compatible reload preservation. | ScriptRuntimeUVE state update/get, compatible reload tests, per-entity typed tick execution, and future typed node families. | Storage does not decode bytecode, mutate graphs, or replace legacy scalar slots; graph execution occurs through the explicit VM context. |
 | `SCRIPT-VECTOR3-VALUE-KERNEL` | `engine/scripting/include/uve/scripting/script_vector3_value_uve.h` | `EvaluateScriptVector3AddUVE` | Pure typed Vector3 value/evaluation contract reusing Math::Vector3UVE for Make, Add, Subtract, scalar Multiply, Dot, Cross, Length, and guarded Normalize with finite-input/output checks. | Native scripting math tests, typed runtime state storage, typed VM dispatch, and managed editor descriptors that consume the same pin types. | Kernel does not mutate graphs, allocate runtime state, execute bytecode, or replace the existing scalar ScriptRuntimeStateUVE storage. |
 | `SCRIPT-VECTOR3-VM-EXECUTION` | `engine/scripting/include/uve/scripting/script_vm_uve.h` | `ExecuteScriptBytecodeUVE` | The existing eight Vector3 node IDs retain deterministic dependency-aware dispatch, typed transfer behavior, instruction budgets, and node-execution diagnostics. | Native VM tests, ScriptRuntimeUVE per-entity execution, debugger stepping, and managed read-only diagnostics. | This family remains compatible with the existing float/Vector3 value alternatives; exact node-family expansion beyond Float/Boolean remains future work. |
+| `SCRIPT-VM-EXECUTION-TRACE` | `engine/scripting/include/uve/scripting/script_vm_uve.h` | `AppendTraceEventUVE` | Bounded copied per-instruction trace records for node execution, value transfer, query refresh, completion, and failure; capped at 512 events with 256-byte message truncation, while `PrependTraceEventsUVE` inserts query-refresh evidence before VM events. | Native VM/runtime tests, debugger stepping, and managed read-only diagnostics. | Trace is copied value data; the VM does not own ECS, scene, graph, or engine-service lifetime and exposes no hidden engine-call authority. |
