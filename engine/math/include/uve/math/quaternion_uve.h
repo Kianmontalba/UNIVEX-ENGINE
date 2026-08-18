@@ -56,6 +56,21 @@ struct QuaternionUVE {
 /// Rotates `vector` by `rotation`.
 [[nodiscard]] Vector3UVE RotateVectorUVE(const QuaternionUVE& rotation, const Vector3UVE& vector) noexcept;
 
+/// Builds a normalized XYZ Euler rotation from radians. Returns false for non-finite input.
+[[nodiscard]] bool TryMakeEulerUVE(const Vector3UVE& radians, QuaternionUVE& outRotation) noexcept;
+
+/// Builds a rotation that points local +Z along `direction` with the supplied up reference.
+[[nodiscard]] bool TryMakeLookAtUVE(const Vector3UVE& direction, const Vector3UVE& up,
+                                    QuaternionUVE& outRotation) noexcept;
+
+/// Spherical interpolation between two rotations with finite alpha.
+[[nodiscard]] bool TrySlerpUVE(const QuaternionUVE& lhs, const QuaternionUVE& rhs, float alpha,
+                               QuaternionUVE& outRotation) noexcept;
+
+/// Decomposes a normalized rotation into a unit axis and angle in radians.
+[[nodiscard]] bool TryToAxisAngleUVE(const QuaternionUVE& rotation, Vector3UVE& outAxis,
+                                     float& outRadians) noexcept;
+
 /// Formats `rotation` as `"(x, y, z, w)"`, for logging/debugging.
 [[nodiscard]] std::string ToStringUVE(const QuaternionUVE& rotation);
 

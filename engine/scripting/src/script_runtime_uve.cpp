@@ -33,6 +33,8 @@ namespace {
                 return typedValue.IsValidUVE();
             } else if constexpr (std::is_same_v<ValueType, ScriptVector3ValueUVE>) {
                 return IsFiniteScriptVector3UVE(typedValue);
+            } else if constexpr (std::is_same_v<ValueType, ScriptRotationValueUVE>) {
+                return Math::IsFiniteUVE(typedValue.value);
             } else {
                 return IsFiniteScriptVector2UVE(typedValue);
             }

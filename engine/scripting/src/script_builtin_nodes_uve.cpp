@@ -17,7 +17,7 @@ struct BuiltInNodeDefinitionUVE final {
     std::uint32_t displayOrder;
 };
 
-[[nodiscard]] std::array<BuiltInNodeDefinitionUVE, 72U> MakeBuiltInDefinitionsUVE() {
+[[nodiscard]] std::array<BuiltInNodeDefinitionUVE, 81U> MakeBuiltInDefinitionsUVE() {
     return {
         BuiltInNodeDefinitionUVE{
             "flow.sequence", "Sequence",
@@ -315,6 +315,60 @@ struct BuiltInNodeDefinitionUVE final {
              ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Vector3}},
             "Math", "node.math.vector3", 410U},
         BuiltInNodeDefinitionUVE{
+            "math.rotation.make", "Make Rotation",
+            {ScriptPinDescriptorUVE{"Axis", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Radians", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Rotation", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Rotation}},
+            "Rotation", "node.math.rotation", 450U},
+        BuiltInNodeDefinitionUVE{
+            "math.rotation.break", "Break Rotation",
+            {ScriptPinDescriptorUVE{"Rotation", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Rotation},
+             ScriptPinDescriptorUVE{"Axis", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Radians", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Number}},
+            "Rotation", "node.math.rotation", 451U},
+        BuiltInNodeDefinitionUVE{
+            "math.rotation.degrees", "Rotation to Degrees",
+            {ScriptPinDescriptorUVE{"Radians", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Degrees", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Number}},
+            "Rotation", "node.math.rotation", 452U},
+        BuiltInNodeDefinitionUVE{
+            "math.rotation.radians", "Degrees to Rotation Radians",
+            {ScriptPinDescriptorUVE{"Degrees", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Radians", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Number}},
+            "Rotation", "node.math.rotation", 453U},
+        BuiltInNodeDefinitionUVE{
+            "math.rotation.euler", "Make Euler Rotation",
+            {ScriptPinDescriptorUVE{"Radians", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Rotation", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Rotation}},
+            "Rotation", "node.math.rotation", 454U},
+        BuiltInNodeDefinitionUVE{
+            "math.rotation.quaternion", "Make Quaternion Rotation",
+            {ScriptPinDescriptorUVE{"X", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Y", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Z", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"W", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Rotation", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Rotation}},
+            "Rotation", "node.math.rotation", 455U},
+        BuiltInNodeDefinitionUVE{
+            "math.rotation.look_at", "Look At Rotation",
+            {ScriptPinDescriptorUVE{"Direction", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Up", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Rotation", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Rotation}},
+            "Rotation", "node.math.rotation", 456U},
+        BuiltInNodeDefinitionUVE{
+            "math.rotation.slerp", "Slerp Rotation",
+            {ScriptPinDescriptorUVE{"A", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Rotation},
+             ScriptPinDescriptorUVE{"B", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Rotation},
+             ScriptPinDescriptorUVE{"Alpha", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Rotation}},
+            "Rotation", "node.math.rotation", 457U},
+        BuiltInNodeDefinitionUVE{
+            "math.rotation.rotate", "Rotate Vector by Rotation",
+            {ScriptPinDescriptorUVE{"Rotation", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Rotation},
+             ScriptPinDescriptorUVE{"Vector", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Vector3}},
+            "Rotation", "node.math.rotation", 458U},
+        BuiltInNodeDefinitionUVE{
             "logic.boolean.not", "Not Boolean",
             {ScriptPinDescriptorUVE{"Value", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Boolean},
              ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
@@ -450,7 +504,7 @@ struct BuiltInNodeDefinitionUVE final {
 } // namespace
 
 bool RegisterBuiltInScriptNodesUVE(ScriptNodeRegistryUVE& registry) {
-    std::array<BuiltInNodeDefinitionUVE, 72U> definitions = MakeBuiltInDefinitionsUVE();
+    std::array<BuiltInNodeDefinitionUVE, 81U> definitions = MakeBuiltInDefinitionsUVE();
     for (const BuiltInNodeDefinitionUVE& definition : definitions) {
         if (registry.FindNodeTypeUVE(definition.typeId) != nullptr) {
             return false;
