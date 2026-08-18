@@ -356,7 +356,7 @@
                         </TabItem>
                         <TabItem Header="Debugger"><Border Padding="12" Background="#20242B" CornerRadius="3"><TextBlock Text="Managed debugger presentation is deferred. This shell does not attach to or control a runtime." TextWrapping="Wrap" /></Border></TabItem>
                         <TabItem Header="Animator">
-                            <Grid RowDefinitions="Auto,Auto,Auto,*,*,*,Auto" RowSpacing="8">
+                            <Grid RowDefinitions="Auto,Auto,Auto,Auto,*,*,*,Auto" RowSpacing="8">
                                 <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="8">
                                     <TextBlock x:Name="MotionQueryStatusTextBlock" Text="Connect to read native Motion Query state." TextWrapping="Wrap" Opacity="0.76" VerticalAlignment="Center" />
                                     <Button Grid.Column="1" Content="Export Registry" Click="MotionQueryExportRegistryButton_OnClick" IsEnabled="False" x:Name="MotionQueryExportRegistryButton" />
@@ -365,13 +365,41 @@
                                     <Button Grid.Column="4" Content="Clear Replay" Click="MotionQueryClearReplayButton_OnClick" IsEnabled="False" x:Name="MotionQueryClearReplayButton" />
                                 </Grid>
                                 <Border Grid.Row="1" Padding="6" Background="#20242B" BorderBrush="#394150" BorderThickness="1" CornerRadius="3">
+                                    <Grid RowDefinitions="Auto,Auto,*" RowSpacing="4">
+                                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                            <TextBlock x:Name="MotionQueryAuthoringStatusTextBlock" Text="Connect to read native Motion Query databases." TextWrapping="Wrap" Opacity="0.76" />
+                                            <TextBlock Grid.Column="1" Text="C++ authority · copied rows only" FontSize="9" Opacity="0.55" VerticalAlignment="Center" />
+                                        </Grid>
+                                        <TextBlock Grid.Row="1" Text="DATABASE AUTHORING · bounded existing-resource commands" FontSize="10" Opacity="0.68" />
+                                        <ListBox x:Name="MotionQueryAuthoringDatabasesListBox" Grid.Row="2" MaxHeight="180" IsEnabled="False">
+                                            <ListBox.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Grid RowDefinitions="Auto,Auto,Auto" ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="4" RowSpacing="3" Margin="0,2">
+                                                        <TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                                        <Button Grid.Column="1" Content="Select" Click="MotionQuerySelectDatabaseButton_OnClick" Padding="4,2" FontSize="10" />
+                                                        <Button Grid.Column="2" Content="Remove" Click="MotionQueryRemoveDatabaseButton_OnClick" Padding="4,2" FontSize="10" />
+                                                        <TextBox Grid.Row="1" Width="110" Watermark="Display name" Padding="2" FontSize="10" />
+                                                        <Button Grid.Row="1" Grid.Column="1" Content="Set Name" Click="MotionQuerySetDisplayNameButton_OnClick" Padding="4,2" FontSize="10" />
+                                                        <TextBox Grid.Row="1" Grid.Column="2" Width="110" Watermark="Schema ID" Padding="2" FontSize="10" />
+                                                        <Button Grid.Row="1" Grid.Column="3" Content="Set Schema" Click="MotionQuerySetSchemaIdButton_OnClick" Padding="4,2" FontSize="10" />
+                                                        <TextBox Grid.Row="1" Grid.Column="4" Width="70" Watermark="Max" Padding="2" FontSize="10" />
+                                                        <Button Grid.Row="1" Grid.Column="5" Content="Set Max" Click="MotionQuerySetMaximumCandidatesButton_OnClick" Padding="4,2" FontSize="10" />
+                                                        <Button Grid.Row="1" Grid.Column="6" Content="Validate" Click="MotionQueryValidateDatabaseButton_OnClick" Padding="4,2" FontSize="10" />
+                                                        <TextBlock Grid.Row="2" Grid.ColumnSpan="7" Text="{Binding DatabaseId, StringFormat='ID: {0}'}" FontSize="9" Opacity="0.62" TextWrapping="Wrap" />
+                                                    </Grid>
+                                                </DataTemplate>
+                                            </ListBox.ItemTemplate>
+                                        </ListBox>
+                                    </Grid>
+                                </Border>
+                                <Border Grid.Row="2" Padding="6" Background="#20242B" BorderBrush="#394150" BorderThickness="1" CornerRadius="3">
                                     <StackPanel Spacing="4">
                                         <TextBlock Text="REPLAY SESSION FACTS · cumulative native counters" FontSize="10" Opacity="0.68" />
                                         <TextBlock x:Name="MotionQuerySessionFactsTextBlock" Text="No session facts available." TextWrapping="Wrap" Opacity="0.85" />
                                     </StackPanel>
                                 </Border>
-                                <TextBlock Grid.Row="2" Text="REPLAY BATCH HISTORY · recent regression outcomes" FontSize="10" Opacity="0.68" />
-                                <Grid Grid.Row="3" ColumnDefinitions="*,*" ColumnSpacing="8">
+                                <TextBlock Grid.Row="3" Text="REPLAY BATCH HISTORY · recent regression outcomes" FontSize="10" Opacity="0.68" />
+                                <Grid Grid.Row="4" ColumnDefinitions="*,*" ColumnSpacing="8">
                                     <Grid RowDefinitions="Auto,*">
                                         <TextBlock Text="BATCH HISTORY" FontSize="10" Opacity="0.68" Margin="0,0,0,4" />
                                         <ListBox x:Name="MotionQueryBatchHistoryListBox" Grid.Row="1" MaxHeight="140">
@@ -408,7 +436,7 @@
                                         </ListBox>
                                     </Grid>
                                 </Grid>
-                                <ListBox x:Name="MotionQueryBaselinesListBox" Grid.Row="4" MaxHeight="80">
+                                <ListBox x:Name="MotionQueryBaselinesListBox" Grid.Row="5" MaxHeight="80">
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
                                             <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="6" Margin="0,2">
@@ -421,7 +449,7 @@
                                         </DataTemplate>
                                     </ListBox.ItemTemplate>
                                 </ListBox>
-                                <Grid Grid.Row="5" RowDefinitions="Auto,Auto,*" RowSpacing="4">
+                                <Grid Grid.Row="6" RowDefinitions="Auto,Auto,*" RowSpacing="4">
                                     <Grid ColumnDefinitions="*,Auto,Auto,Auto">
                                         <TextBlock Text="LIVE DEBUG TRACE · recent native events" FontSize="10" Opacity="0.68" VerticalAlignment="Center" />
                                         <Button Grid.Column="1" Content="Export Trace" Click="MotionQueryExportTraceButton_OnClick" Padding="4,2" FontSize="10" x:Name="MotionQueryExportTraceButton" IsEnabled="False" Margin="0,0,4,0" />
@@ -456,7 +484,7 @@
                                         </ListBox.ItemTemplate>
                                     </ListBox>
                                 </Grid>
-                                <TextBlock x:Name="MotionQueryDiagnosticsTextBlock" Grid.Row="6" Text="No active comparison diagnostics." TextWrapping="Wrap" Opacity="0.72" />
+                                <TextBlock x:Name="MotionQueryDiagnosticsTextBlock" Grid.Row="7" Text="No active comparison diagnostics." TextWrapping="Wrap" Opacity="0.72" />
                             </Grid>
                         </TabItem>
                         <TabItem Header="AI Toolbar"><Border Padding="12" Background="#20242B" CornerRadius="3"><TextBlock Text="AI tooling is deferred. This shell owns no background jobs or asset mutations." TextWrapping="Wrap" /></Border></TabItem>
