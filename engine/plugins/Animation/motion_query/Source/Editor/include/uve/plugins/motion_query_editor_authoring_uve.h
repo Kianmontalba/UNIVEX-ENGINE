@@ -15,6 +15,7 @@ namespace UVE::Plugins::Editor {
 inline constexpr std::uint32_t kMotionQueryEditorProtocolVersionUVE = 1U;
 inline constexpr std::size_t kMotionQueryEditorMaximumDatabasesUVE = 128U;
 inline constexpr std::size_t kMotionQueryEditorMaximumDisplayNameBytesUVE = 128U;
+inline constexpr std::size_t kMotionQueryEditorMaximumHistoryEntriesUVE = 32U;
 
 struct MotionQueryEditorDatabaseEntryUVE final {
     UVE::Asset::ResourceHandleUVE resource;
@@ -42,6 +43,8 @@ enum class MotionQueryEditorCommandKindUVE : std::uint8_t {
     ValidateDatabase,
     CopyDatabase,
     PasteDatabase,
+    Undo,
+    Redo,
 };
 
 struct MotionQueryEditorCommandUVE final {
@@ -80,6 +83,8 @@ struct MotionQueryEditorSnapshotUVE final {
     std::optional<UVE::Asset::ResourceHandleUVE> selectedResource;
     std::vector<MotionQueryEditorDatabaseRowUVE> databases;
     bool clipboardAvailable = false;
+    bool canUndo = false;
+    bool canRedo = false;
     std::string diagnostic;
 
     [[nodiscard]] bool operator==(const MotionQueryEditorSnapshotUVE&) const = default;
@@ -97,6 +102,8 @@ enum class MotionQueryEditorResponseCodeUVE : std::uint8_t {
     ValidationFailed,
     ClipboardEmpty,
     InvalidPasteTarget,
+    NothingToUndo,
+    NothingToRedo,
 };
 
 struct MotionQueryEditorResponseUVE final {
@@ -121,6 +128,16 @@ public:
         UVE::Core::MotionQueryDatabaseContractUVE& destination) const noexcept;
 
 private:
+    struct StateUVE final {
+        std::vector<MotionQueryEditorDatabaseEntryUVE> databases;
+        std::optional<UVE::Asset::ResourceHandleUVE> selectedResource;
+        std::optional<MotionQueryEditorDatabaseEntryUVE> clipboard;
+    };
+
+    [[nodiscard]] StateUVE CaptureStateUVE() const;
+    void RestoreStateUVE(StateUVE state) noexcept;
+    void CommitMutationUVE(StateUVE stateBefore);
+
     [[nodiscard]] MotionQueryEditorResponseUVE MakeResponseUVE(
         const MotionQueryEditorCommandUVE& command, bool applied,
         MotionQueryEditorResponseCodeUVE code, std::string message) const;
@@ -138,6 +155,8 @@ private:
     std::vector<MotionQueryEditorDatabaseEntryUVE> databases_;
     std::optional<UVE::Asset::ResourceHandleUVE> selectedResource_;
     std::optional<MotionQueryEditorDatabaseEntryUVE> clipboard_;
+    std::vector<StateUVE> undoHistory_;
+    std::vector<StateUVE> redoHistory_;
     std::uint64_t revision_ = 0U;
 };
 

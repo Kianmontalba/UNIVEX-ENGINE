@@ -32,6 +32,10 @@ namespace {
             return "copy database";
         case MotionQueryEditorCommandKindUVE::PasteDatabase:
             return "paste database";
+        case MotionQueryEditorCommandKindUVE::Undo:
+            return "undo";
+        case MotionQueryEditorCommandKindUVE::Redo:
+            return "redo";
         }
 
     return "unknown command";
@@ -60,6 +64,35 @@ MotionQueryEditorResponseUVE MotionQueryEditorAuthoringSessionUVE::DispatchUVE(
         return MakeResponseUVE(command, false, MotionQueryEditorResponseCodeUVE::Applied,
                                "motion query editor snapshot read");
     }
+    if (command.kind == MotionQueryEditorCommandKindUVE::Undo ||
+        command.kind == MotionQueryEditorCommandKindUVE::Redo) {
+        if (command.kind == MotionQueryEditorCommandKindUVE::Undo) {
+            if (undoHistory_.empty()) {
+                return MakeResponseUVE(command, false, MotionQueryEditorResponseCodeUVE::NothingToUndo,
+                                       "motion query editor has no undo history");
+            }
+            StateUVE current = CaptureStateUVE();
+            StateUVE target = std::move(undoHistory_.back());
+            undoHistory_.pop_back();
+            redoHistory_.push_back(std::move(current));
+            RestoreStateUVE(std::move(target));
+            ++revision_;
+            return MakeResponseUVE(command, true, MotionQueryEditorResponseCodeUVE::Applied,
+                                   "motion query editor undo applied");
+        }
+        if (redoHistory_.empty()) {
+            return MakeResponseUVE(command, false, MotionQueryEditorResponseCodeUVE::NothingToRedo,
+                                   "motion query editor has no redo history");
+        }
+        StateUVE current = CaptureStateUVE();
+        StateUVE target = std::move(redoHistory_.back());
+        redoHistory_.pop_back();
+        undoHistory_.push_back(std::move(current));
+        RestoreStateUVE(std::move(target));
+        ++revision_;
+        return MakeResponseUVE(command, true, MotionQueryEditorResponseCodeUVE::Applied,
+                               "motion query editor redo applied");
+    }
 
     if (command.kind == MotionQueryEditorCommandKindUVE::RegisterDatabase) {
         if (!command.database.has_value() || !IsValidResourceUVE(command.database->resource) ||
@@ -81,8 +114,9 @@ MotionQueryEditorResponseUVE MotionQueryEditorAuthoringSessionUVE::DispatchUVE(
             return MakeResponseUVE(command, false, MotionQueryEditorResponseCodeUVE::DuplicateDatabase,
                                    "motion query editor database resource is already registered");
         }
+        StateUVE stateBefore = CaptureStateUVE();
         databases_.push_back(*command.database);
-        ++revision_;
+        CommitMutationUVE(std::move(stateBefore));
         return MakeResponseUVE(command, true, MotionQueryEditorResponseCodeUVE::Applied,
                                "motion query editor database registered");
     }
@@ -99,11 +133,12 @@ MotionQueryEditorResponseUVE MotionQueryEditorAuthoringSessionUVE::DispatchUVE(
             return MakeResponseUVE(command, false, MotionQueryEditorResponseCodeUVE::DatabaseNotFound,
                                    "motion query editor database was not found");
         }
+        StateUVE stateBefore = CaptureStateUVE();
         databases_.erase(iterator);
         if (selectedResource_ == command.resource) {
             selectedResource_.reset();
         }
-        ++revision_;
+        CommitMutationUVE(std::move(stateBefore));
         return MakeResponseUVE(command, true, MotionQueryEditorResponseCodeUVE::Applied,
                                "motion query editor database removed");
     }
@@ -142,8 +177,9 @@ MotionQueryEditorResponseUVE MotionQueryEditorAuthoringSessionUVE::DispatchUVE(
             return MakeResponseUVE(command, false, MotionQueryEditorResponseCodeUVE::InvalidPasteTarget,
                                    validation.message);
         }
+        StateUVE stateBefore = CaptureStateUVE();
         databases_.push_back(std::move(pasted));
-        ++revision_;
+        CommitMutationUVE(std::move(stateBefore));
         return MakeResponseUVE(command, true, MotionQueryEditorResponseCodeUVE::Applied,
                                "motion query editor database pasted");
     }
@@ -160,26 +196,31 @@ MotionQueryEditorResponseUVE MotionQueryEditorAuthoringSessionUVE::DispatchUVE(
     }
 
     switch (command.kind) {
-        case MotionQueryEditorCommandKindUVE::SelectDatabase:
+        case MotionQueryEditorCommandKindUVE::SelectDatabase: {
+            StateUVE stateBefore = CaptureStateUVE();
             selectedResource_ = entry->resource;
-            ++revision_;
+            CommitMutationUVE(std::move(stateBefore));
             return MakeResponseUVE(command, true, MotionQueryEditorResponseCodeUVE::Applied,
                                    "motion query editor database selected");
-        case MotionQueryEditorCommandKindUVE::SetDisplayName:
+        }
+        case MotionQueryEditorCommandKindUVE::SetDisplayName: {
             if (!command.text.has_value() || !IsValidDisplayNameUVE(*command.text)) {
                 return MakeResponseUVE(command, false, MotionQueryEditorResponseCodeUVE::InvalidCommand,
                                        "set display name requires bounded text");
             }
+            StateUVE stateBefore = CaptureStateUVE();
             entry->displayName = *command.text;
             entry->dirty = true;
-            ++revision_;
+            CommitMutationUVE(std::move(stateBefore));
             return MakeResponseUVE(command, true, MotionQueryEditorResponseCodeUVE::Applied,
                                    "motion query editor display name updated");
+        }
         case MotionQueryEditorCommandKindUVE::SetSchemaId: {
             if (!command.text.has_value() || command.text->empty()) {
                 return MakeResponseUVE(command, false, MotionQueryEditorResponseCodeUVE::InvalidCommand,
                                        "set schema ID requires non-empty text");
             }
+            StateUVE stateBefore = CaptureStateUVE();
             const std::string previous = entry->contract.schema.schemaId;
             entry->contract.schema.schemaId = *command.text;
             const auto validation = UVE::Core::ValidateMotionQueryDatabaseContractUVE(entry->contract);
@@ -189,7 +230,7 @@ MotionQueryEditorResponseUVE MotionQueryEditorAuthoringSessionUVE::DispatchUVE(
                                        validation.message);
             }
             entry->dirty = true;
-            ++revision_;
+            CommitMutationUVE(std::move(stateBefore));
             return MakeResponseUVE(command, true, MotionQueryEditorResponseCodeUVE::Applied,
                                    "motion query editor schema ID updated");
         }
@@ -198,6 +239,7 @@ MotionQueryEditorResponseUVE MotionQueryEditorAuthoringSessionUVE::DispatchUVE(
                 return MakeResponseUVE(command, false, MotionQueryEditorResponseCodeUVE::InvalidCommand,
                                        "set maximum candidates requires a bounded value");
             }
+            StateUVE stateBefore = CaptureStateUVE();
             const std::size_t previous = entry->contract.settings.maximumCandidates;
             entry->contract.settings.maximumCandidates = *command.candidateIndex;
             const auto validation = UVE::Core::ValidateMotionQueryDatabaseContractUVE(entry->contract);
@@ -207,7 +249,7 @@ MotionQueryEditorResponseUVE MotionQueryEditorAuthoringSessionUVE::DispatchUVE(
                                        validation.message);
             }
             entry->dirty = true;
-            ++revision_;
+            CommitMutationUVE(std::move(stateBefore));
             return MakeResponseUVE(command, true, MotionQueryEditorResponseCodeUVE::Applied,
                                    "motion query editor candidate limit updated");
         }
@@ -216,6 +258,7 @@ MotionQueryEditorResponseUVE MotionQueryEditorAuthoringSessionUVE::DispatchUVE(
                 return MakeResponseUVE(command, false, MotionQueryEditorResponseCodeUVE::InvalidCommand,
                                        "add candidate requires a candidate value");
             }
+            StateUVE stateBefore = CaptureStateUVE();
             const UVE::Core::MotionMatchingDatabaseUVE previous = entry->contract.database;
             const std::size_t previousEventCount = entry->contract.events.size();
             entry->contract.database.candidates.push_back(*command.candidate);
@@ -231,7 +274,7 @@ MotionQueryEditorResponseUVE MotionQueryEditorAuthoringSessionUVE::DispatchUVE(
                                        !eventResult.IsValidUVE() ? eventResult.message : validation.message);
             }
             entry->dirty = true;
-            ++revision_;
+            CommitMutationUVE(std::move(stateBefore));
             return MakeResponseUVE(command, true, MotionQueryEditorResponseCodeUVE::Applied,
                                    "motion query editor candidate added");
         }
@@ -241,6 +284,7 @@ MotionQueryEditorResponseUVE MotionQueryEditorAuthoringSessionUVE::DispatchUVE(
                 return MakeResponseUVE(command, false, MotionQueryEditorResponseCodeUVE::CandidateNotFound,
                                        "remove candidate index is out of range");
             }
+            StateUVE stateBefore = CaptureStateUVE();
             const UVE::Core::MotionMatchingDatabaseUVE previous = entry->contract.database;
             const std::size_t previousEventCount = entry->contract.events.size();
             const std::string removedId =
@@ -260,7 +304,7 @@ MotionQueryEditorResponseUVE MotionQueryEditorAuthoringSessionUVE::DispatchUVE(
                                        !eventResult.IsValidUVE() ? eventResult.message : validation.message);
             }
             entry->dirty = true;
-            ++revision_;
+            CommitMutationUVE(std::move(stateBefore));
             return MakeResponseUVE(command, true, MotionQueryEditorResponseCodeUVE::Applied,
                                    "motion query editor candidate removed");
         }
@@ -271,15 +315,19 @@ MotionQueryEditorResponseUVE MotionQueryEditorAuthoringSessionUVE::DispatchUVE(
                                                            : MotionQueryEditorResponseCodeUVE::ValidationFailed,
                                    validation.message);
         }
-        case MotionQueryEditorCommandKindUVE::CopyDatabase:
+        case MotionQueryEditorCommandKindUVE::CopyDatabase: {
+            StateUVE stateBefore = CaptureStateUVE();
             clipboard_ = *entry;
-            ++revision_;
+            CommitMutationUVE(std::move(stateBefore));
             return MakeResponseUVE(command, true, MotionQueryEditorResponseCodeUVE::Applied,
                                    "motion query editor database copied");
+        }
         case MotionQueryEditorCommandKindUVE::ReadSnapshot:
         case MotionQueryEditorCommandKindUVE::RegisterDatabase:
         case MotionQueryEditorCommandKindUVE::RemoveDatabase:
         case MotionQueryEditorCommandKindUVE::PasteDatabase:
+        case MotionQueryEditorCommandKindUVE::Undo:
+        case MotionQueryEditorCommandKindUVE::Redo:
             break;
     }
     return MakeResponseUVE(command, false, MotionQueryEditorResponseCodeUVE::InvalidCommand,
@@ -290,7 +338,28 @@ void MotionQueryEditorAuthoringSessionUVE::ClearUVE() noexcept {
     databases_.clear();
     selectedResource_.reset();
     clipboard_.reset();
+    undoHistory_.clear();
+    redoHistory_.clear();
     revision_ = 0U;
+}
+
+MotionQueryEditorAuthoringSessionUVE::StateUVE MotionQueryEditorAuthoringSessionUVE::CaptureStateUVE() const {
+    return StateUVE{databases_, selectedResource_, clipboard_};
+}
+
+void MotionQueryEditorAuthoringSessionUVE::RestoreStateUVE(StateUVE state) noexcept {
+    databases_ = std::move(state.databases);
+    selectedResource_ = std::move(state.selectedResource);
+    clipboard_ = std::move(state.clipboard);
+}
+
+void MotionQueryEditorAuthoringSessionUVE::CommitMutationUVE(StateUVE stateBefore) {
+    if (undoHistory_.size() >= kMotionQueryEditorMaximumHistoryEntriesUVE) {
+        undoHistory_.erase(undoHistory_.begin());
+    }
+    undoHistory_.push_back(std::move(stateBefore));
+    redoHistory_.clear();
+    ++revision_;
 }
 
 MotionQueryEditorSnapshotUVE MotionQueryEditorAuthoringSessionUVE::GetSnapshotUVE() const noexcept {
@@ -298,6 +367,8 @@ MotionQueryEditorSnapshotUVE MotionQueryEditorAuthoringSessionUVE::GetSnapshotUV
     snapshot.revision = revision_;
     snapshot.selectedResource = selectedResource_;
     snapshot.clipboardAvailable = clipboard_.has_value();
+    snapshot.canUndo = !undoHistory_.empty();
+    snapshot.canRedo = !redoHistory_.empty();
     snapshot.databases.reserve(databases_.size());
     for (const MotionQueryEditorDatabaseEntryUVE& entry : databases_) {
         snapshot.databases.push_back(BuildRowUVE(entry, selectedResource_));

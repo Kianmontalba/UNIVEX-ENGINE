@@ -184,6 +184,91 @@ TEST(MotionQueryEditorAuthoringUVETest, CopyAndPasteUVE_RejectsMissingOrDuplicat
     EXPECT_EQ(session.GetSnapshotUVE().revision, 2U);
     session.ClearUVE();
     EXPECT_FALSE(session.GetSnapshotUVE().clipboardAvailable);
+    EXPECT_FALSE(session.GetSnapshotUVE().canUndo);
+    EXPECT_FALSE(session.GetSnapshotUVE().canRedo);
+}
+
+TEST(MotionQueryEditorAuthoringUVETest, UndoRedoUVE_RestoresSnapshotsAndHonorsRevisionGuards) {
+    MotionQueryEditorAuthoringSessionUVE session;
+    MotionQueryEditorCommandUVE emptyUndo = MakeCommandUVE(
+        MotionQueryEditorCommandKindUVE::Undo, 0U);
+    EXPECT_EQ(session.DispatchUVE(emptyUndo).code, MotionQueryEditorResponseCodeUVE::NothingToUndo);
+
+    MotionQueryEditorCommandUVE registerCommand = MakeCommandUVE(
+        MotionQueryEditorCommandKindUVE::RegisterDatabase, 0U);
+    registerCommand.database = MakeEntryUVE(1U, "Main", "main-db");
+    ASSERT_TRUE(session.DispatchUVE(registerCommand).applied);
+
+    MotionQueryEditorCommandUVE rename = MakeCommandUVE(
+        MotionQueryEditorCommandKindUVE::SetDisplayName, 1U);
+    rename.resource = MakeResourceUVE(1U);
+    rename.text = "Renamed";
+    ASSERT_TRUE(session.DispatchUVE(rename).applied);
+    ASSERT_EQ(session.GetSnapshotUVE().revision, 2U);
+    EXPECT_TRUE(session.GetSnapshotUVE().canUndo);
+    EXPECT_FALSE(session.GetSnapshotUVE().canRedo);
+
+    MotionQueryEditorCommandUVE staleUndo = MakeCommandUVE(
+        MotionQueryEditorCommandKindUVE::Undo, 1U);
+    EXPECT_EQ(session.DispatchUVE(staleUndo).code, MotionQueryEditorResponseCodeUVE::StaleRevision);
+
+    MotionQueryEditorCommandUVE undo = MakeCommandUVE(
+        MotionQueryEditorCommandKindUVE::Undo, 2U);
+    const MotionQueryEditorResponseUVE undoResponse = session.DispatchUVE(undo);
+    ASSERT_TRUE(undoResponse.applied);
+    ASSERT_EQ(undoResponse.snapshot.revision, 3U);
+    ASSERT_EQ(undoResponse.snapshot.databases.size(), 1U);
+    EXPECT_EQ(undoResponse.snapshot.databases[0].displayName, "Main");
+    EXPECT_TRUE(undoResponse.snapshot.canRedo);
+
+    MotionQueryEditorCommandUVE redo = MakeCommandUVE(
+        MotionQueryEditorCommandKindUVE::Redo, 3U);
+    const MotionQueryEditorResponseUVE redoResponse = session.DispatchUVE(redo);
+    ASSERT_TRUE(redoResponse.applied);
+    ASSERT_EQ(redoResponse.snapshot.revision, 4U);
+    ASSERT_EQ(redoResponse.snapshot.databases[0].displayName, "Renamed");
+    EXPECT_TRUE(redoResponse.snapshot.canUndo);
+    EXPECT_FALSE(redoResponse.snapshot.canRedo);
+
+    MotionQueryEditorCommandUVE emptyRedo = MakeCommandUVE(
+        MotionQueryEditorCommandKindUVE::Redo, 4U);
+    EXPECT_EQ(session.DispatchUVE(emptyRedo).code, MotionQueryEditorResponseCodeUVE::NothingToRedo);
+
+    MotionQueryEditorCommandUVE branch = MakeCommandUVE(
+        MotionQueryEditorCommandKindUVE::SetSchemaId, 4U);
+    branch.resource = MakeResourceUVE(1U);
+    branch.text = "branch-schema";
+    ASSERT_TRUE(session.DispatchUVE(branch).applied);
+    EXPECT_FALSE(session.GetSnapshotUVE().canRedo);
+}
+
+TEST(MotionQueryEditorAuthoringUVETest, UndoRedoUVE_EnforcesBoundedHistoryCapacity) {
+    MotionQueryEditorAuthoringSessionUVE session;
+    MotionQueryEditorCommandUVE registerCommand = MakeCommandUVE(
+        MotionQueryEditorCommandKindUVE::RegisterDatabase, 0U);
+    registerCommand.database = MakeEntryUVE(1U, "Main", "main-db");
+    ASSERT_TRUE(session.DispatchUVE(registerCommand).applied);
+
+    std::uint64_t revision = 1U;
+    for (std::size_t index = 0U; index < kMotionQueryEditorMaximumHistoryEntriesUVE + 8U; ++index) {
+        MotionQueryEditorCommandUVE rename = MakeCommandUVE(
+            MotionQueryEditorCommandKindUVE::SetDisplayName, revision);
+        rename.resource = MakeResourceUVE(1U);
+        rename.text = "Name-" + std::to_string(index);
+        ASSERT_TRUE(session.DispatchUVE(rename).applied);
+        ++revision;
+    }
+
+    std::size_t undoCount = 0U;
+    while (session.GetSnapshotUVE().canUndo) {
+        MotionQueryEditorCommandUVE undo = MakeCommandUVE(
+            MotionQueryEditorCommandKindUVE::Undo, revision);
+        ASSERT_TRUE(session.DispatchUVE(undo).applied);
+        ++revision;
+        ++undoCount;
+    }
+    EXPECT_EQ(undoCount, kMotionQueryEditorMaximumHistoryEntriesUVE);
+    EXPECT_TRUE(session.GetSnapshotUVE().canRedo);
 }
 
 TEST(MotionQueryEditorAuthoringUVETest, SelectAndRemoveUVE_UsesNamedResourceCommands) {
