@@ -48,6 +48,14 @@ ScriptNodeTypeDescriptorUVE MakeSinkNodeUVE() {
     };
 }
 
+ScriptNodeTypeDescriptorUVE MakeBooleanSourceNodeUVE() {
+    return ScriptNodeTypeDescriptorUVE{
+        "test.boolean-source",
+        "Boolean Source",
+        {{"Out", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+    };
+}
+
 void RegisterTestNodesUVE(ScriptNodeRegistryUVE& registry) {
     ASSERT_TRUE(registry.RegisterNodeTypeUVE(MakeSourceNodeUVE()));
     ASSERT_TRUE(registry.RegisterNodeTypeUVE(MakeSinkNodeUVE()));
@@ -216,17 +224,47 @@ TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_LowersDirectSequenceExec
     EXPECT_EQ(result.program->instructions[2].kind, ScriptIrInstructionKindUVE::ExecuteNode);
 }
 
-TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_DefersFlowBranchRuntime) {
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_LowersFlowBranchToConditionalJump) {
     ScriptNodeRegistryUVE registry;
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+    ASSERT_TRUE(registry.RegisterNodeTypeUVE(MakeSinkNodeUVE()));
     ScriptGraphUVE graph;
     ASSERT_TRUE(graph.AddNodeUVE({1U, "flow.branch"}));
+    ASSERT_TRUE(graph.AddNodeUVE({2U, "test.sink"}));
+    ASSERT_TRUE(graph.AddNodeUVE({3U, "test.sink"}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{1U, "True"}, {2U, "Exec"}}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{1U, "False"}, {3U, "Exec"}}));
+
+    const ScriptIrCompileResultUVE result = CompileScriptGraphToIrUVE(graph, registry);
+    ASSERT_TRUE(result.IsSuccessUVE());
+    ASSERT_EQ(result.program->instructions.size(), 3U);
+    const ScriptIrInstructionUVE& branch = result.program->instructions.front();
+    EXPECT_EQ(branch.kind, ScriptIrInstructionKindUVE::ConditionalJump);
+    EXPECT_EQ(branch.sourceNodeId, 1U);
+    EXPECT_EQ(branch.nodeTypeId, "flow.branch");
+    EXPECT_EQ(branch.sourcePinName, "Condition");
+    EXPECT_TRUE(branch.targetPinName.empty());
+    EXPECT_EQ(branch.trueTargetInstructionIndex, 1U);
+    EXPECT_EQ(branch.falseTargetInstructionIndex, 2U);
+    EXPECT_EQ(result.program->instructions[1].kind, ScriptIrInstructionKindUVE::ExecuteNode);
+    EXPECT_EQ(result.program->instructions[2].kind, ScriptIrInstructionKindUVE::ExecuteNode);
+}
+
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsFlowBranchDataConditionLink) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+    ASSERT_TRUE(registry.RegisterNodeTypeUVE(MakeBooleanSourceNodeUVE()));
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({1U, "flow.branch"}));
+    ASSERT_TRUE(graph.AddNodeUVE({2U, "test.boolean-source"}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{2U, "Out"}, {1U, "Condition"}}));
 
     const ScriptIrCompileResultUVE result = CompileScriptGraphToIrUVE(graph, registry);
     EXPECT_FALSE(result.IsSuccessUVE());
     ASSERT_EQ(result.diagnostics.size(), 1U);
     EXPECT_EQ(result.diagnostics.front().code, ScriptValidationCodeUVE::UnsupportedRuntimeNode);
     EXPECT_EQ(result.diagnostics.front().nodeId, 1U);
+    EXPECT_EQ(result.diagnostics.front().pinName, "Condition");
 }
 
 TEST(ScriptNodeRegistryUVETest, FindNodeTypeUVE_ReturnsCopiedStableDescriptorView) {
