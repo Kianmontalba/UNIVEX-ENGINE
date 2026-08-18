@@ -65,6 +65,34 @@ TEST(MotionQueryEditorAuthoringUVETest, RegisterUVE_ProducesValidCopiedSortedSna
     EXPECT_EQ(response.snapshot.revision, 2U);
 }
 
+TEST(MotionQueryEditorAuthoringUVETest, EditorUtilsUVE_ValidateNamesNormalizeSchemaIdsAndDetectCandidateDuplicates) {
+    EXPECT_TRUE(IsValidMotionQueryEditorDisplayNameUVE("Main"));
+    EXPECT_FALSE(IsValidMotionQueryEditorDisplayNameUVE(""));
+    EXPECT_FALSE(IsValidMotionQueryEditorDisplayNameUVE(
+        std::string(kMotionQueryEditorMaximumDisplayNameBytesUVE + 1U, 'x')));
+    EXPECT_EQ(NormalizeMotionQueryEditorSchemaIdUVE(" \t locomotion-v1 \r\n"), "locomotion-v1");
+    EXPECT_TRUE(NormalizeMotionQueryEditorSchemaIdUVE(" \t ").empty());
+
+    const std::vector<UVE::Core::MotionMatchingCandidateUVE> valid = {
+        MakeCandidateUVE("candidate-0"), MakeCandidateUVE("candidate-1")};
+    EXPECT_TRUE(ValidateMotionQueryEditorCandidateIdentifiersUVE(valid).IsValidUVE());
+
+    const std::vector<UVE::Core::MotionMatchingCandidateUVE> duplicate = {
+        MakeCandidateUVE("candidate-0"), MakeCandidateUVE("candidate-0")};
+    const auto duplicateResult = ValidateMotionQueryEditorCandidateIdentifiersUVE(duplicate);
+    EXPECT_EQ(duplicateResult.code, MotionQueryEditorUtilityValidationCodeUVE::DuplicateCandidateIdentifier);
+    EXPECT_EQ(duplicateResult.index, 1U);
+
+    const std::string oversizedId(
+        UVE::Core::MotionMatchingCandidateUVE::kMaximumIdentifierBytesUVE + 1U, 'x');
+    const std::vector<UVE::Core::MotionMatchingCandidateUVE> oversized = {
+        MakeCandidateUVE(oversizedId.c_str())};
+    const auto oversizedResult = ValidateMotionQueryEditorCandidateIdentifiersUVE(oversized);
+    EXPECT_EQ(oversizedResult.code,
+              MotionQueryEditorUtilityValidationCodeUVE::InvalidCandidateIdentifier);
+    EXPECT_EQ(oversizedResult.index, 0U);
+}
+
 TEST(MotionQueryEditorAuthoringUVETest, DispatchUVE_RejectsStaleRevisionAndDuplicateDatabase) {
     MotionQueryEditorAuthoringSessionUVE session;
     MotionQueryEditorCommandUVE registerCommand = MakeCommandUVE(
@@ -237,9 +265,12 @@ TEST(MotionQueryEditorAuthoringUVETest, UndoRedoUVE_RestoresSnapshotsAndHonorsRe
     MotionQueryEditorCommandUVE branch = MakeCommandUVE(
         MotionQueryEditorCommandKindUVE::SetSchemaId, 4U);
     branch.resource = MakeResourceUVE(1U);
-    branch.text = "branch-schema";
+    branch.text = " \tbranch-schema\r\n";
     ASSERT_TRUE(session.DispatchUVE(branch).applied);
     EXPECT_FALSE(session.GetSnapshotUVE().canRedo);
+    UVE::Core::MotionQueryDatabaseContractUVE normalizedContract;
+    ASSERT_TRUE(session.TryGetDatabaseCopyUVE(MakeResourceUVE(1U), normalizedContract));
+    EXPECT_EQ(normalizedContract.schema.schemaId, "branch-schema");
 }
 
 TEST(MotionQueryEditorAuthoringUVETest, UndoRedoUVE_EnforcesBoundedHistoryCapacity) {

@@ -23,6 +23,48 @@ namespace {
 }
 } // namespace
 
+bool IsValidMotionQueryEditorDisplayNameUVE(const std::string_view displayName) noexcept {
+    return !displayName.empty() && displayName.size() <= kMotionQueryEditorMaximumDisplayNameBytesUVE;
+}
+
+std::string NormalizeMotionQueryEditorSchemaIdUVE(const std::string_view schemaId) {
+    const auto isWhitespace = [](const char value) noexcept {
+        return value == ' ' || value == '\t' || value == '\n' || value == '\r' ||
+               value == '\f' || value == '\v';
+    };
+    std::size_t first = 0U;
+    while (first < schemaId.size() && isWhitespace(schemaId[first])) {
+        ++first;
+    }
+    std::size_t last = schemaId.size();
+    while (last > first && isWhitespace(schemaId[last - 1U])) {
+        --last;
+    }
+    return std::string(schemaId.substr(first, last - first));
+}
+
+MotionQueryEditorUtilityValidationResultUVE ValidateMotionQueryEditorCandidateIdentifiersUVE(
+    const std::vector<UVE::Core::MotionMatchingCandidateUVE>& candidates) noexcept {
+    for (std::size_t index = 0U; index < candidates.size(); ++index) {
+        const std::string& candidateId = candidates[index].candidateId;
+        if (candidateId.empty() ||
+            candidateId.size() > UVE::Core::MotionMatchingCandidateUVE::kMaximumIdentifierBytesUVE) {
+            return MotionQueryEditorUtilityValidationResultUVE{
+                MotionQueryEditorUtilityValidationCodeUVE::InvalidCandidateIdentifier, index,
+                "motion matching candidate identifier is empty or too long"};
+        }
+        for (std::size_t previous = 0U; previous < index; ++previous) {
+            if (candidates[previous].candidateId == candidateId) {
+                return MotionQueryEditorUtilityValidationResultUVE{
+                    MotionQueryEditorUtilityValidationCodeUVE::DuplicateCandidateIdentifier, index,
+                    "motion matching candidate identifiers must be unique"};
+            }
+        }
+    }
+    return MotionQueryEditorUtilityValidationResultUVE{
+        MotionQueryEditorUtilityValidationCodeUVE::Valid, 0U, "valid"};
+}
+
 const std::vector<MotionQueryEditorCommandMetadataUVE>&
 GetMotionQueryEditorCommandMetadataUVE() noexcept {
     static const std::vector<MotionQueryEditorCommandMetadataUVE> metadata = {
@@ -106,9 +148,15 @@ MotionQueryEditorResponseUVE MotionQueryEditorAuthoringSessionUVE::DispatchUVE(
 
     if (command.kind == MotionQueryEditorCommandKindUVE::RegisterDatabase) {
         if (!command.database.has_value() || !IsValidResourceUVE(command.database->resource) ||
-            !IsValidDisplayNameUVE(command.database->displayName)) {
+            !IsValidMotionQueryEditorDisplayNameUVE(command.database->displayName)) {
             return MakeResponseUVE(command, false, MotionQueryEditorResponseCodeUVE::InvalidDatabase,
                                    "motion query editor database descriptor is invalid");
+        }
+        const MotionQueryEditorUtilityValidationResultUVE candidateValidation =
+            ValidateMotionQueryEditorCandidateIdentifiersUVE(command.database->contract.database.candidates);
+        if (!candidateValidation.IsValidUVE()) {
+            return MakeResponseUVE(command, false, MotionQueryEditorResponseCodeUVE::InvalidDatabase,
+                                   candidateValidation.message);
         }
         const UVE::Core::MotionQueryDatabaseContractResultUVE validation =
             UVE::Core::ValidateMotionQueryDatabaseContractUVE(command.database->contract);
@@ -160,7 +208,7 @@ MotionQueryEditorResponseUVE MotionQueryEditorAuthoringSessionUVE::DispatchUVE(
         }
         if (!command.pasteTarget.has_value() ||
             !IsValidResourceUVE(command.pasteTarget->resource) ||
-            !IsValidDisplayNameUVE(command.pasteTarget->displayName) ||
+            !IsValidMotionQueryEditorDisplayNameUVE(command.pasteTarget->displayName) ||
             !command.pasteTarget->context.IsValidUVE()) {
             return MakeResponseUVE(command, false, MotionQueryEditorResponseCodeUVE::InvalidPasteTarget,
                                    "paste database requires a valid destination identity");
@@ -214,7 +262,7 @@ MotionQueryEditorResponseUVE MotionQueryEditorAuthoringSessionUVE::DispatchUVE(
                                    "motion query editor database selected");
         }
         case MotionQueryEditorCommandKindUVE::SetDisplayName: {
-            if (!command.text.has_value() || !IsValidDisplayNameUVE(*command.text)) {
+            if (!command.text.has_value() || !IsValidMotionQueryEditorDisplayNameUVE(*command.text)) {
                 return MakeResponseUVE(command, false, MotionQueryEditorResponseCodeUVE::InvalidCommand,
                                        "set display name requires bounded text");
             }
@@ -226,13 +274,19 @@ MotionQueryEditorResponseUVE MotionQueryEditorAuthoringSessionUVE::DispatchUVE(
                                    "motion query editor display name updated");
         }
         case MotionQueryEditorCommandKindUVE::SetSchemaId: {
-            if (!command.text.has_value() || command.text->empty()) {
+            if (!command.text.has_value()) {
+                return MakeResponseUVE(command, false, MotionQueryEditorResponseCodeUVE::InvalidCommand,
+                                       "set schema ID requires non-empty text");
+            }
+            const std::string normalizedSchemaId =
+                NormalizeMotionQueryEditorSchemaIdUVE(*command.text);
+            if (normalizedSchemaId.empty()) {
                 return MakeResponseUVE(command, false, MotionQueryEditorResponseCodeUVE::InvalidCommand,
                                        "set schema ID requires non-empty text");
             }
             StateUVE stateBefore = CaptureStateUVE();
             const std::string previous = entry->contract.schema.schemaId;
-            entry->contract.schema.schemaId = *command.text;
+            entry->contract.schema.schemaId = normalizedSchemaId;
             const auto validation = UVE::Core::ValidateMotionQueryDatabaseContractUVE(entry->contract);
             if (!validation.IsValidUVE()) {
                 entry->contract.schema.schemaId = previous;
@@ -272,6 +326,13 @@ MotionQueryEditorResponseUVE MotionQueryEditorAuthoringSessionUVE::DispatchUVE(
             const UVE::Core::MotionMatchingDatabaseUVE previous = entry->contract.database;
             const std::size_t previousEventCount = entry->contract.events.size();
             entry->contract.database.candidates.push_back(*command.candidate);
+            const MotionQueryEditorUtilityValidationResultUVE candidateValidation =
+                ValidateMotionQueryEditorCandidateIdentifiersUVE(entry->contract.database.candidates);
+            if (!candidateValidation.IsValidUVE()) {
+                entry->contract.database = previous;
+                return MakeResponseUVE(command, false, MotionQueryEditorResponseCodeUVE::ValidationFailed,
+                                       candidateValidation.message);
+            }
             const auto eventResult = UVE::Core::AppendMotionQueryDatabaseEventUVE(
                 entry->contract, UVE::Core::MotionQueryDatabaseEventUVE{
                                       UVE::Core::MotionQueryDatabaseEventKindUVE::CandidateAdded, 0U,
@@ -436,10 +497,6 @@ const MotionQueryEditorDatabaseEntryUVE* MotionQueryEditorAuthoringSessionUVE::F
 bool MotionQueryEditorAuthoringSessionUVE::IsValidResourceUVE(
     const UVE::Asset::ResourceHandleUVE resource) noexcept {
     return resource.guid.value != 0U && resource.generation != 0U;
-}
-
-bool MotionQueryEditorAuthoringSessionUVE::IsValidDisplayNameUVE(const std::string& displayName) noexcept {
-    return !displayName.empty() && displayName.size() <= kMotionQueryEditorMaximumDisplayNameBytesUVE;
 }
 
 MotionQueryEditorDatabaseRowUVE MotionQueryEditorAuthoringSessionUVE::BuildRowUVE(
