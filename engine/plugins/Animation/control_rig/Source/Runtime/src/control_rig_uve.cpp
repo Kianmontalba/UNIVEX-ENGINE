@@ -33,13 +33,6 @@ constexpr float kEpsilonUVE = 1.0e-5F;
     return Math::NormalizeUVE(value);
 }
 
-[[nodiscard]] Math::Vector3UVE BlendVectorUVE(const Math::Vector3UVE& left,
-                                               const Math::Vector3UVE& right,
-                                               const float weight) noexcept {
-    const float factor = std::clamp(weight, 0.0F, 1.0F);
-    return left * (1.0F - factor) + right * factor;
-}
-
 } // namespace
 
 ControlRigValidationResultUVE ValidateControlRigUVE(const ControlRigUVE& rig) noexcept {
@@ -122,6 +115,23 @@ ControlRigValidationResultUVE ValidateControlRigUVE(const ControlRigUVE& rig) no
     return {ControlRigValidationCodeUVE::Valid, {}, "Control Rig is valid."};
 }
 
+TransformPoseUVE BlendControlRigPoseUVE(const TransformPoseUVE& source,
+                                         const TransformPoseUVE& target,
+                                         const float weight) noexcept {
+    const float factor = std::isfinite(weight) ? std::clamp(weight, 0.0F, 1.0F) : 0.0F;
+    TransformPoseUVE blended;
+    blended.position = source.position * (1.0F - factor) + target.position * factor;
+    blended.scale = source.scale * (1.0F - factor) + target.scale * factor;
+    blended.rotation = Math::QuaternionUVE{
+        source.rotation.x * (1.0F - factor) + target.rotation.x * factor,
+        source.rotation.y * (1.0F - factor) + target.rotation.y * factor,
+        source.rotation.z * (1.0F - factor) + target.rotation.z * factor,
+        source.rotation.w * (1.0F - factor) + target.rotation.w * factor,
+    };
+    TransformPoseUVE normalized;
+    return TryNormalizeTransformPoseUVE(blended, normalized) ? normalized : source;
+}
+
 TwoBoneIKSolveResultUVE SolveTwoBoneIKUVE(const TransformPoseUVE& rootPose,
                                           const TransformPoseUVE& midPose,
                                           const TransformPoseUVE& endPose,
@@ -163,9 +173,12 @@ TwoBoneIKSolveResultUVE SolveTwoBoneIKUVE(const TransformPoseUVE& rootPose,
     const float bend = firstLength * std::sqrt(std::max(0.0F, 1.0F - cosine * cosine));
     const Math::Vector3UVE solvedMid = root + direction * along + bendDirection * bend;
     const Math::Vector3UVE solvedEnd = root + direction * solvedDistance;
-    const float factor = std::clamp(weight, 0.0F, 1.0F);
-    result.midPose.position = BlendVectorUVE(midPose.position, solvedMid, factor);
-    result.endPose.position = BlendVectorUVE(endPose.position, solvedEnd, factor);
+    TransformPoseUVE solvedMidPose = midPose;
+    solvedMidPose.position = solvedMid;
+    TransformPoseUVE solvedEndPose = endPose;
+    solvedEndPose.position = solvedEnd;
+    result.midPose = BlendControlRigPoseUVE(midPose, solvedMidPose, weight);
+    result.endPose = BlendControlRigPoseUVE(endPose, solvedEndPose, weight);
     result.rootPose.position = rootPose.position;
     return result;
 }
