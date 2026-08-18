@@ -9,6 +9,7 @@
 
 #include "uve/core/engine_core_uve.h"
 #include "uve/editor/editor_bridge_uve.h"
+#include "uve/plugins/motion_query_database_contract_uve.h"
 #include "uve/scene/components/mesh_component_uve.h"
 
 namespace UVE::Editor::Tests {
@@ -664,16 +665,11 @@ TEST(EditorBridgeUVETest, MotionQueryUVE_ExposesCopiedSnapshotAndRevisionGuarded
         EXPECT_EQ(readResponse.code, "bridge.motion_query.snapshot.read");
         EXPECT_TRUE(readResponse.snapshot.motionQuery.authoring.databases.empty());
 
-        Core::MotionQueryDatabaseContractUVE contract;
-        contract.context.databaseId = "bridge-db";
-        contract.context.generation = 1U;
-        contract.schema.schemaId = "bridge-schema";
-        contract.settings.maximumCandidates = 4U;
-        Core::MotionMatchingCandidateUVE candidate;
-        candidate.candidateId = "bridge-candidate";
-        candidate.sourceClipId = "walk";
-        candidate.feature.facingDirection = Math::Vector3UVE{0.0F, 0.0F, 1.0F};
-        contract.database.candidates = {candidate};
+        const Core::MotionQueryDatabaseFactoryResultUVE factory =
+            Core::CreateDefaultMotionQueryDatabaseContractUVE("bridge-db", 1U, "bridge-schema");
+        ASSERT_TRUE(factory.IsCreatedUVE()) << factory.validation.message;
+        Core::MotionQueryDatabaseContractUVE contract = factory.contract;
+        contract.database.candidates.front().candidateId = "bridge-candidate";
         Plugins::Editor::MotionQueryEditorDatabaseEntryUVE entry;
         entry.resource = Asset::ResourceHandleUVE{Asset::AssetGuidUVE{77U}, 1U};
         entry.displayName = "Bridge Motion Database";

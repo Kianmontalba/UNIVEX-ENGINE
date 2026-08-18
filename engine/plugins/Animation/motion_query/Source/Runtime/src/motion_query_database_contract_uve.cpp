@@ -4,6 +4,7 @@
 
 #include <cmath>
 #include <limits>
+#include <utility>
 
 namespace UVE::Core {
 namespace {
@@ -118,6 +119,32 @@ MotionQueryDatabaseContractResultUVE AppendMotionQueryDatabaseEventUVE(
     contract.events.push_back(std::move(event));
     return MotionQueryDatabaseContractResultUVE{MotionQueryDatabaseContractCodeUVE::Valid, 0U,
                                                 "valid"};
+}
+
+MotionQueryDatabaseFactoryResultUVE CreateDefaultMotionQueryDatabaseContractUVE(
+    const std::string_view databaseId, const std::uint64_t generation,
+    const std::string_view schemaId, const std::size_t maximumCandidates) {
+    MotionQueryDatabaseFactoryResultUVE result;
+    result.contract.context.databaseId = databaseId;
+    result.contract.context.generation = generation;
+    result.contract.schema.schemaId = schemaId;
+    result.contract.schema.trajectoryOffsets = {0.0, 0.25};
+    result.contract.schema.featureChannelIds = {"root_velocity"};
+    result.contract.settings.maximumCandidates = maximumCandidates;
+
+    MotionMatchingCandidateUVE candidate;
+    candidate.candidateId = "default-candidate-0";
+    candidate.sourceClipId = "default-motion";
+    candidate.sampleTimeSeconds = 0.0;
+    candidate.feature.rootVelocity = {0.0F, 0.0F, 0.0F};
+    candidate.feature.facingDirection = {0.0F, 0.0F, 1.0F};
+    candidate.feature.trajectory = {
+        MotionTrajectorySampleUVE{0.0, {0.0F, 0.0F, 0.0F}},
+        MotionTrajectorySampleUVE{0.25, {0.25F, 0.0F, 0.0F}},
+    };
+    result.contract.database.candidates.push_back(std::move(candidate));
+    result.validation = ValidateMotionQueryDatabaseContractUVE(result.contract);
+    return result;
 }
 
 } // namespace UVE::Core

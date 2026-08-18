@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace UVE::Core {
@@ -95,5 +96,18 @@ struct MotionQueryDatabaseContractResultUVE final {
 
 [[nodiscard]] MotionQueryDatabaseContractResultUVE AppendMotionQueryDatabaseEventUVE(
     MotionQueryDatabaseContractUVE& contract, MotionQueryDatabaseEventUVE event);
+
+struct MotionQueryDatabaseFactoryResultUVE final {
+    MotionQueryDatabaseContractUVE contract;
+    MotionQueryDatabaseContractResultUVE validation;
+
+    [[nodiscard]] bool IsCreatedUVE() const noexcept {
+        return validation.IsValidUVE();
+    }
+};
+
+[[nodiscard]] MotionQueryDatabaseFactoryResultUVE CreateDefaultMotionQueryDatabaseContractUVE(
+    std::string_view databaseId, std::uint64_t generation, std::string_view schemaId,
+    std::size_t maximumCandidates = 4U);
 
 } // namespace UVE::Core
