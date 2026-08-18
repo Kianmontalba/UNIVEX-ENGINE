@@ -495,6 +495,70 @@ TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesBooleanConditionBe
     EXPECT_EQ(result.program->instructions[3].kind, ScriptIrInstructionKindUVE::ExecuteNode);
 }
 
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesNumberComparisonConditionBeforeFlowBranch) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+    ASSERT_TRUE(registry.RegisterNodeTypeUVE(MakeSinkNodeUVE()));
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({1U, "flow.branch"}));
+    ASSERT_TRUE(graph.AddNodeUVE({2U, "logic.boolean.greater"}));
+    ASSERT_TRUE(graph.AddNodeUVE({3U, "test.sink"}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{2U, "Result"}, {1U, "Condition"}}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{1U, "True"}, {3U, "Exec"}}));
+
+    const ScriptIrCompileResultUVE result = CompileScriptGraphToIrUVE(graph, registry);
+    ASSERT_TRUE(result.IsSuccessUVE());
+    ASSERT_EQ(result.program->instructions.size(), 4U);
+    EXPECT_EQ(result.program->instructions[0].sourceNodeId, 2U);
+    EXPECT_EQ(result.program->instructions[0].kind, ScriptIrInstructionKindUVE::ExecuteNode);
+    EXPECT_EQ(result.program->instructions[1].kind, ScriptIrInstructionKindUVE::TransferValue);
+    EXPECT_TRUE(result.program->instructions[1].isStagedTransfer);
+    EXPECT_EQ(result.program->instructions[1].sourceNodeId, 2U);
+    EXPECT_EQ(result.program->instructions[1].targetNodeId, 1U);
+    EXPECT_EQ(result.program->instructions[1].sourcePinName, "Result");
+    EXPECT_EQ(result.program->instructions[1].targetPinName, "Condition");
+    EXPECT_EQ(result.program->instructions[2].kind, ScriptIrInstructionKindUVE::ConditionalJump);
+    EXPECT_EQ(result.program->instructions[2].trueTargetInstructionIndex, 3U);
+    EXPECT_EQ(result.program->instructions[2].falseTargetInstructionIndex, 4U);
+    EXPECT_EQ(result.program->instructions[3].sourceNodeId, 3U);
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_RunsNumberComparisonConditionBranch) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+    ASSERT_TRUE(registry.RegisterNodeTypeUVE(MakeSinkNodeUVE()));
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({1U, "flow.branch"}));
+    ASSERT_TRUE(graph.AddNodeUVE({2U, "logic.boolean.greater"}));
+    ASSERT_TRUE(graph.AddNodeUVE({3U, "test.sink"}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{2U, "Result"}, {1U, "Condition"}}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{1U, "True"}, {3U, "Exec"}}));
+
+    const ScriptIrCompileResultUVE compiled = CompileScriptGraphToIrUVE(graph, registry);
+    ASSERT_TRUE(compiled.IsSuccessUVE());
+    std::vector<ScriptBytecodeDiagnosticUVE> diagnostics;
+    const std::optional<ScriptBytecodeProgramUVE> bytecode =
+        LowerIrToBytecodeUVE(*compiled.program, diagnostics);
+    ASSERT_TRUE(bytecode.has_value());
+    ASSERT_TRUE(diagnostics.empty());
+
+    ScriptVmExecutionContextUVE trueContext;
+    ASSERT_TRUE(trueContext.SetInputUVE(2U, "A", 3.0F));
+    ASSERT_TRUE(trueContext.SetInputUVE(2U, "B", 2.0F));
+    const ScriptVmExecutionResultUVE trueResult = ExecuteScriptBytecodeUVE(*bytecode, trueContext);
+    EXPECT_TRUE(trueResult.IsSuccessUVE());
+    EXPECT_EQ(trueResult.instructionsExecuted, 4U);
+    EXPECT_TRUE(std::get<bool>(*trueContext.FindOutputUVE(2U, "Result")));
+
+    ScriptVmExecutionContextUVE falseContext;
+    ASSERT_TRUE(falseContext.SetInputUVE(2U, "A", 2.0F));
+    ASSERT_TRUE(falseContext.SetInputUVE(2U, "B", 3.0F));
+    const ScriptVmExecutionResultUVE falseResult = ExecuteScriptBytecodeUVE(*bytecode, falseContext);
+    EXPECT_TRUE(falseResult.IsSuccessUVE());
+    EXPECT_EQ(falseResult.instructionsExecuted, 3U);
+    EXPECT_FALSE(std::get<bool>(*falseContext.FindOutputUVE(2U, "Result")));
+}
+
 TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesEntityQueryConditionBeforeFlowBranch) {
     ScriptNodeRegistryUVE registry;
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
