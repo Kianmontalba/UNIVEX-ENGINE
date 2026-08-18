@@ -898,7 +898,9 @@ public partial class MainWindow : Window
     {
         bool connected = state == HostSessionState.Connected;
         MotionQueryAuthoringDatabasesListBox.ItemsSource = motionQuery.Authoring.Databases;
+        MotionQueryAuthoringCommandMetadataListBox.ItemsSource = motionQuery.Authoring.CommandMetadata;
         MotionQueryAuthoringDatabasesListBox.IsEnabled = connected && motionQuery.Authoring.Databases.Count > 0;
+        MotionQueryAuthoringCommandMetadataListBox.IsEnabled = connected && motionQuery.Authoring.CommandMetadata.Count > 0;
         MotionQueryAuthoringStatusTextBlock.Text = connected
             ? $"Authoring revision {motionQuery.Authoring.Revision}; {motionQuery.Authoring.Databases.Count} native database(s). {motionQuery.Authoring.Diagnostic}"
             : motionQuery.Authoring.Diagnostic;
