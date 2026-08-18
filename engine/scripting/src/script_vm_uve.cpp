@@ -618,7 +618,9 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                     failure.PrependTraceEventsUVE(std::move(result.trace), result.traceTruncated);
                     return failure;
                 }
-                result.AppendTraceEventUVE({ScriptVmTraceEventKindUVE::ValueTransferred,
+                result.AppendTraceEventUVE({instruction.isStagedTransfer
+                                                 ? ScriptVmTraceEventKindUVE::StagedValueTransferred
+                                                 : ScriptVmTraceEventKindUVE::ValueTransferred,
                                              Scene::kInvalidEntityUVE, index, instruction.sourceNodeId,
                                              instruction.targetNodeId, {}, {}});
             } else {

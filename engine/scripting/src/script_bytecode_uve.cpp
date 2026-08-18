@@ -8,7 +8,7 @@ namespace UVE::Scripting {
 namespace {
 constexpr std::uint8_t kMagic[] = {'U', 'V', 'E', 'S'};
 constexpr std::size_t kHeaderSize = 8U;
-constexpr std::size_t kInstructionSize = 29U;
+constexpr std::size_t kInstructionSize = 30U;
 
 void WriteU32(std::vector<std::uint8_t>& bytes, const std::uint32_t value) {
     for (std::size_t index = 0U; index < 4U; ++index) {
@@ -102,6 +102,9 @@ std::vector<std::uint8_t> EncodeScriptBytecodeUVE(
         bytes.insert(bytes.end(), instruction.nodeTypeId.begin(), instruction.nodeTypeId.end());
         bytes.insert(bytes.end(), instruction.sourcePinName.begin(), instruction.sourcePinName.end());
         bytes.insert(bytes.end(), instruction.targetPinName.begin(), instruction.targetPinName.end());
+        if (program.version >= ScriptBytecodeProgramUVE::kStagedTransferVersionUVE) {
+            bytes.push_back(instruction.isStagedTransfer ? 1U : 0U);
+        }
     }
     return bytes;
 }
@@ -128,7 +131,8 @@ ScriptBytecodeDecodeResultUVE DecodeScriptBytecodeUVE(const std::vector<std::uin
     }
     if (version != ScriptBytecodeProgramUVE::kLegacyVersionUVE &&
         version != ScriptBytecodeProgramUVE::kConditionalJumpVersionUVE &&
-        version != ScriptBytecodeProgramUVE::kCurrentVersionUVE) {
+        version != ScriptBytecodeProgramUVE::kSequenceDispatchVersionUVE &&
+        version != ScriptBytecodeProgramUVE::kStagedTransferVersionUVE) {
         AddDiagnostic(result.diagnostics, ScriptBytecodeDiagnosticCodeUVE::UnsupportedVersion, 4U,
                       "Unsupported bytecode version.");
         return result;
@@ -157,7 +161,7 @@ ScriptBytecodeDecodeResultUVE DecodeScriptBytecodeUVE(const std::vector<std::uin
             return result;
         }
         if (kind == ScriptIrInstructionKindUVE::SequenceDispatch &&
-            version != ScriptBytecodeProgramUVE::kCurrentVersionUVE) {
+            version < ScriptBytecodeProgramUVE::kSequenceDispatchVersionUVE) {
             AddDiagnostic(result.diagnostics, ScriptBytecodeDiagnosticCodeUVE::InvalidInstruction, offset - 1U,
                           "SequenceDispatch requires bytecode version 3.");
             return result;
@@ -197,6 +201,20 @@ ScriptBytecodeDecodeResultUVE DecodeScriptBytecodeUVE(const std::vector<std::uin
         offset += sourceLength;
         instruction.targetPinName.assign(reinterpret_cast<const char*>(bytes.data() + offset), targetLength);
         offset += targetLength;
+        if (version >= ScriptBytecodeProgramUVE::kStagedTransferVersionUVE) {
+            if (offset >= bytes.size()) {
+                AddDiagnostic(result.diagnostics, ScriptBytecodeDiagnosticCodeUVE::Truncated, offset,
+                              "Truncated staged-transfer metadata.");
+                return result;
+            }
+            const std::uint8_t stagedTransfer = bytes[offset++];
+            if (stagedTransfer > 1U) {
+                AddDiagnostic(result.diagnostics, ScriptBytecodeDiagnosticCodeUVE::InvalidInstruction, offset - 1U,
+                              "Invalid staged-transfer metadata.");
+                return result;
+            }
+            instruction.isStagedTransfer = stagedTransfer != 0U;
+        }
         if (kind != ScriptIrInstructionKindUVE::ExecuteNode &&
             kind != ScriptIrInstructionKindUVE::TransferValue &&
             kind != ScriptIrInstructionKindUVE::ConditionalJump &&

@@ -94,6 +94,7 @@ enum class ScriptVmTraceEventKindUVE : std::uint8_t {
     QueryFactsRefreshed,
     Completed,
     Failed,
+    StagedValueTransferred,
 };
 
 struct ScriptVmTraceEventUVE final {
