@@ -4,6 +4,8 @@
 
 #include <gtest/gtest.h>
 
+#include <limits>
+
 namespace UVE::Core {
 namespace {
 
@@ -44,6 +46,26 @@ TEST(ControlRigUVETest, ValidateControlRigUVE_AcceptsControlsSpacesAndTwoBoneCon
     EXPECT_EQ(result.code, ControlRigValidationCodeUVE::Valid);
 }
 
+TEST(ControlRigUVETest, BlendControlRigPoseUVE_ClampsWeightAndNormalizesRotation) {
+    const TransformPoseUVE source{{0.0F, 0.0F, 0.0F}, {0.0F, 0.0F, 0.0F, 1.0F},
+                                  {1.0F, 1.0F, 1.0F}};
+    const TransformPoseUVE target{{10.0F, 4.0F, 0.0F}, {0.0F, 1.0F, 0.0F, 0.0F},
+                                  {3.0F, 5.0F, 7.0F}};
+
+    const TransformPoseUVE half = BlendControlRigPoseUVE(source, target, 0.5F);
+    EXPECT_NEAR(half.position.x, 5.0F, 1.0e-4F);
+    EXPECT_NEAR(half.position.y, 2.0F, 1.0e-4F);
+    EXPECT_NEAR(half.scale.x, 2.0F, 1.0e-4F);
+    EXPECT_NEAR(half.scale.y, 3.0F, 1.0e-4F);
+    EXPECT_NEAR(half.scale.z, 4.0F, 1.0e-4F);
+    EXPECT_NEAR(Math::LengthSquaredUVE(half.rotation), 1.0F, 1.0e-4F);
+
+    EXPECT_EQ(BlendControlRigPoseUVE(source, target, -1.0F), source);
+    EXPECT_EQ(BlendControlRigPoseUVE(source, target, 2.0F), target);
+    EXPECT_EQ(BlendControlRigPoseUVE(source, target,
+                                     std::numeric_limits<float>::quiet_NaN()), source);
+}
+
 TEST(ControlRigUVETest, SolveTwoBoneIKUVE_ReachesTargetWithPoleVectorDeterministically) {
     const ControlRigUVE rig = MakeRigUVE();
     const TransformPoseUVE& root = rig.controls[0].pose;
@@ -59,6 +81,19 @@ TEST(ControlRigUVETest, SolveTwoBoneIKUVE_ReachesTargetWithPoleVectorDeterminist
     EXPECT_NEAR(result.midPose.position.y, 1.0F, 1.0e-4F);
     EXPECT_NEAR(result.endPose.position.x, 1.0F, 1.0e-4F);
     EXPECT_NEAR(result.endPose.position.y, 1.0F, 1.0e-4F);
+}
+
+TEST(ControlRigUVETest, SolveTwoBoneIKUVE_UsesBoundedWeightedPoseBlend) {
+    const ControlRigUVE rig = MakeRigUVE();
+    const TwoBoneIKSolveResultUVE result = SolveTwoBoneIKUVE(
+        rig.controls[0].pose, rig.controls[1].pose, rig.controls[2].pose,
+        rig.controls[3].pose.position, rig.controls[4].pose.position, 0.5F);
+
+    ASSERT_TRUE(result.IsSuccessUVE());
+    EXPECT_NEAR(result.midPose.position.x, 0.5F, 1.0e-4F);
+    EXPECT_NEAR(result.midPose.position.y, 0.5F, 1.0e-4F);
+    EXPECT_NEAR(result.endPose.position.x, 1.5F, 1.0e-4F);
+    EXPECT_NEAR(result.endPose.position.y, 0.5F, 1.0e-4F);
 }
 
 TEST(ControlRigUVETest, TryMakeAimLookAtRotationUVE_AlignsForwardAxis) {

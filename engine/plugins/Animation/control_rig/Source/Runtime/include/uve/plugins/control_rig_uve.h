@@ -104,6 +104,9 @@ struct ControlRigEvaluationResultUVE final {
 [[nodiscard]] ControlRigValidationResultUVE ValidateControlRigUVE(
     const ControlRigUVE& rig) noexcept;
 
+[[nodiscard]] TransformPoseUVE BlendControlRigPoseUVE(
+    const TransformPoseUVE& source, const TransformPoseUVE& target, float weight) noexcept;
+
 [[nodiscard]] TwoBoneIKSolveResultUVE SolveTwoBoneIKUVE(
     const TransformPoseUVE& rootPose, const TransformPoseUVE& midPose,
     const TransformPoseUVE& endPose, const Math::Vector3UVE& target,
