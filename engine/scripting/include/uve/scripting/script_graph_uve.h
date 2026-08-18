@@ -62,6 +62,7 @@ enum class ScriptValidationCodeUVE : std::uint8_t {
     UnsupportedRuntimeNode,
     DataLinkCardinality,
     NodeCountExceeded,
+    LinkCountExceeded,
 };
 
 struct ScriptPinDescriptorUVE final {
@@ -120,6 +121,7 @@ struct ScriptLinkUVE final {
 };
 
 inline constexpr std::size_t kMaximumScriptGraphNodesUVE = 64U;
+inline constexpr std::size_t kMaximumScriptGraphLinksUVE = 256U;
 inline constexpr std::size_t kMaximumScriptDiagnosticMessageBytesUVE = 512U;
 inline constexpr std::size_t kMaximumScriptDiagnosticSourceContextBytesUVE = 256U;
 

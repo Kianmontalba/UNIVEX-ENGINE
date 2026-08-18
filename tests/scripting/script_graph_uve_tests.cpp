@@ -304,6 +304,58 @@ TEST(ScriptGraphUVETest, ValidateUVE_RejectsNodeCountAboveMaximum) {
     EXPECT_EQ(diagnostics.front().message, "Graph node count exceeds the maximum of 64.");
 }
 
+TEST(ScriptGraphUVETest, ValidateUVE_AllowsMaximumLinkCount) {
+    ScriptNodeRegistryUVE registry;
+    std::vector<ScriptPinDescriptorUVE> sourcePins;
+    std::vector<ScriptPinDescriptorUVE> sinkPins;
+    for (std::size_t index = 0U; index < kMaximumScriptGraphLinksUVE; ++index) {
+        sourcePins.emplace_back("Out" + std::to_string(index), ScriptPinDirectionUVE::Output,
+                                ScriptValueTypeUVE::Number);
+        sinkPins.emplace_back("In" + std::to_string(index), ScriptPinDirectionUVE::Input,
+                              ScriptValueTypeUVE::Number);
+    }
+    ASSERT_TRUE(registry.RegisterNodeTypeUVE({"test.many_outputs", "Many Outputs", std::move(sourcePins)}));
+    ASSERT_TRUE(registry.RegisterNodeTypeUVE({"test.many_inputs", "Many Inputs", std::move(sinkPins)}));
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({1U, "test.many_outputs"}));
+    ASSERT_TRUE(graph.AddNodeUVE({2U, "test.many_inputs"}));
+    for (std::size_t index = 0U; index < kMaximumScriptGraphLinksUVE; ++index) {
+        ASSERT_TRUE(graph.AddLinkUVE({{1U, "Out" + std::to_string(index)},
+                                      {2U, "In" + std::to_string(index)}}));
+    }
+
+    EXPECT_TRUE(graph.ValidateUVE(registry).empty());
+}
+
+TEST(ScriptGraphUVETest, ValidateUVE_RejectsLinkCountAboveMaximum) {
+    ScriptNodeRegistryUVE registry;
+    std::vector<ScriptPinDescriptorUVE> sourcePins;
+    std::vector<ScriptPinDescriptorUVE> sinkPins;
+    for (std::size_t index = 0U; index <= kMaximumScriptGraphLinksUVE; ++index) {
+        sourcePins.emplace_back("Out" + std::to_string(index), ScriptPinDirectionUVE::Output,
+                                ScriptValueTypeUVE::Number);
+        sinkPins.emplace_back("In" + std::to_string(index), ScriptPinDirectionUVE::Input,
+                              ScriptValueTypeUVE::Number);
+    }
+    ASSERT_TRUE(registry.RegisterNodeTypeUVE({"test.many_outputs", "Many Outputs", std::move(sourcePins)}));
+    ASSERT_TRUE(registry.RegisterNodeTypeUVE({"test.many_inputs", "Many Inputs", std::move(sinkPins)}));
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({1U, "test.many_outputs"}));
+    ASSERT_TRUE(graph.AddNodeUVE({2U, "test.many_inputs"}));
+    for (std::size_t index = 0U; index <= kMaximumScriptGraphLinksUVE; ++index) {
+        ASSERT_TRUE(graph.AddLinkUVE({{1U, "Out" + std::to_string(index)},
+                                      {2U, "In" + std::to_string(index)}}));
+    }
+
+    const std::vector<ScriptValidationDiagnosticUVE> diagnostics = graph.ValidateUVE(registry);
+    ASSERT_EQ(diagnostics.size(), 1U);
+    EXPECT_EQ(diagnostics.front().code, ScriptValidationCodeUVE::LinkCountExceeded);
+    EXPECT_EQ(diagnostics.front().nodeId, 0U);
+    EXPECT_TRUE(diagnostics.front().pinName.empty());
+    EXPECT_EQ(diagnostics.front().sourceContext, "Graph");
+    EXPECT_EQ(diagnostics.front().message, "Graph link count exceeds the maximum of 256.");
+}
+
 TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_PreservesEngineLogBindingNode) {
     ScriptNodeRegistryUVE registry;
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
