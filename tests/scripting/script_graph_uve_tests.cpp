@@ -118,13 +118,14 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
 
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
     EXPECT_FALSE(RegisterBuiltInScriptNodesUVE(registry));
-    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 28U);
+    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 34U);
 
     const std::vector<ScriptNodeTypeDescriptorUVE> descriptors = registry.GetNodeTypeDescriptorsUVE();
-    ASSERT_EQ(descriptors.size(), 28U);
+    ASSERT_EQ(descriptors.size(), 34U);
     const std::vector<std::string> expectedIds{
         "flow.sequence", "flow.branch",
         "math.float.add", "math.float.subtract", "math.float.multiply", "math.float.divide",
+        "math.float.modulo", "math.float.abs", "math.float.min", "math.float.max", "math.float.clamp", "math.float.power",
         "math.vector3.make", "math.vector3.add", "math.vector3.subtract", "math.vector3.multiply",
         "math.vector3.dot", "math.vector3.cross", "math.vector3.length", "math.vector3.normalize",
         "logic.boolean.not", "logic.boolean.and", "logic.boolean.or", "logic.boolean.xor",
@@ -139,23 +140,23 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
         EXPECT_EQ(descriptors[index].category, "Flow");
         EXPECT_EQ(descriptors[index].iconId, "node.flow");
     }
-    for (std::size_t index = 2U; index < 6U; ++index) {
+    for (std::size_t index = 2U; index < 12U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Math");
         EXPECT_EQ(descriptors[index].iconId, "node.math.float");
     }
-    for (std::size_t index = 6U; index < 14U; ++index) {
+    for (std::size_t index = 12U; index < 20U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Math");
         EXPECT_EQ(descriptors[index].iconId, "node.math.vector3");
     }
-    for (std::size_t index = 14U; index < 24U; ++index) {
+    for (std::size_t index = 20U; index < 30U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Logic");
         EXPECT_EQ(descriptors[index].iconId, "node.logic.boolean");
     }
-    for (std::size_t index = 24U; index < 26U; ++index) {
+    for (std::size_t index = 30U; index < 32U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Entity Query");
         EXPECT_EQ(descriptors[index].iconId, "node.entity.query");
     }
-    for (std::size_t index = 26U; index < descriptors.size(); ++index) {
+    for (std::size_t index = 32U; index < descriptors.size(); ++index) {
         EXPECT_EQ(descriptors[index].category, "Engine");
         EXPECT_EQ(descriptors[index].iconId, "node.engine");
     }
@@ -176,6 +177,25 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
     EXPECT_EQ(branch->pins[1].type, ScriptValueTypeUVE::Boolean);
     EXPECT_EQ(branch->pins[2].role, ScriptPinRoleUVE::Execution);
     EXPECT_EQ(branch->pins[3].role, ScriptPinRoleUVE::Execution);
+
+    const ScriptNodeTypeDescriptorUVE* abs = registry.FindNodeTypeUVE("math.float.abs");
+    ASSERT_NE(abs, nullptr);
+    ASSERT_EQ(abs->pins.size(), 2U);
+    EXPECT_EQ(abs->pins[0].name, "Value");
+    EXPECT_EQ(abs->pins[0].type, ScriptValueTypeUVE::Number);
+    EXPECT_EQ(abs->pins[1].name, "Result");
+    EXPECT_EQ(abs->pins[1].type, ScriptValueTypeUVE::Number);
+
+    const ScriptNodeTypeDescriptorUVE* clamp = registry.FindNodeTypeUVE("math.float.clamp");
+    ASSERT_NE(clamp, nullptr);
+    ASSERT_EQ(clamp->pins.size(), 4U);
+    EXPECT_EQ(clamp->pins[0].name, "Value");
+    EXPECT_EQ(clamp->pins[1].name, "Min");
+    EXPECT_EQ(clamp->pins[2].name, "Max");
+    EXPECT_EQ(clamp->pins[3].name, "Result");
+    for (const ScriptPinDescriptorUVE& pin : clamp->pins) {
+        EXPECT_EQ(pin.type, ScriptValueTypeUVE::Number);
+    }
 
     const ScriptNodeTypeDescriptorUVE* hasComponent = registry.FindNodeTypeUVE("query.entity.has_component");
     ASSERT_NE(hasComponent, nullptr);
@@ -2167,6 +2187,63 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_DispatchesFloatAndBooleanNodes) {
     ASSERT_TRUE(notContext.SetInputUVE(21U, "Value", false));
     ASSERT_TRUE(ExecuteScriptBytecodeUVE(makeProgram(21U, "logic.boolean.not"), notContext).IsSuccessUVE());
     EXPECT_TRUE(std::get<bool>(*notContext.FindOutputUVE(21U, "Result")));
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_DispatchesScalarMathUtilityNodes) {
+    const auto makeProgram = [](const std::uint32_t nodeId, const char* nodeTypeId) {
+        ScriptBytecodeProgramUVE program;
+        program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, nodeId, 0U, nodeTypeId, {}, {}});
+        return program;
+    };
+    const auto runBinary = [&](const char* nodeTypeId, const float lhs, const float rhs) {
+        ScriptVmExecutionContextUVE context;
+        EXPECT_TRUE(context.SetInputUVE(30U, "A", lhs));
+        EXPECT_TRUE(context.SetInputUVE(30U, "B", rhs));
+        const ScriptVmExecutionResultUVE result =
+            ExecuteScriptBytecodeUVE(makeProgram(30U, nodeTypeId), context);
+        EXPECT_TRUE(result.IsSuccessUVE());
+        const auto output = context.FindOutputUVE(30U, "Result");
+        EXPECT_TRUE(output.has_value());
+        EXPECT_TRUE(output.has_value() && std::holds_alternative<float>(*output));
+        return output.has_value() && std::holds_alternative<float>(*output) ?
+                   std::get<float>(*output) : 0.0F;
+    };
+    EXPECT_FLOAT_EQ(runBinary("math.float.modulo", 7.0F, 3.0F), 1.0F);
+    EXPECT_FLOAT_EQ(runBinary("math.float.modulo", -7.0F, 3.0F), -1.0F);
+    EXPECT_FLOAT_EQ(runBinary("math.float.min", 2.0F, 5.0F), 2.0F);
+    EXPECT_FLOAT_EQ(runBinary("math.float.max", 2.0F, 5.0F), 5.0F);
+    EXPECT_FLOAT_EQ(runBinary("math.float.power", 2.0F, 3.0F), 8.0F);
+
+    ScriptVmExecutionContextUVE absContext;
+    ASSERT_TRUE(absContext.SetInputUVE(31U, "Value", -3.5F));
+    ASSERT_TRUE(ExecuteScriptBytecodeUVE(makeProgram(31U, "math.float.abs"), absContext).IsSuccessUVE());
+    EXPECT_FLOAT_EQ(std::get<float>(*absContext.FindOutputUVE(31U, "Result")), 3.5F);
+
+    ScriptVmExecutionContextUVE clampContext;
+    ASSERT_TRUE(clampContext.SetInputUVE(32U, "Value", 7.0F));
+    ASSERT_TRUE(clampContext.SetInputUVE(32U, "Min", 0.0F));
+    ASSERT_TRUE(clampContext.SetInputUVE(32U, "Max", 5.0F));
+    ASSERT_TRUE(ExecuteScriptBytecodeUVE(makeProgram(32U, "math.float.clamp"), clampContext).IsSuccessUVE());
+    EXPECT_FLOAT_EQ(std::get<float>(*clampContext.FindOutputUVE(32U, "Result")), 5.0F);
+
+    ScriptVmExecutionContextUVE moduloByZeroContext;
+    ASSERT_TRUE(moduloByZeroContext.SetInputUVE(33U, "A", 1.0F));
+    ASSERT_TRUE(moduloByZeroContext.SetInputUVE(33U, "B", 0.0F));
+    EXPECT_EQ(ExecuteScriptBytecodeUVE(makeProgram(33U, "math.float.modulo"), moduloByZeroContext).status,
+              ScriptVmStatusUVE::NodeExecutionFailed);
+
+    ScriptVmExecutionContextUVE reversedClampContext;
+    ASSERT_TRUE(reversedClampContext.SetInputUVE(34U, "Value", 1.0F));
+    ASSERT_TRUE(reversedClampContext.SetInputUVE(34U, "Min", 5.0F));
+    ASSERT_TRUE(reversedClampContext.SetInputUVE(34U, "Max", 0.0F));
+    EXPECT_EQ(ExecuteScriptBytecodeUVE(makeProgram(34U, "math.float.clamp"), reversedClampContext).status,
+              ScriptVmStatusUVE::NodeExecutionFailed);
+
+    ScriptVmExecutionContextUVE nonFinitePowerContext;
+    ASSERT_TRUE(nonFinitePowerContext.SetInputUVE(35U, "A", -2.0F));
+    ASSERT_TRUE(nonFinitePowerContext.SetInputUVE(35U, "B", 0.5F));
+    EXPECT_EQ(ExecuteScriptBytecodeUVE(makeProgram(35U, "math.float.power"), nonFinitePowerContext).status,
+              ScriptVmStatusUVE::NodeExecutionFailed);
 }
 
 TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_DispatchesNumberComparisonNodes) {

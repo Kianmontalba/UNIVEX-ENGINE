@@ -78,29 +78,60 @@ namespace {
     const ScriptIrInstructionUVE& instruction, const std::size_t instructionIndex,
     ScriptVmExecutionContextUVE& context) {
     const std::uint32_t nodeId = instruction.sourceNodeId;
-    const float* lhs = FindNumberInputUVE(context, nodeId, "A");
-    const float* rhs = FindNumberInputUVE(context, nodeId, "B");
-    if (lhs == nullptr || rhs == nullptr) {
-        return MakeNodeFailureUVE(instructionIndex, "Float binary node requires Number inputs A and B.");
-    }
-    if (!std::isfinite(*lhs) || !std::isfinite(*rhs)) {
-        return MakeNodeFailureUVE(instructionIndex, "Float node rejected non-finite input.");
-    }
-
     float result = 0.0F;
-    if (instruction.nodeTypeId == "math.float.add") {
-        result = *lhs + *rhs;
-    } else if (instruction.nodeTypeId == "math.float.subtract") {
-        result = *lhs - *rhs;
-    } else if (instruction.nodeTypeId == "math.float.multiply") {
-        result = *lhs * *rhs;
-    } else if (instruction.nodeTypeId == "math.float.divide") {
-        if (std::fabs(*rhs) <= 1.0e-6F) {
-            return MakeNodeFailureUVE(instructionIndex, "Divide Float rejected a zero-near divisor.");
+    if (instruction.nodeTypeId == "math.float.abs") {
+        const float* value = FindNumberInputUVE(context, nodeId, "Value");
+        if (value == nullptr || !std::isfinite(*value)) {
+            return MakeNodeFailureUVE(instructionIndex, "Abs Float requires a finite Number Value input.");
         }
-        result = *lhs / *rhs;
+        result = std::fabs(*value);
+    } else if (instruction.nodeTypeId == "math.float.clamp") {
+        const float* value = FindNumberInputUVE(context, nodeId, "Value");
+        const float* minimum = FindNumberInputUVE(context, nodeId, "Min");
+        const float* maximum = FindNumberInputUVE(context, nodeId, "Max");
+        if (value == nullptr || minimum == nullptr || maximum == nullptr ||
+            !std::isfinite(*value) || !std::isfinite(*minimum) || !std::isfinite(*maximum)) {
+            return MakeNodeFailureUVE(instructionIndex,
+                                      "Clamp Float requires finite Number inputs Value, Min, and Max.");
+        }
+        if (*minimum > *maximum) {
+            return MakeNodeFailureUVE(instructionIndex, "Clamp Float requires Min not greater than Max.");
+        }
+        result = std::clamp(*value, *minimum, *maximum);
     } else {
-        return {};
+        const float* lhs = FindNumberInputUVE(context, nodeId, "A");
+        const float* rhs = FindNumberInputUVE(context, nodeId, "B");
+        if (lhs == nullptr || rhs == nullptr) {
+            return MakeNodeFailureUVE(instructionIndex, "Float binary node requires Number inputs A and B.");
+        }
+        if (!std::isfinite(*lhs) || !std::isfinite(*rhs)) {
+            return MakeNodeFailureUVE(instructionIndex, "Float node rejected non-finite input.");
+        }
+        if (instruction.nodeTypeId == "math.float.add") {
+            result = *lhs + *rhs;
+        } else if (instruction.nodeTypeId == "math.float.subtract") {
+            result = *lhs - *rhs;
+        } else if (instruction.nodeTypeId == "math.float.multiply") {
+            result = *lhs * *rhs;
+        } else if (instruction.nodeTypeId == "math.float.divide") {
+            if (std::fabs(*rhs) <= 1.0e-6F) {
+                return MakeNodeFailureUVE(instructionIndex, "Divide Float rejected a zero-near divisor.");
+            }
+            result = *lhs / *rhs;
+        } else if (instruction.nodeTypeId == "math.float.modulo") {
+            if (std::fabs(*rhs) <= 1.0e-6F) {
+                return MakeNodeFailureUVE(instructionIndex, "Modulo Float rejected a zero-near divisor.");
+            }
+            result = std::fmod(*lhs, *rhs);
+        } else if (instruction.nodeTypeId == "math.float.min") {
+            result = std::fmin(*lhs, *rhs);
+        } else if (instruction.nodeTypeId == "math.float.max") {
+            result = std::fmax(*lhs, *rhs);
+        } else if (instruction.nodeTypeId == "math.float.power") {
+            result = std::pow(*lhs, *rhs);
+        } else {
+            return {};
+        }
     }
     if (!std::isfinite(result) || !SetNodeOutputUVE(context, nodeId, "Result", result)) {
         return MakeNodeFailureUVE(instructionIndex, "Float node rejected its result or output capacity.");
@@ -335,6 +366,14 @@ namespace {
                                               const ScriptVmExecutionContextUVE& context) {
     if (instruction.nodeTypeId.rfind("math.float.", 0U) != 0U) {
         return true;
+    }
+    if (instruction.nodeTypeId == "math.float.abs") {
+        return FindNumberInputUVE(context, instruction.sourceNodeId, "Value") != nullptr;
+    }
+    if (instruction.nodeTypeId == "math.float.clamp") {
+        return FindNumberInputUVE(context, instruction.sourceNodeId, "Value") != nullptr &&
+               FindNumberInputUVE(context, instruction.sourceNodeId, "Min") != nullptr &&
+               FindNumberInputUVE(context, instruction.sourceNodeId, "Max") != nullptr;
     }
     return FindNumberInputUVE(context, instruction.sourceNodeId, "A") != nullptr &&
            FindNumberInputUVE(context, instruction.sourceNodeId, "B") != nullptr;
