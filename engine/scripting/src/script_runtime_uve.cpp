@@ -48,6 +48,8 @@ namespace {
            context.outputs.size() <= ScriptVmExecutionContextUVE::kMaximumBindingsUVE &&
            context.componentFacts.size() <= ScriptVmExecutionContextUVE::kMaximumComponentFactsUVE &&
            context.localVariables.size() <= ScriptVmExecutionContextUVE::kMaximumLocalVariablesUVE &&
+           context.flowControlLatches.size() <= ScriptVmExecutionContextUVE::kMaximumFlowControlLatchesUVE &&
+           context.gateStates.size() <= ScriptVmExecutionContextUVE::kMaximumGateStatesUVE &&
            std::all_of(context.inputs.begin(), context.inputs.end(), validBinding) &&
            std::all_of(context.outputs.begin(), context.outputs.end(), validBinding) &&
            std::all_of(context.componentFacts.begin(), context.componentFacts.end(),
@@ -56,7 +58,11 @@ namespace {
                        [](const ScriptVmLocalVariableUVE& variable) {
                            return variable.slot < ScriptVmExecutionContextUVE::kMaximumLocalVariablesUVE &&
                                   IsFiniteScriptVmValueUVE(variable.value);
-                       });
+                       }) &&
+           std::all_of(context.flowControlLatches.begin(), context.flowControlLatches.end(),
+                       [](const ScriptVmFlowControlLatchUVE& latch) { return latch.nodeId != 0U; }) &&
+           std::all_of(context.gateStates.begin(), context.gateStates.end(),
+                       [](const ScriptVmGateStateUVE& state) { return state.nodeId != 0U; });
 }
 
 [[nodiscard]] std::vector<ScriptBytecodeDiagnosticUVE> ValidateRuntimeProgramUVE(
@@ -186,7 +192,9 @@ ScriptRuntimeStateUpdateResultUVE ScriptRuntimeUVE::SetStateDetailedUVE(const Sc
     if (state.executionContext.inputs.size() > kMaximumStateVmBindingsUVE ||
         state.executionContext.outputs.size() > kMaximumStateVmBindingsUVE ||
         state.executionContext.componentFacts.size() > ScriptVmExecutionContextUVE::kMaximumComponentFactsUVE ||
-        state.executionContext.localVariables.size() > ScriptVmExecutionContextUVE::kMaximumLocalVariablesUVE) {
+        state.executionContext.localVariables.size() > ScriptVmExecutionContextUVE::kMaximumLocalVariablesUVE ||
+        state.executionContext.flowControlLatches.size() > ScriptVmExecutionContextUVE::kMaximumFlowControlLatchesUVE ||
+        state.executionContext.gateStates.size() > ScriptVmExecutionContextUVE::kMaximumGateStatesUVE) {
         return {ScriptRuntimeStateUpdateCodeUVE::CapacityExceeded,
                 "State update rejected because the VM binding, query fact, or local-variable context exceeds its bounded capacity."};
     }

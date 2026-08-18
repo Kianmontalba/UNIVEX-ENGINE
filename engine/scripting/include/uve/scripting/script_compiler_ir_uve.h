@@ -16,6 +16,7 @@ enum class ScriptIrInstructionKindUVE : std::uint8_t {
     TransferValue = 1,
     ConditionalJump = 2,
     SequenceDispatch = 3,
+    FlowControlDispatch = 4,
 };
 
 struct ScriptIrInstructionUVE final {
@@ -31,11 +32,12 @@ struct ScriptIrInstructionUVE final {
     std::uint32_t secondTargetInstructionIndex = 0U;
     // True only for compiler-ordered staging transfers; ordinary graph transfers remain false.
     bool isStagedTransfer = false;
+    std::uint32_t defaultTargetInstructionIndex = 0U;
 };
 
 struct ScriptIrProgramUVE final {
     static constexpr std::size_t kMaximumInstructionsUVE = 256U;
-    static constexpr std::uint32_t kCurrentVersionUVE = 4U;
+    static constexpr std::uint32_t kCurrentVersionUVE = 5U;
 
     std::uint32_t version = kCurrentVersionUVE;
     std::vector<ScriptIrInstructionUVE> instructions;

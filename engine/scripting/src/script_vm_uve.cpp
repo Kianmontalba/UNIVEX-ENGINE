@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
 #include <type_traits>
 #include <utility>
 
@@ -708,7 +709,8 @@ namespace {
 [[nodiscard]] bool ContainsControlFlowUVE(const ScriptBytecodeProgramUVE& program) noexcept {
     return std::any_of(program.instructions.begin(), program.instructions.end(), [](const ScriptIrInstructionUVE& instruction) {
         return instruction.kind == ScriptIrInstructionKindUVE::ConditionalJump ||
-               instruction.kind == ScriptIrInstructionKindUVE::SequenceDispatch;
+               instruction.kind == ScriptIrInstructionKindUVE::SequenceDispatch ||
+               instruction.kind == ScriptIrInstructionKindUVE::FlowControlDispatch;
     });
 }
 
@@ -748,6 +750,96 @@ namespace {
                 sequenceContinuation = instruction.secondTargetInstructionIndex;
                 instructionIndex = instruction.firstTargetInstructionIndex;
             }
+            continue;
+        }
+        if (instruction.kind == ScriptIrInstructionKindUVE::FlowControlDispatch) {
+            if (instruction.trueTargetInstructionIndex > program.instructions.size() ||
+                instruction.falseTargetInstructionIndex > program.instructions.size() ||
+                instruction.defaultTargetInstructionIndex > program.instructions.size()) {
+                ScriptVmExecutionResultUVE failure = MakeNodeFailureUVE(
+                    instructionIndex, "FlowControlDispatch target is outside the bytecode instruction range.");
+                failure.instructionsExecuted = result.instructionsExecuted;
+                failure.PrependTraceEventsUVE(std::move(result.trace), result.traceTruncated);
+                return failure;
+            }
+
+            const std::string& sourcePinName = instruction.sourcePinName;
+            std::size_t target = instruction.defaultTargetInstructionIndex;
+            std::string message;
+            if (instruction.nodeTypeId == "flow.return") {
+                target = program.instructions.size();
+                message = "Return terminated execution.";
+            } else if (instruction.nodeTypeId == "flow.do_once") {
+                if (sourcePinName == "Reset") {
+                    if (!context.ResetDoOnceLatchUVE(instruction.sourceNodeId)) {
+                        ScriptVmExecutionResultUVE failure = MakeNodeFailureUVE(
+                            instructionIndex, "Do Once could not initialize its bounded latch state.");
+                        failure.instructionsExecuted = result.instructionsExecuted;
+                        failure.PrependTraceEventsUVE(std::move(result.trace), result.traceTruncated);
+                        return failure;
+                    }
+                    message = "Do Once latch reset.";
+                } else {
+                    if (!context.InitializeDoOnceLatchUVE(instruction.sourceNodeId)) {
+                        ScriptVmExecutionResultUVE failure = MakeNodeFailureUVE(
+                            instructionIndex, "Do Once exceeded its bounded latch-state capacity.");
+                        failure.instructionsExecuted = result.instructionsExecuted;
+                        failure.PrependTraceEventsUVE(std::move(result.trace), result.traceTruncated);
+                        return failure;
+                    }
+                    const bool shouldFire = context.TryConsumeDoOnceLatchUVE(instruction.sourceNodeId);
+                    target = shouldFire ? instruction.trueTargetInstructionIndex
+                                        : instruction.defaultTargetInstructionIndex;
+                    message = shouldFire ? "Do Once fired Then." : "Do Once suppressed a repeated execution.";
+                }
+            } else if (instruction.nodeTypeId == "flow.gate") {
+                if (sourcePinName == "Open" || sourcePinName == "Close") {
+                    if (!context.SetGateStateUVE(instruction.sourceNodeId, sourcePinName == "Open")) {
+                        ScriptVmExecutionResultUVE failure = MakeNodeFailureUVE(
+                            instructionIndex, "Gate exceeded its bounded state capacity.");
+                        failure.instructionsExecuted = result.instructionsExecuted;
+                        failure.PrependTraceEventsUVE(std::move(result.trace), result.traceTruncated);
+                        return failure;
+                    }
+                    message = sourcePinName == "Open" ? "Gate opened." : "Gate closed.";
+                } else {
+                    if (!context.InitializeGateStateUVE(instruction.sourceNodeId)) {
+                        ScriptVmExecutionResultUVE failure = MakeNodeFailureUVE(
+                            instructionIndex, "Gate exceeded its bounded state capacity.");
+                        failure.instructionsExecuted = result.instructionsExecuted;
+                        failure.PrependTraceEventsUVE(std::move(result.trace), result.traceTruncated);
+                        return failure;
+                    }
+                    const std::optional<bool> open = context.FindGateStateUVE(instruction.sourceNodeId);
+                    target = open.value_or(false) ? instruction.trueTargetInstructionIndex
+                                                  : instruction.falseTargetInstructionIndex;
+                    message = open.value_or(false) ? "Gate routed through Exit." : "Gate suppressed a closed input.";
+                }
+            } else if (instruction.nodeTypeId == "flow.switch") {
+                const float* value = FindNumberInputUVE(context, instruction.sourceNodeId, "Value");
+                if (value == nullptr || !std::isfinite(*value)) {
+                    target = instruction.defaultTargetInstructionIndex;
+                    message = "Switch selected Default because Value was unavailable or non-finite.";
+                } else if (std::fabs(*value) <= 1.0e-6F) {
+                    target = instruction.trueTargetInstructionIndex;
+                    message = "Switch selected Case0.";
+                } else {
+                    target = instruction.falseTargetInstructionIndex;
+                    message = "Switch selected Case1.";
+                }
+            } else {
+                ScriptVmExecutionResultUVE failure = MakeNodeFailureUVE(
+                    instructionIndex, "Unknown FlowControlDispatch node type.");
+                failure.instructionsExecuted = result.instructionsExecuted;
+                failure.PrependTraceEventsUVE(std::move(result.trace), result.traceTruncated);
+                return failure;
+            }
+            ++result.instructionsExecuted;
+            result.AppendTraceEventUVE({ScriptVmTraceEventKindUVE::NodeExecuted,
+                                         Scene::kInvalidEntityUVE, instructionIndex,
+                                         instruction.sourceNodeId, instruction.targetNodeId,
+                                         instruction.nodeTypeId, std::move(message)});
+            instructionIndex = target;
             continue;
         }
         if (instruction.kind == ScriptIrInstructionKindUVE::ConditionalJump) {
@@ -899,7 +991,10 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
         return ExecuteControlFlowProgramUVE(program, *context, options);
     }
     if (context == nullptr) {
-        for (std::size_t index = 0U; index < program.instructions.size(); ++index) {
+        std::vector<ScriptVmFlowControlLatchUVE> localLatches;
+        std::vector<ScriptVmGateStateUVE> localGates;
+        std::size_t index = 0U;
+        while (index < program.instructions.size()) {
             if (result.instructionsExecuted >= options.instructionBudget) {
                 result.status = ScriptVmStatusUVE::InstructionBudgetExceeded;
                 result.diagnostics.push_back({index, "Instruction budget exceeded."});
@@ -907,15 +1002,92 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                                              index, 0U, 0U, {}, "Instruction budget exceeded."});
                 return result;
             }
-            const ScriptIrInstructionKindUVE kind = program.instructions[index].kind;
+            const ScriptIrInstructionUVE& instruction = program.instructions[index];
+            const ScriptIrInstructionKindUVE kind = instruction.kind;
+            if (kind == ScriptIrInstructionKindUVE::FlowControlDispatch) {
+                if (instruction.trueTargetInstructionIndex > program.instructions.size() ||
+                    instruction.falseTargetInstructionIndex > program.instructions.size() ||
+                    instruction.defaultTargetInstructionIndex > program.instructions.size()) {
+                    result.status = ScriptVmStatusUVE::InvalidInstruction;
+                    result.diagnostics.push_back({index, "FlowControlDispatch target is outside the bytecode instruction range."});
+                    result.AppendTraceEventUVE({ScriptVmTraceEventKindUVE::Failed, Scene::kInvalidEntityUVE,
+                                                 index, instruction.sourceNodeId, instruction.targetNodeId,
+                                                 instruction.nodeTypeId, "FlowControlDispatch target is outside the bytecode instruction range."});
+                    return result;
+                }
+                std::size_t target = instruction.defaultTargetInstructionIndex;
+                std::string message;
+                if (instruction.nodeTypeId == "flow.return") {
+                    target = program.instructions.size();
+                    message = "Return terminated execution.";
+                } else if (instruction.nodeTypeId == "flow.do_once") {
+                    auto latch = std::find_if(localLatches.begin(), localLatches.end(),
+                                              [&](const ScriptVmFlowControlLatchUVE& value) {
+                                                  return value.nodeId == instruction.sourceNodeId;
+                                              });
+                    if (latch == localLatches.end()) {
+                        if (localLatches.size() >= ScriptVmExecutionContextUVE::kMaximumFlowControlLatchesUVE) {
+                            result.status = ScriptVmStatusUVE::NodeExecutionFailed;
+                            result.diagnostics.push_back({index, "Do Once exceeded its bounded latch-state capacity."});
+                            return result;
+                        }
+                        localLatches.push_back({instruction.sourceNodeId, false});
+                        latch = std::prev(localLatches.end());
+                    }
+                    if (instruction.sourcePinName == "Reset") {
+                        latch->fired = false;
+                        message = "Do Once latch reset.";
+                    } else if (!latch->fired) {
+                        latch->fired = true;
+                        target = instruction.trueTargetInstructionIndex;
+                        message = "Do Once fired Then.";
+                    } else {
+                        message = "Do Once suppressed a repeated execution.";
+                    }
+                } else if (instruction.nodeTypeId == "flow.gate") {
+                    auto gate = std::find_if(localGates.begin(), localGates.end(),
+                                             [&](const ScriptVmGateStateUVE& value) {
+                                                 return value.nodeId == instruction.sourceNodeId;
+                                             });
+                    if (gate == localGates.end()) {
+                        if (localGates.size() >= ScriptVmExecutionContextUVE::kMaximumGateStatesUVE) {
+                            result.status = ScriptVmStatusUVE::NodeExecutionFailed;
+                            result.diagnostics.push_back({index, "Gate exceeded its bounded state capacity."});
+                            return result;
+                        }
+                        localGates.push_back({instruction.sourceNodeId, false});
+                        gate = std::prev(localGates.end());
+                    }
+                    if (instruction.sourcePinName == "Open" || instruction.sourcePinName == "Close") {
+                        gate->open = instruction.sourcePinName == "Open";
+                        message = gate->open ? "Gate opened." : "Gate closed.";
+                    } else if (gate->open) {
+                        target = instruction.trueTargetInstructionIndex;
+                        message = "Gate routed through Exit.";
+                    } else {
+                        target = instruction.falseTargetInstructionIndex;
+                        message = "Gate suppressed a closed input.";
+                    }
+                } else if (instruction.nodeTypeId == "flow.switch") {
+                    message = "Switch selected Default because Value was unavailable without a VM context.";
+                } else {
+                    result.status = ScriptVmStatusUVE::InvalidInstruction;
+                    result.diagnostics.push_back({index, "Unknown FlowControlDispatch node type."});
+                    return result;
+                }
+                ++result.instructionsExecuted;
+                result.AppendTraceEventUVE({ScriptVmTraceEventKindUVE::NodeExecuted,
+                                             Scene::kInvalidEntityUVE, index, instruction.sourceNodeId,
+                                             instruction.targetNodeId, instruction.nodeTypeId, std::move(message)});
+                index = target;
+                continue;
+            }
             if (kind == ScriptIrInstructionKindUVE::ExecuteNode &&
-                (program.instructions[index].nodeTypeId == "engine.log" ||
-                 program.instructions[index].nodeTypeId == "engine.get_time")) {
+                (instruction.nodeTypeId == "engine.log" || instruction.nodeTypeId == "engine.get_time")) {
                 result.status = ScriptVmStatusUVE::NodeExecutionFailed;
                 result.diagnostics.push_back({index, "engine call requires a caller-owned execution context and binding."});
                 result.AppendTraceEventUVE({ScriptVmTraceEventKindUVE::Failed, Scene::kInvalidEntityUVE,
-                                             index, program.instructions[index].sourceNodeId, 0U,
-                                             program.instructions[index].nodeTypeId,
+                                             index, instruction.sourceNodeId, 0U, instruction.nodeTypeId,
                                              "engine call requires a caller-owned execution context and binding."});
                 return result;
             }
@@ -927,15 +1099,15 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                 return result;
             }
             ++result.instructionsExecuted;
-            const ScriptIrInstructionUVE& instruction = program.instructions[index];
             result.AppendTraceEventUVE({kind == ScriptIrInstructionKindUVE::ExecuteNode
                                              ? ScriptVmTraceEventKindUVE::NodeExecuted
                                              : ScriptVmTraceEventKindUVE::ValueTransferred,
                                          Scene::kInvalidEntityUVE, index, instruction.sourceNodeId,
                                          instruction.targetNodeId, instruction.nodeTypeId, {}});
+            ++index;
         }
         result.AppendTraceEventUVE({ScriptVmTraceEventKindUVE::Completed, Scene::kInvalidEntityUVE,
-                                     program.instructions.size(), 0U, 0U, {}, {}});
+                                     result.instructionsExecuted, 0U, 0U, {}, {}});
         return result;
     }
 
@@ -1086,6 +1258,100 @@ void ScriptVmExecutionResultUVE::PrependTraceEventsUVE(std::vector<ScriptVmTrace
     for (ScriptVmTraceEventUVE& event : existing) {
         AppendTraceEventUVE(std::move(event));
     }
+}
+
+bool ScriptVmExecutionContextUVE::InitializeDoOnceLatchUVE(const std::uint32_t nodeId) {
+    if (nodeId == 0U) {
+        return false;
+    }
+    const auto iterator = std::find_if(flowControlLatches.begin(), flowControlLatches.end(),
+                                       [nodeId](const ScriptVmFlowControlLatchUVE& latch) {
+                                           return latch.nodeId == nodeId;
+                                       });
+    if (iterator != flowControlLatches.end()) {
+        return true;
+    }
+    if (flowControlLatches.size() >= kMaximumFlowControlLatchesUVE) {
+        return false;
+    }
+    flowControlLatches.push_back({nodeId, false});
+    return true;
+}
+
+bool ScriptVmExecutionContextUVE::TryConsumeDoOnceLatchUVE(const std::uint32_t nodeId) {
+    if (!InitializeDoOnceLatchUVE(nodeId)) {
+        return false;
+    }
+    const auto iterator = std::find_if(flowControlLatches.begin(), flowControlLatches.end(),
+                                       [nodeId](const ScriptVmFlowControlLatchUVE& latch) {
+                                           return latch.nodeId == nodeId;
+                                       });
+    if (iterator == flowControlLatches.end() || iterator->fired) {
+        return false;
+    }
+    iterator->fired = true;
+    return true;
+}
+
+bool ScriptVmExecutionContextUVE::ResetDoOnceLatchUVE(const std::uint32_t nodeId) {
+    const auto iterator = std::find_if(flowControlLatches.begin(), flowControlLatches.end(),
+                                       [nodeId](const ScriptVmFlowControlLatchUVE& latch) {
+                                           return latch.nodeId == nodeId;
+                                       });
+    if (iterator == flowControlLatches.end()) {
+        return InitializeDoOnceLatchUVE(nodeId);
+    }
+    iterator->fired = false;
+    return true;
+}
+
+std::optional<bool> ScriptVmExecutionContextUVE::FindDoOnceLatchUVE(const std::uint32_t nodeId) const {
+    const auto iterator = std::find_if(flowControlLatches.cbegin(), flowControlLatches.cend(),
+                                       [nodeId](const ScriptVmFlowControlLatchUVE& latch) {
+                                           return latch.nodeId == nodeId;
+                                       });
+    return iterator == flowControlLatches.cend() ? std::nullopt : std::optional<bool>(iterator->fired);
+}
+
+bool ScriptVmExecutionContextUVE::InitializeGateStateUVE(const std::uint32_t nodeId) {
+    if (nodeId == 0U) {
+        return false;
+    }
+    const auto iterator = std::find_if(gateStates.begin(), gateStates.end(),
+                                       [nodeId](const ScriptVmGateStateUVE& state) {
+                                           return state.nodeId == nodeId;
+                                       });
+    if (iterator != gateStates.end()) {
+        return true;
+    }
+    if (gateStates.size() >= kMaximumGateStatesUVE) {
+        return false;
+    }
+    gateStates.push_back({nodeId, false});
+    return true;
+}
+
+bool ScriptVmExecutionContextUVE::SetGateStateUVE(const std::uint32_t nodeId, const bool open) {
+    if (!InitializeGateStateUVE(nodeId)) {
+        return false;
+    }
+    const auto iterator = std::find_if(gateStates.begin(), gateStates.end(),
+                                       [nodeId](const ScriptVmGateStateUVE& state) {
+                                           return state.nodeId == nodeId;
+                                       });
+    if (iterator == gateStates.end()) {
+        return false;
+    }
+    iterator->open = open;
+    return true;
+}
+
+std::optional<bool> ScriptVmExecutionContextUVE::FindGateStateUVE(const std::uint32_t nodeId) const {
+    const auto iterator = std::find_if(gateStates.cbegin(), gateStates.cend(),
+                                       [nodeId](const ScriptVmGateStateUVE& state) {
+                                           return state.nodeId == nodeId;
+                                       });
+    return iterator == gateStates.cend() ? std::nullopt : std::optional<bool>(iterator->open);
 }
 
 bool ScriptVmExecutionContextUVE::SetInputUVE(const std::uint32_t nodeId, std::string pinName,
