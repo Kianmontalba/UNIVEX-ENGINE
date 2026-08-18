@@ -109,10 +109,12 @@ struct ScriptVmTraceEventUVE final {
 };
 
 using ScriptEngineLogFunctionUVE = bool (*)(void* userData, float value) noexcept;
+using ScriptEngineGetTimeFunctionUVE = bool (*)(void* userData, float* outSeconds) noexcept;
 
 struct ScriptEngineCallBindingsUVE final {
     ScriptEngineLogFunctionUVE log = nullptr;
     void* userData = nullptr;
+    ScriptEngineGetTimeFunctionUVE getTime = nullptr;
 };
 
 struct ScriptVmExecutionOptionsUVE final {
