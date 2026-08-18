@@ -98,6 +98,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
     std::optional<ScriptLinkUVE> branchConditionLink;
     std::optional<ScriptLinkUVE> branchConditionDependencyLink;
     std::vector<ScriptLinkUVE> stagedConditionLinks;
+    std::vector<ScriptLinkUVE> stagedBooleanLinks;
     std::vector<ScriptLinkUVE> stagedNumberLinks;
     std::vector<ScriptLinkUVE> stagedVector3Links;
     for (const ScriptNodeUVE& node : nodes) {
@@ -192,6 +193,37 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
                 }
             }
         }
+    }
+    for (const ScriptLinkUVE& link : links) {
+        if (IsExecutionLinkUVE(link, nodes, registry)) {
+            continue;
+        }
+        const ScriptNodeUVE* sourceNode = FindNodeUVE(nodes, link.output.nodeId);
+        const ScriptNodeUVE* consumerNode = FindNodeUVE(nodes, link.input.nodeId);
+        if (sourceNode == nullptr || consumerNode == nullptr ||
+            consumerNode->typeId.rfind("logic.boolean.", 0U) != 0U) {
+            continue;
+        }
+        if (branchConditionDependencyLink.has_value() &&
+            branchConditionDependencyLink->output.nodeId == link.output.nodeId &&
+            branchConditionDependencyLink->output.pinName == link.output.pinName &&
+            branchConditionDependencyLink->input.nodeId == link.input.nodeId &&
+            branchConditionDependencyLink->input.pinName == link.input.pinName) {
+            continue;
+        }
+        const bool approvedBooleanProducer =
+            sourceNode->typeId.rfind("logic.boolean.", 0U) == 0U && link.output.pinName == "Result";
+        const bool validBooleanInput =
+            (consumerNode->typeId == "logic.boolean.not" && link.input.pinName == "Value") ||
+            (consumerNode->typeId != "logic.boolean.not" &&
+             (link.input.pinName == "A" || link.input.pinName == "B"));
+        if (!approvedBooleanProducer || !validBooleanInput || !stagedBooleanLinks.empty()) {
+            result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode, link.input.nodeId,
+                                          link.input.pinName,
+                                          "Boolean data-link staging supports one direct built-in logic.boolean.*.Result producer; additional consumers and composed/deeper Boolean dependencies remain deferred."});
+            continue;
+        }
+        stagedBooleanLinks.push_back(link);
     }
     for (const ScriptLinkUVE& link : links) {
         if (IsExecutionLinkUVE(link, nodes, registry)) {
@@ -295,11 +327,12 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             instructionNodes.insert(updatedConsumerIterator, sourceNode);
         }
     };
+    moveStagedProducerBeforeConsumer(stagedBooleanLinks);
     moveStagedProducerBeforeConsumer(stagedNumberLinks);
     moveStagedProducerBeforeConsumer(stagedVector3Links);
 
     const std::size_t stagedInstructionCount = instructionNodes.size() + stagedConditionLinks.size() +
-                                                stagedNumberLinks.size() + stagedVector3Links.size();
+                                                stagedBooleanLinks.size() + stagedNumberLinks.size() + stagedVector3Links.size();
     const auto findStagedInstructionIndex = [&](const std::uint32_t nodeId) -> std::optional<std::size_t> {
         const std::optional<std::size_t> baseIndex = FindNodeInstructionIndexUVE(instructionNodes, nodeId);
         if (!baseIndex.has_value()) {
@@ -316,6 +349,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             }
         };
         countStagedBefore(stagedConditionLinks);
+        countStagedBefore(stagedBooleanLinks);
         countStagedBefore(stagedNumberLinks);
         countStagedBefore(stagedVector3Links);
         return *baseIndex + stagedBefore;
@@ -398,6 +432,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
                 }
             };
             emitStagedLinks(stagedConditionLinks);
+            emitStagedLinks(stagedBooleanLinks);
             emitStagedLinks(stagedNumberLinks);
             emitStagedLinks(stagedVector3Links);
     }
@@ -412,7 +447,8 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
                                            stagedLink.input.pinName == link.input.pinName;
                                 }) != stagedLinks.end();
         };
-        if (isStagedLink(stagedConditionLinks) || isStagedLink(stagedNumberLinks) ||
+        if (isStagedLink(stagedConditionLinks) || isStagedLink(stagedBooleanLinks) ||
+            isStagedLink(stagedNumberLinks) ||
             isStagedLink(stagedVector3Links)) {
             continue;
         }

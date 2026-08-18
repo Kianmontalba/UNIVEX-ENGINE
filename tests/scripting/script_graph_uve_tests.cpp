@@ -448,6 +448,72 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_RunsCompiledStagedBooleanConditio
     EXPECT_TRUE(std::get<bool>(*context.FindOutputUVE(2U, "Result")));
 }
 
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesBooleanProducerBeforeConsumer) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({30U, "logic.boolean.not"}));
+    ASSERT_TRUE(graph.AddNodeUVE({20U, "logic.boolean.and"}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{30U, "Result"}, {20U, "A"}}));
+
+    const ScriptIrCompileResultUVE result = CompileScriptGraphToIrUVE(graph, registry);
+    ASSERT_TRUE(result.IsSuccessUVE());
+    ASSERT_EQ(result.program->instructions.size(), 3U);
+    EXPECT_EQ(result.program->instructions[0].nodeTypeId, "logic.boolean.not");
+    EXPECT_EQ(result.program->instructions[1].kind, ScriptIrInstructionKindUVE::TransferValue);
+    EXPECT_EQ(result.program->instructions[1].sourceNodeId, 30U);
+    EXPECT_EQ(result.program->instructions[1].targetNodeId, 20U);
+    EXPECT_EQ(result.program->instructions[1].sourcePinName, "Result");
+    EXPECT_EQ(result.program->instructions[1].targetPinName, "A");
+    EXPECT_EQ(result.program->instructions[2].nodeTypeId, "logic.boolean.and");
+}
+
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsSecondBooleanStagedConsumer) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({10U, "logic.boolean.not"}));
+    ASSERT_TRUE(graph.AddNodeUVE({20U, "logic.boolean.and"}));
+    ASSERT_TRUE(graph.AddNodeUVE({30U, "logic.boolean.or"}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{10U, "Result"}, {20U, "A"}}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{20U, "Result"}, {30U, "B"}}));
+
+    const ScriptIrCompileResultUVE result = CompileScriptGraphToIrUVE(graph, registry);
+    EXPECT_FALSE(result.IsSuccessUVE());
+    ASSERT_EQ(result.diagnostics.size(), 1U);
+    EXPECT_EQ(result.diagnostics.front().code, ScriptValidationCodeUVE::UnsupportedRuntimeNode);
+    EXPECT_EQ(result.diagnostics.front().nodeId, 30U);
+    EXPECT_EQ(result.diagnostics.front().pinName, "B");
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_RunsStagedBooleanChain) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({30U, "logic.boolean.not"}));
+    ASSERT_TRUE(graph.AddNodeUVE({20U, "logic.boolean.and"}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{30U, "Result"}, {20U, "A"}}));
+    const ScriptIrCompileResultUVE compiled = CompileScriptGraphToIrUVE(graph, registry);
+    ASSERT_TRUE(compiled.IsSuccessUVE());
+    std::vector<ScriptBytecodeDiagnosticUVE> diagnostics;
+    const std::optional<ScriptBytecodeProgramUVE> bytecode =
+        LowerIrToBytecodeUVE(*compiled.program, diagnostics);
+    ASSERT_TRUE(bytecode.has_value());
+    ASSERT_TRUE(diagnostics.empty());
+
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(30U, "Value", true));
+    ASSERT_TRUE(context.SetInputUVE(20U, "B", true));
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(*bytecode, context);
+
+    EXPECT_TRUE(result.IsSuccessUVE());
+    EXPECT_EQ(result.instructionsExecuted, 3U);
+    ASSERT_TRUE(context.FindOutputUVE(30U, "Result").has_value());
+    ASSERT_TRUE(context.FindOutputUVE(20U, "Result").has_value());
+    EXPECT_FALSE(std::get<bool>(*context.FindOutputUVE(30U, "Result")));
+    EXPECT_FALSE(std::get<bool>(*context.FindOutputUVE(20U, "Result")));
+}
+
 TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesEngineTimeBeforeFloatConsumer) {
     ScriptNodeRegistryUVE registry;
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
