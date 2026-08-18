@@ -544,8 +544,63 @@ TEST(ScriptBytecodeUVETest, EncodeDecodeScriptBytecodeUVE_RoundTripsVersionedPro
     const ScriptBytecodeDecodeResultUVE decoded = DecodeScriptBytecodeUVE(bytes);
     ASSERT_TRUE(decoded.IsSuccessUVE());
     ASSERT_EQ(decoded.program->instructions.size(), 2U);
+    EXPECT_EQ(decoded.program->version, ScriptBytecodeProgramUVE::kCurrentVersionUVE);
     EXPECT_EQ(decoded.program->instructions[0].nodeTypeId, "test.source");
     EXPECT_EQ(decoded.program->instructions[1].sourcePinName, "Out");
+}
+
+TEST(ScriptBytecodeUVETest, LegacyV1DataOnlyBytecode_DecodesAndExecutes) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 4U, 0U, "test.source", {}, {}});
+    std::vector<ScriptBytecodeDiagnosticUVE> diagnostics;
+    std::vector<std::uint8_t> bytes = EncodeScriptBytecodeUVE(program, diagnostics);
+    ASSERT_TRUE(diagnostics.empty());
+    bytes[4U] = static_cast<std::uint8_t>(ScriptBytecodeProgramUVE::kLegacyVersionUVE);
+    bytes[5U] = 0U;
+    bytes[6U] = 0U;
+    bytes[7U] = 0U;
+
+    const ScriptBytecodeDecodeResultUVE decoded = DecodeScriptBytecodeUVE(bytes);
+    ASSERT_TRUE(decoded.IsSuccessUVE());
+    EXPECT_EQ(decoded.program->version, ScriptBytecodeProgramUVE::kLegacyVersionUVE);
+    const ScriptVmExecutionResultUVE execution = ExecuteScriptBytecodeUVE(*decoded.program);
+    EXPECT_TRUE(execution.IsSuccessUVE());
+    EXPECT_EQ(execution.instructionsExecuted, 1U);
+}
+
+TEST(ScriptBytecodeUVETest, ConditionalJumpV2_RoundTripsTargetsAndRejectsLegacyEncoding) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ConditionalJump, 7U, 0U, "flow.branch",
+                                    "Condition", {}, 1U, 0U});
+    std::vector<ScriptBytecodeDiagnosticUVE> diagnostics;
+    const std::vector<std::uint8_t> bytes = EncodeScriptBytecodeUVE(program, diagnostics);
+    ASSERT_TRUE(diagnostics.empty());
+    const ScriptBytecodeDecodeResultUVE decoded = DecodeScriptBytecodeUVE(bytes);
+    ASSERT_TRUE(decoded.IsSuccessUVE());
+    ASSERT_EQ(decoded.program->instructions.size(), 1U);
+    EXPECT_EQ(decoded.program->instructions.front().kind, ScriptIrInstructionKindUVE::ConditionalJump);
+    EXPECT_EQ(decoded.program->instructions.front().trueTargetInstructionIndex, 1U);
+    EXPECT_EQ(decoded.program->instructions.front().falseTargetInstructionIndex, 0U);
+
+    std::vector<std::uint8_t> legacyBytes = bytes;
+    legacyBytes[4U] = static_cast<std::uint8_t>(ScriptBytecodeProgramUVE::kLegacyVersionUVE);
+    legacyBytes[5U] = 0U;
+    legacyBytes[6U] = 0U;
+    legacyBytes[7U] = 0U;
+    const ScriptBytecodeDecodeResultUVE legacy = DecodeScriptBytecodeUVE(legacyBytes);
+    EXPECT_FALSE(legacy.IsSuccessUVE());
+    ASSERT_EQ(legacy.diagnostics.size(), 1U);
+    EXPECT_EQ(legacy.diagnostics.front().code, ScriptBytecodeDiagnosticCodeUVE::InvalidInstruction);
+}
+
+TEST(ScriptBytecodeUVETest, EncodeScriptBytecodeUVE_RejectsOutOfRangeConditionalJumpTarget) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ConditionalJump, 1U, 0U, "flow.branch",
+                                    "Condition", {}, 2U, 0U});
+    std::vector<ScriptBytecodeDiagnosticUVE> diagnostics;
+    EXPECT_TRUE(EncodeScriptBytecodeUVE(program, diagnostics).empty());
+    ASSERT_EQ(diagnostics.size(), 1U);
+    EXPECT_EQ(diagnostics.front().code, ScriptBytecodeDiagnosticCodeUVE::InvalidInstruction);
 }
 
 TEST(ScriptBytecodeUVETest, DecodeScriptBytecodeUVE_RejectsCorruptHeadersAndTruncation) {

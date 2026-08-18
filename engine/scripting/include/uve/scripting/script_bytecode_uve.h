@@ -26,7 +26,8 @@ struct ScriptBytecodeDiagnosticUVE final {
 };
 
 struct ScriptBytecodeProgramUVE final {
-    static constexpr std::uint32_t kCurrentVersionUVE = 1U;
+    static constexpr std::uint32_t kLegacyVersionUVE = 1U;
+    static constexpr std::uint32_t kCurrentVersionUVE = 2U;
     static constexpr std::size_t kMaximumInstructionsUVE = 4096U;
 
     std::uint32_t version = kCurrentVersionUVE;

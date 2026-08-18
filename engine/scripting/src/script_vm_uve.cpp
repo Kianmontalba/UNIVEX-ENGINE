@@ -318,7 +318,8 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                                                        ScriptVmExecutionContextUVE* context,
                                                        ScriptVmExecutionOptionsUVE options) {
     ScriptVmExecutionResultUVE result;
-    if (program.version != ScriptBytecodeProgramUVE::kCurrentVersionUVE) {
+    if (program.version != ScriptBytecodeProgramUVE::kLegacyVersionUVE &&
+        program.version != ScriptBytecodeProgramUVE::kCurrentVersionUVE) {
         result.status = ScriptVmStatusUVE::InvalidInstruction;
         result.diagnostics.push_back({0U, "Unsupported bytecode version."});
         result.AppendTraceEventUVE({ScriptVmTraceEventKindUVE::Failed, Scene::kInvalidEntityUVE,

@@ -9,7 +9,8 @@ namespace UVE::Scripting {
 bool ScriptDebuggerUVE::AttachUVE(ScriptBytecodeProgramUVE program) {
     m_trace.clear();
     m_traceTruncated = false;
-    if (program.version != ScriptBytecodeProgramUVE::kCurrentVersionUVE ||
+    if ((program.version != ScriptBytecodeProgramUVE::kLegacyVersionUVE &&
+         program.version != ScriptBytecodeProgramUVE::kCurrentVersionUVE) ||
         program.instructions.size() > ScriptBytecodeProgramUVE::kMaximumInstructionsUVE) {
         m_state = ScriptDebuggerStateUVE::Faulted;
         m_pauseReason = "The debugger rejected an unsupported or oversized bytecode program.";
