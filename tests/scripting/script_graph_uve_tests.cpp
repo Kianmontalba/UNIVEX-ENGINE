@@ -666,6 +666,71 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_RunsStagedVector3DotNumberIntoFlo
     EXPECT_FLOAT_EQ(std::get<float>(*context.FindOutputUVE(20U, "Result")), 40.0F);
 }
 
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesFloatProducerBeforeConsumer) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({30U, "math.float.multiply"}));
+    ASSERT_TRUE(graph.AddNodeUVE({20U, "math.float.add"}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{30U, "Result"}, {20U, "A"}}));
+
+    const ScriptIrCompileResultUVE result = CompileScriptGraphToIrUVE(graph, registry);
+    ASSERT_TRUE(result.IsSuccessUVE());
+    ASSERT_EQ(result.program->instructions.size(), 3U);
+    EXPECT_EQ(result.program->instructions[0].nodeTypeId, "math.float.multiply");
+    EXPECT_EQ(result.program->instructions[1].kind, ScriptIrInstructionKindUVE::TransferValue);
+    EXPECT_EQ(result.program->instructions[1].sourceNodeId, 30U);
+    EXPECT_EQ(result.program->instructions[1].targetNodeId, 20U);
+    EXPECT_EQ(result.program->instructions[1].sourcePinName, "Result");
+    EXPECT_EQ(result.program->instructions[1].targetPinName, "A");
+    EXPECT_EQ(result.program->instructions[2].nodeTypeId, "math.float.add");
+}
+
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsSecondFloatStagedConsumer) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({10U, "math.float.multiply"}));
+    ASSERT_TRUE(graph.AddNodeUVE({20U, "math.float.add"}));
+    ASSERT_TRUE(graph.AddNodeUVE({30U, "math.float.subtract"}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{10U, "Result"}, {20U, "A"}}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{20U, "Result"}, {30U, "B"}}));
+
+    const ScriptIrCompileResultUVE result = CompileScriptGraphToIrUVE(graph, registry);
+    EXPECT_FALSE(result.IsSuccessUVE());
+    ASSERT_EQ(result.diagnostics.size(), 1U);
+    EXPECT_EQ(result.diagnostics.front().code, ScriptValidationCodeUVE::UnsupportedRuntimeNode);
+    EXPECT_EQ(result.diagnostics.front().nodeId, 30U);
+    EXPECT_EQ(result.diagnostics.front().pinName, "B");
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_RunsStagedFloatChain) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({30U, "math.float.multiply"}));
+    ASSERT_TRUE(graph.AddNodeUVE({20U, "math.float.add"}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{30U, "Result"}, {20U, "A"}}));
+    const ScriptIrCompileResultUVE compiled = CompileScriptGraphToIrUVE(graph, registry);
+    ASSERT_TRUE(compiled.IsSuccessUVE());
+    std::vector<ScriptBytecodeDiagnosticUVE> diagnostics;
+    const std::optional<ScriptBytecodeProgramUVE> bytecode =
+        LowerIrToBytecodeUVE(*compiled.program, diagnostics);
+    ASSERT_TRUE(bytecode.has_value());
+    ASSERT_TRUE(diagnostics.empty());
+
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(30U, "A", 2.0F));
+    ASSERT_TRUE(context.SetInputUVE(30U, "B", 4.0F));
+    ASSERT_TRUE(context.SetInputUVE(20U, "B", 5.0F));
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(*bytecode, context);
+
+    EXPECT_TRUE(result.IsSuccessUVE());
+    EXPECT_EQ(result.instructionsExecuted, 3U);
+    ASSERT_TRUE(context.FindOutputUVE(20U, "Result").has_value());
+    EXPECT_FLOAT_EQ(std::get<float>(*context.FindOutputUVE(20U, "Result")), 13.0F);
+}
+
 TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_EngineLogUsesCallerOwnedBinding) {
     ScriptBytecodeProgramUVE program;
     program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 70U, 0U, "engine.log", {}, {}});
