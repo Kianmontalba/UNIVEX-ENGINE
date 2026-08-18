@@ -69,19 +69,45 @@ struct ScriptVmValueBindingUVE final {
     [[nodiscard]] bool operator==(const ScriptVmValueBindingUVE&) const = default;
 };
 
+struct ScriptVmFlowControlLatchUVE final {
+    std::uint32_t nodeId = 0U;
+    bool fired = false;
+
+    [[nodiscard]] bool operator==(const ScriptVmFlowControlLatchUVE&) const = default;
+};
+
+struct ScriptVmGateStateUVE final {
+    std::uint32_t nodeId = 0U;
+    bool open = false;
+
+    [[nodiscard]] bool operator==(const ScriptVmGateStateUVE&) const = default;
+};
+
 struct ScriptVmExecutionContextUVE final {
     static constexpr std::size_t kMaximumBindingsUVE = 1024U;
     static constexpr std::size_t kMaximumComponentFactsUVE = 256U;
     static constexpr std::size_t kMaximumLocalVariablesUVE = 256U;
+    static constexpr std::size_t kMaximumFlowControlLatchesUVE = 256U;
+    static constexpr std::size_t kMaximumGateStatesUVE = 256U;
 
     std::vector<ScriptVmValueBindingUVE> inputs;
     std::vector<ScriptVmValueBindingUVE> outputs;
     std::vector<ScriptComponentValueUVE> componentFacts;
     std::vector<ScriptVmLocalVariableUVE> localVariables;
+    std::vector<ScriptVmFlowControlLatchUVE> flowControlLatches;
+    std::vector<ScriptVmGateStateUVE> gateStates;
 
     [[nodiscard]] bool InitializeLocalVariableUVE(std::uint32_t slot, ScriptVmValueUVE value);
     [[nodiscard]] bool SetLocalVariableUVE(std::uint32_t slot, ScriptVmValueUVE value);
     [[nodiscard]] std::optional<ScriptVmValueUVE> FindLocalVariableUVE(std::uint32_t slot) const;
+
+    [[nodiscard]] bool InitializeDoOnceLatchUVE(std::uint32_t nodeId);
+    [[nodiscard]] bool TryConsumeDoOnceLatchUVE(std::uint32_t nodeId);
+    [[nodiscard]] bool ResetDoOnceLatchUVE(std::uint32_t nodeId);
+    [[nodiscard]] std::optional<bool> FindDoOnceLatchUVE(std::uint32_t nodeId) const;
+    [[nodiscard]] bool InitializeGateStateUVE(std::uint32_t nodeId);
+    [[nodiscard]] bool SetGateStateUVE(std::uint32_t nodeId, bool open);
+    [[nodiscard]] std::optional<bool> FindGateStateUVE(std::uint32_t nodeId) const;
 
     [[nodiscard]] bool SetInputUVE(std::uint32_t nodeId, std::string pinName, ScriptVmValueUVE value);
     [[nodiscard]] bool SetOutputUVE(std::uint32_t nodeId, std::string pinName, ScriptVmValueUVE value);

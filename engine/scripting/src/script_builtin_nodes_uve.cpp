@@ -17,7 +17,7 @@ struct BuiltInNodeDefinitionUVE final {
     std::uint32_t displayOrder;
 };
 
-[[nodiscard]] std::array<BuiltInNodeDefinitionUVE, 49U> MakeBuiltInDefinitionsUVE() {
+[[nodiscard]] std::array<BuiltInNodeDefinitionUVE, 53U> MakeBuiltInDefinitionsUVE() {
     return {
         BuiltInNodeDefinitionUVE{
             "flow.sequence", "Sequence",
@@ -32,6 +32,33 @@ struct BuiltInNodeDefinitionUVE final {
              ScriptPinDescriptorUVE{"True", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Execution},
              ScriptPinDescriptorUVE{"False", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Execution}},
             "Flow", "node.flow", 101U},
+        BuiltInNodeDefinitionUVE{
+            "flow.return", "Return",
+            {ScriptPinDescriptorUVE{"In", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Execution}},
+            "Flow", "node.flow", 102U},
+        BuiltInNodeDefinitionUVE{
+            "flow.do_once", "Do Once",
+            {ScriptPinDescriptorUVE{"In", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Execution},
+             ScriptPinDescriptorUVE{"Reset", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Execution},
+             ScriptPinDescriptorUVE{"Then", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Execution},
+             ScriptPinDescriptorUVE{"Default", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Execution}},
+            "Flow", "node.flow", 103U},
+        BuiltInNodeDefinitionUVE{
+            "flow.gate", "Gate",
+            {ScriptPinDescriptorUVE{"In", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Execution},
+             ScriptPinDescriptorUVE{"Open", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Execution},
+             ScriptPinDescriptorUVE{"Close", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Execution},
+             ScriptPinDescriptorUVE{"Exit", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Execution},
+             ScriptPinDescriptorUVE{"Default", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Execution}},
+            "Flow", "node.flow", 104U},
+        BuiltInNodeDefinitionUVE{
+            "flow.switch", "Switch",
+            {ScriptPinDescriptorUVE{"In", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Execution},
+             ScriptPinDescriptorUVE{"Value", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Case0", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Execution},
+             ScriptPinDescriptorUVE{"Case1", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Execution},
+             ScriptPinDescriptorUVE{"Default", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Execution}},
+            "Flow", "node.flow", 105U},
         BuiltInNodeDefinitionUVE{
             "math.float.add", "Add Float",
             {ScriptPinDescriptorUVE{"A", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
@@ -309,7 +336,7 @@ struct BuiltInNodeDefinitionUVE final {
 } // namespace
 
 bool RegisterBuiltInScriptNodesUVE(ScriptNodeRegistryUVE& registry) {
-    std::array<BuiltInNodeDefinitionUVE, 49U> definitions = MakeBuiltInDefinitionsUVE();
+    std::array<BuiltInNodeDefinitionUVE, 53U> definitions = MakeBuiltInDefinitionsUVE();
     for (const BuiltInNodeDefinitionUVE& definition : definitions) {
         if (registry.FindNodeTypeUVE(definition.typeId) != nullptr) {
             return false;

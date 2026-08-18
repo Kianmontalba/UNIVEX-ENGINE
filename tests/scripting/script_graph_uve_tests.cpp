@@ -118,12 +118,12 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
 
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
     EXPECT_FALSE(RegisterBuiltInScriptNodesUVE(registry));
-    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 49U);
+    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 53U);
 
     const std::vector<ScriptNodeTypeDescriptorUVE> descriptors = registry.GetNodeTypeDescriptorsUVE();
-    ASSERT_EQ(descriptors.size(), 49U);
+    ASSERT_EQ(descriptors.size(), 53U);
     const std::vector<std::string> expectedIds{
-        "flow.sequence", "flow.branch",
+        "flow.sequence", "flow.branch", "flow.return", "flow.do_once", "flow.gate", "flow.switch",
         "math.float.add", "math.float.subtract", "math.float.multiply", "math.float.divide",
         "math.float.modulo", "math.float.abs", "math.float.min", "math.float.max", "math.float.clamp", "math.float.power",
         "math.vector2.make", "math.vector2.add", "math.vector2.subtract", "math.vector2.multiply",
@@ -141,35 +141,35 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
     for (std::size_t index = 0U; index < expectedIds.size(); ++index) {
         EXPECT_EQ(descriptors[index].typeId, expectedIds[index]);
     }
-    for (std::size_t index = 0U; index < 2U; ++index) {
+    for (std::size_t index = 0U; index < 6U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Flow");
         EXPECT_EQ(descriptors[index].iconId, "node.flow");
     }
-    for (std::size_t index = 2U; index < 12U; ++index) {
+    for (std::size_t index = 6U; index < 16U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Math");
         EXPECT_EQ(descriptors[index].iconId, "node.math.float");
     }
-    for (std::size_t index = 12U; index < 18U; ++index) {
+    for (std::size_t index = 16U; index < 22U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Math");
         EXPECT_EQ(descriptors[index].iconId, "node.math.vector2");
     }
-    for (std::size_t index = 18U; index < 26U; ++index) {
+    for (std::size_t index = 22U; index < 30U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Math");
         EXPECT_EQ(descriptors[index].iconId, "node.math.vector3");
     }
-    for (std::size_t index = 26U; index < 36U; ++index) {
+    for (std::size_t index = 30U; index < 40U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Logic");
         EXPECT_EQ(descriptors[index].iconId, "node.logic.boolean");
     }
-    for (std::size_t index = 36U; index < 38U; ++index) {
+    for (std::size_t index = 40U; index < 42U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Entity Query");
         EXPECT_EQ(descriptors[index].iconId, "node.entity.query");
     }
-    for (std::size_t index = 38U; index < 40U; ++index) {
+    for (std::size_t index = 42U; index < 44U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Engine");
         EXPECT_EQ(descriptors[index].iconId, "node.engine");
     }
-    for (std::size_t index = 40U; index < descriptors.size(); ++index) {
+    for (std::size_t index = 44U; index < descriptors.size(); ++index) {
         EXPECT_EQ(descriptors[index].category, "Variable");
         EXPECT_EQ(descriptors[index].iconId, "node.variable");
     }
@@ -527,6 +527,34 @@ TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_LowersFlowBranchToCondit
     EXPECT_EQ(branch.falseTargetInstructionIndex, 2U);
     EXPECT_EQ(result.program->instructions[1].kind, ScriptIrInstructionKindUVE::ExecuteNode);
     EXPECT_EQ(result.program->instructions[2].kind, ScriptIrInstructionKindUVE::ExecuteNode);
+}
+
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_LowersFlowControlDispatchNodes) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({1U, "flow.return"}));
+    ASSERT_TRUE(graph.AddNodeUVE({2U, "flow.do_once"}));
+    ASSERT_TRUE(graph.AddNodeUVE({3U, "flow.gate"}));
+    ASSERT_TRUE(graph.AddNodeUVE({4U, "flow.switch"}));
+
+    const ScriptIrCompileResultUVE result = CompileScriptGraphToIrUVE(graph, registry);
+    ASSERT_TRUE(result.IsSuccessUVE());
+    ASSERT_EQ(result.program->version, 5U);
+    ASSERT_EQ(result.program->instructions.size(), 7U);
+    EXPECT_EQ(result.program->instructions[0].nodeTypeId, "flow.return");
+    EXPECT_EQ(result.program->instructions[0].sourcePinName, "In");
+    EXPECT_EQ(result.program->instructions[0].kind, ScriptIrInstructionKindUVE::FlowControlDispatch);
+    EXPECT_EQ(result.program->instructions[1].nodeTypeId, "flow.do_once");
+    EXPECT_EQ(result.program->instructions[1].sourcePinName, "In");
+    EXPECT_EQ(result.program->instructions[2].sourcePinName, "Reset");
+    EXPECT_EQ(result.program->instructions[3].nodeTypeId, "flow.gate");
+    EXPECT_EQ(result.program->instructions[3].sourcePinName, "In");
+    EXPECT_EQ(result.program->instructions[4].sourcePinName, "Open");
+    EXPECT_EQ(result.program->instructions[5].sourcePinName, "Close");
+    EXPECT_EQ(result.program->instructions[6].nodeTypeId, "flow.switch");
+    EXPECT_EQ(result.program->instructions[6].sourcePinName, "In");
+    EXPECT_EQ(result.program->instructions[6].kind, ScriptIrInstructionKindUVE::FlowControlDispatch);
 }
 
 TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesBooleanConditionBeforeFlowBranch) {
@@ -931,7 +959,7 @@ TEST(ScriptBytecodeUVETest, EncodeDecodeScriptBytecodeUVE_RoundTripsStagedTransf
     ASSERT_TRUE(diagnostics.empty());
     const ScriptBytecodeDecodeResultUVE decoded = DecodeScriptBytecodeUVE(bytes);
     ASSERT_TRUE(decoded.IsSuccessUVE());
-    ASSERT_EQ(decoded.program->version, ScriptBytecodeProgramUVE::kStagedTransferVersionUVE);
+    ASSERT_EQ(decoded.program->version, ScriptBytecodeProgramUVE::kCurrentVersionUVE);
     ASSERT_EQ(decoded.program->instructions.size(), 1U);
     EXPECT_TRUE(decoded.program->instructions.front().isStagedTransfer);
 }
@@ -1974,6 +2002,36 @@ TEST(ScriptBytecodeUVETest, SequenceDispatchV3_RoundTripsOrderedTargets) {
     EXPECT_EQ(decoded.program->instructions.front().secondTargetInstructionIndex, 0U);
 }
 
+TEST(ScriptBytecodeUVETest, FlowControlDispatchV5_RoundTripsTargetsAndRejectsLegacyEncoding) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::FlowControlDispatch, 7U, 0U, "flow.switch",
+                                    "In", {}, 1U, 2U, 0U, 0U, false, 3U});
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 8U, 0U, "test.case0", {}, {}});
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 9U, 0U, "test.case1", {}, {}});
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 10U, 0U, "test.default", {}, {}});
+    std::vector<ScriptBytecodeDiagnosticUVE> diagnostics;
+    const std::vector<std::uint8_t> bytes = EncodeScriptBytecodeUVE(program, diagnostics);
+    ASSERT_TRUE(diagnostics.empty());
+    const ScriptBytecodeDecodeResultUVE decoded = DecodeScriptBytecodeUVE(bytes);
+    ASSERT_TRUE(decoded.IsSuccessUVE());
+    ASSERT_EQ(decoded.program->version, ScriptBytecodeProgramUVE::kFlowControlDispatchVersionUVE);
+    ASSERT_EQ(decoded.program->instructions.size(), 4U);
+    EXPECT_EQ(decoded.program->instructions.front().kind, ScriptIrInstructionKindUVE::FlowControlDispatch);
+    EXPECT_EQ(decoded.program->instructions.front().trueTargetInstructionIndex, 1U);
+    EXPECT_EQ(decoded.program->instructions.front().falseTargetInstructionIndex, 2U);
+    EXPECT_EQ(decoded.program->instructions.front().defaultTargetInstructionIndex, 3U);
+
+    std::vector<std::uint8_t> legacyBytes = bytes;
+    legacyBytes[4U] = static_cast<std::uint8_t>(ScriptBytecodeProgramUVE::kStagedTransferVersionUVE);
+    legacyBytes[5U] = 0U;
+    legacyBytes[6U] = 0U;
+    legacyBytes[7U] = 0U;
+    const ScriptBytecodeDecodeResultUVE legacy = DecodeScriptBytecodeUVE(legacyBytes);
+    EXPECT_FALSE(legacy.IsSuccessUVE());
+    ASSERT_EQ(legacy.diagnostics.size(), 1U);
+    EXPECT_EQ(legacy.diagnostics.front().code, ScriptBytecodeDiagnosticCodeUVE::InvalidInstruction);
+}
+
 TEST(ScriptBytecodeUVETest, EncodeScriptBytecodeUVE_RejectsOutOfRangeConditionalJumpTarget) {
     ScriptBytecodeProgramUVE program;
     program.instructions.push_back({ScriptIrInstructionKindUVE::ConditionalJump, 1U, 0U, "flow.branch",
@@ -2015,6 +2073,80 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_CompletesValidProgramWithinBudget
     const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(program, {2U});
     EXPECT_TRUE(result.IsSuccessUVE());
     EXPECT_EQ(result.instructionsExecuted, 2U);
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_DispatchesReturnDoOnceGateAndSwitch) {
+    ScriptBytecodeProgramUVE returnProgram;
+    returnProgram.instructions.push_back({ScriptIrInstructionKindUVE::FlowControlDispatch, 1U, 0U, "flow.return",
+                                          "In", {}, 1U, 1U, 0U, 0U, false, 1U});
+    returnProgram.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 2U, 0U, "test.source", {}, {}});
+    const ScriptVmExecutionResultUVE returnResult = ExecuteScriptBytecodeUVE(returnProgram);
+    ASSERT_TRUE(returnResult.IsSuccessUVE());
+    EXPECT_EQ(returnResult.instructionsExecuted, 1U);
+    ASSERT_EQ(returnResult.trace.size(), 2U);
+    EXPECT_EQ(returnResult.trace[0].message, "Return terminated execution.");
+    EXPECT_EQ(returnResult.trace[1].kind, ScriptVmTraceEventKindUVE::Completed);
+
+    ScriptBytecodeProgramUVE doOnceProgram;
+    doOnceProgram.instructions.push_back({ScriptIrInstructionKindUVE::FlowControlDispatch, 10U, 0U, "flow.do_once",
+                                          "In", {}, 1U, 3U, 0U, 0U, false, 2U});
+    doOnceProgram.instructions.push_back({ScriptIrInstructionKindUVE::FlowControlDispatch, 11U, 0U, "flow.return",
+                                          "In", {}, 3U, 3U, 0U, 0U, false, 3U});
+    doOnceProgram.instructions.push_back({ScriptIrInstructionKindUVE::FlowControlDispatch, 12U, 0U, "flow.return",
+                                          "In", {}, 3U, 3U, 0U, 0U, false, 3U});
+    ScriptVmExecutionContextUVE doOnceContext;
+    const ScriptVmExecutionResultUVE firstDoOnce = ExecuteScriptBytecodeUVE(doOnceProgram, doOnceContext);
+    ASSERT_TRUE(firstDoOnce.IsSuccessUVE());
+    EXPECT_EQ(firstDoOnce.instructionsExecuted, 2U);
+    EXPECT_EQ(doOnceContext.FindDoOnceLatchUVE(10U), std::optional<bool>(true));
+    const ScriptVmExecutionResultUVE repeatedDoOnce = ExecuteScriptBytecodeUVE(doOnceProgram, doOnceContext);
+    ASSERT_TRUE(repeatedDoOnce.IsSuccessUVE());
+    EXPECT_EQ(repeatedDoOnce.instructionsExecuted, 2U);
+    EXPECT_EQ(repeatedDoOnce.trace[0].message, "Do Once suppressed a repeated execution.");
+    ASSERT_TRUE(doOnceContext.ResetDoOnceLatchUVE(10U));
+    const ScriptVmExecutionResultUVE resetDoOnce = ExecuteScriptBytecodeUVE(doOnceProgram, doOnceContext);
+    ASSERT_TRUE(resetDoOnce.IsSuccessUVE());
+    EXPECT_EQ(resetDoOnce.trace[0].message, "Do Once fired Then.");
+
+    ScriptBytecodeProgramUVE gateProgram;
+    gateProgram.instructions.push_back({ScriptIrInstructionKindUVE::FlowControlDispatch, 20U, 0U, "flow.gate",
+                                        "In", {}, 1U, 2U, 0U, 0U, false, 2U});
+    gateProgram.instructions.push_back({ScriptIrInstructionKindUVE::FlowControlDispatch, 21U, 0U, "flow.return",
+                                        "In", {}, 3U, 3U, 0U, 0U, false, 3U});
+    gateProgram.instructions.push_back({ScriptIrInstructionKindUVE::FlowControlDispatch, 22U, 0U, "flow.return",
+                                        "In", {}, 3U, 3U, 0U, 0U, false, 3U});
+    ScriptVmExecutionContextUVE gateContext;
+    const ScriptVmExecutionResultUVE closedGate = ExecuteScriptBytecodeUVE(gateProgram, gateContext);
+    ASSERT_TRUE(closedGate.IsSuccessUVE());
+    EXPECT_EQ(closedGate.trace[0].message, "Gate suppressed a closed input.");
+    ASSERT_TRUE(gateContext.SetGateStateUVE(20U, true));
+    const ScriptVmExecutionResultUVE openGate = ExecuteScriptBytecodeUVE(gateProgram, gateContext);
+    ASSERT_TRUE(openGate.IsSuccessUVE());
+    EXPECT_EQ(openGate.trace[0].message, "Gate routed through Exit.");
+    EXPECT_EQ(gateContext.FindGateStateUVE(20U), std::optional<bool>(true));
+
+    ScriptBytecodeProgramUVE switchProgram;
+    switchProgram.instructions.push_back({ScriptIrInstructionKindUVE::FlowControlDispatch, 30U, 0U, "flow.switch",
+                                          "In", {}, 1U, 2U, 0U, 0U, false, 3U});
+    switchProgram.instructions.push_back({ScriptIrInstructionKindUVE::FlowControlDispatch, 31U, 0U, "flow.return",
+                                          "In", {}, 4U, 4U, 0U, 0U, false, 4U});
+    switchProgram.instructions.push_back({ScriptIrInstructionKindUVE::FlowControlDispatch, 32U, 0U, "flow.return",
+                                          "In", {}, 4U, 4U, 0U, 0U, false, 4U});
+    switchProgram.instructions.push_back({ScriptIrInstructionKindUVE::FlowControlDispatch, 33U, 0U, "flow.return",
+                                          "In", {}, 4U, 4U, 0U, 0U, false, 4U});
+    ScriptVmExecutionContextUVE switchContext;
+    ASSERT_TRUE(switchContext.SetInputUVE(30U, "Value", 0.0F));
+    const ScriptVmExecutionResultUVE case0 = ExecuteScriptBytecodeUVE(switchProgram, switchContext);
+    ASSERT_TRUE(case0.IsSuccessUVE());
+    EXPECT_EQ(case0.trace[0].message, "Switch selected Case0.");
+    ASSERT_TRUE(switchContext.SetInputUVE(30U, "Value", 1.0F));
+    const ScriptVmExecutionResultUVE case1 = ExecuteScriptBytecodeUVE(switchProgram, switchContext);
+    ASSERT_TRUE(case1.IsSuccessUVE());
+    EXPECT_EQ(case1.trace[0].message, "Switch selected Case1.");
+    switchContext.inputs.clear();
+    const ScriptVmExecutionResultUVE defaultCase = ExecuteScriptBytecodeUVE(switchProgram, switchContext);
+    ASSERT_TRUE(defaultCase.IsSuccessUVE());
+    EXPECT_EQ(defaultCase.trace[0].message, "Switch selected Default because Value was unavailable or non-finite.");
 }
 
 TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_ConditionalJumpSelectsTrueAndFalseTargets) {

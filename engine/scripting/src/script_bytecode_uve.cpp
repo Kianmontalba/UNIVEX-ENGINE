@@ -8,7 +8,7 @@ namespace UVE::Scripting {
 namespace {
 constexpr std::uint8_t kMagic[] = {'U', 'V', 'E', 'S'};
 constexpr std::size_t kHeaderSize = 8U;
-constexpr std::size_t kInstructionSize = 30U;
+constexpr std::size_t kInstructionSize = 34U;
 
 void WriteU32(std::vector<std::uint8_t>& bytes, const std::uint32_t value) {
     for (std::size_t index = 0U; index < 4U; ++index) {
@@ -96,6 +96,17 @@ std::vector<std::uint8_t> EncodeScriptBytecodeUVE(
             }
             WriteU32(bytes, instruction.firstTargetInstructionIndex);
             WriteU32(bytes, instruction.secondTargetInstructionIndex);
+        } else if (instruction.kind == ScriptIrInstructionKindUVE::FlowControlDispatch) {
+            if (instruction.trueTargetInstructionIndex > program.instructions.size() ||
+                instruction.falseTargetInstructionIndex > program.instructions.size() ||
+                instruction.defaultTargetInstructionIndex > program.instructions.size()) {
+                AddDiagnostic(diagnostics, ScriptBytecodeDiagnosticCodeUVE::InvalidInstruction, bytes.size(),
+                              "FlowControlDispatch target is outside the bytecode instruction range.");
+                return {};
+            }
+            WriteU32(bytes, instruction.trueTargetInstructionIndex);
+            WriteU32(bytes, instruction.falseTargetInstructionIndex);
+            WriteU32(bytes, instruction.defaultTargetInstructionIndex);
         }
         bytes.push_back(static_cast<std::uint8_t>(instruction.nodeTypeId.size()));
         bytes.push_back(static_cast<std::uint8_t>(instruction.sourcePinName.size()));
@@ -133,7 +144,8 @@ ScriptBytecodeDecodeResultUVE DecodeScriptBytecodeUVE(const std::vector<std::uin
     if (version != ScriptBytecodeProgramUVE::kLegacyVersionUVE &&
         version != ScriptBytecodeProgramUVE::kConditionalJumpVersionUVE &&
         version != ScriptBytecodeProgramUVE::kSequenceDispatchVersionUVE &&
-        version != ScriptBytecodeProgramUVE::kStagedTransferVersionUVE) {
+        version != ScriptBytecodeProgramUVE::kStagedTransferVersionUVE &&
+        version != ScriptBytecodeProgramUVE::kFlowControlDispatchVersionUVE) {
         AddDiagnostic(result.diagnostics, ScriptBytecodeDiagnosticCodeUVE::UnsupportedVersion, 4U,
                       "Unsupported bytecode version.");
         return result;
@@ -167,6 +179,12 @@ ScriptBytecodeDecodeResultUVE DecodeScriptBytecodeUVE(const std::vector<std::uin
                           "SequenceDispatch requires bytecode version 3.");
             return result;
         }
+        if (kind == ScriptIrInstructionKindUVE::FlowControlDispatch &&
+            version < ScriptBytecodeProgramUVE::kFlowControlDispatchVersionUVE) {
+            AddDiagnostic(result.diagnostics, ScriptBytecodeDiagnosticCodeUVE::InvalidInstruction, offset - 1U,
+                          "FlowControlDispatch requires bytecode version 5.");
+            return result;
+        }
         if (!ReadU32(bytes, offset, instruction.sourceNodeId) ||
             !ReadU32(bytes, offset, instruction.targetNodeId)) {
             AddDiagnostic(result.diagnostics, ScriptBytecodeDiagnosticCodeUVE::Truncated, offset,
@@ -185,6 +203,14 @@ ScriptBytecodeDecodeResultUVE DecodeScriptBytecodeUVE(const std::vector<std::uin
              !ReadU32(bytes, offset, instruction.secondTargetInstructionIndex))) {
             AddDiagnostic(result.diagnostics, ScriptBytecodeDiagnosticCodeUVE::Truncated, offset,
                           "Truncated SequenceDispatch targets.");
+            return result;
+        }
+        if (kind == ScriptIrInstructionKindUVE::FlowControlDispatch &&
+            (!ReadU32(bytes, offset, instruction.trueTargetInstructionIndex) ||
+             !ReadU32(bytes, offset, instruction.falseTargetInstructionIndex) ||
+             !ReadU32(bytes, offset, instruction.defaultTargetInstructionIndex))) {
+            AddDiagnostic(result.diagnostics, ScriptBytecodeDiagnosticCodeUVE::Truncated, offset,
+                          "Truncated FlowControlDispatch targets.");
             return result;
         }
         const std::size_t typeLength = bytes[offset++];
@@ -219,7 +245,8 @@ ScriptBytecodeDecodeResultUVE DecodeScriptBytecodeUVE(const std::vector<std::uin
         if (kind != ScriptIrInstructionKindUVE::ExecuteNode &&
             kind != ScriptIrInstructionKindUVE::TransferValue &&
             kind != ScriptIrInstructionKindUVE::ConditionalJump &&
-            kind != ScriptIrInstructionKindUVE::SequenceDispatch) {
+            kind != ScriptIrInstructionKindUVE::SequenceDispatch &&
+            kind != ScriptIrInstructionKindUVE::FlowControlDispatch) {
             AddDiagnostic(result.diagnostics, ScriptBytecodeDiagnosticCodeUVE::InvalidInstruction, offset,
                           "Unknown bytecode instruction kind.");
             return result;
@@ -234,6 +261,14 @@ ScriptBytecodeDecodeResultUVE DecodeScriptBytecodeUVE(const std::vector<std::uin
             (instruction.firstTargetInstructionIndex > count || instruction.secondTargetInstructionIndex > count)) {
             AddDiagnostic(result.diagnostics, ScriptBytecodeDiagnosticCodeUVE::InvalidInstruction, offset,
                           "SequenceDispatch target is outside the bytecode instruction range.");
+            return result;
+        }
+        if (kind == ScriptIrInstructionKindUVE::FlowControlDispatch &&
+            (instruction.trueTargetInstructionIndex > count ||
+             instruction.falseTargetInstructionIndex > count ||
+             instruction.defaultTargetInstructionIndex > count)) {
+            AddDiagnostic(result.diagnostics, ScriptBytecodeDiagnosticCodeUVE::InvalidInstruction, offset,
+                          "FlowControlDispatch target is outside the bytecode instruction range.");
             return result;
         }
         program.instructions.push_back(std::move(instruction));

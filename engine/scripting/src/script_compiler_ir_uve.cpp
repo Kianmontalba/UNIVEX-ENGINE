@@ -47,6 +47,15 @@ std::optional<std::uint32_t> FindExecutionTargetUVE(const std::vector<ScriptLink
     return iterator == links.end() ? std::nullopt : std::optional<std::uint32_t>(iterator->input.nodeId);
 }
 
+const ScriptLinkUVE* FindExecutionLinkUVE(const std::vector<ScriptLinkUVE>& links,
+                                          const std::uint32_t sourceNodeId,
+                                          const std::string& outputPinName) noexcept {
+    const auto iterator = std::find_if(links.begin(), links.end(), [&](const ScriptLinkUVE& link) {
+        return link.output.nodeId == sourceNodeId && link.output.pinName == outputPinName;
+    });
+    return iterator == links.end() ? nullptr : &*iterator;
+}
+
 const ScriptPinDescriptorUVE* FindPinUVE(const ScriptNodeTypeDescriptorUVE& descriptor,
                                         const std::string& pinName) noexcept {
     const auto iterator = std::find_if(descriptor.pins.begin(), descriptor.pins.end(), [&](const ScriptPinDescriptorUVE& pin) {
@@ -273,7 +282,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
         const ScriptNodeUVE* sourceNode = FindNodeUVE(nodes, link.output.nodeId);
         const ScriptNodeUVE* consumerNode = FindNodeUVE(nodes, link.input.nodeId);
         if (sourceNode == nullptr || consumerNode == nullptr ||
-            consumerNode->typeId.rfind("math.float.", 0U) != 0U) {
+            (consumerNode->typeId.rfind("math.float.", 0U) != 0U && consumerNode->typeId != "flow.switch")) {
             continue;
         }
         const bool approvedNumberProducer =
@@ -284,7 +293,9 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             (sourceNode->typeId.rfind("math.float.", 0U) == 0U && link.output.pinName == "Result") ||
             (sourceNode->typeId == "variable.get_number" && link.output.pinName == "Result");
         const bool validDirectNumberLink = approvedNumberProducer &&
-                                           (link.input.pinName == "A" || link.input.pinName == "B");
+                                           ((consumerNode->typeId == "flow.switch" && link.input.pinName == "Value") ||
+                                            (consumerNode->typeId != "flow.switch" &&
+                                             (link.input.pinName == "A" || link.input.pinName == "B")));
         if (!validDirectNumberLink || !stagedNumberLinks.empty()) {
             result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode, link.input.nodeId,
                                           link.input.pinName,
@@ -503,10 +514,29 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
     moveStagedProducerBeforeConsumer(stagedVector3ScaleLinks);
     moveStagedProducerBeforeConsumer(stagedVector3Links);
 
-    const std::size_t stagedInstructionCount = instructionNodes.size() + stagedConditionLinks.size() +
-                                                stagedComponentLinks.size() + stagedBooleanLinks.size() + stagedNumberLinks.size() +
+    const auto flowExtraEntryCountUVE = [](const ScriptNodeUVE& node) noexcept -> std::size_t {
+        if (node.typeId == "flow.do_once") {
+            return 1U;
+        }
+        if (node.typeId == "flow.gate") {
+            return 2U;
+        }
+        return 0U;
+    };
+    const std::size_t flowExtraInstructionCount =
+        static_cast<std::size_t>(std::count_if(
+            instructionNodes.begin(), instructionNodes.end(), [&](const ScriptNodeUVE& node) {
+                return flowExtraEntryCountUVE(node) != 0U;
+            })) +
+        static_cast<std::size_t>(std::count_if(
+            instructionNodes.begin(), instructionNodes.end(),
+            [&](const ScriptNodeUVE& node) { return flowExtraEntryCountUVE(node) == 2U; }));
+    const std::size_t stagedInstructionCount = instructionNodes.size() + flowExtraInstructionCount +
+                                                stagedConditionLinks.size() + stagedComponentLinks.size() +
+                                                stagedBooleanLinks.size() + stagedNumberLinks.size() +
                                                 stagedComparisonNumberLinks.size() + stagedVector2ScaleLinks.size() +
-                                                stagedVector2Links.size() + stagedVector3ScaleLinks.size() + stagedVector3Links.size();
+                                                stagedVector2Links.size() + stagedVector3ScaleLinks.size() +
+                                                stagedVector3Links.size();
     const auto findStagedInstructionIndex = [&](const std::uint32_t nodeId) -> std::optional<std::size_t> {
         const std::optional<std::size_t> baseIndex = FindNodeInstructionIndexUVE(instructionNodes, nodeId);
         if (!baseIndex.has_value()) {
@@ -531,24 +561,68 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
         countStagedBefore(stagedVector2Links);
         countStagedBefore(stagedVector3ScaleLinks);
         countStagedBefore(stagedVector3Links);
-        return *baseIndex + stagedBefore;
+        std::size_t flowEntriesBefore = 0U;
+        for (std::size_t index = 0U; index < *baseIndex; ++index) {
+            flowEntriesBefore += flowExtraEntryCountUVE(instructionNodes[index]);
+        }
+        return *baseIndex + stagedBefore + flowEntriesBefore;
+    };
+    const auto findFlowInstructionIndex = [&](const std::uint32_t nodeId,
+                                              const std::string& inputPinName) -> std::optional<std::size_t> {
+        const std::optional<std::size_t> primaryIndex = findStagedInstructionIndex(nodeId);
+        const ScriptNodeUVE* targetNode = FindNodeUVE(instructionNodes, nodeId);
+        if (!primaryIndex.has_value() || targetNode == nullptr) {
+            return std::nullopt;
+        }
+        if (targetNode->typeId == "flow.do_once" && inputPinName == "Reset") {
+            return *primaryIndex + 1U;
+        }
+        if (targetNode->typeId == "flow.gate" && inputPinName == "Open") {
+            return *primaryIndex + 1U;
+        }
+        if (targetNode->typeId == "flow.gate" && inputPinName == "Close") {
+            return *primaryIndex + 2U;
+        }
+        return primaryIndex;
+    };
+    const auto resolveExecutionTarget = [&](const std::uint32_t sourceNodeId,
+                                            const char* outputPin) -> std::uint32_t {
+        const ScriptLinkUVE* executionLink = FindExecutionLinkUVE(links, sourceNodeId, outputPin);
+        if (executionLink == nullptr) {
+            return static_cast<std::uint32_t>(stagedInstructionCount);
+        }
+        const std::optional<std::size_t> targetIndex =
+            findFlowInstructionIndex(executionLink->input.nodeId, executionLink->input.pinName);
+        return targetIndex.has_value() ? static_cast<std::uint32_t>(*targetIndex)
+                                       : static_cast<std::uint32_t>(stagedInstructionCount);
     };
 
     ScriptIrProgramUVE program;
     program.instructions.reserve(stagedInstructionCount + links.size());
     program.sourceNodeIds.reserve(stagedInstructionCount + links.size());
 
+    const auto appendFlowControlEntry = [&](const ScriptNodeUVE& node, const char* sourcePinName,
+                                             const std::uint32_t trueTarget,
+                                             const std::uint32_t falseTarget,
+                                             const std::uint32_t defaultTarget) {
+        program.instructions.push_back(ScriptIrInstructionUVE{
+            ScriptIrInstructionKindUVE::FlowControlDispatch,
+            node.id,
+            0U,
+            node.typeId,
+            sourcePinName,
+            {},
+            trueTarget,
+            falseTarget,
+            0U,
+            0U,
+            false,
+            defaultTarget,
+        });
+        program.sourceNodeIds.push_back(node.id);
+    };
     for (const ScriptNodeUVE& node : instructionNodes) {
         if (node.typeId == "flow.sequence") {
-            const auto resolveTarget = [&](const char* pinName) -> std::uint32_t {
-                const std::optional<std::uint32_t> targetNodeId = FindExecutionTargetUVE(links, node.id, pinName);
-                if (!targetNodeId.has_value()) {
-                    return static_cast<std::uint32_t>(stagedInstructionCount);
-                }
-                const std::optional<std::size_t> targetIndex = findStagedInstructionIndex(*targetNodeId);
-                return targetIndex.has_value() ? static_cast<std::uint32_t>(*targetIndex)
-                                               : static_cast<std::uint32_t>(stagedInstructionCount);
-            };
             program.instructions.push_back(ScriptIrInstructionUVE{
                 ScriptIrInstructionKindUVE::SequenceDispatch,
                 node.id,
@@ -558,19 +632,11 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
                 "Then2",
                 0U,
                 0U,
-                resolveTarget("Then"),
-                resolveTarget("Then2"),
+                resolveExecutionTarget(node.id, "Then"),
+                resolveExecutionTarget(node.id, "Then2"),
             });
+            program.sourceNodeIds.push_back(node.id);
         } else if (node.typeId == "flow.branch") {
-            const auto resolveTarget = [&](const char* pinName) -> std::uint32_t {
-                const std::optional<std::uint32_t> targetNodeId = FindExecutionTargetUVE(links, node.id, pinName);
-                if (!targetNodeId.has_value()) {
-                    return static_cast<std::uint32_t>(stagedInstructionCount);
-                }
-                const std::optional<std::size_t> targetIndex = findStagedInstructionIndex(*targetNodeId);
-                return targetIndex.has_value() ? static_cast<std::uint32_t>(*targetIndex)
-                                               : static_cast<std::uint32_t>(stagedInstructionCount);
-            };
             program.instructions.push_back(ScriptIrInstructionUVE{
                 ScriptIrInstructionKindUVE::ConditionalJump,
                 node.id,
@@ -578,11 +644,37 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
                 node.typeId,
                 "Condition",
                 {},
-                resolveTarget("True"),
-                resolveTarget("False"),
+                resolveExecutionTarget(node.id, "True"),
+                resolveExecutionTarget(node.id, "False"),
                 0U,
                 0U,
             });
+            program.sourceNodeIds.push_back(node.id);
+        } else if (node.typeId == "flow.return") {
+            appendFlowControlEntry(node, "In", static_cast<std::uint32_t>(stagedInstructionCount),
+                                   static_cast<std::uint32_t>(stagedInstructionCount),
+                                   static_cast<std::uint32_t>(stagedInstructionCount));
+        } else if (node.typeId == "flow.do_once") {
+            appendFlowControlEntry(node, "In", resolveExecutionTarget(node.id, "Then"),
+                                   static_cast<std::uint32_t>(stagedInstructionCount),
+                                   resolveExecutionTarget(node.id, "Default"));
+            appendFlowControlEntry(node, "Reset", static_cast<std::uint32_t>(stagedInstructionCount),
+                                   static_cast<std::uint32_t>(stagedInstructionCount),
+                                   static_cast<std::uint32_t>(stagedInstructionCount));
+        } else if (node.typeId == "flow.gate") {
+            appendFlowControlEntry(node, "In", resolveExecutionTarget(node.id, "Exit"),
+                                   resolveExecutionTarget(node.id, "Default"),
+                                   resolveExecutionTarget(node.id, "Default"));
+            appendFlowControlEntry(node, "Open", static_cast<std::uint32_t>(stagedInstructionCount),
+                                   static_cast<std::uint32_t>(stagedInstructionCount),
+                                   static_cast<std::uint32_t>(stagedInstructionCount));
+            appendFlowControlEntry(node, "Close", static_cast<std::uint32_t>(stagedInstructionCount),
+                                   static_cast<std::uint32_t>(stagedInstructionCount),
+                                   static_cast<std::uint32_t>(stagedInstructionCount));
+        } else if (node.typeId == "flow.switch") {
+            appendFlowControlEntry(node, "In", resolveExecutionTarget(node.id, "Case0"),
+                                   resolveExecutionTarget(node.id, "Case1"),
+                                   resolveExecutionTarget(node.id, "Default"));
         } else {
             program.instructions.push_back(ScriptIrInstructionUVE{
                 ScriptIrInstructionKindUVE::ExecuteNode,
@@ -592,8 +684,8 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
                 {},
                 {},
             });
+            program.sourceNodeIds.push_back(node.id);
         }
-        program.sourceNodeIds.push_back(node.id);
             const auto emitStagedLinks = [&](const std::vector<ScriptLinkUVE>& stagedLinks) {
                 for (const ScriptLinkUVE& stagedLink : stagedLinks) {
                     if (stagedLink.output.nodeId != node.id) {
