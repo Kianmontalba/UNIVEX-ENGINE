@@ -27,6 +27,26 @@ struct MotionQueryAnimationNodeSettingsUVE final {
     bool looping = true;
 };
 
+enum class MotionQueryAnimationSettingsValidationCodeUVE : std::uint8_t {
+    Valid = 0,
+    InvalidSearchResults,
+    InvalidQualityTier,
+    InvalidWeights,
+    InvalidContinuityPolicy,
+    InvalidContinuityAge,
+    InvalidTransitionSettings,
+};
+
+struct MotionQueryAnimationSettingsValidationResultUVE final {
+    MotionQueryAnimationSettingsValidationCodeUVE code =
+        MotionQueryAnimationSettingsValidationCodeUVE::InvalidSearchResults;
+    std::string message;
+
+    [[nodiscard]] bool IsValidUVE() const noexcept {
+        return code == MotionQueryAnimationSettingsValidationCodeUVE::Valid;
+    }
+};
+
 enum class MotionQueryAnimationNodeCodeUVE : std::uint8_t {
     Accepted = 0,
     InvalidSettings,
@@ -73,6 +93,10 @@ struct MotionQueryAnimationNodeResultUVE final {
         return code == MotionQueryAnimationNodeCodeUVE::Accepted;
     }
 };
+
+[[nodiscard]] MotionQueryAnimationSettingsValidationResultUVE
+ValidateMotionQueryAnimationNodeSettingsUVE(
+    const MotionQueryAnimationNodeSettingsUVE& settings) noexcept;
 
 /// Runtime-facing value-only sink. Implementations may live in the editor/diagnostics layer, but the
 /// animation evaluator never owns or discovers them. A null sink is the normal shipping path.

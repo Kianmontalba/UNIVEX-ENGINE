@@ -24,6 +24,55 @@ namespace {
 }
 } // namespace
 
+MotionQueryAnimationSettingsValidationResultUVE ValidateMotionQueryAnimationNodeSettingsUVE(
+    const MotionQueryAnimationNodeSettingsUVE& settings) noexcept {
+    const MotionQuerySearchBudgetUVE budget =
+        ResolveMotionQuerySearchBudgetUVE(settings.qualityTier, settings.maximumSearchResults);
+    if (budget.code == MotionQuerySearchBudgetCodeUVE::InvalidResultCount) {
+        return MotionQueryAnimationSettingsValidationResultUVE{
+            MotionQueryAnimationSettingsValidationCodeUVE::InvalidSearchResults,
+            budget.message};
+    }
+    if (budget.code == MotionQuerySearchBudgetCodeUVE::InvalidQualityTier) {
+        return MotionQueryAnimationSettingsValidationResultUVE{
+            MotionQueryAnimationSettingsValidationCodeUVE::InvalidQualityTier,
+            budget.message};
+    }
+    if (!HasValidWeightsUVE(settings.weights)) {
+        return MotionQueryAnimationSettingsValidationResultUVE{
+            MotionQueryAnimationSettingsValidationCodeUVE::InvalidWeights,
+            "motion query animation node weights are invalid"};
+    }
+    if (settings.continuity.policy != MotionQueryContinuityPolicyUVE::Disabled &&
+        settings.continuity.policy != MotionQueryContinuityPolicyUVE::BlendPreviousWithinWindow) {
+        return MotionQueryAnimationSettingsValidationResultUVE{
+            MotionQueryAnimationSettingsValidationCodeUVE::InvalidContinuityPolicy,
+            "motion query animation node continuity policy is unsupported"};
+    }
+    if (!std::isfinite(settings.continuity.maximumPreviousAgeSeconds) ||
+        settings.continuity.maximumPreviousAgeSeconds < 0.0) {
+        return MotionQueryAnimationSettingsValidationResultUVE{
+            MotionQueryAnimationSettingsValidationCodeUVE::InvalidContinuityAge,
+            "motion query animation node continuity age is invalid"};
+    }
+    if (!std::isfinite(settings.transition.minimumCostImprovement) ||
+        settings.transition.minimumCostImprovement < 0.0F ||
+        settings.transition.minimumCostImprovement > MotionQueryTransitionSettingsUVE::kMaximumCostImprovementUVE ||
+        !std::isfinite(settings.transition.minimumHoldSeconds) ||
+        settings.transition.minimumHoldSeconds < 0.0 ||
+        !std::isfinite(settings.transition.maximumHoldWindowSeconds) ||
+        settings.transition.maximumHoldWindowSeconds < 0.0 ||
+        settings.transition.maximumHoldWindowSeconds >
+            MotionQueryTransitionSettingsUVE::kMaximumHoldWindowSecondsUVE ||
+        settings.transition.minimumHoldSeconds > settings.transition.maximumHoldWindowSeconds) {
+        return MotionQueryAnimationSettingsValidationResultUVE{
+            MotionQueryAnimationSettingsValidationCodeUVE::InvalidTransitionSettings,
+            "motion query animation node transition settings are invalid"};
+    }
+    return MotionQueryAnimationSettingsValidationResultUVE{
+        MotionQueryAnimationSettingsValidationCodeUVE::Valid, "valid"};
+}
+
 MotionQueryAnimationNodeResultUVE EvaluateMotionQueryAnimationNodeUVE(
     const UVE::Core::MotionQueryUVE& query,
     const UVE::Core::MotionMatchingDatabaseUVE& database,
@@ -41,11 +90,11 @@ MotionQueryAnimationNodeResultUVE EvaluateMotionQueryAnimationNodeUVE(
         }
         return result;
     };
-    if (settings.maximumSearchResults == 0U ||
-        settings.maximumSearchResults > MotionQuerySearchIndexUVE::kMaximumQueryResultsUVE ||
-        !HasValidWeightsUVE(settings.weights)) {
+    const MotionQueryAnimationSettingsValidationResultUVE settingsValidation =
+        ValidateMotionQueryAnimationNodeSettingsUVE(settings);
+    if (!settingsValidation.IsValidUVE()) {
         return publish(MakeResultUVE(MotionQueryAnimationNodeCodeUVE::InvalidSettings,
-                             "motion query animation node settings are invalid"));
+                             settingsValidation.message.c_str()));
     }
     const UVE::Core::MotionQueryValidationResultUVE queryValidation =
         UVE::Core::ValidateMotionQueryUVE(query);
