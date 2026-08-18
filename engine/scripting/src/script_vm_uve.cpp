@@ -123,6 +123,57 @@ namespace {
     return context.SetOutputUVE(nodeId, pinName, std::move(value));
 }
 
+[[nodiscard]] ScriptVmExecutionResultUVE ExecuteConversionNodeUVE(
+    const ScriptIrInstructionUVE& instruction, const std::size_t instructionIndex,
+    ScriptVmExecutionContextUVE& context) {
+    const std::uint32_t nodeId = instruction.sourceNodeId;
+    if (instruction.nodeTypeId == "convert.number_to_boolean") {
+        const float* value = FindNumberInputUVE(context, nodeId, "Value");
+        if (value == nullptr || !std::isfinite(*value)) {
+            return MakeNodeFailureUVE(instructionIndex, "Number to Boolean requires a finite Number Value.");
+        }
+        if (!SetNodeOutputUVE(context, nodeId, "Result", *value != 0.0F)) {
+            return MakeNodeFailureUVE(instructionIndex, "Number to Boolean rejected its output capacity.");
+        }
+        return {};
+    }
+    if (instruction.nodeTypeId == "convert.boolean_to_number") {
+        const bool* value = FindBooleanInputUVE(context, nodeId, "Value");
+        if (value == nullptr) {
+            return MakeNodeFailureUVE(instructionIndex, "Boolean to Number requires a Boolean Value.");
+        }
+        if (!SetNodeOutputUVE(context, nodeId, "Result", *value ? 1.0F : 0.0F)) {
+            return MakeNodeFailureUVE(instructionIndex, "Boolean to Number rejected its output capacity.");
+        }
+        return {};
+    }
+    if (instruction.nodeTypeId == "convert.vector2_to_vector3") {
+        const ScriptVector2ValueUVE* vector = FindVector2InputUVE(context, nodeId, "Vector");
+        const float* z = FindNumberInputUVE(context, nodeId, "Z");
+        if (vector == nullptr || (z != nullptr && !std::isfinite(*z))) {
+            return MakeNodeFailureUVE(instructionIndex, "Vector2 to Vector3 requires a finite Vector and optional finite Z.");
+        }
+        const ScriptVector3ValueResultUVE evaluated = EvaluateScriptVector3MakeUVE(
+            vector->value.x, vector->value.y, z == nullptr ? 0.0F : *z);
+        if (!evaluated.IsAppliedUVE() || !SetNodeOutputUVE(context, nodeId, "Result", evaluated.value)) {
+            return MakeNodeFailureUVE(instructionIndex, "Vector2 to Vector3 rejected its input or output capacity.");
+        }
+        return {};
+    }
+    if (instruction.nodeTypeId == "convert.vector3_to_vector2") {
+        const ScriptVector3ValueUVE* vector = FindVector3InputUVE(context, nodeId, "Vector");
+        if (vector == nullptr) {
+            return MakeNodeFailureUVE(instructionIndex, "Vector3 to Vector2 requires a finite Vector input.");
+        }
+        const ScriptVector2ValueResultUVE evaluated = EvaluateScriptVector2MakeUVE(vector->value.x, vector->value.y);
+        if (!evaluated.IsAppliedUVE() || !SetNodeOutputUVE(context, nodeId, "Result", evaluated.value)) {
+            return MakeNodeFailureUVE(instructionIndex, "Vector3 to Vector2 rejected its input or output capacity.");
+        }
+        return {};
+    }
+    return MakeNodeFailureUVE(instructionIndex, "Unknown conversion node type.");
+}
+
 [[nodiscard]] ScriptVmExecutionResultUVE ExecuteVariableNodeUVE(
     const ScriptIrInstructionUVE& instruction, const std::size_t instructionIndex,
     ScriptVmExecutionContextUVE& context) {
@@ -614,6 +665,24 @@ namespace {
     return FindVector2InputUVE(context, nodeId, "Vector") != nullptr;
 }
 
+[[nodiscard]] bool HasRequiredConversionInputsUVE(const ScriptIrInstructionUVE& instruction,
+                                                     const ScriptVmExecutionContextUVE& context) {
+    const std::uint32_t nodeId = instruction.sourceNodeId;
+    if (instruction.nodeTypeId == "convert.number_to_boolean") {
+        return FindNumberInputUVE(context, nodeId, "Value") != nullptr;
+    }
+    if (instruction.nodeTypeId == "convert.boolean_to_number") {
+        return FindBooleanInputUVE(context, nodeId, "Value") != nullptr;
+    }
+    if (instruction.nodeTypeId == "convert.vector2_to_vector3") {
+        return FindVector2InputUVE(context, nodeId, "Vector") != nullptr;
+    }
+    if (instruction.nodeTypeId == "convert.vector3_to_vector2") {
+        return FindVector3InputUVE(context, nodeId, "Vector") != nullptr;
+    }
+    return false;
+}
+
 [[nodiscard]] bool HasRequiredVariableInputsUVE(const ScriptIrInstructionUVE& instruction,
                                                   const ScriptVmExecutionContextUVE& context) {
     if (instruction.nodeTypeId.rfind("variable.", 0U) != 0U) {
@@ -911,6 +980,7 @@ namespace {
         }
 
         const bool isVariableNode = instruction.nodeTypeId.rfind("variable.", 0U) == 0U;
+        const bool isConversionNode = instruction.nodeTypeId.rfind("convert.", 0U) == 0U;
         const bool isVector2Node = instruction.nodeTypeId.rfind("math.vector2.", 0U) == 0U;
         const bool isVector3Node = instruction.nodeTypeId.rfind("math.vector3.", 0U) == 0U;
         const bool isFloatNode = instruction.nodeTypeId.rfind("math.float.", 0U) == 0U;
@@ -919,6 +989,7 @@ namespace {
         const bool isEngineLogNode = instruction.nodeTypeId == "engine.log";
         const bool isEngineGetTimeNode = instruction.nodeTypeId == "engine.get_time";
         if ((isVariableNode && !HasRequiredVariableInputsUVE(instruction, context)) ||
+            (isConversionNode && !HasRequiredConversionInputsUVE(instruction, context)) ||
             (isVector2Node && !HasRequiredVector2InputsUVE(instruction, context)) ||
             (isVector3Node && !HasRequiredVector3InputsUVE(instruction, context)) ||
             (isFloatNode && !HasRequiredFloatInputsUVE(instruction, context)) ||
@@ -934,6 +1005,8 @@ namespace {
         ScriptVmExecutionResultUVE nodeResult;
         if (isVariableNode) {
             nodeResult = ExecuteVariableNodeUVE(instruction, instructionIndex, context);
+        } else if (isConversionNode) {
+            nodeResult = ExecuteConversionNodeUVE(instruction, instructionIndex, context);
         } else if (isVector2Node) {
             nodeResult = ExecuteVector2NodeUVE(instruction, instructionIndex, context);
         } else if (isVector3Node) {
@@ -1157,6 +1230,7 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                                              instruction.targetNodeId, {}, {}});
             } else {
                 const bool isVariableNode = instruction.nodeTypeId.rfind("variable.", 0U) == 0U;
+                const bool isConversionNode = instruction.nodeTypeId.rfind("convert.", 0U) == 0U;
                 const bool isVector2Node = instruction.nodeTypeId.rfind("math.vector2.", 0U) == 0U;
                 const bool isVector3Node = instruction.nodeTypeId.rfind("math.vector3.", 0U) == 0U;
                 const bool isFloatNode = instruction.nodeTypeId.rfind("math.float.", 0U) == 0U;
@@ -1165,6 +1239,7 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                 const bool isEngineLogNode = instruction.nodeTypeId == "engine.log";
                 const bool isEngineGetTimeNode = instruction.nodeTypeId == "engine.get_time";
                 if ((isVariableNode && !HasRequiredVariableInputsUVE(instruction, *context)) ||
+                    (isConversionNode && !HasRequiredConversionInputsUVE(instruction, *context)) ||
                     (isVector2Node && !HasRequiredVector2InputsUVE(instruction, *context)) ||
                     (isVector3Node && !HasRequiredVector3InputsUVE(instruction, *context)) ||
                     (isFloatNode && !HasRequiredFloatInputsUVE(instruction, *context)) ||
@@ -1184,6 +1259,8 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                 ScriptVmExecutionResultUVE nodeResult;
                 if (isVariableNode) {
                     nodeResult = ExecuteVariableNodeUVE(instruction, index, *context);
+                } else if (isConversionNode) {
+                    nodeResult = ExecuteConversionNodeUVE(instruction, index, *context);
                 } else if (isVector2Node) {
                     nodeResult = ExecuteVector2NodeUVE(instruction, index, *context);
                 } else if (isVector3Node) {
