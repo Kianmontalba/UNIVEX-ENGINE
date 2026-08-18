@@ -366,9 +366,12 @@
                                 </Grid>
                                 <Border Grid.Row="1" Padding="6" Background="#20242B" BorderBrush="#394150" BorderThickness="1" CornerRadius="3">
                                     <Grid RowDefinitions="Auto,Auto,Auto,*" ColumnDefinitions="*,*" ColumnSpacing="8" RowSpacing="4">
-                                        <Grid Grid.ColumnSpan="2" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                                        <Grid Grid.ColumnSpan="2" ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="6">
                                             <TextBlock x:Name="MotionQueryAuthoringStatusTextBlock" Text="Connect to read native Motion Query databases." TextWrapping="Wrap" Opacity="0.76" />
                                             <TextBlock Grid.Column="1" Text="C++ authority · copied state only" FontSize="9" Opacity="0.55" VerticalAlignment="Center" />
+                                            <Button Grid.Column="2" x:Name="MotionQueryUndoButton" Content="Undo" Click="MotionQueryUndoButton_OnClick" Padding="4,2" FontSize="10" IsEnabled="False" />
+                                            <Button Grid.Column="3" x:Name="MotionQueryRedoButton" Content="Redo" Click="MotionQueryRedoButton_OnClick" Padding="4,2" FontSize="10" IsEnabled="False" />
+                                            <Button Grid.Column="4" x:Name="MotionQueryReadSnapshotButton" Content="Refresh" Click="MotionQueryReadSnapshotButton_OnClick" Padding="4,2" FontSize="10" IsEnabled="False" />
                                         </Grid>
                                         <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Text="DATABASE AUTHORING · bounded existing-resource commands" FontSize="10" Opacity="0.68" />
                                         <Grid Grid.Row="2" Grid.ColumnSpan="2" ColumnDefinitions="*,*,*,*,*,Auto" ColumnSpacing="4">
