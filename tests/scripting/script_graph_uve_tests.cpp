@@ -244,6 +244,38 @@ TEST(ScriptGraphUVETest, ValidateUVE_EnforcesExecutionLinkCardinality) {
     EXPECT_EQ(diagnostics[1].nodeId, 3U);
 }
 
+TEST(ScriptGraphUVETest, ValidateUVE_EnforcesDataInputCardinality) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({10U, "engine.get_time"}));
+    ASSERT_TRUE(graph.AddNodeUVE({11U, "engine.get_time"}));
+    ASSERT_TRUE(graph.AddNodeUVE({20U, "math.float.add"}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{10U, "Value"}, {20U, "A"}}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{11U, "Value"}, {20U, "A"}}));
+
+    const std::vector<ScriptValidationDiagnosticUVE> diagnostics = graph.ValidateUVE(registry);
+    ASSERT_EQ(diagnostics.size(), 1U);
+    EXPECT_EQ(diagnostics.front().code, ScriptValidationCodeUVE::DataLinkCardinality);
+    EXPECT_EQ(diagnostics.front().nodeId, 20U);
+    EXPECT_EQ(diagnostics.front().pinName, "A");
+    ASSERT_TRUE(diagnostics.front().relatedEndpoint.has_value());
+    EXPECT_EQ(diagnostics.front().relatedEndpoint->nodeId, 11U);
+    EXPECT_EQ(diagnostics.front().relatedEndpoint->pinName, "Value");
+}
+
+TEST(ScriptGraphUVETest, ValidateUVE_AllowsDistinctDataInputPins) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({10U, "engine.get_time"}));
+    ASSERT_TRUE(graph.AddNodeUVE({20U, "math.float.add"}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{10U, "Value"}, {20U, "A"}}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{10U, "Value"}, {20U, "B"}}));
+
+    EXPECT_TRUE(graph.ValidateUVE(registry).empty());
+}
+
 TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_PreservesEngineLogBindingNode) {
     ScriptNodeRegistryUVE registry;
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));

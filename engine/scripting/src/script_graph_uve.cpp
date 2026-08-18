@@ -199,6 +199,7 @@ std::vector<ScriptValidationDiagnosticUVE> ScriptGraphUVE::ValidateUVE(
 
     std::set<std::pair<std::uint32_t, std::string>> linkedExecutionOutputs;
     std::set<std::pair<std::uint32_t, std::string>> linkedExecutionInputs;
+    std::set<std::pair<std::uint32_t, std::string>> linkedDataInputs;
     for (const ScriptLinkUVE& link : m_links) {
         if (link.output.nodeId == link.input.nodeId) {
             AddDiagnosticUVE(diagnostics, ScriptValidationCodeUVE::SelfLink, link.output.nodeId,
@@ -261,6 +262,14 @@ std::vector<ScriptValidationDiagnosticUVE> ScriptGraphUVE::ValidateUVE(
                                  link.input.nodeId, link.input.pinName,
                                  "An execution input may have only one upstream link.", link.output);
             }
+        } else if (outputPin->direction == ScriptPinDirectionUVE::Output &&
+                   inputPin->direction == ScriptPinDirectionUVE::Input &&
+                   outputPin->role != ScriptPinRoleUVE::Execution &&
+                   inputPin->role != ScriptPinRoleUVE::Execution &&
+                   !linkedDataInputs.emplace(link.input.nodeId, link.input.pinName).second) {
+            AddDiagnosticUVE(diagnostics, ScriptValidationCodeUVE::DataLinkCardinality,
+                             link.input.nodeId, link.input.pinName,
+                             "A data input may have only one upstream link.", link.output);
         }
     }
     return diagnostics;
