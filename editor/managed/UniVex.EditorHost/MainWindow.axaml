@@ -280,6 +280,7 @@
                                         <ComboBoxItem Tag="shader" Content="Shader" />
                                         <ComboBoxItem Tag="material" Content="Material" />
                                         <ComboBoxItem Tag="save" Content="Save" />
+                                        <ComboBoxItem Tag="motionQuery" Content="Motion Query" />
                                         <ComboBoxItem Tag="registered" Content="Registered" />
                                         <ComboBoxItem Tag="otherFiles" Content="Other Files" />
                                     </ComboBox>
