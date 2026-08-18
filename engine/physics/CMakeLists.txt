@@ -6,6 +6,7 @@ add_library(uve_physics STATIC
     src/character_controller_uve.cpp
     src/area_overlap_system_uve.cpp
     src/collider_world_aabb_cache_uve.cpp
+    src/collider_world_aabb_dynamic_bvh_uve.cpp
     src/collision_system_uve.cpp
     src/physics_constraint_system_uve.cpp
     src/physics_system_uve.cpp
