@@ -2,6 +2,7 @@
 #include "uve/scripting/script_vm_uve.h"
 
 #include <algorithm>
+#include <bit>
 #include <cmath>
 #include <iterator>
 #include <type_traits>
@@ -9,6 +10,16 @@
 
 namespace UVE::Scripting {
 namespace {
+
+[[nodiscard]] float RandomUnitFromSeedUVE(const float seed) noexcept {
+    std::uint32_t state = std::bit_cast<std::uint32_t>(seed) ^ 0x9E3779B9U;
+    state ^= state >> 16U;
+    state *= 0x7FEB352DU;
+    state ^= state >> 15U;
+    state *= 0x846CA68BU;
+    state ^= state >> 16U;
+    return static_cast<float>(state) / 4294967296.0F;
+}
 
 [[nodiscard]] ScriptVmValueBindingUVE* FindMutableBindingUVE(
     std::vector<ScriptVmValueBindingUVE>& bindings, const std::uint32_t nodeId,
@@ -296,13 +307,29 @@ namespace {
     ScriptVmExecutionContextUVE& context) {
     const std::uint32_t nodeId = instruction.sourceNodeId;
     float result = 0.0F;
-    if (instruction.nodeTypeId == "math.float.abs") {
+    const std::string& nodeTypeId = instruction.nodeTypeId;
+    if (nodeTypeId == "math.float.abs" || nodeTypeId == "math.float.sin" ||
+        nodeTypeId == "math.float.cos" || nodeTypeId == "math.float.tan" ||
+        nodeTypeId == "math.float.sqrt") {
         const float* value = FindNumberInputUVE(context, nodeId, "Value");
         if (value == nullptr || !std::isfinite(*value)) {
-            return MakeNodeFailureUVE(instructionIndex, "Abs Float requires a finite Number Value input.");
+            return MakeNodeFailureUVE(instructionIndex, "Float unary node requires a finite Number Value input.");
         }
-        result = std::fabs(*value);
-    } else if (instruction.nodeTypeId == "math.float.clamp") {
+        if (nodeTypeId == "math.float.abs") {
+            result = std::fabs(*value);
+        } else if (nodeTypeId == "math.float.sin") {
+            result = std::sin(*value);
+        } else if (nodeTypeId == "math.float.cos") {
+            result = std::cos(*value);
+        } else if (nodeTypeId == "math.float.tan") {
+            result = std::tan(*value);
+        } else {
+            if (*value < 0.0F) {
+                return MakeNodeFailureUVE(instructionIndex, "Sqrt Float requires a non-negative Value.");
+            }
+            result = std::sqrt(*value);
+        }
+    } else if (nodeTypeId == "math.float.clamp") {
         const float* value = FindNumberInputUVE(context, nodeId, "Value");
         const float* minimum = FindNumberInputUVE(context, nodeId, "Min");
         const float* maximum = FindNumberInputUVE(context, nodeId, "Max");
@@ -315,6 +342,51 @@ namespace {
             return MakeNodeFailureUVE(instructionIndex, "Clamp Float requires Min not greater than Max.");
         }
         result = std::clamp(*value, *minimum, *maximum);
+    } else if (nodeTypeId == "math.float.lerp") {
+        const float* lhs = FindNumberInputUVE(context, nodeId, "A");
+        const float* rhs = FindNumberInputUVE(context, nodeId, "B");
+        const float* alpha = FindNumberInputUVE(context, nodeId, "Alpha");
+        if (lhs == nullptr || rhs == nullptr || alpha == nullptr || !std::isfinite(*lhs) ||
+            !std::isfinite(*rhs) || !std::isfinite(*alpha)) {
+            return MakeNodeFailureUVE(instructionIndex, "Lerp Float requires finite Number inputs A, B, and Alpha.");
+        }
+        result = *lhs + ((*rhs - *lhs) * *alpha);
+    } else if (nodeTypeId == "math.float.remap") {
+        const float* value = FindNumberInputUVE(context, nodeId, "Value");
+        const float* fromMin = FindNumberInputUVE(context, nodeId, "FromMin");
+        const float* fromMax = FindNumberInputUVE(context, nodeId, "FromMax");
+        const float* toMin = FindNumberInputUVE(context, nodeId, "ToMin");
+        const float* toMax = FindNumberInputUVE(context, nodeId, "ToMax");
+        if (value == nullptr || fromMin == nullptr || fromMax == nullptr || toMin == nullptr ||
+            toMax == nullptr || !std::isfinite(*value) || !std::isfinite(*fromMin) ||
+            !std::isfinite(*fromMax) || !std::isfinite(*toMin) || !std::isfinite(*toMax)) {
+            return MakeNodeFailureUVE(instructionIndex,
+                                      "Remap Float requires finite Number inputs Value, ranges, and targets.");
+        }
+        if (*fromMin == *fromMax) {
+            return MakeNodeFailureUVE(instructionIndex, "Remap Float requires a non-zero source range.");
+        }
+        const float alpha = (*value - *fromMin) / (*fromMax - *fromMin);
+        result = *toMin + ((*toMax - *toMin) * alpha);
+    } else if (nodeTypeId == "math.float.random") {
+        const float* seed = FindNumberInputUVE(context, nodeId, "Seed");
+        if (seed == nullptr || !std::isfinite(*seed)) {
+            return MakeNodeFailureUVE(instructionIndex, "Random Float requires a finite Number Seed.");
+        }
+        result = RandomUnitFromSeedUVE(*seed);
+    } else if (nodeTypeId == "math.float.random_range") {
+        const float* seed = FindNumberInputUVE(context, nodeId, "Seed");
+        const float* minimum = FindNumberInputUVE(context, nodeId, "Min");
+        const float* maximum = FindNumberInputUVE(context, nodeId, "Max");
+        if (seed == nullptr || minimum == nullptr || maximum == nullptr || !std::isfinite(*seed) ||
+            !std::isfinite(*minimum) || !std::isfinite(*maximum)) {
+            return MakeNodeFailureUVE(instructionIndex,
+                                      "Random Range Float requires finite Number Seed, Min, and Max.");
+        }
+        if (*minimum > *maximum) {
+            return MakeNodeFailureUVE(instructionIndex, "Random Range Float requires Min not greater than Max.");
+        }
+        result = *minimum + ((*maximum - *minimum) * RandomUnitFromSeedUVE(*seed));
     } else {
         const float* lhs = FindNumberInputUVE(context, nodeId, "A");
         const float* rhs = FindNumberInputUVE(context, nodeId, "B");
@@ -324,27 +396,27 @@ namespace {
         if (!std::isfinite(*lhs) || !std::isfinite(*rhs)) {
             return MakeNodeFailureUVE(instructionIndex, "Float node rejected non-finite input.");
         }
-        if (instruction.nodeTypeId == "math.float.add") {
+        if (nodeTypeId == "math.float.add") {
             result = *lhs + *rhs;
-        } else if (instruction.nodeTypeId == "math.float.subtract") {
+        } else if (nodeTypeId == "math.float.subtract") {
             result = *lhs - *rhs;
-        } else if (instruction.nodeTypeId == "math.float.multiply") {
+        } else if (nodeTypeId == "math.float.multiply") {
             result = *lhs * *rhs;
-        } else if (instruction.nodeTypeId == "math.float.divide") {
+        } else if (nodeTypeId == "math.float.divide") {
             if (std::fabs(*rhs) <= 1.0e-6F) {
                 return MakeNodeFailureUVE(instructionIndex, "Divide Float rejected a zero-near divisor.");
             }
             result = *lhs / *rhs;
-        } else if (instruction.nodeTypeId == "math.float.modulo") {
+        } else if (nodeTypeId == "math.float.modulo") {
             if (std::fabs(*rhs) <= 1.0e-6F) {
                 return MakeNodeFailureUVE(instructionIndex, "Modulo Float rejected a zero-near divisor.");
             }
             result = std::fmod(*lhs, *rhs);
-        } else if (instruction.nodeTypeId == "math.float.min") {
+        } else if (nodeTypeId == "math.float.min") {
             result = std::fmin(*lhs, *rhs);
-        } else if (instruction.nodeTypeId == "math.float.max") {
+        } else if (nodeTypeId == "math.float.max") {
             result = std::fmax(*lhs, *rhs);
-        } else if (instruction.nodeTypeId == "math.float.power") {
+        } else if (nodeTypeId == "math.float.power") {
             result = std::pow(*lhs, *rhs);
         } else {
             return {};
@@ -710,16 +782,37 @@ namespace {
     if (instruction.nodeTypeId.rfind("math.float.", 0U) != 0U) {
         return true;
     }
-    if (instruction.nodeTypeId == "math.float.abs") {
-        return FindNumberInputUVE(context, instruction.sourceNodeId, "Value") != nullptr;
+    const std::uint32_t nodeId = instruction.sourceNodeId;
+    const std::string& nodeTypeId = instruction.nodeTypeId;
+    if (nodeTypeId == "math.float.abs" || nodeTypeId == "math.float.sin" ||
+        nodeTypeId == "math.float.cos" || nodeTypeId == "math.float.tan" ||
+        nodeTypeId == "math.float.sqrt" || nodeTypeId == "math.float.random") {
+        return FindNumberInputUVE(context, nodeId, nodeTypeId == "math.float.random" ? "Seed" : "Value") != nullptr;
     }
-    if (instruction.nodeTypeId == "math.float.clamp") {
-        return FindNumberInputUVE(context, instruction.sourceNodeId, "Value") != nullptr &&
-               FindNumberInputUVE(context, instruction.sourceNodeId, "Min") != nullptr &&
-               FindNumberInputUVE(context, instruction.sourceNodeId, "Max") != nullptr;
+    if (nodeTypeId == "math.float.clamp") {
+        return FindNumberInputUVE(context, nodeId, "Value") != nullptr &&
+               FindNumberInputUVE(context, nodeId, "Min") != nullptr &&
+               FindNumberInputUVE(context, nodeId, "Max") != nullptr;
     }
-    return FindNumberInputUVE(context, instruction.sourceNodeId, "A") != nullptr &&
-           FindNumberInputUVE(context, instruction.sourceNodeId, "B") != nullptr;
+    if (nodeTypeId == "math.float.lerp") {
+        return FindNumberInputUVE(context, nodeId, "A") != nullptr &&
+               FindNumberInputUVE(context, nodeId, "B") != nullptr &&
+               FindNumberInputUVE(context, nodeId, "Alpha") != nullptr;
+    }
+    if (nodeTypeId == "math.float.remap") {
+        return FindNumberInputUVE(context, nodeId, "Value") != nullptr &&
+               FindNumberInputUVE(context, nodeId, "FromMin") != nullptr &&
+               FindNumberInputUVE(context, nodeId, "FromMax") != nullptr &&
+               FindNumberInputUVE(context, nodeId, "ToMin") != nullptr &&
+               FindNumberInputUVE(context, nodeId, "ToMax") != nullptr;
+    }
+    if (nodeTypeId == "math.float.random_range") {
+        return FindNumberInputUVE(context, nodeId, "Seed") != nullptr &&
+               FindNumberInputUVE(context, nodeId, "Min") != nullptr &&
+               FindNumberInputUVE(context, nodeId, "Max") != nullptr;
+    }
+    return FindNumberInputUVE(context, nodeId, "A") != nullptr &&
+           FindNumberInputUVE(context, nodeId, "B") != nullptr;
 }
 
 [[nodiscard]] bool HasRequiredBooleanInputsUVE(const ScriptIrInstructionUVE& instruction,
