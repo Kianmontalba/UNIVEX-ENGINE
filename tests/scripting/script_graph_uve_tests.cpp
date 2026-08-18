@@ -3,6 +3,7 @@
 #include "uve/scripting/script_bytecode_uve.h"
 #include "uve/scripting/script_runtime_uve.h"
 #include "uve/scripting/script_vm_uve.h"
+#include "uve/scripting/script_rotation_value_uve.h"
 #include "uve/scripting/script_entity_query_adapter_uve.h"
 #include "uve/scripting/script_compiler_ir_uve.h"
 #include "uve/scripting/script_debugger_uve.h"
@@ -119,10 +120,10 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
 
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
     EXPECT_FALSE(RegisterBuiltInScriptNodesUVE(registry));
-    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 72U);
+    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 81U);
 
     const std::vector<ScriptNodeTypeDescriptorUVE> descriptors = registry.GetNodeTypeDescriptorsUVE();
-    ASSERT_EQ(descriptors.size(), 72U);
+    ASSERT_EQ(descriptors.size(), 81U);
     const std::vector<std::string> expectedIds{
         "flow.sequence", "flow.branch", "flow.return", "flow.do_once", "flow.gate", "flow.switch",
         "convert.number_to_boolean", "convert.boolean_to_number", "convert.vector2_to_vector3", "convert.vector3_to_vector2",
@@ -136,6 +137,8 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
         "math.vector3.make", "math.vector3.add", "math.vector3.subtract", "math.vector3.multiply",
         "math.vector3.dot", "math.vector3.cross", "math.vector3.length", "math.vector3.normalize",
         "math.vector3.distance", "math.vector3.direction", "math.vector3.lerp",
+        "math.rotation.make", "math.rotation.break", "math.rotation.degrees", "math.rotation.radians",
+        "math.rotation.euler", "math.rotation.quaternion", "math.rotation.look_at", "math.rotation.slerp", "math.rotation.rotate",
         "logic.boolean.not", "logic.boolean.and", "logic.boolean.or", "logic.boolean.xor",
         "logic.boolean.equal", "logic.boolean.not_equal", "logic.boolean.greater", "logic.boolean.less",
         "logic.boolean.greater_equal", "logic.boolean.less_equal",
@@ -167,19 +170,23 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
         EXPECT_EQ(descriptors[index].category, "Math");
         EXPECT_EQ(descriptors[index].iconId, "node.math.vector3");
     }
-    for (std::size_t index = 49U; index < 59U; ++index) {
+    for (std::size_t index = 49U; index < 58U; ++index) {
+        EXPECT_EQ(descriptors[index].category, "Rotation");
+        EXPECT_EQ(descriptors[index].iconId, "node.math.rotation");
+    }
+    for (std::size_t index = 58U; index < 68U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Logic");
         EXPECT_EQ(descriptors[index].iconId, "node.logic.boolean");
     }
-    for (std::size_t index = 59U; index < 61U; ++index) {
+    for (std::size_t index = 68U; index < 70U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Entity Query");
         EXPECT_EQ(descriptors[index].iconId, "node.entity.query");
     }
-    for (std::size_t index = 61U; index < 63U; ++index) {
+    for (std::size_t index = 70U; index < 72U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Engine");
         EXPECT_EQ(descriptors[index].iconId, "node.engine");
     }
-    for (std::size_t index = 63U; index < descriptors.size(); ++index) {
+    for (std::size_t index = 72U; index < descriptors.size(); ++index) {
         EXPECT_EQ(descriptors[index].category, "Variable");
         EXPECT_EQ(descriptors[index].iconId, "node.variable");
     }
@@ -388,6 +395,24 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
     EXPECT_EQ(multiply->pins[0].type, ScriptValueTypeUVE::Vector3);
     EXPECT_EQ(multiply->pins[1].type, ScriptValueTypeUVE::Number);
     EXPECT_EQ(multiply->pins[2].type, ScriptValueTypeUVE::Vector3);
+
+    const ScriptNodeTypeDescriptorUVE* makeRotation = registry.FindNodeTypeUVE("math.rotation.make");
+    ASSERT_NE(makeRotation, nullptr);
+    ASSERT_EQ(makeRotation->pins.size(), 3U);
+    EXPECT_EQ(makeRotation->pins[0].type, ScriptValueTypeUVE::Vector3);
+    EXPECT_EQ(makeRotation->pins[1].type, ScriptValueTypeUVE::Number);
+    EXPECT_EQ(makeRotation->pins[2].type, ScriptValueTypeUVE::Rotation);
+    const ScriptNodeTypeDescriptorUVE* slerpRotation = registry.FindNodeTypeUVE("math.rotation.slerp");
+    ASSERT_NE(slerpRotation, nullptr);
+    ASSERT_EQ(slerpRotation->pins.size(), 4U);
+    EXPECT_EQ(slerpRotation->pins[0].type, ScriptValueTypeUVE::Rotation);
+    EXPECT_EQ(slerpRotation->pins[1].type, ScriptValueTypeUVE::Rotation);
+    EXPECT_EQ(slerpRotation->pins[3].type, ScriptValueTypeUVE::Rotation);
+    const ScriptNodeTypeDescriptorUVE* rotateRotation = registry.FindNodeTypeUVE("math.rotation.rotate");
+    ASSERT_NE(rotateRotation, nullptr);
+    EXPECT_EQ(rotateRotation->pins[0].type, ScriptValueTypeUVE::Rotation);
+    EXPECT_EQ(rotateRotation->pins[1].type, ScriptValueTypeUVE::Vector3);
+    EXPECT_EQ(rotateRotation->pins[2].type, ScriptValueTypeUVE::Vector3);
 }
 
 TEST(ScriptVectorMathUVETest, Vector2V2FunctionsAreFiniteAndDeterministic) {

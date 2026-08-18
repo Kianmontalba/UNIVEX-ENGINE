@@ -53,6 +53,8 @@ namespace {
                        std::isfinite(typedValue.value.z);
             } else if constexpr (std::is_same_v<ValueType, ScriptVector2ValueUVE>) {
                 return std::isfinite(typedValue.value.x) && std::isfinite(typedValue.value.y);
+            } else if constexpr (std::is_same_v<ValueType, ScriptRotationValueUVE>) {
+                return Math::IsFiniteUVE(typedValue.value);
             } else {
                 return typedValue.IsValidUVE();
             }
@@ -62,7 +64,8 @@ namespace {
 
 [[nodiscard]] bool IsSupportedLocalVariableValueUVE(const ScriptVmValueUVE& value) noexcept {
     return std::holds_alternative<float>(value) || std::holds_alternative<bool>(value) ||
-           std::holds_alternative<ScriptVector3ValueUVE>(value);
+           std::holds_alternative<ScriptVector3ValueUVE>(value) ||
+           std::holds_alternative<ScriptRotationValueUVE>(value);
 }
 
 [[nodiscard]] ScriptVmLocalVariableUVE* FindMutableLocalVariableUVE(
@@ -109,6 +112,12 @@ namespace {
     const ScriptVmExecutionContextUVE& context, const std::uint32_t nodeId, const char* pinName) {
     const ScriptVmValueBindingUVE* binding = FindBindingUVE(context.inputs, nodeId, pinName);
     return binding == nullptr ? nullptr : std::get_if<ScriptVector2ValueUVE>(&binding->value);
+}
+
+[[nodiscard]] const ScriptRotationValueUVE* FindRotationInputUVE(
+    const ScriptVmExecutionContextUVE& context, const std::uint32_t nodeId, const char* pinName) {
+    const ScriptVmValueBindingUVE* binding = FindBindingUVE(context.inputs, nodeId, pinName);
+    return binding == nullptr ? nullptr : std::get_if<ScriptRotationValueUVE>(&binding->value);
 }
 
 [[nodiscard]] const bool* FindBooleanInputUVE(const ScriptVmExecutionContextUVE& context,
@@ -668,6 +677,82 @@ namespace {
     return {};
 }
 
+[[nodiscard]] ScriptVmExecutionResultUVE ExecuteRotationNodeUVE(
+    const ScriptIrInstructionUVE& instruction, const std::size_t instructionIndex,
+    ScriptVmExecutionContextUVE& context) {
+    const std::uint32_t nodeId = instruction.sourceNodeId;
+    const std::string& type = instruction.nodeTypeId;
+    if (type == "math.rotation.make") {
+        const ScriptVector3ValueUVE* axis = FindVector3InputUVE(context, nodeId, "Axis");
+        const float* radians = FindNumberInputUVE(context, nodeId, "Radians");
+        if (axis == nullptr || radians == nullptr) return MakeNodeFailureUVE(instructionIndex, "Make Rotation requires Axis and Radians.");
+        const auto value = EvaluateScriptRotationMakeUVE(*axis, *radians);
+        if (!value.IsAppliedUVE() || !SetNodeOutputUVE(context, nodeId, "Rotation", value.value)) return MakeNodeFailureUVE(instructionIndex, "Make Rotation rejected its input or output capacity.");
+        return {};
+    }
+    if (type == "math.rotation.break") {
+        const ScriptRotationValueUVE* rotation = FindRotationInputUVE(context, nodeId, "Rotation");
+        if (rotation == nullptr) return MakeNodeFailureUVE(instructionIndex, "Break Rotation requires a Rotation input.");
+        const auto value = EvaluateScriptRotationBreakUVE(*rotation);
+        if (!value.IsAppliedUVE() || !SetNodeOutputUVE(context, nodeId, "Axis", value.axis) ||
+            !SetNodeOutputUVE(context, nodeId, "Radians", value.radians)) return MakeNodeFailureUVE(instructionIndex, "Break Rotation rejected its input or output capacity.");
+        return {};
+    }
+    if (type == "math.rotation.degrees" || type == "math.rotation.radians") {
+        const char* inputName = type == "math.rotation.degrees" ? "Radians" : "Degrees";
+        const char* outputName = type == "math.rotation.degrees" ? "Degrees" : "Radians";
+        const float* input = FindNumberInputUVE(context, nodeId, inputName);
+        if (input == nullptr) return MakeNodeFailureUVE(instructionIndex, "Rotation angle conversion requires a Number input.");
+        const auto value = type == "math.rotation.degrees" ? EvaluateScriptRotationDegreesUVE(*input)
+                                                              : EvaluateScriptRotationRadiansUVE(*input);
+        if (!value.IsAppliedUVE() || !SetNodeOutputUVE(context, nodeId, outputName, value.value)) return MakeNodeFailureUVE(instructionIndex, "Rotation angle conversion rejected its input or output capacity.");
+        return {};
+    }
+    if (type == "math.rotation.euler") {
+        const ScriptVector3ValueUVE* radians = FindVector3InputUVE(context, nodeId, "Radians");
+        if (radians == nullptr) return MakeNodeFailureUVE(instructionIndex, "Euler Rotation requires Vector3 Radians.");
+        const auto value = EvaluateScriptRotationEulerUVE(*radians);
+        if (!value.IsAppliedUVE() || !SetNodeOutputUVE(context, nodeId, "Rotation", value.value)) return MakeNodeFailureUVE(instructionIndex, "Euler Rotation rejected its input or output capacity.");
+        return {};
+    }
+    if (type == "math.rotation.quaternion") {
+        const float* x = FindNumberInputUVE(context, nodeId, "X");
+        const float* y = FindNumberInputUVE(context, nodeId, "Y");
+        const float* z = FindNumberInputUVE(context, nodeId, "Z");
+        const float* w = FindNumberInputUVE(context, nodeId, "W");
+        if (x == nullptr || y == nullptr || z == nullptr || w == nullptr) return MakeNodeFailureUVE(instructionIndex, "Quaternion Rotation requires Number X, Y, Z, and W.");
+        const auto value = EvaluateScriptRotationQuaternionUVE(*x, *y, *z, *w);
+        if (!value.IsAppliedUVE() || !SetNodeOutputUVE(context, nodeId, "Rotation", value.value)) return MakeNodeFailureUVE(instructionIndex, "Quaternion Rotation rejected its input or output capacity.");
+        return {};
+    }
+    if (type == "math.rotation.look_at") {
+        const ScriptVector3ValueUVE* direction = FindVector3InputUVE(context, nodeId, "Direction");
+        const ScriptVector3ValueUVE* up = FindVector3InputUVE(context, nodeId, "Up");
+        if (direction == nullptr || up == nullptr) return MakeNodeFailureUVE(instructionIndex, "Look At Rotation requires Direction and Up Vector3 inputs.");
+        const auto value = EvaluateScriptRotationLookAtUVE(*direction, *up);
+        if (!value.IsAppliedUVE() || !SetNodeOutputUVE(context, nodeId, "Rotation", value.value)) return MakeNodeFailureUVE(instructionIndex, "Look At Rotation rejected its input or output capacity.");
+        return {};
+    }
+    if (type == "math.rotation.slerp") {
+        const ScriptRotationValueUVE* lhs = FindRotationInputUVE(context, nodeId, "A");
+        const ScriptRotationValueUVE* rhs = FindRotationInputUVE(context, nodeId, "B");
+        const float* alpha = FindNumberInputUVE(context, nodeId, "Alpha");
+        if (lhs == nullptr || rhs == nullptr || alpha == nullptr) return MakeNodeFailureUVE(instructionIndex, "Slerp Rotation requires Rotations A/B and Number Alpha.");
+        const auto value = EvaluateScriptRotationSlerpUVE(*lhs, *rhs, *alpha);
+        if (!value.IsAppliedUVE() || !SetNodeOutputUVE(context, nodeId, "Result", value.value)) return MakeNodeFailureUVE(instructionIndex, "Slerp Rotation rejected its input or output capacity.");
+        return {};
+    }
+    if (type == "math.rotation.rotate") {
+        const ScriptRotationValueUVE* rotation = FindRotationInputUVE(context, nodeId, "Rotation");
+        const ScriptVector3ValueUVE* vector = FindVector3InputUVE(context, nodeId, "Vector");
+        if (rotation == nullptr || vector == nullptr) return MakeNodeFailureUVE(instructionIndex, "Rotate Vector requires Rotation and Vector3 inputs.");
+        const auto value = EvaluateScriptRotationRotateUVE(*rotation, *vector);
+        if (!value.IsAppliedUVE() || !SetNodeOutputUVE(context, nodeId, "Result", value.value)) return MakeNodeFailureUVE(instructionIndex, "Rotate Vector rejected its input or output capacity.");
+        return {};
+    }
+    return MakeNodeFailureUVE(instructionIndex, "Unknown rotation node type.");
+}
+
 [[nodiscard]] ScriptVmExecutionResultUVE ExecuteVector3NodeUVE(
     const ScriptIrInstructionUVE& instruction, const std::size_t instructionIndex,
     ScriptVmExecutionContextUVE& context) {
@@ -924,8 +1009,36 @@ namespace {
            FindComponentInputUVE(context, instruction.sourceNodeId, "Component") != nullptr;
 }
 
+[[nodiscard]] bool HasRequiredRotationInputsUVE(const ScriptIrInstructionUVE& instruction,
+                                                   const ScriptVmExecutionContextUVE& context) {
+    const std::uint32_t nodeId = instruction.sourceNodeId;
+    const std::string& type = instruction.nodeTypeId;
+    if (type == "math.rotation.make") {
+        return FindVector3InputUVE(context, nodeId, "Axis") != nullptr && FindNumberInputUVE(context, nodeId, "Radians") != nullptr;
+    }
+    if (type == "math.rotation.break") return FindRotationInputUVE(context, nodeId, "Rotation") != nullptr;
+    if (type == "math.rotation.degrees") return FindNumberInputUVE(context, nodeId, "Radians") != nullptr;
+    if (type == "math.rotation.radians") return FindNumberInputUVE(context, nodeId, "Degrees") != nullptr;
+    if (type == "math.rotation.euler") return FindVector3InputUVE(context, nodeId, "Radians") != nullptr;
+    if (type == "math.rotation.quaternion") {
+        return FindNumberInputUVE(context, nodeId, "X") != nullptr && FindNumberInputUVE(context, nodeId, "Y") != nullptr &&
+               FindNumberInputUVE(context, nodeId, "Z") != nullptr && FindNumberInputUVE(context, nodeId, "W") != nullptr;
+    }
+    if (type == "math.rotation.look_at") {
+        return FindVector3InputUVE(context, nodeId, "Direction") != nullptr && FindVector3InputUVE(context, nodeId, "Up") != nullptr;
+    }
+    if (type == "math.rotation.slerp") {
+        return FindRotationInputUVE(context, nodeId, "A") != nullptr && FindRotationInputUVE(context, nodeId, "B") != nullptr &&
+               FindNumberInputUVE(context, nodeId, "Alpha") != nullptr;
+    }
+    if (type == "math.rotation.rotate") {
+        return FindRotationInputUVE(context, nodeId, "Rotation") != nullptr && FindVector3InputUVE(context, nodeId, "Vector") != nullptr;
+    }
+    return true;
+}
+
 [[nodiscard]] bool HasRequiredVector3InputsUVE(const ScriptIrInstructionUVE& instruction,
-                                                const ScriptVmExecutionContextUVE& context) {
+                                                 const ScriptVmExecutionContextUVE& context) {
     const std::uint32_t nodeId = instruction.sourceNodeId;
     if (instruction.nodeTypeId == "math.vector3.make") {
         return FindNumberInputUVE(context, nodeId, "X") != nullptr &&
@@ -1165,6 +1278,7 @@ namespace {
         const bool isConversionNode = instruction.nodeTypeId.rfind("convert.", 0U) == 0U;
         const bool isVector2Node = instruction.nodeTypeId.rfind("math.vector2.", 0U) == 0U;
         const bool isVector3Node = instruction.nodeTypeId.rfind("math.vector3.", 0U) == 0U;
+        const bool isRotationNode = instruction.nodeTypeId.rfind("math.rotation.", 0U) == 0U;
         const bool isFloatNode = instruction.nodeTypeId.rfind("math.float.", 0U) == 0U;
         const bool isBooleanNode = instruction.nodeTypeId.rfind("logic.boolean.", 0U) == 0U;
         const bool isEntityQueryNode = instruction.nodeTypeId.rfind("query.entity.", 0U) == 0U;
@@ -1174,6 +1288,7 @@ namespace {
             (isConversionNode && !HasRequiredConversionInputsUVE(instruction, context)) ||
             (isVector2Node && !HasRequiredVector2InputsUVE(instruction, context)) ||
             (isVector3Node && !HasRequiredVector3InputsUVE(instruction, context)) ||
+            (isRotationNode && !HasRequiredRotationInputsUVE(instruction, context)) ||
             (isFloatNode && !HasRequiredFloatInputsUVE(instruction, context)) ||
             (isBooleanNode && !HasRequiredBooleanInputsUVE(instruction, context)) ||
             (isEntityQueryNode && !HasRequiredEntityQueryInputsUVE(instruction, context)) ||
@@ -1193,6 +1308,8 @@ namespace {
             nodeResult = ExecuteVector2NodeUVE(instruction, instructionIndex, context);
         } else if (isVector3Node) {
             nodeResult = ExecuteVector3NodeUVE(instruction, instructionIndex, context);
+        } else if (isRotationNode) {
+            nodeResult = ExecuteRotationNodeUVE(instruction, instructionIndex, context);
         } else if (isFloatNode) {
             nodeResult = ExecuteFloatNodeUVE(instruction, instructionIndex, context);
         } else if (isBooleanNode) {
@@ -1415,6 +1532,7 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                 const bool isConversionNode = instruction.nodeTypeId.rfind("convert.", 0U) == 0U;
                 const bool isVector2Node = instruction.nodeTypeId.rfind("math.vector2.", 0U) == 0U;
                 const bool isVector3Node = instruction.nodeTypeId.rfind("math.vector3.", 0U) == 0U;
+                const bool isRotationNode = instruction.nodeTypeId.rfind("math.rotation.", 0U) == 0U;
                 const bool isFloatNode = instruction.nodeTypeId.rfind("math.float.", 0U) == 0U;
                 const bool isBooleanNode = instruction.nodeTypeId.rfind("logic.boolean.", 0U) == 0U;
                 const bool isEntityQueryNode = instruction.nodeTypeId.rfind("query.entity.", 0U) == 0U;
@@ -1424,6 +1542,7 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                     (isConversionNode && !HasRequiredConversionInputsUVE(instruction, *context)) ||
                     (isVector2Node && !HasRequiredVector2InputsUVE(instruction, *context)) ||
                     (isVector3Node && !HasRequiredVector3InputsUVE(instruction, *context)) ||
+                    (isRotationNode && !HasRequiredRotationInputsUVE(instruction, *context)) ||
                     (isFloatNode && !HasRequiredFloatInputsUVE(instruction, *context)) ||
                     (isBooleanNode && !HasRequiredBooleanInputsUVE(instruction, *context)) ||
                     (isEntityQueryNode && !HasRequiredEntityQueryInputsUVE(instruction, *context)) ||
@@ -1447,6 +1566,8 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                     nodeResult = ExecuteVector2NodeUVE(instruction, index, *context);
                 } else if (isVector3Node) {
                     nodeResult = ExecuteVector3NodeUVE(instruction, index, *context);
+                } else if (isRotationNode) {
+                    nodeResult = ExecuteRotationNodeUVE(instruction, index, *context);
                 } else if (isFloatNode) {
                     nodeResult = ExecuteFloatNodeUVE(instruction, index, *context);
                 } else if (isBooleanNode) {

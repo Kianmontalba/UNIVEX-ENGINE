@@ -2,8 +2,10 @@
 
 #include "uve/math/quaternion_uve.h"
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
+#include <numbers>
 
 namespace UVE::Math {
 
@@ -127,6 +129,118 @@ Vector3UVE RotateVectorUVE(const QuaternionUVE& rotation, const Vector3UVE& vect
     const Vector3UVE axis{rotation.x, rotation.y, rotation.z};
     const Vector3UVE twiceCross = CrossUVE(axis, vector) * 2.0F;
     return vector + twiceCross * rotation.w + CrossUVE(axis, twiceCross);
+}
+
+bool TryMakeEulerUVE(const Vector3UVE& radians, QuaternionUVE& outRotation) noexcept {
+    if (!IsFiniteVectorUVE(radians)) {
+        return false;
+    }
+    const Vector3UVE half = radians * 0.5F;
+    const float sx = std::sin(half.x);
+    const float cx = std::cos(half.x);
+    const float sy = std::sin(half.y);
+    const float cy = std::cos(half.y);
+    const float sz = std::sin(half.z);
+    const float cz = std::cos(half.z);
+    if (!std::isfinite(sx) || !std::isfinite(cx) || !std::isfinite(sy) || !std::isfinite(cy) ||
+        !std::isfinite(sz) || !std::isfinite(cz)) {
+        return false;
+    }
+    return TryNormalizeUVE(QuaternionUVE{
+        sx * cy * cz - cx * sy * sz,
+        cx * sy * cz + sx * cy * sz,
+        cx * cy * sz - sx * sy * cz,
+        cx * cy * cz + sx * sy * sz,
+    }, outRotation);
+}
+
+bool TryMakeLookAtUVE(const Vector3UVE& direction, const Vector3UVE& up,
+                      QuaternionUVE& outRotation) noexcept {
+    if (!IsFiniteVectorUVE(direction) || !IsFiniteVectorUVE(up) ||
+        LengthSquaredUVE(direction) <= kMinimumQuaternionLengthSquaredUVE ||
+        LengthSquaredUVE(up) <= kMinimumQuaternionLengthSquaredUVE) {
+        return false;
+    }
+    const Vector3UVE forward = NormalizeUVE(direction);
+    const Vector3UVE rightUnnormalized = CrossUVE(up, forward);
+    if (!IsFiniteVectorUVE(rightUnnormalized) ||
+        LengthSquaredUVE(rightUnnormalized) <= kMinimumQuaternionLengthSquaredUVE) {
+        return false;
+    }
+    const Vector3UVE right = NormalizeUVE(rightUnnormalized);
+    const Vector3UVE correctedUp = CrossUVE(forward, right);
+    const float trace = right.x + correctedUp.y + forward.z;
+    QuaternionUVE candidate{};
+    if (trace > 0.0F) {
+        const float scale = std::sqrt(trace + 1.0F) * 2.0F;
+        if (!std::isfinite(scale) || scale <= std::numeric_limits<float>::epsilon()) return false;
+        candidate = QuaternionUVE{(correctedUp.z - forward.y) / scale, (forward.x - right.z) / scale,
+                                  (right.y - correctedUp.x) / scale, scale * 0.25F};
+    } else if (right.x > correctedUp.y && right.x > forward.z) {
+        const float scale = std::sqrt(1.0F + right.x - correctedUp.y - forward.z) * 2.0F;
+        if (!std::isfinite(scale) || scale <= std::numeric_limits<float>::epsilon()) return false;
+        candidate = QuaternionUVE{scale * 0.25F, (right.y + correctedUp.x) / scale,
+                                  (right.z + forward.x) / scale, (correctedUp.z - forward.y) / scale};
+    } else if (correctedUp.y > forward.z) {
+        const float scale = std::sqrt(1.0F + correctedUp.y - right.x - forward.z) * 2.0F;
+        if (!std::isfinite(scale) || scale <= std::numeric_limits<float>::epsilon()) return false;
+        candidate = QuaternionUVE{(right.y + correctedUp.x) / scale, scale * 0.25F,
+                                  (correctedUp.z + forward.y) / scale, (forward.x - right.z) / scale};
+    } else {
+        const float scale = std::sqrt(1.0F + forward.z - right.x - correctedUp.y) * 2.0F;
+        if (!std::isfinite(scale) || scale <= std::numeric_limits<float>::epsilon()) return false;
+        candidate = QuaternionUVE{(right.z + forward.x) / scale, (correctedUp.z + forward.y) / scale,
+                                  scale * 0.25F, (right.y - correctedUp.x) / scale};
+    }
+    return TryNormalizeUVE(candidate, outRotation);
+}
+
+bool TrySlerpUVE(const QuaternionUVE& lhs, const QuaternionUVE& rhs, const float alpha,
+                 QuaternionUVE& outRotation) noexcept {
+    if (!IsFiniteUVE(lhs) || !IsFiniteUVE(rhs) || !std::isfinite(alpha)) return false;
+    QuaternionUVE a{};
+    QuaternionUVE b{};
+    if (!TryNormalizeUVE(lhs, a) || !TryNormalizeUVE(rhs, b)) return false;
+    float dot = a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w;
+    if (dot < 0.0F) {
+        b = QuaternionUVE{-b.x, -b.y, -b.z, -b.w};
+        dot = -dot;
+    }
+    dot = std::clamp(dot, -1.0F, 1.0F);
+    QuaternionUVE candidate{};
+    if (dot > 0.9995F) {
+        candidate = QuaternionUVE{a.x + alpha * (b.x - a.x), a.y + alpha * (b.y - a.y),
+                                  a.z + alpha * (b.z - a.z), a.w + alpha * (b.w - a.w)};
+    } else {
+        const float theta = std::acos(dot);
+        const float sineTheta = std::sin(theta);
+        if (!std::isfinite(theta) || !std::isfinite(sineTheta) || std::fabs(sineTheta) <= 1.0e-6F) return false;
+        const float leftWeight = std::sin((1.0F - alpha) * theta) / sineTheta;
+        const float rightWeight = std::sin(alpha * theta) / sineTheta;
+        candidate = QuaternionUVE{leftWeight * a.x + rightWeight * b.x,
+                                  leftWeight * a.y + rightWeight * b.y,
+                                  leftWeight * a.z + rightWeight * b.z,
+                                  leftWeight * a.w + rightWeight * b.w};
+    }
+    return TryNormalizeUVE(candidate, outRotation);
+}
+
+bool TryToAxisAngleUVE(const QuaternionUVE& rotation, Vector3UVE& outAxis,
+                       float& outRadians) noexcept {
+    QuaternionUVE normalized{};
+    if (!TryNormalizeUVE(rotation, normalized)) return false;
+    const float clampedW = std::clamp(normalized.w, -1.0F, 1.0F);
+    const float radians = 2.0F * std::acos(clampedW);
+    const float sine = std::sqrt(std::max(0.0F, 1.0F - clampedW * clampedW));
+    if (!std::isfinite(radians) || !std::isfinite(sine)) return false;
+    Vector3UVE axis{1.0F, 0.0F, 0.0F};
+    if (sine > 1.0e-5F) {
+        axis = Vector3UVE{normalized.x / sine, normalized.y / sine, normalized.z / sine};
+    }
+    if (!IsFiniteVectorUVE(axis)) return false;
+    outAxis = axis;
+    outRadians = radians;
+    return true;
 }
 
 std::string ToStringUVE(const QuaternionUVE& rotation) {

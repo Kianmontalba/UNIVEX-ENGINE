@@ -113,6 +113,28 @@ TEST(QuaternionUVETest, CheckedHelpers_RejectNonFiniteOrZeroInputWithoutChanging
     EXPECT_EQ(preserved, (QuaternionUVE{1.0F, 2.0F, 3.0F, 4.0F}));
 }
 
+TEST(QuaternionUVETest, CheckedHelpers_EulerLookAtSlerpAndAxisAngleDecomposition) {
+    QuaternionUVE euler{};
+    ASSERT_TRUE(TryMakeEulerUVE(Vector3UVE{0.0F, 0.0F, std::numbers::pi_v<float> * 0.5F}, euler));
+    Vector3UVE axis{};
+    float radians = 0.0F;
+    ASSERT_TRUE(TryToAxisAngleUVE(euler, axis, radians));
+    EXPECT_NEAR(axis.z, 1.0F, kEpsilon);
+    EXPECT_NEAR(radians, std::numbers::pi_v<float> * 0.5F, kEpsilon);
+
+    QuaternionUVE lookAt{};
+    ASSERT_TRUE(TryMakeLookAtUVE(Vector3UVE{0.0F, 0.0F, 1.0F}, Vector3UVE{0.0F, 1.0F, 0.0F}, lookAt));
+    const Vector3UVE forward = RotateVectorUVE(lookAt, Vector3UVE{0.0F, 0.0F, 1.0F});
+    EXPECT_NEAR(forward.x, 0.0F, kEpsilon);
+    EXPECT_NEAR(forward.y, 0.0F, kEpsilon);
+    EXPECT_NEAR(forward.z, 1.0F, kEpsilon);
+
+    QuaternionUVE half{};
+    ASSERT_TRUE(TrySlerpUVE(QuaternionUVE{}, euler, 0.5F, half));
+    EXPECT_NEAR(LengthSquaredUVE(half), 1.0F, kEpsilon);
+    EXPECT_FALSE(TryMakeLookAtUVE(Vector3UVE{0.0F, 0.0F, 0.0F}, Vector3UVE{0.0F, 1.0F, 0.0F}, half));
+}
+
 TEST(QuaternionUVETest, ToStringUVE_FormatsAllFourComponents) {
     const QuaternionUVE rotation{0.0F, 0.0F, 0.0F, 1.0F};
     const std::string text = ToStringUVE(rotation);

@@ -124,6 +124,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
     std::vector<ScriptLinkUVE> stagedVector2Links;
     std::vector<ScriptLinkUVE> stagedVector3ScaleLinks;
     std::vector<ScriptLinkUVE> stagedVector3Links;
+    std::vector<ScriptLinkUVE> stagedRotationLinks;
     std::vector<ScriptLinkUVE> stagedConversionLinks;
     for (const ScriptNodeUVE& node : nodes) {
         if (node.typeId == "flow.sequence") {
@@ -307,6 +308,8 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             (sourceNode->typeId == "math.vector3.distance" && link.output.pinName == "Distance") ||
             (sourceNode->typeId == "math.vector2.length" && link.output.pinName == "Length") ||
             (sourceNode->typeId.rfind("math.float.", 0U) == 0U && link.output.pinName == "Result") ||
+            (sourceNode->typeId == "math.rotation.degrees" && link.output.pinName == "Degrees") ||
+            (sourceNode->typeId == "math.rotation.radians" && link.output.pinName == "Radians") ||
             (sourceNode->typeId == "variable.get_number" && link.output.pinName == "Result") ||
             (sourceNode->typeId == "convert.boolean_to_number" && link.output.pinName == "Result");
         const bool validDirectNumberLink = approvedNumberProducer &&
@@ -342,6 +345,8 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             (sourceNode->typeId == "math.vector3.distance" && link.output.pinName == "Distance") ||
             (sourceNode->typeId == "math.vector2.length" && link.output.pinName == "Length") ||
             (sourceNode->typeId.rfind("math.float.", 0U) == 0U && link.output.pinName == "Result") ||
+            (sourceNode->typeId == "math.rotation.degrees" && link.output.pinName == "Degrees") ||
+            (sourceNode->typeId == "math.rotation.radians" && link.output.pinName == "Radians") ||
             (sourceNode->typeId == "variable.get_number" && link.output.pinName == "Result") ||
             (sourceNode->typeId == "convert.boolean_to_number" && link.output.pinName == "Result");
         const bool validComparisonInput = link.input.pinName == "A" || link.input.pinName == "B";
@@ -383,6 +388,8 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             (sourceNode->typeId == "math.vector3.distance" && link.output.pinName == "Distance") ||
             (sourceNode->typeId == "math.vector2.length" && link.output.pinName == "Length") ||
             (sourceNode->typeId.rfind("math.float.", 0U) == 0U && link.output.pinName == "Result") ||
+            (sourceNode->typeId == "math.rotation.degrees" && link.output.pinName == "Degrees") ||
+            (sourceNode->typeId == "math.rotation.radians" && link.output.pinName == "Radians") ||
             (sourceNode->typeId == "variable.get_number" && link.output.pinName == "Result") ||
             (sourceNode->typeId == "convert.boolean_to_number" && link.output.pinName == "Result");
         const bool hasProducerDependency = std::find_if(
@@ -411,6 +418,8 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
         const bool approvedNumberProducer =
             (sourceNode->typeId == "engine.get_time" && link.output.pinName == "Value") ||
             (sourceNode->typeId.rfind("math.float.", 0U) == 0U && link.output.pinName == "Result") ||
+            (sourceNode->typeId == "math.rotation.degrees" && link.output.pinName == "Degrees") ||
+            (sourceNode->typeId == "math.rotation.radians" && link.output.pinName == "Radians") ||
             (sourceNode->typeId == "variable.get_number" && link.output.pinName == "Result") ||
             (sourceNode->typeId == "convert.boolean_to_number" && link.output.pinName == "Result");
         const bool hasProducerDependency = std::find_if(
@@ -470,7 +479,8 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             sourceNode->typeId == "math.vector3.subtract" || sourceNode->typeId == "math.vector3.multiply" ||
             sourceNode->typeId == "math.vector3.cross" || sourceNode->typeId == "math.vector3.normalize" ||
             sourceNode->typeId == "math.vector3.direction" || sourceNode->typeId == "math.vector3.lerp" ||
-            sourceNode->typeId == "variable.get_vector3" || sourceNode->typeId == "convert.vector2_to_vector3";
+            sourceNode->typeId == "math.rotation.rotate" || sourceNode->typeId == "variable.get_vector3" ||
+            sourceNode->typeId == "convert.vector2_to_vector3";
         const bool approvedOutput = link.output.pinName == "Vector" || link.output.pinName == "Result";
         const bool approvedInput = link.input.pinName == "A" || link.input.pinName == "B" ||
                                    link.input.pinName == "Vector";
@@ -482,6 +492,36 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             continue;
         }
         stagedVector3Links.push_back(link);
+    }
+    for (const ScriptLinkUVE& link : links) {
+        if (IsExecutionLinkUVE(link, nodes, registry)) continue;
+        const ScriptNodeUVE* sourceNode = FindNodeUVE(nodes, link.output.nodeId);
+        const ScriptNodeUVE* consumerNode = FindNodeUVE(nodes, link.input.nodeId);
+        if (sourceNode == nullptr || consumerNode == nullptr || consumerNode->typeId.rfind("math.rotation.", 0U) != 0U) continue;
+        const ScriptNodeTypeDescriptorUVE* sourceDescriptor = registry.FindNodeTypeUVE(sourceNode->typeId);
+        const ScriptNodeTypeDescriptorUVE* consumerDescriptor = registry.FindNodeTypeUVE(consumerNode->typeId);
+        const ScriptPinDescriptorUVE* sourcePin = sourceDescriptor == nullptr ? nullptr : FindPinUVE(*sourceDescriptor, link.output.pinName);
+        const ScriptPinDescriptorUVE* consumerPin = consumerDescriptor == nullptr ? nullptr : FindPinUVE(*consumerDescriptor, link.input.pinName);
+        const bool validRotationType = sourcePin != nullptr && consumerPin != nullptr &&
+            sourcePin->direction == ScriptPinDirectionUVE::Output && consumerPin->direction == ScriptPinDirectionUVE::Input &&
+            sourcePin->role == ScriptPinRoleUVE::Data && consumerPin->role == ScriptPinRoleUVE::Data &&
+            sourcePin->type == ScriptValueTypeUVE::Rotation && consumerPin->type == ScriptValueTypeUVE::Rotation;
+        const bool approvedProducer =
+            ((sourceNode->typeId == "math.rotation.make" || sourceNode->typeId == "math.rotation.euler" ||
+              sourceNode->typeId == "math.rotation.quaternion" || sourceNode->typeId == "math.rotation.look_at") &&
+             link.output.pinName == "Rotation") ||
+            (sourceNode->typeId == "math.rotation.slerp" && link.output.pinName == "Result");
+        const bool duplicateInput = std::any_of(stagedRotationLinks.begin(), stagedRotationLinks.end(),
+            [&](const ScriptLinkUVE& staged) { return staged.input.nodeId == link.input.nodeId && staged.input.pinName == link.input.pinName; });
+        const bool sameConsumer = stagedRotationLinks.empty() ||
+            std::all_of(stagedRotationLinks.begin(), stagedRotationLinks.end(),
+                [&](const ScriptLinkUVE& staged) { return staged.input.nodeId == link.input.nodeId; });
+        if (!validRotationType || !approvedProducer || duplicateInput || stagedRotationLinks.size() >= 2U || !sameConsumer) {
+            result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode, link.input.nodeId, link.input.pinName,
+                                          "Rotation data-link staging supports up to two direct Rotation producers on one consumer; composed and additional consumers remain deferred."});
+            continue;
+        }
+        stagedRotationLinks.push_back(link);
     }
     for (const ScriptLinkUVE& link : links) {
         if (IsExecutionLinkUVE(link, nodes, registry)) {
@@ -594,6 +634,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
     moveStagedProducerBeforeConsumer(stagedVector2Links);
     moveStagedProducerBeforeConsumer(stagedVector3ScaleLinks);
     moveStagedProducerBeforeConsumer(stagedVector3Links);
+    moveStagedProducerBeforeConsumer(stagedRotationLinks);
     moveStagedProducerBeforeConsumer(stagedConversionLinks);
 
     const auto flowExtraEntryCountUVE = [](const ScriptNodeUVE& node) noexcept -> std::size_t {
@@ -618,7 +659,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
                                                 stagedBooleanLinks.size() + stagedNumberLinks.size() +
                                                 stagedComparisonNumberLinks.size() + stagedVector2ScaleLinks.size() +
                                                 stagedVector2Links.size() + stagedVector3ScaleLinks.size() +
-                                                stagedVector3Links.size() + stagedConversionLinks.size();
+                                                stagedVector3Links.size() + stagedRotationLinks.size() + stagedConversionLinks.size();
     const auto findStagedInstructionIndex = [&](const std::uint32_t nodeId) -> std::optional<std::size_t> {
         const std::optional<std::size_t> baseIndex = FindNodeInstructionIndexUVE(instructionNodes, nodeId);
         if (!baseIndex.has_value()) {
@@ -643,6 +684,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
         countStagedBefore(stagedVector2Links);
         countStagedBefore(stagedVector3ScaleLinks);
         countStagedBefore(stagedVector3Links);
+        countStagedBefore(stagedRotationLinks);
         countStagedBefore(stagedConversionLinks);
         std::size_t flowEntriesBefore = 0U;
         for (std::size_t index = 0U; index < *baseIndex; ++index) {
