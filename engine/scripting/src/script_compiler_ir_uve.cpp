@@ -203,13 +203,16 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             consumerNode->typeId.rfind("math.float.", 0U) != 0U) {
             continue;
         }
-        const bool validDirectTimeLink = sourceNode->typeId == "engine.get_time" &&
-                                         link.output.pinName == "Value" &&
-                                         (link.input.pinName == "A" || link.input.pinName == "B");
-        if (!validDirectTimeLink || !stagedNumberLinks.empty()) {
+        const bool approvedNumberProducer =
+            (sourceNode->typeId == "engine.get_time" && link.output.pinName == "Value") ||
+            (sourceNode->typeId == "math.vector3.dot" && link.output.pinName == "Result") ||
+            (sourceNode->typeId == "math.vector3.length" && link.output.pinName == "Length");
+        const bool validDirectNumberLink = approvedNumberProducer &&
+                                           (link.input.pinName == "A" || link.input.pinName == "B");
+        if (!validDirectNumberLink || !stagedNumberLinks.empty()) {
             result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode, link.input.nodeId,
                                           link.input.pinName,
-                                          "Float data-link staging supports only one direct engine.get_time producer; composed and deeper Number dependencies remain deferred."});
+                                          "Float data-link staging supports one direct built-in Number producer (engine.get_time, Vector3 dot, or Vector3 length); composed and deeper Number dependencies remain deferred."});
             continue;
         }
         stagedNumberLinks.push_back(link);
