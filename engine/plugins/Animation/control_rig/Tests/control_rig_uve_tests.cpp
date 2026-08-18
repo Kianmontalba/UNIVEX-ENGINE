@@ -103,6 +103,30 @@ TEST(ControlRigUVETest, TryMakeAimLookAtRotationUVE_AlignsForwardAxis) {
     EXPECT_EQ(rotation, (Math::QuaternionUVE{0.0F, 0.0F, 0.0F, 1.0F}));
 }
 
+TEST(ControlRigUVETest, EvaluateControlRigUVE_UsesOptionalAimLookAtPoleVector) {
+    ControlRigUVE rig = MakeRigUVE();
+    rig.controls[3].pose.position = {0.0F, -1.0F, -1.0F};
+    rig.controls[4].pose.position = {1.0F, 0.0F, 0.0F};
+    rig.constraints[0] = ControlRigConstraintUVE{
+        "aim", ControlRigConstraintKindUVE::AimLookAt, "root", {}, {}, "target", "pole", 1.0F};
+
+    Math::QuaternionUVE expected;
+    ASSERT_TRUE(TryMakeAimLookAtRotationUVE(rig.controls[0].pose.position,
+                                             rig.controls[3].pose.position,
+                                             {1.0F, 0.0F, 0.0F}, expected));
+    const ControlRigEvaluationResultUVE result = EvaluateControlRigUVE(rig);
+    ASSERT_TRUE(result.IsSuccessUVE());
+    ASSERT_EQ(result.appliedConstraintCount, 1U);
+    EXPECT_EQ(result.controls[0].pose.rotation, expected);
+}
+
+TEST(ControlRigUVETest, ValidateControlRigUVE_RejectsMissingAimLookAtPole) {
+    ControlRigUVE rig = MakeRigUVE();
+    rig.constraints[0] = ControlRigConstraintUVE{
+        "aim", ControlRigConstraintKindUVE::AimLookAt, "root", {}, {}, "target", "missing", 1.0F};
+    EXPECT_EQ(ValidateControlRigUVE(rig).code, ControlRigValidationCodeUVE::UnknownControl);
+}
+
 TEST(ControlRigUVETest, SolveSpringPositionUVE_UsesBoundedFiniteWeightedResponse) {
     const TransformPoseUVE source{{0.0F, 0.0F, 0.0F}, {}, {1.0F, 1.0F, 1.0F}};
     const SpringPositionSolveResultUVE result = SolveSpringPositionUVE(

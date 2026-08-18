@@ -106,6 +106,7 @@ ControlRigValidationResultUVE ValidateControlRigUVE(const ControlRigUVE& rig) no
         }
         constraintIds.push_back(constraint.constraintId);
         const bool isTwoBone = constraint.kind == ControlRigConstraintKindUVE::TwoBoneIK;
+        const bool isAimLookAt = constraint.kind == ControlRigConstraintKindUVE::AimLookAt;
         const bool endpointsValid = IsIdentifierUVE(constraint.sourceControlId) &&
             (isTwoBone ? IsIdentifierUVE(constraint.midControlId) && IsIdentifierUVE(constraint.endControlId)
                        : true) && IsIdentifierUVE(constraint.targetControlId);
@@ -113,8 +114,8 @@ ControlRigValidationResultUVE ValidateControlRigUVE(const ControlRigUVE& rig) no
             FindControlUVE(rig.controls, constraint.targetControlId) == nullptr ||
             (isTwoBone && (FindControlUVE(rig.controls, constraint.midControlId) == nullptr ||
                            FindControlUVE(rig.controls, constraint.endControlId) == nullptr)) ||
-            (isTwoBone && (!constraint.poleControlId.empty() &&
-                           FindControlUVE(rig.controls, constraint.poleControlId) == nullptr))) {
+            ((isTwoBone || isAimLookAt) && (!constraint.poleControlId.empty() &&
+                                             FindControlUVE(rig.controls, constraint.poleControlId) == nullptr))) {
             return {ControlRigValidationCodeUVE::UnknownControl, constraint.constraintId,
                     "Constraint references an unknown or missing control."};
         }
@@ -269,8 +270,17 @@ ControlRigEvaluationResultUVE EvaluateControlRigUVE(const ControlRigUVE& rig) {
             const auto target = findMutable(constraint.targetControlId);
             if (constraint.kind == ControlRigConstraintKindUVE::AimLookAt) {
                 Math::QuaternionUVE rotation;
-                if (!TryMakeAimLookAtRotationUVE(source->pose.position, target->pose.position,
-                                                 {0.0F, 1.0F, 0.0F}, rotation)) {
+                Math::Vector3UVE up = {0.0F, 1.0F, 0.0F};
+                if (!constraint.poleControlId.empty()) {
+                    const auto pole = findMutable(constraint.poleControlId);
+                    if (pole != result.controls.end()) {
+                        const Math::Vector3UVE poleDirection = pole->pose.position - source->pose.position;
+                        if (Math::LengthSquaredUVE(poleDirection) > kEpsilonUVE * kEpsilonUVE) {
+                            up = Math::NormalizeUVE(poleDirection);
+                        }
+                    }
+                }
+                if (!TryMakeAimLookAtRotationUVE(source->pose.position, target->pose.position, up, rotation)) {
                     result.message = "Control Rig aim/look-at solve failed.";
                     return result;
                 }
