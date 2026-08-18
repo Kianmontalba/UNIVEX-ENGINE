@@ -96,6 +96,8 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
     std::optional<std::uint32_t> branchNodeId;
     std::optional<std::uint32_t> branchConditionSourceNodeId;
     std::optional<ScriptLinkUVE> branchConditionLink;
+    std::optional<ScriptLinkUVE> branchConditionDependencyLink;
+    std::vector<ScriptLinkUVE> stagedConditionLinks;
     for (const ScriptNodeUVE& node : nodes) {
         if (node.typeId == "flow.sequence") {
             ++sequenceNodeCount;
@@ -142,12 +144,36 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
                                                   "flow.branch data-condition staging supports only built-in Boolean producer nodes."});
                 }
                 for (const ScriptLinkUVE& dependency : links) {
-                    if (dependency.input.nodeId == link.output.nodeId &&
-                        !IsExecutionLinkUVE(dependency, nodes, registry)) {
+                    if (dependency.input.nodeId != link.output.nodeId ||
+                        IsExecutionLinkUVE(dependency, nodes, registry)) {
+                        continue;
+                    }
+                    const ScriptNodeUVE* dependencyNode = FindNodeUVE(nodes, dependency.output.nodeId);
+                    const bool supportedDependency =
+                        dependencyNode != nullptr &&
+                        (dependencyNode->typeId == "logic.boolean.not" ||
+                         dependencyNode->typeId == "logic.boolean.and" ||
+                         dependencyNode->typeId == "logic.boolean.or" ||
+                         dependencyNode->typeId == "logic.boolean.xor");
+                    if (!supportedDependency || branchConditionDependencyLink.has_value()) {
                         result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode,
                                                       dependency.input.nodeId, dependency.input.pinName,
-                                                      "flow.branch data-condition staging does not yet traverse producer data dependencies."});
+                                                      "flow.branch condition scheduling supports at most one built-in Boolean dependency hop."});
+                        continue;
                     }
+                    branchConditionDependencyLink = dependency;
+                    stagedConditionLinks.push_back(dependency);
+                    for (const ScriptLinkUVE& deeperDependency : links) {
+                        if (deeperDependency.input.nodeId == dependency.output.nodeId &&
+                            !IsExecutionLinkUVE(deeperDependency, nodes, registry)) {
+                            result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode,
+                                                          deeperDependency.input.nodeId, deeperDependency.input.pinName,
+                                                          "flow.branch condition scheduling defers dependencies deeper than one producer hop."});
+                        }
+                    }
+                }
+                if (branchConditionLink.has_value()) {
+                    stagedConditionLinks.push_back(*branchConditionLink);
                 }
             }
             for (const char* outputPin : {"True", "False"}) {
@@ -171,41 +197,44 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
 
     std::vector<ScriptNodeUVE> instructionNodes = nodes;
     if (branchNodeId.has_value() && branchConditionSourceNodeId.has_value()) {
-        const auto sourceIterator = std::find_if(instructionNodes.begin(), instructionNodes.end(),
-                                                 [&](const ScriptNodeUVE& node) {
-                                                     return node.id == *branchConditionSourceNodeId;
-                                                 });
+        std::vector<std::uint32_t> conditionOrder;
+        if (branchConditionDependencyLink.has_value()) {
+            conditionOrder.push_back(branchConditionDependencyLink->output.nodeId);
+        }
+        conditionOrder.push_back(*branchConditionSourceNodeId);
+        std::vector<ScriptNodeUVE> conditionNodes;
+        for (const std::uint32_t conditionNodeId : conditionOrder) {
+            const auto iterator = std::find_if(instructionNodes.begin(), instructionNodes.end(),
+                                               [&](const ScriptNodeUVE& node) {
+                                                   return node.id == conditionNodeId;
+                                               });
+            if (iterator != instructionNodes.end()) {
+                conditionNodes.push_back(*iterator);
+                instructionNodes.erase(iterator);
+            }
+        }
         const auto branchIterator = std::find_if(instructionNodes.begin(), instructionNodes.end(),
                                                  [&](const ScriptNodeUVE& node) {
                                                      return node.id == *branchNodeId;
                                                  });
-        if (sourceIterator != instructionNodes.end() && branchIterator != instructionNodes.end() &&
-            sourceIterator > branchIterator) {
-            ScriptNodeUVE sourceNode = *sourceIterator;
-            instructionNodes.erase(sourceIterator);
-            const auto newBranchIterator = std::find_if(instructionNodes.begin(), instructionNodes.end(),
-                                                        [&](const ScriptNodeUVE& node) {
-                                                            return node.id == *branchNodeId;
-                                                        });
-            instructionNodes.insert(newBranchIterator, std::move(sourceNode));
-        }
+        instructionNodes.insert(branchIterator, conditionNodes.begin(), conditionNodes.end());
     }
 
-    const std::size_t stagedInstructionCount = instructionNodes.size() +
-        (branchConditionLink.has_value() ? 1U : 0U);
+    const std::size_t stagedInstructionCount = instructionNodes.size() + stagedConditionLinks.size();
     const auto findStagedInstructionIndex = [&](const std::uint32_t nodeId) -> std::optional<std::size_t> {
         const std::optional<std::size_t> baseIndex = FindNodeInstructionIndexUVE(instructionNodes, nodeId);
         if (!baseIndex.has_value()) {
             return std::nullopt;
         }
-        if (branchConditionSourceNodeId.has_value()) {
+        std::size_t stagedBefore = 0U;
+        for (const ScriptLinkUVE& stagedLink : stagedConditionLinks) {
             const std::optional<std::size_t> sourceIndex =
-                FindNodeInstructionIndexUVE(instructionNodes, *branchConditionSourceNodeId);
-            if (sourceIndex.has_value() && *baseIndex > *sourceIndex) {
-                return *baseIndex + 1U;
+                FindNodeInstructionIndexUVE(instructionNodes, stagedLink.output.nodeId);
+            if (sourceIndex.has_value() && *sourceIndex < *baseIndex) {
+                ++stagedBefore;
             }
         }
-        return baseIndex;
+        return *baseIndex + stagedBefore;
     };
 
     ScriptIrProgramUVE program;
@@ -268,24 +297,30 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             });
         }
         program.sourceNodeIds.push_back(node.id);
-        if (branchConditionLink.has_value() && branchConditionSourceNodeId.has_value() &&
-            node.id == *branchConditionSourceNodeId) {
-            const ScriptLinkUVE& conditionLink = *branchConditionLink;
+        for (const ScriptLinkUVE& stagedLink : stagedConditionLinks) {
+            if (stagedLink.output.nodeId != node.id) {
+                continue;
+            }
             program.instructions.push_back(ScriptIrInstructionUVE{
                 ScriptIrInstructionKindUVE::TransferValue,
-                conditionLink.output.nodeId,
-                conditionLink.input.nodeId,
+                stagedLink.output.nodeId,
+                stagedLink.input.nodeId,
                 {},
-                conditionLink.output.pinName,
-                conditionLink.input.pinName,
+                stagedLink.output.pinName,
+                stagedLink.input.pinName,
             });
-            program.sourceNodeIds.push_back(conditionLink.output.nodeId);
+            program.sourceNodeIds.push_back(stagedLink.output.nodeId);
         }
     }
 
     for (const ScriptLinkUVE& link : links) {
-        if (branchConditionLink.has_value() && link.input.nodeId == branchConditionLink->input.nodeId &&
-            link.input.pinName == branchConditionLink->input.pinName) {
+        if (std::find_if(stagedConditionLinks.begin(), stagedConditionLinks.end(),
+                         [&](const ScriptLinkUVE& stagedLink) {
+                             return stagedLink.output.nodeId == link.output.nodeId &&
+                                    stagedLink.output.pinName == link.output.pinName &&
+                                    stagedLink.input.nodeId == link.input.nodeId &&
+                                    stagedLink.input.pinName == link.input.pinName;
+                         }) != stagedConditionLinks.end()) {
             continue;
         }
         if (IsExecutionLinkUVE(link, nodes, registry)) {
