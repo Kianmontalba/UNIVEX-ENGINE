@@ -60,6 +60,7 @@ enum class ScriptValidationCodeUVE : std::uint8_t {
     SelfLink,
     ExecutionLinkCardinality,
     UnsupportedRuntimeNode,
+    DataLinkCardinality,
 };
 
 struct ScriptPinDescriptorUVE final {
