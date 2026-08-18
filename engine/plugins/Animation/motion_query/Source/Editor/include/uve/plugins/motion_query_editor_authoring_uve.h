@@ -30,6 +30,16 @@ struct MotionQueryEditorPasteTargetUVE final {
     UVE::Core::MotionQueryDatabaseContextUVE context;
 };
 
+enum class MotionQueryEditorCommandPayloadKindUVE : std::uint8_t {
+    None = 0,
+    Database,
+    Resource,
+    Text,
+    CandidateIndex,
+    Candidate,
+    PasteTarget,
+};
+
 enum class MotionQueryEditorCommandKindUVE : std::uint8_t {
     ReadSnapshot = 0,
     RegisterDatabase,
@@ -46,6 +56,22 @@ enum class MotionQueryEditorCommandKindUVE : std::uint8_t {
     Undo,
     Redo,
 };
+
+struct MotionQueryEditorCommandMetadataUVE final {
+    MotionQueryEditorCommandKindUVE kind = MotionQueryEditorCommandKindUVE::ReadSnapshot;
+    MotionQueryEditorCommandPayloadKindUVE payloadKind = MotionQueryEditorCommandPayloadKindUVE::None;
+    std::string name;
+    std::string label;
+    bool mutatesAuthoring = false;
+    bool requiresResource = false;
+    bool requiresPayload = false;
+    bool supportsUndo = false;
+
+    [[nodiscard]] bool operator==(const MotionQueryEditorCommandMetadataUVE&) const = default;
+};
+
+[[nodiscard]] const std::vector<MotionQueryEditorCommandMetadataUVE>&
+GetMotionQueryEditorCommandMetadataUVE() noexcept;
 
 struct MotionQueryEditorCommandUVE final {
     std::uint32_t protocolVersion = kMotionQueryEditorProtocolVersionUVE;
@@ -82,6 +108,7 @@ struct MotionQueryEditorSnapshotUVE final {
     bool authoringAvailable = true;
     std::optional<UVE::Asset::ResourceHandleUVE> selectedResource;
     std::vector<MotionQueryEditorDatabaseRowUVE> databases;
+    std::vector<MotionQueryEditorCommandMetadataUVE> commandMetadata;
     bool clipboardAvailable = false;
     bool canUndo = false;
     bool canRedo = false;

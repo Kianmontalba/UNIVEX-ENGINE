@@ -439,16 +439,32 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"dirty", row.dirty}};
 }
 
+[[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeMotionQueryCommandMetadataUVE& metadata) {
+    return JsonUVE{{"kind", metadata.kind},
+                   {"payloadKind", metadata.payloadKind},
+                   {"name", metadata.name},
+                   {"label", metadata.label},
+                   {"mutatesAuthoring", metadata.mutatesAuthoring},
+                   {"requiresResource", metadata.requiresResource},
+                   {"requiresPayload", metadata.requiresPayload},
+                   {"supportsUndo", metadata.supportsUndo}};
+}
+
 [[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeMotionQueryAuthoringSnapshotUVE& snapshot) {
     JsonUVE databases = JsonUVE::array();
     for (const auto& row : snapshot.databases) {
         databases.push_back(ToJsonUVE(row));
+    }
+    JsonUVE commandMetadata = JsonUVE::array();
+    for (const auto& metadata : snapshot.commandMetadata) {
+        commandMetadata.push_back(ToJsonUVE(metadata));
     }
     return JsonUVE{{"revision", snapshot.revision},
                    {"selectedResource", snapshot.selectedResource.has_value()
                                             ? ToJsonUVE(*snapshot.selectedResource)
                                             : JsonUVE(nullptr)},
                    {"databases", std::move(databases)},
+                   {"commandMetadata", std::move(commandMetadata)},
                    {"diagnostic", snapshot.diagnostic}};
 }
 
