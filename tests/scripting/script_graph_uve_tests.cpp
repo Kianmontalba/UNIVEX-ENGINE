@@ -276,6 +276,34 @@ TEST(ScriptGraphUVETest, ValidateUVE_AllowsDistinctDataInputPins) {
     EXPECT_TRUE(graph.ValidateUVE(registry).empty());
 }
 
+TEST(ScriptGraphUVETest, ValidateUVE_AllowsMaximumNodeCount) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+    ScriptGraphUVE graph;
+    for (std::uint32_t nodeId = 1U; nodeId <= kMaximumScriptGraphNodesUVE; ++nodeId) {
+        ASSERT_TRUE(graph.AddNodeUVE({nodeId, "engine.get_time"}));
+    }
+
+    EXPECT_TRUE(graph.ValidateUVE(registry).empty());
+}
+
+TEST(ScriptGraphUVETest, ValidateUVE_RejectsNodeCountAboveMaximum) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+    ScriptGraphUVE graph;
+    for (std::uint32_t nodeId = 1U; nodeId <= kMaximumScriptGraphNodesUVE + 1U; ++nodeId) {
+        ASSERT_TRUE(graph.AddNodeUVE({nodeId, "engine.get_time"}));
+    }
+
+    const std::vector<ScriptValidationDiagnosticUVE> diagnostics = graph.ValidateUVE(registry);
+    ASSERT_EQ(diagnostics.size(), 1U);
+    EXPECT_EQ(diagnostics.front().code, ScriptValidationCodeUVE::NodeCountExceeded);
+    EXPECT_EQ(diagnostics.front().nodeId, 0U);
+    EXPECT_TRUE(diagnostics.front().pinName.empty());
+    EXPECT_EQ(diagnostics.front().sourceContext, "Graph");
+    EXPECT_EQ(diagnostics.front().message, "Graph node count exceeds the maximum of 64.");
+}
+
 TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_PreservesEngineLogBindingNode) {
     ScriptNodeRegistryUVE registry;
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
