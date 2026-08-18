@@ -185,6 +185,12 @@ const std::vector<ScriptLinkUVE>& ScriptGraphUVE::GetLinksUVE() const noexcept {
 std::vector<ScriptValidationDiagnosticUVE> ScriptGraphUVE::ValidateUVE(
     const ScriptNodeRegistryUVE& registry) const {
     std::vector<ScriptValidationDiagnosticUVE> diagnostics;
+    if (m_nodes.size() > kMaximumScriptGraphNodesUVE) {
+        AddDiagnosticUVE(diagnostics, ScriptValidationCodeUVE::NodeCountExceeded, 0U, {},
+                         "Graph node count exceeds the maximum of " +
+                             std::to_string(kMaximumScriptGraphNodesUVE) + ".");
+        return diagnostics;
+    }
     for (const ScriptNodeUVE& node : m_nodes) {
         if (node.typeId.empty()) {
             AddDiagnosticUVE(diagnostics, ScriptValidationCodeUVE::EmptyNodeType, node.id, {},
