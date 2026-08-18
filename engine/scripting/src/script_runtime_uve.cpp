@@ -15,6 +15,10 @@ namespace {
            std::isfinite(value.value.z);
 }
 
+[[nodiscard]] bool IsFiniteScriptVector2UVE(const ScriptVector2ValueUVE& value) noexcept {
+    return std::isfinite(value.value.x) && std::isfinite(value.value.y);
+}
+
 [[nodiscard]] bool IsFiniteScriptVmValueUVE(const ScriptVmValueUVE& value) noexcept {
     return std::visit(
         [](const auto& typedValue) noexcept {
@@ -27,8 +31,10 @@ namespace {
                 return typedValue.IsValidUVE();
             } else if constexpr (std::is_same_v<ValueType, ScriptComponentValueUVE>) {
                 return typedValue.IsValidUVE();
-            } else {
+            } else if constexpr (std::is_same_v<ValueType, ScriptVector3ValueUVE>) {
                 return IsFiniteScriptVector3UVE(typedValue);
+            } else {
+                return IsFiniteScriptVector2UVE(typedValue);
             }
         },
         value);
