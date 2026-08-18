@@ -278,13 +278,15 @@ TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesBooleanConditionBe
     EXPECT_EQ(result.program->instructions[3].kind, ScriptIrInstructionKindUVE::ExecuteNode);
 }
 
-TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsFlowBranchMultiHopConditionDependency) {
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsFlowBranchTooDeepConditionDependency) {
     ScriptNodeRegistryUVE registry;
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
     ScriptGraphUVE graph;
     ASSERT_TRUE(graph.AddNodeUVE({1U, "flow.branch"}));
     ASSERT_TRUE(graph.AddNodeUVE({2U, "logic.boolean.not"}));
     ASSERT_TRUE(graph.AddNodeUVE({3U, "logic.boolean.not"}));
+    ASSERT_TRUE(graph.AddNodeUVE({4U, "logic.boolean.not"}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{4U, "Result"}, {3U, "Value"}}));
     ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{3U, "Result"}, {2U, "Value"}}));
     ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{2U, "Result"}, {1U, "Condition"}}));
 
@@ -292,7 +294,26 @@ TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsFlowBranchMultiHo
     EXPECT_FALSE(result.IsSuccessUVE());
     ASSERT_EQ(result.diagnostics.size(), 1U);
     EXPECT_EQ(result.diagnostics.front().code, ScriptValidationCodeUVE::UnsupportedRuntimeNode);
-    EXPECT_EQ(result.diagnostics.front().nodeId, 2U);
+    EXPECT_EQ(result.diagnostics.front().nodeId, 3U);
+    EXPECT_EQ(result.diagnostics.front().pinName, "Value");
+}
+
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsFlowBranchConditionCycle) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({1U, "flow.branch"}));
+    ASSERT_TRUE(graph.AddNodeUVE({2U, "logic.boolean.not"}));
+    ASSERT_TRUE(graph.AddNodeUVE({3U, "logic.boolean.not"}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{3U, "Result"}, {2U, "Value"}}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{2U, "Result"}, {3U, "Value"}}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{2U, "Result"}, {1U, "Condition"}}));
+
+    const ScriptIrCompileResultUVE result = CompileScriptGraphToIrUVE(graph, registry);
+    EXPECT_FALSE(result.IsSuccessUVE());
+    ASSERT_EQ(result.diagnostics.size(), 1U);
+    EXPECT_EQ(result.diagnostics.front().code, ScriptValidationCodeUVE::UnsupportedRuntimeNode);
+    EXPECT_EQ(result.diagnostics.front().nodeId, 3U);
     EXPECT_EQ(result.diagnostics.front().pinName, "Value");
 }
 
@@ -313,18 +334,18 @@ TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsNonBuiltinConditi
     EXPECT_EQ(result.diagnostics.front().pinName, "Condition");
 }
 
-TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_RunsCompiledStagedBooleanCondition) {
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_RunsCompiledStagedBooleanConditionDependency) {
     ScriptNodeRegistryUVE registry;
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
     ASSERT_TRUE(registry.RegisterNodeTypeUVE(MakeSinkNodeUVE()));
     ScriptGraphUVE graph;
     ASSERT_TRUE(graph.AddNodeUVE({1U, "flow.branch"}));
     ASSERT_TRUE(graph.AddNodeUVE({2U, "logic.boolean.not"}));
-    ASSERT_TRUE(graph.AddNodeUVE({3U, "test.sink"}));
+    ASSERT_TRUE(graph.AddNodeUVE({3U, "logic.boolean.not"}));
     ASSERT_TRUE(graph.AddNodeUVE({4U, "test.sink"}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{3U, "Result"}, {2U, "Value"}}));
     ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{2U, "Result"}, {1U, "Condition"}}));
-    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{1U, "True"}, {3U, "Exec"}}));
-    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{1U, "False"}, {4U, "Exec"}}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{1U, "True"}, {4U, "Exec"}}));
 
     const ScriptIrCompileResultUVE compiled = CompileScriptGraphToIrUVE(graph, registry);
     ASSERT_TRUE(compiled.IsSuccessUVE());
@@ -333,13 +354,15 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_RunsCompiledStagedBooleanConditio
         LowerIrToBytecodeUVE(*compiled.program, diagnostics);
     ASSERT_TRUE(bytecode.has_value());
     ASSERT_TRUE(diagnostics.empty());
+    ASSERT_EQ(bytecode->instructions.size(), 6U);
 
     ScriptVmExecutionContextUVE context;
-    ASSERT_TRUE(context.SetInputUVE(2U, "Value", true));
+    ASSERT_TRUE(context.SetInputUVE(3U, "Value", true));
     const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(*bytecode, context);
     EXPECT_TRUE(result.IsSuccessUVE());
-    EXPECT_EQ(result.instructionsExecuted, 4U);
-    EXPECT_TRUE(std::get<bool>(*context.FindOutputUVE(2U, "Result")) == false);
+    EXPECT_EQ(result.instructionsExecuted, 6U);
+    EXPECT_FALSE(std::get<bool>(*context.FindOutputUVE(3U, "Result")));
+    EXPECT_TRUE(std::get<bool>(*context.FindOutputUVE(2U, "Result")));
 }
 
 TEST(ScriptNodeRegistryUVETest, FindNodeTypeUVE_ReturnsCopiedStableDescriptorView) {
