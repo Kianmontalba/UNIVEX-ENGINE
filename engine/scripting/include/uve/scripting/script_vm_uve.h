@@ -20,7 +20,9 @@ enum class ScriptVmStatusUVE : std::uint8_t {
     NodeExecutionFailed,
 };
 
-using ScriptVmValueUVE = std::variant<float, ScriptVector3ValueUVE>;
+/// Typed VM values are intentionally value-only and bounded by the execution context; append new
+/// alternatives so existing float/Vector3 variant indices remain stable for serialized callers.
+using ScriptVmValueUVE = std::variant<float, ScriptVector3ValueUVE, bool>;
 
 struct ScriptVmValueBindingUVE final {
     std::uint32_t nodeId = 0U;

@@ -21,6 +21,8 @@ namespace {
             using ValueType = std::decay_t<decltype(typedValue)>;
             if constexpr (std::is_same_v<ValueType, float>) {
                 return std::isfinite(typedValue);
+            } else if constexpr (std::is_same_v<ValueType, bool>) {
+                return true;
             } else {
                 return IsFiniteScriptVector3UVE(typedValue);
             }

@@ -2,6 +2,7 @@
 #include "uve/scripting/script_vm_uve.h"
 
 #include <algorithm>
+#include <cmath>
 #include <utility>
 
 namespace UVE::Scripting {
@@ -47,9 +48,82 @@ namespace {
     return binding == nullptr ? nullptr : std::get_if<ScriptVector3ValueUVE>(&binding->value);
 }
 
+[[nodiscard]] const bool* FindBooleanInputUVE(const ScriptVmExecutionContextUVE& context,
+                                              const std::uint32_t nodeId, const char* pinName) {
+    const ScriptVmValueBindingUVE* binding = FindBindingUVE(context.inputs, nodeId, pinName);
+    return binding == nullptr ? nullptr : std::get_if<bool>(&binding->value);
+}
+
 [[nodiscard]] bool SetNodeOutputUVE(ScriptVmExecutionContextUVE& context, const std::uint32_t nodeId,
                                     const char* pinName, ScriptVmValueUVE value) {
     return context.SetOutputUVE(nodeId, pinName, std::move(value));
+}
+
+[[nodiscard]] ScriptVmExecutionResultUVE ExecuteFloatNodeUVE(
+    const ScriptIrInstructionUVE& instruction, const std::size_t instructionIndex,
+    ScriptVmExecutionContextUVE& context) {
+    const std::uint32_t nodeId = instruction.sourceNodeId;
+    const float* lhs = FindNumberInputUVE(context, nodeId, "A");
+    const float* rhs = FindNumberInputUVE(context, nodeId, "B");
+    if (lhs == nullptr || rhs == nullptr) {
+        return MakeNodeFailureUVE(instructionIndex, "Float binary node requires Number inputs A and B.");
+    }
+    if (!std::isfinite(*lhs) || !std::isfinite(*rhs)) {
+        return MakeNodeFailureUVE(instructionIndex, "Float node rejected non-finite input.");
+    }
+
+    float result = 0.0F;
+    if (instruction.nodeTypeId == "math.float.add") {
+        result = *lhs + *rhs;
+    } else if (instruction.nodeTypeId == "math.float.subtract") {
+        result = *lhs - *rhs;
+    } else if (instruction.nodeTypeId == "math.float.multiply") {
+        result = *lhs * *rhs;
+    } else if (instruction.nodeTypeId == "math.float.divide") {
+        if (std::fabs(*rhs) <= 1.0e-6F) {
+            return MakeNodeFailureUVE(instructionIndex, "Divide Float rejected a zero-near divisor.");
+        }
+        result = *lhs / *rhs;
+    } else {
+        return {};
+    }
+    if (!std::isfinite(result) || !SetNodeOutputUVE(context, nodeId, "Result", result)) {
+        return MakeNodeFailureUVE(instructionIndex, "Float node rejected its result or output capacity.");
+    }
+    return {};
+}
+
+[[nodiscard]] ScriptVmExecutionResultUVE ExecuteBooleanNodeUVE(
+    const ScriptIrInstructionUVE& instruction, const std::size_t instructionIndex,
+    ScriptVmExecutionContextUVE& context) {
+    const std::uint32_t nodeId = instruction.sourceNodeId;
+    if (instruction.nodeTypeId == "logic.boolean.not") {
+        const bool* value = FindBooleanInputUVE(context, nodeId, "Value");
+        if (value == nullptr || !SetNodeOutputUVE(context, nodeId, "Result", !*value)) {
+            return MakeNodeFailureUVE(instructionIndex, "Not Boolean requires a Boolean Value input or output capacity.");
+        }
+        return {};
+    }
+
+    const bool* lhs = FindBooleanInputUVE(context, nodeId, "A");
+    const bool* rhs = FindBooleanInputUVE(context, nodeId, "B");
+    if (lhs == nullptr || rhs == nullptr) {
+        return MakeNodeFailureUVE(instructionIndex, "Boolean binary node requires Boolean inputs A and B.");
+    }
+    bool result = false;
+    if (instruction.nodeTypeId == "logic.boolean.and") {
+        result = *lhs && *rhs;
+    } else if (instruction.nodeTypeId == "logic.boolean.or") {
+        result = *lhs || *rhs;
+    } else if (instruction.nodeTypeId == "logic.boolean.xor") {
+        result = *lhs != *rhs;
+    } else {
+        return {};
+    }
+    if (!SetNodeOutputUVE(context, nodeId, "Result", result)) {
+        return MakeNodeFailureUVE(instructionIndex, "Boolean node rejected its output capacity.");
+    }
+    return {};
 }
 
 [[nodiscard]] ScriptVmExecutionResultUVE ExecuteVector3NodeUVE(
@@ -141,6 +215,27 @@ namespace {
     return {};
 }
 
+[[nodiscard]] bool HasRequiredFloatInputsUVE(const ScriptIrInstructionUVE& instruction,
+                                              const ScriptVmExecutionContextUVE& context) {
+    if (instruction.nodeTypeId.rfind("math.float.", 0U) != 0U) {
+        return true;
+    }
+    return FindNumberInputUVE(context, instruction.sourceNodeId, "A") != nullptr &&
+           FindNumberInputUVE(context, instruction.sourceNodeId, "B") != nullptr;
+}
+
+[[nodiscard]] bool HasRequiredBooleanInputsUVE(const ScriptIrInstructionUVE& instruction,
+                                                const ScriptVmExecutionContextUVE& context) {
+    if (instruction.nodeTypeId == "logic.boolean.not") {
+        return FindBooleanInputUVE(context, instruction.sourceNodeId, "Value") != nullptr;
+    }
+    if (instruction.nodeTypeId.rfind("logic.boolean.", 0U) != 0U) {
+        return true;
+    }
+    return FindBooleanInputUVE(context, instruction.sourceNodeId, "A") != nullptr &&
+           FindBooleanInputUVE(context, instruction.sourceNodeId, "B") != nullptr;
+}
+
 [[nodiscard]] bool HasRequiredVector3InputsUVE(const ScriptIrInstructionUVE& instruction,
                                                 const ScriptVmExecutionContextUVE& context) {
     const std::uint32_t nodeId = instruction.sourceNodeId;
@@ -227,8 +322,12 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                     return failure;
                 }
             } else {
-                if (instruction.nodeTypeId.rfind("math.vector3.", 0U) == 0U &&
-                    !HasRequiredVector3InputsUVE(instruction, *context)) {
+                const bool isVector3Node = instruction.nodeTypeId.rfind("math.vector3.", 0U) == 0U;
+                const bool isFloatNode = instruction.nodeTypeId.rfind("math.float.", 0U) == 0U;
+                const bool isBooleanNode = instruction.nodeTypeId.rfind("logic.boolean.", 0U) == 0U;
+                if ((isVector3Node && !HasRequiredVector3InputsUVE(instruction, *context)) ||
+                    (isFloatNode && !HasRequiredFloatInputsUVE(instruction, *context)) ||
+                    (isBooleanNode && !HasRequiredBooleanInputsUVE(instruction, *context))) {
                     continue;
                 }
                 if (result.instructionsExecuted >= options.instructionBudget) {
@@ -236,7 +335,14 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                     result.diagnostics.push_back({index, "Instruction budget exceeded."});
                     return result;
                 }
-                ScriptVmExecutionResultUVE nodeResult = ExecuteVector3NodeUVE(instruction, index, *context);
+                ScriptVmExecutionResultUVE nodeResult;
+                if (isVector3Node) {
+                    nodeResult = ExecuteVector3NodeUVE(instruction, index, *context);
+                } else if (isFloatNode) {
+                    nodeResult = ExecuteFloatNodeUVE(instruction, index, *context);
+                } else if (isBooleanNode) {
+                    nodeResult = ExecuteBooleanNodeUVE(instruction, index, *context);
+                }
                 if (!nodeResult.IsSuccessUVE()) {
                     nodeResult.instructionsExecuted = result.instructionsExecuted;
                     return nodeResult;
