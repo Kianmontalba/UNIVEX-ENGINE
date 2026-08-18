@@ -902,8 +902,11 @@ public partial class MainWindow : Window
         MotionQueryAuthoringDatabasesListBox.IsEnabled = connected && motionQuery.Authoring.Databases.Count > 0;
         MotionQueryAuthoringCommandMetadataListBox.IsEnabled = connected && motionQuery.Authoring.CommandMetadata.Count > 0;
         MotionQueryPasteDatabaseButton.IsEnabled = connected;
+        MotionQueryUndoButton.IsEnabled = connected && motionQuery.Authoring.CanUndo;
+        MotionQueryRedoButton.IsEnabled = connected && motionQuery.Authoring.CanRedo;
+        MotionQueryReadSnapshotButton.IsEnabled = connected;
         MotionQueryAuthoringStatusTextBlock.Text = connected
-            ? $"Authoring revision {motionQuery.Authoring.Revision}; {motionQuery.Authoring.Databases.Count} native database(s). {motionQuery.Authoring.Diagnostic}"
+            ? $"Authoring revision {motionQuery.Authoring.Revision}; {motionQuery.Authoring.Databases.Count} native database(s); clipboard {(motionQuery.Authoring.ClipboardAvailable ? "ready" : "empty")}; undo {(motionQuery.Authoring.CanUndo ? "ready" : "empty")}; redo {(motionQuery.Authoring.CanRedo ? "ready" : "empty")}. {motionQuery.Authoring.Diagnostic}"
             : motionQuery.Authoring.Diagnostic;
 
         MotionQueryExportRegistryButton.IsEnabled = connected;
@@ -942,6 +945,30 @@ public partial class MainWindow : Window
         return button.Parent is Grid grid
             ? grid.Children.OfType<TextBox>().ElementAtOrDefault(textBoxIndex)?.Text?.Trim()
             : null;
+    }
+
+    private void MotionQueryUndoButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "dispatchMotionQueryCommand")
+        {
+            MotionQueryCommandKind = "undo",
+        });
+    }
+
+    private void MotionQueryRedoButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "dispatchMotionQueryCommand")
+        {
+            MotionQueryCommandKind = "redo",
+        });
+    }
+
+    private void MotionQueryReadSnapshotButton_OnClick(object? sender, RoutedEventArgs e)
+    {
+        DispatchCurrentCommand(new BridgeCommand(CurrentRevision(), "dispatchMotionQueryCommand")
+        {
+            MotionQueryCommandKind = "readSnapshot",
+        });
     }
 
     private void MotionQueryCopyDatabaseButton_OnClick(object? sender, RoutedEventArgs e)

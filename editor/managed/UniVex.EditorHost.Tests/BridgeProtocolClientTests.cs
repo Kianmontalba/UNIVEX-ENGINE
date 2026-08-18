@@ -333,6 +333,9 @@ public sealed class BridgeProtocolClientTests
             {
                 ["revision"] = 4UL,
                 ["selectedResource"] = new JsonObject { ["guid"] = 77UL, ["generation"] = 1UL },
+                ["clipboardAvailable"] = false,
+                ["canUndo"] = true,
+                ["canRedo"] = false,
                 ["diagnostic"] = "native",
                 ["databases"] = new JsonArray(),
             },
@@ -430,6 +433,9 @@ public sealed class BridgeProtocolClientTests
             {
                 ["revision"] = 4UL,
                 ["selectedResource"] = new JsonObject { ["guid"] = 77UL, ["generation"] = 1UL },
+                ["clipboardAvailable"] = false,
+                ["canUndo"] = true,
+                ["canRedo"] = false,
                 ["diagnostic"] = "native",
                 ["commandMetadata"] = new JsonArray
                 {
@@ -595,6 +601,9 @@ public sealed class BridgeProtocolClientTests
         using JsonDocument document = JsonDocument.Parse(snapshot.ToJsonString());
         BridgeEditorSnapshot parsed = BridgeSnapshotParser.Parse(document.RootElement);
         Assert.Equal(4UL, parsed.MotionQuery.Authoring.Revision);
+        Assert.False(parsed.MotionQuery.Authoring.ClipboardAvailable);
+        Assert.True(parsed.MotionQuery.Authoring.CanUndo);
+        Assert.False(parsed.MotionQuery.Authoring.CanRedo);
         Assert.Equal(77UL, parsed.MotionQuery.Authoring.SelectedResource!.Guid);
         Assert.Equal("Bridge DB", parsed.MotionQuery.Authoring.Databases[0].DisplayName);
         Assert.Equal(2, parsed.MotionQuery.Authoring.CommandMetadata.Count);
@@ -675,6 +684,9 @@ public sealed class BridgeProtocolClientTests
             {
                 ["revision"] = 0UL,
                 ["selectedResource"] = null,
+                ["clipboardAvailable"] = false,
+                ["canUndo"] = false,
+                ["canRedo"] = false,
                 ["diagnostic"] = "native",
                 ["databases"] = new JsonArray(),
             },
@@ -873,6 +885,49 @@ public sealed class BridgeProtocolClientTests
         Assert.Equal("Copied Locomotion", pasteTarget.GetProperty("displayName").GetString());
         Assert.Equal("locomotion.copy", pasteTarget.GetProperty("context").GetProperty("databaseId").GetString());
         Assert.Equal(7UL, pasteTarget.GetProperty("context").GetProperty("generation").GetUInt64());
+    }
+
+    [Fact]
+    public async Task DispatchAsync_WritesMotionQueryHistoryCommandsAsOneWorkflow()
+    {
+        static object Response(ulong requestId) => new
+        {
+            jsonrpc = "2.0",
+            id = requestId,
+            result = new
+            {
+                protocolVersion = BridgeProtocolClient.ProtocolVersion,
+                requestId,
+                applied = true,
+                code = "bridge.motion_query.command.applied",
+                message = "applied",
+                snapshot = Snapshot(sceneDirty: false),
+                createdEntity = (object?)null,
+            },
+        };
+        await using MemoryStream input = BuildFrames(Response(1UL), Response(2UL), Response(3UL));
+        await using MemoryStream output = new();
+        await using BridgeProtocolClient client = new(input, output);
+        await client.DispatchAsync(new BridgeCommand(1UL, "dispatchMotionQueryCommand")
+        {
+            MotionQueryCommandKind = "undo",
+        }, CancellationToken.None);
+        await client.DispatchAsync(new BridgeCommand(2UL, "dispatchMotionQueryCommand")
+        {
+            MotionQueryCommandKind = "redo",
+        }, CancellationToken.None);
+        await client.DispatchAsync(new BridgeCommand(3UL, "dispatchMotionQueryCommand")
+        {
+            MotionQueryCommandKind = "readSnapshot",
+        }, CancellationToken.None);
+
+        output.Position = 0;
+        using JsonDocument undo = JsonDocument.Parse(await ReadFrameAsync(output));
+        using JsonDocument redo = JsonDocument.Parse(await ReadFrameAsync(output));
+        using JsonDocument read = JsonDocument.Parse(await ReadFrameAsync(output));
+        Assert.Equal("undo", undo.RootElement.GetProperty("params").GetProperty("motionQueryCommand").GetProperty("kind").GetString());
+        Assert.Equal("redo", redo.RootElement.GetProperty("params").GetProperty("motionQueryCommand").GetProperty("kind").GetString());
+        Assert.Equal("readSnapshot", read.RootElement.GetProperty("params").GetProperty("motionQueryCommand").GetProperty("kind").GetString());
     }
 
     [Fact]
@@ -1571,14 +1626,17 @@ public sealed class BridgeProtocolClientTests
         Assert.Equal("bridge.snapshot.invalid", exception.Code);
     }
 
-    private static MemoryStream BuildFrames(object message)
+    private static MemoryStream BuildFrames(params object[] messages)
     {
-        byte[] body = JsonSerializer.SerializeToUtf8Bytes(message);
-        byte[] header = new byte[sizeof(uint)];
-        BinaryPrimitives.WriteUInt32BigEndian(header, checked((uint)body.Length));
         MemoryStream stream = new();
-        stream.Write(header);
-        stream.Write(body);
+        foreach (object message in messages)
+        {
+            byte[] body = JsonSerializer.SerializeToUtf8Bytes(message);
+            byte[] header = new byte[sizeof(uint)];
+            BinaryPrimitives.WriteUInt32BigEndian(header, checked((uint)body.Length));
+            stream.Write(header);
+            stream.Write(body);
+        }
         stream.Position = 0;
         return stream;
     }

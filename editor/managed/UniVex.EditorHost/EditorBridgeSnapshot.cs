@@ -151,6 +151,9 @@ public sealed record BridgeMotionQueryAuthoringSnapshot(
     BridgeMotionQueryResourceHandle? SelectedResource,
     IReadOnlyList<BridgeMotionQueryDatabaseRow> Databases,
     IReadOnlyList<BridgeMotionQueryCommandMetadata> CommandMetadata,
+    bool ClipboardAvailable,
+    bool CanUndo,
+    bool CanRedo,
     string Diagnostic);
 
 public sealed record BridgeMotionQueryDebuggerSnapshot(
@@ -864,7 +867,7 @@ public static class BridgeSnapshotParser
 
     public static BridgeMotionQuerySnapshot EmptyMotionQuery() =>
         new(new BridgeMotionQueryAuthoringSnapshot(0UL, null, Array.Empty<BridgeMotionQueryDatabaseRow>(),
-                Array.Empty<BridgeMotionQueryCommandMetadata>(),
+                Array.Empty<BridgeMotionQueryCommandMetadata>(), false, false, false,
                 "No native Motion Query authoring session is attached to this bridge frame."),
 
             new BridgeMotionQueryDebuggerSnapshot(false, 0UL, null, null, 0, 0, 0F, string.Empty, string.Empty,
@@ -952,7 +955,11 @@ public static class BridgeSnapshotParser
             RequiredUInt64(authoring, "revision"),
             ParseNullableMotionQueryResource(authoring.GetProperty("selectedResource"),
                                              "motion-query authoring selected resource"),
-            rows, commandMetadata, RequiredBoundedString(authoring, "diagnostic"));
+            rows, commandMetadata,
+            RequiredBoolean(authoring, "clipboardAvailable"),
+            RequiredBoolean(authoring, "canUndo"),
+            RequiredBoolean(authoring, "canRedo"),
+            RequiredBoundedString(authoring, "diagnostic"));
 
         JsonElement debugger = RequiredObjectMember(value, "debugger");
         int candidateCountDebugger = RequiredInt32(debugger, "candidateCount");

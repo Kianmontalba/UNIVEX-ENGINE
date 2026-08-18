@@ -479,6 +479,9 @@ enum class FrameReadResultUVE : std::uint8_t {
                                             : JsonUVE(nullptr)},
                    {"databases", std::move(databases)},
                    {"commandMetadata", std::move(commandMetadata)},
+                   {"clipboardAvailable", snapshot.clipboardAvailable},
+                   {"canUndo", snapshot.canUndo},
+                   {"canRedo", snapshot.canRedo},
                    {"diagnostic", snapshot.diagnostic}};
 }
 
