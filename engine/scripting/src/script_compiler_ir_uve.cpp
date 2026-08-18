@@ -99,6 +99,15 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
     });
     std::vector<ScriptLinkUVE> links = graph.GetLinksUVE();
     std::sort(links.begin(), links.end(), LessLinkUVE);
+    const auto conversionHasDataDependency = [&](const ScriptNodeUVE& sourceNode) {
+        if (sourceNode.typeId.rfind("convert.", 0U) != 0U) {
+            return false;
+        }
+        return std::find_if(links.begin(), links.end(), [&](const ScriptLinkUVE& dependency) {
+            return dependency.input.nodeId == sourceNode.id &&
+                   !IsExecutionLinkUVE(dependency, nodes, registry);
+        }) != links.end();
+    };
 
     std::size_t sequenceNodeCount = 0U;
     std::size_t branchNodeCount = 0U;
@@ -115,6 +124,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
     std::vector<ScriptLinkUVE> stagedVector2Links;
     std::vector<ScriptLinkUVE> stagedVector3ScaleLinks;
     std::vector<ScriptLinkUVE> stagedVector3Links;
+    std::vector<ScriptLinkUVE> stagedConversionLinks;
     for (const ScriptNodeUVE& node : nodes) {
         if (node.typeId == "flow.sequence") {
             ++sequenceNodeCount;
@@ -157,7 +167,8 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
                      sourceNode->typeId == "logic.boolean.equal" || sourceNode->typeId == "logic.boolean.not_equal" ||
                      sourceNode->typeId == "logic.boolean.greater" || sourceNode->typeId == "logic.boolean.less" ||
                      sourceNode->typeId == "logic.boolean.greater_equal" || sourceNode->typeId == "logic.boolean.less_equal" ||
-                     sourceNode->typeId == "query.entity.has_component" || sourceNode->typeId == "variable.get_boolean");
+                     sourceNode->typeId == "query.entity.has_component" || sourceNode->typeId == "variable.get_boolean" ||
+                     sourceNode->typeId == "convert.number_to_boolean");
                 if (!supportedProducer) {
                     result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode, node.id,
                                                   "Condition",
@@ -261,13 +272,15 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
         const bool approvedBooleanProducer =
             (sourceNode->typeId.rfind("logic.boolean.", 0U) == 0U ||
              sourceNode->typeId == "query.entity.has_component" ||
-             sourceNode->typeId == "variable.get_boolean") &&
+             sourceNode->typeId == "variable.get_boolean" ||
+             sourceNode->typeId == "convert.number_to_boolean") &&
             link.output.pinName == "Result";
         const bool validBooleanInput =
             (consumerNode->typeId == "logic.boolean.not" && link.input.pinName == "Value") ||
             (consumerNode->typeId != "logic.boolean.not" &&
              (link.input.pinName == "A" || link.input.pinName == "B"));
-        if (!approvedBooleanProducer || !validBooleanInput || !stagedBooleanLinks.empty()) {
+        if (!approvedBooleanProducer || conversionHasDataDependency(*sourceNode) || !validBooleanInput ||
+            !stagedBooleanLinks.empty()) {
             result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode, link.input.nodeId,
                                           link.input.pinName,
                                           "Boolean data-link staging supports one direct logic.boolean.*.Result or query.entity.has_component.Result producer; additional consumers and composed/deeper Boolean dependencies remain deferred."});
@@ -291,12 +304,13 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             (sourceNode->typeId == "math.vector3.length" && link.output.pinName == "Length") ||
             (sourceNode->typeId == "math.vector2.length" && link.output.pinName == "Length") ||
             (sourceNode->typeId.rfind("math.float.", 0U) == 0U && link.output.pinName == "Result") ||
-            (sourceNode->typeId == "variable.get_number" && link.output.pinName == "Result");
+            (sourceNode->typeId == "variable.get_number" && link.output.pinName == "Result") ||
+            (sourceNode->typeId == "convert.boolean_to_number" && link.output.pinName == "Result");
         const bool validDirectNumberLink = approvedNumberProducer &&
                                            ((consumerNode->typeId == "flow.switch" && link.input.pinName == "Value") ||
                                             (consumerNode->typeId != "flow.switch" &&
                                              (link.input.pinName == "A" || link.input.pinName == "B")));
-        if (!validDirectNumberLink || !stagedNumberLinks.empty()) {
+        if (!validDirectNumberLink || conversionHasDataDependency(*sourceNode) || !stagedNumberLinks.empty()) {
             result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode, link.input.nodeId,
                                           link.input.pinName,
                                           "Float data-link staging supports one direct built-in Number or variable.get_number.Result producer; additional composed and deeper Number dependencies remain deferred."});
@@ -322,7 +336,8 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             (sourceNode->typeId == "math.vector3.length" && link.output.pinName == "Length") ||
             (sourceNode->typeId == "math.vector2.length" && link.output.pinName == "Length") ||
             (sourceNode->typeId.rfind("math.float.", 0U) == 0U && link.output.pinName == "Result") ||
-            (sourceNode->typeId == "variable.get_number" && link.output.pinName == "Result");
+            (sourceNode->typeId == "variable.get_number" && link.output.pinName == "Result") ||
+            (sourceNode->typeId == "convert.boolean_to_number" && link.output.pinName == "Result");
         const bool validComparisonInput = link.input.pinName == "A" || link.input.pinName == "B";
         const bool sameComparisonConsumer = std::any_of(
             stagedComparisonNumberLinks.begin(), stagedComparisonNumberLinks.end(),
@@ -333,7 +348,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
                 return stagedLink.input.nodeId == link.input.nodeId &&
                        stagedLink.input.pinName == link.input.pinName;
             });
-        if (!approvedNumberProducer || !validComparisonInput || duplicateComparisonInput ||
+        if (!approvedNumberProducer || conversionHasDataDependency(*sourceNode) || !validComparisonInput || duplicateComparisonInput ||
             stagedComparisonNumberLinks.size() >= 2U ||
             (!stagedComparisonNumberLinks.empty() && !sameComparisonConsumer)) {
             result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode, link.input.nodeId,
@@ -359,13 +374,14 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             (sourceNode->typeId == "math.vector3.length" && link.output.pinName == "Length") ||
             (sourceNode->typeId == "math.vector2.length" && link.output.pinName == "Length") ||
             (sourceNode->typeId.rfind("math.float.", 0U) == 0U && link.output.pinName == "Result") ||
-            (sourceNode->typeId == "variable.get_number" && link.output.pinName == "Result");
+            (sourceNode->typeId == "variable.get_number" && link.output.pinName == "Result") ||
+            (sourceNode->typeId == "convert.boolean_to_number" && link.output.pinName == "Result");
         const bool hasProducerDependency = std::find_if(
             links.begin(), links.end(), [&](const ScriptLinkUVE& dependency) {
                 return dependency.input.nodeId == sourceNode->id &&
                        !IsExecutionLinkUVE(dependency, nodes, registry);
             }) != links.end();
-        if (!approvedNumberProducer || hasProducerDependency || !stagedVector2ScaleLinks.empty()) {
+        if (!approvedNumberProducer || conversionHasDataDependency(*sourceNode) || hasProducerDependency || !stagedVector2ScaleLinks.empty()) {
             result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode, link.input.nodeId,
                                           link.input.pinName,
                                           "Vector2 Scale staging supports one direct Number producer; additional Scale consumers and composed/deeper dependencies remain deferred."});
@@ -386,13 +402,14 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
         const bool approvedNumberProducer =
             (sourceNode->typeId == "engine.get_time" && link.output.pinName == "Value") ||
             (sourceNode->typeId.rfind("math.float.", 0U) == 0U && link.output.pinName == "Result") ||
-            (sourceNode->typeId == "variable.get_number" && link.output.pinName == "Result");
+            (sourceNode->typeId == "variable.get_number" && link.output.pinName == "Result") ||
+            (sourceNode->typeId == "convert.boolean_to_number" && link.output.pinName == "Result");
         const bool hasProducerDependency = std::find_if(
             links.begin(), links.end(), [&](const ScriptLinkUVE& dependency) {
                 return dependency.input.nodeId == sourceNode->id &&
                        !IsExecutionLinkUVE(dependency, nodes, registry);
             }) != links.end();
-        if (!approvedNumberProducer || hasProducerDependency || !stagedVector3ScaleLinks.empty()) {
+        if (!approvedNumberProducer || conversionHasDataDependency(*sourceNode) || hasProducerDependency || !stagedVector3ScaleLinks.empty()) {
             result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode, link.input.nodeId,
                                           link.input.pinName,
                                           "Vector3 Scale staging supports one direct Number or variable.get_number.Result producer; additional Scale consumers and composed/deeper dependencies remain deferred."});
@@ -414,11 +431,12 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
         const bool approvedProducer =
             sourceNode->typeId == "math.vector2.make" || sourceNode->typeId == "math.vector2.add" ||
             sourceNode->typeId == "math.vector2.subtract" || sourceNode->typeId == "math.vector2.multiply" ||
-            sourceNode->typeId == "math.vector2.normalize";
+            sourceNode->typeId == "math.vector2.normalize" || sourceNode->typeId == "convert.vector3_to_vector2";
         const bool approvedOutput = link.output.pinName == "Vector" || link.output.pinName == "Result";
         const bool approvedInput = link.input.pinName == "A" || link.input.pinName == "B" ||
                                    link.input.pinName == "Vector";
-        if (!approvedProducer || !approvedOutput || !approvedInput || !stagedVector2Links.empty()) {
+        if (!approvedProducer || conversionHasDataDependency(*sourceNode) || !approvedOutput || !approvedInput ||
+            !stagedVector2Links.empty()) {
             result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode, link.input.nodeId,
                                           link.input.pinName,
                                           "Vector2 data-link staging supports one direct Vector2 producer; composed and deeper vector dependencies remain deferred."});
@@ -441,17 +459,71 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             sourceNode->typeId == "math.vector3.make" || sourceNode->typeId == "math.vector3.add" ||
             sourceNode->typeId == "math.vector3.subtract" || sourceNode->typeId == "math.vector3.multiply" ||
             sourceNode->typeId == "math.vector3.cross" || sourceNode->typeId == "math.vector3.normalize" ||
-            sourceNode->typeId == "variable.get_vector3";
+            sourceNode->typeId == "variable.get_vector3" || sourceNode->typeId == "convert.vector2_to_vector3";
         const bool approvedOutput = link.output.pinName == "Vector" || link.output.pinName == "Result";
         const bool approvedInput = link.input.pinName == "A" || link.input.pinName == "B" ||
                                    link.input.pinName == "Vector";
-        if (!approvedProducer || !approvedOutput || !approvedInput || !stagedVector3Links.empty()) {
+        if (!approvedProducer || conversionHasDataDependency(*sourceNode) || !approvedOutput || !approvedInput ||
+            !stagedVector3Links.empty()) {
             result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode, link.input.nodeId,
                                           link.input.pinName,
                                           "Vector3 data-link staging supports one direct built-in or variable.get_vector3.Result producer; composed and deeper vector dependencies remain deferred."});
             continue;
         }
         stagedVector3Links.push_back(link);
+    }
+    for (const ScriptLinkUVE& link : links) {
+        if (IsExecutionLinkUVE(link, nodes, registry)) {
+            continue;
+        }
+        const ScriptNodeUVE* sourceNode = FindNodeUVE(nodes, link.output.nodeId);
+        const ScriptNodeUVE* consumerNode = FindNodeUVE(nodes, link.input.nodeId);
+        if (sourceNode == nullptr || consumerNode == nullptr || consumerNode->typeId.rfind("convert.", 0U) != 0U) {
+            continue;
+        }
+        const ScriptNodeTypeDescriptorUVE* sourceDescriptor = registry.FindNodeTypeUVE(sourceNode->typeId);
+        const ScriptNodeTypeDescriptorUVE* consumerDescriptor = registry.FindNodeTypeUVE(consumerNode->typeId);
+        const ScriptPinDescriptorUVE* outputPin = sourceDescriptor == nullptr
+            ? nullptr
+            : FindPinUVE(*sourceDescriptor, link.output.pinName);
+        const ScriptPinDescriptorUVE* inputPin = consumerDescriptor == nullptr
+            ? nullptr
+            : FindPinUVE(*consumerDescriptor, link.input.pinName);
+        const bool validTypedSource = outputPin != nullptr && inputPin != nullptr &&
+                                      outputPin->direction == ScriptPinDirectionUVE::Output &&
+                                      inputPin->direction == ScriptPinDirectionUVE::Input &&
+                                      outputPin->role == ScriptPinRoleUVE::Data &&
+                                      inputPin->role == ScriptPinRoleUVE::Data &&
+                                      outputPin->type == inputPin->type;
+        const bool validConversionInput =
+            (consumerNode->typeId == "convert.number_to_boolean" && link.input.pinName == "Value" &&
+             inputPin != nullptr && inputPin->type == ScriptValueTypeUVE::Number) ||
+            (consumerNode->typeId == "convert.boolean_to_number" && link.input.pinName == "Value" &&
+             inputPin != nullptr && inputPin->type == ScriptValueTypeUVE::Boolean) ||
+            (consumerNode->typeId == "convert.vector2_to_vector3" &&
+             ((link.input.pinName == "Vector" && inputPin != nullptr && inputPin->type == ScriptValueTypeUVE::Vector2) ||
+              (link.input.pinName == "Z" && inputPin != nullptr && inputPin->type == ScriptValueTypeUVE::Number))) ||
+            (consumerNode->typeId == "convert.vector3_to_vector2" && link.input.pinName == "Vector" &&
+             inputPin != nullptr && inputPin->type == ScriptValueTypeUVE::Vector3);
+        const bool hasProducerDependency = std::find_if(
+            links.begin(), links.end(), [&](const ScriptLinkUVE& dependency) {
+                return dependency.input.nodeId == sourceNode->id &&
+                       !IsExecutionLinkUVE(dependency, nodes, registry);
+            }) != links.end();
+        const bool duplicateConversionInput = std::any_of(
+            stagedConversionLinks.begin(), stagedConversionLinks.end(), [&](const ScriptLinkUVE& stagedLink) {
+                return stagedLink.input.nodeId == link.input.nodeId && stagedLink.input.pinName == link.input.pinName;
+            });
+        const bool sameConversionNode = stagedConversionLinks.empty() ||
+                                        stagedConversionLinks.front().input.nodeId == link.input.nodeId;
+        if (!validTypedSource || !validConversionInput || hasProducerDependency || duplicateConversionInput ||
+            !sameConversionNode || stagedConversionLinks.size() >= 2U) {
+            result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode, link.input.nodeId,
+                                          link.input.pinName,
+                                          "Conversion staging supports at most two direct typed inputs on one conversion node; composed conversion dependencies and additional consumers remain deferred."});
+            continue;
+        }
+        stagedConversionLinks.push_back(link);
     }
     if (!result.diagnostics.empty()) {
         return result;
@@ -482,27 +554,25 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
         instructionNodes.insert(branchIterator, conditionNodes.begin(), conditionNodes.end());
     }
     const auto moveStagedProducerBeforeConsumer = [&](const std::vector<ScriptLinkUVE>& stagedLinks) {
-        if (stagedLinks.empty()) {
-            return;
-        }
-        const ScriptLinkUVE& stagedLink = stagedLinks.front();
-        const auto sourceIterator = std::find_if(instructionNodes.begin(), instructionNodes.end(),
-                                                 [&](const ScriptNodeUVE& node) {
-                                                     return node.id == stagedLink.output.nodeId;
-                                                 });
-        const auto consumerIterator = std::find_if(instructionNodes.begin(), instructionNodes.end(),
-                                                   [&](const ScriptNodeUVE& node) {
-                                                       return node.id == stagedLink.input.nodeId;
-                                                   });
-        if (sourceIterator != instructionNodes.end() && consumerIterator != instructionNodes.end() &&
-            sourceIterator != consumerIterator && sourceIterator > consumerIterator) {
-            const ScriptNodeUVE sourceNode = *sourceIterator;
-            instructionNodes.erase(sourceIterator);
-            const auto updatedConsumerIterator = std::find_if(instructionNodes.begin(), instructionNodes.end(),
-                                                              [&](const ScriptNodeUVE& node) {
-                                                                  return node.id == stagedLink.input.nodeId;
-                                                              });
-            instructionNodes.insert(updatedConsumerIterator, sourceNode);
+        for (const ScriptLinkUVE& stagedLink : stagedLinks) {
+            const auto sourceIterator = std::find_if(instructionNodes.begin(), instructionNodes.end(),
+                                                     [&](const ScriptNodeUVE& node) {
+                                                         return node.id == stagedLink.output.nodeId;
+                                                     });
+            const auto consumerIterator = std::find_if(instructionNodes.begin(), instructionNodes.end(),
+                                                       [&](const ScriptNodeUVE& node) {
+                                                           return node.id == stagedLink.input.nodeId;
+                                                       });
+            if (sourceIterator != instructionNodes.end() && consumerIterator != instructionNodes.end() &&
+                sourceIterator != consumerIterator && sourceIterator > consumerIterator) {
+                const ScriptNodeUVE sourceNode = *sourceIterator;
+                instructionNodes.erase(sourceIterator);
+                const auto updatedConsumerIterator = std::find_if(instructionNodes.begin(), instructionNodes.end(),
+                                                                  [&](const ScriptNodeUVE& node) {
+                                                                      return node.id == stagedLink.input.nodeId;
+                                                                  });
+                instructionNodes.insert(updatedConsumerIterator, sourceNode);
+            }
         }
     };
     moveStagedProducerBeforeConsumer(stagedComponentLinks);
@@ -513,6 +583,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
     moveStagedProducerBeforeConsumer(stagedVector2Links);
     moveStagedProducerBeforeConsumer(stagedVector3ScaleLinks);
     moveStagedProducerBeforeConsumer(stagedVector3Links);
+    moveStagedProducerBeforeConsumer(stagedConversionLinks);
 
     const auto flowExtraEntryCountUVE = [](const ScriptNodeUVE& node) noexcept -> std::size_t {
         if (node.typeId == "flow.do_once") {
@@ -536,7 +607,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
                                                 stagedBooleanLinks.size() + stagedNumberLinks.size() +
                                                 stagedComparisonNumberLinks.size() + stagedVector2ScaleLinks.size() +
                                                 stagedVector2Links.size() + stagedVector3ScaleLinks.size() +
-                                                stagedVector3Links.size();
+                                                stagedVector3Links.size() + stagedConversionLinks.size();
     const auto findStagedInstructionIndex = [&](const std::uint32_t nodeId) -> std::optional<std::size_t> {
         const std::optional<std::size_t> baseIndex = FindNodeInstructionIndexUVE(instructionNodes, nodeId);
         if (!baseIndex.has_value()) {
@@ -561,6 +632,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
         countStagedBefore(stagedVector2Links);
         countStagedBefore(stagedVector3ScaleLinks);
         countStagedBefore(stagedVector3Links);
+        countStagedBefore(stagedConversionLinks);
         std::size_t flowEntriesBefore = 0U;
         for (std::size_t index = 0U; index < *baseIndex; ++index) {
             flowEntriesBefore += flowExtraEntryCountUVE(instructionNodes[index]);
@@ -716,6 +788,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             emitStagedLinks(stagedVector2Links);
             emitStagedLinks(stagedVector3ScaleLinks);
             emitStagedLinks(stagedVector3Links);
+            emitStagedLinks(stagedConversionLinks);
     }
 
     for (const ScriptLinkUVE& link : links) {
@@ -732,7 +805,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             isStagedLink(stagedBooleanLinks) || isStagedLink(stagedNumberLinks) ||
             isStagedLink(stagedComparisonNumberLinks) || isStagedLink(stagedVector2ScaleLinks) ||
             isStagedLink(stagedVector2Links) || isStagedLink(stagedVector3ScaleLinks) ||
-            isStagedLink(stagedVector3Links)) {
+            isStagedLink(stagedVector3Links) || isStagedLink(stagedConversionLinks)) {
             continue;
         }
         if (IsExecutionLinkUVE(link, nodes, registry)) {

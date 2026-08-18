@@ -17,7 +17,7 @@ struct BuiltInNodeDefinitionUVE final {
     std::uint32_t displayOrder;
 };
 
-[[nodiscard]] std::array<BuiltInNodeDefinitionUVE, 53U> MakeBuiltInDefinitionsUVE() {
+[[nodiscard]] std::array<BuiltInNodeDefinitionUVE, 57U> MakeBuiltInDefinitionsUVE() {
     return {
         BuiltInNodeDefinitionUVE{
             "flow.sequence", "Sequence",
@@ -59,6 +59,28 @@ struct BuiltInNodeDefinitionUVE final {
              ScriptPinDescriptorUVE{"Case1", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Execution},
              ScriptPinDescriptorUVE{"Default", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Execution}},
             "Flow", "node.flow", 105U},
+        BuiltInNodeDefinitionUVE{
+            "convert.number_to_boolean", "Number to Boolean",
+            {ScriptPinDescriptorUVE{"Value", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Conversion", "node.conversion", 200U},
+        BuiltInNodeDefinitionUVE{
+            "convert.boolean_to_number", "Boolean to Number",
+            {ScriptPinDescriptorUVE{"Value", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Boolean},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Number}},
+            "Conversion", "node.conversion", 201U},
+        BuiltInNodeDefinitionUVE{
+            "convert.vector2_to_vector3", "Vector2 to Vector3",
+            {ScriptPinDescriptorUVE{"Vector", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector2},
+             ScriptPinDescriptorUVE{"Z", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number,
+                                    ScriptPinRoleUVE::Data, std::string{"0"}},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Vector3}},
+            "Conversion", "node.conversion", 202U},
+        BuiltInNodeDefinitionUVE{
+            "convert.vector3_to_vector2", "Vector3 to Vector2",
+            {ScriptPinDescriptorUVE{"Vector", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Vector2}},
+            "Conversion", "node.conversion", 203U},
         BuiltInNodeDefinitionUVE{
             "math.float.add", "Add Float",
             {ScriptPinDescriptorUVE{"A", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
@@ -336,7 +358,7 @@ struct BuiltInNodeDefinitionUVE final {
 } // namespace
 
 bool RegisterBuiltInScriptNodesUVE(ScriptNodeRegistryUVE& registry) {
-    std::array<BuiltInNodeDefinitionUVE, 53U> definitions = MakeBuiltInDefinitionsUVE();
+    std::array<BuiltInNodeDefinitionUVE, 57U> definitions = MakeBuiltInDefinitionsUVE();
     for (const BuiltInNodeDefinitionUVE& definition : definitions) {
         if (registry.FindNodeTypeUVE(definition.typeId) != nullptr) {
             return false;

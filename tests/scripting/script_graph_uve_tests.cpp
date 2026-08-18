@@ -118,12 +118,13 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
 
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
     EXPECT_FALSE(RegisterBuiltInScriptNodesUVE(registry));
-    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 53U);
+    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 57U);
 
     const std::vector<ScriptNodeTypeDescriptorUVE> descriptors = registry.GetNodeTypeDescriptorsUVE();
-    ASSERT_EQ(descriptors.size(), 53U);
+    ASSERT_EQ(descriptors.size(), 57U);
     const std::vector<std::string> expectedIds{
         "flow.sequence", "flow.branch", "flow.return", "flow.do_once", "flow.gate", "flow.switch",
+        "convert.number_to_boolean", "convert.boolean_to_number", "convert.vector2_to_vector3", "convert.vector3_to_vector2",
         "math.float.add", "math.float.subtract", "math.float.multiply", "math.float.divide",
         "math.float.modulo", "math.float.abs", "math.float.min", "math.float.max", "math.float.clamp", "math.float.power",
         "math.vector2.make", "math.vector2.add", "math.vector2.subtract", "math.vector2.multiply",
@@ -145,31 +146,35 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
         EXPECT_EQ(descriptors[index].category, "Flow");
         EXPECT_EQ(descriptors[index].iconId, "node.flow");
     }
-    for (std::size_t index = 6U; index < 16U; ++index) {
+    for (std::size_t index = 6U; index < 10U; ++index) {
+        EXPECT_EQ(descriptors[index].category, "Conversion");
+        EXPECT_EQ(descriptors[index].iconId, "node.conversion");
+    }
+    for (std::size_t index = 10U; index < 20U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Math");
         EXPECT_EQ(descriptors[index].iconId, "node.math.float");
     }
-    for (std::size_t index = 16U; index < 22U; ++index) {
+    for (std::size_t index = 20U; index < 26U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Math");
         EXPECT_EQ(descriptors[index].iconId, "node.math.vector2");
     }
-    for (std::size_t index = 22U; index < 30U; ++index) {
+    for (std::size_t index = 26U; index < 34U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Math");
         EXPECT_EQ(descriptors[index].iconId, "node.math.vector3");
     }
-    for (std::size_t index = 30U; index < 40U; ++index) {
+    for (std::size_t index = 34U; index < 44U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Logic");
         EXPECT_EQ(descriptors[index].iconId, "node.logic.boolean");
     }
-    for (std::size_t index = 40U; index < 42U; ++index) {
+    for (std::size_t index = 44U; index < 46U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Entity Query");
         EXPECT_EQ(descriptors[index].iconId, "node.entity.query");
     }
-    for (std::size_t index = 42U; index < 44U; ++index) {
+    for (std::size_t index = 46U; index < 48U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Engine");
         EXPECT_EQ(descriptors[index].iconId, "node.engine");
     }
-    for (std::size_t index = 44U; index < descriptors.size(); ++index) {
+    for (std::size_t index = 48U; index < descriptors.size(); ++index) {
         EXPECT_EQ(descriptors[index].category, "Variable");
         EXPECT_EQ(descriptors[index].iconId, "node.variable");
     }
@@ -190,6 +195,22 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
     EXPECT_EQ(branch->pins[1].type, ScriptValueTypeUVE::Boolean);
     EXPECT_EQ(branch->pins[2].role, ScriptPinRoleUVE::Execution);
     EXPECT_EQ(branch->pins[3].role, ScriptPinRoleUVE::Execution);
+
+    const ScriptNodeTypeDescriptorUVE* numberToBoolean = registry.FindNodeTypeUVE("convert.number_to_boolean");
+    ASSERT_NE(numberToBoolean, nullptr);
+    ASSERT_EQ(numberToBoolean->pins.size(), 2U);
+    EXPECT_EQ(numberToBoolean->pins[0].type, ScriptValueTypeUVE::Number);
+    EXPECT_EQ(numberToBoolean->pins[1].type, ScriptValueTypeUVE::Boolean);
+
+    const ScriptNodeTypeDescriptorUVE* vector2ToVector3 = registry.FindNodeTypeUVE("convert.vector2_to_vector3");
+    ASSERT_NE(vector2ToVector3, nullptr);
+    ASSERT_EQ(vector2ToVector3->pins.size(), 3U);
+    EXPECT_EQ(vector2ToVector3->pins[0].type, ScriptValueTypeUVE::Vector2);
+    EXPECT_EQ(vector2ToVector3->pins[1].name, "Z");
+    EXPECT_EQ(vector2ToVector3->pins[1].type, ScriptValueTypeUVE::Number);
+    ASSERT_TRUE(vector2ToVector3->pins[1].defaultValue.has_value());
+    EXPECT_EQ(*vector2ToVector3->pins[1].defaultValue, "0");
+    EXPECT_EQ(vector2ToVector3->pins[2].type, ScriptValueTypeUVE::Vector3);
 
     const ScriptNodeTypeDescriptorUVE* abs = registry.FindNodeTypeUVE("math.float.abs");
     ASSERT_NE(abs, nullptr);
@@ -555,6 +576,32 @@ TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_LowersFlowControlDispatc
     EXPECT_EQ(result.program->instructions[6].nodeTypeId, "flow.switch");
     EXPECT_EQ(result.program->instructions[6].sourcePinName, "In");
     EXPECT_EQ(result.program->instructions[6].kind, ScriptIrInstructionKindUVE::FlowControlDispatch);
+}
+
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesExplicitConversionInput) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({1U, "convert.vector2_to_vector3"}));
+    ASSERT_TRUE(graph.AddNodeUVE({10U, "math.vector2.make"}));
+    ASSERT_TRUE(graph.AddLinkUVE({{10U, "Vector"}, {1U, "Vector"}}));
+
+    const ScriptIrCompileResultUVE result = CompileScriptGraphToIrUVE(graph, registry);
+    ASSERT_TRUE(result.IsSuccessUVE());
+    ASSERT_EQ(result.program->instructions.size(), 3U);
+    EXPECT_EQ(result.program->instructions[0].nodeTypeId, "math.vector2.make");
+    EXPECT_EQ(result.program->instructions[1].kind, ScriptIrInstructionKindUVE::TransferValue);
+    EXPECT_EQ(result.program->instructions[1].sourcePinName, "Vector");
+    EXPECT_EQ(result.program->instructions[1].targetNodeId, 1U);
+    EXPECT_EQ(result.program->instructions[1].targetPinName, "Vector");
+    EXPECT_EQ(result.program->instructions[2].nodeTypeId, "convert.vector2_to_vector3");
+
+    ScriptGraphUVE invalidGraph;
+    ASSERT_TRUE(invalidGraph.AddNodeUVE({1U, "convert.vector2_to_vector3"}));
+    ASSERT_TRUE(invalidGraph.AddNodeUVE({10U, "math.vector3.make"}));
+    ASSERT_TRUE(invalidGraph.AddLinkUVE({{10U, "Result"}, {1U, "Vector"}}));
+    const ScriptIrCompileResultUVE invalidResult = CompileScriptGraphToIrUVE(invalidGraph, registry);
+    EXPECT_FALSE(invalidResult.IsSuccessUVE());
 }
 
 TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesBooleanConditionBeforeFlowBranch) {
@@ -3878,6 +3925,40 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_EvaluatesVector2FunctionFamily) {
     const ScriptVmExecutionResultUVE zeroResult = ExecuteScriptBytecodeUVE(zeroProgram, zeroContext);
     EXPECT_FALSE(zeroResult.IsSuccessUVE());
     EXPECT_EQ(zeroResult.status, ScriptVmStatusUVE::NodeExecutionFailed);
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_EvaluatesExplicitConversionsAndDefaults) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U,
+                                    "convert.number_to_boolean", {}, {}});
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 2U, 0U,
+                                    "convert.boolean_to_number", {}, {}});
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 3U, 0U,
+                                    "convert.vector2_to_vector3", {}, {}});
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 4U, 0U,
+                                    "convert.vector3_to_vector2", {}, {}});
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(1U, "Value", 0.0F));
+    ASSERT_TRUE(context.SetInputUVE(2U, "Value", true));
+    ASSERT_TRUE(context.SetInputUVE(3U, "Vector", ScriptVector2ValueUVE{{3.0F, 4.0F}}));
+    ASSERT_TRUE(context.SetInputUVE(4U, "Vector", ScriptVector3ValueUVE{{6.0F, 7.0F, 8.0F}}));
+
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(program, context);
+    ASSERT_TRUE(result.IsSuccessUVE());
+    EXPECT_FALSE(std::get<bool>(*context.FindOutputUVE(1U, "Result")));
+    EXPECT_FLOAT_EQ(std::get<float>(*context.FindOutputUVE(2U, "Result")), 1.0F);
+    EXPECT_EQ(std::get<ScriptVector3ValueUVE>(*context.FindOutputUVE(3U, "Result")),
+              (ScriptVector3ValueUVE{{3.0F, 4.0F, 0.0F}}));
+    EXPECT_EQ(std::get<ScriptVector2ValueUVE>(*context.FindOutputUVE(4U, "Result")),
+              (ScriptVector2ValueUVE{{6.0F, 7.0F}}));
+
+    ScriptBytecodeProgramUVE invalidProgram;
+    invalidProgram.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 5U, 0U,
+                                           "convert.number_to_boolean", {}, {}});
+    ScriptVmExecutionContextUVE invalidContext;
+    ASSERT_TRUE(invalidContext.SetInputUVE(5U, "Value", std::numeric_limits<float>::quiet_NaN()));
+    const ScriptVmExecutionResultUVE invalidResult = ExecuteScriptBytecodeUVE(invalidProgram, invalidContext);
+    EXPECT_FALSE(invalidResult.IsSuccessUVE());
 }
 
 TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesVector2ProducerBeforeLengthConsumer) {
