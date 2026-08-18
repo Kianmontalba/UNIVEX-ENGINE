@@ -502,8 +502,8 @@ TEST(EditorBridgeUVETest, SnapshotUVE_CopiesHierarchyInspectorAndNativePanelSess
         EXPECT_EQ(snapshot.visualScripting.linkCount, 0U);
         EXPECT_EQ(snapshot.visualScripting.canvas.nodes.size(), 0U);
         EXPECT_EQ(snapshot.visualScripting.canvas.links.size(), 0U);
-        ASSERT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds.size(), 20U);
-        ASSERT_EQ(snapshot.visualScripting.canvas.paletteDescriptors.size(), 20U);
+        ASSERT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds.size(), 21U);
+        ASSERT_EQ(snapshot.visualScripting.canvas.paletteDescriptors.size(), 21U);
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[0], "flow.sequence");
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[1], "flow.branch");
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[2], "math.float.add");
@@ -511,7 +511,8 @@ TEST(EditorBridgeUVETest, SnapshotUVE_CopiesHierarchyInspectorAndNativePanelSess
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[13], "math.vector3.normalize");
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[17], "logic.boolean.xor");
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[18], "query.entity.has_component");
-        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds.back(), "query.entity.get_component");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[19], "query.entity.get_component");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds.back(), "engine.log");
         EXPECT_FALSE(snapshot.visualScripting.canvas.nodesTruncated);
         EXPECT_FALSE(snapshot.visualScripting.canvas.linksTruncated);
 
