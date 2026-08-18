@@ -117,7 +117,32 @@ TEST(ControlRigUVETest, EvaluateControlRigUVE_UsesOptionalAimLookAtPoleVector) {
     const ControlRigEvaluationResultUVE result = EvaluateControlRigUVE(rig);
     ASSERT_TRUE(result.IsSuccessUVE());
     ASSERT_EQ(result.appliedConstraintCount, 1U);
+    EXPECT_NEAR(result.controls[0].pose.rotation.x, expected.x, 1.0e-5F);
+    EXPECT_NEAR(result.controls[0].pose.rotation.y, expected.y, 1.0e-5F);
+    EXPECT_NEAR(result.controls[0].pose.rotation.z, expected.z, 1.0e-5F);
+    EXPECT_NEAR(result.controls[0].pose.rotation.w, expected.w, 1.0e-5F);
+}
+
+TEST(ControlRigUVETest, EvaluateControlRigUVE_ClampsAimLookAtAngle) {
+    ControlRigUVE rig = MakeRigUVE();
+    rig.controls[3].pose.position = {1.0F, 0.0F, 0.0F};
+    rig.constraints[0] = ControlRigConstraintUVE{
+        "aim", ControlRigConstraintKindUVE::AimLookAt, "root", {}, {}, "target", {}, 1.0F, 8.0F, 0.0F,
+        0.0F, 30.0F};
+
+    Math::QuaternionUVE expected;
+    ASSERT_TRUE(Math::TryMakeAxisAngleUVE({0.0F, -1.0F, 0.0F}, 3.14159265358979323846F / 6.0F, expected));
+    const ControlRigEvaluationResultUVE result = EvaluateControlRigUVE(rig);
+    ASSERT_TRUE(result.IsSuccessUVE());
     EXPECT_EQ(result.controls[0].pose.rotation, expected);
+}
+
+TEST(ControlRigUVETest, ValidateControlRigUVE_RejectsInvalidAimLookAtAngleRange) {
+    ControlRigUVE rig = MakeRigUVE();
+    rig.constraints[0] = ControlRigConstraintUVE{
+        "aim", ControlRigConstraintKindUVE::AimLookAt, "root", {}, {}, "target", {}, 1.0F, 8.0F, 0.0F,
+        90.0F, 30.0F};
+    EXPECT_EQ(ValidateControlRigUVE(rig).code, ControlRigValidationCodeUVE::InvalidConstraint);
 }
 
 TEST(ControlRigUVETest, ValidateControlRigUVE_RejectsMissingAimLookAtPole) {
