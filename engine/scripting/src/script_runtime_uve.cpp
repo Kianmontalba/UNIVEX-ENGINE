@@ -282,4 +282,66 @@ std::vector<ScriptRuntimeTickResultUVE> ScriptRuntimeUVE::TickUVE(
     return TickDetailedUVE(options).results;
 }
 
+ScriptRuntimeTickBatchResultUVE ScriptRuntimeUVE::TickWithEntityQueryDetailedUVE(
+    const Scene::IEntityManagerUVE& entityManager,
+    const std::vector<ScriptEntityComponentTypeBindingUVE>& bindings,
+    const ScriptVmExecutionOptionsUVE options) {
+    std::vector<Scene::EntityUVE> entities;
+    entities.reserve(m_instances.size());
+    for (const auto& [entity, instance] : m_instances) {
+        if (instance.enabled) {
+            entities.push_back(entity);
+        }
+    }
+    std::sort(entities.begin(), entities.end(), [](const Scene::EntityUVE& lhs, const Scene::EntityUVE& rhs) {
+        if (lhs.index != rhs.index) {
+            return lhs.index < rhs.index;
+        }
+        return lhs.generation < rhs.generation;
+    });
+
+    ScriptRuntimeTickBatchResultUVE batch;
+    batch.summary.enabledInstanceCount = entities.size();
+    batch.results.reserve(entities.size());
+    for (const Scene::EntityUVE entity : entities) {
+        const auto iterator = m_instances.find(entity);
+        const ScriptEntityQueryAdapterResultUVE refresh =
+            ScriptEntityQueryAdapterUVE::PopulateComponentFactsUVE(entityManager, entity,
+                                                                     bindings,
+                                                                     iterator->second.state.executionContext);
+        ScriptVmExecutionResultUVE execution;
+        if (!refresh.IsAppliedUVE()) {
+            execution.status = ScriptVmStatusUVE::NodeExecutionFailed;
+            execution.diagnostics.push_back({0U, refresh.message});
+        } else {
+            execution = ExecuteScriptBytecodeUVE(iterator->second.program,
+                                                 iterator->second.state.executionContext, options);
+        }
+        switch (execution.status) {
+        case ScriptVmStatusUVE::Completed:
+            ++batch.summary.completedCount;
+            break;
+        case ScriptVmStatusUVE::InstructionBudgetExceeded:
+            ++batch.summary.instructionBudgetExceededCount;
+            break;
+        case ScriptVmStatusUVE::InvalidInstruction:
+            ++batch.summary.invalidInstructionCount;
+            break;
+        case ScriptVmStatusUVE::NodeExecutionFailed:
+            ++batch.summary.nodeExecutionFailedCount;
+            break;
+        }
+        batch.summary.diagnosticCount += execution.diagnostics.size();
+        batch.results.push_back({entity, std::move(execution)});
+    }
+    return batch;
+}
+
+std::vector<ScriptRuntimeTickResultUVE> ScriptRuntimeUVE::TickWithEntityQueryUVE(
+    const Scene::IEntityManagerUVE& entityManager,
+    const std::vector<ScriptEntityComponentTypeBindingUVE>& bindings,
+    const ScriptVmExecutionOptionsUVE options) {
+    return TickWithEntityQueryDetailedUVE(entityManager, bindings, options).results;
+}
+
 } // namespace UVE::Scripting
