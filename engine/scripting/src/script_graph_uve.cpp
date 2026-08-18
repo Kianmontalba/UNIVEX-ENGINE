@@ -2,6 +2,7 @@
 #include "uve/scripting/script_graph_uve.h"
 
 #include <algorithm>
+#include <set>
 #include <string>
 #include <unordered_set>
 
@@ -196,6 +197,8 @@ std::vector<ScriptValidationDiagnosticUVE> ScriptGraphUVE::ValidateUVE(
         }
     }
 
+    std::set<std::pair<std::uint32_t, std::string>> linkedExecutionOutputs;
+    std::set<std::pair<std::uint32_t, std::string>> linkedExecutionInputs;
     for (const ScriptLinkUVE& link : m_links) {
         if (link.output.nodeId == link.input.nodeId) {
             AddDiagnosticUVE(diagnostics, ScriptValidationCodeUVE::SelfLink, link.output.nodeId,
@@ -243,6 +246,21 @@ std::vector<ScriptValidationDiagnosticUVE> ScriptGraphUVE::ValidateUVE(
             !AreScriptPinTypesCompatibleUVE(outputPin->type, inputPin->type)) {
             AddDiagnosticUVE(diagnostics, ScriptValidationCodeUVE::IncompatiblePinTypes,
                              link.input.nodeId, link.input.pinName, "Linked pin types are incompatible.", link.output);
+        }
+        if (outputPin->direction == ScriptPinDirectionUVE::Output &&
+            inputPin->direction == ScriptPinDirectionUVE::Input &&
+            outputPin->role == ScriptPinRoleUVE::Execution &&
+            inputPin->role == ScriptPinRoleUVE::Execution) {
+            if (!linkedExecutionOutputs.emplace(link.output.nodeId, link.output.pinName).second) {
+                AddDiagnosticUVE(diagnostics, ScriptValidationCodeUVE::ExecutionLinkCardinality,
+                                 link.output.nodeId, link.output.pinName,
+                                 "An execution output may have only one downstream link.", link.input);
+            }
+            if (!linkedExecutionInputs.emplace(link.input.nodeId, link.input.pinName).second) {
+                AddDiagnosticUVE(diagnostics, ScriptValidationCodeUVE::ExecutionLinkCardinality,
+                                 link.input.nodeId, link.input.pinName,
+                                 "An execution input may have only one upstream link.", link.output);
+            }
         }
     }
     return diagnostics;

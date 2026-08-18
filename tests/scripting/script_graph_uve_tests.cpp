@@ -74,35 +74,58 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
 
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
     EXPECT_FALSE(RegisterBuiltInScriptNodesUVE(registry));
-    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 18U);
+    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 20U);
 
     const std::vector<ScriptNodeTypeDescriptorUVE> descriptors = registry.GetNodeTypeDescriptorsUVE();
-    ASSERT_EQ(descriptors.size(), 18U);
+    ASSERT_EQ(descriptors.size(), 20U);
     const std::vector<std::string> expectedIds{
+        "flow.sequence", "flow.branch",
         "math.float.add", "math.float.subtract", "math.float.multiply", "math.float.divide",
         "math.vector3.make", "math.vector3.add", "math.vector3.subtract", "math.vector3.multiply",
         "math.vector3.dot", "math.vector3.cross", "math.vector3.length", "math.vector3.normalize",
         "logic.boolean.not", "logic.boolean.and", "logic.boolean.or", "logic.boolean.xor",
         "query.entity.has_component", "query.entity.get_component"};
+    ASSERT_EQ(expectedIds.size(), descriptors.size());
     for (std::size_t index = 0U; index < expectedIds.size(); ++index) {
         EXPECT_EQ(descriptors[index].typeId, expectedIds[index]);
     }
-    for (std::size_t index = 0U; index < 4U; ++index) {
+    for (std::size_t index = 0U; index < 2U; ++index) {
+        EXPECT_EQ(descriptors[index].category, "Flow");
+        EXPECT_EQ(descriptors[index].iconId, "node.flow");
+    }
+    for (std::size_t index = 2U; index < 6U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Math");
         EXPECT_EQ(descriptors[index].iconId, "node.math.float");
     }
-    for (std::size_t index = 4U; index < 12U; ++index) {
+    for (std::size_t index = 6U; index < 14U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Math");
         EXPECT_EQ(descriptors[index].iconId, "node.math.vector3");
     }
-    for (std::size_t index = 12U; index < 16U; ++index) {
+    for (std::size_t index = 14U; index < 18U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Logic");
         EXPECT_EQ(descriptors[index].iconId, "node.logic.boolean");
     }
-    for (std::size_t index = 16U; index < descriptors.size(); ++index) {
+    for (std::size_t index = 18U; index < descriptors.size(); ++index) {
         EXPECT_EQ(descriptors[index].category, "Entity Query");
         EXPECT_EQ(descriptors[index].iconId, "node.entity.query");
     }
+
+    const ScriptNodeTypeDescriptorUVE* sequence = registry.FindNodeTypeUVE("flow.sequence");
+    ASSERT_NE(sequence, nullptr);
+    ASSERT_EQ(sequence->pins.size(), 3U);
+    EXPECT_EQ(sequence->pins[0].role, ScriptPinRoleUVE::Execution);
+    EXPECT_EQ(sequence->pins[1].role, ScriptPinRoleUVE::Execution);
+    EXPECT_EQ(sequence->pins[2].role, ScriptPinRoleUVE::Execution);
+    EXPECT_EQ(sequence->pins[1].name, "Then");
+    EXPECT_EQ(sequence->pins[2].name, "Then2");
+
+    const ScriptNodeTypeDescriptorUVE* branch = registry.FindNodeTypeUVE("flow.branch");
+    ASSERT_NE(branch, nullptr);
+    ASSERT_EQ(branch->pins.size(), 4U);
+    EXPECT_EQ(branch->pins[0].role, ScriptPinRoleUVE::Execution);
+    EXPECT_EQ(branch->pins[1].type, ScriptValueTypeUVE::Boolean);
+    EXPECT_EQ(branch->pins[2].role, ScriptPinRoleUVE::Execution);
+    EXPECT_EQ(branch->pins[3].role, ScriptPinRoleUVE::Execution);
 
     const ScriptNodeTypeDescriptorUVE* hasComponent = registry.FindNodeTypeUVE("query.entity.has_component");
     ASSERT_NE(hasComponent, nullptr);
@@ -137,6 +160,38 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
     EXPECT_EQ(multiply->pins[0].type, ScriptValueTypeUVE::Vector3);
     EXPECT_EQ(multiply->pins[1].type, ScriptValueTypeUVE::Number);
     EXPECT_EQ(multiply->pins[2].type, ScriptValueTypeUVE::Vector3);
+}
+
+TEST(ScriptGraphUVETest, ValidateUVE_EnforcesExecutionLinkCardinality) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({1U, "flow.sequence"}));
+    ASSERT_TRUE(graph.AddNodeUVE({2U, "flow.sequence"}));
+    ASSERT_TRUE(graph.AddNodeUVE({3U, "flow.branch"}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{1U, "Then"}, {3U, "In"}}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{1U, "Then"}, {2U, "In"}}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{2U, "Then"}, {3U, "In"}}));
+
+    const std::vector<ScriptValidationDiagnosticUVE> diagnostics = graph.ValidateUVE(registry);
+    ASSERT_EQ(diagnostics.size(), 2U);
+    EXPECT_EQ(diagnostics[0].code, ScriptValidationCodeUVE::ExecutionLinkCardinality);
+    EXPECT_EQ(diagnostics[0].nodeId, 1U);
+    EXPECT_EQ(diagnostics[1].code, ScriptValidationCodeUVE::ExecutionLinkCardinality);
+    EXPECT_EQ(diagnostics[1].nodeId, 3U);
+}
+
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_DefersFlowRuntimeUntilConditionalJump) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({1U, "flow.sequence"}));
+
+    const ScriptIrCompileResultUVE result = CompileScriptGraphToIrUVE(graph, registry);
+    EXPECT_FALSE(result.IsSuccessUVE());
+    ASSERT_EQ(result.diagnostics.size(), 1U);
+    EXPECT_EQ(result.diagnostics.front().code, ScriptValidationCodeUVE::UnsupportedRuntimeNode);
+    EXPECT_EQ(result.diagnostics.front().nodeId, 1U);
 }
 
 TEST(ScriptNodeRegistryUVETest, FindNodeTypeUVE_ReturnsCopiedStableDescriptorView) {

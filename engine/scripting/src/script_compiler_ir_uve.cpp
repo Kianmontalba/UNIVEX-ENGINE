@@ -29,6 +29,15 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
     if (!result.diagnostics.empty()) {
         return result;
     }
+    for (const ScriptNodeUVE& node : graph.GetNodesUVE()) {
+        if (node.typeId == "flow.sequence" || node.typeId == "flow.branch") {
+            result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode, node.id, {},
+                                          "Flow node runtime execution is deferred to the ConditionalJump increment."});
+        }
+    }
+    if (!result.diagnostics.empty()) {
+        return result;
+    }
 
     ScriptIrProgramUVE program;
     std::vector<ScriptNodeUVE> nodes = graph.GetNodesUVE();
