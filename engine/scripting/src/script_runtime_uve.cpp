@@ -23,6 +23,10 @@ namespace {
                 return std::isfinite(typedValue);
             } else if constexpr (std::is_same_v<ValueType, bool>) {
                 return true;
+            } else if constexpr (std::is_same_v<ValueType, ScriptEntityValueUVE>) {
+                return typedValue.IsValidUVE();
+            } else if constexpr (std::is_same_v<ValueType, ScriptComponentValueUVE>) {
+                return typedValue.IsValidUVE();
             } else {
                 return IsFiniteScriptVector3UVE(typedValue);
             }
@@ -36,8 +40,11 @@ namespace {
     };
     return context.inputs.size() <= ScriptVmExecutionContextUVE::kMaximumBindingsUVE &&
            context.outputs.size() <= ScriptVmExecutionContextUVE::kMaximumBindingsUVE &&
+           context.componentFacts.size() <= ScriptVmExecutionContextUVE::kMaximumComponentFactsUVE &&
            std::all_of(context.inputs.begin(), context.inputs.end(), validBinding) &&
-           std::all_of(context.outputs.begin(), context.outputs.end(), validBinding);
+           std::all_of(context.outputs.begin(), context.outputs.end(), validBinding) &&
+           std::all_of(context.componentFacts.begin(), context.componentFacts.end(),
+                       [](const ScriptComponentValueUVE& fact) { return fact.IsValidQueryFactUVE(); });
 }
 
 [[nodiscard]] std::vector<ScriptBytecodeDiagnosticUVE> ValidateRuntimeProgramUVE(
@@ -165,9 +172,10 @@ ScriptRuntimeStateUpdateResultUVE ScriptRuntimeUVE::SetStateDetailedUVE(const Sc
                 "State update rejected because the typed Vector3 state exceeds its bounded capacity."};
     }
     if (state.executionContext.inputs.size() > kMaximumStateVmBindingsUVE ||
-        state.executionContext.outputs.size() > kMaximumStateVmBindingsUVE) {
+        state.executionContext.outputs.size() > kMaximumStateVmBindingsUVE ||
+        state.executionContext.componentFacts.size() > ScriptVmExecutionContextUVE::kMaximumComponentFactsUVE) {
         return {ScriptRuntimeStateUpdateCodeUVE::CapacityExceeded,
-                "State update rejected because the VM binding context exceeds its bounded capacity."};
+                "State update rejected because the VM binding or query fact context exceeds its bounded capacity."};
     }
     if (!IsValidScriptVmBindingsUVE(state.executionContext)) {
         return {ScriptRuntimeStateUpdateCodeUVE::InvalidVmBinding,
