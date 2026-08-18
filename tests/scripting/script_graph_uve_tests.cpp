@@ -890,6 +890,58 @@ TEST(ScriptRuntimeUVETest, TickDetailedUVE_SummarizesEnabledCompletedAndDisabled
               detailed.results[0].execution.instructionsExecuted);
 }
 
+TEST(ScriptRuntimeUVETest, TickWithEntityQueryDetailedUVE_RefreshesFactsAndAccountsAdapterFailures) {
+    Memory::MemoryManagerUVE memoryManager;
+    Events::EventSystemUVE eventSystem;
+    Scene::EntityManagerUVE entityManager{memoryManager.GetDefaultAllocatorUVE(), eventSystem};
+    const Scene::EntityUVE aliveEntity = entityManager.CreateEntityUVE();
+    entityManager.AddComponentUVE<Scene::NameComponentUVE>(aliveEntity, Scene::NameComponentUVE{"Hero"});
+    const Scene::EntityUVE notAliveEntity{99U, 1U};
+
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back(
+        {ScriptIrInstructionKindUVE::ExecuteNode, 70U, 0U, "query.entity.has_component", {}, {}});
+    ScriptRuntimeUVE runtime;
+    ASSERT_TRUE(runtime.AttachUVE(aliveEntity, program));
+    ASSERT_TRUE(runtime.AttachUVE(notAliveEntity, program));
+
+    ScriptRuntimeStateUVE aliveState;
+    ASSERT_TRUE(aliveState.executionContext.SetInputUVE(70U, "Entity", ScriptEntityValueUVE{aliveEntity}));
+    ASSERT_TRUE(aliveState.executionContext.SetInputUVE(
+        70U, "Component", ScriptComponentValueUVE{Scene::kInvalidEntityUVE, "NameComponentUVE", false}));
+    ASSERT_TRUE(runtime.SetStateUVE(aliveEntity, aliveState));
+    const std::vector<ScriptEntityComponentTypeBindingUVE> bindings{
+        {"NameComponentUVE", std::type_index(typeid(Scene::NameComponentUVE))},
+    };
+
+    const ScriptRuntimeTickBatchResultUVE detailed =
+        runtime.TickWithEntityQueryDetailedUVE(entityManager, bindings);
+    ASSERT_EQ(detailed.results.size(), 2U);
+    EXPECT_EQ(detailed.results[0].entity, aliveEntity);
+    EXPECT_EQ(detailed.results[1].entity, notAliveEntity);
+    EXPECT_EQ(detailed.summary.enabledInstanceCount, 2U);
+    EXPECT_EQ(detailed.summary.completedCount, 1U);
+    EXPECT_EQ(detailed.summary.nodeExecutionFailedCount, 1U);
+    EXPECT_EQ(detailed.summary.diagnosticCount, 1U);
+    EXPECT_FALSE(detailed.IsSuccessUVE());
+    ASSERT_TRUE(detailed.results[0].execution.IsSuccessUVE());
+    EXPECT_EQ(detailed.results[1].execution.status, ScriptVmStatusUVE::NodeExecutionFailed);
+
+    const auto refreshedState = runtime.GetStateUVE(aliveEntity);
+    ASSERT_TRUE(refreshedState.has_value());
+    const auto fact = refreshedState->executionContext.FindComponentFactUVE(aliveEntity, "NameComponentUVE");
+    ASSERT_TRUE(fact.has_value());
+    EXPECT_TRUE(fact->present);
+    EXPECT_TRUE(runtime.SetEnabledUVE(notAliveEntity, false));
+    const ScriptRuntimeTickBatchResultUVE disabled =
+        runtime.TickWithEntityQueryDetailedUVE(entityManager, bindings);
+    ASSERT_EQ(disabled.results.size(), 1U);
+    EXPECT_EQ(disabled.summary.enabledInstanceCount, 1U);
+    EXPECT_EQ(disabled.summary.completedCount, 1U);
+    EXPECT_EQ(disabled.summary.nodeExecutionFailedCount, 0U);
+    EXPECT_TRUE(disabled.IsSuccessUVE());
+}
+
 TEST(ScriptRuntimeUVETest, TickDetailedUVE_ExecutesTypedVector3ThroughPerEntityContext) {
     ScriptRuntimeUVE runtime;
     ScriptBytecodeProgramUVE program;

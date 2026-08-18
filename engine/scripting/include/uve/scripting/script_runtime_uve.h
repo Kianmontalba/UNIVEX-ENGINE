@@ -4,6 +4,7 @@
 #include "uve/scene/entity_uve.h"
 #include "uve/scripting/script_vector3_value_uve.h"
 #include "uve/scripting/script_vm_uve.h"
+#include "uve/scripting/script_entity_query_adapter_uve.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -187,6 +188,14 @@ public:
     [[nodiscard]] ScriptRuntimeTickBatchResultUVE TickDetailedUVE(
         ScriptVmExecutionOptionsUVE options = {});
     [[nodiscard]] std::vector<ScriptRuntimeTickResultUVE> TickUVE(
+        ScriptVmExecutionOptionsUVE options = {});
+    [[nodiscard]] ScriptRuntimeTickBatchResultUVE TickWithEntityQueryDetailedUVE(
+        const Scene::IEntityManagerUVE& entityManager,
+        const std::vector<ScriptEntityComponentTypeBindingUVE>& bindings,
+        ScriptVmExecutionOptionsUVE options = {});
+    [[nodiscard]] std::vector<ScriptRuntimeTickResultUVE> TickWithEntityQueryUVE(
+        const Scene::IEntityManagerUVE& entityManager,
+        const std::vector<ScriptEntityComponentTypeBindingUVE>& bindings,
         ScriptVmExecutionOptionsUVE options = {});
 
 private:
