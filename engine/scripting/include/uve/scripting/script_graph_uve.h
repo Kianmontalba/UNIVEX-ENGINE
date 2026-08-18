@@ -58,6 +58,8 @@ enum class ScriptValidationCodeUVE : std::uint8_t {
     IncompatiblePinTypes,
     DuplicateLink,
     SelfLink,
+    ExecutionLinkCardinality,
+    UnsupportedRuntimeNode,
 };
 
 struct ScriptPinDescriptorUVE final {

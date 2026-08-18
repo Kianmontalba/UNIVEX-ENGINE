@@ -17,8 +17,21 @@ struct BuiltInNodeDefinitionUVE final {
     std::uint32_t displayOrder;
 };
 
-[[nodiscard]] std::array<BuiltInNodeDefinitionUVE, 18U> MakeBuiltInDefinitionsUVE() {
+[[nodiscard]] std::array<BuiltInNodeDefinitionUVE, 20U> MakeBuiltInDefinitionsUVE() {
     return {
+        BuiltInNodeDefinitionUVE{
+            "flow.sequence", "Sequence",
+            {ScriptPinDescriptorUVE{"In", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Execution},
+             ScriptPinDescriptorUVE{"Then", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Execution},
+             ScriptPinDescriptorUVE{"Then2", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Execution}},
+            "Flow", "node.flow", 100U},
+        BuiltInNodeDefinitionUVE{
+            "flow.branch", "Branch",
+            {ScriptPinDescriptorUVE{"In", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Execution},
+             ScriptPinDescriptorUVE{"Condition", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Boolean},
+             ScriptPinDescriptorUVE{"True", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Execution},
+             ScriptPinDescriptorUVE{"False", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Execution}},
+            "Flow", "node.flow", 101U},
         BuiltInNodeDefinitionUVE{
             "math.float.add", "Add Float",
             {ScriptPinDescriptorUVE{"A", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
@@ -131,7 +144,7 @@ struct BuiltInNodeDefinitionUVE final {
 } // namespace
 
 bool RegisterBuiltInScriptNodesUVE(ScriptNodeRegistryUVE& registry) {
-    std::array<BuiltInNodeDefinitionUVE, 18U> definitions = MakeBuiltInDefinitionsUVE();
+    std::array<BuiltInNodeDefinitionUVE, 20U> definitions = MakeBuiltInDefinitionsUVE();
     for (const BuiltInNodeDefinitionUVE& definition : definitions) {
         if (registry.FindNodeTypeUVE(definition.typeId) != nullptr) {
             return false;
