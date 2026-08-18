@@ -98,6 +98,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
     std::optional<ScriptLinkUVE> branchConditionLink;
     std::optional<ScriptLinkUVE> branchConditionDependencyLink;
     std::vector<ScriptLinkUVE> stagedConditionLinks;
+    std::vector<ScriptLinkUVE> stagedNumberLinks;
     for (const ScriptNodeUVE& node : nodes) {
         if (node.typeId == "flow.sequence") {
             ++sequenceNodeCount;
@@ -191,6 +192,27 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             }
         }
     }
+    for (const ScriptLinkUVE& link : links) {
+        if (IsExecutionLinkUVE(link, nodes, registry)) {
+            continue;
+        }
+        const ScriptNodeUVE* sourceNode = FindNodeUVE(nodes, link.output.nodeId);
+        const ScriptNodeUVE* consumerNode = FindNodeUVE(nodes, link.input.nodeId);
+        if (sourceNode == nullptr || consumerNode == nullptr ||
+            consumerNode->typeId.rfind("math.float.", 0U) != 0U) {
+            continue;
+        }
+        const bool validDirectTimeLink = sourceNode->typeId == "engine.get_time" &&
+                                         link.output.pinName == "Value" &&
+                                         (link.input.pinName == "A" || link.input.pinName == "B");
+        if (!validDirectTimeLink || !stagedNumberLinks.empty()) {
+            result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode, link.input.nodeId,
+                                          link.input.pinName,
+                                          "Float data-link staging supports only one direct engine.get_time producer; composed and deeper Number dependencies remain deferred."});
+            continue;
+        }
+        stagedNumberLinks.push_back(link);
+    }
     if (!result.diagnostics.empty()) {
         return result;
     }
@@ -219,21 +241,46 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
                                                  });
         instructionNodes.insert(branchIterator, conditionNodes.begin(), conditionNodes.end());
     }
+    if (!stagedNumberLinks.empty()) {
+        const ScriptLinkUVE& stagedLink = stagedNumberLinks.front();
+        const auto sourceIterator = std::find_if(instructionNodes.begin(), instructionNodes.end(),
+                                                 [&](const ScriptNodeUVE& node) {
+                                                     return node.id == stagedLink.output.nodeId;
+                                                 });
+        const auto consumerIterator = std::find_if(instructionNodes.begin(), instructionNodes.end(),
+                                                   [&](const ScriptNodeUVE& node) {
+                                                       return node.id == stagedLink.input.nodeId;
+                                                   });
+        if (sourceIterator != instructionNodes.end() && consumerIterator != instructionNodes.end() &&
+            sourceIterator != consumerIterator) {
+            const ScriptNodeUVE sourceNode = *sourceIterator;
+            instructionNodes.erase(sourceIterator);
+            const auto updatedConsumerIterator = std::find_if(instructionNodes.begin(), instructionNodes.end(),
+                                                              [&](const ScriptNodeUVE& node) {
+                                                                  return node.id == stagedLink.input.nodeId;
+                                                              });
+            instructionNodes.insert(updatedConsumerIterator, sourceNode);
+        }
+    }
 
-    const std::size_t stagedInstructionCount = instructionNodes.size() + stagedConditionLinks.size();
+    const std::size_t stagedInstructionCount = instructionNodes.size() + stagedConditionLinks.size() + stagedNumberLinks.size();
     const auto findStagedInstructionIndex = [&](const std::uint32_t nodeId) -> std::optional<std::size_t> {
         const std::optional<std::size_t> baseIndex = FindNodeInstructionIndexUVE(instructionNodes, nodeId);
         if (!baseIndex.has_value()) {
             return std::nullopt;
         }
         std::size_t stagedBefore = 0U;
-        for (const ScriptLinkUVE& stagedLink : stagedConditionLinks) {
-            const std::optional<std::size_t> sourceIndex =
-                FindNodeInstructionIndexUVE(instructionNodes, stagedLink.output.nodeId);
-            if (sourceIndex.has_value() && *sourceIndex < *baseIndex) {
-                ++stagedBefore;
+        const auto countStagedBefore = [&](const std::vector<ScriptLinkUVE>& stagedLinks) {
+            for (const ScriptLinkUVE& stagedLink : stagedLinks) {
+                const std::optional<std::size_t> sourceIndex =
+                    FindNodeInstructionIndexUVE(instructionNodes, stagedLink.output.nodeId);
+                if (sourceIndex.has_value() && *sourceIndex < *baseIndex) {
+                    ++stagedBefore;
+                }
             }
-        }
+        };
+        countStagedBefore(stagedConditionLinks);
+        countStagedBefore(stagedNumberLinks);
         return *baseIndex + stagedBefore;
     };
 
@@ -297,30 +344,37 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             });
         }
         program.sourceNodeIds.push_back(node.id);
-        for (const ScriptLinkUVE& stagedLink : stagedConditionLinks) {
-            if (stagedLink.output.nodeId != node.id) {
-                continue;
-            }
-            program.instructions.push_back(ScriptIrInstructionUVE{
-                ScriptIrInstructionKindUVE::TransferValue,
-                stagedLink.output.nodeId,
-                stagedLink.input.nodeId,
-                {},
-                stagedLink.output.pinName,
-                stagedLink.input.pinName,
-            });
-            program.sourceNodeIds.push_back(stagedLink.output.nodeId);
-        }
+            const auto emitStagedLinks = [&](const std::vector<ScriptLinkUVE>& stagedLinks) {
+                for (const ScriptLinkUVE& stagedLink : stagedLinks) {
+                    if (stagedLink.output.nodeId != node.id) {
+                        continue;
+                    }
+                    program.instructions.push_back(ScriptIrInstructionUVE{
+                        ScriptIrInstructionKindUVE::TransferValue,
+                        stagedLink.output.nodeId,
+                        stagedLink.input.nodeId,
+                        {},
+                        stagedLink.output.pinName,
+                        stagedLink.input.pinName,
+                    });
+                    program.sourceNodeIds.push_back(stagedLink.output.nodeId);
+                }
+            };
+            emitStagedLinks(stagedConditionLinks);
+            emitStagedLinks(stagedNumberLinks);
     }
 
     for (const ScriptLinkUVE& link : links) {
-        if (std::find_if(stagedConditionLinks.begin(), stagedConditionLinks.end(),
-                         [&](const ScriptLinkUVE& stagedLink) {
-                             return stagedLink.output.nodeId == link.output.nodeId &&
-                                    stagedLink.output.pinName == link.output.pinName &&
-                                    stagedLink.input.nodeId == link.input.nodeId &&
-                                    stagedLink.input.pinName == link.input.pinName;
-                         }) != stagedConditionLinks.end()) {
+        const auto isStagedLink = [&](const std::vector<ScriptLinkUVE>& stagedLinks) {
+            return std::find_if(stagedLinks.begin(), stagedLinks.end(),
+                                [&](const ScriptLinkUVE& stagedLink) {
+                                    return stagedLink.output.nodeId == link.output.nodeId &&
+                                           stagedLink.output.pinName == link.output.pinName &&
+                                           stagedLink.input.nodeId == link.input.nodeId &&
+                                           stagedLink.input.pinName == link.input.pinName;
+                                }) != stagedLinks.end();
+        };
+        if (isStagedLink(stagedConditionLinks) || isStagedLink(stagedNumberLinks)) {
             continue;
         }
         if (IsExecutionLinkUVE(link, nodes, registry)) {
