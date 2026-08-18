@@ -256,6 +256,25 @@ TEST(MotionQueryDebuggingUVETest, LiveDebugTracePersistenceUVE_RejectsUnexpected
               MotionQueryLiveDebugTracePersistenceCodeUVE::InvalidTrace);
 }
 
+TEST(MotionQueryDebuggingUVETest, LiveDebugTracePersistenceUVE_EnforcesSchemaAndEventBounds) {
+    const auto schemaMismatch = DeserializeMotionQueryLiveDebugTraceUVE(
+        R"({"schemaVersion":2,"truncated":false,"filter":"","events":[]})");
+    EXPECT_EQ(schemaMismatch.code, MotionQueryLiveDebugTracePersistenceCodeUVE::SchemaMismatch);
+
+    MotionQueryTraceSnapshotUVE oversized;
+    oversized.events.reserve(kMotionQueryMaximumTraceEventsUVE + 1U);
+    for (std::size_t index = 0U; index <= kMotionQueryMaximumTraceEventsUVE; ++index) {
+        MotionQueryTraceEventUVE event;
+        event.sequence = index + 1U;
+        event.frameNumber = index + 1U;
+        event.kind = "tick";
+        oversized.events.push_back(std::move(event));
+    }
+    const auto oversizedResult = SerializeMotionQueryLiveDebugTraceUVE(oversized, "");
+    EXPECT_EQ(oversizedResult.code, MotionQueryLiveDebugTracePersistenceCodeUVE::InvalidTrace);
+    EXPECT_TRUE(oversizedResult.payload.empty());
+}
+
 TEST(MotionQueryDebuggingUVETest, LiveDebugSessionUVE_ExportsAndImportsTraceForOfflineInspection) {
     MotionQueryLiveDebugSessionUVE session;
     MotionQueryLiveDebugCommandUVE exportCommand;
