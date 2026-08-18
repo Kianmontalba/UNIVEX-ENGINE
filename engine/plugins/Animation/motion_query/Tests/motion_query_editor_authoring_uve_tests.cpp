@@ -116,6 +116,76 @@ TEST(MotionQueryEditorAuthoringUVETest, DispatchUVE_AppliesNamedMutationsAndPres
     EXPECT_EQ(session.GetSnapshotUVE().databases[0].candidateCount, 2U);
 }
 
+TEST(MotionQueryEditorAuthoringUVETest, CopyAndPasteUVE_CopiesPayloadAndRemapsDestinationIdentity) {
+    MotionQueryEditorAuthoringSessionUVE session;
+    MotionQueryEditorCommandUVE registerCommand = MakeCommandUVE(
+        MotionQueryEditorCommandKindUVE::RegisterDatabase, 0U);
+    registerCommand.database = MakeEntryUVE(1U, "Source", "source-db");
+    ASSERT_TRUE(session.DispatchUVE(registerCommand).applied);
+    EXPECT_FALSE(session.GetSnapshotUVE().clipboardAvailable);
+
+    MotionQueryEditorCommandUVE copy = MakeCommandUVE(
+        MotionQueryEditorCommandKindUVE::CopyDatabase, 1U);
+    copy.resource = MakeResourceUVE(1U);
+    const MotionQueryEditorResponseUVE copyResponse = session.DispatchUVE(copy);
+    ASSERT_TRUE(copyResponse.applied);
+    EXPECT_TRUE(copyResponse.snapshot.clipboardAvailable);
+
+    MotionQueryEditorCommandUVE paste = MakeCommandUVE(
+        MotionQueryEditorCommandKindUVE::PasteDatabase, 2U);
+    paste.pasteTarget = MotionQueryEditorPasteTargetUVE{
+        MakeResourceUVE(2U, 3U), "Pasted", UVE::Core::MotionQueryDatabaseContextUVE{"pasted-db", 7U}};
+    const MotionQueryEditorResponseUVE pasteResponse = session.DispatchUVE(paste);
+    ASSERT_TRUE(pasteResponse.applied);
+    ASSERT_EQ(pasteResponse.snapshot.databases.size(), 2U);
+    EXPECT_EQ(pasteResponse.snapshot.databases[0].displayName, "Pasted");
+    EXPECT_EQ(pasteResponse.snapshot.databases[0].databaseId, "pasted-db");
+    EXPECT_EQ(pasteResponse.snapshot.databases[0].generation, 7U);
+    EXPECT_EQ(pasteResponse.snapshot.databases[0].candidateCount, 1U);
+    EXPECT_TRUE(pasteResponse.snapshot.databases[0].dirty);
+
+    UVE::Core::MotionQueryDatabaseContractUVE pastedContract;
+    ASSERT_TRUE(session.TryGetDatabaseCopyUVE(MakeResourceUVE(2U, 3U), pastedContract));
+    EXPECT_EQ(pastedContract.context.databaseId, "pasted-db");
+    EXPECT_EQ(pastedContract.context.generation, 7U);
+    EXPECT_TRUE(pastedContract.events.empty());
+}
+
+TEST(MotionQueryEditorAuthoringUVETest, CopyAndPasteUVE_RejectsMissingOrDuplicateTargetsWithoutMutation) {
+    MotionQueryEditorAuthoringSessionUVE session;
+    MotionQueryEditorCommandUVE pasteWithoutCopy = MakeCommandUVE(
+        MotionQueryEditorCommandKindUVE::PasteDatabase, 0U);
+    pasteWithoutCopy.pasteTarget = MotionQueryEditorPasteTargetUVE{
+        MakeResourceUVE(2U), "Pasted", UVE::Core::MotionQueryDatabaseContextUVE{"pasted-db", 1U}};
+    EXPECT_EQ(session.DispatchUVE(pasteWithoutCopy).code, MotionQueryEditorResponseCodeUVE::ClipboardEmpty);
+    EXPECT_TRUE(session.GetSnapshotUVE().databases.empty());
+
+    MotionQueryEditorCommandUVE registerCommand = MakeCommandUVE(
+        MotionQueryEditorCommandKindUVE::RegisterDatabase, 0U);
+    registerCommand.database = MakeEntryUVE(1U, "Source", "source-db");
+    ASSERT_TRUE(session.DispatchUVE(registerCommand).applied);
+    MotionQueryEditorCommandUVE copy = MakeCommandUVE(
+        MotionQueryEditorCommandKindUVE::CopyDatabase, 1U);
+    copy.resource = MakeResourceUVE(1U);
+    ASSERT_TRUE(session.DispatchUVE(copy).applied);
+
+    MotionQueryEditorCommandUVE duplicateTarget = MakeCommandUVE(
+        MotionQueryEditorCommandKindUVE::PasteDatabase, 2U);
+    duplicateTarget.pasteTarget = MotionQueryEditorPasteTargetUVE{
+        MakeResourceUVE(1U), "Duplicate", UVE::Core::MotionQueryDatabaseContextUVE{"other-db", 2U}};
+    EXPECT_EQ(session.DispatchUVE(duplicateTarget).code, MotionQueryEditorResponseCodeUVE::DuplicateDatabase);
+    EXPECT_EQ(session.GetSnapshotUVE().databases.size(), 1U);
+
+    MotionQueryEditorCommandUVE invalidTarget = MakeCommandUVE(
+        MotionQueryEditorCommandKindUVE::PasteDatabase, 2U);
+    invalidTarget.pasteTarget = MotionQueryEditorPasteTargetUVE{
+        MakeResourceUVE(3U), "", UVE::Core::MotionQueryDatabaseContextUVE{"invalid-db", 1U}};
+    EXPECT_EQ(session.DispatchUVE(invalidTarget).code, MotionQueryEditorResponseCodeUVE::InvalidPasteTarget);
+    EXPECT_EQ(session.GetSnapshotUVE().revision, 2U);
+    session.ClearUVE();
+    EXPECT_FALSE(session.GetSnapshotUVE().clipboardAvailable);
+}
+
 TEST(MotionQueryEditorAuthoringUVETest, SelectAndRemoveUVE_UsesNamedResourceCommands) {
     MotionQueryEditorAuthoringSessionUVE session;
     MotionQueryEditorCommandUVE registerCommand = MakeCommandUVE(
