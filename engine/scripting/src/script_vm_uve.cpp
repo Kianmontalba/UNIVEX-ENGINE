@@ -112,6 +112,37 @@ namespace {
     const ScriptIrInstructionUVE& instruction, const std::size_t instructionIndex,
     ScriptVmExecutionContextUVE& context) {
     const std::uint32_t nodeId = instruction.sourceNodeId;
+    if (instruction.nodeTypeId == "logic.boolean.equal" ||
+        instruction.nodeTypeId == "logic.boolean.not_equal" ||
+        instruction.nodeTypeId == "logic.boolean.greater" ||
+        instruction.nodeTypeId == "logic.boolean.less" ||
+        instruction.nodeTypeId == "logic.boolean.greater_equal" ||
+        instruction.nodeTypeId == "logic.boolean.less_equal") {
+        const float* lhs = FindNumberInputUVE(context, nodeId, "A");
+        const float* rhs = FindNumberInputUVE(context, nodeId, "B");
+        if (lhs == nullptr || rhs == nullptr || !std::isfinite(*lhs) || !std::isfinite(*rhs)) {
+            return MakeNodeFailureUVE(instructionIndex,
+                                      "Boolean comparison requires finite Number inputs A and B.");
+        }
+        bool result = false;
+        if (instruction.nodeTypeId == "logic.boolean.equal") {
+            result = *lhs == *rhs;
+        } else if (instruction.nodeTypeId == "logic.boolean.not_equal") {
+            result = *lhs != *rhs;
+        } else if (instruction.nodeTypeId == "logic.boolean.greater") {
+            result = *lhs > *rhs;
+        } else if (instruction.nodeTypeId == "logic.boolean.less") {
+            result = *lhs < *rhs;
+        } else if (instruction.nodeTypeId == "logic.boolean.greater_equal") {
+            result = *lhs >= *rhs;
+        } else {
+            result = *lhs <= *rhs;
+        }
+        if (!SetNodeOutputUVE(context, nodeId, "Result", result)) {
+            return MakeNodeFailureUVE(instructionIndex, "Boolean comparison rejected its output capacity.");
+        }
+        return {};
+    }
     if (instruction.nodeTypeId == "logic.boolean.not") {
         const bool* value = FindBooleanInputUVE(context, nodeId, "Value");
         if (value == nullptr || !SetNodeOutputUVE(context, nodeId, "Result", !*value)) {
@@ -311,6 +342,15 @@ namespace {
 
 [[nodiscard]] bool HasRequiredBooleanInputsUVE(const ScriptIrInstructionUVE& instruction,
                                                 const ScriptVmExecutionContextUVE& context) {
+    if (instruction.nodeTypeId == "logic.boolean.equal" ||
+        instruction.nodeTypeId == "logic.boolean.not_equal" ||
+        instruction.nodeTypeId == "logic.boolean.greater" ||
+        instruction.nodeTypeId == "logic.boolean.less" ||
+        instruction.nodeTypeId == "logic.boolean.greater_equal" ||
+        instruction.nodeTypeId == "logic.boolean.less_equal") {
+        return FindNumberInputUVE(context, instruction.sourceNodeId, "A") != nullptr &&
+               FindNumberInputUVE(context, instruction.sourceNodeId, "B") != nullptr;
+    }
     if (instruction.nodeTypeId == "logic.boolean.not") {
         return FindBooleanInputUVE(context, instruction.sourceNodeId, "Value") != nullptr;
     }
