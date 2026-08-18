@@ -92,12 +92,8 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
     std::sort(links.begin(), links.end(), LessLinkUVE);
 
     std::size_t sequenceNodeCount = 0U;
+    std::size_t branchNodeCount = 0U;
     for (const ScriptNodeUVE& node : nodes) {
-        if (node.typeId == "flow.branch") {
-            result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode, node.id, {},
-                                          "flow.branch runtime execution remains deferred."});
-            continue;
-        }
         if (node.typeId == "flow.sequence") {
             ++sequenceNodeCount;
             if (sequenceNodeCount > 1U) {
@@ -114,6 +110,33 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
                         result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode, node.id,
                                                       outputPin,
                                                       "flow.sequence direct dispatch supports only non-flow target nodes."});
+                    }
+                }
+            }
+        } else if (node.typeId == "flow.branch") {
+            ++branchNodeCount;
+            if (branchNodeCount > 1U) {
+                result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode, node.id, {},
+                                              "Only one flow.branch direct-dispatch node is supported per compiled graph."});
+            }
+            for (const ScriptLinkUVE& link : links) {
+                if (link.input.nodeId == node.id && link.input.pinName == "Condition" &&
+                    !IsExecutionLinkUVE(link, nodes, registry)) {
+                    result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode, node.id,
+                                                  "Condition",
+                                                  "flow.branch requires a caller-bound Boolean Condition; graph data-condition staging remains deferred."});
+                }
+            }
+            for (const char* outputPin : {"True", "False"}) {
+                const std::optional<std::uint32_t> targetNodeId =
+                    FindExecutionTargetUVE(links, node.id, outputPin);
+                if (targetNodeId.has_value()) {
+                    const ScriptNodeUVE* targetNode = FindNodeUVE(nodes, *targetNodeId);
+                    if (targetNode == nullptr || targetNode->typeId == "flow.sequence" ||
+                        targetNode->typeId == "flow.branch") {
+                        result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode, node.id,
+                                                      outputPin,
+                                                      "flow.branch direct dispatch supports only non-flow target nodes."});
                     }
                 }
             }
@@ -150,6 +173,29 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
                 0U,
                 resolveTarget("Then"),
                 resolveTarget("Then2"),
+            });
+        } else if (node.typeId == "flow.branch") {
+            const auto resolveTarget = [&](const char* pinName) -> std::uint32_t {
+                const std::optional<std::uint32_t> targetNodeId = FindExecutionTargetUVE(links, node.id, pinName);
+                if (!targetNodeId.has_value()) {
+                    return static_cast<std::uint32_t>(nodes.size());
+                }
+                const std::optional<std::size_t> targetIndex =
+                    FindNodeInstructionIndexUVE(nodes, *targetNodeId);
+                return targetIndex.has_value() ? static_cast<std::uint32_t>(*targetIndex)
+                                               : static_cast<std::uint32_t>(nodes.size());
+            };
+            program.instructions.push_back(ScriptIrInstructionUVE{
+                ScriptIrInstructionKindUVE::ConditionalJump,
+                node.id,
+                0U,
+                node.typeId,
+                "Condition",
+                {},
+                resolveTarget("True"),
+                resolveTarget("False"),
+                0U,
+                0U,
             });
         } else {
             program.instructions.push_back(ScriptIrInstructionUVE{
