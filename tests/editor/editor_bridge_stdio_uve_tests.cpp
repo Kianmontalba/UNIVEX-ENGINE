@@ -183,6 +183,14 @@ TEST(EditorBridgeStdioUVETest, ServeUVE_HandshakesAndRoutesExistingBridgeDispatc
         EXPECT_EQ(handshakeSnapshot.at("visualScripting").at("debugger").at("state").get<std::uint8_t>(), 2U);
         EXPECT_EQ(handshakeSnapshot.at("visualScripting").at("debugger").at("sourceNodeId").get<std::uint32_t>(), 20U);
         EXPECT_EQ(handshakeSnapshot.at("visualScripting").at("debugger").at("breakpointNodeIds").front().get<std::uint32_t>(), 20U);
+        const JsonUVE& debuggerTrace = handshakeSnapshot.at("visualScripting").at("debugger").at("trace");
+        ASSERT_TRUE(debuggerTrace.is_array());
+        ASSERT_EQ(debuggerTrace.size(), 1U);
+        EXPECT_EQ(debuggerTrace.front().at("kind").get<std::uint8_t>(), 0U);
+        EXPECT_EQ(debuggerTrace.front().at("instructionIndex").get<std::size_t>(), 0U);
+        EXPECT_EQ(debuggerTrace.front().at("sourceNodeId").get<std::uint32_t>(), 10U);
+        EXPECT_EQ(debuggerTrace.front().at("nodeTypeId").get<std::string>(), "test.source");
+        EXPECT_FALSE(handshakeSnapshot.at("visualScripting").at("debugger").at("traceTruncated").get<bool>());
         ASSERT_TRUE(handshakeSnapshot.at("scriptRuntime").is_object());
         EXPECT_TRUE(handshakeSnapshot.at("scriptRuntime").at("available").get<bool>());
         EXPECT_EQ(handshakeSnapshot.at("scriptRuntime").at("reason").get<std::string>(),

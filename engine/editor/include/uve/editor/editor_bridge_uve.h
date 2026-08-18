@@ -306,6 +306,8 @@ struct EditorBridgeVisualScriptDebuggerSnapshotUVE final {
     std::size_t executedInstructions = 0U;
     std::string pauseReason;
     std::vector<std::uint32_t> breakpointNodeIds;
+    std::vector<Scripting::ScriptVmTraceEventUVE> trace;
+    bool traceTruncated = false;
     std::string reason;
 
     [[nodiscard]] bool operator==(const EditorBridgeVisualScriptDebuggerSnapshotUVE&) const = default;

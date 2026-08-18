@@ -7,6 +7,8 @@
 namespace UVE::Scripting {
 
 bool ScriptDebuggerUVE::AttachUVE(ScriptBytecodeProgramUVE program) {
+    m_trace.clear();
+    m_traceTruncated = false;
     if (program.version != ScriptBytecodeProgramUVE::kCurrentVersionUVE ||
         program.instructions.size() > ScriptBytecodeProgramUVE::kMaximumInstructionsUVE) {
         m_state = ScriptDebuggerStateUVE::Faulted;
@@ -27,6 +29,8 @@ void ScriptDebuggerUVE::DetachUVE() noexcept {
     m_instructionIndex = 0U;
     m_executedInstructions = 0U;
     m_pauseReason.clear();
+    m_trace.clear();
+    m_traceTruncated = false;
     m_skipCurrentBreakpoint = false;
     m_state = ScriptDebuggerStateUVE::Detached;
 }
@@ -57,8 +61,7 @@ ScriptDebuggerSnapshotUVE ScriptDebuggerUVE::ContinueUVE(const std::size_t instr
     const std::size_t budget = std::min(instructionBudget, kMaximumExecutionBudgetUVE);
     for (std::size_t executed = 0U; executed < budget; ++executed) {
         if (m_instructionIndex >= m_program.instructions.size()) {
-            m_state = ScriptDebuggerStateUVE::Completed;
-            m_pauseReason = "Program completed.";
+            MarkCompletedUVE();
             break;
         }
         const std::uint32_t sourceNodeId = m_program.instructions[m_instructionIndex].sourceNodeId;
@@ -73,8 +76,7 @@ ScriptDebuggerSnapshotUVE ScriptDebuggerUVE::ContinueUVE(const std::size_t instr
         }
     }
     if (m_state == ScriptDebuggerStateUVE::Running && m_instructionIndex >= m_program.instructions.size()) {
-        m_state = ScriptDebuggerStateUVE::Completed;
-        m_pauseReason = "Program completed.";
+        MarkCompletedUVE();
     }
     return MakeSnapshotUVE();
 }
@@ -87,13 +89,11 @@ ScriptDebuggerSnapshotUVE ScriptDebuggerUVE::StepUVE() {
     m_state = ScriptDebuggerStateUVE::Running;
     m_skipCurrentBreakpoint = true;
     if (m_instructionIndex >= m_program.instructions.size()) {
-        m_state = ScriptDebuggerStateUVE::Completed;
-        m_pauseReason = "Program completed.";
+        MarkCompletedUVE();
     } else if (!ExecuteOneUVE()) {
         // ExecuteOneUVE publishes the fault state and reason.
     } else if (m_instructionIndex >= m_program.instructions.size()) {
-        m_state = ScriptDebuggerStateUVE::Completed;
-        m_pauseReason = "Program completed.";
+        MarkCompletedUVE();
     } else {
         m_state = ScriptDebuggerStateUVE::Paused;
         m_pauseReason = "Stepped one instruction.";
@@ -112,18 +112,27 @@ bool ScriptDebuggerUVE::IsBreakpointUVE(const std::uint32_t sourceNodeId) const 
 
 bool ScriptDebuggerUVE::ExecuteOneUVE() {
     if (m_instructionIndex >= m_program.instructions.size()) {
-        m_state = ScriptDebuggerStateUVE::Completed;
-        m_pauseReason = "Program completed.";
+        MarkCompletedUVE();
         return true;
     }
-    const ScriptIrInstructionKindUVE kind = m_program.instructions[m_instructionIndex].kind;
+    const std::size_t instructionIndex = m_instructionIndex;
+    const ScriptIrInstructionUVE& instruction = m_program.instructions[instructionIndex];
+    const ScriptIrInstructionKindUVE kind = instruction.kind;
     if (kind != ScriptIrInstructionKindUVE::ExecuteNode && kind != ScriptIrInstructionKindUVE::TransferValue) {
         m_state = ScriptDebuggerStateUVE::Faulted;
         m_pauseReason = "Invalid instruction kind.";
+        AppendTraceEventUVE({ScriptVmTraceEventKindUVE::Failed, Scene::kInvalidEntityUVE,
+                             instructionIndex, instruction.sourceNodeId, instruction.targetNodeId,
+                             instruction.nodeTypeId, m_pauseReason});
         return false;
     }
     ++m_instructionIndex;
     ++m_executedInstructions;
+    AppendTraceEventUVE({kind == ScriptIrInstructionKindUVE::ExecuteNode
+                             ? ScriptVmTraceEventKindUVE::NodeExecuted
+                             : ScriptVmTraceEventKindUVE::ValueTransferred,
+                         Scene::kInvalidEntityUVE, instructionIndex, instruction.sourceNodeId,
+                         instruction.targetNodeId, instruction.nodeTypeId, {}});
     return true;
 }
 
@@ -134,7 +143,31 @@ ScriptDebuggerSnapshotUVE ScriptDebuggerUVE::MakeSnapshotUVE() const {
         ? m_program.instructions[m_instructionIndex].sourceNodeId
         : 0U;
     return {m_state, m_instructionIndex, sourceNodeId, m_executedInstructions, m_pauseReason,
-            std::move(breakpointNodeIds)};
+            std::move(breakpointNodeIds), m_trace, m_traceTruncated};
+}
+
+void ScriptDebuggerUVE::AppendTraceEventUVE(ScriptVmTraceEventUVE event) {
+    if (m_trace.size() >= kMaximumTraceEventsUVE) {
+        m_traceTruncated = true;
+        return;
+    }
+    if (event.nodeTypeId.size() > ScriptVmExecutionResultUVE::kMaximumTraceMessageBytesUVE) {
+        event.nodeTypeId.resize(ScriptVmExecutionResultUVE::kMaximumTraceMessageBytesUVE);
+    }
+    if (event.message.size() > ScriptVmExecutionResultUVE::kMaximumTraceMessageBytesUVE) {
+        event.message.resize(ScriptVmExecutionResultUVE::kMaximumTraceMessageBytesUVE);
+    }
+    m_trace.push_back(std::move(event));
+}
+
+void ScriptDebuggerUVE::MarkCompletedUVE() {
+    if (m_state == ScriptDebuggerStateUVE::Completed) {
+        return;
+    }
+    m_state = ScriptDebuggerStateUVE::Completed;
+    m_pauseReason = "Program completed.";
+    AppendTraceEventUVE({ScriptVmTraceEventKindUVE::Completed, Scene::kInvalidEntityUVE,
+                         m_instructionIndex, 0U, 0U, {}, {}});
 }
 
 } // namespace UVE::Scripting

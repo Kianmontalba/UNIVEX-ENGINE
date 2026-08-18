@@ -43,6 +43,8 @@ struct ScriptDebugPresentationSnapshotUVE final {
     std::string sourceLabel;
     std::vector<ScriptSourceMappingEntryUVE> entries;
     std::vector<ScriptWatchValueUVE> watches;
+    std::vector<ScriptVmTraceEventUVE> trace;
+    bool traceTruncated = false;
 
     [[nodiscard]] bool operator==(const ScriptDebugPresentationSnapshotUVE&) const = default;
 };

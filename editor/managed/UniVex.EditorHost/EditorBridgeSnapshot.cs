@@ -411,6 +411,16 @@ public sealed record BridgeVisualScriptDiagnostic(
         : $"{SourceContext}: {Message}";
 }
 
+public sealed record BridgeVisualScriptTraceEvent(
+    byte Kind,
+    uint EntityIndex,
+    uint EntityGeneration,
+    ulong InstructionIndex,
+    uint SourceNodeId,
+    uint TargetNodeId,
+    string NodeTypeId,
+    string Message);
+
 public sealed record BridgeVisualScriptDebuggerSnapshot(
     bool Available,
     byte State,
@@ -419,6 +429,8 @@ public sealed record BridgeVisualScriptDebuggerSnapshot(
     ulong ExecutedInstructions,
     string PauseReason,
     IReadOnlyList<uint> BreakpointNodeIds,
+    IReadOnlyList<BridgeVisualScriptTraceEvent> Trace,
+    bool TraceTruncated,
     string Reason);
 
 public sealed record BridgeVisualScriptCanvasSnapshot(
@@ -1268,6 +1280,7 @@ public static class BridgeSnapshotParser
 
     private static BridgeVisualScriptDebuggerSnapshot EmptyVisualScriptDebugger() =>
         new(false, 0, 0UL, 0U, 0UL, string.Empty, Array.Empty<uint>(),
+            Array.Empty<BridgeVisualScriptTraceEvent>(), false,
             "No visual-scripting debugger is attached to this bridge session.");
 
     private static BridgeVisualScriptDebuggerSnapshot ParseVisualScriptDebugger(JsonElement value)
@@ -1280,6 +1293,39 @@ public static class BridgeSnapshotParser
         {
             parsedBreakpoints.Add(breakpoint.GetUInt32());
         }
+        List<BridgeVisualScriptTraceEvent> parsedTrace = new();
+        if (value.TryGetProperty("trace", out JsonElement traceValue) &&
+            traceValue.ValueKind != JsonValueKind.Null)
+        {
+            if (traceValue.ValueKind != JsonValueKind.Array)
+            {
+                throw Invalid("Visual-scripting debugger trace must be an array.");
+            }
+            EnsureBoundedArray(traceValue, "visualScripting.debugger.trace");
+            parsedTrace = new List<BridgeVisualScriptTraceEvent>(traceValue.GetArrayLength());
+            foreach (JsonElement traceEvent in traceValue.EnumerateArray())
+            {
+                RequireObject(traceEvent, "visualScripting.debugger.trace[]");
+                byte kind = RequiredByte(traceEvent, "kind");
+                if (kind > 4)
+                {
+                    throw Invalid("Visual-scripting debugger trace event kind is unsupported.");
+                }
+                parsedTrace.Add(new BridgeVisualScriptTraceEvent(
+                    kind,
+                    RequiredUInt32(traceEvent, "entityIndex"),
+                    RequiredUInt32(traceEvent, "entityGeneration"),
+                    RequiredUInt64(traceEvent, "instructionIndex"),
+                    RequiredUInt32(traceEvent, "sourceNodeId"),
+                    RequiredUInt32(traceEvent, "targetNodeId"),
+                    RequiredBoundedString(traceEvent, "nodeTypeId"),
+                    RequiredBoundedString(traceEvent, "message")));
+            }
+        }
+        bool traceTruncated = value.TryGetProperty("traceTruncated", out JsonElement traceTruncatedValue) &&
+                              traceTruncatedValue.ValueKind != JsonValueKind.Null
+            ? RequiredBoolean(value, "traceTruncated")
+            : false;
         return new BridgeVisualScriptDebuggerSnapshot(
             RequiredBoolean(value, "available"),
             RequiredByte(value, "state"),
@@ -1288,6 +1334,8 @@ public static class BridgeSnapshotParser
             RequiredUInt64(value, "executedInstructions"),
             RequiredBoundedString(value, "pauseReason"),
             parsedBreakpoints,
+            parsedTrace,
+            traceTruncated,
             RequiredBoundedString(value, "reason"));
     }
 
