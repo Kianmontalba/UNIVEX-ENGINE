@@ -1,6 +1,7 @@
 // Copyright (c) 2026 UniVex Studios. All Rights Reserved.
 #pragma once
 
+#include "uve/scene/entity_uve.h"
 #include "uve/scripting/script_bytecode_uve.h"
 #include "uve/scripting/script_vector3_value_uve.h"
 
@@ -20,9 +21,36 @@ enum class ScriptVmStatusUVE : std::uint8_t {
     NodeExecutionFailed,
 };
 
+struct ScriptEntityValueUVE final {
+    Scene::EntityUVE entity = Scene::kInvalidEntityUVE;
+
+    [[nodiscard]] bool IsValidUVE() const noexcept {
+        return entity != Scene::kInvalidEntityUVE;
+    }
+
+    [[nodiscard]] bool operator==(const ScriptEntityValueUVE&) const = default;
+};
+
+struct ScriptComponentValueUVE final {
+    Scene::EntityUVE entity = Scene::kInvalidEntityUVE;
+    std::string componentTypeId;
+    bool present = false;
+
+    [[nodiscard]] bool IsValidUVE() const noexcept {
+        return !componentTypeId.empty();
+    }
+
+    [[nodiscard]] bool IsValidQueryFactUVE() const noexcept {
+        return entity != Scene::kInvalidEntityUVE && IsValidUVE();
+    }
+
+    [[nodiscard]] bool operator==(const ScriptComponentValueUVE&) const = default;
+};
+
 /// Typed VM values are intentionally value-only and bounded by the execution context; append new
-/// alternatives so existing float/Vector3 variant indices remain stable for serialized callers.
-using ScriptVmValueUVE = std::variant<float, ScriptVector3ValueUVE, bool>;
+/// alternatives so existing float/Vector3/Boolean variant indices remain stable for serialized callers.
+using ScriptVmValueUVE =
+    std::variant<float, ScriptVector3ValueUVE, bool, ScriptEntityValueUVE, ScriptComponentValueUVE>;
 
 struct ScriptVmValueBindingUVE final {
     std::uint32_t nodeId = 0U;
@@ -34,9 +62,11 @@ struct ScriptVmValueBindingUVE final {
 
 struct ScriptVmExecutionContextUVE final {
     static constexpr std::size_t kMaximumBindingsUVE = 1024U;
+    static constexpr std::size_t kMaximumComponentFactsUVE = 256U;
 
     std::vector<ScriptVmValueBindingUVE> inputs;
     std::vector<ScriptVmValueBindingUVE> outputs;
+    std::vector<ScriptComponentValueUVE> componentFacts;
 
     [[nodiscard]] bool SetInputUVE(std::uint32_t nodeId, std::string pinName, ScriptVmValueUVE value);
     [[nodiscard]] bool SetOutputUVE(std::uint32_t nodeId, std::string pinName, ScriptVmValueUVE value);
@@ -44,6 +74,10 @@ struct ScriptVmExecutionContextUVE final {
                                                                 const std::string& pinName) const;
     [[nodiscard]] std::optional<ScriptVmValueUVE> FindOutputUVE(std::uint32_t nodeId,
                                                                  const std::string& pinName) const;
+    [[nodiscard]] bool SetComponentFactUVE(Scene::EntityUVE entity, std::string componentTypeId,
+                                            bool present);
+    [[nodiscard]] std::optional<ScriptComponentValueUVE> FindComponentFactUVE(
+        Scene::EntityUVE entity, const std::string& componentTypeId) const;
     void ClearOutputsUVE() noexcept;
 
     [[nodiscard]] bool operator==(const ScriptVmExecutionContextUVE&) const = default;

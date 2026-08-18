@@ -54,6 +54,18 @@ namespace {
     return binding == nullptr ? nullptr : std::get_if<bool>(&binding->value);
 }
 
+[[nodiscard]] const ScriptEntityValueUVE* FindEntityInputUVE(
+    const ScriptVmExecutionContextUVE& context, const std::uint32_t nodeId, const char* pinName) {
+    const ScriptVmValueBindingUVE* binding = FindBindingUVE(context.inputs, nodeId, pinName);
+    return binding == nullptr ? nullptr : std::get_if<ScriptEntityValueUVE>(&binding->value);
+}
+
+[[nodiscard]] const ScriptComponentValueUVE* FindComponentInputUVE(
+    const ScriptVmExecutionContextUVE& context, const std::uint32_t nodeId, const char* pinName) {
+    const ScriptVmValueBindingUVE* binding = FindBindingUVE(context.inputs, nodeId, pinName);
+    return binding == nullptr ? nullptr : std::get_if<ScriptComponentValueUVE>(&binding->value);
+}
+
 [[nodiscard]] bool SetNodeOutputUVE(ScriptVmExecutionContextUVE& context, const std::uint32_t nodeId,
                                     const char* pinName, ScriptVmValueUVE value) {
     return context.SetOutputUVE(nodeId, pinName, std::move(value));
@@ -122,6 +134,37 @@ namespace {
     }
     if (!SetNodeOutputUVE(context, nodeId, "Result", result)) {
         return MakeNodeFailureUVE(instructionIndex, "Boolean node rejected its output capacity.");
+    }
+    return {};
+}
+
+[[nodiscard]] ScriptVmExecutionResultUVE ExecuteEntityQueryNodeUVE(
+    const ScriptIrInstructionUVE& instruction, const std::size_t instructionIndex,
+    ScriptVmExecutionContextUVE& context) {
+    const std::uint32_t nodeId = instruction.sourceNodeId;
+    const ScriptEntityValueUVE* entity = FindEntityInputUVE(context, nodeId, "Entity");
+    const ScriptComponentValueUVE* component = FindComponentInputUVE(context, nodeId, "Component");
+    if (entity == nullptr || component == nullptr || !entity->IsValidUVE() || !component->IsValidUVE()) {
+        return MakeNodeFailureUVE(instructionIndex,
+                                  "Entity query node requires valid Entity and Component inputs.");
+    }
+    const std::optional<ScriptComponentValueUVE> fact =
+        context.FindComponentFactUVE(entity->entity, component->componentTypeId);
+    if (!fact.has_value()) {
+        return MakeNodeFailureUVE(instructionIndex,
+                                  "Entity query node requires a supplied component fact.");
+    }
+    if (instruction.nodeTypeId == "query.entity.has_component") {
+        if (!SetNodeOutputUVE(context, nodeId, "Result", fact->present)) {
+            return MakeNodeFailureUVE(instructionIndex, "Has Component rejected its output capacity.");
+        }
+        return {};
+    }
+    if (instruction.nodeTypeId == "query.entity.get_component") {
+        if (!SetNodeOutputUVE(context, nodeId, "Result", *fact)) {
+            return MakeNodeFailureUVE(instructionIndex, "Get Component rejected its output capacity.");
+        }
+        return {};
     }
     return {};
 }
@@ -236,6 +279,15 @@ namespace {
            FindBooleanInputUVE(context, instruction.sourceNodeId, "B") != nullptr;
 }
 
+[[nodiscard]] bool HasRequiredEntityQueryInputsUVE(
+    const ScriptIrInstructionUVE& instruction, const ScriptVmExecutionContextUVE& context) {
+    if (instruction.nodeTypeId.rfind("query.entity.", 0U) != 0U) {
+        return true;
+    }
+    return FindEntityInputUVE(context, instruction.sourceNodeId, "Entity") != nullptr &&
+           FindComponentInputUVE(context, instruction.sourceNodeId, "Component") != nullptr;
+}
+
 [[nodiscard]] bool HasRequiredVector3InputsUVE(const ScriptIrInstructionUVE& instruction,
                                                 const ScriptVmExecutionContextUVE& context) {
     const std::uint32_t nodeId = instruction.sourceNodeId;
@@ -325,9 +377,11 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                 const bool isVector3Node = instruction.nodeTypeId.rfind("math.vector3.", 0U) == 0U;
                 const bool isFloatNode = instruction.nodeTypeId.rfind("math.float.", 0U) == 0U;
                 const bool isBooleanNode = instruction.nodeTypeId.rfind("logic.boolean.", 0U) == 0U;
+                const bool isEntityQueryNode = instruction.nodeTypeId.rfind("query.entity.", 0U) == 0U;
                 if ((isVector3Node && !HasRequiredVector3InputsUVE(instruction, *context)) ||
                     (isFloatNode && !HasRequiredFloatInputsUVE(instruction, *context)) ||
-                    (isBooleanNode && !HasRequiredBooleanInputsUVE(instruction, *context))) {
+                    (isBooleanNode && !HasRequiredBooleanInputsUVE(instruction, *context)) ||
+                    (isEntityQueryNode && !HasRequiredEntityQueryInputsUVE(instruction, *context))) {
                     continue;
                 }
                 if (result.instructionsExecuted >= options.instructionBudget) {
@@ -342,6 +396,8 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                     nodeResult = ExecuteFloatNodeUVE(instruction, index, *context);
                 } else if (isBooleanNode) {
                     nodeResult = ExecuteBooleanNodeUVE(instruction, index, *context);
+                } else if (isEntityQueryNode) {
+                    nodeResult = ExecuteEntityQueryNodeUVE(instruction, index, *context);
                 }
                 if (!nodeResult.IsSuccessUVE()) {
                     nodeResult.instructionsExecuted = result.instructionsExecuted;
@@ -410,6 +466,37 @@ std::optional<ScriptVmValueUVE> ScriptVmExecutionContextUVE::FindOutputUVE(
     const std::uint32_t nodeId, const std::string& pinName) const {
     const ScriptVmValueBindingUVE* binding = FindBindingUVE(outputs, nodeId, pinName);
     return binding == nullptr ? std::nullopt : std::optional<ScriptVmValueUVE>(binding->value);
+}
+
+bool ScriptVmExecutionContextUVE::SetComponentFactUVE(const Scene::EntityUVE entity,
+                                                         std::string componentTypeId,
+                                                         const bool present) {
+    if (entity == Scene::kInvalidEntityUVE || componentTypeId.empty()) {
+        return false;
+    }
+    const auto iterator = std::find_if(componentFacts.begin(), componentFacts.end(),
+                                       [entity, &componentTypeId](const ScriptComponentValueUVE& fact) {
+                                           return fact.entity == entity && fact.componentTypeId == componentTypeId;
+                                       });
+    if (iterator != componentFacts.end()) {
+        iterator->present = present;
+        return true;
+    }
+    if (componentFacts.size() >= kMaximumComponentFactsUVE) {
+        return false;
+    }
+    componentFacts.push_back({entity, std::move(componentTypeId), present});
+    return true;
+}
+
+std::optional<ScriptComponentValueUVE> ScriptVmExecutionContextUVE::FindComponentFactUVE(
+    const Scene::EntityUVE entity, const std::string& componentTypeId) const {
+    const auto iterator = std::find_if(componentFacts.cbegin(), componentFacts.cend(),
+                                       [entity, &componentTypeId](const ScriptComponentValueUVE& fact) {
+                                           return fact.entity == entity && fact.componentTypeId == componentTypeId;
+                                       });
+    return iterator == componentFacts.cend() ? std::nullopt
+                                             : std::optional<ScriptComponentValueUVE>(*iterator);
 }
 
 void ScriptVmExecutionContextUVE::ClearOutputsUVE() noexcept {

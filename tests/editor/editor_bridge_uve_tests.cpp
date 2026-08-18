@@ -502,12 +502,14 @@ TEST(EditorBridgeUVETest, SnapshotUVE_CopiesHierarchyInspectorAndNativePanelSess
         EXPECT_EQ(snapshot.visualScripting.linkCount, 0U);
         EXPECT_EQ(snapshot.visualScripting.canvas.nodes.size(), 0U);
         EXPECT_EQ(snapshot.visualScripting.canvas.links.size(), 0U);
-        ASSERT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds.size(), 16U);
-        ASSERT_EQ(snapshot.visualScripting.canvas.paletteDescriptors.size(), 16U);
+        ASSERT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds.size(), 18U);
+        ASSERT_EQ(snapshot.visualScripting.canvas.paletteDescriptors.size(), 18U);
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds.front(), "math.float.add");
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[4], "math.vector3.make");
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[11], "math.vector3.normalize");
-        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds.back(), "logic.boolean.xor");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[15], "logic.boolean.xor");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[16], "query.entity.has_component");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds.back(), "query.entity.get_component");
         EXPECT_FALSE(snapshot.visualScripting.canvas.nodesTruncated);
         EXPECT_FALSE(snapshot.visualScripting.canvas.linksTruncated);
 

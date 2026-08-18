@@ -68,15 +68,16 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
 
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
     EXPECT_FALSE(RegisterBuiltInScriptNodesUVE(registry));
-    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 16U);
+    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 18U);
 
     const std::vector<ScriptNodeTypeDescriptorUVE> descriptors = registry.GetNodeTypeDescriptorsUVE();
-    ASSERT_EQ(descriptors.size(), 16U);
+    ASSERT_EQ(descriptors.size(), 18U);
     const std::vector<std::string> expectedIds{
         "math.float.add", "math.float.subtract", "math.float.multiply", "math.float.divide",
         "math.vector3.make", "math.vector3.add", "math.vector3.subtract", "math.vector3.multiply",
         "math.vector3.dot", "math.vector3.cross", "math.vector3.length", "math.vector3.normalize",
-        "logic.boolean.not", "logic.boolean.and", "logic.boolean.or", "logic.boolean.xor"};
+        "logic.boolean.not", "logic.boolean.and", "logic.boolean.or", "logic.boolean.xor",
+        "query.entity.has_component", "query.entity.get_component"};
     for (std::size_t index = 0U; index < expectedIds.size(); ++index) {
         EXPECT_EQ(descriptors[index].typeId, expectedIds[index]);
     }
@@ -88,10 +89,28 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
         EXPECT_EQ(descriptors[index].category, "Math");
         EXPECT_EQ(descriptors[index].iconId, "node.math.vector3");
     }
-    for (std::size_t index = 12U; index < descriptors.size(); ++index) {
+    for (std::size_t index = 12U; index < 16U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Logic");
         EXPECT_EQ(descriptors[index].iconId, "node.logic.boolean");
     }
+    for (std::size_t index = 16U; index < descriptors.size(); ++index) {
+        EXPECT_EQ(descriptors[index].category, "Entity Query");
+        EXPECT_EQ(descriptors[index].iconId, "node.entity.query");
+    }
+
+    const ScriptNodeTypeDescriptorUVE* hasComponent = registry.FindNodeTypeUVE("query.entity.has_component");
+    ASSERT_NE(hasComponent, nullptr);
+    ASSERT_EQ(hasComponent->pins.size(), 3U);
+    EXPECT_EQ(hasComponent->pins[0].type, ScriptValueTypeUVE::Entity);
+    EXPECT_EQ(hasComponent->pins[1].type, ScriptValueTypeUVE::Component);
+    EXPECT_EQ(hasComponent->pins[2].type, ScriptValueTypeUVE::Boolean);
+
+    const ScriptNodeTypeDescriptorUVE* getComponent = registry.FindNodeTypeUVE("query.entity.get_component");
+    ASSERT_NE(getComponent, nullptr);
+    ASSERT_EQ(getComponent->pins.size(), 3U);
+    EXPECT_EQ(getComponent->pins[0].type, ScriptValueTypeUVE::Entity);
+    EXPECT_EQ(getComponent->pins[1].type, ScriptValueTypeUVE::Component);
+    EXPECT_EQ(getComponent->pins[2].type, ScriptValueTypeUVE::Component);
 
     const ScriptNodeTypeDescriptorUVE* make = registry.FindNodeTypeUVE("math.vector3.make");
     ASSERT_NE(make, nullptr);
@@ -615,6 +634,39 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_DispatchesFloatAndBooleanNodes) {
     ASSERT_TRUE(notContext.SetInputUVE(21U, "Value", false));
     ASSERT_TRUE(ExecuteScriptBytecodeUVE(makeProgram(21U, "logic.boolean.not"), notContext).IsSuccessUVE());
     EXPECT_TRUE(std::get<bool>(*notContext.FindOutputUVE(21U, "Result")));
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_DispatchesEntityQueryNodesFromCopiedFacts) {
+    const auto makeProgram = [](const std::uint32_t nodeId, const char* nodeTypeId) {
+        ScriptBytecodeProgramUVE program;
+        program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, nodeId, 0U, nodeTypeId, {}, {}});
+        return program;
+    };
+    const Scene::EntityUVE entity{42U, 3U};
+    const ScriptComponentValueUVE componentToken{Scene::kInvalidEntityUVE, "MeshComponentUVE", false};
+    ScriptVmExecutionContextUVE hasContext;
+    ASSERT_TRUE(hasContext.SetInputUVE(40U, "Entity", ScriptEntityValueUVE{entity}));
+    ASSERT_TRUE(hasContext.SetInputUVE(40U, "Component", componentToken));
+    ASSERT_TRUE(hasContext.SetComponentFactUVE(entity, "MeshComponentUVE", true));
+    ASSERT_TRUE(ExecuteScriptBytecodeUVE(makeProgram(40U, "query.entity.has_component"), hasContext).IsSuccessUVE());
+    EXPECT_EQ(std::get<bool>(*hasContext.FindOutputUVE(40U, "Result")), true);
+
+    ScriptVmExecutionContextUVE getContext;
+    ASSERT_TRUE(getContext.SetInputUVE(41U, "Entity", ScriptEntityValueUVE{entity}));
+    ASSERT_TRUE(getContext.SetInputUVE(41U, "Component", componentToken));
+    ASSERT_TRUE(getContext.SetComponentFactUVE(entity, "MeshComponentUVE", false));
+    ASSERT_TRUE(ExecuteScriptBytecodeUVE(makeProgram(41U, "query.entity.get_component"), getContext).IsSuccessUVE());
+    const auto componentOutput = getContext.FindOutputUVE(41U, "Result");
+    ASSERT_TRUE(componentOutput.has_value());
+    ASSERT_TRUE(std::holds_alternative<ScriptComponentValueUVE>(*componentOutput));
+    EXPECT_FALSE(std::get<ScriptComponentValueUVE>(*componentOutput).present);
+
+    ScriptVmExecutionContextUVE missingFactContext;
+    ASSERT_TRUE(missingFactContext.SetInputUVE(42U, "Entity", ScriptEntityValueUVE{entity}));
+    ASSERT_TRUE(missingFactContext.SetInputUVE(42U, "Component", componentToken));
+    const ScriptVmExecutionResultUVE missingFact =
+        ExecuteScriptBytecodeUVE(makeProgram(42U, "query.entity.has_component"), missingFactContext);
+    EXPECT_EQ(missingFact.status, ScriptVmStatusUVE::NodeExecutionFailed);
 }
 
 TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_ResolvesCompilerStyleNodeThenTransferOrdering) {
