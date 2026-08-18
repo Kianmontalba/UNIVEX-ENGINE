@@ -93,6 +93,13 @@ ControlRigValidationResultUVE ValidateControlRigUVE(const ControlRigUVE& rig) no
             return {ControlRigValidationCodeUVE::InvalidConstraint, constraint.constraintId,
                     "Constraint identity or weight is invalid."};
         }
+        if (constraint.kind == ControlRigConstraintKindUVE::SpringPosition &&
+            (!std::isfinite(constraint.stiffness) || constraint.stiffness < 0.0F ||
+             constraint.stiffness > 64.0F || !std::isfinite(constraint.damping) ||
+             constraint.damping < 0.0F || constraint.damping > 1.0F)) {
+            return {ControlRigValidationCodeUVE::InvalidConstraint, constraint.constraintId,
+                    "Spring constraint stiffness or damping is outside its stable bounded range."};
+        }
         if (std::find(constraintIds.begin(), constraintIds.end(), constraint.constraintId) != constraintIds.end()) {
             return {ControlRigValidationCodeUVE::DuplicateConstraint, constraint.constraintId,
                     "Constraint identifiers must be unique."};
@@ -199,6 +206,30 @@ bool TryMakeAimLookAtRotationUVE(const Math::Vector3UVE& source, const Math::Vec
     return Math::TryMakeAxisAngleUVE(axis, static_cast<float>(std::acos(dot)), outRotation);
 }
 
+SpringPositionSolveResultUVE SolveSpringPositionUVE(const TransformPoseUVE& source,
+                                                    const Math::Vector3UVE& target,
+                                                    const double deltaSeconds,
+                                                    const float stiffness,
+                                                    const float damping,
+                                                    const float weight) noexcept {
+    SpringPositionSolveResultUVE result{source, 0.0F, false};
+    if (!IsFiniteTransformPoseUVE(source) || !std::isfinite(target.x) || !std::isfinite(target.y) ||
+        !std::isfinite(target.z) || !std::isfinite(deltaSeconds) || deltaSeconds < 0.0 ||
+        deltaSeconds > 0.25 || !std::isfinite(stiffness) || stiffness < 0.0F || stiffness > 64.0F ||
+        !std::isfinite(damping) || damping < 0.0F || damping > 1.0F || !std::isfinite(weight) ||
+        weight < 0.0F || weight > 1.0F) {
+        return result;
+    }
+    const float response = static_cast<float>(1.0 - std::exp(-static_cast<double>(stiffness) * deltaSeconds));
+    const float dampedResponse = std::clamp(response * (1.0F - 0.5F * damping) * weight, 0.0F, 1.0F);
+    TransformPoseUVE targetPose = source;
+    targetPose.position = target;
+    result.pose = BlendControlRigPoseUVE(source, targetPose, dampedResponse);
+    result.response = dampedResponse;
+    result.applied = true;
+    return result;
+}
+
 ControlRigEvaluationResultUVE EvaluateControlRigUVE(const ControlRigUVE& rig) {
     ControlRigEvaluationResultUVE result;
     const ControlRigValidationResultUVE validation = ValidateControlRigUVE(rig);
@@ -236,13 +267,24 @@ ControlRigEvaluationResultUVE EvaluateControlRigUVE(const ControlRigUVE& rig) {
         } else {
             const auto source = findMutable(constraint.sourceControlId);
             const auto target = findMutable(constraint.targetControlId);
-            Math::QuaternionUVE rotation;
-            if (!TryMakeAimLookAtRotationUVE(source->pose.position, target->pose.position,
-                                             {0.0F, 1.0F, 0.0F}, rotation)) {
-                result.message = "Control Rig aim/look-at solve failed.";
-                return result;
+            if (constraint.kind == ControlRigConstraintKindUVE::AimLookAt) {
+                Math::QuaternionUVE rotation;
+                if (!TryMakeAimLookAtRotationUVE(source->pose.position, target->pose.position,
+                                                 {0.0F, 1.0F, 0.0F}, rotation)) {
+                    result.message = "Control Rig aim/look-at solve failed.";
+                    return result;
+                }
+                source->pose.rotation = rotation;
+            } else {
+                const SpringPositionSolveResultUVE solved = SolveSpringPositionUVE(
+                    source->pose, target->pose.position, rig.evaluationContext.time.animationDeltaSeconds,
+                    constraint.stiffness, constraint.damping, constraint.weight);
+                if (!solved.IsSuccessUVE()) {
+                    result.message = "Control Rig spring-position solve failed.";
+                    return result;
+                }
+                source->pose = solved.pose;
             }
-            source->pose.rotation = rotation;
         }
         ++result.appliedConstraintCount;
     }

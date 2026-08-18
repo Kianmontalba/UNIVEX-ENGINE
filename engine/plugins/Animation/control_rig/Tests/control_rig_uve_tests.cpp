@@ -103,6 +103,44 @@ TEST(ControlRigUVETest, TryMakeAimLookAtRotationUVE_AlignsForwardAxis) {
     EXPECT_EQ(rotation, (Math::QuaternionUVE{0.0F, 0.0F, 0.0F, 1.0F}));
 }
 
+TEST(ControlRigUVETest, SolveSpringPositionUVE_UsesBoundedFiniteWeightedResponse) {
+    const TransformPoseUVE source{{0.0F, 0.0F, 0.0F}, {}, {1.0F, 1.0F, 1.0F}};
+    const SpringPositionSolveResultUVE result = SolveSpringPositionUVE(
+        source, {10.0F, 0.0F, 0.0F}, 1.0 / 60.0, 8.0F, 0.0F, 1.0F);
+
+    ASSERT_TRUE(result.IsSuccessUVE());
+    EXPECT_GT(result.response, 0.0F);
+    EXPECT_LT(result.response, 1.0F);
+    EXPECT_GT(result.pose.position.x, 0.0F);
+    EXPECT_LT(result.pose.position.x, 10.0F);
+    EXPECT_EQ(result.pose.rotation, source.rotation);
+    EXPECT_EQ(result.pose.scale, source.scale);
+}
+
+TEST(ControlRigUVETest, EvaluateControlRigUVE_AppliesCopiedSpringPositionConstraint) {
+    ControlRigUVE rig = MakeRigUVE();
+    rig.constraints[0] = ControlRigConstraintUVE{
+        "spring", ControlRigConstraintKindUVE::SpringPosition, "root", {}, {}, "target", {}, 1.0F, 8.0F, 0.0F};
+    const ControlRigEvaluationResultUVE result = EvaluateControlRigUVE(rig);
+
+    ASSERT_TRUE(result.IsSuccessUVE());
+    ASSERT_EQ(result.appliedConstraintCount, 1U);
+    EXPECT_GT(result.controls[0].pose.position.x, 0.0F);
+    EXPECT_LT(result.controls[0].pose.position.x, rig.controls[3].pose.position.x);
+    EXPECT_EQ(rig.controls[0].pose.position, (Math::Vector3UVE{0.0F, 0.0F, 0.0F}));
+}
+
+TEST(ControlRigUVETest, ValidateControlRigUVE_RejectsUnstableSpringParameters) {
+    ControlRigUVE rig = MakeRigUVE();
+    rig.constraints[0] = ControlRigConstraintUVE{
+        "spring", ControlRigConstraintKindUVE::SpringPosition, "root", {}, {}, "target", {}, 1.0F, 65.0F, 0.0F};
+    EXPECT_EQ(ValidateControlRigUVE(rig).code, ControlRigValidationCodeUVE::InvalidConstraint);
+
+    EXPECT_FALSE(SolveSpringPositionUVE(rig.controls[0].pose, rig.controls[3].pose.position,
+                                        0.5, 8.0F, 0.0F, 1.0F)
+                     .IsSuccessUVE());
+}
+
 TEST(ControlRigUVETest, EvaluateControlRigUVE_ReturnsCopiedControlsWithAppliedConstraint) {
     const ControlRigEvaluationResultUVE result = EvaluateControlRigUVE(MakeRigUVE());
 

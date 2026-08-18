@@ -27,6 +27,7 @@ struct ControlRigControlUVE final {
 enum class ControlRigConstraintKindUVE : std::uint8_t {
     TwoBoneIK = 0,
     AimLookAt,
+    SpringPosition,
 };
 
 struct ControlRigConstraintUVE final {
@@ -38,6 +39,8 @@ struct ControlRigConstraintUVE final {
     std::string targetControlId;
     std::string poleControlId;
     float weight = 1.0F;
+    float stiffness = 8.0F;
+    float damping = 0.0F;
 };
 
 struct ControlRigUVE final {
@@ -87,6 +90,16 @@ struct TwoBoneIKSolveResultUVE final {
     }
 };
 
+struct SpringPositionSolveResultUVE final {
+    TransformPoseUVE pose;
+    float response = 0.0F;
+    bool applied = false;
+
+    [[nodiscard]] bool IsSuccessUVE() const noexcept {
+        return applied;
+    }
+};
+
 struct ControlRigEvaluationResultUVE final {
     std::vector<ControlRigControlUVE> controls;
     SkeletonDefinitionUVE skeleton;
@@ -115,6 +128,10 @@ struct ControlRigEvaluationResultUVE final {
 [[nodiscard]] bool TryMakeAimLookAtRotationUVE(
     const Math::Vector3UVE& source, const Math::Vector3UVE& target,
     const Math::Vector3UVE& up, Math::QuaternionUVE& outRotation) noexcept;
+
+[[nodiscard]] SpringPositionSolveResultUVE SolveSpringPositionUVE(
+    const TransformPoseUVE& source, const Math::Vector3UVE& target,
+    double deltaSeconds, float stiffness, float damping, float weight) noexcept;
 
 [[nodiscard]] ControlRigEvaluationResultUVE EvaluateControlRigUVE(const ControlRigUVE& rig);
 
