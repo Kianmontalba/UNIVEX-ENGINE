@@ -206,13 +206,14 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
         const bool approvedNumberProducer =
             (sourceNode->typeId == "engine.get_time" && link.output.pinName == "Value") ||
             (sourceNode->typeId == "math.vector3.dot" && link.output.pinName == "Result") ||
-            (sourceNode->typeId == "math.vector3.length" && link.output.pinName == "Length");
+            (sourceNode->typeId == "math.vector3.length" && link.output.pinName == "Length") ||
+            (sourceNode->typeId.rfind("math.float.", 0U) == 0U && link.output.pinName == "Result");
         const bool validDirectNumberLink = approvedNumberProducer &&
                                            (link.input.pinName == "A" || link.input.pinName == "B");
         if (!validDirectNumberLink || !stagedNumberLinks.empty()) {
             result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode, link.input.nodeId,
                                           link.input.pinName,
-                                          "Float data-link staging supports one direct built-in Number producer (engine.get_time, Vector3 dot, or Vector3 length); composed and deeper Number dependencies remain deferred."});
+                                          "Float data-link staging supports one direct built-in Number producer (engine.get_time, Vector3 dot/length, or Float Result); additional composed and deeper Number dependencies remain deferred."});
             continue;
         }
         stagedNumberLinks.push_back(link);
