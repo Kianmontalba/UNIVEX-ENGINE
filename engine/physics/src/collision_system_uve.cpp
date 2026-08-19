@@ -23,6 +23,12 @@ namespace {
 [[nodiscard]] std::optional<Math::PenetrationUVE> ComputePairPenetrationUVE(
     const Detail::ColliderWorldAabbUVE& first, const Detail::ColliderWorldAabbUVE& second) {
     if (first.shapeType == Scene::ColliderShapeTypeUVE::Sphere &&
+        second.shapeType == Scene::ColliderShapeTypeUVE::Sphere) {
+        return Detail::ComputeSphereSpherePenetrationUVE(
+            first.worldAabb.GetCenterUVE(), first.shapeRadius, second.worldAabb.GetCenterUVE(),
+            second.shapeRadius);
+    }
+    if (first.shapeType == Scene::ColliderShapeTypeUVE::Sphere &&
         second.shapeType == Scene::ColliderShapeTypeUVE::Box) {
         const std::optional<Math::PenetrationUVE> sphereToBox =
             Detail::ComputeSphereAabbPenetrationUVE(second.worldAabb, first.worldAabb.GetCenterUVE(),

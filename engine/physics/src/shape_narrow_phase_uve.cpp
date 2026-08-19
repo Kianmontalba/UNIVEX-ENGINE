@@ -184,6 +184,31 @@ std::optional<Math::PenetrationUVE> ComputeCapsuleAabbPenetrationUVE(
     return Math::PenetrationUVE{delta * (1.0F / distance), capsuleRadius - distance};
 }
 
+std::optional<Math::PenetrationUVE> ComputeSphereSpherePenetrationUVE(
+    const Math::Vector3UVE firstCenter, const float firstRadius, const Math::Vector3UVE secondCenter,
+    const float secondRadius) noexcept {
+    if (!std::isfinite(firstCenter.x) || !std::isfinite(firstCenter.y) || !std::isfinite(firstCenter.z) ||
+        !std::isfinite(secondCenter.x) || !std::isfinite(secondCenter.y) ||
+        !std::isfinite(secondCenter.z) || !std::isfinite(firstRadius) || !std::isfinite(secondRadius) ||
+        firstRadius <= 0.0F || secondRadius <= 0.0F) {
+        return std::nullopt;
+    }
+
+    const Math::Vector3UVE delta = secondCenter - firstCenter;
+    const float distanceSquared = Math::LengthSquaredUVE(delta);
+    const float combinedRadius = firstRadius + secondRadius;
+    const float combinedRadiusSquared = combinedRadius * combinedRadius;
+    if (distanceSquared >= combinedRadiusSquared) {
+        return std::nullopt;
+    }
+    if (distanceSquared <= 0.0F) {
+        return Math::PenetrationUVE{{1.0F, 0.0F, 0.0F}, combinedRadius};
+    }
+
+    const float distance = std::sqrt(distanceSquared);
+    return Math::PenetrationUVE{delta * (1.0F / distance), combinedRadius - distance};
+}
+
 } // namespace UVE::Physics::Detail
 
 // EOF
