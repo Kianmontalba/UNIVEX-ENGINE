@@ -221,6 +221,35 @@ TEST_F(ColliderShapeUVETest, DetectCollisionsUVE_RotatedBoxCapsuleRejectsDiagona
     EXPECT_TRUE(collisionSystem.DetectCollisionsUVE(entityManager).empty());
 }
 
+TEST_F(ColliderShapeUVETest, DetectCollisionsUVE_OrientedBoxesUseExactSatAndOrientation) {
+    Scene::ColliderComponentUVE firstBox;
+    firstBox.shapeType = Scene::ColliderShapeTypeUVE::Box;
+    firstBox.halfExtents = {1.0F, 0.4F, 0.4F};
+    const Math::QuaternionUVE quarterTurnY{0.0F, 0.3826834324F, 0.0F, 0.9238795325F};
+    MakeColliderEntityUVE({0.0F, 0.0F, 0.0F}, firstBox, quarterTurnY);
+
+    Scene::ColliderComponentUVE secondBox = firstBox;
+    const Scene::EntityUVE secondEntity = MakeColliderEntityUVE({0.5F, 0.0F, -0.5F}, secondBox, quarterTurnY);
+
+    const std::vector<CollisionPairUVE> pairs = collisionSystem.DetectCollisionsUVE(entityManager);
+    ASSERT_EQ(pairs.size(), 1U);
+    EXPECT_EQ(pairs[0].second, secondEntity);
+    EXPECT_GT(pairs[0].penetrationDepth, 0.0F);
+    EXPECT_GT(Math::DotUVE(pairs[0].separationAxis, {1.0F, 0.0F, -1.0F}), 0.0F);
+    EXPECT_NEAR(Math::LengthSquaredUVE(pairs[0].separationAxis), 1.0F, 1.0e-4F);
+}
+
+TEST_F(ColliderShapeUVETest, DetectCollisionsUVE_OrientedBoxesRejectDiagonalAabbFalsePositive) {
+    Scene::ColliderComponentUVE box;
+    box.shapeType = Scene::ColliderShapeTypeUVE::Box;
+    box.halfExtents = {1.0F, 0.2F, 0.2F};
+    const Math::QuaternionUVE quarterTurnY{0.0F, 0.3826834324F, 0.0F, 0.9238795325F};
+    MakeColliderEntityUVE({0.0F, 0.0F, 0.0F}, box, quarterTurnY);
+    MakeColliderEntityUVE({0.49497475F, 0.0F, 0.49497475F}, box, quarterTurnY);
+
+    EXPECT_TRUE(collisionSystem.DetectCollisionsUVE(entityManager).empty());
+}
+
 TEST_F(ColliderShapeUVETest, DetectCollisionsUVE_CapsuleCapsuleUsesExactSegmentDistanceAndOrientation) {
     Scene::ColliderComponentUVE firstCapsule;
     firstCapsule.shapeType = Scene::ColliderShapeTypeUVE::Capsule;
