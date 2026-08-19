@@ -73,6 +73,7 @@ public:
         NativePluginManifestUVE manifest, const NativePluginCapabilityPolicyUVE& policy);
     [[nodiscard]] std::optional<NativePluginRegistrationScopeUVE> OpenScopeUVE(std::string_view pluginId);
     [[nodiscard]] NativePluginRegistryResultUVE CloseScopeUVE(const NativePluginRegistrationScopeUVE& scope);
+    [[nodiscard]] NativePluginRegistryResultUVE UnregisterManifestUVE(std::string_view pluginId);
     [[nodiscard]] const NativePluginManifestUVE* FindManifestUVE(std::string_view pluginId) const noexcept;
     [[nodiscard]] bool IsScopeOpenUVE(std::string_view pluginId) const noexcept;
     [[nodiscard]] std::size_t GetManifestCountUVE() const noexcept;

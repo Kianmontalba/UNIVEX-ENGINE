@@ -57,6 +57,21 @@ NativePluginRegistryResultUVE NativePluginRegistryUVE::CloseScopeUVE(
     return {NativePluginRegistryCodeUVE::Accepted, "Plugin registration scope closed."};
 }
 
+NativePluginRegistryResultUVE NativePluginRegistryUVE::UnregisterManifestUVE(const std::string_view pluginId) {
+    if (pluginId.empty()) {
+        return {NativePluginRegistryCodeUVE::NotFound, "The plugin identifier is empty."};
+    }
+    const auto iterator = m_entries.find(std::string(pluginId));
+    if (iterator == m_entries.end()) {
+        return {NativePluginRegistryCodeUVE::NotFound, "The plugin manifest is not registered."};
+    }
+    if (iterator->second.scopeOpen) {
+        return {NativePluginRegistryCodeUVE::Busy, "The plugin registration scope must be closed before removal."};
+    }
+    m_entries.erase(iterator);
+    return {NativePluginRegistryCodeUVE::Accepted, "Plugin manifest unregistered."};
+}
+
 const NativePluginManifestUVE* NativePluginRegistryUVE::FindManifestUVE(
     const std::string_view pluginId) const noexcept {
     const auto iterator = m_entries.find(std::string(pluginId));

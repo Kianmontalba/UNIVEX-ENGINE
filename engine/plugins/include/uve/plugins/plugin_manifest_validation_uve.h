@@ -19,6 +19,23 @@ struct NativePluginCapabilityPolicyUVE final {
     std::vector<std::string> allowedCapabilityIds;
 };
 
+enum class NativePluginAbiNegotiationCodeUVE : std::uint8_t {
+    Compatible = 0,
+    InvalidEngineProtocol,
+    UnsupportedPluginProtocol,
+};
+
+struct NativePluginAbiNegotiationResultUVE final {
+    NativePluginAbiNegotiationCodeUVE code = NativePluginAbiNegotiationCodeUVE::InvalidEngineProtocol;
+    std::uint32_t engineProtocol = 0U;
+    std::uint32_t pluginProtocol = 0U;
+    std::string message;
+
+    [[nodiscard]] bool IsCompatibleUVE() const noexcept {
+        return code == NativePluginAbiNegotiationCodeUVE::Compatible;
+    }
+};
+
 enum class NativePluginManifestValidationCodeUVE : std::uint8_t {
     InvalidPluginId = 0,
     EmptyDisplayName,
@@ -45,6 +62,10 @@ struct NativePluginManifestValidationResultUVE final {
         return diagnostics.empty();
     }
 };
+
+[[nodiscard]] NativePluginAbiNegotiationResultUVE NegotiateNativePluginAbiUVE(
+    const NativePluginManifestUVE& manifest,
+    std::uint32_t engineProtocol = kNativePluginProtocolVersionUVE);
 
 [[nodiscard]] NativePluginManifestValidationResultUVE ValidateNativePluginManifestUVE(
     const NativePluginManifestUVE& manifest);

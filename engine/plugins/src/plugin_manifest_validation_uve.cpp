@@ -20,6 +20,26 @@ namespace {
 
 } // namespace
 
+NativePluginAbiNegotiationResultUVE NegotiateNativePluginAbiUVE(const NativePluginManifestUVE& manifest,
+                                                               const std::uint32_t engineProtocol) {
+    if (engineProtocol == 0U) {
+        return {NativePluginAbiNegotiationCodeUVE::InvalidEngineProtocol,
+                engineProtocol,
+                manifest.requiredEngineProtocol,
+                "Engine plugin protocol must be non-zero."};
+    }
+    if (manifest.requiredEngineProtocol != engineProtocol) {
+        return {NativePluginAbiNegotiationCodeUVE::UnsupportedPluginProtocol,
+                engineProtocol,
+                manifest.requiredEngineProtocol,
+                "Plugin manifest requires an unsupported engine protocol."};
+    }
+    return {NativePluginAbiNegotiationCodeUVE::Compatible,
+            engineProtocol,
+            manifest.requiredEngineProtocol,
+            "Plugin manifest protocol is compatible."};
+}
+
 NativePluginManifestValidationResultUVE ValidateNativePluginManifestUVE(
     const NativePluginManifestUVE& manifest) {
     return ValidateNativePluginManifestUVE(manifest, NativePluginCapabilityPolicyUVE{});
@@ -44,9 +64,9 @@ NativePluginManifestValidationResultUVE ValidateNativePluginManifestUVE(
                                       "Plugin display name exceeds the bounded manifest limit."});
         return result;
     }
-    if (manifest.requiredEngineProtocol != kNativePluginProtocolVersionUVE) {
-        result.diagnostics.push_back({NativePluginManifestValidationCodeUVE::UnsupportedProtocol, 0U,
-                                      "Plugin manifest requires an unsupported engine protocol."});
+    const NativePluginAbiNegotiationResultUVE abi = NegotiateNativePluginAbiUVE(manifest);
+    if (!abi.IsCompatibleUVE()) {
+        result.diagnostics.push_back({NativePluginManifestValidationCodeUVE::UnsupportedProtocol, 0U, abi.message});
         return result;
     }
     if (manifest.capabilityIds.size() > NativePluginRegistryUVE::kMaximumCapabilitiesPerPluginUVE) {

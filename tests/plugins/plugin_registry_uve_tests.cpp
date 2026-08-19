@@ -38,6 +38,23 @@ TEST(NativePluginManifestValidationUVETest, ValidateNativePluginManifestUVE_Repo
               NativePluginManifestValidationCodeUVE::TooManyCapabilities);
 }
 
+TEST(NativePluginManifestValidationUVETest, NegotiateNativePluginAbiUVE_ReportsCompatibilityAndProtocolFailures) {
+    const NativePluginManifestUVE compatible{"uve.compatible", "Compatible", {1U, 0U, 0U}, 7U, {}};
+    const NativePluginAbiNegotiationResultUVE accepted = NegotiateNativePluginAbiUVE(compatible, 7U);
+    EXPECT_TRUE(accepted.IsCompatibleUVE());
+    EXPECT_EQ(accepted.engineProtocol, 7U);
+    EXPECT_EQ(accepted.pluginProtocol, 7U);
+
+    const NativePluginAbiNegotiationResultUVE invalidEngine = NegotiateNativePluginAbiUVE(compatible, 0U);
+    EXPECT_EQ(invalidEngine.code, NativePluginAbiNegotiationCodeUVE::InvalidEngineProtocol);
+    EXPECT_FALSE(invalidEngine.IsCompatibleUVE());
+
+    const NativePluginManifestUVE incompatible{"uve.incompatible", "Incompatible", {1U, 0U, 0U}, 8U, {}};
+    const NativePluginAbiNegotiationResultUVE rejected = NegotiateNativePluginAbiUVE(incompatible, 7U);
+    EXPECT_EQ(rejected.code, NativePluginAbiNegotiationCodeUVE::UnsupportedPluginProtocol);
+    EXPECT_FALSE(rejected.IsCompatibleUVE());
+}
+
 TEST(NativePluginManifestValidationUVETest, ValidateNativePluginManifestUVE_AppliesExplicitCapabilityPolicy) {
     const NativePluginManifestUVE manifest{"uve.policy", "Policy", {1U, 0U, 0U},
                                            kNativePluginProtocolVersionUVE, {"node.types", "editor.window"}};
@@ -114,10 +131,30 @@ TEST(NativePluginRegistryUVETest, ScopesAreGenerationCheckedAndExplicitlyClosed)
     EXPECT_EQ(registry.GetOpenScopeCountUVE(), 0U);
 }
 
+TEST(NativePluginRegistryUVETest, UnregisterManifestUVE_RejectsOpenScopeAndRemovesAfterClose) {
+    NativePluginRegistryUVE registry;
+    ASSERT_TRUE(registry.RegisterManifestUVE({"uve.unload", "Unload", {}, 1U, {}}).IsAcceptedUVE());
+    const auto scope = registry.OpenScopeUVE("uve.unload");
+    ASSERT_TRUE(scope.has_value());
+
+    const NativePluginRegistryResultUVE busy = registry.UnregisterManifestUVE("uve.unload");
+    EXPECT_EQ(busy.code, NativePluginRegistryCodeUVE::Busy);
+    EXPECT_NE(registry.FindManifestUVE("uve.unload"), nullptr);
+    EXPECT_EQ(registry.GetManifestCountUVE(), 1U);
+
+    ASSERT_TRUE(registry.CloseScopeUVE(*scope).IsAcceptedUVE());
+    const NativePluginRegistryResultUVE removed = registry.UnregisterManifestUVE("uve.unload");
+    EXPECT_TRUE(removed.IsAcceptedUVE());
+    EXPECT_EQ(registry.FindManifestUVE("uve.unload"), nullptr);
+    EXPECT_EQ(registry.GetManifestCountUVE(), 0U);
+    EXPECT_EQ(registry.UnregisterManifestUVE("uve.unload").code, NativePluginRegistryCodeUVE::NotFound);
+}
+
 TEST(NativePluginRegistryUVETest, InvalidAndUnknownScopesAreRejectedWithoutMutation) {
     NativePluginRegistryUVE registry;
     EXPECT_FALSE(registry.OpenScopeUVE("missing").has_value());
     EXPECT_EQ(registry.CloseScopeUVE({}).code, NativePluginRegistryCodeUVE::InvalidScope);
+    EXPECT_EQ(registry.UnregisterManifestUVE("").code, NativePluginRegistryCodeUVE::NotFound);
     EXPECT_EQ(registry.GetManifestCountUVE(), 0U);
 }
 
