@@ -210,6 +210,44 @@ using ScriptCameraSetFovFunctionUVE = bool (*)(void* userData, Scene::EntityUVE 
 using ScriptCameraShakeFunctionUVE = bool (*)(
     void* userData, Scene::EntityUVE camera, float amplitude, float durationSeconds) noexcept;
 using ScriptCameraSetActiveFunctionUVE = bool (*)(void* userData, Scene::EntityUVE camera, bool active) noexcept;
+using ScriptAnimationClipControlFunctionUVE = bool (*) (
+    void* userData, Scene::EntityUVE actor, float clipToken, float blendDuration, bool* outResult) noexcept;
+using ScriptAnimationPauseFunctionUVE = bool (*) (
+    void* userData, Scene::EntityUVE actor, float clipToken, bool* outResult) noexcept;
+using ScriptAnimationBlendFunctionUVE = bool (*) (
+    void* userData, Scene::EntityUVE actor, float clipAToken, float clipBToken, float weight,
+    bool* outResult) noexcept;
+using ScriptAnimationBlendSpaceFunctionUVE = bool (*) (
+    void* userData, Scene::EntityUVE actor, float blendSpaceToken, float x, float y, bool* outResult) noexcept;
+using ScriptAnimationScalarControlFunctionUVE = bool (*) (
+    void* userData, Scene::EntityUVE actor, float value, bool* outResult) noexcept;
+using ScriptAnimationMontageFunctionUVE = bool (*) (
+    void* userData, Scene::EntityUVE actor, float montageToken, float weight, bool* outResult) noexcept;
+using ScriptAnimationCurrentClipFunctionUVE = bool (*) (
+    void* userData, Scene::EntityUVE actor, float* outClipToken) noexcept;
+using ScriptAnimationPlayingFunctionUVE = bool (*) (
+    void* userData, Scene::EntityUVE actor, float clipToken, bool* outResult) noexcept;
+using ScriptMotionQueryBuildFunctionUVE = bool (*) (
+    void* userData, Scene::EntityUVE actor, const ScriptVector3ValueUVE& velocity,
+    const ScriptVector3ValueUVE& facing, float deltaSeconds, bool* outResult) noexcept;
+using ScriptMotionQuerySearchFunctionUVE = bool (*) (
+    void* userData, Scene::EntityUVE actor, float maximumResults, bool* outResult) noexcept;
+using ScriptMotionQueryBestMatchFunctionUVE = bool (*) (
+    void* userData, Scene::EntityUVE actor, float* outCandidateIndex) noexcept;
+using ScriptMotionQueryTrajectoryFunctionUVE = bool (*) (
+    void* userData, Scene::EntityUVE actor, const ScriptVector3ValueUVE& sample, float offsetSeconds,
+    bool* outResult) noexcept;
+using ScriptMotionQueryPoseFunctionUVE = bool (*) (
+    void* userData, Scene::EntityUVE actor, const ScriptTransformValueUVE& pose, bool* outResult) noexcept;
+using ScriptMotionQueryVectorFunctionUVE = bool (*) (
+    void* userData, Scene::EntityUVE actor, const ScriptVector3ValueUVE& value, bool* outResult) noexcept;
+using ScriptMotionQueryYawFunctionUVE = bool (*) (
+    void* userData, Scene::EntityUVE actor, float yawDegrees, bool* outResult) noexcept;
+using ScriptMotionQueryTransitionFunctionUVE = bool (*) (
+    void* userData, Scene::EntityUVE actor, float targetToken, float durationSeconds, bool* outResult) noexcept;
+using ScriptMotionQueryWarpFunctionUVE = bool (*) (
+    void* userData, Scene::EntityUVE actor, const ScriptVector3ValueUVE& target, float weight,
+    bool* outResult) noexcept;
 
 struct ScriptEngineCallBindingsUVE final {
     ScriptEngineLogFunctionUVE log = nullptr;
@@ -236,6 +274,26 @@ struct ScriptEngineCallBindingsUVE final {
     ScriptCameraSetFovFunctionUVE cameraSetFov = nullptr;
     ScriptCameraShakeFunctionUVE cameraShake = nullptr;
     ScriptCameraSetActiveFunctionUVE cameraSetActive = nullptr;
+    ScriptAnimationClipControlFunctionUVE animationPlay = nullptr;
+    ScriptAnimationClipControlFunctionUVE animationStop = nullptr;
+    ScriptAnimationPauseFunctionUVE animationPause = nullptr;
+    ScriptAnimationBlendFunctionUVE animationBlend = nullptr;
+    ScriptAnimationBlendSpaceFunctionUVE animationBlendSpace = nullptr;
+    ScriptAnimationScalarControlFunctionUVE animationSetSpeed = nullptr;
+    ScriptAnimationScalarControlFunctionUVE animationSetWeight = nullptr;
+    ScriptAnimationMontageFunctionUVE animationMontage = nullptr;
+    ScriptAnimationCurrentClipFunctionUVE animationGetCurrent = nullptr;
+    ScriptAnimationPlayingFunctionUVE animationIsPlaying = nullptr;
+    ScriptMotionQueryBuildFunctionUVE motionQueryBuild = nullptr;
+    ScriptMotionQuerySearchFunctionUVE motionQuerySearch = nullptr;
+    ScriptMotionQueryBestMatchFunctionUVE motionQueryBestMatch = nullptr;
+    ScriptMotionQueryTrajectoryFunctionUVE motionQuerySetTrajectory = nullptr;
+    ScriptMotionQueryPoseFunctionUVE motionQuerySetPose = nullptr;
+    ScriptMotionQueryVectorFunctionUVE motionQuerySetVelocity = nullptr;
+    ScriptMotionQueryVectorFunctionUVE motionQuerySetFacing = nullptr;
+    ScriptMotionQueryYawFunctionUVE motionQuerySetYaw = nullptr;
+    ScriptMotionQueryTransitionFunctionUVE motionQueryTransition = nullptr;
+    ScriptMotionQueryWarpFunctionUVE motionQueryMotionWarp = nullptr;
 };
 
 struct ScriptVmExecutionOptionsUVE final {

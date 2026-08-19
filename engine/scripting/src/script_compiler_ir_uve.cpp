@@ -275,7 +275,17 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
              consumerNode->typeId == "entity.remove_component" || consumerNode->typeId == "camera.set_position" ||
              consumerNode->typeId == "camera.set_rotation" || consumerNode->typeId == "camera.look_at" ||
              consumerNode->typeId == "camera.set_fov" || consumerNode->typeId == "camera.shake" ||
-             consumerNode->typeId == "camera.set_active");
+             consumerNode->typeId == "camera.set_active" || consumerNode->typeId == "animation.play" ||
+             consumerNode->typeId == "animation.stop" || consumerNode->typeId == "animation.pause" ||
+             consumerNode->typeId == "animation.blend" || consumerNode->typeId == "animation.blend_space" ||
+             consumerNode->typeId == "animation.set_speed" || consumerNode->typeId == "animation.set_weight" ||
+             consumerNode->typeId == "animation.montage" || consumerNode->typeId == "animation.get_current_animation" ||
+             consumerNode->typeId == "animation.is_playing" || consumerNode->typeId == "motion.query.build" ||
+             consumerNode->typeId == "motion.query.search" || consumerNode->typeId == "motion.query.get_best_match" ||
+             consumerNode->typeId == "motion.query.set_trajectory" || consumerNode->typeId == "motion.query.set_pose" ||
+             consumerNode->typeId == "motion.query.set_velocity" || consumerNode->typeId == "motion.query.set_facing" ||
+             consumerNode->typeId == "motion.query.set_yaw" || consumerNode->typeId == "motion.query.transition" ||
+             consumerNode->typeId == "motion.query.motion_warp");
         const bool approvedEntityProducer = sourceNode != nullptr &&
             (sourceNode->typeId == "entity.spawn" || sourceNode->typeId == "camera.get_camera") &&
             link.output.pinName == "Result";

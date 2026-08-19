@@ -17,7 +17,7 @@ struct BuiltInNodeDefinitionUVE final {
     std::uint32_t displayOrder;
 };
 
-[[nodiscard]] std::array<BuiltInNodeDefinitionUVE, 130U> MakeBuiltInDefinitionsUVE() {
+[[nodiscard]] std::array<BuiltInNodeDefinitionUVE, 150U> MakeBuiltInDefinitionsUVE() {
     return {
         BuiltInNodeDefinitionUVE{
             "flow.sequence", "Sequence",
@@ -776,13 +776,142 @@ struct BuiltInNodeDefinitionUVE final {
              ScriptPinDescriptorUVE{"Active", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Boolean},
              ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
             "Camera", "node.camera", 1016U},
+        BuiltInNodeDefinitionUVE{
+            "animation.play", "Play Animation",
+            {ScriptPinDescriptorUVE{"Actor", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
+             ScriptPinDescriptorUVE{"Clip", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Blend Duration", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Animation", "node.animation", 1020U},
+        BuiltInNodeDefinitionUVE{
+            "animation.stop", "Stop Animation",
+            {ScriptPinDescriptorUVE{"Actor", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
+             ScriptPinDescriptorUVE{"Clip", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Animation", "node.animation", 1021U},
+        BuiltInNodeDefinitionUVE{
+            "animation.pause", "Pause Animation",
+            {ScriptPinDescriptorUVE{"Actor", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
+             ScriptPinDescriptorUVE{"Clip", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Animation", "node.animation", 1022U},
+        BuiltInNodeDefinitionUVE{
+            "animation.blend", "Blend Animation",
+            {ScriptPinDescriptorUVE{"Actor", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
+             ScriptPinDescriptorUVE{"Clip A", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Clip B", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Weight", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Animation", "node.animation", 1023U},
+        BuiltInNodeDefinitionUVE{
+            "animation.blend_space", "Blend Space",
+            {ScriptPinDescriptorUVE{"Actor", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
+             ScriptPinDescriptorUVE{"Blend Space", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"X", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Y", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Animation", "node.animation", 1024U},
+        BuiltInNodeDefinitionUVE{
+            "animation.set_speed", "Set Animation Speed",
+            {ScriptPinDescriptorUVE{"Actor", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
+             ScriptPinDescriptorUVE{"Speed", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Animation", "node.animation", 1025U},
+        BuiltInNodeDefinitionUVE{
+            "animation.set_weight", "Set Animation Weight",
+            {ScriptPinDescriptorUVE{"Actor", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
+             ScriptPinDescriptorUVE{"Weight", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Animation", "node.animation", 1026U},
+        BuiltInNodeDefinitionUVE{
+            "animation.montage", "Animation Montage",
+            {ScriptPinDescriptorUVE{"Actor", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
+             ScriptPinDescriptorUVE{"Montage", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Weight", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Animation", "node.animation", 1027U},
+        BuiltInNodeDefinitionUVE{
+            "animation.get_current_animation", "Get Current Animation",
+            {ScriptPinDescriptorUVE{"Actor", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Number}},
+            "Animation", "node.animation", 1028U},
+        BuiltInNodeDefinitionUVE{
+            "animation.is_playing", "Is Playing",
+            {ScriptPinDescriptorUVE{"Actor", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
+             ScriptPinDescriptorUVE{"Clip", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Animation", "node.animation", 1029U},
+        BuiltInNodeDefinitionUVE{
+            "motion.query.build", "Build Motion Query",
+            {ScriptPinDescriptorUVE{"Actor", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
+             ScriptPinDescriptorUVE{"Velocity", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Facing", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Delta", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Motion Query", "node.motion_query", 1030U},
+        BuiltInNodeDefinitionUVE{
+            "motion.query.search", "Search Motion Query",
+            {ScriptPinDescriptorUVE{"Actor", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
+             ScriptPinDescriptorUVE{"Max Results", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Motion Query", "node.motion_query", 1031U},
+        BuiltInNodeDefinitionUVE{
+            "motion.query.get_best_match", "Get Best Motion Match",
+            {ScriptPinDescriptorUVE{"Actor", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Number}},
+            "Motion Query", "node.motion_query", 1032U},
+        BuiltInNodeDefinitionUVE{
+            "motion.query.set_trajectory", "Set Motion Trajectory",
+            {ScriptPinDescriptorUVE{"Actor", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
+             ScriptPinDescriptorUVE{"Sample", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Offset", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Motion Query", "node.motion_query", 1033U},
+        BuiltInNodeDefinitionUVE{
+            "motion.query.set_pose", "Set Motion Pose",
+            {ScriptPinDescriptorUVE{"Actor", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
+             ScriptPinDescriptorUVE{"Pose", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Transform},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Motion Query", "node.motion_query", 1034U},
+        BuiltInNodeDefinitionUVE{
+            "motion.query.set_velocity", "Set Motion Velocity",
+            {ScriptPinDescriptorUVE{"Actor", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
+             ScriptPinDescriptorUVE{"Velocity", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Motion Query", "node.motion_query", 1035U},
+        BuiltInNodeDefinitionUVE{
+            "motion.query.set_facing", "Set Motion Facing",
+            {ScriptPinDescriptorUVE{"Actor", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
+             ScriptPinDescriptorUVE{"Facing", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Motion Query", "node.motion_query", 1036U},
+        BuiltInNodeDefinitionUVE{
+            "motion.query.set_yaw", "Set Motion Yaw",
+            {ScriptPinDescriptorUVE{"Actor", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
+             ScriptPinDescriptorUVE{"Yaw", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Motion Query", "node.motion_query", 1037U},
+        BuiltInNodeDefinitionUVE{
+            "motion.query.transition", "Motion Query Transition",
+            {ScriptPinDescriptorUVE{"Actor", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
+             ScriptPinDescriptorUVE{"Target", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Duration", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Motion Query", "node.motion_query", 1038U},
+        BuiltInNodeDefinitionUVE{
+            "motion.query.motion_warp", "Motion Warp",
+            {ScriptPinDescriptorUVE{"Actor", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
+             ScriptPinDescriptorUVE{"Target", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Weight", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Motion Query", "node.motion_query", 1039U},
     };
 }
 
 } // namespace
 
 bool RegisterBuiltInScriptNodesUVE(ScriptNodeRegistryUVE& registry) {
-    std::array<BuiltInNodeDefinitionUVE, 130U> definitions = MakeBuiltInDefinitionsUVE();
+    std::array<BuiltInNodeDefinitionUVE, 150U> definitions = MakeBuiltInDefinitionsUVE();
     for (const BuiltInNodeDefinitionUVE& definition : definitions) {
         if (registry.FindNodeTypeUVE(definition.typeId) != nullptr) {
             return false;
