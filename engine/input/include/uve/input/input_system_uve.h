@@ -58,6 +58,8 @@ public:
 
     void RegisterActionUVE(InputActionUVE&& action) override;
     bool UnregisterActionUVE(std::string_view actionName) override;
+    bool RemapActionUVE(std::string_view actionName, std::vector<InputBindingUVE> positiveBindings,
+                        std::vector<InputBindingUVE> negativeBindings) override;
     [[nodiscard]] bool IsActionTriggeredUVE(std::string_view actionName) const override;
     [[nodiscard]] bool IsActionHeldUVE(std::string_view actionName) const override;
     [[nodiscard]] bool IsActionReleasedUVE(std::string_view actionName) const override;
@@ -67,6 +69,10 @@ private:
     static constexpr std::size_t kKeyCodeCount = static_cast<std::size_t>(KeyCodeUVE::Count);
     static constexpr std::size_t kMouseButtonCount = static_cast<std::size_t>(MouseButtonUVE::Count);
     using GamepadSnapshotArrayUVE = std::array<GamepadStateSnapshotUVE, kMaximumGamepadCountUVE>;
+    static constexpr std::size_t kMaximumRemappedBindingsPerSideUVE = 32U;
+
+    [[nodiscard]] static bool AreBindingsValidForRemapUVE(
+        const std::vector<InputBindingUVE>& bindings) noexcept;
 
     /// True iff any binding in `bindings` is down in the given state arrays.
     [[nodiscard]] static bool AnyBindingDownUVE(const std::vector<InputBindingUVE>& bindings,
