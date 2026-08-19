@@ -130,6 +130,9 @@ namespace {
     return {{"mass", component.mass},
             {"isKinematic", component.isKinematic},
             {"velocity", ToJsonUVE(component.velocity)},
+            {"angularVelocity", ToJsonUVE(component.angularVelocity)},
+            {"torque", ToJsonUVE(component.torque)},
+            {"inverseInertia", ToJsonUVE(component.inverseInertia)},
             {"drag", component.drag},
             {"gravityScale", component.gravityScale}};
 }
@@ -298,6 +301,12 @@ template <typename T, typename FromJsonFunc>
                           rigidBody.isKinematic = json.at("isKinematic").get<bool>();
                           rigidBody.velocity =
                               json.contains("velocity") ? Vector3FromJsonUVE(json.at("velocity")) : Math::Vector3UVE{};
+                          rigidBody.angularVelocity = json.contains("angularVelocity")
+                              ? Vector3FromJsonUVE(json.at("angularVelocity")) : Math::Vector3UVE{};
+                          rigidBody.torque = json.contains("torque")
+                              ? Vector3FromJsonUVE(json.at("torque")) : Math::Vector3UVE{};
+                          rigidBody.inverseInertia = json.contains("inverseInertia")
+                              ? Vector3FromJsonUVE(json.at("inverseInertia")) : Math::Vector3UVE{};
                           rigidBody.drag = json.value("drag", 0.0F);
                           rigidBody.gravityScale = json.value("gravityScale", 1.0F);
                           if (!IsRigidBodyComponentValidUVE(rigidBody)) {

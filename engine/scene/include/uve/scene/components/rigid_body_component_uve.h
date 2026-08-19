@@ -20,6 +20,12 @@ struct RigidBodyComponentUVE final {
     float mass = 1.0F;
     bool isKinematic = false;
     Math::Vector3UVE velocity{};
+    /// Local-space angular velocity in radians/second. Zero preserves legacy orientation behavior.
+    Math::Vector3UVE angularVelocity{};
+    /// Caller-owned persistent torque in local-space force units; zero means no angular acceleration.
+    Math::Vector3UVE torque{};
+    /// Diagonal local-space inverse inertia. Zero components make the corresponding axis immovable.
+    Math::Vector3UVE inverseInertia{};
     /// Simple linear damping: velocity *= (1 - drag * dt) each physics step. 0 = no damping.
     float drag = 0.0F;
     /// Multiplies PhysicsSystemUVE's gravity before integration — 1 = normal gravity, 0 =
@@ -33,6 +39,12 @@ struct RigidBodyComponentUVE final {
 [[nodiscard]] inline bool IsRigidBodyComponentValidUVE(const RigidBodyComponentUVE& rigidBody) noexcept {
     return std::isfinite(rigidBody.mass) && rigidBody.mass >= 0.0F && std::isfinite(rigidBody.velocity.x) &&
            std::isfinite(rigidBody.velocity.y) && std::isfinite(rigidBody.velocity.z) &&
+           std::isfinite(rigidBody.angularVelocity.x) && std::isfinite(rigidBody.angularVelocity.y) &&
+           std::isfinite(rigidBody.angularVelocity.z) && std::isfinite(rigidBody.torque.x) &&
+           std::isfinite(rigidBody.torque.y) && std::isfinite(rigidBody.torque.z) &&
+           std::isfinite(rigidBody.inverseInertia.x) && rigidBody.inverseInertia.x >= 0.0F &&
+           std::isfinite(rigidBody.inverseInertia.y) && rigidBody.inverseInertia.y >= 0.0F &&
+           std::isfinite(rigidBody.inverseInertia.z) && rigidBody.inverseInertia.z >= 0.0F &&
            std::isfinite(rigidBody.drag) && rigidBody.drag >= 0.0F && std::isfinite(rigidBody.gravityScale) &&
            rigidBody.gravityScale >= 0.0F;
 }

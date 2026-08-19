@@ -467,6 +467,50 @@ TEST_F(SceneSerializerUVETest, SaveThenLoad_SingleEntityWithMultipleComponents_R
     std::filesystem::remove(path);
 }
 
+TEST_F(SceneSerializerUVETest, SaveThenLoad_RigidBodyAngularState_RoundTripsExactly) {
+    const EntityUVE entity = entityManager.CreateEntityUVE();
+    RigidBodyComponentUVE rigidBody;
+    rigidBody.mass = 4.0F;
+    rigidBody.angularVelocity = Math::Vector3UVE{1.0F, 2.0F, 3.0F};
+    rigidBody.torque = Math::Vector3UVE{0.5F, 0.25F, 0.125F};
+    rigidBody.inverseInertia = Math::Vector3UVE{0.2F, 0.3F, 0.4F};
+    entityManager.AddComponentUVE<RigidBodyComponentUVE>(entity, rigidBody);
+
+    const std::filesystem::path path = "uve_scene_serializer_tests_rigidbody_angular.uvescene";
+    std::filesystem::remove(path);
+    ASSERT_TRUE(serializer.SaveUVE(entityManager, {entity}, path, SceneAssetTypeUVE::Scene));
+
+    EntityManagerUVE loadedManager(memoryManager.GetDefaultAllocatorUVE(), eventSystem);
+    const std::vector<EntityUVE> roots = serializer.LoadUVE(loadedManager, path);
+    ASSERT_EQ(roots.size(), 1U);
+    const RigidBodyComponentUVE& loaded = loadedManager.GetComponentUVE<RigidBodyComponentUVE>(roots[0]);
+    EXPECT_EQ(loaded.angularVelocity, rigidBody.angularVelocity);
+    EXPECT_EQ(loaded.torque, rigidBody.torque);
+    EXPECT_EQ(loaded.inverseInertia, rigidBody.inverseInertia);
+
+    std::filesystem::remove(path);
+}
+
+TEST_F(SceneSerializerUVETest, LoadUVE_LegacyRigidBodyWithoutAngularFields_UsesZeroDefaults) {
+    const std::string payloadText =
+        R"({"entities":[{"localId":0,"components":{"RigidBodyComponentUVE":{"mass":1.0,"isKinematic":false,"velocity":[0.0,0.0,0.0],"drag":0.0,"gravityScale":1.0}}}]})";
+    const auto* const payloadBytesPtr = reinterpret_cast<const std::byte*>(payloadText.data());
+    const std::vector<std::byte> payloadBytes(payloadBytesPtr, payloadBytesPtr + payloadText.size());
+
+    const std::filesystem::path path = "uve_scene_serializer_tests_rigidbody_angular_legacy.uvescene";
+    std::filesystem::remove(path);
+    ASSERT_TRUE(Asset::WriteUveFileUVE(path, SceneAssetTypeUVE::Scene, payloadBytes));
+
+    const std::vector<EntityUVE> roots = serializer.LoadUVE(entityManager, path);
+    ASSERT_EQ(roots.size(), 1U);
+    const RigidBodyComponentUVE& loaded = entityManager.GetComponentUVE<RigidBodyComponentUVE>(roots[0]);
+    EXPECT_EQ(loaded.angularVelocity, Math::Vector3UVE{});
+    EXPECT_EQ(loaded.torque, Math::Vector3UVE{});
+    EXPECT_EQ(loaded.inverseInertia, Math::Vector3UVE{});
+
+    std::filesystem::remove(path);
+}
+
 TEST_F(SceneSerializerUVETest, SaveThenLoad_NameComponentUVE_RoundTripsExactly) {
     const EntityUVE entity = entityManager.CreateEntityUVE();
     entityManager.AddComponentUVE<NameComponentUVE>(entity, NameComponentUVE{"Gameplay Root"});
