@@ -26,4 +26,9 @@ namespace UVE::Physics {
     Math::Vector3UVE angularVelocity, Math::Vector3UVE angularImpulse,
     Math::Vector3UVE inverseInertia) noexcept;
 
+/// Returns the diagonal-inertia gyroscopic torque term `angularVelocity x (inertia * angularVelocity)`.
+/// The caller decides whether and how to subtract this term during integration.
+[[nodiscard]] std::optional<Math::Vector3UVE> EvaluateGyroscopicTorqueUVE(
+    Math::Vector3UVE angularVelocity, Math::Vector3UVE inverseInertia) noexcept;
+
 } // namespace UVE::Physics

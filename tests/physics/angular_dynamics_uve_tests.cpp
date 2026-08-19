@@ -50,6 +50,23 @@ TEST(AngularDynamicsUVETest, ApplyAngularImpulseUVE_AppliesDiagonalInverseInerti
     EXPECT_NEAR(result->z, 3.6F, kEpsilon);
 }
 
+TEST(AngularDynamicsUVETest, EvaluateGyroscopicTorqueUVE_UsesDiagonalInertiaCrossTerm) {
+    const auto result = EvaluateGyroscopicTorqueUVE(
+        Math::Vector3UVE{1.0F, 2.0F, 3.0F}, Math::Vector3UVE{0.5F, 0.25F, 0.1F});
+    ASSERT_TRUE(result.has_value());
+    EXPECT_NEAR(result->x, 36.0F, kEpsilon);
+    EXPECT_NEAR(result->y, -24.0F, kEpsilon);
+    EXPECT_NEAR(result->z, 4.0F, kEpsilon);
+}
+
+TEST(AngularDynamicsUVETest, EvaluateGyroscopicTorqueUVE_RejectsUnsafeInputs) {
+    EXPECT_FALSE(EvaluateGyroscopicTorqueUVE(
+        Math::Vector3UVE{1.0F, 2.0F, 3.0F}, Math::Vector3UVE{-1.0F, 0.0F, 0.0F}).has_value());
+    EXPECT_FALSE(EvaluateGyroscopicTorqueUVE(
+        Math::Vector3UVE{std::numeric_limits<float>::infinity(), 0.0F, 0.0F},
+        Math::Vector3UVE{1.0F, 1.0F, 1.0F}).has_value());
+}
+
 TEST(AngularDynamicsUVETest, AngularHelpers_RejectUnsafeOrNonFiniteInputs) {
     EXPECT_FALSE(ComputeBoxInverseInertiaUVE(-1.0F, Math::Vector3UVE{1.0F, 1.0F, 1.0F}).has_value());
     EXPECT_FALSE(ComputeBoxInverseInertiaUVE(1.0F, Math::Vector3UVE{0.0F, 1.0F, 1.0F}).has_value());
