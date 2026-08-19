@@ -113,6 +113,56 @@ AnimationContractValidationResultUVE ValidateSkeletonDefinitionUVE(
     return {AnimationContractValidationCodeUVE::Valid, 0U, "valid skeleton contract"};
 }
 
+AnimationContractValidationResultUVE ValidateSkeletonRetargetMapUVE(
+    const SkeletonDefinitionUVE& sourceSkeleton, const SkeletonDefinitionUVE& targetSkeleton,
+    const std::vector<SkeletonRetargetMapEntryUVE>& map) noexcept {
+    const AnimationContractValidationResultUVE sourceValidation =
+        ValidateSkeletonDefinitionUVE(sourceSkeleton);
+    if (!sourceValidation.IsValidUVE()) {
+        return sourceValidation;
+    }
+    const AnimationContractValidationResultUVE targetValidation =
+        ValidateSkeletonDefinitionUVE(targetSkeleton);
+    if (!targetValidation.IsValidUVE()) {
+        return targetValidation;
+    }
+    if (sourceSkeleton.skeletonId.empty() || targetSkeleton.skeletonId.empty() ||
+        map.size() > kMaximumSkeletonJointsUVE) {
+        return {AnimationContractValidationCodeUVE::CapacityExceeded, 0U,
+                "retarget map requires bounded non-empty source and target skeletons"};
+    }
+    for (std::size_t index = 0U; index < map.size(); ++index) {
+        const SkeletonRetargetMapEntryUVE& entry = map[index];
+        if (entry.sourceJointId.empty() || entry.targetJointId.empty() ||
+            entry.sourceJointId.size() > kMaximumAnimationIdentifierBytesUVE ||
+            entry.targetJointId.size() > kMaximumAnimationIdentifierBytesUVE) {
+            return {AnimationContractValidationCodeUVE::InvalidIdentifier, index,
+                    "retarget map joint identifiers are invalid"};
+        }
+        const auto sourceIt = std::find_if(sourceSkeleton.joints.cbegin(), sourceSkeleton.joints.cend(),
+                                           [&entry](const SkeletonJointUVE& joint) {
+                                               return joint.jointId == entry.sourceJointId;
+                                           });
+        const auto targetIt = std::find_if(targetSkeleton.joints.cbegin(), targetSkeleton.joints.cend(),
+                                           [&entry](const SkeletonJointUVE& joint) {
+                                               return joint.jointId == entry.targetJointId;
+                                           });
+        if (sourceIt == sourceSkeleton.joints.cend() || targetIt == targetSkeleton.joints.cend()) {
+            return {AnimationContractValidationCodeUVE::SkeletonMismatch, index,
+                    "retarget map references an unknown source or target joint"};
+        }
+        if (std::find_if(map.cbegin(), map.cbegin() + static_cast<std::ptrdiff_t>(index),
+                         [&entry](const SkeletonRetargetMapEntryUVE& previous) {
+                             return previous.sourceJointId == entry.sourceJointId ||
+                                    previous.targetJointId == entry.targetJointId;
+                         }) != map.cbegin() + static_cast<std::ptrdiff_t>(index)) {
+            return {AnimationContractValidationCodeUVE::DuplicateJoint, index,
+                    "retarget map source and target joints must be unique"};
+        }
+    }
+    return {AnimationContractValidationCodeUVE::Valid, 0U, "valid skeleton retarget map"};
+}
+
 AnimationContractValidationResultUVE ValidatePoseBufferUVE(
     const PoseBufferUVE& pose, const SkeletonDefinitionUVE& skeleton) noexcept {
     const AnimationContractValidationResultUVE skeletonValidation = ValidateSkeletonDefinitionUVE(skeleton);
