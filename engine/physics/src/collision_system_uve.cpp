@@ -9,6 +9,7 @@
 
 #include "uve/math/aabb_uve.h"
 #include "uve/physics/detail/collider_world_aabb_cache_uve.h"
+#include "uve/physics/detail/shape_narrow_phase_uve.h"
 
 namespace UVE::Physics {
 namespace {
@@ -17,6 +18,28 @@ namespace {
                                        const Detail::ColliderWorldAabbUVE& second) noexcept {
     return (first.collisionMask & second.collisionLayer) != 0U &&
            (second.collisionMask & first.collisionLayer) != 0U;
+}
+
+[[nodiscard]] std::optional<Math::PenetrationUVE> ComputePairPenetrationUVE(
+    const Detail::ColliderWorldAabbUVE& first, const Detail::ColliderWorldAabbUVE& second) {
+    if (first.shapeType == Scene::ColliderShapeTypeUVE::Sphere &&
+        second.shapeType == Scene::ColliderShapeTypeUVE::Box) {
+        const std::optional<Math::PenetrationUVE> sphereToBox =
+            Detail::ComputeSphereAabbPenetrationUVE(second.worldAabb, first.worldAabb.GetCenterUVE(),
+                                                    first.shapeRadius);
+        return sphereToBox;
+    }
+    if (first.shapeType == Scene::ColliderShapeTypeUVE::Box &&
+        second.shapeType == Scene::ColliderShapeTypeUVE::Sphere) {
+        const std::optional<Math::PenetrationUVE> sphereToBox =
+            Detail::ComputeSphereAabbPenetrationUVE(first.worldAabb, second.worldAabb.GetCenterUVE(),
+                                                    second.shapeRadius);
+        if (!sphereToBox.has_value()) {
+            return std::nullopt;
+        }
+        return Math::PenetrationUVE{-sphereToBox->axis, sphereToBox->depth};
+    }
+    return Math::ComputePenetrationUVE(first.worldAabb, second.worldAabb);
 }
 
 void AppendPairIfOverlappingUVE(const std::vector<Detail::ColliderWorldAabbUVE>& colliders,
@@ -28,8 +51,7 @@ void AppendPairIfOverlappingUVE(const std::vector<Detail::ColliderWorldAabbUVE>&
         return;
     }
 
-    const std::optional<Math::PenetrationUVE> penetration =
-        Math::ComputePenetrationUVE(first.worldAabb, second.worldAabb);
+    const std::optional<Math::PenetrationUVE> penetration = ComputePairPenetrationUVE(first, second);
     if (penetration.has_value()) {
         pairs.push_back(CollisionPairUVE{first.entity, second.entity, penetration->axis, penetration->depth});
     }

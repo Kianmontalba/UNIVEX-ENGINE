@@ -11,6 +11,7 @@ add_library(uve_physics STATIC
     src/physics_constraint_system_uve.cpp
     src/physics_system_uve.cpp
     src/raycast_system_uve.cpp
+    src/shape_narrow_phase_uve.cpp
 )
 target_include_directories(uve_physics PUBLIC include)
 target_link_libraries(uve_physics PUBLIC uve_platform uve_debug uve_math uve_scene)
