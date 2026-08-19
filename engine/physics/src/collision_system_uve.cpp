@@ -30,16 +30,16 @@ namespace {
     }
     if (first.shapeType == Scene::ColliderShapeTypeUVE::Sphere &&
         second.shapeType == Scene::ColliderShapeTypeUVE::Box) {
-        const std::optional<Math::PenetrationUVE> sphereToBox =
-            Detail::ComputeSphereAabbPenetrationUVE(second.worldAabb, first.worldAabb.GetCenterUVE(),
-                                                    first.shapeRadius);
-        return sphereToBox;
+        return Detail::ComputeSphereOrientedBoxPenetrationUVE(
+            second.worldAabb.GetCenterUVE(), second.shapeHalfExtents, second.shapeRotation,
+            first.worldAabb.GetCenterUVE(), first.shapeRadius);
     }
     if (first.shapeType == Scene::ColliderShapeTypeUVE::Box &&
         second.shapeType == Scene::ColliderShapeTypeUVE::Sphere) {
         const std::optional<Math::PenetrationUVE> sphereToBox =
-            Detail::ComputeSphereAabbPenetrationUVE(first.worldAabb, second.worldAabb.GetCenterUVE(),
-                                                    second.shapeRadius);
+            Detail::ComputeSphereOrientedBoxPenetrationUVE(
+                first.worldAabb.GetCenterUVE(), first.shapeHalfExtents, first.shapeRotation,
+                second.worldAabb.GetCenterUVE(), second.shapeRadius);
         if (!sphereToBox.has_value()) {
             return std::nullopt;
         }
@@ -70,14 +70,16 @@ namespace {
     }
     if (first.shapeType == Scene::ColliderShapeTypeUVE::Capsule &&
         second.shapeType == Scene::ColliderShapeTypeUVE::Box) {
-        return Detail::ComputeCapsuleAabbPenetrationUVE(
-            second.worldAabb, first.shapeSegmentStart, first.shapeSegmentEnd, first.shapeRadius);
+        return Detail::ComputeCapsuleOrientedBoxPenetrationUVE(
+            second.worldAabb.GetCenterUVE(), second.shapeHalfExtents, second.shapeRotation,
+            first.shapeSegmentStart, first.shapeSegmentEnd, first.shapeRadius);
     }
     if (first.shapeType == Scene::ColliderShapeTypeUVE::Box &&
         second.shapeType == Scene::ColliderShapeTypeUVE::Capsule) {
         const std::optional<Math::PenetrationUVE> capsuleToBox =
-            Detail::ComputeCapsuleAabbPenetrationUVE(
-                first.worldAabb, second.shapeSegmentStart, second.shapeSegmentEnd, second.shapeRadius);
+            Detail::ComputeCapsuleOrientedBoxPenetrationUVE(
+                first.worldAabb.GetCenterUVE(), first.shapeHalfExtents, first.shapeRotation,
+                second.shapeSegmentStart, second.shapeSegmentEnd, second.shapeRadius);
         if (!capsuleToBox.has_value()) {
             return std::nullopt;
         }

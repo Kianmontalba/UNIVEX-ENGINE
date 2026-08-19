@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "uve/math/aabb_uve.h"
+#include "uve/math/quaternion_uve.h"
 #include "uve/scene/components/collider_component_uve.h"
 #include "uve/scene/i_entity_manager_uve.h"
 
@@ -26,6 +27,8 @@ struct ColliderWorldAabbUVE {
     std::uint32_t collisionMask;
     Scene::ColliderShapeTypeUVE shapeType = Scene::ColliderShapeTypeUVE::Box;
     float shapeRadius = 0.0F;
+    Math::Vector3UVE shapeHalfExtents{};
+    Math::QuaternionUVE shapeRotation{};
     Math::Vector3UVE shapeSegmentStart{};
     Math::Vector3UVE shapeSegmentEnd{};
 };

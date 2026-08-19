@@ -10,10 +10,24 @@
 namespace UVE::Physics::Detail {
 namespace {
 
+[[nodiscard]] bool IsFiniteVectorUVE(const Math::Vector3UVE value) noexcept {
+    return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+}
+
 [[nodiscard]] bool IsFiniteAabbUVE(const Math::AabbUVE& box) noexcept {
-    return std::isfinite(box.min.x) && std::isfinite(box.min.y) && std::isfinite(box.min.z) &&
-           std::isfinite(box.max.x) && std::isfinite(box.max.y) && std::isfinite(box.max.z) &&
-           box.min.x < box.max.x && box.min.y < box.max.y && box.min.z < box.max.z;
+    return IsFiniteVectorUVE(box.min) && IsFiniteVectorUVE(box.max) && box.min.x < box.max.x &&
+           box.min.y < box.max.y && box.min.z < box.max.z;
+}
+
+[[nodiscard]] bool TryBuildOrientedBoxFrameUVE(
+    const Math::Vector3UVE boxHalfExtents, const Math::QuaternionUVE boxRotation,
+    Math::QuaternionUVE& outRotation, Math::QuaternionUVE& outInverse) noexcept {
+    if (!IsFiniteVectorUVE(boxHalfExtents) || boxHalfExtents.x <= 0.0F || boxHalfExtents.y <= 0.0F ||
+        boxHalfExtents.z <= 0.0F || !Math::TryNormalizeUVE(boxRotation, outRotation) ||
+        !Math::TryInverseUVE(outRotation, outInverse)) {
+        return false;
+    }
+    return true;
 }
 
 } // namespace
@@ -325,6 +339,59 @@ std::optional<Math::PenetrationUVE> ComputeCapsuleCapsulePenetrationUVE(
 
     const float distance = std::sqrt(bestDistanceSquared);
     return Math::PenetrationUVE{delta * (1.0F / distance), combinedRadius - distance};
+}
+
+std::optional<Math::PenetrationUVE> ComputeSphereOrientedBoxPenetrationUVE(
+    const Math::Vector3UVE boxCenter, const Math::Vector3UVE boxHalfExtents,
+    const Math::QuaternionUVE boxRotation, const Math::Vector3UVE sphereCenter,
+    const float sphereRadius) noexcept {
+    if (!IsFiniteVectorUVE(boxCenter) || !IsFiniteVectorUVE(sphereCenter) || !std::isfinite(sphereRadius) ||
+        sphereRadius <= 0.0F) {
+        return std::nullopt;
+    }
+    Math::QuaternionUVE normalizedRotation;
+    Math::QuaternionUVE inverseRotation;
+    if (!TryBuildOrientedBoxFrameUVE(boxHalfExtents, boxRotation, normalizedRotation, inverseRotation)) {
+        return std::nullopt;
+    }
+
+    const Math::Vector3UVE localSphereCenter =
+        Math::RotateVectorUVE(inverseRotation, sphereCenter - boxCenter);
+    const Math::AabbUVE localBox = Math::AabbUVE::FromCenterExtentsUVE({0.0F, 0.0F, 0.0F}, boxHalfExtents);
+    const std::optional<Math::PenetrationUVE> localPenetration =
+        ComputeSphereAabbPenetrationUVE(localBox, localSphereCenter, sphereRadius);
+    if (!localPenetration.has_value()) {
+        return std::nullopt;
+    }
+    return Math::PenetrationUVE{
+        Math::RotateVectorUVE(normalizedRotation, localPenetration->axis), localPenetration->depth};
+}
+
+std::optional<Math::PenetrationUVE> ComputeCapsuleOrientedBoxPenetrationUVE(
+    const Math::Vector3UVE boxCenter, const Math::Vector3UVE boxHalfExtents,
+    const Math::QuaternionUVE boxRotation, const Math::Vector3UVE capsuleSegmentStart,
+    const Math::Vector3UVE capsuleSegmentEnd, const float capsuleRadius) noexcept {
+    if (!IsFiniteVectorUVE(boxCenter) || !IsFiniteVectorUVE(capsuleSegmentStart) ||
+        !IsFiniteVectorUVE(capsuleSegmentEnd) || !std::isfinite(capsuleRadius) || capsuleRadius <= 0.0F) {
+        return std::nullopt;
+    }
+    Math::QuaternionUVE normalizedRotation;
+    Math::QuaternionUVE inverseRotation;
+    if (!TryBuildOrientedBoxFrameUVE(boxHalfExtents, boxRotation, normalizedRotation, inverseRotation)) {
+        return std::nullopt;
+    }
+
+    const Math::Vector3UVE localSegmentStart =
+        Math::RotateVectorUVE(inverseRotation, capsuleSegmentStart - boxCenter);
+    const Math::Vector3UVE localSegmentEnd = Math::RotateVectorUVE(inverseRotation, capsuleSegmentEnd - boxCenter);
+    const Math::AabbUVE localBox = Math::AabbUVE::FromCenterExtentsUVE({0.0F, 0.0F, 0.0F}, boxHalfExtents);
+    const std::optional<Math::PenetrationUVE> localPenetration = ComputeCapsuleAabbPenetrationUVE(
+        localBox, localSegmentStart, localSegmentEnd, capsuleRadius);
+    if (!localPenetration.has_value()) {
+        return std::nullopt;
+    }
+    return Math::PenetrationUVE{
+        Math::RotateVectorUVE(normalizedRotation, localPenetration->axis), localPenetration->depth};
 }
 
 } // namespace UVE::Physics::Detail

@@ -5,6 +5,7 @@
 #include <optional>
 
 #include "uve/math/aabb_uve.h"
+#include "uve/math/quaternion_uve.h"
 
 namespace UVE::Physics::Detail {
 
@@ -50,6 +51,20 @@ namespace UVE::Physics::Detail {
 [[nodiscard]] std::optional<Math::PenetrationUVE> ComputeCapsuleCapsulePenetrationUVE(
     Math::Vector3UVE firstSegmentStart, Math::Vector3UVE firstSegmentEnd, float firstRadius,
     Math::Vector3UVE secondSegmentStart, Math::Vector3UVE secondSegmentEnd, float secondRadius) noexcept;
+
+/// Computes exact sphere-vs-oriented-box penetration by transforming the sphere center into box
+/// local space. The returned axis is in world space and points from the sphere toward the box.
+/// Touching boundaries are not intersections; invalid rotations fail closed.
+[[nodiscard]] std::optional<Math::PenetrationUVE> ComputeSphereOrientedBoxPenetrationUVE(
+    Math::Vector3UVE boxCenter, Math::Vector3UVE boxHalfExtents, Math::QuaternionUVE boxRotation,
+    Math::Vector3UVE sphereCenter, float sphereRadius) noexcept;
+
+/// Computes exact capsule-vs-oriented-box penetration by transforming the capsule centerline into
+/// box local space. The returned axis is in world space and points from the capsule toward the box.
+/// Touching boundaries are not intersections; invalid rotations fail closed.
+[[nodiscard]] std::optional<Math::PenetrationUVE> ComputeCapsuleOrientedBoxPenetrationUVE(
+    Math::Vector3UVE boxCenter, Math::Vector3UVE boxHalfExtents, Math::QuaternionUVE boxRotation,
+    Math::Vector3UVE capsuleSegmentStart, Math::Vector3UVE capsuleSegmentEnd, float capsuleRadius) noexcept;
 
 } // namespace UVE::Physics::Detail
 
