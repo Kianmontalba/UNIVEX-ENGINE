@@ -145,14 +145,24 @@ void AssetManagerUVE::ExecuteLoadUVE(AssetGuidUVE guid, std::type_index type, st
         const auto it = m_impl->records.find(guid);
         if (it != m_impl->records.end()) {
             oldData = it->second.data;
-            destroyFunc = it->second.destroy;
-            it->second.data = success ? newData : nullptr;
-            it->second.state = success ? AssetLoadStateUVE::Loaded : AssetLoadStateUVE::Failed;
-            it->second.failureReason = success ? std::string{} : failureReason;
+            if (success) {
+                destroyFunc = it->second.destroy;
+                it->second.data = newData;
+                it->second.state = AssetLoadStateUVE::Loaded;
+                it->second.failureReason.clear();
+            } else if (oldData != nullptr) {
+                // A failed reload is failure-atomic: retain the last-known-good data and expose
+                // the reload diagnostic while keeping the handle ready for existing consumers.
+                it->second.state = AssetLoadStateUVE::Loaded;
+                it->second.failureReason = failureReason;
+            } else {
+                it->second.data = nullptr;
+                it->second.state = AssetLoadStateUVE::Failed;
+                it->second.failureReason = failureReason;
+            }
         }
     }
-    // Free the previous value only after releasing the lock, and only on a successful reload
-    // that replaced it (oldData is null on a first-ever load).
+    // Free the previous value only after releasing the lock, and only on a successful reload.
     if (oldData != nullptr && destroyFunc) {
         destroyFunc(oldData);
     }
