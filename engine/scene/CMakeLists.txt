@@ -11,6 +11,7 @@
 # add_subdirectory(config) before add_subdirectory(scene).
 
 add_library(uve_scene STATIC
+    src/prefab_revision_policy_uve.cpp
     src/archetype_signature_uve.cpp
     src/chunk_uve.cpp
     src/archetype_uve.cpp
