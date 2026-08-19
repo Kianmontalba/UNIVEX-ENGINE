@@ -91,6 +91,48 @@ TEST(RigidBodyComponentUVETest, IsRigidBodyComponentValidUVE_RejectsUnsafeValues
     invalid = {};
     invalid.gravityScale = -1.0F;
     EXPECT_FALSE(Scene::IsRigidBodyComponentValidUVE(invalid));
+    invalid = {};
+    invalid.angularVelocity.x = std::numeric_limits<float>::quiet_NaN();
+    EXPECT_FALSE(Scene::IsRigidBodyComponentValidUVE(invalid));
+    invalid = {};
+    invalid.torque.y = std::numeric_limits<float>::infinity();
+    EXPECT_FALSE(Scene::IsRigidBodyComponentValidUVE(invalid));
+    invalid = {};
+    invalid.inverseInertia.z = -0.1F;
+    EXPECT_FALSE(Scene::IsRigidBodyComponentValidUVE(invalid));
+}
+
+TEST_F(PhysicsSystemUVETest, StepUVE_AngularStateIntegratesTorqueAndAdvancesLocalRotation) {
+    PhysicsSystemUVE physicsSystem(collisionSystem, Math::Vector3UVE{});
+    Scene::RigidBodyComponentUVE rigidBody;
+    rigidBody.angularVelocity = Math::Vector3UVE{0.0F, 1.0F, 0.0F};
+    rigidBody.torque = Math::Vector3UVE{0.0F, 1.0F, 0.0F};
+    rigidBody.inverseInertia = Math::Vector3UVE{0.0F, 0.5F, 0.0F};
+    const Scene::EntityUVE body = MakeBodyEntityUVE(Math::Vector3UVE{}, rigidBody);
+
+    physicsSystem.StepUVE(entityManager, sceneGraph, 0.5F);
+
+    const Scene::RigidBodyComponentUVE& updated =
+        entityManager.GetComponentUVE<Scene::RigidBodyComponentUVE>(body);
+    EXPECT_NEAR(updated.angularVelocity.y, 1.25F, kEpsilon);
+    const float angle = 0.625F;
+    const Math::QuaternionUVE rotation =
+        entityManager.GetComponentUVE<Scene::TransformComponentUVE>(body).localRotation;
+    EXPECT_NEAR(rotation.x, 0.0F, kEpsilon);
+    EXPECT_NEAR(rotation.y, std::sin(angle * 0.5F), kEpsilon);
+    EXPECT_NEAR(rotation.z, 0.0F, kEpsilon);
+    EXPECT_NEAR(rotation.w, std::cos(angle * 0.5F), kEpsilon);
+}
+
+TEST_F(PhysicsSystemUVETest, StepUVE_ZeroAngularDefaultsPreserveIdentityRotation) {
+    PhysicsSystemUVE physicsSystem(collisionSystem, Math::Vector3UVE{});
+    const Scene::EntityUVE body = MakeBodyEntityUVE(
+        Math::Vector3UVE{}, Scene::RigidBodyComponentUVE{});
+
+    RunStepsUVE(physicsSystem, entityManager, sceneGraph, 3, 0.1F);
+
+    EXPECT_EQ(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(body).localRotation,
+              Math::QuaternionUVE{});
 }
 
 TEST_F(PhysicsSystemUVETest, StepUVE_DynamicBodyUnderGravity_MatchesHandComputedSemiImplicitEuler) {

@@ -6,9 +6,12 @@
 #include "uve/physics/physics_constraint_system_uve.h"
 
 #include <algorithm>
+#include <cmath>
 #include <vector>
 
 #include "uve/debug/assert_uve.h"
+#include "uve/math/quaternion_uve.h"
+#include "uve/physics/angular_dynamics_uve.h"
 #include "uve/physics/collision_pair_uve.h"
 #include "uve/physics/physics_material_uve.h"
 #include "uve/scene/components/collider_component_uve.h"
@@ -123,8 +126,31 @@ void PhysicsSystemUVE::StepUVE(Scene::IEntityManagerUVE& entityManager, Scene::I
                 rigidBody.velocity *= std::max(0.0F, 1.0F - rigidBody.drag * fixedDeltaTimeSeconds);
             }
 
+            const auto integratedAngularVelocity = IntegrateAngularVelocityUVE(
+                rigidBody.angularVelocity, rigidBody.torque, rigidBody.inverseInertia,
+                fixedDeltaTimeSeconds);
+            UVE_ASSERT(integratedAngularVelocity.has_value());
+            if (integratedAngularVelocity.has_value()) {
+                rigidBody.angularVelocity = *integratedAngularVelocity;
+            }
+
             Scene::TransformComponentUVE newTransform = transform;
             newTransform.localPosition += rigidBody.velocity * fixedDeltaTimeSeconds;
+            const float angularSpeedSquared = Math::LengthSquaredUVE(rigidBody.angularVelocity);
+            if (std::isfinite(angularSpeedSquared) && angularSpeedSquared > 1.0e-12F &&
+                std::isfinite(fixedDeltaTimeSeconds) && fixedDeltaTimeSeconds >= 0.0F) {
+                const float angularSpeed = std::sqrt(angularSpeedSquared);
+                const Math::Vector3UVE axis = rigidBody.angularVelocity * (1.0F / angularSpeed);
+                Math::QuaternionUVE deltaRotation;
+                if (Math::TryMakeAxisAngleUVE(axis, angularSpeed * fixedDeltaTimeSeconds, deltaRotation)) {
+                    Math::QuaternionUVE normalizedRotation;
+                    const Math::QuaternionUVE composedRotation =
+                        Math::MultiplyUVE(newTransform.localRotation, deltaRotation);
+                    if (Math::TryNormalizeUVE(composedRotation, normalizedRotation)) {
+                        newTransform.localRotation = normalizedRotation;
+                    }
+                }
+            }
             sceneGraph.SetLocalTransformUVE(entityManager, entity, newTransform);
         });
 
