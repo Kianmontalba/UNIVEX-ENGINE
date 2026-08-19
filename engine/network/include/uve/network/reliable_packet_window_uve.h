@@ -19,6 +19,21 @@ struct ReliableAcknowledgementStateUVE final {
     std::uint32_t receivedHistoryBits = 0U;
     bool hasReceivedSequence = false;
 };
+enum class ReliableRetransmitStatusUVE : std::uint8_t {
+    Waiting = 0,
+    Due,
+    Exhausted,
+    Invalid,
+};
+struct ReliableRetransmitPolicyInputUVE final {
+    float elapsedSeconds = 0.0F;
+    float retryTimeoutSeconds = 0.0F;
+    std::uint32_t retryCount = 0U;
+    std::uint32_t maximumRetries = 0U;
+};
+/// Evaluates one caller-owned retry decision without owning a clock, timer, socket, or packet.
+[[nodiscard]] ReliableRetransmitStatusUVE EvaluateReliableRetransmitPolicyUVE(
+    const ReliableRetransmitPolicyInputUVE& input) noexcept;
 /// Updates a copied receive window using wrap-safe uint32 sequence ordering.
 /// Sequence zero is reserved as the initial/no-packet state; this contract owns no socket or payload.
 [[nodiscard]] ReliablePacketReceiveStatusUVE AcceptReliableSequenceUVE(

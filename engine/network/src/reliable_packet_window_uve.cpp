@@ -1,5 +1,7 @@
 // Copyright (c) 2026 UniVex Studios. All Rights Reserved.
 #include "uve/network/reliable_packet_window_uve.h"
+
+#include <cmath>
 namespace UVE::Network {
 namespace {
 constexpr std::uint32_t kHalfSequenceSpaceUVE = 0x80000000U;
@@ -9,6 +11,19 @@ constexpr std::uint32_t kHalfSequenceSpaceUVE = 0x80000000U;
     return distance != 0U && distance < kHalfSequenceSpaceUVE;
 }
 } // namespace
+ReliableRetransmitStatusUVE EvaluateReliableRetransmitPolicyUVE(
+    const ReliableRetransmitPolicyInputUVE& input) noexcept {
+    if (!std::isfinite(input.elapsedSeconds) || input.elapsedSeconds < 0.0F ||
+        !std::isfinite(input.retryTimeoutSeconds) || input.retryTimeoutSeconds <= 0.0F ||
+        input.retryCount > input.maximumRetries) {
+        return ReliableRetransmitStatusUVE::Invalid;
+    }
+    if (input.retryCount == input.maximumRetries) {
+        return ReliableRetransmitStatusUVE::Exhausted;
+    }
+    return input.elapsedSeconds >= input.retryTimeoutSeconds ? ReliableRetransmitStatusUVE::Due
+                                                               : ReliableRetransmitStatusUVE::Waiting;
+}
 ReliablePacketReceiveStatusUVE AcceptReliableSequenceUVE(
     const std::uint32_t sequence, ReliableAcknowledgementStateUVE& state) noexcept {
     if (sequence == 0U) {

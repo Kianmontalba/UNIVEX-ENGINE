@@ -3,6 +3,16 @@
 #include <gtest/gtest.h>
 namespace UVE::Network::Tests {
 namespace {
+TEST(ReliablePacketWindowUVETest, RetransmitPolicyClassifiesWaitingDueAndExhausted) {
+    EXPECT_EQ(EvaluateReliableRetransmitPolicyUVE({0.25F, 1.0F, 0U, 3U}), ReliableRetransmitStatusUVE::Waiting);
+    EXPECT_EQ(EvaluateReliableRetransmitPolicyUVE({1.0F, 1.0F, 1U, 3U}), ReliableRetransmitStatusUVE::Due);
+    EXPECT_EQ(EvaluateReliableRetransmitPolicyUVE({4.0F, 1.0F, 3U, 3U}), ReliableRetransmitStatusUVE::Exhausted);
+}
+TEST(ReliablePacketWindowUVETest, RetransmitPolicyRejectsInvalidTimingAndRetryInputs) {
+    EXPECT_EQ(EvaluateReliableRetransmitPolicyUVE({-0.1F, 1.0F, 0U, 3U}), ReliableRetransmitStatusUVE::Invalid);
+    EXPECT_EQ(EvaluateReliableRetransmitPolicyUVE({0.1F, 0.0F, 0U, 3U}), ReliableRetransmitStatusUVE::Invalid);
+    EXPECT_EQ(EvaluateReliableRetransmitPolicyUVE({0.1F, 1.0F, 4U, 3U}), ReliableRetransmitStatusUVE::Invalid);
+}
 TEST(ReliablePacketWindowUVETest, FirstSequenceIsAcceptedAndAdvertised) {
     ReliableAcknowledgementStateUVE state;
     EXPECT_EQ(AcceptReliableSequenceUVE(7U, state), ReliablePacketReceiveStatusUVE::Accepted);
