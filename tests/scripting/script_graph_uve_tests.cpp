@@ -18,6 +18,7 @@
 
 #include <gtest/gtest.h>
 
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -199,10 +200,10 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
 
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
     EXPECT_FALSE(RegisterBuiltInScriptNodesUVE(registry));
-    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 115U);
+    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 130U);
 
     const std::vector<ScriptNodeTypeDescriptorUVE> descriptors = registry.GetNodeTypeDescriptorsUVE();
-    ASSERT_EQ(descriptors.size(), 115U);
+    ASSERT_EQ(descriptors.size(), 130U);
     const std::vector<std::string> expectedIds{
         "flow.sequence", "flow.branch", "flow.return", "flow.do_once", "flow.gate", "flow.switch",
         "flow.event", "flow.loop", "flow.for_loop", "flow.while_loop", "flow.delay",
@@ -233,7 +234,11 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
         "variable.make_map", "variable.get_map", "variable.set_map",
         "variable.make_set", "variable.get_set", "variable.set_set",
         "variable.make_struct", "variable.get_struct", "variable.set_struct",
-        "entity.spawn", "entity.destroy", "entity.find", "entity.get_entity", "entity.add_component", "entity.remove_component"};
+        "entity.spawn", "entity.destroy", "entity.find", "entity.get_entity", "entity.add_component", "entity.remove_component",
+        "input.key_pressed", "input.key_released", "input.key_down", "input.mouse_position", "input.mouse_button",
+        "input.gamepad_button", "input.get_axis", "input.get_action",
+        "camera.get_camera", "camera.set_position", "camera.set_rotation", "camera.look_at", "camera.set_fov",
+        "camera.shake", "camera.set_active"};
     ASSERT_EQ(expectedIds.size(), descriptors.size());
     for (std::size_t index = 0U; index < expectedIds.size(); ++index) {
         EXPECT_EQ(descriptors[index].typeId, expectedIds[index]);
@@ -282,9 +287,17 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
         EXPECT_EQ(descriptors[index].category, "Variable");
         EXPECT_EQ(descriptors[index].iconId, "node.variable");
     }
-    for (std::size_t index = 109U; index < descriptors.size(); ++index) {
+    for (std::size_t index = 109U; index < 115U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Entity");
         EXPECT_EQ(descriptors[index].iconId, "node.entity");
+    }
+    for (std::size_t index = 115U; index < 123U; ++index) {
+        EXPECT_EQ(descriptors[index].category, "Input");
+        EXPECT_EQ(descriptors[index].iconId, "node.input");
+    }
+    for (std::size_t index = 123U; index < descriptors.size(); ++index) {
+        EXPECT_EQ(descriptors[index].category, "Camera");
+        EXPECT_EQ(descriptors[index].iconId, "node.camera");
     }
 
     const ScriptNodeTypeDescriptorUVE* lerp = registry.FindNodeTypeUVE("math.float.lerp");
@@ -480,6 +493,46 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
         EXPECT_EQ(mutation->pins[1].type, ScriptValueTypeUVE::Component);
         EXPECT_EQ(mutation->pins[2].name, "Result");
         EXPECT_EQ(mutation->pins[2].type, ScriptValueTypeUVE::Boolean);
+    }
+
+    const ScriptNodeTypeDescriptorUVE* keyPressed = registry.FindNodeTypeUVE("input.key_pressed");
+    ASSERT_NE(keyPressed, nullptr);
+    ASSERT_EQ(keyPressed->pins.size(), 2U);
+    EXPECT_EQ(keyPressed->pins[0].name, "Key");
+    EXPECT_EQ(keyPressed->pins[0].type, ScriptValueTypeUVE::Number);
+    EXPECT_EQ(keyPressed->pins[1].name, "Result");
+    EXPECT_EQ(keyPressed->pins[1].type, ScriptValueTypeUVE::Boolean);
+
+    const ScriptNodeTypeDescriptorUVE* mousePosition = registry.FindNodeTypeUVE("input.mouse_position");
+    ASSERT_NE(mousePosition, nullptr);
+    ASSERT_EQ(mousePosition->pins.size(), 1U);
+    EXPECT_EQ(mousePosition->pins[0].name, "Position");
+    EXPECT_EQ(mousePosition->pins[0].type, ScriptValueTypeUVE::Vector2);
+
+    const ScriptNodeTypeDescriptorUVE* gamepadButton = registry.FindNodeTypeUVE("input.gamepad_button");
+    ASSERT_NE(gamepadButton, nullptr);
+    ASSERT_EQ(gamepadButton->pins.size(), 3U);
+    EXPECT_EQ(gamepadButton->pins[0].type, ScriptValueTypeUVE::Number);
+    EXPECT_EQ(gamepadButton->pins[1].type, ScriptValueTypeUVE::Number);
+    EXPECT_EQ(gamepadButton->pins[2].type, ScriptValueTypeUVE::Boolean);
+
+    const ScriptNodeTypeDescriptorUVE* cameraGet = registry.FindNodeTypeUVE("camera.get_camera");
+    ASSERT_NE(cameraGet, nullptr);
+    ASSERT_EQ(cameraGet->pins.size(), 1U);
+    EXPECT_EQ(cameraGet->pins[0].name, "Result");
+    EXPECT_EQ(cameraGet->pins[0].type, ScriptValueTypeUVE::Entity);
+
+    for (const char* typeId : {"camera.set_position", "camera.set_rotation", "camera.look_at", "camera.set_fov",
+                               "camera.shake", "camera.set_active"}) {
+        const ScriptNodeTypeDescriptorUVE* camera = registry.FindNodeTypeUVE(typeId);
+        ASSERT_NE(camera, nullptr);
+        EXPECT_EQ(camera->category, "Camera");
+        EXPECT_EQ(camera->iconId, "node.camera");
+        ASSERT_GE(camera->pins.size(), 3U);
+        EXPECT_EQ(camera->pins.front().name, "Camera");
+        EXPECT_EQ(camera->pins.front().type, ScriptValueTypeUVE::Entity);
+        EXPECT_EQ(camera->pins.back().name, "Result");
+        EXPECT_EQ(camera->pins.back().type, ScriptValueTypeUVE::Boolean);
     }
 
     const ScriptNodeTypeDescriptorUVE* engineLog = registry.FindNodeTypeUVE("engine.log");
@@ -4839,6 +4892,389 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_EntityNodesFailClosedWithoutRequi
         EXPECT_EQ(ExecuteScriptBytecodeUVE(mutation, mutationContext).status,
                   ScriptVmStatusUVE::NodeExecutionFailed);
     }
+}
+
+} // namespace UVE::Scripting
+
+
+namespace UVE::Scripting {
+namespace {
+
+struct InputCameraCaptureUVE final {
+    std::size_t keyCount = 0U;
+    std::size_t mousePositionCount = 0U;
+    std::size_t mouseButtonCount = 0U;
+    std::size_t gamepadButtonCount = 0U;
+    std::size_t axisCount = 0U;
+    std::size_t actionCount = 0U;
+    std::size_t cameraGetCount = 0U;
+    std::size_t cameraPositionCount = 0U;
+    std::size_t cameraRotationCount = 0U;
+    std::size_t cameraLookAtCount = 0U;
+    std::size_t cameraFovCount = 0U;
+    std::size_t cameraShakeCount = 0U;
+    std::size_t cameraActiveCount = 0U;
+    Scene::EntityUVE camera{7U, 2U};
+    float lastToken = 0.0F;
+    float lastAxis = 0.0F;
+    float lastFov = 0.0F;
+    float lastAmplitude = 0.0F;
+    float lastDuration = 0.0F;
+    bool lastActive = false;
+    bool booleanResult = true;
+    Math::Vector2UVE mousePosition{12.0F, -4.0F};
+    float axisResult = 0.5F;
+};
+
+bool CaptureInputKeyUVE(void* userData, const float token, bool* outResult) noexcept {
+    auto* capture = static_cast<InputCameraCaptureUVE*>(userData);
+    if (capture == nullptr || outResult == nullptr) {
+        return false;
+    }
+    ++capture->keyCount;
+    capture->lastToken = token;
+    *outResult = capture->booleanResult;
+    return true;
+}
+
+bool CaptureInputMousePositionUVE(void* userData, ScriptVector2ValueUVE* outPosition) noexcept {
+    auto* capture = static_cast<InputCameraCaptureUVE*>(userData);
+    if (capture == nullptr || outPosition == nullptr) {
+        return false;
+    }
+    ++capture->mousePositionCount;
+    outPosition->value = capture->mousePosition;
+    return true;
+}
+
+bool CaptureInputMouseButtonUVE(void* userData, const float token, bool* outResult) noexcept {
+    auto* capture = static_cast<InputCameraCaptureUVE*>(userData);
+    if (capture == nullptr || outResult == nullptr) {
+        return false;
+    }
+    ++capture->mouseButtonCount;
+    capture->lastToken = token;
+    *outResult = capture->booleanResult;
+    return true;
+}
+
+bool CaptureInputGamepadButtonUVE(void* userData, const float gamepadToken, const float buttonToken,
+                                  bool* outResult) noexcept {
+    auto* capture = static_cast<InputCameraCaptureUVE*>(userData);
+    if (capture == nullptr || outResult == nullptr) {
+        return false;
+    }
+    ++capture->gamepadButtonCount;
+    capture->lastToken = gamepadToken;
+    capture->lastAxis = buttonToken;
+    *outResult = capture->booleanResult;
+    return true;
+}
+
+bool CaptureInputAxisUVE(void* userData, const float gamepadToken, const float axisToken,
+                        float* outValue) noexcept {
+    auto* capture = static_cast<InputCameraCaptureUVE*>(userData);
+    if (capture == nullptr || outValue == nullptr) {
+        return false;
+    }
+    ++capture->axisCount;
+    capture->lastToken = gamepadToken;
+    capture->lastAxis = axisToken;
+    *outValue = capture->axisResult;
+    return true;
+}
+
+bool CaptureInputActionUVE(void* userData, const float token, bool* outResult) noexcept {
+    auto* capture = static_cast<InputCameraCaptureUVE*>(userData);
+    if (capture == nullptr || outResult == nullptr) {
+        return false;
+    }
+    ++capture->actionCount;
+    capture->lastToken = token;
+    *outResult = capture->booleanResult;
+    return true;
+}
+
+bool CaptureCameraGetUVE(void* userData, Scene::EntityUVE* outCamera) noexcept {
+    auto* capture = static_cast<InputCameraCaptureUVE*>(userData);
+    if (capture == nullptr || outCamera == nullptr) {
+        return false;
+    }
+    ++capture->cameraGetCount;
+    *outCamera = capture->camera;
+    return true;
+}
+
+bool CaptureCameraPositionUVE(void* userData, const Scene::EntityUVE camera,
+                             const ScriptVector3ValueUVE& position) noexcept {
+    auto* capture = static_cast<InputCameraCaptureUVE*>(userData);
+    if (capture == nullptr || camera != capture->camera || !std::isfinite(position.value.x) ||
+        !std::isfinite(position.value.y) || !std::isfinite(position.value.z)) {
+        return false;
+    }
+    ++capture->cameraPositionCount;
+    return true;
+}
+
+bool CaptureCameraRotationUVE(void* userData, const Scene::EntityUVE camera,
+                             const ScriptRotationValueUVE& rotation) noexcept {
+    auto* capture = static_cast<InputCameraCaptureUVE*>(userData);
+    if (capture == nullptr || camera != capture->camera || !Math::IsFiniteUVE(rotation.value)) {
+        return false;
+    }
+    ++capture->cameraRotationCount;
+    return true;
+}
+
+bool CaptureCameraLookAtUVE(void* userData, const Scene::EntityUVE camera,
+                            const ScriptVector3ValueUVE& target) noexcept {
+    auto* capture = static_cast<InputCameraCaptureUVE*>(userData);
+    if (capture == nullptr || camera != capture->camera || !std::isfinite(target.value.x) ||
+        !std::isfinite(target.value.y) || !std::isfinite(target.value.z)) {
+        return false;
+    }
+    ++capture->cameraLookAtCount;
+    return true;
+}
+
+bool CaptureCameraFovUVE(void* userData, const Scene::EntityUVE camera, const float fov) noexcept {
+    auto* capture = static_cast<InputCameraCaptureUVE*>(userData);
+    if (capture == nullptr || camera != capture->camera || !std::isfinite(fov)) {
+        return false;
+    }
+    ++capture->cameraFovCount;
+    capture->lastFov = fov;
+    return true;
+}
+
+bool CaptureCameraShakeUVE(void* userData, const Scene::EntityUVE camera, const float amplitude,
+                           const float duration) noexcept {
+    auto* capture = static_cast<InputCameraCaptureUVE*>(userData);
+    if (capture == nullptr || camera != capture->camera || !std::isfinite(amplitude) || !std::isfinite(duration)) {
+        return false;
+    }
+    ++capture->cameraShakeCount;
+    capture->lastAmplitude = amplitude;
+    capture->lastDuration = duration;
+    return true;
+}
+
+bool CaptureCameraActiveUVE(void* userData, const Scene::EntityUVE camera, const bool active) noexcept {
+    auto* capture = static_cast<InputCameraCaptureUVE*>(userData);
+    if (capture == nullptr || camera != capture->camera) {
+        return false;
+    }
+    ++capture->cameraActiveCount;
+    capture->lastActive = active;
+    return true;
+}
+
+ScriptEngineCallBindingsUVE MakeInputCameraBindingsUVE(InputCameraCaptureUVE& capture) {
+    ScriptEngineCallBindingsUVE bindings{};
+    bindings.userData = &capture;
+    bindings.inputKeyPressed = CaptureInputKeyUVE;
+    bindings.inputKeyReleased = CaptureInputKeyUVE;
+    bindings.inputKeyDown = CaptureInputKeyUVE;
+    bindings.inputMousePosition = CaptureInputMousePositionUVE;
+    bindings.inputMouseButton = CaptureInputMouseButtonUVE;
+    bindings.inputGamepadButton = CaptureInputGamepadButtonUVE;
+    bindings.inputAxis = CaptureInputAxisUVE;
+    bindings.inputAction = CaptureInputActionUVE;
+    bindings.cameraGet = CaptureCameraGetUVE;
+    bindings.cameraSetPosition = CaptureCameraPositionUVE;
+    bindings.cameraSetRotation = CaptureCameraRotationUVE;
+    bindings.cameraLookAt = CaptureCameraLookAtUVE;
+    bindings.cameraSetFov = CaptureCameraFovUVE;
+    bindings.cameraShake = CaptureCameraShakeUVE;
+    bindings.cameraSetActive = CaptureCameraActiveUVE;
+    return bindings;
+}
+
+} // namespace
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_ExecutesInputAndCameraFamiliesWithCopiedValues) {
+    ScriptBytecodeProgramUVE program;
+    const std::array<const char*, 15U> nodeTypes{
+        "input.key_pressed", "input.key_released", "input.key_down", "input.mouse_position",
+        "input.mouse_button", "input.gamepad_button", "input.get_axis", "input.get_action",
+        "camera.get_camera", "camera.set_position", "camera.set_rotation", "camera.look_at",
+        "camera.set_fov", "camera.shake", "camera.set_active"};
+    for (std::size_t index = 0U; index < nodeTypes.size(); ++index) {
+        program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode,
+                                        static_cast<std::uint32_t>(index + 1U), 0U, nodeTypes[index], {}, {}});
+    }
+
+    const Scene::EntityUVE camera{7U, 2U};
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(1U, "Key", 1.0F));
+    ASSERT_TRUE(context.SetInputUVE(2U, "Key", 2.0F));
+    ASSERT_TRUE(context.SetInputUVE(3U, "Key", 3.0F));
+    ASSERT_TRUE(context.SetInputUVE(5U, "Button", 0.0F));
+    ASSERT_TRUE(context.SetInputUVE(6U, "Gamepad", 0.0F));
+    ASSERT_TRUE(context.SetInputUVE(6U, "Button", 1.0F));
+    ASSERT_TRUE(context.SetInputUVE(7U, "Gamepad", 0.0F));
+    ASSERT_TRUE(context.SetInputUVE(7U, "Axis", 2.0F));
+    ASSERT_TRUE(context.SetInputUVE(8U, "Action", 7.0F));
+    ASSERT_TRUE(context.SetInputUVE(10U, "Camera", ScriptEntityValueUVE{camera}));
+    ASSERT_TRUE(context.SetInputUVE(10U, "Position", ScriptVector3ValueUVE{{1.0F, 2.0F, 3.0F}}));
+    ASSERT_TRUE(context.SetInputUVE(11U, "Camera", ScriptEntityValueUVE{camera}));
+    ASSERT_TRUE(context.SetInputUVE(11U, "Rotation", ScriptRotationValueUVE{{0.0F, 0.0F, 0.0F, 1.0F}}));
+    ASSERT_TRUE(context.SetInputUVE(12U, "Camera", ScriptEntityValueUVE{camera}));
+    ASSERT_TRUE(context.SetInputUVE(12U, "Target", ScriptVector3ValueUVE{{4.0F, 5.0F, 6.0F}}));
+    ASSERT_TRUE(context.SetInputUVE(13U, "Camera", ScriptEntityValueUVE{camera}));
+    ASSERT_TRUE(context.SetInputUVE(13U, "FOV", 75.0F));
+    ASSERT_TRUE(context.SetInputUVE(14U, "Camera", ScriptEntityValueUVE{camera}));
+    ASSERT_TRUE(context.SetInputUVE(14U, "Amplitude", 1.0F));
+    ASSERT_TRUE(context.SetInputUVE(14U, "Duration", 0.25F));
+    ASSERT_TRUE(context.SetInputUVE(15U, "Camera", ScriptEntityValueUVE{camera}));
+    ASSERT_TRUE(context.SetInputUVE(15U, "Active", true));
+
+    InputCameraCaptureUVE capture;
+    ScriptEngineCallBindingsUVE bindings = MakeInputCameraBindingsUVE(capture);
+    ScriptVmExecutionOptionsUVE options;
+    options.engineCallBindings = &bindings;
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(program, context, options);
+
+    ASSERT_TRUE(result.IsSuccessUVE());
+    EXPECT_EQ(result.instructionsExecuted, 15U);
+    EXPECT_EQ(capture.keyCount, 3U);
+    EXPECT_EQ(capture.mousePositionCount, 1U);
+    EXPECT_EQ(capture.mouseButtonCount, 1U);
+    EXPECT_EQ(capture.gamepadButtonCount, 1U);
+    EXPECT_EQ(capture.axisCount, 1U);
+    EXPECT_EQ(capture.actionCount, 1U);
+    EXPECT_EQ(capture.cameraGetCount, 1U);
+    EXPECT_EQ(capture.cameraPositionCount, 1U);
+    EXPECT_EQ(capture.cameraRotationCount, 1U);
+    EXPECT_EQ(capture.cameraLookAtCount, 1U);
+    EXPECT_EQ(capture.cameraFovCount, 1U);
+    EXPECT_EQ(capture.cameraShakeCount, 1U);
+    EXPECT_EQ(capture.cameraActiveCount, 1U);
+    EXPECT_EQ(capture.lastToken, 7.0F);
+    EXPECT_FLOAT_EQ(capture.lastAxis, 2.0F);
+    EXPECT_FLOAT_EQ(capture.lastFov, 75.0F);
+    EXPECT_FLOAT_EQ(capture.lastAmplitude, 1.0F);
+    EXPECT_FLOAT_EQ(capture.lastDuration, 0.25F);
+    EXPECT_TRUE(capture.lastActive);
+    EXPECT_EQ(std::get<bool>(*context.FindOutputUVE(1U, "Result")), true);
+    EXPECT_EQ(std::get<ScriptVector2ValueUVE>(*context.FindOutputUVE(4U, "Position")),
+              (ScriptVector2ValueUVE{{12.0F, -4.0F}}));
+    EXPECT_FLOAT_EQ(std::get<float>(*context.FindOutputUVE(7U, "Result")), 0.5F);
+    EXPECT_EQ(std::get<bool>(*context.FindOutputUVE(8U, "Result")), true);
+    EXPECT_EQ(std::get<ScriptEntityValueUVE>(*context.FindOutputUVE(9U, "Result")),
+              (ScriptEntityValueUVE{camera}));
+    EXPECT_EQ(std::get<bool>(*context.FindOutputUVE(15U, "Result")), true);
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_InputAndCameraSchedulerPathUsesCopiedContext) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U,
+                                    "input.mouse_position", {}, {}});
+    InputCameraCaptureUVE capture;
+    ScriptEngineCallBindingsUVE bindings = MakeInputCameraBindingsUVE(capture);
+    ScriptVmExecutionOptionsUVE options;
+    options.engineCallBindings = &bindings;
+    ScriptVmExecutionContextUVE context;
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(program, context, options);
+    EXPECT_TRUE(result.IsSuccessUVE());
+    EXPECT_EQ(result.instructionsExecuted, 1U);
+    EXPECT_EQ(capture.mousePositionCount, 1U);
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_InputAndCameraNodesFailClosedWithoutBindings) {
+    const Scene::EntityUVE camera{7U, 2U};
+    const std::array<const char*, 15U> nodeTypes{
+        "input.key_pressed", "input.key_released", "input.key_down", "input.mouse_position",
+        "input.mouse_button", "input.gamepad_button", "input.get_axis", "input.get_action",
+        "camera.get_camera", "camera.set_position", "camera.set_rotation", "camera.look_at",
+        "camera.set_fov", "camera.shake", "camera.set_active"};
+    for (std::size_t index = 0U; index < nodeTypes.size(); ++index) {
+        const std::uint32_t nodeId = static_cast<std::uint32_t>(index + 1U);
+        ScriptBytecodeProgramUVE program;
+        program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, nodeId, 0U,
+                                        nodeTypes[index], {}, {}});
+        ScriptVmExecutionContextUVE context;
+        if (index == 0U || index == 1U || index == 2U) {
+            ASSERT_TRUE(context.SetInputUVE(nodeId, "Key", 1.0F));
+        } else if (index == 4U) {
+            ASSERT_TRUE(context.SetInputUVE(nodeId, "Button", 0.0F));
+        } else if (index == 5U || index == 6U) {
+            ASSERT_TRUE(context.SetInputUVE(nodeId, "Gamepad", 0.0F));
+            ASSERT_TRUE(context.SetInputUVE(nodeId, index == 5U ? "Button" : "Axis", 0.0F));
+        } else if (index == 7U) {
+            ASSERT_TRUE(context.SetInputUVE(nodeId, "Action", 1.0F));
+        } else if (index >= 9U) {
+            ASSERT_TRUE(context.SetInputUVE(nodeId, "Camera", ScriptEntityValueUVE{camera}));
+            if (index == 9U) {
+                ASSERT_TRUE(context.SetInputUVE(nodeId, "Position", ScriptVector3ValueUVE{{1.0F, 2.0F, 3.0F}}));
+            } else if (index == 10U) {
+                ASSERT_TRUE(context.SetInputUVE(nodeId, "Rotation", ScriptRotationValueUVE{{0.0F, 0.0F, 0.0F, 1.0F}}));
+            } else if (index == 11U) {
+                ASSERT_TRUE(context.SetInputUVE(nodeId, "Target", ScriptVector3ValueUVE{{1.0F, 2.0F, 3.0F}}));
+            } else if (index == 12U) {
+                ASSERT_TRUE(context.SetInputUVE(nodeId, "FOV", 60.0F));
+            } else if (index == 13U) {
+                ASSERT_TRUE(context.SetInputUVE(nodeId, "Amplitude", 1.0F));
+                ASSERT_TRUE(context.SetInputUVE(nodeId, "Duration", 0.5F));
+            } else if (index == 14U) {
+                ASSERT_TRUE(context.SetInputUVE(nodeId, "Active", true));
+            }
+        }
+        EXPECT_EQ(ExecuteScriptBytecodeUVE(program, context).status, ScriptVmStatusUVE::NodeExecutionFailed)
+            << nodeTypes[index];
+    }
+}
+
+} // namespace UVE::Scripting
+
+
+namespace UVE::Scripting {
+
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesInputAndCameraProducers) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+
+    const auto expectStaged = [](const ScriptIrCompileResultUVE& result, const char* producer,
+                                 const char* targetPin, const char* consumer, const std::uint32_t producerId,
+                                 const std::uint32_t consumerId) {
+        ASSERT_TRUE(result.IsSuccessUVE());
+        ASSERT_TRUE(result.program.has_value());
+        ASSERT_EQ(result.program->instructions.size(), 3U);
+        EXPECT_EQ(result.program->instructions[0].nodeTypeId, producer);
+        EXPECT_EQ(result.program->instructions[1].kind, ScriptIrInstructionKindUVE::TransferValue);
+        EXPECT_EQ(result.program->instructions[1].sourceNodeId, producerId);
+        EXPECT_EQ(result.program->instructions[1].targetNodeId, consumerId);
+        EXPECT_EQ(result.program->instructions[1].targetPinName, targetPin);
+        EXPECT_EQ(result.program->instructions[2].nodeTypeId, consumer);
+    };
+
+    ScriptGraphUVE booleanGraph;
+    ASSERT_TRUE(booleanGraph.AddNodeUVE({10U, "input.key_pressed"}));
+    ASSERT_TRUE(booleanGraph.AddNodeUVE({20U, "logic.boolean.not"}));
+    ASSERT_TRUE(booleanGraph.AddLinkUVE({{10U, "Result"}, {20U, "Value"}}));
+    expectStaged(CompileScriptGraphToIrUVE(booleanGraph, registry), "input.key_pressed", "Value",
+                 "logic.boolean.not", 10U, 20U);
+
+    ScriptGraphUVE numberGraph;
+    ASSERT_TRUE(numberGraph.AddNodeUVE({30U, "input.get_axis"}));
+    ASSERT_TRUE(numberGraph.AddNodeUVE({40U, "math.float.add"}));
+    ASSERT_TRUE(numberGraph.AddLinkUVE({{30U, "Result"}, {40U, "A"}}));
+    expectStaged(CompileScriptGraphToIrUVE(numberGraph, registry), "input.get_axis", "A",
+                 "math.float.add", 30U, 40U);
+
+    ScriptGraphUVE vectorGraph;
+    ASSERT_TRUE(vectorGraph.AddNodeUVE({50U, "input.mouse_position"}));
+    ASSERT_TRUE(vectorGraph.AddNodeUVE({60U, "math.vector2.normalize"}));
+    ASSERT_TRUE(vectorGraph.AddLinkUVE({{50U, "Position"}, {60U, "Vector"}}));
+    expectStaged(CompileScriptGraphToIrUVE(vectorGraph, registry), "input.mouse_position", "Vector",
+                 "math.vector2.normalize", 50U, 60U);
+
+    ScriptGraphUVE cameraGraph;
+    ASSERT_TRUE(cameraGraph.AddNodeUVE({70U, "camera.get_camera"}));
+    ASSERT_TRUE(cameraGraph.AddNodeUVE({80U, "camera.set_active"}));
+    ASSERT_TRUE(cameraGraph.AddLinkUVE({{70U, "Result"}, {80U, "Camera"}}));
+    expectStaged(CompileScriptGraphToIrUVE(cameraGraph, registry), "camera.get_camera", "Camera",
+                 "camera.set_active", 70U, 80U);
 }
 
 } // namespace UVE::Scripting

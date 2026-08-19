@@ -194,7 +194,7 @@ struct EditorBridgeAssetBindingSnapshotUVE final {
 
 /// The bridge deliberately bounds presentation records before serializing them. A client must show
 /// the explicit truncation fact and never infer that an omitted entry was deleted from the editor.
-inline constexpr std::size_t kEditorBridgeMaximumPanelEntriesUVE = 128U;
+inline constexpr std::size_t kEditorBridgeMaximumPanelEntriesUVE = 256U;
 inline constexpr std::size_t kEditorBridgeMaximumScriptRuntimeTickHistoryUVE = 8U;
 inline constexpr std::size_t kEditorBridgeMaximumPresentationTextBytesUVE = 256U;
 /// Relative content paths double as native-validated request identities, so they use a separate

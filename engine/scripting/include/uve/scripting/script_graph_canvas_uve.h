@@ -95,7 +95,7 @@ struct ScriptGraphCanvasCommandResultUVE final {
     }
 };
 
-inline constexpr std::size_t kMaximumScriptGraphCanvasEntriesUVE = 128U;
+inline constexpr std::size_t kMaximumScriptGraphCanvasEntriesUVE = 256U;
 inline constexpr std::size_t kMaximumScriptGraphCanvasDefaultValueBytesUVE = 256U;
 inline constexpr std::size_t kMaximumScriptGraphCanvasSelectionUVE = 128U;
 inline constexpr float kMinimumScriptGraphCanvasZoomUVE = 0.1F;

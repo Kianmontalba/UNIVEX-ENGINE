@@ -780,7 +780,7 @@ public sealed record BridgeCommandResult(
 /// </summary>
 public static class BridgeSnapshotParser
 {
-    public const int MaximumPanelEntries = 128;
+    public const int MaximumPanelEntries = 256;
     public const int MaximumScriptRuntimeTickHistory = 8;
     public const int MaximumPresentationTextBytes = 256;
     // Capability IDs are append-only protocol values; 76 is ReadScriptRuntime and 77 is the

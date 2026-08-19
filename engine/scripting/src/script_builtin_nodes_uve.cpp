@@ -17,7 +17,7 @@ struct BuiltInNodeDefinitionUVE final {
     std::uint32_t displayOrder;
 };
 
-[[nodiscard]] std::array<BuiltInNodeDefinitionUVE, 115U> MakeBuiltInDefinitionsUVE() {
+[[nodiscard]] std::array<BuiltInNodeDefinitionUVE, 130U> MakeBuiltInDefinitionsUVE() {
     return {
         BuiltInNodeDefinitionUVE{
             "flow.sequence", "Sequence",
@@ -694,13 +694,95 @@ struct BuiltInNodeDefinitionUVE final {
              ScriptPinDescriptorUVE{"Component", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Component},
              ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
             "Entity", "node.entity", 905U},
+        BuiltInNodeDefinitionUVE{
+            "input.key_pressed", "Key Pressed",
+            {ScriptPinDescriptorUVE{"Key", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Input", "node.input", 1000U},
+        BuiltInNodeDefinitionUVE{
+            "input.key_released", "Key Released",
+            {ScriptPinDescriptorUVE{"Key", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Input", "node.input", 1001U},
+        BuiltInNodeDefinitionUVE{
+            "input.key_down", "Key Down",
+            {ScriptPinDescriptorUVE{"Key", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Input", "node.input", 1002U},
+        BuiltInNodeDefinitionUVE{
+            "input.mouse_position", "Mouse Position",
+            {ScriptPinDescriptorUVE{"Position", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Vector2}},
+            "Input", "node.input", 1003U},
+        BuiltInNodeDefinitionUVE{
+            "input.mouse_button", "Mouse Button",
+            {ScriptPinDescriptorUVE{"Button", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Input", "node.input", 1004U},
+        BuiltInNodeDefinitionUVE{
+            "input.gamepad_button", "Gamepad Button",
+            {ScriptPinDescriptorUVE{"Gamepad", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Button", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Input", "node.input", 1005U},
+        BuiltInNodeDefinitionUVE{
+            "input.get_axis", "Get Axis",
+            {ScriptPinDescriptorUVE{"Gamepad", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Axis", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Number}},
+            "Input", "node.input", 1006U},
+        BuiltInNodeDefinitionUVE{
+            "input.get_action", "Get Action",
+            {ScriptPinDescriptorUVE{"Action", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Input", "node.input", 1007U},
+        BuiltInNodeDefinitionUVE{
+            "camera.get_camera", "Get Camera",
+            {ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Entity}},
+            "Camera", "node.camera", 1010U},
+        BuiltInNodeDefinitionUVE{
+            "camera.set_position", "Set Camera Position",
+            {ScriptPinDescriptorUVE{"Camera", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
+             ScriptPinDescriptorUVE{"Position", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Camera", "node.camera", 1011U},
+        BuiltInNodeDefinitionUVE{
+            "camera.set_rotation", "Set Camera Rotation",
+            {ScriptPinDescriptorUVE{"Camera", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
+             ScriptPinDescriptorUVE{"Rotation", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Rotation},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Camera", "node.camera", 1012U},
+        BuiltInNodeDefinitionUVE{
+            "camera.look_at", "Camera Look At",
+            {ScriptPinDescriptorUVE{"Camera", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
+             ScriptPinDescriptorUVE{"Target", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Camera", "node.camera", 1013U},
+        BuiltInNodeDefinitionUVE{
+            "camera.set_fov", "Set Camera FOV",
+            {ScriptPinDescriptorUVE{"Camera", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
+             ScriptPinDescriptorUVE{"FOV", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Camera", "node.camera", 1014U},
+        BuiltInNodeDefinitionUVE{
+            "camera.shake", "Camera Shake",
+            {ScriptPinDescriptorUVE{"Camera", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
+             ScriptPinDescriptorUVE{"Amplitude", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Duration", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Camera", "node.camera", 1015U},
+        BuiltInNodeDefinitionUVE{
+            "camera.set_active", "Set Camera Active",
+            {ScriptPinDescriptorUVE{"Camera", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
+             ScriptPinDescriptorUVE{"Active", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Boolean},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Camera", "node.camera", 1016U},
     };
 }
 
 } // namespace
 
 bool RegisterBuiltInScriptNodesUVE(ScriptNodeRegistryUVE& registry) {
-    std::array<BuiltInNodeDefinitionUVE, 115U> definitions = MakeBuiltInDefinitionsUVE();
+    std::array<BuiltInNodeDefinitionUVE, 130U> definitions = MakeBuiltInDefinitionsUVE();
     for (const BuiltInNodeDefinitionUVE& definition : definitions) {
         if (registry.FindNodeTypeUVE(definition.typeId) != nullptr) {
             return false;

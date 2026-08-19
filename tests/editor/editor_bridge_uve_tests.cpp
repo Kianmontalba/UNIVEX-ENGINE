@@ -560,8 +560,8 @@ TEST(EditorBridgeUVETest, SnapshotUVE_CopiesHierarchyInspectorAndNativePanelSess
         EXPECT_EQ(snapshot.visualScripting.linkCount, 0U);
         EXPECT_EQ(snapshot.visualScripting.canvas.nodes.size(), 0U);
         EXPECT_EQ(snapshot.visualScripting.canvas.links.size(), 0U);
-        ASSERT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds.size(), 115U);
-        ASSERT_EQ(snapshot.visualScripting.canvas.paletteDescriptors.size(), 115U);
+        ASSERT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds.size(), 130U);
+        ASSERT_EQ(snapshot.visualScripting.canvas.paletteDescriptors.size(), 130U);
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[0], "flow.sequence");
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[1], "flow.branch");
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[2], "flow.return");
@@ -658,6 +658,21 @@ TEST(EditorBridgeUVETest, SnapshotUVE_CopiesHierarchyInspectorAndNativePanelSess
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[112], "entity.get_entity");
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[113], "entity.add_component");
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[114], "entity.remove_component");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[115], "input.key_pressed");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[116], "input.key_released");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[117], "input.key_down");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[118], "input.mouse_position");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[119], "input.mouse_button");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[120], "input.gamepad_button");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[121], "input.get_axis");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[122], "input.get_action");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[123], "camera.get_camera");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[124], "camera.set_position");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[125], "camera.set_rotation");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[126], "camera.look_at");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[127], "camera.set_fov");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[128], "camera.shake");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[129], "camera.set_active");
         EXPECT_FALSE(snapshot.visualScripting.canvas.nodesTruncated);
         EXPECT_FALSE(snapshot.visualScripting.canvas.linksTruncated);
 

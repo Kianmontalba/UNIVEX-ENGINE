@@ -653,6 +653,182 @@ namespace {
     return {};
 }
 
+[[nodiscard]] bool TryGetIntegralNumberInputUVE(const ScriptVmExecutionContextUVE& context,
+                                                const std::uint32_t nodeId, const char* pinName,
+                                                const float maximum, std::uint32_t* outValue) {
+    const float* input = FindNumberInputUVE(context, nodeId, pinName);
+    if (input == nullptr || outValue == nullptr || !std::isfinite(*input) || *input < 0.0F ||
+        *input > maximum || std::floor(*input) != *input) {
+        return false;
+    }
+    *outValue = static_cast<std::uint32_t>(*input);
+    return true;
+}
+
+[[nodiscard]] bool IsFiniteVector2ValueUVE(const ScriptVector2ValueUVE& value) noexcept {
+    return std::isfinite(value.value.x) && std::isfinite(value.value.y);
+}
+
+[[nodiscard]] bool IsFiniteVector3ValueUVE(const ScriptVector3ValueUVE& value) noexcept {
+    return std::isfinite(value.value.x) && std::isfinite(value.value.y) && std::isfinite(value.value.z);
+}
+
+[[nodiscard]] ScriptVmExecutionResultUVE ExecuteInputNodeUVE(
+    const ScriptIrInstructionUVE& instruction, const std::size_t instructionIndex,
+    ScriptVmExecutionContextUVE& context, const ScriptEngineCallBindingsUVE* bindings) {
+    if (bindings == nullptr) {
+        return MakeNodeFailureUVE(instructionIndex, "Input node requires caller-owned input bindings.");
+    }
+    const std::uint32_t nodeId = instruction.sourceNodeId;
+    if (instruction.nodeTypeId == "input.key_pressed" || instruction.nodeTypeId == "input.key_released" ||
+        instruction.nodeTypeId == "input.key_down") {
+        std::uint32_t keyToken = 0U;
+        if (!TryGetIntegralNumberInputUVE(context, nodeId, "Key", 1024.0F, &keyToken)) {
+            return MakeNodeFailureUVE(instructionIndex, "Keyboard input requires a bounded integral Key token.");
+        }
+        const ScriptInputKeyQueryFunctionUVE query = instruction.nodeTypeId == "input.key_pressed"
+            ? bindings->inputKeyPressed
+            : instruction.nodeTypeId == "input.key_released" ? bindings->inputKeyReleased : bindings->inputKeyDown;
+        if (query == nullptr) {
+            return MakeNodeFailureUVE(instructionIndex, "Keyboard input requires its caller-owned query binding.");
+        }
+        bool result = false;
+        if (!query(bindings->userData, static_cast<float>(keyToken), &result) ||
+            !SetNodeOutputUVE(context, nodeId, "Result", result)) {
+            return MakeNodeFailureUVE(instructionIndex, "Keyboard input callback rejected the query or output capacity.");
+        }
+        return {};
+    }
+    if (instruction.nodeTypeId == "input.mouse_position") {
+        if (bindings->inputMousePosition == nullptr) {
+            return MakeNodeFailureUVE(instructionIndex, "Mouse position requires a caller-owned query binding.");
+        }
+        ScriptVector2ValueUVE position{};
+        if (!bindings->inputMousePosition(bindings->userData, &position) || !IsFiniteVector2ValueUVE(position) ||
+            !SetNodeOutputUVE(context, nodeId, "Position", position)) {
+            return MakeNodeFailureUVE(instructionIndex, "Mouse position callback rejected its finite output or capacity.");
+        }
+        return {};
+    }
+    if (instruction.nodeTypeId == "input.mouse_button") {
+        std::uint32_t buttonToken = 0U;
+        if (!TryGetIntegralNumberInputUVE(context, nodeId, "Button", 64.0F, &buttonToken) ||
+            bindings->inputMouseButton == nullptr) {
+            return MakeNodeFailureUVE(instructionIndex, "Mouse button requires a bounded Button token and binding.");
+        }
+        bool result = false;
+        if (!bindings->inputMouseButton(bindings->userData, static_cast<float>(buttonToken), &result) ||
+            !SetNodeOutputUVE(context, nodeId, "Result", result)) {
+            return MakeNodeFailureUVE(instructionIndex, "Mouse button callback rejected the query or output capacity.");
+        }
+        return {};
+    }
+    if (instruction.nodeTypeId == "input.gamepad_button") {
+        std::uint32_t gamepadToken = 0U;
+        std::uint32_t buttonToken = 0U;
+        if (!TryGetIntegralNumberInputUVE(context, nodeId, "Gamepad", 3.0F, &gamepadToken) ||
+            !TryGetIntegralNumberInputUVE(context, nodeId, "Button", 15.0F, &buttonToken) ||
+            bindings->inputGamepadButton == nullptr) {
+            return MakeNodeFailureUVE(instructionIndex, "Gamepad button requires bounded Gamepad/Button tokens and binding.");
+        }
+        bool result = false;
+        if (!bindings->inputGamepadButton(bindings->userData, static_cast<float>(gamepadToken),
+                                          static_cast<float>(buttonToken), &result) ||
+            !SetNodeOutputUVE(context, nodeId, "Result", result)) {
+            return MakeNodeFailureUVE(instructionIndex, "Gamepad button callback rejected the query or output capacity.");
+        }
+        return {};
+    }
+    if (instruction.nodeTypeId == "input.get_axis") {
+        std::uint32_t gamepadToken = 0U;
+        std::uint32_t axisToken = 0U;
+        if (!TryGetIntegralNumberInputUVE(context, nodeId, "Gamepad", 3.0F, &gamepadToken) ||
+            !TryGetIntegralNumberInputUVE(context, nodeId, "Axis", 5.0F, &axisToken) ||
+            bindings->inputAxis == nullptr) {
+            return MakeNodeFailureUVE(instructionIndex, "Gamepad axis requires bounded Gamepad/Axis tokens and binding.");
+        }
+        float result = 0.0F;
+        if (!bindings->inputAxis(bindings->userData, static_cast<float>(gamepadToken), static_cast<float>(axisToken), &result) ||
+            !std::isfinite(result) || result < -1.0F || result > 1.0F ||
+            !SetNodeOutputUVE(context, nodeId, "Result", result)) {
+            return MakeNodeFailureUVE(instructionIndex, "Gamepad axis callback must return a finite normalized value and capacity.");
+        }
+        return {};
+    }
+    if (instruction.nodeTypeId == "input.get_action") {
+        std::uint32_t actionToken = 0U;
+        if (!TryGetIntegralNumberInputUVE(context, nodeId, "Action", 65535.0F, &actionToken) ||
+            bindings->inputAction == nullptr) {
+            return MakeNodeFailureUVE(instructionIndex, "Input action requires a bounded integral Action token and binding.");
+        }
+        bool result = false;
+        if (!bindings->inputAction(bindings->userData, static_cast<float>(actionToken), &result) ||
+            !SetNodeOutputUVE(context, nodeId, "Result", result)) {
+            return MakeNodeFailureUVE(instructionIndex, "Input action callback rejected the query or output capacity.");
+        }
+        return {};
+    }
+    return MakeNodeFailureUVE(instructionIndex, "Unknown Input node type.");
+}
+
+[[nodiscard]] ScriptVmExecutionResultUVE ExecuteCameraNodeUVE(
+    const ScriptIrInstructionUVE& instruction, const std::size_t instructionIndex,
+    ScriptVmExecutionContextUVE& context, const ScriptEngineCallBindingsUVE* bindings) {
+    if (bindings == nullptr) {
+        return MakeNodeFailureUVE(instructionIndex, "Camera node requires caller-owned camera bindings.");
+    }
+    const std::uint32_t nodeId = instruction.sourceNodeId;
+    if (instruction.nodeTypeId == "camera.get_camera") {
+        if (bindings->cameraGet == nullptr) {
+            return MakeNodeFailureUVE(instructionIndex, "Get Camera requires a caller-owned camera binding.");
+        }
+        Scene::EntityUVE camera = Scene::kInvalidEntityUVE;
+        if (!bindings->cameraGet(bindings->userData, &camera) || camera == Scene::kInvalidEntityUVE ||
+            !SetNodeOutputUVE(context, nodeId, "Result", ScriptEntityValueUVE{camera})) {
+            return MakeNodeFailureUVE(instructionIndex, "Get Camera rejected its callback or output capacity.");
+        }
+        return {};
+    }
+    const ScriptEntityValueUVE* camera = FindEntityInputUVE(context, nodeId, "Camera");
+    if (camera == nullptr || !camera->IsValidUVE()) {
+        return MakeNodeFailureUVE(instructionIndex, "Camera control requires a valid Camera entity input.");
+    }
+    bool accepted = false;
+    if (instruction.nodeTypeId == "camera.set_position") {
+        const ScriptVector3ValueUVE* position = FindVector3InputUVE(context, nodeId, "Position");
+        accepted = position != nullptr && IsFiniteVector3ValueUVE(*position) && bindings->cameraSetPosition != nullptr &&
+                   bindings->cameraSetPosition(bindings->userData, camera->entity, *position);
+    } else if (instruction.nodeTypeId == "camera.set_rotation") {
+        const ScriptRotationValueUVE* rotation = FindRotationInputUVE(context, nodeId, "Rotation");
+        accepted = rotation != nullptr && Math::IsFiniteUVE(rotation->value) && bindings->cameraSetRotation != nullptr &&
+                   bindings->cameraSetRotation(bindings->userData, camera->entity, *rotation);
+    } else if (instruction.nodeTypeId == "camera.look_at") {
+        const ScriptVector3ValueUVE* target = FindVector3InputUVE(context, nodeId, "Target");
+        accepted = target != nullptr && IsFiniteVector3ValueUVE(*target) && bindings->cameraLookAt != nullptr &&
+                   bindings->cameraLookAt(bindings->userData, camera->entity, *target);
+    } else if (instruction.nodeTypeId == "camera.set_fov") {
+        const float* fov = FindNumberInputUVE(context, nodeId, "FOV");
+        accepted = fov != nullptr && std::isfinite(*fov) && *fov > 0.0F && *fov < 180.0F &&
+                   bindings->cameraSetFov != nullptr && bindings->cameraSetFov(bindings->userData, camera->entity, *fov);
+    } else if (instruction.nodeTypeId == "camera.shake") {
+        const float* amplitude = FindNumberInputUVE(context, nodeId, "Amplitude");
+        const float* duration = FindNumberInputUVE(context, nodeId, "Duration");
+        accepted = amplitude != nullptr && duration != nullptr && std::isfinite(*amplitude) && std::isfinite(*duration) &&
+                   *amplitude >= 0.0F && *duration >= 0.0F && bindings->cameraShake != nullptr &&
+                   bindings->cameraShake(bindings->userData, camera->entity, *amplitude, *duration);
+    } else if (instruction.nodeTypeId == "camera.set_active") {
+        const bool* active = FindBooleanInputUVE(context, nodeId, "Active");
+        accepted = active != nullptr && bindings->cameraSetActive != nullptr &&
+                   bindings->cameraSetActive(bindings->userData, camera->entity, *active);
+    } else {
+        return MakeNodeFailureUVE(instructionIndex, "Unknown Camera node type.");
+    }
+    if (!accepted || !SetNodeOutputUVE(context, nodeId, "Result", true)) {
+        return MakeNodeFailureUVE(instructionIndex, "Camera control rejected its copied inputs, callback, or output capacity.");
+    }
+    return {};
+}
+
 [[nodiscard]] ScriptVmExecutionResultUVE ExecuteEngineGetTimeNodeUVE(
     const ScriptIrInstructionUVE& instruction, const std::size_t instructionIndex,
     ScriptVmExecutionContextUVE& context, const ScriptEngineCallBindingsUVE* bindings) {
@@ -1284,6 +1460,65 @@ namespace {
     return false;
 }
 
+[[nodiscard]] bool HasRequiredInputNodeInputsUVE(
+    const ScriptIrInstructionUVE& instruction, const ScriptVmExecutionContextUVE& context) {
+    if (instruction.nodeTypeId == "input.mouse_position") {
+        return true;
+    }
+    if (instruction.nodeTypeId == "input.key_pressed" || instruction.nodeTypeId == "input.key_released" ||
+        instruction.nodeTypeId == "input.key_down") {
+        return FindNumberInputUVE(context, instruction.sourceNodeId, "Key") != nullptr;
+    }
+    if (instruction.nodeTypeId == "input.mouse_button") {
+        return FindNumberInputUVE(context, instruction.sourceNodeId, "Button") != nullptr;
+    }
+    if (instruction.nodeTypeId == "input.gamepad_button") {
+        return FindNumberInputUVE(context, instruction.sourceNodeId, "Gamepad") != nullptr &&
+               FindNumberInputUVE(context, instruction.sourceNodeId, "Button") != nullptr;
+    }
+    if (instruction.nodeTypeId == "input.get_axis") {
+        return FindNumberInputUVE(context, instruction.sourceNodeId, "Gamepad") != nullptr &&
+               FindNumberInputUVE(context, instruction.sourceNodeId, "Axis") != nullptr;
+    }
+    if (instruction.nodeTypeId == "input.get_action") {
+        return FindNumberInputUVE(context, instruction.sourceNodeId, "Action") != nullptr;
+    }
+    return false;
+}
+
+[[nodiscard]] bool HasRequiredCameraNodeInputsUVE(
+    const ScriptIrInstructionUVE& instruction, const ScriptVmExecutionContextUVE& context) {
+    if (instruction.nodeTypeId == "camera.get_camera") {
+        return true;
+    }
+    if (instruction.nodeTypeId.rfind("camera.", 0U) != 0U) {
+        return false;
+    }
+    if (FindEntityInputUVE(context, instruction.sourceNodeId, "Camera") == nullptr) {
+        return false;
+    }
+    if (instruction.nodeTypeId == "camera.set_position") {
+        return FindVector3InputUVE(context, instruction.sourceNodeId, "Position") != nullptr;
+    }
+    if (instruction.nodeTypeId == "camera.set_rotation") {
+        return FindRotationInputUVE(context, instruction.sourceNodeId, "Rotation") != nullptr;
+    }
+    if (instruction.nodeTypeId == "camera.look_at") {
+        return FindVector3InputUVE(context, instruction.sourceNodeId, "Target") != nullptr;
+    }
+    if (instruction.nodeTypeId == "camera.set_fov") {
+        return FindNumberInputUVE(context, instruction.sourceNodeId, "FOV") != nullptr;
+    }
+    if (instruction.nodeTypeId == "camera.shake") {
+        return FindNumberInputUVE(context, instruction.sourceNodeId, "Amplitude") != nullptr &&
+               FindNumberInputUVE(context, instruction.sourceNodeId, "Duration") != nullptr;
+    }
+    if (instruction.nodeTypeId == "camera.set_active") {
+        return FindBooleanInputUVE(context, instruction.sourceNodeId, "Active") != nullptr;
+    }
+    return false;
+}
+
 [[nodiscard]] bool HasRequiredRotationInputsUVE(const ScriptIrInstructionUVE& instruction,
                                                    const ScriptVmExecutionContextUVE& context) {
     const std::uint32_t nodeId = instruction.sourceNodeId;
@@ -1688,6 +1923,8 @@ namespace {
         const bool isBooleanNode = instruction.nodeTypeId.rfind("logic.boolean.", 0U) == 0U;
         const bool isEntityQueryNode = instruction.nodeTypeId.rfind("query.entity.", 0U) == 0U;
         const bool isEntityNode = instruction.nodeTypeId.rfind("entity.", 0U) == 0U;
+        const bool isInputNode = instruction.nodeTypeId.rfind("input.", 0U) == 0U;
+        const bool isCameraNode = instruction.nodeTypeId.rfind("camera.", 0U) == 0U;
         const bool isEngineLogNode = instruction.nodeTypeId == "engine.log";
         const bool isEngineGetTimeNode = instruction.nodeTypeId == "engine.get_time";
         if ((isVariableNode && !HasRequiredVariableInputsUVE(instruction, context)) ||
@@ -1700,6 +1937,8 @@ namespace {
             (isBooleanNode && !HasRequiredBooleanInputsUVE(instruction, context)) ||
             (isEntityQueryNode && !HasRequiredEntityQueryInputsUVE(instruction, context)) ||
             (isEntityNode && !HasRequiredEntityNodeInputsUVE(instruction, context)) ||
+            (isInputNode && !HasRequiredInputNodeInputsUVE(instruction, context)) ||
+            (isCameraNode && !HasRequiredCameraNodeInputsUVE(instruction, context)) ||
             (isEngineLogNode && FindNumberInputUVE(context, instruction.sourceNodeId, "Value") == nullptr)) {
             ScriptVmExecutionResultUVE failure = MakeNodeFailureUVE(
                 instructionIndex, "Control-flow execution could not resolve typed node inputs.");
@@ -1728,6 +1967,10 @@ namespace {
             nodeResult = ExecuteEntityQueryNodeUVE(instruction, instructionIndex, context);
         } else if (isEntityNode) {
             nodeResult = ExecuteEntityNodeUVE(instruction, instructionIndex, context, options.engineCallBindings);
+        } else if (isInputNode) {
+            nodeResult = ExecuteInputNodeUVE(instruction, instructionIndex, context, options.engineCallBindings);
+        } else if (isCameraNode) {
+            nodeResult = ExecuteCameraNodeUVE(instruction, instructionIndex, context, options.engineCallBindings);
         } else if (isEngineLogNode) {
             nodeResult = ExecuteEngineLogNodeUVE(instruction, instructionIndex, context, options.engineCallBindings);
         } else if (isEngineGetTimeNode) {
@@ -1968,6 +2211,8 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                 const bool isBooleanNode = instruction.nodeTypeId.rfind("logic.boolean.", 0U) == 0U;
                 const bool isEntityQueryNode = instruction.nodeTypeId.rfind("query.entity.", 0U) == 0U;
                 const bool isEntityNode = instruction.nodeTypeId.rfind("entity.", 0U) == 0U;
+                const bool isInputNode = instruction.nodeTypeId.rfind("input.", 0U) == 0U;
+                const bool isCameraNode = instruction.nodeTypeId.rfind("camera.", 0U) == 0U;
                 const bool isEngineLogNode = instruction.nodeTypeId == "engine.log";
                 const bool isEngineGetTimeNode = instruction.nodeTypeId == "engine.get_time";
                 if ((isVariableNode && !HasRequiredVariableInputsUVE(instruction, *context)) ||
@@ -1980,6 +2225,8 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                     (isBooleanNode && !HasRequiredBooleanInputsUVE(instruction, *context)) ||
                     (isEntityQueryNode && !HasRequiredEntityQueryInputsUVE(instruction, *context)) ||
                     (isEntityNode && !HasRequiredEntityNodeInputsUVE(instruction, *context)) ||
+                    (isInputNode && !HasRequiredInputNodeInputsUVE(instruction, *context)) ||
+                    (isCameraNode && !HasRequiredCameraNodeInputsUVE(instruction, *context)) ||
                     (isEngineLogNode && FindNumberInputUVE(*context, instruction.sourceNodeId, "Value") == nullptr)) {
                     continue;
                 }
@@ -2012,6 +2259,10 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                     nodeResult = ExecuteEntityQueryNodeUVE(instruction, index, *context);
                 } else if (isEntityNode) {
                     nodeResult = ExecuteEntityNodeUVE(instruction, index, *context, options.engineCallBindings);
+                } else if (isInputNode) {
+                    nodeResult = ExecuteInputNodeUVE(instruction, index, *context, options.engineCallBindings);
+                } else if (isCameraNode) {
+                    nodeResult = ExecuteCameraNodeUVE(instruction, index, *context, options.engineCallBindings);
                 } else if (isEngineLogNode) {
                     nodeResult = ExecuteEngineLogNodeUVE(instruction, index, *context, options.engineCallBindings);
                 } else if (isEngineGetTimeNode) {

@@ -108,6 +108,18 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
                    !IsExecutionLinkUVE(dependency, nodes, registry);
         }) != links.end();
     };
+    const auto isInputBooleanProducer = [](const ScriptNodeUVE& sourceNode, const ScriptLinkUVE& link) {
+        return (sourceNode.typeId == "input.key_pressed" || sourceNode.typeId == "input.key_released" ||
+                sourceNode.typeId == "input.key_down" || sourceNode.typeId == "input.mouse_button" ||
+                sourceNode.typeId == "input.gamepad_button" || sourceNode.typeId == "input.get_action") &&
+               link.output.pinName == "Result";
+    };
+    const auto isInputNumberProducer = [](const ScriptNodeUVE& sourceNode, const ScriptLinkUVE& link) {
+        return sourceNode.typeId == "input.get_axis" && link.output.pinName == "Result";
+    };
+    const auto isInputVector2Producer = [](const ScriptNodeUVE& sourceNode, const ScriptLinkUVE& link) {
+        return sourceNode.typeId == "input.mouse_position" && link.output.pinName == "Position";
+    };
 
     std::size_t sequenceNodeCount = 0U;
     std::size_t branchNodeCount = 0U;
@@ -117,6 +129,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
     std::optional<ScriptLinkUVE> branchConditionDependencyLink;
     std::vector<ScriptLinkUVE> stagedConditionLinks;
     std::vector<ScriptLinkUVE> stagedComponentLinks;
+    std::vector<ScriptLinkUVE> stagedEntityLinks;
     std::vector<ScriptLinkUVE> stagedBooleanLinks;
     std::vector<ScriptLinkUVE> stagedNumberLinks;
     std::vector<ScriptLinkUVE> stagedComparisonNumberLinks;
@@ -256,6 +269,46 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
         }
         const ScriptNodeUVE* sourceNode = FindNodeUVE(nodes, link.output.nodeId);
         const ScriptNodeUVE* consumerNode = FindNodeUVE(nodes, link.input.nodeId);
+        const bool isEntityConsumer = consumerNode != nullptr &&
+            (consumerNode->typeId == "query.entity.has_component" || consumerNode->typeId == "query.entity.get_component" ||
+             consumerNode->typeId == "entity.destroy" || consumerNode->typeId == "entity.add_component" ||
+             consumerNode->typeId == "entity.remove_component" || consumerNode->typeId == "camera.set_position" ||
+             consumerNode->typeId == "camera.set_rotation" || consumerNode->typeId == "camera.look_at" ||
+             consumerNode->typeId == "camera.set_fov" || consumerNode->typeId == "camera.shake" ||
+             consumerNode->typeId == "camera.set_active");
+        const bool approvedEntityProducer = sourceNode != nullptr &&
+            (sourceNode->typeId == "entity.spawn" || sourceNode->typeId == "camera.get_camera") &&
+            link.output.pinName == "Result";
+        if (sourceNode == nullptr || !isEntityConsumer || !approvedEntityProducer) {
+            continue;
+        }
+        const ScriptNodeTypeDescriptorUVE* sourceDescriptor = registry.FindNodeTypeUVE(sourceNode->typeId);
+        const ScriptNodeTypeDescriptorUVE* consumerDescriptor = registry.FindNodeTypeUVE(consumerNode->typeId);
+        const ScriptPinDescriptorUVE* sourcePin = sourceDescriptor == nullptr ? nullptr : FindPinUVE(*sourceDescriptor, link.output.pinName);
+        const ScriptPinDescriptorUVE* consumerPin = consumerDescriptor == nullptr ? nullptr : FindPinUVE(*consumerDescriptor, link.input.pinName);
+        const bool validEntityType = sourcePin != nullptr && consumerPin != nullptr &&
+            sourcePin->direction == ScriptPinDirectionUVE::Output && consumerPin->direction == ScriptPinDirectionUVE::Input &&
+            sourcePin->role == ScriptPinRoleUVE::Data && consumerPin->role == ScriptPinRoleUVE::Data &&
+            sourcePin->type == ScriptValueTypeUVE::Entity && consumerPin->type == ScriptValueTypeUVE::Entity;
+        const bool hasProducerDependency = std::find_if(
+            links.begin(), links.end(), [&](const ScriptLinkUVE& dependency) {
+                return dependency.input.nodeId == sourceNode->id &&
+                       !IsExecutionLinkUVE(dependency, nodes, registry);
+            }) != links.end();
+        if (!validEntityType || !approvedEntityProducer || hasProducerDependency || !stagedEntityLinks.empty()) {
+            result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode, link.input.nodeId,
+                                          link.input.pinName,
+                                          "Entity staging supports one direct entity.spawn or camera.get_camera Result producer; composed dependencies and additional Entity consumers remain deferred."});
+            continue;
+        }
+        stagedEntityLinks.push_back(link);
+    }
+    for (const ScriptLinkUVE& link : links) {
+        if (IsExecutionLinkUVE(link, nodes, registry)) {
+            continue;
+        }
+        const ScriptNodeUVE* sourceNode = FindNodeUVE(nodes, link.output.nodeId);
+        const ScriptNodeUVE* consumerNode = FindNodeUVE(nodes, link.input.nodeId);
         const bool isNumberComparisonConsumer =
             consumerNode != nullptr &&
             (consumerNode->typeId == "logic.boolean.equal" || consumerNode->typeId == "logic.boolean.not_equal" ||
@@ -276,7 +329,8 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             (sourceNode->typeId.rfind("logic.boolean.", 0U) == 0U ||
              sourceNode->typeId == "query.entity.has_component" ||
              sourceNode->typeId == "variable.get_boolean" ||
-             sourceNode->typeId == "convert.number_to_boolean") &&
+             sourceNode->typeId == "convert.number_to_boolean" ||
+             isInputBooleanProducer(*sourceNode, link)) &&
             link.output.pinName == "Result";
         const bool validBooleanInput =
             (consumerNode->typeId == "logic.boolean.not" && link.input.pinName == "Value") ||
@@ -314,7 +368,8 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             (sourceNode->typeId == "math.rotation.degrees" && link.output.pinName == "Degrees") ||
             (sourceNode->typeId == "math.rotation.radians" && link.output.pinName == "Radians") ||
             (sourceNode->typeId == "variable.get_number" && link.output.pinName == "Result") ||
-            (sourceNode->typeId == "convert.boolean_to_number" && link.output.pinName == "Result");
+            (sourceNode->typeId == "convert.boolean_to_number" && link.output.pinName == "Result") ||
+            isInputNumberProducer(*sourceNode, link);
         const bool validDirectNumberLink = approvedNumberProducer &&
                                            ((consumerNode->typeId == "flow.switch" && link.input.pinName == "Value") ||
                                             ((consumerNode->typeId == "flow.loop" || consumerNode->typeId == "flow.for_loop") &&
@@ -355,7 +410,8 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             (sourceNode->typeId == "math.rotation.degrees" && link.output.pinName == "Degrees") ||
             (sourceNode->typeId == "math.rotation.radians" && link.output.pinName == "Radians") ||
             (sourceNode->typeId == "variable.get_number" && link.output.pinName == "Result") ||
-            (sourceNode->typeId == "convert.boolean_to_number" && link.output.pinName == "Result");
+            (sourceNode->typeId == "convert.boolean_to_number" && link.output.pinName == "Result") ||
+            isInputNumberProducer(*sourceNode, link);
         const bool validComparisonInput = link.input.pinName == "A" || link.input.pinName == "B";
         const bool sameComparisonConsumer = std::any_of(
             stagedComparisonNumberLinks.begin(), stagedComparisonNumberLinks.end(),
@@ -398,7 +454,8 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             (sourceNode->typeId == "math.rotation.degrees" && link.output.pinName == "Degrees") ||
             (sourceNode->typeId == "math.rotation.radians" && link.output.pinName == "Radians") ||
             (sourceNode->typeId == "variable.get_number" && link.output.pinName == "Result") ||
-            (sourceNode->typeId == "convert.boolean_to_number" && link.output.pinName == "Result");
+            (sourceNode->typeId == "convert.boolean_to_number" && link.output.pinName == "Result") ||
+            isInputNumberProducer(*sourceNode, link);
         const bool hasProducerDependency = std::find_if(
             links.begin(), links.end(), [&](const ScriptLinkUVE& dependency) {
                 return dependency.input.nodeId == sourceNode->id &&
@@ -428,7 +485,8 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             (sourceNode->typeId == "math.rotation.degrees" && link.output.pinName == "Degrees") ||
             (sourceNode->typeId == "math.rotation.radians" && link.output.pinName == "Radians") ||
             (sourceNode->typeId == "variable.get_number" && link.output.pinName == "Result") ||
-            (sourceNode->typeId == "convert.boolean_to_number" && link.output.pinName == "Result");
+            (sourceNode->typeId == "convert.boolean_to_number" && link.output.pinName == "Result") ||
+            isInputNumberProducer(*sourceNode, link);
         const bool hasProducerDependency = std::find_if(
             links.begin(), links.end(), [&](const ScriptLinkUVE& dependency) {
                 return dependency.input.nodeId == sourceNode->id &&
@@ -457,8 +515,10 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             sourceNode->typeId == "math.vector2.make" || sourceNode->typeId == "math.vector2.add" ||
             sourceNode->typeId == "math.vector2.subtract" || sourceNode->typeId == "math.vector2.multiply" ||
             sourceNode->typeId == "math.vector2.normalize" || sourceNode->typeId == "math.vector2.direction" ||
-            sourceNode->typeId == "math.vector2.lerp" || sourceNode->typeId == "convert.vector3_to_vector2";
-        const bool approvedOutput = link.output.pinName == "Vector" || link.output.pinName == "Result";
+            sourceNode->typeId == "math.vector2.lerp" || sourceNode->typeId == "convert.vector3_to_vector2" ||
+            isInputVector2Producer(*sourceNode, link);
+        const bool approvedOutput = link.output.pinName == "Vector" || link.output.pinName == "Result" ||
+                                     link.output.pinName == "Position";
         const bool approvedInput = link.input.pinName == "A" || link.input.pinName == "B" ||
                                    link.input.pinName == "Vector";
         if (!approvedProducer || conversionHasDataDependency(*sourceNode) || !approvedOutput || !approvedInput ||
@@ -720,6 +780,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
         }
     };
     moveStagedProducerBeforeConsumer(stagedComponentLinks);
+    moveStagedProducerBeforeConsumer(stagedEntityLinks);
     moveStagedProducerBeforeConsumer(stagedBooleanLinks);
     moveStagedProducerBeforeConsumer(stagedNumberLinks);
     moveStagedProducerBeforeConsumer(stagedComparisonNumberLinks);
@@ -751,7 +812,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             [&](const ScriptNodeUVE& node) { return flowExtraEntryCountUVE(node) == 2U; }));
     const std::size_t stagedInstructionCount = instructionNodes.size() + flowExtraInstructionCount +
                                                 stagedConditionLinks.size() + stagedComponentLinks.size() +
-                                                stagedBooleanLinks.size() + stagedNumberLinks.size() +
+                                                stagedEntityLinks.size() + stagedBooleanLinks.size() + stagedNumberLinks.size() +
                                                 stagedComparisonNumberLinks.size() + stagedVector2ScaleLinks.size() +
                                                 stagedVector2Links.size() + stagedVector3ScaleLinks.size() +
                                                 stagedVector3Links.size() + stagedRotationLinks.size() + stagedTransformLinks.size() +
@@ -773,6 +834,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
         };
         countStagedBefore(stagedConditionLinks);
         countStagedBefore(stagedComponentLinks);
+        countStagedBefore(stagedEntityLinks);
         countStagedBefore(stagedBooleanLinks);
         countStagedBefore(stagedNumberLinks);
         countStagedBefore(stagedComparisonNumberLinks);
@@ -948,6 +1010,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             };
             emitStagedLinks(stagedConditionLinks);
             emitStagedLinks(stagedComponentLinks);
+            emitStagedLinks(stagedEntityLinks);
             emitStagedLinks(stagedBooleanLinks);
             emitStagedLinks(stagedNumberLinks);
             emitStagedLinks(stagedComparisonNumberLinks);
@@ -972,7 +1035,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
                                 }) != stagedLinks.end();
         };
         if (isStagedLink(stagedConditionLinks) || isStagedLink(stagedComponentLinks) ||
-            isStagedLink(stagedBooleanLinks) || isStagedLink(stagedNumberLinks) ||
+            isStagedLink(stagedEntityLinks) || isStagedLink(stagedBooleanLinks) || isStagedLink(stagedNumberLinks) ||
             isStagedLink(stagedComparisonNumberLinks) || isStagedLink(stagedVector2ScaleLinks) ||
             isStagedLink(stagedVector2Links) || isStagedLink(stagedVector3ScaleLinks) ||
             isStagedLink(stagedVector3Links) || isStagedLink(stagedRotationLinks) ||
