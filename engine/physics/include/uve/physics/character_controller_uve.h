@@ -22,6 +22,14 @@ struct CharacterControllerInputUVE final {
     float maximumGroundSlopeDegrees = 45.0F;
     /// Opt-in maximum vertical step height for MoveWithToIUVE; zero preserves the no-step behavior.
     float maximumStepHeight = 0.0F;
+    /// Opt-in controller-driven push for non-kinematic positive-mass contact targets.
+    bool pushDynamicBodies = false;
+    /// Multiplier for the controller's contact displacement when deriving target push speed.
+    float dynamicBodyPushStrength = 1.0F;
+    /// Per-contact cap for pushed target normal speed, preventing unbounded velocity mutation.
+    float maximumDynamicBodyPushSpeed = 5.0F;
+    /// Fixed-step duration used to derive target push speed from controller displacement.
+    float dynamicBodyPushDeltaTimeSeconds = 1.0F / 60.0F;
 };
 
 enum class CharacterControllerMoveCodeUVE : std::uint8_t {
@@ -45,6 +53,8 @@ struct CharacterControllerMoveResultUVE final {
     bool contactsTruncated = false;
     bool toiUsed = false;
     bool stepUpUsed = false;
+    bool dynamicBodyPushClamped = false;
+    std::size_t pushedBodyCount = 0U;
     bool grounded = false;
     Math::Vector3UVE groundNormal{};
     float earliestImpactTime = 1.0F;
@@ -81,8 +91,9 @@ public:
     /// Opt-in bounded TOI-assisted movement. It scans the shared conservative world-AABB cache,
     /// advances to the earliest swept-AABB impact, removes the contacted normal from remaining
     /// displacement, and repeats for a capped number of iterations. It does not replace the
-    /// overlap resolver or claim backend-wide CCD, exact non-box narrow phases, or dynamic-body
-    /// continuous response.
+    /// overlap resolver or claim backend-wide CCD, exact non-box narrow phases, or backend-wide
+    /// dynamic-body continuous response. When enabled in the input, a bounded per-contact target
+    /// velocity push is applied to validated non-kinematic positive-mass bodies.
     [[nodiscard]] static CharacterControllerMoveResultUVE MoveWithToIUVE(
         Scene::IEntityManagerUVE& entityManager, Scene::ISceneGraphUVE& sceneGraph,
         ICollisionSystemUVE& collisionSystem, const CharacterControllerInputUVE& input);
