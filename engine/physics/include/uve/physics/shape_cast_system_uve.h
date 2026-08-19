@@ -34,6 +34,25 @@ struct BoxCastQueryUVE final {
     Scene::EntityUVE ignoreEntity{};
 };
 
+struct CapsuleCastQueryUVE final {
+    Math::RayUVE ray{};
+    float radius = 0.0F;
+    float height = 0.0F;
+    float maxDistance = 0.0F;
+    std::uint32_t layerMask = 0xFFFFFFFFU;
+    Scene::EntityUVE ignoreEntity{};
+};
+
+struct CapsuleCastHitUVE final {
+    Scene::EntityUVE entity;
+    /// Center of the moving local-Y capsule at first entry into the conservative expanded AABB.
+    Math::Vector3UVE center;
+    /// Axis-aligned face normal of the expanded AABB; zero when the ray starts inside it.
+    Math::Vector3UVE normal;
+    float distance = 0.0F;
+    PhysicsMaterialUVE material;
+};
+
 struct BoxCastHitUVE final {
     Scene::EntityUVE entity;
     /// Center of the moving axis-aligned box at first entry into the conservative expanded AABB.
@@ -63,6 +82,11 @@ public:
     /// each target AABB; this is read-only and deliberately does not claim an oriented/exact box cast.
     [[nodiscard]] static std::optional<BoxCastHitUVE> BoxCastUVE(
         Scene::IEntityManagerUVE& entityManager, const BoxCastQueryUVE& query);
+
+    /// Conservative axis-aligned local-Y capsule cast. The mover capsule's broad-phase half-extents
+    /// expand each target AABB; this does not claim exact or rotated capsule geometry.
+    [[nodiscard]] static std::optional<CapsuleCastHitUVE> CapsuleCastUVE(
+        Scene::IEntityManagerUVE& entityManager, const CapsuleCastQueryUVE& query);
 };
 
 } // namespace UVE::Physics

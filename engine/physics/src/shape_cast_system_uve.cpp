@@ -64,6 +64,51 @@ std::optional<SphereCastHitUVE> ShapeCastSystemUVE::SphereCastUVE(
     return closestHit;
 }
 
+std::optional<CapsuleCastHitUVE> ShapeCastSystemUVE::CapsuleCastUVE(
+    Scene::IEntityManagerUVE& entityManager, const CapsuleCastQueryUVE& query) {
+    if (!IsValidBoxCastRayUVE(query.ray) || !std::isfinite(query.radius) || query.radius <= 0.0F ||
+        !std::isfinite(query.height) || query.height < 2.0F * query.radius ||
+        !std::isfinite(query.maxDistance) || query.maxDistance < 0.0F || query.layerMask == 0U) {
+        return std::nullopt;
+    }
+
+    const Math::Vector3UVE halfExtents{query.radius, query.height * 0.5F, query.radius};
+    if (!IsFiniteVectorUVE(halfExtents)) {
+        return std::nullopt;
+    }
+    const std::vector<Detail::ColliderWorldAabbUVE> colliders =
+        Detail::BuildColliderWorldAabbCacheUVE(entityManager);
+    std::optional<CapsuleCastHitUVE> closestHit;
+    for (const Detail::ColliderWorldAabbUVE& collider : colliders) {
+        if (collider.entity == query.ignoreEntity || (collider.collisionLayer & query.layerMask) == 0U) {
+            continue;
+        }
+        const Math::AabbUVE expandedAabb{
+            collider.worldAabb.min - halfExtents,
+            collider.worldAabb.max + halfExtents,
+        };
+        const std::optional<Math::RayHitUVE> hit =
+            Math::IntersectRayUVE(query.ray, expandedAabb, query.maxDistance);
+        if (!hit.has_value()) {
+            continue;
+        }
+        const bool closer = !closestHit.has_value() || hit->distance < closestHit->distance;
+        const bool tied = closestHit.has_value() && hit->distance == closestHit->distance &&
+                          collider.entity.index < closestHit->entity.index;
+        if (!closer && !tied) {
+            continue;
+        }
+        const Scene::ColliderComponentUVE& colliderComponent =
+            entityManager.GetComponentUVE<Scene::ColliderComponentUVE>(collider.entity);
+        closestHit = CapsuleCastHitUVE{collider.entity,
+                                       query.ray.origin + query.ray.direction * hit->distance,
+                                       hit->normal,
+                                       hit->distance,
+                                       MaterialOfUVE(colliderComponent)};
+    }
+    return closestHit;
+}
+
 std::optional<BoxCastHitUVE> ShapeCastSystemUVE::BoxCastUVE(
     Scene::IEntityManagerUVE& entityManager, const BoxCastQueryUVE& query) {
     if (!IsValidBoxCastRayUVE(query.ray) || !IsFiniteVectorUVE(query.halfExtents) ||
