@@ -17,7 +17,7 @@ struct BuiltInNodeDefinitionUVE final {
     std::uint32_t displayOrder;
 };
 
-[[nodiscard]] std::array<BuiltInNodeDefinitionUVE, 150U> MakeBuiltInDefinitionsUVE() {
+[[nodiscard]] std::array<BuiltInNodeDefinitionUVE, 161U> MakeBuiltInDefinitionsUVE() {
     return {
         BuiltInNodeDefinitionUVE{
             "flow.sequence", "Sequence",
@@ -905,13 +905,107 @@ struct BuiltInNodeDefinitionUVE final {
              ScriptPinDescriptorUVE{"Weight", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
              ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
             "Motion Query", "node.motion_query", 1039U},
+        BuiltInNodeDefinitionUVE{
+            "physics.raycast", "Raycast",
+            {ScriptPinDescriptorUVE{"Origin", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Direction", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Max Distance", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Layer Mask", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Ignore", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
+             ScriptPinDescriptorUVE{"Hit", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean},
+             ScriptPinDescriptorUVE{"Entity", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Entity},
+             ScriptPinDescriptorUVE{"Point", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Normal", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Distance", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Number}},
+            "Physics", "node.physics", 1040U},
+        BuiltInNodeDefinitionUVE{
+            "physics.sphere_cast", "Sphere Cast",
+            {ScriptPinDescriptorUVE{"Origin", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Direction", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Radius", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Max Distance", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Layer Mask", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Ignore", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
+             ScriptPinDescriptorUVE{"Hit", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean},
+             ScriptPinDescriptorUVE{"Entity", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Entity},
+             ScriptPinDescriptorUVE{"Point", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Distance", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Number}},
+            "Physics", "node.physics", 1041U},
+        BuiltInNodeDefinitionUVE{
+            "physics.box_cast", "Box Cast",
+            {ScriptPinDescriptorUVE{"Origin", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Half Extents", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Direction", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Max Distance", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Layer Mask", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Ignore", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
+             ScriptPinDescriptorUVE{"Hit", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean},
+             ScriptPinDescriptorUVE{"Entity", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Entity},
+             ScriptPinDescriptorUVE{"Point", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Distance", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Number}},
+            "Physics", "node.physics", 1042U},
+        BuiltInNodeDefinitionUVE{
+            "physics.capsule_cast", "Capsule Cast",
+            {ScriptPinDescriptorUVE{"Origin", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Direction", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Radius", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Half Height", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Max Distance", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Layer Mask", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Ignore", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
+             ScriptPinDescriptorUVE{"Hit", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean},
+             ScriptPinDescriptorUVE{"Entity", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Entity},
+             ScriptPinDescriptorUVE{"Point", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Distance", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Number}},
+            "Physics", "node.physics", 1043U},
+        BuiltInNodeDefinitionUVE{
+            "physics.overlap", "Overlap",
+            {ScriptPinDescriptorUVE{"Origin", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Half Extents", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Layer Mask", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Count", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Number}},
+            "Physics", "node.physics", 1044U},
+        BuiltInNodeDefinitionUVE{
+            "physics.apply_force", "Apply Force",
+            {ScriptPinDescriptorUVE{"Body", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
+             ScriptPinDescriptorUVE{"Force", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Physics", "node.physics", 1045U},
+        BuiltInNodeDefinitionUVE{
+            "physics.apply_impulse", "Apply Impulse",
+            {ScriptPinDescriptorUVE{"Body", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
+             ScriptPinDescriptorUVE{"Impulse", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Physics", "node.physics", 1046U},
+        BuiltInNodeDefinitionUVE{
+            "physics.set_velocity", "Set Velocity",
+            {ScriptPinDescriptorUVE{"Body", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
+             ScriptPinDescriptorUVE{"Velocity", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Physics", "node.physics", 1047U},
+        BuiltInNodeDefinitionUVE{
+            "physics.get_velocity", "Get Velocity",
+            {ScriptPinDescriptorUVE{"Body", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
+             ScriptPinDescriptorUVE{"Velocity", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Vector3}},
+            "Physics", "node.physics", 1048U},
+        BuiltInNodeDefinitionUVE{
+            "physics.enable_gravity", "Enable Gravity",
+            {ScriptPinDescriptorUVE{"Body", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
+             ScriptPinDescriptorUVE{"Enabled", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Boolean},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Physics", "node.physics", 1049U},
+        BuiltInNodeDefinitionUVE{
+            "physics.is_colliding", "Is Colliding",
+            {ScriptPinDescriptorUVE{"Body", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Physics", "node.physics", 1050U},
     };
 }
 
 } // namespace
 
 bool RegisterBuiltInScriptNodesUVE(ScriptNodeRegistryUVE& registry) {
-    std::array<BuiltInNodeDefinitionUVE, 150U> definitions = MakeBuiltInDefinitionsUVE();
+    std::array<BuiltInNodeDefinitionUVE, 161U> definitions = MakeBuiltInDefinitionsUVE();
     for (const BuiltInNodeDefinitionUVE& definition : definitions) {
         if (registry.FindNodeTypeUVE(definition.typeId) != nullptr) {
             return false;

@@ -248,6 +248,36 @@ using ScriptMotionQueryTransitionFunctionUVE = bool (*) (
 using ScriptMotionQueryWarpFunctionUVE = bool (*) (
     void* userData, Scene::EntityUVE actor, const ScriptVector3ValueUVE& target, float weight,
     bool* outResult) noexcept;
+using ScriptPhysicsRaycastFunctionUVE = bool (*) (
+    void* userData, const ScriptVector3ValueUVE& origin, const ScriptVector3ValueUVE& direction,
+    float maxDistance, std::uint32_t layerMask, Scene::EntityUVE ignoreEntity, bool* outHit,
+    Scene::EntityUVE* outEntity, ScriptVector3ValueUVE* outPoint, ScriptVector3ValueUVE* outNormal,
+    float* outDistance) noexcept;
+using ScriptPhysicsSphereCastFunctionUVE = bool (*) (
+    void* userData, const ScriptVector3ValueUVE& origin, const ScriptVector3ValueUVE& direction,
+    float radius, float maxDistance, std::uint32_t layerMask, Scene::EntityUVE ignoreEntity, bool* outHit,
+    Scene::EntityUVE* outEntity, ScriptVector3ValueUVE* outPoint, float* outDistance) noexcept;
+using ScriptPhysicsBoxCastFunctionUVE = bool (*) (
+    void* userData, const ScriptVector3ValueUVE& origin, const ScriptVector3ValueUVE& halfExtents,
+    const ScriptVector3ValueUVE& direction, float maxDistance, std::uint32_t layerMask,
+    Scene::EntityUVE ignoreEntity, bool* outHit, Scene::EntityUVE* outEntity,
+    ScriptVector3ValueUVE* outPoint, float* outDistance) noexcept;
+using ScriptPhysicsCapsuleCastFunctionUVE = bool (*) (
+    void* userData, const ScriptVector3ValueUVE& origin, const ScriptVector3ValueUVE& direction,
+    float radius, float halfHeight, float maxDistance, std::uint32_t layerMask,
+    Scene::EntityUVE ignoreEntity, bool* outHit, Scene::EntityUVE* outEntity,
+    ScriptVector3ValueUVE* outPoint, float* outDistance) noexcept;
+using ScriptPhysicsOverlapFunctionUVE = bool (*) (
+    void* userData, const ScriptVector3ValueUVE& origin, const ScriptVector3ValueUVE& halfExtents,
+    std::uint32_t layerMask, std::uint32_t* outCount) noexcept;
+using ScriptPhysicsBodyVectorMutationFunctionUVE = bool (*) (
+    void* userData, Scene::EntityUVE body, const ScriptVector3ValueUVE& value, bool* outResult) noexcept;
+using ScriptPhysicsBodyVectorGetFunctionUVE = bool (*) (
+    void* userData, Scene::EntityUVE body, ScriptVector3ValueUVE* outValue) noexcept;
+using ScriptPhysicsGravityFunctionUVE = bool (*) (
+    void* userData, Scene::EntityUVE body, bool enabled, bool* outResult) noexcept;
+using ScriptPhysicsCollisionQueryFunctionUVE = bool (*) (
+    void* userData, Scene::EntityUVE body, bool* outResult) noexcept;
 
 struct ScriptEngineCallBindingsUVE final {
     ScriptEngineLogFunctionUVE log = nullptr;
@@ -294,6 +324,17 @@ struct ScriptEngineCallBindingsUVE final {
     ScriptMotionQueryYawFunctionUVE motionQuerySetYaw = nullptr;
     ScriptMotionQueryTransitionFunctionUVE motionQueryTransition = nullptr;
     ScriptMotionQueryWarpFunctionUVE motionQueryMotionWarp = nullptr;
+    ScriptPhysicsRaycastFunctionUVE physicsRaycast = nullptr;
+    ScriptPhysicsSphereCastFunctionUVE physicsSphereCast = nullptr;
+    ScriptPhysicsBoxCastFunctionUVE physicsBoxCast = nullptr;
+    ScriptPhysicsCapsuleCastFunctionUVE physicsCapsuleCast = nullptr;
+    ScriptPhysicsOverlapFunctionUVE physicsOverlap = nullptr;
+    ScriptPhysicsBodyVectorMutationFunctionUVE physicsApplyForce = nullptr;
+    ScriptPhysicsBodyVectorMutationFunctionUVE physicsApplyImpulse = nullptr;
+    ScriptPhysicsBodyVectorMutationFunctionUVE physicsSetVelocity = nullptr;
+    ScriptPhysicsBodyVectorGetFunctionUVE physicsGetVelocity = nullptr;
+    ScriptPhysicsGravityFunctionUVE physicsEnableGravity = nullptr;
+    ScriptPhysicsCollisionQueryFunctionUVE physicsIsColliding = nullptr;
 };
 
 struct ScriptVmExecutionOptionsUVE final {

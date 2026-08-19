@@ -200,10 +200,10 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
 
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
     EXPECT_FALSE(RegisterBuiltInScriptNodesUVE(registry));
-    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 150U);
+    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 161U);
 
     const std::vector<ScriptNodeTypeDescriptorUVE> descriptors = registry.GetNodeTypeDescriptorsUVE();
-    ASSERT_EQ(descriptors.size(), 150U);
+    ASSERT_EQ(descriptors.size(), 161U);
     const std::vector<std::string> expectedIds{
         "flow.sequence", "flow.branch", "flow.return", "flow.do_once", "flow.gate", "flow.switch",
         "flow.event", "flow.loop", "flow.for_loop", "flow.while_loop", "flow.delay",
@@ -243,7 +243,10 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
         "animation.set_speed", "animation.set_weight", "animation.montage", "animation.get_current_animation",
         "animation.is_playing", "motion.query.build", "motion.query.search", "motion.query.get_best_match",
         "motion.query.set_trajectory", "motion.query.set_pose", "motion.query.set_velocity", "motion.query.set_facing",
-        "motion.query.set_yaw", "motion.query.transition", "motion.query.motion_warp"};
+        "motion.query.set_yaw", "motion.query.transition", "motion.query.motion_warp",
+        "physics.raycast", "physics.sphere_cast", "physics.box_cast", "physics.capsule_cast", "physics.overlap",
+        "physics.apply_force", "physics.apply_impulse", "physics.set_velocity", "physics.get_velocity",
+        "physics.enable_gravity", "physics.is_colliding"};
     ASSERT_EQ(expectedIds.size(), descriptors.size());
     for (std::size_t index = 0U; index < expectedIds.size(); ++index) {
         EXPECT_EQ(descriptors[index].typeId, expectedIds[index]);
@@ -308,9 +311,13 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
         EXPECT_EQ(descriptors[index].category, "Animation");
         EXPECT_EQ(descriptors[index].iconId, "node.animation");
     }
-    for (std::size_t index = 140U; index < descriptors.size(); ++index) {
+    for (std::size_t index = 140U; index < 150U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Motion Query");
         EXPECT_EQ(descriptors[index].iconId, "node.motion_query");
+    }
+    for (std::size_t index = 150U; index < descriptors.size(); ++index) {
+        EXPECT_EQ(descriptors[index].category, "Physics");
+        EXPECT_EQ(descriptors[index].iconId, "node.physics");
     }
 
     const ScriptNodeTypeDescriptorUVE* lerp = registry.FindNodeTypeUVE("math.float.lerp");
@@ -580,6 +587,34 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
         EXPECT_EQ(motion->iconId, "node.motion_query");
         EXPECT_EQ(motion->pins.front().type, ScriptValueTypeUVE::Entity);
     }
+
+    const ScriptNodeTypeDescriptorUVE* physicsRaycast = registry.FindNodeTypeUVE("physics.raycast");
+    ASSERT_NE(physicsRaycast, nullptr);
+    ASSERT_EQ(physicsRaycast->pins.size(), 10U);
+    EXPECT_EQ(physicsRaycast->pins[0].type, ScriptValueTypeUVE::Vector3);
+    EXPECT_EQ(physicsRaycast->pins[4].type, ScriptValueTypeUVE::Entity);
+    EXPECT_EQ(physicsRaycast->pins[5].type, ScriptValueTypeUVE::Boolean);
+    EXPECT_EQ(physicsRaycast->pins[6].type, ScriptValueTypeUVE::Entity);
+    EXPECT_EQ(physicsRaycast->pins[8].type, ScriptValueTypeUVE::Vector3);
+    EXPECT_EQ(physicsRaycast->pins[9].type, ScriptValueTypeUVE::Number);
+    const ScriptNodeTypeDescriptorUVE* physicsOverlap = registry.FindNodeTypeUVE("physics.overlap");
+    ASSERT_NE(physicsOverlap, nullptr);
+    ASSERT_EQ(physicsOverlap->pins.size(), 4U);
+    EXPECT_EQ(physicsOverlap->pins[0].type, ScriptValueTypeUVE::Vector3);
+    EXPECT_EQ(physicsOverlap->pins[1].type, ScriptValueTypeUVE::Vector3);
+    EXPECT_EQ(physicsOverlap->pins[3].type, ScriptValueTypeUVE::Number);
+    const ScriptNodeTypeDescriptorUVE* physicsApplyForce = registry.FindNodeTypeUVE("physics.apply_force");
+    ASSERT_NE(physicsApplyForce, nullptr);
+    ASSERT_EQ(physicsApplyForce->pins.size(), 3U);
+    EXPECT_EQ(physicsApplyForce->pins[0].type, ScriptValueTypeUVE::Entity);
+    EXPECT_EQ(physicsApplyForce->pins[1].type, ScriptValueTypeUVE::Vector3);
+    EXPECT_EQ(physicsApplyForce->pins[2].type, ScriptValueTypeUVE::Boolean);
+    const ScriptNodeTypeDescriptorUVE* physicsGetVelocity = registry.FindNodeTypeUVE("physics.get_velocity");
+    ASSERT_NE(physicsGetVelocity, nullptr);
+    ASSERT_EQ(physicsGetVelocity->pins.size(), 2U);
+    EXPECT_EQ(physicsGetVelocity->pins[0].type, ScriptValueTypeUVE::Entity);
+    EXPECT_EQ(physicsGetVelocity->pins[1].direction, ScriptPinDirectionUVE::Output);
+    EXPECT_EQ(physicsGetVelocity->pins[1].type, ScriptValueTypeUVE::Vector3);
 
     const ScriptNodeTypeDescriptorUVE* engineLog = registry.FindNodeTypeUVE("engine.log");
     ASSERT_NE(engineLog, nullptr);
@@ -5741,6 +5776,268 @@ TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesEntityProducerBefo
     ASSERT_TRUE(motionGraph.AddNodeUVE({40U, "motion.query.search"}));
     ASSERT_TRUE(motionGraph.AddLinkUVE({{30U, "Result"}, {40U, "Actor"}}));
     expectStaged(CompileScriptGraphToIrUVE(motionGraph, registry), "motion.query.search", 30U, 40U);
+    ScriptGraphUVE physicsGraph;
+    ASSERT_TRUE(physicsGraph.AddNodeUVE({50U, "entity.spawn"}));
+    ASSERT_TRUE(physicsGraph.AddNodeUVE({60U, "physics.apply_force"}));
+    ASSERT_TRUE(physicsGraph.AddLinkUVE({{50U, "Result"}, {60U, "Body"}}));
+    expectStaged(CompileScriptGraphToIrUVE(physicsGraph, registry), "physics.apply_force", 50U, 60U);
+}
+
+} // namespace UVE::Scripting
+
+namespace UVE::Scripting {
+namespace {
+
+struct PhysicsCaptureUVE final {
+    Scene::EntityUVE body{9U, 1U};
+    std::size_t raycastCount = 0U;
+    std::size_t sphereCastCount = 0U;
+    std::size_t boxCastCount = 0U;
+    std::size_t capsuleCastCount = 0U;
+    std::size_t overlapCount = 0U;
+    std::size_t forceCount = 0U;
+    std::size_t impulseCount = 0U;
+    std::size_t setVelocityCount = 0U;
+    std::size_t getVelocityCount = 0U;
+    std::size_t gravityCount = 0U;
+    std::size_t collisionCount = 0U;
+};
+
+bool CapturePhysicsRaycastUVE(void* userData, const ScriptVector3ValueUVE& origin,
+                              const ScriptVector3ValueUVE& direction, float maxDistance, std::uint32_t layerMask,
+                              Scene::EntityUVE ignoreEntity, bool* outHit, Scene::EntityUVE* outEntity,
+                              ScriptVector3ValueUVE* outPoint, ScriptVector3ValueUVE* outNormal,
+                              float* outDistance) noexcept {
+    auto* capture = static_cast<PhysicsCaptureUVE*>(userData);
+    if (capture == nullptr || outHit == nullptr || outEntity == nullptr || outPoint == nullptr ||
+        outNormal == nullptr || outDistance == nullptr || !std::isfinite(origin.value.x) ||
+        !std::isfinite(direction.value.z) || !std::isfinite(maxDistance) || layerMask == 0U ||
+        ignoreEntity != Scene::kInvalidEntityUVE) return false;
+    ++capture->raycastCount;
+    *outHit = true;
+    *outEntity = capture->body;
+    *outPoint = ScriptVector3ValueUVE{{1.0F, 2.0F, 3.0F}};
+    *outNormal = ScriptVector3ValueUVE{{0.0F, 1.0F, 0.0F}};
+    *outDistance = 2.0F;
+    return true;
+}
+
+bool CapturePhysicsSphereCastUVE(void* userData, const ScriptVector3ValueUVE& origin,
+                                 const ScriptVector3ValueUVE& direction, float radius, float maxDistance,
+                                 std::uint32_t layerMask, Scene::EntityUVE ignoreEntity, bool* outHit,
+                                 Scene::EntityUVE* outEntity, ScriptVector3ValueUVE* outPoint,
+                                 float* outDistance) noexcept {
+    auto* capture = static_cast<PhysicsCaptureUVE*>(userData);
+    if (capture == nullptr || outHit == nullptr || outEntity == nullptr || outPoint == nullptr ||
+        outDistance == nullptr || !std::isfinite(origin.value.x) || !std::isfinite(direction.value.y) ||
+        !std::isfinite(radius) || !std::isfinite(maxDistance) || layerMask == 0U ||
+        ignoreEntity != Scene::kInvalidEntityUVE) return false;
+    ++capture->sphereCastCount;
+    *outHit = true;
+    *outEntity = capture->body;
+    *outPoint = ScriptVector3ValueUVE{{2.0F, 3.0F, 4.0F}};
+    *outDistance = 3.0F;
+    return true;
+}
+
+bool CapturePhysicsBoxCastUVE(void* userData, const ScriptVector3ValueUVE& origin,
+                              const ScriptVector3ValueUVE& halfExtents, const ScriptVector3ValueUVE& direction,
+                              float maxDistance, std::uint32_t layerMask, Scene::EntityUVE ignoreEntity,
+                              bool* outHit, Scene::EntityUVE* outEntity, ScriptVector3ValueUVE* outPoint,
+                              float* outDistance) noexcept {
+    auto* capture = static_cast<PhysicsCaptureUVE*>(userData);
+    if (capture == nullptr || outHit == nullptr || outEntity == nullptr || outPoint == nullptr ||
+        outDistance == nullptr || !std::isfinite(origin.value.x) || !std::isfinite(halfExtents.value.y) ||
+        !std::isfinite(direction.value.z) || !std::isfinite(maxDistance) || layerMask == 0U ||
+        ignoreEntity != Scene::kInvalidEntityUVE) return false;
+    ++capture->boxCastCount;
+    *outHit = true;
+    *outEntity = capture->body;
+    *outPoint = ScriptVector3ValueUVE{{3.0F, 4.0F, 5.0F}};
+    *outDistance = 4.0F;
+    return true;
+}
+
+bool CapturePhysicsCapsuleCastUVE(void* userData, const ScriptVector3ValueUVE& origin,
+                                  const ScriptVector3ValueUVE& direction, float radius, float halfHeight,
+                                  float maxDistance, std::uint32_t layerMask, Scene::EntityUVE ignoreEntity,
+                                  bool* outHit, Scene::EntityUVE* outEntity, ScriptVector3ValueUVE* outPoint,
+                                  float* outDistance) noexcept {
+    auto* capture = static_cast<PhysicsCaptureUVE*>(userData);
+    if (capture == nullptr || outHit == nullptr || outEntity == nullptr || outPoint == nullptr ||
+        outDistance == nullptr || !std::isfinite(origin.value.z) || !std::isfinite(direction.value.x) ||
+        !std::isfinite(radius) || !std::isfinite(halfHeight) || !std::isfinite(maxDistance) || layerMask == 0U ||
+        ignoreEntity != Scene::kInvalidEntityUVE) return false;
+    ++capture->capsuleCastCount;
+    *outHit = true;
+    *outEntity = capture->body;
+    *outPoint = ScriptVector3ValueUVE{{4.0F, 5.0F, 6.0F}};
+    *outDistance = 5.0F;
+    return true;
+}
+
+bool CapturePhysicsOverlapUVE(void* userData, const ScriptVector3ValueUVE& origin,
+                              const ScriptVector3ValueUVE& halfExtents, std::uint32_t layerMask,
+                              std::uint32_t* outCount) noexcept {
+    auto* capture = static_cast<PhysicsCaptureUVE*>(userData);
+    if (capture == nullptr || outCount == nullptr || !std::isfinite(origin.value.x) ||
+        !std::isfinite(halfExtents.value.y) || layerMask == 0U) return false;
+    ++capture->overlapCount;
+    *outCount = 3U;
+    return true;
+}
+
+bool CapturePhysicsVectorMutationUVE(void* userData, Scene::EntityUVE body,
+                                     const ScriptVector3ValueUVE& value, bool* outResult) noexcept {
+    auto* capture = static_cast<PhysicsCaptureUVE*>(userData);
+    if (capture == nullptr || outResult == nullptr || body != capture->body ||
+        !std::isfinite(value.value.x) || !std::isfinite(value.value.y) || !std::isfinite(value.value.z)) return false;
+    *outResult = true;
+    return true;
+}
+
+bool CapturePhysicsGetVelocityUVE(void* userData, Scene::EntityUVE body,
+                                  ScriptVector3ValueUVE* outValue) noexcept {
+    auto* capture = static_cast<PhysicsCaptureUVE*>(userData);
+    if (capture == nullptr || outValue == nullptr || body != capture->body) return false;
+    ++capture->getVelocityCount;
+    *outValue = ScriptVector3ValueUVE{{6.0F, 7.0F, 8.0F}};
+    return true;
+}
+
+bool CapturePhysicsGravityUVE(void* userData, Scene::EntityUVE body, bool enabled, bool* outResult) noexcept {
+    auto* capture = static_cast<PhysicsCaptureUVE*>(userData);
+    if (capture == nullptr || outResult == nullptr || body != capture->body || !enabled) return false;
+    ++capture->gravityCount;
+    *outResult = true;
+    return true;
+}
+
+bool CapturePhysicsCollisionUVE(void* userData, Scene::EntityUVE body, bool* outResult) noexcept {
+    auto* capture = static_cast<PhysicsCaptureUVE*>(userData);
+    if (capture == nullptr || outResult == nullptr || body != capture->body) return false;
+    ++capture->collisionCount;
+    *outResult = true;
+    return true;
+}
+
+ScriptEngineCallBindingsUVE MakePhysicsBindingsUVE(PhysicsCaptureUVE& capture) {
+    ScriptEngineCallBindingsUVE bindings{};
+    bindings.userData = &capture;
+    bindings.physicsRaycast = CapturePhysicsRaycastUVE;
+    bindings.physicsSphereCast = CapturePhysicsSphereCastUVE;
+    bindings.physicsBoxCast = CapturePhysicsBoxCastUVE;
+    bindings.physicsCapsuleCast = CapturePhysicsCapsuleCastUVE;
+    bindings.physicsOverlap = CapturePhysicsOverlapUVE;
+    bindings.physicsApplyForce = CapturePhysicsVectorMutationUVE;
+    bindings.physicsApplyImpulse = CapturePhysicsVectorMutationUVE;
+    bindings.physicsSetVelocity = CapturePhysicsVectorMutationUVE;
+    bindings.physicsGetVelocity = CapturePhysicsGetVelocityUVE;
+    bindings.physicsEnableGravity = CapturePhysicsGravityUVE;
+    bindings.physicsIsColliding = CapturePhysicsCollisionUVE;
+    return bindings;
+}
+
+bool SetPhysicsInputsUVE(ScriptVmExecutionContextUVE& context, const std::uint32_t nodeId,
+                        const std::size_t index) {
+    const ScriptVector3ValueUVE origin{{0.0F, 0.0F, 0.0F}};
+    const ScriptVector3ValueUVE direction{{0.0F, 0.0F, 1.0F}};
+    if (index <= 3U) {
+        if (!context.SetInputUVE(nodeId, "Origin", origin) || !context.SetInputUVE(nodeId, "Direction", direction) ||
+            !context.SetInputUVE(nodeId, "Max Distance", 10.0F) || !context.SetInputUVE(nodeId, "Layer Mask", 1.0F)) return false;
+        if (index == 1U) return context.SetInputUVE(nodeId, "Radius", 0.5F);
+        if (index == 2U) {
+            return context.SetInputUVE(nodeId, "Half Extents", ScriptVector3ValueUVE{{1.0F, 1.0F, 1.0F}});
+        }
+        if (index == 3U) {
+            return context.SetInputUVE(nodeId, "Radius", 0.5F) && context.SetInputUVE(nodeId, "Half Height", 1.0F);
+        }
+        return true;
+    }
+    if (index == 4U) {
+        return context.SetInputUVE(nodeId, "Origin", origin) &&
+               context.SetInputUVE(nodeId, "Half Extents", ScriptVector3ValueUVE{{1.0F, 1.0F, 1.0F}}) &&
+               context.SetInputUVE(nodeId, "Layer Mask", 1.0F);
+    }
+    if (index == 5U || index == 6U || index == 7U) {
+        const char* pinName = index == 5U ? "Force" : index == 6U ? "Impulse" : "Velocity";
+        return context.SetInputUVE(nodeId, "Body", ScriptEntityValueUVE{Scene::EntityUVE{9U, 1U}}) &&
+               context.SetInputUVE(nodeId, pinName, ScriptVector3ValueUVE{{1.0F, 2.0F, 3.0F}});
+    }
+    if (index == 8U || index == 10U) {
+        return context.SetInputUVE(nodeId, "Body", ScriptEntityValueUVE{Scene::EntityUVE{9U, 1U}});
+    }
+    return context.SetInputUVE(nodeId, "Body", ScriptEntityValueUVE{Scene::EntityUVE{9U, 1U}}) &&
+           (index == 9U ? context.SetInputUVE(nodeId, "Enabled", true) : true);
+}
+
+} // namespace
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_ExecutesPhysicsFamilyWithCopiedValues) {
+    const std::array<const char*, 11U> nodeTypes{
+        "physics.raycast", "physics.sphere_cast", "physics.box_cast", "physics.capsule_cast", "physics.overlap",
+        "physics.apply_force", "physics.apply_impulse", "physics.set_velocity", "physics.get_velocity",
+        "physics.enable_gravity", "physics.is_colliding"};
+    ScriptBytecodeProgramUVE program;
+    ScriptVmExecutionContextUVE context;
+    for (std::size_t index = 0U; index < nodeTypes.size(); ++index) {
+        const std::uint32_t nodeId = static_cast<std::uint32_t>(index + 1U);
+        program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, nodeId, 0U, nodeTypes[index], {}, {}});
+        ASSERT_TRUE(SetPhysicsInputsUVE(context, nodeId, index));
+    }
+    PhysicsCaptureUVE capture;
+    ScriptEngineCallBindingsUVE bindings = MakePhysicsBindingsUVE(capture);
+    ScriptVmExecutionOptionsUVE options;
+    options.engineCallBindings = &bindings;
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(program, context, options);
+    ASSERT_TRUE(result.IsSuccessUVE());
+    EXPECT_EQ(result.instructionsExecuted, 11U);
+    EXPECT_EQ(capture.raycastCount, 1U);
+    EXPECT_EQ(capture.sphereCastCount, 1U);
+    EXPECT_EQ(capture.boxCastCount, 1U);
+    EXPECT_EQ(capture.capsuleCastCount, 1U);
+    EXPECT_EQ(capture.overlapCount, 1U);
+    EXPECT_EQ(capture.getVelocityCount, 1U);
+    EXPECT_EQ(capture.gravityCount, 1U);
+    EXPECT_EQ(capture.collisionCount, 1U);
+    EXPECT_TRUE(std::get<bool>(*context.FindOutputUVE(1U, "Hit")));
+    EXPECT_EQ(std::get<ScriptEntityValueUVE>(*context.FindOutputUVE(1U, "Entity")).entity, capture.body);
+    EXPECT_FLOAT_EQ(std::get<float>(*context.FindOutputUVE(5U, "Count")), 3.0F);
+    EXPECT_EQ(std::get<ScriptVector3ValueUVE>(*context.FindOutputUVE(9U, "Velocity")).value,
+              (Math::Vector3UVE{6.0F, 7.0F, 8.0F}));
+    EXPECT_TRUE(std::get<bool>(*context.FindOutputUVE(11U, "Result")));
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_PhysicsSchedulerUsesCopiedContext) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U,
+                                    "physics.get_velocity", {}, {}});
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(SetPhysicsInputsUVE(context, 1U, 8U));
+    PhysicsCaptureUVE capture;
+    ScriptEngineCallBindingsUVE bindings = MakePhysicsBindingsUVE(capture);
+    ScriptVmExecutionOptionsUVE options;
+    options.engineCallBindings = &bindings;
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(program, context, options);
+    EXPECT_TRUE(result.IsSuccessUVE());
+    EXPECT_EQ(result.instructionsExecuted, 1U);
+    EXPECT_EQ(capture.getVelocityCount, 1U);
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_PhysicsNodesFailClosedWithoutBindings) {
+    const std::array<const char*, 11U> nodeTypes{
+        "physics.raycast", "physics.sphere_cast", "physics.box_cast", "physics.capsule_cast", "physics.overlap",
+        "physics.apply_force", "physics.apply_impulse", "physics.set_velocity", "physics.get_velocity",
+        "physics.enable_gravity", "physics.is_colliding"};
+    for (std::size_t index = 0U; index < nodeTypes.size(); ++index) {
+        const std::uint32_t nodeId = static_cast<std::uint32_t>(index + 1U);
+        ScriptBytecodeProgramUVE program;
+        program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, nodeId, 0U, nodeTypes[index], {}, {}});
+        ScriptVmExecutionContextUVE context;
+        ASSERT_TRUE(SetPhysicsInputsUVE(context, nodeId, index));
+        EXPECT_EQ(ExecuteScriptBytecodeUVE(program, context).status, ScriptVmStatusUVE::NodeExecutionFailed)
+            << nodeTypes[index];
+    }
 }
 
 } // namespace UVE::Scripting

@@ -560,8 +560,8 @@ TEST(EditorBridgeUVETest, SnapshotUVE_CopiesHierarchyInspectorAndNativePanelSess
         EXPECT_EQ(snapshot.visualScripting.linkCount, 0U);
         EXPECT_EQ(snapshot.visualScripting.canvas.nodes.size(), 0U);
         EXPECT_EQ(snapshot.visualScripting.canvas.links.size(), 0U);
-        ASSERT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds.size(), 150U);
-        ASSERT_EQ(snapshot.visualScripting.canvas.paletteDescriptors.size(), 150U);
+        ASSERT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds.size(), 161U);
+        ASSERT_EQ(snapshot.visualScripting.canvas.paletteDescriptors.size(), 161U);
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[0], "flow.sequence");
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[1], "flow.branch");
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[2], "flow.return");
@@ -693,6 +693,17 @@ TEST(EditorBridgeUVETest, SnapshotUVE_CopiesHierarchyInspectorAndNativePanelSess
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[147], "motion.query.set_yaw");
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[148], "motion.query.transition");
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[149], "motion.query.motion_warp");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[150], "physics.raycast");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[151], "physics.sphere_cast");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[152], "physics.box_cast");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[153], "physics.capsule_cast");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[154], "physics.overlap");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[155], "physics.apply_force");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[156], "physics.apply_impulse");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[157], "physics.set_velocity");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[158], "physics.get_velocity");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[159], "physics.enable_gravity");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[160], "physics.is_colliding");
         EXPECT_FALSE(snapshot.visualScripting.canvas.nodesTruncated);
         EXPECT_FALSE(snapshot.visualScripting.canvas.linksTruncated);
 
