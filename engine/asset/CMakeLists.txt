@@ -25,6 +25,7 @@ add_library(uve_asset STATIC
     src/mesh_asset_uve.cpp
     src/texture_asset_uve.cpp
     src/png_metadata_uve.cpp
+    src/obj_metadata_uve.cpp
     src/shader_asset_uve.cpp
     src/material_asset_uve.cpp
     src/data_table_uve.cpp
