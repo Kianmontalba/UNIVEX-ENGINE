@@ -17,11 +17,15 @@ std::vector<ColliderWorldAabbUVE> BuildColliderWorldAabbCacheUVE(Scene::IEntityM
                  const Scene::ColliderComponentUVE& collider) {
             const bool isSphere = collider.shapeType == Scene::ColliderShapeTypeUVE::Sphere;
             const bool isCapsule = collider.shapeType == Scene::ColliderShapeTypeUVE::Capsule;
+            const Math::Vector3UVE localHalfExtents = Scene::GetColliderLocalHalfExtentsUVE(collider);
+            Math::QuaternionUVE shapeRotation{};
+            if (!Math::TryNormalizeUVE(worldTransform.worldRotation, shapeRotation)) {
+                shapeRotation = {};
+            }
             const float capsuleHalfSegment = isCapsule ? collider.height * 0.5F - collider.radius : 0.0F;
             const Math::Vector3UVE localCapsuleOffset{0.0F, capsuleHalfSegment, 0.0F};
             const Math::Vector3UVE worldCapsuleOffset =
-                isCapsule ? Math::RotateVectorUVE(worldTransform.worldRotation, localCapsuleOffset)
-                          : Math::Vector3UVE{};
+                isCapsule ? Math::RotateVectorUVE(shapeRotation, localCapsuleOffset) : Math::Vector3UVE{};
             const Math::Vector3UVE capsuleSegmentStart = worldTransform.worldPosition - worldCapsuleOffset;
             const Math::Vector3UVE capsuleSegmentEnd = worldTransform.worldPosition + worldCapsuleOffset;
             const Math::Vector3UVE worldHalfExtents = isCapsule
@@ -30,7 +34,37 @@ std::vector<ColliderWorldAabbUVE> BuildColliderWorldAabbCacheUVE(Scene::IEntityM
                                                                 collider.radius + std::fabs(worldCapsuleOffset.y),
                                                                 collider.radius + std::fabs(worldCapsuleOffset.z),
                                                             }
-                                                          : Scene::GetColliderLocalHalfExtentsUVE(collider);
+                                                          : isSphere
+                                                                ? localHalfExtents
+                                                                : Math::Vector3UVE{
+                                                                      std::fabs(Math::RotateVectorUVE(
+                                                                          shapeRotation, {localHalfExtents.x, 0.0F, 0.0F})
+                                                                            .x) +
+                                                                          std::fabs(Math::RotateVectorUVE(
+                                                                              shapeRotation, {0.0F, localHalfExtents.y, 0.0F})
+                                                                                .x) +
+                                                                          std::fabs(Math::RotateVectorUVE(
+                                                                              shapeRotation, {0.0F, 0.0F, localHalfExtents.z})
+                                                                                .x),
+                                                                      std::fabs(Math::RotateVectorUVE(
+                                                                          shapeRotation, {localHalfExtents.x, 0.0F, 0.0F})
+                                                                            .y) +
+                                                                          std::fabs(Math::RotateVectorUVE(
+                                                                              shapeRotation, {0.0F, localHalfExtents.y, 0.0F})
+                                                                                .y) +
+                                                                          std::fabs(Math::RotateVectorUVE(
+                                                                              shapeRotation, {0.0F, 0.0F, localHalfExtents.z})
+                                                                                .y),
+                                                                      std::fabs(Math::RotateVectorUVE(
+                                                                          shapeRotation, {localHalfExtents.x, 0.0F, 0.0F})
+                                                                            .z) +
+                                                                          std::fabs(Math::RotateVectorUVE(
+                                                                              shapeRotation, {0.0F, localHalfExtents.y, 0.0F})
+                                                                                .z) +
+                                                                          std::fabs(Math::RotateVectorUVE(
+                                                                              shapeRotation, {0.0F, 0.0F, localHalfExtents.z})
+                                                                                .z),
+                                                                  };
             cache.push_back(ColliderWorldAabbUVE{
                 entity,
                 Math::AabbUVE::FromCenterExtentsUVE(worldTransform.worldPosition, worldHalfExtents),
@@ -38,6 +72,8 @@ std::vector<ColliderWorldAabbUVE> BuildColliderWorldAabbCacheUVE(Scene::IEntityM
                 collider.collisionMask,
                 collider.shapeType,
                 (isSphere || isCapsule) ? collider.radius : 0.0F,
+                localHalfExtents,
+                shapeRotation,
                 capsuleSegmentStart,
                 capsuleSegmentEnd,
             });

@@ -184,6 +184,43 @@ TEST_F(ColliderShapeUVETest, DetectCollisionsUVE_RotatedCapsuleUsesWorldSegmentF
     EXPECT_NEAR(pairs[0].separationAxis.z, 0.0F, 1.0e-5F);
 }
 
+TEST_F(ColliderShapeUVETest, DetectCollisionsUVE_RotatedBoxSphereUsesExactLocalFrame) {
+    Scene::ColliderComponentUVE box;
+    box.shapeType = Scene::ColliderShapeTypeUVE::Box;
+    box.halfExtents = {0.25F, 1.0F, 0.25F};
+    const Math::QuaternionUVE quarterTurnZ{0.0F, 0.0F, 0.3826834324F, 0.9238795325F};
+    MakeColliderEntityUVE({0.0F, 0.0F, 0.0F}, box, quarterTurnZ);
+
+    Scene::ColliderComponentUVE sphere;
+    sphere.shapeType = Scene::ColliderShapeTypeUVE::Sphere;
+    sphere.radius = 0.5F;
+    const Scene::EntityUVE sphereEntity = MakeColliderEntityUVE({0.5F, 0.5F, 0.0F}, sphere);
+
+    const std::vector<CollisionPairUVE> pairs = collisionSystem.DetectCollisionsUVE(entityManager);
+    ASSERT_EQ(pairs.size(), 1U);
+    EXPECT_EQ(pairs[0].second, sphereEntity);
+    EXPECT_GT(pairs[0].penetrationDepth, 0.0F);
+    EXPECT_NEAR(pairs[0].separationAxis.x, 0.70710678F, 1.0e-4F);
+    EXPECT_NEAR(pairs[0].separationAxis.y, 0.70710678F, 1.0e-4F);
+    EXPECT_NEAR(pairs[0].separationAxis.z, 0.0F, 1.0e-5F);
+}
+
+TEST_F(ColliderShapeUVETest, DetectCollisionsUVE_RotatedBoxCapsuleRejectsDiagonalAabbFalsePositive) {
+    Scene::ColliderComponentUVE box;
+    box.shapeType = Scene::ColliderShapeTypeUVE::Box;
+    box.halfExtents = {0.2F, 1.0F, 0.2F};
+    const Math::QuaternionUVE quarterTurnZ{0.0F, 0.0F, 0.3826834324F, 0.9238795325F};
+    MakeColliderEntityUVE({0.0F, 0.0F, 0.0F}, box, quarterTurnZ);
+
+    Scene::ColliderComponentUVE capsule;
+    capsule.shapeType = Scene::ColliderShapeTypeUVE::Capsule;
+    capsule.radius = 0.2F;
+    capsule.height = 2.0F;
+    MakeColliderEntityUVE({0.8F, 0.8F, 0.0F}, capsule);
+
+    EXPECT_TRUE(collisionSystem.DetectCollisionsUVE(entityManager).empty());
+}
+
 TEST_F(ColliderShapeUVETest, DetectCollisionsUVE_CapsuleCapsuleUsesExactSegmentDistanceAndOrientation) {
     Scene::ColliderComponentUVE firstCapsule;
     firstCapsule.shapeType = Scene::ColliderShapeTypeUVE::Capsule;
