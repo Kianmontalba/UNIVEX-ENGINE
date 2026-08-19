@@ -287,6 +287,78 @@ TEST_F(SaveGameSystemUVETest, SavePayloadMigrationRegistryUVE_ValidatesRegistrat
               SaveMigrationRegistrationCodeUVE::CapacityExceeded);
 }
 
+TEST_F(SaveGameSystemUVETest, SavePayloadMigrationRegistryUVE_ComposesDeterministicMultiHopPath) {
+    SavePayloadMigrationRegistryUVE registry;
+    ASSERT_TRUE(registry.RegisterUVE(0U, 1U, [](std::vector<std::byte>& payload, std::string&) {
+        payload.push_back(std::byte{0x02});
+        return true;
+    }).IsAcceptedUVE());
+    ASSERT_TRUE(registry.RegisterUVE(1U, 2U, [](std::vector<std::byte>& payload, std::string&) {
+        payload.push_back(std::byte{0x03});
+        return true;
+    }).IsAcceptedUVE());
+
+    std::vector<std::byte> payload{std::byte{0x01}};
+    const SaveMigrationDiagnosticsUVE diagnostics = registry.MigrateUVE(0U, 2U, payload);
+
+    EXPECT_EQ(diagnostics.status, SaveMigrationStatusUVE::Migrated);
+    EXPECT_EQ(diagnostics.appliedStepCount, 2U);
+    EXPECT_EQ(payload, (std::vector<std::byte>{std::byte{0x01}, std::byte{0x02}, std::byte{0x03}}));
+}
+
+TEST_F(SaveGameSystemUVETest, SavePayloadMigrationRegistryUVE_ChoosesShortestRegistrationOrderPath) {
+    SavePayloadMigrationRegistryUVE registry;
+    ASSERT_TRUE(registry.RegisterUVE(0U, 1U, [](std::vector<std::byte>& payload, std::string&) {
+        payload.push_back(std::byte{0x01});
+        return true;
+    }).IsAcceptedUVE());
+    ASSERT_TRUE(registry.RegisterUVE(1U, 3U, [](std::vector<std::byte>& payload, std::string&) {
+        payload.push_back(std::byte{0x13});
+        return true;
+    }).IsAcceptedUVE());
+    ASSERT_TRUE(registry.RegisterUVE(0U, 2U, [](std::vector<std::byte>& payload, std::string&) {
+        payload.push_back(std::byte{0x02});
+        return true;
+    }).IsAcceptedUVE());
+    ASSERT_TRUE(registry.RegisterUVE(2U, 3U, [](std::vector<std::byte>& payload, std::string&) {
+        payload.push_back(std::byte{0x23});
+        return true;
+    }).IsAcceptedUVE());
+    ASSERT_TRUE(registry.RegisterUVE(0U, 3U, [](std::vector<std::byte>& payload, std::string&) {
+        payload.push_back(std::byte{0x33});
+        return true;
+    }).IsAcceptedUVE());
+
+    std::vector<std::byte> payload{std::byte{0x00}};
+    const SaveMigrationDiagnosticsUVE diagnostics = registry.MigrateUVE(0U, 3U, payload);
+
+    EXPECT_EQ(diagnostics.status, SaveMigrationStatusUVE::Migrated);
+    EXPECT_EQ(diagnostics.appliedStepCount, 1U);
+    EXPECT_EQ(payload, (std::vector<std::byte>{std::byte{0x00}, std::byte{0x33}}));
+}
+
+TEST_F(SaveGameSystemUVETest, SavePayloadMigrationRegistryUVE_MultiHopFailureIsAtomic) {
+    SavePayloadMigrationRegistryUVE registry;
+    ASSERT_TRUE(registry.RegisterUVE(0U, 1U, [](std::vector<std::byte>& payload, std::string&) {
+        payload.push_back(std::byte{0x02});
+        return true;
+    }).IsAcceptedUVE());
+    ASSERT_TRUE(registry.RegisterUVE(1U, 2U, [](std::vector<std::byte>& payload, std::string& reason) {
+        payload.push_back(std::byte{0x03});
+        reason = "second migration rejected";
+        return false;
+    }).IsAcceptedUVE());
+
+    const std::vector<std::byte> originalPayload{std::byte{0x01}};
+    std::vector<std::byte> payload = originalPayload;
+    const SaveMigrationDiagnosticsUVE diagnostics = registry.MigrateUVE(0U, 2U, payload);
+
+    EXPECT_EQ(diagnostics.status, SaveMigrationStatusUVE::InvalidPayload);
+    EXPECT_EQ(diagnostics.appliedStepCount, 1U);
+    EXPECT_EQ(payload, originalPayload);
+    EXPECT_EQ(diagnostics.reason, "second migration rejected");
+}
+
 TEST_F(SaveGameSystemUVETest, SaveGameSystemUVE_LoadsRegisteredVersionTransformAtomically) {
     const EntityUVE entity = entityManager.CreateEntityUVE();
     ASSERT_TRUE(saveGameSystem.SaveUVE(15, entityManager, {entity}, GameStateMetadataUVE{}));

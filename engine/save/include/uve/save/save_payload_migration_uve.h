@@ -30,6 +30,7 @@ struct SaveMigrationDiagnosticsUVE final {
     SaveMigrationStatusUVE status = SaveMigrationStatusUVE::NotRequired;
     std::uint32_t sourceSchemaVersion = kCurrentSavePayloadSchemaVersionUVE;
     std::uint32_t targetSchemaVersion = kCurrentSavePayloadSchemaVersionUVE;
+    std::size_t appliedStepCount = 0U;
     std::string reason;
 
     [[nodiscard]] bool SucceededUVE() const noexcept {
@@ -80,10 +81,10 @@ private:
     std::vector<EntryUVE> m_entries;
 };
 
-/// Bounded schema-dispatch seam for the fixed `.uvesave` payload. Version 1 is currently the only
-/// supported layout, so current payloads pass through unchanged and unsupported versions fail with
-/// copied diagnostics. Future migrations must transform the payload here before scene deserialization;
-/// compression, encryption, cloud sync, and gameplay-domain transforms remain outside this seam.
+/// Bounded schema-dispatch seam for the fixed `.uvesave` payload. Current-version payloads pass
+/// through unchanged; registered transforms can be composed through a deterministic shortest path
+/// of at most the bounded registry capacity, with failure-atomic staging before scene deserialization.
+/// Compression, encryption, cloud sync, and gameplay-domain transforms remain outside this seam.
 [[nodiscard]] SaveMigrationDiagnosticsUVE MigrateSavePayloadUVE(std::uint32_t sourceSchemaVersion,
                                                                std::uint32_t targetSchemaVersion,
                                                                std::vector<std::byte>& payload);
