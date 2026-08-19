@@ -38,6 +38,14 @@ namespace {
             } else if constexpr (std::is_same_v<ValueType, ScriptTransformValueUVE>) {
                 return IsFiniteScriptVector3UVE(typedValue.position) && Math::IsFiniteUVE(typedValue.rotation.value) &&
                        IsFiniteScriptVector3UVE(typedValue.scale);
+            } else if constexpr (std::is_same_v<ValueType, ScriptArrayValueUVE>) {
+                return IsValidScriptArrayValueUVE(typedValue);
+            } else if constexpr (std::is_same_v<ValueType, ScriptMapValueUVE>) {
+                return IsValidScriptMapValueUVE(typedValue);
+            } else if constexpr (std::is_same_v<ValueType, ScriptSetValueUVE>) {
+                return IsValidScriptSetValueUVE(typedValue);
+            } else if constexpr (std::is_same_v<ValueType, ScriptStructValueUVE>) {
+                return IsValidScriptStructValueUVE(typedValue);
             } else {
                 return IsFiniteScriptVector2UVE(typedValue);
             }
@@ -55,6 +63,8 @@ namespace {
            context.localVariables.size() <= ScriptVmExecutionContextUVE::kMaximumLocalVariablesUVE &&
            context.flowControlLatches.size() <= ScriptVmExecutionContextUVE::kMaximumFlowControlLatchesUVE &&
            context.gateStates.size() <= ScriptVmExecutionContextUVE::kMaximumGateStatesUVE &&
+           context.loopStates.size() <= ScriptVmExecutionContextUVE::kMaximumLoopStatesUVE &&
+           context.delayStates.size() <= ScriptVmExecutionContextUVE::kMaximumDelayStatesUVE &&
            std::all_of(context.inputs.begin(), context.inputs.end(), validBinding) &&
            std::all_of(context.outputs.begin(), context.outputs.end(), validBinding) &&
            std::all_of(context.componentFacts.begin(), context.componentFacts.end(),
@@ -67,7 +77,15 @@ namespace {
            std::all_of(context.flowControlLatches.begin(), context.flowControlLatches.end(),
                        [](const ScriptVmFlowControlLatchUVE& latch) { return latch.nodeId != 0U; }) &&
            std::all_of(context.gateStates.begin(), context.gateStates.end(),
-                       [](const ScriptVmGateStateUVE& state) { return state.nodeId != 0U; });
+                       [](const ScriptVmGateStateUVE& state) { return state.nodeId != 0U; }) &&
+           std::all_of(context.loopStates.begin(), context.loopStates.end(),
+                       [](const ScriptVmLoopStateUVE& state) {
+                           return state.nodeId != 0U && state.iteration <= ScriptVmExecutionContextUVE::kMaximumLoopIterationsUVE;
+                       }) &&
+           std::all_of(context.delayStates.begin(), context.delayStates.end(),
+                       [](const ScriptVmDelayStateUVE& state) {
+                           return state.nodeId != 0U && state.remainingFrames <= ScriptVmExecutionContextUVE::kMaximumDelayFramesUVE;
+                       });
 }
 
 [[nodiscard]] std::vector<ScriptBytecodeDiagnosticUVE> ValidateRuntimeProgramUVE(
@@ -199,7 +217,9 @@ ScriptRuntimeStateUpdateResultUVE ScriptRuntimeUVE::SetStateDetailedUVE(const Sc
         state.executionContext.componentFacts.size() > ScriptVmExecutionContextUVE::kMaximumComponentFactsUVE ||
         state.executionContext.localVariables.size() > ScriptVmExecutionContextUVE::kMaximumLocalVariablesUVE ||
         state.executionContext.flowControlLatches.size() > ScriptVmExecutionContextUVE::kMaximumFlowControlLatchesUVE ||
-        state.executionContext.gateStates.size() > ScriptVmExecutionContextUVE::kMaximumGateStatesUVE) {
+        state.executionContext.gateStates.size() > ScriptVmExecutionContextUVE::kMaximumGateStatesUVE ||
+        state.executionContext.loopStates.size() > ScriptVmExecutionContextUVE::kMaximumLoopStatesUVE ||
+        state.executionContext.delayStates.size() > ScriptVmExecutionContextUVE::kMaximumDelayStatesUVE) {
         return {ScriptRuntimeStateUpdateCodeUVE::CapacityExceeded,
                 "State update rejected because the VM binding, query fact, or local-variable context exceeds its bounded capacity."};
     }

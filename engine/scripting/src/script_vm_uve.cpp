@@ -60,6 +60,14 @@ namespace {
                        std::isfinite(typedValue.position.value.z) && Math::IsFiniteUVE(typedValue.rotation.value) &&
                        std::isfinite(typedValue.scale.value.x) && std::isfinite(typedValue.scale.value.y) &&
                        std::isfinite(typedValue.scale.value.z);
+            } else if constexpr (std::is_same_v<ValueType, ScriptArrayValueUVE>) {
+                return IsValidScriptArrayValueUVE(typedValue);
+            } else if constexpr (std::is_same_v<ValueType, ScriptMapValueUVE>) {
+                return IsValidScriptMapValueUVE(typedValue);
+            } else if constexpr (std::is_same_v<ValueType, ScriptSetValueUVE>) {
+                return IsValidScriptSetValueUVE(typedValue);
+            } else if constexpr (std::is_same_v<ValueType, ScriptStructValueUVE>) {
+                return IsValidScriptStructValueUVE(typedValue);
             } else {
                 return typedValue.IsValidUVE();
             }
@@ -71,7 +79,11 @@ namespace {
     return std::holds_alternative<float>(value) || std::holds_alternative<bool>(value) ||
            std::holds_alternative<ScriptVector3ValueUVE>(value) ||
            std::holds_alternative<ScriptRotationValueUVE>(value) ||
-           std::holds_alternative<ScriptTransformValueUVE>(value);
+           std::holds_alternative<ScriptTransformValueUVE>(value) ||
+           std::holds_alternative<ScriptArrayValueUVE>(value) ||
+           std::holds_alternative<ScriptMapValueUVE>(value) ||
+           std::holds_alternative<ScriptSetValueUVE>(value) ||
+           std::holds_alternative<ScriptStructValueUVE>(value);
 }
 
 [[nodiscard]] ScriptVmLocalVariableUVE* FindMutableLocalVariableUVE(
@@ -213,10 +225,15 @@ namespace {
     const bool isNumber = instruction.nodeTypeId.ends_with("_number");
     const bool isBoolean = instruction.nodeTypeId.ends_with("_boolean");
     const bool isVector3 = instruction.nodeTypeId.ends_with("_vector3");
+    const bool isArray = instruction.nodeTypeId.ends_with("_array");
+    const bool isMap = instruction.nodeTypeId.ends_with("_map");
+    const bool isSetCollection = instruction.nodeTypeId.ends_with("_set");
+    const bool isStruct = instruction.nodeTypeId.ends_with("_struct");
     const bool isMake = instruction.nodeTypeId.rfind("variable.make_", 0U) == 0U;
-    const bool isSet = instruction.nodeTypeId.rfind("variable.set_", 0U) == 0U;
+    const bool isSetOperation = instruction.nodeTypeId.rfind("variable.set_", 0U) == 0U;
     const bool isGet = instruction.nodeTypeId.rfind("variable.get_", 0U) == 0U;
-    if ((!isNumber && !isBoolean && !isVector3) || (!isMake && !isSet && !isGet)) {
+    if ((!isNumber && !isBoolean && !isVector3 && !isArray && !isMap && !isSetCollection && !isStruct) ||
+        (!isMake && !isSetOperation && !isGet)) {
         return {};
     }
     const float* slotInput = FindNumberInputUVE(context, nodeId, "Slot");
@@ -234,6 +251,46 @@ namespace {
     };
     const auto rejectType = [&]() {
         return MakeNodeFailureUVE(instructionIndex, "Variable node found a missing or type-incompatible local slot.");
+    };
+    const auto executeCollection = [&]<typename CollectionType>(const char* label) {
+        const ScriptVmValueBindingUVE* binding = FindBindingUVE(context.inputs, nodeId, "Value");
+        const CollectionType* input = binding == nullptr ? nullptr : std::get_if<CollectionType>(&binding->value);
+        const auto isValid = [](const CollectionType& value) {
+            if constexpr (std::is_same_v<CollectionType, ScriptArrayValueUVE>) {
+                return IsValidScriptArrayValueUVE(value);
+            } else if constexpr (std::is_same_v<CollectionType, ScriptMapValueUVE>) {
+                return IsValidScriptMapValueUVE(value);
+            } else if constexpr (std::is_same_v<CollectionType, ScriptSetValueUVE>) {
+                return IsValidScriptSetValueUVE(value);
+            } else {
+                return IsValidScriptStructValueUVE(value);
+            }
+        };
+        const auto makeMessage = [label](const char* prefix, const char* suffix) {
+            return std::string{prefix} + label + " Variable " + suffix;
+        };
+        if (isMake) {
+            if (input == nullptr || !isValid(*input)) {
+                return MakeNodeFailureUVE(instructionIndex, makeMessage("Make ", "requires a valid Value."));
+            }
+            ScriptVmLocalVariableUVE* existing = FindMutableLocalVariableUVE(context.localVariables, slot);
+            if (existing == nullptr) {
+                if (context.localVariables.size() >= ScriptVmExecutionContextUVE::kMaximumLocalVariablesUVE ||
+                    !context.InitializeLocalVariableUVE(slot, *input)) {
+                    return MakeNodeFailureUVE(instructionIndex, makeMessage("Make ", "rejected local capacity."));
+                }
+                return setResult(*input);
+            }
+            return std::holds_alternative<CollectionType>(existing->value) ? setResult(existing->value) : rejectType();
+        }
+        if (isSetOperation) {
+            if (input == nullptr || !isValid(*input) || !context.SetLocalVariableUVE(slot, *input)) {
+                return MakeNodeFailureUVE(instructionIndex, makeMessage("Set ", "requires a valid Value and matching local slot."));
+            }
+            return setResult(*input);
+        }
+        const auto value = context.FindLocalVariableUVE(slot);
+        return value.has_value() && std::holds_alternative<CollectionType>(*value) ? setResult(*value) : rejectType();
     };
     if (isNumber) {
         if (isMake) {
@@ -254,7 +311,7 @@ namespace {
             }
             return setResult(existing->value);
         }
-        if (isSet) {
+        if (isSetOperation) {
             const float* value = FindNumberInputUVE(context, nodeId, "Value");
             if (value == nullptr || !std::isfinite(*value)) {
                 return MakeNodeFailureUVE(instructionIndex, "Set Number Variable requires a finite Value.");
@@ -286,7 +343,7 @@ namespace {
             }
             return setResult(existing->value);
         }
-        if (isSet) {
+        if (isSetOperation) {
             const bool* value = FindBooleanInputUVE(context, nodeId, "Value");
             if (value == nullptr || !context.SetLocalVariableUVE(slot, *value)) {
                 return rejectType();
@@ -296,31 +353,46 @@ namespace {
         const auto value = context.FindLocalVariableUVE(slot);
         return value.has_value() && std::holds_alternative<bool>(*value) ? setResult(*value) : rejectType();
     }
-    if (isMake) {
-        const ScriptVector3ValueUVE* value = FindVector3InputUVE(context, nodeId, "Value");
-        if (value == nullptr || !std::isfinite(value->value.x) || !std::isfinite(value->value.y) ||
-            !std::isfinite(value->value.z)) {
-            return MakeNodeFailureUVE(instructionIndex, "Make Vector3 Variable requires a finite Value.");
+    if (isVector3) {
+        if (isMake) {
+            const ScriptVector3ValueUVE* value = FindVector3InputUVE(context, nodeId, "Value");
+            if (value == nullptr || !std::isfinite(value->value.x) || !std::isfinite(value->value.y) ||
+                !std::isfinite(value->value.z)) {
+                return MakeNodeFailureUVE(instructionIndex, "Make Vector3 Variable requires a finite Value.");
+            }
+            ScriptVmLocalVariableUVE* existing = FindMutableLocalVariableUVE(context.localVariables, slot);
+            if (existing == nullptr) {
+                if (context.localVariables.size() >= ScriptVmExecutionContextUVE::kMaximumLocalVariablesUVE ||
+                    !context.InitializeLocalVariableUVE(slot, *value)) {
+                    return MakeNodeFailureUVE(instructionIndex, "Make Vector3 Variable rejected local capacity.");
+                }
+                return setResult(*value);
+            }
+            return std::holds_alternative<ScriptVector3ValueUVE>(existing->value) ? setResult(existing->value) : rejectType();
         }
-        ScriptVmLocalVariableUVE* existing = FindMutableLocalVariableUVE(context.localVariables, slot);
-        if (existing == nullptr) {
-            if (context.localVariables.size() >= ScriptVmExecutionContextUVE::kMaximumLocalVariablesUVE ||
-                !context.InitializeLocalVariableUVE(slot, *value)) {
-                return MakeNodeFailureUVE(instructionIndex, "Make Vector3 Variable rejected local capacity.");
+        if (isSetOperation) {
+            const ScriptVector3ValueUVE* value = FindVector3InputUVE(context, nodeId, "Value");
+            if (value == nullptr || !context.SetLocalVariableUVE(slot, *value)) {
+                return rejectType();
             }
             return setResult(*value);
         }
-        return std::holds_alternative<ScriptVector3ValueUVE>(existing->value) ? setResult(existing->value) : rejectType();
+        const auto value = context.FindLocalVariableUVE(slot);
+        return value.has_value() && std::holds_alternative<ScriptVector3ValueUVE>(*value) ? setResult(*value) : rejectType();
     }
-    if (isSet) {
-        const ScriptVector3ValueUVE* value = FindVector3InputUVE(context, nodeId, "Value");
-        if (value == nullptr || !context.SetLocalVariableUVE(slot, *value)) {
-            return rejectType();
-        }
-        return setResult(*value);
+    if (isArray) {
+        return executeCollection.template operator()<ScriptArrayValueUVE>("Array");
     }
-    const auto value = context.FindLocalVariableUVE(slot);
-    return value.has_value() && std::holds_alternative<ScriptVector3ValueUVE>(*value) ? setResult(*value) : rejectType();
+    if (isMap) {
+        return executeCollection.template operator()<ScriptMapValueUVE>("Map");
+    }
+    if (isSetCollection) {
+        return executeCollection.template operator()<ScriptSetValueUVE>("Set");
+    }
+    if (isStruct) {
+        return executeCollection.template operator()<ScriptStructValueUVE>("Struct");
+    }
+    return {};
 }
 
 [[nodiscard]] ScriptVmExecutionResultUVE ExecuteFloatNodeUVE(
@@ -1030,7 +1102,26 @@ namespace {
     if (instruction.nodeTypeId.ends_with("_boolean")) {
         return FindBooleanInputUVE(context, instruction.sourceNodeId, "Value") != nullptr;
     }
-    return FindVector3InputUVE(context, instruction.sourceNodeId, "Value") != nullptr;
+    if (instruction.nodeTypeId.ends_with("_vector3")) {
+        return FindVector3InputUVE(context, instruction.sourceNodeId, "Value") != nullptr;
+    }
+    const ScriptVmValueBindingUVE* binding = FindBindingUVE(context.inputs, instruction.sourceNodeId, "Value");
+    if (binding == nullptr) {
+        return false;
+    }
+    if (instruction.nodeTypeId.ends_with("_array")) {
+        return std::holds_alternative<ScriptArrayValueUVE>(binding->value);
+    }
+    if (instruction.nodeTypeId.ends_with("_map")) {
+        return std::holds_alternative<ScriptMapValueUVE>(binding->value);
+    }
+    if (instruction.nodeTypeId.ends_with("_set")) {
+        return std::holds_alternative<ScriptSetValueUVE>(binding->value);
+    }
+    if (instruction.nodeTypeId.ends_with("_struct")) {
+        return std::holds_alternative<ScriptStructValueUVE>(binding->value);
+    }
+    return false;
 }
 
 [[nodiscard]] bool HasRequiredFloatInputsUVE(const ScriptIrInstructionUVE& instruction,

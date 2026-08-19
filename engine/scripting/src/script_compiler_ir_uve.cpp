@@ -127,6 +127,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
     std::vector<ScriptLinkUVE> stagedRotationLinks;
     std::vector<ScriptLinkUVE> stagedTransformLinks;
     std::vector<ScriptLinkUVE> stagedConversionLinks;
+    std::vector<ScriptLinkUVE> stagedCollectionLinks;
     for (const ScriptNodeUVE& node : nodes) {
         if (node.typeId == "flow.sequence") {
             ++sequenceNodeCount;
@@ -626,6 +627,48 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
         }
         stagedConversionLinks.push_back(link);
     }
+    for (const ScriptLinkUVE& link : links) {
+        if (IsExecutionLinkUVE(link, nodes, registry)) {
+            continue;
+        }
+        const ScriptNodeUVE* sourceNode = FindNodeUVE(nodes, link.output.nodeId);
+        const ScriptNodeUVE* consumerNode = FindNodeUVE(nodes, link.input.nodeId);
+        const auto isCollectionPair = [](const std::string& sourceType, const std::string& consumerType,
+                                         const char* suffix) {
+            return sourceType == std::string{"variable.get_"} + suffix &&
+                   consumerType == std::string{"variable.set_"} + suffix;
+        };
+        const auto isCollectionGet = [](const std::string& typeId) {
+            return typeId == "variable.get_array" || typeId == "variable.get_map" ||
+                   typeId == "variable.get_set" || typeId == "variable.get_struct";
+        };
+        const auto isCollectionSet = [](const std::string& typeId) {
+            return typeId == "variable.set_array" || typeId == "variable.set_map" ||
+                   typeId == "variable.set_set" || typeId == "variable.set_struct";
+        };
+        if (sourceNode == nullptr || consumerNode == nullptr ||
+            (!isCollectionGet(sourceNode->typeId) && !isCollectionSet(consumerNode->typeId))) {
+            continue;
+        }
+        const bool validPair = sourceNode != nullptr && consumerNode != nullptr &&
+                               link.output.pinName == "Result" && link.input.pinName == "Value" &&
+                               (isCollectionPair(sourceNode->typeId, consumerNode->typeId, "array") ||
+                                isCollectionPair(sourceNode->typeId, consumerNode->typeId, "map") ||
+                                isCollectionPair(sourceNode->typeId, consumerNode->typeId, "set") ||
+                                isCollectionPair(sourceNode->typeId, consumerNode->typeId, "struct"));
+        const bool hasProducerDependency = sourceNode != nullptr &&
+            std::find_if(links.begin(), links.end(), [&](const ScriptLinkUVE& dependency) {
+                return dependency.input.nodeId == sourceNode->id &&
+                       !IsExecutionLinkUVE(dependency, nodes, registry);
+            }) != links.end();
+        if (!validPair || hasProducerDependency || !stagedCollectionLinks.empty()) {
+            result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode, link.input.nodeId,
+                                          link.input.pinName,
+                                          "Collection staging supports one direct variable.get_array/map/set/struct.Result producer before a matching variable.set_* Value input; composed dependencies and additional consumers remain deferred."});
+            continue;
+        }
+        stagedCollectionLinks.push_back(link);
+    }
     if (!result.diagnostics.empty()) {
         return result;
     }
@@ -686,6 +729,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
     moveStagedProducerBeforeConsumer(stagedVector3Links);
     moveStagedProducerBeforeConsumer(stagedRotationLinks);
     moveStagedProducerBeforeConsumer(stagedTransformLinks);
+    moveStagedProducerBeforeConsumer(stagedCollectionLinks);
     moveStagedProducerBeforeConsumer(stagedConversionLinks);
 
     const auto flowExtraEntryCountUVE = [](const ScriptNodeUVE& node) noexcept -> std::size_t {
@@ -710,7 +754,8 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
                                                 stagedBooleanLinks.size() + stagedNumberLinks.size() +
                                                 stagedComparisonNumberLinks.size() + stagedVector2ScaleLinks.size() +
                                                 stagedVector2Links.size() + stagedVector3ScaleLinks.size() +
-                                                stagedVector3Links.size() + stagedRotationLinks.size() + stagedTransformLinks.size() + stagedConversionLinks.size();
+                                                stagedVector3Links.size() + stagedRotationLinks.size() + stagedTransformLinks.size() +
+                                                stagedCollectionLinks.size() + stagedConversionLinks.size();
     const auto findStagedInstructionIndex = [&](const std::uint32_t nodeId) -> std::optional<std::size_t> {
         const std::optional<std::size_t> baseIndex = FindNodeInstructionIndexUVE(instructionNodes, nodeId);
         if (!baseIndex.has_value()) {
@@ -737,6 +782,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
         countStagedBefore(stagedVector3Links);
         countStagedBefore(stagedRotationLinks);
         countStagedBefore(stagedTransformLinks);
+        countStagedBefore(stagedCollectionLinks);
         countStagedBefore(stagedConversionLinks);
         std::size_t flowEntriesBefore = 0U;
         for (std::size_t index = 0U; index < *baseIndex; ++index) {
@@ -911,6 +957,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             emitStagedLinks(stagedVector3Links);
             emitStagedLinks(stagedRotationLinks);
             emitStagedLinks(stagedTransformLinks);
+            emitStagedLinks(stagedCollectionLinks);
             emitStagedLinks(stagedConversionLinks);
     }
 
@@ -929,7 +976,8 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             isStagedLink(stagedComparisonNumberLinks) || isStagedLink(stagedVector2ScaleLinks) ||
             isStagedLink(stagedVector2Links) || isStagedLink(stagedVector3ScaleLinks) ||
             isStagedLink(stagedVector3Links) || isStagedLink(stagedRotationLinks) ||
-            isStagedLink(stagedTransformLinks) || isStagedLink(stagedConversionLinks)) {
+            isStagedLink(stagedTransformLinks) || isStagedLink(stagedCollectionLinks) ||
+            isStagedLink(stagedConversionLinks)) {
             continue;
         }
         if (IsExecutionLinkUVE(link, nodes, registry)) {

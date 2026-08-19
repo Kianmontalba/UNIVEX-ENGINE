@@ -120,10 +120,10 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
 
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
     EXPECT_FALSE(RegisterBuiltInScriptNodesUVE(registry));
-    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 97U);
+    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 109U);
 
     const std::vector<ScriptNodeTypeDescriptorUVE> descriptors = registry.GetNodeTypeDescriptorsUVE();
-    ASSERT_EQ(descriptors.size(), 97U);
+    ASSERT_EQ(descriptors.size(), 109U);
     const std::vector<std::string> expectedIds{
         "flow.sequence", "flow.branch", "flow.return", "flow.do_once", "flow.gate", "flow.switch",
         "flow.event", "flow.loop", "flow.for_loop", "flow.while_loop", "flow.delay",
@@ -149,7 +149,11 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
         "query.entity.has_component", "query.entity.get_component", "engine.log", "engine.get_time",
         "variable.make_number", "variable.get_number", "variable.set_number",
         "variable.make_boolean", "variable.get_boolean", "variable.set_boolean",
-        "variable.make_vector3", "variable.get_vector3", "variable.set_vector3"};
+        "variable.make_vector3", "variable.get_vector3", "variable.set_vector3",
+        "variable.make_array", "variable.get_array", "variable.set_array",
+        "variable.make_map", "variable.get_map", "variable.set_map",
+        "variable.make_set", "variable.get_set", "variable.set_set",
+        "variable.make_struct", "variable.get_struct", "variable.set_struct"};
     ASSERT_EQ(expectedIds.size(), descriptors.size());
     for (std::size_t index = 0U; index < expectedIds.size(); ++index) {
         EXPECT_EQ(descriptors[index].typeId, expectedIds[index]);
@@ -270,6 +274,31 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
     EXPECT_EQ(delay->pins[1].type, ScriptValueTypeUVE::Number);
     EXPECT_EQ(delay->pins[2].name, "Then");
     EXPECT_EQ(delay->pins[2].role, ScriptPinRoleUVE::Execution);
+
+    const auto assertCollectionDescriptors = [&](const char* makeId, const char* getId, const char* setId,
+                                                   const ScriptValueTypeUVE type) {
+        const ScriptNodeTypeDescriptorUVE* make = registry.FindNodeTypeUVE(makeId);
+        const ScriptNodeTypeDescriptorUVE* get = registry.FindNodeTypeUVE(getId);
+        const ScriptNodeTypeDescriptorUVE* set = registry.FindNodeTypeUVE(setId);
+        ASSERT_NE(make, nullptr);
+        ASSERT_NE(get, nullptr);
+        ASSERT_NE(set, nullptr);
+        ASSERT_EQ(make->pins.size(), 3U);
+        ASSERT_EQ(get->pins.size(), 2U);
+        ASSERT_EQ(set->pins.size(), 3U);
+        EXPECT_EQ(make->pins[1].type, type);
+        EXPECT_EQ(make->pins[2].type, type);
+        EXPECT_EQ(get->pins[1].type, type);
+        EXPECT_EQ(set->pins[1].type, type);
+        EXPECT_EQ(set->pins[2].type, type);
+        EXPECT_EQ(make->pins[0].type, ScriptValueTypeUVE::Number);
+        EXPECT_EQ(get->pins[0].type, ScriptValueTypeUVE::Number);
+        EXPECT_EQ(set->pins[0].type, ScriptValueTypeUVE::Number);
+    };
+    assertCollectionDescriptors("variable.make_array", "variable.get_array", "variable.set_array", ScriptValueTypeUVE::Array);
+    assertCollectionDescriptors("variable.make_map", "variable.get_map", "variable.set_map", ScriptValueTypeUVE::Map);
+    assertCollectionDescriptors("variable.make_set", "variable.get_set", "variable.set_set", ScriptValueTypeUVE::Set);
+    assertCollectionDescriptors("variable.make_struct", "variable.get_struct", "variable.set_struct", ScriptValueTypeUVE::Struct);
 
     const ScriptNodeTypeDescriptorUVE* numberToBoolean = registry.FindNodeTypeUVE("convert.number_to_boolean");
     ASSERT_NE(numberToBoolean, nullptr);
@@ -4043,6 +4072,80 @@ TEST(ScriptDebuggerUVETest, StepUVE_SequenceDispatchContinuesToSecondTarget) {
     EXPECT_EQ(second.state, ScriptDebuggerStateUVE::Completed);
     EXPECT_EQ(second.instructionIndex, 3U);
     EXPECT_EQ(second.executedInstructions, 3U);
+}
+
+TEST(ScriptCollectionValueUVETest, ValidationRejectsNonFiniteDuplicateAndUnorderedValues) {
+    const ScriptArrayValueUVE array{ScriptCollectionElementTypeUVE::Number,
+                                    {ScriptCollectionElementUVE{1.0F}, ScriptCollectionElementUVE{2.0F}}};
+    EXPECT_TRUE(IsValidScriptArrayValueUVE(array));
+    const ScriptArrayValueUVE wrongType{ScriptCollectionElementTypeUVE::Number,
+                                        {ScriptCollectionElementUVE{true}}};
+    EXPECT_FALSE(IsValidScriptArrayValueUVE(wrongType));
+
+    const ScriptMapValueUVE map{ScriptCollectionElementTypeUVE::Boolean,
+                                {{1.0F, ScriptCollectionElementUVE{false}},
+                                 {2.0F, ScriptCollectionElementUVE{true}}}};
+    EXPECT_TRUE(IsValidScriptMapValueUVE(map));
+    const ScriptMapValueUVE duplicateMap{ScriptCollectionElementTypeUVE::Boolean,
+                                         {{1.0F, ScriptCollectionElementUVE{false}},
+                                          {1.0F, ScriptCollectionElementUVE{true}}}};
+    EXPECT_FALSE(IsValidScriptMapValueUVE(duplicateMap));
+
+    const ScriptSetValueUVE set{ScriptCollectionElementTypeUVE::Number,
+                                {ScriptCollectionElementUVE{1.0F}, ScriptCollectionElementUVE{3.0F}}};
+    EXPECT_TRUE(IsValidScriptSetValueUVE(set));
+    const ScriptSetValueUVE duplicateSet{ScriptCollectionElementTypeUVE::Number,
+                                         {ScriptCollectionElementUVE{1.0F}, ScriptCollectionElementUVE{1.0F}}};
+    EXPECT_FALSE(IsValidScriptSetValueUVE(duplicateSet));
+
+    const ScriptStructValueUVE structure{{{1U, ScriptCollectionElementUVE{1.0F}},
+                                           {2U, ScriptCollectionElementUVE{ScriptVector3ValueUVE{{3.0F, 4.0F, 5.0F}}}}}};
+    EXPECT_TRUE(IsValidScriptStructValueUVE(structure));
+    const ScriptStructValueUVE unordered{{{2U, ScriptCollectionElementUVE{1.0F}},
+                                          {1U, ScriptCollectionElementUVE{2.0F}}}};
+    EXPECT_FALSE(IsValidScriptStructValueUVE(unordered));
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_StoresAndRetrievesTypedCollections) {
+    const ScriptArrayValueUVE array{ScriptCollectionElementTypeUVE::Number,
+                                    {ScriptCollectionElementUVE{1.0F}, ScriptCollectionElementUVE{2.0F}}};
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U, "variable.make_array", {}, {}});
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 2U, 0U, "variable.get_array", {}, {}});
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(1U, "Slot", 4.0F));
+    ASSERT_TRUE(context.SetInputUVE(1U, "Value", array));
+    ASSERT_TRUE(context.SetInputUVE(2U, "Slot", 4.0F));
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(program, context);
+    ASSERT_TRUE(result.IsSuccessUVE());
+    EXPECT_EQ(context.FindLocalVariableUVE(4U), std::optional<ScriptVmValueUVE>(array));
+    EXPECT_EQ(context.FindOutputUVE(2U, "Result"), std::optional<ScriptVmValueUVE>(array));
+
+    const ScriptMapValueUVE map{ScriptCollectionElementTypeUVE::Number,
+                                {{1.0F, ScriptCollectionElementUVE{3.0F}}}};
+    ASSERT_TRUE(context.SetInputUVE(3U, "Slot", 5.0F));
+    ASSERT_TRUE(context.SetInputUVE(3U, "Value", map));
+    ScriptBytecodeProgramUVE mapProgram;
+    mapProgram.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 3U, 0U, "variable.make_map", {}, {}});
+    const ScriptVmExecutionResultUVE mapResult = ExecuteScriptBytecodeUVE(mapProgram, context);
+    ASSERT_TRUE(mapResult.IsSuccessUVE());
+    EXPECT_EQ(context.FindLocalVariableUVE(5U), std::optional<ScriptVmValueUVE>(map));
+}
+
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesOneTypedCollectionTransfer) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({1U, "variable.set_array"}));
+    ASSERT_TRUE(graph.AddNodeUVE({2U, "variable.get_array"}));
+    ASSERT_TRUE(graph.AddLinkUVE({{2U, "Result"}, {1U, "Value"}}));
+    const ScriptIrCompileResultUVE result = CompileScriptGraphToIrUVE(graph, registry);
+    ASSERT_TRUE(result.IsSuccessUVE());
+    ASSERT_EQ(result.program->instructions.size(), 3U);
+    EXPECT_EQ(result.program->instructions[0].nodeTypeId, "variable.get_array");
+    EXPECT_EQ(result.program->instructions[1].kind, ScriptIrInstructionKindUVE::TransferValue);
+    EXPECT_TRUE(result.program->instructions[1].isStagedTransfer);
+    EXPECT_EQ(result.program->instructions[2].nodeTypeId, "variable.set_array");
 }
 
 TEST(ScriptDebuggerUVETest, StepUVE_FlowControlDispatchUsesAttachedContext) {
