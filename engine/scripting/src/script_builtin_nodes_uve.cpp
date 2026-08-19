@@ -17,7 +17,7 @@ struct BuiltInNodeDefinitionUVE final {
     std::uint32_t displayOrder;
 };
 
-[[nodiscard]] std::array<BuiltInNodeDefinitionUVE, 81U> MakeBuiltInDefinitionsUVE() {
+[[nodiscard]] std::array<BuiltInNodeDefinitionUVE, 92U> MakeBuiltInDefinitionsUVE() {
     return {
         BuiltInNodeDefinitionUVE{
             "flow.sequence", "Sequence",
@@ -369,6 +369,71 @@ struct BuiltInNodeDefinitionUVE final {
              ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Vector3}},
             "Rotation", "node.math.rotation", 458U},
         BuiltInNodeDefinitionUVE{
+            "math.transform.make", "Make Transform",
+            {ScriptPinDescriptorUVE{"Position", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Rotation", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Rotation},
+             ScriptPinDescriptorUVE{"Scale", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Transform", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Transform}},
+            "Transform", "node.math.transform", 600U},
+        BuiltInNodeDefinitionUVE{
+            "math.transform.break", "Break Transform",
+            {ScriptPinDescriptorUVE{"Transform", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Transform},
+             ScriptPinDescriptorUVE{"Position", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Rotation", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Rotation},
+             ScriptPinDescriptorUVE{"Scale", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Vector3}},
+            "Transform", "node.math.transform", 601U},
+        BuiltInNodeDefinitionUVE{
+            "math.transform.get_position", "Get Transform Position",
+            {ScriptPinDescriptorUVE{"Transform", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Transform},
+             ScriptPinDescriptorUVE{"Position", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Vector3}},
+            "Transform", "node.math.transform", 602U},
+        BuiltInNodeDefinitionUVE{
+            "math.transform.set_position", "Set Transform Position",
+            {ScriptPinDescriptorUVE{"Transform", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Transform},
+             ScriptPinDescriptorUVE{"Position", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Transform}},
+            "Transform", "node.math.transform", 603U},
+        BuiltInNodeDefinitionUVE{
+            "math.transform.get_rotation", "Get Transform Rotation",
+            {ScriptPinDescriptorUVE{"Transform", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Transform},
+             ScriptPinDescriptorUVE{"Rotation", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Rotation}},
+            "Transform", "node.math.transform", 604U},
+        BuiltInNodeDefinitionUVE{
+            "math.transform.set_rotation", "Set Transform Rotation",
+            {ScriptPinDescriptorUVE{"Transform", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Transform},
+             ScriptPinDescriptorUVE{"Rotation", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Rotation},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Transform}},
+            "Transform", "node.math.transform", 605U},
+        BuiltInNodeDefinitionUVE{
+            "math.transform.get_scale", "Get Transform Scale",
+            {ScriptPinDescriptorUVE{"Transform", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Transform},
+             ScriptPinDescriptorUVE{"Scale", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Vector3}},
+            "Transform", "node.math.transform", 606U},
+        BuiltInNodeDefinitionUVE{
+            "math.transform.set_scale", "Set Transform Scale",
+            {ScriptPinDescriptorUVE{"Transform", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Transform},
+             ScriptPinDescriptorUVE{"Scale", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Transform}},
+            "Transform", "node.math.transform", 607U},
+        BuiltInNodeDefinitionUVE{
+            "math.transform.translate", "Translate Transform",
+            {ScriptPinDescriptorUVE{"Transform", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Transform},
+             ScriptPinDescriptorUVE{"Translation", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Transform}},
+            "Transform", "node.math.transform", 608U},
+        BuiltInNodeDefinitionUVE{
+            "math.transform.rotate", "Rotate Transform",
+            {ScriptPinDescriptorUVE{"Transform", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Transform},
+             ScriptPinDescriptorUVE{"Rotation", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Rotation},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Transform}},
+            "Transform", "node.math.transform", 609U},
+        BuiltInNodeDefinitionUVE{
+            "math.transform.transform_point", "Transform Point",
+            {ScriptPinDescriptorUVE{"Transform", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Transform},
+             ScriptPinDescriptorUVE{"Point", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Vector3}},
+            "Transform", "node.math.transform", 610U},
+        BuiltInNodeDefinitionUVE{
             "logic.boolean.not", "Not Boolean",
             {ScriptPinDescriptorUVE{"Value", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Boolean},
              ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
@@ -432,13 +497,13 @@ struct BuiltInNodeDefinitionUVE final {
             {ScriptPinDescriptorUVE{"Entity", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
              ScriptPinDescriptorUVE{"Component", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Component},
              ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
-            "Entity Query", "node.entity.query", 600U},
+            "Entity Query", "node.entity.query", 620U},
         BuiltInNodeDefinitionUVE{
             "query.entity.get_component", "Get Component",
             {ScriptPinDescriptorUVE{"Entity", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
              ScriptPinDescriptorUVE{"Component", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Component},
              ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Component}},
-            "Entity Query", "node.entity.query", 601U},
+            "Entity Query", "node.entity.query", 621U},
         BuiltInNodeDefinitionUVE{
             "engine.log", "Log Number",
             {ScriptPinDescriptorUVE{"Value", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number}},
@@ -504,7 +569,7 @@ struct BuiltInNodeDefinitionUVE final {
 } // namespace
 
 bool RegisterBuiltInScriptNodesUVE(ScriptNodeRegistryUVE& registry) {
-    std::array<BuiltInNodeDefinitionUVE, 81U> definitions = MakeBuiltInDefinitionsUVE();
+    std::array<BuiltInNodeDefinitionUVE, 92U> definitions = MakeBuiltInDefinitionsUVE();
     for (const BuiltInNodeDefinitionUVE& definition : definitions) {
         if (registry.FindNodeTypeUVE(definition.typeId) != nullptr) {
             return false;

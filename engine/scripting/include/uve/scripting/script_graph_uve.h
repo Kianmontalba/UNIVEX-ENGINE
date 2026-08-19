@@ -27,6 +27,7 @@ enum class ScriptValueTypeUVE : std::uint8_t {
     Asset = 6,
     Component = 7,
     Rotation = 8,
+    Transform = 9,
 };
 
 enum class ScriptPinRoleUVE : std::uint8_t {

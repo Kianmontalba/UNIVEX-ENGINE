@@ -35,6 +35,9 @@ namespace {
                 return IsFiniteScriptVector3UVE(typedValue);
             } else if constexpr (std::is_same_v<ValueType, ScriptRotationValueUVE>) {
                 return Math::IsFiniteUVE(typedValue.value);
+            } else if constexpr (std::is_same_v<ValueType, ScriptTransformValueUVE>) {
+                return IsFiniteScriptVector3UVE(typedValue.position) && Math::IsFiniteUVE(typedValue.rotation.value) &&
+                       IsFiniteScriptVector3UVE(typedValue.scale);
             } else {
                 return IsFiniteScriptVector2UVE(typedValue);
             }
