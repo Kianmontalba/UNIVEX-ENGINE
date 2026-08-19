@@ -25,10 +25,13 @@ protected:
     Scene::SceneGraphUVE sceneGraph;
     CollisionSystemUVE collisionSystem;
 
-    Scene::EntityUVE MakeColliderEntityUVE(Math::Vector3UVE position, const Scene::ColliderComponentUVE& collider) {
+    Scene::EntityUVE MakeColliderEntityUVE(
+        Math::Vector3UVE position, const Scene::ColliderComponentUVE& collider,
+        Math::QuaternionUVE rotation = {}) {
         const Scene::EntityUVE entity = entityManager.CreateEntityUVE();
         Scene::TransformComponentUVE transform;
         transform.localPosition = position;
+        transform.localRotation = rotation;
         sceneGraph.AttachTransformUVE(entityManager, entity, transform);
         sceneGraph.UpdateUVE(entityManager);
         entityManager.AddComponentUVE<Scene::ColliderComponentUVE>(entity, collider);
@@ -157,6 +160,28 @@ TEST_F(ColliderShapeUVETest, DetectCollisionsUVE_SphereSphereRejectsTouchingAndD
     // the combined radius. The touching pair is isolated at x=10 and is also intentionally
     // excluded.
     EXPECT_TRUE(collisionSystem.DetectCollisionsUVE(entityManager).empty());
+}
+
+TEST_F(ColliderShapeUVETest, DetectCollisionsUVE_RotatedCapsuleUsesWorldSegmentForSphereContact) {
+    Scene::ColliderComponentUVE capsule;
+    capsule.shapeType = Scene::ColliderShapeTypeUVE::Capsule;
+    capsule.radius = 0.5F;
+    capsule.height = 4.0F;
+    const Math::QuaternionUVE quarterTurnZ{0.0F, 0.0F, 0.70710678118F, 0.70710678118F};
+    MakeColliderEntityUVE({0.0F, 0.0F, 0.0F}, capsule, quarterTurnZ);
+
+    Scene::ColliderComponentUVE sphere;
+    sphere.shapeType = Scene::ColliderShapeTypeUVE::Sphere;
+    sphere.radius = 0.5F;
+    const Scene::EntityUVE sphereEntity = MakeColliderEntityUVE({0.0F, 0.75F, 0.0F}, sphere);
+
+    const std::vector<CollisionPairUVE> pairs = collisionSystem.DetectCollisionsUVE(entityManager);
+    ASSERT_EQ(pairs.size(), 1U);
+    EXPECT_EQ(pairs[0].second, sphereEntity);
+    EXPECT_NEAR(pairs[0].penetrationDepth, 0.25F, 1.0e-5F);
+    EXPECT_NEAR(pairs[0].separationAxis.x, 0.0F, 1.0e-5F);
+    EXPECT_NEAR(pairs[0].separationAxis.y, 1.0F, 1.0e-5F);
+    EXPECT_NEAR(pairs[0].separationAxis.z, 0.0F, 1.0e-5F);
 }
 
 TEST_F(ColliderShapeUVETest, DetectCollisionsUVE_CapsuleCapsuleUsesExactSegmentDistanceAndOrientation) {
