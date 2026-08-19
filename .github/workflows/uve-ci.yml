@@ -61,7 +61,7 @@ jobs:
             sleep 10
           done
 
-          sudo -n timeout --signal=TERM --kill-after=30s 600s \
+          sudo -n timeout --signal=TERM --kill-after=30s 1200s \
             apt-get "${apt_options[@]}" install --yes --no-install-recommends --fix-missing \
               cmake \
               g++ \
