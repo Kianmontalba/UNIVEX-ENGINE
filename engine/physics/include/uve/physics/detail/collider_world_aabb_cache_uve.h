@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "uve/math/aabb_uve.h"
+#include "uve/scene/components/collider_component_uve.h"
 #include "uve/scene/i_entity_manager_uve.h"
 
 namespace UVE::Physics::Detail {
@@ -23,6 +24,8 @@ struct ColliderWorldAabbUVE {
     Math::AabbUVE worldAabb;
     std::uint32_t collisionLayer;
     std::uint32_t collisionMask;
+    Scene::ColliderShapeTypeUVE shapeType = Scene::ColliderShapeTypeUVE::Box;
+    float shapeRadius = 0.0F;
 };
 
 enum class DynamicColliderWorldAabbUpdateCodeUVE : std::uint8_t {
