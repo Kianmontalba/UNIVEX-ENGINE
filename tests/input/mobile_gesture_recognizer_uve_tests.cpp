@@ -1,0 +1,79 @@
+// Copyright (c) 2026 UniVex Studios. All Rights Reserved.
+
+#include "uve/input/mobile_gesture_recognizer_uve.h"
+
+#include <gtest/gtest.h>
+
+#include <limits>
+
+namespace UVE::Input::Tests {
+namespace {
+
+constexpr float kEpsilon = 1e-5F;
+
+TEST(MobileGestureRecognizerUVETest, ClassifiesTapOnReleaseAndSuppressesDuplicateFrame) {
+    MobileGestureRecognizerUVE recognizer;
+
+    MobileInputSnapshotUVE pressed{};
+    pressed.frameNumber = 1U;
+    pressed.touches[0U] = TouchPointStateUVE{true, 7U, Math::Vector2UVE{25.0F, 30.0F}, {}, 1.0F};
+    EXPECT_EQ(recognizer.ConsumeSnapshotUVE(pressed, 0.016F).count, 0U);
+
+    MobileInputSnapshotUVE released{};
+    released.frameNumber = 2U;
+    const MobileGestureReportUVE report = recognizer.ConsumeSnapshotUVE(released, 0.016F);
+    ASSERT_EQ(report.count, 1U);
+    EXPECT_FALSE(report.truncated);
+    EXPECT_EQ(report.events[0U].type, MobileGestureTypeUVE::Tap);
+    EXPECT_EQ(report.events[0U].touchIdentifier, 7U);
+    EXPECT_NEAR(report.events[0U].startPosition.x, 25.0F, kEpsilon);
+    EXPECT_NEAR(report.events[0U].endPosition.y, 30.0F, kEpsilon);
+
+    EXPECT_EQ(recognizer.ConsumeSnapshotUVE(released, 0.016F).count, 0U);
+}
+
+TEST(MobileGestureRecognizerUVETest, ClassifiesDirectionalSwipeFromStableTouchIdentity) {
+    MobileGestureRecognizerUVE recognizer;
+
+    MobileInputSnapshotUVE start{};
+    start.frameNumber = 10U;
+    start.touches[2U] = TouchPointStateUVE{true, 99U, Math::Vector2UVE{0.0F, 0.0F}, {}, 0.5F};
+    EXPECT_EQ(recognizer.ConsumeSnapshotUVE(start, 0.1F).count, 0U);
+
+    MobileInputSnapshotUVE moved{};
+    moved.frameNumber = 11U;
+    moved.touches[2U] = TouchPointStateUVE{true, 99U, Math::Vector2UVE{60.0F, 10.0F}, {}, 0.5F};
+    EXPECT_EQ(recognizer.ConsumeSnapshotUVE(moved, 0.2F).count, 0U);
+
+    MobileInputSnapshotUVE released{};
+    released.frameNumber = 12U;
+    const MobileGestureReportUVE report = recognizer.ConsumeSnapshotUVE(released, 0.2F);
+    ASSERT_EQ(report.count, 1U);
+    EXPECT_EQ(report.events[0U].type, MobileGestureTypeUVE::Swipe);
+    EXPECT_EQ(report.events[0U].direction, MobileSwipeDirectionUVE::PositiveX);
+    EXPECT_EQ(report.events[0U].touchIdentifier, 99U);
+    EXPECT_NEAR(report.events[0U].delta.x, 60.0F, kEpsilon);
+    EXPECT_NEAR(report.events[0U].delta.y, 10.0F, kEpsilon);
+    EXPECT_NEAR(report.events[0U].durationSeconds, 0.2F, kEpsilon);
+}
+
+TEST(MobileGestureRecognizerUVETest, RejectsInvalidFrameDeltaAndResetClearsTrackedTouch) {
+    MobileGestureRecognizerUVE recognizer;
+    MobileInputSnapshotUVE pressed{};
+    pressed.frameNumber = 20U;
+    pressed.touches[0U] = TouchPointStateUVE{true, 5U, Math::Vector2UVE{1.0F, 1.0F}, {}, 0.0F};
+    EXPECT_EQ(recognizer.ConsumeSnapshotUVE(pressed, 0.1F).count, 0U);
+
+    MobileInputSnapshotUVE next = pressed;
+    next.frameNumber = 21U;
+    next.touches[0U].position = Math::Vector2UVE{100.0F, 0.0F};
+    EXPECT_EQ(recognizer.ConsumeSnapshotUVE(next, std::numeric_limits<float>::quiet_NaN()).count, 0U);
+
+    recognizer.ResetUVE();
+    MobileInputSnapshotUVE released{};
+    released.frameNumber = 22U;
+    EXPECT_EQ(recognizer.ConsumeSnapshotUVE(released, 0.1F).count, 0U);
+}
+
+} // namespace
+} // namespace UVE::Input::Tests
