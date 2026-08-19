@@ -84,6 +84,13 @@ struct SkeletonDefinitionUVE final {
     [[nodiscard]] bool operator==(const SkeletonDefinitionUVE&) const noexcept = default;
 };
 
+struct SkeletonRetargetMapEntryUVE final {
+    std::string sourceJointId;
+    std::string targetJointId;
+
+    [[nodiscard]] bool operator==(const SkeletonRetargetMapEntryUVE&) const noexcept = default;
+};
+
 struct PoseBufferUVE final {
     std::string skeletonId;
     std::vector<TransformPoseUVE> localJoints;
@@ -130,6 +137,9 @@ struct PoseSampleUVE final {
     const SkeletonDefinitionUVE& skeleton) noexcept;
 [[nodiscard]] AnimationContractValidationResultUVE ValidatePoseBufferUVE(
     const PoseBufferUVE& pose, const SkeletonDefinitionUVE& skeleton) noexcept;
+[[nodiscard]] AnimationContractValidationResultUVE ValidateSkeletonRetargetMapUVE(
+    const SkeletonDefinitionUVE& sourceSkeleton, const SkeletonDefinitionUVE& targetSkeleton,
+    const std::vector<SkeletonRetargetMapEntryUVE>& map) noexcept;
 [[nodiscard]] AnimationContractValidationResultUVE ValidateAnimationEvaluationContextUVE(
     const AnimationEvaluationContextUVE& context) noexcept;
 

@@ -96,6 +96,24 @@ TEST(AnimationPoseContractUVETest, RejectsDuplicateOrUnknownJointsAndMismatchedP
               AnimationContractValidationCodeUVE::SkeletonMismatch);
 }
 
+TEST(AnimationPoseContractUVETest, ValidatesOneToOneSkeletonRetargetMap) {
+    const SkeletonDefinitionUVE source{
+        "source", {SkeletonJointUVE{"root", ""}, SkeletonJointUVE{"hand", "root"}}};
+    const SkeletonDefinitionUVE target{
+        "target", {SkeletonJointUVE{"pelvis", ""}, SkeletonJointUVE{"arm", "pelvis"}}};
+    const std::vector<SkeletonRetargetMapEntryUVE> validMap{
+        {"root", "pelvis"}, {"hand", "arm"}};
+    EXPECT_TRUE(ValidateSkeletonRetargetMapUVE(source, target, validMap).IsValidUVE());
+
+    const auto unknown = ValidateSkeletonRetargetMapUVE(
+        source, target, std::vector<SkeletonRetargetMapEntryUVE>{{"missing", "pelvis"}});
+    EXPECT_EQ(unknown.code, AnimationContractValidationCodeUVE::SkeletonMismatch);
+
+    const auto duplicate = ValidateSkeletonRetargetMapUVE(
+        source, target, std::vector<SkeletonRetargetMapEntryUVE>{{"root", "pelvis"}, {"root", "arm"}});
+    EXPECT_EQ(duplicate.code, AnimationContractValidationCodeUVE::DuplicateJoint);
+}
+
 TEST(AnimationPoseContractUVETest, RejectsNegativeEvaluationTime) {
     AnimationEvaluationContextUVE context;
     context.time.animationDeltaSeconds = -0.01;
