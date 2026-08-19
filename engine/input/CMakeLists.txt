@@ -2,6 +2,7 @@
 
 
 add_library(uve_input STATIC
+    src/touch_coordinate_transform_uve.cpp
     src/gamepad_input_system_uve.cpp
     src/mobile_gesture_recognizer_uve.cpp
     src/mobile_input_system_uve.cpp
