@@ -94,6 +94,52 @@ TEST(PrefabInstanceComponentUVE, ApplyAndRevertPrefabOverridesUVE_RestoresExplic
     EXPECT_TRUE(instance.overrides.empty());
 }
 
+TEST(PrefabInstanceComponentUVE, CommitPrefabOverridesToSourceUVE_BakesAndClearsAfterCleanBaseline) {
+    PrefabInstanceComponentUVE instance{Asset::AssetGuidUVE{13U}, {{"A.value", "new-a"}}};
+    const std::vector<PrefabPropertyOverrideUVE> baseline{{"A.value", "old-a"}};
+    FakePrefabOverrideTargetUVE source;
+    source.values = {{"A.value", "old-a"}};
+
+    const PrefabOverrideOperationResultUVE result =
+        CommitPrefabOverridesToSourceUVE(instance, baseline, source);
+
+    ASSERT_TRUE(result.IsAppliedUVE());
+    EXPECT_EQ(result.affectedCount, 1U);
+    EXPECT_EQ(source.values.at("A.value"), "new-a");
+    EXPECT_TRUE(instance.overrides.empty());
+}
+
+TEST(PrefabInstanceComponentUVE, CommitPrefabOverridesToSourceUVE_RejectsStaleBaselineWithoutWrite) {
+    PrefabInstanceComponentUVE instance{Asset::AssetGuidUVE{14U}, {{"A.value", "new-a"}}};
+    const std::vector<PrefabPropertyOverrideUVE> baseline{{"A.value", "old-a"}};
+    FakePrefabOverrideTargetUVE source;
+    source.values = {{"A.value", "external-a"}};
+
+    const PrefabOverrideOperationResultUVE result =
+        CommitPrefabOverridesToSourceUVE(instance, baseline, source);
+
+    EXPECT_EQ(result.code, PrefabOverrideOperationCodeUVE::ConflictDetected);
+    EXPECT_EQ(source.writeCount, 0U);
+    EXPECT_EQ(source.values.at("A.value"), "external-a");
+    ASSERT_EQ(instance.overrides.size(), 1U);
+}
+
+TEST(PrefabInstanceComponentUVE, CommitPrefabOverridesToSourceUVE_PreservesInstanceOnWriteFailure) {
+    PrefabInstanceComponentUVE instance{Asset::AssetGuidUVE{15U}, {{"A.value", "new-a"}}};
+    const std::vector<PrefabPropertyOverrideUVE> baseline{{"A.value", "old-a"}};
+    FakePrefabOverrideTargetUVE source;
+    source.values = {{"A.value", "old-a"}};
+    source.failingWritePath = "A.value";
+
+    const PrefabOverrideOperationResultUVE result =
+        CommitPrefabOverridesToSourceUVE(instance, baseline, source);
+
+    EXPECT_EQ(result.code, PrefabOverrideOperationCodeUVE::WriteFailed);
+    EXPECT_EQ(source.values.at("A.value"), "old-a");
+    ASSERT_EQ(instance.overrides.size(), 1U);
+    EXPECT_EQ(instance.overrides.front().serializedValue, "new-a");
+}
+
 TEST(PrefabInstanceComponentUVE, ApplyPrefabOverridesUVE_RollsBackEarlierWritesOnFailure) {
     const PrefabInstanceComponentUVE instance{
         Asset::AssetGuidUVE{8U},
