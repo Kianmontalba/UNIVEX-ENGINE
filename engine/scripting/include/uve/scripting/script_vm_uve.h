@@ -191,6 +191,25 @@ using ScriptEntityGetByHandleFunctionUVE = bool (*)(
     void* userData, float handle, Scene::EntityUVE* outEntity) noexcept;
 using ScriptEntityComponentMutationFunctionUVE = bool (*)(
     void* userData, Scene::EntityUVE entity, const ScriptComponentValueUVE& component) noexcept;
+using ScriptInputKeyQueryFunctionUVE = bool (*)(void* userData, float keyToken, bool* outResult) noexcept;
+using ScriptInputMousePositionFunctionUVE = bool (*)(void* userData, ScriptVector2ValueUVE* outPosition) noexcept;
+using ScriptInputMouseButtonQueryFunctionUVE = bool (*)(void* userData, float buttonToken, bool* outResult) noexcept;
+using ScriptInputGamepadButtonQueryFunctionUVE = bool (*)(
+    void* userData, float gamepadToken, float buttonToken, bool* outResult) noexcept;
+using ScriptInputAxisQueryFunctionUVE = bool (*)(
+    void* userData, float gamepadToken, float axisToken, float* outValue) noexcept;
+using ScriptInputActionQueryFunctionUVE = bool (*)(void* userData, float actionToken, bool* outResult) noexcept;
+using ScriptCameraGetFunctionUVE = bool (*)(void* userData, Scene::EntityUVE* outCamera) noexcept;
+using ScriptCameraSetPositionFunctionUVE = bool (*)(
+    void* userData, Scene::EntityUVE camera, const ScriptVector3ValueUVE& position) noexcept;
+using ScriptCameraSetRotationFunctionUVE = bool (*)(
+    void* userData, Scene::EntityUVE camera, const ScriptRotationValueUVE& rotation) noexcept;
+using ScriptCameraLookAtFunctionUVE = bool (*)(
+    void* userData, Scene::EntityUVE camera, const ScriptVector3ValueUVE& target) noexcept;
+using ScriptCameraSetFovFunctionUVE = bool (*)(void* userData, Scene::EntityUVE camera, float fovDegrees) noexcept;
+using ScriptCameraShakeFunctionUVE = bool (*)(
+    void* userData, Scene::EntityUVE camera, float amplitude, float durationSeconds) noexcept;
+using ScriptCameraSetActiveFunctionUVE = bool (*)(void* userData, Scene::EntityUVE camera, bool active) noexcept;
 
 struct ScriptEngineCallBindingsUVE final {
     ScriptEngineLogFunctionUVE log = nullptr;
@@ -202,6 +221,21 @@ struct ScriptEngineCallBindingsUVE final {
     ScriptEntityGetByHandleFunctionUVE getEntityByHandle = nullptr;
     ScriptEntityComponentMutationFunctionUVE addComponent = nullptr;
     ScriptEntityComponentMutationFunctionUVE removeComponent = nullptr;
+    ScriptInputKeyQueryFunctionUVE inputKeyPressed = nullptr;
+    ScriptInputKeyQueryFunctionUVE inputKeyReleased = nullptr;
+    ScriptInputKeyQueryFunctionUVE inputKeyDown = nullptr;
+    ScriptInputMousePositionFunctionUVE inputMousePosition = nullptr;
+    ScriptInputMouseButtonQueryFunctionUVE inputMouseButton = nullptr;
+    ScriptInputGamepadButtonQueryFunctionUVE inputGamepadButton = nullptr;
+    ScriptInputAxisQueryFunctionUVE inputAxis = nullptr;
+    ScriptInputActionQueryFunctionUVE inputAction = nullptr;
+    ScriptCameraGetFunctionUVE cameraGet = nullptr;
+    ScriptCameraSetPositionFunctionUVE cameraSetPosition = nullptr;
+    ScriptCameraSetRotationFunctionUVE cameraSetRotation = nullptr;
+    ScriptCameraLookAtFunctionUVE cameraLookAt = nullptr;
+    ScriptCameraSetFovFunctionUVE cameraSetFov = nullptr;
+    ScriptCameraShakeFunctionUVE cameraShake = nullptr;
+    ScriptCameraSetActiveFunctionUVE cameraSetActive = nullptr;
 };
 
 struct ScriptVmExecutionOptionsUVE final {
