@@ -708,6 +708,10 @@ public:
 
     void RegisterActionUVE(Input::InputActionUVE&&) override {}
     bool UnregisterActionUVE(std::string_view) override { return false; }
+    bool RemapActionUVE(std::string_view, std::vector<Input::InputBindingUVE>,
+                       std::vector<Input::InputBindingUVE>) override {
+        return false;
+    }
     [[nodiscard]] bool IsActionTriggeredUVE(std::string_view) const override { return false; }
     [[nodiscard]] bool IsActionHeldUVE(std::string_view) const override { return false; }
     [[nodiscard]] bool IsActionReleasedUVE(std::string_view) const override { return false; }
