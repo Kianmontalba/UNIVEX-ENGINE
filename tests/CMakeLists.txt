@@ -87,6 +87,7 @@ add_executable(uve_tests
     audio/null_audio_device_uve_tests.cpp
     audio/audio_system_uve_tests.cpp
     audio/audio_source_system_uve_tests.cpp
+    audio/wav_metadata_uve_tests.cpp
     save/save_game_system_uve_tests.cpp
     save/checkpoint_manager_uve_tests.cpp
     window/null_window_manager_uve_tests.cpp
