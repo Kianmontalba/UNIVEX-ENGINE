@@ -66,6 +66,14 @@ namespace UVE::Physics::Detail {
     Math::Vector3UVE boxCenter, Math::Vector3UVE boxHalfExtents, Math::QuaternionUVE boxRotation,
     Math::Vector3UVE capsuleSegmentStart, Math::Vector3UVE capsuleSegmentEnd, float capsuleRadius) noexcept;
 
+/// Computes exact oriented-box-vs-oriented-box penetration using the 15-axis separating-axis
+/// theorem. The returned axis points from the first box toward the second; touching and invalid
+/// inputs are rejected, and coincident centers use deterministic axis ordering.
+[[nodiscard]] std::optional<Math::PenetrationUVE> ComputeOrientedBoxOrientedBoxPenetrationUVE(
+    Math::Vector3UVE firstCenter, Math::Vector3UVE firstHalfExtents, Math::QuaternionUVE firstRotation,
+    Math::Vector3UVE secondCenter, Math::Vector3UVE secondHalfExtents,
+    Math::QuaternionUVE secondRotation) noexcept;
+
 } // namespace UVE::Physics::Detail
 
 // EOF

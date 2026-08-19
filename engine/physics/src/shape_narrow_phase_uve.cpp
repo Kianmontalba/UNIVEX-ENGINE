@@ -394,6 +394,87 @@ std::optional<Math::PenetrationUVE> ComputeCapsuleOrientedBoxPenetrationUVE(
         Math::RotateVectorUVE(normalizedRotation, localPenetration->axis), localPenetration->depth};
 }
 
+std::optional<Math::PenetrationUVE> ComputeOrientedBoxOrientedBoxPenetrationUVE(
+    const Math::Vector3UVE firstCenter, const Math::Vector3UVE firstHalfExtents,
+    const Math::QuaternionUVE firstRotation, const Math::Vector3UVE secondCenter,
+    const Math::Vector3UVE secondHalfExtents, const Math::QuaternionUVE secondRotation) noexcept {
+    if (!IsFiniteVectorUVE(firstCenter) || !IsFiniteVectorUVE(secondCenter)) {
+        return std::nullopt;
+    }
+    Math::QuaternionUVE normalizedFirstRotation;
+    Math::QuaternionUVE inverseFirstRotation;
+    Math::QuaternionUVE normalizedSecondRotation;
+    Math::QuaternionUVE inverseSecondRotation;
+    if (!TryBuildOrientedBoxFrameUVE(firstHalfExtents, firstRotation, normalizedFirstRotation,
+                                     inverseFirstRotation) ||
+        !TryBuildOrientedBoxFrameUVE(secondHalfExtents, secondRotation, normalizedSecondRotation,
+                                     inverseSecondRotation)) {
+        return std::nullopt;
+    }
+
+    const std::array<Math::Vector3UVE, 3> firstAxes{
+        Math::RotateVectorUVE(normalizedFirstRotation, {1.0F, 0.0F, 0.0F}),
+        Math::RotateVectorUVE(normalizedFirstRotation, {0.0F, 1.0F, 0.0F}),
+        Math::RotateVectorUVE(normalizedFirstRotation, {0.0F, 0.0F, 1.0F}),
+    };
+    const std::array<Math::Vector3UVE, 3> secondAxes{
+        Math::RotateVectorUVE(normalizedSecondRotation, {1.0F, 0.0F, 0.0F}),
+        Math::RotateVectorUVE(normalizedSecondRotation, {0.0F, 1.0F, 0.0F}),
+        Math::RotateVectorUVE(normalizedSecondRotation, {0.0F, 0.0F, 1.0F}),
+    };
+    const Math::Vector3UVE centerDelta = secondCenter - firstCenter;
+    constexpr float kAxisEpsilonUVE = 1.0e-6F;
+    (void)inverseFirstRotation;
+    (void)inverseSecondRotation;
+
+    float minimumOverlap = std::numeric_limits<float>::infinity();
+    Math::Vector3UVE minimumAxis{1.0F, 0.0F, 0.0F};
+    const auto TestAxisUVE = [&](Math::Vector3UVE axis) noexcept {
+        const float axisLengthSquared = Math::LengthSquaredUVE(axis);
+        if (axisLengthSquared <= kAxisEpsilonUVE * kAxisEpsilonUVE) {
+            return true;
+        }
+        axis = axis * (1.0F / std::sqrt(axisLengthSquared));
+        const float firstRadius = std::fabs(Math::DotUVE(axis, firstAxes[0])) * firstHalfExtents.x +
+                                   std::fabs(Math::DotUVE(axis, firstAxes[1])) * firstHalfExtents.y +
+                                   std::fabs(Math::DotUVE(axis, firstAxes[2])) * firstHalfExtents.z;
+        const float secondRadius = std::fabs(Math::DotUVE(axis, secondAxes[0])) * secondHalfExtents.x +
+                                    std::fabs(Math::DotUVE(axis, secondAxes[1])) * secondHalfExtents.y +
+                                    std::fabs(Math::DotUVE(axis, secondAxes[2])) * secondHalfExtents.z;
+        const float overlap = firstRadius + secondRadius - std::fabs(Math::DotUVE(centerDelta, axis));
+        if (!std::isfinite(overlap) || overlap <= 0.0F) {
+            return false;
+        }
+        if (overlap < minimumOverlap) {
+            minimumOverlap = overlap;
+            minimumAxis = Math::DotUVE(centerDelta, axis) < 0.0F ? -axis : axis;
+        }
+        return true;
+    };
+
+    for (const Math::Vector3UVE axis : firstAxes) {
+        if (!TestAxisUVE(axis)) {
+            return std::nullopt;
+        }
+    }
+    for (const Math::Vector3UVE axis : secondAxes) {
+        if (!TestAxisUVE(axis)) {
+            return std::nullopt;
+        }
+    }
+    for (const Math::Vector3UVE firstAxis : firstAxes) {
+        for (const Math::Vector3UVE secondAxis : secondAxes) {
+            if (!TestAxisUVE(Math::CrossUVE(firstAxis, secondAxis))) {
+                return std::nullopt;
+            }
+        }
+    }
+    if (!std::isfinite(minimumOverlap)) {
+        return std::nullopt;
+    }
+    return Math::PenetrationUVE{minimumAxis, minimumOverlap};
+}
+
 } // namespace UVE::Physics::Detail
 
 // EOF

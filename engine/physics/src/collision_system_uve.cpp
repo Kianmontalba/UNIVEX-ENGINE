@@ -85,6 +85,12 @@ namespace {
         }
         return Math::PenetrationUVE{-capsuleToBox->axis, capsuleToBox->depth};
     }
+    if (first.shapeType == Scene::ColliderShapeTypeUVE::Box &&
+        second.shapeType == Scene::ColliderShapeTypeUVE::Box) {
+        return Detail::ComputeOrientedBoxOrientedBoxPenetrationUVE(
+            first.worldAabb.GetCenterUVE(), first.shapeHalfExtents, first.shapeRotation,
+            second.worldAabb.GetCenterUVE(), second.shapeHalfExtents, second.shapeRotation);
+    }
     return Math::ComputePenetrationUVE(first.worldAabb, second.worldAabb);
 }
 
