@@ -42,6 +42,15 @@ namespace UVE::Physics::Detail {
     Math::Vector3UVE capsuleSegmentStart, Math::Vector3UVE capsuleSegmentEnd, float capsuleRadius,
     Math::Vector3UVE sphereCenter, float sphereRadius) noexcept;
 
+/// Computes exact penetration between two capsules represented by explicit centerline segments.
+/// The returned axis points from the first capsule toward the second. Touching pairs are not
+/// intersections; coincident closest points use +X as the stable fallback axis. This copied
+/// value-only helper does not model rotated collider ownership, transforms, ECS state, or backend
+/// resources.
+[[nodiscard]] std::optional<Math::PenetrationUVE> ComputeCapsuleCapsulePenetrationUVE(
+    Math::Vector3UVE firstSegmentStart, Math::Vector3UVE firstSegmentEnd, float firstRadius,
+    Math::Vector3UVE secondSegmentStart, Math::Vector3UVE secondSegmentEnd, float secondRadius) noexcept;
+
 } // namespace UVE::Physics::Detail
 
 // EOF
