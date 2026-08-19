@@ -217,6 +217,30 @@ TEST_F(InputSystemUVETest, UnregisterActionUVE_RemovesActionAndReportsWhetherItE
     EXPECT_FALSE(inputSystem.IsActionHeldUVE("Jump"));
 }
 
+TEST_F(InputSystemUVETest, ActionRemap_ReplacesBindingsOnNextFrameAndRejectsInvalidCandidateAtomically) {
+    inputSystem.RegisterActionUVE(
+        InputActionUVE{"Jump", InputActionTypeUVE::Button, {KeyBindingUVE(KeyCodeUVE::Space)}, {}});
+
+    inputSystem.SetKeyStateUVE(KeyCodeUVE::Space, true);
+    inputSystem.UpdateUVE();
+    EXPECT_TRUE(inputSystem.IsActionHeldUVE("Jump"));
+
+    EXPECT_TRUE(inputSystem.RemapActionUVE("Jump", {KeyBindingUVE(KeyCodeUVE::Enter)}, {}));
+    EXPECT_FALSE(inputSystem.IsActionTriggeredUVE("Jump"));
+    EXPECT_FALSE(inputSystem.IsActionHeldUVE("Jump"));
+
+    inputSystem.SetKeyStateUVE(KeyCodeUVE::Space, false);
+    inputSystem.SetKeyStateUVE(KeyCodeUVE::Enter, true);
+    inputSystem.UpdateUVE();
+    EXPECT_TRUE(inputSystem.IsActionTriggeredUVE("Jump"));
+    EXPECT_TRUE(inputSystem.IsActionHeldUVE("Jump"));
+
+    EXPECT_FALSE(inputSystem.RemapActionUVE(
+        "Jump", {GamepadButtonBindingUVE(kMaximumGamepadCountUVE, GamepadButtonUVE::South)}, {}));
+    EXPECT_TRUE(inputSystem.IsActionHeldUVE("Jump"));
+    EXPECT_FALSE(inputSystem.RemapActionUVE("Missing", {KeyBindingUVE(KeyCodeUVE::A)}, {}));
+}
+
 TEST_F(InputSystemUVETest, ButtonActionTriggered_QueuesAndDeliversInputActionTriggeredEventUVE) {
     std::string receivedActionName;
     InputActionTypeUVE receivedType = InputActionTypeUVE::Axis1D;

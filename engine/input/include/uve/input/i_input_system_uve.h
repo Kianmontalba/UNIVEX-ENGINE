@@ -72,6 +72,13 @@ public:
     /// assertion for an unknown name. Needed for future editor workflows, hot reload, and
     /// runtime action rebuilding without forcing the registry to only ever grow.
     virtual bool UnregisterActionUVE(std::string_view actionName) = 0;
+    /// Atomically replaces the positive/negative binding vectors for an existing action. The
+    /// vectors are copied/moved into the action registry only after every binding is validated;
+    /// a missing action or invalid candidate leaves the existing mapping and frame snapshots unchanged.
+    /// Remapping takes effect for subsequent queries without resetting current/previous device state
+    /// or queueing a synthetic trigger event.
+    virtual bool RemapActionUVE(std::string_view actionName, std::vector<InputBindingUVE> positiveBindings,
+                                std::vector<InputBindingUVE> negativeBindings) = 0;
     // An unregistered/typo'd action name returns false/0.0F rather than asserting — matches
     // IConfigManagerUVE's "keyed lookup that may legitimately miss" precedent, not a programmer
     // precondition violation.

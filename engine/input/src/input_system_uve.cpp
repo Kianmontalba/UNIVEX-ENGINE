@@ -180,6 +180,56 @@ bool InputSystemUVE::UnregisterActionUVE(std::string_view actionName) {
     return m_actions.erase(std::string(actionName)) > 0;
 }
 
+bool InputSystemUVE::AreBindingsValidForRemapUVE(
+    const std::vector<InputBindingUVE>& bindings) noexcept {
+    if (bindings.size() > kMaximumRemappedBindingsPerSideUVE) {
+        return false;
+    }
+    for (const InputBindingUVE& binding : bindings) {
+        switch (binding.source) {
+        case InputBindingSourceUVE::Keyboard:
+            if (static_cast<std::size_t>(binding.key) >= kKeyCodeCount) {
+                return false;
+            }
+            break;
+        case InputBindingSourceUVE::Mouse:
+            if (static_cast<std::size_t>(binding.mouseButton) >= kMouseButtonCount) {
+                return false;
+            }
+            break;
+        case InputBindingSourceUVE::GamepadButton:
+            if (binding.gamepadIndex >= kMaximumGamepadCountUVE ||
+                static_cast<std::size_t>(binding.gamepadButton) >= kGamepadButtonCountUVE) {
+                return false;
+            }
+            break;
+        case InputBindingSourceUVE::GamepadAxis:
+            if (binding.gamepadIndex >= kMaximumGamepadCountUVE ||
+                static_cast<std::size_t>(binding.gamepadAxis) >= kGamepadAxisCountUVE ||
+                !std::isfinite(binding.scale)) {
+                return false;
+            }
+            break;
+        default:
+            return false;
+        }
+    }
+    return true;
+}
+
+bool InputSystemUVE::RemapActionUVE(std::string_view actionName,
+                                    std::vector<InputBindingUVE> positiveBindings,
+                                    std::vector<InputBindingUVE> negativeBindings) {
+    const auto it = m_actions.find(std::string(actionName));
+    if (it == m_actions.end() || !AreBindingsValidForRemapUVE(positiveBindings) ||
+        !AreBindingsValidForRemapUVE(negativeBindings)) {
+        return false;
+    }
+    it->second.positiveBindings = std::move(positiveBindings);
+    it->second.negativeBindings = std::move(negativeBindings);
+    return true;
+}
+
 bool InputSystemUVE::IsActionTriggeredUVE(std::string_view actionName) const {
     const auto it = m_actions.find(std::string(actionName));
     if (it == m_actions.end()) {
