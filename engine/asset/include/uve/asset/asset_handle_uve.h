@@ -53,18 +53,21 @@ public:
     /// True once the underlying load has completed successfully — TryGetUVE() returns non-null.
     [[nodiscard]] bool IsReadyUVE() const { return m_manager->GetLoadStateUVE(m_guid) == AssetLoadStateUVE::Loaded; }
 
-    /// True once the underlying load has completed and failed — TryGetUVE() will never become
-    /// non-null for this handle (short of a future HotReloadUVE-triggered retry succeeding).
+    /// True once the underlying first load has completed and failed. A failed reload of an
+    /// already-loaded record preserves the last-known-good value, so this remains false in that
+    /// case while GetFailureReasonUVE() exposes the copied reload diagnostic.
     [[nodiscard]] bool HasFailedUVE() const {
         return m_manager->GetLoadStateUVE(m_guid) == AssetLoadStateUVE::Failed;
     }
 
-    /// Returns a copied diagnostic for the most recent failed load/reload, or an empty string when
-    /// this handle is not failed. The copy remains valid independently of the manager record.
+    /// Returns a copied diagnostic for the most recent failed load/reload. A failed reload may
+    /// provide a diagnostic while TryGetUVE() still returns the last-known-good value; a successful
+    /// replacement clears it. The copy remains valid independently of the manager record.
     [[nodiscard]] std::string GetFailureReasonUVE() const { return m_manager->GetFailureReasonUVE(m_guid); }
 
-    /// Returns a pointer to the loaded `T`, or `nullptr` if the load hasn't finished (or failed)
-    /// yet. The pointer may be invalidated by a future HotReloadUVE-triggered reload — callers
+    /// Returns a pointer to the loaded `T`, or `nullptr` if the load hasn't finished or has
+    /// failed without a previous loaded value. The pointer may be invalidated by a future
+    /// HotReloadUVE-triggered successful replacement — callers
     /// that need a stable reference across frames should re-call TryGetUVE() each time.
     [[nodiscard]] T* TryGetUVE() const {
         return IsReadyUVE() ? static_cast<T*>(m_manager->GetRawPointerUVE(m_guid)) : nullptr;

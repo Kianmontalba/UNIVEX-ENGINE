@@ -88,18 +88,21 @@ public:
 
     /// Re-runs the previously-registered loader for `guid` in place, replacing its currently
     /// loaded data on success — used by HotReloadUVE when it detects the on-disk asset file has
-    /// changed. Logs a warning and no-ops if `guid` isn't currently tracked, or if it's still
-    /// `Loading`. No type parameter needed: the record already remembers which registered loader
-    /// produced it.
+    /// changed. A failed reload is failure-atomic: an existing loaded value remains the
+    /// last-known-good data and the copied failure diagnostic is retained while the handle remains
+    /// ready; a first-ever failed load remains Failed with no value. Logs a warning and no-ops if
+    /// `guid` isn't currently tracked, or if it's still `Loading`. No type parameter needed: the
+    /// record already remembers which registered loader produced it.
     virtual void ReloadUVE(AssetGuidUVE guid, IAssetDatabaseUVE& assetDatabase) = 0;
 
     /// Number of asset records currently tracked with state `Loaded` (debugging/query only).
     [[nodiscard]] virtual std::size_t GetLoadedAssetCountUVE() const = 0;
 
     /// Returns a copied, thread-safe diagnostic for the most recent failed load/reload of `guid`.
-    /// Returns an empty string for an untracked, loading, or successfully loaded record. The
-    /// returned value is intentionally detached from AssetManagerUVE-owned data so callers may
-    /// retain it without extending asset lifetime or holding the manager mutex.
+    /// A failed reload may return a non-empty diagnostic while the record remains Loaded with its
+    /// last-known-good value; a successful replacement clears it. The returned value is detached
+    /// from AssetManagerUVE-owned data so callers may retain it without extending asset lifetime or
+    /// holding the manager mutex.
     [[nodiscard]] std::string GetFailureReasonUVE(AssetGuidUVE guid) const {
         return GetFailureReasonErased(guid);
     }

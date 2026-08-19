@@ -200,6 +200,35 @@ TEST_F(AssetManagerUVETest, LoadUVE_LoaderRejectsExistingFile_ReportsReasonAndSu
     std::filesystem::remove(path);
 }
 
+TEST_F(AssetManagerUVETest, ReloadUVE_FailurePreservesLastKnownGoodDataAndReportsReason) {
+    const std::filesystem::path path = "uve_asset_manager_tests_last_known_good.uveblob";
+    std::filesystem::remove(path);
+    const std::string text = "last known good";
+    const auto* const textBytes = reinterpret_cast<const std::byte*>(text.data());
+    ASSERT_TRUE(WriteUveFileUVE(path, AssetKindUVE::Blob, std::vector<std::byte>(textBytes, textBytes + text.size())));
+    const AssetGuidUVE guid = assetDatabase.RegisterUVE(path);
+    const AssetHandleUVE<BlobAssetUVE> handle = assetManager.LoadUVE<BlobAssetUVE>(guid, assetDatabase);
+    ASSERT_TRUE(WaitForTerminalStateUVE(handle));
+    ASSERT_TRUE(handle.IsReadyUVE());
+
+    std::filesystem::remove(path);
+    assetManager.ReloadUVE(guid, assetDatabase);
+    for (int iteration = 0; iteration < 200000; ++iteration) {
+        if (handle.IsReadyUVE() && handle.GetFailureReasonUVE() == "asset file does not exist") {
+            break;
+        }
+        std::this_thread::yield();
+    }
+
+    ASSERT_TRUE(handle.IsReadyUVE());
+    EXPECT_FALSE(handle.HasFailedUVE());
+    const BlobAssetUVE* const blob = handle.TryGetUVE();
+    ASSERT_NE(blob, nullptr);
+    EXPECT_EQ(std::string(reinterpret_cast<const char*>(blob->data()), blob->size()), text);
+    EXPECT_EQ(handle.GetFailureReasonUVE(), "asset file does not exist");
+    EXPECT_EQ(assetManager.GetLoadedAssetCountUVE(), 1U);
+}
+
 TEST_F(AssetManagerUVETest, LoadCompletion_PublishesAssetLoadCompletedEvent) {
     const std::filesystem::path path = "uve_asset_manager_tests_event.uveblob";
     std::filesystem::remove(path);
