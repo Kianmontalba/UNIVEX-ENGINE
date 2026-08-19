@@ -81,6 +81,39 @@ void ApplyLocalDeltaUVE(Scene::IEntityManagerUVE& entityManager, Scene::ISceneGr
     sceneGraph.SetLocalTransformUVE(entityManager, entity, transform);
 }
 
+[[nodiscard]] float ResolveGroundSlopeCosineUVE(
+    const CharacterControllerInputUVE& input, CharacterControllerMoveResultUVE& result) noexcept {
+    float degrees = input.maximumGroundSlopeDegrees;
+    if (!std::isfinite(degrees) || degrees < 0.0F) {
+        degrees = CharacterControllerUVE::kDefaultMaximumGroundSlopeDegreesUVE;
+        result.inputClamped = true;
+    }
+    if (degrees > CharacterControllerUVE::kMaximumGroundSlopeDegreesUVE) {
+        degrees = CharacterControllerUVE::kMaximumGroundSlopeDegreesUVE;
+        result.inputClamped = true;
+    }
+    constexpr float kPiUVE = 3.14159265358979323846F;
+    return std::cos(degrees * (kPiUVE / 180.0F));
+}
+
+void RegisterGroundContactUVE(CharacterControllerMoveResultUVE& result,
+                              const Math::Vector3UVE& controllerToTargetNormal,
+                              const float minimumGroundNormalY) noexcept {
+    const float lengthSquared = Math::LengthSquaredUVE(controllerToTargetNormal);
+    if (!std::isfinite(lengthSquared) || lengthSquared <= 0.0F) {
+        return;
+    }
+    const Math::Vector3UVE supportNormal =
+        -controllerToTargetNormal * (1.0F / std::sqrt(lengthSquared));
+    if (!std::isfinite(supportNormal.y) || supportNormal.y < minimumGroundNormalY) {
+        return;
+    }
+    if (!result.grounded || supportNormal.y > result.groundNormal.y) {
+        result.grounded = true;
+        result.groundNormal = supportNormal;
+    }
+}
+
 struct ToICandidateUVE final {
     Scene::EntityUVE entity;
     Math::SweptAabbHitUVE hit;
@@ -149,6 +182,7 @@ CharacterControllerMoveResultUVE CharacterControllerUVE::MoveUVE(
         maximumSubstepDistance = kDefaultMaximumSubstepDistanceUVE;
         result.inputClamped = true;
     }
+    const float minimumGroundNormalY = ResolveGroundSlopeCosineUVE(input, result);
 
     sceneGraph.UpdateUVE(entityManager);
     while (result.substeps < maximumSubsteps &&
@@ -177,6 +211,7 @@ CharacterControllerMoveResultUVE CharacterControllerUVE::MoveUVE(
             const bool controllerIsFirst = pair.first == input.entity;
             const Math::Vector3UVE contactNormal = controllerIsFirst
                 ? pair.separationAxis : -pair.separationAxis;
+            RegisterGroundContactUVE(result, contactNormal, minimumGroundNormalY);
             const Math::Vector3UVE correction = controllerIsFirst
                 ? -pair.separationAxis * pair.penetrationDepth
                 : pair.separationAxis * pair.penetrationDepth;
@@ -219,6 +254,7 @@ CharacterControllerMoveResultUVE CharacterControllerUVE::MoveWithToIUVE(
         maximumStepDistance = kDefaultMaximumSubstepDistanceUVE;
         result.inputClamped = true;
     }
+    const float minimumGroundNormalY = ResolveGroundSlopeCosineUVE(input, result);
 
     sceneGraph.UpdateUVE(entityManager);
     const std::vector<CollisionPairUVE> initialPairs = collisionSystem.DetectCollisionsUVE(entityManager);
@@ -268,6 +304,7 @@ CharacterControllerMoveResultUVE CharacterControllerUVE::MoveWithToIUVE(
 
         result.blocked = true;
         result.toiUsed = true;
+        RegisterGroundContactUVE(result, candidate->hit.normal, minimumGroundNormalY);
         result.earliestImpactTime = std::min(result.earliestImpactTime, impactTime);
         ++result.contactCount;
         result.remainingDisplacement = RemoveIntoNormalComponentUVE(

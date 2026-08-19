@@ -19,6 +19,7 @@ struct CharacterControllerInputUVE final {
     Math::Vector3UVE desiredDisplacement{};
     std::size_t maximumSubsteps = 8U;
     float maximumSubstepDistance = 0.25F;
+    float maximumGroundSlopeDegrees = 45.0F;
 };
 
 enum class CharacterControllerMoveCodeUVE : std::uint8_t {
@@ -41,6 +42,8 @@ struct CharacterControllerMoveResultUVE final {
     bool inputClamped = false;
     bool contactsTruncated = false;
     bool toiUsed = false;
+    bool grounded = false;
+    Math::Vector3UVE groundNormal{};
     float earliestImpactTime = 1.0F;
 
     [[nodiscard]] bool IsAcceptedUVE() const noexcept {
@@ -59,6 +62,8 @@ public:
     static constexpr std::size_t kMaximumContactsUVE = 64U;
     static constexpr float kMinimumMovementDistanceUVE = 1.0e-5F;
     static constexpr float kDefaultMaximumSubstepDistanceUVE = 0.25F;
+    static constexpr float kDefaultMaximumGroundSlopeDegreesUVE = 45.0F;
+    static constexpr float kMaximumGroundSlopeDegreesUVE = 89.0F;
     static constexpr std::size_t kMaximumToIIterationsUVE = 8U;
     static constexpr std::size_t kMaximumToITargetsUVE = 256U;
     static constexpr float kToIEpsilonUVE = 1.0e-4F;
