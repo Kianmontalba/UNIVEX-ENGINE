@@ -560,8 +560,8 @@ TEST(EditorBridgeUVETest, SnapshotUVE_CopiesHierarchyInspectorAndNativePanelSess
         EXPECT_EQ(snapshot.visualScripting.linkCount, 0U);
         EXPECT_EQ(snapshot.visualScripting.canvas.nodes.size(), 0U);
         EXPECT_EQ(snapshot.visualScripting.canvas.links.size(), 0U);
-        ASSERT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds.size(), 97U);
-        ASSERT_EQ(snapshot.visualScripting.canvas.paletteDescriptors.size(), 97U);
+        ASSERT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds.size(), 109U);
+        ASSERT_EQ(snapshot.visualScripting.canvas.paletteDescriptors.size(), 109U);
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[0], "flow.sequence");
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[1], "flow.branch");
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[2], "flow.return");
@@ -640,6 +640,18 @@ TEST(EditorBridgeUVETest, SnapshotUVE_CopiesHierarchyInspectorAndNativePanelSess
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[94], "variable.make_vector3");
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[95], "variable.get_vector3");
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[96], "variable.set_vector3");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[97], "variable.make_array");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[98], "variable.get_array");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[99], "variable.set_array");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[100], "variable.make_map");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[101], "variable.get_map");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[102], "variable.set_map");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[103], "variable.make_set");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[104], "variable.get_set");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[105], "variable.set_set");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[106], "variable.make_struct");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[107], "variable.get_struct");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[108], "variable.set_struct");
         EXPECT_FALSE(snapshot.visualScripting.canvas.nodesTruncated);
         EXPECT_FALSE(snapshot.visualScripting.canvas.linksTruncated);
 
