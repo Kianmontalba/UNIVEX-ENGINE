@@ -245,6 +245,94 @@ TEST_F(SaveGameSystemUVETest, LoadUVE_PayloadWithBogusLengthPrefix_ReturnsEmptyV
     EXPECT_FALSE(saveGameSystem.GetSaveMetadataUVE(12).has_value());
 }
 
+TEST_F(SaveGameSystemUVETest, SavePayloadMigrationRegistryUVE_ValidatesRegistrationAndFailureAtomicity) {
+    SavePayloadMigrationRegistryUVE registry;
+    EXPECT_EQ(registry.RegisterUVE(1U, 1U, [](std::vector<std::byte>&, std::string&) { return true; }).code,
+              SaveMigrationRegistrationCodeUVE::InvalidVersionRange);
+    EXPECT_EQ(registry.RegisterUVE(0U, 1U, {}).code, SaveMigrationRegistrationCodeUVE::MissingTransform);
+
+    ASSERT_TRUE(registry.RegisterUVE(0U, 1U, [](std::vector<std::byte>& payload, std::string&) {
+        payload.push_back(std::byte{0x02});
+        return true;
+    }).IsAcceptedUVE());
+    EXPECT_EQ(registry.RegisterUVE(0U, 1U, [](std::vector<std::byte>&, std::string&) { return true; }).code,
+              SaveMigrationRegistrationCodeUVE::DuplicateTransform);
+
+    std::vector<std::byte> migratedPayload{std::byte{0x01}};
+    const SaveMigrationDiagnosticsUVE migrated = registry.MigrateUVE(0U, 1U, migratedPayload);
+    EXPECT_EQ(migrated.status, SaveMigrationStatusUVE::Migrated);
+    ASSERT_EQ(migratedPayload.size(), 2U);
+    EXPECT_EQ(migratedPayload[1], std::byte{0x02});
+
+    ASSERT_TRUE(registry.RegisterUVE(2U, 1U, [](std::vector<std::byte>& payload, std::string& reason) {
+        payload.clear();
+        reason = "legacy payload rejected";
+        return false;
+    }).IsAcceptedUVE());
+    std::vector<std::byte> rejectedPayload{std::byte{0x03}};
+    const SaveMigrationDiagnosticsUVE rejected = registry.MigrateUVE(2U, 1U, rejectedPayload);
+    EXPECT_EQ(rejected.status, SaveMigrationStatusUVE::InvalidPayload);
+    EXPECT_EQ(rejectedPayload, std::vector<std::byte>{std::byte{0x03}});
+    EXPECT_EQ(registry.GetTransformCountUVE(), 2U);
+
+    for (std::uint32_t index = 0U; index < kMaximumSaveMigrationTransformsUVE - 2U; ++index) {
+        ASSERT_TRUE(registry.RegisterUVE(100U + index, 200U + index,
+                                         [](std::vector<std::byte>& payload, std::string&) {
+                                             payload.push_back(std::byte{0x04});
+                                             return true;
+                                         }).IsAcceptedUVE());
+    }
+    EXPECT_EQ(registry.GetTransformCountUVE(), kMaximumSaveMigrationTransformsUVE);
+    EXPECT_EQ(registry.RegisterUVE(999U, 1000U, [](std::vector<std::byte>&, std::string&) { return true; }).code,
+              SaveMigrationRegistrationCodeUVE::CapacityExceeded);
+}
+
+TEST_F(SaveGameSystemUVETest, SaveGameSystemUVE_LoadsRegisteredVersionTransformAtomically) {
+    const EntityUVE entity = entityManager.CreateEntityUVE();
+    ASSERT_TRUE(saveGameSystem.SaveUVE(15, entityManager, {entity}, GameStateMetadataUVE{}));
+
+    const std::filesystem::path slotPath = saveDirectory / "slot_15.uvesave";
+    std::optional<std::pair<Asset::UveFileHeaderUVE, std::vector<std::byte>>> file =
+        Asset::ReadUveFileUVE(slotPath);
+    ASSERT_TRUE(file.has_value());
+    std::vector<std::byte> payload = file->second;
+    ASSERT_GE(payload.size(), sizeof(std::uint32_t));
+    std::uint32_t metadataLength = 0U;
+    std::memcpy(&metadataLength, payload.data(), sizeof(metadataLength));
+    ASSERT_GT(metadataLength, 0U);
+    ASSERT_LE(sizeof(metadataLength) + metadataLength, payload.size());
+    std::string metadataText(reinterpret_cast<const char*>(payload.data() + sizeof(metadataLength)), metadataLength);
+    const std::string currentVersionToken = "\"payloadSchemaVersion\":1";
+    const std::size_t tokenOffset = metadataText.find(currentVersionToken);
+    ASSERT_NE(tokenOffset, std::string::npos);
+    metadataText.replace(tokenOffset, currentVersionToken.size(), "\"payloadSchemaVersion\":0");
+    std::memcpy(payload.data() + sizeof(metadataLength), metadataText.data(), metadataLength);
+    ASSERT_TRUE(Asset::WriteUveFileUVE(slotPath, Asset::AssetKindUVE::Save, payload));
+
+    ASSERT_TRUE(saveGameSystem.RegisterMigrationUVE(0U, 1U, [](std::vector<std::byte>& payloadBytes, std::string& reason) {
+        const std::string oldToken = "\"payloadSchemaVersion\":0";
+        const std::string newToken = "\"payloadSchemaVersion\":1";
+        const std::string text(reinterpret_cast<const char*>(payloadBytes.data()), payloadBytes.size());
+        const std::size_t offset = text.find(oldToken);
+        if (offset == std::string::npos) {
+            reason = "legacy metadata schema token is missing";
+            return false;
+        }
+        std::string migrated = text;
+        migrated.replace(offset, oldToken.size(), newToken);
+        const auto* bytes = reinterpret_cast<const std::byte*>(migrated.data());
+        payloadBytes.assign(bytes, bytes + migrated.size());
+        return true;
+    }).IsAcceptedUVE());
+
+    EntityManagerUVE loadedManager(memoryManager.GetDefaultAllocatorUVE(), eventSystem);
+    ASSERT_FALSE(saveGameSystem.LoadUVE(15, loadedManager).empty());
+    const SaveMigrationDiagnosticsUVE diagnostics = saveGameSystem.GetLastMigrationDiagnosticsUVE();
+    EXPECT_EQ(diagnostics.status, SaveMigrationStatusUVE::Migrated);
+    EXPECT_EQ(diagnostics.sourceSchemaVersion, 0U);
+    EXPECT_EQ(diagnostics.targetSchemaVersion, 1U);
+}
+
 TEST_F(SaveGameSystemUVETest, SaveThenLoad_CurrentSchemaReportsNoMigrationRequired) {
     const EntityUVE entity = entityManager.CreateEntityUVE();
     ASSERT_TRUE(saveGameSystem.SaveUVE(13, entityManager, {entity}, GameStateMetadataUVE{}));

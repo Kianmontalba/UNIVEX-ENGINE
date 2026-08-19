@@ -4,6 +4,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -12,6 +13,10 @@
 namespace UVE::Save {
 
 inline constexpr std::size_t kMaximumSaveMigrationReasonBytesUVE = 256U;
+inline constexpr std::size_t kMaximumSaveMigrationTransformsUVE = 32U;
+
+using SavePayloadMigrationTransformUVE =
+    std::function<bool(std::vector<std::byte>& payload, std::string& failureReason)>;
 
 enum class SaveMigrationStatusUVE : std::uint8_t {
     NotRequired = 0,
@@ -30,6 +35,49 @@ struct SaveMigrationDiagnosticsUVE final {
     [[nodiscard]] bool SucceededUVE() const noexcept {
         return status == SaveMigrationStatusUVE::NotRequired || status == SaveMigrationStatusUVE::Migrated;
     }
+};
+
+enum class SaveMigrationRegistrationCodeUVE : std::uint8_t {
+    Accepted = 0,
+    InvalidVersionRange,
+    MissingTransform,
+    DuplicateTransform,
+    CapacityExceeded,
+};
+
+struct SaveMigrationRegistrationResultUVE final {
+    SaveMigrationRegistrationCodeUVE code = SaveMigrationRegistrationCodeUVE::Accepted;
+    std::string message;
+
+    [[nodiscard]] bool IsAcceptedUVE() const noexcept {
+        return code == SaveMigrationRegistrationCodeUVE::Accepted;
+    }
+};
+
+class SavePayloadMigrationRegistryUVE final {
+public:
+    SavePayloadMigrationRegistryUVE() = default;
+    SavePayloadMigrationRegistryUVE(const SavePayloadMigrationRegistryUVE&) = delete;
+    SavePayloadMigrationRegistryUVE& operator=(const SavePayloadMigrationRegistryUVE&) = delete;
+
+    [[nodiscard]] SaveMigrationRegistrationResultUVE RegisterUVE(
+        std::uint32_t sourceSchemaVersion, std::uint32_t targetSchemaVersion,
+        SavePayloadMigrationTransformUVE transform);
+
+    [[nodiscard]] SaveMigrationDiagnosticsUVE MigrateUVE(
+        std::uint32_t sourceSchemaVersion, std::uint32_t targetSchemaVersion,
+        std::vector<std::byte>& payload) const;
+
+    [[nodiscard]] std::size_t GetTransformCountUVE() const noexcept;
+
+private:
+    struct EntryUVE final {
+        std::uint32_t sourceSchemaVersion = 0U;
+        std::uint32_t targetSchemaVersion = 0U;
+        SavePayloadMigrationTransformUVE transform;
+    };
+
+    std::vector<EntryUVE> m_entries;
 };
 
 /// Bounded schema-dispatch seam for the fixed `.uvesave` payload. Version 1 is currently the only

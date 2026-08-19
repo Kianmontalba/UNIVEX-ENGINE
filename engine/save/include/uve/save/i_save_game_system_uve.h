@@ -53,6 +53,14 @@ public:
                                         const std::vector<Scene::EntityUVE>& rootEntities,
                                         const GameStateMetadataUVE& metadata) = 0;
 
+    /// Registers one exact source-to-target payload transform. The callable receives a private
+    /// working copy; failure or an exception leaves the caller's payload untouched. Registration
+    /// is bounded and duplicate source/target pairs are rejected. This seam owns migration only,
+    /// not compression, encryption, cloud transport, or gameplay-domain state.
+    [[nodiscard]] virtual SaveMigrationRegistrationResultUVE RegisterMigrationUVE(
+        std::uint32_t sourceSchemaVersion, std::uint32_t targetSchemaVersion,
+        SavePayloadMigrationTransformUVE transform) = 0;
+
     /// Deserializes `slotIndex`'s save into fresh live entities via `entityManager` (exactly
     /// like ISceneSerializerUVE::LoadUVE()), returning the newly-created root entities in file
     /// order. Returns an empty vector (logging the reason) on an out-of-range slot, a missing
