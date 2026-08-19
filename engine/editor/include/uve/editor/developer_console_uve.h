@@ -32,11 +32,35 @@ enum class DeveloperConsoleBuildPolicyUVE : std::uint8_t {
     Shipping,
 };
 
+enum class DeveloperConsoleAccessUVE : std::uint8_t {
+    Denied = 0,
+    ReadOnly,
+    Full,
+};
+
+enum class DeveloperConsoleAuthorizationCodeUVE : std::uint8_t {
+    Applied = 0,
+    Unchanged,
+    Unavailable,
+    InvalidAccess,
+};
+
+struct DeveloperConsoleAuthorizationResultUVE final {
+    DeveloperConsoleAuthorizationCodeUVE code = DeveloperConsoleAuthorizationCodeUVE::Applied;
+    std::string message;
+
+    [[nodiscard]] bool IsAcceptedUVE() const noexcept {
+        return code == DeveloperConsoleAuthorizationCodeUVE::Applied ||
+               code == DeveloperConsoleAuthorizationCodeUVE::Unchanged;
+    }
+};
+
 enum class DeveloperConsoleCommandRegistrationCodeUVE : std::uint8_t {
     Accepted = 0,
     InvalidIdentifier,
     InvalidHelp,
     MissingHandler,
+    Unauthorized,
     CapacityExceeded,
     DuplicateIdentifier,
     Unavailable,
@@ -55,6 +79,7 @@ enum class DeveloperConsoleCVarRegistrationCodeUVE : std::uint8_t {
     Accepted = 0,
     InvalidName,
     InvalidValue,
+    Unauthorized,
     CapacityExceeded,
     DuplicateName,
     Unavailable,
@@ -75,6 +100,7 @@ enum class DeveloperConsoleCVarMutationCodeUVE : std::uint8_t {
     Unavailable,
     UnknownName,
     ReadOnly,
+    Unauthorized,
     InvalidValue,
 };
 
@@ -93,6 +119,7 @@ enum class DeveloperConsoleExecutionCodeUVE : std::uint8_t {
     Unavailable,
     InvalidInput,
     UnknownCommand,
+    Unauthorized,
 };
 
 struct DeveloperConsoleExecutionResultUVE final {
@@ -158,6 +185,7 @@ struct DeveloperConsoleHistoryNavigationResultUVE final {
 enum class DeveloperConsoleClearCodeUVE : std::uint8_t {
     Applied = 0,
     Unavailable,
+    Unauthorized,
     Unchanged,
 };
 
@@ -208,6 +236,7 @@ struct DeveloperConsoleSnapshotUVE final {
     std::uint64_t generation = 0U;
     bool available = true;
     bool developmentOnly = true;
+    DeveloperConsoleAccessUVE access = DeveloperConsoleAccessUVE::Full;
     DeveloperConsoleSeverityFilterUVE severityFilter = DeveloperConsoleSeverityFilterUVE::All;
     std::int32_t historyCursor = -1;
     std::string historyEntry;
@@ -253,6 +282,9 @@ public:
     [[nodiscard]] DeveloperConsoleBuildPolicyResultUVE SetBuildPolicyDetailedUVE(
         DeveloperConsoleBuildPolicyUVE policy) noexcept;
     [[nodiscard]] bool SetBuildPolicyUVE(DeveloperConsoleBuildPolicyUVE policy) noexcept;
+    [[nodiscard]] DeveloperConsoleAuthorizationResultUVE SetAccessDetailedUVE(
+        DeveloperConsoleAccessUVE access) noexcept;
+    [[nodiscard]] bool SetAccessUVE(DeveloperConsoleAccessUVE access) noexcept;
     [[nodiscard]] DeveloperConsoleSeverityFilterResultUVE SetSeverityFilterDetailedUVE(
         DeveloperConsoleSeverityFilterUVE filter) noexcept;
     [[nodiscard]] bool SetSeverityFilterUVE(DeveloperConsoleSeverityFilterUVE filter) noexcept;
@@ -283,6 +315,7 @@ private:
     std::vector<std::string> m_history;
     std::vector<DeveloperConsoleEntryUVE> m_output;
     DeveloperConsoleBuildPolicyUVE m_policy = DeveloperConsoleBuildPolicyUVE::Development;
+    DeveloperConsoleAccessUVE m_access = DeveloperConsoleAccessUVE::Full;
     DeveloperConsoleSeverityFilterUVE m_severityFilter = DeveloperConsoleSeverityFilterUVE::All;
     std::string m_completionPrefix;
     std::int32_t m_historyCursor = -1;

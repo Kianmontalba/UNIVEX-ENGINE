@@ -867,10 +867,17 @@ public partial class MainWindow : Window
             applyingSnapshot = false;
         }
         string availability = console.IsAvailable ? "available" : "shipping-disabled";
+        string authorization = console.Access switch
+        {
+            BridgeDeveloperConsoleAccess.Denied => "denied",
+            BridgeDeveloperConsoleAccess.ReadOnly => "read-only",
+            BridgeDeveloperConsoleAccess.Full => "full",
+            _ => "invalid-access",
+        };
         string cursor = console.HistoryCursor < 0 ? "draft" : $"history {console.HistoryCursor}";
         string discoveryTruncation = console.CompletionTruncated ? " · completion list truncated" : string.Empty;
         DeveloperConsoleStatusTextBlock.Text =
-            $"Generation {console.Generation}; {availability}; filter {console.SeverityFilter}; {cursor}; " +
+            $"Generation {console.Generation}; {availability}; access {authorization}; filter {console.SeverityFilter}; {cursor}; " +
             $"{console.Output.Count} output entr(y/ies), {console.History.Count} history item(s), " +
             $"{console.CVars.Count} cvar(s){truncation}{discoveryTruncation}";
     }
