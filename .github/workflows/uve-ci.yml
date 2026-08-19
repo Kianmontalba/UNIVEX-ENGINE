@@ -90,7 +90,7 @@ jobs:
   managed-editor-host:
     name: managed-editor-host (.NET 8)
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
       - name: Check out repository
@@ -102,20 +102,54 @@ jobs:
           dotnet-version: 8.0.x
 
       - name: Install native bridge build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+          APT_LISTCHANGES_FRONTEND: none
         run: |
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends \
-            cmake \
-            g++ \
-            ninja-build \
-            libglfw3-dev \
-            libwayland-dev \
-            libxkbcommon-dev \
-            libxrandr-dev \
-            libxi-dev \
-            libxinerama-dev \
-            libxcursor-dev \
-            xvfb
+          set -Eeuo pipefail
+
+          apt_diagnostics() {
+            echo '--- APT diagnostics ---'
+            sudo -n fuser -v /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock || true
+            sudo -n dpkg --audit || true
+            sudo -n apt-cache policy cmake g++ ninja-build libglfw3-dev libwayland-dev libxkbcommon-dev \
+              libxrandr-dev libxi-dev libxinerama-dev libxcursor-dev xvfb || true
+          }
+          trap 'status=$?; apt_diagnostics; exit "$status"' ERR
+
+          apt_options=(
+            -o Acquire::Retries=3
+            -o Acquire::http::Timeout=30
+            -o Acquire::https::Timeout=30
+            -o DPkg::Lock::Timeout=60
+          )
+
+          for attempt in 1 2 3; do
+            echo "APT update attempt ${attempt}/3"
+            if sudo -n timeout --signal=TERM --kill-after=30s 300s \
+              apt-get "${apt_options[@]}" update; then
+              break
+            fi
+            if [ "${attempt}" -eq 3 ]; then
+              echo 'APT update failed after bounded retries.' >&2
+              exit 1
+            fi
+            sleep 10
+          done
+
+          sudo -n timeout --signal=TERM --kill-after=30s 1200s \
+            apt-get "${apt_options[@]}" install --yes --no-install-recommends --fix-missing \
+              cmake \
+              g++ \
+              ninja-build \
+              libglfw3-dev \
+              libwayland-dev \
+              libxkbcommon-dev \
+              libxrandr-dev \
+              libxi-dev \
+              libxinerama-dev \
+              libxcursor-dev \
+              xvfb
 
       - name: Configure headless bridge backend
         run: >-
