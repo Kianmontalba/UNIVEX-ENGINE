@@ -829,6 +829,287 @@ namespace {
     return {};
 }
 
+[[nodiscard]] bool IsFiniteTransformValueUVE(const ScriptTransformValueUVE& value) noexcept {
+    return IsFiniteVector3ValueUVE(value.position) && Math::IsFiniteUVE(value.rotation.value) &&
+           IsFiniteVector3ValueUVE(value.scale);
+}
+
+[[nodiscard]] ScriptVmExecutionResultUVE ExecuteAnimationNodeUVE(
+    const ScriptIrInstructionUVE& instruction, const std::size_t instructionIndex,
+    ScriptVmExecutionContextUVE& context, const ScriptEngineCallBindingsUVE* bindings) {
+    if (bindings == nullptr) {
+        return MakeNodeFailureUVE(instructionIndex, "Animation node requires caller-owned animation bindings.");
+    }
+    const std::uint32_t nodeId = instruction.sourceNodeId;
+    const ScriptEntityValueUVE* actor = FindEntityInputUVE(context, nodeId, "Actor");
+    if (actor == nullptr || !actor->IsValidUVE()) {
+        return MakeNodeFailureUVE(instructionIndex, "Animation node requires a valid Actor entity input.");
+    }
+    const auto setAcceptedResult = [&]() -> ScriptVmExecutionResultUVE {
+        return SetNodeOutputUVE(context, nodeId, "Result", true)
+            ? ScriptVmExecutionResultUVE{}
+            : MakeNodeFailureUVE(instructionIndex, "Animation node could not store its Boolean output.");
+    };
+    if (instruction.nodeTypeId == "animation.play" || instruction.nodeTypeId == "animation.stop") {
+        std::uint32_t clipToken = 0U;
+        if (!TryGetIntegralNumberInputUVE(context, nodeId, "Clip", 65535.0F, &clipToken)) {
+            return MakeNodeFailureUVE(instructionIndex, "Animation clip input must be a bounded integral token.");
+        }
+        float blendDuration = 0.0F;
+        if (instruction.nodeTypeId == "animation.play") {
+            const float* input = FindNumberInputUVE(context, nodeId, "Blend Duration");
+            if (input == nullptr || !std::isfinite(*input) || *input < 0.0F) {
+                return MakeNodeFailureUVE(instructionIndex, "Play Animation requires a finite non-negative Blend Duration.");
+            }
+            blendDuration = *input;
+        }
+        const ScriptAnimationClipControlFunctionUVE callback =
+            instruction.nodeTypeId == "animation.play" ? bindings->animationPlay : bindings->animationStop;
+        bool accepted = false;
+        if (callback == nullptr || !callback(bindings->userData, actor->entity, static_cast<float>(clipToken),
+                                             blendDuration, &accepted) || !accepted) {
+            return MakeNodeFailureUVE(instructionIndex, "Animation clip callback rejected its copied inputs.");
+        }
+        return setAcceptedResult();
+    }
+    if (instruction.nodeTypeId == "animation.pause") {
+        std::uint32_t clipToken = 0U;
+        if (!TryGetIntegralNumberInputUVE(context, nodeId, "Clip", 65535.0F, &clipToken) ||
+            bindings->animationPause == nullptr) {
+            return MakeNodeFailureUVE(instructionIndex, "Pause Animation requires a bounded Clip token and binding.");
+        }
+        bool accepted = false;
+        if (!bindings->animationPause(bindings->userData, actor->entity, static_cast<float>(clipToken), &accepted) || !accepted) {
+            return MakeNodeFailureUVE(instructionIndex, "Pause Animation callback rejected its copied inputs.");
+        }
+        return setAcceptedResult();
+    }
+    if (instruction.nodeTypeId == "animation.blend") {
+        std::uint32_t clipAToken = 0U;
+        std::uint32_t clipBToken = 0U;
+        const float* weight = FindNumberInputUVE(context, nodeId, "Weight");
+        if (!TryGetIntegralNumberInputUVE(context, nodeId, "Clip A", 65535.0F, &clipAToken) ||
+            !TryGetIntegralNumberInputUVE(context, nodeId, "Clip B", 65535.0F, &clipBToken) ||
+            weight == nullptr || !std::isfinite(*weight) || *weight < 0.0F || *weight > 1.0F ||
+            bindings->animationBlend == nullptr) {
+            return MakeNodeFailureUVE(instructionIndex, "Blend Animation requires bounded clips, finite Weight, and binding.");
+        }
+        bool accepted = false;
+        if (!bindings->animationBlend(bindings->userData, actor->entity, static_cast<float>(clipAToken),
+                                      static_cast<float>(clipBToken), *weight, &accepted) || !accepted) {
+            return MakeNodeFailureUVE(instructionIndex, "Blend Animation callback rejected its copied inputs.");
+        }
+        return setAcceptedResult();
+    }
+    if (instruction.nodeTypeId == "animation.blend_space") {
+        std::uint32_t blendSpaceToken = 0U;
+        const float* x = FindNumberInputUVE(context, nodeId, "X");
+        const float* y = FindNumberInputUVE(context, nodeId, "Y");
+        if (!TryGetIntegralNumberInputUVE(context, nodeId, "Blend Space", 65535.0F, &blendSpaceToken) ||
+            x == nullptr || y == nullptr || !std::isfinite(*x) || !std::isfinite(*y) ||
+            bindings->animationBlendSpace == nullptr) {
+            return MakeNodeFailureUVE(instructionIndex, "Blend Space requires a bounded token, finite coordinates, and binding.");
+        }
+        bool accepted = false;
+        if (!bindings->animationBlendSpace(bindings->userData, actor->entity, static_cast<float>(blendSpaceToken),
+                                           *x, *y, &accepted) || !accepted) {
+            return MakeNodeFailureUVE(instructionIndex, "Blend Space callback rejected its copied inputs.");
+        }
+        return setAcceptedResult();
+    }
+    if (instruction.nodeTypeId == "animation.set_speed" || instruction.nodeTypeId == "animation.set_weight") {
+        const float* value = FindNumberInputUVE(context, nodeId,
+                                                instruction.nodeTypeId == "animation.set_speed" ? "Speed" : "Weight");
+        const bool validValue = value != nullptr && std::isfinite(*value) &&
+            (instruction.nodeTypeId == "animation.set_speed" ? *value > 0.0F : *value >= 0.0F && *value <= 1.0F);
+        const ScriptAnimationScalarControlFunctionUVE callback =
+            instruction.nodeTypeId == "animation.set_speed" ? bindings->animationSetSpeed : bindings->animationSetWeight;
+        if (!validValue || callback == nullptr) {
+            return MakeNodeFailureUVE(instructionIndex, "Animation scalar control requires a finite bounded value and binding.");
+        }
+        bool accepted = false;
+        if (!callback(bindings->userData, actor->entity, *value, &accepted) || !accepted) {
+            return MakeNodeFailureUVE(instructionIndex, "Animation scalar callback rejected its copied input.");
+        }
+        return setAcceptedResult();
+    }
+    if (instruction.nodeTypeId == "animation.montage") {
+        std::uint32_t montageToken = 0U;
+        const float* weight = FindNumberInputUVE(context, nodeId, "Weight");
+        if (!TryGetIntegralNumberInputUVE(context, nodeId, "Montage", 65535.0F, &montageToken) ||
+            weight == nullptr || !std::isfinite(*weight) || *weight < 0.0F || *weight > 1.0F ||
+            bindings->animationMontage == nullptr) {
+            return MakeNodeFailureUVE(instructionIndex, "Animation Montage requires a bounded token, finite Weight, and binding.");
+        }
+        bool accepted = false;
+        if (!bindings->animationMontage(bindings->userData, actor->entity, static_cast<float>(montageToken), *weight, &accepted) ||
+            !accepted) {
+            return MakeNodeFailureUVE(instructionIndex, "Animation Montage callback rejected its copied inputs.");
+        }
+        return setAcceptedResult();
+    }
+    if (instruction.nodeTypeId == "animation.get_current_animation") {
+        if (bindings->animationGetCurrent == nullptr) {
+            return MakeNodeFailureUVE(instructionIndex, "Get Current Animation requires a caller-owned binding.");
+        }
+        float clipToken = 0.0F;
+        if (!bindings->animationGetCurrent(bindings->userData, actor->entity, &clipToken) || !std::isfinite(clipToken) ||
+            clipToken < 0.0F || clipToken > 65535.0F || std::floor(clipToken) != clipToken ||
+            !SetNodeOutputUVE(context, nodeId, "Result", clipToken)) {
+            return MakeNodeFailureUVE(instructionIndex, "Get Current Animation callback returned an invalid token or output capacity.");
+        }
+        return {};
+    }
+    if (instruction.nodeTypeId == "animation.is_playing") {
+        std::uint32_t clipToken = 0U;
+        if (!TryGetIntegralNumberInputUVE(context, nodeId, "Clip", 65535.0F, &clipToken) ||
+            bindings->animationIsPlaying == nullptr) {
+            return MakeNodeFailureUVE(instructionIndex, "Is Playing requires a bounded Clip token and binding.");
+        }
+        bool result = false;
+        if (!bindings->animationIsPlaying(bindings->userData, actor->entity, static_cast<float>(clipToken), &result) ||
+            !SetNodeOutputUVE(context, nodeId, "Result", result)) {
+            return MakeNodeFailureUVE(instructionIndex, "Is Playing callback rejected its copied input or output capacity.");
+        }
+        return {};
+    }
+    return MakeNodeFailureUVE(instructionIndex, "Unknown Animation node type.");
+}
+
+[[nodiscard]] ScriptVmExecutionResultUVE ExecuteMotionQueryNodeUVE(
+    const ScriptIrInstructionUVE& instruction, const std::size_t instructionIndex,
+    ScriptVmExecutionContextUVE& context, const ScriptEngineCallBindingsUVE* bindings) {
+    if (bindings == nullptr) {
+        return MakeNodeFailureUVE(instructionIndex, "Motion Query node requires caller-owned Motion Query bindings.");
+    }
+    const std::uint32_t nodeId = instruction.sourceNodeId;
+    const ScriptEntityValueUVE* actor = FindEntityInputUVE(context, nodeId, "Actor");
+    if (actor == nullptr || !actor->IsValidUVE()) {
+        return MakeNodeFailureUVE(instructionIndex, "Motion Query node requires a valid Actor entity input.");
+    }
+    const auto setAcceptedResult = [&]() -> ScriptVmExecutionResultUVE {
+        return SetNodeOutputUVE(context, nodeId, "Result", true)
+            ? ScriptVmExecutionResultUVE{}
+            : MakeNodeFailureUVE(instructionIndex, "Motion Query node could not store its Boolean output.");
+    };
+    if (instruction.nodeTypeId == "motion.query.build") {
+        const ScriptVector3ValueUVE* velocity = FindVector3InputUVE(context, nodeId, "Velocity");
+        const ScriptVector3ValueUVE* facing = FindVector3InputUVE(context, nodeId, "Facing");
+        const float* delta = FindNumberInputUVE(context, nodeId, "Delta");
+        if (velocity == nullptr || facing == nullptr || delta == nullptr || !IsFiniteVector3ValueUVE(*velocity) ||
+            !IsFiniteVector3ValueUVE(*facing) || !std::isfinite(*delta) || *delta <= 0.0F ||
+            bindings->motionQueryBuild == nullptr) {
+            return MakeNodeFailureUVE(instructionIndex, "Build Motion Query requires finite vectors, positive Delta, and binding.");
+        }
+        bool accepted = false;
+        if (!bindings->motionQueryBuild(bindings->userData, actor->entity, *velocity, *facing, *delta, &accepted) || !accepted) {
+            return MakeNodeFailureUVE(instructionIndex, "Build Motion Query callback rejected its copied inputs.");
+        }
+        return setAcceptedResult();
+    }
+    if (instruction.nodeTypeId == "motion.query.search") {
+        std::uint32_t maximumResults = 0U;
+        if (!TryGetIntegralNumberInputUVE(context, nodeId, "Max Results", 4096.0F, &maximumResults) || maximumResults == 0U ||
+            bindings->motionQuerySearch == nullptr) {
+            return MakeNodeFailureUVE(instructionIndex, "Search Motion Query requires a bounded positive Max Results and binding.");
+        }
+        bool accepted = false;
+        if (!bindings->motionQuerySearch(bindings->userData, actor->entity, static_cast<float>(maximumResults), &accepted) || !accepted) {
+            return MakeNodeFailureUVE(instructionIndex, "Search Motion Query callback rejected its copied input.");
+        }
+        return setAcceptedResult();
+    }
+    if (instruction.nodeTypeId == "motion.query.get_best_match") {
+        if (bindings->motionQueryBestMatch == nullptr) {
+            return MakeNodeFailureUVE(instructionIndex, "Get Best Motion Match requires a caller-owned binding.");
+        }
+        float candidateIndex = 0.0F;
+        if (!bindings->motionQueryBestMatch(bindings->userData, actor->entity, &candidateIndex) ||
+            !std::isfinite(candidateIndex) || candidateIndex < 0.0F || candidateIndex > 4095.0F ||
+            std::floor(candidateIndex) != candidateIndex || !SetNodeOutputUVE(context, nodeId, "Result", candidateIndex)) {
+            return MakeNodeFailureUVE(instructionIndex, "Get Best Motion Match callback returned an invalid candidate or output capacity.");
+        }
+        return {};
+    }
+    if (instruction.nodeTypeId == "motion.query.set_trajectory") {
+        const ScriptVector3ValueUVE* sample = FindVector3InputUVE(context, nodeId, "Sample");
+        const float* offset = FindNumberInputUVE(context, nodeId, "Offset");
+        if (sample == nullptr || offset == nullptr || !IsFiniteVector3ValueUVE(*sample) || !std::isfinite(*offset) ||
+            bindings->motionQuerySetTrajectory == nullptr) {
+            return MakeNodeFailureUVE(instructionIndex, "Set Motion Trajectory requires a finite Sample/Offset and binding.");
+        }
+        bool accepted = false;
+        if (!bindings->motionQuerySetTrajectory(bindings->userData, actor->entity, *sample, *offset, &accepted) || !accepted) {
+            return MakeNodeFailureUVE(instructionIndex, "Set Motion Trajectory callback rejected its copied inputs.");
+        }
+        return setAcceptedResult();
+    }
+    if (instruction.nodeTypeId == "motion.query.set_pose") {
+        const ScriptTransformValueUVE* pose = FindTransformInputUVE(context, nodeId, "Pose");
+        if (pose == nullptr || !IsFiniteTransformValueUVE(*pose) || bindings->motionQuerySetPose == nullptr) {
+            return MakeNodeFailureUVE(instructionIndex, "Set Motion Pose requires a finite Pose and binding.");
+        }
+        bool accepted = false;
+        if (!bindings->motionQuerySetPose(bindings->userData, actor->entity, *pose, &accepted) || !accepted) {
+            return MakeNodeFailureUVE(instructionIndex, "Set Motion Pose callback rejected its copied input.");
+        }
+        return setAcceptedResult();
+    }
+    if (instruction.nodeTypeId == "motion.query.set_velocity" || instruction.nodeTypeId == "motion.query.set_facing") {
+        const char* pinName = instruction.nodeTypeId == "motion.query.set_velocity" ? "Velocity" : "Facing";
+        const ScriptVector3ValueUVE* value = FindVector3InputUVE(context, nodeId, pinName);
+        if (value == nullptr || !IsFiniteVector3ValueUVE(*value)) {
+            return MakeNodeFailureUVE(instructionIndex, "Motion Query vector control requires a finite value and binding.");
+        }
+        bool accepted = false;
+        const ScriptMotionQueryVectorFunctionUVE callback = instruction.nodeTypeId == "motion.query.set_velocity"
+            ? bindings->motionQuerySetVelocity : bindings->motionQuerySetFacing;
+        if (callback == nullptr || !callback(bindings->userData, actor->entity, *value, &accepted) || !accepted) {
+            return MakeNodeFailureUVE(instructionIndex, "Motion Query vector callback rejected its copied input.");
+        }
+        return setAcceptedResult();
+    }
+    if (instruction.nodeTypeId == "motion.query.set_yaw") {
+        const float* yaw = FindNumberInputUVE(context, nodeId, "Yaw");
+        if (yaw == nullptr || !std::isfinite(*yaw) || bindings->motionQuerySetYaw == nullptr) {
+            return MakeNodeFailureUVE(instructionIndex, "Set Motion Yaw requires a finite Yaw and binding.");
+        }
+        bool accepted = false;
+        if (!bindings->motionQuerySetYaw(bindings->userData, actor->entity, *yaw, &accepted) || !accepted) {
+            return MakeNodeFailureUVE(instructionIndex, "Set Motion Yaw callback rejected its copied input.");
+        }
+        return setAcceptedResult();
+    }
+    if (instruction.nodeTypeId == "motion.query.transition") {
+        std::uint32_t targetToken = 0U;
+        const float* duration = FindNumberInputUVE(context, nodeId, "Duration");
+        if (!TryGetIntegralNumberInputUVE(context, nodeId, "Target", 65535.0F, &targetToken) || duration == nullptr ||
+            !std::isfinite(*duration) || *duration < 0.0F || bindings->motionQueryTransition == nullptr) {
+            return MakeNodeFailureUVE(instructionIndex, "Motion Query Transition requires bounded Target, finite Duration, and binding.");
+        }
+        bool accepted = false;
+        if (!bindings->motionQueryTransition(bindings->userData, actor->entity, static_cast<float>(targetToken), *duration, &accepted) ||
+            !accepted) {
+            return MakeNodeFailureUVE(instructionIndex, "Motion Query Transition callback rejected its copied inputs.");
+        }
+        return setAcceptedResult();
+    }
+    if (instruction.nodeTypeId == "motion.query.motion_warp") {
+        const ScriptVector3ValueUVE* target = FindVector3InputUVE(context, nodeId, "Target");
+        const float* weight = FindNumberInputUVE(context, nodeId, "Weight");
+        if (target == nullptr || weight == nullptr || !IsFiniteVector3ValueUVE(*target) || !std::isfinite(*weight) ||
+            *weight < 0.0F || *weight > 1.0F || bindings->motionQueryMotionWarp == nullptr) {
+            return MakeNodeFailureUVE(instructionIndex, "Motion Warp requires a finite Target, bounded Weight, and binding.");
+        }
+        bool accepted = false;
+        if (!bindings->motionQueryMotionWarp(bindings->userData, actor->entity, *target, *weight, &accepted) || !accepted) {
+            return MakeNodeFailureUVE(instructionIndex, "Motion Warp callback rejected its copied inputs.");
+        }
+        return setAcceptedResult();
+    }
+    return MakeNodeFailureUVE(instructionIndex, "Unknown Motion Query node type.");
+}
+
 [[nodiscard]] ScriptVmExecutionResultUVE ExecuteEngineGetTimeNodeUVE(
     const ScriptIrInstructionUVE& instruction, const std::size_t instructionIndex,
     ScriptVmExecutionContextUVE& context, const ScriptEngineCallBindingsUVE* bindings) {
@@ -1519,6 +1800,71 @@ namespace {
     return false;
 }
 
+[[nodiscard]] bool HasRequiredAnimationNodeInputsUVE(const ScriptIrInstructionUVE& instruction,
+                                                          const ScriptVmExecutionContextUVE& context) {
+    const std::uint32_t nodeId = instruction.sourceNodeId;
+    if (FindEntityInputUVE(context, nodeId, "Actor") == nullptr) {
+        return false;
+    }
+    const std::string& type = instruction.nodeTypeId;
+    if (type == "animation.play") {
+        return FindNumberInputUVE(context, nodeId, "Clip") != nullptr &&
+               FindNumberInputUVE(context, nodeId, "Blend Duration") != nullptr;
+    }
+    if (type == "animation.stop" || type == "animation.pause" || type == "animation.is_playing") {
+        return FindNumberInputUVE(context, nodeId, "Clip") != nullptr;
+    }
+    if (type == "animation.blend") {
+        return FindNumberInputUVE(context, nodeId, "Clip A") != nullptr &&
+               FindNumberInputUVE(context, nodeId, "Clip B") != nullptr &&
+               FindNumberInputUVE(context, nodeId, "Weight") != nullptr;
+    }
+    if (type == "animation.blend_space") {
+        return FindNumberInputUVE(context, nodeId, "Blend Space") != nullptr &&
+               FindNumberInputUVE(context, nodeId, "X") != nullptr &&
+               FindNumberInputUVE(context, nodeId, "Y") != nullptr;
+    }
+    if (type == "animation.set_speed") return FindNumberInputUVE(context, nodeId, "Speed") != nullptr;
+    if (type == "animation.set_weight") return FindNumberInputUVE(context, nodeId, "Weight") != nullptr;
+    if (type == "animation.montage") {
+        return FindNumberInputUVE(context, nodeId, "Montage") != nullptr &&
+               FindNumberInputUVE(context, nodeId, "Weight") != nullptr;
+    }
+    return true;
+}
+
+[[nodiscard]] bool HasRequiredMotionQueryNodeInputsUVE(const ScriptIrInstructionUVE& instruction,
+                                                         const ScriptVmExecutionContextUVE& context) {
+    const std::uint32_t nodeId = instruction.sourceNodeId;
+    if (FindEntityInputUVE(context, nodeId, "Actor") == nullptr) {
+        return false;
+    }
+    const std::string& type = instruction.nodeTypeId;
+    if (type == "motion.query.build") {
+        return FindVector3InputUVE(context, nodeId, "Velocity") != nullptr &&
+               FindVector3InputUVE(context, nodeId, "Facing") != nullptr &&
+               FindNumberInputUVE(context, nodeId, "Delta") != nullptr;
+    }
+    if (type == "motion.query.search") return FindNumberInputUVE(context, nodeId, "Max Results") != nullptr;
+    if (type == "motion.query.set_trajectory") {
+        return FindVector3InputUVE(context, nodeId, "Sample") != nullptr &&
+               FindNumberInputUVE(context, nodeId, "Offset") != nullptr;
+    }
+    if (type == "motion.query.set_pose") return FindTransformInputUVE(context, nodeId, "Pose") != nullptr;
+    if (type == "motion.query.set_velocity") return FindVector3InputUVE(context, nodeId, "Velocity") != nullptr;
+    if (type == "motion.query.set_facing") return FindVector3InputUVE(context, nodeId, "Facing") != nullptr;
+    if (type == "motion.query.set_yaw") return FindNumberInputUVE(context, nodeId, "Yaw") != nullptr;
+    if (type == "motion.query.transition") {
+        return FindNumberInputUVE(context, nodeId, "Target") != nullptr &&
+               FindNumberInputUVE(context, nodeId, "Duration") != nullptr;
+    }
+    if (type == "motion.query.motion_warp") {
+        return FindVector3InputUVE(context, nodeId, "Target") != nullptr &&
+               FindNumberInputUVE(context, nodeId, "Weight") != nullptr;
+    }
+    return true;
+}
+
 [[nodiscard]] bool HasRequiredRotationInputsUVE(const ScriptIrInstructionUVE& instruction,
                                                    const ScriptVmExecutionContextUVE& context) {
     const std::uint32_t nodeId = instruction.sourceNodeId;
@@ -1925,6 +2271,8 @@ namespace {
         const bool isEntityNode = instruction.nodeTypeId.rfind("entity.", 0U) == 0U;
         const bool isInputNode = instruction.nodeTypeId.rfind("input.", 0U) == 0U;
         const bool isCameraNode = instruction.nodeTypeId.rfind("camera.", 0U) == 0U;
+        const bool isAnimationNode = instruction.nodeTypeId.rfind("animation.", 0U) == 0U;
+        const bool isMotionQueryNode = instruction.nodeTypeId.rfind("motion.query.", 0U) == 0U;
         const bool isEngineLogNode = instruction.nodeTypeId == "engine.log";
         const bool isEngineGetTimeNode = instruction.nodeTypeId == "engine.get_time";
         if ((isVariableNode && !HasRequiredVariableInputsUVE(instruction, context)) ||
@@ -1939,6 +2287,8 @@ namespace {
             (isEntityNode && !HasRequiredEntityNodeInputsUVE(instruction, context)) ||
             (isInputNode && !HasRequiredInputNodeInputsUVE(instruction, context)) ||
             (isCameraNode && !HasRequiredCameraNodeInputsUVE(instruction, context)) ||
+            (isAnimationNode && !HasRequiredAnimationNodeInputsUVE(instruction, context)) ||
+            (isMotionQueryNode && !HasRequiredMotionQueryNodeInputsUVE(instruction, context)) ||
             (isEngineLogNode && FindNumberInputUVE(context, instruction.sourceNodeId, "Value") == nullptr)) {
             ScriptVmExecutionResultUVE failure = MakeNodeFailureUVE(
                 instructionIndex, "Control-flow execution could not resolve typed node inputs.");
@@ -1971,6 +2321,10 @@ namespace {
             nodeResult = ExecuteInputNodeUVE(instruction, instructionIndex, context, options.engineCallBindings);
         } else if (isCameraNode) {
             nodeResult = ExecuteCameraNodeUVE(instruction, instructionIndex, context, options.engineCallBindings);
+        } else if (isAnimationNode) {
+            nodeResult = ExecuteAnimationNodeUVE(instruction, instructionIndex, context, options.engineCallBindings);
+        } else if (isMotionQueryNode) {
+            nodeResult = ExecuteMotionQueryNodeUVE(instruction, instructionIndex, context, options.engineCallBindings);
         } else if (isEngineLogNode) {
             nodeResult = ExecuteEngineLogNodeUVE(instruction, instructionIndex, context, options.engineCallBindings);
         } else if (isEngineGetTimeNode) {
@@ -2213,6 +2567,8 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                 const bool isEntityNode = instruction.nodeTypeId.rfind("entity.", 0U) == 0U;
                 const bool isInputNode = instruction.nodeTypeId.rfind("input.", 0U) == 0U;
                 const bool isCameraNode = instruction.nodeTypeId.rfind("camera.", 0U) == 0U;
+                const bool isAnimationNode = instruction.nodeTypeId.rfind("animation.", 0U) == 0U;
+                const bool isMotionQueryNode = instruction.nodeTypeId.rfind("motion.query.", 0U) == 0U;
                 const bool isEngineLogNode = instruction.nodeTypeId == "engine.log";
                 const bool isEngineGetTimeNode = instruction.nodeTypeId == "engine.get_time";
                 if ((isVariableNode && !HasRequiredVariableInputsUVE(instruction, *context)) ||
@@ -2227,6 +2583,8 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                     (isEntityNode && !HasRequiredEntityNodeInputsUVE(instruction, *context)) ||
                     (isInputNode && !HasRequiredInputNodeInputsUVE(instruction, *context)) ||
                     (isCameraNode && !HasRequiredCameraNodeInputsUVE(instruction, *context)) ||
+                    (isAnimationNode && !HasRequiredAnimationNodeInputsUVE(instruction, *context)) ||
+                    (isMotionQueryNode && !HasRequiredMotionQueryNodeInputsUVE(instruction, *context)) ||
                     (isEngineLogNode && FindNumberInputUVE(*context, instruction.sourceNodeId, "Value") == nullptr)) {
                     continue;
                 }
@@ -2263,6 +2621,10 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                     nodeResult = ExecuteInputNodeUVE(instruction, index, *context, options.engineCallBindings);
                 } else if (isCameraNode) {
                     nodeResult = ExecuteCameraNodeUVE(instruction, index, *context, options.engineCallBindings);
+                } else if (isAnimationNode) {
+                    nodeResult = ExecuteAnimationNodeUVE(instruction, index, *context, options.engineCallBindings);
+                } else if (isMotionQueryNode) {
+                    nodeResult = ExecuteMotionQueryNodeUVE(instruction, index, *context, options.engineCallBindings);
                 } else if (isEngineLogNode) {
                     nodeResult = ExecuteEngineLogNodeUVE(instruction, index, *context, options.engineCallBindings);
                 } else if (isEngineGetTimeNode) {

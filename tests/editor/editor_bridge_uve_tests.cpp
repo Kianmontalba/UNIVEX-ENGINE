@@ -560,8 +560,8 @@ TEST(EditorBridgeUVETest, SnapshotUVE_CopiesHierarchyInspectorAndNativePanelSess
         EXPECT_EQ(snapshot.visualScripting.linkCount, 0U);
         EXPECT_EQ(snapshot.visualScripting.canvas.nodes.size(), 0U);
         EXPECT_EQ(snapshot.visualScripting.canvas.links.size(), 0U);
-        ASSERT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds.size(), 130U);
-        ASSERT_EQ(snapshot.visualScripting.canvas.paletteDescriptors.size(), 130U);
+        ASSERT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds.size(), 150U);
+        ASSERT_EQ(snapshot.visualScripting.canvas.paletteDescriptors.size(), 150U);
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[0], "flow.sequence");
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[1], "flow.branch");
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[2], "flow.return");
@@ -673,6 +673,26 @@ TEST(EditorBridgeUVETest, SnapshotUVE_CopiesHierarchyInspectorAndNativePanelSess
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[127], "camera.set_fov");
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[128], "camera.shake");
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[129], "camera.set_active");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[130], "animation.play");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[131], "animation.stop");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[132], "animation.pause");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[133], "animation.blend");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[134], "animation.blend_space");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[135], "animation.set_speed");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[136], "animation.set_weight");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[137], "animation.montage");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[138], "animation.get_current_animation");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[139], "animation.is_playing");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[140], "motion.query.build");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[141], "motion.query.search");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[142], "motion.query.get_best_match");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[143], "motion.query.set_trajectory");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[144], "motion.query.set_pose");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[145], "motion.query.set_velocity");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[146], "motion.query.set_facing");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[147], "motion.query.set_yaw");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[148], "motion.query.transition");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[149], "motion.query.motion_warp");
         EXPECT_FALSE(snapshot.visualScripting.canvas.nodesTruncated);
         EXPECT_FALSE(snapshot.visualScripting.canvas.linksTruncated);
 
