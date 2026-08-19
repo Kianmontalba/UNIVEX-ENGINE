@@ -285,7 +285,12 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
              consumerNode->typeId == "motion.query.set_trajectory" || consumerNode->typeId == "motion.query.set_pose" ||
              consumerNode->typeId == "motion.query.set_velocity" || consumerNode->typeId == "motion.query.set_facing" ||
              consumerNode->typeId == "motion.query.set_yaw" || consumerNode->typeId == "motion.query.transition" ||
-             consumerNode->typeId == "motion.query.motion_warp");
+             consumerNode->typeId == "motion.query.motion_warp" || consumerNode->typeId == "physics.raycast" ||
+             consumerNode->typeId == "physics.sphere_cast" || consumerNode->typeId == "physics.box_cast" ||
+             consumerNode->typeId == "physics.capsule_cast" || consumerNode->typeId == "physics.apply_force" ||
+             consumerNode->typeId == "physics.apply_impulse" || consumerNode->typeId == "physics.set_velocity" ||
+             consumerNode->typeId == "physics.get_velocity" || consumerNode->typeId == "physics.enable_gravity" ||
+             consumerNode->typeId == "physics.is_colliding");
         const bool approvedEntityProducer = sourceNode != nullptr &&
             (sourceNode->typeId == "entity.spawn" || sourceNode->typeId == "camera.get_camera") &&
             link.output.pinName == "Result";

@@ -1110,6 +1110,220 @@ namespace {
     return MakeNodeFailureUVE(instructionIndex, "Unknown Motion Query node type.");
 }
 
+[[nodiscard]] ScriptVmExecutionResultUVE ExecutePhysicsNodeUVE(
+    const ScriptIrInstructionUVE& instruction, const std::size_t instructionIndex,
+    ScriptVmExecutionContextUVE& context, const ScriptEngineCallBindingsUVE* bindings) {
+    if (bindings == nullptr) {
+        return MakeNodeFailureUVE(instructionIndex, "Physics node requires caller-owned physics bindings.");
+    }
+    const std::uint32_t nodeId = instruction.sourceNodeId;
+    const auto setBooleanResult = [&](const bool result) -> ScriptVmExecutionResultUVE {
+        return SetNodeOutputUVE(context, nodeId, "Result", result)
+            ? ScriptVmExecutionResultUVE{}
+            : MakeNodeFailureUVE(instructionIndex, "Physics node rejected its Boolean output capacity.");
+    };
+    const auto setCastOutputs = [&](const bool hit, const Scene::EntityUVE entity,
+                                    const ScriptVector3ValueUVE& point, const ScriptVector3ValueUVE& normal,
+                                    const float distance, const bool includeNormal) -> ScriptVmExecutionResultUVE {
+        if (!SetNodeOutputUVE(context, nodeId, "Hit", hit) ||
+            !SetNodeOutputUVE(context, nodeId, "Entity", ScriptEntityValueUVE{hit ? entity : Scene::kInvalidEntityUVE}) ||
+            !SetNodeOutputUVE(context, nodeId, "Point", point) ||
+            (includeNormal && !SetNodeOutputUVE(context, nodeId, "Normal", normal)) ||
+            !SetNodeOutputUVE(context, nodeId, "Distance", distance)) {
+            return MakeNodeFailureUVE(instructionIndex, "Physics query rejected its copied outputs or output capacity.");
+        }
+        return {};
+    };
+    const auto validCastOutput = [](const bool hit, const Scene::EntityUVE entity,
+                                    const ScriptVector3ValueUVE& point, const ScriptVector3ValueUVE& normal,
+                                    const float distance, const float maximumDistance) {
+        return (!hit || entity != Scene::kInvalidEntityUVE) && IsFiniteVector3ValueUVE(point) &&
+               IsFiniteVector3ValueUVE(normal) && std::isfinite(distance) && distance >= 0.0F &&
+               distance <= maximumDistance;
+    };
+    if (instruction.nodeTypeId == "physics.raycast") {
+        const ScriptVector3ValueUVE* origin = FindVector3InputUVE(context, nodeId, "Origin");
+        const ScriptVector3ValueUVE* direction = FindVector3InputUVE(context, nodeId, "Direction");
+        const float* maximumDistance = FindNumberInputUVE(context, nodeId, "Max Distance");
+        std::uint32_t layerMask = 0U;
+        if (origin == nullptr || direction == nullptr || maximumDistance == nullptr ||
+            !IsFiniteVector3ValueUVE(*origin) || !IsFiniteVector3ValueUVE(*direction) ||
+            !std::isfinite(*maximumDistance) || *maximumDistance <= 0.0F ||
+            !TryGetIntegralNumberInputUVE(context, nodeId, "Layer Mask", 65535.0F, &layerMask) ||
+            bindings->physicsRaycast == nullptr) {
+            return MakeNodeFailureUVE(instructionIndex, "Raycast requires finite vectors, positive Max Distance, a bounded Layer Mask, and binding.");
+        }
+        const ScriptEntityValueUVE* ignore = FindEntityInputUVE(context, nodeId, "Ignore");
+        bool hit = false;
+        Scene::EntityUVE entity = Scene::kInvalidEntityUVE;
+        ScriptVector3ValueUVE point{};
+        ScriptVector3ValueUVE normal{};
+        float distance = 0.0F;
+        if (ignore != nullptr && ignore->entity == Scene::kInvalidEntityUVE) {
+            return MakeNodeFailureUVE(instructionIndex, "Raycast Ignore must be a valid or omitted Entity value.");
+        }
+        if (!bindings->physicsRaycast(bindings->userData, *origin, *direction, *maximumDistance, layerMask,
+                                      ignore == nullptr ? Scene::kInvalidEntityUVE : ignore->entity, &hit, &entity,
+                                      &point, &normal, &distance) ||
+            !validCastOutput(hit, entity, point, normal, distance, *maximumDistance)) {
+            return MakeNodeFailureUVE(instructionIndex, "Raycast callback rejected its copied inputs or returned invalid facts.");
+        }
+        return setCastOutputs(hit, entity, point, normal, distance, true);
+    }
+    if (instruction.nodeTypeId == "physics.sphere_cast") {
+        const ScriptVector3ValueUVE* origin = FindVector3InputUVE(context, nodeId, "Origin");
+        const ScriptVector3ValueUVE* direction = FindVector3InputUVE(context, nodeId, "Direction");
+        const float* radius = FindNumberInputUVE(context, nodeId, "Radius");
+        const float* maximumDistance = FindNumberInputUVE(context, nodeId, "Max Distance");
+        std::uint32_t layerMask = 0U;
+        if (origin == nullptr || direction == nullptr || radius == nullptr || maximumDistance == nullptr ||
+            !IsFiniteVector3ValueUVE(*origin) || !IsFiniteVector3ValueUVE(*direction) ||
+            !std::isfinite(*radius) || *radius <= 0.0F || !std::isfinite(*maximumDistance) || *maximumDistance <= 0.0F ||
+            !TryGetIntegralNumberInputUVE(context, nodeId, "Layer Mask", 65535.0F, &layerMask) ||
+            bindings->physicsSphereCast == nullptr) {
+            return MakeNodeFailureUVE(instructionIndex, "Sphere Cast requires finite values, positive radius/distance, a bounded Layer Mask, and binding.");
+        }
+        const ScriptEntityValueUVE* ignore = FindEntityInputUVE(context, nodeId, "Ignore");
+        bool hit = false;
+        Scene::EntityUVE entity = Scene::kInvalidEntityUVE;
+        ScriptVector3ValueUVE point{};
+        float distance = 0.0F;
+        if (ignore != nullptr && ignore->entity == Scene::kInvalidEntityUVE) {
+            return MakeNodeFailureUVE(instructionIndex, "Sphere Cast Ignore must be a valid or omitted Entity value.");
+        }
+        if (!bindings->physicsSphereCast(bindings->userData, *origin, *direction, *radius, *maximumDistance, layerMask,
+                                         ignore == nullptr ? Scene::kInvalidEntityUVE : ignore->entity, &hit, &entity,
+                                         &point, &distance) ||
+            !validCastOutput(hit, entity, point, ScriptVector3ValueUVE{}, distance, *maximumDistance)) {
+            return MakeNodeFailureUVE(instructionIndex, "Sphere Cast callback rejected its copied inputs or returned invalid facts.");
+        }
+        return setCastOutputs(hit, entity, point, ScriptVector3ValueUVE{}, distance, false);
+    }
+    if (instruction.nodeTypeId == "physics.box_cast") {
+        const ScriptVector3ValueUVE* origin = FindVector3InputUVE(context, nodeId, "Origin");
+        const ScriptVector3ValueUVE* halfExtents = FindVector3InputUVE(context, nodeId, "Half Extents");
+        const ScriptVector3ValueUVE* direction = FindVector3InputUVE(context, nodeId, "Direction");
+        const float* maximumDistance = FindNumberInputUVE(context, nodeId, "Max Distance");
+        std::uint32_t layerMask = 0U;
+        if (origin == nullptr || halfExtents == nullptr || direction == nullptr || maximumDistance == nullptr ||
+            !IsFiniteVector3ValueUVE(*origin) || !IsFiniteVector3ValueUVE(*halfExtents) ||
+            !IsFiniteVector3ValueUVE(*direction) || halfExtents->value.x <= 0.0F || halfExtents->value.y <= 0.0F ||
+            halfExtents->value.z <= 0.0F || !std::isfinite(*maximumDistance) || *maximumDistance <= 0.0F ||
+            !TryGetIntegralNumberInputUVE(context, nodeId, "Layer Mask", 65535.0F, &layerMask) ||
+            bindings->physicsBoxCast == nullptr) {
+            return MakeNodeFailureUVE(instructionIndex, "Box Cast requires finite positive extents/distance, a bounded Layer Mask, and binding.");
+        }
+        const ScriptEntityValueUVE* ignore = FindEntityInputUVE(context, nodeId, "Ignore");
+        bool hit = false;
+        Scene::EntityUVE entity = Scene::kInvalidEntityUVE;
+        ScriptVector3ValueUVE point{};
+        float distance = 0.0F;
+        if (ignore != nullptr && ignore->entity == Scene::kInvalidEntityUVE) {
+            return MakeNodeFailureUVE(instructionIndex, "Box Cast Ignore must be a valid or omitted Entity value.");
+        }
+        if (!bindings->physicsBoxCast(bindings->userData, *origin, *halfExtents, *direction, *maximumDistance,
+                                      layerMask, ignore == nullptr ? Scene::kInvalidEntityUVE : ignore->entity, &hit,
+                                      &entity, &point, &distance) ||
+            !validCastOutput(hit, entity, point, ScriptVector3ValueUVE{}, distance, *maximumDistance)) {
+            return MakeNodeFailureUVE(instructionIndex, "Box Cast callback rejected its copied inputs or returned invalid facts.");
+        }
+        return setCastOutputs(hit, entity, point, ScriptVector3ValueUVE{}, distance, false);
+    }
+    if (instruction.nodeTypeId == "physics.capsule_cast") {
+        const ScriptVector3ValueUVE* origin = FindVector3InputUVE(context, nodeId, "Origin");
+        const ScriptVector3ValueUVE* direction = FindVector3InputUVE(context, nodeId, "Direction");
+        const float* radius = FindNumberInputUVE(context, nodeId, "Radius");
+        const float* halfHeight = FindNumberInputUVE(context, nodeId, "Half Height");
+        const float* maximumDistance = FindNumberInputUVE(context, nodeId, "Max Distance");
+        std::uint32_t layerMask = 0U;
+        if (origin == nullptr || direction == nullptr || radius == nullptr || halfHeight == nullptr || maximumDistance == nullptr ||
+            !IsFiniteVector3ValueUVE(*origin) || !IsFiniteVector3ValueUVE(*direction) || !std::isfinite(*radius) ||
+            *radius <= 0.0F || !std::isfinite(*halfHeight) || *halfHeight <= 0.0F || !std::isfinite(*maximumDistance) ||
+            *maximumDistance <= 0.0F || !TryGetIntegralNumberInputUVE(context, nodeId, "Layer Mask", 65535.0F, &layerMask) ||
+            bindings->physicsCapsuleCast == nullptr) {
+            return MakeNodeFailureUVE(instructionIndex, "Capsule Cast requires finite positive shape/distance values, a bounded Layer Mask, and binding.");
+        }
+        const ScriptEntityValueUVE* ignore = FindEntityInputUVE(context, nodeId, "Ignore");
+        bool hit = false;
+        Scene::EntityUVE entity = Scene::kInvalidEntityUVE;
+        ScriptVector3ValueUVE point{};
+        float distance = 0.0F;
+        if (ignore != nullptr && ignore->entity == Scene::kInvalidEntityUVE) {
+            return MakeNodeFailureUVE(instructionIndex, "Capsule Cast Ignore must be a valid or omitted Entity value.");
+        }
+        if (!bindings->physicsCapsuleCast(bindings->userData, *origin, *direction, *radius, *halfHeight,
+                                          *maximumDistance, layerMask, ignore == nullptr ? Scene::kInvalidEntityUVE : ignore->entity,
+                                          &hit, &entity, &point, &distance) ||
+            !validCastOutput(hit, entity, point, ScriptVector3ValueUVE{}, distance, *maximumDistance)) {
+            return MakeNodeFailureUVE(instructionIndex, "Capsule Cast callback rejected its copied inputs or returned invalid facts.");
+        }
+        return setCastOutputs(hit, entity, point, ScriptVector3ValueUVE{}, distance, false);
+    }
+    if (instruction.nodeTypeId == "physics.overlap") {
+        const ScriptVector3ValueUVE* origin = FindVector3InputUVE(context, nodeId, "Origin");
+        const ScriptVector3ValueUVE* halfExtents = FindVector3InputUVE(context, nodeId, "Half Extents");
+        std::uint32_t layerMask = 0U;
+        std::uint32_t count = 0U;
+        if (origin == nullptr || halfExtents == nullptr || !IsFiniteVector3ValueUVE(*origin) ||
+            !IsFiniteVector3ValueUVE(*halfExtents) || halfExtents->value.x <= 0.0F || halfExtents->value.y <= 0.0F ||
+            halfExtents->value.z <= 0.0F || !TryGetIntegralNumberInputUVE(context, nodeId, "Layer Mask", 65535.0F, &layerMask) ||
+            bindings->physicsOverlap == nullptr || !bindings->physicsOverlap(bindings->userData, *origin, *halfExtents, layerMask, &count) ||
+            count > 4096U || !SetNodeOutputUVE(context, nodeId, "Count", static_cast<float>(count))) {
+            return MakeNodeFailureUVE(instructionIndex, "Overlap requires finite positive extents, a bounded Layer Mask, and a bounded callback count.");
+        }
+        return {};
+    }
+    const ScriptEntityValueUVE* body = FindEntityInputUVE(context, nodeId, "Body");
+    if (body == nullptr || !body->IsValidUVE()) {
+        return MakeNodeFailureUVE(instructionIndex, "Physics body node requires a valid Body entity input.");
+    }
+    if (instruction.nodeTypeId == "physics.apply_force" || instruction.nodeTypeId == "physics.apply_impulse" ||
+        instruction.nodeTypeId == "physics.set_velocity") {
+        const char* pinName = instruction.nodeTypeId == "physics.apply_force" ? "Force" :
+                              instruction.nodeTypeId == "physics.apply_impulse" ? "Impulse" : "Velocity";
+        const ScriptVector3ValueUVE* value = FindVector3InputUVE(context, nodeId, pinName);
+        const ScriptPhysicsBodyVectorMutationFunctionUVE callback =
+            instruction.nodeTypeId == "physics.apply_force" ? bindings->physicsApplyForce :
+            instruction.nodeTypeId == "physics.apply_impulse" ? bindings->physicsApplyImpulse : bindings->physicsSetVelocity;
+        bool accepted = false;
+        if (value == nullptr || !IsFiniteVector3ValueUVE(*value) || callback == nullptr ||
+            !callback(bindings->userData, body->entity, *value, &accepted) || !accepted) {
+            return MakeNodeFailureUVE(instructionIndex, "Physics body vector callback rejected its copied input.");
+        }
+        return setBooleanResult(true);
+    }
+    if (instruction.nodeTypeId == "physics.get_velocity") {
+        if (bindings->physicsGetVelocity == nullptr) {
+            return MakeNodeFailureUVE(instructionIndex, "Get Velocity requires a caller-owned binding.");
+        }
+        ScriptVector3ValueUVE velocity{};
+        if (!bindings->physicsGetVelocity(bindings->userData, body->entity, &velocity) ||
+            !IsFiniteVector3ValueUVE(velocity) || !SetNodeOutputUVE(context, nodeId, "Velocity", velocity)) {
+            return MakeNodeFailureUVE(instructionIndex, "Get Velocity callback returned invalid copied data or output capacity.");
+        }
+        return {};
+    }
+    if (instruction.nodeTypeId == "physics.enable_gravity") {
+        const bool* enabled = FindBooleanInputUVE(context, nodeId, "Enabled");
+        bool accepted = false;
+        if (enabled == nullptr || bindings->physicsEnableGravity == nullptr ||
+            !bindings->physicsEnableGravity(bindings->userData, body->entity, *enabled, &accepted) || !accepted) {
+            return MakeNodeFailureUVE(instructionIndex, "Enable Gravity callback rejected its copied input.");
+        }
+        return setBooleanResult(true);
+    }
+    if (instruction.nodeTypeId == "physics.is_colliding") {
+        bool colliding = false;
+        if (bindings->physicsIsColliding == nullptr ||
+            !bindings->physicsIsColliding(bindings->userData, body->entity, &colliding) ||
+            !SetNodeOutputUVE(context, nodeId, "Result", colliding)) {
+            return MakeNodeFailureUVE(instructionIndex, "Is Colliding callback rejected its copied query or output capacity.");
+        }
+        return {};
+    }
+    return MakeNodeFailureUVE(instructionIndex, "Unknown Physics node type.");
+}
+
 [[nodiscard]] ScriptVmExecutionResultUVE ExecuteEngineGetTimeNodeUVE(
     const ScriptIrInstructionUVE& instruction, const std::size_t instructionIndex,
     ScriptVmExecutionContextUVE& context, const ScriptEngineCallBindingsUVE* bindings) {
@@ -1800,6 +2014,59 @@ namespace {
     return false;
 }
 
+[[nodiscard]] bool HasRequiredPhysicsNodeInputsUVE(const ScriptIrInstructionUVE& instruction,
+                                                       const ScriptVmExecutionContextUVE& context) {
+    const std::uint32_t nodeId = instruction.sourceNodeId;
+    const std::string& type = instruction.nodeTypeId;
+    if (type == "physics.raycast") {
+        return FindVector3InputUVE(context, nodeId, "Origin") != nullptr &&
+               FindVector3InputUVE(context, nodeId, "Direction") != nullptr &&
+               FindNumberInputUVE(context, nodeId, "Max Distance") != nullptr &&
+               FindNumberInputUVE(context, nodeId, "Layer Mask") != nullptr;
+    }
+    if (type == "physics.sphere_cast") {
+        return FindVector3InputUVE(context, nodeId, "Origin") != nullptr &&
+               FindVector3InputUVE(context, nodeId, "Direction") != nullptr &&
+               FindNumberInputUVE(context, nodeId, "Radius") != nullptr &&
+               FindNumberInputUVE(context, nodeId, "Max Distance") != nullptr &&
+               FindNumberInputUVE(context, nodeId, "Layer Mask") != nullptr;
+    }
+    if (type == "physics.box_cast") {
+        return FindVector3InputUVE(context, nodeId, "Origin") != nullptr &&
+               FindVector3InputUVE(context, nodeId, "Half Extents") != nullptr &&
+               FindVector3InputUVE(context, nodeId, "Direction") != nullptr &&
+               FindNumberInputUVE(context, nodeId, "Max Distance") != nullptr &&
+               FindNumberInputUVE(context, nodeId, "Layer Mask") != nullptr;
+    }
+    if (type == "physics.capsule_cast") {
+        return FindVector3InputUVE(context, nodeId, "Origin") != nullptr &&
+               FindVector3InputUVE(context, nodeId, "Direction") != nullptr &&
+               FindNumberInputUVE(context, nodeId, "Radius") != nullptr &&
+               FindNumberInputUVE(context, nodeId, "Half Height") != nullptr &&
+               FindNumberInputUVE(context, nodeId, "Max Distance") != nullptr &&
+               FindNumberInputUVE(context, nodeId, "Layer Mask") != nullptr;
+    }
+    if (type == "physics.overlap") {
+        return FindVector3InputUVE(context, nodeId, "Origin") != nullptr &&
+               FindVector3InputUVE(context, nodeId, "Half Extents") != nullptr &&
+               FindNumberInputUVE(context, nodeId, "Layer Mask") != nullptr;
+    }
+    if (type == "physics.apply_force") return FindEntityInputUVE(context, nodeId, "Body") != nullptr &&
+                                               FindVector3InputUVE(context, nodeId, "Force") != nullptr;
+    if (type == "physics.apply_impulse") return FindEntityInputUVE(context, nodeId, "Body") != nullptr &&
+                                                 FindVector3InputUVE(context, nodeId, "Impulse") != nullptr;
+    if (type == "physics.set_velocity") return FindEntityInputUVE(context, nodeId, "Body") != nullptr &&
+                                                 FindVector3InputUVE(context, nodeId, "Velocity") != nullptr;
+    if (type == "physics.get_velocity" || type == "physics.is_colliding") {
+        return FindEntityInputUVE(context, nodeId, "Body") != nullptr;
+    }
+    if (type == "physics.enable_gravity") {
+        return FindEntityInputUVE(context, nodeId, "Body") != nullptr &&
+               FindBooleanInputUVE(context, nodeId, "Enabled") != nullptr;
+    }
+    return false;
+}
+
 [[nodiscard]] bool HasRequiredAnimationNodeInputsUVE(const ScriptIrInstructionUVE& instruction,
                                                           const ScriptVmExecutionContextUVE& context) {
     const std::uint32_t nodeId = instruction.sourceNodeId;
@@ -2273,6 +2540,7 @@ namespace {
         const bool isCameraNode = instruction.nodeTypeId.rfind("camera.", 0U) == 0U;
         const bool isAnimationNode = instruction.nodeTypeId.rfind("animation.", 0U) == 0U;
         const bool isMotionQueryNode = instruction.nodeTypeId.rfind("motion.query.", 0U) == 0U;
+        const bool isPhysicsNode = instruction.nodeTypeId.rfind("physics.", 0U) == 0U;
         const bool isEngineLogNode = instruction.nodeTypeId == "engine.log";
         const bool isEngineGetTimeNode = instruction.nodeTypeId == "engine.get_time";
         if ((isVariableNode && !HasRequiredVariableInputsUVE(instruction, context)) ||
@@ -2289,6 +2557,7 @@ namespace {
             (isCameraNode && !HasRequiredCameraNodeInputsUVE(instruction, context)) ||
             (isAnimationNode && !HasRequiredAnimationNodeInputsUVE(instruction, context)) ||
             (isMotionQueryNode && !HasRequiredMotionQueryNodeInputsUVE(instruction, context)) ||
+            (isPhysicsNode && !HasRequiredPhysicsNodeInputsUVE(instruction, context)) ||
             (isEngineLogNode && FindNumberInputUVE(context, instruction.sourceNodeId, "Value") == nullptr)) {
             ScriptVmExecutionResultUVE failure = MakeNodeFailureUVE(
                 instructionIndex, "Control-flow execution could not resolve typed node inputs.");
@@ -2325,6 +2594,8 @@ namespace {
             nodeResult = ExecuteAnimationNodeUVE(instruction, instructionIndex, context, options.engineCallBindings);
         } else if (isMotionQueryNode) {
             nodeResult = ExecuteMotionQueryNodeUVE(instruction, instructionIndex, context, options.engineCallBindings);
+        } else if (isPhysicsNode) {
+            nodeResult = ExecutePhysicsNodeUVE(instruction, instructionIndex, context, options.engineCallBindings);
         } else if (isEngineLogNode) {
             nodeResult = ExecuteEngineLogNodeUVE(instruction, instructionIndex, context, options.engineCallBindings);
         } else if (isEngineGetTimeNode) {
@@ -2569,6 +2840,7 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                 const bool isCameraNode = instruction.nodeTypeId.rfind("camera.", 0U) == 0U;
                 const bool isAnimationNode = instruction.nodeTypeId.rfind("animation.", 0U) == 0U;
                 const bool isMotionQueryNode = instruction.nodeTypeId.rfind("motion.query.", 0U) == 0U;
+                const bool isPhysicsNode = instruction.nodeTypeId.rfind("physics.", 0U) == 0U;
                 const bool isEngineLogNode = instruction.nodeTypeId == "engine.log";
                 const bool isEngineGetTimeNode = instruction.nodeTypeId == "engine.get_time";
                 if ((isVariableNode && !HasRequiredVariableInputsUVE(instruction, *context)) ||
@@ -2585,6 +2857,7 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                     (isCameraNode && !HasRequiredCameraNodeInputsUVE(instruction, *context)) ||
                     (isAnimationNode && !HasRequiredAnimationNodeInputsUVE(instruction, *context)) ||
                     (isMotionQueryNode && !HasRequiredMotionQueryNodeInputsUVE(instruction, *context)) ||
+                    (isPhysicsNode && !HasRequiredPhysicsNodeInputsUVE(instruction, *context)) ||
                     (isEngineLogNode && FindNumberInputUVE(*context, instruction.sourceNodeId, "Value") == nullptr)) {
                     continue;
                 }
@@ -2625,6 +2898,8 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                     nodeResult = ExecuteAnimationNodeUVE(instruction, index, *context, options.engineCallBindings);
                 } else if (isMotionQueryNode) {
                     nodeResult = ExecuteMotionQueryNodeUVE(instruction, index, *context, options.engineCallBindings);
+                } else if (isPhysicsNode) {
+                    nodeResult = ExecutePhysicsNodeUVE(instruction, index, *context, options.engineCallBindings);
                 } else if (isEngineLogNode) {
                     nodeResult = ExecuteEngineLogNodeUVE(instruction, index, *context, options.engineCallBindings);
                 } else if (isEngineGetTimeNode) {
