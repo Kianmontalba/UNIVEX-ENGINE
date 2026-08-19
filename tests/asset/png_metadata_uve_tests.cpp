@@ -4,6 +4,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -62,6 +63,29 @@ TEST(PngMetadataUVETest, ParsePngMetadataUVE_ReportsIndexedColorWithoutAlpha) {
     EXPECT_EQ(metadata->colorType, 3U);
     EXPECT_FALSE(metadata->hasAlpha);
     EXPECT_EQ(metadata->interlaceMethod, 1U);
+}
+
+TEST(PngMetadataUVETest, ValidatePngRgba8PixelBudgetUVE_AcceptsDefaultHdBudget) {
+    const std::optional<PngMetadataUVE> metadata = ParsePngMetadataUVE(MakePngIhdrUVE());
+    ASSERT_TRUE(metadata.has_value());
+    EXPECT_TRUE(ValidatePngRgba8PixelBudgetUVE(*metadata));
+}
+
+TEST(PngMetadataUVETest, ValidatePngRgba8PixelBudgetUVE_RejectsZeroOrNonRgba8Facts) {
+    PngMetadataUVE zeroWidth{.width = 0U, .height = 1080U, .bitDepth = 8U, .colorType = 6U};
+    EXPECT_FALSE(ValidatePngRgba8PixelBudgetUVE(zeroWidth));
+
+    PngMetadataUVE rgb{.width = 1920U, .height = 1080U, .bitDepth = 8U, .colorType = 2U};
+    EXPECT_FALSE(ValidatePngRgba8PixelBudgetUVE(rgb));
+}
+
+TEST(PngMetadataUVETest, ValidatePngRgba8PixelBudgetUVE_RejectsOverflowAndOversizedBudget) {
+    PngMetadataUVE huge{.width = 0xFFFFFFFFU, .height = 0xFFFFFFFFU, .bitDepth = 8U, .colorType = 6U};
+    EXPECT_FALSE(ValidatePngRgba8PixelBudgetUVE(huge, std::numeric_limits<std::uint64_t>::max()));
+
+    PngMetadataUVE small{.width = 4U, .height = 4U, .bitDepth = 8U, .colorType = 6U};
+    EXPECT_FALSE(ValidatePngRgba8PixelBudgetUVE(small, 63ULL));
+    EXPECT_TRUE(ValidatePngRgba8PixelBudgetUVE(small, 64ULL));
 }
 
 TEST(PngMetadataUVETest, ParsePngMetadataUVE_RejectsMalformedIhdrFacts) {

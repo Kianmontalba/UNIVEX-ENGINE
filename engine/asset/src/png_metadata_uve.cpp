@@ -77,4 +77,19 @@ std::optional<PngMetadataUVE> ParsePngMetadataUVE(const std::vector<std::byte>& 
     return metadata;
 }
 
+bool ValidatePngRgba8PixelBudgetUVE(const PngMetadataUVE& metadata,
+                                    const std::uint64_t maximumBytes) noexcept {
+    if (metadata.width == 0U || metadata.height == 0U || metadata.bitDepth != 8U ||
+        metadata.colorType != 6U || maximumBytes == 0U) {
+        return false;
+    }
+    constexpr std::uint64_t kBytesPerRgba8Pixel = 4ULL;
+    const std::uint64_t pixelCount = static_cast<std::uint64_t>(metadata.width) *
+                                      static_cast<std::uint64_t>(metadata.height);
+    if (pixelCount > maximumBytes / kBytesPerRgba8Pixel) {
+        return false;
+    }
+    return pixelCount * kBytesPerRgba8Pixel <= maximumBytes;
+}
+
 } // namespace UVE::Asset
