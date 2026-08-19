@@ -28,6 +28,7 @@ enum class AssetImportSourceKindUVE {
     RawModel,
     RawTexture,
     RawMaterial,
+    RawAudio,
 };
 
 /// Value-only classification of an import source. It describes the source format and current
@@ -90,7 +91,7 @@ public:
                             const AssetImportSettingsUVE&)>
             importFunc) = 0;
 
-    /// Classifies a source path without touching the filesystem. Raw model/texture/material kinds
+    /// Classifies a source path without touching the filesystem. Raw model/texture/material/audio kinds
     /// explicitly report that a format-specific parser is required; current built-in UVE envelope
     /// kinds report deterministic generic copy authority, while PlainText reports the
     /// bounded text parser authority.

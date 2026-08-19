@@ -40,6 +40,8 @@ namespace {
             return "rawTexture";
         case Asset::AssetImportSourceKindUVE::RawMaterial:
             return "rawMaterial";
+        case Asset::AssetImportSourceKindUVE::RawAudio:
+            return "rawAudio";
         case Asset::AssetImportSourceKindUVE::Unknown:
             return "unknown";
     }

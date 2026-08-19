@@ -155,12 +155,16 @@ using ImportFuncUVE = std::function<bool(const std::filesystem::path&, const std
     if (extension == "material" || extension == "mat" || extension == "mtl") {
         return AssetImportSourceKindUVE::RawMaterial;
     }
+    if (extension == "wav" || extension == "ogg" || extension == "mp3" || extension == "flac" ||
+        extension == "aac" || extension == "m4a" || extension == "wma") {
+        return AssetImportSourceKindUVE::RawAudio;
+    }
     return AssetImportSourceKindUVE::Unknown;
 }
 
 [[nodiscard]] bool RequiresFormatSpecificParserUVE(const AssetImportSourceKindUVE kind) {
     return kind == AssetImportSourceKindUVE::RawModel || kind == AssetImportSourceKindUVE::RawTexture ||
-           kind == AssetImportSourceKindUVE::RawMaterial;
+           kind == AssetImportSourceKindUVE::RawMaterial || kind == AssetImportSourceKindUVE::RawAudio;
 }
 
 } // namespace
