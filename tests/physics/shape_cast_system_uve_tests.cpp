@@ -100,6 +100,74 @@ TEST_F(ShapeCastSystemUVETest, SphereCastUVE_LayerAndIgnoreFiltersAreApplied) {
     EXPECT_NE(hit->entity, ignored);
 }
 
+TEST_F(ShapeCastSystemUVETest, BoxCastUVE_ExpandsTargetByMoverHalfExtentsAndReportsCenter) {
+    const Scene::EntityUVE entity = MakeColliderEntityUVE(Math::Vector3UVE{}, Math::Vector3UVE{1.0F, 1.0F, 1.0F});
+    BoxCastQueryUVE query;
+    query.ray = Math::RayUVE{Math::Vector3UVE{-5.0F, 0.0F, 0.0F}, Math::Vector3UVE{1.0F, 0.0F, 0.0F}};
+    query.halfExtents = Math::Vector3UVE{0.5F, 0.25F, 0.75F};
+    query.maxDistance = 100.0F;
+
+    const std::optional<BoxCastHitUVE> hit = ShapeCastSystemUVE::BoxCastUVE(entityManager, query);
+    ASSERT_TRUE(hit.has_value());
+    EXPECT_EQ(hit->entity, entity);
+    EXPECT_NEAR(hit->distance, 3.5F, kEpsilon);
+    EXPECT_NEAR(hit->center.x, -1.5F, kEpsilon);
+    EXPECT_NEAR(hit->normal.x, -1.0F, kEpsilon);
+}
+
+TEST_F(ShapeCastSystemUVETest, BoxCastUVE_ReturnsClosestHitDeterministically) {
+    MakeColliderEntityUVE(Math::Vector3UVE{5.0F, 0.0F, 0.0F}, Math::Vector3UVE{1.0F, 1.0F, 1.0F});
+    const Scene::EntityUVE closer =
+        MakeColliderEntityUVE(Math::Vector3UVE{0.0F, 0.0F, 0.0F}, Math::Vector3UVE{1.0F, 1.0F, 1.0F});
+    BoxCastQueryUVE query;
+    query.ray = Math::RayUVE{Math::Vector3UVE{-10.0F, 0.0F, 0.0F}, Math::Vector3UVE{1.0F, 0.0F, 0.0F}};
+    query.halfExtents = Math::Vector3UVE{0.5F, 0.5F, 0.5F};
+    query.maxDistance = 100.0F;
+
+    const std::optional<BoxCastHitUVE> hit = ShapeCastSystemUVE::BoxCastUVE(entityManager, query);
+    ASSERT_TRUE(hit.has_value());
+    EXPECT_EQ(hit->entity, closer);
+}
+
+TEST_F(ShapeCastSystemUVETest, BoxCastUVE_AppliesLayerIgnoreAndMaterialFacts) {
+    const Scene::EntityUVE ignored =
+        MakeColliderEntityUVE(Math::Vector3UVE{}, Math::Vector3UVE{1.0F, 1.0F, 1.0F}, 1U);
+    const Scene::EntityUVE visible = MakeColliderEntityUVE(
+        Math::Vector3UVE{4.0F, 0.0F, 0.0F}, Math::Vector3UVE{1.0F, 1.0F, 1.0F}, 2U, 0.4F, 0.9F, 3.0F);
+    BoxCastQueryUVE query;
+    query.ray = Math::RayUVE{Math::Vector3UVE{-10.0F, 0.0F, 0.0F}, Math::Vector3UVE{1.0F, 0.0F, 0.0F}};
+    query.halfExtents = Math::Vector3UVE{0.5F, 0.5F, 0.5F};
+    query.maxDistance = 100.0F;
+    query.layerMask = 2U;
+    query.ignoreEntity = ignored;
+
+    const std::optional<BoxCastHitUVE> hit = ShapeCastSystemUVE::BoxCastUVE(entityManager, query);
+    ASSERT_TRUE(hit.has_value());
+    EXPECT_EQ(hit->entity, visible);
+    EXPECT_NEAR(hit->material.friction, 0.4F, kEpsilon);
+    EXPECT_NEAR(hit->material.restitution, 0.9F, kEpsilon);
+    EXPECT_NEAR(hit->material.density, 3.0F, kEpsilon);
+}
+
+TEST_F(ShapeCastSystemUVETest, BoxCastUVE_RejectsInvalidFiniteInputs) {
+    MakeColliderEntityUVE(Math::Vector3UVE{}, Math::Vector3UVE{1.0F, 1.0F, 1.0F});
+    BoxCastQueryUVE negativeExtents;
+    negativeExtents.ray = Math::RayUVE{Math::Vector3UVE{-5.0F, 0.0F, 0.0F}, Math::Vector3UVE{1.0F, 0.0F, 0.0F}};
+    negativeExtents.halfExtents = Math::Vector3UVE{-1.0F, 0.0F, 0.0F};
+    negativeExtents.maxDistance = 100.0F;
+    EXPECT_FALSE(ShapeCastSystemUVE::BoxCastUVE(entityManager, negativeExtents).has_value());
+
+    BoxCastQueryUVE zeroDirection = negativeExtents;
+    zeroDirection.halfExtents = Math::Vector3UVE{0.5F, 0.5F, 0.5F};
+    zeroDirection.ray.direction = Math::Vector3UVE{};
+    EXPECT_FALSE(ShapeCastSystemUVE::BoxCastUVE(entityManager, zeroDirection).has_value());
+
+    BoxCastQueryUVE nonFiniteDistance = zeroDirection;
+    nonFiniteDistance.ray.direction = Math::Vector3UVE{1.0F, 0.0F, 0.0F};
+    nonFiniteDistance.maxDistance = std::numeric_limits<float>::quiet_NaN();
+    EXPECT_FALSE(ShapeCastSystemUVE::BoxCastUVE(entityManager, nonFiniteDistance).has_value());
+}
+
 TEST_F(ShapeCastSystemUVETest, SphereCastUVE_RejectsInvalidFiniteInputs) {
     MakeColliderEntityUVE(Math::Vector3UVE{}, Math::Vector3UVE{1.0F, 1.0F, 1.0F});
 

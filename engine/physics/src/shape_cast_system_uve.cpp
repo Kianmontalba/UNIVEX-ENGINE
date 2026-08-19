@@ -13,6 +13,19 @@
 #include "uve/scene/i_entity_manager_uve.h"
 
 namespace UVE::Physics {
+namespace {
+
+[[nodiscard]] bool IsFiniteVectorUVE(const Math::Vector3UVE& value) noexcept {
+    return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+}
+
+[[nodiscard]] bool IsValidBoxCastRayUVE(const Math::RayUVE& ray) noexcept {
+    const float lengthSquared = Math::LengthSquaredUVE(ray.direction);
+    return IsFiniteVectorUVE(ray.origin) && IsFiniteVectorUVE(ray.direction) &&
+           std::isfinite(lengthSquared) && lengthSquared > 0.0F;
+}
+
+} // namespace
 
 std::optional<SphereCastHitUVE> ShapeCastSystemUVE::SphereCastUVE(
     Scene::IEntityManagerUVE& entityManager, const SphereCastQueryUVE& query) {
@@ -47,6 +60,49 @@ std::optional<SphereCastHitUVE> ShapeCastSystemUVE::SphereCastUVE(
                                       hit->normal,
                                       hit->distance,
                                       MaterialOfUVE(colliderComponent)};
+    }
+    return closestHit;
+}
+
+std::optional<BoxCastHitUVE> ShapeCastSystemUVE::BoxCastUVE(
+    Scene::IEntityManagerUVE& entityManager, const BoxCastQueryUVE& query) {
+    if (!IsValidBoxCastRayUVE(query.ray) || !IsFiniteVectorUVE(query.halfExtents) ||
+        query.halfExtents.x < 0.0F || query.halfExtents.y < 0.0F || query.halfExtents.z < 0.0F ||
+        !std::isfinite(query.maxDistance) || query.maxDistance < 0.0F || query.layerMask == 0U) {
+        return std::nullopt;
+    }
+
+    const std::vector<Detail::ColliderWorldAabbUVE> colliders =
+        Detail::BuildColliderWorldAabbCacheUVE(entityManager);
+    std::optional<BoxCastHitUVE> closestHit;
+    for (const Detail::ColliderWorldAabbUVE& collider : colliders) {
+        if (collider.entity == query.ignoreEntity || (collider.collisionLayer & query.layerMask) == 0U) {
+            continue;
+        }
+
+        const Math::AabbUVE expandedAabb{
+            collider.worldAabb.min - query.halfExtents,
+            collider.worldAabb.max + query.halfExtents,
+        };
+        const std::optional<Math::RayHitUVE> hit =
+            Math::IntersectRayUVE(query.ray, expandedAabb, query.maxDistance);
+        if (!hit.has_value()) {
+            continue;
+        }
+        const bool closer = !closestHit.has_value() || hit->distance < closestHit->distance;
+        const bool tied = closestHit.has_value() && hit->distance == closestHit->distance &&
+                          collider.entity.index < closestHit->entity.index;
+        if (!closer && !tied) {
+            continue;
+        }
+
+        const Scene::ColliderComponentUVE& colliderComponent =
+            entityManager.GetComponentUVE<Scene::ColliderComponentUVE>(collider.entity);
+        closestHit = BoxCastHitUVE{collider.entity,
+                                   query.ray.origin + query.ray.direction * hit->distance,
+                                   hit->normal,
+                                   hit->distance,
+                                   MaterialOfUVE(colliderComponent)};
     }
     return closestHit;
 }
