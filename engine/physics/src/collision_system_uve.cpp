@@ -46,6 +46,12 @@ namespace {
         return Math::PenetrationUVE{-sphereToBox->axis, sphereToBox->depth};
     }
     if (first.shapeType == Scene::ColliderShapeTypeUVE::Capsule &&
+        second.shapeType == Scene::ColliderShapeTypeUVE::Capsule) {
+        return Detail::ComputeCapsuleCapsulePenetrationUVE(
+            first.shapeSegmentStart, first.shapeSegmentEnd, first.shapeRadius,
+            second.shapeSegmentStart, second.shapeSegmentEnd, second.shapeRadius);
+    }
+    if (first.shapeType == Scene::ColliderShapeTypeUVE::Capsule &&
         second.shapeType == Scene::ColliderShapeTypeUVE::Sphere) {
         return Detail::ComputeCapsuleSpherePenetrationUVE(
             first.shapeSegmentStart, first.shapeSegmentEnd, first.shapeRadius,

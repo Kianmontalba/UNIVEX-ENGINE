@@ -159,6 +159,54 @@ TEST_F(ColliderShapeUVETest, DetectCollisionsUVE_SphereSphereRejectsTouchingAndD
     EXPECT_TRUE(collisionSystem.DetectCollisionsUVE(entityManager).empty());
 }
 
+TEST_F(ColliderShapeUVETest, DetectCollisionsUVE_CapsuleCapsuleUsesExactSegmentDistanceAndOrientation) {
+    Scene::ColliderComponentUVE firstCapsule;
+    firstCapsule.shapeType = Scene::ColliderShapeTypeUVE::Capsule;
+    firstCapsule.radius = 0.5F;
+    firstCapsule.height = 4.0F;
+    const Scene::EntityUVE firstEntity = MakeColliderEntityUVE({0.0F, 0.0F, 0.0F}, firstCapsule);
+
+    Scene::ColliderComponentUVE secondCapsule;
+    secondCapsule.shapeType = Scene::ColliderShapeTypeUVE::Capsule;
+    secondCapsule.radius = 0.5F;
+    secondCapsule.height = 4.0F;
+    const Scene::EntityUVE secondEntity = MakeColliderEntityUVE({0.75F, 0.0F, 0.0F}, secondCapsule);
+
+    const std::vector<CollisionPairUVE> pairs = collisionSystem.DetectCollisionsUVE(entityManager);
+    ASSERT_EQ(pairs.size(), 1U);
+    EXPECT_EQ(pairs[0].first, firstEntity);
+    EXPECT_EQ(pairs[0].second, secondEntity);
+    EXPECT_NEAR(pairs[0].penetrationDepth, 0.25F, 1.0e-5F);
+    EXPECT_NEAR(pairs[0].separationAxis.x, 1.0F, 1.0e-5F);
+    EXPECT_NEAR(pairs[0].separationAxis.y, 0.0F, 1.0e-5F);
+    EXPECT_NEAR(pairs[0].separationAxis.z, 0.0F, 1.0e-5F);
+}
+
+TEST_F(ColliderShapeUVETest, DetectCollisionsUVE_CapsuleCapsuleRejectsTouchingAndDiagonalAabbFalsePositive) {
+    Scene::ColliderComponentUVE firstCapsule;
+    firstCapsule.shapeType = Scene::ColliderShapeTypeUVE::Capsule;
+    firstCapsule.radius = 0.5F;
+    firstCapsule.height = 4.0F;
+    MakeColliderEntityUVE({0.0F, 0.0F, 0.0F}, firstCapsule);
+
+    Scene::ColliderComponentUVE touchingCapsule;
+    touchingCapsule.shapeType = Scene::ColliderShapeTypeUVE::Capsule;
+    touchingCapsule.radius = 0.5F;
+    touchingCapsule.height = 4.0F;
+    MakeColliderEntityUVE({10.0F, 0.0F, 0.0F}, touchingCapsule);
+
+    Scene::ColliderComponentUVE diagonalCapsule;
+    diagonalCapsule.shapeType = Scene::ColliderShapeTypeUVE::Capsule;
+    diagonalCapsule.radius = 0.5F;
+    diagonalCapsule.height = 4.0F;
+    MakeColliderEntityUVE({0.9F, 0.0F, 0.9F}, diagonalCapsule);
+
+    // The touching pair is isolated at x=10. Touching centerlines at distance 1.0 and diagonal
+    // centerlines at sqrt(0.9^2 + 0.9^2) must both be rejected even though their conservative
+    // capsule AABBs overlap.
+    EXPECT_TRUE(collisionSystem.DetectCollisionsUVE(entityManager).empty());
+}
+
 TEST_F(ColliderShapeUVETest, DetectCollisionsUVE_CapsuleSphereUsesExactCenterlineDistance) {
     Scene::ColliderComponentUVE capsule;
     capsule.shapeType = Scene::ColliderShapeTypeUVE::Capsule;
