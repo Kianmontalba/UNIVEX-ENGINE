@@ -2,7 +2,16 @@
 
 #include "uve/render/particle_draw_command_uve.h"
 
+#include <cmath>
+
 namespace UVE::Render {
+
+bool IsValidParticleDrawCommandUVE(const ParticleDrawCommandUVE& command) noexcept {
+    return std::isfinite(command.position.x) && std::isfinite(command.position.y) &&
+           std::isfinite(command.position.z) && std::isfinite(command.remainingLifetimeSeconds) &&
+           command.remainingLifetimeSeconds >= 0.0F && std::isfinite(command.sortDepth) &&
+           command.sequence != 0U;
+}
 
 ParticleDrawRecordingUVE ParticleDrawRecorderUVE::RecordUVE(const RenderQueueUVE& queue,
                                                              const std::size_t maximumCommands) {
