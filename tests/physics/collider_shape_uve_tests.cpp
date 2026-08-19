@@ -118,6 +118,47 @@ TEST_F(ColliderShapeUVETest, DetectCollisionsUVE_SphereUsesExactSphereBoxAndCaps
     }));
 }
 
+TEST_F(ColliderShapeUVETest, DetectCollisionsUVE_SphereSphereUsesExactDistance) {
+    Scene::ColliderComponentUVE firstSphere;
+    firstSphere.shapeType = Scene::ColliderShapeTypeUVE::Sphere;
+    firstSphere.radius = 1.0F;
+    MakeColliderEntityUVE({0.0F, 0.0F, 0.0F}, firstSphere);
+
+    Scene::ColliderComponentUVE secondSphere;
+    secondSphere.shapeType = Scene::ColliderShapeTypeUVE::Sphere;
+    secondSphere.radius = 1.0F;
+    MakeColliderEntityUVE({1.5F, 0.0F, 0.0F}, secondSphere);
+
+    const std::vector<CollisionPairUVE> pairs = collisionSystem.DetectCollisionsUVE(entityManager);
+    ASSERT_EQ(pairs.size(), 1U);
+    EXPECT_NEAR(pairs[0].penetrationDepth, 0.5F, 1.0e-5F);
+    EXPECT_NEAR(pairs[0].separationAxis.x, 1.0F, 1.0e-5F);
+    EXPECT_NEAR(pairs[0].separationAxis.y, 0.0F, 1.0e-5F);
+    EXPECT_NEAR(pairs[0].separationAxis.z, 0.0F, 1.0e-5F);
+}
+
+TEST_F(ColliderShapeUVETest, DetectCollisionsUVE_SphereSphereRejectsTouchingAndDiagonalAabbFalsePositive) {
+    Scene::ColliderComponentUVE sphere;
+    sphere.shapeType = Scene::ColliderShapeTypeUVE::Sphere;
+    sphere.radius = 0.5F;
+    MakeColliderEntityUVE({0.0F, 0.0F, 0.0F}, sphere);
+
+    Scene::ColliderComponentUVE touchingSphere;
+    touchingSphere.shapeType = Scene::ColliderShapeTypeUVE::Sphere;
+    touchingSphere.radius = 0.5F;
+    MakeColliderEntityUVE({10.0F, 0.0F, 0.0F}, touchingSphere);
+
+    Scene::ColliderComponentUVE diagonalSphere;
+    diagonalSphere.shapeType = Scene::ColliderShapeTypeUVE::Sphere;
+    diagonalSphere.radius = 0.5F;
+    MakeColliderEntityUVE({0.9F, 0.9F, 0.0F}, diagonalSphere);
+
+    // The diagonal pair's conservative AABBs overlap, but its center distance is greater than
+    // the combined radius. The touching pair is isolated at x=10 and is also intentionally
+    // excluded.
+    EXPECT_TRUE(collisionSystem.DetectCollisionsUVE(entityManager).empty());
+}
+
 TEST_F(ColliderShapeUVETest, DetectCollisionsUVE_CapsuleRejectsDiagonalExpandedAabbFalsePositive) {
     Scene::ColliderComponentUVE capsule;
     capsule.shapeType = Scene::ColliderShapeTypeUVE::Capsule;

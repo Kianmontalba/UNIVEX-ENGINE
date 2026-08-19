@@ -26,6 +26,13 @@ namespace UVE::Physics::Detail {
     const Math::AabbUVE& box, Math::Vector3UVE segmentStart, Math::Vector3UVE segmentEnd,
     float capsuleRadius) noexcept;
 
+/// Computes exact sphere-vs-sphere penetration with a deterministic first-to-second axis. Touching
+/// spheres are not intersections; coincident centers use +X as the stable fallback axis. This is a
+/// copied value-only helper with no ECS, transform, or backend ownership.
+[[nodiscard]] std::optional<Math::PenetrationUVE> ComputeSphereSpherePenetrationUVE(
+    Math::Vector3UVE firstCenter, float firstRadius, Math::Vector3UVE secondCenter,
+    float secondRadius) noexcept;
+
 } // namespace UVE::Physics::Detail
 
 // EOF
