@@ -39,6 +39,21 @@ namespace {
         }
         return Math::PenetrationUVE{-sphereToBox->axis, sphereToBox->depth};
     }
+    if (first.shapeType == Scene::ColliderShapeTypeUVE::Capsule &&
+        second.shapeType == Scene::ColliderShapeTypeUVE::Box) {
+        return Detail::ComputeCapsuleAabbPenetrationUVE(
+            second.worldAabb, first.shapeSegmentStart, first.shapeSegmentEnd, first.shapeRadius);
+    }
+    if (first.shapeType == Scene::ColliderShapeTypeUVE::Box &&
+        second.shapeType == Scene::ColliderShapeTypeUVE::Capsule) {
+        const std::optional<Math::PenetrationUVE> capsuleToBox =
+            Detail::ComputeCapsuleAabbPenetrationUVE(
+                first.worldAabb, second.shapeSegmentStart, second.shapeSegmentEnd, second.shapeRadius);
+        if (!capsuleToBox.has_value()) {
+            return std::nullopt;
+        }
+        return Math::PenetrationUVE{-capsuleToBox->axis, capsuleToBox->depth};
+    }
     return Math::ComputePenetrationUVE(first.worldAabb, second.worldAabb);
 }
 

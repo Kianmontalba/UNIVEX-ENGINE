@@ -13,6 +13,19 @@ std::vector<ColliderWorldAabbUVE> BuildColliderWorldAabbCacheUVE(Scene::IEntityM
     entityManager.ForEachUVE<Scene::WorldTransformComponentUVE, Scene::ColliderComponentUVE>(
         [&](Scene::EntityUVE entity, const Scene::WorldTransformComponentUVE& worldTransform,
                  const Scene::ColliderComponentUVE& collider) {
+            const bool isSphere = collider.shapeType == Scene::ColliderShapeTypeUVE::Sphere;
+            const bool isCapsule = collider.shapeType == Scene::ColliderShapeTypeUVE::Capsule;
+            const float capsuleHalfSegment = isCapsule ? collider.height * 0.5F - collider.radius : 0.0F;
+            const Math::Vector3UVE capsuleSegmentStart{
+                worldTransform.worldPosition.x,
+                worldTransform.worldPosition.y - capsuleHalfSegment,
+                worldTransform.worldPosition.z,
+            };
+            const Math::Vector3UVE capsuleSegmentEnd{
+                worldTransform.worldPosition.x,
+                worldTransform.worldPosition.y + capsuleHalfSegment,
+                worldTransform.worldPosition.z,
+            };
             cache.push_back(ColliderWorldAabbUVE{
                 entity,
                 Math::AabbUVE::FromCenterExtentsUVE(
@@ -20,7 +33,9 @@ std::vector<ColliderWorldAabbUVE> BuildColliderWorldAabbCacheUVE(Scene::IEntityM
                 collider.collisionLayer,
                 collider.collisionMask,
                 collider.shapeType,
-                collider.shapeType == Scene::ColliderShapeTypeUVE::Sphere ? collider.radius : 0.0F,
+                (isSphere || isCapsule) ? collider.radius : 0.0F,
+                capsuleSegmentStart,
+                capsuleSegmentEnd,
             });
         });
     return cache;
