@@ -8,6 +8,8 @@
 
 namespace UVE::Asset {
 
+inline constexpr std::uint64_t kMaximumPngDecodedPixelBytesUVE = 64ULL * 1024ULL * 1024ULL;
+
 struct PngMetadataUVE final {
     std::uint32_t width = 0U;
     std::uint32_t height = 0U;
@@ -23,5 +25,9 @@ struct PngMetadataUVE final {
 /// the first IHDR chunk and its supported color/depth/method combinations; it never decodes pixels,
 /// verifies or owns a filesystem path, allocates GPU resources, or selects a texture backend.
 [[nodiscard]] std::optional<PngMetadataUVE> ParsePngMetadataUVE(const std::vector<std::byte>& bytes);
+/// Checks the supported RGBA8 decoded-pixel budget without allocating or decoding pixel data.
+[[nodiscard]] bool ValidatePngRgba8PixelBudgetUVE(
+    const PngMetadataUVE& metadata,
+    std::uint64_t maximumBytes = kMaximumPngDecodedPixelBytesUVE) noexcept;
 
 } // namespace UVE::Asset
