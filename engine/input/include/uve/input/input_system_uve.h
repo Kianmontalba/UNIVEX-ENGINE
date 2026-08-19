@@ -10,6 +10,7 @@
 #include <unordered_map>
 
 #include "uve/events/i_event_system_uve.h"
+#include "uve/input/i_gamepad_input_system_uve.h"
 #include "uve/input/i_input_system_uve.h"
 
 namespace UVE::Input {
@@ -36,7 +37,8 @@ namespace UVE::Input {
 class InputSystemUVE final : public IInputSystemUVE {
 public:
     /// `eventSystem` must outlive this InputSystemUVE.
-    explicit InputSystemUVE(Events::IEventSystemUVE& eventSystem);
+    explicit InputSystemUVE(Events::IEventSystemUVE& eventSystem,
+                            IGamepadInputSystemUVE* gamepadInputSystem = nullptr);
 
     void SetKeyStateUVE(KeyCodeUVE key, bool isDown) override;
     void SetMouseButtonStateUVE(MouseButtonUVE button, bool isDown) override;
@@ -64,13 +66,24 @@ public:
 private:
     static constexpr std::size_t kKeyCodeCount = static_cast<std::size_t>(KeyCodeUVE::Count);
     static constexpr std::size_t kMouseButtonCount = static_cast<std::size_t>(MouseButtonUVE::Count);
+    using GamepadSnapshotArrayUVE = std::array<GamepadStateSnapshotUVE, kMaximumGamepadCountUVE>;
 
     /// True iff any binding in `bindings` is down in the given state arrays.
     [[nodiscard]] static bool AnyBindingDownUVE(const std::vector<InputBindingUVE>& bindings,
                                                  const std::array<bool, kKeyCodeCount>& keyState,
-                                                 const std::array<bool, kMouseButtonCount>& mouseState) noexcept;
+                                                 const std::array<bool, kMouseButtonCount>& mouseState,
+                                                 const GamepadSnapshotArrayUVE& currentGamepadState,
+                                                 const GamepadSnapshotArrayUVE& previousGamepadState,
+                                                 bool usePreviousGamepadSnapshot) noexcept;
+    [[nodiscard]] static float GetBindingValueUVE(const InputBindingUVE& binding,
+                                                   const std::array<bool, kKeyCodeCount>& keyState,
+                                                   const std::array<bool, kMouseButtonCount>& mouseState,
+                                                   const GamepadSnapshotArrayUVE& currentGamepadState,
+                                                   const GamepadSnapshotArrayUVE& previousGamepadState,
+                                                   bool usePreviousGamepadSnapshot) noexcept;
 
     Events::IEventSystemUVE* m_eventSystem;
+    IGamepadInputSystemUVE* m_gamepadInputSystem;
 
     // "Live" state — written by Set*StateUVE() (any thread), read only by UpdateUVE() under
     // m_liveStateMutex.
@@ -86,6 +99,8 @@ private:
     std::array<bool, kKeyCodeCount> m_previousKeyState{};
     std::array<bool, kMouseButtonCount> m_currentMouseButtonState{};
     std::array<bool, kMouseButtonCount> m_previousMouseButtonState{};
+    GamepadSnapshotArrayUVE m_currentGamepadState{};
+    GamepadSnapshotArrayUVE m_previousGamepadState{};
     Math::Vector2UVE m_currentMousePosition{};
     Math::Vector2UVE m_previousMousePosition{};
     Math::Vector2UVE m_mouseDelta{};
