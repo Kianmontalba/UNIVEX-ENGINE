@@ -3,6 +3,7 @@
 #include "uve/save/save_payload_migration_uve.h"
 
 #include <algorithm>
+#include <limits>
 #include <utility>
 
 namespace UVE::Save {
@@ -58,18 +59,45 @@ SaveMigrationDiagnosticsUVE SavePayloadMigrationRegistryUVE::MigrateUVE(
         sourceSchemaVersion == kCurrentSavePayloadSchemaVersionUVE) {
         return MigrateSavePayloadUVE(sourceSchemaVersion, targetSchemaVersion, payload);
     }
-    const auto iterator = std::find_if(m_entries.cbegin(), m_entries.cend(),
-                                       [sourceSchemaVersion, targetSchemaVersion](const EntryUVE& entry) {
-                                           return entry.sourceSchemaVersion == sourceSchemaVersion &&
-                                                  entry.targetSchemaVersion == targetSchemaVersion;
-                                       });
-    if (iterator == m_entries.cend()) {
+    if (sourceSchemaVersion == targetSchemaVersion) {
+        diagnostics.status = SaveMigrationStatusUVE::UnsupportedSourceVersion;
+        diagnostics.reason = BoundedReasonUVE("source save payload schema version is unsupported");
+        return diagnostics;
+    }
+
+    const std::size_t invalidIndex = std::numeric_limits<std::size_t>::max();
+    std::vector<std::uint32_t> discoveredVersions{sourceSchemaVersion};
+    std::vector<std::size_t> predecessorVersion{invalidIndex};
+    std::vector<std::size_t> predecessorEntry{invalidIndex};
+    std::size_t queueIndex = 0U;
+    std::size_t targetVersionIndex = invalidIndex;
+    while (queueIndex < discoveredVersions.size() && targetVersionIndex == invalidIndex) {
+        const std::uint32_t currentVersion = discoveredVersions[queueIndex];
+        for (std::size_t entryIndex = 0U; entryIndex < m_entries.size(); ++entryIndex) {
+            const EntryUVE& entry = m_entries[entryIndex];
+            if (entry.sourceSchemaVersion != currentVersion ||
+                std::find(discoveredVersions.cbegin(), discoveredVersions.cend(), entry.targetSchemaVersion) !=
+                    discoveredVersions.cend()) {
+                continue;
+            }
+            discoveredVersions.push_back(entry.targetSchemaVersion);
+            predecessorVersion.push_back(queueIndex);
+            predecessorEntry.push_back(entryIndex);
+            if (entry.targetSchemaVersion == targetSchemaVersion) {
+                targetVersionIndex = discoveredVersions.size() - 1U;
+                break;
+            }
+        }
+        ++queueIndex;
+    }
+
+    if (targetVersionIndex == invalidIndex) {
         diagnostics.status = targetSchemaVersion == kCurrentSavePayloadSchemaVersionUVE
                                  ? SaveMigrationStatusUVE::UnsupportedSourceVersion
                                  : SaveMigrationStatusUVE::UnsupportedTargetVersion;
         diagnostics.reason = BoundedReasonUVE(targetSchemaVersion == kCurrentSavePayloadSchemaVersionUVE
-                                                  ? "source save payload schema version is unsupported"
-                                                  : "target save payload schema version is unsupported");
+                                                  ? "no migration path reaches the current save schema version"
+                                                  : "no migration path reaches the requested save schema version");
         return diagnostics;
     }
     if (payload.empty()) {
@@ -78,27 +106,40 @@ SaveMigrationDiagnosticsUVE SavePayloadMigrationRegistryUVE::MigrateUVE(
         return diagnostics;
     }
 
+    std::vector<std::size_t> path;
+    for (std::size_t versionIndex = targetVersionIndex;
+         predecessorEntry[versionIndex] != invalidIndex;
+         versionIndex = predecessorVersion[versionIndex]) {
+        path.push_back(predecessorEntry[versionIndex]);
+    }
+    std::reverse(path.begin(), path.end());
+
     std::vector<std::byte> migratedPayload = payload;
     std::string failureReason;
-    try {
-        if (!iterator->transform(migratedPayload, failureReason)) {
-            diagnostics.status = SaveMigrationStatusUVE::InvalidPayload;
-            diagnostics.reason = failureReason.empty() ? BoundedReasonUVE("save migration transform rejected payload")
-                                                       : std::move(failureReason);
-            if (diagnostics.reason.size() > kMaximumSaveMigrationReasonBytesUVE) {
-                diagnostics.reason.resize(kMaximumSaveMigrationReasonBytesUVE);
+    for (const std::size_t entryIndex : path) {
+        failureReason.clear();
+        try {
+            if (!m_entries[entryIndex].transform(migratedPayload, failureReason)) {
+                diagnostics.status = SaveMigrationStatusUVE::InvalidPayload;
+                diagnostics.reason = failureReason.empty()
+                                         ? BoundedReasonUVE("save migration transform rejected payload")
+                                         : std::move(failureReason);
+                if (diagnostics.reason.size() > kMaximumSaveMigrationReasonBytesUVE) {
+                    diagnostics.reason.resize(kMaximumSaveMigrationReasonBytesUVE);
+                }
+                return diagnostics;
             }
+        } catch (...) {
+            diagnostics.status = SaveMigrationStatusUVE::InvalidPayload;
+            diagnostics.reason = BoundedReasonUVE("save migration transform raised an exception");
             return diagnostics;
         }
-    } catch (...) {
-        diagnostics.status = SaveMigrationStatusUVE::InvalidPayload;
-        diagnostics.reason = BoundedReasonUVE("save migration transform raised an exception");
-        return diagnostics;
-    }
-    if (migratedPayload.empty()) {
-        diagnostics.status = SaveMigrationStatusUVE::InvalidPayload;
-        diagnostics.reason = BoundedReasonUVE("save migration transform produced an empty payload");
-        return diagnostics;
+        if (migratedPayload.empty()) {
+            diagnostics.status = SaveMigrationStatusUVE::InvalidPayload;
+            diagnostics.reason = BoundedReasonUVE("save migration transform produced an empty payload");
+            return diagnostics;
+        }
+        ++diagnostics.appliedStepCount;
     }
     payload.swap(migratedPayload);
     diagnostics.status = SaveMigrationStatusUVE::Migrated;
