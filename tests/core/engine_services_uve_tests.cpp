@@ -775,6 +775,10 @@ public:
         ++saveCallCount;
         return true;
     }
+    [[nodiscard]] Save::SaveMigrationRegistrationResultUVE RegisterMigrationUVE(
+        std::uint32_t, std::uint32_t, Save::SavePayloadMigrationTransformUVE) override {
+        return {Save::SaveMigrationRegistrationCodeUVE::Accepted, "fake migration accepted"};
+    }
     [[nodiscard]] std::vector<Scene::EntityUVE> LoadUVE(int, Scene::IEntityManagerUVE&) override { return {}; }
     [[nodiscard]] bool DeleteSaveUVE(int) override { return false; }
     [[nodiscard]] bool HasSaveUVE(int) const override { return false; }

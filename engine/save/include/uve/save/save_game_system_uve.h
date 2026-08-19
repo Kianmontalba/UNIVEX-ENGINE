@@ -37,6 +37,9 @@ public:
     [[nodiscard]] bool SaveUVE(int slotIndex, Scene::IEntityManagerUVE& entityManager,
                                 const std::vector<Scene::EntityUVE>& rootEntities,
                                 const GameStateMetadataUVE& metadata) override;
+    [[nodiscard]] SaveMigrationRegistrationResultUVE RegisterMigrationUVE(
+        std::uint32_t sourceSchemaVersion, std::uint32_t targetSchemaVersion,
+        SavePayloadMigrationTransformUVE transform) override;
     [[nodiscard]] std::vector<Scene::EntityUVE> LoadUVE(int slotIndex,
                                                          Scene::IEntityManagerUVE& entityManager) override;
     [[nodiscard]] bool DeleteSaveUVE(int slotIndex) override;
@@ -48,6 +51,7 @@ public:
 private:
     Scene::ISceneSerializerUVE* m_sceneSerializer;
     std::filesystem::path m_saveDirectory;
+    SavePayloadMigrationRegistryUVE m_migrationRegistry;
     mutable SaveMigrationDiagnosticsUVE m_lastMigrationDiagnostics;
 };
 

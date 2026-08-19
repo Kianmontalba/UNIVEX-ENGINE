@@ -177,6 +177,12 @@ void AppendUint64UVE(std::vector<std::byte>& buffer, std::uint64_t value) {
 SaveGameSystemUVE::SaveGameSystemUVE(Scene::ISceneSerializerUVE& sceneSerializer, std::filesystem::path saveDirectory)
     : m_sceneSerializer(&sceneSerializer), m_saveDirectory(std::move(saveDirectory)) {}
 
+SaveMigrationRegistrationResultUVE SaveGameSystemUVE::RegisterMigrationUVE(
+    const std::uint32_t sourceSchemaVersion, const std::uint32_t targetSchemaVersion,
+    SavePayloadMigrationTransformUVE transform) {
+    return m_migrationRegistry.RegisterUVE(sourceSchemaVersion, targetSchemaVersion, std::move(transform));
+}
+
 bool SaveGameSystemUVE::SaveUVE(int slotIndex, Scene::IEntityManagerUVE& entityManager,
                                  const std::vector<Scene::EntityUVE>& rootEntities,
                                  const GameStateMetadataUVE& metadata) {
@@ -252,7 +258,7 @@ std::vector<Scene::EntityUVE> SaveGameSystemUVE::LoadUVE(int slotIndex, Scene::I
     std::vector<std::byte> worldJsonBytes;
     if (!SplitSavePayloadUVE(payload, metadataJsonBytes, worldJsonBytes)) {
         std::vector<std::byte> emptyPayload;
-        m_lastMigrationDiagnostics = MigrateSavePayloadUVE(kCurrentSavePayloadSchemaVersionUVE,
+        m_lastMigrationDiagnostics = m_migrationRegistry.MigrateUVE(kCurrentSavePayloadSchemaVersionUVE,
                                                             kCurrentSavePayloadSchemaVersionUVE, emptyPayload);
         UVE_ERROR("SaveGameSystemUVE: \"{}\" has a corrupt or truncated save payload", finalPath.string());
         return {};
@@ -261,11 +267,11 @@ std::vector<Scene::EntityUVE> SaveGameSystemUVE::LoadUVE(int slotIndex, Scene::I
     const std::optional<GameStateMetadataUVE> metadata = DecodeMetadataJsonUVE(metadataJsonBytes);
     if (!metadata.has_value()) {
         std::vector<std::byte> emptyPayload;
-        m_lastMigrationDiagnostics = MigrateSavePayloadUVE(kCurrentSavePayloadSchemaVersionUVE,
+        m_lastMigrationDiagnostics = m_migrationRegistry.MigrateUVE(kCurrentSavePayloadSchemaVersionUVE,
                                                             kCurrentSavePayloadSchemaVersionUVE, emptyPayload);
         return {};
     }
-    m_lastMigrationDiagnostics = MigrateSavePayloadUVE(metadata->payloadSchemaVersion,
+    m_lastMigrationDiagnostics = m_migrationRegistry.MigrateUVE(metadata->payloadSchemaVersion,
                                                         kCurrentSavePayloadSchemaVersionUVE, payload);
     if (!m_lastMigrationDiagnostics.SucceededUVE()) {
         UVE_ERROR("SaveGameSystemUVE: \"{}\" cannot load schema v{}: {}", finalPath.string(),
@@ -345,7 +351,7 @@ std::optional<GameStateMetadataUVE> SaveGameSystemUVE::GetSaveMetadataUVE(int sl
         return std::nullopt;
     }
     std::vector<std::byte> migrationProbe{std::byte{0}};
-    m_lastMigrationDiagnostics = MigrateSavePayloadUVE(metadata->payloadSchemaVersion,
+    m_lastMigrationDiagnostics = m_migrationRegistry.MigrateUVE(metadata->payloadSchemaVersion,
                                                         kCurrentSavePayloadSchemaVersionUVE, migrationProbe);
     if (!m_lastMigrationDiagnostics.SucceededUVE()) {
         UVE_ERROR("SaveGameSystemUVE: \"{}\" metadata schema v{} is unsupported: {}", finalPath.string(),
