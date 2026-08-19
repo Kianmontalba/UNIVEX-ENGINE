@@ -20,6 +20,8 @@ struct CharacterControllerInputUVE final {
     std::size_t maximumSubsteps = 8U;
     float maximumSubstepDistance = 0.25F;
     float maximumGroundSlopeDegrees = 45.0F;
+    /// Opt-in maximum vertical step height for MoveWithToIUVE; zero preserves the no-step behavior.
+    float maximumStepHeight = 0.0F;
 };
 
 enum class CharacterControllerMoveCodeUVE : std::uint8_t {
@@ -42,6 +44,7 @@ struct CharacterControllerMoveResultUVE final {
     bool inputClamped = false;
     bool contactsTruncated = false;
     bool toiUsed = false;
+    bool stepUpUsed = false;
     bool grounded = false;
     Math::Vector3UVE groundNormal{};
     float earliestImpactTime = 1.0F;
@@ -54,8 +57,10 @@ struct CharacterControllerMoveResultUVE final {
 /// Bounded main-thread kinematic movement over the existing AABB collision/layer contracts.
 /// The default MoveUVE path advances in capped discrete substeps, then existing minimum-translation-
 /// vector contacts are applied and remaining displacement is projected away from contacted normals.
-/// The opt-in MoveWithToIUVE path adds capped conservative swept-AABB TOI; neither path owns exact
-/// non-box narrow phases, dynamic-body push policy, a ground/step solver, or locomotion state.
+/// The opt-in MoveWithToIUVE path adds capped conservative swept-AABB TOI and, when
+/// `maximumStepHeight` is positive, one failure-atomic vertical lift/clearance/drop attempt for a
+/// wall-like impact. Neither path owns exact non-box narrow phases, dynamic-body push policy,
+/// locomotion state, or persistent controller history.
 class CharacterControllerUVE final {
 public:
     static constexpr std::size_t kMaximumSubstepsUVE = 32U;
@@ -66,6 +71,7 @@ public:
     static constexpr float kMaximumGroundSlopeDegreesUVE = 89.0F;
     static constexpr std::size_t kMaximumToIIterationsUVE = 8U;
     static constexpr std::size_t kMaximumToITargetsUVE = 256U;
+    static constexpr std::size_t kMaximumStepSearchIterationsUVE = 8U;
     static constexpr float kToIEpsilonUVE = 1.0e-4F;
 
     [[nodiscard]] static CharacterControllerMoveResultUVE MoveUVE(

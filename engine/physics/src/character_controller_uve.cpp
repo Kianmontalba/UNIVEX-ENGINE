@@ -155,6 +155,94 @@ struct ToICandidateUVE final {
     return best;
 }
 
+[[nodiscard]] bool HasControllerCollisionUVE(Scene::IEntityManagerUVE& entityManager,
+                                              ICollisionSystemUVE& collisionSystem,
+                                              Scene::EntityUVE controller) {
+    const std::vector<CollisionPairUVE> pairs = collisionSystem.DetectCollisionsUVE(entityManager);
+    return std::any_of(pairs.begin(), pairs.end(), [&](const CollisionPairUVE& pair) {
+        return pair.first == controller || pair.second == controller;
+    });
+}
+
+[[nodiscard]] bool IsCollisionFreeAfterDeltaUVE(
+    Scene::IEntityManagerUVE& entityManager, Scene::ISceneGraphUVE& sceneGraph,
+    ICollisionSystemUVE& collisionSystem, Scene::EntityUVE controller,
+    const Math::Vector3UVE& delta) {
+    ApplyLocalDeltaUVE(entityManager, sceneGraph, controller, delta);
+    sceneGraph.UpdateUVE(entityManager);
+    const bool collisionFree = !HasControllerCollisionUVE(entityManager, collisionSystem, controller);
+    ApplyLocalDeltaUVE(entityManager, sceneGraph, controller, -delta);
+    sceneGraph.UpdateUVE(entityManager);
+    return collisionFree;
+}
+
+[[nodiscard]] bool TryStepUpUVE(
+    Scene::IEntityManagerUVE& entityManager, Scene::ISceneGraphUVE& sceneGraph,
+    ICollisionSystemUVE& collisionSystem, Scene::EntityUVE controller,
+    const Math::Vector3UVE& horizontalDisplacement, float maximumStepHeight,
+    bool& outContactsTruncated, Math::Vector3UVE& outNetDisplacement) {
+    const Math::Vector3UVE lift{0.0F, maximumStepHeight, 0.0F};
+    ApplyLocalDeltaUVE(entityManager, sceneGraph, controller, lift);
+    sceneGraph.UpdateUVE(entityManager);
+    if (HasControllerCollisionUVE(entityManager, collisionSystem, controller)) {
+        ApplyLocalDeltaUVE(entityManager, sceneGraph, controller, -lift);
+        sceneGraph.UpdateUVE(entityManager);
+        return false;
+    }
+
+    const Scene::ColliderComponentUVE& movingCollider =
+        entityManager.GetComponentUVE<Scene::ColliderComponentUVE>(controller);
+    const Scene::WorldTransformComponentUVE& worldTransform =
+        entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(controller);
+    const Math::AabbUVE movingAabb = Math::AabbUVE::FromCenterExtentsUVE(
+        worldTransform.worldPosition, Scene::GetColliderLocalHalfExtentsUVE(movingCollider));
+    const std::vector<Detail::ColliderWorldAabbUVE> cache =
+        Detail::BuildColliderWorldAabbCacheUVE(entityManager);
+    bool targetCacheTruncated = false;
+    const std::optional<ToICandidateUVE> horizontalImpact = FindEarliestToIUVE(
+        movingAabb, horizontalDisplacement, movingCollider, cache, controller,
+        CharacterControllerUVE::kMaximumToITargetsUVE, targetCacheTruncated);
+    outContactsTruncated = outContactsTruncated || targetCacheTruncated;
+    if (horizontalImpact.has_value()) {
+        ApplyLocalDeltaUVE(entityManager, sceneGraph, controller, -lift);
+        sceneGraph.UpdateUVE(entityManager);
+        return false;
+    }
+
+    ApplyLocalDeltaUVE(entityManager, sceneGraph, controller, horizontalDisplacement);
+    sceneGraph.UpdateUVE(entityManager);
+
+    const Math::Vector3UVE fullDrop{0.0F, -maximumStepHeight, 0.0F};
+    float dropDistance = maximumStepHeight;
+    if (!IsCollisionFreeAfterDeltaUVE(entityManager, sceneGraph, collisionSystem, controller, fullDrop)) {
+        float freeDistance = 0.0F;
+        float blockedDistance = maximumStepHeight;
+        for (std::size_t iteration = 0U; iteration < CharacterControllerUVE::kMaximumStepSearchIterationsUVE;
+             ++iteration) {
+            const float candidateDistance = (freeDistance + blockedDistance) * 0.5F;
+            const Math::Vector3UVE candidateDrop{0.0F, -candidateDistance, 0.0F};
+            if (IsCollisionFreeAfterDeltaUVE(entityManager, sceneGraph, collisionSystem, controller, candidateDrop)) {
+                freeDistance = candidateDistance;
+            } else {
+                blockedDistance = candidateDistance;
+            }
+        }
+        if (freeDistance <= CharacterControllerUVE::kMinimumMovementDistanceUVE) {
+            ApplyLocalDeltaUVE(entityManager, sceneGraph, controller, -horizontalDisplacement);
+            ApplyLocalDeltaUVE(entityManager, sceneGraph, controller, -lift);
+            sceneGraph.UpdateUVE(entityManager);
+            return false;
+        }
+        dropDistance = freeDistance;
+    }
+
+    const Math::Vector3UVE actualDrop{0.0F, -dropDistance, 0.0F};
+    ApplyLocalDeltaUVE(entityManager, sceneGraph, controller, actualDrop);
+    sceneGraph.UpdateUVE(entityManager);
+    outNetDisplacement = lift + horizontalDisplacement + actualDrop;
+    return true;
+}
+
 } // namespace
 
 CharacterControllerMoveResultUVE CharacterControllerUVE::MoveUVE(
@@ -255,6 +343,11 @@ CharacterControllerMoveResultUVE CharacterControllerUVE::MoveWithToIUVE(
         result.inputClamped = true;
     }
     const float minimumGroundNormalY = ResolveGroundSlopeCosineUVE(input, result);
+    float maximumStepHeight = input.maximumStepHeight;
+    if (!std::isfinite(maximumStepHeight) || maximumStepHeight < 0.0F) {
+        maximumStepHeight = 0.0F;
+        result.inputClamped = true;
+    }
 
     sceneGraph.UpdateUVE(entityManager);
     const std::vector<CollisionPairUVE> initialPairs = collisionSystem.DetectCollisionsUVE(entityManager);
@@ -294,6 +387,27 @@ CharacterControllerMoveResultUVE CharacterControllerUVE::MoveWithToIUVE(
         }
 
         const float impactTime = std::clamp(candidate->hit.time, 0.0F, 1.0F);
+        const Math::Vector3UVE horizontalDisplacement{
+            consideredDisplacement.x, 0.0F, consideredDisplacement.z};
+        if (maximumStepHeight > kMinimumMovementDistanceUVE &&
+            std::fabs(candidate->hit.normal.y) < minimumGroundNormalY &&
+            FiniteLengthUVE(horizontalDisplacement) > kMinimumMovementDistanceUVE) {
+            Math::Vector3UVE stepDisplacement{};
+            if (TryStepUpUVE(entityManager, sceneGraph, collisionSystem, input.entity,
+                             horizontalDisplacement, maximumStepHeight, result.contactsTruncated,
+                             stepDisplacement)) {
+                result.remainingDisplacement -= horizontalDisplacement;
+                result.appliedDisplacement += stepDisplacement;
+                result.blocked = true;
+                result.toiUsed = true;
+                result.stepUpUsed = true;
+                result.earliestImpactTime = std::min(result.earliestImpactTime, impactTime);
+                ++result.contactCount;
+                ++result.substeps;
+                continue;
+            }
+        }
+
         const float advanceTime = std::max(0.0F, impactTime - kToIEpsilonUVE);
         const Math::Vector3UVE preImpactDisplacement = consideredDisplacement * advanceTime;
         ApplyLocalDeltaUVE(entityManager, sceneGraph, input.entity, preImpactDisplacement);
