@@ -568,6 +568,13 @@ public enum BridgeDeveloperConsoleSeverity : byte
     Error = 2,
 }
 
+public enum BridgeDeveloperConsoleAccess : byte
+{
+    Denied = 0,
+    ReadOnly = 1,
+    Full = 2,
+}
+
 public sealed record BridgeDeveloperConsoleEntry(BridgeDeveloperConsoleSeverity Severity, string Text);
 
 public sealed record BridgeDeveloperConsoleCVar(string Name, string Value, bool IsReadOnly);
@@ -578,6 +585,7 @@ public sealed record BridgeDeveloperConsoleSnapshot(
     ulong Generation,
     bool IsAvailable,
     bool IsDevelopmentOnly,
+    BridgeDeveloperConsoleAccess Access,
     byte SeverityFilter,
     int HistoryCursor,
     string HistoryEntry,
@@ -1442,7 +1450,7 @@ public static class BridgeSnapshotParser
     }
 
     private static BridgeDeveloperConsoleSnapshot EmptyDeveloperConsole() =>
-        new(0UL, false, true, 0, -1, string.Empty, false, false, false, false,
+        new(0UL, false, true, BridgeDeveloperConsoleAccess.Denied, 0, -1, string.Empty, false, false, false, false,
             Array.Empty<BridgeDeveloperConsoleEntry>(), Array.Empty<string>(), Array.Empty<BridgeDeveloperConsoleCVar>(),
             Array.Empty<BridgeDeveloperConsoleCompletion>());
 
@@ -1627,6 +1635,11 @@ public static class BridgeSnapshotParser
         EnsureBoundedArray(output, "developerConsole.output");
         EnsureBoundedArray(history, "developerConsole.history");
         EnsureBoundedArray(cvars, "developerConsole.cvars");
+        byte access = OptionalByte(value, "access", (byte)BridgeDeveloperConsoleAccess.Full);
+        if (!Enum.IsDefined((BridgeDeveloperConsoleAccess)access))
+        {
+            throw Invalid("The backend returned an unsupported developer-console access level.");
+        }
         byte severityFilter = OptionalByte(value, "severityFilter", 0);
         if (severityFilter > 3)
         {
@@ -1683,7 +1696,7 @@ public static class BridgeSnapshotParser
 
         return new BridgeDeveloperConsoleSnapshot(
             RequiredUInt64(value, "generation"), OptionalBoolean(value, "available", true),
-            OptionalBoolean(value, "developmentOnly", true), severityFilter, historyCursor, historyEntry,
+            OptionalBoolean(value, "developmentOnly", true), (BridgeDeveloperConsoleAccess)access, severityFilter, historyCursor, historyEntry,
             RequiredBoolean(value, "outputTruncated"), RequiredBoolean(value, "historyTruncated"),
             RequiredBoolean(value, "cvarsTruncated"), OptionalBoolean(value, "completionTruncated", false),
             parsedOutput, parsedHistory, parsedCVars, parsedCompletions);

@@ -170,6 +170,7 @@ enum class FrameReadResultUVE : std::uint8_t {
     return JsonUVE{{"generation", snapshot.console.generation},
                    {"available", snapshot.console.available},
                    {"developmentOnly", snapshot.console.developmentOnly},
+                   {"access", static_cast<std::uint8_t>(snapshot.console.access)},
                    {"severityFilter", static_cast<std::uint8_t>(snapshot.console.severityFilter)},
                    {"historyCursor", snapshot.console.historyCursor},
                    {"historyEntry", snapshot.console.historyEntry},

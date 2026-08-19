@@ -286,6 +286,47 @@ TEST(DeveloperConsoleUVE, CompletionAndSeverityFilterAreNativeDeterministicFacts
     EXPECT_EQ(filtered.output.front().severity, DeveloperConsoleSeverityUVE::Error);
 }
 
+TEST(DeveloperConsoleUVE, SetAccessDetailedUVE_EnforcesBoundedAuthorizationWithoutMutationBypass) {
+    DeveloperConsoleUVE console;
+    ASSERT_TRUE(console.RegisterCVarUVE("r.runtime", "1").IsAcceptedUVE());
+
+    const DeveloperConsoleAuthorizationResultUVE readOnly =
+        console.SetAccessDetailedUVE(DeveloperConsoleAccessUVE::ReadOnly);
+    EXPECT_EQ(readOnly.code, DeveloperConsoleAuthorizationCodeUVE::Applied);
+    EXPECT_TRUE(readOnly.IsAcceptedUVE());
+    EXPECT_EQ(console.GetSnapshotUVE().access, DeveloperConsoleAccessUVE::ReadOnly);
+
+    const DeveloperConsoleCommandRegistrationResultUVE command =
+        console.RegisterCommandUVE("blocked.command", "Blocked command.", [](DeveloperConsoleUVE&, std::string_view) {});
+    EXPECT_EQ(command.code, DeveloperConsoleCommandRegistrationCodeUVE::Unauthorized);
+    EXPECT_EQ(console.GetSnapshotUVE().completions.size(), 3U);
+    EXPECT_EQ(console.ExecuteDetailedUVE("help").code, DeveloperConsoleExecutionCodeUVE::Unauthorized);
+    EXPECT_EQ(console.SetCVarDetailedUVE("r.runtime", "2").code, DeveloperConsoleCVarMutationCodeUVE::Unauthorized);
+
+    console.AppendUVE(DeveloperConsoleSeverityUVE::Info, "retained");
+    EXPECT_EQ(console.ClearDetailedUVE().code, DeveloperConsoleClearCodeUVE::Unauthorized);
+    EXPECT_EQ(console.GetSnapshotUVE().output.size(), 1U);
+
+    const DeveloperConsoleAuthorizationResultUVE full = console.SetAccessDetailedUVE(DeveloperConsoleAccessUVE::Full);
+    EXPECT_EQ(full.code, DeveloperConsoleAuthorizationCodeUVE::Applied);
+    EXPECT_TRUE(console.RegisterCommand("allowed.command", "Allowed command.", [](DeveloperConsoleUVE&, std::string_view) {}));
+    EXPECT_TRUE(console.ExecuteUVE("allowed.command"));
+    EXPECT_TRUE(console.SetCVarUVE("r.runtime", "2"));
+
+    const DeveloperConsoleAuthorizationResultUVE invalid =
+        console.SetAccessDetailedUVE(static_cast<DeveloperConsoleAccessUVE>(99U));
+    EXPECT_EQ(invalid.code, DeveloperConsoleAuthorizationCodeUVE::InvalidAccess);
+}
+
+TEST(DeveloperConsoleUVE, SetAccessDetailedUVE_ShippingRemainsPermanentlyDenied) {
+    DeveloperConsoleUVE shipping(DeveloperConsoleBuildPolicyUVE::Shipping);
+    const DeveloperConsoleSnapshotUVE initial = shipping.GetSnapshotUVE();
+    EXPECT_EQ(initial.access, DeveloperConsoleAccessUVE::Denied);
+    const DeveloperConsoleAuthorizationResultUVE denied = shipping.SetAccessDetailedUVE(DeveloperConsoleAccessUVE::ReadOnly);
+    EXPECT_EQ(denied.code, DeveloperConsoleAuthorizationCodeUVE::Unavailable);
+    EXPECT_EQ(shipping.GetSnapshotUVE().access, DeveloperConsoleAccessUVE::Denied);
+}
+
 TEST(DeveloperConsoleUVE, SetBuildPolicyDetailedUVEReturnsStructuredDiagnostics) {
     DeveloperConsoleUVE console;
     const DeveloperConsoleBuildPolicyResultUVE unchanged =
@@ -317,6 +358,7 @@ TEST(DeveloperConsoleUVE, ShippingPolicyUVE_ClosesRegistrationAndPreservesGenera
     const DeveloperConsoleSnapshotUVE initial = shipping.GetSnapshotUVE();
     EXPECT_FALSE(initial.available);
     EXPECT_TRUE(initial.developmentOnly);
+    EXPECT_EQ(initial.access, DeveloperConsoleAccessUVE::Denied);
     EXPECT_TRUE(initial.completions.empty());
 
     const DeveloperConsoleCommandRegistrationResultUVE command = shipping.RegisterCommandUVE(

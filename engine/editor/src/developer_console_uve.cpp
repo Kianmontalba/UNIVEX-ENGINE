@@ -32,7 +32,9 @@ void IncrementGenerationUVE(std::uint64_t& generation) noexcept {
 
 } // namespace
 
-DeveloperConsoleUVE::DeveloperConsoleUVE(const DeveloperConsoleBuildPolicyUVE policy) : m_policy(policy) {
+DeveloperConsoleUVE::DeveloperConsoleUVE(const DeveloperConsoleBuildPolicyUVE policy)
+    : m_policy(policy), m_access(policy == DeveloperConsoleBuildPolicyUVE::Shipping ? DeveloperConsoleAccessUVE::Denied
+                                                                                     : DeveloperConsoleAccessUVE::Full) {
     RegisterBuiltInsUVE();
 }
 
@@ -72,6 +74,10 @@ DeveloperConsoleCommandRegistrationResultUVE DeveloperConsoleUVE::RegisterComman
         return {DeveloperConsoleCommandRegistrationCodeUVE::Unavailable,
                 "Command registration is unavailable under the Shipping build policy."};
     }
+    if (m_access != DeveloperConsoleAccessUVE::Full) {
+        return {DeveloperConsoleCommandRegistrationCodeUVE::Unauthorized,
+                "Command registration requires Full console authorization."};
+    }
     if (!IsBoundedIdentifierUVE(identifier)) {
         return {DeveloperConsoleCommandRegistrationCodeUVE::InvalidIdentifier,
                 "Command identifier is empty or contains unsupported characters."};
@@ -108,6 +114,10 @@ DeveloperConsoleCVarRegistrationResultUVE DeveloperConsoleUVE::RegisterCVarUVE(s
     if (!IsAvailableUVE()) {
         return {DeveloperConsoleCVarRegistrationCodeUVE::Unavailable,
                 "CVAR registration is unavailable under the Shipping build policy."};
+    }
+    if (m_access != DeveloperConsoleAccessUVE::Full) {
+        return {DeveloperConsoleCVarRegistrationCodeUVE::Unauthorized,
+                "CVAR registration requires Full console authorization."};
     }
     if (!IsBoundedIdentifierUVE(name)) {
         return {DeveloperConsoleCVarRegistrationCodeUVE::InvalidName,
@@ -164,6 +174,10 @@ DeveloperConsoleExecutionResultUVE DeveloperConsoleUVE::ExecuteDetailedUVE(std::
         return {DeveloperConsoleExecutionCodeUVE::Unavailable,
                 "Developer Console execution is unavailable under the Shipping build policy."};
     }
+    if (m_access != DeveloperConsoleAccessUVE::Full) {
+        return {DeveloperConsoleExecutionCodeUVE::Unauthorized,
+                "Developer Console execution requires Full console authorization."};
+    }
     commandLine = TrimUVE(commandLine);
     if (commandLine.empty() || commandLine.size() > kMaximumValueBytesUVE ||
         commandLine.find_first_of("\r\n") != std::string::npos) {
@@ -196,6 +210,10 @@ DeveloperConsoleClearResultUVE DeveloperConsoleUVE::ClearDetailedUVE() noexcept 
         return {DeveloperConsoleClearCodeUVE::Unavailable,
                 "Console clearing is unavailable under the Shipping build policy."};
     }
+    if (m_access != DeveloperConsoleAccessUVE::Full) {
+        return {DeveloperConsoleClearCodeUVE::Unauthorized,
+                "Console clearing requires Full console authorization."};
+    }
     if (m_output.empty()) {
         return {DeveloperConsoleClearCodeUVE::Unchanged, "Console output is already clear."};
     }
@@ -214,6 +232,10 @@ DeveloperConsoleCVarMutationResultUVE DeveloperConsoleUVE::SetCVarDetailedUVE(co
     if (!IsAvailableUVE()) {
         return {DeveloperConsoleCVarMutationCodeUVE::Unavailable,
                 "CVAR mutation is unavailable under the Shipping build policy."};
+    }
+    if (m_access != DeveloperConsoleAccessUVE::Full) {
+        return {DeveloperConsoleCVarMutationCodeUVE::Unauthorized,
+                "CVAR mutation requires Full console authorization."};
     }
     const auto iterator = m_cvars.find(name);
     if (iterator == m_cvars.end()) {
@@ -267,6 +289,9 @@ DeveloperConsoleBuildPolicyResultUVE DeveloperConsoleUVE::SetBuildPolicyDetailed
                 "Shipping build policy is monotonic and cannot be relaxed at runtime."};
     }
     m_policy = policy;
+    if (policy == DeveloperConsoleBuildPolicyUVE::Shipping) {
+        m_access = DeveloperConsoleAccessUVE::Denied;
+    }
     m_completionPrefix.clear();
     m_historyCursor = -1;
     IncrementGenerationUVE(m_generation);
@@ -275,6 +300,28 @@ DeveloperConsoleBuildPolicyResultUVE DeveloperConsoleUVE::SetBuildPolicyDetailed
 
 bool DeveloperConsoleUVE::SetBuildPolicyUVE(const DeveloperConsoleBuildPolicyUVE policy) noexcept {
     return SetBuildPolicyDetailedUVE(policy).IsAcceptedUVE();
+}
+
+DeveloperConsoleAuthorizationResultUVE DeveloperConsoleUVE::SetAccessDetailedUVE(
+    const DeveloperConsoleAccessUVE access) noexcept {
+    if (!IsAvailableUVE()) {
+        return {DeveloperConsoleAuthorizationCodeUVE::Unavailable,
+                "Console authorization is unavailable under the Shipping build policy."};
+    }
+    if (static_cast<std::uint8_t>(access) > static_cast<std::uint8_t>(DeveloperConsoleAccessUVE::Full)) {
+        return {DeveloperConsoleAuthorizationCodeUVE::InvalidAccess,
+                "Console authorization value is outside the supported range."};
+    }
+    if (m_access == access) {
+        return {DeveloperConsoleAuthorizationCodeUVE::Unchanged, "Console authorization is unchanged."};
+    }
+    m_access = access;
+    IncrementGenerationUVE(m_generation);
+    return {DeveloperConsoleAuthorizationCodeUVE::Applied, "Console authorization updated."};
+}
+
+bool DeveloperConsoleUVE::SetAccessUVE(const DeveloperConsoleAccessUVE access) noexcept {
+    return SetAccessDetailedUVE(access).IsAcceptedUVE();
 }
 
 DeveloperConsoleSeverityFilterResultUVE DeveloperConsoleUVE::SetSeverityFilterDetailedUVE(
@@ -377,6 +424,7 @@ DeveloperConsoleSnapshotUVE DeveloperConsoleUVE::GetSnapshotUVE() const {
     snapshot.generation = m_generation;
     snapshot.available = IsAvailableUVE();
     snapshot.developmentOnly = true;
+    snapshot.access = m_access;
     snapshot.severityFilter = m_severityFilter;
     snapshot.historyCursor = m_historyCursor;
     if (m_historyCursor >= 0 && static_cast<std::size_t>(m_historyCursor) < m_history.size()) {

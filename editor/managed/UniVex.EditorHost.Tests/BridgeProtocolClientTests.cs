@@ -1332,6 +1332,7 @@ public sealed class BridgeProtocolClientTests
             generation = 3UL,
             available = true,
             developmentOnly = true,
+            access = 2,
             severityFilter = 0,
             historyCursor = 0,
             historyEntry = "help",
@@ -1529,6 +1530,7 @@ public sealed class BridgeProtocolClientTests
         Assert.Equal(3UL, snapshot.DeveloperConsole.Generation);
         Assert.True(snapshot.DeveloperConsole.IsAvailable);
         Assert.True(snapshot.DeveloperConsole.IsDevelopmentOnly);
+        Assert.Equal(BridgeDeveloperConsoleAccess.Full, snapshot.DeveloperConsole.Access);
         Assert.Equal((byte)0, snapshot.DeveloperConsole.SeverityFilter);
         Assert.Equal(0, snapshot.DeveloperConsole.HistoryCursor);
         Assert.Equal("help", snapshot.DeveloperConsole.HistoryEntry);
@@ -1539,6 +1541,12 @@ public sealed class BridgeProtocolClientTests
         Assert.Equal("ready", snapshot.DeveloperConsole.Output[0].Text);
         Assert.Equal(new[] { "help" }, snapshot.DeveloperConsole.History);
         Assert.True(snapshot.DeveloperConsole.CVars[0].IsReadOnly);
+
+        JsonObject legacy = JsonSerializer.SerializeToNode(Snapshot(sceneDirty: false))!.AsObject();
+        legacy["developerConsole"]!.AsObject().Remove("access");
+        using JsonDocument legacyDocument = JsonDocument.Parse(legacy.ToJsonString());
+        BridgeEditorSnapshot legacySnapshot = BridgeSnapshotParser.Parse(legacyDocument.RootElement);
+        Assert.Equal(BridgeDeveloperConsoleAccess.Full, legacySnapshot.DeveloperConsole.Access);
     }
 
     [Fact]
@@ -1887,6 +1895,7 @@ public sealed class BridgeProtocolClientTests
             generation = 3UL,
             available = true,
             developmentOnly = true,
+            access = 2,
             severityFilter = 0,
             historyCursor = 0,
             historyEntry = "help",
@@ -2098,6 +2107,7 @@ public sealed class BridgeProtocolClientTests
             generation = 3UL,
             available = true,
             developmentOnly = true,
+            access = 2,
             severityFilter = 0,
             historyCursor = 0,
             historyEntry = "help",
