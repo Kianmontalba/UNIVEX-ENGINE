@@ -98,6 +98,7 @@ add_executable(uve_tests
     save/checkpoint_manager_uve_tests.cpp
     window/null_window_manager_uve_tests.cpp
     window/window_manager_uve_tests.cpp
+    window/window_desc_validation_uve_tests.cpp
     render/gl_render_device_uve_tests.cpp
     render/shader/shader_preprocessor_uve_tests.cpp
     render/shader/shader_diagnostics_parser_uve_tests.cpp
