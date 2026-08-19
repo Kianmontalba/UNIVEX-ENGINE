@@ -122,6 +122,7 @@ add_executable(uve_tests
     scripting/script_asset_loader_uve_tests.cpp
     scripting/script_vector3_value_uve_tests.cpp
     scripting/script_rotation_value_uve_tests.cpp
+    scripting/script_transform_value_uve_tests.cpp
     scripting/script_source_mapping_uve_tests.cpp
     plugins/plugin_registry_uve_tests.cpp
     ../engine/plugins/Animation/control_rig/Tests/control_rig_uve_tests.cpp

@@ -6,6 +6,7 @@
 #include "uve/scripting/script_vector2_value_uve.h"
 #include "uve/scripting/script_vector3_value_uve.h"
 #include "uve/scripting/script_rotation_value_uve.h"
+#include "uve/scripting/script_transform_value_uve.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -53,7 +54,7 @@ struct ScriptComponentValueUVE final {
 /// alternatives so existing float/Vector3/Boolean variant indices remain stable for serialized callers.
 using ScriptVmValueUVE =
     std::variant<float, ScriptVector3ValueUVE, bool, ScriptEntityValueUVE, ScriptComponentValueUVE,
-                 ScriptVector2ValueUVE, ScriptRotationValueUVE>;
+                 ScriptVector2ValueUVE, ScriptRotationValueUVE, ScriptTransformValueUVE>;
 
 struct ScriptVmLocalVariableUVE final {
     std::uint32_t slot = 0U;

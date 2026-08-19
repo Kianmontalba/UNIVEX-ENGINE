@@ -120,10 +120,10 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
 
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
     EXPECT_FALSE(RegisterBuiltInScriptNodesUVE(registry));
-    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 81U);
+    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 92U);
 
     const std::vector<ScriptNodeTypeDescriptorUVE> descriptors = registry.GetNodeTypeDescriptorsUVE();
-    ASSERT_EQ(descriptors.size(), 81U);
+    ASSERT_EQ(descriptors.size(), 92U);
     const std::vector<std::string> expectedIds{
         "flow.sequence", "flow.branch", "flow.return", "flow.do_once", "flow.gate", "flow.switch",
         "convert.number_to_boolean", "convert.boolean_to_number", "convert.vector2_to_vector3", "convert.vector3_to_vector2",
@@ -142,6 +142,9 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
         "logic.boolean.not", "logic.boolean.and", "logic.boolean.or", "logic.boolean.xor",
         "logic.boolean.equal", "logic.boolean.not_equal", "logic.boolean.greater", "logic.boolean.less",
         "logic.boolean.greater_equal", "logic.boolean.less_equal",
+        "math.transform.make", "math.transform.break", "math.transform.get_position", "math.transform.set_position",
+        "math.transform.get_rotation", "math.transform.set_rotation", "math.transform.get_scale", "math.transform.set_scale",
+        "math.transform.translate", "math.transform.rotate", "math.transform.transform_point",
         "query.entity.has_component", "query.entity.get_component", "engine.log", "engine.get_time",
         "variable.make_number", "variable.get_number", "variable.set_number",
         "variable.make_boolean", "variable.get_boolean", "variable.set_boolean",
@@ -178,15 +181,19 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
         EXPECT_EQ(descriptors[index].category, "Logic");
         EXPECT_EQ(descriptors[index].iconId, "node.logic.boolean");
     }
-    for (std::size_t index = 68U; index < 70U; ++index) {
+    for (std::size_t index = 68U; index < 79U; ++index) {
+        EXPECT_EQ(descriptors[index].category, "Transform");
+        EXPECT_EQ(descriptors[index].iconId, "node.math.transform");
+    }
+    for (std::size_t index = 79U; index < 81U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Entity Query");
         EXPECT_EQ(descriptors[index].iconId, "node.entity.query");
     }
-    for (std::size_t index = 70U; index < 72U; ++index) {
+    for (std::size_t index = 81U; index < 83U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Engine");
         EXPECT_EQ(descriptors[index].iconId, "node.engine");
     }
-    for (std::size_t index = 72U; index < descriptors.size(); ++index) {
+    for (std::size_t index = 83U; index < descriptors.size(); ++index) {
         EXPECT_EQ(descriptors[index].category, "Variable");
         EXPECT_EQ(descriptors[index].iconId, "node.variable");
     }
@@ -413,6 +420,27 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
     EXPECT_EQ(rotateRotation->pins[0].type, ScriptValueTypeUVE::Rotation);
     EXPECT_EQ(rotateRotation->pins[1].type, ScriptValueTypeUVE::Vector3);
     EXPECT_EQ(rotateRotation->pins[2].type, ScriptValueTypeUVE::Vector3);
+
+    const ScriptNodeTypeDescriptorUVE* makeTransform = registry.FindNodeTypeUVE("math.transform.make");
+    ASSERT_NE(makeTransform, nullptr);
+    ASSERT_EQ(makeTransform->pins.size(), 4U);
+    EXPECT_EQ(makeTransform->pins[0].type, ScriptValueTypeUVE::Vector3);
+    EXPECT_EQ(makeTransform->pins[1].type, ScriptValueTypeUVE::Rotation);
+    EXPECT_EQ(makeTransform->pins[2].type, ScriptValueTypeUVE::Vector3);
+    EXPECT_EQ(makeTransform->pins[3].type, ScriptValueTypeUVE::Transform);
+    const ScriptNodeTypeDescriptorUVE* breakTransform = registry.FindNodeTypeUVE("math.transform.break");
+    ASSERT_NE(breakTransform, nullptr);
+    ASSERT_EQ(breakTransform->pins.size(), 4U);
+    EXPECT_EQ(breakTransform->pins[0].type, ScriptValueTypeUVE::Transform);
+    EXPECT_EQ(breakTransform->pins[1].type, ScriptValueTypeUVE::Vector3);
+    EXPECT_EQ(breakTransform->pins[2].type, ScriptValueTypeUVE::Rotation);
+    EXPECT_EQ(breakTransform->pins[3].type, ScriptValueTypeUVE::Vector3);
+    const ScriptNodeTypeDescriptorUVE* transformPoint = registry.FindNodeTypeUVE("math.transform.transform_point");
+    ASSERT_NE(transformPoint, nullptr);
+    ASSERT_EQ(transformPoint->pins.size(), 3U);
+    EXPECT_EQ(transformPoint->pins[0].type, ScriptValueTypeUVE::Transform);
+    EXPECT_EQ(transformPoint->pins[1].type, ScriptValueTypeUVE::Vector3);
+    EXPECT_EQ(transformPoint->pins[2].type, ScriptValueTypeUVE::Vector3);
 }
 
 TEST(ScriptVectorMathUVETest, Vector2V2FunctionsAreFiniteAndDeterministic) {

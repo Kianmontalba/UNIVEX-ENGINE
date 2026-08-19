@@ -125,6 +125,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
     std::vector<ScriptLinkUVE> stagedVector3ScaleLinks;
     std::vector<ScriptLinkUVE> stagedVector3Links;
     std::vector<ScriptLinkUVE> stagedRotationLinks;
+    std::vector<ScriptLinkUVE> stagedTransformLinks;
     std::vector<ScriptLinkUVE> stagedConversionLinks;
     for (const ScriptNodeUVE& node : nodes) {
         if (node.typeId == "flow.sequence") {
@@ -470,7 +471,8 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
         const ScriptNodeUVE* sourceNode = FindNodeUVE(nodes, link.output.nodeId);
         const ScriptNodeUVE* consumerNode = FindNodeUVE(nodes, link.input.nodeId);
         if (sourceNode == nullptr || consumerNode == nullptr ||
-            consumerNode->typeId.rfind("math.vector3.", 0U) != 0U ||
+            (consumerNode->typeId.rfind("math.vector3.", 0U) != 0U &&
+             consumerNode->typeId != "math.transform.set_position" && consumerNode->typeId != "math.transform.translate") ||
             (consumerNode->typeId == "math.vector3.multiply" && link.input.pinName == "Scale")) {
             continue;
         }
@@ -479,11 +481,17 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             sourceNode->typeId == "math.vector3.subtract" || sourceNode->typeId == "math.vector3.multiply" ||
             sourceNode->typeId == "math.vector3.cross" || sourceNode->typeId == "math.vector3.normalize" ||
             sourceNode->typeId == "math.vector3.direction" || sourceNode->typeId == "math.vector3.lerp" ||
-            sourceNode->typeId == "math.rotation.rotate" || sourceNode->typeId == "variable.get_vector3" ||
-            sourceNode->typeId == "convert.vector2_to_vector3";
-        const bool approvedOutput = link.output.pinName == "Vector" || link.output.pinName == "Result";
+            sourceNode->typeId == "math.rotation.rotate" ||
+            (sourceNode->typeId == "math.transform.get_position" && link.output.pinName == "Position") ||
+            (sourceNode->typeId == "math.transform.get_scale" && link.output.pinName == "Scale") ||
+            (sourceNode->typeId == "math.transform.transform_point" && link.output.pinName == "Result") ||
+            sourceNode->typeId == "variable.get_vector3" || sourceNode->typeId == "convert.vector2_to_vector3";
+        const bool approvedOutput = link.output.pinName == "Vector" || link.output.pinName == "Result" ||
+                                     (sourceNode->typeId == "math.transform.get_position" && link.output.pinName == "Position") ||
+                                     (sourceNode->typeId == "math.transform.get_scale" && link.output.pinName == "Scale");
         const bool approvedInput = link.input.pinName == "A" || link.input.pinName == "B" ||
-                                   link.input.pinName == "Vector";
+                                   link.input.pinName == "Vector" || link.input.pinName == "Position" ||
+                                   link.input.pinName == "Translation";
         if (!approvedProducer || conversionHasDataDependency(*sourceNode) || !approvedOutput || !approvedInput ||
             !stagedVector3Links.empty()) {
             result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode, link.input.nodeId,
@@ -497,7 +505,12 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
         if (IsExecutionLinkUVE(link, nodes, registry)) continue;
         const ScriptNodeUVE* sourceNode = FindNodeUVE(nodes, link.output.nodeId);
         const ScriptNodeUVE* consumerNode = FindNodeUVE(nodes, link.input.nodeId);
-        if (sourceNode == nullptr || consumerNode == nullptr || consumerNode->typeId.rfind("math.rotation.", 0U) != 0U) continue;
+        if (sourceNode == nullptr || consumerNode == nullptr ||
+            (consumerNode->typeId.rfind("math.rotation.", 0U) != 0U &&
+             consumerNode->typeId != "math.transform.set_rotation" &&
+             consumerNode->typeId != "math.transform.rotate")) {
+            continue;
+        }
         const ScriptNodeTypeDescriptorUVE* sourceDescriptor = registry.FindNodeTypeUVE(sourceNode->typeId);
         const ScriptNodeTypeDescriptorUVE* consumerDescriptor = registry.FindNodeTypeUVE(consumerNode->typeId);
         const ScriptPinDescriptorUVE* sourcePin = sourceDescriptor == nullptr ? nullptr : FindPinUVE(*sourceDescriptor, link.output.pinName);
@@ -510,7 +523,8 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             ((sourceNode->typeId == "math.rotation.make" || sourceNode->typeId == "math.rotation.euler" ||
               sourceNode->typeId == "math.rotation.quaternion" || sourceNode->typeId == "math.rotation.look_at") &&
              link.output.pinName == "Rotation") ||
-            (sourceNode->typeId == "math.rotation.slerp" && link.output.pinName == "Result");
+            (sourceNode->typeId == "math.rotation.slerp" && link.output.pinName == "Result") ||
+            (sourceNode->typeId == "math.transform.get_rotation" && link.output.pinName == "Rotation");
         const bool duplicateInput = std::any_of(stagedRotationLinks.begin(), stagedRotationLinks.end(),
             [&](const ScriptLinkUVE& staged) { return staged.input.nodeId == link.input.nodeId && staged.input.pinName == link.input.pinName; });
         const bool sameConsumer = stagedRotationLinks.empty() ||
@@ -522,6 +536,37 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             continue;
         }
         stagedRotationLinks.push_back(link);
+    }
+    for (const ScriptLinkUVE& link : links) {
+        if (IsExecutionLinkUVE(link, nodes, registry)) {
+            continue;
+        }
+        const ScriptNodeUVE* sourceNode = FindNodeUVE(nodes, link.output.nodeId);
+        const ScriptNodeUVE* consumerNode = FindNodeUVE(nodes, link.input.nodeId);
+        if (sourceNode == nullptr || consumerNode == nullptr || link.input.pinName != "Transform") {
+            continue;
+        }
+        const ScriptNodeTypeDescriptorUVE* sourceDescriptor = registry.FindNodeTypeUVE(sourceNode->typeId);
+        const ScriptNodeTypeDescriptorUVE* consumerDescriptor = registry.FindNodeTypeUVE(consumerNode->typeId);
+        const ScriptPinDescriptorUVE* sourcePin = sourceDescriptor == nullptr ? nullptr : FindPinUVE(*sourceDescriptor, link.output.pinName);
+        const ScriptPinDescriptorUVE* consumerPin = consumerDescriptor == nullptr ? nullptr : FindPinUVE(*consumerDescriptor, link.input.pinName);
+        const bool validTransformType = sourcePin != nullptr && consumerPin != nullptr &&
+            sourcePin->direction == ScriptPinDirectionUVE::Output && consumerPin->direction == ScriptPinDirectionUVE::Input &&
+            sourcePin->role == ScriptPinRoleUVE::Data && consumerPin->role == ScriptPinRoleUVE::Data &&
+            sourcePin->type == ScriptValueTypeUVE::Transform && consumerPin->type == ScriptValueTypeUVE::Transform;
+        const bool approvedProducer =
+            (sourceNode->typeId == "math.transform.make" && link.output.pinName == "Transform") ||
+            ((sourceNode->typeId == "math.transform.set_position" || sourceNode->typeId == "math.transform.set_rotation" ||
+              sourceNode->typeId == "math.transform.set_scale" || sourceNode->typeId == "math.transform.translate" ||
+              sourceNode->typeId == "math.transform.rotate") && link.output.pinName == "Result");
+        const bool duplicateInput = std::any_of(stagedTransformLinks.begin(), stagedTransformLinks.end(),
+            [&](const ScriptLinkUVE& staged) { return staged.input.nodeId == link.input.nodeId && staged.input.pinName == link.input.pinName; });
+        if (!validTransformType || !approvedProducer || duplicateInput || !stagedTransformLinks.empty()) {
+            result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode, link.input.nodeId, link.input.pinName,
+                                          "Transform data-link staging supports one direct Transform producer; composed and additional Transform consumers remain deferred."});
+            continue;
+        }
+        stagedTransformLinks.push_back(link);
     }
     for (const ScriptLinkUVE& link : links) {
         if (IsExecutionLinkUVE(link, nodes, registry)) {
@@ -635,6 +680,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
     moveStagedProducerBeforeConsumer(stagedVector3ScaleLinks);
     moveStagedProducerBeforeConsumer(stagedVector3Links);
     moveStagedProducerBeforeConsumer(stagedRotationLinks);
+    moveStagedProducerBeforeConsumer(stagedTransformLinks);
     moveStagedProducerBeforeConsumer(stagedConversionLinks);
 
     const auto flowExtraEntryCountUVE = [](const ScriptNodeUVE& node) noexcept -> std::size_t {
@@ -659,7 +705,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
                                                 stagedBooleanLinks.size() + stagedNumberLinks.size() +
                                                 stagedComparisonNumberLinks.size() + stagedVector2ScaleLinks.size() +
                                                 stagedVector2Links.size() + stagedVector3ScaleLinks.size() +
-                                                stagedVector3Links.size() + stagedRotationLinks.size() + stagedConversionLinks.size();
+                                                stagedVector3Links.size() + stagedRotationLinks.size() + stagedTransformLinks.size() + stagedConversionLinks.size();
     const auto findStagedInstructionIndex = [&](const std::uint32_t nodeId) -> std::optional<std::size_t> {
         const std::optional<std::size_t> baseIndex = FindNodeInstructionIndexUVE(instructionNodes, nodeId);
         if (!baseIndex.has_value()) {
@@ -685,6 +731,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
         countStagedBefore(stagedVector3ScaleLinks);
         countStagedBefore(stagedVector3Links);
         countStagedBefore(stagedRotationLinks);
+        countStagedBefore(stagedTransformLinks);
         countStagedBefore(stagedConversionLinks);
         std::size_t flowEntriesBefore = 0U;
         for (std::size_t index = 0U; index < *baseIndex; ++index) {

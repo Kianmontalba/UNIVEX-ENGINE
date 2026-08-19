@@ -55,6 +55,11 @@ namespace {
                 return std::isfinite(typedValue.value.x) && std::isfinite(typedValue.value.y);
             } else if constexpr (std::is_same_v<ValueType, ScriptRotationValueUVE>) {
                 return Math::IsFiniteUVE(typedValue.value);
+            } else if constexpr (std::is_same_v<ValueType, ScriptTransformValueUVE>) {
+                return std::isfinite(typedValue.position.value.x) && std::isfinite(typedValue.position.value.y) &&
+                       std::isfinite(typedValue.position.value.z) && Math::IsFiniteUVE(typedValue.rotation.value) &&
+                       std::isfinite(typedValue.scale.value.x) && std::isfinite(typedValue.scale.value.y) &&
+                       std::isfinite(typedValue.scale.value.z);
             } else {
                 return typedValue.IsValidUVE();
             }
@@ -65,7 +70,8 @@ namespace {
 [[nodiscard]] bool IsSupportedLocalVariableValueUVE(const ScriptVmValueUVE& value) noexcept {
     return std::holds_alternative<float>(value) || std::holds_alternative<bool>(value) ||
            std::holds_alternative<ScriptVector3ValueUVE>(value) ||
-           std::holds_alternative<ScriptRotationValueUVE>(value);
+           std::holds_alternative<ScriptRotationValueUVE>(value) ||
+           std::holds_alternative<ScriptTransformValueUVE>(value);
 }
 
 [[nodiscard]] ScriptVmLocalVariableUVE* FindMutableLocalVariableUVE(
@@ -118,6 +124,12 @@ namespace {
     const ScriptVmExecutionContextUVE& context, const std::uint32_t nodeId, const char* pinName) {
     const ScriptVmValueBindingUVE* binding = FindBindingUVE(context.inputs, nodeId, pinName);
     return binding == nullptr ? nullptr : std::get_if<ScriptRotationValueUVE>(&binding->value);
+}
+
+[[nodiscard]] const ScriptTransformValueUVE* FindTransformInputUVE(
+    const ScriptVmExecutionContextUVE& context, const std::uint32_t nodeId, const char* pinName) {
+    const ScriptVmValueBindingUVE* binding = FindBindingUVE(context.inputs, nodeId, pinName);
+    return binding == nullptr ? nullptr : std::get_if<ScriptTransformValueUVE>(&binding->value);
 }
 
 [[nodiscard]] const bool* FindBooleanInputUVE(const ScriptVmExecutionContextUVE& context,
@@ -753,6 +765,86 @@ namespace {
     return MakeNodeFailureUVE(instructionIndex, "Unknown rotation node type.");
 }
 
+[[nodiscard]] ScriptVmExecutionResultUVE ExecuteTransformNodeUVE(
+    const ScriptIrInstructionUVE& instruction, const std::size_t instructionIndex,
+    ScriptVmExecutionContextUVE& context) {
+    const std::uint32_t nodeId = instruction.sourceNodeId;
+    const std::string& type = instruction.nodeTypeId;
+    if (type == "math.transform.make") {
+        const ScriptVector3ValueUVE* position = FindVector3InputUVE(context, nodeId, "Position");
+        const ScriptRotationValueUVE* rotation = FindRotationInputUVE(context, nodeId, "Rotation");
+        const ScriptVector3ValueUVE* scale = FindVector3InputUVE(context, nodeId, "Scale");
+        if (position == nullptr || rotation == nullptr || scale == nullptr) return MakeNodeFailureUVE(instructionIndex, "Make Transform requires Position, Rotation, and Scale inputs.");
+        const auto value = EvaluateScriptTransformMakeUVE(*position, *rotation, *scale);
+        if (!value.IsAppliedUVE() || !SetNodeOutputUVE(context, nodeId, "Transform", value.value)) return MakeNodeFailureUVE(instructionIndex, "Make Transform rejected its inputs or output capacity.");
+        return {};
+    }
+    if (type == "math.transform.break") {
+        const ScriptTransformValueUVE* transform = FindTransformInputUVE(context, nodeId, "Transform");
+        if (transform == nullptr) return MakeNodeFailureUVE(instructionIndex, "Break Transform requires a Transform input.");
+        const auto value = EvaluateScriptTransformBreakUVE(*transform);
+        if (!value.IsAppliedUVE() || !SetNodeOutputUVE(context, nodeId, "Position", value.value.position) ||
+            !SetNodeOutputUVE(context, nodeId, "Rotation", value.value.rotation) ||
+            !SetNodeOutputUVE(context, nodeId, "Scale", value.value.scale)) return MakeNodeFailureUVE(instructionIndex, "Break Transform rejected its input or output capacity.");
+        return {};
+    }
+    if (type == "math.transform.get_position" || type == "math.transform.get_scale") {
+        const ScriptTransformValueUVE* transform = FindTransformInputUVE(context, nodeId, "Transform");
+        if (transform == nullptr) return MakeNodeFailureUVE(instructionIndex, "Transform component access requires a Transform input.");
+        const auto value = type == "math.transform.get_position" ? EvaluateScriptTransformGetPositionUVE(*transform)
+                                                                    : EvaluateScriptTransformGetScaleUVE(*transform);
+        const char* outputName = type == "math.transform.get_position" ? "Position" : "Scale";
+        if (!value.IsAppliedUVE() || !SetNodeOutputUVE(context, nodeId, outputName, value.value)) return MakeNodeFailureUVE(instructionIndex, "Transform component access rejected its input or output capacity.");
+        return {};
+    }
+    if (type == "math.transform.get_rotation") {
+        const ScriptTransformValueUVE* transform = FindTransformInputUVE(context, nodeId, "Transform");
+        if (transform == nullptr) return MakeNodeFailureUVE(instructionIndex, "Get Transform Rotation requires a Transform input.");
+        const auto value = EvaluateScriptTransformGetRotationUVE(*transform);
+        if (!value.IsAppliedUVE() || !SetNodeOutputUVE(context, nodeId, "Rotation", value.value)) return MakeNodeFailureUVE(instructionIndex, "Get Transform Rotation rejected its input or output capacity.");
+        return {};
+    }
+    if (type == "math.transform.set_position" || type == "math.transform.set_scale") {
+        const ScriptTransformValueUVE* transform = FindTransformInputUVE(context, nodeId, "Transform");
+        const ScriptVector3ValueUVE* valueInput = FindVector3InputUVE(context, nodeId, type == "math.transform.set_position" ? "Position" : "Scale");
+        if (transform == nullptr || valueInput == nullptr) return MakeNodeFailureUVE(instructionIndex, "Set Transform component requires Transform and Vector3 inputs.");
+        const auto value = type == "math.transform.set_position" ? EvaluateScriptTransformSetPositionUVE(*transform, *valueInput)
+                                                                    : EvaluateScriptTransformSetScaleUVE(*transform, *valueInput);
+        if (!value.IsAppliedUVE() || !SetNodeOutputUVE(context, nodeId, "Result", value.value)) return MakeNodeFailureUVE(instructionIndex, "Set Transform component rejected its input or output capacity.");
+        return {};
+    }
+    if (type == "math.transform.set_rotation") {
+        const ScriptTransformValueUVE* transform = FindTransformInputUVE(context, nodeId, "Transform");
+        const ScriptRotationValueUVE* rotation = FindRotationInputUVE(context, nodeId, "Rotation");
+        if (transform == nullptr || rotation == nullptr) return MakeNodeFailureUVE(instructionIndex, "Set Transform Rotation requires Transform and Rotation inputs.");
+        const auto value = EvaluateScriptTransformSetRotationUVE(*transform, *rotation);
+        if (!value.IsAppliedUVE() || !SetNodeOutputUVE(context, nodeId, "Result", value.value)) return MakeNodeFailureUVE(instructionIndex, "Set Transform Rotation rejected its input or output capacity.");
+        return {};
+    }
+    if (type == "math.transform.translate" || type == "math.transform.transform_point") {
+        const ScriptTransformValueUVE* transform = FindTransformInputUVE(context, nodeId, "Transform");
+        const ScriptVector3ValueUVE* vector = FindVector3InputUVE(context, nodeId, type == "math.transform.translate" ? "Translation" : "Point");
+        if (transform == nullptr || vector == nullptr) return MakeNodeFailureUVE(instructionIndex, "Transform vector operation requires Transform and Vector3 inputs.");
+        if (type == "math.transform.translate") {
+            const auto value = EvaluateScriptTransformTranslateUVE(*transform, *vector);
+            if (!value.IsAppliedUVE() || !SetNodeOutputUVE(context, nodeId, "Result", value.value)) return MakeNodeFailureUVE(instructionIndex, "Translate Transform rejected its input or output capacity.");
+        } else {
+            const auto value = EvaluateScriptTransformPointUVE(*transform, *vector);
+            if (!value.IsAppliedUVE() || !SetNodeOutputUVE(context, nodeId, "Result", value.value)) return MakeNodeFailureUVE(instructionIndex, "Transform Point rejected its input or output capacity.");
+        }
+        return {};
+    }
+    if (type == "math.transform.rotate") {
+        const ScriptTransformValueUVE* transform = FindTransformInputUVE(context, nodeId, "Transform");
+        const ScriptRotationValueUVE* rotation = FindRotationInputUVE(context, nodeId, "Rotation");
+        if (transform == nullptr || rotation == nullptr) return MakeNodeFailureUVE(instructionIndex, "Rotate Transform requires Transform and Rotation inputs.");
+        const auto value = EvaluateScriptTransformRotateUVE(*transform, *rotation);
+        if (!value.IsAppliedUVE() || !SetNodeOutputUVE(context, nodeId, "Result", value.value)) return MakeNodeFailureUVE(instructionIndex, "Rotate Transform rejected its input or output capacity.");
+        return {};
+    }
+    return MakeNodeFailureUVE(instructionIndex, "Unknown transform node type.");
+}
+
 [[nodiscard]] ScriptVmExecutionResultUVE ExecuteVector3NodeUVE(
     const ScriptIrInstructionUVE& instruction, const std::size_t instructionIndex,
     ScriptVmExecutionContextUVE& context) {
@@ -1037,6 +1129,36 @@ namespace {
     return true;
 }
 
+[[nodiscard]] bool HasRequiredTransformInputsUVE(const ScriptIrInstructionUVE& instruction,
+                                                     const ScriptVmExecutionContextUVE& context) {
+    const std::uint32_t nodeId = instruction.sourceNodeId;
+    const std::string& type = instruction.nodeTypeId;
+    if (type == "math.transform.make") {
+        return FindVector3InputUVE(context, nodeId, "Position") != nullptr && FindRotationInputUVE(context, nodeId, "Rotation") != nullptr &&
+               FindVector3InputUVE(context, nodeId, "Scale") != nullptr;
+    }
+    if (type == "math.transform.break" || type == "math.transform.get_position" || type == "math.transform.get_rotation" ||
+        type == "math.transform.get_scale") {
+        return FindTransformInputUVE(context, nodeId, "Transform") != nullptr;
+    }
+    if (type == "math.transform.set_position") {
+        return FindTransformInputUVE(context, nodeId, "Transform") != nullptr && FindVector3InputUVE(context, nodeId, "Position") != nullptr;
+    }
+    if (type == "math.transform.set_rotation" || type == "math.transform.rotate") {
+        return FindTransformInputUVE(context, nodeId, "Transform") != nullptr && FindRotationInputUVE(context, nodeId, "Rotation") != nullptr;
+    }
+    if (type == "math.transform.set_scale") {
+        return FindTransformInputUVE(context, nodeId, "Transform") != nullptr && FindVector3InputUVE(context, nodeId, "Scale") != nullptr;
+    }
+    if (type == "math.transform.translate") {
+        return FindTransformInputUVE(context, nodeId, "Transform") != nullptr && FindVector3InputUVE(context, nodeId, "Translation") != nullptr;
+    }
+    if (type == "math.transform.transform_point") {
+        return FindTransformInputUVE(context, nodeId, "Transform") != nullptr && FindVector3InputUVE(context, nodeId, "Point") != nullptr;
+    }
+    return true;
+}
+
 [[nodiscard]] bool HasRequiredVector3InputsUVE(const ScriptIrInstructionUVE& instruction,
                                                  const ScriptVmExecutionContextUVE& context) {
     const std::uint32_t nodeId = instruction.sourceNodeId;
@@ -1279,6 +1401,7 @@ namespace {
         const bool isVector2Node = instruction.nodeTypeId.rfind("math.vector2.", 0U) == 0U;
         const bool isVector3Node = instruction.nodeTypeId.rfind("math.vector3.", 0U) == 0U;
         const bool isRotationNode = instruction.nodeTypeId.rfind("math.rotation.", 0U) == 0U;
+        const bool isTransformNode = instruction.nodeTypeId.rfind("math.transform.", 0U) == 0U;
         const bool isFloatNode = instruction.nodeTypeId.rfind("math.float.", 0U) == 0U;
         const bool isBooleanNode = instruction.nodeTypeId.rfind("logic.boolean.", 0U) == 0U;
         const bool isEntityQueryNode = instruction.nodeTypeId.rfind("query.entity.", 0U) == 0U;
@@ -1289,6 +1412,7 @@ namespace {
             (isVector2Node && !HasRequiredVector2InputsUVE(instruction, context)) ||
             (isVector3Node && !HasRequiredVector3InputsUVE(instruction, context)) ||
             (isRotationNode && !HasRequiredRotationInputsUVE(instruction, context)) ||
+            (isTransformNode && !HasRequiredTransformInputsUVE(instruction, context)) ||
             (isFloatNode && !HasRequiredFloatInputsUVE(instruction, context)) ||
             (isBooleanNode && !HasRequiredBooleanInputsUVE(instruction, context)) ||
             (isEntityQueryNode && !HasRequiredEntityQueryInputsUVE(instruction, context)) ||
@@ -1310,6 +1434,8 @@ namespace {
             nodeResult = ExecuteVector3NodeUVE(instruction, instructionIndex, context);
         } else if (isRotationNode) {
             nodeResult = ExecuteRotationNodeUVE(instruction, instructionIndex, context);
+        } else if (isTransformNode) {
+            nodeResult = ExecuteTransformNodeUVE(instruction, instructionIndex, context);
         } else if (isFloatNode) {
             nodeResult = ExecuteFloatNodeUVE(instruction, instructionIndex, context);
         } else if (isBooleanNode) {
@@ -1533,6 +1659,7 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                 const bool isVector2Node = instruction.nodeTypeId.rfind("math.vector2.", 0U) == 0U;
                 const bool isVector3Node = instruction.nodeTypeId.rfind("math.vector3.", 0U) == 0U;
                 const bool isRotationNode = instruction.nodeTypeId.rfind("math.rotation.", 0U) == 0U;
+                const bool isTransformNode = instruction.nodeTypeId.rfind("math.transform.", 0U) == 0U;
                 const bool isFloatNode = instruction.nodeTypeId.rfind("math.float.", 0U) == 0U;
                 const bool isBooleanNode = instruction.nodeTypeId.rfind("logic.boolean.", 0U) == 0U;
                 const bool isEntityQueryNode = instruction.nodeTypeId.rfind("query.entity.", 0U) == 0U;
@@ -1543,6 +1670,7 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                     (isVector2Node && !HasRequiredVector2InputsUVE(instruction, *context)) ||
                     (isVector3Node && !HasRequiredVector3InputsUVE(instruction, *context)) ||
                     (isRotationNode && !HasRequiredRotationInputsUVE(instruction, *context)) ||
+                    (isTransformNode && !HasRequiredTransformInputsUVE(instruction, *context)) ||
                     (isFloatNode && !HasRequiredFloatInputsUVE(instruction, *context)) ||
                     (isBooleanNode && !HasRequiredBooleanInputsUVE(instruction, *context)) ||
                     (isEntityQueryNode && !HasRequiredEntityQueryInputsUVE(instruction, *context)) ||
@@ -1568,6 +1696,8 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                     nodeResult = ExecuteVector3NodeUVE(instruction, index, *context);
                 } else if (isRotationNode) {
                     nodeResult = ExecuteRotationNodeUVE(instruction, index, *context);
+                } else if (isTransformNode) {
+                    nodeResult = ExecuteTransformNodeUVE(instruction, index, *context);
                 } else if (isFloatNode) {
                     nodeResult = ExecuteFloatNodeUVE(instruction, index, *context);
                 } else if (isBooleanNode) {
