@@ -4,6 +4,8 @@
 
 #include <gtest/gtest.h>
 
+#include <limits>
+
 namespace UVE::Render::Tests {
 
 TEST(ParticleDrawRecorderUVETest, RecordUVE_CopiesSortedQueueItemsWithoutMutatingQueue) {
@@ -23,6 +25,21 @@ TEST(ParticleDrawRecorderUVETest, RecordUVE_CopiesSortedQueueItemsWithoutMutatin
     EXPECT_EQ(recording.commands[0].sequence, 4U);
     EXPECT_EQ(queue.particleItems, before.particleItems);
     EXPECT_EQ(queue.particleItemsTruncated, before.particleItemsTruncated);
+}
+
+TEST(ParticleDrawRecorderUVETest, IsValidParticleDrawCommandUVE_AcceptsFiniteLiveCommand) {
+    const ParticleDrawCommandUVE command{{1U, 1U}, Math::Vector3UVE{1.0F, 2.0F, 3.0F}, 0.5F, -2.0F, 7U};
+    EXPECT_TRUE(IsValidParticleDrawCommandUVE(command));
+}
+
+TEST(ParticleDrawRecorderUVETest, IsValidParticleDrawCommandUVE_RejectsUnsafeFields) {
+    EXPECT_FALSE(IsValidParticleDrawCommandUVE(
+        ParticleDrawCommandUVE{{1U, 1U}, Math::Vector3UVE{}, -0.1F, 0.0F, 1U}));
+    EXPECT_FALSE(IsValidParticleDrawCommandUVE(
+        ParticleDrawCommandUVE{{1U, 1U}, Math::Vector3UVE{std::numeric_limits<float>::quiet_NaN(), 0.0F, 0.0F},
+                               1.0F, 0.0F, 1U}));
+    EXPECT_FALSE(IsValidParticleDrawCommandUVE(
+        ParticleDrawCommandUVE{{1U, 1U}, Math::Vector3UVE{}, 1.0F, 0.0F, 0U}));
 }
 
 TEST(ParticleDrawRecorderUVETest, RecordUVE_HonorsHardCapAndQueueTruncationFact) {

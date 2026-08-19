@@ -22,6 +22,8 @@ struct ParticleDrawCommandUVE final {
     [[nodiscard]] bool operator==(const ParticleDrawCommandUVE&) const = default;
 };
 
+[[nodiscard]] bool IsValidParticleDrawCommandUVE(const ParticleDrawCommandUVE& command) noexcept;
+
 struct ParticleDrawRecordingUVE final {
     std::size_t sourceItemCount = 0U;
     bool truncated = false;
