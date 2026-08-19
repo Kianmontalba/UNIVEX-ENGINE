@@ -94,6 +94,85 @@ bool CaptureEngineTimeUVE(void* userData, float* outSeconds) noexcept {
     return true;
 }
 
+struct EntityLifecycleCaptureUVE final {
+    std::size_t spawnCount = 0U;
+    std::size_t destroyCount = 0U;
+    std::size_t findCount = 0U;
+    std::size_t getCount = 0U;
+    std::size_t addCount = 0U;
+    std::size_t removeCount = 0U;
+    Scene::EntityUVE entity{42U, 3U};
+    std::string lastComponentType;
+    float lastHandle = 0.0F;
+};
+
+bool CaptureEntitySpawnUVE(void* userData, Scene::EntityUVE* outEntity) noexcept {
+    auto* capture = static_cast<EntityLifecycleCaptureUVE*>(userData);
+    if (capture == nullptr || outEntity == nullptr) {
+        return false;
+    }
+    ++capture->spawnCount;
+    *outEntity = capture->entity;
+    return true;
+}
+
+bool CaptureEntityDestroyUVE(void* userData, const Scene::EntityUVE entity) noexcept {
+    auto* capture = static_cast<EntityLifecycleCaptureUVE*>(userData);
+    if (capture == nullptr || entity != capture->entity) {
+        return false;
+    }
+    ++capture->destroyCount;
+    return true;
+}
+
+bool CaptureEntityFindUVE(void* userData, const ScriptComponentValueUVE& component,
+                         Scene::EntityUVE* outEntity) noexcept {
+    auto* capture = static_cast<EntityLifecycleCaptureUVE*>(userData);
+    if (capture == nullptr || outEntity == nullptr) {
+        return false;
+    }
+    ++capture->findCount;
+    capture->lastComponentType = component.componentTypeId;
+    *outEntity = capture->entity;
+    return true;
+}
+
+bool CaptureEntityGetUVE(void* userData, const float handle, Scene::EntityUVE* outEntity) noexcept {
+    auto* capture = static_cast<EntityLifecycleCaptureUVE*>(userData);
+    if (capture == nullptr || outEntity == nullptr) {
+        return false;
+    }
+    ++capture->getCount;
+    capture->lastHandle = handle;
+    *outEntity = capture->entity;
+    return true;
+}
+
+bool CaptureEntityMutationUVE(void* userData, const Scene::EntityUVE entity,
+                             const ScriptComponentValueUVE& component, const bool isAdd) noexcept {
+    auto* capture = static_cast<EntityLifecycleCaptureUVE*>(userData);
+    if (capture == nullptr || entity != capture->entity) {
+        return false;
+    }
+    if (isAdd) {
+        ++capture->addCount;
+    } else {
+        ++capture->removeCount;
+    }
+    capture->lastComponentType = component.componentTypeId;
+    return true;
+}
+
+bool CaptureEntityAddUVE(void* userData, const Scene::EntityUVE entity,
+                         const ScriptComponentValueUVE& component) noexcept {
+    return CaptureEntityMutationUVE(userData, entity, component, true);
+}
+
+bool CaptureEntityRemoveUVE(void* userData, const Scene::EntityUVE entity,
+                            const ScriptComponentValueUVE& component) noexcept {
+    return CaptureEntityMutationUVE(userData, entity, component, false);
+}
+
 void RegisterTestNodesUVE(ScriptNodeRegistryUVE& registry) {
     ASSERT_TRUE(registry.RegisterNodeTypeUVE(MakeSourceNodeUVE()));
     ASSERT_TRUE(registry.RegisterNodeTypeUVE(MakeSinkNodeUVE()));
@@ -120,10 +199,10 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
 
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
     EXPECT_FALSE(RegisterBuiltInScriptNodesUVE(registry));
-    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 109U);
+    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 115U);
 
     const std::vector<ScriptNodeTypeDescriptorUVE> descriptors = registry.GetNodeTypeDescriptorsUVE();
-    ASSERT_EQ(descriptors.size(), 109U);
+    ASSERT_EQ(descriptors.size(), 115U);
     const std::vector<std::string> expectedIds{
         "flow.sequence", "flow.branch", "flow.return", "flow.do_once", "flow.gate", "flow.switch",
         "flow.event", "flow.loop", "flow.for_loop", "flow.while_loop", "flow.delay",
@@ -153,7 +232,8 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
         "variable.make_array", "variable.get_array", "variable.set_array",
         "variable.make_map", "variable.get_map", "variable.set_map",
         "variable.make_set", "variable.get_set", "variable.set_set",
-        "variable.make_struct", "variable.get_struct", "variable.set_struct"};
+        "variable.make_struct", "variable.get_struct", "variable.set_struct",
+        "entity.spawn", "entity.destroy", "entity.find", "entity.get_entity", "entity.add_component", "entity.remove_component"};
     ASSERT_EQ(expectedIds.size(), descriptors.size());
     for (std::size_t index = 0U; index < expectedIds.size(); ++index) {
         EXPECT_EQ(descriptors[index].typeId, expectedIds[index]);
@@ -198,9 +278,13 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
         EXPECT_EQ(descriptors[index].category, "Engine");
         EXPECT_EQ(descriptors[index].iconId, "node.engine");
     }
-    for (std::size_t index = 88U; index < descriptors.size(); ++index) {
+    for (std::size_t index = 88U; index < 109U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Variable");
         EXPECT_EQ(descriptors[index].iconId, "node.variable");
+    }
+    for (std::size_t index = 109U; index < descriptors.size(); ++index) {
+        EXPECT_EQ(descriptors[index].category, "Entity");
+        EXPECT_EQ(descriptors[index].iconId, "node.entity");
     }
 
     const ScriptNodeTypeDescriptorUVE* lerp = registry.FindNodeTypeUVE("math.float.lerp");
@@ -348,6 +432,55 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
     EXPECT_EQ(getComponent->pins[0].type, ScriptValueTypeUVE::Entity);
     EXPECT_EQ(getComponent->pins[1].type, ScriptValueTypeUVE::Component);
     EXPECT_EQ(getComponent->pins[2].type, ScriptValueTypeUVE::Component);
+
+    const ScriptNodeTypeDescriptorUVE* entitySpawn = registry.FindNodeTypeUVE("entity.spawn");
+    ASSERT_NE(entitySpawn, nullptr);
+    ASSERT_EQ(entitySpawn->pins.size(), 1U);
+    EXPECT_EQ(entitySpawn->category, "Entity");
+    EXPECT_EQ(entitySpawn->iconId, "node.entity");
+    EXPECT_EQ(entitySpawn->pins[0].name, "Result");
+    EXPECT_EQ(entitySpawn->pins[0].direction, ScriptPinDirectionUVE::Output);
+    EXPECT_EQ(entitySpawn->pins[0].type, ScriptValueTypeUVE::Entity);
+
+    const ScriptNodeTypeDescriptorUVE* entityDestroy = registry.FindNodeTypeUVE("entity.destroy");
+    ASSERT_NE(entityDestroy, nullptr);
+    ASSERT_EQ(entityDestroy->pins.size(), 2U);
+    EXPECT_EQ(entityDestroy->pins[0].name, "Entity");
+    EXPECT_EQ(entityDestroy->pins[0].direction, ScriptPinDirectionUVE::Input);
+    EXPECT_EQ(entityDestroy->pins[0].type, ScriptValueTypeUVE::Entity);
+    EXPECT_EQ(entityDestroy->pins[1].name, "Result");
+    EXPECT_EQ(entityDestroy->pins[1].direction, ScriptPinDirectionUVE::Output);
+    EXPECT_EQ(entityDestroy->pins[1].type, ScriptValueTypeUVE::Boolean);
+
+    const ScriptNodeTypeDescriptorUVE* entityFind = registry.FindNodeTypeUVE("entity.find");
+    ASSERT_NE(entityFind, nullptr);
+    ASSERT_EQ(entityFind->pins.size(), 2U);
+    EXPECT_EQ(entityFind->pins[0].name, "Component");
+    EXPECT_EQ(entityFind->pins[0].type, ScriptValueTypeUVE::Component);
+    EXPECT_EQ(entityFind->pins[1].name, "Result");
+    EXPECT_EQ(entityFind->pins[1].type, ScriptValueTypeUVE::Entity);
+
+    const ScriptNodeTypeDescriptorUVE* entityGet = registry.FindNodeTypeUVE("entity.get_entity");
+    ASSERT_NE(entityGet, nullptr);
+    ASSERT_EQ(entityGet->pins.size(), 2U);
+    EXPECT_EQ(entityGet->pins[0].name, "Handle");
+    EXPECT_EQ(entityGet->pins[0].type, ScriptValueTypeUVE::Number);
+    EXPECT_EQ(entityGet->pins[1].name, "Result");
+    EXPECT_EQ(entityGet->pins[1].type, ScriptValueTypeUVE::Entity);
+
+    for (const char* typeId : {"entity.add_component", "entity.remove_component"}) {
+        const ScriptNodeTypeDescriptorUVE* mutation = registry.FindNodeTypeUVE(typeId);
+        ASSERT_NE(mutation, nullptr);
+        ASSERT_EQ(mutation->pins.size(), 3U);
+        EXPECT_EQ(mutation->category, "Entity");
+        EXPECT_EQ(mutation->iconId, "node.entity");
+        EXPECT_EQ(mutation->pins[0].name, "Entity");
+        EXPECT_EQ(mutation->pins[0].type, ScriptValueTypeUVE::Entity);
+        EXPECT_EQ(mutation->pins[1].name, "Component");
+        EXPECT_EQ(mutation->pins[1].type, ScriptValueTypeUVE::Component);
+        EXPECT_EQ(mutation->pins[2].name, "Result");
+        EXPECT_EQ(mutation->pins[2].type, ScriptValueTypeUVE::Boolean);
+    }
 
     const ScriptNodeTypeDescriptorUVE* engineLog = registry.FindNodeTypeUVE("engine.log");
     ASSERT_NE(engineLog, nullptr);
@@ -4580,6 +4713,132 @@ TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesVector2ProducerBef
     EXPECT_TRUE(compiled.program->instructions[1].isStagedTransfer);
     EXPECT_EQ(compiled.program->instructions[1].targetPinName, "Vector");
     EXPECT_EQ(compiled.program->instructions[2].nodeTypeId, "math.vector2.length");
+}
+
+} // namespace UVE::Scripting
+
+
+namespace UVE::Scripting {
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_ExecutesEntityLifecycleCallbacksAndStoresTypedOutputs) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U,
+                                    "entity.spawn", {}, {}});
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 2U, 0U,
+                                    "entity.destroy", {}, {}});
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 3U, 0U,
+                                    "entity.find", {}, {}});
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 4U, 0U,
+                                    "entity.get_entity", {}, {}});
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 5U, 0U,
+                                    "entity.add_component", {}, {}});
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 6U, 0U,
+                                    "entity.remove_component", {}, {}});
+
+    const Scene::EntityUVE entity{42U, 3U};
+    const ScriptComponentValueUVE component{Scene::kInvalidEntityUVE, "MeshComponentUVE", false};
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(2U, "Entity", ScriptEntityValueUVE{entity}));
+    ASSERT_TRUE(context.SetInputUVE(3U, "Component", component));
+    ASSERT_TRUE(context.SetInputUVE(4U, "Handle", 7.0F));
+    ASSERT_TRUE(context.SetInputUVE(5U, "Entity", ScriptEntityValueUVE{entity}));
+    ASSERT_TRUE(context.SetInputUVE(5U, "Component", component));
+    ASSERT_TRUE(context.SetInputUVE(6U, "Entity", ScriptEntityValueUVE{entity}));
+    ASSERT_TRUE(context.SetInputUVE(6U, "Component", component));
+
+    EntityLifecycleCaptureUVE capture;
+    ScriptEngineCallBindingsUVE bindings{};
+    bindings.userData = &capture;
+    bindings.spawnEntity = CaptureEntitySpawnUVE;
+    bindings.destroyEntity = CaptureEntityDestroyUVE;
+    bindings.findEntityByComponent = CaptureEntityFindUVE;
+    bindings.getEntityByHandle = CaptureEntityGetUVE;
+    bindings.addComponent = CaptureEntityAddUVE;
+    bindings.removeComponent = CaptureEntityRemoveUVE;
+    ScriptVmExecutionOptionsUVE options;
+    options.engineCallBindings = &bindings;
+
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(program, context, options);
+    ASSERT_TRUE(result.IsSuccessUVE());
+    EXPECT_EQ(result.instructionsExecuted, 6U);
+    EXPECT_EQ(capture.spawnCount, 1U);
+    EXPECT_EQ(capture.destroyCount, 1U);
+    EXPECT_EQ(capture.findCount, 1U);
+    EXPECT_EQ(capture.getCount, 1U);
+    EXPECT_EQ(capture.addCount, 1U);
+    EXPECT_EQ(capture.removeCount, 1U);
+    EXPECT_EQ(capture.lastComponentType, "MeshComponentUVE");
+    EXPECT_FLOAT_EQ(capture.lastHandle, 7.0F);
+    EXPECT_EQ(std::get<ScriptEntityValueUVE>(*context.FindOutputUVE(1U, "Result")),
+              (ScriptEntityValueUVE{entity}));
+    EXPECT_TRUE(std::get<bool>(*context.FindOutputUVE(2U, "Result")));
+    EXPECT_EQ(std::get<ScriptEntityValueUVE>(*context.FindOutputUVE(3U, "Result")),
+              (ScriptEntityValueUVE{entity}));
+    EXPECT_EQ(std::get<ScriptEntityValueUVE>(*context.FindOutputUVE(4U, "Result")),
+              (ScriptEntityValueUVE{entity}));
+    EXPECT_TRUE(std::get<bool>(*context.FindOutputUVE(5U, "Result")));
+    EXPECT_TRUE(std::get<bool>(*context.FindOutputUVE(6U, "Result")));
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_ExecutesEntitySpawnThroughSchedulerPath) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U,
+                                    "entity.spawn", {}, {}});
+    EntityLifecycleCaptureUVE capture;
+    ScriptEngineCallBindingsUVE bindings{};
+    bindings.userData = &capture;
+    bindings.spawnEntity = CaptureEntitySpawnUVE;
+    ScriptVmExecutionOptionsUVE options;
+    options.engineCallBindings = &bindings;
+
+    ScriptVmExecutionContextUVE context;
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(program, context, options);
+    EXPECT_TRUE(result.IsSuccessUVE());
+    EXPECT_EQ(result.instructionsExecuted, 1U);
+    EXPECT_EQ(capture.spawnCount, 1U);
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_EntityNodesFailClosedWithoutRequiredBindings) {
+    const Scene::EntityUVE entity{42U, 3U};
+    const ScriptComponentValueUVE component{Scene::kInvalidEntityUVE, "MeshComponentUVE", false};
+
+    ScriptBytecodeProgramUVE spawn;
+    spawn.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U,
+                                  "entity.spawn", {}, {}});
+    ScriptVmExecutionContextUVE spawnContext;
+    EXPECT_EQ(ExecuteScriptBytecodeUVE(spawn, spawnContext).status, ScriptVmStatusUVE::NodeExecutionFailed);
+
+    ScriptBytecodeProgramUVE destroy;
+    destroy.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 2U, 0U,
+                                    "entity.destroy", {}, {}});
+    ScriptVmExecutionContextUVE destroyContext;
+    ASSERT_TRUE(destroyContext.SetInputUVE(2U, "Entity", ScriptEntityValueUVE{entity}));
+    EXPECT_EQ(ExecuteScriptBytecodeUVE(destroy, destroyContext).status, ScriptVmStatusUVE::NodeExecutionFailed);
+
+    ScriptBytecodeProgramUVE find;
+    find.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 3U, 0U,
+                                 "entity.find", {}, {}});
+    ScriptVmExecutionContextUVE findContext;
+    ASSERT_TRUE(findContext.SetInputUVE(3U, "Component", component));
+    EXPECT_EQ(ExecuteScriptBytecodeUVE(find, findContext).status, ScriptVmStatusUVE::NodeExecutionFailed);
+
+    ScriptBytecodeProgramUVE getEntity;
+    getEntity.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 4U, 0U,
+                                      "entity.get_entity", {}, {}});
+    ScriptVmExecutionContextUVE getContext;
+    ASSERT_TRUE(getContext.SetInputUVE(4U, "Handle", 7.0F));
+    EXPECT_EQ(ExecuteScriptBytecodeUVE(getEntity, getContext).status, ScriptVmStatusUVE::NodeExecutionFailed);
+
+    for (const char* nodeType : {"entity.add_component", "entity.remove_component"}) {
+        ScriptBytecodeProgramUVE mutation;
+        mutation.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 5U, 0U,
+                                         nodeType, {}, {}});
+        ScriptVmExecutionContextUVE mutationContext;
+        ASSERT_TRUE(mutationContext.SetInputUVE(5U, "Entity", ScriptEntityValueUVE{entity}));
+        ASSERT_TRUE(mutationContext.SetInputUVE(5U, "Component", component));
+        EXPECT_EQ(ExecuteScriptBytecodeUVE(mutation, mutationContext).status,
+                  ScriptVmStatusUVE::NodeExecutionFailed);
+    }
 }
 
 } // namespace UVE::Scripting

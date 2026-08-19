@@ -183,11 +183,25 @@ struct ScriptVmTraceEventUVE final {
 
 using ScriptEngineLogFunctionUVE = bool (*)(void* userData, float value) noexcept;
 using ScriptEngineGetTimeFunctionUVE = bool (*)(void* userData, float* outSeconds) noexcept;
+using ScriptEntitySpawnFunctionUVE = bool (*)(void* userData, Scene::EntityUVE* outEntity) noexcept;
+using ScriptEntityDestroyFunctionUVE = bool (*)(void* userData, Scene::EntityUVE entity) noexcept;
+using ScriptEntityFindByComponentFunctionUVE = bool (*)(
+    void* userData, const ScriptComponentValueUVE& component, Scene::EntityUVE* outEntity) noexcept;
+using ScriptEntityGetByHandleFunctionUVE = bool (*)(
+    void* userData, float handle, Scene::EntityUVE* outEntity) noexcept;
+using ScriptEntityComponentMutationFunctionUVE = bool (*)(
+    void* userData, Scene::EntityUVE entity, const ScriptComponentValueUVE& component) noexcept;
 
 struct ScriptEngineCallBindingsUVE final {
     ScriptEngineLogFunctionUVE log = nullptr;
     void* userData = nullptr;
     ScriptEngineGetTimeFunctionUVE getTime = nullptr;
+    ScriptEntitySpawnFunctionUVE spawnEntity = nullptr;
+    ScriptEntityDestroyFunctionUVE destroyEntity = nullptr;
+    ScriptEntityFindByComponentFunctionUVE findEntityByComponent = nullptr;
+    ScriptEntityGetByHandleFunctionUVE getEntityByHandle = nullptr;
+    ScriptEntityComponentMutationFunctionUVE addComponent = nullptr;
+    ScriptEntityComponentMutationFunctionUVE removeComponent = nullptr;
 };
 
 struct ScriptVmExecutionOptionsUVE final {
