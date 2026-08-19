@@ -2,6 +2,7 @@
 
 
 #include "uve/save/save_game_system_uve.h"
+#include "uve/save/save_payload_compression_uve.h"
 
 #include <chrono>
 #include <cstdio>
@@ -140,7 +141,7 @@ void AppendUint64UVE(std::vector<std::byte>& buffer, std::uint64_t value) {
     AppendBytesUVE(payload, metadataJsonBytes.data(), metadataJsonBytes.size());
     AppendUint64UVE(payload, worldJsonBytes.size());
     AppendBytesUVE(payload, worldJsonBytes.data(), worldJsonBytes.size());
-    return payload;
+    return CompressSavePayloadUVE(payload);
 }
 
 /// Splits a `.uvesave` payload back into its metadata and world JSON byte sections. Returns
@@ -253,6 +254,12 @@ std::vector<Scene::EntityUVE> SaveGameSystemUVE::LoadUVE(int slotIndex, Scene::I
                    static_cast<std::uint32_t>(header.assetType));
         return {};
     }
+    std::vector<std::byte> expandedPayload;
+    if (!DecompressSavePayloadUVE(payload, expandedPayload)) {
+        UVE_ERROR("SaveGameSystemUVE: \"{}\" has a corrupt or oversized compressed payload", finalPath.string());
+        return {};
+    }
+    payload = std::move(expandedPayload);
 
     std::vector<std::byte> metadataJsonBytes;
     std::vector<std::byte> worldJsonBytes;
@@ -339,9 +346,14 @@ std::optional<GameStateMetadataUVE> SaveGameSystemUVE::GetSaveMetadataUVE(int sl
                    static_cast<std::uint32_t>(header.assetType));
         return std::nullopt;
     }
+    std::vector<std::byte> expandedPayload;
+    if (!DecompressSavePayloadUVE(payload, expandedPayload)) {
+        UVE_ERROR("SaveGameSystemUVE: \"{}\" has a corrupt or oversized compressed payload", finalPath.string());
+        return std::nullopt;
+    }
 
     std::vector<std::byte> metadataJsonBytes;
-    if (!SplitSaveMetadataOnlyUVE(payload, metadataJsonBytes)) {
+    if (!SplitSaveMetadataOnlyUVE(expandedPayload, metadataJsonBytes)) {
         UVE_ERROR("SaveGameSystemUVE: \"{}\" has a corrupt or truncated save payload", finalPath.string());
         return std::nullopt;
     }

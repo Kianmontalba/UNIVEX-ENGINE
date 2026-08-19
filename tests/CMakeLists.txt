@@ -96,6 +96,7 @@ add_executable(uve_tests
     audio/wav_metadata_uve_tests.cpp
     save/save_game_system_uve_tests.cpp
     save/checkpoint_manager_uve_tests.cpp
+    save/save_payload_compression_uve_tests.cpp
     network/reliable_packet_window_uve_tests.cpp
     window/null_window_manager_uve_tests.cpp
     window/window_manager_uve_tests.cpp
