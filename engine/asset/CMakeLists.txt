@@ -28,6 +28,7 @@ add_library(uve_asset STATIC
     src/obj_metadata_uve.cpp
     src/gltf_metadata_uve.cpp
     src/jpeg_metadata_uve.cpp
+    src/mtl_metadata_uve.cpp
     src/shader_asset_uve.cpp
     src/material_asset_uve.cpp
     src/data_table_uve.cpp
