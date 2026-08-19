@@ -118,6 +118,22 @@ TEST_F(ColliderShapeUVETest, DetectCollisionsUVE_SphereUsesExactSphereBoxAndCaps
     }));
 }
 
+TEST_F(ColliderShapeUVETest, DetectCollisionsUVE_CapsuleRejectsDiagonalExpandedAabbFalsePositive) {
+    Scene::ColliderComponentUVE capsule;
+    capsule.shapeType = Scene::ColliderShapeTypeUVE::Capsule;
+    capsule.radius = 0.5F;
+    capsule.height = 4.0F;
+    MakeColliderEntityUVE({0.0F, 0.0F, 0.0F}, capsule);
+
+    Scene::ColliderComponentUVE box;
+    box.halfExtents = {0.5F, 0.5F, 0.5F};
+    MakeColliderEntityUVE({0.9F, 0.0F, 0.9F}, box);
+
+    // The conservative AABBs overlap by 0.1 on X/Z, but the capsule centerline-to-box distance
+    // is sqrt(0.4^2 + 0.4^2) > radius, so the exact narrow phase must reject the pair.
+    EXPECT_TRUE(collisionSystem.DetectCollisionsUVE(entityManager).empty());
+}
+
 TEST_F(ColliderShapeUVETest, DetectCollisionsUVE_SphereRejectsDiagonalExpandedAabbFalsePositive) {
     Scene::ColliderComponentUVE sphere;
     sphere.shapeType = Scene::ColliderShapeTypeUVE::Sphere;

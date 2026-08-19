@@ -26,6 +26,8 @@ struct ColliderWorldAabbUVE {
     std::uint32_t collisionMask;
     Scene::ColliderShapeTypeUVE shapeType = Scene::ColliderShapeTypeUVE::Box;
     float shapeRadius = 0.0F;
+    Math::Vector3UVE shapeSegmentStart{};
+    Math::Vector3UVE shapeSegmentEnd{};
 };
 
 enum class DynamicColliderWorldAabbUpdateCodeUVE : std::uint8_t {
