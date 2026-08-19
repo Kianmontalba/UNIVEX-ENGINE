@@ -96,6 +96,7 @@ add_executable(uve_tests
     audio/wav_metadata_uve_tests.cpp
     save/save_game_system_uve_tests.cpp
     save/checkpoint_manager_uve_tests.cpp
+    network/reliable_packet_window_uve_tests.cpp
     window/null_window_manager_uve_tests.cpp
     window/window_manager_uve_tests.cpp
     window/window_desc_validation_uve_tests.cpp
@@ -179,6 +180,7 @@ target_link_libraries(uve_tests PRIVATE
     uve_input
     uve_audio
     uve_save
+    uve_network
     uve_window
     uve_core
     uve_editor
