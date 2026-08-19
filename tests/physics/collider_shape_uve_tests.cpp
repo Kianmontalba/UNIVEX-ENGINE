@@ -159,6 +159,51 @@ TEST_F(ColliderShapeUVETest, DetectCollisionsUVE_SphereSphereRejectsTouchingAndD
     EXPECT_TRUE(collisionSystem.DetectCollisionsUVE(entityManager).empty());
 }
 
+TEST_F(ColliderShapeUVETest, DetectCollisionsUVE_CapsuleSphereUsesExactCenterlineDistance) {
+    Scene::ColliderComponentUVE capsule;
+    capsule.shapeType = Scene::ColliderShapeTypeUVE::Capsule;
+    capsule.radius = 0.5F;
+    capsule.height = 4.0F;
+    const Scene::EntityUVE capsuleEntity = MakeColliderEntityUVE({0.0F, 0.0F, 0.0F}, capsule);
+
+    Scene::ColliderComponentUVE sphere;
+    sphere.shapeType = Scene::ColliderShapeTypeUVE::Sphere;
+    sphere.radius = 0.5F;
+    const Scene::EntityUVE sphereEntity = MakeColliderEntityUVE({0.75F, 0.0F, 0.0F}, sphere);
+
+    const std::vector<CollisionPairUVE> pairs = collisionSystem.DetectCollisionsUVE(entityManager);
+    ASSERT_EQ(pairs.size(), 1U);
+    EXPECT_EQ(pairs[0].first, capsuleEntity);
+    EXPECT_EQ(pairs[0].second, sphereEntity);
+    EXPECT_NEAR(pairs[0].penetrationDepth, 0.25F, 1.0e-5F);
+    EXPECT_NEAR(pairs[0].separationAxis.x, 1.0F, 1.0e-5F);
+    EXPECT_NEAR(pairs[0].separationAxis.y, 0.0F, 1.0e-5F);
+    EXPECT_NEAR(pairs[0].separationAxis.z, 0.0F, 1.0e-5F);
+}
+
+TEST_F(ColliderShapeUVETest, DetectCollisionsUVE_SphereCapsuleRejectsTouchingAndDiagonalAabbFalsePositive) {
+    Scene::ColliderComponentUVE touchingSphere;
+    touchingSphere.shapeType = Scene::ColliderShapeTypeUVE::Sphere;
+    touchingSphere.radius = 0.5F;
+    MakeColliderEntityUVE({1.0F, 0.0F, 0.0F}, touchingSphere);
+
+    Scene::ColliderComponentUVE diagonalSphere;
+    diagonalSphere.shapeType = Scene::ColliderShapeTypeUVE::Sphere;
+    diagonalSphere.radius = 0.5F;
+    MakeColliderEntityUVE({0.9F, 1.4F, 0.9F}, diagonalSphere);
+
+    Scene::ColliderComponentUVE capsule;
+    capsule.shapeType = Scene::ColliderShapeTypeUVE::Capsule;
+    capsule.radius = 0.5F;
+    capsule.height = 4.0F;
+    MakeColliderEntityUVE({0.0F, 0.0F, 0.0F}, capsule);
+
+    // The touching sphere reaches the capsule AABB boundary but has no strict overlap. The
+    // diagonal sphere overlaps the conservative AABB in X/Z while its centerline distance is
+    // greater than the combined radius. The two spheres are also separated from one another.
+    EXPECT_TRUE(collisionSystem.DetectCollisionsUVE(entityManager).empty());
+}
+
 TEST_F(ColliderShapeUVETest, DetectCollisionsUVE_CapsuleRejectsDiagonalExpandedAabbFalsePositive) {
     Scene::ColliderComponentUVE capsule;
     capsule.shapeType = Scene::ColliderShapeTypeUVE::Capsule;

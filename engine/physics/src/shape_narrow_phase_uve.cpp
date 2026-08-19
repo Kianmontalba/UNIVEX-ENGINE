@@ -209,6 +209,40 @@ std::optional<Math::PenetrationUVE> ComputeSphereSpherePenetrationUVE(
     return Math::PenetrationUVE{delta * (1.0F / distance), combinedRadius - distance};
 }
 
+std::optional<Math::PenetrationUVE> ComputeCapsuleSpherePenetrationUVE(
+    const Math::Vector3UVE capsuleSegmentStart, const Math::Vector3UVE capsuleSegmentEnd,
+    const float capsuleRadius, const Math::Vector3UVE sphereCenter, const float sphereRadius) noexcept {
+    if (!std::isfinite(capsuleSegmentStart.x) || !std::isfinite(capsuleSegmentStart.y) ||
+        !std::isfinite(capsuleSegmentStart.z) || !std::isfinite(capsuleSegmentEnd.x) ||
+        !std::isfinite(capsuleSegmentEnd.y) || !std::isfinite(capsuleSegmentEnd.z) ||
+        !std::isfinite(capsuleRadius) || capsuleRadius <= 0.0F || !std::isfinite(sphereCenter.x) ||
+        !std::isfinite(sphereCenter.y) || !std::isfinite(sphereCenter.z) || !std::isfinite(sphereRadius) ||
+        sphereRadius <= 0.0F) {
+        return std::nullopt;
+    }
+
+    const Math::Vector3UVE segment = capsuleSegmentEnd - capsuleSegmentStart;
+    const float segmentLengthSquared = Math::LengthSquaredUVE(segment);
+    float segmentTime = 0.0F;
+    if (segmentLengthSquared > 0.0F) {
+        segmentTime = std::clamp(
+            Math::DotUVE(sphereCenter - capsuleSegmentStart, segment) / segmentLengthSquared, 0.0F, 1.0F);
+    }
+    const Math::Vector3UVE closestSegmentPoint = capsuleSegmentStart + segment * segmentTime;
+    const Math::Vector3UVE delta = sphereCenter - closestSegmentPoint;
+    const float distanceSquared = Math::LengthSquaredUVE(delta);
+    const float combinedRadius = capsuleRadius + sphereRadius;
+    if (distanceSquared >= combinedRadius * combinedRadius) {
+        return std::nullopt;
+    }
+    if (distanceSquared <= 0.0F) {
+        return Math::PenetrationUVE{{1.0F, 0.0F, 0.0F}, combinedRadius};
+    }
+
+    const float distance = std::sqrt(distanceSquared);
+    return Math::PenetrationUVE{delta * (1.0F / distance), combinedRadius - distance};
+}
+
 } // namespace UVE::Physics::Detail
 
 // EOF

@@ -46,6 +46,23 @@ namespace {
         return Math::PenetrationUVE{-sphereToBox->axis, sphereToBox->depth};
     }
     if (first.shapeType == Scene::ColliderShapeTypeUVE::Capsule &&
+        second.shapeType == Scene::ColliderShapeTypeUVE::Sphere) {
+        return Detail::ComputeCapsuleSpherePenetrationUVE(
+            first.shapeSegmentStart, first.shapeSegmentEnd, first.shapeRadius,
+            second.worldAabb.GetCenterUVE(), second.shapeRadius);
+    }
+    if (first.shapeType == Scene::ColliderShapeTypeUVE::Sphere &&
+        second.shapeType == Scene::ColliderShapeTypeUVE::Capsule) {
+        const std::optional<Math::PenetrationUVE> capsuleToSphere =
+            Detail::ComputeCapsuleSpherePenetrationUVE(
+                second.shapeSegmentStart, second.shapeSegmentEnd, second.shapeRadius,
+                first.worldAabb.GetCenterUVE(), first.shapeRadius);
+        if (!capsuleToSphere.has_value()) {
+            return std::nullopt;
+        }
+        return Math::PenetrationUVE{-capsuleToSphere->axis, capsuleToSphere->depth};
+    }
+    if (first.shapeType == Scene::ColliderShapeTypeUVE::Capsule &&
         second.shapeType == Scene::ColliderShapeTypeUVE::Box) {
         return Detail::ComputeCapsuleAabbPenetrationUVE(
             second.worldAabb, first.shapeSegmentStart, first.shapeSegmentEnd, first.shapeRadius);
