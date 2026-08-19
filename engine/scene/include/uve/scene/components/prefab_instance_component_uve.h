@@ -170,6 +170,32 @@ struct PrefabOverrideConflictReportUVE final {
     return report;
 }
 
+/// Commits the instance's overrides into a caller-owned source-prefab target only when the
+/// supplied baseline still matches. The source target is mutated through ApplyPrefabOverridesUVE;
+/// the instance override records are cleared only after every source write succeeds.
+[[nodiscard]] inline PrefabOverrideOperationResultUVE CommitPrefabOverridesToSourceUVE(
+    PrefabInstanceComponentUVE& instance, const std::vector<PrefabPropertyOverrideUVE>& baseline,
+    IPrefabOverrideTargetUVE& sourceTarget) {
+    if (!IsPrefabInstanceComponentValidUVE(instance)) {
+        return {PrefabOverrideOperationCodeUVE::InvalidInstance, 0U,
+                "Prefab source commit rejected because the instance data is invalid."};
+    }
+    const PrefabOverrideConflictReportUVE conflictReport =
+        DetectPrefabOverrideConflictsUVE(instance, baseline, sourceTarget);
+    if (!conflictReport.IsConflictFreeUVE()) {
+        return {conflictReport.code, conflictReport.inspectedCount,
+                "Prefab source commit rejected because the source baseline is stale or unreadable."};
+    }
+    const PrefabOverrideOperationResultUVE applied = ApplyPrefabOverridesUVE(instance, sourceTarget);
+    if (!applied.IsAppliedUVE()) {
+        return applied;
+    }
+    const std::size_t committedCount = instance.overrides.size();
+    instance.overrides.clear();
+    return {PrefabOverrideOperationCodeUVE::Applied, committedCount,
+            "Prefab overrides committed to the source target."};
+}
+
 /// Restores a caller-supplied sorted baseline and clears the instance override records only after
 /// the target is fully restored. The baseline is explicit because persistence intentionally does
 /// not invent or silently fetch source-prefab state.
