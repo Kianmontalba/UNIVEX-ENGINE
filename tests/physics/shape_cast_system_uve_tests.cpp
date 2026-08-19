@@ -168,6 +168,55 @@ TEST_F(ShapeCastSystemUVETest, BoxCastUVE_RejectsInvalidFiniteInputs) {
     EXPECT_FALSE(ShapeCastSystemUVE::BoxCastUVE(entityManager, nonFiniteDistance).has_value());
 }
 
+TEST_F(ShapeCastSystemUVETest, CapsuleCastUVE_ExpandsTargetByLocalYCapsuleBounds) {
+    const Scene::EntityUVE entity = MakeColliderEntityUVE(Math::Vector3UVE{}, Math::Vector3UVE{1.0F, 1.0F, 1.0F});
+    CapsuleCastQueryUVE query;
+    query.ray = Math::RayUVE{Math::Vector3UVE{-5.0F, 0.0F, 0.0F}, Math::Vector3UVE{1.0F, 0.0F, 0.0F}};
+    query.radius = 0.5F;
+    query.height = 2.0F;
+    query.maxDistance = 100.0F;
+
+    const std::optional<CapsuleCastHitUVE> hit = ShapeCastSystemUVE::CapsuleCastUVE(entityManager, query);
+    ASSERT_TRUE(hit.has_value());
+    EXPECT_EQ(hit->entity, entity);
+    EXPECT_NEAR(hit->distance, 3.5F, kEpsilon);
+    EXPECT_NEAR(hit->center.x, -1.5F, kEpsilon);
+    EXPECT_NEAR(hit->normal.x, -1.0F, kEpsilon);
+}
+
+TEST_F(ShapeCastSystemUVETest, CapsuleCastUVE_ReturnsClosestHitAndHonorsFilters) {
+    const Scene::EntityUVE ignored =
+        MakeColliderEntityUVE(Math::Vector3UVE{}, Math::Vector3UVE{1.0F, 1.0F, 1.0F}, 1U);
+    const Scene::EntityUVE visible =
+        MakeColliderEntityUVE(Math::Vector3UVE{4.0F, 0.0F, 0.0F}, Math::Vector3UVE{1.0F, 1.0F, 1.0F}, 2U);
+    CapsuleCastQueryUVE query;
+    query.ray = Math::RayUVE{Math::Vector3UVE{-10.0F, 0.0F, 0.0F}, Math::Vector3UVE{1.0F, 0.0F, 0.0F}};
+    query.radius = 0.5F;
+    query.height = 3.0F;
+    query.maxDistance = 100.0F;
+    query.layerMask = 2U;
+    query.ignoreEntity = ignored;
+
+    const std::optional<CapsuleCastHitUVE> hit = ShapeCastSystemUVE::CapsuleCastUVE(entityManager, query);
+    ASSERT_TRUE(hit.has_value());
+    EXPECT_EQ(hit->entity, visible);
+}
+
+TEST_F(ShapeCastSystemUVETest, CapsuleCastUVE_RejectsInvalidDimensionsAndFiniteInputs) {
+    MakeColliderEntityUVE(Math::Vector3UVE{}, Math::Vector3UVE{1.0F, 1.0F, 1.0F});
+    CapsuleCastQueryUVE tooShort;
+    tooShort.ray = Math::RayUVE{Math::Vector3UVE{-5.0F, 0.0F, 0.0F}, Math::Vector3UVE{1.0F, 0.0F, 0.0F}};
+    tooShort.radius = 1.0F;
+    tooShort.height = 1.5F;
+    tooShort.maxDistance = 100.0F;
+    EXPECT_FALSE(ShapeCastSystemUVE::CapsuleCastUVE(entityManager, tooShort).has_value());
+
+    CapsuleCastQueryUVE nonFinite = tooShort;
+    nonFinite.height = 2.0F;
+    nonFinite.radius = std::numeric_limits<float>::quiet_NaN();
+    EXPECT_FALSE(ShapeCastSystemUVE::CapsuleCastUVE(entityManager, nonFinite).has_value());
+}
+
 TEST_F(ShapeCastSystemUVETest, SphereCastUVE_RejectsInvalidFiniteInputs) {
     MakeColliderEntityUVE(Math::Vector3UVE{}, Math::Vector3UVE{1.0F, 1.0F, 1.0F});
 
