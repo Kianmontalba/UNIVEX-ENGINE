@@ -6,6 +6,7 @@
 #include <gtest/gtest.h>
 
 #include "uve/events/event_system_uve.h"
+#include "uve/input/gamepad_input_system_uve.h"
 #include "uve/input/input_action_triggered_event_uve.h"
 
 namespace UVE::Input::Tests {
@@ -129,6 +130,48 @@ TEST_F(InputSystemUVETest, ButtonAction_MultiBindingOr_DoesNotRetriggerOnSecondK
     inputSystem.UpdateUVE();
     EXPECT_FALSE(inputSystem.IsActionTriggeredUVE("Jump"));
     EXPECT_TRUE(inputSystem.IsActionHeldUVE("Jump"));
+}
+
+TEST_F(InputSystemUVETest, ButtonAction_GamepadBinding_TriggeredHeldReleased) {
+    GamepadInputSystemUVE gamepad;
+    InputSystemUVE gamepadInputSystem{eventSystem, &gamepad};
+    gamepadInputSystem.RegisterActionUVE(
+        InputActionUVE{"Jump", InputActionTypeUVE::Button,
+                       {GamepadButtonBindingUVE(0U, GamepadButtonUVE::South)}, {}});
+
+    gamepad.SetConnectedUVE(0U, true);
+    gamepad.SetButtonStateUVE(0U, GamepadButtonUVE::South, true);
+    gamepad.UpdateUVE();
+    gamepadInputSystem.UpdateUVE();
+    EXPECT_TRUE(gamepadInputSystem.IsActionTriggeredUVE("Jump"));
+    EXPECT_TRUE(gamepadInputSystem.IsActionHeldUVE("Jump"));
+
+    gamepadInputSystem.UpdateUVE();
+    EXPECT_FALSE(gamepadInputSystem.IsActionTriggeredUVE("Jump"));
+    EXPECT_TRUE(gamepadInputSystem.IsActionHeldUVE("Jump"));
+
+    gamepad.SetButtonStateUVE(0U, GamepadButtonUVE::South, false);
+    gamepad.UpdateUVE();
+    gamepadInputSystem.UpdateUVE();
+    EXPECT_FALSE(gamepadInputSystem.IsActionHeldUVE("Jump"));
+    EXPECT_TRUE(gamepadInputSystem.IsActionReleasedUVE("Jump"));
+}
+
+TEST_F(InputSystemUVETest, AxisAction_GamepadBindingUsesScaledClampedAxisValue) {
+    GamepadInputSystemUVE gamepad{0.0F};
+    InputSystemUVE gamepadInputSystem{eventSystem, &gamepad};
+    gamepadInputSystem.RegisterActionUVE(
+        InputActionUVE{"MoveHorizontal", InputActionTypeUVE::Axis1D,
+                       {GamepadAxisBindingUVE(0U, GamepadAxisUVE::LeftX, 0.5F)},
+                       {GamepadAxisBindingUVE(0U, GamepadAxisUVE::RightX, 2.0F)}});
+
+    gamepad.SetConnectedUVE(0U, true);
+    gamepad.SetAxisStateUVE(0U, GamepadAxisUVE::LeftX, 0.8F);
+    gamepad.SetAxisStateUVE(0U, GamepadAxisUVE::RightX, -0.25F);
+    gamepad.UpdateUVE();
+    gamepadInputSystem.UpdateUVE();
+
+    EXPECT_NEAR(gamepadInputSystem.GetAxisValueUVE("MoveHorizontal"), 0.9F, kEpsilon);
 }
 
 TEST_F(InputSystemUVETest, AxisAction_ComputesPositiveNegativeBothNeither) {
