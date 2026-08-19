@@ -81,9 +81,27 @@ TEST_F(CharacterControllerUVETest, MoveUVE_WallContactStopsAtMinimumTranslationD
 
     ASSERT_TRUE(result.IsAcceptedUVE());
     EXPECT_TRUE(result.blocked);
+    EXPECT_FALSE(result.grounded);
     EXPECT_GT(result.contactCount, 0U);
     EXPECT_NEAR(GetWorldPositionUVE(controller).x, 1.0F, 1.0e-4F);
     EXPECT_NEAR(GetWorldPositionUVE(controller).y, 0.0F, 1.0e-4F);
+}
+
+TEST_F(CharacterControllerUVETest, MoveUVE_GroundContactReportsSupportNormal) {
+    const Scene::EntityUVE controller = MakeControllerEntityUVE({0.0F, 2.0F, 0.0F}, {0.5F, 0.5F, 0.5F});
+    MakeColliderEntityUVE({0.0F, 0.0F, 0.0F}, {2.0F, 0.5F, 2.0F});
+
+    const CharacterControllerMoveResultUVE result = CharacterControllerUVE::MoveUVE(
+        entityManager, sceneGraph, collisionSystem,
+        CharacterControllerInputUVE{controller, {0.0F, -2.0F, 0.0F}, 16U, 0.25F});
+
+    ASSERT_TRUE(result.IsAcceptedUVE());
+    EXPECT_TRUE(result.blocked);
+    EXPECT_TRUE(result.grounded);
+    EXPECT_NEAR(result.groundNormal.x, 0.0F, 1.0e-5F);
+    EXPECT_NEAR(result.groundNormal.y, 1.0F, 1.0e-5F);
+    EXPECT_NEAR(result.groundNormal.z, 0.0F, 1.0e-5F);
+    EXPECT_NEAR(GetWorldPositionUVE(controller).y, 1.0F, 1.0e-4F);
 }
 
 TEST_F(CharacterControllerUVETest, MoveUVE_WallContactPreservesTangentialDisplacement) {
@@ -158,6 +176,19 @@ TEST_F(CharacterControllerUVETest, MoveWithToIUVE_IncompatibleLayerMaskPassesThr
     EXPECT_FALSE(result.blocked);
     EXPECT_FALSE(result.toiUsed);
     EXPECT_NEAR(GetWorldPositionUVE(controller).x, 10.0F, 1.0e-4F);
+}
+
+TEST_F(CharacterControllerUVETest, MoveUVE_ClampsInvalidGroundSlopeWithoutRejectingInput) {
+    const Scene::EntityUVE controller = MakeControllerEntityUVE({}, {0.5F, 0.5F, 0.5F});
+
+    const CharacterControllerMoveResultUVE result = CharacterControllerUVE::MoveUVE(
+        entityManager, sceneGraph, collisionSystem,
+        CharacterControllerInputUVE{controller, {0.1F, 0.0F, 0.0F}, 1U, 1.0F, -5.0F});
+
+    ASSERT_TRUE(result.IsAcceptedUVE());
+    EXPECT_TRUE(result.inputClamped);
+    EXPECT_FALSE(result.grounded);
+    EXPECT_NEAR(GetWorldPositionUVE(controller).x, 0.1F, 1.0e-4F);
 }
 
 TEST_F(CharacterControllerUVETest, MoveUVE_RejectsDynamicBodyAndClampsInvalidBudget) {
