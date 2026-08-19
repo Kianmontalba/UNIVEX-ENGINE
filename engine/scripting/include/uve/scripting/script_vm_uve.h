@@ -85,12 +85,32 @@ struct ScriptVmGateStateUVE final {
     [[nodiscard]] bool operator==(const ScriptVmGateStateUVE&) const = default;
 };
 
+struct ScriptVmLoopStateUVE final {
+    std::uint32_t nodeId = 0U;
+    std::uint32_t iteration = 0U;
+    bool active = false;
+
+    [[nodiscard]] bool operator==(const ScriptVmLoopStateUVE&) const = default;
+};
+
+struct ScriptVmDelayStateUVE final {
+    std::uint32_t nodeId = 0U;
+    std::uint32_t remainingFrames = 0U;
+    bool armed = false;
+
+    [[nodiscard]] bool operator==(const ScriptVmDelayStateUVE&) const = default;
+};
+
 struct ScriptVmExecutionContextUVE final {
     static constexpr std::size_t kMaximumBindingsUVE = 1024U;
     static constexpr std::size_t kMaximumComponentFactsUVE = 256U;
     static constexpr std::size_t kMaximumLocalVariablesUVE = 256U;
     static constexpr std::size_t kMaximumFlowControlLatchesUVE = 256U;
     static constexpr std::size_t kMaximumGateStatesUVE = 256U;
+    static constexpr std::size_t kMaximumLoopStatesUVE = 256U;
+    static constexpr std::size_t kMaximumDelayStatesUVE = 256U;
+    static constexpr std::uint32_t kMaximumLoopIterationsUVE = 4096U;
+    static constexpr std::uint32_t kMaximumDelayFramesUVE = 4096U;
 
     std::vector<ScriptVmValueBindingUVE> inputs;
     std::vector<ScriptVmValueBindingUVE> outputs;
@@ -98,6 +118,8 @@ struct ScriptVmExecutionContextUVE final {
     std::vector<ScriptVmLocalVariableUVE> localVariables;
     std::vector<ScriptVmFlowControlLatchUVE> flowControlLatches;
     std::vector<ScriptVmGateStateUVE> gateStates;
+    std::vector<ScriptVmLoopStateUVE> loopStates;
+    std::vector<ScriptVmDelayStateUVE> delayStates;
 
     [[nodiscard]] bool InitializeLocalVariableUVE(std::uint32_t slot, ScriptVmValueUVE value);
     [[nodiscard]] bool SetLocalVariableUVE(std::uint32_t slot, ScriptVmValueUVE value);
@@ -110,6 +132,12 @@ struct ScriptVmExecutionContextUVE final {
     [[nodiscard]] bool InitializeGateStateUVE(std::uint32_t nodeId);
     [[nodiscard]] bool SetGateStateUVE(std::uint32_t nodeId, bool open);
     [[nodiscard]] std::optional<bool> FindGateStateUVE(std::uint32_t nodeId) const;
+    [[nodiscard]] bool InitializeLoopStateUVE(std::uint32_t nodeId);
+    [[nodiscard]] bool SetLoopStateUVE(std::uint32_t nodeId, std::uint32_t iteration, bool active);
+    [[nodiscard]] std::optional<ScriptVmLoopStateUVE> FindLoopStateUVE(std::uint32_t nodeId) const;
+    [[nodiscard]] bool InitializeDelayStateUVE(std::uint32_t nodeId);
+    [[nodiscard]] bool SetDelayStateUVE(std::uint32_t nodeId, std::uint32_t remainingFrames, bool armed);
+    [[nodiscard]] std::optional<ScriptVmDelayStateUVE> FindDelayStateUVE(std::uint32_t nodeId) const;
 
     [[nodiscard]] bool SetInputUVE(std::uint32_t nodeId, std::string pinName, ScriptVmValueUVE value);
     [[nodiscard]] bool SetOutputUVE(std::uint32_t nodeId, std::string pinName, ScriptVmValueUVE value);

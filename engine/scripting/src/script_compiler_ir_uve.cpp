@@ -297,7 +297,8 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
         const ScriptNodeUVE* sourceNode = FindNodeUVE(nodes, link.output.nodeId);
         const ScriptNodeUVE* consumerNode = FindNodeUVE(nodes, link.input.nodeId);
         if (sourceNode == nullptr || consumerNode == nullptr ||
-            (consumerNode->typeId.rfind("math.float.", 0U) != 0U && consumerNode->typeId != "flow.switch")) {
+            (consumerNode->typeId.rfind("math.float.", 0U) != 0U && consumerNode->typeId != "flow.switch" &&
+             consumerNode->typeId != "flow.loop" && consumerNode->typeId != "flow.for_loop" && consumerNode->typeId != "flow.delay")) {
             continue;
         }
         const bool approvedNumberProducer =
@@ -315,7 +316,11 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             (sourceNode->typeId == "convert.boolean_to_number" && link.output.pinName == "Result");
         const bool validDirectNumberLink = approvedNumberProducer &&
                                            ((consumerNode->typeId == "flow.switch" && link.input.pinName == "Value") ||
-                                            (consumerNode->typeId != "flow.switch" &&
+                                            ((consumerNode->typeId == "flow.loop" || consumerNode->typeId == "flow.for_loop") &&
+                                             link.input.pinName == "Count") ||
+                                            (consumerNode->typeId == "flow.delay" && link.input.pinName == "Frames") ||
+                                            (consumerNode->typeId != "flow.switch" && consumerNode->typeId != "flow.loop" &&
+                                             consumerNode->typeId != "flow.for_loop" && consumerNode->typeId != "flow.delay" &&
                                              (link.input.pinName == "A" || link.input.pinName == "B")));
         if (!validDirectNumberLink || conversionHasDataDependency(*sourceNode) || !stagedNumberLinks.empty()) {
             result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode, link.input.nodeId,
@@ -847,6 +852,22 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             appendFlowControlEntry(node, "In", resolveExecutionTarget(node.id, "Case0"),
                                    resolveExecutionTarget(node.id, "Case1"),
                                    resolveExecutionTarget(node.id, "Default"));
+        } else if (node.typeId == "flow.event") {
+            appendFlowControlEntry(node, "Event", resolveExecutionTarget(node.id, "Then"),
+                                   static_cast<std::uint32_t>(stagedInstructionCount),
+                                   static_cast<std::uint32_t>(stagedInstructionCount));
+        } else if (node.typeId == "flow.loop" || node.typeId == "flow.for_loop") {
+            appendFlowControlEntry(node, "In", resolveExecutionTarget(node.id, "Body"),
+                                   resolveExecutionTarget(node.id, "Completed"),
+                                   resolveExecutionTarget(node.id, "Completed"));
+        } else if (node.typeId == "flow.while_loop") {
+            appendFlowControlEntry(node, "In", resolveExecutionTarget(node.id, "Body"),
+                                   resolveExecutionTarget(node.id, "Completed"),
+                                   resolveExecutionTarget(node.id, "Completed"));
+        } else if (node.typeId == "flow.delay") {
+            appendFlowControlEntry(node, "In", resolveExecutionTarget(node.id, "Then"),
+                                   static_cast<std::uint32_t>(stagedInstructionCount),
+                                   resolveExecutionTarget(node.id, "Then"));
         } else {
             program.instructions.push_back(ScriptIrInstructionUVE{
                 ScriptIrInstructionKindUVE::ExecuteNode,
@@ -888,6 +909,8 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             emitStagedLinks(stagedVector2Links);
             emitStagedLinks(stagedVector3ScaleLinks);
             emitStagedLinks(stagedVector3Links);
+            emitStagedLinks(stagedRotationLinks);
+            emitStagedLinks(stagedTransformLinks);
             emitStagedLinks(stagedConversionLinks);
     }
 
@@ -905,7 +928,8 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             isStagedLink(stagedBooleanLinks) || isStagedLink(stagedNumberLinks) ||
             isStagedLink(stagedComparisonNumberLinks) || isStagedLink(stagedVector2ScaleLinks) ||
             isStagedLink(stagedVector2Links) || isStagedLink(stagedVector3ScaleLinks) ||
-            isStagedLink(stagedVector3Links) || isStagedLink(stagedConversionLinks)) {
+            isStagedLink(stagedVector3Links) || isStagedLink(stagedRotationLinks) ||
+            isStagedLink(stagedTransformLinks) || isStagedLink(stagedConversionLinks)) {
             continue;
         }
         if (IsExecutionLinkUVE(link, nodes, registry)) {
