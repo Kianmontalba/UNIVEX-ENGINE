@@ -114,6 +114,89 @@ void RegisterGroundContactUVE(CharacterControllerMoveResultUVE& result,
     }
 }
 
+struct DynamicBodyPushPolicyUVE final {
+    bool enabled = false;
+    float strength = 0.0F;
+    float maximumSpeed = 0.0F;
+    float deltaTimeSeconds = 0.0F;
+};
+
+[[nodiscard]] DynamicBodyPushPolicyUVE ResolveDynamicBodyPushPolicyUVE(
+    const CharacterControllerInputUVE& input, CharacterControllerMoveResultUVE& result) noexcept {
+    DynamicBodyPushPolicyUVE policy;
+    if (!input.pushDynamicBodies) {
+        return policy;
+    }
+    policy.enabled = true;
+    policy.strength = input.dynamicBodyPushStrength;
+    if (!std::isfinite(policy.strength) || policy.strength < 0.0F) {
+        policy.strength = 0.0F;
+        result.dynamicBodyPushClamped = true;
+        result.inputClamped = true;
+    }
+    policy.maximumSpeed = input.maximumDynamicBodyPushSpeed;
+    if (!std::isfinite(policy.maximumSpeed) || policy.maximumSpeed <= 0.0F) {
+        policy.maximumSpeed = 5.0F;
+        result.dynamicBodyPushClamped = true;
+        result.inputClamped = true;
+    }
+    policy.deltaTimeSeconds = input.dynamicBodyPushDeltaTimeSeconds;
+    if (!std::isfinite(policy.deltaTimeSeconds) || policy.deltaTimeSeconds <= 0.0F) {
+        policy.deltaTimeSeconds = 1.0F / 60.0F;
+        result.dynamicBodyPushClamped = true;
+        result.inputClamped = true;
+    }
+    return policy;
+}
+
+[[nodiscard]] bool ApplyDynamicBodyPushUVE(
+    Scene::IEntityManagerUVE& entityManager, Scene::EntityUVE targetEntity,
+    const Math::Vector3UVE& contactNormal, const Math::Vector3UVE& controllerDisplacement,
+    const DynamicBodyPushPolicyUVE& policy) {
+    if (!policy.enabled || policy.strength <= 0.0F || !std::isfinite(policy.maximumSpeed) ||
+        policy.maximumSpeed <= 0.0F || !std::isfinite(policy.deltaTimeSeconds) ||
+        policy.deltaTimeSeconds <= 0.0F || !entityManager.IsAliveUVE(targetEntity) ||
+        !entityManager.HasComponentUVE<Scene::RigidBodyComponentUVE>(targetEntity)) {
+        return false;
+    }
+    const float normalLengthSquared = Math::LengthSquaredUVE(contactNormal);
+    if (!std::isfinite(normalLengthSquared) || normalLengthSquared <= 0.0F ||
+        !IsFiniteVectorUVE(controllerDisplacement)) {
+        return false;
+    }
+    const Math::Vector3UVE normal = contactNormal * (1.0F / std::sqrt(normalLengthSquared));
+    const float intoTarget = Math::DotUVE(controllerDisplacement, normal);
+    if (!std::isfinite(intoTarget) || intoTarget <= 0.0F) {
+        return false;
+    }
+
+    Scene::RigidBodyComponentUVE& rigidBody =
+        entityManager.GetComponentUVE<Scene::RigidBodyComponentUVE>(targetEntity);
+    if (!Scene::IsRigidBodyComponentValidUVE(rigidBody) || rigidBody.isKinematic ||
+        rigidBody.mass <= 0.0F) {
+        return false;
+    }
+    const float desiredNormalSpeed = std::min(
+        policy.maximumSpeed, intoTarget * policy.strength / policy.deltaTimeSeconds);
+    if (!std::isfinite(desiredNormalSpeed) || desiredNormalSpeed <= 0.0F) {
+        return false;
+    }
+    const float currentNormalSpeed = Math::DotUVE(rigidBody.velocity, normal);
+    if (!std::isfinite(currentNormalSpeed)) {
+        return false;
+    }
+    const float speedDelta = desiredNormalSpeed - currentNormalSpeed;
+    if (!std::isfinite(speedDelta) || speedDelta <= 0.0F) {
+        return false;
+    }
+    const Math::Vector3UVE proposedVelocity = rigidBody.velocity + normal * speedDelta;
+    if (!IsFiniteVectorUVE(proposedVelocity)) {
+        return false;
+    }
+    rigidBody.velocity = proposedVelocity;
+    return true;
+}
+
 struct ToICandidateUVE final {
     Scene::EntityUVE entity;
     Math::SweptAabbHitUVE hit;
@@ -271,6 +354,7 @@ CharacterControllerMoveResultUVE CharacterControllerUVE::MoveUVE(
         result.inputClamped = true;
     }
     const float minimumGroundNormalY = ResolveGroundSlopeCosineUVE(input, result);
+    const DynamicBodyPushPolicyUVE pushPolicy = ResolveDynamicBodyPushPolicyUVE(input, result);
 
     sceneGraph.UpdateUVE(entityManager);
     while (result.substeps < maximumSubsteps &&
@@ -297,9 +381,13 @@ CharacterControllerMoveResultUVE CharacterControllerUVE::MoveUVE(
                 continue;
             }
             const bool controllerIsFirst = pair.first == input.entity;
+            const Scene::EntityUVE targetEntity = controllerIsFirst ? pair.second : pair.first;
             const Math::Vector3UVE contactNormal = controllerIsFirst
                 ? pair.separationAxis : -pair.separationAxis;
             RegisterGroundContactUVE(result, contactNormal, minimumGroundNormalY);
+            if (ApplyDynamicBodyPushUVE(entityManager, targetEntity, contactNormal, step, pushPolicy)) {
+                ++result.pushedBodyCount;
+            }
             const Math::Vector3UVE correction = controllerIsFirst
                 ? -pair.separationAxis * pair.penetrationDepth
                 : pair.separationAxis * pair.penetrationDepth;
@@ -343,6 +431,7 @@ CharacterControllerMoveResultUVE CharacterControllerUVE::MoveWithToIUVE(
         result.inputClamped = true;
     }
     const float minimumGroundNormalY = ResolveGroundSlopeCosineUVE(input, result);
+    const DynamicBodyPushPolicyUVE pushPolicy = ResolveDynamicBodyPushPolicyUVE(input, result);
     float maximumStepHeight = input.maximumStepHeight;
     if (!std::isfinite(maximumStepHeight) || maximumStepHeight < 0.0F) {
         maximumStepHeight = 0.0F;
@@ -419,6 +508,10 @@ CharacterControllerMoveResultUVE CharacterControllerUVE::MoveWithToIUVE(
         result.blocked = true;
         result.toiUsed = true;
         RegisterGroundContactUVE(result, candidate->hit.normal, minimumGroundNormalY);
+        if (ApplyDynamicBodyPushUVE(entityManager, candidate->entity, candidate->hit.normal,
+                                    consideredDisplacement, pushPolicy)) {
+            ++result.pushedBodyCount;
+        }
         result.earliestImpactTime = std::min(result.earliestImpactTime, impactTime);
         ++result.contactCount;
         result.remainingDisplacement = RemoveIntoNormalComponentUVE(
