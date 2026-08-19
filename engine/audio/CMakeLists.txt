@@ -2,6 +2,7 @@
 
 
 add_library(uve_audio STATIC
+    src/pcm_gain_effect_uve.cpp
     src/audio_mixer_group_uve.cpp
     src/null_audio_device_uve.cpp
     src/audio_system_uve.cpp
