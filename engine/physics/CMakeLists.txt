@@ -9,6 +9,7 @@ add_library(uve_physics STATIC
     src/collider_world_aabb_cache_uve.cpp
     src/collider_world_aabb_dynamic_bvh_uve.cpp
     src/collision_system_uve.cpp
+    src/hinge_motor_limit_uve.cpp
     src/physics_constraint_system_uve.cpp
     src/physics_system_uve.cpp
     src/raycast_system_uve.cpp
