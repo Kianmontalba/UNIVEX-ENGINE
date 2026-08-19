@@ -560,8 +560,8 @@ TEST(EditorBridgeUVETest, SnapshotUVE_CopiesHierarchyInspectorAndNativePanelSess
         EXPECT_EQ(snapshot.visualScripting.linkCount, 0U);
         EXPECT_EQ(snapshot.visualScripting.canvas.nodes.size(), 0U);
         EXPECT_EQ(snapshot.visualScripting.canvas.links.size(), 0U);
-        ASSERT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds.size(), 109U);
-        ASSERT_EQ(snapshot.visualScripting.canvas.paletteDescriptors.size(), 109U);
+        ASSERT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds.size(), 115U);
+        ASSERT_EQ(snapshot.visualScripting.canvas.paletteDescriptors.size(), 115U);
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[0], "flow.sequence");
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[1], "flow.branch");
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[2], "flow.return");
@@ -652,6 +652,12 @@ TEST(EditorBridgeUVETest, SnapshotUVE_CopiesHierarchyInspectorAndNativePanelSess
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[106], "variable.make_struct");
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[107], "variable.get_struct");
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[108], "variable.set_struct");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[109], "entity.spawn");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[110], "entity.destroy");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[111], "entity.find");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[112], "entity.get_entity");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[113], "entity.add_component");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[114], "entity.remove_component");
         EXPECT_FALSE(snapshot.visualScripting.canvas.nodesTruncated);
         EXPECT_FALSE(snapshot.visualScripting.canvas.linksTruncated);
 

@@ -585,6 +585,74 @@ namespace {
     return {};
 }
 
+[[nodiscard]] ScriptVmExecutionResultUVE ExecuteEntityNodeUVE(
+    const ScriptIrInstructionUVE& instruction, const std::size_t instructionIndex,
+    ScriptVmExecutionContextUVE& context, const ScriptEngineCallBindingsUVE* bindings) {
+    const std::uint32_t nodeId = instruction.sourceNodeId;
+    if (bindings == nullptr) {
+        return MakeNodeFailureUVE(instructionIndex, "Entity node requires caller-owned scene bindings.");
+    }
+    if (instruction.nodeTypeId == "entity.spawn") {
+        if (bindings->spawnEntity == nullptr) {
+            return MakeNodeFailureUVE(instructionIndex, "Spawn Entity requires a caller-owned spawn binding.");
+        }
+        Scene::EntityUVE entity = Scene::kInvalidEntityUVE;
+        if (!bindings->spawnEntity(bindings->userData, &entity) || entity == Scene::kInvalidEntityUVE ||
+            !SetNodeOutputUVE(context, nodeId, "Result", ScriptEntityValueUVE{entity})) {
+            return MakeNodeFailureUVE(instructionIndex, "Spawn Entity rejected its callback or output capacity.");
+        }
+        return {};
+    }
+    if (instruction.nodeTypeId == "entity.destroy") {
+        const ScriptEntityValueUVE* entity = FindEntityInputUVE(context, nodeId, "Entity");
+        if (entity == nullptr || !entity->IsValidUVE() || bindings->destroyEntity == nullptr ||
+            !bindings->destroyEntity(bindings->userData, entity->entity) ||
+            !SetNodeOutputUVE(context, nodeId, "Result", true)) {
+            return MakeNodeFailureUVE(instructionIndex, "Destroy Entity rejected its input, callback, or output capacity.");
+        }
+        return {};
+    }
+    if (instruction.nodeTypeId == "entity.find") {
+        const ScriptComponentValueUVE* component = FindComponentInputUVE(context, nodeId, "Component");
+        if (component == nullptr || !component->IsValidUVE() || bindings->findEntityByComponent == nullptr) {
+            return MakeNodeFailureUVE(instructionIndex, "Find Entity requires a valid Component and find binding.");
+        }
+        Scene::EntityUVE entity = Scene::kInvalidEntityUVE;
+        if (!bindings->findEntityByComponent(bindings->userData, *component, &entity) ||
+            entity == Scene::kInvalidEntityUVE || !SetNodeOutputUVE(context, nodeId, "Result", ScriptEntityValueUVE{entity})) {
+            return MakeNodeFailureUVE(instructionIndex, "Find Entity rejected its callback or output capacity.");
+        }
+        return {};
+    }
+    if (instruction.nodeTypeId == "entity.get_entity") {
+        const float* handle = FindNumberInputUVE(context, nodeId, "Handle");
+        if (handle == nullptr || !std::isfinite(*handle) || *handle < 0.0F || std::floor(*handle) != *handle ||
+            bindings->getEntityByHandle == nullptr) {
+            return MakeNodeFailureUVE(instructionIndex, "Get Entity requires a finite non-negative integral Handle and binding.");
+        }
+        Scene::EntityUVE entity = Scene::kInvalidEntityUVE;
+        if (!bindings->getEntityByHandle(bindings->userData, *handle, &entity) ||
+            entity == Scene::kInvalidEntityUVE || !SetNodeOutputUVE(context, nodeId, "Result", ScriptEntityValueUVE{entity})) {
+            return MakeNodeFailureUVE(instructionIndex, "Get Entity rejected its callback or output capacity.");
+        }
+        return {};
+    }
+    if (instruction.nodeTypeId == "entity.add_component" || instruction.nodeTypeId == "entity.remove_component") {
+        const ScriptEntityValueUVE* entity = FindEntityInputUVE(context, nodeId, "Entity");
+        const ScriptComponentValueUVE* component = FindComponentInputUVE(context, nodeId, "Component");
+        const ScriptEntityComponentMutationFunctionUVE mutation = instruction.nodeTypeId == "entity.add_component"
+            ? bindings->addComponent
+            : bindings->removeComponent;
+        if (entity == nullptr || !entity->IsValidUVE() || component == nullptr || !component->IsValidUVE() ||
+            mutation == nullptr || !mutation(bindings->userData, entity->entity, *component) ||
+            !SetNodeOutputUVE(context, nodeId, "Result", true)) {
+            return MakeNodeFailureUVE(instructionIndex, "Entity component mutation rejected its inputs, callback, or output capacity.");
+        }
+        return {};
+    }
+    return {};
+}
+
 [[nodiscard]] ScriptVmExecutionResultUVE ExecuteEngineGetTimeNodeUVE(
     const ScriptIrInstructionUVE& instruction, const std::size_t instructionIndex,
     ScriptVmExecutionContextUVE& context, const ScriptEngineCallBindingsUVE* bindings) {
@@ -1192,6 +1260,30 @@ namespace {
            FindComponentInputUVE(context, instruction.sourceNodeId, "Component") != nullptr;
 }
 
+[[nodiscard]] bool HasRequiredEntityNodeInputsUVE(
+    const ScriptIrInstructionUVE& instruction, const ScriptVmExecutionContextUVE& context) {
+    if (instruction.nodeTypeId.rfind("entity.", 0U) != 0U) {
+        return true;
+    }
+    if (instruction.nodeTypeId == "entity.spawn") {
+        return true;
+    }
+    if (instruction.nodeTypeId == "entity.destroy") {
+        return FindEntityInputUVE(context, instruction.sourceNodeId, "Entity") != nullptr;
+    }
+    if (instruction.nodeTypeId == "entity.find") {
+        return FindComponentInputUVE(context, instruction.sourceNodeId, "Component") != nullptr;
+    }
+    if (instruction.nodeTypeId == "entity.get_entity") {
+        return FindNumberInputUVE(context, instruction.sourceNodeId, "Handle") != nullptr;
+    }
+    if (instruction.nodeTypeId == "entity.add_component" || instruction.nodeTypeId == "entity.remove_component") {
+        return FindEntityInputUVE(context, instruction.sourceNodeId, "Entity") != nullptr &&
+               FindComponentInputUVE(context, instruction.sourceNodeId, "Component") != nullptr;
+    }
+    return false;
+}
+
 [[nodiscard]] bool HasRequiredRotationInputsUVE(const ScriptIrInstructionUVE& instruction,
                                                    const ScriptVmExecutionContextUVE& context) {
     const std::uint32_t nodeId = instruction.sourceNodeId;
@@ -1595,6 +1687,7 @@ namespace {
         const bool isFloatNode = instruction.nodeTypeId.rfind("math.float.", 0U) == 0U;
         const bool isBooleanNode = instruction.nodeTypeId.rfind("logic.boolean.", 0U) == 0U;
         const bool isEntityQueryNode = instruction.nodeTypeId.rfind("query.entity.", 0U) == 0U;
+        const bool isEntityNode = instruction.nodeTypeId.rfind("entity.", 0U) == 0U;
         const bool isEngineLogNode = instruction.nodeTypeId == "engine.log";
         const bool isEngineGetTimeNode = instruction.nodeTypeId == "engine.get_time";
         if ((isVariableNode && !HasRequiredVariableInputsUVE(instruction, context)) ||
@@ -1606,6 +1699,7 @@ namespace {
             (isFloatNode && !HasRequiredFloatInputsUVE(instruction, context)) ||
             (isBooleanNode && !HasRequiredBooleanInputsUVE(instruction, context)) ||
             (isEntityQueryNode && !HasRequiredEntityQueryInputsUVE(instruction, context)) ||
+            (isEntityNode && !HasRequiredEntityNodeInputsUVE(instruction, context)) ||
             (isEngineLogNode && FindNumberInputUVE(context, instruction.sourceNodeId, "Value") == nullptr)) {
             ScriptVmExecutionResultUVE failure = MakeNodeFailureUVE(
                 instructionIndex, "Control-flow execution could not resolve typed node inputs.");
@@ -1632,6 +1726,8 @@ namespace {
             nodeResult = ExecuteBooleanNodeUVE(instruction, instructionIndex, context);
         } else if (isEntityQueryNode) {
             nodeResult = ExecuteEntityQueryNodeUVE(instruction, instructionIndex, context);
+        } else if (isEntityNode) {
+            nodeResult = ExecuteEntityNodeUVE(instruction, instructionIndex, context, options.engineCallBindings);
         } else if (isEngineLogNode) {
             nodeResult = ExecuteEngineLogNodeUVE(instruction, instructionIndex, context, options.engineCallBindings);
         } else if (isEngineGetTimeNode) {
@@ -1871,6 +1967,7 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                 const bool isFloatNode = instruction.nodeTypeId.rfind("math.float.", 0U) == 0U;
                 const bool isBooleanNode = instruction.nodeTypeId.rfind("logic.boolean.", 0U) == 0U;
                 const bool isEntityQueryNode = instruction.nodeTypeId.rfind("query.entity.", 0U) == 0U;
+                const bool isEntityNode = instruction.nodeTypeId.rfind("entity.", 0U) == 0U;
                 const bool isEngineLogNode = instruction.nodeTypeId == "engine.log";
                 const bool isEngineGetTimeNode = instruction.nodeTypeId == "engine.get_time";
                 if ((isVariableNode && !HasRequiredVariableInputsUVE(instruction, *context)) ||
@@ -1882,6 +1979,7 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                     (isFloatNode && !HasRequiredFloatInputsUVE(instruction, *context)) ||
                     (isBooleanNode && !HasRequiredBooleanInputsUVE(instruction, *context)) ||
                     (isEntityQueryNode && !HasRequiredEntityQueryInputsUVE(instruction, *context)) ||
+                    (isEntityNode && !HasRequiredEntityNodeInputsUVE(instruction, *context)) ||
                     (isEngineLogNode && FindNumberInputUVE(*context, instruction.sourceNodeId, "Value") == nullptr)) {
                     continue;
                 }
@@ -1912,6 +2010,8 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                     nodeResult = ExecuteBooleanNodeUVE(instruction, index, *context);
                 } else if (isEntityQueryNode) {
                     nodeResult = ExecuteEntityQueryNodeUVE(instruction, index, *context);
+                } else if (isEntityNode) {
+                    nodeResult = ExecuteEntityNodeUVE(instruction, index, *context, options.engineCallBindings);
                 } else if (isEngineLogNode) {
                     nodeResult = ExecuteEngineLogNodeUVE(instruction, index, *context, options.engineCallBindings);
                 } else if (isEngineGetTimeNode) {

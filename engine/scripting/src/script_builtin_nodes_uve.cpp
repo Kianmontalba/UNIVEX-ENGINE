@@ -17,7 +17,7 @@ struct BuiltInNodeDefinitionUVE final {
     std::uint32_t displayOrder;
 };
 
-[[nodiscard]] std::array<BuiltInNodeDefinitionUVE, 109U> MakeBuiltInDefinitionsUVE() {
+[[nodiscard]] std::array<BuiltInNodeDefinitionUVE, 115U> MakeBuiltInDefinitionsUVE() {
     return {
         BuiltInNodeDefinitionUVE{
             "flow.sequence", "Sequence",
@@ -663,13 +663,44 @@ struct BuiltInNodeDefinitionUVE final {
              ScriptPinDescriptorUVE{"Value", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Struct},
              ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Struct}},
             "Variable", "node.variable", 820U},
+        BuiltInNodeDefinitionUVE{
+            "entity.spawn", "Spawn Entity",
+            {ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Entity}},
+            "Entity", "node.entity", 900U},
+        BuiltInNodeDefinitionUVE{
+            "entity.destroy", "Destroy Entity",
+            {ScriptPinDescriptorUVE{"Entity", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Entity", "node.entity", 901U},
+        BuiltInNodeDefinitionUVE{
+            "entity.find", "Find Entity",
+            {ScriptPinDescriptorUVE{"Component", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Component},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Entity}},
+            "Entity", "node.entity", 902U},
+        BuiltInNodeDefinitionUVE{
+            "entity.get_entity", "Get Entity",
+            {ScriptPinDescriptorUVE{"Handle", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Entity}},
+            "Entity", "node.entity", 903U},
+        BuiltInNodeDefinitionUVE{
+            "entity.add_component", "Add Component",
+            {ScriptPinDescriptorUVE{"Entity", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
+             ScriptPinDescriptorUVE{"Component", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Component},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Entity", "node.entity", 904U},
+        BuiltInNodeDefinitionUVE{
+            "entity.remove_component", "Remove Component",
+            {ScriptPinDescriptorUVE{"Entity", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
+             ScriptPinDescriptorUVE{"Component", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Component},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Entity", "node.entity", 905U},
     };
 }
 
 } // namespace
 
 bool RegisterBuiltInScriptNodesUVE(ScriptNodeRegistryUVE& registry) {
-    std::array<BuiltInNodeDefinitionUVE, 109U> definitions = MakeBuiltInDefinitionsUVE();
+    std::array<BuiltInNodeDefinitionUVE, 115U> definitions = MakeBuiltInDefinitionsUVE();
     for (const BuiltInNodeDefinitionUVE& definition : definitions) {
         if (registry.FindNodeTypeUVE(definition.typeId) != nullptr) {
             return false;
