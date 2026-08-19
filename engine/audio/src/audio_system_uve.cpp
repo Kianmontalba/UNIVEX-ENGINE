@@ -24,16 +24,19 @@ struct SourceStateUVE {
 
 struct AudioSystemUVE::ImplUVE {
     IAudioDeviceUVE& audioDevice;
+    IAudioClipResolverUVE* clipResolver = nullptr;
     Math::Vector3UVE listenerPosition{};
     Math::Vector3UVE listenerForward{0.0F, 0.0F, -1.0F};
     Math::Vector3UVE listenerUp{0.0F, 1.0F, 0.0F};
     std::unordered_map<std::uint32_t, SourceStateUVE> sources;
     AudioMixerGroupUVE mixerGroups;
 
-    explicit ImplUVE(IAudioDeviceUVE& device) : audioDevice(device) {}
+    explicit ImplUVE(IAudioDeviceUVE& device, IAudioClipResolverUVE* resolver)
+        : audioDevice(device), clipResolver(resolver) {}
 };
 
-AudioSystemUVE::AudioSystemUVE(IAudioDeviceUVE& audioDevice) : m_impl(std::make_unique<ImplUVE>(audioDevice)) {}
+AudioSystemUVE::AudioSystemUVE(IAudioDeviceUVE& audioDevice, IAudioClipResolverUVE* clipResolver)
+    : m_impl(std::make_unique<ImplUVE>(audioDevice, clipResolver)) {}
 
 AudioSystemUVE::~AudioSystemUVE() = default;
 
@@ -51,9 +54,22 @@ Math::Vector3UVE AudioSystemUVE::GetListenerPositionUVE() const noexcept {
 }
 
 VoiceHandleUVE AudioSystemUVE::CreateSourceUVE(const AudioSourceDescUVE& desc) {
-    const VoiceHandleUVE voice = m_impl->audioDevice.CreateVoiceUVE(AudioVoiceDescUVE{desc.audioAssetPath, desc.looping});
+    std::string resolvedAudioAssetPath = desc.audioAssetPath;
+    if (m_impl->clipResolver != nullptr) {
+        const AudioClipResolutionUVE resolution = m_impl->clipResolver->ResolveAudioClipUVE(desc.audioAssetPath);
+        if (!resolution.accepted) {
+            UVE_ERROR("AudioSystemUVE: audio clip resolution rejected '{}': {}", desc.audioAssetPath,
+                      resolution.diagnostic);
+            return kInvalidVoiceHandleUVE;
+        }
+        resolvedAudioAssetPath = resolution.resolvedPath;
+    }
+
+    const VoiceHandleUVE voice =
+        m_impl->audioDevice.CreateVoiceUVE(AudioVoiceDescUVE{resolvedAudioAssetPath, desc.looping});
     SourceStateUVE state;
     state.desc = desc;
+    state.desc.audioAssetPath = resolvedAudioAssetPath;
     state.mixerGroup = m_impl->mixerGroups.ResolveGroupNameUVE(desc.mixerGroup);
     state.desc.mixerGroup = state.mixerGroup;
     state.volume = desc.volume;

@@ -5,6 +5,7 @@
 
 #include <memory>
 
+#include "uve/audio/i_audio_clip_resolver_uve.h"
 #include "uve/audio/i_audio_device_uve.h"
 #include "uve/audio/i_audio_system_uve.h"
 
@@ -17,7 +18,8 @@ namespace UVE::Audio {
 /// they need.
 class AudioSystemUVE final : public IAudioSystemUVE {
 public:
-    explicit AudioSystemUVE(IAudioDeviceUVE& audioDevice);
+    explicit AudioSystemUVE(IAudioDeviceUVE& audioDevice,
+                            IAudioClipResolverUVE* clipResolver = nullptr);
     ~AudioSystemUVE() override;
 
     AudioSystemUVE(const AudioSystemUVE&) = delete;
