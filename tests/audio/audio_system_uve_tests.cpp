@@ -29,6 +29,71 @@ protected:
                         [](const Debug::LogMessageUVE& message) { return message.level == Debug::LogLevelUVE::Error; });
 }
 
+class RecordingAudioDeviceUVE final : public IAudioDeviceUVE {
+public:
+    [[nodiscard]] VoiceHandleUVE CreateVoiceUVE(const AudioVoiceDescUVE& desc) override {
+        lastDescription = desc;
+        ++createCount;
+        return VoiceHandleUVE{1U};
+    }
+    void DestroyVoiceUVE(VoiceHandleUVE) override {}
+    [[nodiscard]] bool PlayUVE(VoiceHandleUVE) override { return true; }
+    [[nodiscard]] bool StopUVE(VoiceHandleUVE) override { return true; }
+    [[nodiscard]] bool SetVoiceParamsUVE(VoiceHandleUVE, const AudioVoiceParamsUVE&) override { return true; }
+    [[nodiscard]] VoicePlaybackStateUVE GetVoiceStateUVE(VoiceHandleUVE) const override {
+        return VoicePlaybackStateUVE::Stopped;
+    }
+    [[nodiscard]] std::string_view GetBackendNameUVE() const noexcept override { return "Recording"; }
+
+    AudioVoiceDescUVE lastDescription{};
+    int createCount = 0;
+};
+
+class TestAudioClipResolverUVE final : public IAudioClipResolverUVE {
+public:
+    [[nodiscard]] AudioClipResolutionUVE ResolveAudioClipUVE(std::string_view) const override {
+        ++resolveCount;
+        return AudioClipResolutionUVE{accepted, resolvedPath, diagnostic};
+    }
+
+    bool accepted = true;
+    std::string resolvedPath;
+    std::string diagnostic;
+    mutable int resolveCount = 0;
+};
+
+TEST(AudioClipResolutionUVETest, AcceptedResolverPathReachesDeviceAndCopiesIntoSourceState) {
+    RecordingAudioDeviceUVE device;
+    TestAudioClipResolverUVE resolver;
+    resolver.resolvedPath = "audio/derived/explosion.clip";
+    AudioSystemUVE audioSystem{device, &resolver};
+
+    AudioSourceDescUVE desc;
+    desc.audioAssetPath = "sounds/explosion.wav";
+    const VoiceHandleUVE source = audioSystem.CreateSourceUVE(desc);
+
+    EXPECT_NE(source, kInvalidVoiceHandleUVE);
+    EXPECT_EQ(resolver.resolveCount, 1);
+    EXPECT_EQ(device.createCount, 1);
+    EXPECT_EQ(device.lastDescription.audioAssetPath, resolver.resolvedPath);
+}
+
+TEST(AudioClipResolutionUVETest, RejectedResolverPathFailsAtomicallyBeforeDeviceCreation) {
+    RecordingAudioDeviceUVE device;
+    TestAudioClipResolverUVE resolver;
+    resolver.accepted = false;
+    resolver.diagnostic = "clip is missing";
+    AudioSystemUVE audioSystem{device, &resolver};
+
+    AudioSourceDescUVE desc;
+    desc.audioAssetPath = "sounds/missing.wav";
+    const VoiceHandleUVE source = audioSystem.CreateSourceUVE(desc);
+
+    EXPECT_EQ(source, kInvalidVoiceHandleUVE);
+    EXPECT_EQ(resolver.resolveCount, 1);
+    EXPECT_EQ(device.createCount, 0);
+}
+
 TEST_F(AudioSystemUVETest, CreateSourceUVE_ForwardsCorrectlyShapedVoiceDescToDevice) {
     AudioSourceDescUVE desc;
     desc.audioAssetPath = "sounds/explosion.wav";
