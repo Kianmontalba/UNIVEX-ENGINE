@@ -149,6 +149,37 @@ TEST_F(CharacterControllerUVETest, MoveWithToIUVE_StopsBeforeThinWallWithoutTunn
     EXPECT_LT(GetWorldPositionUVE(controller).x, 1.5F);
 }
 
+TEST_F(CharacterControllerUVETest, MoveWithToIUVE_StepHeightOptInTraversesLowObstacle) {
+    const Scene::EntityUVE controller = MakeControllerEntityUVE({0.0F, 1.0F, 0.0F}, {0.5F, 1.0F, 0.5F});
+    MakeColliderEntityUVE({1.0F, 0.25F, 0.0F}, {0.5F, 0.25F, 2.0F});
+
+    const CharacterControllerMoveResultUVE result = CharacterControllerUVE::MoveWithToIUVE(
+        entityManager, sceneGraph, collisionSystem,
+        CharacterControllerInputUVE{controller, {3.0F, 0.0F, 0.0F}, 8U, 100.0F, 45.0F, 0.75F});
+
+    ASSERT_TRUE(result.IsAcceptedUVE());
+    EXPECT_TRUE(result.blocked);
+    EXPECT_TRUE(result.toiUsed);
+    EXPECT_TRUE(result.stepUpUsed);
+    EXPECT_NEAR(GetWorldPositionUVE(controller).x, 3.0F, 1.0e-4F);
+    EXPECT_NEAR(GetWorldPositionUVE(controller).y, 1.0F, 1.0e-4F);
+}
+
+TEST_F(CharacterControllerUVETest, MoveWithToIUVE_StepHeightTooLowPreservesWallBlock) {
+    const Scene::EntityUVE controller = MakeControllerEntityUVE({0.0F, 1.0F, 0.0F}, {0.5F, 1.0F, 0.5F});
+    MakeColliderEntityUVE({1.0F, 1.0F, 0.0F}, {0.5F, 1.0F, 2.0F});
+
+    const CharacterControllerMoveResultUVE result = CharacterControllerUVE::MoveWithToIUVE(
+        entityManager, sceneGraph, collisionSystem,
+        CharacterControllerInputUVE{controller, {3.0F, 0.0F, 0.0F}, 8U, 100.0F, 45.0F, 0.75F});
+
+    ASSERT_TRUE(result.IsAcceptedUVE());
+    EXPECT_TRUE(result.blocked);
+    EXPECT_TRUE(result.toiUsed);
+    EXPECT_FALSE(result.stepUpUsed);
+    EXPECT_LT(GetWorldPositionUVE(controller).x, 0.5F);
+}
+
 TEST_F(CharacterControllerUVETest, MoveWithToIUVE_PreservesTangentialDisplacementAfterImpact) {
     const Scene::EntityUVE controller = MakeControllerEntityUVE({}, {0.5F, 0.5F, 0.5F});
     MakeColliderEntityUVE({2.0F, 0.0F, 0.0F}, {0.5F, 2.0F, 2.0F});
