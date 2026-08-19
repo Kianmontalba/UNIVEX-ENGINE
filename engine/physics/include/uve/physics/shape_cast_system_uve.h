@@ -26,6 +26,24 @@ struct SphereCastQueryUVE final {
     Scene::EntityUVE ignoreEntity{};
 };
 
+struct BoxCastQueryUVE final {
+    Math::RayUVE ray{};
+    Math::Vector3UVE halfExtents{};
+    float maxDistance = 0.0F;
+    std::uint32_t layerMask = 0xFFFFFFFFU;
+    Scene::EntityUVE ignoreEntity{};
+};
+
+struct BoxCastHitUVE final {
+    Scene::EntityUVE entity;
+    /// Center of the moving axis-aligned box at first entry into the conservative expanded AABB.
+    Math::Vector3UVE center;
+    /// Axis-aligned face normal of the expanded AABB; zero when the ray starts inside it.
+    Math::Vector3UVE normal;
+    float distance = 0.0F;
+    PhysicsMaterialUVE material;
+};
+
 struct SphereCastHitUVE final {
     Scene::EntityUVE entity;
     /// Center of the moving sphere at first entry into the conservative expanded AABB.
@@ -40,6 +58,11 @@ class ShapeCastSystemUVE final {
 public:
     [[nodiscard]] static std::optional<SphereCastHitUVE> SphereCastUVE(
         Scene::IEntityManagerUVE& entityManager, const SphereCastQueryUVE& query);
+
+    /// Conservative axis-aligned box cast over cached world AABBs. The mover half-extents expand
+    /// each target AABB; this is read-only and deliberately does not claim an oriented/exact box cast.
+    [[nodiscard]] static std::optional<BoxCastHitUVE> BoxCastUVE(
+        Scene::IEntityManagerUVE& entityManager, const BoxCastQueryUVE& query);
 };
 
 } // namespace UVE::Physics
