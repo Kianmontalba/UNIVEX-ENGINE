@@ -69,4 +69,21 @@ std::optional<Math::Vector3UVE> ApplyAngularImpulseUVE(
     return IsFiniteVectorUVE(result) ? std::optional<Math::Vector3UVE>{result} : std::nullopt;
 }
 
+std::optional<Math::Vector3UVE> EvaluateGyroscopicTorqueUVE(
+    const Math::Vector3UVE angularVelocity, const Math::Vector3UVE inverseInertia) noexcept {
+    if (!IsFiniteVectorUVE(angularVelocity) || !IsFiniteVectorUVE(inverseInertia) ||
+        inverseInertia.x < 0.0F || inverseInertia.y < 0.0F || inverseInertia.z < 0.0F) {
+        return std::nullopt;
+    }
+    const Math::Vector3UVE angularMomentum{
+        inverseInertia.x > 0.0F ? angularVelocity.x / inverseInertia.x : 0.0F,
+        inverseInertia.y > 0.0F ? angularVelocity.y / inverseInertia.y : 0.0F,
+        inverseInertia.z > 0.0F ? angularVelocity.z / inverseInertia.z : 0.0F};
+    const Math::Vector3UVE result{
+        angularVelocity.y * angularMomentum.z - angularVelocity.z * angularMomentum.y,
+        angularVelocity.z * angularMomentum.x - angularVelocity.x * angularMomentum.z,
+        angularVelocity.x * angularMomentum.y - angularVelocity.y * angularMomentum.x};
+    return IsFiniteVectorUVE(result) ? std::optional<Math::Vector3UVE>{result} : std::nullopt;
+}
+
 } // namespace UVE::Physics
