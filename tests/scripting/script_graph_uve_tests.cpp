@@ -120,12 +120,13 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
 
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
     EXPECT_FALSE(RegisterBuiltInScriptNodesUVE(registry));
-    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 92U);
+    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 97U);
 
     const std::vector<ScriptNodeTypeDescriptorUVE> descriptors = registry.GetNodeTypeDescriptorsUVE();
-    ASSERT_EQ(descriptors.size(), 92U);
+    ASSERT_EQ(descriptors.size(), 97U);
     const std::vector<std::string> expectedIds{
         "flow.sequence", "flow.branch", "flow.return", "flow.do_once", "flow.gate", "flow.switch",
+        "flow.event", "flow.loop", "flow.for_loop", "flow.while_loop", "flow.delay",
         "convert.number_to_boolean", "convert.boolean_to_number", "convert.vector2_to_vector3", "convert.vector3_to_vector2",
         "math.float.add", "math.float.subtract", "math.float.multiply", "math.float.divide",
         "math.float.modulo", "math.float.abs", "math.float.min", "math.float.max", "math.float.clamp", "math.float.power",
@@ -153,47 +154,47 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
     for (std::size_t index = 0U; index < expectedIds.size(); ++index) {
         EXPECT_EQ(descriptors[index].typeId, expectedIds[index]);
     }
-    for (std::size_t index = 0U; index < 6U; ++index) {
+    for (std::size_t index = 0U; index < 11U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Flow");
         EXPECT_EQ(descriptors[index].iconId, "node.flow");
     }
-    for (std::size_t index = 6U; index < 10U; ++index) {
+    for (std::size_t index = 11U; index < 15U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Conversion");
         EXPECT_EQ(descriptors[index].iconId, "node.conversion");
     }
-    for (std::size_t index = 10U; index < 28U; ++index) {
+    for (std::size_t index = 15U; index < 33U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Math");
         EXPECT_EQ(descriptors[index].iconId, "node.math.float");
     }
-    for (std::size_t index = 28U; index < 38U; ++index) {
+    for (std::size_t index = 33U; index < 43U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Math");
         EXPECT_EQ(descriptors[index].iconId, "node.math.vector2");
     }
-    for (std::size_t index = 38U; index < 49U; ++index) {
+    for (std::size_t index = 43U; index < 54U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Math");
         EXPECT_EQ(descriptors[index].iconId, "node.math.vector3");
     }
-    for (std::size_t index = 49U; index < 58U; ++index) {
+    for (std::size_t index = 54U; index < 63U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Rotation");
         EXPECT_EQ(descriptors[index].iconId, "node.math.rotation");
     }
-    for (std::size_t index = 58U; index < 68U; ++index) {
+    for (std::size_t index = 63U; index < 73U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Logic");
         EXPECT_EQ(descriptors[index].iconId, "node.logic.boolean");
     }
-    for (std::size_t index = 68U; index < 79U; ++index) {
+    for (std::size_t index = 73U; index < 84U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Transform");
         EXPECT_EQ(descriptors[index].iconId, "node.math.transform");
     }
-    for (std::size_t index = 79U; index < 81U; ++index) {
+    for (std::size_t index = 84U; index < 86U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Entity Query");
         EXPECT_EQ(descriptors[index].iconId, "node.entity.query");
     }
-    for (std::size_t index = 81U; index < 83U; ++index) {
+    for (std::size_t index = 86U; index < 88U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Engine");
         EXPECT_EQ(descriptors[index].iconId, "node.engine");
     }
-    for (std::size_t index = 83U; index < descriptors.size(); ++index) {
+    for (std::size_t index = 88U; index < descriptors.size(); ++index) {
         EXPECT_EQ(descriptors[index].category, "Variable");
         EXPECT_EQ(descriptors[index].iconId, "node.variable");
     }
@@ -228,6 +229,47 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
     EXPECT_EQ(branch->pins[1].type, ScriptValueTypeUVE::Boolean);
     EXPECT_EQ(branch->pins[2].role, ScriptPinRoleUVE::Execution);
     EXPECT_EQ(branch->pins[3].role, ScriptPinRoleUVE::Execution);
+
+    const ScriptNodeTypeDescriptorUVE* event = registry.FindNodeTypeUVE("flow.event");
+    ASSERT_NE(event, nullptr);
+    ASSERT_EQ(event->pins.size(), 1U);
+    EXPECT_EQ(event->pins[0].name, "Then");
+    EXPECT_EQ(event->pins[0].role, ScriptPinRoleUVE::Execution);
+    EXPECT_EQ(event->pins[0].direction, ScriptPinDirectionUVE::Output);
+
+    const ScriptNodeTypeDescriptorUVE* loop = registry.FindNodeTypeUVE("flow.loop");
+    ASSERT_NE(loop, nullptr);
+    ASSERT_EQ(loop->pins.size(), 4U);
+    EXPECT_EQ(loop->pins[1].name, "Count");
+    EXPECT_EQ(loop->pins[1].type, ScriptValueTypeUVE::Number);
+    EXPECT_EQ(loop->pins[2].name, "Body");
+    EXPECT_EQ(loop->pins[3].name, "Completed");
+    EXPECT_EQ(loop->pins[2].role, ScriptPinRoleUVE::Execution);
+    EXPECT_EQ(loop->pins[3].role, ScriptPinRoleUVE::Execution);
+
+    const ScriptNodeTypeDescriptorUVE* forLoop = registry.FindNodeTypeUVE("flow.for_loop");
+    ASSERT_NE(forLoop, nullptr);
+    ASSERT_EQ(forLoop->pins.size(), 5U);
+    EXPECT_EQ(forLoop->pins[1].type, ScriptValueTypeUVE::Number);
+    EXPECT_EQ(forLoop->pins[4].name, "Index");
+    EXPECT_EQ(forLoop->pins[4].type, ScriptValueTypeUVE::Number);
+    EXPECT_EQ(forLoop->pins[4].direction, ScriptPinDirectionUVE::Output);
+
+    const ScriptNodeTypeDescriptorUVE* whileLoop = registry.FindNodeTypeUVE("flow.while_loop");
+    ASSERT_NE(whileLoop, nullptr);
+    ASSERT_EQ(whileLoop->pins.size(), 4U);
+    EXPECT_EQ(whileLoop->pins[1].name, "Condition");
+    EXPECT_EQ(whileLoop->pins[1].type, ScriptValueTypeUVE::Boolean);
+    EXPECT_EQ(whileLoop->pins[2].role, ScriptPinRoleUVE::Execution);
+    EXPECT_EQ(whileLoop->pins[3].role, ScriptPinRoleUVE::Execution);
+
+    const ScriptNodeTypeDescriptorUVE* delay = registry.FindNodeTypeUVE("flow.delay");
+    ASSERT_NE(delay, nullptr);
+    ASSERT_EQ(delay->pins.size(), 3U);
+    EXPECT_EQ(delay->pins[1].name, "Frames");
+    EXPECT_EQ(delay->pins[1].type, ScriptValueTypeUVE::Number);
+    EXPECT_EQ(delay->pins[2].name, "Then");
+    EXPECT_EQ(delay->pins[2].role, ScriptPinRoleUVE::Execution);
 
     const ScriptNodeTypeDescriptorUVE* numberToBoolean = registry.FindNodeTypeUVE("convert.number_to_boolean");
     ASSERT_NE(numberToBoolean, nullptr);
@@ -2400,6 +2442,92 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_DispatchesReturnDoOnceGateAndSwit
     EXPECT_EQ(defaultCase.trace[0].message, "Switch selected Default because Value was unavailable or non-finite.");
 }
 
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_LowersRemainingFlowLoopFamily) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({1U, "flow.event"}));
+    ASSERT_TRUE(graph.AddNodeUVE({2U, "flow.loop"}));
+    ASSERT_TRUE(graph.AddNodeUVE({3U, "flow.for_loop"}));
+    ASSERT_TRUE(graph.AddNodeUVE({4U, "flow.while_loop"}));
+    ASSERT_TRUE(graph.AddNodeUVE({5U, "flow.delay"}));
+
+    const ScriptIrCompileResultUVE result = CompileScriptGraphToIrUVE(graph, registry);
+    ASSERT_TRUE(result.IsSuccessUVE());
+    ASSERT_EQ(result.program->instructions.size(), 5U);
+    EXPECT_EQ(result.program->instructions[0].nodeTypeId, "flow.event");
+    EXPECT_EQ(result.program->instructions[0].sourcePinName, "Event");
+    EXPECT_EQ(result.program->instructions[1].nodeTypeId, "flow.loop");
+    EXPECT_EQ(result.program->instructions[2].nodeTypeId, "flow.for_loop");
+    EXPECT_EQ(result.program->instructions[3].nodeTypeId, "flow.while_loop");
+    EXPECT_EQ(result.program->instructions[4].nodeTypeId, "flow.delay");
+    for (const ScriptIrInstructionUVE& instruction : result.program->instructions) {
+        EXPECT_EQ(instruction.kind, ScriptIrInstructionKindUVE::FlowControlDispatch);
+    }
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_DispatchesEventLoopsAndFrameDelay) {
+    ScriptBytecodeProgramUVE eventProgram;
+    eventProgram.instructions.push_back({ScriptIrInstructionKindUVE::FlowControlDispatch, 1U, 0U, "flow.event",
+                                          "Event", {}, 1U, 2U, 0U, 0U, false, 2U});
+    eventProgram.instructions.push_back({ScriptIrInstructionKindUVE::FlowControlDispatch, 2U, 0U, "flow.return",
+                                          "In", {}, 2U, 2U, 0U, 0U, false, 2U});
+    ScriptVmExecutionContextUVE eventContext;
+    const ScriptVmExecutionResultUVE eventResult = ExecuteScriptBytecodeUVE(eventProgram, eventContext);
+    ASSERT_TRUE(eventResult.IsSuccessUVE());
+    ASSERT_GE(eventResult.trace.size(), 2U);
+    EXPECT_EQ(eventResult.trace[0].message, "Event fired Then.");
+
+    ScriptBytecodeProgramUVE forProgram;
+    forProgram.instructions.push_back({ScriptIrInstructionKindUVE::FlowControlDispatch, 10U, 0U, "flow.for_loop",
+                                        "In", {}, 1U, 2U, 0U, 0U, false, 2U});
+    forProgram.instructions.push_back({ScriptIrInstructionKindUVE::FlowControlDispatch, 11U, 0U, "flow.return",
+                                        "In", {}, 2U, 2U, 0U, 0U, false, 2U});
+    ScriptVmExecutionContextUVE forContext;
+    ASSERT_TRUE(forContext.SetInputUVE(10U, "Count", 2.0F));
+    const ScriptVmExecutionResultUVE firstFor = ExecuteScriptBytecodeUVE(forProgram, forContext);
+    ASSERT_TRUE(firstFor.IsSuccessUVE());
+    EXPECT_EQ(firstFor.trace[0].message, "For Loop dispatched Body.");
+    EXPECT_EQ(forContext.FindOutputUVE(10U, "Index"), std::optional<ScriptVmValueUVE>(0.0F));
+    const ScriptVmExecutionResultUVE secondFor = ExecuteScriptBytecodeUVE(forProgram, forContext);
+    ASSERT_TRUE(secondFor.IsSuccessUVE());
+    EXPECT_EQ(forContext.FindOutputUVE(10U, "Index"), std::optional<ScriptVmValueUVE>(1.0F));
+    const ScriptVmExecutionResultUVE completedFor = ExecuteScriptBytecodeUVE(forProgram, forContext);
+    ASSERT_TRUE(completedFor.IsSuccessUVE());
+    EXPECT_EQ(completedFor.trace[0].message, "Loop completed.");
+    EXPECT_EQ(forContext.FindLoopStateUVE(10U), std::optional<ScriptVmLoopStateUVE>(ScriptVmLoopStateUVE{10U, 0U, false}));
+
+    ScriptBytecodeProgramUVE whileProgram;
+    whileProgram.instructions.push_back({ScriptIrInstructionKindUVE::FlowControlDispatch, 20U, 0U, "flow.while_loop",
+                                          "In", {}, 1U, 2U, 0U, 0U, false, 2U});
+    whileProgram.instructions.push_back({ScriptIrInstructionKindUVE::FlowControlDispatch, 21U, 0U, "flow.return",
+                                          "In", {}, 2U, 2U, 0U, 0U, false, 2U});
+    ScriptVmExecutionContextUVE whileContext;
+    ASSERT_TRUE(whileContext.SetInputUVE(20U, "Condition", false));
+    const ScriptVmExecutionResultUVE whileResult = ExecuteScriptBytecodeUVE(whileProgram, whileContext);
+    ASSERT_TRUE(whileResult.IsSuccessUVE());
+    EXPECT_EQ(whileResult.trace[0].message, "While Loop completed because Condition was false.");
+
+    ScriptBytecodeProgramUVE delayProgram;
+    delayProgram.instructions.push_back({ScriptIrInstructionKindUVE::FlowControlDispatch, 30U, 0U, "flow.delay",
+                                          "In", {}, 1U, 1U, 0U, 0U, false, 1U});
+    delayProgram.instructions.push_back({ScriptIrInstructionKindUVE::FlowControlDispatch, 31U, 0U, "flow.return",
+                                          "In", {}, 2U, 2U, 0U, 0U, false, 2U});
+    ScriptVmExecutionContextUVE delayContext;
+    ASSERT_TRUE(delayContext.SetInputUVE(30U, "Frames", 2.0F));
+    const ScriptVmExecutionResultUVE firstDelay = ExecuteScriptBytecodeUVE(delayProgram, delayContext);
+    ASSERT_TRUE(firstDelay.IsSuccessUVE());
+    EXPECT_EQ(firstDelay.trace[0].message, "Delay yielded until the next runtime tick.");
+    EXPECT_EQ(delayContext.FindDelayStateUVE(30U), std::optional<ScriptVmDelayStateUVE>(ScriptVmDelayStateUVE{30U, 2U, true}));
+    const ScriptVmExecutionResultUVE secondDelay = ExecuteScriptBytecodeUVE(delayProgram, delayContext);
+    ASSERT_TRUE(secondDelay.IsSuccessUVE());
+    EXPECT_EQ(secondDelay.trace[0].message, "Delay yielded while its bounded frame state remained active.");
+    const ScriptVmExecutionResultUVE thirdDelay = ExecuteScriptBytecodeUVE(delayProgram, delayContext);
+    ASSERT_TRUE(thirdDelay.IsSuccessUVE());
+    EXPECT_EQ(thirdDelay.trace[0].message, "Delay dispatched Then.");
+    EXPECT_EQ(delayContext.FindDelayStateUVE(30U), std::optional<ScriptVmDelayStateUVE>(ScriptVmDelayStateUVE{30U, 0U, false}));
+}
+
 TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_ConditionalJumpSelectsTrueAndFalseTargets) {
     ScriptBytecodeProgramUVE program;
     program.instructions.push_back({ScriptIrInstructionKindUVE::ConditionalJump, 1U, 0U, "flow.branch",
@@ -3915,6 +4043,45 @@ TEST(ScriptDebuggerUVETest, StepUVE_SequenceDispatchContinuesToSecondTarget) {
     EXPECT_EQ(second.state, ScriptDebuggerStateUVE::Completed);
     EXPECT_EQ(second.instructionIndex, 3U);
     EXPECT_EQ(second.executedInstructions, 3U);
+}
+
+TEST(ScriptDebuggerUVETest, StepUVE_FlowControlDispatchUsesAttachedContext) {
+    ScriptBytecodeProgramUVE eventProgram;
+    eventProgram.instructions.push_back({ScriptIrInstructionKindUVE::FlowControlDispatch, 1U, 0U, "flow.event",
+                                          "Event", {}, 1U, 2U, 0U, 0U, false, 2U});
+    eventProgram.instructions.push_back({ScriptIrInstructionKindUVE::FlowControlDispatch, 2U, 0U, "flow.return",
+                                          "In", {}, 2U, 2U, 0U, 0U, false, 2U});
+    ScriptDebuggerUVE eventDebugger;
+    ASSERT_TRUE(eventDebugger.AttachUVE(eventProgram));
+    const ScriptDebuggerSnapshotUVE eventStep = eventDebugger.StepUVE();
+    EXPECT_EQ(eventStep.state, ScriptDebuggerStateUVE::Paused);
+    EXPECT_EQ(eventStep.instructionIndex, 1U);
+    ASSERT_EQ(eventStep.trace.size(), 1U);
+    EXPECT_EQ(eventStep.trace.front().message, "Event fired Then.");
+    const ScriptDebuggerSnapshotUVE eventReturn = eventDebugger.StepUVE();
+    EXPECT_EQ(eventReturn.state, ScriptDebuggerStateUVE::Completed);
+    EXPECT_EQ(eventReturn.instructionIndex, 2U);
+
+    ScriptBytecodeProgramUVE delayProgram;
+    delayProgram.instructions.push_back({ScriptIrInstructionKindUVE::FlowControlDispatch, 10U, 0U, "flow.delay",
+                                          "In", {}, 1U, 1U, 0U, 0U, false, 1U});
+    delayProgram.instructions.push_back({ScriptIrInstructionKindUVE::FlowControlDispatch, 11U, 0U, "flow.return",
+                                          "In", {}, 2U, 2U, 0U, 0U, false, 2U});
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(10U, "Frames", 1.0F));
+    ScriptDebuggerUVE delayDebugger;
+    ASSERT_TRUE(delayDebugger.AttachWithContextUVE(delayProgram, context));
+    const ScriptDebuggerSnapshotUVE delayStart = delayDebugger.StepUVE();
+    EXPECT_EQ(delayStart.state, ScriptDebuggerStateUVE::Paused);
+    EXPECT_EQ(delayStart.instructionIndex, 0U);
+    EXPECT_EQ(delayStart.trace.front().message, "Delay yielded until the next debugger step.");
+    const ScriptDebuggerSnapshotUVE delayThen = delayDebugger.StepUVE();
+    EXPECT_EQ(delayThen.state, ScriptDebuggerStateUVE::Paused);
+    EXPECT_EQ(delayThen.instructionIndex, 1U);
+    EXPECT_EQ(delayThen.trace.back().message, "Delay dispatched Then.");
+    const ScriptDebuggerSnapshotUVE delayReturn = delayDebugger.StepUVE();
+    EXPECT_EQ(delayReturn.state, ScriptDebuggerStateUVE::Completed);
+    EXPECT_EQ(delayReturn.instructionIndex, 2U);
 }
 
 TEST(ScriptDebuggerUVETest, ContinueUVE_BoundsCopiedTraceHistory) {

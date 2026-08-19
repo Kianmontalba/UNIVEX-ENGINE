@@ -1252,6 +1252,12 @@ namespace {
             const std::string& sourcePinName = instruction.sourcePinName;
             std::size_t target = instruction.defaultTargetInstructionIndex;
             std::string message;
+            const auto flowFailure = [&](std::string failureMessage) {
+                ScriptVmExecutionResultUVE failure = MakeNodeFailureUVE(instructionIndex, std::move(failureMessage));
+                failure.instructionsExecuted = result.instructionsExecuted;
+                failure.PrependTraceEventsUVE(std::move(result.trace), result.traceTruncated);
+                return failure;
+            };
             if (instruction.nodeTypeId == "flow.return") {
                 target = program.instructions.size();
                 message = "Return terminated execution.";
@@ -1312,6 +1318,99 @@ namespace {
                 } else {
                     target = instruction.falseTargetInstructionIndex;
                     message = "Switch selected Case1.";
+                }
+            } else if (instruction.nodeTypeId == "flow.event") {
+                target = instruction.trueTargetInstructionIndex;
+                message = "Event fired Then.";
+            } else if (instruction.nodeTypeId == "flow.loop" || instruction.nodeTypeId == "flow.for_loop") {
+                const float* count = FindNumberInputUVE(context, instruction.sourceNodeId, "Count");
+                if (count == nullptr || !std::isfinite(*count) || *count < 0.0F ||
+                    *count > static_cast<float>(ScriptVmExecutionContextUVE::kMaximumLoopIterationsUVE) ||
+                    std::floor(*count) != *count) {
+                    return flowFailure("Loop Count must be a finite non-negative integer within the bounded iteration limit.");
+                }
+                if (!context.InitializeLoopStateUVE(instruction.sourceNodeId)) {
+                    return flowFailure("Loop exceeded its bounded state capacity.");
+                }
+                const ScriptVmLoopStateUVE state = context.FindLoopStateUVE(instruction.sourceNodeId).value_or(
+                    ScriptVmLoopStateUVE{instruction.sourceNodeId, 0U, false});
+                const std::uint32_t countValue = static_cast<std::uint32_t>(*count);
+                if (countValue == 0U || (state.active && state.iteration >= countValue)) {
+                    if (!context.SetLoopStateUVE(instruction.sourceNodeId, 0U, false)) {
+                        return flowFailure("Loop could not reset its bounded state.");
+                    }
+                    target = instruction.falseTargetInstructionIndex;
+                    message = "Loop completed.";
+                } else {
+                    if (instruction.nodeTypeId == "flow.for_loop" &&
+                        !context.SetOutputUVE(instruction.sourceNodeId, "Index", static_cast<float>(state.iteration))) {
+                        return flowFailure("For Loop could not publish its bounded Index output.");
+                    }
+                    if (!context.SetLoopStateUVE(instruction.sourceNodeId, state.iteration + 1U, true)) {
+                        return flowFailure("Loop could not advance its bounded iteration state.");
+                    }
+                    target = instruction.trueTargetInstructionIndex;
+                    message = instruction.nodeTypeId == "flow.for_loop" ? "For Loop dispatched Body." : "Loop dispatched Body.";
+                }
+            } else if (instruction.nodeTypeId == "flow.while_loop") {
+                const bool* condition = FindBooleanInputUVE(context, instruction.sourceNodeId, "Condition");
+                if (condition == nullptr) {
+                    return flowFailure("While Loop requires a Boolean Condition input.");
+                }
+                if (!context.InitializeLoopStateUVE(instruction.sourceNodeId)) {
+                    return flowFailure("While Loop exceeded its bounded state capacity.");
+                }
+                const ScriptVmLoopStateUVE state = context.FindLoopStateUVE(instruction.sourceNodeId).value_or(
+                    ScriptVmLoopStateUVE{instruction.sourceNodeId, 0U, false});
+                if (!*condition) {
+                    if (!context.SetLoopStateUVE(instruction.sourceNodeId, 0U, false)) {
+                        return flowFailure("While Loop could not reset its bounded state.");
+                    }
+                    target = instruction.falseTargetInstructionIndex;
+                    message = "While Loop completed because Condition was false.";
+                } else if (state.iteration >= ScriptVmExecutionContextUVE::kMaximumLoopIterationsUVE) {
+                    return flowFailure("While Loop exceeded its bounded iteration limit.");
+                } else {
+                    if (!context.SetLoopStateUVE(instruction.sourceNodeId, state.iteration + 1U, true)) {
+                        return flowFailure("While Loop could not advance its bounded iteration state.");
+                    }
+                    target = instruction.trueTargetInstructionIndex;
+                    message = "While Loop dispatched Body.";
+                }
+            } else if (instruction.nodeTypeId == "flow.delay") {
+                const float* frames = FindNumberInputUVE(context, instruction.sourceNodeId, "Frames");
+                if (frames == nullptr || !std::isfinite(*frames) || *frames < 0.0F ||
+                    *frames > static_cast<float>(ScriptVmExecutionContextUVE::kMaximumDelayFramesUVE) ||
+                    std::floor(*frames) != *frames) {
+                    return flowFailure("Delay Frames must be a finite non-negative integer within the bounded frame limit.");
+                }
+                if (!context.InitializeDelayStateUVE(instruction.sourceNodeId)) {
+                    return flowFailure("Delay exceeded its bounded state capacity.");
+                }
+                const ScriptVmDelayStateUVE state = context.FindDelayStateUVE(instruction.sourceNodeId).value_or(
+                    ScriptVmDelayStateUVE{instruction.sourceNodeId, 0U, false});
+                const std::uint32_t frameCount = static_cast<std::uint32_t>(*frames);
+                if (!state.armed && frameCount == 0U) {
+                    target = instruction.trueTargetInstructionIndex;
+                    message = "Delay dispatched Then immediately.";
+                } else if (!state.armed) {
+                    if (!context.SetDelayStateUVE(instruction.sourceNodeId, frameCount, true)) {
+                        return flowFailure("Delay could not arm its bounded frame state.");
+                    }
+                    target = program.instructions.size();
+                    message = "Delay yielded until the next runtime tick.";
+                } else if (state.remainingFrames > 1U) {
+                    if (!context.SetDelayStateUVE(instruction.sourceNodeId, state.remainingFrames - 1U, true)) {
+                        return flowFailure("Delay could not advance its bounded frame state.");
+                    }
+                    target = program.instructions.size();
+                    message = "Delay yielded while its bounded frame state remained active.";
+                } else {
+                    if (!context.SetDelayStateUVE(instruction.sourceNodeId, 0U, false)) {
+                        return flowFailure("Delay could not complete its bounded frame state.");
+                    }
+                    target = instruction.trueTargetInstructionIndex;
+                    message = "Delay dispatched Then.";
                 }
             } else {
                 ScriptVmExecutionResultUVE failure = MakeNodeFailureUVE(
@@ -1568,6 +1667,24 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                     }
                 } else if (instruction.nodeTypeId == "flow.switch") {
                     message = "Switch selected Default because Value was unavailable without a VM context.";
+                } else if (instruction.nodeTypeId == "flow.event") {
+                    target = instruction.trueTargetInstructionIndex;
+                    message = "Event fired Then.";
+                } else if (instruction.nodeTypeId == "flow.loop" || instruction.nodeTypeId == "flow.for_loop" ||
+                           instruction.nodeTypeId == "flow.while_loop") {
+                    result.status = ScriptVmStatusUVE::NodeExecutionFailed;
+                    result.diagnostics.push_back({index, "Loop nodes require a persistent VM context with their bounded data inputs."});
+                    result.AppendTraceEventUVE({ScriptVmTraceEventKindUVE::Failed, Scene::kInvalidEntityUVE,
+                                                 index, instruction.sourceNodeId, instruction.targetNodeId,
+                                                 instruction.nodeTypeId, "Loop nodes require a persistent VM context with their bounded data inputs."});
+                    return result;
+                } else if (instruction.nodeTypeId == "flow.delay") {
+                    result.status = ScriptVmStatusUVE::NodeExecutionFailed;
+                    result.diagnostics.push_back({index, "Delay requires a persistent VM context to preserve frame state."});
+                    result.AppendTraceEventUVE({ScriptVmTraceEventKindUVE::Failed, Scene::kInvalidEntityUVE,
+                                                 index, instruction.sourceNodeId, instruction.targetNodeId,
+                                                 instruction.nodeTypeId, "Delay requires a persistent VM context to preserve frame state."});
+                    return result;
                 } else {
                     result.status = ScriptVmStatusUVE::InvalidInstruction;
                     result.diagnostics.push_back({index, "Unknown FlowControlDispatch node type."});
@@ -1862,6 +1979,94 @@ std::optional<bool> ScriptVmExecutionContextUVE::FindGateStateUVE(const std::uin
                                            return state.nodeId == nodeId;
                                        });
     return iterator == gateStates.cend() ? std::nullopt : std::optional<bool>(iterator->open);
+}
+
+bool ScriptVmExecutionContextUVE::InitializeLoopStateUVE(const std::uint32_t nodeId) {
+    if (nodeId == 0U) {
+        return false;
+    }
+    const auto iterator = std::find_if(loopStates.begin(), loopStates.end(),
+                                       [nodeId](const ScriptVmLoopStateUVE& state) {
+                                           return state.nodeId == nodeId;
+                                       });
+    if (iterator != loopStates.end()) {
+        return true;
+    }
+    if (loopStates.size() >= kMaximumLoopStatesUVE) {
+        return false;
+    }
+    loopStates.push_back({nodeId, 0U, false});
+    return true;
+}
+
+bool ScriptVmExecutionContextUVE::SetLoopStateUVE(const std::uint32_t nodeId,
+                                                  const std::uint32_t iteration,
+                                                  const bool active) {
+    if (iteration > kMaximumLoopIterationsUVE || !InitializeLoopStateUVE(nodeId)) {
+        return false;
+    }
+    const auto iterator = std::find_if(loopStates.begin(), loopStates.end(),
+                                       [nodeId](const ScriptVmLoopStateUVE& state) {
+                                           return state.nodeId == nodeId;
+                                       });
+    if (iterator == loopStates.end()) {
+        return false;
+    }
+    iterator->iteration = iteration;
+    iterator->active = active;
+    return true;
+}
+
+std::optional<ScriptVmLoopStateUVE> ScriptVmExecutionContextUVE::FindLoopStateUVE(const std::uint32_t nodeId) const {
+    const auto iterator = std::find_if(loopStates.cbegin(), loopStates.cend(),
+                                       [nodeId](const ScriptVmLoopStateUVE& state) {
+                                           return state.nodeId == nodeId;
+                                       });
+    return iterator == loopStates.cend() ? std::nullopt : std::optional<ScriptVmLoopStateUVE>(*iterator);
+}
+
+bool ScriptVmExecutionContextUVE::InitializeDelayStateUVE(const std::uint32_t nodeId) {
+    if (nodeId == 0U) {
+        return false;
+    }
+    const auto iterator = std::find_if(delayStates.begin(), delayStates.end(),
+                                       [nodeId](const ScriptVmDelayStateUVE& state) {
+                                           return state.nodeId == nodeId;
+                                       });
+    if (iterator != delayStates.end()) {
+        return true;
+    }
+    if (delayStates.size() >= kMaximumDelayStatesUVE) {
+        return false;
+    }
+    delayStates.push_back({nodeId, 0U, false});
+    return true;
+}
+
+bool ScriptVmExecutionContextUVE::SetDelayStateUVE(const std::uint32_t nodeId,
+                                                   const std::uint32_t remainingFrames,
+                                                   const bool armed) {
+    if (remainingFrames > kMaximumDelayFramesUVE || !InitializeDelayStateUVE(nodeId)) {
+        return false;
+    }
+    const auto iterator = std::find_if(delayStates.begin(), delayStates.end(),
+                                       [nodeId](const ScriptVmDelayStateUVE& state) {
+                                           return state.nodeId == nodeId;
+                                       });
+    if (iterator == delayStates.end()) {
+        return false;
+    }
+    iterator->remainingFrames = remainingFrames;
+    iterator->armed = armed;
+    return true;
+}
+
+std::optional<ScriptVmDelayStateUVE> ScriptVmExecutionContextUVE::FindDelayStateUVE(const std::uint32_t nodeId) const {
+    const auto iterator = std::find_if(delayStates.cbegin(), delayStates.cend(),
+                                       [nodeId](const ScriptVmDelayStateUVE& state) {
+                                           return state.nodeId == nodeId;
+                                       });
+    return iterator == delayStates.cend() ? std::nullopt : std::optional<ScriptVmDelayStateUVE>(*iterator);
 }
 
 bool ScriptVmExecutionContextUVE::SetInputUVE(const std::uint32_t nodeId, std::string pinName,

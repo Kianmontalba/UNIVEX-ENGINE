@@ -17,7 +17,7 @@ struct BuiltInNodeDefinitionUVE final {
     std::uint32_t displayOrder;
 };
 
-[[nodiscard]] std::array<BuiltInNodeDefinitionUVE, 92U> MakeBuiltInDefinitionsUVE() {
+[[nodiscard]] std::array<BuiltInNodeDefinitionUVE, 97U> MakeBuiltInDefinitionsUVE() {
     return {
         BuiltInNodeDefinitionUVE{
             "flow.sequence", "Sequence",
@@ -59,6 +59,38 @@ struct BuiltInNodeDefinitionUVE final {
              ScriptPinDescriptorUVE{"Case1", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Execution},
              ScriptPinDescriptorUVE{"Default", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Execution}},
             "Flow", "node.flow", 105U},
+        BuiltInNodeDefinitionUVE{
+            "flow.event", "Event",
+            {ScriptPinDescriptorUVE{"Then", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Execution}},
+            "Flow", "node.flow", 106U},
+        BuiltInNodeDefinitionUVE{
+            "flow.loop", "Loop",
+            {ScriptPinDescriptorUVE{"In", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Execution},
+             ScriptPinDescriptorUVE{"Count", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Body", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Execution},
+             ScriptPinDescriptorUVE{"Completed", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Execution}},
+            "Flow", "node.flow", 107U},
+        BuiltInNodeDefinitionUVE{
+            "flow.for_loop", "For Loop",
+            {ScriptPinDescriptorUVE{"In", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Execution},
+             ScriptPinDescriptorUVE{"Count", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Body", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Execution},
+             ScriptPinDescriptorUVE{"Completed", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Execution},
+             ScriptPinDescriptorUVE{"Index", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Number}},
+            "Flow", "node.flow", 108U},
+        BuiltInNodeDefinitionUVE{
+            "flow.while_loop", "While Loop",
+            {ScriptPinDescriptorUVE{"In", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Execution},
+             ScriptPinDescriptorUVE{"Condition", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Boolean},
+             ScriptPinDescriptorUVE{"Body", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Execution},
+             ScriptPinDescriptorUVE{"Completed", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Execution}},
+            "Flow", "node.flow", 109U},
+        BuiltInNodeDefinitionUVE{
+            "flow.delay", "Delay",
+            {ScriptPinDescriptorUVE{"In", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Execution},
+             ScriptPinDescriptorUVE{"Frames", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Then", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Execution}},
+            "Flow", "node.flow", 110U},
         BuiltInNodeDefinitionUVE{
             "convert.number_to_boolean", "Number to Boolean",
             {ScriptPinDescriptorUVE{"Value", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
@@ -569,7 +601,7 @@ struct BuiltInNodeDefinitionUVE final {
 } // namespace
 
 bool RegisterBuiltInScriptNodesUVE(ScriptNodeRegistryUVE& registry) {
-    std::array<BuiltInNodeDefinitionUVE, 92U> definitions = MakeBuiltInDefinitionsUVE();
+    std::array<BuiltInNodeDefinitionUVE, 97U> definitions = MakeBuiltInDefinitionsUVE();
     for (const BuiltInNodeDefinitionUVE& definition : definitions) {
         if (registry.FindNodeTypeUVE(definition.typeId) != nullptr) {
             return false;
