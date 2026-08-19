@@ -45,6 +45,30 @@ constexpr std::uint32_t kMaximumCountUVE = 1'000'000U;
 
 } // namespace
 
+bool ResolveObjIndexUVE(const std::int64_t rawIndex, const std::uint32_t attributeCount,
+                        std::uint32_t& outZeroBasedIndex) noexcept {
+    if (attributeCount == 0U || rawIndex == 0) {
+        return false;
+    }
+    std::uint64_t zeroBasedIndex = 0U;
+    if (rawIndex > 0) {
+        const std::uint64_t oneBasedIndex = static_cast<std::uint64_t>(rawIndex);
+        if (oneBasedIndex > static_cast<std::uint64_t>(attributeCount)) {
+            return false;
+        }
+        zeroBasedIndex = oneBasedIndex - 1U;
+    } else {
+        const std::uint64_t relativeDistance =
+            static_cast<std::uint64_t>(-(rawIndex + 1)) + 1U;
+        if (relativeDistance > static_cast<std::uint64_t>(attributeCount)) {
+            return false;
+        }
+        zeroBasedIndex = static_cast<std::uint64_t>(attributeCount) - relativeDistance;
+    }
+    outZeroBasedIndex = static_cast<std::uint32_t>(zeroBasedIndex);
+    return true;
+}
+
 std::optional<ObjMetadataUVE> ParseObjMetadataUVE(const std::string_view source) {
     ObjMetadataUVE metadata;
     std::size_t lineStart = 0U;
