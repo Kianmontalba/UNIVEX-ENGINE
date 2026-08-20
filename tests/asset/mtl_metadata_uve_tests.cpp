@@ -49,6 +49,37 @@ TEST(MtlMetadataUVETest, ParseMtlMaterialPropertyUVE_RejectsInvalidAndExtraToken
     EXPECT_EQ(property, original);
 }
 
+TEST(MtlMetadataUVETest, ParseMtlTextureMapUVE_ParsesBoundedOptionsAndDefaults) {
+    MtlTextureMapUVE map;
+    ASSERT_TRUE(ParseMtlTextureMapUVE("map_Kd -s 2 3 4 -o -1 0.5 0 -clamp on textures/brick.png", map));
+    EXPECT_EQ(map.textureReference, "textures/brick.png");
+    EXPECT_EQ(map.scale, (std::array<float, 3U>{2.0F, 3.0F, 4.0F}));
+    EXPECT_EQ(map.offset, (std::array<float, 3U>{-1.0F, 0.5F, 0.0F}));
+    EXPECT_TRUE(map.clamp);
+    ASSERT_TRUE(ParseMtlTextureMapUVE("map_Bump brick_n.png", map));
+    EXPECT_EQ(map.textureReference, "brick_n.png");
+    EXPECT_EQ(map.scale, (std::array<float, 3U>{1.0F, 1.0F, 1.0F}));
+    EXPECT_EQ(map.offset, (std::array<float, 3U>{0.0F, 0.0F, 0.0F}));
+    EXPECT_FALSE(map.clamp);
+}
+
+TEST(MtlMetadataUVETest, ParseMtlTextureMapUVE_RejectsInvalidOptionsAtomically) {
+    const MtlTextureMapUVE original{"stable.png", {1.0F, 1.0F, 1.0F}, {0.0F, 0.0F, 0.0F}, false};
+    MtlTextureMapUVE map = original;
+    EXPECT_FALSE(ParseMtlTextureMapUVE("map_Kd -s 1 2 textures/brick.png", map));
+    EXPECT_EQ(map, original);
+    EXPECT_FALSE(ParseMtlTextureMapUVE("map_Kd -clamp maybe brick.png", map));
+    EXPECT_EQ(map, original);
+    EXPECT_FALSE(ParseMtlTextureMapUVE("map_Kd -s nan 1 1 brick.png", map));
+    EXPECT_EQ(map, original);
+    EXPECT_FALSE(ParseMtlTextureMapUVE("map_Kd ../brick.png", map));
+    EXPECT_EQ(map, original);
+    EXPECT_FALSE(ParseMtlTextureMapUVE("map_Kd brick.png other.png", map));
+    EXPECT_EQ(map, original);
+    EXPECT_FALSE(ParseMtlTextureMapUVE("map_Kd -unknown brick.png", map));
+    EXPECT_EQ(map, original);
+}
+
 TEST(MtlMetadataUVETest, ParseMtlMetadataUVE_CountsMaterialPropertiesAndMaps) {
     const auto metadata = ParseMtlMetadataUVE("newmtl Brick\nKd 1 0.5 0.2\nNs 32\nmap_Kd brick.png\nmap_Bump brick_n.png\nillum 2\n");
     ASSERT_TRUE(metadata.has_value()); EXPECT_EQ(metadata->materialCount,1U); EXPECT_EQ(metadata->textureMapCount,2U);
