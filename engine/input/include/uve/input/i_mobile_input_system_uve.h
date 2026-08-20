@@ -4,6 +4,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cmath>
 #include <cstdint>
 
 #include "uve/math/vector2_uve.h"
@@ -28,6 +29,42 @@ struct TouchPointStateUVE final {
 
 /// Bounded, backend-neutral mobile input snapshot. Gyroscope values are rotation rates in radians
 /// per second, normalized only for finite input; platform adapters own coordinate-system mapping.
+enum class TouchLifecycleTransitionUVE : std::uint8_t {
+    None = 0,
+    Began,
+    Moved,
+    Ended,
+    Replaced,
+};
+
+/// Classifies one copied touch-slot transition. Replaced means two active frames have different
+/// identifiers in the same slot; the helper does not poll hardware, own lifecycle state, or mutate snapshots.
+[[nodiscard]] inline bool EvaluateTouchLifecycleTransitionUVE(
+    const TouchPointStateUVE& previous, const TouchPointStateUVE& current,
+    TouchLifecycleTransitionUVE& outTransition) noexcept {
+    const auto isValid = [](const TouchPointStateUVE& touch) noexcept {
+        return !touch.active || (touch.identifier != 0U && std::isfinite(touch.position.x) &&
+                                 std::isfinite(touch.position.y) && std::isfinite(touch.delta.x) &&
+                                 std::isfinite(touch.delta.y) && std::isfinite(touch.pressure) &&
+                                 touch.pressure >= 0.0F && touch.pressure <= 1.0F);
+    };
+    if (!isValid(previous) || !isValid(current)) return false;
+    TouchLifecycleTransitionUVE transition = TouchLifecycleTransitionUVE::None;
+    if (!previous.active && current.active) {
+        transition = TouchLifecycleTransitionUVE::Began;
+    } else if (previous.active && !current.active) {
+        transition = TouchLifecycleTransitionUVE::Ended;
+    } else if (previous.active && current.active) {
+        transition = previous.identifier == current.identifier
+                         ? ((previous.position == current.position && previous.pressure == current.pressure)
+                                ? TouchLifecycleTransitionUVE::None
+                                : TouchLifecycleTransitionUVE::Moved)
+                         : TouchLifecycleTransitionUVE::Replaced;
+    }
+    outTransition = transition;
+    return true;
+}
+
 struct MobileInputSnapshotUVE final {
     std::array<TouchPointStateUVE, kMaximumTouchCountUVE> touches{};
     Math::Vector3UVE gyroscopeRotationRate{};
