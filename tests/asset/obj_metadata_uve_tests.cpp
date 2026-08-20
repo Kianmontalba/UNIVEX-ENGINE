@@ -23,6 +23,49 @@ TEST(ObjMetadataUVETest, ResolveObjIndexUVE_MapsPositiveAndNegativeObjIndices) {
     EXPECT_EQ(resolved, 0U);
 }
 
+TEST(ObjMetadataUVETest, ResolveObjFaceVertexUVE_ResolvesSupportedTokenForms) {
+    ObjFaceVertexUVE vertex;
+    ASSERT_TRUE(ResolveObjFaceVertexUVE("1/2/3", 4U, 4U, 4U, vertex));
+    EXPECT_EQ(vertex.positionIndex, 0U);
+    ASSERT_TRUE(vertex.texcoordIndex.has_value());
+    EXPECT_EQ(*vertex.texcoordIndex, 1U);
+    ASSERT_TRUE(vertex.normalIndex.has_value());
+    EXPECT_EQ(*vertex.normalIndex, 2U);
+    ASSERT_TRUE(ResolveObjFaceVertexUVE("-1/-2/-3", 4U, 4U, 4U, vertex));
+    EXPECT_EQ(vertex.positionIndex, 3U);
+    EXPECT_EQ(*vertex.texcoordIndex, 2U);
+    EXPECT_EQ(*vertex.normalIndex, 1U);
+    ASSERT_TRUE(ResolveObjFaceVertexUVE("1//3", 4U, 0U, 4U, vertex));
+    EXPECT_EQ(vertex.positionIndex, 0U);
+    EXPECT_FALSE(vertex.texcoordIndex.has_value());
+    ASSERT_TRUE(vertex.normalIndex.has_value());
+    EXPECT_EQ(*vertex.normalIndex, 2U);
+    ASSERT_TRUE(ResolveObjFaceVertexUVE("2/3", 4U, 4U, 0U, vertex));
+    EXPECT_EQ(vertex.positionIndex, 1U);
+    ASSERT_TRUE(vertex.texcoordIndex.has_value());
+    EXPECT_EQ(*vertex.texcoordIndex, 2U);
+    EXPECT_FALSE(vertex.normalIndex.has_value());
+}
+
+TEST(ObjMetadataUVETest, ResolveObjFaceVertexUVE_RejectsMalformedAndOutOfRangeTokensAtomically) {
+    const ObjFaceVertexUVE original{7U, 8U, 9U};
+    ObjFaceVertexUVE vertex = original;
+    EXPECT_FALSE(ResolveObjFaceVertexUVE("", 4U, 4U, 4U, vertex));
+    EXPECT_EQ(vertex, original);
+    EXPECT_FALSE(ResolveObjFaceVertexUVE("1/", 4U, 4U, 4U, vertex));
+    EXPECT_EQ(vertex, original);
+    EXPECT_FALSE(ResolveObjFaceVertexUVE("1//", 4U, 4U, 4U, vertex));
+    EXPECT_EQ(vertex, original);
+    EXPECT_FALSE(ResolveObjFaceVertexUVE("1/2/3/4", 4U, 4U, 4U, vertex));
+    EXPECT_EQ(vertex, original);
+    EXPECT_FALSE(ResolveObjFaceVertexUVE("0/1/1", 4U, 4U, 4U, vertex));
+    EXPECT_EQ(vertex, original);
+    EXPECT_FALSE(ResolveObjFaceVertexUVE("1/5/1", 4U, 4U, 4U, vertex));
+    EXPECT_EQ(vertex, original);
+    EXPECT_FALSE(ResolveObjFaceVertexUVE("1/a/1", 4U, 4U, 4U, vertex));
+    EXPECT_EQ(vertex, original);
+}
+
 TEST(ObjMetadataUVETest, ResolveObjIndexUVE_RejectsInvalidAndExtremeIndicesAtomically) {
     std::uint32_t resolved = 77U;
     EXPECT_FALSE(ResolveObjIndexUVE(0, 4U, resolved));

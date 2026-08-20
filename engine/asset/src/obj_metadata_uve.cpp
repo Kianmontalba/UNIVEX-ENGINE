@@ -3,10 +3,12 @@
 #include "uve/asset/obj_metadata_uve.h"
 
 #include <algorithm>
+#include <charconv>
 #include <cctype>
 #include <cstdint>
 #include <limits>
 #include <string_view>
+#include <system_error>
 
 namespace UVE::Asset {
 namespace {
@@ -43,6 +45,18 @@ constexpr std::uint32_t kMaximumCountUVE = 1'000'000U;
     return true;
 }
 
+[[nodiscard]] std::optional<std::int64_t> ParseSignedIntegerUVE(const std::string_view text) noexcept {
+    if (text.empty()) {
+        return std::nullopt;
+    }
+    std::int64_t value = 0;
+    const auto result = std::from_chars(text.data(), text.data() + text.size(), value);
+    if (result.ec != std::errc{} || result.ptr != text.data() + text.size()) {
+        return std::nullopt;
+    }
+    return value;
+}
+
 } // namespace
 
 bool ResolveObjIndexUVE(const std::int64_t rawIndex, const std::uint32_t attributeCount,
@@ -66,6 +80,68 @@ bool ResolveObjIndexUVE(const std::int64_t rawIndex, const std::uint32_t attribu
         zeroBasedIndex = static_cast<std::uint64_t>(attributeCount) - relativeDistance;
     }
     outZeroBasedIndex = static_cast<std::uint32_t>(zeroBasedIndex);
+    return true;
+}
+
+bool ResolveObjFaceVertexUVE(const std::string_view token, const std::uint32_t positionCount,
+                              const std::uint32_t texcoordCount, const std::uint32_t normalCount,
+                              ObjFaceVertexUVE& outVertex) noexcept {
+    if (token.empty()) {
+        return false;
+    }
+    const std::size_t firstSlash = token.find('/');
+    const std::size_t secondSlash = firstSlash == std::string_view::npos
+                                        ? std::string_view::npos
+                                        : token.find('/', firstSlash + 1U);
+    if (firstSlash != std::string_view::npos && secondSlash != std::string_view::npos &&
+        token.find('/', secondSlash + 1U) != std::string_view::npos) {
+        return false;
+    }
+    const std::string_view positionText =
+        token.substr(0U, firstSlash == std::string_view::npos ? token.size() : firstSlash);
+    const std::optional<std::int64_t> positionRaw = ParseSignedIntegerUVE(positionText);
+    if (!positionRaw) {
+        return false;
+    }
+    ObjFaceVertexUVE candidate;
+    if (!ResolveObjIndexUVE(*positionRaw, positionCount, candidate.positionIndex)) {
+        return false;
+    }
+    if (firstSlash == std::string_view::npos) {
+        outVertex = candidate;
+        return true;
+    }
+    const std::size_t texcoordEnd = secondSlash == std::string_view::npos ? token.size() : secondSlash;
+    const std::string_view texcoordText = token.substr(firstSlash + 1U, texcoordEnd - firstSlash - 1U);
+    if (texcoordText.empty() && secondSlash == std::string_view::npos) {
+        return false;
+    }
+    if (!texcoordText.empty()) {
+        const std::optional<std::int64_t> texcoordRaw = ParseSignedIntegerUVE(texcoordText);
+        if (!texcoordRaw) {
+            return false;
+        }
+        std::uint32_t texcoordIndex = 0U;
+        if (!ResolveObjIndexUVE(*texcoordRaw, texcoordCount, texcoordIndex)) {
+            return false;
+        }
+        candidate.texcoordIndex = texcoordIndex;
+    }
+    if (secondSlash == std::string_view::npos) {
+        outVertex = candidate;
+        return true;
+    }
+    const std::string_view normalText = token.substr(secondSlash + 1U);
+    const std::optional<std::int64_t> normalRaw = ParseSignedIntegerUVE(normalText);
+    if (!normalRaw) {
+        return false;
+    }
+    std::uint32_t normalIndex = 0U;
+    if (!ResolveObjIndexUVE(*normalRaw, normalCount, normalIndex)) {
+        return false;
+    }
+    candidate.normalIndex = normalIndex;
+    outVertex = candidate;
     return true;
 }
 

@@ -25,6 +25,19 @@ struct ObjMetadataUVE final {
 [[nodiscard]] bool ResolveObjIndexUVE(std::int64_t rawIndex, std::uint32_t attributeCount,
                                       std::uint32_t& outZeroBasedIndex) noexcept;
 
+struct ObjFaceVertexUVE final {
+    std::uint32_t positionIndex = 0U;
+    std::optional<std::uint32_t> texcoordIndex;
+    std::optional<std::uint32_t> normalIndex;
+    [[nodiscard]] bool operator==(const ObjFaceVertexUVE&) const noexcept = default;
+};
+
+/// Resolves one bounded OBJ face vertex token (`v`, `v/vt`, `v//vn`, or `v/vt/vn`) into copied
+/// zero-based indices. It performs no face triangulation, mesh allocation, material loading, or I/O.
+[[nodiscard]] bool ResolveObjFaceVertexUVE(
+    std::string_view token, std::uint32_t positionCount, std::uint32_t texcoordCount,
+    std::uint32_t normalCount, ObjFaceVertexUVE& outVertex) noexcept;
+
 /// Parses bounded OBJ declaration statistics from caller-owned text. It validates declaration
 /// arity and face reference presence, reports polygon triangulation capacity, and returns copied
 /// counts only; it does not resolve indices, load material libraries, allocate mesh data, or own
