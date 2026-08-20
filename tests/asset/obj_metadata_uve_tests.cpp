@@ -2,12 +2,39 @@
 
 #include "uve/asset/obj_metadata_uve.h"
 
+#include <cstdint>
+#include <limits>
 #include <string_view>
 
 #include <gtest/gtest.h>
 
 namespace UVE::Asset::Tests {
 namespace {
+
+TEST(ObjMetadataUVETest, ResolveObjIndexUVE_MapsPositiveAndNegativeObjIndices) {
+    std::uint32_t resolved = 99U;
+    EXPECT_TRUE(ResolveObjIndexUVE(1, 4U, resolved));
+    EXPECT_EQ(resolved, 0U);
+    EXPECT_TRUE(ResolveObjIndexUVE(4, 4U, resolved));
+    EXPECT_EQ(resolved, 3U);
+    EXPECT_TRUE(ResolveObjIndexUVE(-1, 4U, resolved));
+    EXPECT_EQ(resolved, 3U);
+    EXPECT_TRUE(ResolveObjIndexUVE(-4, 4U, resolved));
+    EXPECT_EQ(resolved, 0U);
+}
+
+TEST(ObjMetadataUVETest, ResolveObjIndexUVE_RejectsInvalidAndExtremeIndicesAtomically) {
+    std::uint32_t resolved = 77U;
+    EXPECT_FALSE(ResolveObjIndexUVE(0, 4U, resolved));
+    EXPECT_EQ(resolved, 77U);
+    EXPECT_FALSE(ResolveObjIndexUVE(5, 4U, resolved));
+    EXPECT_EQ(resolved, 77U);
+    EXPECT_FALSE(ResolveObjIndexUVE(-5, 4U, resolved));
+    EXPECT_EQ(resolved, 77U);
+    EXPECT_FALSE(ResolveObjIndexUVE(1, 0U, resolved));
+    EXPECT_FALSE(ResolveObjIndexUVE(std::numeric_limits<std::int64_t>::min(), 4U, resolved));
+    EXPECT_EQ(resolved, 77U);
+}
 
 TEST(ObjMetadataUVETest, ParseObjMetadataUVE_CountsDeclarationsAndTriangulatesPolygons) {
     constexpr std::string_view source =
