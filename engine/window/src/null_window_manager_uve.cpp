@@ -12,6 +12,8 @@ bool NullWindowManagerUVE::IsValidUVE() const noexcept {
     return true;
 }
 
+void NullWindowManagerUVE::AttachInputSystemUVE(Input::IInputSystemUVE* /*inputSystem*/) noexcept {}
+
 void NullWindowManagerUVE::PollEventsUVE() {
     // No real OS event queue to pump.
 }

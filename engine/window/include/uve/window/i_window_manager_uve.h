@@ -7,6 +7,7 @@
 #include <string_view>
 #include <vector>
 
+#include "uve/input/i_input_system_uve.h"
 #include "uve/window/monitor_info_uve.h"
 
 namespace UVE::Window {
@@ -32,6 +33,10 @@ public:
     /// False means every other method is still safe to call (no crashes) but reports a degraded,
     /// inert state — callers must not attempt to build a render device against an invalid window.
     [[nodiscard]] virtual bool IsValidUVE() const noexcept = 0;
+
+    /// Attaches a borrowed desktop input sink. The window backend never owns the sink and may
+    /// feed its existing Set*StateUVE() injection seam during PollEventsUVE().
+    virtual void AttachInputSystemUVE(Input::IInputSystemUVE* inputSystem) noexcept = 0;
 
     /// Pumps OS window/input events (GLFW: glfwPollEvents()). Publishes
     /// WindowCloseRequestedEventUVE/WindowResizedEventUVE/WindowFocusChangedEventUVE for anything

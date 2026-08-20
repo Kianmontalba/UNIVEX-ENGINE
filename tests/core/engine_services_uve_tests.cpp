@@ -814,6 +814,7 @@ public:
 class FakeWindowManagerUVE final : public Window::IWindowManagerUVE {
 public:
     [[nodiscard]] bool IsValidUVE() const noexcept override { return true; }
+    void AttachInputSystemUVE(Input::IInputSystemUVE* /*inputSystem*/) noexcept override {}
     void PollEventsUVE() override { ++pollEventsCallCount; }
     void SwapBuffersUVE() override {}
     [[nodiscard]] bool IsCloseRequestedUVE() const noexcept override { return false; }

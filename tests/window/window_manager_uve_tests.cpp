@@ -4,6 +4,7 @@
 #include "uve/window/window_manager_uve.h"
 
 #include <chrono>
+#include <cmath>
 #include <memory>
 #include <thread>
 
@@ -12,6 +13,7 @@
 #include <gtest/gtest.h>
 
 #include "uve/events/event_system_uve.h"
+#include "uve/input/input_system_uve.h"
 #include "uve/window/window_events_uve.h"
 
 namespace UVE::Window::Tests {
@@ -60,6 +62,16 @@ TEST_F(WindowManagerUVETest, GetBackendNameUVE_ReturnsGlfw3) {
 
 TEST_F(WindowManagerUVETest, GetNativeWindowHandleUVE_ReturnsNonNull) {
     EXPECT_NE(windowManager->GetNativeWindowHandleUVE(), nullptr);
+}
+
+TEST_F(WindowManagerUVETest, PollEventsWithAttachedInput_CommitsFiniteMouseSnapshot) {
+    Input::InputSystemUVE inputSystem(eventSystem);
+    windowManager->AttachInputSystemUVE(&inputSystem);
+    windowManager->PollEventsUVE();
+    inputSystem.UpdateUVE();
+    const Math::Vector2UVE mousePosition = inputSystem.GetMousePositionUVE();
+    EXPECT_TRUE(std::isfinite(mousePosition.x));
+    EXPECT_TRUE(std::isfinite(mousePosition.y));
 }
 
 TEST_F(WindowManagerUVETest, PollEventsAndSwapBuffers_DoNotCrash) {

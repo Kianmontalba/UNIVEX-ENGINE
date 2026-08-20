@@ -323,6 +323,7 @@ void EngineCoreUVE::Init() {
     // InputSystem twenty-eighth: needs only EventSystem (composed by reference, to queue
     // InputActionTriggeredEventUVE), already available.
     m_inputSystem = std::make_unique<Input::InputSystemUVE>(*m_eventSystem);
+    m_windowManager->AttachInputSystemUVE(m_inputSystem.get());
 
     // AudioDevice twenty-ninth: no dependencies of its own (a NullAudioDeviceUVE — no real audio
     // hardware/SDK is buildable in this sandbox).
@@ -388,9 +389,8 @@ void EngineCoreUVE::BeginFrame() {
 }
 
 void EngineCoreUVE::Update() {
-    m_inputSystem->UpdateUVE();
-
     m_windowManager->PollEventsUVE();
+    m_inputSystem->UpdateUVE();
     if (m_windowManager->IsCloseRequestedUVE()) {
         RequestQuitUVE();
     }
