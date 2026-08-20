@@ -11,6 +11,56 @@ namespace {
 
 constexpr float kEpsilon = 1e-5F;
 
+TEST(MobileGestureRecognizerUVETest, ClassifiesTouchChordLifecycleAcrossCopiedFrames) {
+    constexpr std::size_t kRequiredTouches = 2U;
+    MobileInputSnapshotUVE previous{};
+    MobileInputSnapshotUVE current{};
+    current.touches[0U] = TouchPointStateUVE{true, 11U, Math::Vector2UVE{0.0F, 2.0F}, {}, 1.0F};
+    current.touches[3U] = TouchPointStateUVE{true, 22U, Math::Vector2UVE{4.0F, 6.0F}, {}, 1.0F};
+    TouchChordLifecycleTransitionUVE transition = TouchChordLifecycleTransitionUVE::Replaced;
+    ASSERT_TRUE(EvaluateTouchChordLifecycleTransitionUVE(
+        previous, current, kRequiredTouches, transition));
+    EXPECT_EQ(transition, TouchChordLifecycleTransitionUVE::Began);
+
+    previous = current;
+    current.touches[0U].position.x = 1.0F;
+    ASSERT_TRUE(EvaluateTouchChordLifecycleTransitionUVE(
+        previous, current, kRequiredTouches, transition));
+    EXPECT_EQ(transition, TouchChordLifecycleTransitionUVE::Moved);
+
+    previous = current;
+    ASSERT_TRUE(EvaluateTouchChordLifecycleTransitionUVE(
+        previous, current, kRequiredTouches, transition));
+    EXPECT_EQ(transition, TouchChordLifecycleTransitionUVE::None);
+
+    current.touches[3U].identifier = 33U;
+    ASSERT_TRUE(EvaluateTouchChordLifecycleTransitionUVE(
+        previous, current, kRequiredTouches, transition));
+    EXPECT_EQ(transition, TouchChordLifecycleTransitionUVE::Replaced);
+
+    previous = current;
+    current.touches[3U] = {};
+    ASSERT_TRUE(EvaluateTouchChordLifecycleTransitionUVE(
+        previous, current, kRequiredTouches, transition));
+    EXPECT_EQ(transition, TouchChordLifecycleTransitionUVE::Ended);
+}
+
+TEST(MobileGestureRecognizerUVETest, RejectsInvalidTouchChordLifecycleAtomically) {
+    MobileInputSnapshotUVE previous{};
+    MobileInputSnapshotUVE current{};
+    current.touches[0U] = TouchPointStateUVE{true, 11U, Math::Vector2UVE{}, {}, 1.0F};
+    current.touches[1U] = TouchPointStateUVE{true, 11U, Math::Vector2UVE{1.0F, 1.0F}, {}, 1.0F};
+    TouchChordLifecycleTransitionUVE transition = TouchChordLifecycleTransitionUVE::Moved;
+    EXPECT_FALSE(EvaluateTouchChordLifecycleTransitionUVE(previous, current, 2U, transition));
+    EXPECT_EQ(transition, TouchChordLifecycleTransitionUVE::Moved);
+
+    current.touches[1U].identifier = 22U;
+    current.touches[1U].position.x = std::numeric_limits<float>::quiet_NaN();
+    EXPECT_FALSE(EvaluateTouchChordLifecycleTransitionUVE(previous, current, 2U, transition));
+    EXPECT_EQ(transition, TouchChordLifecycleTransitionUVE::Moved);
+    EXPECT_FALSE(EvaluateTouchChordLifecycleTransitionUVE(previous, current, 1U, transition));
+}
+
 TEST(MobileGestureRecognizerUVETest, EvaluatesExactTouchChordCentroid) {
     MobileInputSnapshotUVE snapshot{};
     snapshot.touches[0U] = TouchPointStateUVE{true, 11U, Math::Vector2UVE{0.0F, 2.0F}, {}, 1.0F};

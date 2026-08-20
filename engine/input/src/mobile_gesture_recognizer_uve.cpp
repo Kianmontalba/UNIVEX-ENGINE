@@ -12,6 +12,86 @@ constexpr MobileGestureRecognizerConfigUVE kDefaultGestureConfig{};
 
 } // namespace
 
+bool EvaluateTouchChordLifecycleTransitionUVE(
+    const MobileInputSnapshotUVE& previous, const MobileInputSnapshotUVE& current,
+    const std::size_t requiredTouchCount,
+    TouchChordLifecycleTransitionUVE& outTransition) noexcept {
+    if (requiredTouchCount < 2U || requiredTouchCount > kMaximumTouchCountUVE) {
+        return false;
+    }
+
+    const auto validateSnapshot = [](const MobileInputSnapshotUVE& snapshot,
+                                     std::size_t& outActiveCount) noexcept {
+        std::size_t activeCount = 0U;
+        for (std::size_t slot = 0U; slot < kMaximumTouchCountUVE; ++slot) {
+            const TouchPointStateUVE& touch = snapshot.touches[slot];
+            if (!touch.active) {
+                continue;
+            }
+            if (touch.identifier == 0U || !std::isfinite(touch.position.x) ||
+                !std::isfinite(touch.position.y) || !std::isfinite(touch.delta.x) ||
+                !std::isfinite(touch.delta.y) || !std::isfinite(touch.pressure) ||
+                touch.pressure < 0.0F || touch.pressure > 1.0F) {
+                return false;
+            }
+            for (std::size_t previousSlot = 0U; previousSlot < slot; ++previousSlot) {
+                if (snapshot.touches[previousSlot].active &&
+                    snapshot.touches[previousSlot].identifier == touch.identifier) {
+                    return false;
+                }
+            }
+            ++activeCount;
+        }
+        outActiveCount = activeCount;
+        return true;
+    };
+
+    std::size_t previousCount = 0U;
+    std::size_t currentCount = 0U;
+    if (!validateSnapshot(previous, previousCount) ||
+        !validateSnapshot(current, currentCount)) {
+        return false;
+    }
+
+    const bool previousMatches = previousCount == requiredTouchCount;
+    const bool currentMatches = currentCount == requiredTouchCount;
+    TouchChordLifecycleTransitionUVE transition = TouchChordLifecycleTransitionUVE::None;
+    if (!previousMatches && currentMatches) {
+        transition = TouchChordLifecycleTransitionUVE::Began;
+    } else if (previousMatches && !currentMatches) {
+        transition = TouchChordLifecycleTransitionUVE::Ended;
+    } else if (previousMatches && currentMatches) {
+        bool sameIdentifiers = true;
+        bool moved = false;
+        for (std::size_t currentSlot = 0U; currentSlot < kMaximumTouchCountUVE; ++currentSlot) {
+            const TouchPointStateUVE& currentTouch = current.touches[currentSlot];
+            if (!currentTouch.active) {
+                continue;
+            }
+            const TouchPointStateUVE* previousTouch = nullptr;
+            for (std::size_t previousSlot = 0U; previousSlot < kMaximumTouchCountUVE; ++previousSlot) {
+                const TouchPointStateUVE& candidate = previous.touches[previousSlot];
+                if (candidate.active && candidate.identifier == currentTouch.identifier) {
+                    previousTouch = &candidate;
+                    break;
+                }
+            }
+            if (previousTouch == nullptr) {
+                sameIdentifiers = false;
+                continue;
+            }
+            moved = moved || previousTouch->position != currentTouch.position ||
+                    previousTouch->pressure != currentTouch.pressure;
+        }
+        transition = !sameIdentifiers
+                         ? TouchChordLifecycleTransitionUVE::Replaced
+                         : (moved ? TouchChordLifecycleTransitionUVE::Moved
+                                  : TouchChordLifecycleTransitionUVE::None);
+    }
+    outTransition = transition;
+    return true;
+}
+
 bool EvaluateTouchChordUVE(const MobileInputSnapshotUVE& snapshot,
                            const std::size_t requiredTouchCount,
                            Math::Vector2UVE& outCentroid) noexcept {
