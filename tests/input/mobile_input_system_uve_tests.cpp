@@ -11,6 +11,43 @@ namespace {
 
 constexpr float kEpsilon = 1e-5F;
 
+TEST(MobileInputSystemUVETest, EvaluateMobileLifecycleTransitionUVE_ClassifiesPlatformEdges) {
+    MobileLifecycleTransitionUVE transition = MobileLifecycleTransitionUVE::Terminated;
+    ASSERT_TRUE(EvaluateMobileLifecycleTransitionUVE(
+        MobileLifecycleStateUVE::Inactive, MobileLifecycleStateUVE::Active, transition));
+    EXPECT_EQ(transition, MobileLifecycleTransitionUVE::Activated);
+    ASSERT_TRUE(EvaluateMobileLifecycleTransitionUVE(
+        MobileLifecycleStateUVE::Active, MobileLifecycleStateUVE::Suspended, transition));
+    EXPECT_EQ(transition, MobileLifecycleTransitionUVE::Suspended);
+    ASSERT_TRUE(EvaluateMobileLifecycleTransitionUVE(
+        MobileLifecycleStateUVE::Suspended, MobileLifecycleStateUVE::Active, transition));
+    EXPECT_EQ(transition, MobileLifecycleTransitionUVE::Resumed);
+    ASSERT_TRUE(EvaluateMobileLifecycleTransitionUVE(
+        MobileLifecycleStateUVE::Active, MobileLifecycleStateUVE::Inactive, transition));
+    EXPECT_EQ(transition, MobileLifecycleTransitionUVE::Deactivated);
+    ASSERT_TRUE(EvaluateMobileLifecycleTransitionUVE(
+        MobileLifecycleStateUVE::Active, MobileLifecycleStateUVE::Terminated, transition));
+    EXPECT_EQ(transition, MobileLifecycleTransitionUVE::Terminated);
+    ASSERT_TRUE(EvaluateMobileLifecycleTransitionUVE(
+        MobileLifecycleStateUVE::Terminated, MobileLifecycleStateUVE::Active, transition));
+    EXPECT_EQ(transition, MobileLifecycleTransitionUVE::Reinitialized);
+    ASSERT_TRUE(EvaluateMobileLifecycleTransitionUVE(
+        MobileLifecycleStateUVE::Active, MobileLifecycleStateUVE::Active, transition));
+    EXPECT_EQ(transition, MobileLifecycleTransitionUVE::None);
+}
+
+TEST(MobileInputSystemUVETest, EvaluateMobileLifecycleTransitionUVE_RejectsInvalidStatesAtomically) {
+    MobileLifecycleTransitionUVE transition = MobileLifecycleTransitionUVE::Resumed;
+    const auto invalidState = static_cast<MobileLifecycleStateUVE>(
+        static_cast<std::uint8_t>(MobileLifecycleStateUVE::Count));
+    EXPECT_FALSE(EvaluateMobileLifecycleTransitionUVE(
+        invalidState, MobileLifecycleStateUVE::Active, transition));
+    EXPECT_EQ(transition, MobileLifecycleTransitionUVE::Resumed);
+    EXPECT_FALSE(EvaluateMobileLifecycleTransitionUVE(
+        MobileLifecycleStateUVE::Active, invalidState, transition));
+    EXPECT_EQ(transition, MobileLifecycleTransitionUVE::Resumed);
+}
+
 TEST(MobileInputSystemUVETest, EvaluateTouchLifecycleTransitionUVE_ClassifiesSlotChanges) {
     TouchLifecycleTransitionUVE transition = TouchLifecycleTransitionUVE::Replaced;
     const TouchPointStateUVE inactive{};
