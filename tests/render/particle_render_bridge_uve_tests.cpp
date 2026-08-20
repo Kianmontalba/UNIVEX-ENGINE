@@ -7,6 +7,31 @@
 
 namespace UVE::Render::Tests {
 
+TEST(ParticleRenderBridgeUVETest, ValidateParticleRenderSnapshotUVE_AcceptsValidAndTruncatedBatches) {
+    ParticleRenderSnapshotUVE valid;
+    valid.sourceParticleCount = 1U;
+    valid.items.push_back({Scene::EntityUVE{2U, 1U}, Math::Vector3UVE{1.0F, 2.0F, 3.0F}, 1.0F, 3.0F, 7U});
+    EXPECT_TRUE(ValidateParticleRenderSnapshotUVE(valid));
+    valid.truncated = true;
+    valid.sourceParticleCount = 3U;
+    EXPECT_TRUE(ValidateParticleRenderSnapshotUVE(valid, 1U));
+}
+
+TEST(ParticleRenderBridgeUVETest, ValidateParticleRenderSnapshotUVE_RejectsInconsistentOrUnsafeBatches) {
+    ParticleRenderSnapshotUVE snapshot;
+    snapshot.sourceParticleCount = 1U;
+    snapshot.items.push_back({Scene::EntityUVE{2U, 1U}, {}, 1.0F, 0.0F, 1U});
+    EXPECT_FALSE(ValidateParticleRenderSnapshotUVE(snapshot, 0U));
+    snapshot.items[0].sequence = 0U;
+    EXPECT_FALSE(ValidateParticleRenderSnapshotUVE(snapshot));
+    snapshot.items[0].sequence = 1U;
+    snapshot.items[0].entity = Scene::kInvalidEntityUVE;
+    EXPECT_FALSE(ValidateParticleRenderSnapshotUVE(snapshot));
+    snapshot.items[0].entity = Scene::EntityUVE{2U, 1U};
+    snapshot.sourceParticleCount = 0U;
+    EXPECT_FALSE(ValidateParticleRenderSnapshotUVE(snapshot));
+}
+
 TEST(ParticleRenderBridgeUVETest, ExtractUVE_CopiesEnabledParticlesWithStableOrdering) {
     Scene::ParticleRuntimeUVE runtime;
     const Scene::EntityUVE first{2U, 1U};
