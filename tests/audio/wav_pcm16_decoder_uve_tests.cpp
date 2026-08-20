@@ -53,6 +53,50 @@ TEST(WavPcm16DecoderUVETest, PlanPcm16StreamWindowUVE_RejectsInvalidInputsAtomic
     EXPECT_EQ(plan, original);
 }
 
+TEST(WavPcm16DecoderUVETest, AdvancePcm16StreamCursorUVE_ClampsNonLoopingCursorAtEnd) {
+    std::size_t cursor = 99U;
+    bool reachedEnd = false;
+    bool wrapped = true;
+    ASSERT_TRUE(AdvancePcm16StreamCursorUVE(100U, 20U, 16U, false, cursor, reachedEnd, wrapped));
+    EXPECT_EQ(cursor, 36U);
+    EXPECT_FALSE(reachedEnd);
+    EXPECT_FALSE(wrapped);
+    ASSERT_TRUE(AdvancePcm16StreamCursorUVE(100U, cursor, 100U, false, cursor, reachedEnd, wrapped));
+    EXPECT_EQ(cursor, 100U);
+    EXPECT_TRUE(reachedEnd);
+    EXPECT_FALSE(wrapped);
+    ASSERT_TRUE(AdvancePcm16StreamCursorUVE(100U, cursor, 0U, false, cursor, reachedEnd, wrapped));
+    EXPECT_EQ(cursor, 100U);
+    EXPECT_TRUE(reachedEnd);
+}
+
+TEST(WavPcm16DecoderUVETest, AdvancePcm16StreamCursorUVE_WrapsLoopingCursor) {
+    std::size_t cursor = 0U;
+    bool reachedEnd = false;
+    bool wrapped = false;
+    ASSERT_TRUE(AdvancePcm16StreamCursorUVE(100U, 96U, 16U, true, cursor, reachedEnd, wrapped));
+    EXPECT_EQ(cursor, 12U);
+    EXPECT_TRUE(reachedEnd);
+    EXPECT_TRUE(wrapped);
+    ASSERT_TRUE(AdvancePcm16StreamCursorUVE(100U, 100U, 0U, true, cursor, reachedEnd, wrapped));
+    EXPECT_EQ(cursor, 0U);
+    EXPECT_FALSE(reachedEnd);
+    EXPECT_TRUE(wrapped);
+}
+
+TEST(WavPcm16DecoderUVETest, AdvancePcm16StreamCursorUVE_RejectsInvalidInputsAtomically) {
+    std::size_t cursor = 7U;
+    bool reachedEnd = true;
+    bool wrapped = true;
+    EXPECT_FALSE(AdvancePcm16StreamCursorUVE(0U, 0U, 1U, false, cursor, reachedEnd, wrapped));
+    EXPECT_EQ(cursor, 7U);
+    EXPECT_TRUE(reachedEnd);
+    EXPECT_TRUE(wrapped);
+    EXPECT_FALSE(AdvancePcm16StreamCursorUVE(10U, 11U, 1U, false, cursor, reachedEnd, wrapped));
+    EXPECT_FALSE(AdvancePcm16StreamCursorUVE(10U, 0U, 1U, false, cursor, reachedEnd, wrapped, 0U));
+    EXPECT_FALSE(AdvancePcm16StreamCursorUVE(11U, 0U, 1U, false, cursor, reachedEnd, wrapped, 10U));
+}
+
 TEST(WavPcm16DecoderUVETest, ValidateWavPcm16SampleWindowUVE_AcceptsBoundedChunks) {
     EXPECT_TRUE(ValidateWavPcm16SampleWindowUVE(100U, 0U, 32U));
     EXPECT_TRUE(ValidateWavPcm16SampleWindowUVE(100U, 40U, 60U));
