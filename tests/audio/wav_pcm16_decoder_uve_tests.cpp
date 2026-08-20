@@ -26,6 +26,20 @@ std::vector<std::byte> BuildWav16(const std::vector<std::int16_t>& samples, cons
     for (const std::int16_t sample : samples) AppendU16(bytes, static_cast<std::uint16_t>(sample));
     return bytes;
 }
+TEST(WavPcm16DecoderUVETest, ValidateWavPcm16SampleWindowUVE_AcceptsBoundedChunks) {
+    EXPECT_TRUE(ValidateWavPcm16SampleWindowUVE(100U, 0U, 32U));
+    EXPECT_TRUE(ValidateWavPcm16SampleWindowUVE(100U, 40U, 60U));
+    EXPECT_TRUE(ValidateWavPcm16SampleWindowUVE(100U, 40U, 8U, 8U));
+}
+
+TEST(WavPcm16DecoderUVETest, ValidateWavPcm16SampleWindowUVE_RejectsInvalidWindows) {
+    EXPECT_FALSE(ValidateWavPcm16SampleWindowUVE(100U, 0U, 0U));
+    EXPECT_FALSE(ValidateWavPcm16SampleWindowUVE(100U, 101U, 1U));
+    EXPECT_FALSE(ValidateWavPcm16SampleWindowUVE(100U, 90U, 11U));
+    EXPECT_FALSE(ValidateWavPcm16SampleWindowUVE(100U, 0U, kMaximumWavPcm16SamplesUVE + 1U));
+    EXPECT_FALSE(ValidateWavPcm16SampleWindowUVE(100U, 0U, 1U, 0U));
+}
+
 TEST(WavPcm16DecoderUVETest, DecodesNormalizedSamples) {
     std::vector<float> output;
     ASSERT_TRUE(DecodeWavPcm16SamplesUVE(BuildWav16({-32768, 0, 16384, 32767}), output));
