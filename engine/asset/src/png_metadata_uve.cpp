@@ -53,6 +53,67 @@ namespace {
     }
 }
 
+[[nodiscard]] bool UnfilterPngScanlineUVE(const PngFilterTypeUVE filter,
+                                           const std::vector<std::byte>& filteredBytes,
+                                           const std::vector<std::byte>& previousRow,
+                                           const std::size_t bytesPerPixel,
+                                           std::vector<std::byte>& outRow) {
+    if (bytesPerPixel == 0U || filteredBytes.empty() || filteredBytes.size() > kMaximumPngRgba8ScanlineBytesUVE ||
+        (!previousRow.empty() && previousRow.size() != filteredBytes.size()) ||
+        ((filter == PngFilterTypeUVE::Up || filter == PngFilterTypeUVE::Average || filter == PngFilterTypeUVE::Paeth) &&
+         previousRow.empty())) {
+        return false;
+    }
+    try {
+        std::vector<std::byte> reconstructed(filteredBytes.size());
+        const auto byteAt = [](const std::vector<std::byte>& bytes, const std::size_t index) noexcept {
+            return std::to_integer<unsigned int>(bytes[index]);
+        };
+        const auto paeth = [](const unsigned int left, const unsigned int up,
+                              const unsigned int upperLeft) noexcept {
+            const int prediction = static_cast<int>(left) + static_cast<int>(up) - static_cast<int>(upperLeft);
+            const int leftDistance = std::abs(prediction - static_cast<int>(left));
+            const int upDistance = std::abs(prediction - static_cast<int>(up));
+            const int upperLeftDistance = std::abs(prediction - static_cast<int>(upperLeft));
+            if (leftDistance <= upDistance && leftDistance <= upperLeftDistance) return left;
+            if (upDistance <= upperLeftDistance) return up;
+            return upperLeft;
+        };
+        for (std::size_t index = 0U; index < filteredBytes.size(); ++index) {
+            const unsigned int left = index >= bytesPerPixel ? byteAt(reconstructed, index - bytesPerPixel) : 0U;
+            const unsigned int up = previousRow.empty() ? 0U : byteAt(previousRow, index);
+            const unsigned int upperLeft = previousRow.empty() || index < bytesPerPixel ?
+                0U : byteAt(previousRow, index - bytesPerPixel);
+            unsigned int predictor = 0U;
+            switch (filter) {
+                case PngFilterTypeUVE::None:
+                    predictor = 0U;
+                    break;
+                case PngFilterTypeUVE::Sub:
+                    predictor = left;
+                    break;
+                case PngFilterTypeUVE::Up:
+                    predictor = up;
+                    break;
+                case PngFilterTypeUVE::Average:
+                    predictor = (left + up) / 2U;
+                    break;
+                case PngFilterTypeUVE::Paeth:
+                    predictor = paeth(left, up, upperLeft);
+                    break;
+                default:
+                    return false;
+            }
+            reconstructed[index] = std::byte{static_cast<unsigned char>(
+                (byteAt(filteredBytes, index) + predictor) & 0xFFU)};
+        }
+        outRow = std::move(reconstructed);
+        return true;
+    } catch (const std::bad_alloc&) {
+        return false;
+    }
+}
+
 } // namespace
 
 std::optional<PngMetadataUVE> ParsePngMetadataUVE(const std::vector<std::byte>& bytes) {
@@ -89,65 +150,13 @@ bool UnfilterPngRgba8ScanlineUVE(const PngFilterTypeUVE filter,
                                     const std::vector<std::byte>& filteredBytes,
                                     const std::vector<std::byte>& previousRow,
                                     std::vector<std::byte>& outRow) {
-    if (filteredBytes.empty() || filteredBytes.size() > kMaximumPngRgba8ScanlineBytesUVE ||
-        (!previousRow.empty() && previousRow.size() != filteredBytes.size()) ||
-        ((filter == PngFilterTypeUVE::Up || filter == PngFilterTypeUVE::Average || filter == PngFilterTypeUVE::Paeth) &&
-         previousRow.empty())) {
-        return false;
-    }
-    try {
-        std::vector<std::byte> reconstructed(filteredBytes.size());
-        const auto byteAt = [](const std::vector<std::byte>& bytes, const std::size_t index) noexcept {
-            return std::to_integer<unsigned int>(bytes[index]);
-        };
-        const auto paeth = [](const unsigned int left, const unsigned int up,
-                              const unsigned int upperLeft) noexcept {
-            const int prediction = static_cast<int>(left) + static_cast<int>(up) - static_cast<int>(upperLeft);
-            const int leftDistance = std::abs(prediction - static_cast<int>(left));
-            const int upDistance = std::abs(prediction - static_cast<int>(up));
-            const int upperLeftDistance = std::abs(prediction - static_cast<int>(upperLeft));
-            if (leftDistance <= upDistance && leftDistance <= upperLeftDistance) return left;
-            if (upDistance <= upperLeftDistance) return up;
-            return upperLeft;
-        };
-        for (std::size_t index = 0U; index < filteredBytes.size(); ++index) {
-            const unsigned int left = index >= 4U ? byteAt(reconstructed, index - 4U) : 0U;
-            const unsigned int up = previousRow.empty() ? 0U : byteAt(previousRow, index);
-            const unsigned int upperLeft = previousRow.empty() || index < 4U ? 0U : byteAt(previousRow, index - 4U);
-            unsigned int predictor = 0U;
-            switch (filter) {
-                case PngFilterTypeUVE::None:
-                    predictor = 0U;
-                    break;
-                case PngFilterTypeUVE::Sub:
-                    predictor = left;
-                    break;
-                case PngFilterTypeUVE::Up:
-                    predictor = up;
-                    break;
-                case PngFilterTypeUVE::Average:
-                    predictor = (left + up) / 2U;
-                    break;
-                case PngFilterTypeUVE::Paeth:
-                    predictor = paeth(left, up, upperLeft);
-                    break;
-                default:
-                    return false;
-            }
-            reconstructed[index] = std::byte{static_cast<unsigned char>(
-                (byteAt(filteredBytes, index) + predictor) & 0xFFU)};
-        }
-        outRow = std::move(reconstructed);
-        return true;
-    } catch (const std::bad_alloc&) {
-        return false;
-    }
+    return UnfilterPngScanlineUVE(filter, filteredBytes, previousRow, 4U, outRow);
 }
 
 bool ValidatePngRgba8PixelBudgetUVE(const PngMetadataUVE& metadata,
                                     const std::uint64_t maximumBytes) noexcept {
     if (metadata.width == 0U || metadata.height == 0U || metadata.bitDepth != 8U ||
-        metadata.colorType != 6U || maximumBytes == 0U) {
+        (metadata.colorType != 2U && metadata.colorType != 6U) || maximumBytes == 0U) {
         return false;
     }
     constexpr std::uint64_t kBytesPerRgba8Pixel = 4ULL;
@@ -162,8 +171,9 @@ bool ValidatePngRgba8PixelBudgetUVE(const PngMetadataUVE& metadata,
 bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUVE& outImage) noexcept {
     try {
         const auto metadata = ParsePngMetadataUVE(bytes);
-        if (!metadata.has_value() || metadata->bitDepth != 8U || metadata->colorType != 6U ||
-            metadata->interlaceMethod != 0U || !ValidatePngRgba8PixelBudgetUVE(*metadata)) {
+        if (!metadata.has_value() || metadata->bitDepth != 8U ||
+            (metadata->colorType != 2U && metadata->colorType != 6U) || metadata->interlaceMethod != 0U ||
+            !ValidatePngRgba8PixelBudgetUVE(*metadata)) {
             return false;
         }
         constexpr std::size_t kSignatureBytes = 8U;
@@ -211,13 +221,17 @@ bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUV
         if (!foundIdat || !foundIend || compressed.empty()) {
             return false;
         }
-        const std::uint64_t rowBytes64 = static_cast<std::uint64_t>(metadata->width) * 4ULL;
-        const std::uint64_t inflatedBytes64 = (rowBytes64 + 1ULL) * static_cast<std::uint64_t>(metadata->height);
-        if (rowBytes64 > std::numeric_limits<std::size_t>::max() ||
+        const std::size_t sourceBytesPerPixel = metadata->colorType == 2U ? 3U : 4U;
+        const std::uint64_t sourceRowBytes64 = static_cast<std::uint64_t>(metadata->width) * sourceBytesPerPixel;
+        const std::uint64_t outputRowBytes64 = static_cast<std::uint64_t>(metadata->width) * 4ULL;
+        const std::uint64_t inflatedBytes64 = (sourceRowBytes64 + 1ULL) * static_cast<std::uint64_t>(metadata->height);
+        if (sourceRowBytes64 > std::numeric_limits<std::size_t>::max() ||
+            outputRowBytes64 > std::numeric_limits<std::size_t>::max() ||
             inflatedBytes64 > std::numeric_limits<std::size_t>::max()) {
             return false;
         }
-        const std::size_t rowBytes = static_cast<std::size_t>(rowBytes64);
+        const std::size_t sourceRowBytes = static_cast<std::size_t>(sourceRowBytes64);
+        const std::size_t outputRowBytes = static_cast<std::size_t>(outputRowBytes64);
         const std::size_t inflatedBytes = static_cast<std::size_t>(inflatedBytes64);
         std::vector<std::byte> inflated(inflatedBytes);
         uLongf destinationLength = static_cast<uLongf>(inflated.size());
@@ -226,18 +240,25 @@ bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUV
             destinationLength != inflated.size()) {
             return false;
         }
-        std::vector<std::byte> pixels(rowBytes * static_cast<std::size_t>(metadata->height));
+        std::vector<std::byte> pixels(outputRowBytes * static_cast<std::size_t>(metadata->height));
         std::vector<std::byte> previousRow;
         for (std::size_t row = 0U; row < metadata->height; ++row) {
-            const std::size_t rowOffset = row * (rowBytes + 1U);
+            const std::size_t rowOffset = row * (sourceRowBytes + 1U);
             const auto filter = static_cast<PngFilterTypeUVE>(std::to_integer<std::uint8_t>(inflated[rowOffset]));
             const std::vector<std::byte> filtered(inflated.begin() + static_cast<std::ptrdiff_t>(rowOffset + 1U),
-                                                   inflated.begin() + static_cast<std::ptrdiff_t>(rowOffset + 1U + rowBytes));
+                                                   inflated.begin() + static_cast<std::ptrdiff_t>(rowOffset + 1U + sourceRowBytes));
             std::vector<std::byte> decodedRow;
-            if (!UnfilterPngRgba8ScanlineUVE(filter, filtered, previousRow, decodedRow)) {
+            if (!UnfilterPngScanlineUVE(filter, filtered, previousRow, sourceBytesPerPixel, decodedRow)) {
                 return false;
             }
-            std::memcpy(pixels.data() + row * rowBytes, decodedRow.data(), rowBytes);
+            for (std::size_t x = 0U; x < metadata->width; ++x) {
+                const std::size_t sourceOffset = x * sourceBytesPerPixel;
+                const std::size_t outputOffset = row * outputRowBytes + x * 4U;
+                pixels[outputOffset] = decodedRow[sourceOffset];
+                pixels[outputOffset + 1U] = decodedRow[sourceOffset + 1U];
+                pixels[outputOffset + 2U] = decodedRow[sourceOffset + 2U];
+                pixels[outputOffset + 3U] = sourceBytesPerPixel == 4U ? decodedRow[sourceOffset + 3U] : std::byte{0xFF};
+            }
             previousRow = std::move(decodedRow);
         }
         PngRgba8ImageUVE image;

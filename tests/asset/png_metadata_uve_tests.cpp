@@ -8,6 +8,7 @@
 #include <vector>
 
 #include <gtest/gtest.h>
+#include <zlib.h>
 
 namespace UVE::Asset::Tests {
 namespace {
@@ -113,12 +114,42 @@ TEST(PngMetadataUVETest, ValidatePngRgba8PixelBudgetUVE_AcceptsDefaultHdBudget) 
     EXPECT_TRUE(ValidatePngRgba8PixelBudgetUVE(*metadata));
 }
 
-TEST(PngMetadataUVETest, ValidatePngRgba8PixelBudgetUVE_RejectsZeroOrNonRgba8Facts) {
+[[nodiscard]] std::vector<std::byte> MakePngRgbOneByOneUVE() {
+    std::vector<std::byte> png{
+        std::byte{0x89}, std::byte{0x50}, std::byte{0x4E}, std::byte{0x47}, std::byte{0x0D}, std::byte{0x0A},
+        std::byte{0x1A}, std::byte{0x0A}};
+    const auto appendChunk = [](std::vector<std::byte>& output, const std::vector<std::byte>& type,
+                                const std::vector<std::byte>& payload) {
+        AppendU32BEUVE(output, static_cast<std::uint32_t>(payload.size()));
+        output.insert(output.end(), type.begin(), type.end());
+        output.insert(output.end(), payload.begin(), payload.end());
+        std::vector<std::byte> crcInput(type);
+        crcInput.insert(crcInput.end(), payload.begin(), payload.end());
+        const uLong crc = crc32(0L, reinterpret_cast<const Bytef*>(crcInput.data()), static_cast<uInt>(crcInput.size()));
+        AppendU32BEUVE(output, static_cast<std::uint32_t>(crc));
+    };
+    appendChunk(png, {std::byte{'I'}, std::byte{'H'}, std::byte{'D'}, std::byte{'R'}},
+                {std::byte{0}, std::byte{0}, std::byte{0}, std::byte{1}, std::byte{0}, std::byte{0}, std::byte{0},
+                 std::byte{1}, std::byte{8}, std::byte{2}, std::byte{0}, std::byte{0}, std::byte{0}});
+    const std::vector<std::byte> raw{std::byte{0}, std::byte{0xFF}, std::byte{0}, std::byte{0}};
+    uLongf compressedSize = compressBound(static_cast<uLong>(raw.size()));
+    std::vector<std::byte> compressed(static_cast<std::size_t>(compressedSize));
+    if (compress2(reinterpret_cast<Bytef*>(compressed.data()), &compressedSize,
+                  reinterpret_cast<const Bytef*>(raw.data()), static_cast<uLong>(raw.size()), Z_BEST_SPEED) != Z_OK) {
+        return {};
+    }
+    compressed.resize(static_cast<std::size_t>(compressedSize));
+    appendChunk(png, {std::byte{'I'}, std::byte{'D'}, std::byte{'A'}, std::byte{'T'}}, compressed);
+    appendChunk(png, {std::byte{'I'}, std::byte{'E'}, std::byte{'N'}, std::byte{'D'}}, {});
+    return png;
+}
+
+TEST(PngMetadataUVETest, ValidatePngRgba8PixelBudgetUVE_RejectsZeroAndAcceptsRgbFacts) {
     PngMetadataUVE zeroWidth{.width = 0U, .height = 1080U, .bitDepth = 8U, .colorType = 6U};
     EXPECT_FALSE(ValidatePngRgba8PixelBudgetUVE(zeroWidth));
 
     PngMetadataUVE rgb{.width = 1920U, .height = 1080U, .bitDepth = 8U, .colorType = 2U};
-    EXPECT_FALSE(ValidatePngRgba8PixelBudgetUVE(rgb));
+    EXPECT_TRUE(ValidatePngRgba8PixelBudgetUVE(rgb));
 }
 
 TEST(PngMetadataUVETest, ValidatePngRgba8PixelBudgetUVE_RejectsOverflowAndOversizedBudget) {
@@ -152,6 +183,20 @@ TEST(PngMetadataUVETest, DecodePngRgba8ImageUVE_DecodesKnownOneByOnePixel) {
     ASSERT_EQ(image.pixels.size(), 4U);
     EXPECT_EQ(image.pixels[0], std::byte{0x00});
     EXPECT_EQ(image.pixels[1], std::byte{0xFF});
+    EXPECT_EQ(image.pixels[2], std::byte{0x00});
+    EXPECT_EQ(image.pixels[3], std::byte{0xFF});
+}
+
+TEST(PngMetadataUVETest, DecodePngRgba8ImageUVE_ExpandsRgbToRgba) {
+    const std::vector<std::byte> png = MakePngRgbOneByOneUVE();
+    ASSERT_FALSE(png.empty());
+    PngRgba8ImageUVE image;
+    ASSERT_TRUE(DecodePngRgba8ImageUVE(png, image));
+    EXPECT_EQ(image.width, 1U);
+    EXPECT_EQ(image.height, 1U);
+    ASSERT_EQ(image.pixels.size(), 4U);
+    EXPECT_EQ(image.pixels[0], std::byte{0xFF});
+    EXPECT_EQ(image.pixels[1], std::byte{0x00});
     EXPECT_EQ(image.pixels[2], std::byte{0x00});
     EXPECT_EQ(image.pixels[3], std::byte{0xFF});
 }
