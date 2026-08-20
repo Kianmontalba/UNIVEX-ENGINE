@@ -42,6 +42,43 @@ TEST(ParticleDrawRecorderUVETest, IsValidParticleDrawCommandUVE_RejectsUnsafeFie
         ParticleDrawCommandUVE{{1U, 1U}, Math::Vector3UVE{}, 1.0F, 0.0F, 0U}));
 }
 
+TEST(ParticleDrawRecorderUVETest, PlanParticleGpuUploadUVE_ComputesFixedStrideBytes) {
+    ParticleDrawRecordingUVE recording;
+    recording.sourceItemCount = 2U;
+    recording.commands = {
+        ParticleDrawCommandUVE{{1U, 1U}, {}, 1.0F, 0.0F, 1U},
+        ParticleDrawCommandUVE{{2U, 1U}, {}, 0.5F, 1.0F, 2U},
+    };
+
+    ParticleGpuUploadPlanUVE plan;
+    ASSERT_TRUE(PlanParticleGpuUploadUVE(recording, 128U, plan));
+    EXPECT_EQ(plan.commandCount, 2U);
+    EXPECT_EQ(plan.byteCount, 2U * ParticleGpuUploadPlanUVE::kParticleStrideBytesUVE);
+    EXPECT_FALSE(plan.truncated);
+}
+
+TEST(ParticleDrawRecorderUVETest, PlanParticleGpuUploadUVE_PreservesTruncationAndRejectsUnsafeBatches) {
+    ParticleDrawRecordingUVE recording;
+    recording.sourceItemCount = 3U;
+    recording.truncated = true;
+    recording.commands = {ParticleDrawCommandUVE{{1U, 1U}, {}, 1.0F, 0.0F, 1U}};
+    ParticleGpuUploadPlanUVE plan;
+    ASSERT_TRUE(PlanParticleGpuUploadUVE(recording, ParticleGpuUploadPlanUVE::kParticleStrideBytesUVE, plan));
+    EXPECT_EQ(plan.commandCount, 1U);
+    EXPECT_TRUE(plan.truncated);
+
+    plan.commandCount = 9U;
+    plan.byteCount = 10U;
+    plan.truncated = false;
+    EXPECT_FALSE(PlanParticleGpuUploadUVE(recording, 1U, plan));
+    EXPECT_EQ(plan.commandCount, 9U);
+    EXPECT_EQ(plan.byteCount, 10U);
+    EXPECT_FALSE(plan.truncated);
+
+    recording.truncated = false;
+    EXPECT_FALSE(PlanParticleGpuUploadUVE(recording, 128U, plan));
+}
+
 TEST(ParticleDrawRecorderUVETest, RecordUVE_HonorsHardCapAndQueueTruncationFact) {
     RenderQueueUVE queue;
     queue.particleItems = {
