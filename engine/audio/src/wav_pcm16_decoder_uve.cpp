@@ -1,6 +1,7 @@
 // Copyright (c) 2026 UniVex Studios. All Rights Reserved.
 #include "uve/audio/wav_pcm16_decoder_uve.h"
 #include "uve/audio/wav_metadata_uve.h"
+#include "uve/audio/pcm_gain_effect_uve.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -22,6 +23,35 @@ namespace {
     return offset + 4U <= bytes.size() && std::memcmp(bytes.data() + offset, tag, 4U) == 0;
 }
 } // namespace
+
+bool ApplyPcmGainEffectChainUVE(const std::vector<float>& inputSamples,
+                                  const std::vector<float>& gains,
+                                  std::vector<float>& outputSamples) noexcept {
+    if (inputSamples.size() > kMaximumPcmGainSamplesUVE ||
+        gains.size() > kMaximumPcmGainChainEffectsUVE) {
+        return false;
+    }
+    for (const float sample : inputSamples) {
+        if (!std::isfinite(sample)) {
+            return false;
+        }
+    }
+    if (gains.empty()) {
+        outputSamples = inputSamples;
+        return true;
+    }
+    std::vector<float> working = inputSamples;
+    std::vector<float> next;
+    for (const float gain : gains) {
+        if (!ApplyPcmGainEffectUVE(working, gain, next)) {
+            return false;
+        }
+        working.swap(next);
+        next.clear();
+    }
+    outputSamples = std::move(working);
+    return true;
+}
 
 bool ValidateWavPcm16SampleWindowUVE(const std::size_t totalSamples,
                                      const std::size_t startSample,
