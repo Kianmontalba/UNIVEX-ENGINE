@@ -11,10 +11,10 @@ namespace UVE::Asset {
 
 /// AssetImporterUVE is the concrete, engine-standard implementation of IAssetImporterUVE. Its
 /// constructor registers built-in importers for plain project documents, the existing typed UVE
-/// envelopes, and the bounded raw PNG-to-`.uvetex` bridge. Envelope imports are deterministic
-/// reimport/copy contracts; the PNG importer decodes supported source bytes through
-/// `DecodePngRgba8ImageUVE` and writes validated RGBA8 texture envelopes, while raw FBX/OBJ/glTF,
-/// JPEG, material-source, and other texture/audio conversion remains deferred.
+/// envelopes, and bounded raw PNG-to-`.uvetex` and OBJ-to-`.uvemodel` bridges. Envelope imports are
+/// deterministic reimport/copy contracts; the source importers decode/convert only their documented
+/// bounded forms, while raw FBX/glTF/JPEG, MTL/material-source, and other texture/audio conversion
+/// remains independently deferred.
 class AssetImporterUVE final : public IAssetImporterUVE {
 public:
     AssetImporterUVE();
