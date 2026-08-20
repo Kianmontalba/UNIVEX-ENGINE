@@ -158,7 +158,7 @@ bool ValidatePngRgba8PixelBudgetUVE(const PngMetadataUVE& metadata,
     if (metadata.width == 0U || metadata.height == 0U ||
         !((metadata.bitDepth == 8U && (metadata.colorType == 0U || metadata.colorType == 2U ||
                                        metadata.colorType == 3U || metadata.colorType == 6U)) ||
-          (metadata.bitDepth == 16U && metadata.colorType == 6U)) || maximumBytes == 0U) {
+          (metadata.bitDepth == 16U && (metadata.colorType == 0U || metadata.colorType == 6U))) || maximumBytes == 0U) {
         return false;
     }
     constexpr std::uint64_t kBytesPerRgba8Pixel = 4ULL;
@@ -176,7 +176,7 @@ bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUV
         if (!metadata.has_value() ||
             !((metadata->bitDepth == 8U && (metadata->colorType == 0U || metadata->colorType == 2U ||
                                              metadata->colorType == 3U || metadata->colorType == 6U)) ||
-              (metadata->bitDepth == 16U && metadata->colorType == 6U)) ||
+              (metadata->bitDepth == 16U && (metadata->colorType == 0U || metadata->colorType == 6U))) ||
             metadata->interlaceMethod != 0U ||
             !ValidatePngRgba8PixelBudgetUVE(*metadata)) {
             return false;
@@ -243,7 +243,8 @@ bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUV
         if (!foundIdat || !foundIend || compressed.empty() || (metadata->colorType == 3U && paletteRgb.empty())) {
             return false;
         }
-        const std::size_t sourceBytesPerPixel = metadata->bitDepth == 16U ? 8U :
+        const std::size_t sourceBytesPerPixel = metadata->bitDepth == 16U ?
+            (metadata->colorType == 0U ? 2U : 8U) :
             (metadata->colorType == 0U || metadata->colorType == 3U ? 1U :
              (metadata->colorType == 2U ? 3U : 4U));
         const std::uint64_t sourceRowBytes64 = static_cast<std::uint64_t>(metadata->width) * sourceBytesPerPixel;
@@ -278,7 +279,13 @@ bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUV
             for (std::size_t x = 0U; x < metadata->width; ++x) {
                 const std::size_t sourceOffset = x * sourceBytesPerPixel;
                 const std::size_t outputOffset = row * outputRowBytes + x * 4U;
-                if (metadata->bitDepth == 16U) {
+                if (metadata->bitDepth == 16U && metadata->colorType == 0U) {
+                    const std::byte gray = decodedRow[sourceOffset];
+                    pixels[outputOffset] = gray;
+                    pixels[outputOffset + 1U] = gray;
+                    pixels[outputOffset + 2U] = gray;
+                    pixels[outputOffset + 3U] = std::byte{0xFF};
+                } else if (metadata->bitDepth == 16U) {
                     pixels[outputOffset] = decodedRow[sourceOffset];
                     pixels[outputOffset + 1U] = decodedRow[sourceOffset + 2U];
                     pixels[outputOffset + 2U] = decodedRow[sourceOffset + 4U];
