@@ -11,6 +11,27 @@ namespace {
 
 constexpr float kEpsilon = 1e-5F;
 
+TEST(MobileInputSystemUVETest, EvaluateMobileInputPolicyUVE_ClassifiesAvailability) {
+    MobileInputAvailabilityUVE availability = MobileInputAvailabilityUVE::TouchAndGyroscope;
+    ASSERT_TRUE(EvaluateMobileInputPolicyUVE(
+        MobileLifecycleStateUVE::Active, true, false, false, availability));
+    EXPECT_EQ(availability, MobileInputAvailabilityUVE::TouchAndGyroscope);
+    ASSERT_TRUE(EvaluateMobileInputPolicyUVE(
+        MobileLifecycleStateUVE::Active, false, true, false, availability));
+    EXPECT_EQ(availability, MobileInputAvailabilityUVE::TouchOnly);
+    ASSERT_TRUE(EvaluateMobileInputPolicyUVE(
+        MobileLifecycleStateUVE::Suspended, true, true, true, availability));
+    EXPECT_EQ(availability, MobileInputAvailabilityUVE::Disabled);
+}
+
+TEST(MobileInputSystemUVETest, EvaluateMobileInputPolicyUVE_RejectsInvalidLifecycleAtomically) {
+    MobileInputAvailabilityUVE availability = MobileInputAvailabilityUVE::TouchOnly;
+    const auto invalidState = static_cast<MobileLifecycleStateUVE>(
+        static_cast<std::uint8_t>(MobileLifecycleStateUVE::Count));
+    EXPECT_FALSE(EvaluateMobileInputPolicyUVE(invalidState, true, true, true, availability));
+    EXPECT_EQ(availability, MobileInputAvailabilityUVE::TouchOnly);
+}
+
 TEST(MobileInputSystemUVETest, EvaluateMobileLifecycleTransitionUVE_ClassifiesPlatformEdges) {
     MobileLifecycleTransitionUVE transition = MobileLifecycleTransitionUVE::Terminated;
     ASSERT_TRUE(EvaluateMobileLifecycleTransitionUVE(
