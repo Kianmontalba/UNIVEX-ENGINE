@@ -3,6 +3,35 @@
 #include <algorithm>
 #include <cmath>
 namespace UVE::Input {
+bool ApplyTouchOrientationUVE(const Math::Vector2UVE normalizedPosition,
+                              const TouchOrientationUVE orientation,
+                              Math::Vector2UVE& outOriented) noexcept {
+    if (!std::isfinite(normalizedPosition.x) || !std::isfinite(normalizedPosition.y) ||
+        normalizedPosition.x < 0.0F || normalizedPosition.x > 1.0F || normalizedPosition.y < 0.0F ||
+        normalizedPosition.y > 1.0F) {
+        return false;
+    }
+    Math::Vector2UVE oriented;
+    switch (orientation) {
+        case TouchOrientationUVE::Deg0:
+            oriented = normalizedPosition;
+            break;
+        case TouchOrientationUVE::Deg90:
+            oriented = Math::Vector2UVE{1.0F - normalizedPosition.y, normalizedPosition.x};
+            break;
+        case TouchOrientationUVE::Deg180:
+            oriented = Math::Vector2UVE{1.0F - normalizedPosition.x, 1.0F - normalizedPosition.y};
+            break;
+        case TouchOrientationUVE::Deg270:
+            oriented = Math::Vector2UVE{normalizedPosition.y, 1.0F - normalizedPosition.x};
+            break;
+        default:
+            return false;
+    }
+    outOriented = oriented;
+    return true;
+}
+
 bool NormalizeTouchCoordinateUVE(const Math::Vector2UVE pixelPosition,
                                  const TouchCoordinateViewportUVE& viewport,
                                  Math::Vector2UVE& outNormalized) noexcept {
