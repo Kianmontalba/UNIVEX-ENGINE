@@ -15,6 +15,22 @@ namespace {
                                       std::to_integer<std::uint16_t>(bytes[offset + 1U]));
 }
 } // namespace
+
+bool ValidateJpegRgba8PixelBudgetUVE(const JpegMetadataUVE& metadata,
+                                     const std::uint64_t maximumBytes) noexcept {
+    if (metadata.width == 0U || metadata.height == 0U || metadata.precision != 8U ||
+        metadata.componentCount == 0U || metadata.componentCount > 4U || maximumBytes == 0U) {
+        return false;
+    }
+    constexpr std::uint64_t kBytesPerRgba8Pixel = 4ULL;
+    const std::uint64_t pixelCount = static_cast<std::uint64_t>(metadata.width) *
+                                      static_cast<std::uint64_t>(metadata.height);
+    if (pixelCount > maximumBytes / kBytesPerRgba8Pixel) {
+        return false;
+    }
+    return pixelCount * kBytesPerRgba8Pixel <= maximumBytes;
+}
+
 std::optional<JpegMetadataUVE> ParseJpegMetadataUVE(const std::vector<std::byte>& bytes) {
     if (bytes.size() < 2U || bytes[0] != std::byte{0xFF} || bytes[1] != std::byte{0xD8}) return std::nullopt;
     std::size_t offset = 2U;
