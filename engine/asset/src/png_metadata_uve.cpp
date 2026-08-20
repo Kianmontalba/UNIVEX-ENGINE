@@ -155,8 +155,10 @@ bool UnfilterPngRgba8ScanlineUVE(const PngFilterTypeUVE filter,
 
 bool ValidatePngRgba8PixelBudgetUVE(const PngMetadataUVE& metadata,
                                     const std::uint64_t maximumBytes) noexcept {
-    if (metadata.width == 0U || metadata.height == 0U || metadata.bitDepth != 8U ||
-        (metadata.colorType != 0U && metadata.colorType != 2U && metadata.colorType != 3U && metadata.colorType != 6U) || maximumBytes == 0U) {
+    if (metadata.width == 0U || metadata.height == 0U ||
+        !((metadata.bitDepth == 8U && (metadata.colorType == 0U || metadata.colorType == 2U ||
+                                       metadata.colorType == 3U || metadata.colorType == 6U)) ||
+          (metadata.bitDepth == 16U && metadata.colorType == 6U)) || maximumBytes == 0U) {
         return false;
     }
     constexpr std::uint64_t kBytesPerRgba8Pixel = 4ULL;
@@ -171,9 +173,10 @@ bool ValidatePngRgba8PixelBudgetUVE(const PngMetadataUVE& metadata,
 bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUVE& outImage) noexcept {
     try {
         const auto metadata = ParsePngMetadataUVE(bytes);
-        if (!metadata.has_value() || metadata->bitDepth != 8U ||
-            (metadata->colorType != 0U && metadata->colorType != 2U && metadata->colorType != 3U &&
-             metadata->colorType != 6U) ||
+        if (!metadata.has_value() ||
+            !((metadata->bitDepth == 8U && (metadata->colorType == 0U || metadata->colorType == 2U ||
+                                             metadata->colorType == 3U || metadata->colorType == 6U)) ||
+              (metadata->bitDepth == 16U && metadata->colorType == 6U)) ||
             metadata->interlaceMethod != 0U ||
             !ValidatePngRgba8PixelBudgetUVE(*metadata)) {
             return false;
@@ -240,8 +243,9 @@ bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUV
         if (!foundIdat || !foundIend || compressed.empty() || (metadata->colorType == 3U && paletteRgb.empty())) {
             return false;
         }
-        const std::size_t sourceBytesPerPixel = metadata->colorType == 0U || metadata->colorType == 3U ? 1U :
-            (metadata->colorType == 2U ? 3U : 4U);
+        const std::size_t sourceBytesPerPixel = metadata->bitDepth == 16U ? 8U :
+            (metadata->colorType == 0U || metadata->colorType == 3U ? 1U :
+             (metadata->colorType == 2U ? 3U : 4U));
         const std::uint64_t sourceRowBytes64 = static_cast<std::uint64_t>(metadata->width) * sourceBytesPerPixel;
         const std::uint64_t outputRowBytes64 = static_cast<std::uint64_t>(metadata->width) * 4ULL;
         const std::uint64_t inflatedBytes64 = (sourceRowBytes64 + 1ULL) * static_cast<std::uint64_t>(metadata->height);
@@ -274,7 +278,12 @@ bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUV
             for (std::size_t x = 0U; x < metadata->width; ++x) {
                 const std::size_t sourceOffset = x * sourceBytesPerPixel;
                 const std::size_t outputOffset = row * outputRowBytes + x * 4U;
-                if (metadata->colorType == 3U) {
+                if (metadata->bitDepth == 16U) {
+                    pixels[outputOffset] = decodedRow[sourceOffset];
+                    pixels[outputOffset + 1U] = decodedRow[sourceOffset + 2U];
+                    pixels[outputOffset + 2U] = decodedRow[sourceOffset + 4U];
+                    pixels[outputOffset + 3U] = decodedRow[sourceOffset + 6U];
+                } else if (metadata->colorType == 3U) {
                     const std::size_t paletteIndex = std::to_integer<std::uint8_t>(decodedRow[sourceOffset]);
                     if (paletteIndex >= paletteAlpha.size()) {
                         return false;
@@ -289,7 +298,7 @@ bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUV
                     pixels[outputOffset] = red;
                     pixels[outputOffset + 1U] = sourceBytesPerPixel == 1U ? red : decodedRow[sourceOffset + 1U];
                     pixels[outputOffset + 2U] = sourceBytesPerPixel == 1U ? red : decodedRow[sourceOffset + 2U];
-                    pixels[outputOffset + 3U] = sourceBytesPerPixel == 4U ? decodedRow[sourceOffset + 3U] : std::byte{0xFF};
+                    pixels[outputOffset + 3U] = metadata->colorType == 6U ? decodedRow[sourceOffset + 3U] : std::byte{0xFF};
                 }
             }
             previousRow = std::move(decodedRow);
