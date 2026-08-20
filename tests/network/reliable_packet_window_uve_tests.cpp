@@ -125,6 +125,41 @@ TEST(ReliablePacketWindowUVETest, InvalidAcknowledgementDoesNotMutatePendingMask
     EXPECT_FALSE(ApplyReliableAcknowledgementsUVE(header, pending, 1U));
     EXPECT_EQ(pending, 0xA5A5A5A5U);
 }
+TEST(ReliablePacketWindowUVETest, ReliablePacketHeaderWireRoundTrip_IsLittleEndianAndExactSize) {
+    const ReliablePacketHeaderUVE original{0x12345678U, 0x90ABCDEFU, 0x01020304U};
+    std::vector<std::uint8_t> bytes;
+    ASSERT_TRUE(SerializeReliablePacketHeaderUVE(original, bytes));
+    EXPECT_EQ(bytes, (std::vector<std::uint8_t>{0x78U, 0x56U, 0x34U, 0x12U,
+                                                  0xEFU, 0xCDU, 0xABU, 0x90U,
+                                                  0x04U, 0x03U, 0x02U, 0x01U}));
+    ReliablePacketHeaderUVE decoded;
+    ASSERT_TRUE(DeserializeReliablePacketHeaderUVE(bytes, decoded));
+    EXPECT_EQ(decoded.sequence, original.sequence);
+    EXPECT_EQ(decoded.acknowledgedSequence, original.acknowledgedSequence);
+    EXPECT_EQ(decoded.selectiveAcknowledgementBits, original.selectiveAcknowledgementBits);
+}
+
+TEST(ReliablePacketWindowUVETest, ReliablePacketHeaderWireRejectsInvalidAndMalformedInputsAtomically) {
+    const ReliablePacketHeaderUVE original{7U, 8U, 9U};
+    ReliablePacketHeaderUVE decoded = original;
+    EXPECT_FALSE(DeserializeReliablePacketHeaderUVE({1U, 2U, 3U}, decoded));
+    EXPECT_EQ(decoded.sequence, original.sequence);
+    EXPECT_EQ(decoded.acknowledgedSequence, original.acknowledgedSequence);
+    EXPECT_EQ(decoded.selectiveAcknowledgementBits, original.selectiveAcknowledgementBits);
+
+    std::vector<std::uint8_t> bytes{5U, 6U};
+    EXPECT_FALSE(SerializeReliablePacketHeaderUVE(ReliablePacketHeaderUVE{0U, 2U, 3U}, bytes));
+    EXPECT_EQ(bytes, (std::vector<std::uint8_t>{5U, 6U}));
+    EXPECT_FALSE(SerializeReliablePacketHeaderUVE(ReliablePacketHeaderUVE{1U, 0U, 3U}, bytes));
+    EXPECT_EQ(bytes, (std::vector<std::uint8_t>{5U, 6U}));
+    EXPECT_FALSE(DeserializeReliablePacketHeaderUVE(
+        std::vector<std::uint8_t>{0U, 0U, 0U, 0U, 2U, 0U, 0U, 0U, 3U, 0U, 0U, 0U}, decoded));
+    EXPECT_EQ(decoded.sequence, original.sequence);
+    EXPECT_FALSE(DeserializeReliablePacketHeaderUVE(
+        std::vector<std::uint8_t>{1U, 0U, 0U, 0U, 0U, 0U, 0U, 0U, 3U, 0U, 0U, 0U}, decoded));
+    EXPECT_EQ(decoded.acknowledgedSequence, original.acknowledgedSequence);
+}
+
 TEST(ReliablePacketWindowUVETest, ReassemblesOutOfOrderFragmentsAndResetsState) {
     ReliablePayloadReassemblyStateUVE state;
     std::vector<std::uint8_t> payload;

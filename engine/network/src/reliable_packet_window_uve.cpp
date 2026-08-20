@@ -14,6 +14,49 @@ constexpr std::uint32_t kHalfSequenceSpaceUVE = 0x80000000U;
 }
 } // namespace
 
+bool SerializeReliablePacketHeaderUVE(const ReliablePacketHeaderUVE& header,
+                                      std::vector<std::uint8_t>& outBytes) noexcept {
+    if (header.sequence == 0U || header.acknowledgedSequence == 0U) {
+        return false;
+    }
+    try {
+        std::vector<std::uint8_t> bytes;
+        bytes.reserve(kReliablePacketHeaderWireBytesUVE);
+        const auto appendUint32 = [&bytes](const std::uint32_t value) {
+            bytes.push_back(static_cast<std::uint8_t>(value & 0xFFU));
+            bytes.push_back(static_cast<std::uint8_t>((value >> 8U) & 0xFFU));
+            bytes.push_back(static_cast<std::uint8_t>((value >> 16U) & 0xFFU));
+            bytes.push_back(static_cast<std::uint8_t>((value >> 24U) & 0xFFU));
+        };
+        appendUint32(header.sequence);
+        appendUint32(header.acknowledgedSequence);
+        appendUint32(header.selectiveAcknowledgementBits);
+        outBytes = std::move(bytes);
+        return true;
+    } catch (const std::bad_alloc&) {
+        return false;
+    }
+}
+
+bool DeserializeReliablePacketHeaderUVE(const std::vector<std::uint8_t>& bytes,
+                                        ReliablePacketHeaderUVE& outHeader) noexcept {
+    if (bytes.size() != kReliablePacketHeaderWireBytesUVE) {
+        return false;
+    }
+    const auto readUint32 = [&bytes](const std::size_t offset) {
+        return static_cast<std::uint32_t>(bytes[offset]) |
+               (static_cast<std::uint32_t>(bytes[offset + 1U]) << 8U) |
+               (static_cast<std::uint32_t>(bytes[offset + 2U]) << 16U) |
+               (static_cast<std::uint32_t>(bytes[offset + 3U]) << 24U);
+    };
+    const ReliablePacketHeaderUVE decoded{readUint32(0U), readUint32(4U), readUint32(8U)};
+    if (decoded.sequence == 0U || decoded.acknowledgedSequence == 0U) {
+        return false;
+    }
+    outHeader = decoded;
+    return true;
+}
+
 ReliablePayloadReassemblyStatusUVE AcceptReliablePayloadFragmentUVE(
     const std::uint32_t messageId, const std::size_t fragmentIndex, const std::size_t fragmentCount,
     const std::vector<std::uint8_t>& fragmentBytes, ReliablePayloadReassemblyStateUVE& state,

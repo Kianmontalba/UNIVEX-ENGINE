@@ -7,11 +7,20 @@ namespace UVE::Network {
 inline constexpr std::uint32_t kReliablePacketMaximumSelectiveAckBitsUVE = 32U;
 inline constexpr std::size_t kReliablePacketMaximumPayloadBytesUVE = 1200U;
 inline constexpr std::size_t kReliablePacketMaximumFragmentCountUVE = 1024U;
+inline constexpr std::size_t kReliablePacketHeaderWireBytesUVE = 12U;
 struct ReliablePacketHeaderUVE final {
     std::uint32_t sequence = 0U;
     std::uint32_t acknowledgedSequence = 0U;
     std::uint32_t selectiveAcknowledgementBits = 0U;
 };
+/// Serializes one validated reliable header into an exact 12-byte little-endian wire representation.
+/// The helper owns only copied bytes and publishes output failure-atomically.
+[[nodiscard]] bool SerializeReliablePacketHeaderUVE(
+    const ReliablePacketHeaderUVE& header, std::vector<std::uint8_t>& outBytes) noexcept;
+/// Deserializes one exact 12-byte little-endian reliable header with nonzero sequence/ack validation.
+/// The helper owns no packet, socket, payload, timer, or transport lifecycle.
+[[nodiscard]] bool DeserializeReliablePacketHeaderUVE(
+    const std::vector<std::uint8_t>& bytes, ReliablePacketHeaderUVE& outHeader) noexcept;
 enum class ReliablePacketReceiveStatusUVE : std::uint8_t {
     Accepted = 0,
     Duplicate,
