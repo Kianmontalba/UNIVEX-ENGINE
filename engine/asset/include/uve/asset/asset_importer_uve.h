@@ -14,8 +14,8 @@ namespace UVE::Asset {
 /// envelopes, and bounded raw PNG-to-`.uvetex`, OBJ-to-`.uvemodel`, MTL-to-`.uvemat`, and
 /// glTF/GLB-to-`.uvemodel` bridges.
 /// Envelope imports are deterministic reimport/copy contracts; the source importers decode/convert
-/// only their documented bounded forms, while raw FBX/JPEG, broader glTF scene/material/image
-/// conversion, MTL texture/shader resolution, and other texture/audio conversion remains independently deferred.
+/// only their documented bounded forms, while raw FBX/audio, broader glTF scene/material/image
+/// conversion, MTL texture/shader resolution, and other audio conversion remains independently deferred.
 class AssetImporterUVE final : public IAssetImporterUVE {
 public:
     AssetImporterUVE();
