@@ -61,6 +61,7 @@ add_executable(uve_tests
     asset/obj_mesh_converter_uve_tests.cpp
     asset/obj_importer_uve_tests.cpp
     asset/gltf_metadata_uve_tests.cpp
+    asset/gltf_mesh_converter_uve_tests.cpp
     asset/jpeg_metadata_uve_tests.cpp
     asset/mtl_metadata_uve_tests.cpp
     asset/mtl_material_converter_uve_tests.cpp
