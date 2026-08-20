@@ -1,6 +1,15 @@
 // Copyright (c) 2026 UniVex Studios. All Rights Reserved.
 #include "uve/asset/jpeg_metadata_uve.h"
 #include <cstddef>
+#include <cstdio>
+#include <cstdlib>
+#include <csetjmp>
+#include <cstring>
+#include <limits>
+#include <new>
+#include <utility>
+
+#include <jpeglib.h>
 namespace UVE::Asset {
 namespace {
 [[nodiscard]] bool IsSofMarkerUVE(const std::uint8_t marker) noexcept {
@@ -14,6 +23,103 @@ namespace {
     return static_cast<std::uint16_t>((std::to_integer<std::uint16_t>(bytes[offset]) << 8U) |
                                       std::to_integer<std::uint16_t>(bytes[offset + 1U]));
 }
+struct JpegErrorUVE final {
+    jpeg_error_mgr base{};
+    std::jmp_buf jump{};
+};
+
+void JpegErrorExitUVE(j_common_ptr info) noexcept {
+    auto* const error = reinterpret_cast<JpegErrorUVE*>(info->err);
+    longjmp(error->jump, 1);
+}
+
+struct JpegDecodeStateUVE final {
+    jpeg_decompress_struct decoder{};
+    bool decoderCreated = false;
+    unsigned char* rgbaPixels = nullptr;
+    unsigned char* scanline = nullptr;
+};
+
+[[nodiscard]] bool DecodeJpegRawRgba8UVE(const std::vector<std::byte>& bytes,
+                                          const JpegMetadataUVE& metadata,
+                                          std::byte*& outPixels) noexcept {
+    outPixels = nullptr;
+    auto* const state = new (std::nothrow) JpegDecodeStateUVE{};
+    if (state == nullptr) return false;
+    JpegErrorUVE error;
+    state->decoder.err = jpeg_std_error(&error.base);
+    error.base.error_exit = JpegErrorExitUVE;
+    if (setjmp(error.jump) != 0) {
+        std::free(state->scanline);
+        std::free(state->rgbaPixels);
+        if (state->decoderCreated) jpeg_destroy_decompress(&state->decoder);
+        delete state;
+        return false;
+    }
+    jpeg_create_decompress(&state->decoder);
+    state->decoderCreated = true;
+    jpeg_mem_src(&state->decoder,
+                 const_cast<unsigned char*>(reinterpret_cast<const unsigned char*>(bytes.data())),
+                 static_cast<unsigned long>(bytes.size()));
+    if (jpeg_read_header(&state->decoder, TRUE) != JPEG_HEADER_OK) {
+        jpeg_destroy_decompress(&state->decoder);
+        delete state;
+        return false;
+    }
+    state->decoder.out_color_space = JCS_RGB;
+    if (!jpeg_start_decompress(&state->decoder) || state->decoder.output_width != metadata.width ||
+        state->decoder.output_height != metadata.height || state->decoder.output_components != 3U) {
+        jpeg_destroy_decompress(&state->decoder);
+        delete state;
+        return false;
+    }
+    const std::size_t outputWidth = static_cast<std::size_t>(state->decoder.output_width);
+    const std::size_t outputHeight = static_cast<std::size_t>(state->decoder.output_height);
+    const std::size_t rgbaByteCount = outputWidth * outputHeight * 4U;
+    state->rgbaPixels = static_cast<unsigned char*>(std::malloc(rgbaByteCount));
+    state->scanline = static_cast<unsigned char*>(std::malloc(outputWidth * 3U));
+    if (state->rgbaPixels == nullptr || state->scanline == nullptr) {
+        std::free(state->scanline);
+        std::free(state->rgbaPixels);
+        jpeg_destroy_decompress(&state->decoder);
+        delete state;
+        return false;
+    }
+    while (state->decoder.output_scanline < state->decoder.output_height) {
+        JSAMPROW row = state->scanline;
+        if (jpeg_read_scanlines(&state->decoder, &row, 1U) != 1U) {
+            std::free(state->scanline);
+            std::free(state->rgbaPixels);
+            jpeg_destroy_decompress(&state->decoder);
+            delete state;
+            return false;
+        }
+        const std::size_t sourceRow = static_cast<std::size_t>(state->decoder.output_scanline - 1U);
+        for (std::size_t x = 0U; x < outputWidth; ++x) {
+            const std::size_t source = x * 3U;
+            const std::size_t target = (sourceRow * outputWidth + x) * 4U;
+            state->rgbaPixels[target] = state->scanline[source];
+            state->rgbaPixels[target + 1U] = state->scanline[source + 1U];
+            state->rgbaPixels[target + 2U] = state->scanline[source + 2U];
+            state->rgbaPixels[target + 3U] = 0xFFU;
+        }
+    }
+    if (!jpeg_finish_decompress(&state->decoder)) {
+        std::free(state->scanline);
+        std::free(state->rgbaPixels);
+        jpeg_destroy_decompress(&state->decoder);
+        delete state;
+        return false;
+    }
+    std::free(state->scanline);
+    state->scanline = nullptr;
+    jpeg_destroy_decompress(&state->decoder);
+    outPixels = reinterpret_cast<std::byte*>(state->rgbaPixels);
+    state->rgbaPixels = nullptr;
+    delete state;
+    return true;
+}
+
 } // namespace
 
 bool ValidateJpegRgba8PixelBudgetUVE(const JpegMetadataUVE& metadata,
@@ -60,4 +166,31 @@ std::optional<JpegMetadataUVE> ParseJpegMetadataUVE(const std::vector<std::byte>
     }
     return std::nullopt;
 }
+
+bool DecodeJpegRgba8ImageUVE(const std::vector<std::byte>& bytes, JpegRgba8ImageUVE& outImage) noexcept {
+    std::byte* rawPixels = nullptr;
+    try {
+        const auto metadata = ParseJpegMetadataUVE(bytes);
+        if (!metadata.has_value() || metadata->progressive || !ValidateJpegRgba8PixelBudgetUVE(*metadata) ||
+            bytes.size() > static_cast<std::size_t>(std::numeric_limits<unsigned long>::max())) {
+            return false;
+        }
+        if (!DecodeJpegRawRgba8UVE(bytes, *metadata, rawPixels)) return false;
+        const std::size_t pixelByteCount = static_cast<std::size_t>(metadata->width) * metadata->height * 4U;
+        std::vector<std::byte> pixels(pixelByteCount);
+        std::memcpy(pixels.data(), rawPixels, pixelByteCount);
+        std::free(rawPixels);
+        rawPixels = nullptr;
+        JpegRgba8ImageUVE image;
+        image.width = metadata->width;
+        image.height = metadata->height;
+        image.pixels = std::move(pixels);
+        outImage = std::move(image);
+        return true;
+    } catch (const std::bad_alloc&) {
+        std::free(rawPixels);
+        return false;
+    }
+}
+
 } // namespace UVE::Asset

@@ -37,7 +37,7 @@ jobs:
             sudo -n fuser -v /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock || true
             sudo -n dpkg --audit || true
             sudo -n apt-cache policy cmake g++ ninja-build libglfw3-dev libwayland-dev libxkbcommon-dev \
-              libxrandr-dev libxi-dev libxinerama-dev libxcursor-dev || true
+              libxrandr-dev libxi-dev libxinerama-dev libxcursor-dev libjpeg-dev || true
           }
           trap 'status=$?; apt_diagnostics; exit "$status"' ERR
 
@@ -72,7 +72,8 @@ jobs:
               libxrandr-dev \
               libxi-dev \
               libxinerama-dev \
-              libxcursor-dev
+              libxcursor-dev \
+              libjpeg-dev
 
       - name: Configure Debug build
         run: >-
@@ -113,7 +114,7 @@ jobs:
             sudo -n fuser -v /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock || true
             sudo -n dpkg --audit || true
             sudo -n apt-cache policy cmake g++ ninja-build libglfw3-dev libwayland-dev libxkbcommon-dev \
-              libxrandr-dev libxi-dev libxinerama-dev libxcursor-dev xvfb || true
+              libxrandr-dev libxi-dev libxinerama-dev libxcursor-dev libjpeg-dev xvfb || true
           }
           trap 'status=$?; apt_diagnostics; exit "$status"' ERR
 
@@ -149,6 +150,7 @@ jobs:
               libxi-dev \
               libxinerama-dev \
               libxcursor-dev \
+              libjpeg-dev \
               xvfb
 
       - name: Configure headless bridge backend

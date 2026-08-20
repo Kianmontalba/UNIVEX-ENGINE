@@ -22,4 +22,15 @@ struct JpegMetadataUVE final {
 /// lengths and frame dimensions but never decodes entropy data, owns files, allocates pixels, or
 /// selects a texture/renderer backend.
 [[nodiscard]] std::optional<JpegMetadataUVE> ParseJpegMetadataUVE(const std::vector<std::byte>& bytes);
+
+struct JpegRgba8ImageUVE final {
+    std::uint32_t width = 0U;
+    std::uint32_t height = 0U;
+    std::vector<std::byte> pixels;
+};
+
+/// Decodes bounded JPEG source bytes into copied RGBA8 pixels using the approved codec boundary.
+/// It rejects unsupported/unsafe input atomically and owns no filesystem or GPU resources.
+[[nodiscard]] bool DecodeJpegRgba8ImageUVE(
+    const std::vector<std::byte>& bytes, JpegRgba8ImageUVE& outImage) noexcept;
 } // namespace UVE::Asset
