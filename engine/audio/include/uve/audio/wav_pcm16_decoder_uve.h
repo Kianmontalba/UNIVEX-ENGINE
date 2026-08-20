@@ -20,6 +20,12 @@ struct Pcm16StreamWindowPlanUVE final {
     std::size_t totalSamples, std::size_t cursorSample, std::size_t requestedSamples,
     bool loop, Pcm16StreamWindowPlanUVE& outPlan,
     std::size_t maximumSamples = kMaximumWavPcm16SamplesUVE) noexcept;
+/// Advances a caller-owned PCM16 sample cursor without decoding, scheduling refills, or owning a stream.
+/// Non-looping cursors clamp at totalSamples; looping cursors wrap to the beginning after the end.
+[[nodiscard]] bool AdvancePcm16StreamCursorUVE(
+    std::size_t totalSamples, std::size_t cursorSample, std::size_t advanceSamples, bool loop,
+    std::size_t& outCursorSample, bool& outReachedEnd, bool& outWrapped,
+    std::size_t maximumSamples = kMaximumWavPcm16SamplesUVE) noexcept;
 /// Validates one bounded PCM16 sample window for caller-owned streaming/chunk preparation.
 [[nodiscard]] bool ValidateWavPcm16SampleWindowUVE(std::size_t totalSamples,
                                                     std::size_t startSample,

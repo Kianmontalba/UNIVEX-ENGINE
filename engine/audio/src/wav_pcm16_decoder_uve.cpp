@@ -77,6 +77,39 @@ bool PlanPcm16StreamWindowUVE(const std::size_t totalSamples, const std::size_t 
     return true;
 }
 
+bool AdvancePcm16StreamCursorUVE(const std::size_t totalSamples, const std::size_t cursorSample,
+                                    const std::size_t advanceSamples, const bool loop,
+                                    std::size_t& outCursorSample, bool& outReachedEnd,
+                                    bool& outWrapped, const std::size_t maximumSamples) noexcept {
+    if (totalSamples == 0U || totalSamples > maximumSamples || maximumSamples == 0U ||
+        cursorSample > totalSamples) {
+        return false;
+    }
+    if (!loop && cursorSample == totalSamples) {
+        outCursorSample = totalSamples;
+        outReachedEnd = true;
+        outWrapped = false;
+        return true;
+    }
+    const std::size_t normalizedCursor = cursorSample == totalSamples ? 0U : cursorSample;
+    const std::size_t remainingSamples = totalSamples - normalizedCursor;
+    const bool reachedEnd = advanceSamples >= remainingSamples;
+    if (!loop) {
+        outCursorSample = reachedEnd ? totalSamples : normalizedCursor + advanceSamples;
+        outReachedEnd = reachedEnd;
+        outWrapped = false;
+        return true;
+    }
+    if (!reachedEnd) {
+        outCursorSample = normalizedCursor + advanceSamples;
+    } else {
+        outCursorSample = (advanceSamples - remainingSamples) % totalSamples;
+    }
+    outReachedEnd = reachedEnd;
+    outWrapped = cursorSample == totalSamples || reachedEnd;
+    return true;
+}
+
 bool ValidateWavPcm16SampleWindowUVE(const std::size_t totalSamples,
                                      const std::size_t startSample,
                                      const std::size_t requestedSamples,
