@@ -5,6 +5,7 @@
 namespace UVE::Network {
 inline constexpr std::uint32_t kReliablePacketMaximumSelectiveAckBitsUVE = 32U;
 inline constexpr std::size_t kReliablePacketMaximumPayloadBytesUVE = 1200U;
+inline constexpr std::size_t kReliablePacketMaximumFragmentCountUVE = 1024U;
 struct ReliablePacketHeaderUVE final {
     std::uint32_t sequence = 0U;
     std::uint32_t acknowledgedSequence = 0U;
@@ -33,6 +34,19 @@ struct ReliableRetransmitPolicyInputUVE final {
     std::uint32_t retryCount = 0U;
     std::uint32_t maximumRetries = 0U;
 };
+struct ReliablePayloadFragmentPlanUVE final {
+    std::size_t fragmentCount = 0U;
+    std::size_t maximumFragmentBytes = 0U;
+    std::size_t finalFragmentBytes = 0U;
+    bool fragmented = false;
+    [[nodiscard]] bool operator==(const ReliablePayloadFragmentPlanUVE&) const noexcept = default;
+};
+/// Plans bounded caller-owned payload fragments without serializing or retaining reassembly state.
+[[nodiscard]] bool PlanReliablePayloadFragmentsUVE(
+    std::size_t payloadBytes, std::size_t fragmentBytes,
+    ReliablePayloadFragmentPlanUVE& outPlan,
+    std::size_t maximumFragments = kReliablePacketMaximumFragmentCountUVE) noexcept;
+
 /// Validates one caller-owned payload size against a bounded datagram budget.
 [[nodiscard]] bool ValidateReliablePayloadBudgetUVE(
     std::size_t payloadBytes,

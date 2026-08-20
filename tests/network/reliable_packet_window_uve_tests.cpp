@@ -3,6 +3,34 @@
 #include <gtest/gtest.h>
 namespace UVE::Network::Tests {
 namespace {
+TEST(ReliablePacketWindowUVETest, PlansReliablePayloadFragmentsUVE_CalculatesBoundaries) {
+    ReliablePayloadFragmentPlanUVE plan{99U, 99U, 99U, true};
+    ASSERT_TRUE(PlanReliablePayloadFragmentsUVE(500U, 1200U, plan));
+    EXPECT_EQ(plan.fragmentCount, 1U);
+    EXPECT_EQ(plan.maximumFragmentBytes, 1200U);
+    EXPECT_EQ(plan.finalFragmentBytes, 500U);
+    EXPECT_FALSE(plan.fragmented);
+    ASSERT_TRUE(PlanReliablePayloadFragmentsUVE(2500U, 1000U, plan));
+    EXPECT_EQ(plan.fragmentCount, 3U);
+    EXPECT_EQ(plan.finalFragmentBytes, 500U);
+    EXPECT_TRUE(plan.fragmented);
+}
+
+TEST(ReliablePacketWindowUVETest, PlansReliablePayloadFragmentsUVE_RejectsInvalidAndOverCapInputsAtomically) {
+    const ReliablePayloadFragmentPlanUVE original{7U, 8U, 9U, true};
+    ReliablePayloadFragmentPlanUVE plan = original;
+    EXPECT_FALSE(PlanReliablePayloadFragmentsUVE(0U, 100U, plan));
+    EXPECT_EQ(plan, original);
+    EXPECT_FALSE(PlanReliablePayloadFragmentsUVE(100U, 0U, plan));
+    EXPECT_EQ(plan, original);
+    EXPECT_FALSE(PlanReliablePayloadFragmentsUVE(100U, kReliablePacketMaximumPayloadBytesUVE + 1U, plan));
+    EXPECT_EQ(plan, original);
+    EXPECT_FALSE(PlanReliablePayloadFragmentsUVE(2500U, 1000U, plan, 2U));
+    EXPECT_EQ(plan, original);
+    EXPECT_FALSE(PlanReliablePayloadFragmentsUVE(1025U, 1U, plan, 2048U));
+    EXPECT_EQ(plan, original);
+}
+
 TEST(ReliablePacketWindowUVETest, ValidateReliablePayloadBudgetUVE_AcceptsBoundedPayloads) {
     EXPECT_TRUE(ValidateReliablePayloadBudgetUVE(0U));
     EXPECT_TRUE(ValidateReliablePayloadBudgetUVE(kReliablePacketMaximumPayloadBytesUVE));
