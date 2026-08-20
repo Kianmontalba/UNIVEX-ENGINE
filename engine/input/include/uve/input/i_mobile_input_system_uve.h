@@ -37,6 +37,62 @@ enum class TouchLifecycleTransitionUVE : std::uint8_t {
     Replaced,
 };
 
+enum class MobileLifecycleStateUVE : std::uint8_t {
+    Inactive = 0,
+    Active,
+    Suspended,
+    Terminated,
+    Count,
+};
+
+enum class MobileLifecycleTransitionUVE : std::uint8_t {
+    None = 0,
+    Activated,
+    Resumed,
+    Suspended,
+    Deactivated,
+    Terminated,
+    Reinitialized,
+};
+
+/// Classifies a copied application-lifecycle edge for Android/iOS adapters without owning native
+/// lifecycle callbacks, process state, or platform shutdown policy.
+[[nodiscard]] inline bool EvaluateMobileLifecycleTransitionUVE(
+    const MobileLifecycleStateUVE previous, const MobileLifecycleStateUVE current,
+    MobileLifecycleTransitionUVE& outTransition) noexcept {
+    const auto isValid = [](const MobileLifecycleStateUVE state) noexcept {
+        return static_cast<std::uint8_t>(state) < static_cast<std::uint8_t>(MobileLifecycleStateUVE::Count);
+    };
+    if (!isValid(previous) || !isValid(current)) {
+        return false;
+    }
+    MobileLifecycleTransitionUVE transition = MobileLifecycleTransitionUVE::None;
+    if (previous != current) {
+        switch (current) {
+        case MobileLifecycleStateUVE::Active:
+            transition = previous == MobileLifecycleStateUVE::Suspended
+                             ? MobileLifecycleTransitionUVE::Resumed
+                             : (previous == MobileLifecycleStateUVE::Terminated
+                                    ? MobileLifecycleTransitionUVE::Reinitialized
+                                    : MobileLifecycleTransitionUVE::Activated);
+            break;
+        case MobileLifecycleStateUVE::Suspended:
+            transition = MobileLifecycleTransitionUVE::Suspended;
+            break;
+        case MobileLifecycleStateUVE::Inactive:
+            transition = MobileLifecycleTransitionUVE::Deactivated;
+            break;
+        case MobileLifecycleStateUVE::Terminated:
+            transition = MobileLifecycleTransitionUVE::Terminated;
+            break;
+        case MobileLifecycleStateUVE::Count:
+            return false;
+        }
+    }
+    outTransition = transition;
+    return true;
+}
+
 /// Classifies one copied touch-slot transition. Replaced means two active frames have different
 /// identifiers in the same slot; the helper does not poll hardware, own lifecycle state, or mutate snapshots.
 [[nodiscard]] inline bool EvaluateTouchLifecycleTransitionUVE(
