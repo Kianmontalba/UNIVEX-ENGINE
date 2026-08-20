@@ -31,6 +31,27 @@ TEST(SavePayloadCompressionUVETest, CorruptCompressedPayloadFailsAtomically) {
     EXPECT_FALSE(DecompressSavePayloadUVE(compressed, restored));
     EXPECT_EQ(restored, std::vector<std::byte>{std::byte{0x11}});
 }
+TEST(SavePayloadCompressionUVETest, CorruptCompressedByteFailsFingerprintValidationAtomically) {
+    const std::vector<std::byte> payload(128U, std::byte{0x7F});
+    std::vector<std::byte> compressed = CompressSavePayloadUVE(payload);
+    ASSERT_LT(compressed.size(), payload.size());
+    compressed.back() = std::byte{0x7E};
+    std::vector<std::byte> restored{std::byte{0x11}};
+    EXPECT_FALSE(DecompressSavePayloadUVE(compressed, restored));
+    EXPECT_EQ(restored, std::vector<std::byte>{std::byte{0x11}});
+}
+TEST(SavePayloadCompressionUVETest, LegacyCompressedEnvelopeRemainsReadable) {
+    std::vector<std::byte> legacy{std::byte{'U'}, std::byte{'V'}, std::byte{'S'}, std::byte{'C'}};
+    const std::uint64_t expectedSize = 4U;
+    const auto* sizeBytes = reinterpret_cast<const std::byte*>(&expectedSize);
+    legacy.insert(legacy.end(), sizeBytes, sizeBytes + sizeof(expectedSize));
+    legacy.push_back(std::byte{4U});
+    legacy.push_back(std::byte{'a'});
+
+    std::vector<std::byte> restored;
+    ASSERT_TRUE(DecompressSavePayloadUVE(legacy, restored));
+    EXPECT_EQ(restored, (std::vector<std::byte>{std::byte{'a'}, std::byte{'a'}, std::byte{'a'}, std::byte{'a'}}));
+}
 TEST(SavePayloadCompressionUVETest, OversizedPayloadIsRejected) {
     const std::vector<std::byte> payload(kMaximumCompressedSavePayloadBytesUVE + 1U, std::byte{0});
     EXPECT_TRUE(CompressSavePayloadUVE(payload).empty());
