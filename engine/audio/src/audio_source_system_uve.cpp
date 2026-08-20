@@ -27,10 +27,36 @@ namespace {
     }
 }
 
+[[nodiscard]] AudioSourceDescUVE MakeAudioSourceDescUVE(
+    const Scene::AudioSourceComponentUVE& audioSource) {
+    AudioSourceDescUVE desc;
+    desc.audioAssetPath = audioSource.audioAssetPath;
+    desc.looping = audioSource.looping;
+    desc.volume = audioSource.volume;
+    desc.pitch = audioSource.pitch;
+    desc.spatial = audioSource.spatial;
+    desc.minDistance = audioSource.minDistance;
+    desc.maxDistance = audioSource.maxDistance;
+    desc.attenuationModel = AttenuationModelOfUVE(audioSource.attenuationCurve);
+    return desc;
+}
+
+[[nodiscard]] bool RequiresVoiceReplacementUVE(const AudioSourceDescUVE& previous,
+                                                const AudioSourceDescUVE& current) noexcept {
+    return previous.audioAssetPath != current.audioAssetPath || previous.looping != current.looping ||
+           previous.spatial != current.spatial || previous.minDistance != current.minDistance ||
+           previous.maxDistance != current.maxDistance || previous.attenuationModel != current.attenuationModel;
+}
+
 } // namespace
 
 struct AudioSourceSystemUVE::ImplUVE {
-    std::unordered_map<Scene::EntityUVE, VoiceHandleUVE> entityToVoice;
+    struct SourceStateUVE final {
+        VoiceHandleUVE voice;
+        AudioSourceDescUVE descriptor;
+    };
+
+    std::unordered_map<Scene::EntityUVE, SourceStateUVE> entityToVoice;
 };
 
 AudioSourceSystemUVE::AudioSourceSystemUVE() : m_impl(std::make_unique<ImplUVE>()) {}
@@ -46,33 +72,45 @@ void AudioSourceSystemUVE::SyncUVE(Scene::IEntityManagerUVE& entityManager, IAud
             UVE_ASSERT(Scene::IsAudioSourceComponentValidUVE(audioSource));
             seen.insert(entity);
 
+            const AudioSourceDescUVE desiredDesc = MakeAudioSourceDescUVE(audioSource);
             auto iterator = m_impl->entityToVoice.find(entity);
             if (iterator == m_impl->entityToVoice.end()) {
-                AudioSourceDescUVE desc;
-                desc.audioAssetPath = audioSource.audioAssetPath;
-                desc.looping = audioSource.looping;
-                desc.volume = audioSource.volume;
-                desc.pitch = audioSource.pitch;
-                desc.spatial = audioSource.spatial;
-                desc.minDistance = audioSource.minDistance;
-                desc.maxDistance = audioSource.maxDistance;
-                desc.attenuationModel = AttenuationModelOfUVE(audioSource.attenuationCurve);
-
-                const VoiceHandleUVE voice = audioSystem.CreateSourceUVE(desc);
-                iterator = m_impl->entityToVoice.emplace(entity, voice).first;
+                const VoiceHandleUVE voice = audioSystem.CreateSourceUVE(desiredDesc);
+                if (voice == kInvalidVoiceHandleUVE) {
+                    return;
+                }
+                iterator = m_impl->entityToVoice.emplace(
+                    entity, ImplUVE::SourceStateUVE{voice, desiredDesc}).first;
                 if (audioSource.playOnAwake) {
                     static_cast<void>(audioSystem.PlayUVE(voice));
                 }
+            } else {
+                ImplUVE::SourceStateUVE& state = iterator->second;
+                if (RequiresVoiceReplacementUVE(state.descriptor, desiredDesc)) {
+                    const VoicePlaybackStateUVE previousPlaybackState = audioSystem.GetSourceStateUVE(state.voice);
+                    const VoiceHandleUVE replacement = audioSystem.CreateSourceUVE(desiredDesc);
+                    if (replacement != kInvalidVoiceHandleUVE) {
+                        const bool wasPlaying = previousPlaybackState == VoicePlaybackStateUVE::Playing;
+                        if (!wasPlaying || audioSystem.PlayUVE(replacement)) {
+                            const VoiceHandleUVE previousVoice = state.voice;
+                            state.voice = replacement;
+                            state.descriptor = desiredDesc;
+                            audioSystem.DestroySourceUVE(previousVoice);
+                        } else {
+                            audioSystem.DestroySourceUVE(replacement);
+                        }
+                    }
+                }
             }
 
-            audioSystem.SetSourcePositionUVE(iterator->second, worldTransform.worldPosition);
-            audioSystem.SetSourceVolumeUVE(iterator->second, audioSource.volume);
-            audioSystem.SetSourcePitchUVE(iterator->second, audioSource.pitch);
+            audioSystem.SetSourcePositionUVE(iterator->second.voice, worldTransform.worldPosition);
+            audioSystem.SetSourceVolumeUVE(iterator->second.voice, audioSource.volume);
+            audioSystem.SetSourcePitchUVE(iterator->second.voice, audioSource.pitch);
         });
 
     for (auto iterator = m_impl->entityToVoice.begin(); iterator != m_impl->entityToVoice.end();) {
         if (!seen.contains(iterator->first)) {
-            audioSystem.DestroySourceUVE(iterator->second);
+            audioSystem.DestroySourceUVE(iterator->second.voice);
             iterator = m_impl->entityToVoice.erase(iterator);
         } else {
             ++iterator;

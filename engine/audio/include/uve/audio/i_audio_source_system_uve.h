@@ -27,9 +27,11 @@ public:
     /// to track the entity's current WorldTransformComponentUVE/AudioSourceComponentUVE values;
     /// and destroys the source for any previously-seen entity no longer matching (removed
     /// entirely, or its AudioSourceComponentUVE was removed) since the last call.
-    /// Looping/spatial/minDistance/maxDistance/attenuationCurve are only read when a source is
-    /// first created — changing them later on a live entity currently has no effect until the
-    /// entity is destroyed and recreated.
+    /// Descriptor-affecting edits to audioAssetPath, looping, spatial, minDistance, maxDistance, or
+    /// attenuationCurve are applied by creating a replacement voice first. The replacement inherits
+    /// the previous voice's Stopped/Playing state; if creation or playback restart fails, the old
+    /// voice and its cached descriptor remain live. Volume, pitch, and position continue updating in
+    /// place, while playOnAwake is only honored for the first source creation.
     virtual void SyncUVE(Scene::IEntityManagerUVE& entityManager, IAudioSystemUVE& audioSystem) = 0;
 };
 
