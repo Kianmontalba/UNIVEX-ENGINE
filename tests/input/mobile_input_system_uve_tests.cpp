@@ -11,6 +11,36 @@ namespace {
 
 constexpr float kEpsilon = 1e-5F;
 
+TEST(MobileInputSystemUVETest, EvaluateTouchLifecycleTransitionUVE_ClassifiesSlotChanges) {
+    TouchLifecycleTransitionUVE transition = TouchLifecycleTransitionUVE::Replaced;
+    const TouchPointStateUVE inactive{};
+    const TouchPointStateUVE began{true, 7U, Math::Vector2UVE{1.0F, 2.0F}, {}, 0.5F};
+    const TouchPointStateUVE moved{true, 7U, Math::Vector2UVE{2.0F, 2.0F}, Math::Vector2UVE{1.0F, 0.0F}, 0.75F};
+    const TouchPointStateUVE replaced{true, 8U, Math::Vector2UVE{2.0F, 2.0F}, {}, 0.75F};
+    ASSERT_TRUE(EvaluateTouchLifecycleTransitionUVE(inactive, inactive, transition));
+    EXPECT_EQ(transition, TouchLifecycleTransitionUVE::None);
+    ASSERT_TRUE(EvaluateTouchLifecycleTransitionUVE(inactive, began, transition));
+    EXPECT_EQ(transition, TouchLifecycleTransitionUVE::Began);
+    ASSERT_TRUE(EvaluateTouchLifecycleTransitionUVE(began, moved, transition));
+    EXPECT_EQ(transition, TouchLifecycleTransitionUVE::Moved);
+    ASSERT_TRUE(EvaluateTouchLifecycleTransitionUVE(moved, inactive, transition));
+    EXPECT_EQ(transition, TouchLifecycleTransitionUVE::Ended);
+    ASSERT_TRUE(EvaluateTouchLifecycleTransitionUVE(moved, replaced, transition));
+    EXPECT_EQ(transition, TouchLifecycleTransitionUVE::Replaced);
+    ASSERT_TRUE(EvaluateTouchLifecycleTransitionUVE(began, began, transition));
+    EXPECT_EQ(transition, TouchLifecycleTransitionUVE::None);
+}
+
+TEST(MobileInputSystemUVETest, EvaluateTouchLifecycleTransitionUVE_RejectsInvalidInputsAtomically) {
+    TouchLifecycleTransitionUVE transition = TouchLifecycleTransitionUVE::Moved;
+    const TouchPointStateUVE invalidIdentifier{true, 0U, Math::Vector2UVE{}, {}, 0.5F};
+    const TouchPointStateUVE invalidPressure{true, 1U, Math::Vector2UVE{}, {}, 1.1F};
+    EXPECT_FALSE(EvaluateTouchLifecycleTransitionUVE(invalidIdentifier, TouchPointStateUVE{}, transition));
+    EXPECT_EQ(transition, TouchLifecycleTransitionUVE::Moved);
+    EXPECT_FALSE(EvaluateTouchLifecycleTransitionUVE(invalidPressure, TouchPointStateUVE{}, transition));
+    EXPECT_EQ(transition, TouchLifecycleTransitionUVE::Moved);
+}
+
 TEST(MobileInputSystemUVETest, SnapshotCopiesTouchDeltaPressureAndGyroscopeDeterministically) {
     MobileInputSystemUVE mobileInput;
 
