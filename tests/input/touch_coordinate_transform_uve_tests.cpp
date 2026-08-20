@@ -4,6 +4,25 @@
 #include <limits>
 namespace UVE::Input::Tests {
 namespace {
+TEST(TouchCoordinateTransformUVETest, AppliesCardinalTouchOrientations) {
+    const Math::Vector2UVE input{0.25F, 0.75F};
+    Math::Vector2UVE output;
+    ASSERT_TRUE(ApplyTouchOrientationUVE(input, TouchOrientationUVE::Deg0, output));
+    EXPECT_FLOAT_EQ(output.x, 0.25F); EXPECT_FLOAT_EQ(output.y, 0.75F);
+    ASSERT_TRUE(ApplyTouchOrientationUVE(input, TouchOrientationUVE::Deg90, output));
+    EXPECT_FLOAT_EQ(output.x, 0.25F); EXPECT_FLOAT_EQ(output.y, 0.25F);
+    ASSERT_TRUE(ApplyTouchOrientationUVE(input, TouchOrientationUVE::Deg180, output));
+    EXPECT_FLOAT_EQ(output.x, 0.75F); EXPECT_FLOAT_EQ(output.y, 0.25F);
+    ASSERT_TRUE(ApplyTouchOrientationUVE(input, TouchOrientationUVE::Deg270, output));
+    EXPECT_FLOAT_EQ(output.x, 0.75F); EXPECT_FLOAT_EQ(output.y, 0.75F);
+}
+TEST(TouchCoordinateTransformUVETest, RejectsInvalidOrientationInputsAtomically) {
+    Math::Vector2UVE output{0.4F, 0.6F};
+    EXPECT_FALSE(ApplyTouchOrientationUVE(Math::Vector2UVE{-0.1F, 0.5F}, TouchOrientationUVE::Deg0, output));
+    EXPECT_FLOAT_EQ(output.x, 0.4F); EXPECT_FLOAT_EQ(output.y, 0.6F);
+    EXPECT_FALSE(ApplyTouchOrientationUVE(Math::Vector2UVE{0.5F, std::numeric_limits<float>::quiet_NaN()}, TouchOrientationUVE::Deg0, output));
+    EXPECT_FLOAT_EQ(output.x, 0.4F); EXPECT_FLOAT_EQ(output.y, 0.6F);
+}
 TEST(TouchCoordinateTransformUVETest, MapsSafeAreaPixelsToNormalizedCoordinates) {
     const TouchCoordinateViewportUVE viewport{1000.0F, 800.0F, 100.0F, 50.0F, 100.0F, 50.0F};
     Math::Vector2UVE normalized{0.0F, 0.0F};
