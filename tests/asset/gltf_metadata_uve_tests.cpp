@@ -1,6 +1,7 @@
 // Copyright (c) 2026 UniVex Studios. All Rights Reserved.
 #include "uve/asset/gltf_metadata_uve.h"
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <vector>
 #include <gtest/gtest.h>
@@ -9,6 +10,24 @@ namespace {
 void AppendU32LEUVE(std::vector<std::byte>& bytes, const std::uint32_t value) {
     for (unsigned int shift = 0U; shift < 32U; shift += 8U) bytes.push_back(std::byte{static_cast<unsigned char>((value >> shift) & 0xFFU)});
 }
+TEST(GltfMetadataUVETest, ValidateGltfAccessorSpanUVE_AcceptsBoundedTightAndStridedSpans) {
+    EXPECT_TRUE(ValidateGltfAccessorSpanUVE(64U, 0U, 16U, 4U, 4U));
+    EXPECT_TRUE(ValidateGltfAccessorSpanUVE(64U, 4U, 4U, 12U, 8U));
+    EXPECT_TRUE(ValidateGltfAccessorSpanUVE(8U, 8U, 0U, 1U, 1U));
+}
+
+TEST(GltfMetadataUVETest, ValidateGltfAccessorSpanUVE_RejectsInvalidAndOverflowingSpans) {
+    EXPECT_FALSE(ValidateGltfAccessorSpanUVE(64U, 65U, 1U, 4U, 4U));
+    EXPECT_FALSE(ValidateGltfAccessorSpanUVE(64U, 0U, 2U, 3U, 4U));
+    EXPECT_FALSE(ValidateGltfAccessorSpanUVE(64U, 60U, 2U, 4U, 4U));
+    EXPECT_FALSE(ValidateGltfAccessorSpanUVE(64U, 0U, 1'000'001U, 4U, 4U));
+    EXPECT_TRUE(ValidateGltfAccessorSpanUVE(64U, 0U, 2U, 4U, 4U, 2U));
+    EXPECT_FALSE(ValidateGltfAccessorSpanUVE(std::numeric_limits<std::uint64_t>::max(), 0U,
+                                             std::numeric_limits<std::uint64_t>::max(),
+                                             std::numeric_limits<std::uint64_t>::max(), 1U,
+                                             std::numeric_limits<std::uint64_t>::max()));
+}
+
 TEST(GltfMetadataUVETest, ParseGltfMetadataUVE_ReturnsCopiedJsonCounts) {
     const auto metadata = ParseGltfMetadataUVE(R"({"asset":{"version":"2.0"},"nodes":[{}],"meshes":[{},{}],"materials":[{}],"images":[{}],"buffers":[{},{}]})");
     ASSERT_TRUE(metadata.has_value());
