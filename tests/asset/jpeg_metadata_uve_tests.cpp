@@ -21,7 +21,7 @@ void AddSofUVE(std::vector<std::byte>& bytes, const std::uint8_t marker, const s
     for (std::uint8_t index = 0U; index < components; ++index) bytes.insert(bytes.end(), {std::byte{static_cast<unsigned char>(index + 1U)}, std::byte{0x11}, std::byte{0}});
 }
 
-[[nodiscard]] std::vector<std::byte> MakeOneByOneJpegUVE() {
+[[nodiscard]] std::vector<std::byte> MakeOneByOneJpegUVE(const bool progressive = false) {
     jpeg_compress_struct compressor{};
     jpeg_error_mgr error{};
     jpeg_std_error(&error);
@@ -35,6 +35,7 @@ void AddSofUVE(std::vector<std::byte>& bytes, const std::uint8_t marker, const s
     compressor.input_components = 3;
     compressor.in_color_space = JCS_RGB;
     jpeg_set_defaults(&compressor);
+    if (progressive) jpeg_simple_progression(&compressor);
     jpeg_set_quality(&compressor, 100, TRUE);
     jpeg_start_compress(&compressor, TRUE);
     JSAMPLE pixel[3] = {255U, 0U, 0U};
@@ -53,6 +54,20 @@ TEST(JpegMetadataUVETest, DecodeJpegRgba8ImageUVE_ExpandsRgbToRgba) {
     ASSERT_TRUE(DecodeJpegRgba8ImageUVE(MakeOneByOneJpegUVE(), image));
     EXPECT_EQ(image.width, 1U);
     EXPECT_EQ(image.height, 1U);
+    ASSERT_EQ(image.pixels.size(), 4U);
+    EXPECT_GT(std::to_integer<unsigned int>(image.pixels[0]), 200U);
+    EXPECT_LT(std::to_integer<unsigned int>(image.pixels[1]), 50U);
+    EXPECT_LT(std::to_integer<unsigned int>(image.pixels[2]), 50U);
+    EXPECT_EQ(image.pixels[3], std::byte{0xFF});
+}
+
+TEST(JpegMetadataUVETest, DecodeJpegRgba8ImageUVE_DecodesProgressiveRgbToRgba) {
+    const auto bytes = MakeOneByOneJpegUVE(true);
+    const auto metadata = ParseJpegMetadataUVE(bytes);
+    ASSERT_TRUE(metadata.has_value());
+    ASSERT_TRUE(metadata->progressive);
+    JpegRgba8ImageUVE image;
+    ASSERT_TRUE(DecodeJpegRgba8ImageUVE(bytes, image));
     ASSERT_EQ(image.pixels.size(), 4U);
     EXPECT_GT(std::to_integer<unsigned int>(image.pixels[0]), 200U);
     EXPECT_LT(std::to_integer<unsigned int>(image.pixels[1]), 50U);

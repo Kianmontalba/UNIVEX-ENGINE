@@ -171,7 +171,7 @@ bool DecodeJpegRgba8ImageUVE(const std::vector<std::byte>& bytes, JpegRgba8Image
     std::byte* rawPixels = nullptr;
     try {
         const auto metadata = ParseJpegMetadataUVE(bytes);
-        if (!metadata.has_value() || metadata->progressive || !ValidateJpegRgba8PixelBudgetUVE(*metadata) ||
+        if (!metadata.has_value() || !ValidateJpegRgba8PixelBudgetUVE(*metadata) ||
             bytes.size() > static_cast<std::size_t>(std::numeric_limits<unsigned long>::max())) {
             return false;
         }
