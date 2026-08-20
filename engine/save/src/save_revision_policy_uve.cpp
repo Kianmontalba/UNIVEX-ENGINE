@@ -2,6 +2,22 @@
 
 namespace UVE::Save {
 
+SaveSyncActionUVE EvaluateSaveSyncActionUVE(const SaveRevisionStatusUVE status) noexcept {
+    switch (status) {
+        case SaveRevisionStatusUVE::Unchanged:
+            return SaveSyncActionUVE::NoOp;
+        case SaveRevisionStatusUVE::LocalAhead:
+            return SaveSyncActionUVE::Upload;
+        case SaveRevisionStatusUVE::RemoteAhead:
+            return SaveSyncActionUVE::Download;
+        case SaveRevisionStatusUVE::Conflict:
+            return SaveSyncActionUVE::Conflict;
+        case SaveRevisionStatusUVE::Invalid:
+        default:
+            return SaveSyncActionUVE::Invalid;
+    }
+}
+
 SaveRevisionStatusUVE EvaluateSaveRevisionUVE(
     const std::uint64_t baseRevision, const std::uint64_t localRevision,
     const std::uint64_t remoteRevision) noexcept {
