@@ -20,6 +20,11 @@ enum class GltfResourceUriKindUVE : std::uint8_t { Invalid, RelativePath, DataUr
 /// paths must be traversal-safe; data URIs are recognized only as bounded non-empty tokens.
 [[nodiscard]] GltfResourceUriKindUVE ClassifyGltfResourceUriUVE(std::string_view uri) noexcept;
 
+/// Resolves one safe relative glTF resource URI against the asset's directory into a bounded VFS
+/// path. Data URIs, filesystem I/O, and resource decoding are intentionally outside this contract.
+[[nodiscard]] bool ResolveGltfResourceVirtualPathUVE(
+    std::string_view assetVirtualPath, std::string_view resourceUri, std::string& outVirtualPath);
+
 struct GltfMetadataUVE final {
     GltfContainerKindUVE container = GltfContainerKindUVE::Json;
     std::uint32_t nodeCount = 0U;
