@@ -106,6 +106,8 @@ TEST_F(PhysicsConstraintSystemUVETest, AddDistanceAndSolveUVE_MassWeightedCorrec
 
     const PhysicsConstraintSolveResultUVE solved = constraintSystem.SolveUVE(entityManager, sceneGraph);
 
+    EXPECT_TRUE(solved.islandPlanValid);
+    EXPECT_EQ(solved.islandCount, 1U);
     EXPECT_GT(solved.solvedConstraintCount, 0U);
     EXPECT_NEAR(WorldPositionUVE(first).x, 3.0F, kEpsilon);
     EXPECT_NEAR(WorldPositionUVE(second).x, 7.0F, kEpsilon);
@@ -122,9 +124,34 @@ TEST_F(PhysicsConstraintSystemUVETest, SolveHingeUVE_CoincidesAnchorsAndLeavesSt
 
     const PhysicsConstraintSolveResultUVE solved = constraintSystem.SolveUVE(entityManager, sceneGraph);
 
+    EXPECT_TRUE(solved.islandPlanValid);
+    EXPECT_EQ(solved.islandCount, 1U);
     EXPECT_GT(solved.solvedConstraintCount, 0U);
     EXPECT_NEAR(WorldPositionUVE(dynamicBody).x, 6.0F, kEpsilon);
     EXPECT_NEAR(WorldPositionUVE(staticBody).x, 6.0F, kEpsilon);
+}
+
+TEST_F(PhysicsConstraintSystemUVETest, SolveUVE_ProcessesDisconnectedConstraintIslandsDeterministically) {
+    const Scene::EntityUVE first = MakeBodyUVE({0.0F, 0.0F, 0.0F});
+    const Scene::EntityUVE second = MakeBodyUVE({10.0F, 0.0F, 0.0F});
+    const Scene::EntityUVE third = MakeBodyUVE({20.0F, 0.0F, 0.0F});
+    const Scene::EntityUVE fourth = MakeBodyUVE({30.0F, 0.0F, 0.0F});
+    ASSERT_TRUE(constraintSystem.AddDistanceConstraintUVE(
+                    DistanceConstraintUVE{first, second, {}, {}, 4.0F})
+                    .IsAcceptedUVE());
+    ASSERT_TRUE(constraintSystem.AddDistanceConstraintUVE(
+                    DistanceConstraintUVE{third, fourth, {}, {}, 4.0F})
+                    .IsAcceptedUVE());
+
+    const PhysicsConstraintSolveResultUVE solved = constraintSystem.SolveUVE(entityManager, sceneGraph);
+
+    EXPECT_TRUE(solved.islandPlanValid);
+    EXPECT_EQ(solved.islandCount, 2U);
+    EXPECT_EQ(solved.solvedConstraintCount, 2U);
+    EXPECT_NEAR(WorldPositionUVE(first).x, 3.0F, kEpsilon);
+    EXPECT_NEAR(WorldPositionUVE(second).x, 7.0F, kEpsilon);
+    EXPECT_NEAR(WorldPositionUVE(third).x, 23.0F, kEpsilon);
+    EXPECT_NEAR(WorldPositionUVE(fourth).x, 27.0F, kEpsilon);
 }
 
 TEST_F(PhysicsConstraintSystemUVETest, RemoveConstraintUVE_RejectsStaleGenerationAfterSlotReuse) {
