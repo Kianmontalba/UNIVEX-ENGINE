@@ -4,6 +4,31 @@
 #include <limits>
 namespace UVE::Audio::Tests {
 namespace {
+TEST(PcmGainEffectUVETest, AppliesOrderedGainChainAndClampsEachStage) {
+    const std::vector<float> input{-0.75F, 0.25F, 0.9F};
+    std::vector<float> output;
+    ASSERT_TRUE(ApplyPcmGainEffectChainUVE(input, {2.0F, 0.5F}, output));
+    EXPECT_FLOAT_EQ(output[0], -0.5F);
+    EXPECT_FLOAT_EQ(output[1], 0.25F);
+    EXPECT_FLOAT_EQ(output[2], 0.5F);
+}
+
+TEST(PcmGainEffectUVETest, EmptyGainChainCopiesFiniteInput) {
+    const std::vector<float> input{-0.5F, 0.25F};
+    std::vector<float> output{0.75F};
+    ASSERT_TRUE(ApplyPcmGainEffectChainUVE(input, {}, output));
+    EXPECT_EQ(output, input);
+}
+
+TEST(PcmGainEffectUVETest, InvalidChainStageOrCountLeavesOutputUnchanged) {
+    const std::vector<float> input{0.5F};
+    std::vector<float> output{0.25F};
+    EXPECT_FALSE(ApplyPcmGainEffectChainUVE(input, {-1.0F}, output));
+    EXPECT_EQ(output, std::vector<float>{0.25F});
+    EXPECT_FALSE(ApplyPcmGainEffectChainUVE(input, std::vector<float>(kMaximumPcmGainChainEffectsUVE + 1U, 1.0F), output));
+    EXPECT_EQ(output, std::vector<float>{0.25F});
+}
+
 TEST(PcmGainEffectUVETest, AppliesGainAndClampsNormalizedSamples) {
     const std::vector<float> input{-0.75F, 0.25F, 0.9F};
     std::vector<float> output;
