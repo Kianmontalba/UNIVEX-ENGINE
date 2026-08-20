@@ -63,6 +63,10 @@ struct PhysicsConstraintSolveResultUVE final {
     std::size_t iterations = 0U;
     std::size_t solvedConstraintCount = 0U;
     std::size_t skippedConstraintCount = 0U;
+    /// Number of deterministic connected constraint islands consumed by this solve.
+    std::size_t islandCount = 0U;
+    /// False only if the bounded copied island plan could not be built; no solver mutation follows.
+    bool islandPlanValid = false;
     bool iterationCapReached = false;
 };
 
@@ -157,6 +161,8 @@ struct ConstraintIslandPlanUVE final {
 /// coincident anchor positions and carry a validated world axis for future angular degrees of
 /// freedom. v1 owns copied descriptors and generation-safe registry slots only: it does not own
 /// entities, rotations, angular velocity, inertia, persistence, motors, limits, or backend state.
+/// SolveUVE consumes the bounded deterministic connected-component plan to order work by island,
+/// preserving slot order within each island and leaving the positional constraint equations unchanged.
 class PhysicsConstraintSystemUVE final {
 public:
     static constexpr std::size_t kMaximumConstraintsUVE = 256U;

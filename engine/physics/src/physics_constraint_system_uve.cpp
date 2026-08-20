@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <utility>
 
 #include "uve/scene/components/rigid_body_component_uve.h"
 #include "uve/scene/components/transform_component_uve.h"
@@ -139,16 +140,68 @@ PhysicsConstraintSolveResultUVE PhysicsConstraintSystemUVE::SolveUVE(
     Scene::IEntityManagerUVE& entityManager, Scene::ISceneGraphUVE& sceneGraph,
     std::size_t maximumIterations) const {
     PhysicsConstraintSolveResultUVE result;
-    const std::size_t iterationLimit = std::min(maximumIterations, kMaximumSolverIterationsUVE);
-    if (iterationLimit == 0U || GetConstraintCountUVE() == 0U) {
+    const std::size_t constraintCount = GetConstraintCountUVE();
+    if (constraintCount == 0U) {
+        result.islandPlanValid = true;
         return result;
+    }
+
+    std::array<ConstraintIslandEdgeUVE, kMaximumConstraintsUVE> edges{};
+    std::size_t edgeCount = 0U;
+    const auto getEntities = [](const SlotUVE& slot) noexcept {
+        return std::pair<Scene::EntityUVE, Scene::EntityUVE>{
+            slot.kind == KindUVE::Distance ? slot.distance.firstEntity : slot.hinge.firstEntity,
+            slot.kind == KindUVE::Distance ? slot.distance.secondEntity : slot.hinge.secondEntity};
+    };
+    for (const SlotUVE& slot : slots_) {
+        if (!slot.occupied) {
+            continue;
+        }
+        const auto [firstEntity, secondEntity] = getEntities(slot);
+        edges[edgeCount++] = ConstraintIslandEdgeUVE{firstEntity, secondEntity};
+    }
+
+    ConstraintIslandPlanUVE islandPlan;
+    if (!BuildConstraintIslandPlanUVE(std::span<const ConstraintIslandEdgeUVE>{edges.data(), edgeCount}, islandPlan)) {
+        return result;
+    }
+    result.islandPlanValid = true;
+    result.islandCount = islandPlan.islandCount;
+
+    const std::size_t iterationLimit = std::min(maximumIterations, kMaximumSolverIterationsUVE);
+    if (iterationLimit == 0U) {
+        return result;
+    }
+
+    std::array<std::size_t, kMaximumConstraintsUVE> orderedIndices{};
+    std::size_t orderedCount = 0U;
+    for (std::size_t island = 0U; island < islandPlan.islandCount; ++island) {
+        for (std::size_t slotIndex = 0U; slotIndex < slots_.size(); ++slotIndex) {
+            const SlotUVE& slot = slots_[slotIndex];
+            if (!slot.occupied) {
+                continue;
+            }
+            const auto [firstEntity, secondEntity] = getEntities(slot);
+            std::size_t firstEntityIndex = ConstraintIslandPlanUVE::kMaximumEntitiesUVE;
+            for (std::size_t entityIndex = 0U; entityIndex < islandPlan.entityCount; ++entityIndex) {
+                if (islandPlan.entities[entityIndex] == firstEntity) {
+                    firstEntityIndex = entityIndex;
+                    break;
+                }
+            }
+            if (firstEntityIndex != ConstraintIslandPlanUVE::kMaximumEntitiesUVE &&
+                islandPlan.islandIndices[firstEntityIndex] == island) {
+                orderedIndices[orderedCount++] = slotIndex;
+            }
+        }
     }
 
     std::array<bool, kMaximumConstraintsUVE> reportedSkipped{};
     sceneGraph.UpdateUVE(entityManager);
     for (std::size_t iteration = 0U; iteration < iterationLimit; ++iteration) {
         bool changed = false;
-        for (std::size_t index = 0U; index < slots_.size(); ++index) {
+        for (std::size_t orderIndex = 0U; orderIndex < orderedCount; ++orderIndex) {
+            const std::size_t index = orderedIndices[orderIndex];
             const SlotUVE& slot = slots_[index];
             if (!slot.occupied) {
                 continue;
