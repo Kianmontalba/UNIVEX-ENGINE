@@ -31,6 +31,8 @@ struct RenderQueueUVE {
     std::size_t invalidAssetReferences = 0U;
     std::size_t pendingAssetLoads = 0U;
     std::size_t failedAssetLoads = 0U;
+    /// Scene/render handoff rejections caused by non-finite transforms or invalid mesh bounds.
+    std::size_t invalidRenderEligibility = 0U;
 
     /// Sorts opaqueItems ascending by sortDepth (front-to-back), transparentItems descending by
     /// sortDepth (back-to-front), and particleItems descending by sortDepth with deterministic ties.
