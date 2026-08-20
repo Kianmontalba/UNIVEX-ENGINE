@@ -33,6 +33,7 @@
 #include "uve/audio/audio_source_system_uve.h"
 #include "uve/audio/audio_system_uve.h"
 #include "uve/audio/null_audio_device_uve.h"
+#include "uve/audio/wav_importer_uve.h"
 #include "uve/commandline/command_line_uve.h"
 #include "uve/config/config_manager_uve.h"
 #include "uve/debug/assert_uve.h"
@@ -201,6 +202,7 @@ void EngineCoreUVE::Init() {
 
     // AssetImporter fourteenth: retains the existing extension-selected synchronous import behavior.
     m_assetImporter = std::make_unique<Asset::AssetImporterUVE>();
+    Audio::RegisterWavImporterUVE(*m_assetImporter);
 
     // Compose the schema-driven Data Table importers and typed loader onto the existing generic
     // services. Registration owns no service or loaded asset state, so EngineCoreUVE remains the

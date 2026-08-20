@@ -9,6 +9,7 @@ add_library(uve_audio STATIC
     src/audio_system_uve.cpp
     src/audio_source_system_uve.cpp
     src/wav_metadata_uve.cpp
+    src/wav_importer_uve.cpp
 )
 target_include_directories(uve_audio PUBLIC include)
 # uve_scene: AudioSourceSystemUVE walks WorldTransformComponentUVE + AudioSourceComponentUVE via
