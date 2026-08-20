@@ -876,7 +876,9 @@ TEST(EngineCoreUVETest, SaveGameSystemAndCheckpointManager_ReachableAndFunctiona
     EXPECT_TRUE(saveGameSystem.HasSaveUVE(0));
 
     EXPECT_TRUE(checkpointManager.CheckpointUVE(entityManager, {entity}));
-    EXPECT_TRUE(saveGameSystem.HasSaveUVE(Save::kAutoSaveSlotIndexUVE));
+    EXPECT_TRUE(saveGameSystem.HasSaveUVE(Save::kManualCheckpointSlotIndexUVE));
+    EXPECT_FALSE(saveGameSystem.HasSaveUVE(Save::kAutoSaveSlotIndexUVE));
+    EXPECT_TRUE(saveGameSystem.HasSaveUVE(0));
 
     engine.Shutdown();
     std::filesystem::remove_all(config.saveDirectoryPath);

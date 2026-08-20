@@ -161,13 +161,13 @@ TEST_F(SaveGameSystemUVETest, ListUsedSlotsUVE_NoSaveDirectoryYet_ReturnsEmptyNo
 
 TEST_F(SaveGameSystemUVETest, SaveUVE_OutOfRangeSlotIndex_ReturnsFalse) {
     const EntityUVE entity = entityManager.CreateEntityUVE();
-    EXPECT_FALSE(saveGameSystem.SaveUVE(-2, entityManager, {entity}, GameStateMetadataUVE{}));
+    EXPECT_FALSE(saveGameSystem.SaveUVE(-3, entityManager, {entity}, GameStateMetadataUVE{}));
     EXPECT_FALSE(saveGameSystem.SaveUVE(kSaveSlotCountUVE, entityManager, {entity}, GameStateMetadataUVE{}));
     EXPECT_FALSE(saveGameSystem.SaveUVE(1000, entityManager, {entity}, GameStateMetadataUVE{}));
 }
 
 TEST_F(SaveGameSystemUVETest, LoadUVE_OutOfRangeSlotIndex_ReturnsEmptyVector) {
-    EXPECT_TRUE(saveGameSystem.LoadUVE(-2, entityManager).empty());
+    EXPECT_TRUE(saveGameSystem.LoadUVE(-3, entityManager).empty());
     EXPECT_TRUE(saveGameSystem.LoadUVE(kSaveSlotCountUVE, entityManager).empty());
 }
 
@@ -175,7 +175,7 @@ TEST_F(SaveGameSystemUVETest, LoadUVE_MissingSlot_ReturnsEmptyVector) {
     EXPECT_TRUE(saveGameSystem.LoadUVE(20, entityManager).empty());
 }
 
-TEST_F(SaveGameSystemUVETest, SaveUVE_AutoSaveSlotIndex_RoundTripsIndependentlyOfNumberedSlots) {
+TEST_F(SaveGameSystemUVETest, SaveUVE_ReservedSlots_RoundTripIndependentlyOfNumberedSlots) {
     const EntityUVE numberedEntity = entityManager.CreateEntityUVE();
     entityManager.AddComponentUVE<RigidBodyComponentUVE>(numberedEntity, RigidBodyComponentUVE{1.0F, false});
     ASSERT_TRUE(saveGameSystem.SaveUVE(0, entityManager, {numberedEntity}, GameStateMetadataUVE{}));
@@ -183,6 +183,11 @@ TEST_F(SaveGameSystemUVETest, SaveUVE_AutoSaveSlotIndex_RoundTripsIndependentlyO
     const EntityUVE autoSaveEntity = entityManager.CreateEntityUVE();
     entityManager.AddComponentUVE<RigidBodyComponentUVE>(autoSaveEntity, RigidBodyComponentUVE{5.0F, true});
     ASSERT_TRUE(saveGameSystem.SaveUVE(kAutoSaveSlotIndexUVE, entityManager, {autoSaveEntity}, GameStateMetadataUVE{}));
+
+    const EntityUVE manualCheckpointEntity = entityManager.CreateEntityUVE();
+    entityManager.AddComponentUVE<RigidBodyComponentUVE>(manualCheckpointEntity, RigidBodyComponentUVE{9.0F, true});
+    ASSERT_TRUE(saveGameSystem.SaveUVE(kManualCheckpointSlotIndexUVE, entityManager, {manualCheckpointEntity},
+                                       GameStateMetadataUVE{}));
 
     EntityManagerUVE loadedManager(memoryManager.GetDefaultAllocatorUVE(), eventSystem);
     const std::vector<EntityUVE> numberedRoots = saveGameSystem.LoadUVE(0, loadedManager);
@@ -193,6 +198,11 @@ TEST_F(SaveGameSystemUVETest, SaveUVE_AutoSaveSlotIndex_RoundTripsIndependentlyO
     const std::vector<EntityUVE> autoSaveRoots = saveGameSystem.LoadUVE(kAutoSaveSlotIndexUVE, loadedAutoSaveManager);
     ASSERT_EQ(autoSaveRoots.size(), 1U);
     EXPECT_FLOAT_EQ(loadedAutoSaveManager.GetComponentUVE<RigidBodyComponentUVE>(autoSaveRoots[0]).mass, 5.0F);
+
+    EntityManagerUVE loadedManualManager(memoryManager.GetDefaultAllocatorUVE(), eventSystem);
+    const std::vector<EntityUVE> manualRoots = saveGameSystem.LoadUVE(kManualCheckpointSlotIndexUVE, loadedManualManager);
+    ASSERT_EQ(manualRoots.size(), 1U);
+    EXPECT_FLOAT_EQ(loadedManualManager.GetComponentUVE<RigidBodyComponentUVE>(manualRoots[0]).mass, 9.0F);
 
     EXPECT_EQ(saveGameSystem.ListUsedSlotsUVE(), (std::vector<int>{0}));
 }

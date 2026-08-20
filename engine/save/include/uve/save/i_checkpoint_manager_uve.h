@@ -14,13 +14,7 @@ namespace UVE::Save {
 /// ICheckpointManagerUVE is the auto-save/manual-checkpoint system (Part 17's
 /// CheckpointManagerUVE): accumulates elapsed time via UpdateUVE(), writing to
 /// ISaveGameSystemUVE's reserved kAutoSaveSlotIndexUVE whenever the configured interval elapses;
-/// CheckpointUVE() writes to that same reserved slot immediately, on demand (both share one
-/// reserved slot for this "Foundations" increment).
-///
-/// TODO(Increment 19+): Future versions may separate autosave and manual checkpoint into
-/// independent reserved slots. Sharing one slot means a manual checkpoint is silently overwritten
-/// by the next auto-save tick, and vice versa — acceptable for this foundation increment, not a
-/// long-term design.
+/// CheckpointUVE() writes to the distinct kManualCheckpointSlotIndexUVE immediately, on demand.
 ///
 /// A checkpoint — automatic or manual — resets the elapsed-time accumulator, so a manual
 /// CheckpointUVE() call defers the next automatic one rather than being immediately followed by a
@@ -41,7 +35,7 @@ public:
     virtual void UpdateUVE(double deltaTimeSeconds, Scene::IEntityManagerUVE& entityManager,
                             const std::vector<Scene::EntityUVE>& rootEntities) = 0;
 
-    /// Immediately saves `rootEntities` to kAutoSaveSlotIndexUVE (the spec's "manual save points
+    /// Immediately saves `rootEntities` to kManualCheckpointSlotIndexUVE (the spec's "manual save points
     /// - e.g. before boss fight"), regardless of how much time has elapsed since the last
     /// auto-save, then resets the since-last-save counter to 0. Returns whatever the underlying
     /// ISaveGameSystemUVE::SaveUVE() returned.
@@ -54,7 +48,8 @@ public:
     virtual void SetAutoSaveIntervalSecondsUVE(double intervalSeconds) noexcept = 0;
     [[nodiscard]] virtual double GetAutoSaveIntervalSecondsUVE() const noexcept = 0;
 
-    /// Seconds accumulated since the last successful-or-attempted auto-save/checkpoint. Exposed
+    /// Seconds accumulated since the last successful-or-attempted auto-save. Manual checkpoints
+    /// reset this accumulator because they defer the next automatic save. Exposed
     /// so tests can assert "just under the interval, no save fired" / "at/over the interval, one
     /// fired" without a real wall-clock wait.
     [[nodiscard]] virtual double GetElapsedSinceLastSaveSecondsUVE() const noexcept = 0;
