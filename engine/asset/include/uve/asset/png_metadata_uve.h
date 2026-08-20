@@ -34,7 +34,7 @@ enum class PngFilterTypeUVE : std::uint8_t { None = 0U, Sub = 1U, Up = 2U, Avera
     PngFilterTypeUVE filter, const std::vector<std::byte>& filteredBytes,
     const std::vector<std::byte>& previousRow, std::vector<std::byte>& outRow);
 
-/// Checks the supported 8-bit RGB/RGBA decoded-pixel budget after normalization to RGBA8,
+/// Checks the supported 8-bit grayscale/RGB/RGBA decoded-pixel budget after normalization to RGBA8,
 /// without allocating or decoding pixel data.
 [[nodiscard]] bool ValidatePngRgba8PixelBudgetUVE(
     const PngMetadataUVE& metadata,
@@ -46,8 +46,8 @@ struct PngRgba8ImageUVE final {
     std::vector<std::byte> pixels;
 };
 
-/// Decodes a bounded 8-bit, non-interlaced RGB or RGBA PNG using zlib and the existing scanline
-/// unfilter primitive, normalizing RGB input to opaque RGBA8. It rejects unsupported color/depth/
+/// Decodes a bounded 8-bit, non-interlaced grayscale, RGB, or RGBA PNG using zlib and the existing
+/// scanline unfilter primitive, normalizing grayscale/RGB input to opaque RGBA8. It rejects unsupported color/depth/
 /// interlace modes and owns no filesystem or GPU state.
 [[nodiscard]] bool DecodePngRgba8ImageUVE(
     const std::vector<std::byte>& bytes, PngRgba8ImageUVE& outImage) noexcept;
