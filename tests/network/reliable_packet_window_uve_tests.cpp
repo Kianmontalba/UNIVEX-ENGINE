@@ -3,6 +3,15 @@
 #include <gtest/gtest.h>
 namespace UVE::Network::Tests {
 namespace {
+TEST(ReliablePacketWindowUVETest, ValidateReliablePayloadBudgetUVE_AcceptsBoundedPayloads) {
+    EXPECT_TRUE(ValidateReliablePayloadBudgetUVE(0U));
+    EXPECT_TRUE(ValidateReliablePayloadBudgetUVE(kReliablePacketMaximumPayloadBytesUVE));
+    EXPECT_TRUE(ValidateReliablePayloadBudgetUVE(512U, 512U));
+}
+TEST(ReliablePacketWindowUVETest, ValidateReliablePayloadBudgetUVE_RejectsOversizedPayloads) {
+    EXPECT_FALSE(ValidateReliablePayloadBudgetUVE(kReliablePacketMaximumPayloadBytesUVE + 1U));
+    EXPECT_FALSE(ValidateReliablePayloadBudgetUVE(1U, 0U));
+}
 TEST(ReliablePacketWindowUVETest, RetransmitPolicyClassifiesWaitingDueAndExhausted) {
     EXPECT_EQ(EvaluateReliableRetransmitPolicyUVE({0.25F, 1.0F, 0U, 3U}), ReliableRetransmitStatusUVE::Waiting);
     EXPECT_EQ(EvaluateReliableRetransmitPolicyUVE({1.0F, 1.0F, 1U, 3U}), ReliableRetransmitStatusUVE::Due);

@@ -1,8 +1,10 @@
 // Copyright (c) 2026 UniVex Studios. All Rights Reserved.
 #pragma once
+#include <cstddef>
 #include <cstdint>
 namespace UVE::Network {
 inline constexpr std::uint32_t kReliablePacketMaximumSelectiveAckBitsUVE = 32U;
+inline constexpr std::size_t kReliablePacketMaximumPayloadBytesUVE = 1200U;
 struct ReliablePacketHeaderUVE final {
     std::uint32_t sequence = 0U;
     std::uint32_t acknowledgedSequence = 0U;
@@ -31,6 +33,11 @@ struct ReliableRetransmitPolicyInputUVE final {
     std::uint32_t retryCount = 0U;
     std::uint32_t maximumRetries = 0U;
 };
+/// Validates one caller-owned payload size against a bounded datagram budget.
+[[nodiscard]] bool ValidateReliablePayloadBudgetUVE(
+    std::size_t payloadBytes,
+    std::size_t maximumBytes = kReliablePacketMaximumPayloadBytesUVE) noexcept;
+
 /// Evaluates one caller-owned retry decision without owning a clock, timer, socket, or packet.
 [[nodiscard]] ReliableRetransmitStatusUVE EvaluateReliableRetransmitPolicyUVE(
     const ReliableRetransmitPolicyInputUVE& input) noexcept;
