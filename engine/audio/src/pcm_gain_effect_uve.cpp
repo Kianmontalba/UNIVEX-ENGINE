@@ -4,6 +4,35 @@
 #include <cmath>
 #include <utility>
 namespace UVE::Audio {
+bool ApplyScheduledPcmGainEffectsUVE(const std::vector<float>& inputSamples,
+                                       const std::vector<PcmGainEffectWindowUVE>& windows,
+                                       std::vector<float>& outputSamples) noexcept {
+    if (inputSamples.size() > kMaximumPcmGainSamplesUVE || windows.size() > kMaximumPcmGainChainEffectsUVE) {
+        return false;
+    }
+    for (const float sample : inputSamples) {
+        if (!std::isfinite(sample)) return false;
+    }
+    for (const PcmGainEffectWindowUVE& window : windows) {
+        if (window.sampleCount == 0U || !std::isfinite(window.gain) || window.gain < 0.0F ||
+            window.startSample > inputSamples.size() || window.sampleCount > inputSamples.size() - window.startSample) {
+            return false;
+        }
+    }
+    try {
+        std::vector<float> working = inputSamples;
+        for (const PcmGainEffectWindowUVE& window : windows) {
+            for (std::size_t index = window.startSample; index < window.startSample + window.sampleCount; ++index) {
+                working[index] = std::clamp(working[index] * window.gain, -1.0F, 1.0F);
+            }
+        }
+        outputSamples = std::move(working);
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
 bool ApplyPcmGainEffectUVE(const std::vector<float>& inputSamples, const float gain,
                           std::vector<float>& outputSamples) noexcept {
     if (inputSamples.size() > kMaximumPcmGainSamplesUVE || !std::isfinite(gain) || gain < 0.0F) {
