@@ -12,6 +12,30 @@ constexpr std::uint32_t kHalfSequenceSpaceUVE = 0x80000000U;
 }
 } // namespace
 
+bool PlanReliablePayloadFragmentsUVE(const std::size_t payloadBytes,
+                                      const std::size_t fragmentBytes,
+                                      ReliablePayloadFragmentPlanUVE& outPlan,
+                                      const std::size_t maximumFragments) noexcept {
+    if (payloadBytes == 0U || fragmentBytes == 0U ||
+        fragmentBytes > kReliablePacketMaximumPayloadBytesUVE || maximumFragments == 0U) {
+        return false;
+    }
+    const std::size_t fragmentCount = payloadBytes / fragmentBytes +
+                                      (payloadBytes % fragmentBytes == 0U ? 0U : 1U);
+    const std::size_t boundedMaximumFragments =
+        maximumFragments < kReliablePacketMaximumFragmentCountUVE
+            ? maximumFragments
+            : kReliablePacketMaximumFragmentCountUVE;
+    if (fragmentCount == 0U || fragmentCount > boundedMaximumFragments) {
+        return false;
+    }
+    const std::size_t remainder = payloadBytes % fragmentBytes;
+    outPlan = ReliablePayloadFragmentPlanUVE{fragmentCount, fragmentBytes,
+                                              remainder == 0U ? fragmentBytes : remainder,
+                                              fragmentCount > 1U};
+    return true;
+}
+
 bool ValidateReliablePayloadBudgetUVE(const std::size_t payloadBytes,
                                       const std::size_t maximumBytes) noexcept {
     return payloadBytes <= maximumBytes;
