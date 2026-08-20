@@ -21,6 +21,7 @@ public:
     explicit NullWindowManagerUVE(const WindowDescUVE& desc = WindowDescUVE{});
 
     [[nodiscard]] bool IsValidUVE() const noexcept override;
+    void AttachInputSystemUVE(Input::IInputSystemUVE* inputSystem) noexcept override;
     void PollEventsUVE() override;
     void SwapBuffersUVE() override;
     [[nodiscard]] bool IsCloseRequestedUVE() const noexcept override;

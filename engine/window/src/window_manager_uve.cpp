@@ -7,6 +7,8 @@
 #include <GLFW/glfw3.h>
 
 #include "uve/debug/logging_macros_uve.h"
+#include "uve/input/key_code_uve.h"
+#include "uve/input/mouse_button_uve.h"
 #include "uve/window/window_events_uve.h"
 
 namespace UVE::Window {
@@ -36,6 +38,8 @@ struct WindowManagerUVE::ImplUVE {
     bool ownsGlfwRefCount = false;
     bool vsyncEnabled = true;
     bool fullscreen = false;
+    Input::IInputSystemUVE* inputSystem = nullptr;
+    float scrollDelta = 0.0F;
     int windowedX = 0;
     int windowedY = 0;
     int windowedWidth = 0;
@@ -61,6 +65,78 @@ struct WindowManagerUVE::ImplUVE {
 
     static void FocusCallbackUVE(GLFWwindow* glfwWindow, int focused) {
         FromWindowUVE(glfwWindow).eventSystem->Publish(WindowFocusChangedEventUVE{focused == GLFW_TRUE});
+    }
+
+    static void ScrollCallbackUVE(GLFWwindow* glfwWindow, double /*xOffset*/, double yOffset) {
+        FromWindowUVE(glfwWindow).scrollDelta += static_cast<float>(yOffset);
+    }
+
+    static int ToGlfwKeyUVE(const Input::KeyCodeUVE key) noexcept {
+        using Input::KeyCodeUVE;
+        const int value = static_cast<int>(key);
+        if (value >= static_cast<int>(KeyCodeUVE::A) && value <= static_cast<int>(KeyCodeUVE::Z)) {
+            return GLFW_KEY_A + value - static_cast<int>(KeyCodeUVE::A);
+        }
+        if (value >= static_cast<int>(KeyCodeUVE::Num0) && value <= static_cast<int>(KeyCodeUVE::Num9)) {
+            return GLFW_KEY_0 + value - static_cast<int>(KeyCodeUVE::Num0);
+        }
+        if (value >= static_cast<int>(KeyCodeUVE::F1) && value <= static_cast<int>(KeyCodeUVE::F12)) {
+            return GLFW_KEY_F1 + value - static_cast<int>(KeyCodeUVE::F1);
+        }
+        switch (key) {
+        case KeyCodeUVE::Up: return GLFW_KEY_UP;
+        case KeyCodeUVE::Down: return GLFW_KEY_DOWN;
+        case KeyCodeUVE::Left: return GLFW_KEY_LEFT;
+        case KeyCodeUVE::Right: return GLFW_KEY_RIGHT;
+        case KeyCodeUVE::Space: return GLFW_KEY_SPACE;
+        case KeyCodeUVE::Enter: return GLFW_KEY_ENTER;
+        case KeyCodeUVE::Escape: return GLFW_KEY_ESCAPE;
+        case KeyCodeUVE::Tab: return GLFW_KEY_TAB;
+        case KeyCodeUVE::Backspace: return GLFW_KEY_BACKSPACE;
+        case KeyCodeUVE::LeftShift: return GLFW_KEY_LEFT_SHIFT;
+        case KeyCodeUVE::RightShift: return GLFW_KEY_RIGHT_SHIFT;
+        case KeyCodeUVE::LeftCtrl: return GLFW_KEY_LEFT_CONTROL;
+        case KeyCodeUVE::RightCtrl: return GLFW_KEY_RIGHT_CONTROL;
+        case KeyCodeUVE::LeftAlt: return GLFW_KEY_LEFT_ALT;
+        case KeyCodeUVE::RightAlt: return GLFW_KEY_RIGHT_ALT;
+        default: return GLFW_KEY_UNKNOWN;
+        }
+    }
+
+    static int ToGlfwMouseButtonUVE(const Input::MouseButtonUVE button) noexcept {
+        switch (button) {
+        case Input::MouseButtonUVE::Left: return GLFW_MOUSE_BUTTON_LEFT;
+        case Input::MouseButtonUVE::Right: return GLFW_MOUSE_BUTTON_RIGHT;
+        case Input::MouseButtonUVE::Middle: return GLFW_MOUSE_BUTTON_MIDDLE;
+        default: return -1;
+        }
+    }
+
+    void PollInputUVE() noexcept {
+        if (inputSystem == nullptr || window == nullptr) {
+            return;
+        }
+        for (int value = static_cast<int>(Input::KeyCodeUVE::A);
+             value < static_cast<int>(Input::KeyCodeUVE::Count); ++value) {
+            const auto key = static_cast<Input::KeyCodeUVE>(value);
+            const int glfwKey = ToGlfwKeyUVE(key);
+            if (glfwKey != GLFW_KEY_UNKNOWN) {
+                inputSystem->SetKeyStateUVE(key, glfwGetKey(window, glfwKey) != GLFW_RELEASE);
+            }
+        }
+        for (int value = 0; value < static_cast<int>(Input::MouseButtonUVE::Count); ++value) {
+            const auto button = static_cast<Input::MouseButtonUVE>(value);
+            const int glfwButton = ToGlfwMouseButtonUVE(button);
+            inputSystem->SetMouseButtonStateUVE(
+                button, glfwGetMouseButton(window, glfwButton) != GLFW_RELEASE);
+        }
+        double cursorX = 0.0;
+        double cursorY = 0.0;
+        glfwGetCursorPos(window, &cursorX, &cursorY);
+        inputSystem->SetMousePositionUVE(
+            Math::Vector2UVE{static_cast<float>(cursorX), static_cast<float>(cursorY)});
+        inputSystem->SetMouseScrollDeltaUVE(scrollDelta);
+        scrollDelta = 0.0F;
     }
 };
 
@@ -105,6 +181,7 @@ WindowManagerUVE::WindowManagerUVE(Events::IEventSystemUVE& eventSystem, const W
     glfwSetWindowCloseCallback(m_impl->window, &ImplUVE::CloseCallbackUVE);
     glfwSetFramebufferSizeCallback(m_impl->window, &ImplUVE::FramebufferSizeCallbackUVE);
     glfwSetWindowFocusCallback(m_impl->window, &ImplUVE::FocusCallbackUVE);
+    glfwSetScrollCallback(m_impl->window, &ImplUVE::ScrollCallbackUVE);
 
     glfwMakeContextCurrent(m_impl->window);
     m_impl->vsyncEnabled = desc.vsyncEnabled;
@@ -131,9 +208,14 @@ bool WindowManagerUVE::IsValidUVE() const noexcept {
     return m_impl->valid;
 }
 
+void WindowManagerUVE::AttachInputSystemUVE(Input::IInputSystemUVE* inputSystem) noexcept {
+    m_impl->inputSystem = inputSystem;
+}
+
 void WindowManagerUVE::PollEventsUVE() {
     if (m_impl->valid) {
         glfwPollEvents();
+        m_impl->PollInputUVE();
     }
 }
 
