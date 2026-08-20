@@ -200,10 +200,10 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
 
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
     EXPECT_FALSE(RegisterBuiltInScriptNodesUVE(registry));
-    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 161U);
+    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 162U);
 
     const std::vector<ScriptNodeTypeDescriptorUVE> descriptors = registry.GetNodeTypeDescriptorsUVE();
-    ASSERT_EQ(descriptors.size(), 161U);
+    ASSERT_EQ(descriptors.size(), 162U);
     const std::vector<std::string> expectedIds{
         "flow.sequence", "flow.branch", "flow.return", "flow.do_once", "flow.gate", "flow.switch",
         "flow.event", "flow.loop", "flow.for_loop", "flow.while_loop", "flow.delay",
@@ -246,7 +246,7 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
         "motion.query.set_yaw", "motion.query.transition", "motion.query.motion_warp",
         "physics.raycast", "physics.sphere_cast", "physics.box_cast", "physics.capsule_cast", "physics.overlap",
         "physics.apply_force", "physics.apply_impulse", "physics.set_velocity", "physics.get_velocity",
-        "physics.enable_gravity", "physics.is_colliding"};
+        "physics.enable_gravity", "physics.is_colliding", "audio.set_volume"};
     ASSERT_EQ(expectedIds.size(), descriptors.size());
     for (std::size_t index = 0U; index < expectedIds.size(); ++index) {
         EXPECT_EQ(descriptors[index].typeId, expectedIds[index]);
@@ -315,10 +315,12 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
         EXPECT_EQ(descriptors[index].category, "Motion Query");
         EXPECT_EQ(descriptors[index].iconId, "node.motion_query");
     }
-    for (std::size_t index = 150U; index < descriptors.size(); ++index) {
+    for (std::size_t index = 150U; index < 161U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Physics");
         EXPECT_EQ(descriptors[index].iconId, "node.physics");
     }
+    EXPECT_EQ(descriptors[161U].category, "Audio");
+    EXPECT_EQ(descriptors[161U].iconId, "node.audio");
 
     const ScriptNodeTypeDescriptorUVE* lerp = registry.FindNodeTypeUVE("math.float.lerp");
     ASSERT_NE(lerp, nullptr);
@@ -6040,4 +6042,113 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_PhysicsNodesFailClosedWithoutBind
     }
 }
 
+} // namespace UVE::Scripting
+
+
+namespace UVE::Scripting {
+namespace {
+
+TEST(ScriptBuiltInNodeUVETest, RegisterBuiltInScriptNodesUVE_ContainsAudioSetVolumeDescriptor) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+    const ScriptNodeTypeDescriptorUVE* descriptor = registry.FindNodeTypeUVE("audio.set_volume");
+    ASSERT_NE(descriptor, nullptr);
+    EXPECT_EQ(descriptor->displayName, "Set Volume");
+    EXPECT_EQ(descriptor->category, "Audio");
+    ASSERT_EQ(descriptor->pins.size(), 3U);
+    EXPECT_EQ(descriptor->pins[0].name, "Source");
+    EXPECT_EQ(descriptor->pins[0].type, ScriptValueTypeUVE::Entity);
+    EXPECT_EQ(descriptor->pins[1].name, "Volume");
+    EXPECT_EQ(descriptor->pins[1].type, ScriptValueTypeUVE::Number);
+    EXPECT_EQ(descriptor->pins[2].name, "Result");
+    EXPECT_EQ(descriptor->pins[2].type, ScriptValueTypeUVE::Boolean);
+}
+
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesEntityBeforeAudioSetVolume) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({1U, "entity.spawn"}));
+    ASSERT_TRUE(graph.AddNodeUVE({2U, "audio.set_volume"}));
+    ASSERT_TRUE(graph.AddLinkUVE({{1U, "Result"}, {2U, "Source"}}));
+
+    const ScriptIrCompileResultUVE result = CompileScriptGraphToIrUVE(graph, registry);
+
+    EXPECT_TRUE(result.IsSuccessUVE());
+    ASSERT_TRUE(result.program.has_value());
+    ASSERT_EQ(result.program->instructions.size(), 3U);
+    EXPECT_EQ(result.program->instructions[0].nodeTypeId, "entity.spawn");
+    EXPECT_EQ(result.program->instructions[1].kind, ScriptIrInstructionKindUVE::TransferValue);
+    EXPECT_EQ(result.program->instructions[2].nodeTypeId, "audio.set_volume");
+}
+
+struct AudioCaptureUVE final {
+    Scene::EntityUVE source{9U, 1U};
+    float volume = 0.0F;
+    std::size_t setVolumeCount = 0U;
+};
+
+bool CaptureAudioSetVolumeUVE(void* userData, Scene::EntityUVE source, float volume,
+                              bool* outResult) noexcept {
+    auto* capture = static_cast<AudioCaptureUVE*>(userData);
+    if (capture == nullptr || outResult == nullptr || source != capture->source ||
+        !std::isfinite(volume) || volume < 0.0F || volume > 1.0F) {
+        return false;
+    }
+    capture->volume = volume;
+    ++capture->setVolumeCount;
+    *outResult = true;
+    return true;
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_ExecutesAudioSetVolumeWithCopiedValues) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U,
+                                    "audio.set_volume", {}, {}});
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(1U, "Source", ScriptEntityValueUVE{Scene::EntityUVE{9U, 1U}}));
+    ASSERT_TRUE(context.SetInputUVE(1U, "Volume", 0.35F));
+    AudioCaptureUVE capture;
+    ScriptEngineCallBindingsUVE bindings{};
+    bindings.userData = &capture;
+    bindings.audioSetVolume = CaptureAudioSetVolumeUVE;
+    ScriptVmExecutionOptionsUVE options;
+    options.engineCallBindings = &bindings;
+
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(program, context, options);
+
+    ASSERT_TRUE(result.IsSuccessUVE());
+    EXPECT_EQ(result.instructionsExecuted, 1U);
+    EXPECT_EQ(capture.setVolumeCount, 1U);
+    EXPECT_FLOAT_EQ(capture.volume, 0.35F);
+    const std::optional<ScriptVmValueUVE> output = context.FindOutputUVE(1U, "Result");
+    ASSERT_TRUE(output.has_value());
+    ASSERT_TRUE(std::holds_alternative<bool>(*output));
+    EXPECT_TRUE(std::get<bool>(*output));
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_AudioSetVolumeFailsClosedForMissingBindingAndInvalidVolume) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U,
+                                    "audio.set_volume", {}, {}});
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(1U, "Source", ScriptEntityValueUVE{Scene::EntityUVE{9U, 1U}}));
+    ASSERT_TRUE(context.SetInputUVE(1U, "Volume", 0.35F));
+    EXPECT_EQ(ExecuteScriptBytecodeUVE(program, context).status, ScriptVmStatusUVE::NodeExecutionFailed);
+
+    AudioCaptureUVE capture;
+    ScriptEngineCallBindingsUVE bindings{};
+    bindings.userData = &capture;
+    bindings.audioSetVolume = CaptureAudioSetVolumeUVE;
+    ScriptVmExecutionOptionsUVE options;
+    options.engineCallBindings = &bindings;
+    ASSERT_TRUE(context.SetInputUVE(1U, "Volume", 1.01F));
+
+    const ScriptVmExecutionResultUVE invalidResult = ExecuteScriptBytecodeUVE(program, context, options);
+
+    EXPECT_EQ(invalidResult.status, ScriptVmStatusUVE::NodeExecutionFailed);
+    EXPECT_EQ(capture.setVolumeCount, 0U);
+}
+
+} // namespace
 } // namespace UVE::Scripting
