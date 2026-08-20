@@ -13,12 +13,20 @@ enum class GltfContainerKindUVE : std::uint8_t { Json, Binary };
 
 inline constexpr std::uint64_t kMaximumGltfAccessorElementsUVE = 1'000'000ULL;
 inline constexpr std::size_t kMaximumGltfResourceUriBytesUVE = 4'096U;
+inline constexpr std::size_t kMaximumGltfDataUriDecodedBytesUVE = 64U * 1024U * 1024U;
 
 enum class GltfResourceUriKindUVE : std::uint8_t { Invalid, RelativePath, DataUri };
 
 /// Classifies one bounded glTF image/buffer URI without filesystem access or data decoding. Relative
 /// paths must be traversal-safe; data URIs are recognized only as bounded non-empty tokens.
 [[nodiscard]] GltfResourceUriKindUVE ClassifyGltfResourceUriUVE(std::string_view uri) noexcept;
+
+/// Decodes one bounded glTF data URI into caller-owned bytes with failure-atomic publication.
+/// It supports percent-encoded payloads and strict base64 payloads, but does not parse media types,
+/// allocate image/buffer objects, or perform format conversion.
+[[nodiscard]] bool DecodeGltfDataUriUVE(
+    std::string_view uri, std::vector<std::byte>& outBytes,
+    std::size_t maximumBytes = kMaximumGltfDataUriDecodedBytesUVE);
 
 /// Resolves one safe relative glTF resource URI against the asset's directory into a bounded VFS
 /// path. Data URIs, filesystem I/O, and resource decoding are intentionally outside this contract.
