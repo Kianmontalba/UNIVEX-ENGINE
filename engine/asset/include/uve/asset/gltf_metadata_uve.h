@@ -12,6 +12,13 @@ namespace UVE::Asset {
 enum class GltfContainerKindUVE : std::uint8_t { Json, Binary };
 
 inline constexpr std::uint64_t kMaximumGltfAccessorElementsUVE = 1'000'000ULL;
+inline constexpr std::size_t kMaximumGltfResourceUriBytesUVE = 4'096U;
+
+enum class GltfResourceUriKindUVE : std::uint8_t { Invalid, RelativePath, DataUri };
+
+/// Classifies one bounded glTF image/buffer URI without filesystem access or data decoding. Relative
+/// paths must be traversal-safe; data URIs are recognized only as bounded non-empty tokens.
+[[nodiscard]] GltfResourceUriKindUVE ClassifyGltfResourceUriUVE(std::string_view uri) noexcept;
 
 struct GltfMetadataUVE final {
     GltfContainerKindUVE container = GltfContainerKindUVE::Json;

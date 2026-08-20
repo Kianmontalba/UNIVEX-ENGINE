@@ -10,6 +10,26 @@ namespace {
 void AppendU32LEUVE(std::vector<std::byte>& bytes, const std::uint32_t value) {
     for (unsigned int shift = 0U; shift < 32U; shift += 8U) bytes.push_back(std::byte{static_cast<unsigned char>((value >> shift) & 0xFFU)});
 }
+TEST(GltfMetadataUVETest, ClassifyGltfResourceUriUVE_AcceptsSafeRelativeAndDataUris) {
+    EXPECT_EQ(ClassifyGltfResourceUriUVE("textures/albedo.png"), GltfResourceUriKindUVE::RelativePath);
+    EXPECT_EQ(ClassifyGltfResourceUriUVE("mesh\\lod0.bin"), GltfResourceUriKindUVE::RelativePath);
+    EXPECT_EQ(ClassifyGltfResourceUriUVE("data:image/png;base64,AAAA"), GltfResourceUriKindUVE::DataUri);
+}
+
+TEST(GltfMetadataUVETest, ClassifyGltfResourceUriUVE_RejectsUnsafeAndUnboundedUris) {
+    EXPECT_EQ(ClassifyGltfResourceUriUVE(""), GltfResourceUriKindUVE::Invalid);
+    EXPECT_EQ(ClassifyGltfResourceUriUVE("/textures/albedo.png"), GltfResourceUriKindUVE::Invalid);
+    EXPECT_EQ(ClassifyGltfResourceUriUVE("http://example.com/mesh.bin"), GltfResourceUriKindUVE::Invalid);
+    EXPECT_EQ(ClassifyGltfResourceUriUVE("textures/../mesh.bin"), GltfResourceUriKindUVE::Invalid);
+    EXPECT_EQ(ClassifyGltfResourceUriUVE("textures/%2e%2e/mesh.bin"), GltfResourceUriKindUVE::Invalid);
+    EXPECT_EQ(ClassifyGltfResourceUriUVE("textures//mesh.bin"), GltfResourceUriKindUVE::Invalid);
+    EXPECT_EQ(ClassifyGltfResourceUriUVE("textures/%ZZ/mesh.bin"), GltfResourceUriKindUVE::Invalid);
+    EXPECT_EQ(ClassifyGltfResourceUriUVE("data:image/png;base64"), GltfResourceUriKindUVE::Invalid);
+    EXPECT_EQ(ClassifyGltfResourceUriUVE(std::string("textures/mesh\0.bin", 18U)), GltfResourceUriKindUVE::Invalid);
+    const std::string oversized(kMaximumGltfResourceUriBytesUVE + 1U, 'x');
+    EXPECT_EQ(ClassifyGltfResourceUriUVE(oversized), GltfResourceUriKindUVE::Invalid);
+}
+
 TEST(GltfMetadataUVETest, ValidateGltfAccessorSpanUVE_AcceptsBoundedTightAndStridedSpans) {
     EXPECT_TRUE(ValidateGltfAccessorSpanUVE(64U, 0U, 16U, 4U, 4U));
     EXPECT_TRUE(ValidateGltfAccessorSpanUVE(64U, 4U, 4U, 12U, 8U));

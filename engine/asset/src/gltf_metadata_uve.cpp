@@ -46,6 +46,75 @@ constexpr std::uint32_t kMaximumCountUVE = 1'000'000U;
 }
 } // namespace
 
+GltfResourceUriKindUVE ClassifyGltfResourceUriUVE(const std::string_view uri) noexcept {
+    if (uri.empty() || uri.size() > kMaximumGltfResourceUriBytesUVE) {
+        return GltfResourceUriKindUVE::Invalid;
+    }
+    if (uri.starts_with("data:")) {
+        if (uri.find(',') == std::string_view::npos) {
+            return GltfResourceUriKindUVE::Invalid;
+        }
+        for (const char rawCharacter : uri) {
+            const unsigned char character = static_cast<unsigned char>(rawCharacter);
+            if (character == 0U || character < 0x20U || character == 0x7FU) {
+                return GltfResourceUriKindUVE::Invalid;
+            }
+        }
+        return GltfResourceUriKindUVE::DataUri;
+    }
+    if (uri.front() == '/' || uri.front() == '\\') {
+        return GltfResourceUriKindUVE::Invalid;
+    }
+    std::size_t segmentStart = 0U;
+    for (std::size_t index = 0U; index < uri.size(); ++index) {
+        const unsigned char character = static_cast<unsigned char>(uri[index]);
+        if (character == 0U || character < 0x20U || character == 0x7FU || character == ':') {
+            return GltfResourceUriKindUVE::Invalid;
+        }
+        if (character == '%') {
+            if (index + 2U >= uri.size()) {
+                return GltfResourceUriKindUVE::Invalid;
+            }
+            const char first = uri[index + 1U];
+            const char second = uri[index + 2U];
+            const auto isHex = [](const char value) noexcept {
+                return (value >= '0' && value <= '9') || (value >= 'a' && value <= 'f') ||
+                       (value >= 'A' && value <= 'F');
+            };
+            if (!isHex(first) || !isHex(second)) {
+                return GltfResourceUriKindUVE::Invalid;
+            }
+            const auto hexValue = [](const char value) noexcept -> unsigned int {
+                if (value >= '0' && value <= '9') return static_cast<unsigned int>(value - '0');
+                if (value >= 'a' && value <= 'f') return static_cast<unsigned int>(value - 'a' + 10);
+                return static_cast<unsigned int>(value - 'A' + 10);
+            };
+            const unsigned int decoded = (hexValue(first) << 4U) | hexValue(second);
+            if (decoded == 0U || decoded == '.' || decoded == '/' || decoded == '\\') {
+                return GltfResourceUriKindUVE::Invalid;
+            }
+            index += 2U;
+            continue;
+        }
+        if (character != '/' && character != '\\') {
+            continue;
+        }
+        const std::size_t segmentLength = index - segmentStart;
+        if (segmentLength == 0U || (segmentLength == 1U && uri[segmentStart] == '.') ||
+            (segmentLength == 2U && uri[segmentStart] == '.' && uri[segmentStart + 1U] == '.')) {
+            return GltfResourceUriKindUVE::Invalid;
+        }
+        segmentStart = index + 1U;
+    }
+    const std::size_t finalSegmentLength = uri.size() - segmentStart;
+    if (finalSegmentLength == 0U ||
+        (finalSegmentLength == 1U && uri[segmentStart] == '.') ||
+        (finalSegmentLength == 2U && uri[segmentStart] == '.' && uri[segmentStart + 1U] == '.')) {
+        return GltfResourceUriKindUVE::Invalid;
+    }
+    return GltfResourceUriKindUVE::RelativePath;
+}
+
 bool ValidateGltfAccessorSpanUVE(const std::uint64_t bufferByteLength,
                                  const std::uint64_t byteOffset,
                                  const std::uint64_t elementCount,
