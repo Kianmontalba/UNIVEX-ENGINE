@@ -17,7 +17,7 @@ struct BuiltInNodeDefinitionUVE final {
     std::uint32_t displayOrder;
 };
 
-[[nodiscard]] std::array<BuiltInNodeDefinitionUVE, 162U> MakeBuiltInDefinitionsUVE() {
+[[nodiscard]] std::array<BuiltInNodeDefinitionUVE, 163U> MakeBuiltInDefinitionsUVE() {
     return {
         BuiltInNodeDefinitionUVE{
             "flow.sequence", "Sequence",
@@ -1005,13 +1005,19 @@ struct BuiltInNodeDefinitionUVE final {
              ScriptPinDescriptorUVE{"Volume", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
              ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
             "Audio", "node.audio", 1100U},
+        BuiltInNodeDefinitionUVE{
+            "audio.set_pitch", "Set Pitch",
+            {ScriptPinDescriptorUVE{"Source", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
+             ScriptPinDescriptorUVE{"Pitch", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
+             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
+            "Audio", "node.audio", 1101U},
     };
 }
 
 } // namespace
 
 bool RegisterBuiltInScriptNodesUVE(ScriptNodeRegistryUVE& registry) {
-    std::array<BuiltInNodeDefinitionUVE, 162U> definitions = MakeBuiltInDefinitionsUVE();
+    std::array<BuiltInNodeDefinitionUVE, 163U> definitions = MakeBuiltInDefinitionsUVE();
     for (const BuiltInNodeDefinitionUVE& definition : definitions) {
         if (registry.FindNodeTypeUVE(definition.typeId) != nullptr) {
             return false;

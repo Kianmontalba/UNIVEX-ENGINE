@@ -338,6 +338,7 @@ struct ScriptEngineCallBindingsUVE final {
     ScriptPhysicsGravityFunctionUVE physicsEnableGravity = nullptr;
     ScriptPhysicsCollisionQueryFunctionUVE physicsIsColliding = nullptr;
     ScriptAudioScalarControlFunctionUVE audioSetVolume = nullptr;
+    ScriptAudioScalarControlFunctionUVE audioSetPitch = nullptr;
 };
 
 struct ScriptVmExecutionOptionsUVE final {
