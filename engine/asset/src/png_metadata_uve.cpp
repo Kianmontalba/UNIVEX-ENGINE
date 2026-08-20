@@ -184,7 +184,7 @@ bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUV
                 (metadata->colorType == 0U || metadata->colorType == 2U || metadata->colorType == 3U ||
                  metadata->colorType == 6U)) ||
                (metadata->interlaceMethod == 1U && metadata->bitDepth == 16U &&
-                (metadata->colorType == 0U || metadata->colorType == 6U)))) ||
+                (metadata->colorType == 0U || metadata->colorType == 2U || metadata->colorType == 6U)))) ||
             !ValidatePngRgba8PixelBudgetUVE(*metadata)) {
             return false;
         }
@@ -336,6 +336,11 @@ bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUV
                         pixels[outputOffset] = gray;
                         pixels[outputOffset + 1U] = gray;
                         pixels[outputOffset + 2U] = gray;
+                        pixels[outputOffset + 3U] = std::byte{0xFF};
+                    } else if (metadata->interlaceMethod == 1U && metadata->bitDepth == 16U && metadata->colorType == 2U) {
+                        pixels[outputOffset] = decodedRow[sourceOffset];
+                        pixels[outputOffset + 1U] = decodedRow[sourceOffset + 2U];
+                        pixels[outputOffset + 2U] = decodedRow[sourceOffset + 4U];
                         pixels[outputOffset + 3U] = std::byte{0xFF};
                     } else if (metadata->interlaceMethod == 1U && metadata->bitDepth == 16U && metadata->colorType == 6U) {
                         pixels[outputOffset] = decodedRow[sourceOffset];
