@@ -8,6 +8,22 @@
 
 namespace UVE::Audio {
 
+bool EvaluateAudioMixParametersUVE(const float sourceVolume, const float sourcePitch,
+                                    const float groupVolume, const float groupPitch,
+                                    const float attenuation, AudioMixParametersUVE& outParameters) noexcept {
+    if (!std::isfinite(sourceVolume) || sourceVolume < 0.0F || !std::isfinite(sourcePitch) || sourcePitch < 0.0F ||
+        !std::isfinite(groupVolume) || groupVolume < 0.0F || groupVolume > 1.0F || !std::isfinite(groupPitch) ||
+        groupPitch < kMinimumAudioMixerPitchMultiplierUVE || groupPitch > kMaximumAudioMixerPitchMultiplierUVE ||
+        !std::isfinite(attenuation) || attenuation < 0.0F || attenuation > 1.0F) {
+        return false;
+    }
+    const float pitch = sourcePitch * groupPitch;
+    const float gain = sourceVolume * groupVolume * attenuation;
+    if (!std::isfinite(pitch) || !std::isfinite(gain)) return false;
+    outParameters = AudioMixParametersUVE{std::clamp(gain, 0.0F, 1.0F), pitch};
+    return true;
+}
+
 AudioMixerGroupUVE::AudioMixerGroupUVE() {
     m_groups.emplace(std::string(kMasterAudioMixerGroupNameUVE), GroupStateUVE{});
 }

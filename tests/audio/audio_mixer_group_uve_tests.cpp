@@ -2,12 +2,35 @@
 
 #include "uve/audio/audio_mixer_group_uve.h"
 
+#include <limits>
 #include <string>
 
 #include <gtest/gtest.h>
 
 namespace UVE::Audio::Tests {
 namespace {
+
+TEST(AudioMixerGroupUVETest, EvaluateAudioMixParametersUVE_ComposesFiniteFinalValues) {
+    AudioMixParametersUVE parameters;
+    ASSERT_TRUE(EvaluateAudioMixParametersUVE(0.8F, 1.5F, 0.5F, 2.0F, 0.25F, parameters));
+    EXPECT_EQ(parameters, (AudioMixParametersUVE{0.1F, 3.0F}));
+    ASSERT_TRUE(EvaluateAudioMixParametersUVE(4.0F, 1.0F, 1.0F, 1.0F, 1.0F, parameters));
+    EXPECT_EQ(parameters, (AudioMixParametersUVE{1.0F, 1.0F}));
+}
+
+TEST(AudioMixerGroupUVETest, EvaluateAudioMixParametersUVE_RejectsInvalidInputsAtomically) {
+    const AudioMixParametersUVE original{0.25F, 1.5F};
+    AudioMixParametersUVE parameters = original;
+    EXPECT_FALSE(EvaluateAudioMixParametersUVE(-1.0F, 1.0F, 1.0F, 1.0F, 1.0F, parameters));
+    EXPECT_EQ(parameters, original);
+    EXPECT_FALSE(EvaluateAudioMixParametersUVE(1.0F, 1.0F, 1.0F, 0.1F, 1.0F, parameters));
+    EXPECT_EQ(parameters, original);
+    EXPECT_FALSE(EvaluateAudioMixParametersUVE(1.0F, 1.0F, 1.0F, 1.0F, 2.0F, parameters));
+    EXPECT_EQ(parameters, original);
+    EXPECT_FALSE(EvaluateAudioMixParametersUVE(1.0F, std::numeric_limits<float>::max(),
+                                                1.0F, 4.0F, 1.0F, parameters));
+    EXPECT_EQ(parameters, original);
+}
 
 TEST(AudioMixerGroupUVETest, MasterAlwaysExistsAndInvalidDefinitionsAreRejected) {
     AudioMixerGroupUVE mixer;
