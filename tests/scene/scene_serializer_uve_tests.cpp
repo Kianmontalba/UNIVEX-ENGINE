@@ -397,11 +397,32 @@ TEST_F(SceneSerializerUVETest, RestoreUVE_InvalidPrefabInstancePayload_RollsBack
     EXPECT_EQ(entityManager.GetEntityCountUVE(), entityCountBefore);
 }
 
+TEST_F(SceneSerializerUVETest, RestoreUVE_LegacyPrefabInstanceDefaultsRevisions) {
+    const std::string payloadText =
+        R"({"entities":[{"localId":0,"components":{"PrefabInstanceComponentUVE":{"sourcePrefabGuid":77,"overrides":[]}}}]})";
+    const auto* const payloadBytes = reinterpret_cast<const std::byte*>(payloadText.data());
+    const SceneSnapshotUVE snapshot{
+        Asset::EncodeUveFileEnvelopeUVE(SceneAssetTypeUVE::Scene,
+                                        std::vector<std::byte>{payloadBytes, payloadBytes + payloadText.size()}),
+        SceneAssetTypeUVE::Scene};
+
+    const std::vector<EntityUVE> roots = serializer.RestoreUVE(entityManager, snapshot);
+    ASSERT_EQ(roots.size(), 1U);
+    const PrefabInstanceComponentUVE& component =
+        entityManager.GetComponentUVE<PrefabInstanceComponentUVE>(roots.front());
+    EXPECT_EQ(component.sourcePrefabGuid, Asset::AssetGuidUVE{77U});
+    EXPECT_EQ(component.sourceRevision, 1U);
+    EXPECT_EQ(component.instanceRevision, 1U);
+    EXPECT_TRUE(component.overrides.empty());
+}
+
 TEST_F(SceneSerializerUVETest, SaveThenLoad_PrefabInstanceOverrides_RoundTripsDeterministically) {
     const EntityUVE entity = entityManager.CreateEntityUVE();
     const PrefabInstanceComponentUVE component{
         Asset::AssetGuidUVE{77U},
-        {{"Transform.position", "[1,2,3]"}, {"Transform.rotation", "[0,0,0,1]"}}};
+        {{"Transform.position", "[1,2,3]"}, {"Transform.rotation", "[0,0,0,1]"}},
+        5U,
+        6U};
     entityManager.AddComponentUVE<PrefabInstanceComponentUVE>(entity, component);
 
     const std::filesystem::path path = "uve_scene_serializer_tests_prefab_overrides.uvescene";
@@ -414,6 +435,8 @@ TEST_F(SceneSerializerUVETest, SaveThenLoad_PrefabInstanceOverrides_RoundTripsDe
     const PrefabInstanceComponentUVE& loaded =
         loadedManager.GetComponentUVE<PrefabInstanceComponentUVE>(roots.front());
     ASSERT_EQ(loaded.sourcePrefabGuid, Asset::AssetGuidUVE{77U});
+    EXPECT_EQ(loaded.sourceRevision, 5U);
+    EXPECT_EQ(loaded.instanceRevision, 6U);
     ASSERT_EQ(loaded.overrides.size(), 2U);
     EXPECT_EQ(loaded.overrides[0].propertyPath, "Transform.position");
     EXPECT_EQ(loaded.overrides[0].serializedValue, "[1,2,3]");

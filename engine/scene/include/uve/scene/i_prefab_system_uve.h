@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <filesystem>
 
 #include "uve/asset/i_asset_database_uve.h"
@@ -46,6 +47,18 @@ public:
                                                     Asset::IAssetDatabaseUVE& assetDatabase,
                                                     Asset::AssetGuidUVE prefabGuid,
                                                     EntityUVE parent) = 0;
+
+    /// Instantiates and stamps a nonzero source revision into the new root's
+    /// PrefabInstanceComponentUVE. The default implementation preserves legacy callers and
+    /// delegates to InstantiateUVE without revision metadata; PrefabSystemUVE overrides it.
+    [[nodiscard]] virtual EntityUVE InstantiateWithRevisionUVE(
+        IEntityManagerUVE& entityManager, ISceneGraphUVE& sceneGraph,
+        Asset::IAssetDatabaseUVE& assetDatabase, Asset::AssetGuidUVE prefabGuid, EntityUVE parent,
+        std::uint64_t sourceRevision) {
+        static_cast<void>(sourceRevision);
+        return InstantiateUVE(entityManager, sceneGraph, assetDatabase, prefabGuid, parent);
+    }
+
 };
 
 } // namespace UVE::Scene

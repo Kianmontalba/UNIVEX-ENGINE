@@ -245,7 +245,33 @@ TEST_F(PrefabSystemUVETest, SaveThenInstantiate_ProducesEntityWithSameComponentV
     EXPECT_EQ(entityManager.GetComponentUVE<MeshComponentUVE>(instance).meshGuid, Asset::AssetGuidUVE{11});
     ASSERT_TRUE(entityManager.HasComponentUVE<PrefabInstanceComponentUVE>(instance));
     EXPECT_EQ(entityManager.GetComponentUVE<PrefabInstanceComponentUVE>(instance).sourcePrefabGuid, guid);
+    EXPECT_EQ(entityManager.GetComponentUVE<PrefabInstanceComponentUVE>(instance).sourceRevision, 1U);
+    EXPECT_EQ(entityManager.GetComponentUVE<PrefabInstanceComponentUVE>(instance).instanceRevision, 1U);
 
+    std::filesystem::remove(prefabPath);
+}
+
+TEST_F(PrefabSystemUVETest, InstantiateWithRevisionUVE_StampsRevisionAndRejectsZero) {
+    const EntityUVE source = entityManager.CreateEntityUVE();
+    entityManager.AddComponentUVE<MeshComponentUVE>(source, MeshComponentUVE{Asset::AssetGuidUVE{13}, Asset::AssetGuidUVE{14}});
+    const std::filesystem::path prefabPath = "uve_prefab_tests_revision.uveprefab";
+    std::filesystem::remove(prefabPath);
+    const Asset::AssetGuidUVE guid = prefabSystem.SavePrefabUVE(entityManager, assetDatabase, source, prefabPath);
+    ASSERT_NE(guid, Asset::kInvalidAssetGuidUVE);
+
+    const EntityUVE instance = prefabSystem.InstantiateWithRevisionUVE(
+        entityManager, sceneGraph, assetDatabase, guid, kInvalidEntityUVE, 42U);
+    ASSERT_NE(instance, kInvalidEntityUVE);
+    const PrefabInstanceComponentUVE& component =
+        entityManager.GetComponentUVE<PrefabInstanceComponentUVE>(instance);
+    EXPECT_EQ(component.sourceRevision, 42U);
+    EXPECT_EQ(component.instanceRevision, 42U);
+    const std::size_t entityCountAfterValid = entityManager.GetEntityCountUVE();
+
+    EXPECT_EQ(prefabSystem.InstantiateWithRevisionUVE(entityManager, sceneGraph, assetDatabase, guid,
+                                                       kInvalidEntityUVE, 0U),
+              kInvalidEntityUVE);
+    EXPECT_EQ(entityManager.GetEntityCountUVE(), entityCountAfterValid);
     std::filesystem::remove(prefabPath);
 }
 

@@ -22,6 +22,10 @@ public:
     [[nodiscard]] EntityUVE InstantiateUVE(IEntityManagerUVE& entityManager, ISceneGraphUVE& sceneGraph,
                                            Asset::IAssetDatabaseUVE& assetDatabase,
                                            Asset::AssetGuidUVE prefabGuid, EntityUVE parent) override;
+    [[nodiscard]] EntityUVE InstantiateWithRevisionUVE(
+        IEntityManagerUVE& entityManager, ISceneGraphUVE& sceneGraph,
+        Asset::IAssetDatabaseUVE& assetDatabase, Asset::AssetGuidUVE prefabGuid, EntityUVE parent,
+        std::uint64_t sourceRevision) override;
 
 private:
     SceneSerializerUVE m_sceneSerializer;
