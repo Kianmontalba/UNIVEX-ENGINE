@@ -11,6 +11,30 @@ namespace {
 
 constexpr float kEpsilon = 1e-5F;
 
+TEST(MobileGestureRecognizerUVETest, EvaluatesExactTouchChordCentroid) {
+    MobileInputSnapshotUVE snapshot{};
+    snapshot.touches[0U] = TouchPointStateUVE{true, 11U, Math::Vector2UVE{0.0F, 2.0F}, {}, 1.0F};
+    snapshot.touches[3U] = TouchPointStateUVE{true, 22U, Math::Vector2UVE{4.0F, 6.0F}, {}, 1.0F};
+    Math::Vector2UVE centroid{9.0F, 9.0F};
+    ASSERT_TRUE(EvaluateTouchChordUVE(snapshot, 2U, centroid));
+    EXPECT_NEAR(centroid.x, 2.0F, kEpsilon);
+    EXPECT_NEAR(centroid.y, 4.0F, kEpsilon);
+}
+
+TEST(MobileGestureRecognizerUVETest, RejectsChordCountDuplicatesAndInvalidPositionAtomically) {
+    MobileInputSnapshotUVE snapshot{};
+    snapshot.touches[0U] = TouchPointStateUVE{true, 11U, Math::Vector2UVE{0.0F, 2.0F}, {}, 1.0F};
+    snapshot.touches[1U] = TouchPointStateUVE{true, 11U, Math::Vector2UVE{4.0F, 6.0F}, {}, 1.0F};
+    Math::Vector2UVE centroid{9.0F, 9.0F};
+    EXPECT_FALSE(EvaluateTouchChordUVE(snapshot, 2U, centroid));
+    EXPECT_EQ(centroid, (Math::Vector2UVE{9.0F, 9.0F}));
+    snapshot.touches[1U].identifier = 22U;
+    snapshot.touches[1U].position.x = std::numeric_limits<float>::quiet_NaN();
+    EXPECT_FALSE(EvaluateTouchChordUVE(snapshot, 2U, centroid));
+    EXPECT_EQ(centroid, (Math::Vector2UVE{9.0F, 9.0F}));
+    EXPECT_FALSE(EvaluateTouchChordUVE(snapshot, 1U, centroid));
+}
+
 TEST(MobileGestureRecognizerUVETest, ClassifiesTapOnReleaseAndSuppressesDuplicateFrame) {
     MobileGestureRecognizerUVE recognizer;
 

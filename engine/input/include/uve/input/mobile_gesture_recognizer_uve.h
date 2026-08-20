@@ -22,6 +22,12 @@ enum class MobileSwipeDirectionUVE : std::uint8_t {
     NegativeY,
 };
 
+/// Evaluates an exact-count multi-touch chord over one copied snapshot and publishes its centroid.
+/// The policy owns no gesture lifecycle, platform framework, touch polling, or ECS state.
+[[nodiscard]] bool EvaluateTouchChordUVE(const MobileInputSnapshotUVE& snapshot,
+                                          std::size_t requiredTouchCount,
+                                          Math::Vector2UVE& outCentroid) noexcept;
+
 struct MobileGestureEventUVE final {
     MobileGestureTypeUVE type = MobileGestureTypeUVE::Tap;
     MobileSwipeDirectionUVE direction = MobileSwipeDirectionUVE::PositiveX;

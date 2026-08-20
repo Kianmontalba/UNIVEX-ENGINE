@@ -12,6 +12,45 @@ constexpr MobileGestureRecognizerConfigUVE kDefaultGestureConfig{};
 
 } // namespace
 
+bool EvaluateTouchChordUVE(const MobileInputSnapshotUVE& snapshot,
+                           const std::size_t requiredTouchCount,
+                           Math::Vector2UVE& outCentroid) noexcept {
+    if (requiredTouchCount < 2U || requiredTouchCount > kMaximumTouchCountUVE) {
+        return false;
+    }
+    Math::Vector2UVE sum{};
+    std::size_t activeCount = 0U;
+    for (std::size_t slot = 0U; slot < kMaximumTouchCountUVE; ++slot) {
+        const TouchPointStateUVE& touch = snapshot.touches[slot];
+        if (!touch.active) {
+            continue;
+        }
+        if (touch.identifier == 0U || !std::isfinite(touch.position.x) ||
+            !std::isfinite(touch.position.y)) {
+            return false;
+        }
+        for (std::size_t previous = 0U; previous < slot; ++previous) {
+            if (snapshot.touches[previous].active &&
+                snapshot.touches[previous].identifier == touch.identifier) {
+                return false;
+            }
+        }
+        sum.x += touch.position.x;
+        sum.y += touch.position.y;
+        ++activeCount;
+    }
+    if (activeCount != requiredTouchCount) {
+        return false;
+    }
+    const float inverseCount = 1.0F / static_cast<float>(activeCount);
+    const Math::Vector2UVE centroid{sum.x * inverseCount, sum.y * inverseCount};
+    if (!std::isfinite(centroid.x) || !std::isfinite(centroid.y)) {
+        return false;
+    }
+    outCentroid = centroid;
+    return true;
+}
+
 MobileGestureRecognizerConfigUVE MobileGestureRecognizerUVE::SanitizeConfigUVE(
     MobileGestureRecognizerConfigUVE config) noexcept {
     if (!std::isfinite(config.maximumTapDurationSeconds) || config.maximumTapDurationSeconds <= 0.0F) {
