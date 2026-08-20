@@ -39,4 +39,15 @@ enum class PngFilterTypeUVE : std::uint8_t { None = 0U, Sub = 1U, Up = 2U, Avera
     const PngMetadataUVE& metadata,
     std::uint64_t maximumBytes = kMaximumPngDecodedPixelBytesUVE) noexcept;
 
+struct PngRgba8ImageUVE final {
+    std::uint32_t width = 0U;
+    std::uint32_t height = 0U;
+    std::vector<std::byte> pixels;
+};
+
+/// Decodes a bounded 8-bit, non-interlaced RGBA PNG using zlib and the existing scanline unfilter
+/// primitive. It rejects unsupported color/depth/interlace modes and owns no filesystem or GPU state.
+[[nodiscard]] bool DecodePngRgba8ImageUVE(
+    const std::vector<std::byte>& bytes, PngRgba8ImageUVE& outImage) noexcept;
+
 } // namespace UVE::Asset

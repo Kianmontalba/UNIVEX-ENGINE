@@ -130,6 +130,47 @@ TEST(PngMetadataUVETest, ValidatePngRgba8PixelBudgetUVE_RejectsOverflowAndOversi
     EXPECT_TRUE(ValidatePngRgba8PixelBudgetUVE(small, 64ULL));
 }
 
+TEST(PngMetadataUVETest, DecodePngRgba8ImageUVE_DecodesKnownOneByOnePixel) {
+    const std::vector<std::byte> png{
+        std::byte{0x89}, std::byte{0x50}, std::byte{0x4E}, std::byte{0x47}, std::byte{0x0D}, std::byte{0x0A},
+        std::byte{0x1A}, std::byte{0x0A}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x0D},
+        std::byte{'I'}, std::byte{'H'}, std::byte{'D'}, std::byte{'R'}, std::byte{0x00}, std::byte{0x00},
+        std::byte{0x00}, std::byte{0x01}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x01},
+        std::byte{0x08}, std::byte{0x06}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x1F},
+        std::byte{0x15}, std::byte{0xC4}, std::byte{0x89}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+        std::byte{0x0D}, std::byte{'I'}, std::byte{'D'}, std::byte{'A'}, std::byte{'T'}, std::byte{0x78},
+        std::byte{0x9C}, std::byte{0x63}, std::byte{0x60}, std::byte{0xF8}, std::byte{0xCF}, std::byte{0xF0},
+        std::byte{0x1F}, std::byte{0x00}, std::byte{0x04}, std::byte{0x01}, std::byte{0x01}, std::byte{0xFF},
+        std::byte{0x71}, std::byte{0xEB}, std::byte{0x47}, std::byte{0xE5}, std::byte{0x00}, std::byte{0x00},
+        std::byte{0x00}, std::byte{0x00},
+        std::byte{'I'}, std::byte{'E'}, std::byte{'N'}, std::byte{'D'}, std::byte{0xAE}, std::byte{0x42},
+        std::byte{0x60}, std::byte{0x82}};
+    PngRgba8ImageUVE image;
+    ASSERT_TRUE(DecodePngRgba8ImageUVE(png, image));
+    EXPECT_EQ(image.width, 1U);
+    EXPECT_EQ(image.height, 1U);
+    ASSERT_EQ(image.pixels.size(), 4U);
+    EXPECT_EQ(image.pixels[0], std::byte{0x00});
+    EXPECT_EQ(image.pixels[1], std::byte{0xFF});
+    EXPECT_EQ(image.pixels[2], std::byte{0x00});
+    EXPECT_EQ(image.pixels[3], std::byte{0xFF});
+}
+
+TEST(PngMetadataUVETest, DecodePngRgba8ImageUVE_RejectsCorruptOrUnsupportedInputAtomically) {
+    const std::vector<std::byte> png{
+        std::byte{0x89}, std::byte{0x50}, std::byte{0x4E}, std::byte{0x47}, std::byte{0x0D}, std::byte{0x0A},
+        std::byte{0x1A}, std::byte{0x0A}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x0D},
+        std::byte{'I'}, std::byte{'H'}, std::byte{'D'}, std::byte{'R'}, std::byte{0x00}, std::byte{0x00},
+        std::byte{0x00}, std::byte{0x01}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x01},
+        std::byte{0x08}, std::byte{0x02}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x1F},
+        std::byte{0x15}, std::byte{0xC4}, std::byte{0x89}};
+    PngRgba8ImageUVE image{7U, 8U, {std::byte{0xAA}}};
+    EXPECT_FALSE(DecodePngRgba8ImageUVE(png, image));
+    EXPECT_EQ(image.width, 7U);
+    EXPECT_EQ(image.height, 8U);
+    EXPECT_EQ(image.pixels, std::vector<std::byte>({std::byte{0xAA}}));
+}
+
 TEST(PngMetadataUVETest, ParsePngMetadataUVE_RejectsMalformedIhdrFacts) {
     std::vector<std::byte> badSignature = MakePngIhdrUVE();
     badSignature[0] = std::byte{'X'};
