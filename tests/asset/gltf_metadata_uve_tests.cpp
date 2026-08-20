@@ -30,6 +30,31 @@ TEST(GltfMetadataUVETest, ClassifyGltfResourceUriUVE_RejectsUnsafeAndUnboundedUr
     EXPECT_EQ(ClassifyGltfResourceUriUVE(oversized), GltfResourceUriKindUVE::Invalid);
 }
 
+TEST(GltfMetadataUVETest, ResolveGltfResourceVirtualPathUVE_ComposesBoundedVfsPaths) {
+    std::string resolved = "unchanged";
+    ASSERT_TRUE(ResolveGltfResourceVirtualPathUVE("models/characters/hero.gltf", "textures/albedo.png", resolved));
+    EXPECT_EQ(resolved, "models/characters/textures/albedo.png");
+    ASSERT_TRUE(ResolveGltfResourceVirtualPathUVE("scene.gltf", "mesh\\lod0.bin", resolved));
+    EXPECT_EQ(resolved, "mesh/lod0.bin");
+}
+
+TEST(GltfMetadataUVETest, ResolveGltfResourceVirtualPathUVE_RejectsInvalidInputsAtomically) {
+    const std::string original = "stable/path.bin";
+    std::string resolved = original;
+    EXPECT_FALSE(ResolveGltfResourceVirtualPathUVE("models/hero.gltf", "data:application/octet-stream,AAAA", resolved));
+    EXPECT_EQ(resolved, original);
+    EXPECT_FALSE(ResolveGltfResourceVirtualPathUVE("models/../hero.gltf", "mesh.bin", resolved));
+    EXPECT_EQ(resolved, original);
+    EXPECT_FALSE(ResolveGltfResourceVirtualPathUVE("/hero.gltf", "mesh.bin", resolved));
+    EXPECT_EQ(resolved, original);
+    const std::string oversizedCombined(kMaximumGltfResourceUriBytesUVE - 6U, 'a');
+    EXPECT_FALSE(ResolveGltfResourceVirtualPathUVE("models/hero.gltf", oversizedCombined, resolved));
+    EXPECT_EQ(resolved, original);
+    const std::string oversizedResource(kMaximumGltfResourceUriBytesUVE + 1U, 'b');
+    EXPECT_FALSE(ResolveGltfResourceVirtualPathUVE("hero.gltf", oversizedResource, resolved));
+    EXPECT_EQ(resolved, original);
+}
+
 TEST(GltfMetadataUVETest, ValidateGltfAccessorSpanUVE_AcceptsBoundedTightAndStridedSpans) {
     EXPECT_TRUE(ValidateGltfAccessorSpanUVE(64U, 0U, 16U, 4U, 4U));
     EXPECT_TRUE(ValidateGltfAccessorSpanUVE(64U, 4U, 4U, 12U, 8U));

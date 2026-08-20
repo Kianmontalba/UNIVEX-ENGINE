@@ -5,6 +5,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <new>
+#include <utility>
 
 #include <nlohmann/json.hpp>
 
@@ -113,6 +115,34 @@ GltfResourceUriKindUVE ClassifyGltfResourceUriUVE(const std::string_view uri) no
         return GltfResourceUriKindUVE::Invalid;
     }
     return GltfResourceUriKindUVE::RelativePath;
+}
+
+bool ResolveGltfResourceVirtualPathUVE(const std::string_view assetVirtualPath,
+                                          const std::string_view resourceUri,
+                                          std::string& outVirtualPath) {
+    if (assetVirtualPath.empty() || assetVirtualPath.size() > kMaximumGltfResourceUriBytesUVE ||
+        resourceUri.empty() || resourceUri.size() > kMaximumGltfResourceUriBytesUVE ||
+        ClassifyGltfResourceUriUVE(assetVirtualPath) != GltfResourceUriKindUVE::RelativePath ||
+        ClassifyGltfResourceUriUVE(resourceUri) != GltfResourceUriKindUVE::RelativePath) {
+        return false;
+    }
+    const std::size_t separator = assetVirtualPath.rfind('/');
+    const std::size_t directoryBytes = separator == std::string_view::npos ? 0U : separator + 1U;
+    if (directoryBytes + resourceUri.size() > kMaximumGltfResourceUriBytesUVE) {
+        return false;
+    }
+    try {
+        std::string resolved;
+        resolved.reserve(directoryBytes + resourceUri.size());
+        resolved.append(assetVirtualPath.substr(0U, directoryBytes));
+        for (const char character : resourceUri) {
+            resolved.push_back(character == '\\' ? '/' : character);
+        }
+        outVirtualPath = std::move(resolved);
+        return true;
+    } catch (const std::bad_alloc&) {
+        return false;
+    }
 }
 
 bool ValidateGltfAccessorSpanUVE(const std::uint64_t bufferByteLength,
