@@ -55,6 +55,32 @@ enum class MobileLifecycleTransitionUVE : std::uint8_t {
     Reinitialized,
 };
 
+enum class MobileInputAvailabilityUVE : std::uint8_t {
+    Disabled = 0,
+    TouchOnly,
+    TouchAndGyroscope,
+};
+
+/// Evaluates caller-owned mobile input acceptance policy from copied lifecycle/focus facts. Native
+/// callbacks, background execution, and platform-specific sensor policy remain outside this helper.
+[[nodiscard]] inline bool EvaluateMobileInputPolicyUVE(
+    const MobileLifecycleStateUVE lifecycle, const bool focused, const bool allowBackgroundTouch,
+    const bool allowBackgroundGyroscope, MobileInputAvailabilityUVE& outAvailability) noexcept {
+    if (static_cast<std::uint8_t>(lifecycle) >= static_cast<std::uint8_t>(MobileLifecycleStateUVE::Count)) {
+        return false;
+    }
+    MobileInputAvailabilityUVE availability = MobileInputAvailabilityUVE::Disabled;
+    if (lifecycle == MobileLifecycleStateUVE::Active) {
+        const bool touchEnabled = focused || allowBackgroundTouch;
+        const bool gyroscopeEnabled = focused || allowBackgroundGyroscope;
+        availability = gyroscopeEnabled ? MobileInputAvailabilityUVE::TouchAndGyroscope
+                                        : (touchEnabled ? MobileInputAvailabilityUVE::TouchOnly
+                                                        : MobileInputAvailabilityUVE::Disabled);
+    }
+    outAvailability = availability;
+    return true;
+}
+
 /// Classifies a copied application-lifecycle edge for Android/iOS adapters without owning native
 /// lifecycle callbacks, process state, or platform shutdown policy.
 [[nodiscard]] inline bool EvaluateMobileLifecycleTransitionUVE(
