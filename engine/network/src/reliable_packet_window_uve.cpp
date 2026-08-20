@@ -11,6 +11,12 @@ constexpr std::uint32_t kHalfSequenceSpaceUVE = 0x80000000U;
     return distance != 0U && distance < kHalfSequenceSpaceUVE;
 }
 } // namespace
+
+bool ValidateReliablePayloadBudgetUVE(const std::size_t payloadBytes,
+                                      const std::size_t maximumBytes) noexcept {
+    return payloadBytes <= maximumBytes;
+}
+
 ReliableRetransmitStatusUVE EvaluateReliableRetransmitPolicyUVE(
     const ReliableRetransmitPolicyInputUVE& input) noexcept {
     if (!std::isfinite(input.elapsedSeconds) || input.elapsedSeconds < 0.0F ||
