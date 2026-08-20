@@ -156,7 +156,7 @@ bool UnfilterPngRgba8ScanlineUVE(const PngFilterTypeUVE filter,
 bool ValidatePngRgba8PixelBudgetUVE(const PngMetadataUVE& metadata,
                                     const std::uint64_t maximumBytes) noexcept {
     if (metadata.width == 0U || metadata.height == 0U || metadata.bitDepth != 8U ||
-        (metadata.colorType != 0U && metadata.colorType != 2U && metadata.colorType != 6U) || maximumBytes == 0U) {
+        (metadata.colorType != 0U && metadata.colorType != 2U && metadata.colorType != 3U && metadata.colorType != 6U) || maximumBytes == 0U) {
         return false;
     }
     constexpr std::uint64_t kBytesPerRgba8Pixel = 4ULL;
@@ -172,7 +172,8 @@ bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUV
     try {
         const auto metadata = ParsePngMetadataUVE(bytes);
         if (!metadata.has_value() || metadata->bitDepth != 8U ||
-            (metadata->colorType != 0U && metadata->colorType != 2U && metadata->colorType != 6U) ||
+            (metadata->colorType != 0U && metadata->colorType != 2U && metadata->colorType != 3U &&
+             metadata->colorType != 6U) ||
             metadata->interlaceMethod != 0U ||
             !ValidatePngRgba8PixelBudgetUVE(*metadata)) {
             return false;
@@ -183,6 +184,8 @@ bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUV
             return false;
         }
         std::vector<std::byte> compressed;
+        std::vector<std::byte> paletteRgb;
+        std::vector<std::byte> paletteAlpha;
         bool foundIdat = false;
         bool foundIend = false;
         std::size_t offset = kSignatureBytes;
@@ -204,7 +207,22 @@ bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUV
             if (crc != static_cast<uLong>(ReadU32BE(bytes, crcOffset))) {
                 return false;
             }
-            if (HasBytes(bytes, typeOffset, {'I', 'D', 'A', 'T'})) {
+            if (HasBytes(bytes, typeOffset, {'P', 'L', 'T', 'E'})) {
+                if (metadata->colorType != 3U || foundIdat || !paletteRgb.empty() || payloadLength == 0U ||
+                    payloadLength > 768U || payloadLength % 3U != 0U) {
+                    return false;
+                }
+                paletteRgb.insert(paletteRgb.end(), bytes.begin() + static_cast<std::ptrdiff_t>(payloadOffset),
+                                  bytes.begin() + static_cast<std::ptrdiff_t>(payloadOffset + payloadLength));
+                paletteAlpha.assign(payloadLength / 3U, std::byte{0xFF});
+            } else if (HasBytes(bytes, typeOffset, {'t', 'R', 'N', 'S'})) {
+                if (metadata->colorType != 3U || foundIdat || paletteAlpha.empty() ||
+                    payloadLength > paletteAlpha.size()) {
+                    return false;
+                }
+                std::copy(bytes.begin() + static_cast<std::ptrdiff_t>(payloadOffset),
+                          bytes.begin() + static_cast<std::ptrdiff_t>(payloadOffset + payloadLength), paletteAlpha.begin());
+            } else if (HasBytes(bytes, typeOffset, {'I', 'D', 'A', 'T'})) {
                 if (compressed.size() > kMaximumPngDecodedPixelBytesUVE -
                                        std::min<std::size_t>(compressed.size(), kMaximumPngDecodedPixelBytesUVE) ||
                     payloadLength > kMaximumPngDecodedPixelBytesUVE - compressed.size()) {
@@ -219,10 +237,10 @@ bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUV
             }
             offset = crcOffset + 4U;
         }
-        if (!foundIdat || !foundIend || compressed.empty()) {
+        if (!foundIdat || !foundIend || compressed.empty() || (metadata->colorType == 3U && paletteRgb.empty())) {
             return false;
         }
-        const std::size_t sourceBytesPerPixel = metadata->colorType == 0U ? 1U :
+        const std::size_t sourceBytesPerPixel = metadata->colorType == 0U || metadata->colorType == 3U ? 1U :
             (metadata->colorType == 2U ? 3U : 4U);
         const std::uint64_t sourceRowBytes64 = static_cast<std::uint64_t>(metadata->width) * sourceBytesPerPixel;
         const std::uint64_t outputRowBytes64 = static_cast<std::uint64_t>(metadata->width) * 4ULL;
@@ -256,11 +274,23 @@ bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUV
             for (std::size_t x = 0U; x < metadata->width; ++x) {
                 const std::size_t sourceOffset = x * sourceBytesPerPixel;
                 const std::size_t outputOffset = row * outputRowBytes + x * 4U;
-                const std::byte red = decodedRow[sourceOffset];
-                pixels[outputOffset] = red;
-                pixels[outputOffset + 1U] = sourceBytesPerPixel == 1U ? red : decodedRow[sourceOffset + 1U];
-                pixels[outputOffset + 2U] = sourceBytesPerPixel == 1U ? red : decodedRow[sourceOffset + 2U];
-                pixels[outputOffset + 3U] = sourceBytesPerPixel == 4U ? decodedRow[sourceOffset + 3U] : std::byte{0xFF};
+                if (metadata->colorType == 3U) {
+                    const std::size_t paletteIndex = std::to_integer<std::uint8_t>(decodedRow[sourceOffset]);
+                    if (paletteIndex >= paletteAlpha.size()) {
+                        return false;
+                    }
+                    const std::size_t paletteOffset = paletteIndex * 3U;
+                    pixels[outputOffset] = paletteRgb[paletteOffset];
+                    pixels[outputOffset + 1U] = paletteRgb[paletteOffset + 1U];
+                    pixels[outputOffset + 2U] = paletteRgb[paletteOffset + 2U];
+                    pixels[outputOffset + 3U] = paletteAlpha[paletteIndex];
+                } else {
+                    const std::byte red = decodedRow[sourceOffset];
+                    pixels[outputOffset] = red;
+                    pixels[outputOffset + 1U] = sourceBytesPerPixel == 1U ? red : decodedRow[sourceOffset + 1U];
+                    pixels[outputOffset + 2U] = sourceBytesPerPixel == 1U ? red : decodedRow[sourceOffset + 2U];
+                    pixels[outputOffset + 3U] = sourceBytesPerPixel == 4U ? decodedRow[sourceOffset + 3U] : std::byte{0xFF};
+                }
             }
             previousRow = std::move(decodedRow);
         }
