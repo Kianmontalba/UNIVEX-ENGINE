@@ -4,6 +4,25 @@
 #include <limits>
 namespace UVE::Input::Tests {
 namespace {
+TEST(TouchCoordinateTransformUVETest, ValidateTouchCoordinateViewportUVE_AcceptsBoundedSafeArea) {
+    EXPECT_TRUE(ValidateTouchCoordinateViewportUVE(
+        TouchCoordinateViewportUVE{100.0F, 80.0F, 0.0F, 0.0F, 100.0F, 80.0F}));
+    EXPECT_TRUE(ValidateTouchCoordinateViewportUVE(
+        TouchCoordinateViewportUVE{100.0F, 80.0F, 10.0F, 20.0F, 90.0F, 70.0F}));
+}
+
+TEST(TouchCoordinateTransformUVETest, ValidateTouchCoordinateViewportUVE_RejectsUnsafeSnapshots) {
+    EXPECT_FALSE(ValidateTouchCoordinateViewportUVE(
+        TouchCoordinateViewportUVE{0.0F, 80.0F, 0.0F, 0.0F, 100.0F, 80.0F}));
+    EXPECT_FALSE(ValidateTouchCoordinateViewportUVE(
+        TouchCoordinateViewportUVE{100.0F, 80.0F, 60.0F, 20.0F, 50.0F, 70.0F}));
+    EXPECT_FALSE(ValidateTouchCoordinateViewportUVE(
+        TouchCoordinateViewportUVE{100.0F, 80.0F, 0.0F, 0.0F, 120.0F, 80.0F}));
+    EXPECT_FALSE(ValidateTouchCoordinateViewportUVE(
+        TouchCoordinateViewportUVE{100.0F, 80.0F, std::numeric_limits<float>::quiet_NaN(),
+                                   0.0F, 100.0F, 80.0F}));
+}
+
 TEST(TouchCoordinateTransformUVETest, AppliesCardinalTouchOrientations) {
     const Math::Vector2UVE input{0.25F, 0.75F};
     Math::Vector2UVE output;
