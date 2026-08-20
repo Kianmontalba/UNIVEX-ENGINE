@@ -100,5 +100,65 @@ TEST(ReliablePacketWindowUVETest, InvalidAcknowledgementDoesNotMutatePendingMask
     EXPECT_FALSE(ApplyReliableAcknowledgementsUVE(header, pending, 1U));
     EXPECT_EQ(pending, 0xA5A5A5A5U);
 }
+TEST(ReliablePacketWindowUVETest, ReassemblesOutOfOrderFragmentsAndResetsState) {
+    ReliablePayloadReassemblyStateUVE state;
+    std::vector<std::uint8_t> payload;
+
+    EXPECT_EQ(AcceptReliablePayloadFragmentUVE(17U, 1U, 2U, {3U, 4U}, state, payload),
+              ReliablePayloadReassemblyStatusUVE::Accepted);
+    EXPECT_TRUE(state.IsActiveUVE());
+    EXPECT_EQ(state.receivedFragmentCount, 1U);
+    EXPECT_EQ(AcceptReliablePayloadFragmentUVE(17U, 0U, 2U, {1U, 2U}, state, payload),
+              ReliablePayloadReassemblyStatusUVE::Complete);
+    EXPECT_EQ(payload, (std::vector<std::uint8_t>{1U, 2U, 3U, 4U}));
+    EXPECT_FALSE(state.IsActiveUVE());
+    EXPECT_EQ(state.receivedFragmentCount, 0U);
+}
+
+TEST(ReliablePacketWindowUVETest, DuplicateFragmentIsIdempotentAndConflictDoesNotMutateState) {
+    ReliablePayloadReassemblyStateUVE state;
+    std::vector<std::uint8_t> payload;
+    ASSERT_EQ(AcceptReliablePayloadFragmentUVE(19U, 0U, 2U, {7U}, state, payload),
+              ReliablePayloadReassemblyStatusUVE::Accepted);
+
+    EXPECT_EQ(AcceptReliablePayloadFragmentUVE(19U, 0U, 2U, {7U}, state, payload),
+              ReliablePayloadReassemblyStatusUVE::Duplicate);
+    EXPECT_EQ(AcceptReliablePayloadFragmentUVE(19U, 0U, 2U, {8U}, state, payload),
+              ReliablePayloadReassemblyStatusUVE::Conflict);
+    EXPECT_EQ(state.receivedFragmentCount, 1U);
+    EXPECT_TRUE(payload.empty());
+}
+
+TEST(ReliablePacketWindowUVETest, ReassemblyRejectsInvalidBoundsAndMessageConflicts) {
+    ReliablePayloadReassemblyStateUVE state;
+    std::vector<std::uint8_t> payload{9U};
+
+    EXPECT_EQ(AcceptReliablePayloadFragmentUVE(0U, 0U, 1U, {1U}, state, payload),
+              ReliablePayloadReassemblyStatusUVE::Invalid);
+    EXPECT_EQ(AcceptReliablePayloadFragmentUVE(20U, 2U, 2U, {1U}, state, payload),
+              ReliablePayloadReassemblyStatusUVE::Invalid);
+    EXPECT_EQ(AcceptReliablePayloadFragmentUVE(20U, 0U, kReliablePacketMaximumFragmentCountUVE + 1U, {1U},
+                                               state, payload),
+              ReliablePayloadReassemblyStatusUVE::Invalid);
+    EXPECT_EQ(AcceptReliablePayloadFragmentUVE(20U, 0U, 2U, {1U}, state, payload),
+              ReliablePayloadReassemblyStatusUVE::Accepted);
+    EXPECT_EQ(AcceptReliablePayloadFragmentUVE(21U, 1U, 2U, {2U}, state, payload),
+              ReliablePayloadReassemblyStatusUVE::Conflict);
+    EXPECT_EQ(state.messageId, 20U);
+    EXPECT_EQ(state.receivedFragmentCount, 1U);
+    EXPECT_EQ(payload, (std::vector<std::uint8_t>{9U}));
+}
+
+TEST(ReliablePacketWindowUVETest, SingleFragmentPublishesCopiedPayload) {
+    ReliablePayloadReassemblyStateUVE state;
+    std::vector<std::uint8_t> payload;
+    const std::vector<std::uint8_t> fragment{4U, 5U, 6U};
+
+    EXPECT_EQ(AcceptReliablePayloadFragmentUVE(22U, 0U, 1U, fragment, state, payload),
+              ReliablePayloadReassemblyStatusUVE::Complete);
+    EXPECT_EQ(payload, fragment);
+    EXPECT_FALSE(state.IsActiveUVE());
+}
+
 } // namespace
 } // namespace UVE::Network::Tests
