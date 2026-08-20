@@ -29,6 +29,7 @@ add_library(uve_window STATIC
     src/null_window_manager_uve.cpp
     src/window_desc_validation_uve.cpp
     src/monitor_info_validation_uve.cpp
+    src/display_mode_validation_uve.cpp
 )
 target_include_directories(uve_window PUBLIC include)
 target_link_libraries(uve_window
