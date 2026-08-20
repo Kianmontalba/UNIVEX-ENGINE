@@ -61,6 +61,10 @@ bool NullAudioDeviceUVE::SetVoiceParamsUVE(VoiceHandleUVE voice, const AudioVoic
         UVE_ERROR("NullAudioDeviceUVE: SetVoiceParamsUVE called with an unknown handle ({})", voice.value);
         return false;
     }
+    if (!ValidateAudioVoiceParamsUVE(params)) {
+        UVE_ERROR("NullAudioDeviceUVE: SetVoiceParamsUVE received invalid parameters for handle ({})", voice.value);
+        return false;
+    }
     m_impl->recordedCalls.emplace_back(SetVoiceParamsCallUVE{voice, params});
     return true;
 }

@@ -4,6 +4,7 @@
 #include "uve/audio/null_audio_device_uve.h"
 
 #include <algorithm>
+#include <limits>
 #include <memory>
 #include <variant>
 #include <vector>
@@ -86,6 +87,20 @@ TEST(NullAudioDeviceUVETest, SetVoiceParamsUVE_UnknownHandle_ReturnsFalseAndLogs
 
     EXPECT_TRUE(LoggedAnErrorUVE(*memorySinkPtr));
     logger.Shutdown();
+}
+
+TEST(NullAudioDeviceUVETest, SetVoiceParamsUVE_RejectsInvalidParametersWithoutRecording) {
+    NullAudioDeviceUVE device;
+    const VoiceHandleUVE voice = device.CreateVoiceUVE(AudioVoiceDescUVE{});
+    const AudioVoiceParamsUVE original{Math::Vector3UVE{1.0F, 2.0F, 3.0F}, 0.5F, 1.0F};
+    EXPECT_TRUE(device.SetVoiceParamsUVE(voice, original));
+    ASSERT_EQ(device.GetRecordedCallsUVE().size(), 1U);
+    const AudioVoiceParamsUVE invalidPosition{
+        Math::Vector3UVE{std::numeric_limits<float>::quiet_NaN(), 0.0F, 0.0F}, 0.5F, 1.0F};
+    EXPECT_FALSE(device.SetVoiceParamsUVE(voice, invalidPosition));
+    EXPECT_FALSE(device.SetVoiceParamsUVE(voice, AudioVoiceParamsUVE{Math::Vector3UVE{}, 1.1F, 1.0F}));
+    EXPECT_FALSE(device.SetVoiceParamsUVE(voice, AudioVoiceParamsUVE{Math::Vector3UVE{}, 0.5F, -1.0F}));
+    EXPECT_EQ(device.GetRecordedCallsUVE().size(), 1U);
 }
 
 TEST(NullAudioDeviceUVETest, GetVoiceStateUVE_UnknownHandle_ReturnsStoppedAndLogsError) {
