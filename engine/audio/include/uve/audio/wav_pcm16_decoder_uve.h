@@ -13,4 +13,10 @@ inline constexpr std::size_t kMaximumWavPcm16SamplesUVE = 1U << 20U;
 /// Supports only RIFF/WAVE PCM16; owns no decoder, stream, device, or voice lifetime.
 [[nodiscard]] bool DecodeWavPcm16SamplesUVE(const std::vector<std::byte>& wavBytes,
                                             std::vector<float>& outSamples) noexcept;
+
+/// Decodes one bounded PCM16 sample window directly from caller-owned WAV bytes with atomic output
+/// publication. It owns no stream cursor, refill schedule, decoder, device, or voice lifetime.
+[[nodiscard]] bool DecodeWavPcm16SampleWindowUVE(
+    const std::vector<std::byte>& wavBytes, std::size_t startSample, std::size_t requestedSamples,
+    std::vector<float>& outSamples, std::size_t maximumSamples = kMaximumWavPcm16SamplesUVE);
 } // namespace UVE::Audio

@@ -40,6 +40,35 @@ TEST(WavPcm16DecoderUVETest, ValidateWavPcm16SampleWindowUVE_RejectsInvalidWindo
     EXPECT_FALSE(ValidateWavPcm16SampleWindowUVE(100U, 0U, 1U, 0U));
 }
 
+TEST(WavPcm16DecoderUVETest, DecodeWavPcm16SampleWindowUVE_DecodesBoundedSlices) {
+    const auto wav = BuildWav16({-32768, 0, 16384, 32767, -16384});
+    std::vector<float> output;
+    ASSERT_TRUE(DecodeWavPcm16SampleWindowUVE(wav, 1U, 3U, output));
+    ASSERT_EQ(output.size(), 3U);
+    EXPECT_FLOAT_EQ(output[0], 0.0F);
+    EXPECT_FLOAT_EQ(output[1], 0.5F);
+    EXPECT_NEAR(output[2], 0.9999695F, 1.0e-6F);
+    ASSERT_TRUE(DecodeWavPcm16SampleWindowUVE(wav, 4U, 1U, output, 1U));
+    ASSERT_EQ(output.size(), 1U);
+    EXPECT_FLOAT_EQ(output[0], -0.5F);
+}
+
+TEST(WavPcm16DecoderUVETest, DecodeWavPcm16SampleWindowUVE_RejectsInvalidAndMalformedInputsAtomically) {
+    const std::vector<float> original{0.25F};
+    std::vector<float> output = original;
+    const auto wav = BuildWav16({1, 2, 3});
+    EXPECT_FALSE(DecodeWavPcm16SampleWindowUVE(wav, 3U, 1U, output));
+    EXPECT_EQ(output, original);
+    EXPECT_FALSE(DecodeWavPcm16SampleWindowUVE(wav, 0U, 2U, output, 1U));
+    EXPECT_EQ(output, original);
+    auto truncated = wav;
+    truncated.pop_back();
+    EXPECT_FALSE(DecodeWavPcm16SampleWindowUVE(truncated, 0U, 1U, output));
+    EXPECT_EQ(output, original);
+    EXPECT_FALSE(DecodeWavPcm16SampleWindowUVE(BuildWav16({1, 2}, 8U), 0U, 1U, output));
+    EXPECT_EQ(output, original);
+}
+
 TEST(WavPcm16DecoderUVETest, DecodesNormalizedSamples) {
     std::vector<float> output;
     ASSERT_TRUE(DecodeWavPcm16SamplesUVE(BuildWav16({-32768, 0, 16384, 32767}), output));
