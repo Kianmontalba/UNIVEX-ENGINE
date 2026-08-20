@@ -230,6 +230,19 @@ TEST(PngMetadataUVETest, ValidatePngRgba8PixelBudgetUVE_AcceptsDefaultHdBudget) 
                                8U, 2U, 2U, 1U);
 }
 
+[[nodiscard]] std::vector<std::byte> MakePngAdam7Rgba16TwoByTwoUVE() {
+    return MakePngOneByOneUVE(6U,
+                               {std::byte{0}, std::byte{0x12}, std::byte{0x01}, std::byte{0x34}, std::byte{0x02},
+                                std::byte{0x56}, std::byte{0x03}, std::byte{0x78}, std::byte{0x04},
+                                std::byte{0}, std::byte{0xAB}, std::byte{0x05}, std::byte{0xCD}, std::byte{0x06},
+                                std::byte{0xEF}, std::byte{0x07}, std::byte{0x01}, std::byte{0x08},
+                                std::byte{0}, std::byte{0x10}, std::byte{0x09}, std::byte{0x20}, std::byte{0x0A},
+                                std::byte{0x30}, std::byte{0x0B}, std::byte{0x40}, std::byte{0x0C},
+                                std::byte{0xFF}, std::byte{0x0D}, std::byte{0xFF}, std::byte{0x0E}, std::byte{0xFF},
+                                std::byte{0x0F}, std::byte{0xFF}, std::byte{0x10}},
+                               {}, {}, 16U, 2U, 2U, 1U);
+}
+
 TEST(PngMetadataUVETest, ValidatePngRgba8PixelBudgetUVE_RejectsZeroAndAcceptsGrayRgbFacts) {
     PngMetadataUVE zeroWidth{.width = 0U, .height = 1080U, .bitDepth = 8U, .colorType = 6U};
     EXPECT_FALSE(ValidatePngRgba8PixelBudgetUVE(zeroWidth));
@@ -255,6 +268,32 @@ TEST(PngMetadataUVETest, ValidatePngRgba8PixelBudgetUVE_RejectsOverflowAndOversi
     PngMetadataUVE small{.width = 4U, .height = 4U, .bitDepth = 8U, .colorType = 6U};
     EXPECT_FALSE(ValidatePngRgba8PixelBudgetUVE(small, 63ULL));
     EXPECT_TRUE(ValidatePngRgba8PixelBudgetUVE(small, 64ULL));
+}
+
+TEST(PngMetadataUVETest, DecodePngRgba8ImageUVE_DownconvertsAdam7Rgba16TwoByTwo) {
+    const std::vector<std::byte> png = MakePngAdam7Rgba16TwoByTwoUVE();
+    ASSERT_FALSE(png.empty());
+    PngRgba8ImageUVE image;
+    ASSERT_TRUE(DecodePngRgba8ImageUVE(png, image));
+    ASSERT_EQ(image.width, 2U);
+    ASSERT_EQ(image.height, 2U);
+    ASSERT_EQ(image.pixels.size(), 16U);
+    EXPECT_EQ(image.pixels[0], std::byte{0x12});
+    EXPECT_EQ(image.pixels[1], std::byte{0x34});
+    EXPECT_EQ(image.pixels[2], std::byte{0x56});
+    EXPECT_EQ(image.pixels[3], std::byte{0x78});
+    EXPECT_EQ(image.pixels[4], std::byte{0xAB});
+    EXPECT_EQ(image.pixels[5], std::byte{0xCD});
+    EXPECT_EQ(image.pixels[6], std::byte{0xEF});
+    EXPECT_EQ(image.pixels[7], std::byte{0x01});
+    EXPECT_EQ(image.pixels[8], std::byte{0x10});
+    EXPECT_EQ(image.pixels[9], std::byte{0x20});
+    EXPECT_EQ(image.pixels[10], std::byte{0x30});
+    EXPECT_EQ(image.pixels[11], std::byte{0x40});
+    EXPECT_EQ(image.pixels[12], std::byte{0xFF});
+    EXPECT_EQ(image.pixels[13], std::byte{0xFF});
+    EXPECT_EQ(image.pixels[14], std::byte{0xFF});
+    EXPECT_EQ(image.pixels[15], std::byte{0xFF});
 }
 
 TEST(PngMetadataUVETest, DecodePngRgba8ImageUVE_DecodesAdam7IndexedTwoByTwo) {

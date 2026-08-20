@@ -180,9 +180,10 @@ bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUV
               (metadata->bitDepth == 16U && (metadata->colorType == 0U || metadata->colorType == 2U ||
                                                metadata->colorType == 6U))) ||
             (metadata->interlaceMethod != 0U &&
-             !(metadata->interlaceMethod == 1U && metadata->bitDepth == 8U &&
-               (metadata->colorType == 0U || metadata->colorType == 2U || metadata->colorType == 3U ||
-                metadata->colorType == 6U))) ||
+             !((metadata->interlaceMethod == 1U && metadata->bitDepth == 8U &&
+                (metadata->colorType == 0U || metadata->colorType == 2U || metadata->colorType == 3U ||
+                 metadata->colorType == 6U)) ||
+               (metadata->interlaceMethod == 1U && metadata->bitDepth == 16U && metadata->colorType == 6U))) ||
             !ValidatePngRgba8PixelBudgetUVE(*metadata)) {
             return false;
         }
@@ -329,7 +330,12 @@ bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUV
                     const std::size_t outputX = startX + x * stepX;
                     const std::size_t outputY = startY + row * stepY;
                     const std::size_t outputOffset = outputY * outputRowBytes + outputX * 4U;
-                    if (metadata->interlaceMethod == 1U && metadata->colorType == 3U) {
+                    if (metadata->interlaceMethod == 1U && metadata->bitDepth == 16U && metadata->colorType == 6U) {
+                        pixels[outputOffset] = decodedRow[sourceOffset];
+                        pixels[outputOffset + 1U] = decodedRow[sourceOffset + 2U];
+                        pixels[outputOffset + 2U] = decodedRow[sourceOffset + 4U];
+                        pixels[outputOffset + 3U] = decodedRow[sourceOffset + 6U];
+                    } else if (metadata->interlaceMethod == 1U && metadata->colorType == 3U) {
                         const std::size_t paletteIndex = std::to_integer<std::uint8_t>(decodedRow[sourceOffset]);
                         if (paletteIndex >= paletteAlpha.size()) return false;
                         const std::size_t paletteOffset = paletteIndex * 3U;
