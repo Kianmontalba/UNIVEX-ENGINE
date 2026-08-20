@@ -4,6 +4,14 @@
 
 namespace UVE::Save {
 
+enum class SaveSyncActionUVE : std::uint8_t {
+    Invalid = 0,
+    NoOp,
+    Upload,
+    Download,
+    Conflict,
+};
+
 enum class SaveRevisionStatusUVE : std::uint8_t {
     Invalid = 0,
     Unchanged,
@@ -11,6 +19,9 @@ enum class SaveRevisionStatusUVE : std::uint8_t {
     RemoteAhead,
     Conflict,
 };
+
+/// Maps caller-owned revision status to a sync direction without performing cloud I/O.
+[[nodiscard]] SaveSyncActionUVE EvaluateSaveSyncActionUVE(SaveRevisionStatusUVE status) noexcept;
 
 /// Classifies caller-owned base/local/remote save revisions without cloud or merge ownership.
 [[nodiscard]] SaveRevisionStatusUVE EvaluateSaveRevisionUVE(
