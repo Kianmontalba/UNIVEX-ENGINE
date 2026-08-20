@@ -32,6 +32,41 @@ struct ParticleDrawRecordingUVE final {
     [[nodiscard]] bool operator==(const ParticleDrawRecordingUVE&) const = default;
 };
 
+struct ParticleGpuUploadPlanUVE final {
+    static constexpr std::size_t kParticleStrideBytesUVE = sizeof(float) * 5U;
+    std::size_t commandCount = 0U;
+    std::size_t byteCount = 0U;
+    bool truncated = false;
+};
+
+/// Plans a bounded fixed-stride particle upload from copied draw commands. It does not allocate
+/// GPU buffers, resolve materials, bind pipelines, submit commands, or mutate the recording.
+[[nodiscard]] inline bool PlanParticleGpuUploadUVE(
+    const ParticleDrawRecordingUVE& recording, const std::size_t maximumBytes,
+    ParticleGpuUploadPlanUVE& outPlan) noexcept {
+    if (recording.commands.size() > kMaximumParticleDrawCommandsUVE ||
+        recording.sourceItemCount < recording.commands.size() ||
+        (!recording.truncated && recording.sourceItemCount != recording.commands.size()) ||
+        maximumBytes < ParticleGpuUploadPlanUVE::kParticleStrideBytesUVE) {
+        return false;
+    }
+    const std::size_t commandCount = recording.commands.size();
+    if (commandCount > maximumBytes / ParticleGpuUploadPlanUVE::kParticleStrideBytesUVE) {
+        return false;
+    }
+    for (const ParticleDrawCommandUVE& command : recording.commands) {
+        if (!IsValidParticleDrawCommandUVE(command)) {
+            return false;
+        }
+    }
+    ParticleGpuUploadPlanUVE plan;
+    plan.commandCount = commandCount;
+    plan.byteCount = commandCount * ParticleGpuUploadPlanUVE::kParticleStrideBytesUVE;
+    plan.truncated = recording.truncated;
+    outPlan = plan;
+    return true;
+}
+
 /// Copies renderer-owned particle queue values into a bounded command description. This v1 does
 /// not allocate GPU buffers, bind pipelines, submit OpenGL calls, resolve assets, or mutate the queue.
 class ParticleDrawRecorderUVE final {
