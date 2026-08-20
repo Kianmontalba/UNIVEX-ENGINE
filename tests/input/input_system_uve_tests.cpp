@@ -241,6 +241,37 @@ TEST_F(InputSystemUVETest, ActionRemap_ReplacesBindingsOnNextFrameAndRejectsInva
     EXPECT_FALSE(inputSystem.RemapActionUVE("Missing", {KeyBindingUVE(KeyCodeUVE::A)}, {}));
 }
 
+TEST_F(InputSystemUVETest, KeyboardAndMouseSentinelInputsAreIgnoredSafely) {
+    inputSystem.SetKeyStateUVE(KeyCodeUVE::Count, true);
+    inputSystem.SetMouseButtonStateUVE(MouseButtonUVE::Count, true);
+    inputSystem.UpdateUVE();
+
+    EXPECT_FALSE(inputSystem.IsKeyDownUVE(KeyCodeUVE::Count));
+    EXPECT_FALSE(inputSystem.WasKeyPressedThisFrameUVE(KeyCodeUVE::Count));
+    EXPECT_FALSE(inputSystem.WasKeyReleasedThisFrameUVE(KeyCodeUVE::Count));
+    EXPECT_FALSE(inputSystem.IsMouseButtonDownUVE(MouseButtonUVE::Count));
+    EXPECT_FALSE(inputSystem.WasMouseButtonPressedThisFrameUVE(MouseButtonUVE::Count));
+    EXPECT_FALSE(inputSystem.WasMouseButtonReleasedThisFrameUVE(MouseButtonUVE::Count));
+}
+
+TEST_F(InputSystemUVETest, SentinelBindingsEvaluateInertlyAndRemapRejectsThemAtomically) {
+    inputSystem.RegisterActionUVE(
+        InputActionUVE{"Jump", InputActionTypeUVE::Button, {KeyBindingUVE(KeyCodeUVE::Space)}, {}});
+    inputSystem.RegisterActionUVE(
+        InputActionUVE{"Invalid", InputActionTypeUVE::Button, {KeyBindingUVE(KeyCodeUVE::Count),
+                                                                  MouseBindingUVE(MouseButtonUVE::Count)}, {}});
+
+    inputSystem.SetKeyStateUVE(KeyCodeUVE::Space, true);
+    inputSystem.UpdateUVE();
+    EXPECT_TRUE(inputSystem.IsActionHeldUVE("Jump"));
+    EXPECT_FALSE(inputSystem.IsActionTriggeredUVE("Invalid"));
+    EXPECT_FALSE(inputSystem.IsActionHeldUVE("Invalid"));
+
+    EXPECT_FALSE(inputSystem.RemapActionUVE("Jump", {KeyBindingUVE(KeyCodeUVE::Count)}, {}));
+    EXPECT_FALSE(inputSystem.RemapActionUVE("Jump", {MouseBindingUVE(MouseButtonUVE::Count)}, {}));
+    EXPECT_TRUE(inputSystem.IsActionHeldUVE("Jump"));
+}
+
 TEST_F(InputSystemUVETest, ButtonActionTriggered_QueuesAndDeliversInputActionTriggeredEventUVE) {
     std::string receivedActionName;
     InputActionTypeUVE receivedType = InputActionTypeUVE::Axis1D;

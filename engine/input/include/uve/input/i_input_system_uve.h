@@ -39,6 +39,9 @@ public:
     // Reflects "current state," not a queued event log: a key press-and-release faster than one
     // frame apart can be missed — a documented, standard polling-input simplification, not an
     // oversight (see docs/CODING_STANDARDS.md).
+    /// `KeyCodeUVE::Count` is a sentinel, not a physical key; passing it is inert and never indexes
+    /// device state. The same fail-closed rule applies to `MouseButtonUVE::Count` below and to raw
+    /// key/mouse edge queries.
     virtual void SetKeyStateUVE(KeyCodeUVE key, bool isDown) = 0;
     virtual void SetMouseButtonStateUVE(MouseButtonUVE button, bool isDown) = 0;
     virtual void SetMousePositionUVE(Math::Vector2UVE position) = 0;

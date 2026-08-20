@@ -23,10 +23,14 @@ float InputSystemUVE::GetBindingValueUVE(const InputBindingUVE& binding,
                                          const GamepadSnapshotArrayUVE& previousGamepadState,
                                          const bool usePreviousGamepadSnapshot) noexcept {
     switch (binding.source) {
-    case InputBindingSourceUVE::Keyboard:
-        return keyState[static_cast<std::size_t>(binding.key)] ? 1.0F : 0.0F;
-    case InputBindingSourceUVE::Mouse:
-        return mouseState[static_cast<std::size_t>(binding.mouseButton)] ? 1.0F : 0.0F;
+    case InputBindingSourceUVE::Keyboard: {
+        const std::size_t keyIndex = static_cast<std::size_t>(binding.key);
+        return keyIndex < kKeyCodeCount && keyState[keyIndex] ? 1.0F : 0.0F;
+    }
+    case InputBindingSourceUVE::Mouse: {
+        const std::size_t buttonIndex = static_cast<std::size_t>(binding.mouseButton);
+        return buttonIndex < kMouseButtonCount && mouseState[buttonIndex] ? 1.0F : 0.0F;
+    }
     case InputBindingSourceUVE::GamepadButton: {
         if (binding.gamepadIndex >= kMaximumGamepadCountUVE) {
             return 0.0F;
@@ -71,13 +75,21 @@ bool InputSystemUVE::AnyBindingDownUVE(const std::vector<InputBindingUVE>& bindi
 }
 
 void InputSystemUVE::SetKeyStateUVE(KeyCodeUVE key, bool isDown) {
+    const std::size_t index = static_cast<std::size_t>(key);
+    if (index >= kKeyCodeCount) {
+        return;
+    }
     const std::lock_guard<std::mutex> lock(m_liveStateMutex);
-    m_liveKeyState[static_cast<std::size_t>(key)] = isDown;
+    m_liveKeyState[index] = isDown;
 }
 
 void InputSystemUVE::SetMouseButtonStateUVE(MouseButtonUVE button, bool isDown) {
+    const std::size_t index = static_cast<std::size_t>(button);
+    if (index >= kMouseButtonCount) {
+        return;
+    }
     const std::lock_guard<std::mutex> lock(m_liveStateMutex);
-    m_liveMouseButtonState[static_cast<std::size_t>(button)] = isDown;
+    m_liveMouseButtonState[index] = isDown;
 }
 
 void InputSystemUVE::SetMousePositionUVE(Math::Vector2UVE position) {
@@ -132,31 +144,33 @@ void InputSystemUVE::UpdateUVE() {
 }
 
 bool InputSystemUVE::IsKeyDownUVE(KeyCodeUVE key) const {
-    return m_currentKeyState[static_cast<std::size_t>(key)];
+    const std::size_t index = static_cast<std::size_t>(key);
+    return index < kKeyCodeCount && m_currentKeyState[index];
 }
 
 bool InputSystemUVE::WasKeyPressedThisFrameUVE(KeyCodeUVE key) const {
     const std::size_t index = static_cast<std::size_t>(key);
-    return m_currentKeyState[index] && !m_previousKeyState[index];
+    return index < kKeyCodeCount && m_currentKeyState[index] && !m_previousKeyState[index];
 }
 
 bool InputSystemUVE::WasKeyReleasedThisFrameUVE(KeyCodeUVE key) const {
     const std::size_t index = static_cast<std::size_t>(key);
-    return !m_currentKeyState[index] && m_previousKeyState[index];
+    return index < kKeyCodeCount && !m_currentKeyState[index] && m_previousKeyState[index];
 }
 
 bool InputSystemUVE::IsMouseButtonDownUVE(MouseButtonUVE button) const {
-    return m_currentMouseButtonState[static_cast<std::size_t>(button)];
+    const std::size_t index = static_cast<std::size_t>(button);
+    return index < kMouseButtonCount && m_currentMouseButtonState[index];
 }
 
 bool InputSystemUVE::WasMouseButtonPressedThisFrameUVE(MouseButtonUVE button) const {
     const std::size_t index = static_cast<std::size_t>(button);
-    return m_currentMouseButtonState[index] && !m_previousMouseButtonState[index];
+    return index < kMouseButtonCount && m_currentMouseButtonState[index] && !m_previousMouseButtonState[index];
 }
 
 bool InputSystemUVE::WasMouseButtonReleasedThisFrameUVE(MouseButtonUVE button) const {
     const std::size_t index = static_cast<std::size_t>(button);
-    return !m_currentMouseButtonState[index] && m_previousMouseButtonState[index];
+    return index < kMouseButtonCount && !m_currentMouseButtonState[index] && m_previousMouseButtonState[index];
 }
 
 Math::Vector2UVE InputSystemUVE::GetMousePositionUVE() const {
