@@ -1,10 +1,27 @@
 // Copyright (c) 2026 UniVex Studios. All Rights Reserved.
 #pragma once
+#include <array>
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <string_view>
 namespace UVE::Asset {
 inline constexpr std::uint64_t kMaximumMtlTextureReferenceBytesUVE = 256ULL;
+
+enum class MtlMaterialPropertyKindUVE : std::uint8_t { Invalid, Scalar, Vector3, TextureReference };
+
+struct MtlMaterialPropertyUVE final {
+    MtlMaterialPropertyKindUVE kind = MtlMaterialPropertyKindUVE::Invalid;
+    float scalarValue = 0.0F;
+    std::array<float, 3U> vectorValue{};
+    std::string textureReference;
+    [[nodiscard]] bool operator==(const MtlMaterialPropertyUVE&) const noexcept = default;
+};
+
+/// Parses one bounded MTL scalar, three-component vector, or validated texture-map property into
+/// copied facts. It performs no shader/material conversion, filesystem I/O, or renderer ownership.
+[[nodiscard]] bool ParseMtlMaterialPropertyUVE(
+    std::string_view sourceLine, MtlMaterialPropertyUVE& outProperty);
 
 struct MtlMetadataUVE final {
     std::uint32_t materialCount = 0U;

@@ -19,6 +19,36 @@ TEST(MtlMetadataUVETest, ValidateMtlTextureReferenceUVE_RejectsUnsafeReferences)
     EXPECT_FALSE(ValidateMtlTextureReferenceUVE(std::string("brick\0.png", 9U)));
 }
 
+TEST(MtlMetadataUVETest, ParseMtlMaterialPropertyUVE_CopiesScalarVectorAndTextureFacts) {
+    MtlMaterialPropertyUVE property;
+    ASSERT_TRUE(ParseMtlMaterialPropertyUVE("Ns 32.5", property));
+    EXPECT_EQ(property.kind, MtlMaterialPropertyKindUVE::Scalar);
+    EXPECT_FLOAT_EQ(property.scalarValue, 32.5F);
+    ASSERT_TRUE(ParseMtlMaterialPropertyUVE("Kd 1.0 0.5 0.25", property));
+    EXPECT_EQ(property.kind, MtlMaterialPropertyKindUVE::Vector3);
+    EXPECT_FLOAT_EQ(property.vectorValue[0], 1.0F);
+    EXPECT_FLOAT_EQ(property.vectorValue[1], 0.5F);
+    EXPECT_FLOAT_EQ(property.vectorValue[2], 0.25F);
+    ASSERT_TRUE(ParseMtlMaterialPropertyUVE("map_Kd textures/brick.png", property));
+    EXPECT_EQ(property.kind, MtlMaterialPropertyKindUVE::TextureReference);
+    EXPECT_EQ(property.textureReference, "textures/brick.png");
+}
+
+TEST(MtlMetadataUVETest, ParseMtlMaterialPropertyUVE_RejectsInvalidAndExtraTokensAtomically) {
+    const MtlMaterialPropertyUVE original{MtlMaterialPropertyKindUVE::Scalar, 7.0F, {1.0F, 2.0F, 3.0F}, "stable.png"};
+    MtlMaterialPropertyUVE property = original;
+    EXPECT_FALSE(ParseMtlMaterialPropertyUVE("Kd 1 0", property));
+    EXPECT_EQ(property, original);
+    EXPECT_FALSE(ParseMtlMaterialPropertyUVE("Ns nan", property));
+    EXPECT_EQ(property, original);
+    EXPECT_FALSE(ParseMtlMaterialPropertyUVE("map_Kd ../brick.png", property));
+    EXPECT_EQ(property, original);
+    EXPECT_FALSE(ParseMtlMaterialPropertyUVE("map_Kd -s 1 1 1 brick.png", property));
+    EXPECT_EQ(property, original);
+    EXPECT_FALSE(ParseMtlMaterialPropertyUVE("Kd 1 0 0 extra", property));
+    EXPECT_EQ(property, original);
+}
+
 TEST(MtlMetadataUVETest, ParseMtlMetadataUVE_CountsMaterialPropertiesAndMaps) {
     const auto metadata = ParseMtlMetadataUVE("newmtl Brick\nKd 1 0.5 0.2\nNs 32\nmap_Kd brick.png\nmap_Bump brick_n.png\nillum 2\n");
     ASSERT_TRUE(metadata.has_value()); EXPECT_EQ(metadata->materialCount,1U); EXPECT_EQ(metadata->textureMapCount,2U);
