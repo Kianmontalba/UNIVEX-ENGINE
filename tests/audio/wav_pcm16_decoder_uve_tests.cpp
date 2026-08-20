@@ -26,6 +26,33 @@ std::vector<std::byte> BuildWav16(const std::vector<std::int16_t>& samples, cons
     for (const std::int16_t sample : samples) AppendU16(bytes, static_cast<std::uint16_t>(sample));
     return bytes;
 }
+TEST(WavPcm16DecoderUVETest, PlanPcm16StreamWindowUVE_PlansContiguousAndLoopingWindows) {
+    Pcm16StreamWindowPlanUVE plan;
+    ASSERT_TRUE(PlanPcm16StreamWindowUVE(100U, 20U, 16U, false, plan));
+    EXPECT_EQ(plan, (Pcm16StreamWindowPlanUVE{20U, 16U, 36U, false, false}));
+    ASSERT_TRUE(PlanPcm16StreamWindowUVE(100U, 96U, 16U, false, plan));
+    EXPECT_EQ(plan, (Pcm16StreamWindowPlanUVE{96U, 4U, 100U, true, false}));
+    ASSERT_TRUE(PlanPcm16StreamWindowUVE(100U, 96U, 16U, true, plan));
+    EXPECT_EQ(plan, (Pcm16StreamWindowPlanUVE{96U, 4U, 0U, true, true}));
+    ASSERT_TRUE(PlanPcm16StreamWindowUVE(100U, 100U, 8U, true, plan));
+    EXPECT_EQ(plan, (Pcm16StreamWindowPlanUVE{0U, 8U, 8U, false, true}));
+    ASSERT_TRUE(PlanPcm16StreamWindowUVE(100U, 100U, 8U, false, plan));
+    EXPECT_EQ(plan, (Pcm16StreamWindowPlanUVE{100U, 0U, 100U, true, false}));
+}
+
+TEST(WavPcm16DecoderUVETest, PlanPcm16StreamWindowUVE_RejectsInvalidInputsAtomically) {
+    const Pcm16StreamWindowPlanUVE original{4U, 3U, 7U, false, false};
+    Pcm16StreamWindowPlanUVE plan = original;
+    EXPECT_FALSE(PlanPcm16StreamWindowUVE(0U, 0U, 1U, false, plan));
+    EXPECT_EQ(plan, original);
+    EXPECT_FALSE(PlanPcm16StreamWindowUVE(10U, 11U, 1U, false, plan));
+    EXPECT_EQ(plan, original);
+    EXPECT_FALSE(PlanPcm16StreamWindowUVE(10U, 0U, 0U, false, plan));
+    EXPECT_EQ(plan, original);
+    EXPECT_FALSE(PlanPcm16StreamWindowUVE(10U, 0U, 9U, false, plan, 8U));
+    EXPECT_EQ(plan, original);
+}
+
 TEST(WavPcm16DecoderUVETest, ValidateWavPcm16SampleWindowUVE_AcceptsBoundedChunks) {
     EXPECT_TRUE(ValidateWavPcm16SampleWindowUVE(100U, 0U, 32U));
     EXPECT_TRUE(ValidateWavPcm16SampleWindowUVE(100U, 40U, 60U));
