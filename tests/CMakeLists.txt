@@ -77,6 +77,7 @@ add_executable(uve_tests
     asset/project_change_watcher_uve_tests.cpp
     asset/mesh_asset_uve_tests.cpp
     asset/texture_asset_uve_tests.cpp
+    asset/audio_asset_uve_tests.cpp
     asset/shader_asset_uve_tests.cpp
     asset/material_asset_uve_tests.cpp
     asset/data_table_uve_tests.cpp
@@ -106,6 +107,7 @@ add_executable(uve_tests
     audio/wav_metadata_uve_tests.cpp
     audio/pcm_gain_effect_uve_tests.cpp
     audio/wav_pcm16_decoder_uve_tests.cpp
+    audio/wav_importer_uve_tests.cpp
     save/save_game_system_uve_tests.cpp
     save/checkpoint_manager_uve_tests.cpp
     save/save_payload_compression_uve_tests.cpp
