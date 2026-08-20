@@ -5,12 +5,15 @@
 
 #include <algorithm>
 #include <limits>
+#include <string>
+#include <string_view>
 #include <variant>
 #include <vector>
 
 #include <gtest/gtest.h>
 
 #include "uve/audio/audio_system_uve.h"
+#include "uve/audio/i_audio_clip_resolver_uve.h"
 #include "uve/audio/null_audio_device_uve.h"
 #include "uve/events/event_system_uve.h"
 #include "uve/memory/memory_manager_uve.h"
@@ -44,6 +47,16 @@ protected:
         const std::vector<RecordedAudioCallUVE>& recorded = device.GetRecordedCallsUVE();
         return std::any_of(recorded.begin(), recorded.end(),
                             [](const RecordedAudioCallUVE& call) { return std::holds_alternative<PlayVoiceCallUVE>(call); });
+    }
+};
+
+class RejectingClipResolverUVE final : public IAudioClipResolverUVE {
+public:
+    [[nodiscard]] AudioClipResolutionUVE ResolveAudioClipUVE(const std::string_view authoredPath) const override {
+        if (authoredPath == "rejected.wav") {
+            return AudioClipResolutionUVE{false, {}, "test rejection"};
+        }
+        return AudioClipResolutionUVE{true, std::string(authoredPath), {}};
     }
 };
 
@@ -163,6 +176,92 @@ TEST_F(AudioSourceSystemUVETest, RepeatedSyncUVE_UnchangedScene_DoesNotCreateASe
     audioSourceSystem.SyncUVE(entityManager, audioSystem);
 
     EXPECT_EQ(device.GetLiveVoiceCountUVE(), 1U);
+}
+
+TEST_F(AudioSourceSystemUVETest, ChangingAudioAssetPath_ReplacesVoiceAndPreservesCount) {
+    Scene::AudioSourceComponentUVE audioSource;
+    audioSource.audioAssetPath = "a.wav";
+    audioSource.playOnAwake = true;
+    const Scene::EntityUVE entity = MakeAudioEntityUVE(audioSource);
+
+    audioSourceSystem.SyncUVE(entityManager, audioSystem);
+    ASSERT_EQ(device.GetLiveVoiceCountUVE(), 1U);
+    device.ClearRecordedCallsUVE();
+
+    entityManager.GetComponentUVE<Scene::AudioSourceComponentUVE>(entity).audioAssetPath = "b.wav";
+    audioSourceSystem.SyncUVE(entityManager, audioSystem);
+
+    EXPECT_EQ(device.GetLiveVoiceCountUVE(), 1U);
+    EXPECT_TRUE(AnyRecordedPlayCallUVE());
+}
+
+TEST_F(AudioSourceSystemUVETest, ChangingLooping_ReplacesVoiceAtomically) {
+    Scene::AudioSourceComponentUVE audioSource;
+    audioSource.looping = false;
+    audioSource.playOnAwake = true;
+    const Scene::EntityUVE entity = MakeAudioEntityUVE(audioSource);
+
+    audioSourceSystem.SyncUVE(entityManager, audioSystem);
+    ASSERT_EQ(device.GetLiveVoiceCountUVE(), 1U);
+    device.ClearRecordedCallsUVE();
+
+    entityManager.GetComponentUVE<Scene::AudioSourceComponentUVE>(entity).looping = true;
+    audioSourceSystem.SyncUVE(entityManager, audioSystem);
+
+    EXPECT_EQ(device.GetLiveVoiceCountUVE(), 1U);
+    EXPECT_TRUE(AnyRecordedPlayCallUVE());
+}
+
+TEST_F(AudioSourceSystemUVETest, UnchangedDescriptor_DoesNotReplaceVoice) {
+    Scene::AudioSourceComponentUVE audioSource;
+    audioSource.playOnAwake = false;
+    MakeAudioEntityUVE(audioSource);
+
+    audioSourceSystem.SyncUVE(entityManager, audioSystem);
+    ASSERT_EQ(device.GetLiveVoiceCountUVE(), 1U);
+    device.ClearRecordedCallsUVE();
+
+    audioSourceSystem.SyncUVE(entityManager, audioSystem);
+
+    EXPECT_EQ(device.GetLiveVoiceCountUVE(), 1U);
+    EXPECT_TRUE(device.GetRecordedCallsUVE().empty());
+}
+
+TEST_F(AudioSourceSystemUVETest, ReplacementPreservesPlayingState) {
+    Scene::AudioSourceComponentUVE audioSource;
+    audioSource.audioAssetPath = "playing-a.wav";
+    audioSource.playOnAwake = true;
+    const Scene::EntityUVE entity = MakeAudioEntityUVE(audioSource);
+
+    audioSourceSystem.SyncUVE(entityManager, audioSystem);
+    ASSERT_EQ(device.GetLiveVoiceCountUVE(), 1U);
+    device.ClearRecordedCallsUVE();
+
+    entityManager.GetComponentUVE<Scene::AudioSourceComponentUVE>(entity).audioAssetPath = "playing-b.wav";
+    audioSourceSystem.SyncUVE(entityManager, audioSystem);
+
+    EXPECT_EQ(device.GetLiveVoiceCountUVE(), 1U);
+    EXPECT_TRUE(AnyRecordedPlayCallUVE());
+}
+
+TEST_F(AudioSourceSystemUVETest, FailedReplacement_PreservesOldVoice) {
+    RejectingClipResolverUVE resolver;
+    AudioSystemUVE resolvingAudioSystem{device, &resolver};
+    AudioSourceSystemUVE resolvingAudioSourceSystem;
+    Scene::AudioSourceComponentUVE audioSource;
+    audioSource.audioAssetPath = "accepted.wav";
+    audioSource.playOnAwake = false;
+    const Scene::EntityUVE entity = MakeAudioEntityUVE(audioSource);
+
+    resolvingAudioSourceSystem.SyncUVE(entityManager, resolvingAudioSystem);
+    ASSERT_EQ(device.GetLiveVoiceCountUVE(), 1U);
+    device.ClearRecordedCallsUVE();
+
+    entityManager.GetComponentUVE<Scene::AudioSourceComponentUVE>(entity).audioAssetPath = "rejected.wav";
+    resolvingAudioSourceSystem.SyncUVE(entityManager, resolvingAudioSystem);
+
+    EXPECT_EQ(device.GetLiveVoiceCountUVE(), 1U);
+    EXPECT_TRUE(device.GetRecordedCallsUVE().empty());
 }
 
 #if UVE_DEBUG
