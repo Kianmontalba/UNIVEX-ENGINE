@@ -1,6 +1,7 @@
 // Copyright (c) 2026 UniVex Studios. All Rights Reserved.
 #include "uve/asset/jpeg_metadata_uve.h"
 #include <cstdint>
+#include <limits>
 #include <vector>
 #include <gtest/gtest.h>
 namespace UVE::Asset::Tests {
@@ -16,6 +17,21 @@ void AddSofUVE(std::vector<std::byte>& bytes, const std::uint8_t marker, const s
     bytes.push_back(std::byte{static_cast<unsigned char>(width & 0xFFU)}); bytes.push_back(std::byte{components});
     for (std::uint8_t index = 0U; index < components; ++index) bytes.insert(bytes.end(), {std::byte{static_cast<unsigned char>(index + 1U)}, std::byte{0x11}, std::byte{0}});
 }
+TEST(JpegMetadataUVETest, ValidateJpegRgba8PixelBudgetUVE_AcceptsBaselineFrame) {
+    const JpegMetadataUVE metadata{640U, 480U, 8U, 3U, false};
+    EXPECT_TRUE(ValidateJpegRgba8PixelBudgetUVE(metadata));
+}
+
+TEST(JpegMetadataUVETest, ValidateJpegRgba8PixelBudgetUVE_RejectsInvalidOrOversizedFacts) {
+    EXPECT_FALSE(ValidateJpegRgba8PixelBudgetUVE(JpegMetadataUVE{0U, 480U, 8U, 3U, false}));
+    EXPECT_FALSE(ValidateJpegRgba8PixelBudgetUVE(JpegMetadataUVE{640U, 480U, 12U, 3U, false}));
+    EXPECT_FALSE(ValidateJpegRgba8PixelBudgetUVE(JpegMetadataUVE{4U, 4U, 8U, 3U, false}, 63ULL));
+    EXPECT_TRUE(ValidateJpegRgba8PixelBudgetUVE(JpegMetadataUVE{4U, 4U, 8U, 3U, false}, 64ULL));
+    EXPECT_FALSE(ValidateJpegRgba8PixelBudgetUVE(
+        JpegMetadataUVE{0xFFFFFFFFU, 0xFFFFFFFFU, 8U, 4U, false},
+        std::numeric_limits<std::uint64_t>::max()));
+}
+
 TEST(JpegMetadataUVETest, ParseJpegMetadataUVE_ReturnsBaselineFrameFacts) {
     std::vector<std::byte> bytes{std::byte{0xFF}, std::byte{0xD8}}; AddSofUVE(bytes, 0xC0U, 640U, 480U, 3U);
     const auto metadata = ParseJpegMetadataUVE(bytes); ASSERT_TRUE(metadata.has_value());
