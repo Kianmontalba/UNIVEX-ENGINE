@@ -114,7 +114,8 @@ TEST(PngMetadataUVETest, ValidatePngRgba8PixelBudgetUVE_AcceptsDefaultHdBudget) 
     EXPECT_TRUE(ValidatePngRgba8PixelBudgetUVE(*metadata));
 }
 
-[[nodiscard]] std::vector<std::byte> MakePngRgbOneByOneUVE() {
+[[nodiscard]] std::vector<std::byte> MakePngOneByOneUVE(const std::uint8_t colorType,
+                                                            const std::vector<std::byte>& raw) {
     std::vector<std::byte> png{
         std::byte{0x89}, std::byte{0x50}, std::byte{0x4E}, std::byte{0x47}, std::byte{0x0D}, std::byte{0x0A},
         std::byte{0x1A}, std::byte{0x0A}};
@@ -130,8 +131,7 @@ TEST(PngMetadataUVETest, ValidatePngRgba8PixelBudgetUVE_AcceptsDefaultHdBudget) 
     };
     appendChunk(png, {std::byte{'I'}, std::byte{'H'}, std::byte{'D'}, std::byte{'R'}},
                 {std::byte{0}, std::byte{0}, std::byte{0}, std::byte{1}, std::byte{0}, std::byte{0}, std::byte{0},
-                 std::byte{1}, std::byte{8}, std::byte{2}, std::byte{0}, std::byte{0}, std::byte{0}});
-    const std::vector<std::byte> raw{std::byte{0}, std::byte{0xFF}, std::byte{0}, std::byte{0}};
+                 std::byte{1}, std::byte{8}, std::byte{colorType}, std::byte{0}, std::byte{0}, std::byte{0}});
     uLongf compressedSize = compressBound(static_cast<uLong>(raw.size()));
     std::vector<std::byte> compressed(static_cast<std::size_t>(compressedSize));
     if (compress2(reinterpret_cast<Bytef*>(compressed.data()), &compressedSize,
@@ -144,10 +144,20 @@ TEST(PngMetadataUVETest, ValidatePngRgba8PixelBudgetUVE_AcceptsDefaultHdBudget) 
     return png;
 }
 
-TEST(PngMetadataUVETest, ValidatePngRgba8PixelBudgetUVE_RejectsZeroAndAcceptsRgbFacts) {
+[[nodiscard]] std::vector<std::byte> MakePngRgbOneByOneUVE() {
+    return MakePngOneByOneUVE(2U, {std::byte{0}, std::byte{0xFF}, std::byte{0}, std::byte{0}});
+}
+
+[[nodiscard]] std::vector<std::byte> MakePngGrayOneByOneUVE() {
+    return MakePngOneByOneUVE(0U, {std::byte{0}, std::byte{0x80}});
+}
+
+TEST(PngMetadataUVETest, ValidatePngRgba8PixelBudgetUVE_RejectsZeroAndAcceptsGrayRgbFacts) {
     PngMetadataUVE zeroWidth{.width = 0U, .height = 1080U, .bitDepth = 8U, .colorType = 6U};
     EXPECT_FALSE(ValidatePngRgba8PixelBudgetUVE(zeroWidth));
 
+    PngMetadataUVE gray{.width = 1920U, .height = 1080U, .bitDepth = 8U, .colorType = 0U};
+    EXPECT_TRUE(ValidatePngRgba8PixelBudgetUVE(gray));
     PngMetadataUVE rgb{.width = 1920U, .height = 1080U, .bitDepth = 8U, .colorType = 2U};
     EXPECT_TRUE(ValidatePngRgba8PixelBudgetUVE(rgb));
 }
@@ -198,6 +208,18 @@ TEST(PngMetadataUVETest, DecodePngRgba8ImageUVE_ExpandsRgbToRgba) {
     EXPECT_EQ(image.pixels[0], std::byte{0xFF});
     EXPECT_EQ(image.pixels[1], std::byte{0x00});
     EXPECT_EQ(image.pixels[2], std::byte{0x00});
+    EXPECT_EQ(image.pixels[3], std::byte{0xFF});
+}
+
+TEST(PngMetadataUVETest, DecodePngRgba8ImageUVE_ExpandsGrayscaleToRgba) {
+    const std::vector<std::byte> png = MakePngGrayOneByOneUVE();
+    ASSERT_FALSE(png.empty());
+    PngRgba8ImageUVE image;
+    ASSERT_TRUE(DecodePngRgba8ImageUVE(png, image));
+    ASSERT_EQ(image.pixels.size(), 4U);
+    EXPECT_EQ(image.pixels[0], std::byte{0x80});
+    EXPECT_EQ(image.pixels[1], std::byte{0x80});
+    EXPECT_EQ(image.pixels[2], std::byte{0x80});
     EXPECT_EQ(image.pixels[3], std::byte{0xFF});
 }
 
