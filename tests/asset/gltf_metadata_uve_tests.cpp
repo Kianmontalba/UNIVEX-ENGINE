@@ -30,6 +30,37 @@ TEST(GltfMetadataUVETest, ClassifyGltfResourceUriUVE_RejectsUnsafeAndUnboundedUr
     EXPECT_EQ(ClassifyGltfResourceUriUVE(oversized), GltfResourceUriKindUVE::Invalid);
 }
 
+TEST(GltfMetadataUVETest, DecodeGltfDataUriUVE_DecodesPercentAndBase64Payloads) {
+    std::vector<std::byte> decoded;
+    ASSERT_TRUE(DecodeGltfDataUriUVE("data:text/plain,hello%20world", decoded));
+    const std::vector<std::byte> expectedText{std::byte{'h'}, std::byte{'e'}, std::byte{'l'}, std::byte{'l'},
+                                               std::byte{'o'}, std::byte{' '}, std::byte{'w'}, std::byte{'o'},
+                                               std::byte{'r'}, std::byte{'l'}, std::byte{'d'}};
+    EXPECT_EQ(decoded, expectedText);
+    ASSERT_TRUE(DecodeGltfDataUriUVE("data:application/octet-stream;base64,SGVsbG8=", decoded));
+    const std::vector<std::byte> expectedBase64{std::byte{'H'}, std::byte{'e'}, std::byte{'l'}, std::byte{'l'}, std::byte{'o'}};
+    EXPECT_EQ(decoded, expectedBase64);
+}
+
+TEST(GltfMetadataUVETest, DecodeGltfDataUriUVE_RejectsMalformedAndCappedPayloadsAtomically) {
+    const std::vector<std::byte> original{std::byte{0xAA}, std::byte{0xBB}};
+    std::vector<std::byte> decoded = original;
+    EXPECT_FALSE(DecodeGltfDataUriUVE("data:text/plain,hello%2", decoded));
+    EXPECT_EQ(decoded, original);
+    EXPECT_FALSE(DecodeGltfDataUriUVE("data:application/octet-stream;base64,SGVsbG8", decoded));
+    EXPECT_EQ(decoded, original);
+    EXPECT_FALSE(DecodeGltfDataUriUVE("data:application/octet-stream;base64,AB==", decoded));
+    EXPECT_EQ(decoded, original);
+    EXPECT_FALSE(DecodeGltfDataUriUVE("data:application/octet-stream;base64,AAB=", decoded));
+    EXPECT_EQ(decoded, original);
+    EXPECT_FALSE(DecodeGltfDataUriUVE("data:text/plain,hello", decoded, 4U));
+    EXPECT_EQ(decoded, original);
+    EXPECT_FALSE(DecodeGltfDataUriUVE("textures/mesh.bin", decoded));
+    EXPECT_EQ(decoded, original);
+    ASSERT_TRUE(DecodeGltfDataUriUVE("data:,", decoded, 0U));
+    EXPECT_TRUE(decoded.empty());
+}
+
 TEST(GltfMetadataUVETest, ResolveGltfResourceVirtualPathUVE_ComposesBoundedVfsPaths) {
     std::string resolved = "unchanged";
     ASSERT_TRUE(ResolveGltfResourceVirtualPathUVE("models/characters/hero.gltf", "textures/albedo.png", resolved));

@@ -117,6 +117,107 @@ GltfResourceUriKindUVE ClassifyGltfResourceUriUVE(const std::string_view uri) no
     return GltfResourceUriKindUVE::RelativePath;
 }
 
+bool DecodeGltfDataUriUVE(const std::string_view uri, std::vector<std::byte>& outBytes,
+                          const std::size_t maximumBytes) {
+    if (ClassifyGltfResourceUriUVE(uri) != GltfResourceUriKindUVE::DataUri) {
+        return false;
+    }
+    const std::size_t comma = uri.find(',');
+    const std::string_view metadata = uri.substr(5U, comma - 5U);
+    const std::string_view payload = uri.substr(comma + 1U);
+    const bool isBase64 = metadata.ends_with(";base64");
+    try {
+        std::vector<std::byte> decoded;
+        const auto appendByte = [&](const unsigned int value) {
+            if (decoded.size() >= maximumBytes) {
+                return false;
+            }
+            decoded.push_back(std::byte{static_cast<unsigned char>(value)});
+            return true;
+        };
+        if (!isBase64) {
+            for (std::size_t index = 0U; index < payload.size(); ++index) {
+                unsigned int value = static_cast<unsigned char>(payload[index]);
+                if (payload[index] == '%') {
+                    if (index + 2U >= payload.size()) {
+                        return false;
+                    }
+                    const auto hexValue = [](const char character) noexcept -> int {
+                        if (character >= '0' && character <= '9') return character - '0';
+                        if (character >= 'a' && character <= 'f') return character - 'a' + 10;
+                        if (character >= 'A' && character <= 'F') return character - 'A' + 10;
+                        return -1;
+                    };
+                    const int high = hexValue(payload[index + 1U]);
+                    const int low = hexValue(payload[index + 2U]);
+                    if (high < 0 || low < 0) {
+                        return false;
+                    }
+                    value = static_cast<unsigned int>((high << 4) | low);
+                    index += 2U;
+                }
+                if (!appendByte(value)) {
+                    return false;
+                }
+            }
+        } else {
+            if (payload.size() % 4U != 0U) {
+                return false;
+            }
+            const auto base64Value = [](const char character) noexcept -> int {
+                if (character >= 'A' && character <= 'Z') return character - 'A';
+                if (character >= 'a' && character <= 'z') return character - 'a' + 26;
+                if (character >= '0' && character <= '9') return character - '0' + 52;
+                if (character == '+') return 62;
+                if (character == '/') return 63;
+                return -1;
+            };
+            for (std::size_t index = 0U; index < payload.size(); index += 4U) {
+                const char first = payload[index];
+                const char second = payload[index + 1U];
+                const char third = payload[index + 2U];
+                const char fourth = payload[index + 3U];
+                const int firstValue = base64Value(first);
+                const int secondValue = base64Value(second);
+                const bool thirdPadding = third == '=';
+                const bool fourthPadding = fourth == '=';
+                if (firstValue < 0 || secondValue < 0 || (thirdPadding && !fourthPadding) ||
+                    (!thirdPadding && base64Value(third) < 0) || (!fourthPadding && base64Value(fourth) < 0) ||
+                    (thirdPadding && index + 4U != payload.size())) {
+                    return false;
+                }
+                if (thirdPadding && (secondValue & 0x0F) != 0) {
+                    return false;
+                }
+                if (fourthPadding && !thirdPadding && (base64Value(third) & 0x03) != 0) {
+                    return false;
+                }
+                if (!appendByte(static_cast<unsigned int>((firstValue << 2) | (secondValue >> 4)))) {
+                    return false;
+                }
+                if (thirdPadding) {
+                    continue;
+                }
+                const int thirdValue = base64Value(third);
+                if (!appendByte(static_cast<unsigned int>((secondValue << 4) | (thirdValue >> 2)))) {
+                    return false;
+                }
+                if (fourthPadding) {
+                    continue;
+                }
+                const int fourthValue = base64Value(fourth);
+                if (!appendByte(static_cast<unsigned int>((thirdValue << 6) | fourthValue))) {
+                    return false;
+                }
+            }
+        }
+        outBytes = std::move(decoded);
+        return true;
+    } catch (const std::bad_alloc&) {
+        return false;
+    }
+}
+
 bool ResolveGltfResourceVirtualPathUVE(const std::string_view assetVirtualPath,
                                           const std::string_view resourceUri,
                                           std::string& outVirtualPath) {
