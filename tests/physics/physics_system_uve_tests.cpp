@@ -124,6 +124,22 @@ TEST_F(PhysicsSystemUVETest, StepUVE_AngularStateIntegratesTorqueAndAdvancesLoca
     EXPECT_NEAR(rotation.w, std::cos(angle * 0.5F), kEpsilon);
 }
 
+TEST_F(PhysicsSystemUVETest, StepUVE_AppliesGyroscopicTorqueToAngularVelocity) {
+    PhysicsSystemUVE physicsSystem(collisionSystem, Math::Vector3UVE{});
+    Scene::RigidBodyComponentUVE rigidBody;
+    rigidBody.angularVelocity = Math::Vector3UVE{1.0F, 2.0F, 0.0F};
+    rigidBody.inverseInertia = Math::Vector3UVE{2.0F, 3.0F, 4.0F};
+    const Scene::EntityUVE body = MakeBodyEntityUVE(Math::Vector3UVE{}, rigidBody);
+
+    physicsSystem.StepUVE(entityManager, sceneGraph, 0.1F);
+
+    const Scene::RigidBodyComponentUVE& updated =
+        entityManager.GetComponentUVE<Scene::RigidBodyComponentUVE>(body);
+    EXPECT_NEAR(updated.angularVelocity.x, 1.0F, kEpsilon);
+    EXPECT_NEAR(updated.angularVelocity.y, 2.0F, kEpsilon);
+    EXPECT_NEAR(updated.angularVelocity.z, 0.13333333F, kEpsilon);
+}
+
 TEST_F(PhysicsSystemUVETest, StepUVE_ZeroAngularDefaultsPreserveIdentityRotation) {
     PhysicsSystemUVE physicsSystem(collisionSystem, Math::Vector3UVE{});
     const Scene::EntityUVE body = MakeBodyEntityUVE(

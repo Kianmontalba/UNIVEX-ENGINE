@@ -126,8 +126,15 @@ void PhysicsSystemUVE::StepUVE(Scene::IEntityManagerUVE& entityManager, Scene::I
                 rigidBody.velocity *= std::max(0.0F, 1.0F - rigidBody.drag * fixedDeltaTimeSeconds);
             }
 
+            Math::Vector3UVE effectiveTorque = rigidBody.torque;
+            const auto gyroscopicTorque = EvaluateGyroscopicTorqueUVE(
+                rigidBody.angularVelocity, rigidBody.inverseInertia);
+            UVE_ASSERT(gyroscopicTorque.has_value());
+            if (gyroscopicTorque.has_value()) {
+                effectiveTorque -= *gyroscopicTorque;
+            }
             const auto integratedAngularVelocity = IntegrateAngularVelocityUVE(
-                rigidBody.angularVelocity, rigidBody.torque, rigidBody.inverseInertia,
+                rigidBody.angularVelocity, effectiveTorque, rigidBody.inverseInertia,
                 fixedDeltaTimeSeconds);
             UVE_ASSERT(integratedAngularVelocity.has_value());
             if (integratedAngularVelocity.has_value()) {
