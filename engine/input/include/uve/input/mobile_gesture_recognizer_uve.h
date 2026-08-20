@@ -22,6 +22,20 @@ enum class MobileSwipeDirectionUVE : std::uint8_t {
     NegativeY,
 };
 
+enum class TouchChordLifecycleTransitionUVE : std::uint8_t {
+    None = 0,
+    Began,
+    Moved,
+    Ended,
+    Replaced,
+};
+
+/// Classifies an exact-count multi-touch chord across copied previous/current snapshots.
+/// The policy owns no gesture lifecycle, platform framework, touch polling, or ECS state.
+[[nodiscard]] bool EvaluateTouchChordLifecycleTransitionUVE(
+    const MobileInputSnapshotUVE& previous, const MobileInputSnapshotUVE& current,
+    std::size_t requiredTouchCount, TouchChordLifecycleTransitionUVE& outTransition) noexcept;
+
 /// Evaluates an exact-count multi-touch chord over one copied snapshot and publishes its centroid.
 /// The policy owns no gesture lifecycle, platform framework, touch polling, or ECS state.
 [[nodiscard]] bool EvaluateTouchChordUVE(const MobileInputSnapshotUVE& snapshot,
