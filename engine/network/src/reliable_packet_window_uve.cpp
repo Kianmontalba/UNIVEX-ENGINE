@@ -104,6 +104,25 @@ bool ValidateReliablePayloadBudgetUVE(const std::size_t payloadBytes,
     return payloadBytes <= maximumBytes;
 }
 
+bool ComputeReliableRetryTimeoutUVE(const float baseTimeoutSeconds, const std::uint32_t retryCount,
+                                     const float maximumTimeoutSeconds, float& outTimeoutSeconds) noexcept {
+    if (!std::isfinite(baseTimeoutSeconds) || baseTimeoutSeconds <= 0.0F ||
+        !std::isfinite(maximumTimeoutSeconds) || maximumTimeoutSeconds < baseTimeoutSeconds ||
+        retryCount > 31U) {
+        return false;
+    }
+    float timeout = baseTimeoutSeconds;
+    for (std::uint32_t attempt = 0U; attempt < retryCount; ++attempt) {
+        if (timeout >= maximumTimeoutSeconds * 0.5F) {
+            timeout = maximumTimeoutSeconds;
+            break;
+        }
+        timeout *= 2.0F;
+    }
+    outTimeoutSeconds = timeout > maximumTimeoutSeconds ? maximumTimeoutSeconds : timeout;
+    return std::isfinite(outTimeoutSeconds);
+}
+
 ReliableRetransmitStatusUVE EvaluateReliableRetransmitPolicyUVE(
     const ReliableRetransmitPolicyInputUVE& input) noexcept {
     if (!std::isfinite(input.elapsedSeconds) || input.elapsedSeconds < 0.0F ||

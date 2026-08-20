@@ -35,6 +35,12 @@ struct ReliableRetransmitPolicyInputUVE final {
     std::uint32_t retryCount = 0U;
     std::uint32_t maximumRetries = 0U;
 };
+/// Computes a bounded caller-owned exponential retry timeout without owning a clock, timer, socket,
+/// retry queue, or transport lifecycle. Retry zero returns the base timeout; later retries double it
+/// until the caller-selected maximum timeout is reached.
+[[nodiscard]] bool ComputeReliableRetryTimeoutUVE(
+    float baseTimeoutSeconds, std::uint32_t retryCount, float maximumTimeoutSeconds,
+    float& outTimeoutSeconds) noexcept;
 struct ReliablePayloadFragmentPlanUVE final {
     std::size_t fragmentCount = 0U;
     std::size_t maximumFragmentBytes = 0U;
