@@ -209,6 +209,14 @@ TEST(PngMetadataUVETest, ValidatePngRgba8PixelBudgetUVE_AcceptsDefaultHdBudget) 
                                {}, {}, 8U, 2U, 2U, 1U);
 }
 
+[[nodiscard]] std::vector<std::byte> MakePngAdam7GrayTwoByTwoUVE() {
+    return MakePngOneByOneUVE(0U,
+                               {std::byte{0}, std::byte{0x10},
+                                std::byte{0}, std::byte{0x80},
+                                std::byte{0}, std::byte{0xC0}, std::byte{0xFF}},
+                               {}, {}, 8U, 2U, 2U, 1U);
+}
+
 TEST(PngMetadataUVETest, ValidatePngRgba8PixelBudgetUVE_RejectsZeroAndAcceptsGrayRgbFacts) {
     PngMetadataUVE zeroWidth{.width = 0U, .height = 1080U, .bitDepth = 8U, .colorType = 6U};
     EXPECT_FALSE(ValidatePngRgba8PixelBudgetUVE(zeroWidth));
@@ -234,6 +242,32 @@ TEST(PngMetadataUVETest, ValidatePngRgba8PixelBudgetUVE_RejectsOverflowAndOversi
     PngMetadataUVE small{.width = 4U, .height = 4U, .bitDepth = 8U, .colorType = 6U};
     EXPECT_FALSE(ValidatePngRgba8PixelBudgetUVE(small, 63ULL));
     EXPECT_TRUE(ValidatePngRgba8PixelBudgetUVE(small, 64ULL));
+}
+
+TEST(PngMetadataUVETest, DecodePngRgba8ImageUVE_DecodesAdam7GrayTwoByTwo) {
+    const std::vector<std::byte> png = MakePngAdam7GrayTwoByTwoUVE();
+    ASSERT_FALSE(png.empty());
+    PngRgba8ImageUVE image;
+    ASSERT_TRUE(DecodePngRgba8ImageUVE(png, image));
+    ASSERT_EQ(image.width, 2U);
+    ASSERT_EQ(image.height, 2U);
+    ASSERT_EQ(image.pixels.size(), 16U);
+    EXPECT_EQ(image.pixels[0], std::byte{0x10});
+    EXPECT_EQ(image.pixels[1], std::byte{0x10});
+    EXPECT_EQ(image.pixels[2], std::byte{0x10});
+    EXPECT_EQ(image.pixels[3], std::byte{0xFF});
+    EXPECT_EQ(image.pixels[4], std::byte{0x80});
+    EXPECT_EQ(image.pixels[5], std::byte{0x80});
+    EXPECT_EQ(image.pixels[6], std::byte{0x80});
+    EXPECT_EQ(image.pixels[7], std::byte{0xFF});
+    EXPECT_EQ(image.pixels[8], std::byte{0xC0});
+    EXPECT_EQ(image.pixels[9], std::byte{0xC0});
+    EXPECT_EQ(image.pixels[10], std::byte{0xC0});
+    EXPECT_EQ(image.pixels[11], std::byte{0xFF});
+    EXPECT_EQ(image.pixels[12], std::byte{0xFF});
+    EXPECT_EQ(image.pixels[13], std::byte{0xFF});
+    EXPECT_EQ(image.pixels[14], std::byte{0xFF});
+    EXPECT_EQ(image.pixels[15], std::byte{0xFF});
 }
 
 TEST(PngMetadataUVETest, DecodePngRgba8ImageUVE_DecodesAdam7RgbTwoByTwo) {
