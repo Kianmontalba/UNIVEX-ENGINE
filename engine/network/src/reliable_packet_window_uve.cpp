@@ -2,6 +2,8 @@
 #include "uve/network/reliable_packet_window_uve.h"
 
 #include <cmath>
+#include <new>
+#include <utility>
 namespace UVE::Network {
 namespace {
 constexpr std::uint32_t kHalfSequenceSpaceUVE = 0x80000000U;
@@ -11,6 +13,67 @@ constexpr std::uint32_t kHalfSequenceSpaceUVE = 0x80000000U;
     return distance != 0U && distance < kHalfSequenceSpaceUVE;
 }
 } // namespace
+
+ReliablePayloadReassemblyStatusUVE AcceptReliablePayloadFragmentUVE(
+    const std::uint32_t messageId, const std::size_t fragmentIndex, const std::size_t fragmentCount,
+    const std::vector<std::uint8_t>& fragmentBytes, ReliablePayloadReassemblyStateUVE& state,
+    std::vector<std::uint8_t>& outPayload) noexcept {
+    if (messageId == 0U || fragmentCount == 0U ||
+        fragmentCount > kReliablePacketMaximumFragmentCountUVE || fragmentIndex >= fragmentCount ||
+        fragmentBytes.empty() || fragmentBytes.size() > kReliablePacketMaximumPayloadBytesUVE) {
+        return ReliablePayloadReassemblyStatusUVE::Invalid;
+    }
+
+    if (!state.IsActiveUVE()) {
+        try {
+            ReliablePayloadReassemblyStateUVE initialState;
+            initialState.messageId = messageId;
+            initialState.fragmentCount = fragmentCount;
+            initialState.fragments.resize(fragmentCount);
+            initialState.fragments[fragmentIndex] = fragmentBytes;
+            initialState.receivedFragmentCount = 1U;
+            initialState.receivedByteCount = fragmentBytes.size();
+            state = std::move(initialState);
+        } catch (const std::bad_alloc&) {
+            state.ResetUVE();
+            return ReliablePayloadReassemblyStatusUVE::Invalid;
+        }
+    } else {
+        if (state.messageId != messageId || state.fragmentCount != fragmentCount ||
+            state.fragments.size() != fragmentCount) {
+            return ReliablePayloadReassemblyStatusUVE::Conflict;
+        }
+        std::vector<std::uint8_t>& storedFragment = state.fragments[fragmentIndex];
+        if (!storedFragment.empty()) {
+            return storedFragment == fragmentBytes ? ReliablePayloadReassemblyStatusUVE::Duplicate
+                                                    : ReliablePayloadReassemblyStatusUVE::Conflict;
+        }
+        try {
+            storedFragment = fragmentBytes;
+            ++state.receivedFragmentCount;
+            state.receivedByteCount += fragmentBytes.size();
+        } catch (const std::bad_alloc&) {
+            return ReliablePayloadReassemblyStatusUVE::Invalid;
+        }
+    }
+
+    if (state.receivedFragmentCount < state.fragmentCount) {
+        return ReliablePayloadReassemblyStatusUVE::Accepted;
+    }
+
+    try {
+        std::vector<std::uint8_t> assembled;
+        assembled.reserve(state.receivedByteCount);
+        for (const std::vector<std::uint8_t>& storedFragment : state.fragments) {
+            assembled.insert(assembled.end(), storedFragment.begin(), storedFragment.end());
+        }
+        outPayload = std::move(assembled);
+    } catch (const std::bad_alloc&) {
+        return ReliablePayloadReassemblyStatusUVE::Invalid;
+    }
+    state.ResetUVE();
+    return ReliablePayloadReassemblyStatusUVE::Complete;
+}
 
 bool PlanReliablePayloadFragmentsUVE(const std::size_t payloadBytes,
                                       const std::size_t fragmentBytes,
