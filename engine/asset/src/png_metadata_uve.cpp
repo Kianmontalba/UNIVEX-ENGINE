@@ -2,11 +2,16 @@
 
 #include "uve/asset/png_metadata_uve.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdlib>
+#include <cstring>
 #include <initializer_list>
+#include <limits>
 #include <new>
 #include <utility>
+
+#include <zlib.h>
 
 namespace UVE::Asset {
 namespace {
@@ -152,6 +157,98 @@ bool ValidatePngRgba8PixelBudgetUVE(const PngMetadataUVE& metadata,
         return false;
     }
     return pixelCount * kBytesPerRgba8Pixel <= maximumBytes;
+}
+
+bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUVE& outImage) noexcept {
+    try {
+        const auto metadata = ParsePngMetadataUVE(bytes);
+        if (!metadata.has_value() || metadata->bitDepth != 8U || metadata->colorType != 6U ||
+            metadata->interlaceMethod != 0U || !ValidatePngRgba8PixelBudgetUVE(*metadata)) {
+            return false;
+        }
+        constexpr std::size_t kSignatureBytes = 8U;
+        constexpr std::size_t kChunkOverheadBytes = 12U;
+        if (bytes.size() < kSignatureBytes) {
+            return false;
+        }
+        std::vector<std::byte> compressed;
+        bool foundIdat = false;
+        bool foundIend = false;
+        std::size_t offset = kSignatureBytes;
+        while (offset <= bytes.size() && bytes.size() - offset >= kChunkOverheadBytes) {
+            const std::uint32_t chunkLength = ReadU32BE(bytes, offset);
+            const std::size_t payloadLength = static_cast<std::size_t>(chunkLength);
+            if (payloadLength > bytes.size() - offset - kChunkOverheadBytes) {
+                return false;
+            }
+            const std::size_t typeOffset = offset + 4U;
+            const std::size_t payloadOffset = offset + 8U;
+            const std::size_t crcOffset = payloadOffset + payloadLength;
+            uLong crc = crc32(0L, Z_NULL, 0U);
+            crc = crc32(crc, reinterpret_cast<const Bytef*>(bytes.data() + typeOffset), 4U);
+            if (payloadLength > 0U) {
+                crc = crc32(crc, reinterpret_cast<const Bytef*>(bytes.data() + payloadOffset),
+                           static_cast<uInt>(payloadLength));
+            }
+            if (crc != static_cast<uLong>(ReadU32BE(bytes, crcOffset))) {
+                return false;
+            }
+            if (HasBytes(bytes, typeOffset, {'I', 'D', 'A', 'T'})) {
+                if (compressed.size() > kMaximumPngDecodedPixelBytesUVE -
+                                       std::min<std::size_t>(compressed.size(), kMaximumPngDecodedPixelBytesUVE) ||
+                    payloadLength > kMaximumPngDecodedPixelBytesUVE - compressed.size()) {
+                    return false;
+                }
+                compressed.insert(compressed.end(), bytes.begin() + static_cast<std::ptrdiff_t>(payloadOffset),
+                                  bytes.begin() + static_cast<std::ptrdiff_t>(payloadOffset + payloadLength));
+                foundIdat = true;
+            } else if (HasBytes(bytes, typeOffset, {'I', 'E', 'N', 'D'})) {
+                foundIend = true;
+                break;
+            }
+            offset = crcOffset + 4U;
+        }
+        if (!foundIdat || !foundIend || compressed.empty()) {
+            return false;
+        }
+        const std::uint64_t rowBytes64 = static_cast<std::uint64_t>(metadata->width) * 4ULL;
+        const std::uint64_t inflatedBytes64 = (rowBytes64 + 1ULL) * static_cast<std::uint64_t>(metadata->height);
+        if (rowBytes64 > std::numeric_limits<std::size_t>::max() ||
+            inflatedBytes64 > std::numeric_limits<std::size_t>::max()) {
+            return false;
+        }
+        const std::size_t rowBytes = static_cast<std::size_t>(rowBytes64);
+        const std::size_t inflatedBytes = static_cast<std::size_t>(inflatedBytes64);
+        std::vector<std::byte> inflated(inflatedBytes);
+        uLongf destinationLength = static_cast<uLongf>(inflated.size());
+        if (uncompress(reinterpret_cast<Bytef*>(inflated.data()), &destinationLength,
+                       reinterpret_cast<const Bytef*>(compressed.data()), static_cast<uLong>(compressed.size())) != Z_OK ||
+            destinationLength != inflated.size()) {
+            return false;
+        }
+        std::vector<std::byte> pixels(rowBytes * static_cast<std::size_t>(metadata->height));
+        std::vector<std::byte> previousRow;
+        for (std::size_t row = 0U; row < metadata->height; ++row) {
+            const std::size_t rowOffset = row * (rowBytes + 1U);
+            const auto filter = static_cast<PngFilterTypeUVE>(std::to_integer<std::uint8_t>(inflated[rowOffset]));
+            const std::vector<std::byte> filtered(inflated.begin() + static_cast<std::ptrdiff_t>(rowOffset + 1U),
+                                                   inflated.begin() + static_cast<std::ptrdiff_t>(rowOffset + 1U + rowBytes));
+            std::vector<std::byte> decodedRow;
+            if (!UnfilterPngRgba8ScanlineUVE(filter, filtered, previousRow, decodedRow)) {
+                return false;
+            }
+            std::memcpy(pixels.data() + row * rowBytes, decodedRow.data(), rowBytes);
+            previousRow = std::move(decodedRow);
+        }
+        PngRgba8ImageUVE image;
+        image.width = metadata->width;
+        image.height = metadata->height;
+        image.pixels = std::move(pixels);
+        outImage = std::move(image);
+        return true;
+    } catch (const std::bad_alloc&) {
+        return false;
+    }
 }
 
 } // namespace UVE::Asset
