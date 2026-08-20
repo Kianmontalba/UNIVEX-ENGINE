@@ -7,6 +7,29 @@ bool Inc(std::uint32_t& value) noexcept { if (value >= kMax) return false; ++val
 std::string_view Token(std::string_view& rest) noexcept { while (!rest.empty() && std::isspace(static_cast<unsigned char>(rest.front())) != 0) rest.remove_prefix(1U); const auto end = rest.find_first_of(" \t\r\n"); const auto token = rest.substr(0U, end); rest = end == std::string_view::npos ? std::string_view{} : rest.substr(end); return token; }
 bool Has(std::string_view& rest, const std::size_t count) noexcept { for (std::size_t i=0U;i<count;++i) if (Token(rest).empty()) return false; return true; }
 }
+
+bool ValidateMtlTextureReferenceUVE(const std::string_view path) noexcept {
+    if (path.empty() || path.size() > kMaximumMtlTextureReferenceBytesUVE ||
+        path.front() == '/' || path.front() == '\\' || path.find('\0') != std::string_view::npos ||
+        (path.size() >= 2U && path[1U] == ':')) {
+        return false;
+    }
+    std::size_t segmentStart = 0U;
+    while (segmentStart <= path.size()) {
+        const std::size_t separator = path.find_first_of("/\\", segmentStart);
+        const std::string_view segment = path.substr(
+            segmentStart, separator == std::string_view::npos ? std::string_view::npos : separator - segmentStart);
+        if (segment.empty() || segment == "." || segment == "..") {
+            return false;
+        }
+        if (separator == std::string_view::npos) {
+            break;
+        }
+        segmentStart = separator + 1U;
+    }
+    return true;
+}
+
 std::optional<MtlMetadataUVE> ParseMtlMetadataUVE(const std::string_view source) {
     MtlMetadataUVE out; std::size_t start=0U;
     while (start <= source.size()) {
