@@ -50,8 +50,10 @@ public:
     [[nodiscard]] virtual bool UpdateBufferUVE(BufferHandleUVE buffer, std::span<const std::byte> data,
                                                 std::uint64_t offsetBytes = 0) = 0;
 
-    /// Creates a GPU texture per `desc`, optionally uploading `initialData`. Never returns
-    /// kInvalidTextureHandleUVE on success.
+    /// Creates a GPU texture per `desc`, optionally uploading `initialData`. The backend must
+    /// reject invalid descriptors or partial non-empty level-0 data through
+    /// `ValidateTextureUploadUVE` before allocating a resource; valid creation never returns
+    /// kInvalidTextureHandleUVE.
     [[nodiscard]] virtual TextureHandleUVE CreateTextureUVE(const TextureDescUVE& desc,
                                                              std::span<const std::byte> initialData = {}) = 0;
 

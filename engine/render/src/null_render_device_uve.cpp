@@ -61,6 +61,10 @@ bool NullRenderDeviceUVE::UpdateBufferUVE(BufferHandleUVE buffer, std::span<cons
 
 TextureHandleUVE NullRenderDeviceUVE::CreateTextureUVE(const TextureDescUVE& desc,
                                                          std::span<const std::byte> initialData) {
+    if (!ValidateTextureUploadUVE(desc, initialData)) {
+        UVE_ERROR("NullRenderDeviceUVE: CreateTextureUVE received an invalid descriptor or initial upload");
+        return kInvalidTextureHandleUVE;
+    }
     static_cast<void>(initialData); // NullRenderDeviceUVE performs no real upload, bookkeeping only.
     const std::uint32_t handleValue = m_impl->nextTextureHandle++;
     m_impl->textures.emplace(handleValue, desc);

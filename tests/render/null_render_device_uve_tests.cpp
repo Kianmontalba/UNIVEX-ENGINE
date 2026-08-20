@@ -113,6 +113,21 @@ TEST(NullRenderDeviceUVETest, CreateTextureUVE_ReturnsUniqueHandles) {
     EXPECT_NE(first, second);
 }
 
+TEST(NullRenderDeviceUVETest, CreateTextureUVE_InvalidDescriptorOrUpload_ReturnsInvalidBeforeAllocation) {
+    NullRenderDeviceUVE device;
+    const std::array<std::byte, 3> incompleteData{};
+    const std::array<std::byte, 4> validData{};
+
+    EXPECT_EQ(device.CreateTextureUVE(TextureDescUVE{0U, 1U, TextureFormatUVE::RGBA8Unorm, 1U}),
+              kInvalidTextureHandleUVE);
+    EXPECT_EQ(device.CreateTextureUVE(TextureDescUVE{1U, 1U, TextureFormatUVE::RGBA8Unorm, 1U}, incompleteData),
+              kInvalidTextureHandleUVE);
+    const TextureHandleUVE valid =
+        device.CreateTextureUVE(TextureDescUVE{1U, 1U, TextureFormatUVE::RGBA8Unorm, 1U}, validData);
+    EXPECT_EQ(valid.value, 1U);
+    EXPECT_NE(valid, kInvalidTextureHandleUVE);
+}
+
 TEST(NullRenderDeviceUVETest, CreateShaderUVE_ReturnsUniqueHandles) {
     NullRenderDeviceUVE device;
     const ShaderHandleUVE first = device.CreateShaderUVE(ShaderDescUVE{ShaderStageUVE::Vertex, "vs"});
