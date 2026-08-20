@@ -16,6 +16,18 @@ inline constexpr float kMinimumAudioMixerPitchMultiplierUVE = 0.25F;
 inline constexpr float kMaximumAudioMixerPitchMultiplierUVE = 4.0F;
 inline constexpr std::string_view kMasterAudioMixerGroupNameUVE = "Master";
 
+struct AudioMixParametersUVE final {
+    float gain = 1.0F;
+    float pitch = 1.0F;
+    [[nodiscard]] bool operator==(const AudioMixParametersUVE&) const noexcept = default;
+};
+
+/// Evaluates finite source/group/attenuation inputs into final device-facing gain and pitch.
+/// It performs no device I/O, voice mutation, mixer routing, streaming, or backend selection.
+[[nodiscard]] bool EvaluateAudioMixParametersUVE(
+    float sourceVolume, float sourcePitch, float groupVolume, float groupPitch,
+    float attenuation, AudioMixParametersUVE& outParameters) noexcept;
+
 struct AudioMixerGroupSnapshotUVE final {
     std::string name;
     float volumeMultiplier = 1.0F;

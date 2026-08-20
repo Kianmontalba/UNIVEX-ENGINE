@@ -170,17 +170,19 @@ void AudioSystemUVE::UpdateUVE() {
     for (auto& [handleValue, state] : m_impl->sources) {
         const float groupVolume = m_impl->mixerGroups.GetGroupVolumeUVE(state.mixerGroup);
         const float groupPitch = m_impl->mixerGroups.GetGroupPitchUVE(state.mixerGroup);
-        float gain = 0.0F;
-        if (!state.desc.spatial) {
-            gain = std::clamp(state.volume * groupVolume, 0.0F, 1.0F);
-        } else {
+        float attenuation = 1.0F;
+        if (state.desc.spatial) {
             const float distance = Math::LengthUVE(state.position - m_impl->listenerPosition);
-            const float attenuation = ComputeDistanceAttenuationUVE(distance, state.desc.minDistance,
-                                                                      state.desc.maxDistance, state.desc.attenuationModel);
-            gain = std::clamp(state.volume * groupVolume * attenuation, 0.0F, 1.0F);
+            attenuation = ComputeDistanceAttenuationUVE(distance, state.desc.minDistance,
+                                                         state.desc.maxDistance, state.desc.attenuationModel);
+        }
+        AudioMixParametersUVE parameters;
+        if (!EvaluateAudioMixParametersUVE(state.volume, state.pitch, groupVolume, groupPitch, attenuation, parameters)) {
+            UVE_ERROR("AudioSystemUVE: invalid mix parameters for source {}", handleValue);
+            parameters = AudioMixParametersUVE{0.0F, 1.0F};
         }
         static_cast<void>(m_impl->audioDevice.SetVoiceParamsUVE(
-            VoiceHandleUVE{handleValue}, AudioVoiceParamsUVE{state.position, gain, state.pitch * groupPitch}));
+            VoiceHandleUVE{handleValue}, AudioVoiceParamsUVE{state.position, parameters.gain, parameters.pitch}));
     }
 }
 
