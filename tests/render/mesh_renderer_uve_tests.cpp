@@ -5,6 +5,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <limits>
 #include <numbers>
 #include <thread>
 
@@ -17,6 +18,7 @@
 #include "uve/events/event_system_uve.h"
 #include "uve/memory/memory_manager_uve.h"
 #include "uve/scene/components/mesh_component_uve.h"
+#include "uve/scene/components/world_transform_component_uve.h"
 #include "uve/scene/entity_manager_uve.h"
 #include "uve/scene/scene_graph_uve.h"
 #include "uve/threading/thread_pool_uve.h"
@@ -171,6 +173,26 @@ TEST_F(MeshRendererUVETest, ExtractRenderQueueUVE_PartialReference_Asserts) {
         "");
 }
 #endif
+
+TEST_F(MeshRendererUVETest, ExtractRenderQueueUVE_NonFiniteWorldTransform_IsCountedAndSkipped) {
+    RegisterImmediateLoadersUVE(/*materialIsTransparent=*/false);
+    const Asset::AssetGuidUVE meshGuid = assetDatabase.RegisterUVE("mesh_renderer_tests_nonfinite.uvemodel");
+    const Asset::AssetGuidUVE materialGuid = assetDatabase.RegisterUVE("mesh_renderer_tests_nonfinite.uvemat");
+    const Scene::EntityUVE entity = MakeMeshEntityUVE(Math::Vector3UVE{0.0F, 0.0F, -10.0F}, meshGuid, materialGuid);
+    WaitUntilAssetsReadyUVE(meshGuid, materialGuid);
+    entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(entity).worldPosition.x =
+        std::numeric_limits<float>::quiet_NaN();
+
+    const RenderQueueUVE queue =
+        meshRenderer.ExtractRenderQueueUVE(entityManager, assetManager, assetDatabase, MakeTestFrustumUVE());
+
+    EXPECT_TRUE(queue.opaqueItems.empty());
+    EXPECT_TRUE(queue.transparentItems.empty());
+    EXPECT_EQ(queue.invalidAssetReferences, 0U);
+    EXPECT_EQ(queue.pendingAssetLoads, 0U);
+    EXPECT_EQ(queue.failedAssetLoads, 0U);
+    EXPECT_EQ(queue.invalidRenderEligibility, 1U);
+}
 
 TEST_F(MeshRendererUVETest, ExtractRenderQueueUVE_FailedAssetLoad_IsCountedAndSkipped) {
     assetManager.RegisterLoaderUVE<Asset::MeshAssetUVE>(

@@ -8,18 +8,11 @@
 
 #include "uve/asset/asset_guid_uve.h"
 #include "uve/debug/assert_uve.h"
-#include "uve/math/aabb_uve.h"
+#include "uve/render/mesh_render_eligibility_uve.h"
 #include "uve/scene/components/mesh_component_uve.h"
 #include "uve/scene/components/world_transform_component_uve.h"
 
 namespace UVE::Render {
-
-namespace {
-
-/// The near plane's index within FrustumUVE::planes ("left, right, bottom, top, near, far").
-constexpr std::size_t kNearPlaneIndexUVE = 4;
-
-} // namespace
 
 RenderQueueUVE MeshRendererUVE::ExtractRenderQueueUVE(Scene::IEntityManagerUVE& entityManager,
                                                         Asset::IAssetManagerUVE& assetManager,
@@ -59,17 +52,17 @@ RenderQueueUVE MeshRendererUVE::ExtractRenderQueueUVE(Scene::IEntityManagerUVE& 
             const Asset::MeshAssetUVE* const mesh = meshHandle.TryGetUVE();
             const Asset::MaterialAssetUVE* const material = materialHandle.TryGetUVE();
 
-            const Math::Matrix4x4UVE worldMatrix = Math::Matrix4x4UVE::ComposeTrsUVE(
-                worldTransform.worldPosition, worldTransform.worldRotation, worldTransform.worldScale);
-            const Math::AabbUVE worldAabb = mesh->localBounds.TransformUVE(worldMatrix);
-            if (!cullFrustum.IntersectsUVE(worldAabb)) {
+            MeshRenderEligibilityUVE eligibility;
+            if (!EvaluateMeshRenderEligibilityUVE(meshComponent, worldTransform, *mesh, cullFrustum, eligibility)) {
+                if (eligibility.reason == MeshRenderEligibilityReasonUVE::InvalidWorldTransform ||
+                    eligibility.reason == MeshRenderEligibilityReasonUVE::InvalidLocalBounds) {
+                    ++queue.invalidRenderEligibility;
+                }
                 return;
             }
 
-            const float sortDepth =
-                cullFrustum.planes[kNearPlaneIndexUVE].GetSignedDistanceUVE(worldAabb.GetCenterUVE());
-
-            RenderItemUVE item{worldMatrix, std::move(meshHandle), std::move(materialHandle), sortDepth};
+            RenderItemUVE item{eligibility.worldMatrix, std::move(meshHandle), std::move(materialHandle),
+                               eligibility.sortDepth};
             if (material->isTransparent) {
                 queue.transparentItems.push_back(std::move(item));
             } else {
