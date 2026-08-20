@@ -3,7 +3,10 @@
 #include "uve/asset/png_metadata_uve.h"
 
 #include <cstddef>
+#include <cstdlib>
 #include <initializer_list>
+#include <new>
+#include <utility>
 
 namespace UVE::Asset {
 namespace {
@@ -75,6 +78,65 @@ std::optional<PngMetadataUVE> ParsePngMetadataUVE(const std::vector<std::byte>& 
     }
     metadata.hasAlpha = metadata.colorType == 4U || metadata.colorType == 6U;
     return metadata;
+}
+
+bool UnfilterPngRgba8ScanlineUVE(const PngFilterTypeUVE filter,
+                                    const std::vector<std::byte>& filteredBytes,
+                                    const std::vector<std::byte>& previousRow,
+                                    std::vector<std::byte>& outRow) {
+    if (filteredBytes.empty() || filteredBytes.size() > kMaximumPngRgba8ScanlineBytesUVE ||
+        (!previousRow.empty() && previousRow.size() != filteredBytes.size()) ||
+        ((filter == PngFilterTypeUVE::Up || filter == PngFilterTypeUVE::Average || filter == PngFilterTypeUVE::Paeth) &&
+         previousRow.empty())) {
+        return false;
+    }
+    try {
+        std::vector<std::byte> reconstructed(filteredBytes.size());
+        const auto byteAt = [](const std::vector<std::byte>& bytes, const std::size_t index) noexcept {
+            return std::to_integer<unsigned int>(bytes[index]);
+        };
+        const auto paeth = [](const unsigned int left, const unsigned int up,
+                              const unsigned int upperLeft) noexcept {
+            const int prediction = static_cast<int>(left) + static_cast<int>(up) - static_cast<int>(upperLeft);
+            const int leftDistance = std::abs(prediction - static_cast<int>(left));
+            const int upDistance = std::abs(prediction - static_cast<int>(up));
+            const int upperLeftDistance = std::abs(prediction - static_cast<int>(upperLeft));
+            if (leftDistance <= upDistance && leftDistance <= upperLeftDistance) return left;
+            if (upDistance <= upperLeftDistance) return up;
+            return upperLeft;
+        };
+        for (std::size_t index = 0U; index < filteredBytes.size(); ++index) {
+            const unsigned int left = index >= 4U ? byteAt(reconstructed, index - 4U) : 0U;
+            const unsigned int up = previousRow.empty() ? 0U : byteAt(previousRow, index);
+            const unsigned int upperLeft = previousRow.empty() || index < 4U ? 0U : byteAt(previousRow, index - 4U);
+            unsigned int predictor = 0U;
+            switch (filter) {
+                case PngFilterTypeUVE::None:
+                    predictor = 0U;
+                    break;
+                case PngFilterTypeUVE::Sub:
+                    predictor = left;
+                    break;
+                case PngFilterTypeUVE::Up:
+                    predictor = up;
+                    break;
+                case PngFilterTypeUVE::Average:
+                    predictor = (left + up) / 2U;
+                    break;
+                case PngFilterTypeUVE::Paeth:
+                    predictor = paeth(left, up, upperLeft);
+                    break;
+                default:
+                    return false;
+            }
+            reconstructed[index] = std::byte{static_cast<unsigned char>(
+                (byteAt(filteredBytes, index) + predictor) & 0xFFU)};
+        }
+        outRow = std::move(reconstructed);
+        return true;
+    } catch (const std::bad_alloc&) {
+        return false;
+    }
 }
 
 bool ValidatePngRgba8PixelBudgetUVE(const PngMetadataUVE& metadata,

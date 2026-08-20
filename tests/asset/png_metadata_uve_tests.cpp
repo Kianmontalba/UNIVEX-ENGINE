@@ -65,6 +65,48 @@ TEST(PngMetadataUVETest, ParsePngMetadataUVE_ReportsIndexedColorWithoutAlpha) {
     EXPECT_EQ(metadata->interlaceMethod, 1U);
 }
 
+TEST(PngMetadataUVETest, UnfilterPngRgba8ScanlineUVE_ReconstructsAllSupportedFilters) {
+    const std::vector<std::byte> original{std::byte{10}, std::byte{20}, std::byte{30}, std::byte{40},
+                                           std::byte{50}, std::byte{60}, std::byte{70}, std::byte{80}};
+    const std::vector<std::byte> previous{std::byte{1}, std::byte{2}, std::byte{3}, std::byte{4},
+                                            std::byte{5}, std::byte{6}, std::byte{7}, std::byte{8}};
+    std::vector<std::byte> output;
+    ASSERT_TRUE(UnfilterPngRgba8ScanlineUVE(PngFilterTypeUVE::None, original, {}, output));
+    EXPECT_EQ(output, original);
+    ASSERT_TRUE(UnfilterPngRgba8ScanlineUVE(PngFilterTypeUVE::Sub,
+                                            {std::byte{10}, std::byte{20}, std::byte{30}, std::byte{40},
+                                             std::byte{40}, std::byte{40}, std::byte{40}, std::byte{40}}, {}, output));
+    EXPECT_EQ(output, original);
+    ASSERT_TRUE(UnfilterPngRgba8ScanlineUVE(PngFilterTypeUVE::Up,
+                                            {std::byte{9}, std::byte{18}, std::byte{27}, std::byte{36},
+                                             std::byte{45}, std::byte{54}, std::byte{63}, std::byte{72}}, previous, output));
+    EXPECT_EQ(output, original);
+    ASSERT_TRUE(UnfilterPngRgba8ScanlineUVE(PngFilterTypeUVE::Average,
+                                            {std::byte{10}, std::byte{19}, std::byte{29}, std::byte{38},
+                                             std::byte{43}, std::byte{47}, std::byte{52}, std::byte{56}}, previous, output));
+    EXPECT_EQ(output, original);
+    ASSERT_TRUE(UnfilterPngRgba8ScanlineUVE(PngFilterTypeUVE::Paeth,
+                                            {std::byte{9}, std::byte{18}, std::byte{27}, std::byte{36},
+                                             std::byte{40}, std::byte{40}, std::byte{40}, std::byte{40}}, previous, output));
+    EXPECT_EQ(output, original);
+}
+
+TEST(PngMetadataUVETest, UnfilterPngRgba8ScanlineUVE_RejectsInvalidInputsAtomically) {
+    const std::vector<std::byte> original{std::byte{0xAA}, std::byte{0xBB}};
+    std::vector<std::byte> output = original;
+    EXPECT_FALSE(UnfilterPngRgba8ScanlineUVE(static_cast<PngFilterTypeUVE>(9U), {std::byte{1}, std::byte{2}}, {}, output));
+    EXPECT_EQ(output, original);
+    EXPECT_FALSE(UnfilterPngRgba8ScanlineUVE(PngFilterTypeUVE::Up, {std::byte{1}, std::byte{2}}, {}, output));
+    EXPECT_EQ(output, original);
+    EXPECT_FALSE(UnfilterPngRgba8ScanlineUVE(PngFilterTypeUVE::None, {std::byte{1}, std::byte{2}}, {std::byte{1}}, output));
+    EXPECT_EQ(output, original);
+    EXPECT_FALSE(UnfilterPngRgba8ScanlineUVE(PngFilterTypeUVE::None, {}, {}, output));
+    EXPECT_EQ(output, original);
+    const std::vector<std::byte> oversized(kMaximumPngRgba8ScanlineBytesUVE + 1U, std::byte{0});
+    EXPECT_FALSE(UnfilterPngRgba8ScanlineUVE(PngFilterTypeUVE::None, oversized, {}, output));
+    EXPECT_EQ(output, original);
+}
+
 TEST(PngMetadataUVETest, ValidatePngRgba8PixelBudgetUVE_AcceptsDefaultHdBudget) {
     const std::optional<PngMetadataUVE> metadata = ParsePngMetadataUVE(MakePngIhdrUVE());
     ASSERT_TRUE(metadata.has_value());
