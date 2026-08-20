@@ -159,7 +159,7 @@ bool ValidatePngRgba8PixelBudgetUVE(const PngMetadataUVE& metadata,
         !((metadata.bitDepth == 8U && (metadata.colorType == 0U || metadata.colorType == 2U ||
                                        metadata.colorType == 3U || metadata.colorType == 6U)) ||
           (metadata.bitDepth == 16U && (metadata.colorType == 0U || metadata.colorType == 2U ||
-                                           metadata.colorType == 6U))) || maximumBytes == 0U) {
+                                           metadata.colorType == 4U || metadata.colorType == 6U))) || maximumBytes == 0U) {
         return false;
     }
     constexpr std::uint64_t kBytesPerRgba8Pixel = 4ULL;
@@ -178,13 +178,14 @@ bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUV
             !((metadata->bitDepth == 8U && (metadata->colorType == 0U || metadata->colorType == 2U ||
                                              metadata->colorType == 3U || metadata->colorType == 6U)) ||
               (metadata->bitDepth == 16U && (metadata->colorType == 0U || metadata->colorType == 2U ||
-                                               metadata->colorType == 6U))) ||
+                                               metadata->colorType == 4U || metadata->colorType == 6U))) ||
             (metadata->interlaceMethod != 0U &&
              !((metadata->interlaceMethod == 1U && metadata->bitDepth == 8U &&
                 (metadata->colorType == 0U || metadata->colorType == 2U || metadata->colorType == 3U ||
                  metadata->colorType == 6U)) ||
                (metadata->interlaceMethod == 1U && metadata->bitDepth == 16U &&
-                (metadata->colorType == 0U || metadata->colorType == 2U || metadata->colorType == 6U)))) ||
+                (metadata->colorType == 0U || metadata->colorType == 2U || metadata->colorType == 4U ||
+                 metadata->colorType == 6U)))) ||
             !ValidatePngRgba8PixelBudgetUVE(*metadata)) {
             return false;
         }
@@ -251,7 +252,8 @@ bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUV
             return false;
         }
         const std::size_t sourceBytesPerPixel = metadata->bitDepth == 16U ?
-            (metadata->colorType == 0U ? 2U : (metadata->colorType == 2U ? 6U : 8U)) :
+            (metadata->colorType == 0U ? 2U : (metadata->colorType == 2U ? 6U :
+             (metadata->colorType == 4U ? 4U : 8U))) :
             (metadata->colorType == 0U || metadata->colorType == 3U ? 1U :
              (metadata->colorType == 2U ? 3U : 4U));
         const std::uint64_t outputRowBytes64 = static_cast<std::uint64_t>(metadata->width) * 4ULL;
@@ -342,6 +344,12 @@ bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUV
                         pixels[outputOffset + 1U] = decodedRow[sourceOffset + 2U];
                         pixels[outputOffset + 2U] = decodedRow[sourceOffset + 4U];
                         pixels[outputOffset + 3U] = std::byte{0xFF};
+                    } else if (metadata->interlaceMethod == 1U && metadata->bitDepth == 16U && metadata->colorType == 4U) {
+                        const std::byte gray = decodedRow[sourceOffset];
+                        pixels[outputOffset] = gray;
+                        pixels[outputOffset + 1U] = gray;
+                        pixels[outputOffset + 2U] = gray;
+                        pixels[outputOffset + 3U] = decodedRow[sourceOffset + 2U];
                     } else if (metadata->interlaceMethod == 1U && metadata->bitDepth == 16U && metadata->colorType == 6U) {
                         pixels[outputOffset] = decodedRow[sourceOffset];
                         pixels[outputOffset + 1U] = decodedRow[sourceOffset + 2U];
