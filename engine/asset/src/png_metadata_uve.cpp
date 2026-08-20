@@ -179,7 +179,8 @@ bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUV
                                              metadata->colorType == 3U || metadata->colorType == 6U)) ||
               (metadata->bitDepth == 16U && (metadata->colorType == 0U || metadata->colorType == 2U ||
                                                metadata->colorType == 6U))) ||
-            metadata->interlaceMethod != 0U ||
+            (metadata->interlaceMethod != 0U &&
+             !(metadata->interlaceMethod == 1U && metadata->bitDepth == 8U && metadata->colorType == 6U)) ||
             !ValidatePngRgba8PixelBudgetUVE(*metadata)) {
             return false;
         }
@@ -249,73 +250,134 @@ bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUV
             (metadata->colorType == 0U ? 2U : (metadata->colorType == 2U ? 6U : 8U)) :
             (metadata->colorType == 0U || metadata->colorType == 3U ? 1U :
              (metadata->colorType == 2U ? 3U : 4U));
-        const std::uint64_t sourceRowBytes64 = static_cast<std::uint64_t>(metadata->width) * sourceBytesPerPixel;
         const std::uint64_t outputRowBytes64 = static_cast<std::uint64_t>(metadata->width) * 4ULL;
-        const std::uint64_t inflatedBytes64 = (sourceRowBytes64 + 1ULL) * static_cast<std::uint64_t>(metadata->height);
-        if (sourceRowBytes64 > std::numeric_limits<std::size_t>::max() ||
-            outputRowBytes64 > std::numeric_limits<std::size_t>::max() ||
-            inflatedBytes64 > std::numeric_limits<std::size_t>::max()) {
+        if (outputRowBytes64 > std::numeric_limits<std::size_t>::max()) {
             return false;
         }
-        const std::size_t sourceRowBytes = static_cast<std::size_t>(sourceRowBytes64);
         const std::size_t outputRowBytes = static_cast<std::size_t>(outputRowBytes64);
-        const std::size_t inflatedBytes = static_cast<std::size_t>(inflatedBytes64);
-        std::vector<std::byte> inflated(inflatedBytes);
+        const std::size_t pixelBytes = outputRowBytes * static_cast<std::size_t>(metadata->height);
+        std::vector<std::byte> inflated;
+        std::vector<std::byte> pixels(pixelBytes);
+        const auto checkedAdd = [](const std::uint64_t left, const std::uint64_t right,
+                                   std::uint64_t& result) noexcept {
+            if (right > std::numeric_limits<std::uint64_t>::max() - left) return false;
+            result = left + right;
+            return true;
+        };
+        const auto checkedMultiply = [](const std::uint64_t left, const std::uint64_t right,
+                                        std::uint64_t& result) noexcept {
+            if (left != 0U && right > std::numeric_limits<std::uint64_t>::max() / left) return false;
+            result = left * right;
+            return true;
+        };
+        const auto passWidth = [metadata](const std::size_t start, const std::size_t step) noexcept {
+            if (metadata->width <= start) return std::size_t{0U};
+            return (static_cast<std::size_t>(metadata->width) - start + step - 1U) / step;
+        };
+        const auto passHeight = [metadata](const std::size_t start, const std::size_t step) noexcept {
+            if (metadata->height <= start) return std::size_t{0U};
+            return (static_cast<std::size_t>(metadata->height) - start + step - 1U) / step;
+        };
+        constexpr std::size_t kAdam7StartX[7] = {0U, 4U, 0U, 2U, 0U, 1U, 0U};
+        constexpr std::size_t kAdam7StartY[7] = {0U, 0U, 4U, 0U, 2U, 0U, 1U};
+        constexpr std::size_t kAdam7StepX[7] = {8U, 8U, 4U, 4U, 2U, 2U, 1U};
+        constexpr std::size_t kAdam7StepY[7] = {8U, 8U, 4U, 4U, 2U, 2U, 2U};
+        std::uint64_t inflatedBytes64 = 0U;
+        const std::size_t passCount = metadata->interlaceMethod == 1U ? 7U : 1U;
+        for (std::size_t pass = 0U; pass < passCount; ++pass) {
+            const std::size_t width = metadata->interlaceMethod == 1U ? passWidth(kAdam7StartX[pass], kAdam7StepX[pass]) : metadata->width;
+            const std::size_t height = metadata->interlaceMethod == 1U ? passHeight(kAdam7StartY[pass], kAdam7StepY[pass]) : metadata->height;
+            if (width == 0U || height == 0U) continue;
+            std::uint64_t rowBytes = 0U;
+            std::uint64_t passBytes = 0U;
+            if (!checkedMultiply(static_cast<std::uint64_t>(width), static_cast<std::uint64_t>(sourceBytesPerPixel), rowBytes) ||
+                rowBytes > kMaximumPngRgba8ScanlineBytesUVE ||
+                !checkedAdd(rowBytes, 1U, rowBytes) ||
+                !checkedMultiply(rowBytes, static_cast<std::uint64_t>(height), passBytes) ||
+                !checkedAdd(inflatedBytes64, passBytes, inflatedBytes64) ||
+                inflatedBytes64 > kMaximumPngDecodedPixelBytesUVE) {
+                return false;
+            }
+        }
+        if (inflatedBytes64 > std::numeric_limits<std::size_t>::max()) {
+            return false;
+        }
+        inflated.resize(static_cast<std::size_t>(inflatedBytes64));
         uLongf destinationLength = static_cast<uLongf>(inflated.size());
         if (uncompress(reinterpret_cast<Bytef*>(inflated.data()), &destinationLength,
                        reinterpret_cast<const Bytef*>(compressed.data()), static_cast<uLong>(compressed.size())) != Z_OK ||
             destinationLength != inflated.size()) {
             return false;
         }
-        std::vector<std::byte> pixels(outputRowBytes * static_cast<std::size_t>(metadata->height));
-        std::vector<std::byte> previousRow;
-        for (std::size_t row = 0U; row < metadata->height; ++row) {
-            const std::size_t rowOffset = row * (sourceRowBytes + 1U);
-            const auto filter = static_cast<PngFilterTypeUVE>(std::to_integer<std::uint8_t>(inflated[rowOffset]));
-            const std::vector<std::byte> filtered(inflated.begin() + static_cast<std::ptrdiff_t>(rowOffset + 1U),
-                                                   inflated.begin() + static_cast<std::ptrdiff_t>(rowOffset + 1U + sourceRowBytes));
-            std::vector<std::byte> decodedRow;
-            if (!UnfilterPngScanlineUVE(filter, filtered, previousRow, sourceBytesPerPixel, decodedRow)) {
-                return false;
-            }
-            for (std::size_t x = 0U; x < metadata->width; ++x) {
-                const std::size_t sourceOffset = x * sourceBytesPerPixel;
-                const std::size_t outputOffset = row * outputRowBytes + x * 4U;
-                if (metadata->bitDepth == 16U && metadata->colorType == 0U) {
-                    const std::byte gray = decodedRow[sourceOffset];
-                    pixels[outputOffset] = gray;
-                    pixels[outputOffset + 1U] = gray;
-                    pixels[outputOffset + 2U] = gray;
-                    pixels[outputOffset + 3U] = std::byte{0xFF};
-                } else if (metadata->bitDepth == 16U && metadata->colorType == 2U) {
-                    pixels[outputOffset] = decodedRow[sourceOffset];
-                    pixels[outputOffset + 1U] = decodedRow[sourceOffset + 2U];
-                    pixels[outputOffset + 2U] = decodedRow[sourceOffset + 4U];
-                    pixels[outputOffset + 3U] = std::byte{0xFF};
-                } else if (metadata->bitDepth == 16U) {
-                    pixels[outputOffset] = decodedRow[sourceOffset];
-                    pixels[outputOffset + 1U] = decodedRow[sourceOffset + 2U];
-                    pixels[outputOffset + 2U] = decodedRow[sourceOffset + 4U];
-                    pixels[outputOffset + 3U] = decodedRow[sourceOffset + 6U];
-                } else if (metadata->colorType == 3U) {
-                    const std::size_t paletteIndex = std::to_integer<std::uint8_t>(decodedRow[sourceOffset]);
-                    if (paletteIndex >= paletteAlpha.size()) {
-                        return false;
+        std::size_t inflatedOffset = 0U;
+        const auto decodePass = [&](const std::size_t passWidthValue, const std::size_t passHeightValue,
+                                    const std::size_t startX, const std::size_t startY,
+                                    const std::size_t stepX, const std::size_t stepY) noexcept {
+            const std::size_t sourceRowBytes = passWidthValue * sourceBytesPerPixel;
+            std::vector<std::byte> previousRow;
+            for (std::size_t row = 0U; row < passHeightValue; ++row) {
+                const std::size_t rowOffset = inflatedOffset + row * (sourceRowBytes + 1U);
+                const auto filter = static_cast<PngFilterTypeUVE>(std::to_integer<std::uint8_t>(inflated[rowOffset]));
+                const std::vector<std::byte> filtered(inflated.begin() + static_cast<std::ptrdiff_t>(rowOffset + 1U),
+                                                       inflated.begin() + static_cast<std::ptrdiff_t>(rowOffset + 1U + sourceRowBytes));
+                std::vector<std::byte> decodedRow;
+                if (!UnfilterPngScanlineUVE(filter, filtered, previousRow, sourceBytesPerPixel, decodedRow)) return false;
+                for (std::size_t x = 0U; x < passWidthValue; ++x) {
+                    const std::size_t sourceOffset = x * sourceBytesPerPixel;
+                    const std::size_t outputX = startX + x * stepX;
+                    const std::size_t outputY = startY + row * stepY;
+                    const std::size_t outputOffset = outputY * outputRowBytes + outputX * 4U;
+                    if (metadata->interlaceMethod == 1U) {
+                        pixels[outputOffset] = decodedRow[sourceOffset];
+                        pixels[outputOffset + 1U] = decodedRow[sourceOffset + 1U];
+                        pixels[outputOffset + 2U] = decodedRow[sourceOffset + 2U];
+                        pixels[outputOffset + 3U] = decodedRow[sourceOffset + 3U];
+                    } else if (metadata->bitDepth == 16U && metadata->colorType == 0U) {
+                        const std::byte gray = decodedRow[sourceOffset];
+                        pixels[outputOffset] = gray;
+                        pixels[outputOffset + 1U] = gray;
+                        pixels[outputOffset + 2U] = gray;
+                        pixels[outputOffset + 3U] = std::byte{0xFF};
+                    } else if (metadata->bitDepth == 16U && metadata->colorType == 2U) {
+                        pixels[outputOffset] = decodedRow[sourceOffset];
+                        pixels[outputOffset + 1U] = decodedRow[sourceOffset + 2U];
+                        pixels[outputOffset + 2U] = decodedRow[sourceOffset + 4U];
+                        pixels[outputOffset + 3U] = std::byte{0xFF};
+                    } else if (metadata->bitDepth == 16U) {
+                        pixels[outputOffset] = decodedRow[sourceOffset];
+                        pixels[outputOffset + 1U] = decodedRow[sourceOffset + 2U];
+                        pixels[outputOffset + 2U] = decodedRow[sourceOffset + 4U];
+                        pixels[outputOffset + 3U] = decodedRow[sourceOffset + 6U];
+                    } else if (metadata->colorType == 3U) {
+                        const std::size_t paletteIndex = std::to_integer<std::uint8_t>(decodedRow[sourceOffset]);
+                        if (paletteIndex >= paletteAlpha.size()) return false;
+                        const std::size_t paletteOffset = paletteIndex * 3U;
+                        pixels[outputOffset] = paletteRgb[paletteOffset];
+                        pixels[outputOffset + 1U] = paletteRgb[paletteOffset + 1U];
+                        pixels[outputOffset + 2U] = paletteRgb[paletteOffset + 2U];
+                        pixels[outputOffset + 3U] = paletteAlpha[paletteIndex];
+                    } else {
+                        const std::byte red = decodedRow[sourceOffset];
+                        pixels[outputOffset] = red;
+                        pixels[outputOffset + 1U] = sourceBytesPerPixel == 1U ? red : decodedRow[sourceOffset + 1U];
+                        pixels[outputOffset + 2U] = sourceBytesPerPixel == 1U ? red : decodedRow[sourceOffset + 2U];
+                        pixels[outputOffset + 3U] = metadata->colorType == 6U ? decodedRow[sourceOffset + 3U] : std::byte{0xFF};
                     }
-                    const std::size_t paletteOffset = paletteIndex * 3U;
-                    pixels[outputOffset] = paletteRgb[paletteOffset];
-                    pixels[outputOffset + 1U] = paletteRgb[paletteOffset + 1U];
-                    pixels[outputOffset + 2U] = paletteRgb[paletteOffset + 2U];
-                    pixels[outputOffset + 3U] = paletteAlpha[paletteIndex];
-                } else {
-                    const std::byte red = decodedRow[sourceOffset];
-                    pixels[outputOffset] = red;
-                    pixels[outputOffset + 1U] = sourceBytesPerPixel == 1U ? red : decodedRow[sourceOffset + 1U];
-                    pixels[outputOffset + 2U] = sourceBytesPerPixel == 1U ? red : decodedRow[sourceOffset + 2U];
-                    pixels[outputOffset + 3U] = metadata->colorType == 6U ? decodedRow[sourceOffset + 3U] : std::byte{0xFF};
                 }
+                previousRow = std::move(decodedRow);
             }
-            previousRow = std::move(decodedRow);
+            inflatedOffset += passHeightValue * (sourceRowBytes + 1U);
+            return true;
+        };
+        for (std::size_t pass = 0U; pass < passCount; ++pass) {
+            const std::size_t width = metadata->interlaceMethod == 1U ? passWidth(kAdam7StartX[pass], kAdam7StepX[pass]) : metadata->width;
+            const std::size_t height = metadata->interlaceMethod == 1U ? passHeight(kAdam7StartY[pass], kAdam7StepY[pass]) : metadata->height;
+            if (width == 0U || height == 0U) continue;
+            const std::size_t startX = metadata->interlaceMethod == 1U ? kAdam7StartX[pass] : 0U;
+            const std::size_t startY = metadata->interlaceMethod == 1U ? kAdam7StartY[pass] : 0U;
+            const std::size_t stepX = metadata->interlaceMethod == 1U ? kAdam7StepX[pass] : 1U;
+            const std::size_t stepY = metadata->interlaceMethod == 1U ? kAdam7StepY[pass] : 1U;
+            if (!decodePass(width, height, startX, startY, stepX, stepY)) return false;
         }
         PngRgba8ImageUVE image;
         image.width = metadata->width;
