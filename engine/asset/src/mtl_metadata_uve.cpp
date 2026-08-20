@@ -78,6 +78,51 @@ bool ParseMtlMaterialPropertyUVE(const std::string_view sourceLine, MtlMaterialP
     }
 }
 
+bool ParseMtlTextureMapUVE(const std::string_view sourceLine, MtlTextureMapUVE& outMap) {
+    if (sourceLine.empty() || sourceLine.size() > kMaximumMtlTextureReferenceBytesUVE) return false;
+    const auto parseFloat = [](const std::string_view text, float& outValue) noexcept {
+        if (text.empty()) return false;
+        float value = 0.0F;
+        const auto result = std::from_chars(text.data(), text.data() + text.size(), value,
+                                            std::chars_format::general);
+        if (result.ec != std::errc{} || result.ptr != text.data() + text.size() || !std::isfinite(value)) return false;
+        outValue = value;
+        return true;
+    };
+    try {
+        std::string_view rest = sourceLine;
+        if (Token(rest).rfind("map_", 0U) != 0U) return false;
+        MtlTextureMapUVE candidate;
+        bool hasReference = false;
+        while (true) {
+            const std::string_view option = Token(rest);
+            if (option.empty()) break;
+            if (option == "-s" || option == "-o") {
+                auto& values = option == "-s" ? candidate.scale : candidate.offset;
+                for (float& value : values) {
+                    if (!parseFloat(Token(rest), value)) return false;
+                }
+            } else if (option == "-clamp") {
+                const std::string_view mode = Token(rest);
+                if (mode == "on") candidate.clamp = true;
+                else if (mode == "off") candidate.clamp = false;
+                else return false;
+            } else {
+                if (option.front() == '-' || !ValidateMtlTextureReferenceUVE(option)) return false;
+                candidate.textureReference.assign(option);
+                hasReference = true;
+                if (!Token(rest).empty()) return false;
+                break;
+            }
+        }
+        if (!hasReference) return false;
+        outMap = std::move(candidate);
+        return true;
+    } catch (const std::bad_alloc&) {
+        return false;
+    }
+}
+
 std::optional<MtlMetadataUVE> ParseMtlMetadataUVE(const std::string_view source) {
     MtlMetadataUVE out; std::size_t start=0U;
     while (start <= source.size()) {

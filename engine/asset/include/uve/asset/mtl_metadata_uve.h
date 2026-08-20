@@ -23,6 +23,18 @@ struct MtlMaterialPropertyUVE final {
 [[nodiscard]] bool ParseMtlMaterialPropertyUVE(
     std::string_view sourceLine, MtlMaterialPropertyUVE& outProperty);
 
+struct MtlTextureMapUVE final {
+    std::string textureReference;
+    std::array<float, 3U> scale{1.0F, 1.0F, 1.0F};
+    std::array<float, 3U> offset{};
+    bool clamp = false;
+    [[nodiscard]] bool operator==(const MtlTextureMapUVE&) const noexcept = default;
+};
+
+/// Parses one bounded MTL map directive with strict three-component `-s`/`-o` options and
+/// `-clamp on|off`. It performs no texture loading, filesystem I/O, shader compilation, or material conversion.
+[[nodiscard]] bool ParseMtlTextureMapUVE(std::string_view sourceLine, MtlTextureMapUVE& outMap);
+
 struct MtlMetadataUVE final {
     std::uint32_t materialCount = 0U;
     std::uint32_t textureMapCount = 0U;
