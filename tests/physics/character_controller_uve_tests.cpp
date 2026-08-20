@@ -56,6 +56,23 @@ protected:
     }
 };
 
+TEST(CharacterControllerCcdPolicyUVETest, ClassifiesFiniteDisplacementAgainstSweepThreshold) {
+    EXPECT_EQ(EvaluateCcdEligibilityUVE(Math::Vector3UVE{0.1F, 0.0F, 0.0F}, 0.25F),
+              CcdEligibilityStatusUVE::Disabled);
+    EXPECT_EQ(EvaluateCcdEligibilityUVE(Math::Vector3UVE{0.25F, 0.0F, 0.0F}, 0.25F),
+              CcdEligibilityStatusUVE::Enabled);
+    EXPECT_EQ(EvaluateCcdEligibilityUVE(Math::Vector3UVE{0.0F, 0.0F, 0.0F}, 0.25F),
+              CcdEligibilityStatusUVE::Disabled);
+}
+
+TEST(CharacterControllerCcdPolicyUVETest, RejectsNonFiniteDisplacementAndInvalidThreshold) {
+    EXPECT_EQ(EvaluateCcdEligibilityUVE(
+                  Math::Vector3UVE{std::numeric_limits<float>::quiet_NaN(), 0.0F, 0.0F}, 0.25F),
+              CcdEligibilityStatusUVE::Invalid);
+    EXPECT_EQ(EvaluateCcdEligibilityUVE(Math::Vector3UVE{1.0F, 0.0F, 0.0F}, 0.0F),
+              CcdEligibilityStatusUVE::Invalid);
+}
+
 TEST_F(CharacterControllerUVETest, MoveUVE_FreeSpaceAppliesRequestedDisplacementDeterministically) {
     const Scene::EntityUVE controller = MakeControllerEntityUVE({}, {0.5F, 0.5F, 0.5F});
 

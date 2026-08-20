@@ -328,6 +328,20 @@ struct ToICandidateUVE final {
 
 } // namespace
 
+CcdEligibilityStatusUVE EvaluateCcdEligibilityUVE(const Math::Vector3UVE displacement,
+                                                   const float minimumSweepDistance) noexcept {
+    if (!IsFiniteVectorUVE(displacement) || !std::isfinite(minimumSweepDistance) ||
+        minimumSweepDistance <= 0.0F) {
+        return CcdEligibilityStatusUVE::Invalid;
+    }
+    const float displacementLength = FiniteLengthUVE(displacement);
+    if (!std::isfinite(displacementLength)) {
+        return CcdEligibilityStatusUVE::Invalid;
+    }
+    return displacementLength >= minimumSweepDistance ? CcdEligibilityStatusUVE::Enabled
+                                                       : CcdEligibilityStatusUVE::Disabled;
+}
+
 CharacterControllerMoveResultUVE CharacterControllerUVE::MoveUVE(
     Scene::IEntityManagerUVE& entityManager, Scene::ISceneGraphUVE& sceneGraph,
     ICollisionSystemUVE& collisionSystem, const CharacterControllerInputUVE& input) {

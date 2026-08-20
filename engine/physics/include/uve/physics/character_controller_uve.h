@@ -14,6 +14,12 @@ namespace UVE::Physics {
 /// Caller-owned kinematic movement request. The entity must have a valid transform, collider,
 /// and either no rigid body or a valid kinematic rigid body; CharacterControllerUVE never adds,
 /// removes, or serializes components.
+enum class CcdEligibilityStatusUVE : std::uint8_t { Invalid = 0, Disabled, Enabled };
+
+/// Classifies whether a finite displacement warrants a caller-owned continuous sweep.
+[[nodiscard]] CcdEligibilityStatusUVE EvaluateCcdEligibilityUVE(
+    Math::Vector3UVE displacement, float minimumSweepDistance) noexcept;
+
 struct CharacterControllerInputUVE final {
     Scene::EntityUVE entity;
     Math::Vector3UVE desiredDisplacement{};
