@@ -29,6 +29,32 @@ TEST(PcmGainEffectUVETest, InvalidChainStageOrCountLeavesOutputUnchanged) {
     EXPECT_EQ(output, std::vector<float>{0.25F});
 }
 
+TEST(PcmGainEffectUVETest, ApplyScheduledPcmGainEffectsUVE_AppliesOrderedWindows) {
+    const std::vector<float> input{-0.5F, 0.25F, 0.75F, -0.25F};
+    std::vector<float> output;
+    ASSERT_TRUE(ApplyScheduledPcmGainEffectsUVE(
+        input, {{1U, 2U, 2.0F}, {2U, 1U, 0.5F}}, output));
+    EXPECT_EQ(output, (std::vector<float>{-0.5F, 0.5F, 0.5F, -0.25F}));
+    ASSERT_TRUE(ApplyScheduledPcmGainEffectsUVE(
+        input, {{0U, 3U, 3.0F}}, output));
+    EXPECT_EQ(output, (std::vector<float>{-1.0F, 0.75F, 1.0F, -0.25F}));
+}
+
+TEST(PcmGainEffectUVETest, ApplyScheduledPcmGainEffectsUVE_RejectsInvalidWindowsAtomically) {
+    const std::vector<float> input{0.5F, -0.25F};
+    const std::vector<float> original{0.75F};
+    std::vector<float> output = original;
+    EXPECT_FALSE(ApplyScheduledPcmGainEffectsUVE(input, {{0U, 0U, 1.0F}}, output));
+    EXPECT_EQ(output, original);
+    EXPECT_FALSE(ApplyScheduledPcmGainEffectsUVE(input, {{1U, 2U, 1.0F}}, output));
+    EXPECT_EQ(output, original);
+    EXPECT_FALSE(ApplyScheduledPcmGainEffectsUVE(input, {{0U, 1U, -1.0F}}, output));
+    EXPECT_EQ(output, original);
+    EXPECT_FALSE(ApplyScheduledPcmGainEffectsUVE(
+        input, std::vector<PcmGainEffectWindowUVE>(kMaximumPcmGainChainEffectsUVE + 1U, {0U, 1U, 1.0F}), output));
+    EXPECT_EQ(output, original);
+}
+
 TEST(PcmGainEffectUVETest, AppliesGainAndClampsNormalizedSamples) {
     const std::vector<float> input{-0.75F, 0.25F, 0.9F};
     std::vector<float> output;

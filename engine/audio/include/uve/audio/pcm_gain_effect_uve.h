@@ -5,6 +5,19 @@
 namespace UVE::Audio {
 inline constexpr std::size_t kMaximumPcmGainSamplesUVE = 1U << 20U;
 inline constexpr std::size_t kMaximumPcmGainChainEffectsUVE = 8U;
+
+struct PcmGainEffectWindowUVE final {
+    std::size_t startSample = 0U;
+    std::size_t sampleCount = 0U;
+    float gain = 1.0F;
+    [[nodiscard]] bool operator==(const PcmGainEffectWindowUVE&) const noexcept = default;
+};
+
+/// Applies ordered bounded gain windows to copied samples. Overlapping windows are applied in
+/// caller order; the helper owns no mixer, device, stream, voice, or scheduler lifetime.
+[[nodiscard]] bool ApplyScheduledPcmGainEffectsUVE(
+    const std::vector<float>& inputSamples, const std::vector<PcmGainEffectWindowUVE>& windows,
+    std::vector<float>& outputSamples) noexcept;
 /// Applies an ordered bounded chain of finite nonnegative PCM gain stages to copied samples.
 /// The chain owns no mixer, device, stream, voice, or sample-buffer lifetime.
 [[nodiscard]] bool ApplyPcmGainEffectChainUVE(const std::vector<float>& inputSamples,
