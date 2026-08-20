@@ -55,6 +55,28 @@ bool ApplyPcmGainEffectChainUVE(const std::vector<float>& inputSamples,
     return true;
 }
 
+bool PlanPcm16StreamWindowUVE(const std::size_t totalSamples, const std::size_t cursorSample,
+                               const std::size_t requestedSamples, const bool loop,
+                               Pcm16StreamWindowPlanUVE& outPlan, const std::size_t maximumSamples) noexcept {
+    if (totalSamples == 0U || maximumSamples == 0U || requestedSamples == 0U ||
+        requestedSamples > maximumSamples || cursorSample > totalSamples) {
+        return false;
+    }
+    if (cursorSample == totalSamples && !loop) {
+        outPlan = Pcm16StreamWindowPlanUVE{totalSamples, 0U, totalSamples, true, false};
+        return true;
+    }
+    const bool wrappedBeforeWindow = cursorSample == totalSamples;
+    const std::size_t startSample = wrappedBeforeWindow ? 0U : cursorSample;
+    const std::size_t availableSamples = totalSamples - startSample;
+    const std::size_t sampleCount = std::min(requestedSamples, availableSamples);
+    const bool reachedEnd = sampleCount == availableSamples;
+    const bool wrapped = wrappedBeforeWindow || (loop && reachedEnd);
+    const std::size_t nextCursorSample = reachedEnd ? (loop ? 0U : totalSamples) : startSample + sampleCount;
+    outPlan = Pcm16StreamWindowPlanUVE{startSample, sampleCount, nextCursorSample, reachedEnd, wrapped};
+    return true;
+}
+
 bool ValidateWavPcm16SampleWindowUVE(const std::size_t totalSamples,
                                      const std::size_t startSample,
                                      const std::size_t requestedSamples,
