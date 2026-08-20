@@ -31,6 +31,7 @@ add_library(uve_asset STATIC
     src/png_importer_uve.cpp
     src/obj_metadata_uve.cpp
     src/obj_mesh_converter_uve.cpp
+    src/obj_importer_uve.cpp
     src/gltf_metadata_uve.cpp
     src/jpeg_metadata_uve.cpp
     src/mtl_metadata_uve.cpp
