@@ -166,7 +166,10 @@ namespace {
     for (const PrefabPropertyOverrideUVE& override : component.overrides) {
         overrides.push_back(ToJsonUVE(override));
     }
-    return {{"sourcePrefabGuid", component.sourcePrefabGuid.value}, {"overrides", std::move(overrides)}};
+    return {{"sourcePrefabGuid", component.sourcePrefabGuid.value},
+            {"sourceRevision", component.sourceRevision},
+            {"instanceRevision", component.instanceRevision},
+            {"overrides", std::move(overrides)}};
 }
 
 [[nodiscard]] PrefabInstanceComponentUVE PrefabInstanceFromJsonUVE(const nlohmann::json& json) {
@@ -187,7 +190,8 @@ namespace {
     }
 
     const PrefabInstanceComponentUVE instance{
-        Asset::AssetGuidUVE{json.at("sourcePrefabGuid").get<std::uint64_t>()}, std::move(overrides)};
+        Asset::AssetGuidUVE{json.at("sourcePrefabGuid").get<std::uint64_t>()}, std::move(overrides),
+        json.value("sourceRevision", 1ULL), json.value("instanceRevision", 1ULL)};
     if (!IsPrefabInstanceComponentValidUVE(instance)) {
         throw std::runtime_error("Invalid PrefabInstanceComponentUVE payload");
     }

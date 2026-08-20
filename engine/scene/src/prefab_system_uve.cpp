@@ -28,6 +28,16 @@ Asset::AssetGuidUVE PrefabSystemUVE::SavePrefabUVE(IEntityManagerUVE& entityMana
 EntityUVE PrefabSystemUVE::InstantiateUVE(IEntityManagerUVE& entityManager, ISceneGraphUVE& sceneGraph,
                                            Asset::IAssetDatabaseUVE& assetDatabase,
                                            Asset::AssetGuidUVE prefabGuid, EntityUVE parent) {
+    return InstantiateWithRevisionUVE(entityManager, sceneGraph, assetDatabase, prefabGuid, parent, 1U);
+}
+
+EntityUVE PrefabSystemUVE::InstantiateWithRevisionUVE(
+    IEntityManagerUVE& entityManager, ISceneGraphUVE& sceneGraph, Asset::IAssetDatabaseUVE& assetDatabase,
+    Asset::AssetGuidUVE prefabGuid, EntityUVE parent, const std::uint64_t sourceRevision) {
+    if (sourceRevision == 0U) {
+        UVE_ERROR("PrefabSystemUVE: source revision must be nonzero for prefab GUID {}", prefabGuid.value);
+        return kInvalidEntityUVE;
+    }
     const std::filesystem::path path = assetDatabase.ResolveUVE(prefabGuid);
     if (path.empty()) {
         UVE_ERROR("PrefabSystemUVE: unknown prefab GUID {}", prefabGuid.value);
@@ -50,7 +60,8 @@ EntityUVE PrefabSystemUVE::InstantiateUVE(IEntityManagerUVE& entityManager, ISce
     if (entityManager.HasComponentUVE<PrefabInstanceComponentUVE>(root)) {
         entityManager.RemoveComponentUVE<PrefabInstanceComponentUVE>(root);
     }
-    entityManager.AddComponentUVE<PrefabInstanceComponentUVE>(root, PrefabInstanceComponentUVE{prefabGuid, {}});
+    entityManager.AddComponentUVE<PrefabInstanceComponentUVE>(
+        root, PrefabInstanceComponentUVE{prefabGuid, {}, sourceRevision, sourceRevision});
 
     if (parent != kInvalidEntityUVE) {
         sceneGraph.SetParentUVE(entityManager, root, parent);

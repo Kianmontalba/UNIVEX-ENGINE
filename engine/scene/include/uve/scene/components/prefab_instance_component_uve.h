@@ -36,6 +36,10 @@ struct PrefabPropertyOverrideUVE final {
 struct PrefabInstanceComponentUVE final {
     Asset::AssetGuidUVE sourcePrefabGuid;
     std::vector<PrefabPropertyOverrideUVE> overrides;
+    /// Revision of the source prefab used when this instance was created or last refreshed.
+    std::uint64_t sourceRevision = 1U;
+    /// Revision represented by the instance's persisted authored state; legacy payloads default to 1.
+    std::uint64_t instanceRevision = 1U;
 };
 
 enum class PrefabOverrideOperationCodeUVE : std::uint8_t {
@@ -230,8 +234,8 @@ struct PrefabOverrideConflictReportUVE final {
 /// this value and are still loaded as data rather than recursively re-instantiated.
 [[nodiscard]] inline bool IsPrefabInstanceComponentValidUVE(
     const PrefabInstanceComponentUVE& component) noexcept {
-    if (component.sourcePrefabGuid == Asset::kInvalidAssetGuidUVE ||
-        component.overrides.size() > kMaximumPrefabOverridesUVE) {
+    if (component.sourcePrefabGuid == Asset::kInvalidAssetGuidUVE || component.sourceRevision == 0U ||
+        component.instanceRevision == 0U || component.overrides.size() > kMaximumPrefabOverridesUVE) {
         return false;
     }
 
