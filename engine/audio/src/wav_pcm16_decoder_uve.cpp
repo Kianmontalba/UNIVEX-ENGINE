@@ -5,6 +5,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <limits>
+#include <new>
 #include <cstring>
 #include <utility>
 namespace UVE::Audio {
@@ -63,6 +65,52 @@ bool ValidateWavPcm16SampleWindowUVE(const std::size_t totalSamples,
         return false;
     }
     return true;
+}
+
+bool DecodeWavPcm16SampleWindowUVE(const std::vector<std::byte>& wavBytes,
+                                      const std::size_t startSample, const std::size_t requestedSamples,
+                                      std::vector<float>& outSamples, const std::size_t maximumSamples) {
+    const auto metadata = ParseWavMetadataUVE(wavBytes);
+    if (!metadata || metadata->audioFormat != 1U || metadata->bitsPerSample != 16U ||
+        metadata->blockAlign == 0U || metadata->dataBytes % metadata->blockAlign != 0U) {
+        return false;
+    }
+    const std::size_t totalSamples = metadata->dataBytes / 2U;
+    if (!ValidateWavPcm16SampleWindowUVE(totalSamples, startSample, requestedSamples, maximumSamples)) {
+        return false;
+    }
+    std::size_t dataOffset = 12U;
+    while (dataOffset + 8U <= wavBytes.size()) {
+        const std::uint32_t chunkSize = ReadU32LE(wavBytes, dataOffset + 4U);
+        const std::size_t payloadOffset = dataOffset + 8U;
+        if (payloadOffset > wavBytes.size() || chunkSize > wavBytes.size() - payloadOffset) {
+            return false;
+        }
+        if (HasTag(wavBytes, dataOffset, "data")) {
+            if (chunkSize != metadata->dataBytes) return false;
+            const std::size_t firstByte = payloadOffset + startSample * 2U;
+            const std::size_t byteCount = requestedSamples * 2U;
+            if (firstByte > payloadOffset + chunkSize || byteCount > payloadOffset + chunkSize - firstByte) {
+                return false;
+            }
+            try {
+                std::vector<float> samples;
+                samples.reserve(requestedSamples);
+                for (std::size_t offset = firstByte; offset < firstByte + byteCount; offset += 2U) {
+                    const std::int16_t value = static_cast<std::int16_t>(ReadU16LE(wavBytes, offset));
+                    samples.push_back(std::clamp(static_cast<float>(value) / 32768.0F, -1.0F, 1.0F));
+                }
+                outSamples = std::move(samples);
+                return true;
+            } catch (const std::bad_alloc&) {
+                return false;
+            }
+        }
+        const std::size_t payloadEnd = payloadOffset + chunkSize;
+        if ((chunkSize & 1U) != 0U && payloadEnd == std::numeric_limits<std::size_t>::max()) return false;
+        dataOffset = payloadEnd + (chunkSize & 1U);
+    }
+    return false;
 }
 
 bool DecodeWavPcm16SamplesUVE(const std::vector<std::byte>& wavBytes,
