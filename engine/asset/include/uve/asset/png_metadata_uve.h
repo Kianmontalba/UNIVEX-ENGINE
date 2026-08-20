@@ -49,7 +49,7 @@ struct PngRgba8ImageUVE final {
 /// Decodes bounded non-interlaced grayscale, RGB, indexed, or RGBA PNG forms using zlib and the existing scanline
 /// unfilter primitive, normalizing grayscale/RGB input to opaque RGBA8, indexed input through validated PLTE/tRNS
 /// palette facts, 16-bit grayscale/RGB/RGBA input through big-endian high-byte down-conversion, and Adam7-interlaced
-/// 8-bit RGB/RGBA input through bounded pass reconstruction and opaque-alpha normalization. It rejects unsupported
+/// 8-bit grayscale/RGB/RGBA input through bounded pass reconstruction and opaque-alpha normalization. It rejects unsupported
 /// color/depth/interlace modes and owns no filesystem or GPU state.
 [[nodiscard]] bool DecodePngRgba8ImageUVE(
     const std::vector<std::byte>& bytes, PngRgba8ImageUVE& outImage) noexcept;
