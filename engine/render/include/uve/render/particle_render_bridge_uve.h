@@ -31,6 +31,12 @@ struct ParticleRenderSnapshotUVE final {
     [[nodiscard]] bool operator==(const ParticleRenderSnapshotUVE&) const = default;
 };
 
+/// Validates one copied particle render snapshot against bounded consistency and finite draw facts.
+/// The predicate performs no GPU allocation, asset lookup, renderer registration, culling, or mutation.
+[[nodiscard]] bool ValidateParticleRenderSnapshotUVE(
+    const ParticleRenderSnapshotUVE& snapshot,
+    std::size_t maximumItems = kMaximumParticleRenderItemsUVE) noexcept;
+
 /// Copies enabled CPU particle state into the renderer-owned value path. It performs no GPU work,
 /// asset lookup, renderer registration, culling against a camera, or mutation of ParticleRuntimeUVE.
 class ParticleRenderBridgeUVE final {
