@@ -181,7 +181,8 @@ bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUV
                                                metadata->colorType == 6U))) ||
             (metadata->interlaceMethod != 0U &&
              !(metadata->interlaceMethod == 1U && metadata->bitDepth == 8U &&
-               (metadata->colorType == 0U || metadata->colorType == 2U || metadata->colorType == 6U))) ||
+               (metadata->colorType == 0U || metadata->colorType == 2U || metadata->colorType == 3U ||
+                metadata->colorType == 6U))) ||
             !ValidatePngRgba8PixelBudgetUVE(*metadata)) {
             return false;
         }
@@ -328,7 +329,15 @@ bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUV
                     const std::size_t outputX = startX + x * stepX;
                     const std::size_t outputY = startY + row * stepY;
                     const std::size_t outputOffset = outputY * outputRowBytes + outputX * 4U;
-                    if (metadata->interlaceMethod == 1U && metadata->colorType == 0U) {
+                    if (metadata->interlaceMethod == 1U && metadata->colorType == 3U) {
+                        const std::size_t paletteIndex = std::to_integer<std::uint8_t>(decodedRow[sourceOffset]);
+                        if (paletteIndex >= paletteAlpha.size()) return false;
+                        const std::size_t paletteOffset = paletteIndex * 3U;
+                        pixels[outputOffset] = paletteRgb[paletteOffset];
+                        pixels[outputOffset + 1U] = paletteRgb[paletteOffset + 1U];
+                        pixels[outputOffset + 2U] = paletteRgb[paletteOffset + 2U];
+                        pixels[outputOffset + 3U] = paletteAlpha[paletteIndex];
+                    } else if (metadata->interlaceMethod == 1U && metadata->colorType == 0U) {
                         const std::byte gray = decodedRow[sourceOffset];
                         pixels[outputOffset] = gray;
                         pixels[outputOffset + 1U] = gray;
