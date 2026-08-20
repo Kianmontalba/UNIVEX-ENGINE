@@ -12,6 +12,38 @@ namespace {
 
 constexpr float kEpsilon = 1e-5F;
 
+TEST(GamepadInputSystemUVETest, EvaluateGamepadConnectionTransitionUVE_ClassifiesEdges) {
+    GamepadStateSnapshotUVE previous{};
+    GamepadStateSnapshotUVE current{};
+    current.connected = true;
+    GamepadConnectionTransitionUVE transition = GamepadConnectionTransitionUVE::Disconnected;
+    ASSERT_TRUE(EvaluateGamepadConnectionTransitionUVE(previous, current, transition));
+    EXPECT_EQ(transition, GamepadConnectionTransitionUVE::Connected);
+
+    previous = current;
+    ASSERT_TRUE(EvaluateGamepadConnectionTransitionUVE(previous, current, transition));
+    EXPECT_EQ(transition, GamepadConnectionTransitionUVE::None);
+
+    current.connected = false;
+    ASSERT_TRUE(EvaluateGamepadConnectionTransitionUVE(previous, current, transition));
+    EXPECT_EQ(transition, GamepadConnectionTransitionUVE::Disconnected);
+}
+
+TEST(GamepadInputSystemUVETest, EvaluateGamepadConnectionTransitionUVE_RejectsInvalidAxesAtomically) {
+    GamepadStateSnapshotUVE previous{};
+    GamepadStateSnapshotUVE current{};
+    current.connected = true;
+    current.axes[static_cast<std::size_t>(GamepadAxisUVE::LeftX)] =
+        std::numeric_limits<float>::quiet_NaN();
+    GamepadConnectionTransitionUVE transition = GamepadConnectionTransitionUVE::Disconnected;
+    EXPECT_FALSE(EvaluateGamepadConnectionTransitionUVE(previous, current, transition));
+    EXPECT_EQ(transition, GamepadConnectionTransitionUVE::Disconnected);
+
+    current.axes[static_cast<std::size_t>(GamepadAxisUVE::LeftX)] = 2.0F;
+    EXPECT_FALSE(EvaluateGamepadConnectionTransitionUVE(previous, current, transition));
+    EXPECT_EQ(transition, GamepadConnectionTransitionUVE::Disconnected);
+}
+
 TEST(GamepadInputSystemUVETest, UpdateUVE_NormalizesFiniteAxesAndCopiesSnapshot) {
     GamepadInputSystemUVE inputSystem(0.2F);
 

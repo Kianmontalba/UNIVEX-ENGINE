@@ -4,6 +4,7 @@
 
 #include <array>
 #include <cstddef>
+#include <cmath>
 #include <cstdint>
 
 namespace UVE::Input {
@@ -52,6 +53,37 @@ struct GamepadStateSnapshotUVE final {
 
     [[nodiscard]] bool operator==(const GamepadStateSnapshotUVE&) const noexcept = default;
 };
+
+enum class GamepadConnectionTransitionUVE : std::uint8_t {
+    None = 0,
+    Connected,
+    Disconnected,
+};
+
+/// Classifies a copied gamepad connection edge without polling hardware or owning device state.
+[[nodiscard]] inline bool EvaluateGamepadConnectionTransitionUVE(
+    const GamepadStateSnapshotUVE& previous, const GamepadStateSnapshotUVE& current,
+    GamepadConnectionTransitionUVE& outTransition) noexcept {
+    const auto isValid = [](const GamepadStateSnapshotUVE& snapshot) noexcept {
+        for (const float axis : snapshot.axes) {
+            if (!std::isfinite(axis) || axis < -1.0F || axis > 1.0F) {
+                return false;
+            }
+        }
+        return true;
+    };
+    if (!isValid(previous) || !isValid(current)) {
+        return false;
+    }
+    const GamepadConnectionTransitionUVE transition =
+        !previous.connected && current.connected
+            ? GamepadConnectionTransitionUVE::Connected
+            : (previous.connected && !current.connected
+                   ? GamepadConnectionTransitionUVE::Disconnected
+                   : GamepadConnectionTransitionUVE::None);
+    outTransition = transition;
+    return true;
+}
 
 /// Injectable, bounded gamepad state service. Set*StateUVE() methods update a live copy and are
 /// safe from any thread; UpdateUVE() commits one deterministic current/previous snapshot on the
