@@ -22,6 +22,19 @@ namespace {
     return offset + 4U <= bytes.size() && std::memcmp(bytes.data() + offset, tag, 4U) == 0;
 }
 } // namespace
+
+bool ValidateWavPcm16SampleWindowUVE(const std::size_t totalSamples,
+                                     const std::size_t startSample,
+                                     const std::size_t requestedSamples,
+                                     const std::size_t maximumSamples) noexcept {
+    if (totalSamples == 0U || requestedSamples == 0U || maximumSamples == 0U ||
+        requestedSamples > maximumSamples || startSample > totalSamples ||
+        requestedSamples > totalSamples - startSample) {
+        return false;
+    }
+    return true;
+}
+
 bool DecodeWavPcm16SamplesUVE(const std::vector<std::byte>& wavBytes,
                               std::vector<float>& outSamples) noexcept {
     const auto metadata = ParseWavMetadataUVE(wavBytes);
