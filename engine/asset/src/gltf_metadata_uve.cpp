@@ -45,6 +45,29 @@ constexpr std::uint32_t kMaximumCountUVE = 1'000'000U;
     } catch (const nlohmann::json::exception&) { return std::nullopt; }
 }
 } // namespace
+
+bool ValidateGltfAccessorSpanUVE(const std::uint64_t bufferByteLength,
+                                 const std::uint64_t byteOffset,
+                                 const std::uint64_t elementCount,
+                                 const std::uint64_t elementStride,
+                                 const std::uint64_t elementSize,
+                                 const std::uint64_t maximumElements) noexcept {
+    if (byteOffset > bufferByteLength || elementSize == 0U || elementStride < elementSize ||
+        elementCount > maximumElements) {
+        return false;
+    }
+    if (elementCount == 0U) {
+        return true;
+    }
+    const std::uint64_t remainingBytes = bufferByteLength - byteOffset;
+    const std::uint64_t trailingElements = elementCount - 1U;
+    if (trailingElements > remainingBytes / elementStride) {
+        return false;
+    }
+    const std::uint64_t lastElementOffset = trailingElements * elementStride;
+    return elementSize <= remainingBytes - lastElementOffset;
+}
+
 std::optional<GltfMetadataUVE> ParseGltfMetadataUVE(const std::string_view jsonSource) {
     return ParseJsonUVE(jsonSource, GltfContainerKindUVE::Json, false);
 }
