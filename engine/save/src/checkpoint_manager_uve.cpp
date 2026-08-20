@@ -14,13 +14,13 @@ void CheckpointManagerUVE::UpdateUVE(double deltaTimeSeconds, Scene::IEntityMana
     m_elapsedSinceLastSaveSeconds += deltaTimeSeconds;
 
     if (m_elapsedSinceLastSaveSeconds >= m_autoSaveIntervalSeconds) {
-        static_cast<void>(SaveCheckpointUVE(entityManager, rootEntities));
+        static_cast<void>(SaveCheckpointUVE(kAutoSaveSlotIndexUVE, entityManager, rootEntities));
     }
 }
 
 bool CheckpointManagerUVE::CheckpointUVE(Scene::IEntityManagerUVE& entityManager,
                                           const std::vector<Scene::EntityUVE>& rootEntities) {
-    return SaveCheckpointUVE(entityManager, rootEntities);
+    return SaveCheckpointUVE(kManualCheckpointSlotIndexUVE, entityManager, rootEntities);
 }
 
 void CheckpointManagerUVE::SetAutoSaveIntervalSecondsUVE(double intervalSeconds) noexcept {
@@ -39,12 +39,12 @@ double CheckpointManagerUVE::GetTotalPlaytimeSecondsUVE() const noexcept {
     return m_totalPlaytimeSeconds;
 }
 
-bool CheckpointManagerUVE::SaveCheckpointUVE(Scene::IEntityManagerUVE& entityManager,
+bool CheckpointManagerUVE::SaveCheckpointUVE(const int slotIndex, Scene::IEntityManagerUVE& entityManager,
                                               const std::vector<Scene::EntityUVE>& rootEntities) {
     GameStateMetadataUVE metadata;
     metadata.playtimeSeconds = m_totalPlaytimeSeconds;
 
-    const bool saved = m_saveGameSystem->SaveUVE(kAutoSaveSlotIndexUVE, entityManager, rootEntities, metadata);
+    const bool saved = m_saveGameSystem->SaveUVE(slotIndex, entityManager, rootEntities, metadata);
     m_elapsedSinceLastSaveSeconds = 0.0;
     return saved;
 }

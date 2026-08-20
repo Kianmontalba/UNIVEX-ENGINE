@@ -19,14 +19,18 @@ namespace UVE::Save {
 namespace {
 
 [[nodiscard]] bool IsValidSlotIndexUVE(int slotIndex) noexcept {
-    return slotIndex == kAutoSaveSlotIndexUVE || (slotIndex >= 0 && slotIndex < kSaveSlotCountUVE);
+    return slotIndex == kAutoSaveSlotIndexUVE || slotIndex == kManualCheckpointSlotIndexUVE ||
+           (slotIndex >= 0 && slotIndex < kSaveSlotCountUVE);
 }
 
-/// The filename stem (no extension) for `slotIndex` — `"autosave"` for the reserved slot,
-/// `"slot_07"`-style (zero-padded to 2 digits) for a numbered slot.
+/// The filename stem (no extension) for `slotIndex` — `"autosave"` and
+/// `"manual_checkpoint"` for reserved slots, or `"slot_07"`-style for numbered slots.
 [[nodiscard]] std::string SlotFileStemUVE(int slotIndex) {
     if (slotIndex == kAutoSaveSlotIndexUVE) {
         return "autosave";
+    }
+    if (slotIndex == kManualCheckpointSlotIndexUVE) {
+        return "manual_checkpoint";
     }
     char buffer[16];
     std::snprintf(buffer, sizeof(buffer), "slot_%02d", slotIndex);

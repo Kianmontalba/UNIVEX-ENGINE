@@ -17,12 +17,14 @@ namespace UVE::Save {
 /// slotIndex values for every ISaveGameSystemUVE method below are [0, kSaveSlotCountUVE).
 inline constexpr int kSaveSlotCountUVE = 99;
 
-/// The reserved slot CheckpointManagerUVE writes both auto-saves and manual checkpoints to —
-/// deliberately outside [0, kSaveSlotCountUVE) so it can never collide with, or be enumerated
-/// alongside, a player's own numbered saves (ListUsedSlotsUVE() never returns it). Every
-/// ISaveGameSystemUVE method that takes a slotIndex accepts this value too, so
-/// CheckpointManagerUVE needs no separate API surface of its own on ISaveGameSystemUVE.
+/// The reserved slot used by automatic checkpoints. It is deliberately outside
+/// [0, kSaveSlotCountUVE) so it can never collide with, or be enumerated alongside, a player's
+/// numbered saves. Every slot-taking method accepts this value.
 inline constexpr int kAutoSaveSlotIndexUVE = -1;
+
+/// The reserved slot used by explicit/manual checkpoints. It is deliberately distinct from the
+/// automatic slot and from numbered saves; ListUsedSlotsUVE() never returns either reserved slot.
+inline constexpr int kManualCheckpointSlotIndexUVE = -2;
 
 /// ISaveGameSystemUVE is the core save/load manager (Part 17's SaveGameSystemUVE): slot-based
 /// persistence of "world state" — every entity reachable from an explicit root-entity list,
@@ -42,7 +44,7 @@ public:
     /// Serializes every entity reachable from `rootEntities` (via SceneSerializerUVE, exactly
     /// like ISceneSerializerUVE::SaveUVE()'s own reachability rule) plus `metadata` to the file
     /// backing `slotIndex`, overwriting any existing save in that slot. `slotIndex` must be
-    /// kAutoSaveSlotIndexUVE or in [0, kSaveSlotCountUVE) — any other value logs a UVE_ERROR and
+    /// kAutoSaveSlotIndexUVE, kManualCheckpointSlotIndexUVE, or in [0, kSaveSlotCountUVE) — any other value logs a UVE_ERROR and
     /// returns false without touching disk. `metadata.savedAtUnixSecondsUVE`/`slotIndex`/
     /// `payloadSchemaVersion` are overwritten internally; every other field is taken verbatim
     /// from the caller. Returns false (logging the reason) on an out-of-range slot, an
