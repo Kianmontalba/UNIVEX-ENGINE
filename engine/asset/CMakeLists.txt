@@ -9,6 +9,7 @@
 # already exist — MeshAssetUVE/MaterialAssetUVE's public headers use Vector3UVE/AabbUVE.
 
 find_package(ZLIB REQUIRED)
+find_package(JPEG REQUIRED)
 
 add_library(uve_asset STATIC
     src/asset_guid_uve.cpp
@@ -46,7 +47,7 @@ add_library(uve_asset STATIC
 target_include_directories(uve_asset PUBLIC include)
 target_link_libraries(uve_asset
     PUBLIC uve_platform uve_debug uve_threading uve_events uve_math
-    PRIVATE nlohmann_json::nlohmann_json ZLIB::ZLIB
+    PRIVATE nlohmann_json::nlohmann_json ZLIB::ZLIB JPEG::JPEG
 )
 target_compile_features(uve_asset PUBLIC cxx_std_20)
 uve_set_warnings(uve_asset)
