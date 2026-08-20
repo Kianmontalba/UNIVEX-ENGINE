@@ -1,5 +1,6 @@
 // Copyright (c) 2026 UniVex Studios. All Rights Reserved.
 #include "uve/network/reliable_packet_window_uve.h"
+#include <limits>
 #include <gtest/gtest.h>
 namespace UVE::Network::Tests {
 namespace {
@@ -50,6 +51,30 @@ TEST(ReliablePacketWindowUVETest, RetransmitPolicyRejectsInvalidTimingAndRetryIn
     EXPECT_EQ(EvaluateReliableRetransmitPolicyUVE({0.1F, 0.0F, 0U, 3U}), ReliableRetransmitStatusUVE::Invalid);
     EXPECT_EQ(EvaluateReliableRetransmitPolicyUVE({0.1F, 1.0F, 4U, 3U}), ReliableRetransmitStatusUVE::Invalid);
 }
+TEST(ReliablePacketWindowUVETest, RetryTimeoutBackoffDoublesAndClamps) {
+    float timeout = 99.0F;
+    ASSERT_TRUE(ComputeReliableRetryTimeoutUVE(0.25F, 0U, 4.0F, timeout));
+    EXPECT_FLOAT_EQ(timeout, 0.25F);
+    ASSERT_TRUE(ComputeReliableRetryTimeoutUVE(0.25F, 3U, 4.0F, timeout));
+    EXPECT_FLOAT_EQ(timeout, 2.0F);
+    ASSERT_TRUE(ComputeReliableRetryTimeoutUVE(0.25F, 5U, 4.0F, timeout));
+    EXPECT_FLOAT_EQ(timeout, 4.0F);
+}
+
+TEST(ReliablePacketWindowUVETest, RetryTimeoutBackoffRejectsInvalidInputsAtomically) {
+    float timeout = 7.0F;
+    EXPECT_FALSE(ComputeReliableRetryTimeoutUVE(0.0F, 0U, 4.0F, timeout));
+    EXPECT_FLOAT_EQ(timeout, 7.0F);
+    EXPECT_FALSE(ComputeReliableRetryTimeoutUVE(-0.1F, 0U, 4.0F, timeout));
+    EXPECT_FLOAT_EQ(timeout, 7.0F);
+    EXPECT_FALSE(ComputeReliableRetryTimeoutUVE(1.0F, 0U, 0.5F, timeout));
+    EXPECT_FLOAT_EQ(timeout, 7.0F);
+    EXPECT_FALSE(ComputeReliableRetryTimeoutUVE(1.0F, 32U, 4.0F, timeout));
+    EXPECT_FLOAT_EQ(timeout, 7.0F);
+    EXPECT_FALSE(ComputeReliableRetryTimeoutUVE(std::numeric_limits<float>::quiet_NaN(), 0U, 4.0F, timeout));
+    EXPECT_FLOAT_EQ(timeout, 7.0F);
+}
+
 TEST(ReliablePacketWindowUVETest, FirstSequenceIsAcceptedAndAdvertised) {
     ReliableAcknowledgementStateUVE state;
     EXPECT_EQ(AcceptReliableSequenceUVE(7U, state), ReliablePacketReceiveStatusUVE::Accepted);
