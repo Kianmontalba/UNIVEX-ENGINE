@@ -223,6 +223,10 @@ bool GlRenderDeviceUVE::UpdateBufferUVE(BufferHandleUVE buffer, std::span<const 
 
 TextureHandleUVE GlRenderDeviceUVE::CreateTextureUVE(const TextureDescUVE& desc,
                                                        std::span<const std::byte> initialData) {
+    if (!ValidateTextureUploadUVE(desc, initialData)) {
+        UVE_ERROR("GlRenderDeviceUVE: CreateTextureUVE received an invalid descriptor or initial upload");
+        return kInvalidTextureHandleUVE;
+    }
     if (desc.mipLevels > 1) {
         UVE_WARNING("GlRenderDeviceUVE: CreateTextureUVE requested {} mip levels - only level 0 is populated",
                      desc.mipLevels);

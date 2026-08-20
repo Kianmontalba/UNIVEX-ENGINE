@@ -4,7 +4,10 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
+#include <limits>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -36,6 +39,41 @@ struct TextureDescUVE {
     TextureFormatUVE format = TextureFormatUVE::RGBA8Unorm;
     std::uint32_t mipLevels = 1;
 };
+
+/// Validates one texture descriptor and optional level-0 upload before a backend allocates a GPU
+/// resource. Positive dimensions and a nonzero mip level count are required; empty initial data is
+/// allowed for render targets, while a non-empty level-0 upload must exactly match
+/// width*height*bytes-per-pixel. The
+/// helper performs no allocation, backend calls, or ownership transfer.
+[[nodiscard]] inline bool ValidateTextureUploadUVE(const TextureDescUVE& desc,
+                                                    const std::span<const std::byte> initialData) noexcept {
+    if (desc.width == 0U || desc.height == 0U || desc.mipLevels == 0U) {
+        return false;
+    }
+    std::uint64_t bytesPerPixel = 0U;
+    switch (desc.format) {
+        case TextureFormatUVE::RGBA8Unorm:
+            bytesPerPixel = 4U;
+            break;
+        case TextureFormatUVE::RGBA16Float:
+            bytesPerPixel = 8U;
+            break;
+        case TextureFormatUVE::Depth32Float:
+            bytesPerPixel = 4U;
+            break;
+        default:
+            return false;
+    }
+    const std::uint64_t pixelCount = static_cast<std::uint64_t>(desc.width) * desc.height;
+    if (pixelCount > std::numeric_limits<std::uint64_t>::max() / bytesPerPixel) {
+        return false;
+    }
+    const std::uint64_t expectedBytes = pixelCount * bytesPerPixel;
+    if (expectedBytes > std::numeric_limits<std::size_t>::max()) {
+        return false;
+    }
+    return initialData.empty() || initialData.size() == static_cast<std::size_t>(expectedBytes);
+}
 
 /// Which programmable stage a ShaderDescUVE belongs to. `Compute` is reserved for the future
 /// ComputeSystemUVE (Part 7.2) — unused by anything built so far. `Geometry` (Increment 21) is

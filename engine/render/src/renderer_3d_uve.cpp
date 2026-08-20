@@ -495,6 +495,11 @@ struct Renderer3DUVE::ImplUVE {
                                    ToRenderTextureFormatUVE(textureAsset->format), 1};
         const TextureHandleUVE handle =
             renderDevice.CreateTextureUVE(desc, std::as_bytes(std::span(textureAsset->pixels)));
+        if (handle == kInvalidTextureHandleUVE) {
+            ++lastFrameDiagnostics.textureFallbacks;
+            UVE_ERROR("Renderer3DUVE: texture asset upload failed - falling back to the default texture");
+            return fallbackHandle;
+        }
         textureCache.emplace(textureGuid, handle);
         return handle;
     }
