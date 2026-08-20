@@ -6,6 +6,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <span>
 
 #include "uve/math/vector3_uve.h"
 #include "uve/scene/entity_uve.h"
@@ -64,6 +65,92 @@ struct PhysicsConstraintSolveResultUVE final {
     std::size_t skippedConstraintCount = 0U;
     bool iterationCapReached = false;
 };
+
+struct ConstraintIslandEdgeUVE final {
+    Scene::EntityUVE firstEntity;
+    Scene::EntityUVE secondEntity;
+};
+
+struct ConstraintIslandPlanUVE final {
+    static constexpr std::size_t kMaximumEntitiesUVE = 512U;
+    std::array<Scene::EntityUVE, kMaximumEntitiesUVE> entities{};
+    std::array<std::size_t, kMaximumEntitiesUVE> islandIndices{};
+    std::size_t entityCount = 0U;
+    std::size_t islandCount = 0U;
+};
+
+/// Builds deterministic connected components from copied constraint edges. The planner owns no
+/// constraints, entities, solver iterations, persistence, or backend state.
+[[nodiscard]] inline bool BuildConstraintIslandPlanUVE(
+    const std::span<const ConstraintIslandEdgeUVE> edges, ConstraintIslandPlanUVE& outPlan) noexcept {
+    if (edges.size() > ConstraintIslandPlanUVE::kMaximumEntitiesUVE) {
+        return false;
+    }
+    ConstraintIslandPlanUVE plan;
+    std::array<std::size_t, ConstraintIslandPlanUVE::kMaximumEntitiesUVE> parent{};
+    for (std::size_t index = 0U; index < parent.size(); ++index) {
+        parent[index] = index;
+    }
+    const auto addEntity = [&plan, &parent](const Scene::EntityUVE entity) noexcept {
+        const std::size_t existing = [&plan, entity]() noexcept {
+            for (std::size_t index = 0U; index < plan.entityCount; ++index) {
+                if (plan.entities[index] == entity) {
+                    return index;
+                }
+            }
+            return ConstraintIslandPlanUVE::kMaximumEntitiesUVE;
+        }();
+        if (existing != ConstraintIslandPlanUVE::kMaximumEntitiesUVE) {
+            return existing;
+        }
+        if (plan.entityCount >= ConstraintIslandPlanUVE::kMaximumEntitiesUVE) {
+            return ConstraintIslandPlanUVE::kMaximumEntitiesUVE;
+        }
+        const std::size_t index = plan.entityCount++;
+        plan.entities[index] = entity;
+        parent[index] = index;
+        return index;
+    };
+    const auto findRoot = [&parent](std::size_t index) noexcept {
+        while (parent[index] != index) {
+            parent[index] = parent[parent[index]];
+            index = parent[index];
+        }
+        return index;
+    };
+    for (const ConstraintIslandEdgeUVE& edge : edges) {
+        if (edge.firstEntity == Scene::kInvalidEntityUVE || edge.secondEntity == Scene::kInvalidEntityUVE) {
+            return false;
+        }
+        const std::size_t first = addEntity(edge.firstEntity);
+        const std::size_t second = addEntity(edge.secondEntity);
+        if (first == ConstraintIslandPlanUVE::kMaximumEntitiesUVE ||
+            second == ConstraintIslandPlanUVE::kMaximumEntitiesUVE) {
+            return false;
+        }
+        const std::size_t firstRoot = findRoot(first);
+        const std::size_t secondRoot = findRoot(second);
+        if (firstRoot != secondRoot) {
+            parent[secondRoot] = firstRoot;
+        }
+    }
+    for (std::size_t index = 0U; index < plan.entityCount; ++index) {
+        const std::size_t root = findRoot(index);
+        std::size_t islandIndex = ConstraintIslandPlanUVE::kMaximumEntitiesUVE;
+        for (std::size_t prior = 0U; prior < index; ++prior) {
+            if (findRoot(prior) == root) {
+                islandIndex = plan.islandIndices[prior];
+                break;
+            }
+        }
+        if (islandIndex == ConstraintIslandPlanUVE::kMaximumEntitiesUVE) {
+            islandIndex = plan.islandCount++;
+        }
+        plan.islandIndices[index] = islandIndex;
+    }
+    outPlan = plan;
+    return true;
+}
 
 /// Bounded main-thread positional constraint seam above the existing PhysicsSystemUVE.
 /// Distance constraints preserve a configured anchor separation; hinge constraints preserve
