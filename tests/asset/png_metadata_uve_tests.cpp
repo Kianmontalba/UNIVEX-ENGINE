@@ -178,6 +178,11 @@ TEST(PngMetadataUVETest, ValidatePngRgba8PixelBudgetUVE_AcceptsDefaultHdBudget) 
     return MakePngOneByOneUVE(0U, {std::byte{0}, std::byte{0x34}, std::byte{0x56}}, {}, {}, 16U);
 }
 
+[[nodiscard]] std::vector<std::byte> MakePngRgb16OneByOneUVE() {
+    return MakePngOneByOneUVE(2U, {std::byte{0}, std::byte{0x12}, std::byte{0x34}, std::byte{0xAB}, std::byte{0xCD},
+                                   std::byte{0xEF}, std::byte{0x01}}, {}, {}, 16U);
+}
+
 TEST(PngMetadataUVETest, ValidatePngRgba8PixelBudgetUVE_RejectsZeroAndAcceptsGrayRgbFacts) {
     PngMetadataUVE zeroWidth{.width = 0U, .height = 1080U, .bitDepth = 8U, .colorType = 6U};
     EXPECT_FALSE(ValidatePngRgba8PixelBudgetUVE(zeroWidth));
@@ -190,8 +195,10 @@ TEST(PngMetadataUVETest, ValidatePngRgba8PixelBudgetUVE_RejectsZeroAndAcceptsGra
     EXPECT_TRUE(ValidatePngRgba8PixelBudgetUVE(rgba16));
     PngMetadataUVE gray16{.width = 1U, .height = 1U, .bitDepth = 16U, .colorType = 0U};
     EXPECT_TRUE(ValidatePngRgba8PixelBudgetUVE(gray16));
-    PngMetadataUVE rgb16{.width = 1U, .height = 1U, .bitDepth = 16U, .colorType = 2U};
-    EXPECT_FALSE(ValidatePngRgba8PixelBudgetUVE(rgb16));
+    PngMetadataUVE rgb16Accepted{.width = 1U, .height = 1U, .bitDepth = 16U, .colorType = 2U};
+    EXPECT_TRUE(ValidatePngRgba8PixelBudgetUVE(rgb16Accepted));
+    PngMetadataUVE indexed16{.width = 1U, .height = 1U, .bitDepth = 16U, .colorType = 3U};
+    EXPECT_FALSE(ValidatePngRgba8PixelBudgetUVE(indexed16));
 }
 
 TEST(PngMetadataUVETest, ValidatePngRgba8PixelBudgetUVE_RejectsOverflowAndOversizedBudget) {
@@ -252,6 +259,18 @@ TEST(PngMetadataUVETest, DecodePngRgba8ImageUVE_ExpandsGrayscaleToRgba) {
     EXPECT_EQ(image.pixels[0], std::byte{0x80});
     EXPECT_EQ(image.pixels[1], std::byte{0x80});
     EXPECT_EQ(image.pixels[2], std::byte{0x80});
+    EXPECT_EQ(image.pixels[3], std::byte{0xFF});
+}
+
+TEST(PngMetadataUVETest, DecodePngRgba8ImageUVE_DownconvertsRgb16ToRgba8) {
+    const std::vector<std::byte> png = MakePngRgb16OneByOneUVE();
+    ASSERT_FALSE(png.empty());
+    PngRgba8ImageUVE image;
+    ASSERT_TRUE(DecodePngRgba8ImageUVE(png, image));
+    ASSERT_EQ(image.pixels.size(), 4U);
+    EXPECT_EQ(image.pixels[0], std::byte{0x12});
+    EXPECT_EQ(image.pixels[1], std::byte{0xAB});
+    EXPECT_EQ(image.pixels[2], std::byte{0xEF});
     EXPECT_EQ(image.pixels[3], std::byte{0xFF});
 }
 
