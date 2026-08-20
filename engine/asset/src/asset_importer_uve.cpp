@@ -3,6 +3,8 @@
 
 #include "uve/asset/asset_importer_uve.h"
 
+#include "uve/asset/png_importer_uve.h"
+
 #include <cctype>
 #include <fstream>
 #include <iterator>
@@ -186,6 +188,7 @@ AssetImporterUVE::AssetImporterUVE() : m_impl(std::make_unique<ImplUVE>()) {
     RegisterImporterUVE("uvetex", &GenericFileImportUVE);
     RegisterImporterUVE("uveshader", &GenericFileImportUVE);
     RegisterImporterUVE("uvemat", &GenericFileImportUVE);
+    RegisterPngImporterUVE(*this);
 }
 
 AssetImporterUVE::~AssetImporterUVE() = default;
