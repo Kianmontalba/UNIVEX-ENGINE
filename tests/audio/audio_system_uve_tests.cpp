@@ -35,7 +35,7 @@ public:
     [[nodiscard]] VoiceHandleUVE CreateVoiceUVE(const AudioVoiceDescUVE& desc) override {
         lastDescription = desc;
         ++createCount;
-        return VoiceHandleUVE{1U};
+        return nextHandle;
     }
     void DestroyVoiceUVE(VoiceHandleUVE) override {}
     [[nodiscard]] bool PlayUVE(VoiceHandleUVE) override { return true; }
@@ -47,6 +47,7 @@ public:
     [[nodiscard]] std::string_view GetBackendNameUVE() const noexcept override { return "Recording"; }
 
     AudioVoiceDescUVE lastDescription{};
+    VoiceHandleUVE nextHandle{1U};
     int createCount = 0;
 };
 
@@ -77,6 +78,31 @@ TEST(AudioClipResolutionUVETest, AcceptedResolverPathReachesDeviceAndCopiesIntoS
     EXPECT_EQ(resolver.resolveCount, 1);
     EXPECT_EQ(device.createCount, 1);
     EXPECT_EQ(device.lastDescription.audioAssetPath, resolver.resolvedPath);
+}
+
+TEST(AudioSystemDeviceFailureUVETest, InvalidDeviceVoiceHandleFailsBeforeSourcePublication) {
+    RecordingAudioDeviceUVE device;
+    device.nextHandle = kInvalidVoiceHandleUVE;
+    AudioSystemUVE audioSystem{device};
+
+    const VoiceHandleUVE source = audioSystem.CreateSourceUVE(AudioSourceDescUVE{});
+
+    EXPECT_EQ(source, kInvalidVoiceHandleUVE);
+    EXPECT_EQ(device.createCount, 1);
+    EXPECT_EQ(audioSystem.GetMixerDiagnosticsUVE().routedSourceCount, 0U);
+}
+
+TEST(AudioSystemDeviceFailureUVETest, DuplicateDeviceVoiceHandleFailsBeforeSecondSourcePublication) {
+    RecordingAudioDeviceUVE device;
+    AudioSystemUVE audioSystem{device};
+
+    const VoiceHandleUVE first = audioSystem.CreateSourceUVE(AudioSourceDescUVE{});
+    const VoiceHandleUVE duplicate = audioSystem.CreateSourceUVE(AudioSourceDescUVE{});
+
+    EXPECT_EQ(first, VoiceHandleUVE{1U});
+    EXPECT_EQ(duplicate, kInvalidVoiceHandleUVE);
+    EXPECT_EQ(device.createCount, 2);
+    EXPECT_EQ(audioSystem.GetMixerDiagnosticsUVE().routedSourceCount, 1U);
 }
 
 TEST(AudioClipResolutionUVETest, RejectedResolverPathFailsAtomicallyBeforeDeviceCreation) {
