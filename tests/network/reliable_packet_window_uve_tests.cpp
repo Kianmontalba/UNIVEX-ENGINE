@@ -155,6 +155,13 @@ TEST(ReliablePacketWindowUVETest, SelectiveAcknowledgementRejectsReservedZeroAft
     EXPECT_EQ(pending, 0xFFFFFFFEU);
 }
 
+TEST(ReliablePacketWindowUVETest, SelectiveAcknowledgementAcceptsValidNearBoundarySequence) {
+    std::uint32_t pending = 1U << 2U;
+    const ReliablePacketHeaderUVE header{5U, 0xFFFFFFFDU, 1U << 1U};
+    EXPECT_TRUE(ApplyReliableAcknowledgementsUVE(header, pending, 0xFFFFFFFDU));
+    EXPECT_EQ(pending, 0U);
+}
+
 TEST(ReliablePacketWindowUVETest, InvalidAcknowledgementDoesNotMutatePendingMask) {
     std::uint32_t pending = 0xA5A5A5A5U;
     const ReliablePacketHeaderUVE header{1U, 0U, 0xFFFFFFFFU};
