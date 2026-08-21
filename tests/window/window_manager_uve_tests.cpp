@@ -93,12 +93,18 @@ TEST_F(WindowManagerUVETest, SetVSyncEnabledUVE_RoundTrips) {
     EXPECT_TRUE(windowManager->IsVSyncEnabledUVE());
 }
 
-TEST_F(WindowManagerUVETest, SetFullscreenUVE_RoundTripsWithoutCrashing) {
+TEST_F(WindowManagerUVETest, SetFullscreenUVE_RoundTripsWithBackendConfirmedState) {
+    auto* const glfwWindow = static_cast<GLFWwindow*>(windowManager->GetNativeWindowHandleUVE());
+    GLFWmonitor* const primaryMonitor = glfwGetPrimaryMonitor();
+    ASSERT_NE(primaryMonitor, nullptr);
     EXPECT_FALSE(windowManager->IsFullscreenUVE());
+    EXPECT_EQ(glfwGetWindowMonitor(glfwWindow), nullptr);
     windowManager->SetFullscreenUVE(true);
     EXPECT_TRUE(windowManager->IsFullscreenUVE());
+    EXPECT_EQ(glfwGetWindowMonitor(glfwWindow), primaryMonitor);
     windowManager->SetFullscreenUVE(false);
     EXPECT_FALSE(windowManager->IsFullscreenUVE());
+    EXPECT_EQ(glfwGetWindowMonitor(glfwWindow), nullptr);
 }
 
 TEST_F(WindowManagerUVETest, EnumerateMonitorsUVE_ReturnsValidatedSnapshot) {

@@ -56,7 +56,9 @@ public:
     virtual void SetVSyncEnabledUVE(bool enabled) = 0;
     [[nodiscard]] virtual bool IsVSyncEnabledUVE() const noexcept = 0;
 
-    /// Toggles the window between windowed and borderless-fullscreen-on-primary-monitor.
+    /// Toggles the window between windowed and borderless-fullscreen-on-primary-monitor. The cached
+    /// state changes only after the backend confirms the requested monitor transition; a failed
+    /// transition preserves the previous state.
     virtual void SetFullscreenUVE(bool fullscreen) = 0;
     [[nodiscard]] virtual bool IsFullscreenUVE() const noexcept = 0;
 
