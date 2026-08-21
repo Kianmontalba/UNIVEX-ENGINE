@@ -13,6 +13,7 @@
 namespace UVE::Save {
 
 inline constexpr std::size_t kMaximumSaveMigrationReasonBytesUVE = 256U;
+inline constexpr std::size_t kMaximumSaveMigrationPayloadBytesUVE = 64U * 1024U * 1024U;
 inline constexpr std::size_t kMaximumSaveMigrationTransformsUVE = 32U;
 
 using SavePayloadMigrationTransformUVE =
