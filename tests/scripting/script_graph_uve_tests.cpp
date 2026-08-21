@@ -6846,5 +6846,30 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_DebugErrorRejectsCallbackWithoutO
     EXPECT_FALSE(context.FindOutputUVE(1U, "Result").has_value());
 }
 
+TEST(ScriptVmExecutionContextUVE, SetBindingsAndComponentFactsRejectMalformedIdentifiersAtomically) {
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(7U, "Value", 1.0F));
+    ASSERT_TRUE(context.SetOutputUVE(7U, "Result", 2.0F));
+    ASSERT_TRUE(context.SetComponentFactUVE(Scene::EntityUVE{3U, 1U}, "MeshComponentUVE", true));
+
+    const std::string oversized(kMaximumScriptVmIdentifierBytesUVE + 1U, 'x');
+    std::string embeddedNul = "Valid";
+    embeddedNul.push_back('\0');
+    embeddedNul += "Suffix";
+    EXPECT_FALSE(context.SetInputUVE(0U, "Value", 3.0F));
+    EXPECT_FALSE(context.SetOutputUVE(0U, "Result", 4.0F));
+    EXPECT_FALSE(context.SetInputUVE(7U, oversized, 3.0F));
+    EXPECT_FALSE(context.SetOutputUVE(7U, embeddedNul, 4.0F));
+    EXPECT_FALSE(context.SetComponentFactUVE(Scene::EntityUVE{3U, 1U}, oversized, true));
+    EXPECT_FALSE(context.SetComponentFactUVE(Scene::EntityUVE{3U, 1U}, embeddedNul, true));
+
+    ASSERT_EQ(context.inputs.size(), 1U);
+    ASSERT_EQ(context.outputs.size(), 1U);
+    ASSERT_EQ(context.componentFacts.size(), 1U);
+    EXPECT_EQ(context.inputs.front().pinName, "Value");
+    EXPECT_EQ(context.outputs.front().pinName, "Result");
+    EXPECT_EQ(context.componentFacts.front().componentTypeId, "MeshComponentUVE");
+}
+
 } // namespace
 } // namespace UVE::Scripting

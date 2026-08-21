@@ -3337,7 +3337,7 @@ std::optional<ScriptVmDelayStateUVE> ScriptVmExecutionContextUVE::FindDelayState
 
 bool ScriptVmExecutionContextUVE::SetInputUVE(const std::uint32_t nodeId, std::string pinName,
                                               ScriptVmValueUVE value) {
-    if (pinName.empty()) {
+    if (nodeId == 0U || !IsValidScriptVmIdentifierUVE(pinName)) {
         return false;
     }
     if (ScriptVmValueBindingUVE* existing = FindMutableBindingUVE(inputs, nodeId, pinName);
@@ -3354,7 +3354,7 @@ bool ScriptVmExecutionContextUVE::SetInputUVE(const std::uint32_t nodeId, std::s
 
 bool ScriptVmExecutionContextUVE::SetOutputUVE(const std::uint32_t nodeId, std::string pinName,
                                                ScriptVmValueUVE value) {
-    if (pinName.empty()) {
+    if (nodeId == 0U || !IsValidScriptVmIdentifierUVE(pinName)) {
         return false;
     }
     if (ScriptVmValueBindingUVE* existing = FindMutableBindingUVE(outputs, nodeId, pinName);
@@ -3421,7 +3421,7 @@ std::optional<ScriptVmValueUVE> ScriptVmExecutionContextUVE::FindOutputUVE(
 bool ScriptVmExecutionContextUVE::SetComponentFactUVE(const Scene::EntityUVE entity,
                                                          std::string componentTypeId,
                                                          const bool present) {
-    if (entity == Scene::kInvalidEntityUVE || componentTypeId.empty()) {
+    if (entity == Scene::kInvalidEntityUVE || !IsValidScriptVmIdentifierUVE(componentTypeId)) {
         return false;
     }
     const auto iterator = std::find_if(componentFacts.begin(), componentFacts.end(),

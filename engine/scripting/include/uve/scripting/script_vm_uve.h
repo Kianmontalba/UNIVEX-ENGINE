@@ -12,10 +12,18 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <variant>
 #include <vector>
 
 namespace UVE::Scripting {
+
+inline constexpr std::size_t kMaximumScriptVmIdentifierBytesUVE = 4096U;
+
+[[nodiscard]] inline bool IsValidScriptVmIdentifierUVE(const std::string_view identifier) noexcept {
+    return !identifier.empty() && identifier.size() <= kMaximumScriptVmIdentifierBytesUVE &&
+           identifier.find('\0') == std::string_view::npos;
+}
 
 enum class ScriptVmStatusUVE : std::uint8_t {
     Completed = 0,
