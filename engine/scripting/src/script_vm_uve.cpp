@@ -1484,6 +1484,23 @@ namespace {
     return {};
 }
 
+[[nodiscard]] ScriptVmExecutionResultUVE ExecuteDebugErrorNodeUVE(
+    const ScriptIrInstructionUVE& instruction, const std::size_t instructionIndex,
+    ScriptVmExecutionContextUVE& context, const ScriptEngineCallBindingsUVE* bindings) {
+    const float* value = FindNumberInputUVE(context, instruction.sourceNodeId, "Value");
+    bool accepted = false;
+    if (value == nullptr || !std::isfinite(*value)) {
+        return MakeNodeFailureUVE(instructionIndex, "debug.error requires a finite Number Value input.");
+    }
+    if (bindings == nullptr || bindings->debugError == nullptr ||
+        !bindings->debugError(bindings->userData, *value, &accepted) || !accepted ||
+        !SetNodeOutputUVE(context, instruction.sourceNodeId, "Result", true)) {
+        return MakeNodeFailureUVE(instructionIndex,
+                                  "debug.error requires an accepted caller-owned error callback and Result output.");
+    }
+    return {};
+}
+
 [[nodiscard]] ScriptVmExecutionResultUVE ExecuteEntityQueryNodeUVE(
     const ScriptIrInstructionUVE& instruction, const std::size_t instructionIndex,
     ScriptVmExecutionContextUVE& context) {
@@ -2693,6 +2710,7 @@ namespace {
         const bool isEngineLogNode = instruction.nodeTypeId == "engine.log";
         const bool isDebugPrintNode = instruction.nodeTypeId == "debug.print";
         const bool isDebugWarningNode = instruction.nodeTypeId == "debug.warning";
+        const bool isDebugErrorNode = instruction.nodeTypeId == "debug.error";
         const bool isEngineGetTimeNode = instruction.nodeTypeId == "engine.get_time";
         if ((isVariableNode && !HasRequiredVariableInputsUVE(instruction, context)) ||
             (isConversionNode && !HasRequiredConversionInputsUVE(instruction, context)) ||
@@ -2710,7 +2728,7 @@ namespace {
             (isMotionQueryNode && !HasRequiredMotionQueryNodeInputsUVE(instruction, context)) ||
             (isPhysicsNode && !HasRequiredPhysicsNodeInputsUVE(instruction, context)) ||
             (isAudioNode && !HasRequiredAudioNodeInputsUVE(instruction, context)) ||
-            ((isEngineLogNode || isDebugPrintNode || isDebugWarningNode) &&
+            ((isEngineLogNode || isDebugPrintNode || isDebugWarningNode || isDebugErrorNode) &&
              FindNumberInputUVE(context, instruction.sourceNodeId, "Value") == nullptr)) {
             ScriptVmExecutionResultUVE failure = MakeNodeFailureUVE(
                 instructionIndex, "Control-flow execution could not resolve typed node inputs.");
@@ -2909,7 +2927,8 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
             }
             if (kind == ScriptIrInstructionKindUVE::ExecuteNode &&
                 (instruction.nodeTypeId == "engine.log" || instruction.nodeTypeId == "debug.print" ||
-                 instruction.nodeTypeId == "debug.warning" || instruction.nodeTypeId == "engine.get_time")) {
+                 instruction.nodeTypeId == "debug.warning" || instruction.nodeTypeId == "debug.error" ||
+                 instruction.nodeTypeId == "engine.get_time")) {
                 result.status = ScriptVmStatusUVE::NodeExecutionFailed;
                 result.diagnostics.push_back({index, "engine call requires a caller-owned execution context and binding."});
                 result.AppendTraceEventUVE({ScriptVmTraceEventKindUVE::Failed, Scene::kInvalidEntityUVE,
@@ -3001,6 +3020,7 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                 const bool isEngineLogNode = instruction.nodeTypeId == "engine.log";
                 const bool isDebugPrintNode = instruction.nodeTypeId == "debug.print";
                 const bool isDebugWarningNode = instruction.nodeTypeId == "debug.warning";
+                const bool isDebugErrorNode = instruction.nodeTypeId == "debug.error";
                 const bool isEngineGetTimeNode = instruction.nodeTypeId == "engine.get_time";
                 if ((isVariableNode && !HasRequiredVariableInputsUVE(instruction, *context)) ||
                     (isConversionNode && !HasRequiredConversionInputsUVE(instruction, *context)) ||
@@ -3018,7 +3038,7 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                     (isMotionQueryNode && !HasRequiredMotionQueryNodeInputsUVE(instruction, *context)) ||
                     (isPhysicsNode && !HasRequiredPhysicsNodeInputsUVE(instruction, *context)) ||
                     (isAudioNode && !HasRequiredAudioNodeInputsUVE(instruction, *context)) ||
-                    ((isEngineLogNode || isDebugPrintNode || isDebugWarningNode) &&
+                    ((isEngineLogNode || isDebugPrintNode || isDebugWarningNode || isDebugErrorNode) &&
                      FindNumberInputUVE(*context, instruction.sourceNodeId, "Value") == nullptr)) {
                     continue;
                 }
@@ -3067,6 +3087,8 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                     nodeResult = ExecuteEngineLogNodeUVE(instruction, index, *context, options.engineCallBindings);
                 } else if (isDebugWarningNode) {
                     nodeResult = ExecuteDebugWarningNodeUVE(instruction, index, *context, options.engineCallBindings);
+                } else if (isDebugErrorNode) {
+                    nodeResult = ExecuteDebugErrorNodeUVE(instruction, index, *context, options.engineCallBindings);
                 } else if (isEngineGetTimeNode) {
                     nodeResult = ExecuteEngineGetTimeNodeUVE(instruction, index, *context, options.engineCallBindings);
                 }
