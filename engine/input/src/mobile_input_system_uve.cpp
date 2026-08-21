@@ -26,7 +26,7 @@ float MobileInputSystemUVE::SanitizePressureUVE(const float pressure) noexcept {
 void MobileInputSystemUVE::SetTouchStateUVE(const std::size_t touchSlot, const bool active,
                                             const std::uint64_t identifier,
                                             const Math::Vector2UVE position, const float pressure) {
-    if (touchSlot >= kMaximumTouchCountUVE) {
+    if (touchSlot >= kMaximumTouchCountUVE || (active && identifier == 0U)) {
         return;
     }
     const std::lock_guard<std::mutex> lock(m_liveStateMutex);
