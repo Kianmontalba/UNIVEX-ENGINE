@@ -87,6 +87,9 @@ public:
         return {PrefabOverrideOperationCodeUVE::InvalidInstance, 0U,
                 "Prefab override apply rejected because the instance data is invalid."};
     }
+    // Complete the read/staging phase before mutating the target. Apart from making a failed
+    // read observably read-only, this keeps string/vector allocation failures out of the write
+    // phase: no target mutation can precede an exception while a rollback value is being staged.
     std::vector<PrefabPropertyOverrideUVE> previousValues;
     previousValues.reserve(instance.overrides.size());
     for (const PrefabPropertyOverrideUVE& override : instance.overrides) {
@@ -97,18 +100,23 @@ public:
             return {PrefabOverrideOperationCodeUVE::ReadFailed, previousValues.size(),
                     "Prefab override apply could not read the existing target property."};
         }
-        if (!target.WritePropertyUVE(override.propertyPath, override.serializedValue)) {
-            for (std::size_t index = previousValues.size(); index > 0U; --index) {
-                const PrefabPropertyOverrideUVE& previous = previousValues[index - 1U];
-                if (!target.WritePropertyUVE(previous.propertyPath, previous.serializedValue)) {
-                    return {PrefabOverrideOperationCodeUVE::RollbackFailed, index - 1U,
-                            "Prefab override apply failed and rollback could not restore the target."};
-                }
-            }
-            return {PrefabOverrideOperationCodeUVE::WriteFailed, previousValues.size(),
-                    "Prefab override apply failed; target writes were rolled back."};
-        }
         previousValues.push_back({override.propertyPath, std::move(previousValue)});
+    }
+
+    for (std::size_t index = 0U; index < instance.overrides.size(); ++index) {
+        const PrefabPropertyOverrideUVE& override = instance.overrides[index];
+        if (target.WritePropertyUVE(override.propertyPath, override.serializedValue)) {
+            continue;
+        }
+        for (std::size_t rollbackIndex = index; rollbackIndex > 0U; --rollbackIndex) {
+            const PrefabPropertyOverrideUVE& previous = previousValues[rollbackIndex - 1U];
+            if (!target.WritePropertyUVE(previous.propertyPath, previous.serializedValue)) {
+                return {PrefabOverrideOperationCodeUVE::RollbackFailed, rollbackIndex - 1U,
+                        "Prefab override apply failed and rollback could not restore the target."};
+            }
+        }
+        return {PrefabOverrideOperationCodeUVE::WriteFailed, index,
+                "Prefab override apply failed; target writes were rolled back."};
     }
     return {PrefabOverrideOperationCodeUVE::Applied, instance.overrides.size(),
             "Prefab overrides applied to the live target."};
