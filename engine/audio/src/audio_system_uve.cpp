@@ -59,6 +59,10 @@ Math::Vector3UVE AudioSystemUVE::GetListenerPositionUVE() const noexcept {
 }
 
 VoiceHandleUVE AudioSystemUVE::CreateSourceUVE(const AudioSourceDescUVE& desc) {
+    if (!IsAudioSourceDescValidUVE(desc)) {
+        UVE_ERROR("AudioSystemUVE: CreateSourceUVE rejected invalid source descriptor");
+        return kInvalidVoiceHandleUVE;
+    }
     std::string resolvedAudioAssetPath = desc.audioAssetPath;
     if (m_impl->clipResolver != nullptr) {
         const AudioClipResolutionUVE resolution = m_impl->clipResolver->ResolveAudioClipUVE(desc.audioAssetPath);

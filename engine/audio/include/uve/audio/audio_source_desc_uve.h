@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <cmath>
 #include <string>
 
 #include "uve/audio/audio_attenuation_model_uve.h"
@@ -27,5 +28,15 @@ struct AudioSourceDescUVE {
     float maxDistance = 25.0F;
     AudioAttenuationModelUVE attenuationModel = AudioAttenuationModelUVE::Linear;
 };
+
+[[nodiscard]] inline bool IsAudioSourceDescValidUVE(const AudioSourceDescUVE& source) noexcept {
+    const bool spatialDistanceValid =
+        !source.spatial || (std::isfinite(source.minDistance) && source.minDistance > 0.0F &&
+                            std::isfinite(source.maxDistance) && source.maxDistance > source.minDistance);
+    const bool attenuationModelValid = source.attenuationModel == AudioAttenuationModelUVE::Linear ||
+                                       source.attenuationModel == AudioAttenuationModelUVE::InverseSquare;
+    return std::isfinite(source.volume) && source.volume >= 0.0F && std::isfinite(source.pitch) &&
+           source.pitch > 0.0F && attenuationModelValid && spatialDistanceValid;
+}
 
 } // namespace UVE::Audio
