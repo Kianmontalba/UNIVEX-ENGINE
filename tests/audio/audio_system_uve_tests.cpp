@@ -121,6 +121,24 @@ TEST(AudioClipResolutionUVETest, RejectedResolverPathFailsAtomicallyBeforeDevice
     EXPECT_EQ(device.createCount, 0);
 }
 
+TEST(AudioSystemSourceValidationUVETest, CreateSourceUVE_RejectsInvalidDescriptorBeforeResolverOrDevice) {
+    RecordingAudioDeviceUVE device;
+    TestAudioClipResolverUVE resolver;
+    AudioSystemUVE audioSystem{device, &resolver};
+
+    AudioSourceDescUVE descriptor;
+    descriptor.audioAssetPath = "sounds/invalid.wav";
+    descriptor.minDistance = 5.0F;
+    descriptor.maxDistance = 5.0F;
+    EXPECT_EQ(audioSystem.CreateSourceUVE(descriptor), kInvalidVoiceHandleUVE);
+
+    descriptor = AudioSourceDescUVE{};
+    descriptor.pitch = std::numeric_limits<float>::quiet_NaN();
+    EXPECT_EQ(audioSystem.CreateSourceUVE(descriptor), kInvalidVoiceHandleUVE);
+    EXPECT_EQ(resolver.resolveCount, 0);
+    EXPECT_EQ(device.createCount, 0);
+}
+
 TEST_F(AudioSystemUVETest, CreateSourceUVE_ForwardsCorrectlyShapedVoiceDescToDevice) {
     AudioSourceDescUVE desc;
     desc.audioAssetPath = "sounds/explosion.wav";
