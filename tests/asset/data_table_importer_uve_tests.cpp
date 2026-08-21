@@ -103,6 +103,21 @@ TEST(DataTableImporterUVE, RegistersCsvTsvAndJsonImportersWithTypedDestinations)
     EXPECT_EQ(database.GetRegisteredAssetsUVE().size(), 3U);
 }
 
+TEST(DataTableImporterUVE, RejectsOverCapSourceBeforeTypedParseAndPublish) {
+    const TemporaryImporterFilesUVE files;
+    const std::string oversized(DataTableUVE::kMaximumDocumentBytesUVE + 1U, 'x');
+    WriteTextUVE(files.CsvUVE(), oversized);
+
+    AssetImporterUVE importer;
+    RegisterDataTableImportersUVE(importer);
+    AssetDatabaseUVE database;
+
+    EXPECT_EQ(importer.ImportUVE(files.CsvUVE(), files.CsvDestinationUVE(), database, MakeSettingsUVE()),
+              kInvalidAssetGuidUVE);
+    EXPECT_FALSE(std::filesystem::exists(files.CsvDestinationUVE()));
+    EXPECT_TRUE(database.GetRegisteredAssetsUVE().empty());
+}
+
 TEST(DataTableImporterUVE, RejectsMalformedSourceMissingSchemaAndWrongDestinationWithoutRegistration) {
     const TemporaryImporterFilesUVE files;
     WriteTextUVE(files.CsvUVE(), "id,damage,enabled,label\npistol,not-an-integer,true,Pistol\n");

@@ -23,6 +23,11 @@ enum class DataTableSourceFormatUVE : std::uint8_t {
 };
 
 [[nodiscard]] bool ReadSourceDocumentUVE(const std::filesystem::path& sourcePath, std::string& document) {
+    std::error_code sourceSizeError;
+    const std::uintmax_t sourceSize = std::filesystem::file_size(sourcePath, sourceSizeError);
+    if (sourceSizeError || sourceSize > DataTableUVE::kMaximumDocumentBytesUVE) {
+        return false;
+    }
     std::ifstream input(sourcePath, std::ios::binary);
     if (!input.is_open()) {
         return false;
