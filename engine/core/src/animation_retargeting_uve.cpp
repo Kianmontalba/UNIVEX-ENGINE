@@ -37,6 +37,23 @@ constexpr std::size_t kMaximumIdentifierBytesUVE = 128U;
     return left * (1.0F - factor) + right * factor;
 }
 
+[[nodiscard]] bool IsFiniteVectorUVE(const Math::Vector3UVE& value) noexcept {
+    return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+}
+
+[[nodiscard]] bool IsLiveSourcePoseValidUVE(const std::vector<RetargetBonePoseUVE>& sourcePose) noexcept {
+    for (const RetargetBonePoseUVE& bone : sourcePose) {
+        if (!IsIdentifierUVE(bone.boneId) || !IsFiniteTransformPoseUVE(bone.pose)) {
+            return false;
+        }
+        TransformPoseUVE normalized;
+        if (!TryNormalizeTransformPoseUVE(bone.pose, normalized)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 } // namespace
 
 AnimationRetargetingValidationResultUVE ValidateAnimationRetargetingUVE(
@@ -158,11 +175,15 @@ AnimationRetargetingResultUVE RetargetAnimationPoseUVE(
         result.message = validation.message;
         return result;
     }
-    result.targetPose = targetReferencePose;
+    if (!IsLiveSourcePoseValidUVE(sourcePose)) {
+        result.message = "Retargeting live source pose contains an invalid bone or transform.";
+        return result;
+    }
+    std::vector<RetargetBonePoseUVE> candidateTargetPose = targetReferencePose;
     for (const RetargetBoneMappingUVE& mapping : profile.mappings) {
         const RetargetBonePoseUVE* sourceReference = FindBoneUVE(sourceReferencePose, mapping.sourceBoneId);
         const RetargetBonePoseUVE* sourceCurrent = FindBoneUVE(sourcePose, mapping.sourceBoneId);
-        RetargetBonePoseUVE* targetReference = FindMutableBoneUVE(result.targetPose, mapping.targetBoneId);
+        RetargetBonePoseUVE* targetReference = FindMutableBoneUVE(candidateTargetPose, mapping.targetBoneId);
         if (sourceReference == nullptr || sourceCurrent == nullptr || targetReference == nullptr) {
             if (profile.missingRootPolicy == RetargetMissingRootPolicyUVE::Ignore) {
                 result.ignoredMissingRoot = true;
@@ -178,21 +199,51 @@ AnimationRetargetingResultUVE RetargetAnimationPoseUVE(
         }
         const Math::QuaternionUVE sourceDelta = Math::MultiplyUVE(
             sourceCurrent->pose.rotation, sourceReferenceInverse);
-        targetReference->pose.rotation = Math::MultiplyUVE(
-            targetReference->pose.rotation, Math::MultiplyUVE(mapping.orientationCorrection, sourceDelta));
+        const Math::QuaternionUVE correctedDelta = Math::MultiplyUVE(mapping.orientationCorrection, sourceDelta);
+        const Math::QuaternionUVE candidateRotation =
+            Math::MultiplyUVE(targetReference->pose.rotation, correctedDelta);
         const Math::Vector3UVE sourceDeltaPosition = sourceCurrent->pose.position - sourceReference->pose.position;
-        targetReference->pose.position += sourceDeltaPosition * profile.translationScale;
+        const Math::Vector3UVE scaledDeltaPosition = sourceDeltaPosition * profile.translationScale;
+        if (!Math::IsFiniteUVE(sourceDelta) || !Math::IsFiniteUVE(correctedDelta) ||
+            !Math::IsFiniteUVE(candidateRotation) || !IsFiniteVectorUVE(sourceDeltaPosition) ||
+            !IsFiniteVectorUVE(scaledDeltaPosition)) {
+            result = AnimationRetargetingResultUVE{};
+            result.message = "Retargeting produced a non-finite mapped bone candidate.";
+            return result;
+        }
+        targetReference->pose.rotation = candidateRotation;
+        targetReference->pose.position += scaledDeltaPosition;
+        if (!IsFiniteTransformPoseUVE(targetReference->pose)) {
+            result = AnimationRetargetingResultUVE{};
+            result.message = "Retargeting produced a non-finite target bone pose.";
+            return result;
+        }
         ++result.mappedBoneCount;
     }
     if (profile.applyIKControls) {
         for (const RetargetIKControlUVE& control : profile.ikControls) {
-            RetargetBonePoseUVE* target = FindMutableBoneUVE(result.targetPose, control.targetBoneId);
+            RetargetBonePoseUVE* target = FindMutableBoneUVE(candidateTargetPose, control.targetBoneId);
             if (target != nullptr) {
                 target->pose.position = BlendVectorUVE(target->pose.position, control.targetPosition, control.weight);
+                if (!IsFiniteVectorUVE(target->pose.position)) {
+                    result = AnimationRetargetingResultUVE{};
+                    result.message = "Retargeting IK control produced a non-finite target position.";
+                    return result;
+                }
                 ++result.appliedIKControlCount;
             }
         }
     }
+    for (RetargetBonePoseUVE& bone : candidateTargetPose) {
+        TransformPoseUVE normalized;
+        if (!TryNormalizeTransformPoseUVE(bone.pose, normalized)) {
+            result = AnimationRetargetingResultUVE{};
+            result.message = "Retargeting produced an invalid final target pose.";
+            return result;
+        }
+        bone.pose = normalized;
+    }
+    result.targetPose = std::move(candidateTargetPose);
     result.message = "Animation retargeting evaluated successfully.";
     return result;
 }
