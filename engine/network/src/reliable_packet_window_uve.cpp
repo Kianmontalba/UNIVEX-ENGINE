@@ -87,6 +87,10 @@ ReliablePayloadReassemblyStatusUVE AcceptReliablePayloadFragmentUVE(
             state.fragments.size() != fragmentCount) {
             return ReliablePayloadReassemblyStatusUVE::Conflict;
         }
+        if (state.receivedByteCount > kReliablePacketMaximumReassembledPayloadBytesUVE ||
+            fragmentBytes.size() > kReliablePacketMaximumReassembledPayloadBytesUVE - state.receivedByteCount) {
+            return ReliablePayloadReassemblyStatusUVE::Invalid;
+        }
         std::vector<std::uint8_t>& storedFragment = state.fragments[fragmentIndex];
         if (!storedFragment.empty()) {
             return storedFragment == fragmentBytes ? ReliablePayloadReassemblyStatusUVE::Duplicate
