@@ -111,6 +111,15 @@ TEST(GamepadInputSystemUVETest, Disconnect_ClearsStateAndInvalidIndicesAreSafeNo
     // Disconnect clears the current state and emits one release edge for any previously held button.
     EXPECT_TRUE(inputSystem.WasButtonReleasedThisFrameUVE(0U, GamepadButtonUVE::Start));
 
+    inputSystem.SetAxisStateUVE(0U, GamepadAxisUVE::RightTrigger, 1.0F);
+    inputSystem.SetButtonStateUVE(0U, GamepadButtonUVE::Start, true);
+    inputSystem.SetConnectedUVE(0U, true);
+    inputSystem.UpdateUVE();
+    const GamepadStateSnapshotUVE reconnected = inputSystem.GetSnapshotUVE(0U);
+    EXPECT_TRUE(reconnected.connected);
+    EXPECT_NEAR(reconnected.axes[static_cast<std::size_t>(GamepadAxisUVE::RightTrigger)], 0.0F, kEpsilon);
+    EXPECT_FALSE(reconnected.buttons[static_cast<std::size_t>(GamepadButtonUVE::Start)]);
+
     inputSystem.SetConnectedUVE(kMaximumGamepadCountUVE, true);
     inputSystem.SetAxisStateUVE(kMaximumGamepadCountUVE, GamepadAxisUVE::LeftX, 1.0F);
     inputSystem.SetButtonStateUVE(kMaximumGamepadCountUVE, GamepadButtonUVE::South, true);
