@@ -82,6 +82,23 @@ TEST(PhysicsMaterialUVETest, MaterialOfUVE_OutOfRangeRestitution_ClampsToOne) {
     EXPECT_NEAR(MaterialOfUVE(collider).restitution, 1.0F, kEpsilon);
 }
 
+TEST(PhysicsMaterialUVETest, MaterialOfUVE_NonFiniteFrictionAndRestitutionFailClosed) {
+    Scene::ColliderComponentUVE collider;
+    collider.friction = std::numeric_limits<float>::quiet_NaN();
+    collider.restitution = std::numeric_limits<float>::infinity();
+    const PhysicsMaterialUVE material = MaterialOfUVE(collider);
+    EXPECT_FLOAT_EQ(material.friction, 0.0F);
+    EXPECT_FLOAT_EQ(material.restitution, 0.0F);
+}
+
+TEST(PhysicsMaterialUVETest, MaterialOfUVE_InvalidDensityFallsBackToUnitDensity) {
+    Scene::ColliderComponentUVE collider;
+    collider.density = -1.0F;
+    EXPECT_FLOAT_EQ(MaterialOfUVE(collider).density, 1.0F);
+    collider.density = std::numeric_limits<float>::quiet_NaN();
+    EXPECT_FLOAT_EQ(MaterialOfUVE(collider).density, 1.0F);
+}
+
 TEST(PhysicsMaterialUVETest, MaterialOfUVE_NegativeFriction_ClampsToZero) {
     Scene::ColliderComponentUVE collider;
     collider.friction = -1.0F;

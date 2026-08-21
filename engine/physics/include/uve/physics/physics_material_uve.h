@@ -4,6 +4,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cmath>
 
 #include "uve/scene/components/collider_component_uve.h"
 
@@ -40,9 +41,13 @@ struct PhysicsMaterialUVE {
 /// friction (negative), without a general NaN/validation framework (out of scope this increment).
 /// Shared by PhysicsSystemUVE's resolution and RaycastSystemUVE's hit reporting so both read this
 /// data through the exact same clamp, never two independently-maintained copies of it.
-[[nodiscard]] constexpr PhysicsMaterialUVE MaterialOfUVE(const Scene::ColliderComponentUVE& collider) noexcept {
-    return PhysicsMaterialUVE{std::clamp(collider.friction, 0.0F, 1.0F), std::clamp(collider.restitution, 0.0F, 1.0F),
-                               collider.density};
+[[nodiscard]] inline PhysicsMaterialUVE MaterialOfUVE(const Scene::ColliderComponentUVE& collider) noexcept {
+    const float friction = std::isfinite(collider.friction) ? std::clamp(collider.friction, 0.0F, 1.0F) : 0.0F;
+    const float restitution = std::isfinite(collider.restitution)
+                                  ? std::clamp(collider.restitution, 0.0F, 1.0F)
+                                  : 0.0F;
+    const float density = std::isfinite(collider.density) && collider.density > 0.0F ? collider.density : 1.0F;
+    return PhysicsMaterialUVE{friction, restitution, density};
 }
 
 } // namespace UVE::Physics
