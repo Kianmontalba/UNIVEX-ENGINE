@@ -138,7 +138,10 @@ void InputSystemUVE::UpdateUVE() {
         m_mouseScrollDelta = m_scrollDeltaAccumulator;
         m_scrollDeltaAccumulator = 0.0F;
     }
-    m_mouseDelta = m_currentMousePosition - m_previousMousePosition;
+    const Math::Vector2UVE candidateMouseDelta = m_currentMousePosition - m_previousMousePosition;
+    m_mouseDelta = std::isfinite(candidateMouseDelta.x) && std::isfinite(candidateMouseDelta.y)
+                       ? candidateMouseDelta
+                       : Math::Vector2UVE{};
 
     const auto GetAxisSnapshotValueUVE = [&](const InputActionUVE& action, const bool previous) {
         const auto SumBindingValuesUVE = [&](const std::vector<InputBindingUVE>& bindings) {
