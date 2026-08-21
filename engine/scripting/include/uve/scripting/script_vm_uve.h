@@ -280,6 +280,9 @@ using ScriptPhysicsCollisionQueryFunctionUVE = bool (*) (
     void* userData, Scene::EntityUVE body, bool* outResult) noexcept;
 using ScriptAudioScalarControlFunctionUVE = bool (*) (
     void* userData, Scene::EntityUVE source, float value, bool* outResult) noexcept;
+using ScriptAudioPositionControlFunctionUVE = bool (*) (
+    void* userData, Scene::EntityUVE source, const ScriptVector3ValueUVE& position,
+    bool* outResult) noexcept;
 
 struct ScriptEngineCallBindingsUVE final {
     ScriptEngineLogFunctionUVE log = nullptr;
@@ -339,6 +342,7 @@ struct ScriptEngineCallBindingsUVE final {
     ScriptPhysicsCollisionQueryFunctionUVE physicsIsColliding = nullptr;
     ScriptAudioScalarControlFunctionUVE audioSetVolume = nullptr;
     ScriptAudioScalarControlFunctionUVE audioSetPitch = nullptr;
+    ScriptAudioPositionControlFunctionUVE audioSet3dPosition = nullptr;
 };
 
 struct ScriptVmExecutionOptionsUVE final {

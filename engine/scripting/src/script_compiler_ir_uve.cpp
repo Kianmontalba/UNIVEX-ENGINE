@@ -276,7 +276,8 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
              consumerNode->typeId == "camera.set_rotation" || consumerNode->typeId == "camera.look_at" ||
              consumerNode->typeId == "camera.set_fov" || consumerNode->typeId == "camera.shake" ||
              consumerNode->typeId == "camera.set_active" || consumerNode->typeId == "audio.set_volume" ||
-             consumerNode->typeId == "audio.set_pitch" || consumerNode->typeId == "animation.play" ||
+             consumerNode->typeId == "audio.set_pitch" || consumerNode->typeId == "audio.set_3d_position" ||
+             consumerNode->typeId == "animation.play" ||
              consumerNode->typeId == "animation.stop" || consumerNode->typeId == "animation.pause" ||
              consumerNode->typeId == "animation.blend" || consumerNode->typeId == "animation.blend_space" ||
              consumerNode->typeId == "animation.set_speed" || consumerNode->typeId == "animation.set_weight" ||
