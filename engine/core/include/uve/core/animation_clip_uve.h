@@ -21,6 +21,7 @@ struct AnimationEventUVE final {
 struct AnimationClipUVE final {
     static constexpr std::size_t kMaximumSamplesUVE = 4096U;
     static constexpr std::size_t kMaximumEventsUVE = 1024U;
+    static constexpr std::size_t kMaximumCollectedEventsUVE = 1024U;
     static constexpr std::size_t kMaximumIdentifierBytesUVE = 128U;
 
     std::string clipId;
@@ -58,6 +59,8 @@ struct AnimationClipValidationResultUVE final {
 [[nodiscard]] bool TrySampleAnimationClipUVE(const AnimationClipUVE& clip, double timeSeconds,
                                              bool looping, TransformPoseUVE& outPose) noexcept;
 
+/// Collects events in chronological loop order and caps copied output at
+/// `AnimationClipUVE::kMaximumCollectedEventsUVE`; excessively large loop indices/ranges fail closed.
 [[nodiscard]] std::vector<AnimationEventUVE> CollectAnimationEventsUVE(
     const AnimationClipUVE& clip, double startSeconds, double endSeconds, bool looping);
 
