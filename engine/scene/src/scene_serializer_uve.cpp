@@ -225,9 +225,13 @@ template <typename T, typename FromJsonFunc>
         std::unordered_map<std::string, ComponentRegistrationUVE> table;
 
         table.emplace("TransformComponentUVE", MakeRegistrationUVE<TransformComponentUVE>([](const nlohmann::json& json) {
-                          return TransformComponentUVE{Vector3FromJsonUVE(json.at("localPosition")),
-                                                        QuaternionFromJsonUVE(json.at("localRotation")),
-                                                        Vector3FromJsonUVE(json.at("localScale"))};
+                          const TransformComponentUVE transform{Vector3FromJsonUVE(json.at("localPosition")),
+                                                                QuaternionFromJsonUVE(json.at("localRotation")),
+                                                                Vector3FromJsonUVE(json.at("localScale"))};
+                          if (!IsTransformComponentValidUVE(transform)) {
+                              throw std::runtime_error("Invalid TransformComponentUVE payload");
+                          }
+                          return transform;
                       }));
         table.emplace("MeshComponentUVE", MakeRegistrationUVE<MeshComponentUVE>([](const nlohmann::json& json) {
                           const MeshComponentUVE mesh{Asset::AssetGuidUVE{json.at("meshGuid").get<std::uint64_t>()},
