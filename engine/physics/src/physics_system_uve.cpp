@@ -22,6 +22,10 @@ namespace UVE::Physics {
 
 namespace {
 
+[[nodiscard]] bool IsFiniteVector3UVE(const Math::Vector3UVE& value) noexcept {
+    return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+}
+
 /// 0 for a kinematic or non-positive-mass body — the "infinite mass" case (immovable). Computed
 /// on demand rather than stored on RigidBodyComponentUVE, so mass/inverseMass can never desync.
 [[nodiscard]] float EffectiveInverseMassUVE(bool isKinematic, float mass) noexcept {
@@ -125,33 +129,50 @@ void PhysicsSystemUVE::StepUVE(Scene::IEntityManagerUVE& entityManager, Scene::I
                 return;
             }
 
-            rigidBody.velocity += m_gravity * (rigidBody.gravityScale * fixedDeltaTimeSeconds);
+            const float gravityStep = rigidBody.gravityScale * fixedDeltaTimeSeconds;
+            if (!std::isfinite(gravityStep)) {
+                return;
+            }
+            Math::Vector3UVE candidateVelocity = rigidBody.velocity + m_gravity * gravityStep;
+            if (!IsFiniteVector3UVE(candidateVelocity)) {
+                return;
+            }
             if (rigidBody.drag > 0.0F) {
-                rigidBody.velocity *= std::max(0.0F, 1.0F - rigidBody.drag * fixedDeltaTimeSeconds);
+                candidateVelocity *= std::max(0.0F, 1.0F - rigidBody.drag * fixedDeltaTimeSeconds);
+                if (!IsFiniteVector3UVE(candidateVelocity)) {
+                    return;
+                }
             }
 
+            Math::Vector3UVE candidateAngularVelocity = rigidBody.angularVelocity;
             Math::Vector3UVE effectiveTorque = rigidBody.torque;
             const auto gyroscopicTorque = EvaluateGyroscopicTorqueUVE(
                 rigidBody.angularVelocity, rigidBody.inverseInertia);
-            UVE_ASSERT(gyroscopicTorque.has_value());
-            if (gyroscopicTorque.has_value()) {
-                effectiveTorque -= *gyroscopicTorque;
+            if (!gyroscopicTorque.has_value()) {
+                return;
+            }
+            effectiveTorque -= *gyroscopicTorque;
+            if (!IsFiniteVector3UVE(effectiveTorque)) {
+                return;
             }
             const auto integratedAngularVelocity = IntegrateAngularVelocityUVE(
                 rigidBody.angularVelocity, effectiveTorque, rigidBody.inverseInertia,
                 fixedDeltaTimeSeconds);
-            UVE_ASSERT(integratedAngularVelocity.has_value());
-            if (integratedAngularVelocity.has_value()) {
-                rigidBody.angularVelocity = *integratedAngularVelocity;
+            if (!integratedAngularVelocity.has_value() || !IsFiniteVector3UVE(*integratedAngularVelocity)) {
+                return;
             }
+            candidateAngularVelocity = *integratedAngularVelocity;
 
             Scene::TransformComponentUVE newTransform = transform;
-            newTransform.localPosition += rigidBody.velocity * fixedDeltaTimeSeconds;
-            const float angularSpeedSquared = Math::LengthSquaredUVE(rigidBody.angularVelocity);
+            newTransform.localPosition += candidateVelocity * fixedDeltaTimeSeconds;
+            if (!IsFiniteVector3UVE(newTransform.localPosition)) {
+                return;
+            }
+            const float angularSpeedSquared = Math::LengthSquaredUVE(candidateAngularVelocity);
             if (std::isfinite(angularSpeedSquared) && angularSpeedSquared > 1.0e-12F &&
                 std::isfinite(fixedDeltaTimeSeconds) && fixedDeltaTimeSeconds >= 0.0F) {
                 const float angularSpeed = std::sqrt(angularSpeedSquared);
-                const Math::Vector3UVE axis = rigidBody.angularVelocity * (1.0F / angularSpeed);
+                const Math::Vector3UVE axis = candidateAngularVelocity * (1.0F / angularSpeed);
                 Math::QuaternionUVE deltaRotation;
                 if (Math::TryMakeAxisAngleUVE(axis, angularSpeed * fixedDeltaTimeSeconds, deltaRotation)) {
                     Math::QuaternionUVE normalizedRotation;
@@ -162,6 +183,8 @@ void PhysicsSystemUVE::StepUVE(Scene::IEntityManagerUVE& entityManager, Scene::I
                     }
                 }
             }
+            rigidBody.velocity = candidateVelocity;
+            rigidBody.angularVelocity = candidateAngularVelocity;
             sceneGraph.SetLocalTransformUVE(entityManager, entity, newTransform);
         });
 
