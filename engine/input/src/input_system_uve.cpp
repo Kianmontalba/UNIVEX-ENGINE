@@ -100,9 +100,15 @@ void InputSystemUVE::SetMousePositionUVE(Math::Vector2UVE position) {
     m_liveMousePosition = position;
 }
 
-void InputSystemUVE::SetMouseScrollDeltaUVE(float delta) {
+void InputSystemUVE::SetMouseScrollDeltaUVE(const float delta) {
+    if (!std::isfinite(delta)) {
+        return;
+    }
     const std::lock_guard<std::mutex> lock(m_liveStateMutex);
-    m_scrollDeltaAccumulator += delta;
+    const float candidate = m_scrollDeltaAccumulator + delta;
+    if (std::isfinite(candidate)) {
+        m_scrollDeltaAccumulator = candidate;
+    }
 }
 
 void InputSystemUVE::UpdateUVE() {

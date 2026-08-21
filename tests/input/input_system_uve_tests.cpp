@@ -3,6 +3,9 @@
 
 #include "uve/input/input_system_uve.h"
 
+#include <cmath>
+#include <limits>
+
 #include <gtest/gtest.h>
 
 #include "uve/events/event_system_uve.h"
@@ -93,6 +96,19 @@ TEST_F(InputSystemUVETest, ScrollDelta_AccumulatesThenResetsAfterUpdateUVE) {
 
     inputSystem.UpdateUVE(); // no new scroll input
     EXPECT_NEAR(inputSystem.GetMouseScrollDeltaUVE(), 0.0F, kEpsilon);
+}
+
+TEST_F(InputSystemUVETest, ScrollDelta_RejectsNonFiniteAndOverflowingInput) {
+    inputSystem.SetMouseScrollDeltaUVE(1.0F);
+    inputSystem.SetMouseScrollDeltaUVE(std::numeric_limits<float>::quiet_NaN());
+    inputSystem.SetMouseScrollDeltaUVE(std::numeric_limits<float>::infinity());
+    inputSystem.UpdateUVE();
+    EXPECT_FLOAT_EQ(inputSystem.GetMouseScrollDeltaUVE(), 1.0F);
+
+    inputSystem.SetMouseScrollDeltaUVE(std::numeric_limits<float>::max());
+    inputSystem.SetMouseScrollDeltaUVE(std::numeric_limits<float>::max());
+    inputSystem.UpdateUVE();
+    EXPECT_FLOAT_EQ(inputSystem.GetMouseScrollDeltaUVE(), std::numeric_limits<float>::max());
 }
 
 TEST_F(InputSystemUVETest, RegisterActionUVE_RejectsUnboundedAndMalformedNames) {
