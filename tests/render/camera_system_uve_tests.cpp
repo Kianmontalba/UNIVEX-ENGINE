@@ -145,6 +145,10 @@ TEST(CameraComponentUVETest, IsCameraComponentValidUVE_RejectsProjectionUnsafeVa
     Scene::CameraComponentUVE invalidFov = {};
     invalidFov.fieldOfViewDegrees = 0.0F;
     EXPECT_FALSE(Scene::IsCameraComponentValidUVE(invalidFov));
+    invalidFov.fieldOfViewDegrees = Scene::kMinimumCameraFieldOfViewDegreesUVE * 0.5F;
+    EXPECT_FALSE(Scene::IsCameraComponentValidUVE(invalidFov));
+    invalidFov.fieldOfViewDegrees = Scene::kMinimumCameraFieldOfViewDegreesUVE;
+    EXPECT_TRUE(Scene::IsCameraComponentValidUVE(invalidFov));
     invalidFov.fieldOfViewDegrees = 180.0F;
     EXPECT_FALSE(Scene::IsCameraComponentValidUVE(invalidFov));
     invalidFov.fieldOfViewDegrees = std::numeric_limits<float>::quiet_NaN();
