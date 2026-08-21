@@ -21,10 +21,12 @@ inline constexpr std::size_t kMaximumScriptAssetPathBytesUVE = 1024U;
 
 /// Validates a script's project-relative virtual path without resolving or reading the asset. An
 /// empty path remains the established no-script state; non-empty paths use canonical forward-slash
-/// segments and cannot contain absolute/traversal segments, embedded NULs, or unbounded input.
+/// segments and cannot contain absolute, URI, Windows-drive, or traversal forms, embedded NULs, or
+/// unbounded input.
 [[nodiscard]] inline bool IsScriptAssetPathValidUVE(const std::string_view path) noexcept {
-    if (path.empty() || path.size() > kMaximumScriptAssetPathBytesUVE || path.find('\0') != std::string_view::npos ||
-        path.find('\\') != std::string_view::npos || path.front() == '/') {
+    if (path.empty() || path.size() > kMaximumScriptAssetPathBytesUVE ||
+        path.find('\0') != std::string_view::npos || path.find('\\') != std::string_view::npos ||
+        path.find(':') != std::string_view::npos || path.front() == '/') {
         return path.empty();
     }
 

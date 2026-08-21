@@ -392,6 +392,9 @@ TEST(ScriptComponentUVE, IsScriptComponentValidUVE_AllowsEmptyAndCanonicalRelati
     EXPECT_FALSE(IsScriptComponentValidUVE(ScriptComponentUVE{"/scripts/player.lua"}));
     EXPECT_FALSE(IsScriptComponentValidUVE(ScriptComponentUVE{"scripts/../player.lua"}));
     EXPECT_FALSE(IsScriptComponentValidUVE(ScriptComponentUVE{"scripts\\player.lua"}));
+    EXPECT_FALSE(IsScriptComponentValidUVE(ScriptComponentUVE{"C:/scripts/player.lua"}));
+    EXPECT_FALSE(IsScriptComponentValidUVE(ScriptComponentUVE{"file://scripts/player.lua"}));
+    EXPECT_FALSE(IsScriptComponentValidUVE(ScriptComponentUVE{"scripts/player.lua:alternate"}));
 
     std::string embeddedNulPath{"scripts/player"};
     embeddedNulPath.push_back('\0');
