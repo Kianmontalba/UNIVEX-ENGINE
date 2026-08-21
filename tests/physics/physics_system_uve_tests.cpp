@@ -163,6 +163,43 @@ TEST_F(PhysicsSystemUVETest, StepUVE_DynamicBodyUnderGravity_MatchesHandComputed
     EXPECT_NEAR(entityManager.GetComponentUVE<Scene::RigidBodyComponentUVE>(body).velocity.y, -3.0F, kEpsilon);
 }
 
+TEST_F(PhysicsSystemUVETest, StepUVE_InvalidGravityOrDeltaPreservesBodyState) {
+    Scene::RigidBodyComponentUVE rigidBody;
+    rigidBody.velocity = Math::Vector3UVE{1.0F, 2.0F, 3.0F};
+    const Scene::EntityUVE body = MakeBodyEntityUVE(Math::Vector3UVE{4.0F, 5.0F, 6.0F}, rigidBody);
+    const Scene::TransformComponentUVE originalTransform =
+        entityManager.GetComponentUVE<Scene::TransformComponentUVE>(body);
+    const Math::Vector3UVE originalVelocity =
+        entityManager.GetComponentUVE<Scene::RigidBodyComponentUVE>(body).velocity;
+
+    PhysicsSystemUVE nonFiniteGravitySystem(
+        collisionSystem, Math::Vector3UVE{std::numeric_limits<float>::quiet_NaN(), 0.0F, 0.0F});
+    nonFiniteGravitySystem.StepUVE(entityManager, sceneGraph, 0.1F);
+    const Scene::TransformComponentUVE& afterNonFiniteGravity =
+        entityManager.GetComponentUVE<Scene::TransformComponentUVE>(body);
+    const Scene::RigidBodyComponentUVE& bodyAfterNonFiniteGravity =
+        entityManager.GetComponentUVE<Scene::RigidBodyComponentUVE>(body);
+    EXPECT_FLOAT_EQ(afterNonFiniteGravity.localPosition.x, originalTransform.localPosition.x);
+    EXPECT_FLOAT_EQ(afterNonFiniteGravity.localPosition.y, originalTransform.localPosition.y);
+    EXPECT_FLOAT_EQ(afterNonFiniteGravity.localPosition.z, originalTransform.localPosition.z);
+    EXPECT_FLOAT_EQ(bodyAfterNonFiniteGravity.velocity.x, originalVelocity.x);
+    EXPECT_FLOAT_EQ(bodyAfterNonFiniteGravity.velocity.y, originalVelocity.y);
+    EXPECT_FLOAT_EQ(bodyAfterNonFiniteGravity.velocity.z, originalVelocity.z);
+
+    PhysicsSystemUVE validGravitySystem(collisionSystem, Math::Vector3UVE{0.0F, -9.81F, 0.0F});
+    validGravitySystem.StepUVE(entityManager, sceneGraph, -0.1F);
+    const Scene::TransformComponentUVE& afterInvalidDelta =
+        entityManager.GetComponentUVE<Scene::TransformComponentUVE>(body);
+    const Scene::RigidBodyComponentUVE& bodyAfterInvalidDelta =
+        entityManager.GetComponentUVE<Scene::RigidBodyComponentUVE>(body);
+    EXPECT_FLOAT_EQ(afterInvalidDelta.localPosition.x, originalTransform.localPosition.x);
+    EXPECT_FLOAT_EQ(afterInvalidDelta.localPosition.y, originalTransform.localPosition.y);
+    EXPECT_FLOAT_EQ(afterInvalidDelta.localPosition.z, originalTransform.localPosition.z);
+    EXPECT_FLOAT_EQ(bodyAfterInvalidDelta.velocity.x, originalVelocity.x);
+    EXPECT_FLOAT_EQ(bodyAfterInvalidDelta.velocity.y, originalVelocity.y);
+    EXPECT_FLOAT_EQ(bodyAfterInvalidDelta.velocity.z, originalVelocity.z);
+}
+
 TEST_F(PhysicsSystemUVETest, StepUVE_GravityScaleDouble_FallsExactlyTwiceAsFar) {
     PhysicsSystemUVE physicsSystem(collisionSystem, Math::Vector3UVE{0.0F, -10.0F, 0.0F});
     Scene::RigidBodyComponentUVE normalScale;
