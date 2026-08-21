@@ -8,6 +8,9 @@ bool ValidateMonitorInfoUVE(const MonitorInfoUVE& monitor) noexcept {
 }
 
 bool ValidateMonitorSnapshotUVE(const std::vector<MonitorInfoUVE>& monitors) noexcept {
+    if (monitors.size() > kMaximumMonitorSnapshotEntriesUVE) {
+        return false;
+    }
     bool primarySeen = false;
     for (const MonitorInfoUVE& monitor : monitors) {
         if (!ValidateMonitorInfoUVE(monitor)) {
