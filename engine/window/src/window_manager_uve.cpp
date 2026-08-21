@@ -258,9 +258,17 @@ void WindowManagerUVE::SetFullscreenUVE(bool fullscreen) {
         }
         glfwSetWindowMonitor(m_impl->window, primaryMonitor, 0, 0, mode->width, mode->height,
                               mode->refreshRate);
+        if (glfwGetWindowMonitor(m_impl->window) != primaryMonitor) {
+            UVE_ERROR("WindowManagerUVE: GLFW did not confirm fullscreen transition");
+            return;
+        }
     } else {
         glfwSetWindowMonitor(m_impl->window, nullptr, m_impl->windowedX, m_impl->windowedY,
                               m_impl->windowedWidth, m_impl->windowedHeight, 0);
+        if (glfwGetWindowMonitor(m_impl->window) != nullptr) {
+            UVE_ERROR("WindowManagerUVE: GLFW did not confirm windowed transition");
+            return;
+        }
     }
     m_impl->fullscreen = fullscreen;
 }
