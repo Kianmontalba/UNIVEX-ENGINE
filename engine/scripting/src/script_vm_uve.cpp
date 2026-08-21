@@ -1333,7 +1333,9 @@ namespace {
     const bool isPlaySound = instruction.nodeTypeId == "audio.play_sound";
     const bool isStopSound = instruction.nodeTypeId == "audio.stop_sound";
     const bool isPlayingQuery = instruction.nodeTypeId == "audio.is_playing";
-    if (!isSetVolume && !isSetPitch && !isSetPosition && !isPlaySound && !isStopSound && !isPlayingQuery) {
+    const bool isSetAttenuation = instruction.nodeTypeId == "audio.set_attenuation";
+    if (!isSetVolume && !isSetPitch && !isSetPosition && !isPlaySound && !isStopSound && !isPlayingQuery &&
+        !isSetAttenuation) {
         return MakeNodeFailureUVE(instructionIndex, "Unknown Audio node type.");
     }
     const std::uint32_t nodeId = instruction.sourceNodeId;
@@ -1363,6 +1365,23 @@ namespace {
                 instructionIndex, isPlaySound
                     ? "Play Sound requires an accepted caller-owned trigger callback."
                     : "Stop Sound requires an accepted caller-owned trigger callback.");
+        }
+        return {};
+    }
+    if (isSetAttenuation) {
+        const ScriptAudioAttenuationControlFunctionUVE callback =
+            bindings == nullptr ? nullptr : bindings->audioSetAttenuation;
+        const float* minDistance = FindNumberInputUVE(context, nodeId, "Min Distance");
+        const float* maxDistance = FindNumberInputUVE(context, nodeId, "Max Distance");
+        const float* model = FindNumberInputUVE(context, nodeId, "Model");
+        const bool validModel = model != nullptr && (*model == 0.0F || *model == 1.0F);
+        if (callback == nullptr || minDistance == nullptr || maxDistance == nullptr || model == nullptr ||
+            !std::isfinite(*minDistance) || !std::isfinite(*maxDistance) || !std::isfinite(*model) ||
+            *minDistance <= 0.0F || *maxDistance <= *minDistance || !validModel ||
+            !callback(bindings->userData, source->entity, *minDistance, *maxDistance, *model, &accepted) || !accepted ||
+            !SetNodeOutputUVE(context, nodeId, "Result", true)) {
+            return MakeNodeFailureUVE(instructionIndex,
+                                      "Set Attenuation requires finite ordered distances, a supported model, and an accepted caller-owned callback.");
         }
         return {};
     }
@@ -2163,6 +2182,11 @@ namespace {
     }
     if (instruction.nodeTypeId == "audio.set_pitch") {
         return FindNumberInputUVE(context, nodeId, "Pitch") != nullptr;
+    }
+    if (instruction.nodeTypeId == "audio.set_attenuation") {
+        return FindNumberInputUVE(context, nodeId, "Min Distance") != nullptr &&
+               FindNumberInputUVE(context, nodeId, "Max Distance") != nullptr &&
+               FindNumberInputUVE(context, nodeId, "Model") != nullptr;
     }
     return false;
 }
