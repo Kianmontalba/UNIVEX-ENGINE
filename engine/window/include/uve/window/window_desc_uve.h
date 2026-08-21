@@ -3,10 +3,13 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 
 namespace UVE::Window {
+
+inline constexpr std::size_t kMaximumWindowTitleBytesUVE = 256U;
 
 /// Describes the window WindowManagerUVE creates. Passed once at construction; there is no
 /// "resize the desc" API — width/height change through the OS (user drag, SetFullscreenUVE()) and

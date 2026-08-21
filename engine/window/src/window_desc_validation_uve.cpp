@@ -6,6 +6,8 @@ bool ValidateWindowDescUVE(const WindowDescUVE& desc) noexcept {
     // Keep dimensions within the shared display-mode axis cap before the GLFW int narrowing cast.
     // glVersionMinor is unsigned, so its type already enforces the requested nonnegative rule.
     return desc.width > 0U && desc.width <= kMaximumDisplayModeAxisUVE && desc.height > 0U &&
-           desc.height <= kMaximumDisplayModeAxisUVE && !desc.title.empty() && desc.glVersionMajor >= 1U;
+           desc.height <= kMaximumDisplayModeAxisUVE && !desc.title.empty() &&
+           desc.title.size() <= kMaximumWindowTitleBytesUVE && desc.title.find('\0') == std::string::npos &&
+           desc.glVersionMajor >= 1U;
 }
 } // namespace UVE::Window

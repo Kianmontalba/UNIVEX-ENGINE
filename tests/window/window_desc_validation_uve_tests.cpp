@@ -36,6 +36,21 @@ TEST(WindowDescValidationUVETest, AxisDimensionsAboveSharedCap_AreRejected) {
     desc.height = kMaximumDisplayModeAxisUVE + 1U;
     EXPECT_FALSE(ValidateWindowDescUVE(desc));
 }
+TEST(WindowDescValidationUVETest, TitleAtSharedCap_IsAccepted) {
+    WindowDescUVE desc;
+    desc.title.assign(kMaximumWindowTitleBytesUVE, 'T');
+    EXPECT_TRUE(ValidateWindowDescUVE(desc));
+}
+
+TEST(WindowDescValidationUVETest, OversizedOrEmbeddedNulTitle_IsRejected) {
+    WindowDescUVE desc;
+    desc.title.assign(kMaximumWindowTitleBytesUVE + 1U, 'T');
+    EXPECT_FALSE(ValidateWindowDescUVE(desc));
+
+    desc.title = std::string{"UVE\0Editor", 10U};
+    EXPECT_FALSE(ValidateWindowDescUVE(desc));
+}
+
 TEST(WindowDescValidationUVETest, OpenGlMajorVersionBelowOne_IsRejected) {
     WindowDescUVE desc;
     desc.glVersionMajor = 0U;
