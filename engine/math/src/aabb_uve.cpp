@@ -35,7 +35,12 @@ std::string ToStringUVE(const AabbUVE& box) {
 }
 
 std::optional<PenetrationUVE> ComputePenetrationUVE(const AabbUVE& a, const AabbUVE& b) noexcept {
-    if (!a.IntersectsUVE(b)) {
+    const auto IsFiniteVectorUVE = [](const Vector3UVE& value) noexcept {
+        return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+    };
+    if (!IsFiniteVectorUVE(a.min) || !IsFiniteVectorUVE(a.max) || !IsFiniteVectorUVE(b.min) ||
+        !IsFiniteVectorUVE(b.max) || a.min.x > a.max.x || a.min.y > a.max.y || a.min.z > a.max.z ||
+        b.min.x > b.max.x || b.min.y > b.max.y || b.min.z > b.max.z || !a.IntersectsUVE(b)) {
         return std::nullopt;
     }
 
@@ -44,6 +49,11 @@ std::optional<PenetrationUVE> ComputePenetrationUVE(const AabbUVE& a, const Aabb
     const float overlapZ = std::min(a.max.z, b.max.z) - std::max(a.min.z, b.min.z);
     const Vector3UVE centerA = a.GetCenterUVE();
     const Vector3UVE centerB = b.GetCenterUVE();
+    if (!std::isfinite(overlapX) || !std::isfinite(overlapY) || !std::isfinite(overlapZ) ||
+        overlapX <= 0.0F || overlapY <= 0.0F || overlapZ <= 0.0F || !IsFiniteVectorUVE(centerA) ||
+        !IsFiniteVectorUVE(centerB)) {
+        return std::nullopt;
+    }
 
     if (overlapX <= overlapY && overlapX <= overlapZ) {
         return PenetrationUVE{Vector3UVE{centerB.x >= centerA.x ? 1.0F : -1.0F, 0.0F, 0.0F}, overlapX};
