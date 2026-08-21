@@ -89,6 +89,7 @@ GamepadStateSnapshotUVE GamepadInputSystemUVE::GetSnapshotUVE(const std::size_t 
     if (!IsValidGamepadIndexUVE(gamepadIndex)) {
         return {};
     }
+    const std::lock_guard<std::mutex> lock(m_liveStateMutex);
     return m_currentState[gamepadIndex];
 }
 
@@ -96,6 +97,7 @@ GamepadStateSnapshotUVE GamepadInputSystemUVE::GetPreviousSnapshotUVE(const std:
     if (!IsValidGamepadIndexUVE(gamepadIndex)) {
         return {};
     }
+    const std::lock_guard<std::mutex> lock(m_liveStateMutex);
     return m_previousState[gamepadIndex];
 }
 
@@ -103,6 +105,7 @@ float GamepadInputSystemUVE::GetAxisValueUVE(const std::size_t gamepadIndex, con
     if (!IsValidGamepadIndexUVE(gamepadIndex) || !IsValidAxisUVE(axis)) {
         return 0.0F;
     }
+    const std::lock_guard<std::mutex> lock(m_liveStateMutex);
     return m_currentState[gamepadIndex].axes[static_cast<std::size_t>(axis)];
 }
 
@@ -110,6 +113,7 @@ bool GamepadInputSystemUVE::IsButtonDownUVE(const std::size_t gamepadIndex, cons
     if (!IsValidGamepadIndexUVE(gamepadIndex) || !IsValidButtonUVE(button)) {
         return false;
     }
+    const std::lock_guard<std::mutex> lock(m_liveStateMutex);
     return m_currentState[gamepadIndex].buttons[static_cast<std::size_t>(button)];
 }
 
@@ -118,6 +122,7 @@ bool GamepadInputSystemUVE::WasButtonPressedThisFrameUVE(const std::size_t gamep
     if (!IsValidGamepadIndexUVE(gamepadIndex) || !IsValidButtonUVE(button)) {
         return false;
     }
+    const std::lock_guard<std::mutex> lock(m_liveStateMutex);
     const std::size_t buttonIndex = static_cast<std::size_t>(button);
     return m_currentState[gamepadIndex].buttons[buttonIndex] && !m_previousState[gamepadIndex].buttons[buttonIndex];
 }
@@ -127,6 +132,7 @@ bool GamepadInputSystemUVE::WasButtonReleasedThisFrameUVE(const std::size_t game
     if (!IsValidGamepadIndexUVE(gamepadIndex) || !IsValidButtonUVE(button)) {
         return false;
     }
+    const std::lock_guard<std::mutex> lock(m_liveStateMutex);
     const std::size_t buttonIndex = static_cast<std::size_t>(button);
     return !m_currentState[gamepadIndex].buttons[buttonIndex] && m_previousState[gamepadIndex].buttons[buttonIndex];
 }
