@@ -18,7 +18,7 @@ namespace {
 constexpr std::array<char, 4> kUveMagicUVE{'U', 'V', 'E', '\0'};
 constexpr std::uint32_t kEnvelopeVersionUVE = 1;
 constexpr std::uint32_t kCompressionMethodNoneUVE = 0;
-constexpr std::uint64_t kMaximumPayloadBytesUVE = 512ULL * 1024ULL * 1024ULL;
+constexpr std::uint64_t kMaximumPayloadBytesUVE = kMaximumUveFilePayloadBytesUVE;
 constexpr std::size_t kEnvelopeHeaderBytesUVE =
     kUveMagicUVE.size() + sizeof(std::uint32_t) + sizeof(std::uint32_t) + sizeof(std::uint32_t) + sizeof(std::uint64_t);
 
@@ -51,8 +51,15 @@ template <typename T>
 
 } // namespace
 
+bool IsUveFilePayloadSizeValidUVE(const std::size_t payloadBytes) noexcept {
+    return payloadBytes <= kMaximumUveFilePayloadBytesUVE;
+}
+
 std::vector<std::byte> EncodeUveFileEnvelopeUVE(const AssetKindUVE assetType,
                                                 const std::vector<std::byte>& payload) {
+    if (!IsUveFilePayloadSizeValidUVE(payload.size())) {
+        return {};
+    }
     std::vector<std::byte> envelope;
     envelope.reserve(kEnvelopeHeaderBytesUVE + payload.size());
     const auto* const magicBytes = reinterpret_cast<const std::byte*>(kUveMagicUVE.data());
@@ -112,6 +119,10 @@ DecodeUveFileEnvelopeUVE(const std::vector<std::byte>& envelope, const std::stri
 
 bool WriteUveFileUVE(const std::filesystem::path& path, const AssetKindUVE assetType,
                      const std::vector<std::byte>& payload) {
+    if (!IsUveFilePayloadSizeValidUVE(payload.size())) {
+        UVE_ERROR("UveFileEnvelopeUVE: refused oversized payload for {}", path.string());
+        return false;
+    }
     if (!IsAssetKindValidUVE(static_cast<std::uint32_t>(assetType))) {
         UVE_ERROR("UveFileEnvelopeUVE: refused to write \"{}\" with invalid asset kind {}", path.string(),
                   static_cast<std::uint32_t>(assetType));

@@ -27,6 +27,8 @@ namespace UVE::Asset {
 /// envelope-backed typed data-table asset format. `Audio` is the bounded
 /// interleaved PCM16-derived normalized sample envelope used by `.uveaudio` importer output. The
 /// `assetType` value is never reused.
+inline constexpr std::size_t kMaximumUveFilePayloadBytesUVE = 512U * 1024U * 1024U;
+
 enum class AssetKindUVE : std::uint32_t {
     Scene = 1,
     Prefab = 2,
@@ -49,7 +51,10 @@ struct UveFileHeaderUVE {
     std::uint32_t compressionMethod = 0;
 };
 
-/// Encodes `payload` as a universal `.uve*` binary envelope in memory: magic `"UVE\0"`,
+/// Returns whether a payload can be represented by the bounded universal `.uve*` envelope contract.
+[[nodiscard]] bool IsUveFilePayloadSizeValidUVE(std::size_t payloadBytes) noexcept;
+
+/// Encodes `payload` as a universal `.uve*` binary envelope in memory: magic "UVE\0",
 /// `version uint32` (the current payload schema version), `assetType uint32`,
 /// `compressionMethod uint32` (always `0 = None`), `payloadLength uint64`, then `payload`
 /// verbatim. It is the authoritative byte layout used by both filesystem persistence and
