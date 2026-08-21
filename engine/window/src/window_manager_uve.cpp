@@ -304,6 +304,11 @@ std::vector<MonitorInfoUVE> WindowManagerUVE::EnumerateMonitorsUVE() const {
     if (monitorCount < 0 || (monitorCount > 0 && glfwMonitors == nullptr)) {
         return {};
     }
+    if (monitorCount > static_cast<int>(kMaximumMonitorSnapshotEntriesUVE)) {
+        UVE_ERROR("WindowManagerUVE: GLFW returned {} monitors, exceeding the {}-entry snapshot cap",
+                  monitorCount, kMaximumMonitorSnapshotEntriesUVE);
+        return {};
+    }
     GLFWmonitor* const primaryMonitor = glfwGetPrimaryMonitor();
 
     monitors.reserve(static_cast<std::size_t>(monitorCount));
