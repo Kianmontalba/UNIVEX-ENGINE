@@ -38,6 +38,22 @@ protected:
     AssetDatabaseUVE assetDatabase;
 };
 
+class RejectingAssetDatabaseUVE final : public IAssetDatabaseUVE {
+public:
+    bool LoadUVE(const std::filesystem::path&) override { return false; }
+    bool SaveUVE() override { return false; }
+    bool SaveUVE(const std::filesystem::path&) override { return false; }
+    [[nodiscard]] AssetGuidUVE RegisterUVE(const std::filesystem::path&) override {
+        ++registerCount;
+        return kInvalidAssetGuidUVE;
+    }
+    [[nodiscard]] std::filesystem::path ResolveUVE(AssetGuidUVE) const override { return {}; }
+    [[nodiscard]] bool HasGuidUVE(AssetGuidUVE) const override { return false; }
+    [[nodiscard]] std::vector<AssetRecordUVE> GetRegisteredAssetsUVE() const override { return {}; }
+
+    int registerCount = 0;
+};
+
 TEST_F(AssetImporterUVETest, ClassifySourceUVE_ReportsAuthorityAndRawParserBoundary) {
     struct ClassificationCaseUVE {
         std::string_view path;
@@ -83,6 +99,34 @@ TEST_F(AssetImporterUVETest, ClassifySourceUVE_ReportsAuthorityAndRawParserBound
     EXPECT_TRUE(custom.importerRegistered);
     EXPECT_FALSE(custom.requiresFormatSpecificParser);
     EXPECT_EQ(custom.diagnostic, "custom importer is registered without built-in classification");
+}
+
+TEST_F(AssetImporterUVETest, ImportUVE_RegistrationFailureReturnsInvalidAfterSuccessfulConversion) {
+    const std::filesystem::path sourcePath = "uve_asset_importer_registration_failure_source.custom";
+    const std::filesystem::path destinationPath = "uve_asset_importer_registration_failure_dest.custom";
+    std::filesystem::remove(sourcePath);
+    std::filesystem::remove(destinationPath);
+    WriteFixtureFileUVE(sourcePath, "converted before registration failure");
+
+    importer.RegisterImporterUVE("custom", [](const std::filesystem::path& source,
+                                                const std::filesystem::path& destination,
+                                                const AssetImportSettingsUVE&) {
+        std::ifstream input(source, std::ios::binary);
+        std::ofstream output(destination, std::ios::binary | std::ios::trunc);
+        output << input.rdbuf();
+        return input.good() && output.good();
+    });
+    RejectingAssetDatabaseUVE rejectingDatabase;
+
+    const AssetGuidUVE guid = importer.ImportUVE(sourcePath, destinationPath, rejectingDatabase);
+
+    EXPECT_EQ(guid, kInvalidAssetGuidUVE);
+    EXPECT_EQ(rejectingDatabase.registerCount, 1);
+    EXPECT_TRUE(std::filesystem::exists(destinationPath));
+    EXPECT_EQ(ReadFileUVE(destinationPath), "converted before registration failure");
+
+    std::filesystem::remove(sourcePath);
+    std::filesystem::remove(destinationPath);
 }
 
 TEST_F(AssetImporterUVETest, ImportUVE_GenericImporter_CopiesFileAndRegistersGuid) {
