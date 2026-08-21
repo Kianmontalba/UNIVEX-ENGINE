@@ -218,7 +218,7 @@ ReliablePacketReceiveStatusUVE AcceptReliableSequenceUVE(
 bool ApplyReliableAcknowledgementsUVE(
     const ReliablePacketHeaderUVE& header, std::uint32_t& pendingSequenceMask,
     const std::uint32_t oldestPendingSequence) noexcept {
-    if (header.acknowledgedSequence == 0U || oldestPendingSequence == 0U) {
+    if (header.sequence == 0U || header.acknowledgedSequence == 0U || oldestPendingSequence == 0U) {
         return false;
     }
     bool changed = false;

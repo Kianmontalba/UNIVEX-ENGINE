@@ -125,6 +125,13 @@ TEST(ReliablePacketWindowUVETest, InvalidAcknowledgementDoesNotMutatePendingMask
     EXPECT_FALSE(ApplyReliableAcknowledgementsUVE(header, pending, 1U));
     EXPECT_EQ(pending, 0xA5A5A5A5U);
 }
+TEST(ReliablePacketWindowUVETest, AcknowledgementRejectsReservedZeroPacketSequenceAtomically) {
+    std::uint32_t pending = 0xA5A5A5A5U;
+    const ReliablePacketHeaderUVE header{0U, 8U, 0xFFFFFFFFU};
+    EXPECT_FALSE(ApplyReliableAcknowledgementsUVE(header, pending, 1U));
+    EXPECT_EQ(pending, 0xA5A5A5A5U);
+}
+
 TEST(ReliablePacketWindowUVETest, ReliablePacketHeaderWireRoundTrip_IsLittleEndianAndExactSize) {
     const ReliablePacketHeaderUVE original{0x12345678U, 0x90ABCDEFU, 0x01020304U};
     std::vector<std::uint8_t> bytes;
