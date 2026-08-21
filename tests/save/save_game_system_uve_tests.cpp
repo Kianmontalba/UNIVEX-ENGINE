@@ -195,6 +195,36 @@ TEST_F(SaveGameSystemUVETest, GetSaveMetadataUVE_RejectsEmbeddedSlotIdentityMism
     EXPECT_EQ(loadedManager.GetEntityCountUVE(), 0U);
 }
 
+TEST_F(SaveGameSystemUVETest, LoadUVE_RejectsTamperedNegativePlaytimeMetadata) {
+    const EntityUVE entity = entityManager.CreateEntityUVE();
+    GameStateMetadataUVE metadata;
+    metadata.playtimeSeconds = 100.0;
+    ASSERT_TRUE(saveGameSystem.SaveUVE(17, entityManager, {entity}, metadata));
+
+    const std::filesystem::path slotPath = saveDirectory / "slot_17.uvesave";
+    const auto originalFile = Asset::ReadUveFileUVE(slotPath);
+    ASSERT_TRUE(originalFile.has_value());
+    std::vector<std::byte> payload = originalFile->second;
+    ASSERT_GE(payload.size(), sizeof(std::uint32_t));
+    std::uint32_t metadataLength = 0U;
+    std::memcpy(&metadataLength, payload.data(), sizeof(metadataLength));
+    ASSERT_LE(sizeof(metadataLength) + static_cast<std::size_t>(metadataLength), payload.size());
+    std::string metadataText(reinterpret_cast<const char*>(payload.data() + sizeof(metadataLength)), metadataLength);
+    const std::string validToken = "\"playtimeSeconds\":100.0";
+    const std::string invalidToken = "\"playtimeSeconds\":-10.0";
+    const std::size_t playtimeOffset = metadataText.find(validToken);
+    ASSERT_NE(playtimeOffset, std::string::npos);
+    ASSERT_EQ(validToken.size(), invalidToken.size());
+    metadataText.replace(playtimeOffset, validToken.size(), invalidToken);
+    std::memcpy(payload.data() + sizeof(metadataLength), metadataText.data(), metadataLength);
+    ASSERT_TRUE(Asset::WriteUveFileUVE(slotPath, Asset::AssetKindUVE::Save, payload));
+
+    EntityManagerUVE loadedManager(memoryManager.GetDefaultAllocatorUVE(), eventSystem);
+    EXPECT_TRUE(saveGameSystem.LoadUVE(17, loadedManager).empty());
+    EXPECT_EQ(loadedManager.GetEntityCountUVE(), 0U);
+    EXPECT_FALSE(saveGameSystem.GetSaveMetadataUVE(17).has_value());
+}
+
 TEST_F(SaveGameSystemUVETest, GetSaveMetadataUVE_EmptySlot_ReturnsNullopt) {
     EXPECT_FALSE(saveGameSystem.GetSaveMetadataUVE(11).has_value());
 }
