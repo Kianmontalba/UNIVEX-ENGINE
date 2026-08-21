@@ -30,6 +30,14 @@ void MobileInputSystemUVE::SetTouchStateUVE(const std::size_t touchSlot, const b
         return;
     }
     const std::lock_guard<std::mutex> lock(m_liveStateMutex);
+    if (active) {
+        for (std::size_t otherSlot = 0U; otherSlot < kMaximumTouchCountUVE; ++otherSlot) {
+            if (otherSlot != touchSlot && m_liveState.touches[otherSlot].active &&
+                m_liveState.touches[otherSlot].identifier == identifier) {
+                return;
+            }
+        }
+    }
     TouchPointStateUVE& touch = m_liveState.touches[touchSlot];
     touch.active = active;
     touch.identifier = active ? identifier : 0U;
