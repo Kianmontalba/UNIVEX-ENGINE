@@ -11,6 +11,7 @@
 #include "uve/input/mouse_button_uve.h"
 #include "uve/window/window_events_uve.h"
 #include "uve/window/monitor_info_validation_uve.h"
+#include "uve/window/window_desc_validation_uve.h"
 
 namespace UVE::Window {
 
@@ -143,6 +144,10 @@ struct WindowManagerUVE::ImplUVE {
 
 WindowManagerUVE::WindowManagerUVE(Events::IEventSystemUVE& eventSystem, const WindowDescUVE& desc)
     : m_impl(std::make_unique<ImplUVE>(eventSystem)) {
+    if (!ValidateWindowDescUVE(desc)) {
+        UVE_ERROR("WindowManagerUVE: rejected invalid window descriptor before GLFW initialization");
+        return;
+    }
     if (g_glfwRefCount == 0) {
         glfwSetErrorCallback(&GlfwErrorCallbackUVE);
         if (glfwInit() != GLFW_TRUE) {

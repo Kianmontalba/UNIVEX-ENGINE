@@ -107,6 +107,14 @@ TEST_F(WindowManagerUVETest, SetFullscreenUVE_RoundTripsWithBackendConfirmedStat
     EXPECT_EQ(glfwGetWindowMonitor(glfwWindow), nullptr);
 }
 
+TEST_F(WindowManagerUVETest, InvalidWindowDescriptor_FailsClosedBeforeCreation) {
+    WindowDescUVE invalid = MakeTestWindowDescUVE();
+    invalid.width = 0U;
+    WindowManagerUVE invalidManager(eventSystem, invalid);
+    EXPECT_FALSE(invalidManager.IsValidUVE());
+    EXPECT_EQ(invalidManager.GetNativeWindowHandleUVE(), nullptr);
+}
+
 TEST_F(WindowManagerUVETest, EnumerateMonitorsUVE_ReturnsValidatedSnapshot) {
     const std::vector<MonitorInfoUVE> monitors = windowManager->EnumerateMonitorsUVE();
     EXPECT_FALSE(monitors.empty());
