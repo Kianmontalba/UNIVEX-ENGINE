@@ -158,8 +158,9 @@ struct PrefabOverrideConflictReportUVE final {
         return {PrefabOverrideOperationCodeUVE::InvalidBaseline, 0U, false, {}};
     }
 
+    const std::size_t conflictLimit = std::min(maximumConflicts, kMaximumPrefabConflictsUVE);
     PrefabOverrideConflictReportUVE report;
-    report.conflicts.reserve(std::min(baseline.size(), maximumConflicts));
+    report.conflicts.reserve(std::min(baseline.size(), conflictLimit));
     for (const PrefabPropertyOverrideUVE& expected : baseline) {
         std::string actualValue;
         if (!target.ReadPropertyUVE(expected.propertyPath, actualValue) || actualValue.empty() ||
@@ -173,7 +174,7 @@ struct PrefabOverrideConflictReportUVE final {
             continue;
         }
         report.code = PrefabOverrideOperationCodeUVE::ConflictDetected;
-        if (report.conflicts.size() < maximumConflicts) {
+        if (report.conflicts.size() < conflictLimit) {
             report.conflicts.push_back(
                 {expected.propertyPath, expected.serializedValue, std::move(actualValue)});
         } else {
