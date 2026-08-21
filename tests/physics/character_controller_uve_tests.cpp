@@ -20,6 +20,16 @@
 namespace UVE::Physics::Tests {
 namespace {
 
+class FixedCollisionSystemUVE final : public ICollisionSystemUVE {
+public:
+    std::vector<CollisionPairUVE> pairs;
+
+    [[nodiscard]] std::vector<CollisionPairUVE> DetectCollisionsUVE(
+        Scene::IEntityManagerUVE&) const override {
+        return pairs;
+    }
+};
+
 class CharacterControllerUVETest : public ::testing::Test {
 protected:
     Memory::MemoryManagerUVE memoryManager;
@@ -92,6 +102,27 @@ TEST_F(CharacterControllerUVETest, MoveUVE_RejectsFiniteDisplacementWhoseLengthO
     EXPECT_EQ(moveResult.code, CharacterControllerMoveCodeUVE::InvalidInput);
     EXPECT_EQ(moveResult.substeps, 0U);
     EXPECT_EQ(GetWorldPositionUVE(controller), positionBefore);
+}
+
+TEST_F(CharacterControllerUVETest, MoveUVE_SkipsNonUnitFiniteCollisionAxisWithoutNonFiniteMutation) {
+    const Scene::EntityUVE controller = MakeControllerEntityUVE({}, {0.5F, 0.5F, 0.5F});
+    const Scene::EntityUVE target = MakeColliderEntityUVE({0.0F, 0.0F, 0.0F}, {0.5F, 0.5F, 0.5F});
+    FixedCollisionSystemUVE malformedCollisionSystem;
+    malformedCollisionSystem.pairs.push_back(
+        CollisionPairUVE{controller, target, {std::numeric_limits<float>::max(), 0.0F, 0.0F}, 1.0F});
+
+    const CharacterControllerMoveResultUVE result = CharacterControllerUVE::MoveUVE(
+        entityManager, sceneGraph, malformedCollisionSystem,
+        CharacterControllerInputUVE{controller, {1.0F, 0.0F, 0.0F}, 8U, 0.25F});
+
+    EXPECT_EQ(result.code, CharacterControllerMoveCodeUVE::Moved);
+    EXPECT_FALSE(result.blocked);
+    EXPECT_EQ(result.contactCount, 0U);
+    const Math::Vector3UVE position = GetWorldPositionUVE(controller);
+    EXPECT_TRUE(std::isfinite(position.x));
+    EXPECT_TRUE(std::isfinite(position.y));
+    EXPECT_TRUE(std::isfinite(position.z));
+    EXPECT_NEAR(position.x, 1.0F, 1.0e-4F);
 }
 
 TEST_F(CharacterControllerUVETest, MoveUVE_FreeSpaceAppliesRequestedDisplacementDeterministically) {
