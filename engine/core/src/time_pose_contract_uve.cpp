@@ -23,6 +23,13 @@ namespace {
            identifier.find('\0') == std::string::npos;
 }
 
+[[nodiscard]] bool IsFiniteUnifiedTimeStateUVE(const UnifiedTimeStateUVE& state) noexcept {
+    return std::isfinite(state.realTimeSeconds) && std::isfinite(state.gameTimeSeconds) &&
+           std::isfinite(state.fixedTimeSeconds) && std::isfinite(state.animationTimeSeconds) &&
+           std::isfinite(state.fixedAccumulatorSeconds) && std::isfinite(state.realDeltaSeconds) &&
+           std::isfinite(state.gameDeltaSeconds) && std::isfinite(state.animationDeltaSeconds);
+}
+
 } // namespace
 
 UnifiedTimeStateUVE UnifiedTimeContractUVE::AdvanceUVE(
@@ -75,6 +82,11 @@ UnifiedTimeStateUVE UnifiedTimeContractUVE::AdvanceUVE(
         }
     }
     next.paused = input.paused;
+    if (!IsFiniteUnifiedTimeStateUVE(next)) {
+        outFixedSteps = 0U;
+        outInputClamped = true;
+        return previous;
+    }
     return next;
 }
 
