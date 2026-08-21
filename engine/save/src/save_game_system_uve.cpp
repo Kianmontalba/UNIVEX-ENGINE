@@ -338,6 +338,10 @@ std::vector<Scene::EntityUVE> SaveGameSystemUVE::LoadUVE(int slotIndex, Scene::I
                                                             kCurrentSavePayloadSchemaVersionUVE, emptyPayload);
         return {};
     }
+    if (!IsValidSaveMetadataUVE(metadata.value())) {
+        UVE_ERROR("SaveGameSystemUVE: slot {} contains invalid playtime metadata", slotIndex);
+        return {};
+    }
     if (!IsSaveMetadataForSlotUVE(metadata.value(), slotIndex)) {
         UVE_ERROR("SaveGameSystemUVE: slot {} contains metadata for slot {}", slotIndex, metadata->slotIndex);
         return {};
@@ -428,10 +432,14 @@ std::optional<GameStateMetadataUVE> SaveGameSystemUVE::GetSaveMetadataUVE(int sl
         return std::nullopt;
     }
     const std::optional<GameStateMetadataUVE> metadata = DecodeMetadataJsonUVE(metadataJsonBytes);
-    if (!metadata.has_value() || !IsSaveMetadataForSlotUVE(metadata.value(), slotIndex)) {
+    if (!metadata.has_value() || !IsValidSaveMetadataUVE(metadata.value())) {
         if (metadata.has_value()) {
-            UVE_ERROR("SaveGameSystemUVE: slot {} contains metadata for slot {}", slotIndex, metadata->slotIndex);
+            UVE_ERROR("SaveGameSystemUVE: slot {} contains invalid playtime metadata", slotIndex);
         }
+        return std::nullopt;
+    }
+    if (!IsSaveMetadataForSlotUVE(metadata.value(), slotIndex)) {
+        UVE_ERROR("SaveGameSystemUVE: slot {} contains metadata for slot {}", slotIndex, metadata->slotIndex);
         return std::nullopt;
     }
     return metadata;
