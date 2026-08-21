@@ -188,14 +188,18 @@ bool DecodeWavPcm16SamplesUVE(const std::vector<std::byte>& wavBytes,
         }
         if (HasTag(wavBytes, dataOffset, "data")) {
             if (chunkSize != metadata->dataBytes) return false;
-            std::vector<float> samples;
-            samples.reserve(sampleCount);
-            for (std::size_t offset = payloadOffset; offset < payloadOffset + chunkSize; offset += 2U) {
-                const std::int16_t value = static_cast<std::int16_t>(ReadU16LE(wavBytes, offset));
-                samples.push_back(std::clamp(static_cast<float>(value) / 32768.0F, -1.0F, 1.0F));
+            try {
+                std::vector<float> samples;
+                samples.reserve(sampleCount);
+                for (std::size_t offset = payloadOffset; offset < payloadOffset + chunkSize; offset += 2U) {
+                    const std::int16_t value = static_cast<std::int16_t>(ReadU16LE(wavBytes, offset));
+                    samples.push_back(std::clamp(static_cast<float>(value) / 32768.0F, -1.0F, 1.0F));
+                }
+                outSamples = std::move(samples);
+                return true;
+            } catch (const std::bad_alloc&) {
+                return false;
             }
-            outSamples = std::move(samples);
-            return true;
         }
         dataOffset = payloadOffset + chunkSize + (chunkSize & 1U);
     }
