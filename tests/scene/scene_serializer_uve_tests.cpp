@@ -896,6 +896,35 @@ TEST_F(SceneSerializerUVETest, SaveThenLoad_Hierarchy_RemapsParentCorrectly) {
     std::filesystem::remove(path);
 }
 
+TEST_F(SceneSerializerUVETest, SaveUVE_FailedTemporaryPublicationPreservesExistingDestination) {
+    const EntityUVE root = entityManager.CreateEntityUVE();
+    entityManager.AddComponentUVE<MeshComponentUVE>(root, MeshComponentUVE{Asset::AssetGuidUVE{101}, Asset::AssetGuidUVE{202}});
+
+    const std::filesystem::path path = "uve_scene_serializer_tests_atomic_destination.uvescene";
+    const std::filesystem::path temporaryPath = path.string() + ".uve_scene_tmp";
+    std::filesystem::remove(path);
+    std::filesystem::remove_all(temporaryPath);
+    ASSERT_TRUE(serializer.SaveUVE(entityManager, {root}, path, SceneAssetTypeUVE::Scene));
+    const auto before = Asset::ReadUveFileUVE(path);
+    ASSERT_TRUE(before.has_value());
+
+    ASSERT_TRUE(std::filesystem::create_directory(temporaryPath));
+    {
+        std::ofstream lockFile(temporaryPath / "lock");
+        ASSERT_TRUE(lockFile.is_open());
+        lockFile << "keep temporary path non-empty";
+    }
+
+    EXPECT_FALSE(serializer.SaveUVE(entityManager, {root}, path, SceneAssetTypeUVE::Scene));
+    const auto after = Asset::ReadUveFileUVE(path);
+    ASSERT_TRUE(after.has_value());
+    EXPECT_EQ(after->first.assetType, before->first.assetType);
+    EXPECT_EQ(after->second, before->second);
+
+    std::filesystem::remove(path);
+    std::filesystem::remove_all(temporaryPath);
+}
+
 TEST_F(SceneSerializerUVETest, SaveThenLoad_MultipleRoots_AllPresentInFileOrder) {
     const EntityUVE rootA = entityManager.CreateEntityUVE();
     entityManager.AddComponentUVE<MeshComponentUVE>(rootA, MeshComponentUVE{Asset::AssetGuidUVE{1}, Asset::AssetGuidUVE{2}});
