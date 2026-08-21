@@ -44,8 +44,12 @@ void AppendUint64UVE(std::vector<std::byte>& buffer, std::uint64_t value) {
 }
 
 [[nodiscard]] bool IsSafeRelativePathUVE(std::string_view name) {
+    if (name.empty() || name.size() > kMaximumAssetBundleEntryNameBytesUVE ||
+        name.find('\0') != std::string_view::npos) {
+        return false;
+    }
     const std::filesystem::path path{std::string(name)};
-    if (name.empty() || path.is_absolute() || path.has_root_name() || path.has_root_directory()) {
+    if (path.is_absolute() || path.has_root_name() || path.has_root_directory()) {
         return false;
     }
     return std::none_of(path.begin(), path.end(), [](const std::filesystem::path& component) {
@@ -103,6 +107,10 @@ void AppendUint64UVE(std::vector<std::byte>& buffer, std::uint64_t value) {
         UVE_ERROR("AssetBundleUVE: \"{}\" has a truncated entry count", bundlePath.string());
         return false;
     }
+    if (entryCount > kMaximumAssetBundleEntriesUVE) {
+        UVE_ERROR("AssetBundleUVE: \"{}\" exceeds the bounded entry-count limit", bundlePath.string());
+        return false;
+    }
 
     for (std::uint32_t index = 0; index < entryCount; ++index) {
         std::uint64_t guidValue = 0;
@@ -113,7 +121,8 @@ void AppendUint64UVE(std::vector<std::byte>& buffer, std::uint64_t value) {
             return false;
         }
         static_cast<void>(guidValue); // not needed for scanning/lookup, only the name/data ranges are
-        if (offset + nameLength > payload.size()) {
+        if (nameLength == 0U || nameLength > kMaximumAssetBundleEntryNameBytesUVE ||
+            offset > payload.size() || nameLength > payload.size() - offset) {
             UVE_ERROR("AssetBundleUVE: \"{}\" has a truncated entry name", bundlePath.string());
             return false;
         }
@@ -142,6 +151,10 @@ void AppendUint64UVE(std::vector<std::byte>& buffer, std::uint64_t value) {
 
 bool AssetBundleUVE::PackUVE(const std::vector<AssetBundleEntryUVE>& entries,
                               const std::filesystem::path& bundlePath) {
+    if (entries.size() > kMaximumAssetBundleEntriesUVE) {
+        UVE_ERROR("AssetBundleUVE: entry count exceeds the bounded limit");
+        return false;
+    }
     std::vector<std::byte> payload;
     AppendUint32UVE(payload, static_cast<std::uint32_t>(entries.size()));
 
