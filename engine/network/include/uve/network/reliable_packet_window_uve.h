@@ -96,7 +96,8 @@ struct ReliablePayloadReassemblyStateUVE final {
     ReliablePayloadFragmentPlanUVE& outPlan,
     std::size_t maximumFragments = kReliablePacketMaximumFragmentCountUVE) noexcept;
 
-/// Validates one caller-owned payload size against a bounded datagram budget.
+/// Validates one caller-owned payload size against a bounded datagram budget. A caller-supplied
+/// maximum above `kReliablePacketMaximumPayloadBytesUVE` is clamped to that shared wire cap.
 [[nodiscard]] bool ValidateReliablePayloadBudgetUVE(
     std::size_t payloadBytes,
     std::size_t maximumBytes = kReliablePacketMaximumPayloadBytesUVE) noexcept;

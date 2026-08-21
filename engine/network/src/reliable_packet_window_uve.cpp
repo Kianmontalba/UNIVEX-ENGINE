@@ -149,7 +149,9 @@ bool PlanReliablePayloadFragmentsUVE(const std::size_t payloadBytes,
 
 bool ValidateReliablePayloadBudgetUVE(const std::size_t payloadBytes,
                                       const std::size_t maximumBytes) noexcept {
-    return payloadBytes <= maximumBytes;
+    const std::size_t boundedMaximumBytes =
+        maximumBytes < kReliablePacketMaximumPayloadBytesUVE ? maximumBytes : kReliablePacketMaximumPayloadBytesUVE;
+    return payloadBytes <= boundedMaximumBytes;
 }
 
 bool ComputeReliableRetryTimeoutUVE(const float baseTimeoutSeconds, const std::uint32_t retryCount,
