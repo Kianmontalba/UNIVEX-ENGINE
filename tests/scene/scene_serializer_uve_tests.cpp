@@ -896,6 +896,34 @@ TEST_F(SceneSerializerUVETest, SaveThenLoad_Hierarchy_RemapsParentCorrectly) {
     std::filesystem::remove(path);
 }
 
+TEST_F(SceneSerializerUVETest, PrefabSerializationRequiresSingleRootBeforeEntityPublication) {
+    const EntityUVE rootA = entityManager.CreateEntityUVE();
+    entityManager.AddComponentUVE<MeshComponentUVE>(rootA, MeshComponentUVE{Asset::AssetGuidUVE{301}, Asset::AssetGuidUVE{302}});
+    const EntityUVE rootB = entityManager.CreateEntityUVE();
+    entityManager.AddComponentUVE<MeshComponentUVE>(rootB, MeshComponentUVE{Asset::AssetGuidUVE{303}, Asset::AssetGuidUVE{304}});
+
+    const std::filesystem::path rejectedSavePath = "uve_scene_serializer_tests_multi_root_prefab.uveprefab";
+    const std::filesystem::path malformedPath = "uve_scene_serializer_tests_malformed_multi_root.uveprefab";
+    std::filesystem::remove(rejectedSavePath);
+    std::filesystem::remove(malformedPath);
+    EXPECT_FALSE(serializer.SaveUVE(entityManager, {rootA, rootB}, rejectedSavePath, SceneAssetTypeUVE::Prefab));
+    EXPECT_FALSE(std::filesystem::exists(rejectedSavePath));
+
+    const std::optional<SceneSnapshotUVE> sceneSnapshot =
+        serializer.CaptureUVE(entityManager, {rootA, rootB}, SceneAssetTypeUVE::Scene);
+    ASSERT_TRUE(sceneSnapshot.has_value());
+    const auto decoded = Asset::DecodeUveFileEnvelopeUVE(sceneSnapshot->bytes, "multi-root prefab test");
+    ASSERT_TRUE(decoded.has_value());
+    ASSERT_TRUE(Asset::WriteUveFileUVE(malformedPath, Asset::AssetKindUVE::Prefab, decoded->second));
+
+    const std::size_t entityCountBeforeLoad = entityManager.GetEntityCountUVE();
+    EXPECT_TRUE(serializer.LoadUVE(entityManager, malformedPath).empty());
+    EXPECT_EQ(entityManager.GetEntityCountUVE(), entityCountBeforeLoad);
+
+    std::filesystem::remove(rejectedSavePath);
+    std::filesystem::remove(malformedPath);
+}
+
 TEST_F(SceneSerializerUVETest, SaveUVE_FailedTemporaryPublicationPreservesExistingDestination) {
     const EntityUVE root = entityManager.CreateEntityUVE();
     entityManager.AddComponentUVE<MeshComponentUVE>(root, MeshComponentUVE{Asset::AssetGuidUVE{101}, Asset::AssetGuidUVE{202}});

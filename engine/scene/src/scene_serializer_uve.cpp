@@ -487,7 +487,7 @@ void RollbackRestoredEntitiesUVE(IEntityManagerUVE& entityManager, std::vector<E
 
 [[nodiscard]] std::optional<std::vector<EntityUVE>> DecodeScenePayloadUVE(
     IEntityManagerUVE& entityManager, const std::vector<std::byte>& payloadBuffer,
-    const std::string_view sourceDescription) {
+    const std::string_view sourceDescription, const std::optional<std::size_t> expectedRootCount = std::nullopt) {
     const std::string payloadText(reinterpret_cast<const char*>(payloadBuffer.data()), payloadBuffer.size());
     nlohmann::json payload;
     try {
@@ -523,6 +523,31 @@ void RollbackRestoredEntitiesUVE(IEntityManagerUVE& entityManager, std::vector<E
     } catch (const nlohmann::json::exception& jsonError) {
         UVE_ERROR("SceneSerializerUVE: malformed entity list in \"{}\": {}", sourceDescription, jsonError.what());
         return std::nullopt;
+    }
+
+    if (expectedRootCount.has_value()) {
+        std::size_t rootCount = 0U;
+        for (const auto& [unusedLocalId, entityJson] : orderedEntities) {
+            static_cast<void>(unusedLocalId);
+            const auto& components = entityJson.at("components");
+            bool hasKnownParent = false;
+            if (components.contains("HierarchyComponentUVE")) {
+                const std::int64_t parentLocalId =
+                    components.at("HierarchyComponentUVE").at("parentLocalId").get<std::int64_t>();
+                hasKnownParent = parentLocalId >= 0 &&
+                                 static_cast<std::uint64_t>(parentLocalId) <=
+                                     std::numeric_limits<std::uint32_t>::max() &&
+                                 localIds.contains(static_cast<std::uint32_t>(parentLocalId));
+            }
+            if (!hasKnownParent) {
+                ++rootCount;
+            }
+        }
+        if (rootCount != *expectedRootCount) {
+            UVE_ERROR("SceneSerializerUVE: \"{}\" has {} roots but requires {} before entity creation",
+                      sourceDescription, rootCount, *expectedRootCount);
+            return std::nullopt;
+        }
     }
 
     std::unordered_map<std::uint32_t, EntityUVE> localIdToEntity;
@@ -607,6 +632,10 @@ std::optional<SceneSnapshotUVE> SceneSerializerUVE::CaptureUVE(
     if (!ValidateSceneAssetTypeUVE(assetType, "scene snapshot")) {
         return std::nullopt;
     }
+    if (assetType == SceneAssetTypeUVE::Prefab && rootEntities.size() != 1U) {
+        UVE_ERROR("SceneSerializerUVE: prefab snapshot requires exactly one root entity");
+        return std::nullopt;
+    }
     const std::optional<std::vector<std::byte>> payload =
         EncodeScenePayloadUVE(entityManager, rootEntities, "scene snapshot");
     if (!payload.has_value()) {
@@ -628,14 +657,19 @@ std::vector<EntityUVE> SceneSerializerUVE::RestoreUVE(IEntityManagerUVE& entityM
         }
         return {};
     }
-    const std::optional<std::vector<EntityUVE>> restored =
-        DecodeScenePayloadUVE(entityManager, payload, "scene snapshot");
+    const std::optional<std::vector<EntityUVE>> restored = DecodeScenePayloadUVE(
+        entityManager, payload, "scene snapshot",
+        header.assetType == SceneAssetTypeUVE::Prefab ? std::optional<std::size_t>{1U} : std::nullopt);
     return restored.value_or(std::vector<EntityUVE>{});
 }
 
 bool SceneSerializerUVE::SaveUVE(IEntityManagerUVE& entityManager, const std::vector<EntityUVE>& rootEntities,
                                   const std::filesystem::path& path, const SceneAssetTypeUVE assetType) {
     if (!ValidateSceneAssetTypeUVE(assetType, path.string())) {
+        return false;
+    }
+    if (assetType == SceneAssetTypeUVE::Prefab && rootEntities.size() != 1U) {
+        UVE_ERROR("SceneSerializerUVE: prefab save requires exactly one root entity for \"{}\"", path.string());
         return false;
     }
     const std::optional<std::vector<std::byte>> payload = EncodeScenePayloadUVE(entityManager, rootEntities, path.string());
@@ -671,7 +705,9 @@ std::vector<EntityUVE> SceneSerializerUVE::LoadUVE(IEntityManagerUVE& entityMana
     if (!ValidateSceneAssetTypeUVE(header.assetType, path.string())) {
         return {};
     }
-    const std::optional<std::vector<EntityUVE>> restored = DecodeScenePayloadUVE(entityManager, payload, path.string());
+    const std::optional<std::vector<EntityUVE>> restored = DecodeScenePayloadUVE(
+        entityManager, payload, path.string(),
+        header.assetType == SceneAssetTypeUVE::Prefab ? std::optional<std::size_t>{1U} : std::nullopt);
     return restored.value_or(std::vector<EntityUVE>{});
 }
 
