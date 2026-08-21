@@ -113,6 +113,12 @@ TEST(ReliablePacketWindowUVETest, CumulativeAcknowledgementClearsPendingPrefix) 
     EXPECT_TRUE(ApplyReliableAcknowledgementsUVE(header, pending, 100U));
     EXPECT_EQ(pending, 0xFFFFFFF8U);
 }
+TEST(ReliablePacketWindowUVETest, CumulativeAcknowledgementClearsFullThirtyTwoEntryWindow) {
+    std::uint32_t pending = 0xFFFFFFFFU;
+    const ReliablePacketHeaderUVE header{132U, 131U, 0U};
+    EXPECT_TRUE(ApplyReliableAcknowledgementsUVE(header, pending, 100U));
+    EXPECT_EQ(pending, 0U);
+}
 TEST(ReliablePacketWindowUVETest, SelectiveAcknowledgementClearsForwardSlots) {
     std::uint32_t pending = 0xFFFFFFFFU;
     const ReliablePacketHeaderUVE header{200U, 200U, (1U << 1U) | (1U << 4U)};
