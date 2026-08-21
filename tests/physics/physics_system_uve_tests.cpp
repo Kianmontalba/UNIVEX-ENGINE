@@ -200,6 +200,46 @@ TEST_F(PhysicsSystemUVETest, StepUVE_InvalidGravityOrDeltaPreservesBodyState) {
     EXPECT_FLOAT_EQ(bodyAfterInvalidDelta.velocity.z, originalVelocity.z);
 }
 
+TEST_F(PhysicsSystemUVETest, StepUVE_DerivedOverflowFailsClosedWithoutPublishingNonFiniteState) {
+    Scene::RigidBodyComponentUVE velocityOverflowBody;
+    velocityOverflowBody.velocity = Math::Vector3UVE{std::numeric_limits<float>::max(), 0.0F, 0.0F};
+    const Scene::EntityUVE velocityBody = MakeBodyEntityUVE(Math::Vector3UVE{4.0F, 5.0F, 6.0F}, velocityOverflowBody);
+    PhysicsSystemUVE velocityOverflowSystem(collisionSystem, Math::Vector3UVE{std::numeric_limits<float>::max(), 0.0F, 0.0F});
+
+    velocityOverflowSystem.StepUVE(entityManager, sceneGraph, 1.0F);
+
+    const Scene::RigidBodyComponentUVE& velocityAfter =
+        entityManager.GetComponentUVE<Scene::RigidBodyComponentUVE>(velocityBody);
+    EXPECT_FLOAT_EQ(velocityAfter.velocity.x, std::numeric_limits<float>::max());
+    EXPECT_EQ(GetWorldPositionUVE(velocityBody), (Math::Vector3UVE{4.0F, 5.0F, 6.0F}));
+
+    Scene::RigidBodyComponentUVE positionOverflowBody;
+    positionOverflowBody.velocity = Math::Vector3UVE{std::numeric_limits<float>::max(), 0.0F, 0.0F};
+    const Scene::EntityUVE positionBody = MakeBodyEntityUVE(Math::Vector3UVE{0.0F, 1.0F, 2.0F}, positionOverflowBody);
+    PhysicsSystemUVE positionOverflowSystem(collisionSystem, Math::Vector3UVE{});
+
+    positionOverflowSystem.StepUVE(entityManager, sceneGraph, 2.0F);
+
+    const Scene::RigidBodyComponentUVE& positionAfter =
+        entityManager.GetComponentUVE<Scene::RigidBodyComponentUVE>(positionBody);
+    EXPECT_FLOAT_EQ(positionAfter.velocity.x, std::numeric_limits<float>::max());
+    EXPECT_EQ(GetWorldPositionUVE(positionBody), (Math::Vector3UVE{0.0F, 1.0F, 2.0F}));
+
+    Scene::RigidBodyComponentUVE angularOverflowBody;
+    angularOverflowBody.angularVelocity = Math::Vector3UVE{std::numeric_limits<float>::max(), 0.0F, 0.0F};
+    angularOverflowBody.torque = Math::Vector3UVE{std::numeric_limits<float>::max(), 0.0F, 0.0F};
+    angularOverflowBody.inverseInertia = Math::Vector3UVE{1.0F, 0.0F, 0.0F};
+    const Scene::EntityUVE angularBody = MakeBodyEntityUVE(Math::Vector3UVE{2.0F, 3.0F, 4.0F}, angularOverflowBody);
+    PhysicsSystemUVE angularOverflowSystem(collisionSystem, Math::Vector3UVE{});
+
+    angularOverflowSystem.StepUVE(entityManager, sceneGraph, 1.0F);
+
+    const Scene::RigidBodyComponentUVE& angularAfter =
+        entityManager.GetComponentUVE<Scene::RigidBodyComponentUVE>(angularBody);
+    EXPECT_FLOAT_EQ(angularAfter.angularVelocity.x, std::numeric_limits<float>::max());
+    EXPECT_EQ(GetWorldPositionUVE(angularBody), (Math::Vector3UVE{2.0F, 3.0F, 4.0F}));
+}
+
 TEST_F(PhysicsSystemUVETest, StepUVE_GravityScaleDouble_FallsExactlyTwiceAsFar) {
     PhysicsSystemUVE physicsSystem(collisionSystem, Math::Vector3UVE{0.0F, -10.0F, 0.0F});
     Scene::RigidBodyComponentUVE normalScale;
