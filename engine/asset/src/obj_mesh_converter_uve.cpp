@@ -24,6 +24,15 @@ namespace {
 
 constexpr float kDegenerateTriangleEpsilonSquaredUVE = 0.00000001F;
 
+[[nodiscard]] bool IsFiniteVectorUVE(const Math::Vector3UVE& value) noexcept {
+    return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+}
+
+[[nodiscard]] bool IsFiniteBoundsUVE(const Math::AabbUVE& bounds) noexcept {
+    return IsFiniteVectorUVE(bounds.min) && IsFiniteVectorUVE(bounds.max) &&
+           bounds.min.x <= bounds.max.x && bounds.min.y <= bounds.max.y && bounds.min.z <= bounds.max.z;
+}
+
 [[nodiscard]] std::string_view NextTokenUVE(std::string_view& rest) noexcept {
     while (!rest.empty() && (rest.front() == ' ' || rest.front() == '\t')) {
         rest.remove_prefix(1U);
@@ -86,7 +95,8 @@ constexpr float kDegenerateTriangleEpsilonSquaredUVE = 0.00000001F;
         return false;
     }
     outNormal = Math::Vector3UVE{*x, *y, *z};
-    return Math::LengthSquaredUVE(outNormal) > kDegenerateTriangleEpsilonSquaredUVE;
+    const float lengthSquared = Math::LengthSquaredUVE(outNormal);
+    return std::isfinite(lengthSquared) && lengthSquared > kDegenerateTriangleEpsilonSquaredUVE;
 }
 
 void UpdateBoundsUVE(const Math::Vector3UVE& position, bool& hasBounds, Math::AabbUVE& bounds) noexcept {
@@ -106,11 +116,18 @@ void UpdateBoundsUVE(const Math::Vector3UVE& position, bool& hasBounds, Math::Aa
 [[nodiscard]] Math::Vector3UVE ComputeFaceNormalUVE(const Math::Vector3UVE& first,
                                                      const Math::Vector3UVE& second,
                                                      const Math::Vector3UVE& third) noexcept {
-    const Math::Vector3UVE cross = Math::CrossUVE(second - first, third - first);
-    if (Math::LengthSquaredUVE(cross) <= kDegenerateTriangleEpsilonSquaredUVE) {
+    const Math::Vector3UVE firstEdge = second - first;
+    const Math::Vector3UVE secondEdge = third - first;
+    if (!IsFiniteVectorUVE(firstEdge) || !IsFiniteVectorUVE(secondEdge)) {
         return {};
     }
-    return Math::NormalizeUVE(cross);
+    const Math::Vector3UVE cross = Math::CrossUVE(firstEdge, secondEdge);
+    const float lengthSquared = Math::LengthSquaredUVE(cross);
+    if (!std::isfinite(lengthSquared) || lengthSquared <= kDegenerateTriangleEpsilonSquaredUVE) {
+        return {};
+    }
+    const Math::Vector3UVE normalized = Math::NormalizeUVE(cross);
+    return IsFiniteVectorUVE(normalized) ? normalized : Math::Vector3UVE{};
 }
 
 } // namespace
@@ -244,6 +261,16 @@ bool ConvertObjMeshUVE(const std::string_view source, MeshAssetUVE& outMesh) {
         return false;
     }
     GenerateMeshTangentsUVE(candidate.vertices, candidate.indices);
+    if (!IsFiniteBoundsUVE(candidate.localBounds)) {
+        return false;
+    }
+    for (const MeshVertexUVE& vertex : candidate.vertices) {
+        if (!IsFiniteVectorUVE(vertex.position) || !IsFiniteVectorUVE(vertex.normal) ||
+            !std::isfinite(vertex.u) || !std::isfinite(vertex.v) || !IsFiniteVectorUVE(vertex.tangent) ||
+            !std::isfinite(vertex.tangentHandedness)) {
+            return false;
+        }
+    }
     outMesh = std::move(candidate);
     return true;
 }
