@@ -14,6 +14,14 @@ constexpr std::uint32_t kHalfSequenceSpaceUVE = 0x80000000U;
     return distance != 0U && distance < kHalfSequenceSpaceUVE;
 }
 
+[[nodiscard]] bool IsConsistentReliableAcknowledgementStateUVE(
+    const ReliableAcknowledgementStateUVE& state) noexcept {
+    if (!state.hasReceivedSequence) {
+        return state.latestReceivedSequence == 0U && state.receivedHistoryBits == 0U;
+    }
+    return state.latestReceivedSequence != 0U;
+}
+
 [[nodiscard]] bool IsConsistentActiveReassemblyStateUVE(
     const ReliablePayloadReassemblyStateUVE& state) noexcept {
     if (!state.IsActiveUVE() || state.fragmentCount == 0U ||
@@ -216,7 +224,7 @@ ReliableRetransmitStatusUVE EvaluateReliableRetransmitPolicyUVE(
 }
 ReliablePacketReceiveStatusUVE AcceptReliableSequenceUVE(
     const std::uint32_t sequence, ReliableAcknowledgementStateUVE& state) noexcept {
-    if (sequence == 0U) {
+    if (sequence == 0U || !IsConsistentReliableAcknowledgementStateUVE(state)) {
         return ReliablePacketReceiveStatusUVE::Invalid;
     }
     if (!state.hasReceivedSequence) {
