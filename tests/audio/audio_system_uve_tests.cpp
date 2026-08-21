@@ -264,6 +264,15 @@ TEST_F(AudioSystemUVETest, SetListenerPositionAndGetListenerPositionUVE_RoundTri
     EXPECT_EQ(audioSystem.GetListenerPositionUVE(), (Math::Vector3UVE{1.0F, 2.0F, 3.0F}));
 }
 
+TEST_F(AudioSystemUVETest, SetListenerPositionUVE_RejectsNonFiniteAndPreservesLastValidState) {
+    const Math::Vector3UVE validPosition{1.0F, 2.0F, 3.0F};
+    audioSystem.SetListenerPositionUVE(validPosition);
+    audioSystem.SetListenerPositionUVE(
+        Math::Vector3UVE{std::numeric_limits<float>::infinity(), 0.0F, 0.0F});
+
+    EXPECT_EQ(audioSystem.GetListenerPositionUVE(), validPosition);
+}
+
 TEST_F(AudioSystemUVETest, SetSourcePositionVolumePitchUVE_UnknownHandle_LogsErrorAndIsNoOp) {
     Debug::LoggerUVE logger;
     logger.Init(Debug::LogLevelUVE::Trace);
