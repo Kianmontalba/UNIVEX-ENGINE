@@ -45,8 +45,9 @@ public:
     virtual void SetKeyStateUVE(KeyCodeUVE key, bool isDown) = 0;
     virtual void SetMouseButtonStateUVE(MouseButtonUVE button, bool isDown) = 0;
     virtual void SetMousePositionUVE(Math::Vector2UVE position) = 0;
-    /// Accumulates until the next UpdateUVE() call drains it — a real scroll wheel can report
-    /// several small deltas between frames.
+    /// Accumulates finite deltas until the next UpdateUVE() call drains it — a real scroll wheel
+    /// can report several small deltas between frames. Non-finite deltas and additions that would
+    /// make the accumulator non-finite are ignored, preserving the last valid accumulated value.
     virtual void SetMouseScrollDeltaUVE(float delta) = 0;
 
     /// Advances current->previous state for edge detection, computes mouse delta, drains the
