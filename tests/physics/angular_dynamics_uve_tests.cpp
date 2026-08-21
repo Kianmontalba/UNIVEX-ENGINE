@@ -72,6 +72,8 @@ TEST(AngularDynamicsUVETest, AngularHelpers_RejectUnsafeOrNonFiniteInputs) {
     EXPECT_FALSE(ComputeBoxInverseInertiaUVE(1.0F, Math::Vector3UVE{0.0F, 1.0F, 1.0F}).has_value());
     EXPECT_FALSE(ComputeBoxInverseInertiaUVE(
         std::numeric_limits<float>::quiet_NaN(), Math::Vector3UVE{1.0F, 1.0F, 1.0F}).has_value());
+    EXPECT_FALSE(ComputeBoxInverseInertiaUVE(
+        1.0F, Math::Vector3UVE{std::numeric_limits<float>::max(), 1.0F, 1.0F}).has_value());
     EXPECT_FALSE(IntegrateAngularVelocityUVE(
         Math::Vector3UVE{}, Math::Vector3UVE{}, Math::Vector3UVE{}, -0.1F).has_value());
     EXPECT_FALSE(ApplyAngularImpulseUVE(

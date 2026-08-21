@@ -32,6 +32,10 @@ std::optional<Math::Vector3UVE> ComputeBoxInverseInertiaUVE(
     const float ySquared = halfExtents.y * halfExtents.y;
     const float zSquared = halfExtents.z * halfExtents.z;
     const float inverseMass = 1.0F / mass;
+    if (!std::isfinite(xSquared) || !std::isfinite(ySquared) || !std::isfinite(zSquared) ||
+        !std::isfinite(inverseMass)) {
+        return std::nullopt;
+    }
     const Math::Vector3UVE inertia{
         (mass / 3.0F) * (ySquared + zSquared),
         (mass / 3.0F) * (xSquared + zSquared),
