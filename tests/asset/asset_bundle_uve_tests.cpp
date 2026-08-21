@@ -109,6 +109,35 @@ TEST(AssetBundleUVETest, PackUVE_TraversalVirtualName_ReturnsFalse) {
     std::filesystem::remove(source);
 }
 
+TEST(AssetBundleUVETest, PackAndScan_RejectUnboundedEntryCountsAndNames) {
+    AssetBundleUVE bundle;
+    const std::filesystem::path source = "uve_asset_bundle_tests_bounds.txt";
+    const std::filesystem::path bundlePath = "uve_asset_bundle_tests_bounds.uvebundle";
+    WriteFixtureFileUVE(source, "data");
+    std::filesystem::remove(bundlePath);
+
+    std::vector<AssetBundleEntryUVE> tooManyEntries(kMaximumAssetBundleEntriesUVE + 1U);
+    EXPECT_FALSE(bundle.PackUVE(tooManyEntries, bundlePath));
+    EXPECT_FALSE(std::filesystem::exists(bundlePath));
+
+    const std::string oversizedName(kMaximumAssetBundleEntryNameBytesUVE + 1U, 'N');
+    EXPECT_FALSE(bundle.PackUVE({{AssetGuidUVE{101}, source, oversizedName}}, bundlePath));
+    EXPECT_FALSE(std::filesystem::exists(bundlePath));
+    const std::string nulName = std::string("valid") + '\0' + "hidden";
+    EXPECT_FALSE(bundle.PackUVE({{AssetGuidUVE{102}, source, nulName}}, bundlePath));
+    EXPECT_FALSE(std::filesystem::exists(bundlePath));
+
+    const std::uint32_t invalidEntryCount =
+        static_cast<std::uint32_t>(kMaximumAssetBundleEntriesUVE + 1U);
+    const auto* const countBytes = reinterpret_cast<const std::byte*>(&invalidEntryCount);
+    const std::vector<std::byte> malformedPayload(countBytes, countBytes + sizeof(invalidEntryCount));
+    ASSERT_TRUE(WriteUveFileUVE(bundlePath, AssetKindUVE::Bundle, malformedPayload));
+    EXPECT_FALSE(bundle.HasEntryUVE(bundlePath, "anything"));
+
+    std::filesystem::remove(source);
+    std::filesystem::remove(bundlePath);
+}
+
 TEST(AssetBundleUVETest, UnpackUVE_NonBundleAssetType_FailsCleanlyAndLogsError) {
     const std::filesystem::path path = "uve_asset_bundle_tests_not_a_bundle.uveblob";
     std::filesystem::remove(path);

@@ -14,6 +14,9 @@
 
 namespace UVE::Asset {
 
+inline constexpr std::size_t kMaximumAssetBundleEntriesUVE = 4096U;
+inline constexpr std::size_t kMaximumAssetBundleEntryNameBytesUVE = 256U;
+
 /// One asset to pack into a bundle: its GUID, the loose file on disk to read its bytes from, and
 /// an optional `virtualName` used as the on-disk entry name (and, for `IFileSystemUVE`-mounted
 /// bundles, the name a virtual path resolves against). Left empty, the entry's name falls back
