@@ -441,6 +441,65 @@ TEST_F(SaveGameSystemUVETest, SaveGameSystemUVE_LoadsRegisteredVersionTransformA
     EXPECT_EQ(diagnostics.targetSchemaVersion, 1U);
 }
 
+TEST_F(SaveGameSystemUVETest, LegacyMetadataMigrationRunsBeforeDecodeForLoadAndMetadata) {
+    const EntityUVE entity = entityManager.CreateEntityUVE();
+    GameStateMetadataUVE metadata;
+    metadata.playtimeSeconds = 321.5;
+    ASSERT_TRUE(saveGameSystem.SaveUVE(16, entityManager, {entity}, metadata));
+
+    const std::filesystem::path slotPath = saveDirectory / "slot_16.uvesave";
+    std::optional<std::pair<Asset::UveFileHeaderUVE, std::vector<std::byte>>> file =
+        Asset::ReadUveFileUVE(slotPath);
+    ASSERT_TRUE(file.has_value());
+    std::vector<std::byte> payload = file->second;
+    ASSERT_GE(payload.size(), sizeof(std::uint32_t));
+    std::uint32_t metadataLength = 0U;
+    std::memcpy(&metadataLength, payload.data(), sizeof(metadataLength));
+    ASSERT_GT(metadataLength, 0U);
+    ASSERT_LE(sizeof(metadataLength) + metadataLength, payload.size());
+    std::string metadataText(reinterpret_cast<const char*>(payload.data() + sizeof(metadataLength)), metadataLength);
+    const std::string currentVersionToken = "\"payloadSchemaVersion\":1";
+    const std::size_t versionOffset = metadataText.find(currentVersionToken);
+    ASSERT_NE(versionOffset, std::string::npos);
+    metadataText.replace(versionOffset, currentVersionToken.size(), "\"payloadSchemaVersion\":0");
+    const std::string currentPlaytimeKey = "\"playtimeSeconds\"";
+    const std::string legacyPlaytimeKey = "\"legacyTimeValue\"";
+    const std::size_t playtimeOffset = metadataText.find(currentPlaytimeKey);
+    ASSERT_NE(playtimeOffset, std::string::npos);
+    ASSERT_EQ(currentPlaytimeKey.size(), legacyPlaytimeKey.size());
+    metadataText.replace(playtimeOffset, currentPlaytimeKey.size(), legacyPlaytimeKey);
+    ASSERT_EQ(metadataText.size(), metadataLength);
+    std::memcpy(payload.data() + sizeof(metadataLength), metadataText.data(), metadataLength);
+    ASSERT_TRUE(Asset::WriteUveFileUVE(slotPath, Asset::AssetKindUVE::Save, payload));
+
+    ASSERT_TRUE(saveGameSystem.RegisterMigrationUVE(0U, 1U, [](std::vector<std::byte>& payloadBytes, std::string& reason) {
+        std::string text(reinterpret_cast<const char*>(payloadBytes.data()), payloadBytes.size());
+        const std::string oldVersionToken = "\"payloadSchemaVersion\":0";
+        const std::string newVersionToken = "\"payloadSchemaVersion\":1";
+        const std::size_t migratedVersionOffset = text.find(oldVersionToken);
+        const std::size_t legacyPlaytimeOffset = text.find("\"legacyTimeValue\"");
+        if (migratedVersionOffset == std::string::npos || legacyPlaytimeOffset == std::string::npos) {
+            reason = "legacy metadata fields are missing from the framed payload";
+            return false;
+        }
+        text.replace(migratedVersionOffset, oldVersionToken.size(), newVersionToken);
+        text.replace(legacyPlaytimeOffset, std::string{"\"legacyTimeValue\""}.size(),
+                     "\"playtimeSeconds\"");
+        const auto* bytes = reinterpret_cast<const std::byte*>(text.data());
+        payloadBytes.assign(bytes, bytes + text.size());
+        return true;
+    }).IsAcceptedUVE());
+
+    const std::optional<GameStateMetadataUVE> migratedMetadata = saveGameSystem.GetSaveMetadataUVE(16);
+    ASSERT_TRUE(migratedMetadata.has_value());
+    EXPECT_DOUBLE_EQ(migratedMetadata->playtimeSeconds, 321.5);
+    EXPECT_EQ(saveGameSystem.GetLastMigrationDiagnosticsUVE().status, SaveMigrationStatusUVE::Migrated);
+
+    EntityManagerUVE loadedManager(memoryManager.GetDefaultAllocatorUVE(), eventSystem);
+    ASSERT_FALSE(saveGameSystem.LoadUVE(16, loadedManager).empty());
+    EXPECT_EQ(saveGameSystem.GetLastMigrationDiagnosticsUVE().status, SaveMigrationStatusUVE::Migrated);
+}
+
 TEST_F(SaveGameSystemUVETest, SaveThenLoad_CurrentSchemaReportsNoMigrationRequired) {
     const EntityUVE entity = entityManager.CreateEntityUVE();
     ASSERT_TRUE(saveGameSystem.SaveUVE(13, entityManager, {entity}, GameStateMetadataUVE{}));
