@@ -283,7 +283,15 @@ PhysicsConstraintSolveResultUVE PhysicsConstraintSystemUVE::SolveUVE(
             const float firstInverseMass = InverseMassUVE(entityManager, firstEntity);
             const float secondInverseMass = InverseMassUVE(entityManager, secondEntity);
             const float totalInverseMass = firstInverseMass + secondInverseMass;
-            if (!std::isfinite(totalInverseMass) || totalInverseMass <= 0.0F) {
+            if (!std::isfinite(firstInverseMass) || !std::isfinite(secondInverseMass) ||
+                !std::isfinite(totalInverseMass)) {
+                if (!reportedSkipped[index]) {
+                    ++result.skippedConstraintCount;
+                    reportedSkipped[index] = true;
+                }
+                continue;
+            }
+            if (totalInverseMass <= 0.0F) {
                 continue;
             }
             const Math::Vector3UVE firstDelta = correction * (firstInverseMass / totalInverseMass);
