@@ -3,11 +3,14 @@
 
 #pragma once
 
+#include <cstddef>
 #include <memory>
 
 #include "uve/asset/i_asset_importer_uve.h"
 
 namespace UVE::Asset {
+
+inline constexpr std::size_t kMaximumTextImportBytesUVE = 16U * 1024U * 1024U;
 
 /// AssetImporterUVE is the concrete, engine-standard implementation of IAssetImporterUVE. Its
 /// constructor registers built-in importers for plain project documents, the existing typed UVE
