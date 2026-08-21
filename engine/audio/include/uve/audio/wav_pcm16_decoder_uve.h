@@ -14,8 +14,9 @@ struct Pcm16StreamWindowPlanUVE final {
     [[nodiscard]] bool operator==(const Pcm16StreamWindowPlanUVE&) const noexcept = default;
 };
 
-/// Plans one contiguous bounded PCM16 refill window from a caller-owned cursor. The planner does
-/// not mutate a cursor, decode bytes, schedule refills, own voices, or select a stream backend.
+/// Plans one contiguous bounded PCM16 refill window from a caller-owned cursor. Both totalSamples and
+/// requestedSamples must remain within maximumSamples. The planner does not mutate a cursor, decode bytes,
+/// schedule refills, own voices, or select a stream backend.
 [[nodiscard]] bool PlanPcm16StreamWindowUVE(
     std::size_t totalSamples, std::size_t cursorSample, std::size_t requestedSamples,
     bool loop, Pcm16StreamWindowPlanUVE& outPlan,
