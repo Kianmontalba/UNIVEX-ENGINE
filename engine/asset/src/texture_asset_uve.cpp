@@ -3,7 +3,9 @@
 
 #include "uve/asset/texture_asset_uve.h"
 
+#include <cstdint>
 #include <cstring>
+#include <limits>
 
 #include "uve/asset/uve_file_envelope_uve.h"
 #include "uve/debug/logging_macros_uve.h"
@@ -111,6 +113,22 @@ bool LoadTextureAssetUVE(const std::filesystem::path& path, TextureAssetUVE& out
 }
 
 bool SaveTextureAssetUVE(const TextureAssetUVE& texture, const std::filesystem::path& path) {
+    const std::uint32_t bytesPerPixel = BytesPerPixelUVE(texture.format);
+    if (bytesPerPixel == 0U) {
+        UVE_ERROR("TextureAssetUVE: rejected invalid texture format before writing {}", path.string());
+        return false;
+    }
+    if (texture.width != 0U && texture.height > std::numeric_limits<std::uint64_t>::max() / texture.width) {
+        UVE_ERROR("TextureAssetUVE: rejected overflowing dimensions before writing {}", path.string());
+        return false;
+    }
+    const std::uint64_t pixelCount = static_cast<std::uint64_t>(texture.width) * texture.height;
+    if (pixelCount > std::numeric_limits<std::uint64_t>::max() / bytesPerPixel ||
+        pixelCount * bytesPerPixel != texture.pixels.size()) {
+        UVE_ERROR("TextureAssetUVE: rejected pixel byte count before writing {}", path.string());
+        return false;
+    }
+
     std::vector<std::byte> payload;
     AppendUint32UVE(payload, texture.width);
     AppendUint32UVE(payload, texture.height);

@@ -4,6 +4,7 @@
 #include "uve/asset/texture_asset_uve.h"
 
 #include <algorithm>
+#include <cstring>
 #include <filesystem>
 #include <memory>
 #include <thread>
@@ -91,13 +92,44 @@ TEST(TextureAssetUVETest, LoadTextureAssetUVE_MissingFile_ReturnsFalse) {
     EXPECT_FALSE(LoadTextureAssetUVE(path, texture));
 }
 
+TEST(TextureAssetUVETest, SaveTextureAssetUVE_RejectsInvalidDescriptorBeforeReplacingDestination) {
+    const std::filesystem::path path = "uve_texture_asset_tests_invalid_save.uvetex";
+    std::filesystem::remove(path);
+    const TextureAssetUVE original = MakeTestTextureUVE();
+    ASSERT_TRUE(SaveTextureAssetUVE(original, path));
+
+    TextureAssetUVE invalidPixelCount = original;
+    invalidPixelCount.pixels.resize(3);
+    EXPECT_FALSE(SaveTextureAssetUVE(invalidPixelCount, path));
+
+    TextureAssetUVE invalidFormat = original;
+    invalidFormat.format = static_cast<TextureFormatUVE>(99U);
+    EXPECT_FALSE(SaveTextureAssetUVE(invalidFormat, path));
+
+    TextureAssetUVE loaded;
+    ASSERT_TRUE(LoadTextureAssetUVE(path, loaded));
+    EXPECT_EQ(loaded.pixels, original.pixels);
+    std::filesystem::remove(path);
+}
+
 TEST(TextureAssetUVETest, LoadTextureAssetUVE_PixelByteCountMismatch_FailsAndLogsError) {
     const std::filesystem::path path = "uve_texture_asset_tests_bad_pixel_count.uvetex";
     std::filesystem::remove(path);
 
-    TextureAssetUVE invalidTexture = MakeTestTextureUVE();
-    invalidTexture.pixels.resize(3); // 2x2 RGBA8Unorm expects 16 bytes, not 3
-    ASSERT_TRUE(SaveTextureAssetUVE(invalidTexture, path));
+    std::vector<std::byte> malformedPayload(3U * sizeof(std::uint32_t) + sizeof(std::uint64_t) + 3U);
+    const std::uint32_t width = 2U;
+    const std::uint32_t height = 2U;
+    const std::uint32_t format = static_cast<std::uint32_t>(TextureFormatUVE::RGBA8Unorm);
+    const std::uint64_t pixelByteCount = 3U;
+    std::size_t offset = 0U;
+    std::memcpy(malformedPayload.data() + offset, &width, sizeof(width));
+    offset += sizeof(width);
+    std::memcpy(malformedPayload.data() + offset, &height, sizeof(height));
+    offset += sizeof(height);
+    std::memcpy(malformedPayload.data() + offset, &format, sizeof(format));
+    offset += sizeof(format);
+    std::memcpy(malformedPayload.data() + offset, &pixelByteCount, sizeof(pixelByteCount));
+    ASSERT_TRUE(WriteUveFileUVE(path, AssetKindUVE::Texture, malformedPayload));
 
     Debug::LoggerUVE logger;
     logger.Init(Debug::LogLevelUVE::Trace);
