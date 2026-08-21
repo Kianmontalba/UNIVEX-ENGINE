@@ -54,6 +54,9 @@ void GamepadInputSystemUVE::SetAxisStateUVE(const std::size_t gamepadIndex, cons
         return;
     }
     const std::lock_guard<std::mutex> lock(m_liveStateMutex);
+    if (!m_liveState[gamepadIndex].connected) {
+        return;
+    }
     m_liveState[gamepadIndex].axes[static_cast<std::size_t>(axis)] = value;
 }
 
@@ -63,6 +66,9 @@ void GamepadInputSystemUVE::SetButtonStateUVE(const std::size_t gamepadIndex, co
         return;
     }
     const std::lock_guard<std::mutex> lock(m_liveStateMutex);
+    if (!m_liveState[gamepadIndex].connected) {
+        return;
+    }
     m_liveState[gamepadIndex].buttons[static_cast<std::size_t>(button)] = isDown;
 }
 
