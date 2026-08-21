@@ -21,9 +21,9 @@ inline constexpr std::size_t kMaximumSaveNameBytesUVE = 128U;
 /// hand before calling SaveUVE().
 /// Thread-safety: value type; safe to copy/move/compare freely.
 struct GameStateMetadataUVE {
-    /// Seconds since the Unix epoch, UTC. Overwritten by SaveGameSystemUVE::SaveUVE() itself
-    /// (never trusts a caller-supplied value), so every save file's timestamp is trustworthy
-    /// regardless of what a caller passes in.
+    /// Nonnegative seconds since the Unix epoch, UTC. Overwritten by SaveGameSystemUVE::SaveUVE()
+    /// itself (never trusts a caller-supplied value), so every save file's timestamp is trustworthy
+    /// regardless of what a caller passes in; decoded negative timestamps are rejected.
     std::int64_t savedAtUnixSecondsUVE = 0;
 
     /// The engine build that wrote this save. Read but not validated this increment — no old

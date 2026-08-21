@@ -195,6 +195,35 @@ TEST_F(SaveGameSystemUVETest, GetSaveMetadataUVE_RejectsEmbeddedSlotIdentityMism
     EXPECT_EQ(loadedManager.GetEntityCountUVE(), 0U);
 }
 
+TEST_F(SaveGameSystemUVETest, LoadUVE_RejectsTamperedNegativeTimestampMetadata) {
+    const EntityUVE entity = entityManager.CreateEntityUVE();
+    ASSERT_TRUE(saveGameSystem.SaveUVE(18, entityManager, {entity}, GameStateMetadataUVE{}));
+
+    const std::filesystem::path slotPath = saveDirectory / "slot_18.uvesave";
+    const auto originalFile = Asset::ReadUveFileUVE(slotPath);
+    ASSERT_TRUE(originalFile.has_value());
+    std::vector<std::byte> payload = originalFile->second;
+    ASSERT_GE(payload.size(), sizeof(std::uint32_t));
+    std::uint32_t metadataLength = 0U;
+    std::memcpy(&metadataLength, payload.data(), sizeof(metadataLength));
+    ASSERT_LE(sizeof(metadataLength) + static_cast<std::size_t>(metadataLength), payload.size());
+    std::string metadataText(reinterpret_cast<const char*>(payload.data() + sizeof(metadataLength)), metadataLength);
+    const std::string validToken = "\"savedAtUnixSecondsUVE\":";
+    const std::size_t timestampOffset = metadataText.find(validToken);
+    ASSERT_NE(timestampOffset, std::string::npos);
+    const std::size_t timestampValueOffset = timestampOffset + validToken.size();
+    const std::size_t timestampValueEnd = metadataText.find(',', timestampValueOffset);
+    ASSERT_NE(timestampValueEnd, std::string::npos);
+    metadataText.replace(timestampValueOffset, timestampValueEnd - timestampValueOffset, "-1");
+    std::memcpy(payload.data() + sizeof(metadataLength), metadataText.data(), metadataLength);
+    ASSERT_TRUE(Asset::WriteUveFileUVE(slotPath, Asset::AssetKindUVE::Save, payload));
+
+    EntityManagerUVE loadedManager(memoryManager.GetDefaultAllocatorUVE(), eventSystem);
+    EXPECT_TRUE(saveGameSystem.LoadUVE(18, loadedManager).empty());
+    EXPECT_EQ(loadedManager.GetEntityCountUVE(), 0U);
+    EXPECT_FALSE(saveGameSystem.GetSaveMetadataUVE(18).has_value());
+}
+
 TEST_F(SaveGameSystemUVETest, LoadUVE_RejectsTamperedNegativePlaytimeMetadata) {
     const EntityUVE entity = entityManager.CreateEntityUVE();
     GameStateMetadataUVE metadata;
