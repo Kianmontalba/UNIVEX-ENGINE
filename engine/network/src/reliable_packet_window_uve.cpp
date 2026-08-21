@@ -281,7 +281,9 @@ bool ApplyReliableAcknowledgementsUVE(
             continue;
         }
         const std::uint32_t selectiveSequence = header.acknowledgedSequence + bitIndex + 1U;
-        if (selectiveSequence == 0U) {
+        // Reject reserved zero and any arithmetic wrap that is not newer in sequence space.
+        if (selectiveSequence == 0U ||
+            !IsNewerSequenceUVE(selectiveSequence, header.acknowledgedSequence)) {
             continue;
         }
         const std::uint32_t pendingDistance = selectiveSequence - oldestPendingSequence;
