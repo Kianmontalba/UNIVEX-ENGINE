@@ -45,6 +45,24 @@ TEST(AudioMixerGroupUVETest, MasterAlwaysExistsAndInvalidDefinitionsAreRejected)
     EXPECT_TRUE(mixer.HasGroupUVE("SFX"));
 }
 
+TEST(AudioMixerGroupUVETest, InvalidLookupNamesAreRejectedWithoutChangingDefaults) {
+    AudioMixerGroupUVE mixer;
+    const std::string oversizedName(kMaximumAudioMixerGroupNameBytesUVE + 1U, 'X');
+    const std::string nulName = std::string("SFX") + '\0' + "Hidden";
+
+    for (const std::string& name : {oversizedName, nulName}) {
+        EXPECT_FALSE(mixer.HasGroupUVE(name));
+        EXPECT_FALSE(mixer.RemoveGroupUVE(name));
+        EXPECT_FALSE(mixer.SetGroupVolumeUVE(name, 0.5F));
+        EXPECT_FALSE(mixer.SetGroupPitchUVE(name, 1.5F));
+        EXPECT_FALSE(mixer.AttachSourceUVE(name));
+        EXPECT_FALSE(mixer.DetachSourceUVE(name));
+        EXPECT_FLOAT_EQ(mixer.GetGroupVolumeUVE(name), 1.0F);
+        EXPECT_FLOAT_EQ(mixer.GetGroupPitchUVE(name), 1.0F);
+        EXPECT_EQ(mixer.ResolveGroupNameUVE(name), kMasterAudioMixerGroupNameUVE);
+    }
+}
+
 TEST(AudioMixerGroupUVETest, SourceRoutingAndDiagnosticsAreCopiedAndDeterministic) {
     AudioMixerGroupUVE mixer;
     ASSERT_TRUE(mixer.RegisterGroupUVE("Music", 0.75F, 0.8F));
