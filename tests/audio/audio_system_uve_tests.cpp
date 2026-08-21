@@ -4,6 +4,7 @@
 #include "uve/audio/audio_system_uve.h"
 
 #include <algorithm>
+#include <limits>
 #include <memory>
 #include <variant>
 #include <vector>
@@ -248,6 +249,30 @@ TEST_F(AudioSystemUVETest, SetSourcePositionVolumePitchUVE_UnknownHandle_LogsErr
     EXPECT_TRUE(LoggedAnErrorUVE(*memorySinkPtr));
 
     logger.Shutdown();
+}
+
+TEST_F(AudioSystemUVETest, InvalidSourceRuntimeParameters_PreserveLastValidState) {
+    AudioSourceDescUVE desc;
+    desc.spatial = false;
+    const VoiceHandleUVE source = audioSystem.CreateSourceUVE(desc);
+    audioSystem.SetSourcePositionUVE(source, Math::Vector3UVE{2.0F, 3.0F, 4.0F});
+    audioSystem.SetSourceVolumeUVE(source, 0.5F);
+    audioSystem.SetSourcePitchUVE(source, 1.5F);
+
+    audioSystem.SetSourcePositionUVE(
+        source, Math::Vector3UVE{std::numeric_limits<float>::quiet_NaN(), 0.0F, 0.0F});
+    audioSystem.SetSourceVolumeUVE(source, std::numeric_limits<float>::infinity());
+    audioSystem.SetSourcePitchUVE(source, -1.0F);
+
+    device.ClearRecordedCallsUVE();
+    audioSystem.UpdateUVE();
+    const std::vector<RecordedAudioCallUVE>& recorded = device.GetRecordedCallsUVE();
+    ASSERT_EQ(recorded.size(), 1U);
+    ASSERT_TRUE(std::holds_alternative<SetVoiceParamsCallUVE>(recorded[0]));
+    const AudioVoiceParamsUVE& params = std::get<SetVoiceParamsCallUVE>(recorded[0]).params;
+    EXPECT_EQ(params.position, (Math::Vector3UVE{2.0F, 3.0F, 4.0F}));
+    EXPECT_FLOAT_EQ(params.gain, 0.5F);
+    EXPECT_FLOAT_EQ(params.pitch, 1.5F);
 }
 
 TEST_F(AudioSystemUVETest, UpdateUVE_WithZeroSources_IsSafeNoOp) {
