@@ -131,6 +131,22 @@ TEST(MobileInputSystemUVETest, SnapshotCopiesTouchDeltaPressureAndGyroscopeDeter
     EXPECT_EQ(mobileInput.GetPreviousSnapshotUVE().touches[0U].identifier, 42U);
 }
 
+TEST(MobileInputSystemUVETest, ActiveZeroIdentifierIsRejectedWithoutPublishingOrReplacingTouch) {
+    MobileInputSystemUVE mobileInput;
+    mobileInput.SetTouchStateUVE(0U, true, 0U, Math::Vector2UVE{10.0F, 20.0F}, 1.0F);
+    mobileInput.UpdateUVE();
+    EXPECT_FALSE(mobileInput.GetSnapshotUVE().touches[0U].active);
+
+    mobileInput.SetTouchStateUVE(0U, true, 42U, Math::Vector2UVE{10.0F, 20.0F}, 1.0F);
+    mobileInput.UpdateUVE();
+    mobileInput.SetTouchStateUVE(0U, true, 0U, Math::Vector2UVE{30.0F, 40.0F}, 1.0F);
+    mobileInput.UpdateUVE();
+    const TouchPointStateUVE touch = mobileInput.GetSnapshotUVE().touches[0U];
+    EXPECT_TRUE(touch.active);
+    EXPECT_EQ(touch.identifier, 42U);
+    EXPECT_EQ(touch.position, (Math::Vector2UVE{10.0F, 20.0F}));
+}
+
 TEST(MobileInputSystemUVETest, InvalidAndNonFiniteInputFailsClosedAndReleaseClearsTouch) {
     MobileInputSystemUVE mobileInput;
     const float infinity = std::numeric_limits<float>::infinity();

@@ -15,8 +15,9 @@ namespace UVE::Input {
 inline constexpr std::size_t kMaximumTouchCountUVE = 10U;
 
 /// One copied touch-slot value committed by MobileInputSystemUVE.
-/// `identifier` remains stable for the lifetime of a platform touch contact; `delta` is computed
-/// only when the same identifier occupies the same slot in adjacent committed frames.
+/// Active contacts require a nonzero identifier that remains stable for the lifetime of a platform
+/// touch contact; `delta` is computed only when the same identifier occupies the same slot in adjacent
+/// committed frames.
 struct TouchPointStateUVE final {
     bool active = false;
     std::uint64_t identifier = 0U;
