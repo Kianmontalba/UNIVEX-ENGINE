@@ -29,7 +29,7 @@ void AppendUint64UVE(std::vector<std::byte>& buffer, std::uint64_t value) {
 
 [[nodiscard]] bool ReadUint32FromBufferUVE(const std::vector<std::byte>& buffer, std::size_t& offset,
                                             std::uint32_t& outValue) {
-    if (offset + sizeof(outValue) > buffer.size()) {
+    if (offset > buffer.size() || sizeof(outValue) > buffer.size() - offset) {
         return false;
     }
     std::memcpy(&outValue, buffer.data() + offset, sizeof(outValue));
@@ -39,7 +39,7 @@ void AppendUint64UVE(std::vector<std::byte>& buffer, std::uint64_t value) {
 
 [[nodiscard]] bool ReadUint64FromBufferUVE(const std::vector<std::byte>& buffer, std::size_t& offset,
                                             std::uint64_t& outValue) {
-    if (offset + sizeof(outValue) > buffer.size()) {
+    if (offset > buffer.size() || sizeof(outValue) > buffer.size() - offset) {
         return false;
     }
     std::memcpy(&outValue, buffer.data() + offset, sizeof(outValue));
@@ -89,13 +89,22 @@ bool LoadTextureAssetUVE(const std::filesystem::path& path, TextureAssetUVE& out
     }
     const auto format = static_cast<TextureFormatUVE>(formatValue);
 
-    if (offset + pixelByteCount > payload.size()) {
+    if (offset > payload.size() || pixelByteCount > payload.size() - offset) {
         UVE_ERROR("TextureAssetUVE: \"{}\" has truncated pixel data", path.string());
         return false;
     }
 
-    const std::uint64_t expectedByteCount =
-        static_cast<std::uint64_t>(width) * static_cast<std::uint64_t>(height) * BytesPerPixelUVE(format);
+    const std::uint64_t bytesPerPixel = BytesPerPixelUVE(format);
+    if (width != 0U && height > std::numeric_limits<std::uint64_t>::max() / width) {
+        UVE_ERROR("TextureAssetUVE: \"{}\" has overflowing texture dimensions", path.string());
+        return false;
+    }
+    const std::uint64_t pixelCount = static_cast<std::uint64_t>(width) * height;
+    if (pixelCount > std::numeric_limits<std::uint64_t>::max() / bytesPerPixel) {
+        UVE_ERROR("TextureAssetUVE: \"{}\" has overflowing expected pixel bytes", path.string());
+        return false;
+    }
+    const std::uint64_t expectedByteCount = pixelCount * bytesPerPixel;
     if (pixelByteCount != expectedByteCount) {
         UVE_ERROR("TextureAssetUVE: \"{}\" has {} pixel bytes, expected {} for a {}x{} texture", path.string(),
                    pixelByteCount, expectedByteCount, width, height);

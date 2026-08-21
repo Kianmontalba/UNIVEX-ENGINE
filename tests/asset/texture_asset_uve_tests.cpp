@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cstring>
 #include <filesystem>
+#include <limits>
 #include <memory>
 #include <thread>
 #include <vector>
@@ -149,6 +150,34 @@ TEST(TextureAssetUVETest, LoadTextureAssetUVE_PixelByteCountMismatch_FailsAndLog
     EXPECT_TRUE(foundError);
 
     logger.Shutdown();
+    std::filesystem::remove(path);
+}
+
+TEST(TextureAssetUVETest, LoadTextureAssetUVE_RejectsOverflowingPixelByteCountBeforePublication) {
+    const std::filesystem::path path = "uve_texture_asset_tests_overflowing_pixel_count.uvetex";
+    std::filesystem::remove(path);
+    std::vector<std::byte> malformedPayload(3U * sizeof(std::uint32_t) + sizeof(std::uint64_t));
+    const std::uint32_t width = 1U;
+    const std::uint32_t height = 1U;
+    const std::uint32_t format = static_cast<std::uint32_t>(TextureFormatUVE::RGBA8Unorm);
+    const std::uint64_t pixelByteCount = std::numeric_limits<std::uint64_t>::max();
+    std::size_t offset = 0U;
+    std::memcpy(malformedPayload.data() + offset, &width, sizeof(width));
+    offset += sizeof(width);
+    std::memcpy(malformedPayload.data() + offset, &height, sizeof(height));
+    offset += sizeof(height);
+    std::memcpy(malformedPayload.data() + offset, &format, sizeof(format));
+    offset += sizeof(format);
+    std::memcpy(malformedPayload.data() + offset, &pixelByteCount, sizeof(pixelByteCount));
+    ASSERT_TRUE(WriteUveFileUVE(path, AssetKindUVE::Texture, malformedPayload));
+
+    const TextureAssetUVE sentinel = MakeTestTextureUVE();
+    TextureAssetUVE output = sentinel;
+    EXPECT_FALSE(LoadTextureAssetUVE(path, output));
+    EXPECT_EQ(output.width, sentinel.width);
+    EXPECT_EQ(output.height, sentinel.height);
+    EXPECT_EQ(output.format, sentinel.format);
+    EXPECT_EQ(output.pixels, sentinel.pixels);
     std::filesystem::remove(path);
 }
 
