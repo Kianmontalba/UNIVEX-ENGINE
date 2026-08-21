@@ -42,6 +42,7 @@ void SceneGraphUVE::AttachTransformUVE(IEntityManagerUVE& entityManager, EntityU
                                         const TransformComponentUVE& localTransform) {
     UVE_ASSERT(entityManager.IsAliveUVE(entity));
     UVE_ASSERT(!entityManager.HasComponentUVE<TransformComponentUVE>(entity));
+    UVE_ASSERT(IsTransformComponentValidUVE(localTransform));
 
     entityManager.AddComponentUVE<TransformComponentUVE>(entity, localTransform);
     entityManager.AddComponentUVE<WorldTransformComponentUVE>(entity);
@@ -51,6 +52,7 @@ void SceneGraphUVE::AttachTransformUVE(IEntityManagerUVE& entityManager, EntityU
 void SceneGraphUVE::SetLocalTransformUVE(IEntityManagerUVE& entityManager, EntityUVE entity,
                                          const TransformComponentUVE& localTransform) {
     UVE_ASSERT(entityManager.HasComponentUVE<TransformComponentUVE>(entity));
+    UVE_ASSERT(IsTransformComponentValidUVE(localTransform));
 
     entityManager.GetComponentUVE<TransformComponentUVE>(entity) = localTransform;
     entityManager.GetComponentUVE<WorldTransformComponentUVE>(entity).dirty = true;

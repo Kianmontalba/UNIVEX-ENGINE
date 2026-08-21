@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -37,6 +38,22 @@ TEST_F(SceneGraphUVETest, AttachTransformUVE_AddsAllThreeComponents) {
     EXPECT_TRUE(entityManager.HasComponentUVE<WorldTransformComponentUVE>(entity));
     EXPECT_TRUE(entityManager.HasComponentUVE<HierarchyComponentUVE>(entity));
     EXPECT_EQ(entityManager.GetComponentUVE<HierarchyComponentUVE>(entity).parent, kInvalidEntityUVE);
+}
+
+TEST(TransformComponentUVETest, IsTransformComponentValidUVE_RejectsNonFiniteAndNonUnitValues) {
+    TransformComponentUVE transform;
+    EXPECT_TRUE(IsTransformComponentValidUVE(transform));
+
+    transform.localPosition.x = std::numeric_limits<float>::quiet_NaN();
+    EXPECT_FALSE(IsTransformComponentValidUVE(transform));
+    transform = TransformComponentUVE{};
+    transform.localScale.z = std::numeric_limits<float>::infinity();
+    EXPECT_FALSE(IsTransformComponentValidUVE(transform));
+    transform = TransformComponentUVE{};
+    transform.localRotation.w = 0.5F;
+    EXPECT_FALSE(IsTransformComponentValidUVE(transform));
+    transform.localRotation = Math::QuaternionUVE{0.0F, 0.0F, 0.0F, 1.0004F};
+    EXPECT_TRUE(IsTransformComponentValidUVE(transform));
 }
 
 TEST_F(SceneGraphUVETest, UpdateUVE_RootEntity_WorldEqualsLocal) {
