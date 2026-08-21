@@ -217,10 +217,10 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
 
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
     EXPECT_FALSE(RegisterBuiltInScriptNodesUVE(registry));
-    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 170U);
+    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 171U);
 
     const std::vector<ScriptNodeTypeDescriptorUVE> descriptors = registry.GetNodeTypeDescriptorsUVE();
-    ASSERT_EQ(descriptors.size(), 170U);
+    ASSERT_EQ(descriptors.size(), 171U);
     const std::vector<std::string> expectedIds{
         "flow.sequence", "flow.branch", "flow.return", "flow.do_once", "flow.gate", "flow.switch",
         "flow.event", "flow.loop", "flow.for_loop", "flow.while_loop", "flow.delay",
@@ -265,7 +265,7 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
         "physics.apply_force", "physics.apply_impulse", "physics.set_velocity", "physics.get_velocity",
         "physics.enable_gravity", "physics.is_colliding", "audio.set_volume", "audio.set_pitch",
         "audio.set_3d_position", "audio.play_sound", "audio.stop_sound", "audio.is_playing",
-        "audio.set_attenuation", "debug.print", "debug.warning"};
+        "audio.set_attenuation", "debug.print", "debug.warning", "debug.error"};
     ASSERT_EQ(expectedIds.size(), descriptors.size());
     for (std::size_t index = 0U; index < expectedIds.size(); ++index) {
         EXPECT_EQ(descriptors[index].typeId, expectedIds[index]);
@@ -342,7 +342,7 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
         EXPECT_EQ(descriptors[index].category, "Audio");
         EXPECT_EQ(descriptors[index].iconId, "node.audio");
     }
-    for (std::size_t index = 168U; index < 170U; ++index) {
+    for (std::size_t index = 168U; index < 171U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Debug");
         EXPECT_EQ(descriptors[index].iconId, "node.debug");
     }
@@ -6180,6 +6180,17 @@ TEST(ScriptBuiltInNodeUVETest, RegisterBuiltInScriptNodesUVE_ContainsAudioSetVol
     EXPECT_EQ(debugWarningDescriptor->pins[1].name, "Result");
     EXPECT_EQ(debugWarningDescriptor->pins[1].direction, ScriptPinDirectionUVE::Output);
     EXPECT_EQ(debugWarningDescriptor->pins[1].type, ScriptValueTypeUVE::Boolean);
+
+    const ScriptNodeTypeDescriptorUVE* debugErrorDescriptor = registry.FindNodeTypeUVE("debug.error");
+    ASSERT_NE(debugErrorDescriptor, nullptr);
+    EXPECT_EQ(debugErrorDescriptor->displayName, "Error Number");
+    EXPECT_EQ(debugErrorDescriptor->category, "Debug");
+    EXPECT_EQ(debugErrorDescriptor->iconId, "node.debug");
+    ASSERT_EQ(debugErrorDescriptor->pins.size(), 2U);
+    EXPECT_EQ(debugErrorDescriptor->pins[0].name, "Value");
+    EXPECT_EQ(debugErrorDescriptor->pins[0].type, ScriptValueTypeUVE::Number);
+    EXPECT_EQ(debugErrorDescriptor->pins[1].name, "Result");
+    EXPECT_EQ(debugErrorDescriptor->pins[1].type, ScriptValueTypeUVE::Boolean);
 }
 
 TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesEntityBeforeAudioSetVolume) {
@@ -6794,6 +6805,44 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_DebugWarningRejectsCallbackWithou
 
     EXPECT_EQ(ExecuteScriptBytecodeUVE(program, context, options).status, ScriptVmStatusUVE::NodeExecutionFailed);
     EXPECT_EQ(capture.callCount, 1U);
+    EXPECT_FALSE(context.FindOutputUVE(1U, "Result").has_value());
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_DebugErrorPublishesAcceptedResult) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U, "debug.error", {}, {}});
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(1U, "Value", 9.5F));
+    DebugWarningCaptureUVE capture;
+    ScriptEngineCallBindingsUVE bindings{};
+    bindings.userData = &capture;
+    bindings.debugError = CaptureDebugWarningUVE;
+    ScriptVmExecutionOptionsUVE options;
+    options.engineCallBindings = &bindings;
+
+    ASSERT_TRUE(ExecuteScriptBytecodeUVE(program, context, options).IsSuccessUVE());
+    EXPECT_EQ(capture.callCount, 1U);
+    EXPECT_FLOAT_EQ(capture.lastValue, 9.5F);
+    const std::optional<ScriptVmValueUVE> output = context.FindOutputUVE(1U, "Result");
+    ASSERT_TRUE(output.has_value());
+    ASSERT_TRUE(std::holds_alternative<bool>(*output));
+    EXPECT_TRUE(std::get<bool>(*output));
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_DebugErrorRejectsCallbackWithoutOutput) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U, "debug.error", {}, {}});
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(1U, "Value", 9.5F));
+    DebugWarningCaptureUVE capture;
+    capture.accept = false;
+    ScriptEngineCallBindingsUVE bindings{};
+    bindings.userData = &capture;
+    bindings.debugError = CaptureDebugWarningUVE;
+    ScriptVmExecutionOptionsUVE options;
+    options.engineCallBindings = &bindings;
+
+    EXPECT_EQ(ExecuteScriptBytecodeUVE(program, context, options).status, ScriptVmStatusUVE::NodeExecutionFailed);
     EXPECT_FALSE(context.FindOutputUVE(1U, "Result").has_value());
 }
 
