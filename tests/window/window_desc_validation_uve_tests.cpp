@@ -1,5 +1,6 @@
 // Copyright (c) 2026 UniVex Studios. All Rights Reserved.
 #include "uve/window/window_desc_validation_uve.h"
+#include "uve/window/display_mode_validation_uve.h"
 #include <gtest/gtest.h>
 namespace UVE::Window::Tests {
 namespace {
@@ -24,6 +25,15 @@ TEST(WindowDescValidationUVETest, ZeroDimensionsOrEmptyTitle_AreRejected) {
     EXPECT_FALSE(ValidateWindowDescUVE(desc));
     desc.height = 720U;
     desc.title.clear();
+    EXPECT_FALSE(ValidateWindowDescUVE(desc));
+}
+TEST(WindowDescValidationUVETest, AxisDimensionsAboveSharedCap_AreRejected) {
+    WindowDescUVE desc;
+    desc.width = kMaximumDisplayModeAxisUVE + 1U;
+    EXPECT_FALSE(ValidateWindowDescUVE(desc));
+
+    desc.width = 1280U;
+    desc.height = kMaximumDisplayModeAxisUVE + 1U;
     EXPECT_FALSE(ValidateWindowDescUVE(desc));
 }
 TEST(WindowDescValidationUVETest, OpenGlMajorVersionBelowOne_IsRejected) {

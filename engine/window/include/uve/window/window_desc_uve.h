@@ -11,6 +11,8 @@ namespace UVE::Window {
 /// Describes the window WindowManagerUVE creates. Passed once at construction; there is no
 /// "resize the desc" API — width/height change through the OS (user drag, SetFullscreenUVE()) and
 /// are read back via IWindowManagerUVE::GetWidthUVE()/GetHeightUVE(), not by mutating this struct.
+/// Width and height are validated against the shared kMaximumDisplayModeAxisUVE cap before backend
+/// creation narrows them to GLFW's signed integer dimensions.
 struct WindowDescUVE {
     std::string title = "UniVex Engine";
     std::uint32_t width = 1280;
