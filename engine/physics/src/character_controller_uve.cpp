@@ -394,21 +394,26 @@ CharacterControllerMoveResultUVE CharacterControllerUVE::MoveUVE(
             if (pair.first != input.entity && pair.second != input.entity) {
                 continue;
             }
+            const float separationAxisLengthSquared = Math::LengthSquaredUVE(pair.separationAxis);
             if (!std::isfinite(pair.penetrationDepth) || pair.penetrationDepth <= 0.0F ||
-                !IsFiniteVectorUVE(pair.separationAxis)) {
+                !IsFiniteVectorUVE(pair.separationAxis) || !std::isfinite(separationAxisLengthSquared) ||
+                std::abs(separationAxisLengthSquared - 1.0F) > 1.0e-3F) {
                 continue;
             }
             const bool controllerIsFirst = pair.first == input.entity;
             const Scene::EntityUVE targetEntity = controllerIsFirst ? pair.second : pair.first;
             const Math::Vector3UVE contactNormal = controllerIsFirst
                 ? pair.separationAxis : -pair.separationAxis;
+            const Math::Vector3UVE correction = controllerIsFirst
+                ? -pair.separationAxis * pair.penetrationDepth
+                : pair.separationAxis * pair.penetrationDepth;
+            if (!IsFiniteVectorUVE(correction)) {
+                continue;
+            }
             RegisterGroundContactUVE(result, contactNormal, minimumGroundNormalY);
             if (ApplyDynamicBodyPushUVE(entityManager, targetEntity, contactNormal, step, pushPolicy)) {
                 ++result.pushedBodyCount;
             }
-            const Math::Vector3UVE correction = controllerIsFirst
-                ? -pair.separationAxis * pair.penetrationDepth
-                : pair.separationAxis * pair.penetrationDepth;
             ApplyLocalDeltaUVE(entityManager, sceneGraph, input.entity, correction);
             result.appliedDisplacement += correction;
             result.remainingDisplacement = RemoveIntoNormalComponentUVE(
