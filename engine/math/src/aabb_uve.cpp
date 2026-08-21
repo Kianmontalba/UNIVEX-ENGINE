@@ -120,6 +120,15 @@ std::optional<SweptAabbHitUVE> SweepAabbUVE(const AabbUVE& moving, const Vector3
 }
 
 std::optional<RayHitUVE> IntersectRayUVE(const RayUVE& ray, const AabbUVE& aabb, float maxDistance) noexcept {
+    const auto IsFiniteVectorUVE = [](const Vector3UVE& value) noexcept {
+        return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+    };
+    if (!IsFiniteVectorUVE(ray.origin) || !IsFiniteVectorUVE(ray.direction) ||
+        !IsFiniteVectorUVE(aabb.min) || !IsFiniteVectorUVE(aabb.max) || !std::isfinite(maxDistance) ||
+        maxDistance < 0.0F || aabb.min.x > aabb.max.x || aabb.min.y > aabb.max.y || aabb.min.z > aabb.max.z) {
+        return std::nullopt;
+    }
+
     const std::array<float, 3> origin{ray.origin.x, ray.origin.y, ray.origin.z};
     const std::array<float, 3> direction{ray.direction.x, ray.direction.y, ray.direction.z};
     const std::array<float, 3> boxMin{aabb.min.x, aabb.min.y, aabb.min.z};
@@ -137,8 +146,16 @@ std::optional<RayHitUVE> IntersectRayUVE(const RayUVE& ray, const AabbUVE& aabb,
             continue;
         }
 
-        float tNear = (boxMin[axis] - origin[axis]) / direction[axis];
-        float tFar = (boxMax[axis] - origin[axis]) / direction[axis];
+        const float nearNumerator = boxMin[axis] - origin[axis];
+        const float farNumerator = boxMax[axis] - origin[axis];
+        if (!std::isfinite(nearNumerator) || !std::isfinite(farNumerator)) {
+            return std::nullopt;
+        }
+        float tNear = nearNumerator / direction[axis];
+        float tFar = farNumerator / direction[axis];
+        if (!std::isfinite(tNear) || !std::isfinite(tFar)) {
+            return std::nullopt;
+        }
         float nearSign = -1.0F;
         if (tNear > tFar) {
             std::swap(tNear, tFar);
@@ -162,6 +179,9 @@ std::optional<RayHitUVE> IntersectRayUVE(const RayUVE& ray, const AabbUVE& aabb,
         }
     }
 
+    if (!std::isfinite(tmin) || !IsFiniteVectorUVE(normal)) {
+        return std::nullopt;
+    }
     return RayHitUVE{tmin, normal};
 }
 

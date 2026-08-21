@@ -6,6 +6,7 @@
 #include <cmath>
 #include <optional>
 #include <string>
+#include <limits>
 
 #include <gtest/gtest.h>
 
@@ -204,6 +205,27 @@ TEST(AabbUVETest, IntersectRayUVE_ParallelToSlabOutsideRange_ReturnsNulloptWitho
     const RayUVE ray{Vector3UVE{5.0F, 0.0F, -10.0F}, Vector3UVE{0.0F, 0.0F, 1.0F}};
 
     EXPECT_FALSE(IntersectRayUVE(ray, box, 100.0F).has_value());
+}
+
+TEST(AabbUVETest, IntersectRayUVE_RejectsNonFiniteOrInvertedInputs) {
+    const AabbUVE validBox{Vector3UVE{-1.0F, -1.0F, -1.0F}, Vector3UVE{1.0F, 1.0F, 1.0F}};
+    const RayUVE validRay{Vector3UVE{-5.0F, 0.0F, 0.0F}, Vector3UVE{1.0F, 0.0F, 0.0F}};
+    const float infinity = std::numeric_limits<float>::infinity();
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+
+    EXPECT_FALSE(IntersectRayUVE(RayUVE{Vector3UVE{nan, 0.0F, 0.0F}, validRay.direction}, validBox, 100.0F));
+    EXPECT_FALSE(IntersectRayUVE(validRay, validBox, infinity));
+    EXPECT_FALSE(IntersectRayUVE(validRay,
+                                 AabbUVE{Vector3UVE{1.0F, -1.0F, -1.0F}, Vector3UVE{-1.0F, 1.0F, 1.0F}},
+                                 100.0F));
+}
+
+TEST(AabbUVETest, IntersectRayUVE_RejectsFiniteSlabSubtractionOverflow) {
+    const float maximumFloat = std::numeric_limits<float>::max();
+    const AabbUVE box{Vector3UVE{maximumFloat, -1.0F, -1.0F}, Vector3UVE{maximumFloat, 1.0F, 1.0F}};
+    const RayUVE ray{Vector3UVE{-maximumFloat, 0.0F, 0.0F}, Vector3UVE{1.0F, 0.0F, 0.0F}};
+
+    EXPECT_FALSE(IntersectRayUVE(ray, box, maximumFloat));
 }
 
 TEST(AabbUVETest, IntersectRayUVE_HitBeyondMaxDistance_ReturnsNullopt) {
