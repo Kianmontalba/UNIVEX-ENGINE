@@ -95,6 +95,22 @@ TEST_F(InputSystemUVETest, ScrollDelta_AccumulatesThenResetsAfterUpdateUVE) {
     EXPECT_NEAR(inputSystem.GetMouseScrollDeltaUVE(), 0.0F, kEpsilon);
 }
 
+TEST_F(InputSystemUVETest, RegisterActionUVE_RejectsUnboundedAndMalformedNames) {
+    const std::string maximumName(kMaximumInputActionNameBytesUVE, 'M');
+    inputSystem.RegisterActionUVE(
+        InputActionUVE{maximumName, InputActionTypeUVE::Button, {KeyBindingUVE(KeyCodeUVE::Space)}, {}});
+    EXPECT_TRUE(inputSystem.RemapActionUVE(maximumName, {KeyBindingUVE(KeyCodeUVE::Enter)}, {}));
+
+    inputSystem.RegisterActionUVE(
+        InputActionUVE{maximumName + "X", InputActionTypeUVE::Button, {}, {}});
+    EXPECT_FALSE(inputSystem.IsActionHeldUVE(maximumName + "X"));
+    inputSystem.RegisterActionUVE(InputActionUVE{"", InputActionTypeUVE::Button, {}, {}});
+    EXPECT_FALSE(inputSystem.IsActionHeldUVE(""));
+    const std::string nulName = std::string("bad") + '\0' + "name";
+    inputSystem.RegisterActionUVE(InputActionUVE{nulName, InputActionTypeUVE::Button, {}, {}});
+    EXPECT_FALSE(inputSystem.IsActionHeldUVE(nulName));
+}
+
 TEST_F(InputSystemUVETest, ButtonAction_SingleBinding_TriggeredHeldReleased) {
     inputSystem.RegisterActionUVE(
         InputActionUVE{"Jump", InputActionTypeUVE::Button, {KeyBindingUVE(KeyCodeUVE::Space)}, {}});
