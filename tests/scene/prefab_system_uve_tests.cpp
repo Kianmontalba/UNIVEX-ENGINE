@@ -31,6 +31,7 @@ namespace {
 class FakePrefabOverrideTargetUVE final : public IPrefabOverrideTargetUVE {
 public:
     std::map<std::string, std::string> values;
+    std::string failingReadPath;
     std::string failingWritePath;
     std::size_t readCount = 0U;
     std::size_t writeCount = 0U;
@@ -38,6 +39,9 @@ public:
     [[nodiscard]] bool ReadPropertyUVE(const std::string_view propertyPath,
                                        std::string& serializedValue) const override {
         ++const_cast<FakePrefabOverrideTargetUVE*>(this)->readCount;
+        if (!failingReadPath.empty() && propertyPath == failingReadPath) {
+            return false;
+        }
         const auto iterator = values.find(std::string{propertyPath});
         if (iterator == values.end()) {
             return false;
@@ -184,6 +188,24 @@ TEST(PrefabInstanceComponentUVE, ApplyPrefabOverridesUVE_RollsBackEarlierWritesO
     EXPECT_EQ(target.values.at("A.value"), "old-a");
     EXPECT_EQ(target.values.at("B.value"), "old-b");
     EXPECT_EQ(instance.overrides.size(), 2U);
+}
+
+TEST(PrefabInstanceComponentUVE, ApplyPrefabOverridesUVE_StagesAllReadsBeforeWriting) {
+    const PrefabInstanceComponentUVE instance{
+        Asset::AssetGuidUVE{18U},
+        {{"A.value", "new-a"}, {"B.value", "new-b"}}};
+    FakePrefabOverrideTargetUVE target;
+    target.values = {{"A.value", "old-a"}, {"B.value", "old-b"}};
+    target.failingReadPath = "B.value";
+
+    const PrefabOverrideOperationResultUVE result = ApplyPrefabOverridesUVE(instance, target);
+
+    EXPECT_EQ(result.code, PrefabOverrideOperationCodeUVE::ReadFailed);
+    EXPECT_EQ(result.affectedCount, 1U);
+    EXPECT_EQ(target.readCount, 2U);
+    EXPECT_EQ(target.writeCount, 0U);
+    EXPECT_EQ(target.values.at("A.value"), "old-a");
+    EXPECT_EQ(target.values.at("B.value"), "old-b");
 }
 
 TEST(PrefabInstanceComponentUVE, DetectPrefabOverrideConflictsUVE_CleanBaselineIsReadOnly) {
