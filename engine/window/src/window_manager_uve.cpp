@@ -12,6 +12,7 @@
 #include "uve/window/window_events_uve.h"
 #include "uve/window/monitor_info_validation_uve.h"
 #include "uve/window/window_desc_validation_uve.h"
+#include "uve/window/framebuffer_size_validation_uve.h"
 
 namespace UVE::Window {
 
@@ -59,10 +60,15 @@ struct WindowManagerUVE::ImplUVE {
     }
 
     static void FramebufferSizeCallbackUVE(GLFWwindow* glfwWindow, int width, int height) {
+        std::uint32_t framebufferWidth = 0U;
+        std::uint32_t framebufferHeight = 0U;
+        if (!ValidateFramebufferSizeUVE(width, height, framebufferWidth, framebufferHeight)) {
+            return;
+        }
         // Publishes only — never touches GL state here. GlRenderDeviceUVE polls the window's
         // current size once per frame instead, per the approved design.
-        FromWindowUVE(glfwWindow).eventSystem->Publish(WindowResizedEventUVE{
-            static_cast<std::uint32_t>(width), static_cast<std::uint32_t>(height)});
+        FromWindowUVE(glfwWindow).eventSystem->Publish(
+            WindowResizedEventUVE{framebufferWidth, framebufferHeight});
     }
 
     static void FocusCallbackUVE(GLFWwindow* glfwWindow, int focused) {
@@ -289,7 +295,11 @@ std::uint32_t WindowManagerUVE::GetWidthUVE() const noexcept {
     int width = 0;
     int height = 0;
     glfwGetFramebufferSize(m_impl->window, &width, &height);
-    return static_cast<std::uint32_t>(width);
+    std::uint32_t framebufferWidth = 0U;
+    std::uint32_t framebufferHeight = 0U;
+    return ValidateFramebufferSizeUVE(width, height, framebufferWidth, framebufferHeight)
+               ? framebufferWidth
+               : 0U;
 }
 
 std::uint32_t WindowManagerUVE::GetHeightUVE() const noexcept {
@@ -299,7 +309,11 @@ std::uint32_t WindowManagerUVE::GetHeightUVE() const noexcept {
     int width = 0;
     int height = 0;
     glfwGetFramebufferSize(m_impl->window, &width, &height);
-    return static_cast<std::uint32_t>(height);
+    std::uint32_t framebufferWidth = 0U;
+    std::uint32_t framebufferHeight = 0U;
+    return ValidateFramebufferSizeUVE(width, height, framebufferWidth, framebufferHeight)
+               ? framebufferHeight
+               : 0U;
 }
 
 std::vector<MonitorInfoUVE> WindowManagerUVE::EnumerateMonitorsUVE() const {
