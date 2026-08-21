@@ -43,7 +43,8 @@ struct TextureAssetUVE {
 [[nodiscard]] bool LoadTextureAssetUVE(const std::filesystem::path& path, TextureAssetUVE& outTexture);
 
 /// Writes `texture` to `path` as a `.uve*` envelope with `AssetKindUVE::Texture`. Returns false
-/// (logging the reason) if the file can't be written.
+/// (logging the reason) for an unsupported format, overflowing dimensions, mismatched pixel bytes,
+/// or a file publication failure; invalid descriptors are rejected before opening the destination.
 [[nodiscard]] bool SaveTextureAssetUVE(const TextureAssetUVE& texture, const std::filesystem::path& path);
 
 } // namespace UVE::Asset
