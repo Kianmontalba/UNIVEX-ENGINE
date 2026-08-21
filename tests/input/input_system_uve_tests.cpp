@@ -125,6 +125,13 @@ TEST_F(InputSystemUVETest, RegisterActionUVE_RejectsUnboundedAndMalformedNames) 
     const std::string nulName = std::string("bad") + '\0' + "name";
     inputSystem.RegisterActionUVE(InputActionUVE{nulName, InputActionTypeUVE::Button, {}, {}});
     EXPECT_FALSE(inputSystem.IsActionHeldUVE(nulName));
+
+    inputSystem.RegisterActionUVE(
+        InputActionUVE{"InvalidType", InputActionTypeUVE::Button, {KeyBindingUVE(KeyCodeUVE::Space)}, {}});
+    inputSystem.RegisterActionUVE(InputActionUVE{"InvalidType", static_cast<InputActionTypeUVE>(99), {}, {}});
+    inputSystem.SetKeyStateUVE(KeyCodeUVE::Space, true);
+    inputSystem.UpdateUVE();
+    EXPECT_TRUE(inputSystem.IsActionHeldUVE("InvalidType"));
 }
 
 TEST_F(InputSystemUVETest, ButtonAction_SingleBinding_TriggeredHeldReleased) {
