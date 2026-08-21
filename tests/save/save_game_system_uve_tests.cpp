@@ -492,6 +492,23 @@ TEST_F(SaveGameSystemUVETest, SavePayloadMigrationRegistryUVE_MultiHopFailureIsA
     EXPECT_EQ(diagnostics.reason, "second migration rejected");
 }
 
+TEST_F(SaveGameSystemUVETest, SavePayloadMigrationRegistryUVE_RejectsTransformOutputOverCapAtomically) {
+    SavePayloadMigrationRegistryUVE registry;
+    ASSERT_TRUE(registry.RegisterUVE(0U, 1U, [](std::vector<std::byte>& payload, std::string&) {
+        payload.resize(kMaximumSaveMigrationPayloadBytesUVE + 1U, std::byte{0x7F});
+        return true;
+    }).IsAcceptedUVE());
+
+    const std::vector<std::byte> originalPayload{std::byte{0x01}};
+    std::vector<std::byte> payload = originalPayload;
+    const SaveMigrationDiagnosticsUVE diagnostics = registry.MigrateUVE(0U, 1U, payload);
+
+    EXPECT_EQ(diagnostics.status, SaveMigrationStatusUVE::InvalidPayload);
+    EXPECT_EQ(diagnostics.appliedStepCount, 0U);
+    EXPECT_EQ(payload, originalPayload);
+    EXPECT_EQ(diagnostics.reason, "save migration transform exceeded migration cap");
+}
+
 TEST_F(SaveGameSystemUVETest, SaveGameSystemUVE_LoadsRegisteredVersionTransformAtomically) {
     const EntityUVE entity = entityManager.CreateEntityUVE();
     ASSERT_TRUE(saveGameSystem.SaveUVE(15, entityManager, {entity}, GameStateMetadataUVE{}));

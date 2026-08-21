@@ -100,9 +100,10 @@ SaveMigrationDiagnosticsUVE SavePayloadMigrationRegistryUVE::MigrateUVE(
                                                   : "no migration path reaches the requested save schema version");
         return diagnostics;
     }
-    if (payload.empty()) {
+    if (payload.empty() || payload.size() > kMaximumSaveMigrationPayloadBytesUVE) {
         diagnostics.status = SaveMigrationStatusUVE::InvalidPayload;
-        diagnostics.reason = BoundedReasonUVE("save payload is empty");
+        diagnostics.reason = BoundedReasonUVE(payload.empty() ? "save payload is empty"
+                                                               : "save payload exceeds migration cap");
         return diagnostics;
     }
 
@@ -134,9 +135,11 @@ SaveMigrationDiagnosticsUVE SavePayloadMigrationRegistryUVE::MigrateUVE(
             diagnostics.reason = BoundedReasonUVE("save migration transform raised an exception");
             return diagnostics;
         }
-        if (migratedPayload.empty()) {
+        if (migratedPayload.empty() || migratedPayload.size() > kMaximumSaveMigrationPayloadBytesUVE) {
             diagnostics.status = SaveMigrationStatusUVE::InvalidPayload;
-            diagnostics.reason = BoundedReasonUVE("save migration transform produced an empty payload");
+            diagnostics.reason = BoundedReasonUVE(migratedPayload.empty()
+                                                       ? "save migration transform produced an empty payload"
+                                                       : "save migration transform exceeded migration cap");
             return diagnostics;
         }
         ++diagnostics.appliedStepCount;
