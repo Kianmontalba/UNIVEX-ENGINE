@@ -222,6 +222,24 @@ TEST(ReliablePacketWindowUVETest, ReassemblyRejectsInvalidBoundsAndMessageConfli
     EXPECT_EQ(payload, (std::vector<std::uint8_t>{9U}));
 }
 
+TEST(ReliablePacketWindowUVETest, ReassemblyRejectsOverBudgetAggregateStateAtomically) {
+    ReliablePayloadReassemblyStateUVE state;
+    state.messageId = 23U;
+    state.fragmentCount = 2U;
+    state.receivedFragmentCount = 1U;
+    state.receivedByteCount = kReliablePacketMaximumReassembledPayloadBytesUVE;
+    state.fragments.resize(2U);
+    state.fragments[0U] = {1U};
+    std::vector<std::uint8_t> payload{9U};
+
+    EXPECT_EQ(AcceptReliablePayloadFragmentUVE(23U, 1U, 2U, {2U}, state, payload),
+              ReliablePayloadReassemblyStatusUVE::Invalid);
+    EXPECT_EQ(state.receivedByteCount, kReliablePacketMaximumReassembledPayloadBytesUVE);
+    EXPECT_EQ(state.receivedFragmentCount, 1U);
+    EXPECT_TRUE(state.fragments[1U].empty());
+    EXPECT_EQ(payload, (std::vector<std::uint8_t>{9U}));
+}
+
 TEST(ReliablePacketWindowUVETest, SingleFragmentPublishesCopiedPayload) {
     ReliablePayloadReassemblyStateUVE state;
     std::vector<std::uint8_t> payload;

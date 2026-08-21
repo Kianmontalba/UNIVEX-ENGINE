@@ -7,6 +7,8 @@ namespace UVE::Network {
 inline constexpr std::uint32_t kReliablePacketMaximumSelectiveAckBitsUVE = 32U;
 inline constexpr std::size_t kReliablePacketMaximumPayloadBytesUVE = 1200U;
 inline constexpr std::size_t kReliablePacketMaximumFragmentCountUVE = 1024U;
+inline constexpr std::size_t kReliablePacketMaximumReassembledPayloadBytesUVE =
+    kReliablePacketMaximumPayloadBytesUVE * kReliablePacketMaximumFragmentCountUVE;
 inline constexpr std::size_t kReliablePacketHeaderWireBytesUVE = 12U;
 struct ReliablePacketHeaderUVE final {
     std::uint32_t sequence = 0U;
