@@ -24,6 +24,10 @@ constexpr float kEpsilonUVE = 1.0e-5F;
     return iterator == controls.cend() ? nullptr : &*iterator;
 }
 
+[[nodiscard]] bool IsFiniteVectorUVE(const Math::Vector3UVE& value) noexcept {
+    return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+}
+
 [[nodiscard]] Math::Vector3UVE NormalizeVectorUVE(const Math::Vector3UVE& value,
                                                    const Math::Vector3UVE& fallback) noexcept {
     const float lengthSquared = Math::LengthSquaredUVE(value);
@@ -199,7 +203,8 @@ TwoBoneIKSolveResultUVE SolveTwoBoneIKUVE(const TransformPoseUVE& rootPose,
                                           const float weight) noexcept {
     TwoBoneIKSolveResultUVE result{rootPose, midPose, endPose, false, false};
     if (!IsFiniteTransformPoseUVE(rootPose) || !IsFiniteTransformPoseUVE(midPose) ||
-        !IsFiniteTransformPoseUVE(endPose) || !std::isfinite(weight)) {
+        !IsFiniteTransformPoseUVE(endPose) || !IsFiniteVectorUVE(target) || !IsFiniteVectorUVE(pole) ||
+        !std::isfinite(weight)) {
         return result;
     }
     const Math::Vector3UVE root = rootPose.position;
@@ -216,6 +221,10 @@ TwoBoneIKSolveResultUVE SolveTwoBoneIKUVE(const TransformPoseUVE& rootPose,
     }
     const float minimumDistance = std::abs(firstLength - secondLength) + kEpsilonUVE;
     const float maximumDistance = firstLength + secondLength - kEpsilonUVE;
+    if (!std::isfinite(minimumDistance) || !std::isfinite(maximumDistance) ||
+        minimumDistance > maximumDistance || maximumDistance <= kEpsilonUVE) {
+        return result;
+    }
     const float solvedDistance = std::clamp(requestedDistance, minimumDistance, maximumDistance);
     result.reachable = requestedDistance >= minimumDistance && requestedDistance <= maximumDistance;
     result.targetClamped = !result.reachable;
@@ -230,8 +239,14 @@ TwoBoneIKSolveResultUVE SolveTwoBoneIKUVE(const TransformPoseUVE& rootPose,
                                         (2.0F * firstLength * solvedDistance), -1.0F, 1.0F);
     const float along = firstLength * cosine;
     const float bend = firstLength * std::sqrt(std::max(0.0F, 1.0F - cosine * cosine));
+    if (!std::isfinite(cosine) || !std::isfinite(along) || !std::isfinite(bend)) {
+        return result;
+    }
     const Math::Vector3UVE solvedMid = root + direction * along + bendDirection * bend;
     const Math::Vector3UVE solvedEnd = root + direction * solvedDistance;
+    if (!IsFiniteVectorUVE(solvedMid) || !IsFiniteVectorUVE(solvedEnd)) {
+        return result;
+    }
     TransformPoseUVE solvedMidPose = midPose;
     solvedMidPose.position = solvedMid;
     TransformPoseUVE solvedEndPose = endPose;

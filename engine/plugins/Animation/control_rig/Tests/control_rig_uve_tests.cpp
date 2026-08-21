@@ -83,6 +83,19 @@ TEST(ControlRigUVETest, SolveTwoBoneIKUVE_ReachesTargetWithPoleVectorDeterminist
     EXPECT_NEAR(result.endPose.position.y, 1.0F, 1.0e-4F);
 }
 
+TEST(ControlRigUVETest, SolveTwoBoneIKUVE_RejectsOverflowedFiniteGeometry) {
+    const TransformPoseUVE root{{-std::numeric_limits<float>::max(), 0.0F, 0.0F}, {}, {1.0F, 1.0F, 1.0F}};
+    const TransformPoseUVE mid{{0.0F, 0.0F, 0.0F}, {}, {1.0F, 1.0F, 1.0F}};
+    const TransformPoseUVE end{{std::numeric_limits<float>::max(), 0.0F, 0.0F}, {}, {1.0F, 1.0F, 1.0F}};
+    const TwoBoneIKSolveResultUVE result = SolveTwoBoneIKUVE(
+        root, mid, end, {0.0F, 1.0F, 0.0F}, {0.0F, 1.0F, 0.0F}, 1.0F);
+
+    EXPECT_FALSE(result.IsSuccessUVE());
+    EXPECT_EQ(result.rootPose, root);
+    EXPECT_EQ(result.midPose, mid);
+    EXPECT_EQ(result.endPose, end);
+}
+
 TEST(ControlRigUVETest, SolveTwoBoneIKUVE_AlignsRootAndMidRotationsToSolvedBones) {
     const ControlRigUVE rig = MakeRigUVE();
     const TwoBoneIKSolveResultUVE result = SolveTwoBoneIKUVE(
