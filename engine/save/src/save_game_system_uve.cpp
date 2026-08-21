@@ -139,6 +139,20 @@ void AppendUint64UVE(std::vector<std::byte>& buffer, std::uint64_t value) {
     }
 }
 
+/// Reads only the schema discriminator needed to select a migration. Legacy metadata may not yet
+/// satisfy DecodeMetadataJsonUVE(), so this intentionally performs no current-schema field access.
+[[nodiscard]] std::optional<std::uint32_t> DecodeMetadataSchemaVersionUVE(
+    const std::vector<std::byte>& bytes) {
+    const std::string text(reinterpret_cast<const char*>(bytes.data()), bytes.size());
+    try {
+        const nlohmann::json json = nlohmann::json::parse(text);
+        return json.value("payloadSchemaVersion", std::uint32_t{1});
+    } catch (const nlohmann::json::exception& jsonError) {
+        UVE_ERROR("SaveGameSystemUVE: failed to parse save schema discriminator: {}", jsonError.what());
+        return std::nullopt;
+    }
+}
+
 /// Builds a `.uvesave` payload: `metadataJsonLength uint32`, `metadataJsonBytes`,
 /// `worldJsonLength uint64`, `worldJsonBytes` — the *only* function that touches this fixed
 /// layout, so a future increment can wrap this function's output (and SplitSavePayloadUVE's
@@ -292,23 +306,31 @@ std::vector<Scene::EntityUVE> SaveGameSystemUVE::LoadUVE(int slotIndex, Scene::I
         return {};
     }
 
-    const std::optional<GameStateMetadataUVE> metadata = DecodeMetadataJsonUVE(metadataJsonBytes);
-    if (!metadata.has_value()) {
+    const std::optional<std::uint32_t> sourceSchemaVersion =
+        DecodeMetadataSchemaVersionUVE(metadataJsonBytes);
+    if (!sourceSchemaVersion.has_value()) {
         std::vector<std::byte> emptyPayload;
         m_lastMigrationDiagnostics = m_migrationRegistry.MigrateUVE(kCurrentSavePayloadSchemaVersionUVE,
                                                             kCurrentSavePayloadSchemaVersionUVE, emptyPayload);
         return {};
     }
-    m_lastMigrationDiagnostics = m_migrationRegistry.MigrateUVE(metadata->payloadSchemaVersion,
+    m_lastMigrationDiagnostics = m_migrationRegistry.MigrateUVE(sourceSchemaVersion.value(),
                                                         kCurrentSavePayloadSchemaVersionUVE, payload);
     if (!m_lastMigrationDiagnostics.SucceededUVE()) {
         UVE_ERROR("SaveGameSystemUVE: \"{}\" cannot load schema v{}: {}", finalPath.string(),
-                   metadata->payloadSchemaVersion, m_lastMigrationDiagnostics.reason);
+                   sourceSchemaVersion.value(), m_lastMigrationDiagnostics.reason);
         return {};
     }
     if (m_lastMigrationDiagnostics.status == SaveMigrationStatusUVE::Migrated &&
         !SplitSavePayloadUVE(payload, metadataJsonBytes, worldJsonBytes)) {
         UVE_ERROR("SaveGameSystemUVE: \"{}\" migration produced an invalid payload", finalPath.string());
+        return {};
+    }
+    const std::optional<GameStateMetadataUVE> metadata = DecodeMetadataJsonUVE(metadataJsonBytes);
+    if (!metadata.has_value()) {
+        std::vector<std::byte> emptyPayload;
+        m_lastMigrationDiagnostics = m_migrationRegistry.MigrateUVE(kCurrentSavePayloadSchemaVersionUVE,
+                                                            kCurrentSavePayloadSchemaVersionUVE, emptyPayload);
         return {};
     }
 
@@ -379,19 +401,24 @@ std::optional<GameStateMetadataUVE> SaveGameSystemUVE::GetSaveMetadataUVE(int sl
         return std::nullopt;
     }
 
-    const std::optional<GameStateMetadataUVE> metadata = DecodeMetadataJsonUVE(metadataJsonBytes);
-    if (!metadata.has_value()) {
+    const std::optional<std::uint32_t> sourceSchemaVersion =
+        DecodeMetadataSchemaVersionUVE(metadataJsonBytes);
+    if (!sourceSchemaVersion.has_value()) {
         return std::nullopt;
     }
-    std::vector<std::byte> migrationProbe{std::byte{0}};
-    m_lastMigrationDiagnostics = m_migrationRegistry.MigrateUVE(metadata->payloadSchemaVersion,
-                                                        kCurrentSavePayloadSchemaVersionUVE, migrationProbe);
+    m_lastMigrationDiagnostics = m_migrationRegistry.MigrateUVE(sourceSchemaVersion.value(),
+                                                        kCurrentSavePayloadSchemaVersionUVE, expandedPayload);
     if (!m_lastMigrationDiagnostics.SucceededUVE()) {
         UVE_ERROR("SaveGameSystemUVE: \"{}\" metadata schema v{} is unsupported: {}", finalPath.string(),
-                   metadata->payloadSchemaVersion, m_lastMigrationDiagnostics.reason);
+                   sourceSchemaVersion.value(), m_lastMigrationDiagnostics.reason);
         return std::nullopt;
     }
-    return metadata;
+    if (m_lastMigrationDiagnostics.status == SaveMigrationStatusUVE::Migrated &&
+        !SplitSaveMetadataOnlyUVE(expandedPayload, metadataJsonBytes)) {
+        UVE_ERROR("SaveGameSystemUVE: \"{}\" migration produced an invalid payload", finalPath.string());
+        return std::nullopt;
+    }
+    return DecodeMetadataJsonUVE(metadataJsonBytes);
 }
 
 std::vector<int> SaveGameSystemUVE::ListUsedSlotsUVE() const {
