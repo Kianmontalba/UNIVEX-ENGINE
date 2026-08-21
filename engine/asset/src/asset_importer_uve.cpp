@@ -236,8 +236,13 @@ void AssetImporterUVE::RegisterImporterUVE(
     std::function<bool(const std::filesystem::path&, const std::filesystem::path&,
                         const AssetImportSettingsUVE&)>
         importFunc) {
+    std::string normalizedExtension = NormalizeExtensionUVE(std::move(sourceExtension));
+    if (normalizedExtension.empty() || !importFunc) {
+        UVE_ERROR("AssetImporterUVE: rejected importer registration with an empty extension or callback");
+        return;
+    }
     const std::lock_guard<std::mutex> lock(m_impl->mutex);
-    m_impl->importers[NormalizeExtensionUVE(std::move(sourceExtension))] = std::move(importFunc);
+    m_impl->importers[std::move(normalizedExtension)] = std::move(importFunc);
 }
 
 AssetImportSourceClassificationUVE AssetImporterUVE::ClassifySourceUVE(

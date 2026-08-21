@@ -84,7 +84,8 @@ public:
     /// Registers `importFunc` for `sourceExtension` (matched case-insensitively, with or without
     /// a leading dot — ".png" and "png" register the same key): `importFunc(source, destination,
     /// settings)` should copy/convert `source` to `destination` and return true on success.
-    /// Replaces any importer already registered for that extension, including a built-in one.
+    /// Replaces any importer already registered for that extension, including a built-in one. Empty
+    /// normalized extensions and empty callbacks are rejected without changing an existing importer.
     virtual void RegisterImporterUVE(
         std::string sourceExtension,
         std::function<bool(const std::filesystem::path&, const std::filesystem::path&,
