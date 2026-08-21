@@ -4,6 +4,7 @@
 #include "uve/audio/audio_system_uve.h"
 
 #include <algorithm>
+#include <cmath>
 #include <unordered_map>
 
 #include "uve/debug/logging_macros_uve.h"
@@ -106,6 +107,10 @@ void AudioSystemUVE::SetSourcePositionUVE(VoiceHandleUVE source, Math::Vector3UV
         UVE_ERROR("AudioSystemUVE: SetSourcePositionUVE called with an unknown handle ({})", source.value);
         return;
     }
+    if (!std::isfinite(position.x) || !std::isfinite(position.y) || !std::isfinite(position.z)) {
+        UVE_ERROR("AudioSystemUVE: SetSourcePositionUVE rejected non-finite position for handle ({})", source.value);
+        return;
+    }
     iterator->second.position = position;
 }
 
@@ -115,6 +120,10 @@ void AudioSystemUVE::SetSourceVolumeUVE(VoiceHandleUVE source, float volume) {
         UVE_ERROR("AudioSystemUVE: SetSourceVolumeUVE called with an unknown handle ({})", source.value);
         return;
     }
+    if (!std::isfinite(volume) || volume < 0.0F) {
+        UVE_ERROR("AudioSystemUVE: SetSourceVolumeUVE rejected invalid volume for handle ({})", source.value);
+        return;
+    }
     iterator->second.volume = volume;
 }
 
@@ -122,6 +131,10 @@ void AudioSystemUVE::SetSourcePitchUVE(VoiceHandleUVE source, float pitch) {
     const auto iterator = m_impl->sources.find(source.value);
     if (iterator == m_impl->sources.end()) {
         UVE_ERROR("AudioSystemUVE: SetSourcePitchUVE called with an unknown handle ({})", source.value);
+        return;
+    }
+    if (!std::isfinite(pitch) || pitch < 0.0F) {
+        UVE_ERROR("AudioSystemUVE: SetSourcePitchUVE rejected invalid pitch for handle ({})", source.value);
         return;
     }
     iterator->second.pitch = pitch;
