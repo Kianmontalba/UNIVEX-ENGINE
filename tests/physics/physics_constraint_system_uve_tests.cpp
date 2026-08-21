@@ -132,6 +132,23 @@ TEST_F(PhysicsConstraintSystemUVETest, SolveUVE_SkipsOverflowedFiniteConstraintG
     EXPECT_FLOAT_EQ(WorldPositionUVE(second).y, maximum);
 }
 
+TEST_F(PhysicsConstraintSystemUVETest, SolveUVE_SkipsSubnormalMassInverseOverflowAtomically) {
+    const float subnormalMass = std::numeric_limits<float>::denorm_min();
+    const Scene::EntityUVE first = MakeBodyUVE({0.0F, 0.0F, 0.0F}, subnormalMass);
+    const Scene::EntityUVE second = MakeBodyUVE({4.0F, 0.0F, 0.0F}, 1.0F);
+    ASSERT_TRUE(constraintSystem.AddDistanceConstraintUVE(
+                    DistanceConstraintUVE{first, second, {}, {}, 1.0F})
+                    .IsAcceptedUVE());
+
+    const PhysicsConstraintSolveResultUVE solved = constraintSystem.SolveUVE(entityManager, sceneGraph);
+
+    EXPECT_TRUE(solved.islandPlanValid);
+    EXPECT_EQ(solved.solvedConstraintCount, 0U);
+    EXPECT_EQ(solved.skippedConstraintCount, 1U);
+    EXPECT_FLOAT_EQ(WorldPositionUVE(first).x, 0.0F);
+    EXPECT_FLOAT_EQ(WorldPositionUVE(second).x, 4.0F);
+}
+
 TEST_F(PhysicsConstraintSystemUVETest, AddHingeConstraintUVE_RejectsOverflowedFiniteAxisAtomically) {
     const Scene::EntityUVE first = MakeBodyUVE({});
     const Scene::EntityUVE second = MakeBodyUVE({2.0F, 0.0F, 0.0F});
