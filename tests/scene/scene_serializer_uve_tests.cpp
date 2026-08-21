@@ -372,6 +372,20 @@ TEST_F(SceneSerializerUVETest, RestoreUVE_InvalidAudioSourcePayload_RollsBackCre
     EXPECT_EQ(entityManager.GetEntityCountUVE(), entityCountBefore);
 }
 
+TEST(AudioSourceComponentUVE, IsAudioSourceComponentValidUVE_EnforcesBoundedNulFreePath) {
+    AudioSourceComponentUVE valid;
+    valid.audioAssetPath = "sounds/player.wav";
+    EXPECT_TRUE(IsAudioSourceComponentValidUVE(valid));
+    valid.audioAssetPath.clear();
+    EXPECT_TRUE(IsAudioSourceComponentValidUVE(valid));
+    valid.audioAssetPath.assign(kMaximumAudioAssetPathBytesUVE + 1U, 'x');
+    EXPECT_FALSE(IsAudioSourceComponentValidUVE(valid));
+    valid.audioAssetPath.assign("sounds/player");
+    valid.audioAssetPath.push_back('\0');
+    valid.audioAssetPath += ".wav";
+    EXPECT_FALSE(IsAudioSourceComponentValidUVE(valid));
+}
+
 TEST(ScriptComponentUVE, IsScriptComponentValidUVE_AllowsEmptyAndCanonicalRelativePaths) {
     EXPECT_TRUE(IsScriptComponentValidUVE(ScriptComponentUVE{""}));
     EXPECT_TRUE(IsScriptComponentValidUVE(ScriptComponentUVE{"scripts/player.lua"}));

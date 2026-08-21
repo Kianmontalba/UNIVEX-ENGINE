@@ -4,10 +4,13 @@
 #pragma once
 
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <string>
 
 namespace UVE::Scene {
+
+inline constexpr std::size_t kMaximumAudioAssetPathBytesUVE = 1024U;
 
 /// Distance-attenuation curve shape a spatial AudioSourceComponentUVE uses, consumed by
 /// Audio::AudioSourceSystemUVE (which converts it to Audio::AudioAttenuationModelUVE) — kept as a
@@ -54,7 +57,10 @@ struct AudioSourceComponentUVE final {
     const bool spatialDistanceValid =
         !source.spatial || (std::isfinite(source.minDistance) && source.minDistance > 0.0F &&
                             std::isfinite(source.maxDistance) && source.maxDistance > source.minDistance);
-    return std::isfinite(source.volume) && source.volume >= 0.0F && std::isfinite(source.pitch) && source.pitch > 0.0F &&
+    const bool assetPathValid = source.audioAssetPath.size() <= kMaximumAudioAssetPathBytesUVE &&
+                                source.audioAssetPath.find('\0') == std::string::npos;
+    return assetPathValid && std::isfinite(source.volume) && source.volume >= 0.0F &&
+           std::isfinite(source.pitch) && source.pitch > 0.0F &&
            IsAudioAttenuationCurveValidUVE(source.attenuationCurve) && spatialDistanceValid;
 }
 
