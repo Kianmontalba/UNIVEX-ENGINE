@@ -118,6 +118,20 @@ TEST(UveFileEnvelopeUVETest, ReadUveFileUVE_BadMagic_ReturnsNulloptAndLogsError)
     std::filesystem::remove(path);
 }
 
+TEST(UveFileEnvelopeUVETest, WriteUveFileUVE_InvalidAssetKindPreservesExistingDestination) {
+    const std::filesystem::path path = "uve_file_envelope_tests_invalid_write_kind.uveblob";
+    std::filesystem::remove(path);
+    const std::vector<std::byte> originalPayload = MakePayloadUVE("original");
+    ASSERT_TRUE(WriteUveFileUVE(path, AssetKindUVE::Blob, originalPayload));
+
+    EXPECT_FALSE(WriteUveFileUVE(path, static_cast<AssetKindUVE>(0xFFFFFFFFU), MakePayloadUVE("replacement")));
+    const auto result = ReadUveFileUVE(path);
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ(result->first.assetType, AssetKindUVE::Blob);
+    EXPECT_EQ(result->second, originalPayload);
+    std::filesystem::remove(path);
+}
+
 TEST(UveFileEnvelopeUVETest, ReadUveFileUVE_InvalidAssetKind_ReturnsNullopt) {
     const std::filesystem::path path = "uve_file_envelope_tests_bad_asset_kind.uveblob";
     std::filesystem::remove(path);
