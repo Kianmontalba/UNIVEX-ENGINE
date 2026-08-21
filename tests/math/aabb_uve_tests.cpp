@@ -135,6 +135,24 @@ TEST(AabbUVETest, ComputePenetrationUVE_OverlappingAlongX_ReturnsXAxisAndCorrect
     EXPECT_NEAR(penetration->axis.z, 0.0F, kEpsilon);
 }
 
+TEST(AabbUVETest, ComputePenetrationUVE_RejectsOverflowedFiniteDepth) {
+    const float maximumFloat = std::numeric_limits<float>::max();
+    const AabbUVE a{Vector3UVE{-maximumFloat, -1.0F, -1.0F}, Vector3UVE{maximumFloat, 1.0F, 1.0F}};
+    const AabbUVE b{Vector3UVE{-maximumFloat, -1.0F, -1.0F}, Vector3UVE{maximumFloat, 1.0F, 1.0F}};
+
+    EXPECT_FALSE(ComputePenetrationUVE(a, b).has_value());
+}
+
+TEST(AabbUVETest, ComputePenetrationUVE_RejectsNonFiniteOrInvertedInputs) {
+    const AabbUVE validBox{Vector3UVE{-1.0F, -1.0F, -1.0F}, Vector3UVE{1.0F, 1.0F, 1.0F}};
+    const float infinity = std::numeric_limits<float>::infinity();
+
+    EXPECT_FALSE(ComputePenetrationUVE(
+        AabbUVE{Vector3UVE{infinity, -1.0F, -1.0F}, validBox.max}, validBox).has_value());
+    EXPECT_FALSE(ComputePenetrationUVE(
+        AabbUVE{Vector3UVE{1.0F, -1.0F, -1.0F}, Vector3UVE{-1.0F, 1.0F, 1.0F}}, validBox).has_value());
+}
+
 TEST(AabbUVETest, ComputePenetrationUVE_AxisPointsFromFirstTowardSecond) {
     const AabbUVE a{Vector3UVE{1.0F, 0.0F, 0.0F}, Vector3UVE{3.0F, 10.0F, 10.0F}};
     const AabbUVE b{Vector3UVE{0.0F, 0.0F, 0.0F}, Vector3UVE{2.0F, 10.0F, 10.0F}};
