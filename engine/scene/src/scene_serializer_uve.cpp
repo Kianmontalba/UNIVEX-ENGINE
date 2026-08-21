@@ -274,7 +274,11 @@ template <typename T, typename FromJsonFunc>
                           return camera;
                       }));
         table.emplace("NameComponentUVE", MakeRegistrationUVE<NameComponentUVE>([](const nlohmann::json& json) {
-                          return NameComponentUVE{json.at("name").get<std::string>()};
+                          const NameComponentUVE component{json.at("name").get<std::string>()};
+                          if (!IsNameComponentValidUVE(component)) {
+                              throw std::runtime_error("Invalid NameComponentUVE payload");
+                          }
+                          return component;
                       }));
         table.emplace("ColliderComponentUVE", MakeRegistrationUVE<ColliderComponentUVE>([](const nlohmann::json& json) {
                           ColliderComponentUVE collider;

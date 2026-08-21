@@ -2,9 +2,12 @@
 
 #pragma once
 
+#include <cstddef>
 #include <string>
 
 namespace UVE::Scene {
+
+inline constexpr std::size_t kMaximumEntityNameBytesUVE = 128U;
 
 /// Persistent, human-readable authored metadata for a scene entity. Names are intentionally not
 /// required to be globally unique: the editor gives newly created entities deterministic defaults,
@@ -14,5 +17,10 @@ namespace UVE::Scene {
 struct NameComponentUVE final {
     std::string name;
 };
+
+[[nodiscard]] inline bool IsNameComponentValidUVE(const NameComponentUVE& component) noexcept {
+    return component.name.size() <= kMaximumEntityNameBytesUVE &&
+           component.name.find('\0') == std::string::npos;
+}
 
 } // namespace UVE::Scene
