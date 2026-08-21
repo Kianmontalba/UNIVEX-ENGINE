@@ -5,6 +5,7 @@
 #include "uve/save/save_payload_compression_uve.h"
 
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <system_error>
@@ -21,6 +22,10 @@ namespace {
 [[nodiscard]] bool IsValidSlotIndexUVE(int slotIndex) noexcept {
     return slotIndex == kAutoSaveSlotIndexUVE || slotIndex == kManualCheckpointSlotIndexUVE ||
            (slotIndex >= 0 && slotIndex < kSaveSlotCountUVE);
+}
+
+[[nodiscard]] bool IsValidSaveMetadataUVE(const GameStateMetadataUVE& metadata) noexcept {
+    return std::isfinite(metadata.playtimeSeconds) && metadata.playtimeSeconds >= 0.0;
 }
 
 /// The filename stem (no extension) for `slotIndex` — `"autosave"` and
@@ -193,6 +198,10 @@ bool SaveGameSystemUVE::SaveUVE(int slotIndex, Scene::IEntityManagerUVE& entityM
                                  const GameStateMetadataUVE& metadata) {
     if (!IsValidSlotIndexUVE(slotIndex)) {
         UVE_ERROR("SaveGameSystemUVE: SaveUVE called with an out-of-range slot index ({})", slotIndex);
+        return false;
+    }
+    if (!IsValidSaveMetadataUVE(metadata)) {
+        UVE_ERROR("SaveGameSystemUVE: SaveUVE rejected non-finite or negative playtime metadata for slot {}", slotIndex);
         return false;
     }
 
