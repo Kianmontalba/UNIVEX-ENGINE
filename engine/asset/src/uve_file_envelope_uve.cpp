@@ -112,6 +112,11 @@ DecodeUveFileEnvelopeUVE(const std::vector<std::byte>& envelope, const std::stri
 
 bool WriteUveFileUVE(const std::filesystem::path& path, const AssetKindUVE assetType,
                      const std::vector<std::byte>& payload) {
+    if (!IsAssetKindValidUVE(static_cast<std::uint32_t>(assetType))) {
+        UVE_ERROR("UveFileEnvelopeUVE: refused to write \"{}\" with invalid asset kind {}", path.string(),
+                  static_cast<std::uint32_t>(assetType));
+        return false;
+    }
     std::ofstream file(path, std::ios::binary);
     if (!file.is_open()) {
         UVE_ERROR("UveFileEnvelopeUVE: failed to open \"{}\" for writing", path.string());
