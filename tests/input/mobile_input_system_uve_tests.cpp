@@ -147,6 +147,26 @@ TEST(MobileInputSystemUVETest, ActiveZeroIdentifierIsRejectedWithoutPublishingOr
     EXPECT_EQ(touch.position, (Math::Vector2UVE{10.0F, 20.0F}));
 }
 
+TEST(MobileInputSystemUVETest, DuplicateActiveIdentifierIsRejectedWithoutPublishingOrReplacingTouch) {
+    MobileInputSystemUVE mobileInput;
+    mobileInput.SetTouchStateUVE(0U, true, 42U, Math::Vector2UVE{10.0F, 20.0F}, 0.5F);
+    mobileInput.UpdateUVE();
+
+    mobileInput.SetTouchStateUVE(1U, true, 42U, Math::Vector2UVE{30.0F, 40.0F}, 0.75F);
+    mobileInput.UpdateUVE();
+    const MobileInputSnapshotUVE duplicateRejected = mobileInput.GetSnapshotUVE();
+    EXPECT_TRUE(duplicateRejected.touches[0U].active);
+    EXPECT_EQ(duplicateRejected.touches[0U].identifier, 42U);
+    EXPECT_EQ(duplicateRejected.touches[0U].position, (Math::Vector2UVE{10.0F, 20.0F}));
+    EXPECT_FALSE(duplicateRejected.touches[1U].active);
+
+    mobileInput.SetTouchStateUVE(1U, true, 43U, Math::Vector2UVE{30.0F, 40.0F}, 0.75F);
+    mobileInput.UpdateUVE();
+    const MobileInputSnapshotUVE uniqueAccepted = mobileInput.GetSnapshotUVE();
+    EXPECT_TRUE(uniqueAccepted.touches[1U].active);
+    EXPECT_EQ(uniqueAccepted.touches[1U].identifier, 43U);
+}
+
 TEST(MobileInputSystemUVETest, InvalidAndNonFiniteInputFailsClosedAndReleaseClearsTouch) {
     MobileInputSystemUVE mobileInput;
     const float infinity = std::numeric_limits<float>::infinity();
