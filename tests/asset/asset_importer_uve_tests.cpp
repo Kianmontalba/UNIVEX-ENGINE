@@ -264,6 +264,37 @@ TEST_F(AssetImporterUVETest, ImportUVE_UnregisteredExtension_ReturnsInvalidAndLo
     std::filesystem::remove(sourcePath);
 }
 
+TEST_F(AssetImporterUVETest, RegisterImporterUVE_InvalidRegistrationPreservesExistingImporter) {
+    const std::filesystem::path sourcePath = "uve_asset_importer_tests_invalid_registration.custom";
+    const std::filesystem::path destinationPath = "uve_asset_importer_tests_invalid_registration_dest.custom";
+    std::filesystem::remove(sourcePath);
+    std::filesystem::remove(destinationPath);
+    WriteFixtureFileUVE(sourcePath, "source");
+
+    bool validImporterRan = false;
+    const auto validImporter = [&validImporterRan](const std::filesystem::path&,
+                                                     const std::filesystem::path& destination,
+                                                     const AssetImportSettingsUVE&) {
+        validImporterRan = true;
+        std::ofstream file(destination, std::ios::binary);
+        file << "valid importer";
+        return file.good();
+    };
+    importer.RegisterImporterUVE("custom", validImporter);
+    importer.RegisterImporterUVE("", {});
+    importer.RegisterImporterUVE("custom", {});
+
+    const AssetImportSourceClassificationUVE noExtension = importer.ClassifySourceUVE("asset");
+    EXPECT_FALSE(noExtension.importerRegistered);
+    const AssetGuidUVE guid = importer.ImportUVE(sourcePath, destinationPath, assetDatabase);
+    ASSERT_NE(guid, kInvalidAssetGuidUVE);
+    EXPECT_TRUE(validImporterRan);
+    EXPECT_EQ(ReadFileUVE(destinationPath), "valid importer");
+
+    std::filesystem::remove(sourcePath);
+    std::filesystem::remove(destinationPath);
+}
+
 TEST_F(AssetImporterUVETest, RegisterImporterUVE_CustomExtension_IsPickedOverGeneric) {
     const std::filesystem::path sourcePath = "uve_asset_importer_tests_source.custom";
     const std::filesystem::path destinationPath = "uve_asset_importer_tests_dest.custom";
