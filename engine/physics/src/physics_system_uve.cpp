@@ -112,6 +112,10 @@ void PhysicsSystemUVE::SetConstraintSystemUVE(PhysicsConstraintSystemUVE* constr
 
 void PhysicsSystemUVE::StepUVE(Scene::IEntityManagerUVE& entityManager, Scene::ISceneGraphUVE& sceneGraph,
                                 float fixedDeltaTimeSeconds) {
+    if (!std::isfinite(fixedDeltaTimeSeconds) || fixedDeltaTimeSeconds < 0.0F ||
+        !std::isfinite(m_gravity.x) || !std::isfinite(m_gravity.y) || !std::isfinite(m_gravity.z)) {
+        return;
+    }
     entityManager.ForEachUVE<Scene::TransformComponentUVE, Scene::RigidBodyComponentUVE>(
         [&entityManager, &sceneGraph, this, fixedDeltaTimeSeconds](
             Scene::EntityUVE entity, const Scene::TransformComponentUVE& transform,
