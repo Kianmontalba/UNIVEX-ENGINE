@@ -25,8 +25,8 @@ namespace {
 }
 
 [[nodiscard]] bool IsValidSaveMetadataUVE(const GameStateMetadataUVE& metadata) noexcept {
-    return std::isfinite(metadata.playtimeSeconds) && metadata.playtimeSeconds >= 0.0 &&
-           metadata.saveName.size() <= kMaximumSaveNameBytesUVE &&
+    return metadata.savedAtUnixSecondsUVE >= 0 && std::isfinite(metadata.playtimeSeconds) &&
+           metadata.playtimeSeconds >= 0.0 && metadata.saveName.size() <= kMaximumSaveNameBytesUVE &&
            metadata.saveName.find('\0') == std::string::npos;
 }
 
