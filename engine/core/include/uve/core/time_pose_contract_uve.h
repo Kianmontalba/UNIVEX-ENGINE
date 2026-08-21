@@ -68,6 +68,8 @@ struct TransformPoseUVE final {
 };
 
 inline constexpr std::size_t kMaximumSkeletonJointsUVE = 256U;
+/// Maximum byte length for skeleton/joint identifiers; accepted identifiers are non-empty where
+/// required and never contain embedded NUL bytes.
 inline constexpr std::size_t kMaximumAnimationIdentifierBytesUVE = 128U;
 
 struct SkeletonJointUVE final {
