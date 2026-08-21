@@ -319,6 +319,19 @@ TEST_F(SaveGameSystemUVETest, LoadUVE_TruncatedFile_ReturnsEmptyVectorWithoutCra
     EXPECT_TRUE(saveGameSystem.LoadUVE(6, freshManager).empty());
 }
 
+TEST_F(SaveGameSystemUVETest, HasSaveUVE_RejectsTruncatedSlotAndListUsedSlotsHidesIt) {
+    const EntityUVE entity = entityManager.CreateEntityUVE();
+    ASSERT_TRUE(saveGameSystem.SaveUVE(12, entityManager, {entity}, GameStateMetadataUVE{}));
+
+    const std::filesystem::path slotPath = saveDirectory / "slot_12.uvesave";
+    std::error_code errorCode;
+    std::filesystem::resize_file(slotPath, 10, errorCode);
+    ASSERT_FALSE(errorCode);
+
+    EXPECT_FALSE(saveGameSystem.HasSaveUVE(12));
+    EXPECT_TRUE(saveGameSystem.ListUsedSlotsUVE().empty());
+}
+
 TEST_F(SaveGameSystemUVETest, LoadUVE_PayloadWithBogusLengthPrefix_ReturnsEmptyVectorWithoutCrashing) {
     const EntityUVE entity = entityManager.CreateEntityUVE();
     ASSERT_TRUE(saveGameSystem.SaveUVE(12, entityManager, {entity}, GameStateMetadataUVE{}));
