@@ -64,12 +64,24 @@ using ImportFuncUVE = std::function<bool(const std::filesystem::path&, const std
 [[nodiscard]] bool TextFileImportUVE(const std::filesystem::path& source,
                                      const std::filesystem::path& destination,
                                      const AssetImportSettingsUVE& baseSettings) {
+    std::error_code sourceSizeError;
+    const std::uintmax_t sourceSize = std::filesystem::file_size(source, sourceSizeError);
+    if (sourceSizeError || sourceSize > kMaximumTextImportBytesUVE) {
+        UVE_ERROR("AssetImporterUVE: text source exceeds the {}-byte cap or cannot be sized \"{}\"",
+                  kMaximumTextImportBytesUVE, source.string());
+        return false;
+    }
     std::ifstream input(source, std::ios::binary);
     if (!input.is_open()) {
         UVE_ERROR("AssetImporterUVE: failed to open text source \"{}\"", source.string());
         return false;
     }
     std::string sourceText{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
+    if (sourceText.size() > kMaximumTextImportBytesUVE) {
+        UVE_ERROR("AssetImporterUVE: text source grew beyond the {}-byte cap \"{}\"",
+                  kMaximumTextImportBytesUVE, source.string());
+        return false;
+    }
     if (sourceText.find('\0') != std::string::npos) {
         UVE_ERROR("AssetImporterUVE: text source contains a NUL byte \"{}\"", source.string());
         return false;

@@ -185,6 +185,21 @@ TEST_F(AssetImporterUVETest, TextImportUVE_EnsuresTrailingNewline) {
     std::filesystem::remove(destinationPath);
 }
 
+TEST_F(AssetImporterUVETest, TextImportUVE_RejectsOverCapSourceBeforePublish) {
+    const std::filesystem::path sourcePath = "uve_text_parser_oversized_source.txt";
+    const std::filesystem::path destinationPath = "uve_text_parser_oversized_destination.txt";
+    std::filesystem::remove(sourcePath);
+    std::filesystem::remove(destinationPath);
+    const std::string oversized(kMaximumTextImportBytesUVE + 1U, 'T');
+    WriteFixtureFileUVE(sourcePath, oversized);
+
+    EXPECT_EQ(importer.ImportUVE(sourcePath, destinationPath, assetDatabase), kInvalidAssetGuidUVE);
+    EXPECT_FALSE(std::filesystem::exists(destinationPath));
+
+    std::filesystem::remove(sourcePath);
+    std::filesystem::remove(destinationPath);
+}
+
 TEST(AssetImportSettingsUVETest, TextImportSettingsUVE_CacheVersionIsStable) {
     TextImportSettingsUVE preserve;
     TextImportSettingsUVE same = preserve;
