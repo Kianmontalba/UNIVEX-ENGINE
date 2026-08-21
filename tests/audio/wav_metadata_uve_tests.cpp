@@ -64,7 +64,7 @@ TEST(WavMetadataUVETest, ParseWavMetadataUVE_ReturnsCoherentPcmFacts) {
 TEST(WavMetadataUVETest, ParseWavMetadataUVE_SkipsPaddedJunkChunk) {
     std::vector<std::byte> bytes;
     AppendTagUVE(bytes, "RIFF");
-    AppendU32UVE(bytes, 44U);
+    AppendU32UVE(bytes, 54U);
     AppendTagUVE(bytes, "WAVE");
     AppendTagUVE(bytes, "JUNK");
     AppendU32UVE(bytes, 1U);
@@ -73,6 +73,14 @@ TEST(WavMetadataUVETest, ParseWavMetadataUVE_SkipsPaddedJunkChunk) {
     const std::vector<std::byte> pcm = MakePcmWavUVE();
     bytes.insert(bytes.end(), pcm.begin() + 12, pcm.end());
     ASSERT_TRUE(ParseWavMetadataUVE(bytes).has_value());
+}
+
+TEST(WavMetadataUVETest, ParseWavMetadataUVE_StopsAtDeclaredRiffBoundary) {
+    std::vector<std::byte> bytes = MakePcmWavUVE();
+    AppendTagUVE(bytes, "data");
+    AppendU32UVE(bytes, 1U);
+    bytes.push_back(std::byte{0xFF});
+    EXPECT_TRUE(ParseWavMetadataUVE(bytes).has_value());
 }
 
 TEST(WavMetadataUVETest, ParseWavMetadataUVE_RejectsMalformedOrIncoherentInputs) {

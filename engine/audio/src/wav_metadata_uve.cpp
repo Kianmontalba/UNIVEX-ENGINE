@@ -42,15 +42,16 @@ std::optional<WavMetadataUVE> ParseWavMetadataUVE(const std::vector<std::byte>& 
     if (riffPayloadBytes < 4U || static_cast<std::uint64_t>(riffPayloadBytes) + 8U > bytes.size()) {
         return std::nullopt;
     }
+    const std::size_t riffEnd = static_cast<std::size_t>(riffPayloadBytes) + 8U;
 
     std::optional<WavMetadataUVE> metadata;
     std::uint32_t dataBytes = 0U;
     std::size_t offset = kRiffHeaderBytes;
-    while (offset + kChunkHeaderBytes <= bytes.size()) {
+    while (offset + kChunkHeaderBytes <= riffEnd) {
         const std::uint32_t chunkBytes = ReadU32LE(bytes, offset + 4U);
         const std::size_t payloadOffset = offset + kChunkHeaderBytes;
         const std::uint64_t payloadEnd = static_cast<std::uint64_t>(payloadOffset) + chunkBytes;
-        if (payloadEnd > bytes.size()) {
+        if (payloadEnd > riffEnd) {
             return std::nullopt;
         }
         if (HasTag(bytes, offset, 'f', 'm', 't', ' ') && chunkBytes >= 16U && !metadata.has_value()) {
@@ -84,7 +85,8 @@ std::optional<WavMetadataUVE> ParseWavMetadataUVE(const std::vector<std::byte>& 
         }
         offset += kChunkHeaderBytes + paddedBytes;
     }
-    if (!metadata.has_value() || dataBytes == 0U || dataBytes % metadata->blockAlign != 0U) {
+    if (offset != riffEnd || !metadata.has_value() || dataBytes == 0U ||
+        dataBytes % metadata->blockAlign != 0U) {
         return std::nullopt;
     }
     metadata->dataBytes = dataBytes;
