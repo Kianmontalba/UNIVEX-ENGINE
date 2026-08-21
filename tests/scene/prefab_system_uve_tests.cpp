@@ -254,6 +254,29 @@ TEST(PrefabInstanceComponentUVE, DetectPrefabOverrideConflictsUVE_HonorsConflict
     EXPECT_EQ(target.writeCount, 0U);
 }
 
+TEST(PrefabInstanceComponentUVE, DetectPrefabOverrideConflictsUVE_ClampsCallerLimitToSharedHardCap) {
+    std::vector<PrefabPropertyOverrideUVE> overrides;
+    std::vector<PrefabPropertyOverrideUVE> baseline;
+    FakePrefabOverrideTargetUVE target;
+    overrides.reserve(kMaximumPrefabConflictsUVE + 1U);
+    baseline.reserve(kMaximumPrefabConflictsUVE + 1U);
+    for (std::size_t index = 0U; index <= kMaximumPrefabConflictsUVE; ++index) {
+        const std::string propertyPath = "A." + std::to_string(1000U + index);
+        overrides.push_back({propertyPath, "new"});
+        baseline.push_back({propertyPath, "old"});
+        target.values.emplace(propertyPath, "external");
+    }
+
+    const PrefabInstanceComponentUVE instance{Asset::AssetGuidUVE{13U}, overrides};
+    const PrefabOverrideConflictReportUVE report = DetectPrefabOverrideConflictsUVE(
+        instance, baseline, target, kMaximumPrefabConflictsUVE + 100U);
+    EXPECT_EQ(report.code, PrefabOverrideOperationCodeUVE::ConflictDetected);
+    EXPECT_EQ(report.inspectedCount, kMaximumPrefabConflictsUVE + 1U);
+    EXPECT_EQ(report.conflicts.size(), kMaximumPrefabConflictsUVE);
+    EXPECT_TRUE(report.truncated);
+    EXPECT_EQ(target.writeCount, 0U);
+}
+
 TEST(PrefabInstanceComponentUVE, RevertPrefabOverridesUVE_RejectsInvalidBaselineWithoutMutation) {
     PrefabInstanceComponentUVE instance{Asset::AssetGuidUVE{9U}, {{"A.value", "new-a"}}};
     FakePrefabOverrideTargetUVE target;
