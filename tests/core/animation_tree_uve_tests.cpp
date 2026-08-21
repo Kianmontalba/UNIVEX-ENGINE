@@ -2,6 +2,8 @@
 
 #include "uve/core/animation_tree_uve.h"
 
+#include <limits>
+
 #include <gtest/gtest.h>
 
 namespace UVE::Core {
@@ -62,6 +64,22 @@ TEST(AnimationTreeUVETest, EvaluateAnimationTreeUVE_SelectsTransitionAndPropagat
     ASSERT_TRUE(result.IsSuccessUVE());
     EXPECT_EQ(result.pose.position, (Math::Vector3UVE{14.0F, 0.0F, 0.0F}));
     EXPECT_EQ(result.evaluatedNodeCount, 4U);
+}
+
+TEST(AnimationTreeUVETest, EvaluateAnimationTreeUVE_RejectsNonFiniteScaledTimeBeforeRecursion) {
+    AnimationTreeUVE tree;
+    tree.clips = {MakeClipUVE("a", 0.0F, 1.0F)};
+    tree.nodes = {
+        AnimationTreeNodeUVE{1U, AnimationTreeNodeKindUVE::ClipPlayer, "A", "a", {}, 0U, 0U, 0.5F, 1.0F, true},
+        AnimationTreeNodeUVE{2U, AnimationTreeNodeKindUVE::TimeScale, "Scale", {}, {}, 1U, 0U, 0.5F,
+                              std::numeric_limits<float>::max(), true},
+        AnimationTreeNodeUVE{3U, AnimationTreeNodeKindUVE::OutputPose, "Output", {}, {}, 2U, 0U, 0.5F, 1.0F, true},
+    };
+
+    const AnimationTreeEvaluationResultUVE result =
+        EvaluateAnimationTreeUVE(tree, std::numeric_limits<double>::max());
+    EXPECT_FALSE(result.IsSuccessUVE());
+    EXPECT_EQ(result.evaluatedNodeCount, 0U);
 }
 
 TEST(AnimationTreeUVETest, ValidateAnimationTreeUVE_RejectsUnknownClipAndCycle) {
