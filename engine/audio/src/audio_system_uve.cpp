@@ -42,6 +42,10 @@ AudioSystemUVE::AudioSystemUVE(IAudioDeviceUVE& audioDevice, IAudioClipResolverU
 AudioSystemUVE::~AudioSystemUVE() = default;
 
 void AudioSystemUVE::SetListenerPositionUVE(Math::Vector3UVE position) {
+    if (!std::isfinite(position.x) || !std::isfinite(position.y) || !std::isfinite(position.z)) {
+        UVE_ERROR("AudioSystemUVE: SetListenerPositionUVE rejected non-finite position");
+        return;
+    }
     m_impl->listenerPosition = position;
 }
 
