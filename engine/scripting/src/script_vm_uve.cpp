@@ -1331,7 +1331,8 @@ namespace {
     const bool isSetPitch = instruction.nodeTypeId == "audio.set_pitch";
     const bool isSetPosition = instruction.nodeTypeId == "audio.set_3d_position";
     const bool isPlaySound = instruction.nodeTypeId == "audio.play_sound";
-    if (!isSetVolume && !isSetPitch && !isSetPosition && !isPlaySound) {
+    const bool isStopSound = instruction.nodeTypeId == "audio.stop_sound";
+    if (!isSetVolume && !isSetPitch && !isSetPosition && !isPlaySound && !isStopSound) {
         return MakeNodeFailureUVE(instructionIndex, "Unknown Audio node type.");
     }
     const std::uint32_t nodeId = instruction.sourceNodeId;
@@ -1340,13 +1341,16 @@ namespace {
         return MakeNodeFailureUVE(instructionIndex, "Audio node requires a valid Source entity.");
     }
     bool accepted = false;
-    if (isPlaySound) {
+    if (isPlaySound || isStopSound) {
         const ScriptAudioTriggerFunctionUVE callback =
-            bindings == nullptr ? nullptr : bindings->audioPlaySound;
+            isPlaySound ? (bindings == nullptr ? nullptr : bindings->audioPlaySound)
+                        : (bindings == nullptr ? nullptr : bindings->audioStopSound);
         if (callback == nullptr || !callback(bindings->userData, source->entity, &accepted) || !accepted ||
             !SetNodeOutputUVE(context, nodeId, "Result", true)) {
-            return MakeNodeFailureUVE(instructionIndex,
-                                      "Play Sound requires an accepted caller-owned trigger callback.");
+            return MakeNodeFailureUVE(
+                instructionIndex, isPlaySound
+                    ? "Play Sound requires an accepted caller-owned trigger callback."
+                    : "Stop Sound requires an accepted caller-owned trigger callback.");
         }
         return {};
     }
@@ -2135,7 +2139,7 @@ namespace {
     if (FindEntityInputUVE(context, nodeId, "Source") == nullptr) {
         return false;
     }
-    if (instruction.nodeTypeId == "audio.play_sound") {
+    if (instruction.nodeTypeId == "audio.play_sound" || instruction.nodeTypeId == "audio.stop_sound") {
         return true;
     }
     if (instruction.nodeTypeId == "audio.set_3d_position") {

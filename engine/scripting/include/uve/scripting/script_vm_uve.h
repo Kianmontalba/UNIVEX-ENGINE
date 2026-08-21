@@ -346,6 +346,7 @@ struct ScriptEngineCallBindingsUVE final {
     ScriptAudioScalarControlFunctionUVE audioSetPitch = nullptr;
     ScriptAudioPositionControlFunctionUVE audioSet3dPosition = nullptr;
     ScriptAudioTriggerFunctionUVE audioPlaySound = nullptr;
+    ScriptAudioTriggerFunctionUVE audioStopSound = nullptr;
 };
 
 struct ScriptVmExecutionOptionsUVE final {
