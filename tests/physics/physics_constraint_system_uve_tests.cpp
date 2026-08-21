@@ -132,6 +132,17 @@ TEST_F(PhysicsConstraintSystemUVETest, SolveUVE_SkipsOverflowedFiniteConstraintG
     EXPECT_FLOAT_EQ(WorldPositionUVE(second).y, maximum);
 }
 
+TEST_F(PhysicsConstraintSystemUVETest, AddHingeConstraintUVE_RejectsOverflowedFiniteAxisAtomically) {
+    const Scene::EntityUVE first = MakeBodyUVE({});
+    const Scene::EntityUVE second = MakeBodyUVE({2.0F, 0.0F, 0.0F});
+    const float maximum = std::numeric_limits<float>::max();
+    const PhysicsConstraintMutationResultUVE added = constraintSystem.AddHingeConstraintUVE(
+        HingeConstraintUVE{first, second, {}, {}, Math::Vector3UVE{maximum, 0.0F, 0.0F}});
+
+    EXPECT_EQ(added.code, PhysicsConstraintCodeUVE::InvalidConstraint);
+    EXPECT_EQ(constraintSystem.GetConstraintCountUVE(), 0U);
+}
+
 TEST_F(PhysicsConstraintSystemUVETest, SolveHingeUVE_CoincidesAnchorsAndLeavesStaticBodyUnmoved) {
     const Scene::EntityUVE dynamicBody = MakeBodyUVE({0.0F, 0.0F, 0.0F}, 1.0F);
     const Scene::EntityUVE staticBody = MakeStaticUVE({6.0F, 0.0F, 0.0F});

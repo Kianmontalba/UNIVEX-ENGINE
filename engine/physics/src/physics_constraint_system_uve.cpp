@@ -144,11 +144,13 @@ bool PhysicsConstraintSystemUVE::IsValidDistanceUVE(const DistanceConstraintUVE&
 }
 
 bool PhysicsConstraintSystemUVE::IsValidHingeUVE(const HingeConstraintUVE& constraint) noexcept {
+    const float worldAxisLength = ConstraintLengthUVE(constraint.worldAxis);
     return constraint.firstEntity != Scene::kInvalidEntityUVE &&
            constraint.secondEntity != Scene::kInvalidEntityUVE &&
            constraint.firstEntity != constraint.secondEntity && IsFiniteVectorUVE(constraint.firstAnchor) &&
            IsFiniteVectorUVE(constraint.secondAnchor) && IsFiniteVectorUVE(constraint.worldAxis) &&
-           ConstraintLengthUVE(constraint.worldAxis) > PhysicsConstraintSystemUVE::kConstraintEpsilonUVE;
+           std::isfinite(worldAxisLength) &&
+           worldAxisLength > PhysicsConstraintSystemUVE::kConstraintEpsilonUVE;
 }
 
 PhysicsConstraintSolveResultUVE PhysicsConstraintSystemUVE::SolveUVE(
