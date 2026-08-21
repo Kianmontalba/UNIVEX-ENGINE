@@ -21,13 +21,16 @@ namespace {
 
 [[nodiscard]] float ConstraintLengthUVE(const Math::Vector3UVE& value) noexcept {
     const float squared = Math::LengthSquaredUVE(value);
+    if (std::isinf(squared)) {
+        return std::numeric_limits<float>::infinity();
+    }
     return std::isfinite(squared) && squared >= 0.0F ? std::sqrt(squared) : 0.0F;
 }
 
 [[nodiscard]] Math::Vector3UVE NormalizeOrDefaultUVE(const Math::Vector3UVE& value,
                                                       Math::Vector3UVE fallback) noexcept {
     const float length = ConstraintLengthUVE(value);
-    if (length <= PhysicsConstraintSystemUVE::kConstraintEpsilonUVE) {
+    if (!std::isfinite(length) || length <= PhysicsConstraintSystemUVE::kConstraintEpsilonUVE) {
         return fallback;
     }
     return value * (1.0F / length);
@@ -38,6 +41,18 @@ void ApplyLocalDeltaUVE(Scene::IEntityManagerUVE& entityManager, Scene::ISceneGr
     Scene::TransformComponentUVE transform = entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity);
     transform.localPosition += delta;
     sceneGraph.SetLocalTransformUVE(entityManager, entity, transform);
+}
+
+[[nodiscard]] bool IsLocalDeltaValidUVE(Scene::IEntityManagerUVE& entityManager,
+                                        Scene::EntityUVE entity,
+                                        const Math::Vector3UVE delta) {
+    if (!IsFiniteVectorUVE(delta)) {
+        return false;
+    }
+    Scene::TransformComponentUVE candidate =
+        entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity);
+    candidate.localPosition += delta;
+    return Scene::IsTransformComponentValidUVE(candidate);
 }
 
 [[nodiscard]] float InverseMassUVE(Scene::IEntityManagerUVE& entityManager,
@@ -243,7 +258,14 @@ PhysicsConstraintSolveResultUVE PhysicsConstraintSystemUVE::SolveUVE(
             if (slot.kind == KindUVE::Distance) {
                 const float distance = ConstraintLengthUVE(delta);
                 const float error = distance - slot.distance.restLength;
-                if (!std::isfinite(error) || std::fabs(error) <= kConstraintEpsilonUVE) {
+                if (!std::isfinite(error)) {
+                    if (!reportedSkipped[index]) {
+                        ++result.skippedConstraintCount;
+                        reportedSkipped[index] = true;
+                    }
+                    continue;
+                }
+                if (std::fabs(error) <= kConstraintEpsilonUVE) {
                     continue;
                 }
                 const Math::Vector3UVE direction =
@@ -262,10 +284,18 @@ PhysicsConstraintSolveResultUVE PhysicsConstraintSystemUVE::SolveUVE(
             if (!std::isfinite(totalInverseMass) || totalInverseMass <= 0.0F) {
                 continue;
             }
-            ApplyLocalDeltaUVE(entityManager, sceneGraph, firstEntity,
-                               correction * (firstInverseMass / totalInverseMass));
-            ApplyLocalDeltaUVE(entityManager, sceneGraph, secondEntity,
-                               correction * (-secondInverseMass / totalInverseMass));
+            const Math::Vector3UVE firstDelta = correction * (firstInverseMass / totalInverseMass);
+            const Math::Vector3UVE secondDelta = correction * (-secondInverseMass / totalInverseMass);
+            if (!IsLocalDeltaValidUVE(entityManager, firstEntity, firstDelta) ||
+                !IsLocalDeltaValidUVE(entityManager, secondEntity, secondDelta)) {
+                if (!reportedSkipped[index]) {
+                    ++result.skippedConstraintCount;
+                    reportedSkipped[index] = true;
+                }
+                continue;
+            }
+            ApplyLocalDeltaUVE(entityManager, sceneGraph, firstEntity, firstDelta);
+            ApplyLocalDeltaUVE(entityManager, sceneGraph, secondEntity, secondDelta);
             ++result.solvedConstraintCount;
             changed = true;
             sceneGraph.UpdateUVE(entityManager);

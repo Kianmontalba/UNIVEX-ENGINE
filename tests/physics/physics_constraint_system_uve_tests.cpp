@@ -3,6 +3,8 @@
 
 #include "uve/physics/physics_constraint_system_uve.h"
 
+#include <limits>
+
 #include <gtest/gtest.h>
 
 #include "uve/events/event_system_uve.h"
@@ -111,6 +113,23 @@ TEST_F(PhysicsConstraintSystemUVETest, AddDistanceAndSolveUVE_MassWeightedCorrec
     EXPECT_GT(solved.solvedConstraintCount, 0U);
     EXPECT_NEAR(WorldPositionUVE(first).x, 3.0F, kEpsilon);
     EXPECT_NEAR(WorldPositionUVE(second).x, 7.0F, kEpsilon);
+}
+
+TEST_F(PhysicsConstraintSystemUVETest, SolveUVE_SkipsOverflowedFiniteConstraintGeometryAtomically) {
+    const float maximum = std::numeric_limits<float>::max();
+    const Scene::EntityUVE first = MakeBodyUVE({maximum, 0.0F, 0.0F});
+    const Scene::EntityUVE second = MakeBodyUVE({0.0F, maximum, 0.0F});
+    ASSERT_TRUE(constraintSystem.AddDistanceConstraintUVE(
+                    DistanceConstraintUVE{first, second, {}, {}, 1.0F})
+                    .IsAcceptedUVE());
+
+    const PhysicsConstraintSolveResultUVE solved = constraintSystem.SolveUVE(entityManager, sceneGraph);
+
+    EXPECT_TRUE(solved.islandPlanValid);
+    EXPECT_EQ(solved.solvedConstraintCount, 0U);
+    EXPECT_EQ(solved.skippedConstraintCount, 1U);
+    EXPECT_FLOAT_EQ(WorldPositionUVE(first).x, maximum);
+    EXPECT_FLOAT_EQ(WorldPositionUVE(second).y, maximum);
 }
 
 TEST_F(PhysicsConstraintSystemUVETest, SolveHingeUVE_CoincidesAnchorsAndLeavesStaticBodyUnmoved) {
