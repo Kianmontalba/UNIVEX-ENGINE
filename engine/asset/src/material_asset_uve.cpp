@@ -3,6 +3,8 @@
 
 #include "uve/asset/material_asset_uve.h"
 
+#include <cmath>
+
 #include <nlohmann/json.hpp>
 
 #include "uve/asset/uve_file_envelope_uve.h"
@@ -20,7 +22,24 @@ namespace {
     return Math::Vector3UVE{value.at("x").get<float>(), value.at("y").get<float>(), value.at("z").get<float>()};
 }
 
+[[nodiscard]] bool IsFiniteUnitIntervalUVE(const float value) noexcept {
+    return std::isfinite(value) && value >= 0.0F && value <= 1.0F;
+}
+
+[[nodiscard]] bool IsFiniteNonNegativeVectorUVE(const Math::Vector3UVE& value) noexcept {
+    return std::isfinite(value.x) && value.x >= 0.0F && std::isfinite(value.y) && value.y >= 0.0F &&
+           std::isfinite(value.z) && value.z >= 0.0F;
+}
+
 } // namespace
+
+bool IsMaterialAssetValidUVE(const MaterialAssetUVE& material) noexcept {
+    return IsFiniteUnitIntervalUVE(material.albedoColor.x) &&
+           IsFiniteUnitIntervalUVE(material.albedoColor.y) &&
+           IsFiniteUnitIntervalUVE(material.albedoColor.z) &&
+           IsFiniteUnitIntervalUVE(material.metallic) && IsFiniteUnitIntervalUVE(material.roughness) &&
+           IsFiniteNonNegativeVectorUVE(material.emissiveColor);
+}
 
 bool LoadMaterialAssetUVE(const std::filesystem::path& path, MaterialAssetUVE& outMaterial) {
     const std::optional<std::pair<UveFileHeaderUVE, std::vector<std::byte>>> file = ReadUveFileUVE(path);
@@ -61,11 +80,19 @@ bool LoadMaterialAssetUVE(const std::filesystem::path& path, MaterialAssetUVE& o
         return false;
     }
 
+    if (!IsMaterialAssetValidUVE(material)) {
+        UVE_ERROR("MaterialAssetUVE: decoded material contains invalid values in {}", path.string());
+        return false;
+    }
     outMaterial = material;
     return true;
 }
 
 bool SaveMaterialAssetUVE(const MaterialAssetUVE& material, const std::filesystem::path& path) {
+    if (!IsMaterialAssetValidUVE(material)) {
+        UVE_ERROR("MaterialAssetUVE: rejected non-finite or out-of-range values before writing {}", path.string());
+        return false;
+    }
     nlohmann::json payload;
     payload["albedoColor"] = Vector3ToJsonUVE(material.albedoColor);
     payload["albedoTexture"] = material.albedoTexture.value;

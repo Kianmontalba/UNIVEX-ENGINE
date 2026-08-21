@@ -75,6 +75,46 @@ TEST(MaterialAssetUVETest, SaveThenLoad_RoundTripsFieldExact) {
     std::filesystem::remove(path);
 }
 
+TEST(MaterialAssetUVETest, SaveMaterialAssetUVE_RejectsInvalidValuesBeforeReplacingDestination) {
+    const std::filesystem::path path = "uve_material_asset_tests_invalid_save.uvemat";
+    std::filesystem::remove(path);
+    const MaterialAssetUVE original = MakeTestMaterialUVE();
+    ASSERT_TRUE(SaveMaterialAssetUVE(original, path));
+
+    MaterialAssetUVE invalid = original;
+    invalid.metallic = 2.0F;
+    EXPECT_FALSE(SaveMaterialAssetUVE(invalid, path));
+    invalid = original;
+    invalid.roughness = std::numeric_limits<float>::quiet_NaN();
+    EXPECT_FALSE(SaveMaterialAssetUVE(invalid, path));
+    invalid = original;
+    invalid.emissiveColor.x = -1.0F;
+    EXPECT_FALSE(SaveMaterialAssetUVE(invalid, path));
+
+    MaterialAssetUVE loaded;
+    ASSERT_TRUE(LoadMaterialAssetUVE(path, loaded));
+    EXPECT_EQ(loaded.metallic, original.metallic);
+    EXPECT_EQ(loaded.roughness, original.roughness);
+    EXPECT_EQ(loaded.emissiveColor, original.emissiveColor);
+    std::filesystem::remove(path);
+}
+
+TEST(MaterialAssetUVETest, LoadMaterialAssetUVE_RejectsOutOfRangeDecodedValuesBeforePublication) {
+    const std::filesystem::path path = "uve_material_asset_tests_invalid_values.uvemat";
+    std::filesystem::remove(path);
+    const std::string invalidJson =
+        R"({"albedoColor":{"x":1.0,"y":1.0,"z":1.0},"albedoTexture":0,"normalTexture":0,"metallic":2.0,"roughness":0.5,"aoTexture":0,"emissiveColor":{"x":0.0,"y":0.0,"z":0.0},"vertexShader":0,"fragmentShader":0,"isTransparent":false})";
+    const auto* const jsonBytes = reinterpret_cast<const std::byte*>(invalidJson.data());
+    ASSERT_TRUE(WriteUveFileUVE(path, AssetKindUVE::Material,
+                                 std::vector<std::byte>(jsonBytes, jsonBytes + invalidJson.size())));
+
+    MaterialAssetUVE output;
+    output.metallic = 0.25F;
+    EXPECT_FALSE(LoadMaterialAssetUVE(path, output));
+    EXPECT_EQ(output.metallic, 0.25F);
+    std::filesystem::remove(path);
+}
+
 TEST(MaterialAssetUVETest, LoadMaterialAssetUVE_WrongAssetKind_FailsCleanlyAndLogsError) {
     const std::filesystem::path path = "uve_material_asset_tests_wrong_kind.uveblob";
     std::filesystem::remove(path);
