@@ -25,7 +25,9 @@ namespace {
 }
 
 [[nodiscard]] bool IsValidSaveMetadataUVE(const GameStateMetadataUVE& metadata) noexcept {
-    return std::isfinite(metadata.playtimeSeconds) && metadata.playtimeSeconds >= 0.0;
+    return std::isfinite(metadata.playtimeSeconds) && metadata.playtimeSeconds >= 0.0 &&
+           metadata.saveName.size() <= kMaximumSaveNameBytesUVE &&
+           metadata.saveName.find('\0') == std::string::npos;
 }
 
 [[nodiscard]] bool IsSaveMetadataForSlotUVE(const GameStateMetadataUVE& metadata, const int slotIndex) noexcept {
@@ -137,7 +139,7 @@ void AppendUint64UVE(std::vector<std::byte>& buffer, std::uint64_t value) {
         metadata.playtimeSeconds = json.at("playtimeSeconds").get<double>();
         metadata.slotIndex = json.at("slotIndex").get<int>();
         metadata.saveName = json.value("saveName", std::string{});
-        return metadata;
+        return IsValidSaveMetadataUVE(metadata) ? std::optional<GameStateMetadataUVE>{metadata} : std::nullopt;
     } catch (const nlohmann::json::exception& jsonError) {
         UVE_ERROR("SaveGameSystemUVE: failed to parse save metadata: {}", jsonError.what());
         return std::nullopt;
@@ -228,7 +230,7 @@ bool SaveGameSystemUVE::SaveUVE(int slotIndex, Scene::IEntityManagerUVE& entityM
         return false;
     }
     if (!IsValidSaveMetadataUVE(metadata)) {
-        UVE_ERROR("SaveGameSystemUVE: SaveUVE rejected non-finite or negative playtime metadata for slot {}", slotIndex);
+        UVE_ERROR("SaveGameSystemUVE: SaveUVE rejected invalid playtime or save-name metadata for slot {}", slotIndex);
         return false;
     }
 
