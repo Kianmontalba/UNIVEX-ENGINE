@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -176,13 +177,16 @@ struct PrefabOverrideConflictReportUVE final {
 
 /// Commits the instance's overrides into a caller-owned source-prefab target only when the
 /// supplied baseline still matches. The source target is mutated through ApplyPrefabOverridesUVE;
-/// the instance override records are cleared only after every source write succeeds.
+/// the instance override records are cleared only after every source write succeeds. When supplied,
+/// committedSourceRevision is copied into both revision fields only after the commit succeeds.
 [[nodiscard]] inline PrefabOverrideOperationResultUVE CommitPrefabOverridesToSourceUVE(
     PrefabInstanceComponentUVE& instance, const std::vector<PrefabPropertyOverrideUVE>& baseline,
-    IPrefabOverrideTargetUVE& sourceTarget) {
-    if (!IsPrefabInstanceComponentValidUVE(instance)) {
+    IPrefabOverrideTargetUVE& sourceTarget,
+    const std::optional<std::uint64_t> committedSourceRevision = std::nullopt) {
+    if (!IsPrefabInstanceComponentValidUVE(instance) ||
+        (committedSourceRevision.has_value() && committedSourceRevision.value() == 0U)) {
         return {PrefabOverrideOperationCodeUVE::InvalidInstance, 0U,
-                "Prefab source commit rejected because the instance data is invalid."};
+                "Prefab source commit rejected because the instance or committed revision is invalid."};
     }
     const PrefabOverrideConflictReportUVE conflictReport =
         DetectPrefabOverrideConflictsUVE(instance, baseline, sourceTarget);
@@ -195,6 +199,10 @@ struct PrefabOverrideConflictReportUVE final {
         return applied;
     }
     const std::size_t committedCount = instance.overrides.size();
+    if (committedSourceRevision.has_value()) {
+        instance.sourceRevision = committedSourceRevision.value();
+        instance.instanceRevision = committedSourceRevision.value();
+    }
     instance.overrides.clear();
     return {PrefabOverrideOperationCodeUVE::Applied, committedCount,
             "Prefab overrides committed to the source target."};

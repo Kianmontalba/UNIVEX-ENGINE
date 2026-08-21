@@ -109,6 +109,37 @@ TEST(PrefabInstanceComponentUVE, CommitPrefabOverridesToSourceUVE_BakesAndClears
     EXPECT_TRUE(instance.overrides.empty());
 }
 
+TEST(PrefabInstanceComponentUVE, CommitPrefabOverridesToSourceUVE_PublishesCommittedRevisionAfterSuccess) {
+    PrefabInstanceComponentUVE instance{Asset::AssetGuidUVE{16U}, { {"A.value", "new-a"} }, 4U, 4U};
+    const std::vector<PrefabPropertyOverrideUVE> baseline{{"A.value", "old-a"}};
+    FakePrefabOverrideTargetUVE source;
+    source.values = {{"A.value", "old-a"}};
+
+    const PrefabOverrideOperationResultUVE result =
+        CommitPrefabOverridesToSourceUVE(instance, baseline, source, 5U);
+
+    ASSERT_TRUE(result.IsAppliedUVE());
+    EXPECT_EQ(instance.sourceRevision, 5U);
+    EXPECT_EQ(instance.instanceRevision, 5U);
+    EXPECT_TRUE(instance.overrides.empty());
+}
+
+TEST(PrefabInstanceComponentUVE, CommitPrefabOverridesToSourceUVE_RejectsZeroCommittedRevisionAtomically) {
+    PrefabInstanceComponentUVE instance{Asset::AssetGuidUVE{17U}, {{"A.value", "new-a"}}, 4U, 4U};
+    const std::vector<PrefabPropertyOverrideUVE> baseline{{"A.value", "old-a"}};
+    FakePrefabOverrideTargetUVE source;
+    source.values = {{"A.value", "old-a"}};
+
+    const PrefabOverrideOperationResultUVE result =
+        CommitPrefabOverridesToSourceUVE(instance, baseline, source, 0U);
+
+    EXPECT_EQ(result.code, PrefabOverrideOperationCodeUVE::InvalidInstance);
+    EXPECT_EQ(instance.sourceRevision, 4U);
+    EXPECT_EQ(instance.instanceRevision, 4U);
+    ASSERT_EQ(instance.overrides.size(), 1U);
+    EXPECT_EQ(source.writeCount, 0U);
+}
+
 TEST(PrefabInstanceComponentUVE, CommitPrefabOverridesToSourceUVE_RejectsStaleBaselineWithoutWrite) {
     PrefabInstanceComponentUVE instance{Asset::AssetGuidUVE{14U}, {{"A.value", "new-a"}}};
     const std::vector<PrefabPropertyOverrideUVE> baseline{{"A.value", "old-a"}};
