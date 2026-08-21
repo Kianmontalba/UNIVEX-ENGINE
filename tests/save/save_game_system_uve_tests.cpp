@@ -466,6 +466,27 @@ TEST_F(SaveGameSystemUVETest, LoadUVE_UnsupportedSchemaReportsBoundedMigrationDi
     EXPECT_EQ(diagnostics.sourceSchemaVersion, 9U);
 }
 
+TEST_F(SaveGameSystemUVETest, SaveUVE_NegativePlaytimeMetadataFailsBeforeDirectoryMutation) {
+    GameStateMetadataUVE metadata;
+    metadata.playtimeSeconds = -1.0;
+    const std::filesystem::path invalidMetadataDirectory = "uve_save_game_system_tests_invalid_metadata_negative";
+    std::filesystem::remove_all(invalidMetadataDirectory);
+
+    EXPECT_FALSE(saveGameSystem.SaveUVE(3, entityManager, {}, metadata));
+    EXPECT_FALSE(std::filesystem::exists(invalidMetadataDirectory));
+}
+
+TEST_F(SaveGameSystemUVETest, SaveUVE_NonFinitePlaytimeMetadataFailsBeforeDirectoryMutation) {
+    GameStateMetadataUVE metadata;
+    metadata.playtimeSeconds = std::numeric_limits<double>::quiet_NaN();
+    const std::filesystem::path invalidMetadataDirectory = "uve_save_game_system_tests_invalid_metadata_nan";
+    std::filesystem::remove_all(invalidMetadataDirectory);
+
+    SaveGameSystemUVE invalidMetadataSystem(sceneSerializer, invalidMetadataDirectory);
+    EXPECT_FALSE(invalidMetadataSystem.SaveUVE(3, entityManager, {}, metadata));
+    EXPECT_FALSE(std::filesystem::exists(invalidMetadataDirectory));
+}
+
 TEST_F(SaveGameSystemUVETest, SaveUVE_DirectoryCannotBeCreated_FailsWithoutLeavingAnyFile) {
     // Point the save directory at a path where a path component is a regular file rather than a
     // directory - directory creation fails structurally (ENOTDIR) regardless of privilege level
