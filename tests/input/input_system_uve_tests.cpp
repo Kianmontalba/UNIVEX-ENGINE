@@ -101,6 +101,16 @@ TEST_F(InputSystemUVETest, MousePosition_RejectsNonFiniteAndPreservesLastValidSt
     EXPECT_FLOAT_EQ(inputSystem.GetMouseDeltaUVE().y, 0.0F);
 }
 
+TEST_F(InputSystemUVETest, MouseDelta_OverflowFailsClosedWithoutPublishingNonFiniteValue) {
+    inputSystem.SetMousePositionUVE(Math::Vector2UVE{-std::numeric_limits<float>::max(), 0.0F});
+    inputSystem.UpdateUVE();
+    inputSystem.SetMousePositionUVE(Math::Vector2UVE{std::numeric_limits<float>::max(), 0.0F});
+    inputSystem.UpdateUVE();
+
+    EXPECT_FLOAT_EQ(inputSystem.GetMouseDeltaUVE().x, 0.0F);
+    EXPECT_FLOAT_EQ(inputSystem.GetMouseDeltaUVE().y, 0.0F);
+}
+
 TEST_F(InputSystemUVETest, ScrollDelta_AccumulatesThenResetsAfterUpdateUVE) {
     inputSystem.SetMouseScrollDeltaUVE(1.0F);
     inputSystem.SetMouseScrollDeltaUVE(0.5F);
