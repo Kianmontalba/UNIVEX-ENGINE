@@ -5,12 +5,14 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <limits>
 #include <optional>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <typeindex>
 #include <unordered_map>
 #include <unordered_set>
@@ -637,7 +639,26 @@ bool SceneSerializerUVE::SaveUVE(IEntityManagerUVE& entityManager, const std::ve
         return false;
     }
     const std::optional<std::vector<std::byte>> payload = EncodeScenePayloadUVE(entityManager, rootEntities, path.string());
-    return payload.has_value() && Asset::WriteUveFileUVE(path, assetType, *payload);
+    if (!payload.has_value()) {
+        return false;
+    }
+
+    const std::filesystem::path temporaryPath = path.string() + ".uve_scene_tmp";
+    std::error_code errorCode;
+    std::filesystem::remove(temporaryPath, errorCode);
+    errorCode.clear();
+    if (!Asset::WriteUveFileUVE(temporaryPath, assetType, *payload)) {
+        std::filesystem::remove(temporaryPath, errorCode);
+        return false;
+    }
+    std::filesystem::rename(temporaryPath, path, errorCode);
+    if (errorCode) {
+        UVE_ERROR("SceneSerializerUVE: failed to publish temporary scene \"{}\" as \"{}\": {}",
+                  temporaryPath.string(), path.string(), errorCode.message());
+        std::filesystem::remove(temporaryPath, errorCode);
+        return false;
+    }
+    return true;
 }
 
 std::vector<EntityUVE> SceneSerializerUVE::LoadUVE(IEntityManagerUVE& entityManager,
