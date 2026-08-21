@@ -80,5 +80,27 @@ TEST(ObjMeshConverterUVETest, ConvertObjMeshUVE_DegenerateOrNonFiniteInputFails)
     EXPECT_FALSE(ConvertObjMeshUVE("v 0 0 0\nv 1 0 0\nv 2 0 0\nf 1 2 3\n", mesh));
 }
 
+TEST(ObjMeshConverterUVETest, ConvertObjMeshUVE_RejectsFiniteNormalAndEdgeOverflowWithoutPublishing) {
+    MeshAssetUVE original;
+    original.vertices = {
+        MeshVertexUVE{Math::Vector3UVE{4.0F, 5.0F, 6.0F}, Math::Vector3UVE{0.0F, 1.0F, 0.0F}, 0.0F, 0.0F}};
+    original.indices = {0U};
+    original.localBounds = Math::AabbUVE{Math::Vector3UVE{4.0F, 5.0F, 6.0F}, Math::Vector3UVE{4.0F, 5.0F, 6.0F}};
+
+    MeshAssetUVE normalOverflow = original;
+    EXPECT_FALSE(ConvertObjMeshUVE(
+        "v 0 0 0\nv 1 0 0\nv 0 1 0\nvn 3.402823466e38 3.402823466e38 0\nf 1/1 2/1 3/1\n",
+        normalOverflow));
+    EXPECT_EQ(normalOverflow.vertices.size(), original.vertices.size());
+    EXPECT_EQ(normalOverflow.vertices[0].position, original.vertices[0].position);
+
+    MeshAssetUVE edgeOverflow = original;
+    EXPECT_FALSE(ConvertObjMeshUVE(
+        "v -3.402823466e38 0 0\nv 3.402823466e38 0 0\nv 0 1 0\nf 1 2 3\n",
+        edgeOverflow));
+    EXPECT_EQ(edgeOverflow.vertices.size(), original.vertices.size());
+    EXPECT_EQ(edgeOverflow.vertices[0].position, original.vertices[0].position);
+}
+
 } // namespace
 } // namespace UVE::Asset::Tests

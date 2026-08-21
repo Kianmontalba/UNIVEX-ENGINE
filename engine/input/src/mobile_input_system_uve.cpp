@@ -62,7 +62,10 @@ void MobileInputSystemUVE::UpdateUVE() {
         const TouchPointStateUVE& previousTouch = m_previousState.touches[touchSlot];
         if (currentTouch.active && previousTouch.active &&
             currentTouch.identifier == previousTouch.identifier) {
-            currentTouch.delta = currentTouch.position - previousTouch.position;
+            const Math::Vector2UVE delta = currentTouch.position - previousTouch.position;
+            currentTouch.delta = std::isfinite(delta.x) && std::isfinite(delta.y)
+                ? delta
+                : Math::Vector2UVE{};
         } else {
             currentTouch.delta = {};
         }
