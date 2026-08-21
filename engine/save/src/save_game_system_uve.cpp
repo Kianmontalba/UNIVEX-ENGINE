@@ -28,6 +28,10 @@ namespace {
     return std::isfinite(metadata.playtimeSeconds) && metadata.playtimeSeconds >= 0.0;
 }
 
+[[nodiscard]] bool IsSaveMetadataForSlotUVE(const GameStateMetadataUVE& metadata, const int slotIndex) noexcept {
+    return metadata.slotIndex == slotIndex;
+}
+
 /// The filename stem (no extension) for `slotIndex` — `"autosave"` and
 /// `"manual_checkpoint"` for reserved slots, or `"slot_07"`-style for numbered slots.
 [[nodiscard]] std::string SlotFileStemUVE(int slotIndex) {
@@ -334,6 +338,10 @@ std::vector<Scene::EntityUVE> SaveGameSystemUVE::LoadUVE(int slotIndex, Scene::I
                                                             kCurrentSavePayloadSchemaVersionUVE, emptyPayload);
         return {};
     }
+    if (!IsSaveMetadataForSlotUVE(metadata.value(), slotIndex)) {
+        UVE_ERROR("SaveGameSystemUVE: slot {} contains metadata for slot {}", slotIndex, metadata->slotIndex);
+        return {};
+    }
 
     const std::filesystem::path scratchPath = ScratchScenePathUVE(m_saveDirectory, slotIndex);
     if (!Asset::WriteUveFileUVE(scratchPath, Asset::AssetKindUVE::Scene, worldJsonBytes)) {
@@ -419,7 +427,14 @@ std::optional<GameStateMetadataUVE> SaveGameSystemUVE::GetSaveMetadataUVE(int sl
         UVE_ERROR("SaveGameSystemUVE: \"{}\" migration produced an invalid payload", finalPath.string());
         return std::nullopt;
     }
-    return DecodeMetadataJsonUVE(metadataJsonBytes);
+    const std::optional<GameStateMetadataUVE> metadata = DecodeMetadataJsonUVE(metadataJsonBytes);
+    if (!metadata.has_value() || !IsSaveMetadataForSlotUVE(metadata.value(), slotIndex)) {
+        if (metadata.has_value()) {
+            UVE_ERROR("SaveGameSystemUVE: slot {} contains metadata for slot {}", slotIndex, metadata->slotIndex);
+        }
+        return std::nullopt;
+    }
+    return metadata;
 }
 
 std::vector<int> SaveGameSystemUVE::ListUsedSlotsUVE() const {

@@ -167,6 +167,34 @@ TEST_F(SaveGameSystemUVETest, GetSaveMetadataUVE_ReturnsMetadataWithoutCreatingE
     EXPECT_EQ(freshManager.GetEntityCountUVE(), 0U);
 }
 
+TEST_F(SaveGameSystemUVETest, GetSaveMetadataUVE_RejectsEmbeddedSlotIdentityMismatch) {
+    const EntityUVE entity = entityManager.CreateEntityUVE();
+    ASSERT_TRUE(saveGameSystem.SaveUVE(16, entityManager, {entity}, GameStateMetadataUVE{}));
+    const std::filesystem::path slotPath = saveDirectory / "slot_16.uvesave";
+    const auto originalFile = Asset::ReadUveFileUVE(slotPath);
+    ASSERT_TRUE(originalFile.has_value());
+
+    std::vector<std::byte> expandedPayload;
+    ASSERT_TRUE(DecompressSavePayloadUVE(originalFile->second, expandedPayload));
+    ASSERT_GE(expandedPayload.size(), sizeof(std::uint32_t));
+    std::uint32_t metadataLength = 0U;
+    std::memcpy(&metadataLength, expandedPayload.data(), sizeof(metadataLength));
+    ASSERT_LE(sizeof(metadataLength) + static_cast<std::size_t>(metadataLength), expandedPayload.size());
+    std::string metadata(reinterpret_cast<const char*>(expandedPayload.data() + sizeof(metadataLength)), metadataLength);
+    const std::string expectedSlot = "\"slotIndex\":16";
+    const std::size_t slotOffset = metadata.find(expectedSlot);
+    ASSERT_NE(slotOffset, std::string::npos);
+    metadata.replace(slotOffset, expectedSlot.size(), "\"slotIndex\":17");
+    std::memcpy(expandedPayload.data() + sizeof(metadataLength), metadata.data(), metadata.size());
+    ASSERT_TRUE(Asset::WriteUveFileUVE(slotPath, Asset::AssetKindUVE::Save,
+                                       CompressSavePayloadUVE(expandedPayload)));
+
+    EXPECT_FALSE(saveGameSystem.GetSaveMetadataUVE(16).has_value());
+    EntityManagerUVE loadedManager(memoryManager.GetDefaultAllocatorUVE(), eventSystem);
+    EXPECT_TRUE(saveGameSystem.LoadUVE(16, loadedManager).empty());
+    EXPECT_EQ(loadedManager.GetEntityCountUVE(), 0U);
+}
+
 TEST_F(SaveGameSystemUVETest, GetSaveMetadataUVE_EmptySlot_ReturnsNullopt) {
     EXPECT_FALSE(saveGameSystem.GetSaveMetadataUVE(11).has_value());
 }
