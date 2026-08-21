@@ -186,9 +186,16 @@ void MobileGestureRecognizerUVE::AppendReleaseGestureUVE(const TouchTrackUVE& tr
         return;
     }
     const Math::Vector2UVE delta = track.lastPosition - track.startPosition;
-    const float distanceSquared = delta.x * delta.x + delta.y * delta.y;
-    const float tapDistanceSquared = m_config.maximumTapDistance * m_config.maximumTapDistance;
-    const float swipeDistanceSquared = m_config.minimumSwipeDistance * m_config.minimumSwipeDistance;
+    if (!IsFiniteVectorUVE(delta)) {
+        return;
+    }
+    const double deltaX = static_cast<double>(delta.x);
+    const double deltaY = static_cast<double>(delta.y);
+    const double distanceSquared = deltaX * deltaX + deltaY * deltaY;
+    const double tapDistanceSquared = static_cast<double>(m_config.maximumTapDistance) *
+                                      static_cast<double>(m_config.maximumTapDistance);
+    const double swipeDistanceSquared = static_cast<double>(m_config.minimumSwipeDistance) *
+                                        static_cast<double>(m_config.minimumSwipeDistance);
     MobileGestureTypeUVE type = MobileGestureTypeUVE::Tap;
     MobileSwipeDirectionUVE direction = MobileSwipeDirectionUVE::PositiveX;
     if (track.durationSeconds <= m_config.maximumTapDurationSeconds && distanceSquared <= tapDistanceSquared) {
