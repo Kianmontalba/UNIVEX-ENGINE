@@ -77,6 +77,21 @@ TEST_F(CollisionSystemUVETest, DetectCollisionsUVE_EntityMissingColliderComponen
     EXPECT_TRUE(collisionSystem.DetectCollisionsUVE(entityManager).empty());
 }
 
+TEST_F(CollisionSystemUVETest, BuildColliderWorldAabbCacheUVE_SkipsFiniteBoundsThatOverflowPublication) {
+    const Scene::EntityUVE validEntity =
+        MakeColliderEntityUVE(Math::Vector3UVE{0.0F, 0.0F, 0.0F}, Math::Vector3UVE{1.0F, 1.0F, 1.0F});
+    const Scene::EntityUVE overflowedEntity = MakeColliderEntityUVE(
+        Math::Vector3UVE{std::numeric_limits<float>::max(), 0.0F, 0.0F},
+        Math::Vector3UVE{1.0e38F, 1.0F, 1.0F});
+
+    const std::vector<Detail::ColliderWorldAabbUVE> cache = Detail::BuildColliderWorldAabbCacheUVE(entityManager);
+
+    ASSERT_EQ(cache.size(), 1U);
+    EXPECT_EQ(cache.front().entity, validEntity);
+    EXPECT_NE(cache.front().entity, overflowedEntity);
+    EXPECT_TRUE(collisionSystem.DetectCollisionsUVE(entityManager).empty());
+}
+
 TEST_F(CollisionSystemUVETest, DetectCollisionsUVE_MultipleSimultaneousOverlaps_AllReported) {
     const Scene::EntityUVE a = MakeColliderEntityUVE(Math::Vector3UVE{0.0F, 0.0F, 0.0F}, Math::Vector3UVE{1.0F, 1.0F, 1.0F});
     const Scene::EntityUVE b = MakeColliderEntityUVE(Math::Vector3UVE{1.5F, 0.0F, 0.0F}, Math::Vector3UVE{1.0F, 1.0F, 1.0F});

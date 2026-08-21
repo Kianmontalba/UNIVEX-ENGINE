@@ -9,6 +9,18 @@
 #include "uve/scene/components/world_transform_component_uve.h"
 
 namespace UVE::Physics::Detail {
+namespace {
+
+[[nodiscard]] bool IsFiniteVectorUVE(const Math::Vector3UVE& value) noexcept {
+    return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+}
+
+[[nodiscard]] bool IsValidAabbUVE(const Math::AabbUVE& value) noexcept {
+    return IsFiniteVectorUVE(value.min) && IsFiniteVectorUVE(value.max) && value.min.x <= value.max.x &&
+           value.min.y <= value.max.y && value.min.z <= value.max.z;
+}
+
+} // namespace
 
 std::vector<ColliderWorldAabbUVE> BuildColliderWorldAabbCacheUVE(Scene::IEntityManagerUVE& entityManager) {
     std::vector<ColliderWorldAabbUVE> cache;
@@ -65,9 +77,14 @@ std::vector<ColliderWorldAabbUVE> BuildColliderWorldAabbCacheUVE(Scene::IEntityM
                                                                               shapeRotation, {0.0F, 0.0F, localHalfExtents.z})
                                                                                 .z),
                                                                   };
+            const Math::AabbUVE worldAabb =
+                Math::AabbUVE::FromCenterExtentsUVE(worldTransform.worldPosition, worldHalfExtents);
+            if (!IsValidAabbUVE(worldAabb)) {
+                return;
+            }
             cache.push_back(ColliderWorldAabbUVE{
                 entity,
-                Math::AabbUVE::FromCenterExtentsUVE(worldTransform.worldPosition, worldHalfExtents),
+                worldAabb,
                 collider.collisionLayer,
                 collider.collisionMask,
                 collider.shapeType,
