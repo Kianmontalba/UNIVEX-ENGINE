@@ -131,6 +131,21 @@ TEST(MobileInputSystemUVETest, SnapshotCopiesTouchDeltaPressureAndGyroscopeDeter
     EXPECT_EQ(mobileInput.GetPreviousSnapshotUVE().touches[0U].identifier, 42U);
 }
 
+TEST(MobileInputSystemUVETest, FiniteEndpointDeltaOverflowFailsClosedToZero) {
+    MobileInputSystemUVE mobileInput;
+    const float maximumFloat = std::numeric_limits<float>::max();
+
+    mobileInput.SetTouchStateUVE(0U, true, 42U, Math::Vector2UVE{-maximumFloat, 0.0F}, 1.0F);
+    mobileInput.UpdateUVE();
+    mobileInput.SetTouchStateUVE(0U, true, 42U, Math::Vector2UVE{maximumFloat, 0.0F}, 1.0F);
+    mobileInput.UpdateUVE();
+
+    const TouchPointStateUVE touch = mobileInput.GetSnapshotUVE().touches[0U];
+    EXPECT_TRUE(std::isfinite(touch.delta.x));
+    EXPECT_TRUE(std::isfinite(touch.delta.y));
+    EXPECT_EQ(touch.delta, (Math::Vector2UVE{}));
+}
+
 TEST(MobileInputSystemUVETest, ActiveZeroIdentifierIsRejectedWithoutPublishingOrReplacingTouch) {
     MobileInputSystemUVE mobileInput;
     mobileInput.SetTouchStateUVE(0U, true, 0U, Math::Vector2UVE{10.0F, 20.0F}, 1.0F);
