@@ -207,9 +207,12 @@ AnimationTreeEvaluationResultUVE EvaluateAnimationTreeUVE(
                     success = selected != nullptr && evaluate(*selected, localTime, outPose);
                     break;
                 }
-                case AnimationTreeNodeKindUVE::TimeScale:
-                    success = evaluate(*FindNodeUVE(tree, node.inputA), localTime * node.timeScale, outPose);
+                case AnimationTreeNodeKindUVE::TimeScale: {
+                    const double scaledTime = localTime * static_cast<double>(node.timeScale);
+                    success = std::isfinite(scaledTime) &&
+                              evaluate(*FindNodeUVE(tree, node.inputA), scaledTime, outPose);
                     break;
+                }
                 case AnimationTreeNodeKindUVE::Parameter:
                 case AnimationTreeNodeKindUVE::State:
                 case AnimationTreeNodeKindUVE::OneShot:
