@@ -125,6 +125,18 @@ TEST(ReliablePacketWindowUVETest, SelectiveAcknowledgementClearsForwardSlots) {
     EXPECT_TRUE(ApplyReliableAcknowledgementsUVE(header, pending, 200U));
     EXPECT_EQ(pending, ~(1U << 0U | 1U << 2U | 1U << 5U));
 }
+TEST(ReliablePacketWindowUVETest, SelectiveAcknowledgementRejectsReservedZeroAfterUint32Wrap) {
+    std::uint32_t pending = 0xFFFFFFFFU;
+    const ReliablePacketHeaderUVE header{5U, 0xFFFFFFFEU, (1U << 0U) | (1U << 1U)};
+    EXPECT_TRUE(ApplyReliableAcknowledgementsUVE(header, pending, 0xFFFFFFFEU));
+    EXPECT_EQ(pending, ~((1U << 0U) | (1U << 1U)));
+
+    pending = 0xFFFFFFFEU;
+    const ReliablePacketHeaderUVE reservedOnly{5U, 0xFFFFFFFEU, (1U << 1U)};
+    EXPECT_FALSE(ApplyReliableAcknowledgementsUVE(reservedOnly, pending, 0xFFFFFFFEU));
+    EXPECT_EQ(pending, 0xFFFFFFFEU);
+}
+
 TEST(ReliablePacketWindowUVETest, InvalidAcknowledgementDoesNotMutatePendingMask) {
     std::uint32_t pending = 0xA5A5A5A5U;
     const ReliablePacketHeaderUVE header{1U, 0U, 0xFFFFFFFFU};
