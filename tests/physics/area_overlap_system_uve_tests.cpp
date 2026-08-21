@@ -88,6 +88,21 @@ TEST_F(AreaOverlapSystemUVETest, QueryUVE_SkipsFiniteAreaBoundsThatOverflowPubli
     EXPECT_FALSE(result.truncated);
 }
 
+TEST_F(AreaOverlapSystemUVETest, QueryUVE_SkipsOverflowedFinitePenetrationDepth) {
+    const float maximumFloat = std::numeric_limits<float>::max();
+    MakeAreaEntityUVE(Math::Vector3UVE{0.0F, 0.0F, 0.0F},
+                      Math::Vector3UVE{maximumFloat, maximumFloat, maximumFloat});
+    MakeColliderEntityUVE(Math::Vector3UVE{0.0F, 0.0F, 0.0F},
+                          Math::Vector3UVE{maximumFloat, maximumFloat, maximumFloat});
+
+    const AreaOverlapQueryResultUVE result = AreaOverlapSystemUVE::QueryUVE(entityManager);
+
+    EXPECT_EQ(result.inspectedAreas, 1U);
+    EXPECT_EQ(result.inspectedColliders, 1U);
+    EXPECT_TRUE(result.overlaps.empty());
+    EXPECT_FALSE(result.truncated);
+}
+
 TEST_F(AreaOverlapSystemUVETest, QueryUVE_IncompatibleOrOneSidedMaskDoesNotReportOverlap) {
     MakeAreaEntityUVE(Math::Vector3UVE{0.0F, 0.0F, 0.0F}, Math::Vector3UVE{1.0F, 1.0F, 1.0F}, 1U, 1U);
     MakeColliderEntityUVE(Math::Vector3UVE{0.5F, 0.0F, 0.0F}, Math::Vector3UVE{1.0F, 1.0F, 1.0F}, 2U, 1U);

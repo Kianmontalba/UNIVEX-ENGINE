@@ -72,7 +72,7 @@ AreaOverlapQueryResultUVE AreaOverlapSystemUVE::QueryUVE(
             }
             const std::optional<Math::PenetrationUVE> penetration =
                 Math::ComputePenetrationUVE(area.worldAabb, collider.worldAabb);
-            if (!penetration.has_value()) {
+            if (!penetration.has_value() || !std::isfinite(penetration->depth) || penetration->depth <= 0.0F) {
                 continue;
             }
             if (result.overlaps.size() >= resultCap) {
