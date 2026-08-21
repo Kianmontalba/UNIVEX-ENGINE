@@ -198,6 +198,28 @@ TEST_F(AudioSystemUVETest, SpatialSource_GainMatchesHandComputedLinearAttenuatio
     EXPECT_FLOAT_EQ(std::get<SetVoiceParamsCallUVE>(recorded[0]).params.gain, 0.5F);
 }
 
+TEST_F(AudioSystemUVETest, SpatialSource_OverflowedListenerDistanceFailsClosedToFiniteSilence) {
+    AudioSourceDescUVE desc;
+    desc.spatial = true;
+    desc.minDistance = 1.0F;
+    desc.maxDistance = std::numeric_limits<float>::max();
+    const VoiceHandleUVE source = audioSystem.CreateSourceUVE(desc);
+    const float maximumFloat = std::numeric_limits<float>::max();
+
+    audioSystem.SetListenerPositionUVE(Math::Vector3UVE{-maximumFloat, 0.0F, 0.0F});
+    audioSystem.SetSourcePositionUVE(source, Math::Vector3UVE{maximumFloat, 0.0F, 0.0F});
+
+    device.ClearRecordedCallsUVE();
+    audioSystem.UpdateUVE();
+
+    const std::vector<RecordedAudioCallUVE>& recorded = device.GetRecordedCallsUVE();
+    ASSERT_EQ(recorded.size(), 1U);
+    ASSERT_TRUE(std::holds_alternative<SetVoiceParamsCallUVE>(recorded[0]));
+    const AudioVoiceParamsUVE& params = std::get<SetVoiceParamsCallUVE>(recorded[0]).params;
+    EXPECT_TRUE(ValidateAudioVoiceParamsUVE(params));
+    EXPECT_FLOAT_EQ(params.gain, 0.0F);
+}
+
 TEST_F(AudioSystemUVETest, SpatialSource_GainMatchesHandComputedInverseSquareAttenuation) {
     AudioSourceDescUVE desc;
     desc.spatial = true;
