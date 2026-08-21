@@ -243,6 +243,9 @@ bool ApplyReliableAcknowledgementsUVE(
             continue;
         }
         const std::uint32_t selectiveSequence = header.acknowledgedSequence + bitIndex + 1U;
+        if (selectiveSequence == 0U) {
+            continue;
+        }
         const std::uint32_t pendingDistance = selectiveSequence - oldestPendingSequence;
         if (pendingDistance >= kReliablePacketMaximumSelectiveAckBitsUVE) {
             continue;
