@@ -101,8 +101,13 @@ constexpr float kMinimumNormalLengthSquaredUVE = 1.0e-12F;
     return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
 }
 
+[[nodiscard]] bool HasUsableNormalLengthUVE(const UVE::Math::Vector3UVE& value) noexcept {
+    const float lengthSquared = UVE::Math::LengthSquaredUVE(value);
+    return std::isfinite(lengthSquared) && lengthSquared > kMinimumNormalLengthSquaredUVE;
+}
+
 [[nodiscard]] UVE::Math::Vector3UVE NormalizeOrFallbackUVE(const UVE::Math::Vector3UVE& value) noexcept {
-    if (UVE::Math::LengthSquaredUVE(value) <= kMinimumNormalLengthSquaredUVE) {
+    if (!HasUsableNormalLengthUVE(value)) {
         return UVE::Math::Vector3UVE{0.0F, 1.0F, 0.0F};
     }
     return UVE::Math::NormalizeUVE(value);
@@ -161,7 +166,7 @@ bool ConvertGltfPrimitiveUVE(const GltfPrimitiveSourceUVE& source, MeshAssetUVE&
         candidate.vertices[vertexIndex].position = position;
         if (source.normals.has_value()) {
             const UVE::Math::Vector3UVE normal = ReadVector3UVE(*source.normals, vertexIndex);
-            if (!IsFiniteVectorUVE(normal) || UVE::Math::LengthSquaredUVE(normal) <= kMinimumNormalLengthSquaredUVE) {
+            if (!IsFiniteVectorUVE(normal) || !HasUsableNormalLengthUVE(normal)) {
                 return false;
             }
             candidate.vertices[vertexIndex].normal = UVE::Math::NormalizeUVE(normal);
@@ -207,8 +212,7 @@ bool ConvertGltfPrimitiveUVE(const GltfPrimitiveSourceUVE& source, MeshAssetUVE&
             const auto& b = candidate.vertices[candidate.indices[triangle + 1U]].position;
             const auto& c = candidate.vertices[candidate.indices[triangle + 2U]].position;
             const UVE::Math::Vector3UVE faceNormal = UVE::Math::CrossUVE(b - a, c - a);
-            if (!IsFiniteVectorUVE(faceNormal) ||
-                UVE::Math::LengthSquaredUVE(faceNormal) <= kMinimumNormalLengthSquaredUVE) {
+            if (!IsFiniteVectorUVE(faceNormal) || !HasUsableNormalLengthUVE(faceNormal)) {
                 return false;
             }
             normalAccumulation[candidate.indices[triangle]] += faceNormal;
