@@ -42,11 +42,20 @@ using ImportFuncUVE = std::function<bool(const std::filesystem::path&, const std
                                          const std::filesystem::path& destination,
                                          const AssetImportSettingsUVE& /*settings*/) {
     std::error_code errorCode;
-    std::filesystem::copy_file(source, destination, std::filesystem::copy_options::overwrite_existing,
-                                errorCode);
+    const std::filesystem::path temporaryPath = destination.string() + ".uve_generic_tmp";
+    std::filesystem::remove(temporaryPath, errorCode);
+    if (!std::filesystem::copy_file(source, temporaryPath, std::filesystem::copy_options::overwrite_existing,
+                                    errorCode)) {
+        UVE_ERROR("AssetImporterUVE: failed to copy \"{}\" to temporary destination \"{}\": {}", source.string(),
+                   temporaryPath.string(), errorCode.message());
+        std::filesystem::remove(temporaryPath, errorCode);
+        return false;
+    }
+    std::filesystem::rename(temporaryPath, destination, errorCode);
     if (errorCode) {
-        UVE_ERROR("AssetImporterUVE: failed to copy \"{}\" to \"{}\": {}", source.string(),
+        UVE_ERROR("AssetImporterUVE: failed to publish \"{}\" to \"{}\": {}", source.string(),
                    destination.string(), errorCode.message());
+        std::filesystem::remove(temporaryPath, errorCode);
         return false;
     }
     return true;
