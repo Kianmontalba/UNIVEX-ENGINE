@@ -1448,14 +1448,21 @@ namespace {
     const ScriptIrInstructionUVE& instruction, const std::size_t instructionIndex,
     ScriptVmExecutionContextUVE& context, const ScriptEngineCallBindingsUVE* bindings) {
     const float* value = FindNumberInputUVE(context, instruction.sourceNodeId, "Value");
-    if (value == nullptr) {
-        return MakeNodeFailureUVE(instructionIndex, "engine.log requires a Number Value input.");
+    const bool isDebugPrint = instruction.nodeTypeId == "debug.print";
+    if (value == nullptr || !std::isfinite(*value)) {
+        return MakeNodeFailureUVE(instructionIndex,
+                                  isDebugPrint ? "debug.print requires a finite Number Value input."
+                                               : "engine.log requires a finite Number Value input.");
     }
     if (bindings == nullptr || bindings->log == nullptr) {
-        return MakeNodeFailureUVE(instructionIndex, "engine.log requires a caller-owned engine call binding.");
+        return MakeNodeFailureUVE(instructionIndex,
+                                  isDebugPrint ? "debug.print requires a caller-owned log binding."
+                                               : "engine.log requires a caller-owned engine call binding.");
     }
     if (!bindings->log(bindings->userData, *value)) {
-        return MakeNodeFailureUVE(instructionIndex, "engine.log callback rejected the copied Number value.");
+        return MakeNodeFailureUVE(instructionIndex,
+                                  isDebugPrint ? "debug.print callback rejected the copied Number value."
+                                               : "engine.log callback rejected the copied Number value.");
     }
     return {};
 }
@@ -2667,6 +2674,7 @@ namespace {
         const bool isPhysicsNode = instruction.nodeTypeId.rfind("physics.", 0U) == 0U;
         const bool isAudioNode = instruction.nodeTypeId.rfind("audio.", 0U) == 0U;
         const bool isEngineLogNode = instruction.nodeTypeId == "engine.log";
+        const bool isDebugPrintNode = instruction.nodeTypeId == "debug.print";
         const bool isEngineGetTimeNode = instruction.nodeTypeId == "engine.get_time";
         if ((isVariableNode && !HasRequiredVariableInputsUVE(instruction, context)) ||
             (isConversionNode && !HasRequiredConversionInputsUVE(instruction, context)) ||
@@ -2684,7 +2692,8 @@ namespace {
             (isMotionQueryNode && !HasRequiredMotionQueryNodeInputsUVE(instruction, context)) ||
             (isPhysicsNode && !HasRequiredPhysicsNodeInputsUVE(instruction, context)) ||
             (isAudioNode && !HasRequiredAudioNodeInputsUVE(instruction, context)) ||
-            (isEngineLogNode && FindNumberInputUVE(context, instruction.sourceNodeId, "Value") == nullptr)) {
+            ((isEngineLogNode || isDebugPrintNode) &&
+             FindNumberInputUVE(context, instruction.sourceNodeId, "Value") == nullptr)) {
             ScriptVmExecutionResultUVE failure = MakeNodeFailureUVE(
                 instructionIndex, "Control-flow execution could not resolve typed node inputs.");
             failure.instructionsExecuted = result.instructionsExecuted;
@@ -2881,7 +2890,8 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                 continue;
             }
             if (kind == ScriptIrInstructionKindUVE::ExecuteNode &&
-                (instruction.nodeTypeId == "engine.log" || instruction.nodeTypeId == "engine.get_time")) {
+                (instruction.nodeTypeId == "engine.log" || instruction.nodeTypeId == "debug.print" ||
+                 instruction.nodeTypeId == "engine.get_time")) {
                 result.status = ScriptVmStatusUVE::NodeExecutionFailed;
                 result.diagnostics.push_back({index, "engine call requires a caller-owned execution context and binding."});
                 result.AppendTraceEventUVE({ScriptVmTraceEventKindUVE::Failed, Scene::kInvalidEntityUVE,
@@ -2971,6 +2981,7 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                 const bool isPhysicsNode = instruction.nodeTypeId.rfind("physics.", 0U) == 0U;
                 const bool isAudioNode = instruction.nodeTypeId.rfind("audio.", 0U) == 0U;
                 const bool isEngineLogNode = instruction.nodeTypeId == "engine.log";
+                const bool isDebugPrintNode = instruction.nodeTypeId == "debug.print";
                 const bool isEngineGetTimeNode = instruction.nodeTypeId == "engine.get_time";
                 if ((isVariableNode && !HasRequiredVariableInputsUVE(instruction, *context)) ||
                     (isConversionNode && !HasRequiredConversionInputsUVE(instruction, *context)) ||
@@ -2988,7 +2999,8 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                     (isMotionQueryNode && !HasRequiredMotionQueryNodeInputsUVE(instruction, *context)) ||
                     (isPhysicsNode && !HasRequiredPhysicsNodeInputsUVE(instruction, *context)) ||
                     (isAudioNode && !HasRequiredAudioNodeInputsUVE(instruction, *context)) ||
-                    (isEngineLogNode && FindNumberInputUVE(*context, instruction.sourceNodeId, "Value") == nullptr)) {
+                    ((isEngineLogNode || isDebugPrintNode) &&
+                     FindNumberInputUVE(*context, instruction.sourceNodeId, "Value") == nullptr)) {
                     continue;
                 }
                 if (result.instructionsExecuted >= options.instructionBudget) {
@@ -3032,7 +3044,7 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                     nodeResult = ExecutePhysicsNodeUVE(instruction, index, *context, options.engineCallBindings);
                 } else if (isAudioNode) {
                     nodeResult = ExecuteAudioNodeUVE(instruction, index, *context, options.engineCallBindings);
-                } else if (isEngineLogNode) {
+                } else if (isEngineLogNode || isDebugPrintNode) {
                     nodeResult = ExecuteEngineLogNodeUVE(instruction, index, *context, options.engineCallBindings);
                 } else if (isEngineGetTimeNode) {
                     nodeResult = ExecuteEngineGetTimeNodeUVE(instruction, index, *context, options.engineCallBindings);
