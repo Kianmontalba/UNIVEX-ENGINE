@@ -15,6 +15,8 @@
 
 namespace UVE::Input {
 
+inline constexpr std::size_t kMaximumInputActionNameBytesUVE = 128U;
+
 /// InputSystemUVE is the concrete, engine-standard implementation of IInputSystemUVE. Composes an
 /// Events::IEventSystemUVE& (dependency injection, matching Renderer3DUVE/PhysicsSystemUVE's
 /// precedent for a service that needs a constructor-injected collaborator) to queue
