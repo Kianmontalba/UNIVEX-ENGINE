@@ -40,6 +40,10 @@ TEST(ReliablePacketWindowUVETest, ValidateReliablePayloadBudgetUVE_AcceptsBounde
 TEST(ReliablePacketWindowUVETest, ValidateReliablePayloadBudgetUVE_RejectsOversizedPayloads) {
     EXPECT_FALSE(ValidateReliablePayloadBudgetUVE(kReliablePacketMaximumPayloadBytesUVE + 1U));
     EXPECT_FALSE(ValidateReliablePayloadBudgetUVE(1U, 0U));
+    EXPECT_TRUE(ValidateReliablePayloadBudgetUVE(kReliablePacketMaximumPayloadBytesUVE,
+                                                 kReliablePacketMaximumPayloadBytesUVE + 1U));
+    EXPECT_FALSE(ValidateReliablePayloadBudgetUVE(kReliablePacketMaximumPayloadBytesUVE + 1U,
+                                                  kReliablePacketMaximumPayloadBytesUVE + 1U));
 }
 TEST(ReliablePacketWindowUVETest, RetransmitPolicyClassifiesWaitingDueAndExhausted) {
     EXPECT_EQ(EvaluateReliableRetransmitPolicyUVE({0.25F, 1.0F, 0U, 3U}), ReliableRetransmitStatusUVE::Waiting);
