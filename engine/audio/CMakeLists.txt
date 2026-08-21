@@ -7,6 +7,7 @@ add_library(uve_audio STATIC
     src/audio_mixer_group_uve.cpp
     src/null_audio_device_uve.cpp
     src/audio_system_uve.cpp
+    src/audio_listener_orientation_validation_uve.cpp
     src/audio_source_system_uve.cpp
     src/wav_metadata_uve.cpp
     src/wav_importer_uve.cpp
