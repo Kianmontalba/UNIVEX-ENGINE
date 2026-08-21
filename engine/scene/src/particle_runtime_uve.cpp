@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <utility>
 
 namespace UVE::Scene {
@@ -125,11 +126,20 @@ ParticleRuntimeResultUVE ParticleRuntimeUVE::EmitDetailedUVE(const EntityUVE ent
         return MakeResultUVE(ParticleRuntimeCodeUVE::LiveParticleCountExceeded,
                              "Particle emission exceeds the emitter particle budget.");
     }
+    if (iterator->second.nextSequence == 0U ||
+        static_cast<std::uint64_t>(emission.count) >
+            std::numeric_limits<std::uint64_t>::max() - iterator->second.nextSequence + 1U) {
+        return MakeResultUVE(ParticleRuntimeCodeUVE::CapacityExceeded,
+                             "Particle emission would exhaust the deterministic sequence range.");
+    }
 
     iterator->second.particles.reserve(currentCount + emission.count);
     for (std::uint32_t index = 0U; index < emission.count; ++index) {
+        const std::uint64_t sequence = iterator->second.nextSequence;
+        iterator->second.nextSequence =
+            sequence == std::numeric_limits<std::uint64_t>::max() ? 0U : sequence + 1U;
         iterator->second.particles.push_back(
-            {emission.position, emission.velocity, emission.lifetimeSeconds, iterator->second.nextSequence++});
+            {emission.position, emission.velocity, emission.lifetimeSeconds, sequence});
     }
     iterator->second.liveParticles = static_cast<std::uint32_t>(iterator->second.particles.size());
     return MakeResultUVE(ParticleRuntimeCodeUVE::Applied,
