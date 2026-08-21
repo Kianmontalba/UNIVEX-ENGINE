@@ -178,8 +178,16 @@ void AppendUint64UVE(std::vector<std::byte>& buffer, std::uint64_t value) {
                                              std::vector<std::byte>& outMetadataJsonBytes) {
     std::size_t offset = 0;
     std::uint32_t metadataLength = 0;
-    return ReadUint32FromBufferUVE(payload, offset, metadataLength) &&
-           ReadBytesFromBufferUVE(payload, offset, metadataLength, outMetadataJsonBytes);
+    if (!ReadUint32FromBufferUVE(payload, offset, metadataLength) ||
+        !ReadBytesFromBufferUVE(payload, offset, metadataLength, outMetadataJsonBytes)) {
+        return false;
+    }
+    std::uint64_t worldLength = 0U;
+    if (!ReadUint64FromBufferUVE(payload, offset, worldLength)) {
+        return false;
+    }
+    const std::size_t remainingBytes = payload.size() - offset;
+    return worldLength == static_cast<std::uint64_t>(remainingBytes);
 }
 
 } // namespace
