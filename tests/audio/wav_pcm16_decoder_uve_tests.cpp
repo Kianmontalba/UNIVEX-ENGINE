@@ -51,6 +51,8 @@ TEST(WavPcm16DecoderUVETest, PlanPcm16StreamWindowUVE_RejectsInvalidInputsAtomic
     EXPECT_EQ(plan, original);
     EXPECT_FALSE(PlanPcm16StreamWindowUVE(10U, 0U, 9U, false, plan, 8U));
     EXPECT_EQ(plan, original);
+    EXPECT_FALSE(PlanPcm16StreamWindowUVE(kMaximumWavPcm16SamplesUVE + 1U, 0U, 1U, false, plan));
+    EXPECT_EQ(plan, original);
 }
 
 TEST(WavPcm16DecoderUVETest, AdvancePcm16StreamCursorUVE_ClampsNonLoopingCursorAtEnd) {

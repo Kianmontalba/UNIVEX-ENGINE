@@ -62,7 +62,7 @@ bool ApplyPcmGainEffectChainUVE(const std::vector<float>& inputSamples,
 bool PlanPcm16StreamWindowUVE(const std::size_t totalSamples, const std::size_t cursorSample,
                                const std::size_t requestedSamples, const bool loop,
                                Pcm16StreamWindowPlanUVE& outPlan, const std::size_t maximumSamples) noexcept {
-    if (totalSamples == 0U || maximumSamples == 0U || requestedSamples == 0U ||
+    if (totalSamples == 0U || maximumSamples == 0U || totalSamples > maximumSamples || requestedSamples == 0U ||
         requestedSamples > maximumSamples || cursorSample > totalSamples) {
         return false;
     }
