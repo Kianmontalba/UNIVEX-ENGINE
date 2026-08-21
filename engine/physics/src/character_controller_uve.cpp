@@ -78,11 +78,20 @@ bool ValidateControllerInputUVE(Scene::IEntityManagerUVE& entityManager,
     return true;
 }
 
-void ApplyLocalDeltaUVE(Scene::IEntityManagerUVE& entityManager, Scene::ISceneGraphUVE& sceneGraph,
-                        Scene::EntityUVE entity, const Math::Vector3UVE& delta) {
+[[nodiscard]] bool ApplyLocalDeltaUVE(Scene::IEntityManagerUVE& entityManager,
+                                      Scene::ISceneGraphUVE& sceneGraph, Scene::EntityUVE entity,
+                                      const Math::Vector3UVE& delta) {
+    if (!IsFiniteVectorUVE(delta)) {
+        return false;
+    }
     Scene::TransformComponentUVE transform = entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity);
-    transform.localPosition += delta;
+    const Math::Vector3UVE candidatePosition = transform.localPosition + delta;
+    if (!IsFiniteVectorUVE(candidatePosition)) {
+        return false;
+    }
+    transform.localPosition = candidatePosition;
     sceneGraph.SetLocalTransformUVE(entityManager, entity, transform);
+    return true;
 }
 
 [[nodiscard]] float ResolveGroundSlopeCosineUVE(
@@ -255,10 +264,14 @@ struct ToICandidateUVE final {
     Scene::IEntityManagerUVE& entityManager, Scene::ISceneGraphUVE& sceneGraph,
     ICollisionSystemUVE& collisionSystem, Scene::EntityUVE controller,
     const Math::Vector3UVE& delta) {
-    ApplyLocalDeltaUVE(entityManager, sceneGraph, controller, delta);
+    if (!ApplyLocalDeltaUVE(entityManager, sceneGraph, controller, delta)) {
+        return false;
+    }
     sceneGraph.UpdateUVE(entityManager);
     const bool collisionFree = !HasControllerCollisionUVE(entityManager, collisionSystem, controller);
-    ApplyLocalDeltaUVE(entityManager, sceneGraph, controller, -delta);
+    if (!ApplyLocalDeltaUVE(entityManager, sceneGraph, controller, -delta)) {
+        return false;
+    }
     sceneGraph.UpdateUVE(entityManager);
     return collisionFree;
 }
@@ -269,10 +282,14 @@ struct ToICandidateUVE final {
     const Math::Vector3UVE& horizontalDisplacement, float maximumStepHeight,
     bool& outContactsTruncated, Math::Vector3UVE& outNetDisplacement) {
     const Math::Vector3UVE lift{0.0F, maximumStepHeight, 0.0F};
-    ApplyLocalDeltaUVE(entityManager, sceneGraph, controller, lift);
+    if (!ApplyLocalDeltaUVE(entityManager, sceneGraph, controller, lift)) {
+        return false;
+    }
     sceneGraph.UpdateUVE(entityManager);
     if (HasControllerCollisionUVE(entityManager, collisionSystem, controller)) {
-        ApplyLocalDeltaUVE(entityManager, sceneGraph, controller, -lift);
+        if (!ApplyLocalDeltaUVE(entityManager, sceneGraph, controller, -lift)) {
+            return false;
+        }
         sceneGraph.UpdateUVE(entityManager);
         return false;
     }
@@ -291,12 +308,16 @@ struct ToICandidateUVE final {
         CharacterControllerUVE::kMaximumToITargetsUVE, targetCacheTruncated);
     outContactsTruncated = outContactsTruncated || targetCacheTruncated;
     if (horizontalImpact.has_value()) {
-        ApplyLocalDeltaUVE(entityManager, sceneGraph, controller, -lift);
+        if (!ApplyLocalDeltaUVE(entityManager, sceneGraph, controller, -lift)) {
+            return false;
+        }
         sceneGraph.UpdateUVE(entityManager);
         return false;
     }
 
-    ApplyLocalDeltaUVE(entityManager, sceneGraph, controller, horizontalDisplacement);
+    if (!ApplyLocalDeltaUVE(entityManager, sceneGraph, controller, horizontalDisplacement)) {
+        return false;
+    }
     sceneGraph.UpdateUVE(entityManager);
 
     const Math::Vector3UVE fullDrop{0.0F, -maximumStepHeight, 0.0F};
@@ -315,8 +336,10 @@ struct ToICandidateUVE final {
             }
         }
         if (freeDistance <= CharacterControllerUVE::kMinimumMovementDistanceUVE) {
-            ApplyLocalDeltaUVE(entityManager, sceneGraph, controller, -horizontalDisplacement);
-            ApplyLocalDeltaUVE(entityManager, sceneGraph, controller, -lift);
+            if (!ApplyLocalDeltaUVE(entityManager, sceneGraph, controller, -horizontalDisplacement) ||
+                !ApplyLocalDeltaUVE(entityManager, sceneGraph, controller, -lift)) {
+                return false;
+            }
             sceneGraph.UpdateUVE(entityManager);
             return false;
         }
@@ -324,7 +347,9 @@ struct ToICandidateUVE final {
     }
 
     const Math::Vector3UVE actualDrop{0.0F, -dropDistance, 0.0F};
-    ApplyLocalDeltaUVE(entityManager, sceneGraph, controller, actualDrop);
+    if (!ApplyLocalDeltaUVE(entityManager, sceneGraph, controller, actualDrop)) {
+        return false;
+    }
     sceneGraph.UpdateUVE(entityManager);
     outNetDisplacement = lift + horizontalDisplacement + actualDrop;
     return true;
@@ -380,9 +405,17 @@ CharacterControllerMoveResultUVE CharacterControllerUVE::MoveUVE(
         const float remainingLength = FiniteLengthUVE(result.remainingDisplacement);
         const float stepLength = std::min(remainingLength, maximumSubstepDistance);
         const Math::Vector3UVE step = result.remainingDisplacement * (stepLength / remainingLength);
-        ApplyLocalDeltaUVE(entityManager, sceneGraph, input.entity, step);
+        if (!ApplyLocalDeltaUVE(entityManager, sceneGraph, input.entity, step)) {
+            result.code = CharacterControllerMoveCodeUVE::InvalidInput;
+            return result;
+        }
         result.remainingDisplacement -= step;
         result.appliedDisplacement += step;
+        if (!IsFiniteVectorUVE(result.remainingDisplacement) ||
+            !IsFiniteVectorUVE(result.appliedDisplacement)) {
+            result.code = CharacterControllerMoveCodeUVE::InvalidInput;
+            return result;
+        }
         ++result.substeps;
         sceneGraph.UpdateUVE(entityManager);
 
@@ -411,13 +444,21 @@ CharacterControllerMoveResultUVE CharacterControllerUVE::MoveUVE(
                 continue;
             }
             RegisterGroundContactUVE(result, contactNormal, minimumGroundNormalY);
-            if (ApplyDynamicBodyPushUVE(entityManager, targetEntity, contactNormal, step, pushPolicy)) {
-                ++result.pushedBodyCount;
+            if (!ApplyLocalDeltaUVE(entityManager, sceneGraph, input.entity, correction)) {
+                result.code = CharacterControllerMoveCodeUVE::InvalidInput;
+                return result;
             }
-            ApplyLocalDeltaUVE(entityManager, sceneGraph, input.entity, correction);
             result.appliedDisplacement += correction;
             result.remainingDisplacement = RemoveIntoNormalComponentUVE(
                 result.remainingDisplacement, contactNormal);
+            if (!IsFiniteVectorUVE(result.appliedDisplacement) ||
+                !IsFiniteVectorUVE(result.remainingDisplacement)) {
+                result.code = CharacterControllerMoveCodeUVE::InvalidInput;
+                return result;
+            }
+            if (ApplyDynamicBodyPushUVE(entityManager, targetEntity, contactNormal, step, pushPolicy)) {
+                ++result.pushedBodyCount;
+            }
             result.blocked = true;
             ++result.contactCount;
         }
@@ -490,9 +531,17 @@ CharacterControllerMoveResultUVE CharacterControllerUVE::MoveWithToIUVE(
         result.contactsTruncated = result.contactsTruncated || targetCacheTruncated;
 
         if (!candidate.has_value()) {
-            ApplyLocalDeltaUVE(entityManager, sceneGraph, input.entity, consideredDisplacement);
+            if (!ApplyLocalDeltaUVE(entityManager, sceneGraph, input.entity, consideredDisplacement)) {
+                result.code = CharacterControllerMoveCodeUVE::InvalidInput;
+                return result;
+            }
             result.remainingDisplacement -= consideredDisplacement;
             result.appliedDisplacement += consideredDisplacement;
+            if (!IsFiniteVectorUVE(result.remainingDisplacement) ||
+                !IsFiniteVectorUVE(result.appliedDisplacement)) {
+                result.code = CharacterControllerMoveCodeUVE::InvalidInput;
+                return result;
+            }
             ++result.substeps;
             sceneGraph.UpdateUVE(entityManager);
             continue;
@@ -522,9 +571,17 @@ CharacterControllerMoveResultUVE CharacterControllerUVE::MoveWithToIUVE(
 
         const float advanceTime = std::max(0.0F, impactTime - kToIEpsilonUVE);
         const Math::Vector3UVE preImpactDisplacement = consideredDisplacement * advanceTime;
-        ApplyLocalDeltaUVE(entityManager, sceneGraph, input.entity, preImpactDisplacement);
+        if (!ApplyLocalDeltaUVE(entityManager, sceneGraph, input.entity, preImpactDisplacement)) {
+            result.code = CharacterControllerMoveCodeUVE::InvalidInput;
+            return result;
+        }
         result.remainingDisplacement -= preImpactDisplacement;
         result.appliedDisplacement += preImpactDisplacement;
+        if (!IsFiniteVectorUVE(result.remainingDisplacement) ||
+            !IsFiniteVectorUVE(result.appliedDisplacement)) {
+            result.code = CharacterControllerMoveCodeUVE::InvalidInput;
+            return result;
+        }
         ++result.substeps;
         sceneGraph.UpdateUVE(entityManager);
 

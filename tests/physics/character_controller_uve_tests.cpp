@@ -104,6 +104,28 @@ TEST_F(CharacterControllerUVETest, MoveUVE_RejectsFiniteDisplacementWhoseLengthO
     EXPECT_EQ(GetWorldPositionUVE(controller), positionBefore);
 }
 
+TEST_F(CharacterControllerUVETest, MoveUVE_RejectsFiniteDerivedCorrectionOverflowWithoutMutation) {
+    const float maximumFloat = std::numeric_limits<float>::max();
+    const Scene::EntityUVE controller =
+        MakeControllerEntityUVE({maximumFloat, 0.0F, 0.0F}, {0.5F, 0.5F, 0.5F});
+    const Scene::EntityUVE target = MakeColliderEntityUVE({0.0F, 0.0F, 0.0F}, {0.5F, 0.5F, 0.5F});
+    FixedCollisionSystemUVE overflowCollisionSystem;
+    overflowCollisionSystem.pairs.push_back(
+        CollisionPairUVE{target, controller, {1.0F, 0.0F, 0.0F}, maximumFloat});
+    const Math::Vector3UVE positionBefore = GetWorldPositionUVE(controller);
+
+    const CharacterControllerMoveResultUVE result = CharacterControllerUVE::MoveUVE(
+        entityManager, sceneGraph, overflowCollisionSystem,
+        CharacterControllerInputUVE{controller, {1.0F, 0.0F, 0.0F}, 8U, 0.25F});
+
+    EXPECT_EQ(result.code, CharacterControllerMoveCodeUVE::InvalidInput);
+    EXPECT_EQ(result.substeps, 1U);
+    EXPECT_EQ(GetWorldPositionUVE(controller), positionBefore);
+    EXPECT_TRUE(std::isfinite(GetWorldPositionUVE(controller).x));
+    EXPECT_TRUE(std::isfinite(GetWorldPositionUVE(controller).y));
+    EXPECT_TRUE(std::isfinite(GetWorldPositionUVE(controller).z));
+}
+
 TEST_F(CharacterControllerUVETest, MoveUVE_SkipsNonUnitFiniteCollisionAxisWithoutNonFiniteMutation) {
     const Scene::EntityUVE controller = MakeControllerEntityUVE({}, {0.5F, 0.5F, 0.5F});
     const Scene::EntityUVE target = MakeColliderEntityUVE({0.0F, 0.0F, 0.0F}, {0.5F, 0.5F, 0.5F});
