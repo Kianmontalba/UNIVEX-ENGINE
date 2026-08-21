@@ -556,6 +556,9 @@ void RollbackRestoredEntitiesUVE(IEntityManagerUVE& entityManager, std::vector<E
                 }
 
                 const auto registrationIt = GetRegistrationsByNameUVE().find(componentName);
+                if (registrationIt == GetRegistrationsByNameUVE().end()) {
+                    throw std::runtime_error("unknown scene component: " + componentName);
+                }
                 registrationIt->second.fromJson(entityManager, entity, componentJson);
                 hasTransform = hasTransform || componentName == "TransformComponentUVE";
             }
