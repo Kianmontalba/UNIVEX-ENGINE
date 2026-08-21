@@ -3,6 +3,7 @@
 #include "uve/physics/area_overlap_system_uve.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <optional>
 #include <vector>
@@ -15,6 +16,15 @@
 namespace UVE::Physics {
 
 namespace {
+
+[[nodiscard]] bool IsFiniteVectorUVE(const Math::Vector3UVE& value) noexcept {
+    return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+}
+
+[[nodiscard]] bool IsValidAabbUVE(const Math::AabbUVE& value) noexcept {
+    return IsFiniteVectorUVE(value.min) && IsFiniteVectorUVE(value.max) && value.min.x <= value.max.x &&
+           value.min.y <= value.max.y && value.min.z <= value.max.z;
+}
 
 struct AreaWorldAabbUVE final {
     Scene::EntityUVE entity;
@@ -32,9 +42,12 @@ struct AreaWorldAabbUVE final {
             if (!Scene::IsAreaComponentValidUVE(area)) {
                 return;
             }
-            areas.push_back(AreaWorldAabbUVE{
-                entity, Math::AabbUVE::FromCenterExtentsUVE(worldTransform.worldPosition, area.halfExtents),
-                area.collisionLayer, area.collisionMask});
+            const Math::AabbUVE worldAabb =
+                Math::AabbUVE::FromCenterExtentsUVE(worldTransform.worldPosition, area.halfExtents);
+            if (!IsValidAabbUVE(worldAabb)) {
+                return;
+            }
+            areas.push_back(AreaWorldAabbUVE{entity, worldAabb, area.collisionLayer, area.collisionMask});
         });
     return areas;
 }

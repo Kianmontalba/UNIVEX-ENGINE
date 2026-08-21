@@ -4,6 +4,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 
 #include <gtest/gtest.h>
 
@@ -67,6 +68,24 @@ TEST_F(AreaOverlapSystemUVETest, QueryUVE_CompatibleOverlapReturnsCopiedPair) {
     EXPECT_EQ(result.overlaps.front().area, area);
     EXPECT_EQ(result.overlaps.front().other, collider);
     EXPECT_GT(result.overlaps.front().penetrationDepth, 0.0F);
+}
+
+TEST_F(AreaOverlapSystemUVETest, QueryUVE_SkipsFiniteAreaBoundsThatOverflowPublication) {
+    const Scene::EntityUVE validArea =
+        MakeAreaEntityUVE(Math::Vector3UVE{0.0F, 0.0F, 0.0F}, Math::Vector3UVE{1.0F, 1.0F, 1.0F});
+    MakeAreaEntityUVE(Math::Vector3UVE{std::numeric_limits<float>::max(), 0.0F, 0.0F},
+                      Math::Vector3UVE{1.0e38F, 1.0F, 1.0F});
+    const Scene::EntityUVE collider =
+        MakeColliderEntityUVE(Math::Vector3UVE{0.5F, 0.0F, 0.0F}, Math::Vector3UVE{1.0F, 1.0F, 1.0F});
+
+    const AreaOverlapQueryResultUVE result = AreaOverlapSystemUVE::QueryUVE(entityManager);
+
+    ASSERT_EQ(result.inspectedAreas, 1U);
+    ASSERT_EQ(result.inspectedColliders, 1U);
+    ASSERT_EQ(result.overlaps.size(), 1U);
+    EXPECT_EQ(result.overlaps.front().area, validArea);
+    EXPECT_EQ(result.overlaps.front().other, collider);
+    EXPECT_FALSE(result.truncated);
 }
 
 TEST_F(AreaOverlapSystemUVETest, QueryUVE_IncompatibleOrOneSidedMaskDoesNotReportOverlap) {
