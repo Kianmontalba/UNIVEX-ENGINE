@@ -200,10 +200,10 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
 
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
     EXPECT_FALSE(RegisterBuiltInScriptNodesUVE(registry));
-    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 163U);
+    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 164U);
 
     const std::vector<ScriptNodeTypeDescriptorUVE> descriptors = registry.GetNodeTypeDescriptorsUVE();
-    ASSERT_EQ(descriptors.size(), 163U);
+    ASSERT_EQ(descriptors.size(), 164U);
     const std::vector<std::string> expectedIds{
         "flow.sequence", "flow.branch", "flow.return", "flow.do_once", "flow.gate", "flow.switch",
         "flow.event", "flow.loop", "flow.for_loop", "flow.while_loop", "flow.delay",
@@ -246,7 +246,8 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
         "motion.query.set_yaw", "motion.query.transition", "motion.query.motion_warp",
         "physics.raycast", "physics.sphere_cast", "physics.box_cast", "physics.capsule_cast", "physics.overlap",
         "physics.apply_force", "physics.apply_impulse", "physics.set_velocity", "physics.get_velocity",
-        "physics.enable_gravity", "physics.is_colliding", "audio.set_volume", "audio.set_pitch"};
+        "physics.enable_gravity", "physics.is_colliding", "audio.set_volume", "audio.set_pitch",
+        "audio.set_3d_position"};
     ASSERT_EQ(expectedIds.size(), descriptors.size());
     for (std::size_t index = 0U; index < expectedIds.size(); ++index) {
         EXPECT_EQ(descriptors[index].typeId, expectedIds[index]);
@@ -319,7 +320,7 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
         EXPECT_EQ(descriptors[index].category, "Physics");
         EXPECT_EQ(descriptors[index].iconId, "node.physics");
     }
-    for (std::size_t index = 161U; index < 163U; ++index) {
+    for (std::size_t index = 161U; index < 164U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Audio");
         EXPECT_EQ(descriptors[index].iconId, "node.audio");
     }
@@ -6076,6 +6077,18 @@ TEST(ScriptBuiltInNodeUVETest, RegisterBuiltInScriptNodesUVE_ContainsAudioSetVol
     EXPECT_EQ(pitchDescriptor->pins[1].type, ScriptValueTypeUVE::Number);
     EXPECT_EQ(pitchDescriptor->pins[2].name, "Result");
     EXPECT_EQ(pitchDescriptor->pins[2].type, ScriptValueTypeUVE::Boolean);
+
+    const ScriptNodeTypeDescriptorUVE* positionDescriptor = registry.FindNodeTypeUVE("audio.set_3d_position");
+    ASSERT_NE(positionDescriptor, nullptr);
+    EXPECT_EQ(positionDescriptor->displayName, "Set 3D Position");
+    EXPECT_EQ(positionDescriptor->category, "Audio");
+    ASSERT_EQ(positionDescriptor->pins.size(), 3U);
+    EXPECT_EQ(positionDescriptor->pins[0].name, "Source");
+    EXPECT_EQ(positionDescriptor->pins[0].type, ScriptValueTypeUVE::Entity);
+    EXPECT_EQ(positionDescriptor->pins[1].name, "Position");
+    EXPECT_EQ(positionDescriptor->pins[1].type, ScriptValueTypeUVE::Vector3);
+    EXPECT_EQ(positionDescriptor->pins[2].name, "Result");
+    EXPECT_EQ(positionDescriptor->pins[2].type, ScriptValueTypeUVE::Boolean);
 }
 
 TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesEntityBeforeAudioSetVolume) {
@@ -6099,7 +6112,9 @@ TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesEntityBeforeAudioS
 struct AudioCaptureUVE final {
     Scene::EntityUVE source{9U, 1U};
     float volume = 0.0F;
+    ScriptVector3ValueUVE position{};
     std::size_t setVolumeCount = 0U;
+    std::size_t setPositionCount = 0U;
 };
 
 bool CaptureAudioSetVolumeUVE(void* userData, Scene::EntityUVE source, float volume,
@@ -6246,6 +6261,92 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_AudioSetPitchFailsClosedForNonPos
 
     EXPECT_EQ(result.status, ScriptVmStatusUVE::NodeExecutionFailed);
     EXPECT_EQ(capture.setVolumeCount, 0U);
+}
+
+} // namespace
+} // namespace UVE::Scripting
+
+
+namespace UVE::Scripting {
+namespace {
+
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesEntityBeforeAudioSet3dPosition) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({1U, "entity.spawn"}));
+    ASSERT_TRUE(graph.AddNodeUVE({2U, "audio.set_3d_position"}));
+    ASSERT_TRUE(graph.AddLinkUVE({{1U, "Result"}, {2U, "Source"}}));
+
+    const ScriptIrCompileResultUVE result = CompileScriptGraphToIrUVE(graph, registry);
+
+    ASSERT_TRUE(result.IsSuccessUVE());
+    ASSERT_TRUE(result.program.has_value());
+    ASSERT_EQ(result.program->instructions.size(), 3U);
+    EXPECT_EQ(result.program->instructions[0].nodeTypeId, "entity.spawn");
+    EXPECT_EQ(result.program->instructions[1].kind, ScriptIrInstructionKindUVE::TransferValue);
+    EXPECT_EQ(result.program->instructions[2].nodeTypeId, "audio.set_3d_position");
+}
+
+bool CaptureAudioSet3dPositionUVE(void* userData, Scene::EntityUVE source,
+                                  const ScriptVector3ValueUVE& position, bool* outResult) noexcept {
+    auto* capture = static_cast<AudioCaptureUVE*>(userData);
+    if (capture == nullptr || outResult == nullptr || source != capture->source ||
+        !std::isfinite(position.value.x) || !std::isfinite(position.value.y) ||
+        !std::isfinite(position.value.z)) {
+        return false;
+    }
+    capture->position = position;
+    ++capture->setPositionCount;
+    *outResult = true;
+    return true;
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_ExecutesAudioSet3dPositionWithCopiedValues) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U,
+                                    "audio.set_3d_position", {}, {}});
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(1U, "Source", ScriptEntityValueUVE{Scene::EntityUVE{9U, 1U}}));
+    ASSERT_TRUE(context.SetInputUVE(1U, "Position", ScriptVector3ValueUVE{{1.0F, 2.0F, 3.0F}}));
+    AudioCaptureUVE capture;
+    ScriptEngineCallBindingsUVE bindings{};
+    bindings.userData = &capture;
+    bindings.audioSet3dPosition = CaptureAudioSet3dPositionUVE;
+    ScriptVmExecutionOptionsUVE options;
+    options.engineCallBindings = &bindings;
+
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(program, context, options);
+
+    ASSERT_TRUE(result.IsSuccessUVE());
+    EXPECT_EQ(result.instructionsExecuted, 1U);
+    EXPECT_EQ(capture.setPositionCount, 1U);
+    EXPECT_EQ(capture.position.value, (Math::Vector3UVE{1.0F, 2.0F, 3.0F}));
+    const std::optional<ScriptVmValueUVE> output = context.FindOutputUVE(1U, "Result");
+    ASSERT_TRUE(output.has_value());
+    ASSERT_TRUE(std::holds_alternative<bool>(*output));
+    EXPECT_TRUE(std::get<bool>(*output));
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_AudioSet3dPositionFailsClosedForNonFinitePosition) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U,
+                                    "audio.set_3d_position", {}, {}});
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(1U, "Source", ScriptEntityValueUVE{Scene::EntityUVE{9U, 1U}}));
+    ASSERT_TRUE(context.SetInputUVE(1U, "Position",
+                                    ScriptVector3ValueUVE{{std::numeric_limits<float>::quiet_NaN(), 0.0F, 0.0F}}));
+    AudioCaptureUVE capture;
+    ScriptEngineCallBindingsUVE bindings{};
+    bindings.userData = &capture;
+    bindings.audioSet3dPosition = CaptureAudioSet3dPositionUVE;
+    ScriptVmExecutionOptionsUVE options;
+    options.engineCallBindings = &bindings;
+
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(program, context, options);
+
+    EXPECT_EQ(result.status, ScriptVmStatusUVE::NodeExecutionFailed);
+    EXPECT_EQ(capture.setPositionCount, 0U);
 }
 
 } // namespace

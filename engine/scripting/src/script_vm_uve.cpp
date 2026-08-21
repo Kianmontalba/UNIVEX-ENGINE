@@ -1329,28 +1329,42 @@ namespace {
     ScriptVmExecutionContextUVE& context, const ScriptEngineCallBindingsUVE* bindings) {
     const bool isSetVolume = instruction.nodeTypeId == "audio.set_volume";
     const bool isSetPitch = instruction.nodeTypeId == "audio.set_pitch";
-    if (!isSetVolume && !isSetPitch) {
+    const bool isSetPosition = instruction.nodeTypeId == "audio.set_3d_position";
+    if (!isSetVolume && !isSetPitch && !isSetPosition) {
         return MakeNodeFailureUVE(instructionIndex, "Unknown Audio node type.");
+    }
+    const std::uint32_t nodeId = instruction.sourceNodeId;
+    const ScriptEntityValueUVE* source = FindEntityInputUVE(context, nodeId, "Source");
+    if (source == nullptr || !source->IsValidUVE()) {
+        return MakeNodeFailureUVE(instructionIndex, "Audio node requires a valid Source entity.");
+    }
+    bool accepted = false;
+    if (isSetPosition) {
+        const ScriptAudioPositionControlFunctionUVE callback =
+            bindings == nullptr ? nullptr : bindings->audioSet3dPosition;
+        const ScriptVector3ValueUVE* position = FindVector3InputUVE(context, nodeId, "Position");
+        if (callback == nullptr || position == nullptr || !std::isfinite(position->value.x) ||
+            !std::isfinite(position->value.y) || !std::isfinite(position->value.z) ||
+            !callback(bindings->userData, source->entity, *position, &accepted) || !accepted ||
+            !SetNodeOutputUVE(context, nodeId, "Result", true)) {
+            return MakeNodeFailureUVE(
+                instructionIndex, "Set 3D Position requires a finite Position and accepted callback output.");
+        }
+        return {};
     }
     const ScriptAudioScalarControlFunctionUVE callback =
         isSetVolume ? (bindings == nullptr ? nullptr : bindings->audioSetVolume)
                     : (bindings == nullptr ? nullptr : bindings->audioSetPitch);
-    if (callback == nullptr) {
-        return MakeNodeFailureUVE(instructionIndex, "Audio node requires a caller-owned audio binding.");
-    }
-    const std::uint32_t nodeId = instruction.sourceNodeId;
-    const ScriptEntityValueUVE* source = FindEntityInputUVE(context, nodeId, "Source");
     const char* valuePin = isSetVolume ? "Volume" : "Pitch";
     const float* value = FindNumberInputUVE(context, nodeId, valuePin);
-    const bool validValue = source != nullptr && source->IsValidUVE() && value != nullptr &&
-        std::isfinite(*value) && (isSetVolume ? *value >= 0.0F && *value <= 1.0F : *value > 0.0F);
-    if (!validValue) {
+    const bool validValue = value != nullptr && std::isfinite(*value) &&
+        (isSetVolume ? *value >= 0.0F && *value <= 1.0F : *value > 0.0F);
+    if (callback == nullptr || !validValue) {
         return MakeNodeFailureUVE(
             instructionIndex, isSetVolume
-                ? "Set Volume requires a valid Source entity and finite Volume in [0, 1]."
-                : "Set Pitch requires a valid Source entity and finite positive Pitch.");
+                ? "Set Volume requires a finite Volume in [0, 1] and accepted callback output."
+                : "Set Pitch requires a finite positive Pitch and accepted callback output.");
     }
-    bool accepted = false;
     if (!callback(bindings->userData, source->entity, *value, &accepted) || !accepted ||
         !SetNodeOutputUVE(context, nodeId, "Result", true)) {
         return MakeNodeFailureUVE(
@@ -2597,8 +2611,10 @@ namespace {
             (isMotionQueryNode && !HasRequiredMotionQueryNodeInputsUVE(instruction, context)) ||
             (isPhysicsNode && !HasRequiredPhysicsNodeInputsUVE(instruction, context)) ||
             (isAudioNode && (FindEntityInputUVE(context, instruction.sourceNodeId, "Source") == nullptr ||
-                             FindNumberInputUVE(context, instruction.sourceNodeId,
-                                                instruction.nodeTypeId == "audio.set_pitch" ? "Pitch" : "Volume") == nullptr)) ||
+                             (instruction.nodeTypeId == "audio.set_3d_position"
+                                  ? FindVector3InputUVE(context, instruction.sourceNodeId, "Position") == nullptr
+                                  : FindNumberInputUVE(context, instruction.sourceNodeId,
+                                                       instruction.nodeTypeId == "audio.set_pitch" ? "Pitch" : "Volume") == nullptr))) ||
             (isEngineLogNode && FindNumberInputUVE(context, instruction.sourceNodeId, "Value") == nullptr)) {
             ScriptVmExecutionResultUVE failure = MakeNodeFailureUVE(
                 instructionIndex, "Control-flow execution could not resolve typed node inputs.");
@@ -2903,8 +2919,10 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                     (isMotionQueryNode && !HasRequiredMotionQueryNodeInputsUVE(instruction, *context)) ||
                     (isPhysicsNode && !HasRequiredPhysicsNodeInputsUVE(instruction, *context)) ||
                     (isAudioNode && (FindEntityInputUVE(*context, instruction.sourceNodeId, "Source") == nullptr ||
-                                     FindNumberInputUVE(*context, instruction.sourceNodeId,
-                                                        instruction.nodeTypeId == "audio.set_pitch" ? "Pitch" : "Volume") == nullptr)) ||
+                                     (instruction.nodeTypeId == "audio.set_3d_position"
+                                          ? FindVector3InputUVE(*context, instruction.sourceNodeId, "Position") == nullptr
+                                          : FindNumberInputUVE(*context, instruction.sourceNodeId,
+                                                               instruction.nodeTypeId == "audio.set_pitch" ? "Pitch" : "Volume") == nullptr))) ||
                     (isEngineLogNode && FindNumberInputUVE(*context, instruction.sourceNodeId, "Value") == nullptr)) {
                     continue;
                 }
