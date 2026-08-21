@@ -217,6 +217,27 @@ TEST_F(ShapeCastSystemUVETest, CapsuleCastUVE_RejectsInvalidDimensionsAndFiniteI
     EXPECT_FALSE(ShapeCastSystemUVE::CapsuleCastUVE(entityManager, nonFinite).has_value());
 }
 
+TEST_F(ShapeCastSystemUVETest, ShapeCasts_SkipNonFiniteExpandedAabbs) {
+    MakeColliderEntityUVE(Math::Vector3UVE{1.0e38F, 0.0F, 0.0F}, Math::Vector3UVE{1.0F, 1.0F, 1.0F});
+    SphereCastQueryUVE sphere = MakeXAxisQueryUVE(0.0F, std::numeric_limits<float>::max(),
+                                                   std::numeric_limits<float>::max());
+    EXPECT_FALSE(ShapeCastSystemUVE::SphereCastUVE(entityManager, sphere).has_value());
+
+    BoxCastQueryUVE box;
+    box.ray = Math::RayUVE{Math::Vector3UVE{}, Math::Vector3UVE{1.0F, 0.0F, 0.0F}};
+    box.halfExtents = Math::Vector3UVE{std::numeric_limits<float>::max(), 0.0F, 0.0F};
+    box.maxDistance = std::numeric_limits<float>::max();
+    EXPECT_FALSE(ShapeCastSystemUVE::BoxCastUVE(entityManager, box).has_value());
+
+    MakeColliderEntityUVE(Math::Vector3UVE{0.0F, 2.0e38F, 0.0F}, Math::Vector3UVE{1.0F, 1.0F, 1.0F});
+    CapsuleCastQueryUVE capsule;
+    capsule.ray = Math::RayUVE{Math::Vector3UVE{}, Math::Vector3UVE{0.0F, 1.0F, 0.0F}};
+    capsule.radius = 1.0F;
+    capsule.height = std::numeric_limits<float>::max();
+    capsule.maxDistance = std::numeric_limits<float>::max();
+    EXPECT_FALSE(ShapeCastSystemUVE::CapsuleCastUVE(entityManager, capsule).has_value());
+}
+
 TEST_F(ShapeCastSystemUVETest, SphereCastUVE_RejectsInvalidFiniteInputs) {
     MakeColliderEntityUVE(Math::Vector3UVE{}, Math::Vector3UVE{1.0F, 1.0F, 1.0F});
 

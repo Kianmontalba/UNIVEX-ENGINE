@@ -25,6 +25,11 @@ namespace {
            std::isfinite(lengthSquared) && lengthSquared > 0.0F;
 }
 
+[[nodiscard]] bool IsFiniteAabbUVE(const Math::AabbUVE& aabb) noexcept {
+    return IsFiniteVectorUVE(aabb.min) && IsFiniteVectorUVE(aabb.max) &&
+           aabb.min.x <= aabb.max.x && aabb.min.y <= aabb.max.y && aabb.min.z <= aabb.max.z;
+}
+
 } // namespace
 
 std::optional<SphereCastHitUVE> ShapeCastSystemUVE::SphereCastUVE(
@@ -47,6 +52,9 @@ std::optional<SphereCastHitUVE> ShapeCastSystemUVE::SphereCastUVE(
             collider.worldAabb.min - radiusExtents,
             collider.worldAabb.max + radiusExtents,
         };
+        if (!IsFiniteAabbUVE(expandedAabb)) {
+            continue;
+        }
         const std::optional<Math::RayHitUVE> hit =
             Math::IntersectRayUVE(query.ray, expandedAabb, query.maxDistance);
         if (!hit.has_value() || (closestHit.has_value() && hit->distance >= closestHit->distance)) {
@@ -87,6 +95,9 @@ std::optional<CapsuleCastHitUVE> ShapeCastSystemUVE::CapsuleCastUVE(
             collider.worldAabb.min - halfExtents,
             collider.worldAabb.max + halfExtents,
         };
+        if (!IsFiniteAabbUVE(expandedAabb)) {
+            continue;
+        }
         const std::optional<Math::RayHitUVE> hit =
             Math::IntersectRayUVE(query.ray, expandedAabb, query.maxDistance);
         if (!hit.has_value()) {
@@ -129,6 +140,9 @@ std::optional<BoxCastHitUVE> ShapeCastSystemUVE::BoxCastUVE(
             collider.worldAabb.min - query.halfExtents,
             collider.worldAabb.max + query.halfExtents,
         };
+        if (!IsFiniteAabbUVE(expandedAabb)) {
+            continue;
+        }
         const std::optional<Math::RayHitUVE> hit =
             Math::IntersectRayUVE(query.ray, expandedAabb, query.maxDistance);
         if (!hit.has_value()) {
