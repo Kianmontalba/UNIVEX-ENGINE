@@ -200,10 +200,10 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
 
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
     EXPECT_FALSE(RegisterBuiltInScriptNodesUVE(registry));
-    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 168U);
+    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 169U);
 
     const std::vector<ScriptNodeTypeDescriptorUVE> descriptors = registry.GetNodeTypeDescriptorsUVE();
-    ASSERT_EQ(descriptors.size(), 168U);
+    ASSERT_EQ(descriptors.size(), 169U);
     const std::vector<std::string> expectedIds{
         "flow.sequence", "flow.branch", "flow.return", "flow.do_once", "flow.gate", "flow.switch",
         "flow.event", "flow.loop", "flow.for_loop", "flow.while_loop", "flow.delay",
@@ -248,7 +248,7 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
         "physics.apply_force", "physics.apply_impulse", "physics.set_velocity", "physics.get_velocity",
         "physics.enable_gravity", "physics.is_colliding", "audio.set_volume", "audio.set_pitch",
         "audio.set_3d_position", "audio.play_sound", "audio.stop_sound", "audio.is_playing",
-        "audio.set_attenuation"};
+        "audio.set_attenuation", "debug.print"};
     ASSERT_EQ(expectedIds.size(), descriptors.size());
     for (std::size_t index = 0U; index < expectedIds.size(); ++index) {
         EXPECT_EQ(descriptors[index].typeId, expectedIds[index]);
@@ -325,6 +325,8 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
         EXPECT_EQ(descriptors[index].category, "Audio");
         EXPECT_EQ(descriptors[index].iconId, "node.audio");
     }
+    EXPECT_EQ(descriptors[168U].category, "Debug");
+    EXPECT_EQ(descriptors[168U].iconId, "node.debug");
 
     const ScriptNodeTypeDescriptorUVE* lerp = registry.FindNodeTypeUVE("math.float.lerp");
     ASSERT_NE(lerp, nullptr);
@@ -6136,6 +6138,16 @@ TEST(ScriptBuiltInNodeUVETest, RegisterBuiltInScriptNodesUVE_ContainsAudioSetVol
     EXPECT_EQ(attenuationDescriptor->pins[3].type, ScriptValueTypeUVE::Number);
     EXPECT_EQ(attenuationDescriptor->pins[4].name, "Result");
     EXPECT_EQ(attenuationDescriptor->pins[4].type, ScriptValueTypeUVE::Boolean);
+
+    const ScriptNodeTypeDescriptorUVE* debugPrintDescriptor = registry.FindNodeTypeUVE("debug.print");
+    ASSERT_NE(debugPrintDescriptor, nullptr);
+    EXPECT_EQ(debugPrintDescriptor->displayName, "Print Number");
+    EXPECT_EQ(debugPrintDescriptor->category, "Debug");
+    EXPECT_EQ(debugPrintDescriptor->iconId, "node.debug");
+    ASSERT_EQ(debugPrintDescriptor->pins.size(), 1U);
+    EXPECT_EQ(debugPrintDescriptor->pins[0].name, "Value");
+    EXPECT_EQ(debugPrintDescriptor->pins[0].direction, ScriptPinDirectionUVE::Input);
+    EXPECT_EQ(debugPrintDescriptor->pins[0].type, ScriptValueTypeUVE::Number);
 }
 
 TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesEntityBeforeAudioSetVolume) {
@@ -6675,6 +6687,41 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_AudioSetAttenuationRejectsInvalid
     options.engineCallBindings = &bindings;
 
     EXPECT_EQ(ExecuteScriptBytecodeUVE(program, context, options).status, ScriptVmStatusUVE::NodeExecutionFailed);
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_DebugPrintDispatchesCopiedNumberToLogBinding) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U, "debug.print", {}, {}});
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(1U, "Value", 42.5F));
+    EngineLogCaptureUVE capture;
+    ScriptEngineCallBindingsUVE bindings{};
+    bindings.userData = &capture;
+    bindings.log = CaptureEngineLogUVE;
+    ScriptVmExecutionOptionsUVE options;
+    options.engineCallBindings = &bindings;
+
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(program, context, options);
+
+    ASSERT_TRUE(result.IsSuccessUVE());
+    EXPECT_EQ(capture.callCount, 1U);
+    EXPECT_FLOAT_EQ(capture.lastValue, 42.5F);
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_DebugPrintRejectsNonFiniteNumberBeforeCallback) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U, "debug.print", {}, {}});
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(1U, "Value", std::numeric_limits<float>::quiet_NaN()));
+    EngineLogCaptureUVE capture;
+    ScriptEngineCallBindingsUVE bindings{};
+    bindings.userData = &capture;
+    bindings.log = CaptureEngineLogUVE;
+    ScriptVmExecutionOptionsUVE options;
+    options.engineCallBindings = &bindings;
+
+    EXPECT_EQ(ExecuteScriptBytecodeUVE(program, context, options).status, ScriptVmStatusUVE::NodeExecutionFailed);
+    EXPECT_EQ(capture.callCount, 0U);
 }
 
 } // namespace
