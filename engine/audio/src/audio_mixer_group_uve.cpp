@@ -54,7 +54,7 @@ bool AudioMixerGroupUVE::RegisterGroupUVE(const std::string_view name, const flo
 }
 
 bool AudioMixerGroupUVE::RemoveGroupUVE(const std::string_view name) {
-    if (name == kMasterAudioMixerGroupNameUVE) {
+    if (!IsValidNameUVE(name) || name == kMasterAudioMixerGroupNameUVE) {
         return false;
     }
     const auto iterator = m_groups.find(std::string(name));
@@ -66,15 +66,16 @@ bool AudioMixerGroupUVE::RemoveGroupUVE(const std::string_view name) {
 }
 
 bool AudioMixerGroupUVE::HasGroupUVE(const std::string_view name) const {
-    return m_groups.contains(std::string(name));
+    return IsValidNameUVE(name) && m_groups.contains(std::string(name));
 }
 
 std::string AudioMixerGroupUVE::ResolveGroupNameUVE(const std::string_view name) const {
-    return HasGroupUVE(name) ? std::string(name) : std::string(kMasterAudioMixerGroupNameUVE);
+    return IsValidNameUVE(name) && HasGroupUVE(name) ? std::string(name)
+                                                       : std::string(kMasterAudioMixerGroupNameUVE);
 }
 
 bool AudioMixerGroupUVE::SetGroupVolumeUVE(const std::string_view name, const float volumeMultiplier) {
-    if (!IsValidVolumeMultiplierUVE(volumeMultiplier)) {
+    if (!IsValidNameUVE(name) || !IsValidVolumeMultiplierUVE(volumeMultiplier)) {
         return false;
     }
     const auto iterator = m_groups.find(std::string(name));
@@ -86,7 +87,7 @@ bool AudioMixerGroupUVE::SetGroupVolumeUVE(const std::string_view name, const fl
 }
 
 bool AudioMixerGroupUVE::SetGroupPitchUVE(const std::string_view name, const float pitchMultiplier) {
-    if (!IsValidPitchMultiplierUVE(pitchMultiplier)) {
+    if (!IsValidNameUVE(name) || !IsValidPitchMultiplierUVE(pitchMultiplier)) {
         return false;
     }
     const auto iterator = m_groups.find(std::string(name));
@@ -98,16 +99,25 @@ bool AudioMixerGroupUVE::SetGroupPitchUVE(const std::string_view name, const flo
 }
 
 float AudioMixerGroupUVE::GetGroupVolumeUVE(const std::string_view name) const {
+    if (!IsValidNameUVE(name)) {
+        return 1.0F;
+    }
     const auto iterator = m_groups.find(std::string(name));
     return iterator == m_groups.end() ? 1.0F : iterator->second.volumeMultiplier;
 }
 
 float AudioMixerGroupUVE::GetGroupPitchUVE(const std::string_view name) const {
+    if (!IsValidNameUVE(name)) {
+        return 1.0F;
+    }
     const auto iterator = m_groups.find(std::string(name));
     return iterator == m_groups.end() ? 1.0F : iterator->second.pitchMultiplier;
 }
 
 bool AudioMixerGroupUVE::AttachSourceUVE(const std::string_view name) {
+    if (!IsValidNameUVE(name)) {
+        return false;
+    }
     const auto iterator = m_groups.find(std::string(name));
     if (iterator == m_groups.end() || iterator->second.sourceCount == std::numeric_limits<std::size_t>::max()) {
         return false;
@@ -117,6 +127,9 @@ bool AudioMixerGroupUVE::AttachSourceUVE(const std::string_view name) {
 }
 
 bool AudioMixerGroupUVE::DetachSourceUVE(const std::string_view name) {
+    if (!IsValidNameUVE(name)) {
+        return false;
+    }
     const auto iterator = m_groups.find(std::string(name));
     if (iterator == m_groups.end() || iterator->second.sourceCount == 0U) {
         return false;
