@@ -299,10 +299,16 @@ TEST_F(InputSystemUVETest, ButtonActionTriggered_QueuesAndDeliversInputActionTri
     EXPECT_NEAR(receivedAxisValue, 0.0F, kEpsilon);
 }
 
-TEST_F(InputSystemUVETest, AxisActionValueChange_DoesNotQueueAnEvent) {
+TEST_F(InputSystemUVETest, AxisActionCrossingThreshold_QueuesCopiedAxisEvent) {
     int receivedCount = 0;
+    InputActionTypeUVE receivedType = InputActionTypeUVE::Button;
+    float receivedAxisValue = 0.0F;
     eventSystem.Subscribe<InputActionTriggeredEventUVE>(
-        [&receivedCount](const InputActionTriggeredEventUVE&) { ++receivedCount; });
+        [&](const InputActionTriggeredEventUVE& event) {
+            ++receivedCount;
+            receivedType = event.type;
+            receivedAxisValue = event.axisValue;
+        });
 
     inputSystem.RegisterActionUVE(InputActionUVE{"MoveHorizontal",
                                                    InputActionTypeUVE::Axis1D,
@@ -311,9 +317,55 @@ TEST_F(InputSystemUVETest, AxisActionValueChange_DoesNotQueueAnEvent) {
 
     inputSystem.SetKeyStateUVE(KeyCodeUVE::D, true);
     inputSystem.UpdateUVE();
+    EXPECT_EQ(receivedCount, 0); // queued, not yet dispatched
+    eventSystem.DispatchQueuedUVE();
+
+    EXPECT_EQ(receivedCount, 1);
+    EXPECT_EQ(receivedType, InputActionTypeUVE::Axis1D);
+    EXPECT_NEAR(receivedAxisValue, 1.0F, kEpsilon);
+}
+
+TEST_F(InputSystemUVETest, AxisActionBelowThreshold_DoesNotQueueEvent) {
+    GamepadInputSystemUVE gamepad{0.0F};
+    InputSystemUVE gamepadInputSystem{eventSystem, &gamepad};
+    int receivedCount = 0;
+    eventSystem.Subscribe<InputActionTriggeredEventUVE>(
+        [&receivedCount](const InputActionTriggeredEventUVE&) { ++receivedCount; });
+    gamepadInputSystem.RegisterActionUVE(InputActionUVE{
+        "MoveHorizontal", InputActionTypeUVE::Axis1D,
+        {GamepadAxisBindingUVE(0U, GamepadAxisUVE::LeftX, 1.0F)}, {}});
+
+    gamepad.SetConnectedUVE(0U, true);
+    gamepad.SetAxisStateUVE(0U, GamepadAxisUVE::LeftX, 0.5F);
+    gamepad.UpdateUVE();
+    gamepadInputSystem.UpdateUVE();
     eventSystem.DispatchQueuedUVE();
 
     EXPECT_EQ(receivedCount, 0);
+}
+
+TEST_F(InputSystemUVETest, AxisActionGamepadCrossingThreshold_UsesPreviousAxisSnapshot) {
+    GamepadInputSystemUVE gamepad{0.0F};
+    InputSystemUVE gamepadInputSystem{eventSystem, &gamepad};
+    float receivedAxisValue = 0.0F;
+    int receivedCount = 0;
+    eventSystem.Subscribe<InputActionTriggeredEventUVE>(
+        [&](const InputActionTriggeredEventUVE& event) {
+            ++receivedCount;
+            receivedAxisValue = event.axisValue;
+        });
+    gamepadInputSystem.RegisterActionUVE(InputActionUVE{
+        "MoveHorizontal", InputActionTypeUVE::Axis1D,
+        {GamepadAxisBindingUVE(0U, GamepadAxisUVE::LeftX, 1.0F)}, {}});
+
+    gamepad.SetConnectedUVE(0U, true);
+    gamepad.SetAxisStateUVE(0U, GamepadAxisUVE::LeftX, 0.8F);
+    gamepad.UpdateUVE();
+    gamepadInputSystem.UpdateUVE();
+    eventSystem.DispatchQueuedUVE();
+
+    EXPECT_EQ(receivedCount, 1);
+    EXPECT_NEAR(receivedAxisValue, 0.8F, kEpsilon);
 }
 
 } // namespace

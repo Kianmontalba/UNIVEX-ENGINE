@@ -51,7 +51,8 @@ public:
 
     /// Advances current->previous state for edge detection, computes mouse delta, drains the
     /// scroll accumulator, and queues an InputActionTriggeredEventUVE for every Button action
-    /// that newly transitioned to triggered this frame. Must be called exactly once per frame,
+    /// that newly transitioned to triggered plus every Axis1D action that crossed the documented
+    /// absolute threshold this frame. Must be called exactly once per frame,
     /// from the main thread, before anything reads this frame's input state.
     virtual void UpdateUVE() = 0;
 
