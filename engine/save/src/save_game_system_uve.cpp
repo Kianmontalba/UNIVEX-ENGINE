@@ -380,9 +380,7 @@ bool SaveGameSystemUVE::HasSaveUVE(int slotIndex) const {
     if (!IsValidSlotIndexUVE(slotIndex)) {
         return false;
     }
-    std::error_code errorCode;
-    const bool exists = std::filesystem::exists(SlotFilePathUVE(m_saveDirectory, slotIndex), errorCode);
-    return exists && !errorCode;
+    return GetSaveMetadataUVE(slotIndex).has_value();
 }
 
 std::optional<GameStateMetadataUVE> SaveGameSystemUVE::GetSaveMetadataUVE(int slotIndex) const {
