@@ -285,6 +285,8 @@ using ScriptAudioPositionControlFunctionUVE = bool (*) (
     bool* outResult) noexcept;
 using ScriptAudioTriggerFunctionUVE = bool (*)(
     void* userData, Scene::EntityUVE source, bool* outResult) noexcept;
+using ScriptAudioStateQueryFunctionUVE = bool (*)(
+    void* userData, Scene::EntityUVE source, bool* outResult) noexcept;
 
 struct ScriptEngineCallBindingsUVE final {
     ScriptEngineLogFunctionUVE log = nullptr;
@@ -347,6 +349,7 @@ struct ScriptEngineCallBindingsUVE final {
     ScriptAudioPositionControlFunctionUVE audioSet3dPosition = nullptr;
     ScriptAudioTriggerFunctionUVE audioPlaySound = nullptr;
     ScriptAudioTriggerFunctionUVE audioStopSound = nullptr;
+    ScriptAudioStateQueryFunctionUVE audioIsPlaying = nullptr;
 };
 
 struct ScriptVmExecutionOptionsUVE final {
