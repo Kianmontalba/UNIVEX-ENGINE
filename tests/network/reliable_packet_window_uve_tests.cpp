@@ -79,6 +79,20 @@ TEST(ReliablePacketWindowUVETest, RetryTimeoutBackoffRejectsInvalidInputsAtomica
     EXPECT_FLOAT_EQ(timeout, 7.0F);
 }
 
+TEST(ReliablePacketWindowUVETest, RejectsInconsistentReceiveStateAtomically) {
+    ReliableAcknowledgementStateUVE activeState{0U, 1U, true};
+    EXPECT_EQ(AcceptReliableSequenceUVE(7U, activeState), ReliablePacketReceiveStatusUVE::Invalid);
+    EXPECT_EQ(activeState.latestReceivedSequence, 0U);
+    EXPECT_EQ(activeState.receivedHistoryBits, 1U);
+    EXPECT_TRUE(activeState.hasReceivedSequence);
+
+    ReliableAcknowledgementStateUVE inactiveState{9U, 0U, false};
+    EXPECT_EQ(AcceptReliableSequenceUVE(7U, inactiveState), ReliablePacketReceiveStatusUVE::Invalid);
+    EXPECT_EQ(inactiveState.latestReceivedSequence, 9U);
+    EXPECT_EQ(inactiveState.receivedHistoryBits, 0U);
+    EXPECT_FALSE(inactiveState.hasReceivedSequence);
+}
+
 TEST(ReliablePacketWindowUVETest, FirstSequenceIsAcceptedAndAdvertised) {
     ReliableAcknowledgementStateUVE state;
     EXPECT_EQ(AcceptReliableSequenceUVE(7U, state), ReliablePacketReceiveStatusUVE::Accepted);
