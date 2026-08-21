@@ -11,6 +11,13 @@ TEST(MonitorInfoValidationUVETest, AcceptsValidSnapshotWithAtMostOnePrimary) {
     EXPECT_TRUE(ValidateMonitorSnapshotUVE({}));
 }
 
+TEST(MonitorInfoValidationUVETest, RejectsMonitorSnapshotBeyondBoundedEntryCap) {
+    std::vector<MonitorInfoUVE> monitors;
+    monitors.resize(kMaximumMonitorSnapshotEntriesUVE + 1U,
+                    MonitorInfoUVE{"Monitor", 1920U, 1080U, false});
+    EXPECT_FALSE(ValidateMonitorSnapshotUVE(monitors));
+}
+
 TEST(MonitorInfoValidationUVETest, RejectsInvalidEntryAndDuplicatePrimary) {
     EXPECT_FALSE(ValidateMonitorInfoUVE({"", 1920U, 1080U, true}));
     EXPECT_FALSE(ValidateMonitorInfoUVE({"Primary", 0U, 1080U, true}));
