@@ -3,12 +3,14 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <string>
 
 namespace UVE::Save {
 
 inline constexpr std::uint32_t kCurrentSavePayloadSchemaVersionUVE = 1U;
+inline constexpr std::size_t kMaximumSaveNameBytesUVE = 128U;
 
 /// Metadata section of a `.uvesave` file: timestamp, engine version, playtime — the spec's
 /// "Metadata (timestamp, version, playtime)" (Part 17). Carries engine version as four raw
@@ -48,7 +50,8 @@ struct GameStateMetadataUVE {
     int slotIndex = 0;
 
     /// Optional player-facing label (e.g. "Before the Dragon Fight"). Empty by default. Never
-    /// interpreted by SaveGameSystemUVE itself — purely round-tripped for UI display.
+    /// interpreted by SaveGameSystemUVE itself — purely round-tripped for UI display. The copied
+    /// UTF-8/byte string is capped by `kMaximumSaveNameBytesUVE` and may not contain NUL bytes.
     std::string saveName;
 };
 

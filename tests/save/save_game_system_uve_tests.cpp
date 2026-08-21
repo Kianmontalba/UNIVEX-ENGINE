@@ -244,6 +244,17 @@ TEST_F(SaveGameSystemUVETest, ListUsedSlotsUVE_NoSaveDirectoryYet_ReturnsEmptyNo
     EXPECT_TRUE(saveGameSystem.ListUsedSlotsUVE().empty());
 }
 
+TEST_F(SaveGameSystemUVETest, SaveUVE_RejectsOversizedOrNulSaveNameBeforeFilesystemWork) {
+    const EntityUVE entity = entityManager.CreateEntityUVE();
+    GameStateMetadataUVE metadata;
+    metadata.saveName.assign(kMaximumSaveNameBytesUVE + 1U, 'x');
+    EXPECT_FALSE(saveGameSystem.SaveUVE(18, entityManager, {entity}, metadata));
+
+    metadata.saveName = std::string{"Visible"} + '\0' + "Hidden";
+    EXPECT_FALSE(saveGameSystem.SaveUVE(19, entityManager, {entity}, metadata));
+    EXPECT_FALSE(std::filesystem::exists(saveDirectory));
+}
+
 TEST_F(SaveGameSystemUVETest, SaveUVE_OutOfRangeSlotIndex_ReturnsFalse) {
     const EntityUVE entity = entityManager.CreateEntityUVE();
     EXPECT_FALSE(saveGameSystem.SaveUVE(-3, entityManager, {entity}, GameStateMetadataUVE{}));
