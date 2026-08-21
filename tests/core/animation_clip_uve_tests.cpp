@@ -2,6 +2,8 @@
 
 #include "uve/core/animation_clip_uve.h"
 
+#include <limits>
+
 #include <gtest/gtest.h>
 
 namespace UVE::Core {
@@ -48,6 +50,13 @@ TEST(AnimationClipUVETest, CollectAnimationEventsUVE_ReturnsEventsAcrossLoopBoun
     ASSERT_EQ(events.size(), 2U);
     EXPECT_EQ(events[0].eventId, "step_right");
     EXPECT_EQ(events[1].eventId, "step_left");
+}
+
+TEST(AnimationClipUVETest, CollectAnimationEventsUVE_RejectsUnboundedFiniteLoopRange) {
+    const AnimationClipUVE clip = MakeClipUVE();
+    const std::vector<AnimationEventUVE> events =
+        CollectAnimationEventsUVE(clip, 0.0, std::numeric_limits<double>::max(), true);
+    EXPECT_TRUE(events.empty());
 }
 
 TEST(AnimationClipUVETest, ValidateAnimationClipUVE_RejectsUnsortedOrInvalidData) {

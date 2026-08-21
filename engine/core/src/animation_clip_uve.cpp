@@ -143,14 +143,37 @@ std::vector<AnimationEventUVE> CollectAnimationEventsUVE(const AnimationClipUVE&
     }
     const double firstLoop = std::floor(startSeconds / clip.durationSeconds);
     const double lastLoop = std::floor(endSeconds / clip.durationSeconds);
-    for (std::int64_t loop = static_cast<std::int64_t>(firstLoop);
-         loop <= static_cast<std::int64_t>(lastLoop); ++loop) {
+    if (!std::isfinite(firstLoop) || !std::isfinite(lastLoop) ||
+        firstLoop < static_cast<double>(std::numeric_limits<std::int64_t>::min()) ||
+        firstLoop >= static_cast<double>(std::numeric_limits<std::int64_t>::max()) ||
+        lastLoop < static_cast<double>(std::numeric_limits<std::int64_t>::min()) ||
+        lastLoop >= static_cast<double>(std::numeric_limits<std::int64_t>::max())) {
+        return result;
+    }
+    const std::int64_t firstLoopIndex = static_cast<std::int64_t>(firstLoop);
+    const std::int64_t lastLoopIndex = static_cast<std::int64_t>(lastLoop);
+    const std::uint64_t loopSpan = static_cast<std::uint64_t>(lastLoopIndex) -
+                                   static_cast<std::uint64_t>(firstLoopIndex);
+    const std::uint64_t maximumLoops =
+        (AnimationClipUVE::kMaximumCollectedEventsUVE / std::max<std::size_t>(clip.events.size(), 1U)) + 1U;
+    if (loopSpan >= maximumLoops) {
+        return result;
+    }
+    result.reserve(std::min(AnimationClipUVE::kMaximumCollectedEventsUVE,
+                            clip.events.size() * static_cast<std::size_t>(loopSpan + 1U)));
+    for (std::int64_t loop = firstLoopIndex;; ++loop) {
         const double offset = static_cast<double>(loop) * clip.durationSeconds;
         for (const AnimationEventUVE& event : clip.events) {
             const double occurrence = offset + event.timeSeconds;
             if (occurrence > startSeconds && occurrence <= endSeconds) {
+                if (result.size() >= AnimationClipUVE::kMaximumCollectedEventsUVE) {
+                    return result;
+                }
                 result.push_back(event);
             }
+        }
+        if (loop == lastLoopIndex) {
+            break;
         }
     }
     return result;
