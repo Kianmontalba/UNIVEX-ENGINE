@@ -202,9 +202,17 @@ void AudioSystemUVE::UpdateUVE() {
         const float groupPitch = m_impl->mixerGroups.GetGroupPitchUVE(state.mixerGroup);
         float attenuation = 1.0F;
         if (state.desc.spatial) {
-            const float distance = Math::LengthUVE(state.position - m_impl->listenerPosition);
-            attenuation = ComputeDistanceAttenuationUVE(distance, state.desc.minDistance,
-                                                         state.desc.maxDistance, state.desc.attenuationModel);
+            const Math::Vector3UVE listenerDelta = state.position - m_impl->listenerPosition;
+            const float distanceSquared = Math::LengthSquaredUVE(listenerDelta);
+            if (!std::isfinite(distanceSquared) || distanceSquared < 0.0F) {
+                attenuation = 0.0F;
+            } else {
+                const float distance = std::sqrt(distanceSquared);
+                attenuation = std::isfinite(distance)
+                    ? ComputeDistanceAttenuationUVE(distance, state.desc.minDistance,
+                                                     state.desc.maxDistance, state.desc.attenuationModel)
+                    : 0.0F;
+            }
         }
         AudioMixParametersUVE parameters;
         if (!EvaluateAudioMixParametersUVE(state.volume, state.pitch, groupVolume, groupPitch, attenuation, parameters)) {
