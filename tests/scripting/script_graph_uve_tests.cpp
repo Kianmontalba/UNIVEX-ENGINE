@@ -200,10 +200,10 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
 
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
     EXPECT_FALSE(RegisterBuiltInScriptNodesUVE(registry));
-    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 166U);
+    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 167U);
 
     const std::vector<ScriptNodeTypeDescriptorUVE> descriptors = registry.GetNodeTypeDescriptorsUVE();
-    ASSERT_EQ(descriptors.size(), 166U);
+    ASSERT_EQ(descriptors.size(), 167U);
     const std::vector<std::string> expectedIds{
         "flow.sequence", "flow.branch", "flow.return", "flow.do_once", "flow.gate", "flow.switch",
         "flow.event", "flow.loop", "flow.for_loop", "flow.while_loop", "flow.delay",
@@ -247,7 +247,7 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
         "physics.raycast", "physics.sphere_cast", "physics.box_cast", "physics.capsule_cast", "physics.overlap",
         "physics.apply_force", "physics.apply_impulse", "physics.set_velocity", "physics.get_velocity",
         "physics.enable_gravity", "physics.is_colliding", "audio.set_volume", "audio.set_pitch",
-        "audio.set_3d_position", "audio.play_sound", "audio.stop_sound"};
+        "audio.set_3d_position", "audio.play_sound", "audio.stop_sound", "audio.is_playing"};
     ASSERT_EQ(expectedIds.size(), descriptors.size());
     for (std::size_t index = 0U; index < expectedIds.size(); ++index) {
         EXPECT_EQ(descriptors[index].typeId, expectedIds[index]);
@@ -320,7 +320,7 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
         EXPECT_EQ(descriptors[index].category, "Physics");
         EXPECT_EQ(descriptors[index].iconId, "node.physics");
     }
-    for (std::size_t index = 161U; index < 166U; ++index) {
+    for (std::size_t index = 161U; index < 167U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Audio");
         EXPECT_EQ(descriptors[index].iconId, "node.audio");
     }
@@ -6109,6 +6109,16 @@ TEST(ScriptBuiltInNodeUVETest, RegisterBuiltInScriptNodesUVE_ContainsAudioSetVol
     EXPECT_EQ(stopDescriptor->pins[0].type, ScriptValueTypeUVE::Entity);
     EXPECT_EQ(stopDescriptor->pins[1].name, "Result");
     EXPECT_EQ(stopDescriptor->pins[1].type, ScriptValueTypeUVE::Boolean);
+
+    const ScriptNodeTypeDescriptorUVE* playingDescriptor = registry.FindNodeTypeUVE("audio.is_playing");
+    ASSERT_NE(playingDescriptor, nullptr);
+    EXPECT_EQ(playingDescriptor->displayName, "Is Playing");
+    EXPECT_EQ(playingDescriptor->category, "Audio");
+    ASSERT_EQ(playingDescriptor->pins.size(), 2U);
+    EXPECT_EQ(playingDescriptor->pins[0].name, "Source");
+    EXPECT_EQ(playingDescriptor->pins[0].type, ScriptValueTypeUVE::Entity);
+    EXPECT_EQ(playingDescriptor->pins[1].name, "Result");
+    EXPECT_EQ(playingDescriptor->pins[1].type, ScriptValueTypeUVE::Boolean);
 }
 
 TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesEntityBeforeAudioSetVolume) {
@@ -6491,6 +6501,73 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_AudioStopSoundFailsClosedForMissi
     ScriptBytecodeProgramUVE program;
     program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U,
                                     "audio.stop_sound", {}, {}});
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(1U, "Source", ScriptEntityValueUVE{Scene::EntityUVE{9U, 1U}}));
+
+    EXPECT_EQ(ExecuteScriptBytecodeUVE(program, context).status, ScriptVmStatusUVE::NodeExecutionFailed);
+}
+
+} // namespace
+} // namespace UVE::Scripting
+
+
+namespace UVE::Scripting {
+namespace {
+
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesEntityBeforeAudioIsPlaying) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({1U, "entity.spawn"}));
+    ASSERT_TRUE(graph.AddNodeUVE({2U, "audio.is_playing"}));
+    ASSERT_TRUE(graph.AddLinkUVE({{1U, "Result"}, {2U, "Source"}}));
+
+    const ScriptIrCompileResultUVE result = CompileScriptGraphToIrUVE(graph, registry);
+
+    ASSERT_TRUE(result.IsSuccessUVE());
+    ASSERT_TRUE(result.program.has_value());
+    ASSERT_EQ(result.program->instructions.size(), 3U);
+    EXPECT_EQ(result.program->instructions[0].nodeTypeId, "entity.spawn");
+    EXPECT_EQ(result.program->instructions[1].kind, ScriptIrInstructionKindUVE::TransferValue);
+    EXPECT_EQ(result.program->instructions[2].nodeTypeId, "audio.is_playing");
+}
+
+bool CaptureAudioIsPlayingUVE(void* userData, Scene::EntityUVE source, bool* outResult) noexcept {
+    auto* capture = static_cast<AudioCaptureUVE*>(userData);
+    if (capture == nullptr || outResult == nullptr || source != capture->source) {
+        return false;
+    }
+    *outResult = capture->setVolumeCount != 0U;
+    return true;
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_ExecutesAudioIsPlayingAndPublishesQueryValue) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U,
+                                    "audio.is_playing", {}, {}});
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(1U, "Source", ScriptEntityValueUVE{Scene::EntityUVE{9U, 1U}}));
+    AudioCaptureUVE capture;
+    capture.setVolumeCount = 1U;
+    ScriptEngineCallBindingsUVE bindings{};
+    bindings.userData = &capture;
+    bindings.audioIsPlaying = CaptureAudioIsPlayingUVE;
+    ScriptVmExecutionOptionsUVE options;
+    options.engineCallBindings = &bindings;
+
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(program, context, options);
+
+    ASSERT_TRUE(result.IsSuccessUVE());
+    const std::optional<ScriptVmValueUVE> output = context.FindOutputUVE(1U, "Result");
+    ASSERT_TRUE(output.has_value());
+    ASSERT_TRUE(std::holds_alternative<bool>(*output));
+    EXPECT_TRUE(std::get<bool>(*output));
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_AudioIsPlayingFailsClosedForMissingBinding) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U,
+                                    "audio.is_playing", {}, {}});
     ScriptVmExecutionContextUVE context;
     ASSERT_TRUE(context.SetInputUVE(1U, "Source", ScriptEntityValueUVE{Scene::EntityUVE{9U, 1U}}));
 

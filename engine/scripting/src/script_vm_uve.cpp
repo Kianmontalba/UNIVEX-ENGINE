@@ -1332,7 +1332,8 @@ namespace {
     const bool isSetPosition = instruction.nodeTypeId == "audio.set_3d_position";
     const bool isPlaySound = instruction.nodeTypeId == "audio.play_sound";
     const bool isStopSound = instruction.nodeTypeId == "audio.stop_sound";
-    if (!isSetVolume && !isSetPitch && !isSetPosition && !isPlaySound && !isStopSound) {
+    const bool isPlayingQuery = instruction.nodeTypeId == "audio.is_playing";
+    if (!isSetVolume && !isSetPitch && !isSetPosition && !isPlaySound && !isStopSound && !isPlayingQuery) {
         return MakeNodeFailureUVE(instructionIndex, "Unknown Audio node type.");
     }
     const std::uint32_t nodeId = instruction.sourceNodeId;
@@ -1341,6 +1342,17 @@ namespace {
         return MakeNodeFailureUVE(instructionIndex, "Audio node requires a valid Source entity.");
     }
     bool accepted = false;
+    if (isPlayingQuery) {
+        const ScriptAudioStateQueryFunctionUVE callback =
+            bindings == nullptr ? nullptr : bindings->audioIsPlaying;
+        bool isPlaying = false;
+        if (callback == nullptr || !callback(bindings->userData, source->entity, &isPlaying) ||
+            !SetNodeOutputUVE(context, nodeId, "Result", isPlaying)) {
+            return MakeNodeFailureUVE(instructionIndex,
+                                      "Is Playing requires an accepted caller-owned state query callback.");
+        }
+        return {};
+    }
     if (isPlaySound || isStopSound) {
         const ScriptAudioTriggerFunctionUVE callback =
             isPlaySound ? (bindings == nullptr ? nullptr : bindings->audioPlaySound)
@@ -2139,7 +2151,8 @@ namespace {
     if (FindEntityInputUVE(context, nodeId, "Source") == nullptr) {
         return false;
     }
-    if (instruction.nodeTypeId == "audio.play_sound" || instruction.nodeTypeId == "audio.stop_sound") {
+    if (instruction.nodeTypeId == "audio.play_sound" || instruction.nodeTypeId == "audio.stop_sound" ||
+        instruction.nodeTypeId == "audio.is_playing") {
         return true;
     }
     if (instruction.nodeTypeId == "audio.set_3d_position") {
