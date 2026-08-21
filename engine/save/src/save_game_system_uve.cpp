@@ -91,13 +91,14 @@ void AppendUint64UVE(std::vector<std::byte>& buffer, std::uint64_t value) {
 }
 
 [[nodiscard]] bool ReadBytesFromBufferUVE(const std::vector<std::byte>& buffer, std::size_t& offset,
-                                           std::size_t length, std::vector<std::byte>& outBytes) {
-    if (offset + length > buffer.size()) {
+                                           std::uint64_t length, std::vector<std::byte>& outBytes) {
+    if (offset > buffer.size() || length > static_cast<std::uint64_t>(buffer.size() - offset)) {
         return false;
     }
+    const std::size_t safeLength = static_cast<std::size_t>(length);
     outBytes.assign(buffer.begin() + static_cast<std::ptrdiff_t>(offset),
-                     buffer.begin() + static_cast<std::ptrdiff_t>(offset + length));
-    offset += length;
+                     buffer.begin() + static_cast<std::ptrdiff_t>(offset + safeLength));
+    offset += safeLength;
     return true;
 }
 

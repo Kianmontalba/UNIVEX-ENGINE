@@ -6,6 +6,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <optional>
 #include <string>
 #include <vector>
@@ -279,6 +280,31 @@ TEST_F(SaveGameSystemUVETest, LoadUVE_PayloadWithBogusLengthPrefix_ReturnsEmptyV
     EntityManagerUVE freshManager(memoryManager.GetDefaultAllocatorUVE(), eventSystem);
     EXPECT_TRUE(saveGameSystem.LoadUVE(12, freshManager).empty());
     EXPECT_FALSE(saveGameSystem.GetSaveMetadataUVE(12).has_value());
+}
+
+TEST_F(SaveGameSystemUVETest, LoadUVE_WorldLengthUint64OverflowIsRejectedWithoutCrashing) {
+    const EntityUVE entity = entityManager.CreateEntityUVE();
+    ASSERT_TRUE(saveGameSystem.SaveUVE(15, entityManager, {entity}, GameStateMetadataUVE{}));
+
+    const std::filesystem::path slotPath = saveDirectory / "slot_15.uvesave";
+    std::optional<std::pair<Asset::UveFileHeaderUVE, std::vector<std::byte>>> file =
+        Asset::ReadUveFileUVE(slotPath);
+    ASSERT_TRUE(file.has_value());
+    std::vector<std::byte> expandedPayload;
+    ASSERT_TRUE(DecompressSavePayloadUVE(file->second, expandedPayload));
+
+    std::uint32_t metadataLength = 0U;
+    ASSERT_GE(expandedPayload.size(), sizeof(metadataLength));
+    std::memcpy(&metadataLength, expandedPayload.data(), sizeof(metadataLength));
+    const std::size_t worldLengthOffset = sizeof(metadataLength) + static_cast<std::size_t>(metadataLength);
+    ASSERT_LE(worldLengthOffset + sizeof(std::uint64_t), expandedPayload.size());
+    const std::uint64_t absurdWorldLength = std::numeric_limits<std::uint64_t>::max();
+    std::memcpy(expandedPayload.data() + worldLengthOffset, &absurdWorldLength, sizeof(absurdWorldLength));
+    ASSERT_TRUE(Asset::WriteUveFileUVE(slotPath, Asset::AssetKindUVE::Save, expandedPayload));
+
+    EntityManagerUVE freshManager(memoryManager.GetDefaultAllocatorUVE(), eventSystem);
+    EXPECT_TRUE(saveGameSystem.LoadUVE(15, freshManager).empty());
+    EXPECT_FALSE(saveGameSystem.GetSaveMetadataUVE(15).has_value());
 }
 
 TEST_F(SaveGameSystemUVETest, SavePayloadMigrationRegistryUVE_ValidatesRegistrationAndFailureAtomicity) {
