@@ -3,6 +3,7 @@
 #include "uve/physics/character_controller_uve.h"
 
 #include <cmath>
+#include <limits>
 
 #include <gtest/gtest.h>
 
@@ -71,6 +72,26 @@ TEST(CharacterControllerCcdPolicyUVETest, RejectsNonFiniteDisplacementAndInvalid
               CcdEligibilityStatusUVE::Invalid);
     EXPECT_EQ(EvaluateCcdEligibilityUVE(Math::Vector3UVE{1.0F, 0.0F, 0.0F}, 0.0F),
               CcdEligibilityStatusUVE::Invalid);
+}
+
+TEST(CharacterControllerCcdPolicyUVETest, RejectsFiniteDisplacementWhoseLengthOverflows) {
+    const float maximumFloat = std::numeric_limits<float>::max();
+    EXPECT_EQ(EvaluateCcdEligibilityUVE(Math::Vector3UVE{maximumFloat, maximumFloat, 0.0F}, 0.25F),
+              CcdEligibilityStatusUVE::Invalid);
+}
+
+TEST_F(CharacterControllerUVETest, MoveUVE_RejectsFiniteDisplacementWhoseLengthOverflowsWithoutMutation) {
+    const Scene::EntityUVE controller = MakeControllerEntityUVE({1.0F, 2.0F, 3.0F}, {0.5F, 0.5F, 0.5F});
+    const Math::Vector3UVE positionBefore = GetWorldPositionUVE(controller);
+    const float maximumFloat = std::numeric_limits<float>::max();
+
+    const CharacterControllerMoveResultUVE moveResult = CharacterControllerUVE::MoveUVE(
+        entityManager, sceneGraph, collisionSystem,
+        CharacterControllerInputUVE{controller, {maximumFloat, maximumFloat, 0.0F}, 8U, 0.25F});
+
+    EXPECT_EQ(moveResult.code, CharacterControllerMoveCodeUVE::InvalidInput);
+    EXPECT_EQ(moveResult.substeps, 0U);
+    EXPECT_EQ(GetWorldPositionUVE(controller), positionBefore);
 }
 
 TEST_F(CharacterControllerUVETest, MoveUVE_FreeSpaceAppliesRequestedDisplacementDeterministically) {
