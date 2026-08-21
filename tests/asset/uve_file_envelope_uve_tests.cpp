@@ -26,6 +26,12 @@ namespace {
     return std::vector<std::byte>(bytes, bytes + text.size());
 }
 
+TEST(UveFileEnvelopeUVETest, IsUveFilePayloadSizeValidUVE_EnforcesMaximumWithoutAllocation) {
+    EXPECT_TRUE(IsUveFilePayloadSizeValidUVE(kMaximumUveFilePayloadBytesUVE));
+    EXPECT_FALSE(IsUveFilePayloadSizeValidUVE(kMaximumUveFilePayloadBytesUVE + 1U));
+    EXPECT_FALSE(IsUveFilePayloadSizeValidUVE(std::numeric_limits<std::size_t>::max()));
+}
+
 TEST(UveFileEnvelopeUVETest, WriteThenRead_RoundTripsPayloadAndAssetKind) {
     const std::filesystem::path path = "uve_file_envelope_tests_roundtrip.uveblob";
     std::filesystem::remove(path);
