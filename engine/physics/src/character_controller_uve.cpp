@@ -19,9 +19,13 @@ namespace {
     return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
 }
 
-[[nodiscard]] float FiniteLengthUVE(const Math::Vector3UVE& value) noexcept {
+[[nodiscard]] bool HasFiniteLengthUVE(const Math::Vector3UVE& value) noexcept {
     const float lengthSquared = Math::LengthSquaredUVE(value);
-    return std::isfinite(lengthSquared) && lengthSquared >= 0.0F ? std::sqrt(lengthSquared) : 0.0F;
+    return std::isfinite(lengthSquared) && lengthSquared >= 0.0F;
+}
+
+[[nodiscard]] float FiniteLengthUVE(const Math::Vector3UVE& value) noexcept {
+    return HasFiniteLengthUVE(value) ? std::sqrt(Math::LengthSquaredUVE(value)) : 0.0F;
 }
 
 [[nodiscard]] Math::Vector3UVE RemoveIntoNormalComponentUVE(
@@ -53,7 +57,7 @@ bool ValidateControllerInputUVE(Scene::IEntityManagerUVE& entityManager,
         result.code = CharacterControllerMoveCodeUVE::MissingCollider;
         return false;
     }
-    if (!IsFiniteVectorUVE(input.desiredDisplacement) ||
+    if (!IsFiniteVectorUVE(input.desiredDisplacement) || !HasFiniteLengthUVE(input.desiredDisplacement) ||
         !Scene::IsColliderComponentValidUVE(
             entityManager.GetComponentUVE<Scene::ColliderComponentUVE>(input.entity))) {
         result.code = CharacterControllerMoveCodeUVE::InvalidInput;
@@ -330,8 +334,8 @@ struct ToICandidateUVE final {
 
 CcdEligibilityStatusUVE EvaluateCcdEligibilityUVE(const Math::Vector3UVE displacement,
                                                    const float minimumSweepDistance) noexcept {
-    if (!IsFiniteVectorUVE(displacement) || !std::isfinite(minimumSweepDistance) ||
-        minimumSweepDistance <= 0.0F) {
+    if (!IsFiniteVectorUVE(displacement) || !HasFiniteLengthUVE(displacement) ||
+        !std::isfinite(minimumSweepDistance) || minimumSweepDistance <= 0.0F) {
         return CcdEligibilityStatusUVE::Invalid;
     }
     const float displacementLength = FiniteLengthUVE(displacement);
