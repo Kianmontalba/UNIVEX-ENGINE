@@ -371,6 +371,24 @@ TEST_F(PrefabSystemUVETest, InstantiateTwice_ProducesIndependentEntities) {
     std::filesystem::remove(prefabPath);
 }
 
+TEST_F(PrefabSystemUVETest, InstantiateUVE_InvalidParentFailsBeforeEntityMutation) {
+    const EntityUVE source = entityManager.CreateEntityUVE();
+    entityManager.AddComponentUVE<MeshComponentUVE>(source, MeshComponentUVE{Asset::AssetGuidUVE{21}, Asset::AssetGuidUVE{22}});
+    sceneGraph.AttachTransformUVE(entityManager, source, TransformComponentUVE{});
+
+    const std::filesystem::path prefabPath = "uve_prefab_tests_invalid_parent.uveprefab";
+    std::filesystem::remove(prefabPath);
+    const Asset::AssetGuidUVE guid = prefabSystem.SavePrefabUVE(entityManager, assetDatabase, source, prefabPath);
+    const std::size_t entityCountBefore = entityManager.GetEntityCountUVE();
+    const EntityUVE invalidParent{0xFFFFFFFFU, 1U};
+
+    const EntityUVE instance = prefabSystem.InstantiateUVE(entityManager, sceneGraph, assetDatabase, guid, invalidParent);
+
+    EXPECT_EQ(instance, kInvalidEntityUVE);
+    EXPECT_EQ(entityManager.GetEntityCountUVE(), entityCountBefore);
+    std::filesystem::remove(prefabPath);
+}
+
 TEST_F(PrefabSystemUVETest, InstantiateUVE_WithParent_ReparentsNewRoot) {
     const EntityUVE parent = entityManager.CreateEntityUVE();
     sceneGraph.AttachTransformUVE(entityManager, parent, TransformComponentUVE{});

@@ -38,6 +38,11 @@ EntityUVE PrefabSystemUVE::InstantiateWithRevisionUVE(
         UVE_ERROR("PrefabSystemUVE: source revision must be nonzero for prefab GUID {}", prefabGuid.value);
         return kInvalidEntityUVE;
     }
+    if (parent != kInvalidEntityUVE && !entityManager.IsAliveUVE(parent)) {
+        UVE_ERROR("PrefabSystemUVE: cannot instantiate prefab GUID {} under an invalid parent ({}, {})",
+                  prefabGuid.value, parent.index, parent.generation);
+        return kInvalidEntityUVE;
+    }
     const std::filesystem::path path = assetDatabase.ResolveUVE(prefabGuid);
     if (path.empty()) {
         UVE_ERROR("PrefabSystemUVE: unknown prefab GUID {}", prefabGuid.value);
