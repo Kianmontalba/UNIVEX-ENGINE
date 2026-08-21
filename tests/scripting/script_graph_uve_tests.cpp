@@ -75,6 +75,23 @@ bool CaptureEngineLogUVE(void* userData, const float value) noexcept {
     return capture->accept;
 }
 
+struct DebugWarningCaptureUVE final {
+    std::size_t callCount = 0U;
+    float lastValue = 0.0F;
+    bool accept = true;
+};
+
+bool CaptureDebugWarningUVE(void* userData, const float value, bool* outResult) noexcept {
+    auto* capture = static_cast<DebugWarningCaptureUVE*>(userData);
+    if (capture == nullptr || outResult == nullptr) {
+        return false;
+    }
+    ++capture->callCount;
+    capture->lastValue = value;
+    *outResult = capture->accept;
+    return true;
+}
+
 struct EngineTimeCaptureUVE final {
     std::size_t callCount = 0U;
     float value = 0.0F;
@@ -200,10 +217,10 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
 
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
     EXPECT_FALSE(RegisterBuiltInScriptNodesUVE(registry));
-    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 169U);
+    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 170U);
 
     const std::vector<ScriptNodeTypeDescriptorUVE> descriptors = registry.GetNodeTypeDescriptorsUVE();
-    ASSERT_EQ(descriptors.size(), 169U);
+    ASSERT_EQ(descriptors.size(), 170U);
     const std::vector<std::string> expectedIds{
         "flow.sequence", "flow.branch", "flow.return", "flow.do_once", "flow.gate", "flow.switch",
         "flow.event", "flow.loop", "flow.for_loop", "flow.while_loop", "flow.delay",
@@ -248,7 +265,7 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
         "physics.apply_force", "physics.apply_impulse", "physics.set_velocity", "physics.get_velocity",
         "physics.enable_gravity", "physics.is_colliding", "audio.set_volume", "audio.set_pitch",
         "audio.set_3d_position", "audio.play_sound", "audio.stop_sound", "audio.is_playing",
-        "audio.set_attenuation", "debug.print"};
+        "audio.set_attenuation", "debug.print", "debug.warning"};
     ASSERT_EQ(expectedIds.size(), descriptors.size());
     for (std::size_t index = 0U; index < expectedIds.size(); ++index) {
         EXPECT_EQ(descriptors[index].typeId, expectedIds[index]);
@@ -325,8 +342,10 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
         EXPECT_EQ(descriptors[index].category, "Audio");
         EXPECT_EQ(descriptors[index].iconId, "node.audio");
     }
-    EXPECT_EQ(descriptors[168U].category, "Debug");
-    EXPECT_EQ(descriptors[168U].iconId, "node.debug");
+    for (std::size_t index = 168U; index < 170U; ++index) {
+        EXPECT_EQ(descriptors[index].category, "Debug");
+        EXPECT_EQ(descriptors[index].iconId, "node.debug");
+    }
 
     const ScriptNodeTypeDescriptorUVE* lerp = registry.FindNodeTypeUVE("math.float.lerp");
     ASSERT_NE(lerp, nullptr);
@@ -6148,6 +6167,19 @@ TEST(ScriptBuiltInNodeUVETest, RegisterBuiltInScriptNodesUVE_ContainsAudioSetVol
     EXPECT_EQ(debugPrintDescriptor->pins[0].name, "Value");
     EXPECT_EQ(debugPrintDescriptor->pins[0].direction, ScriptPinDirectionUVE::Input);
     EXPECT_EQ(debugPrintDescriptor->pins[0].type, ScriptValueTypeUVE::Number);
+
+    const ScriptNodeTypeDescriptorUVE* debugWarningDescriptor = registry.FindNodeTypeUVE("debug.warning");
+    ASSERT_NE(debugWarningDescriptor, nullptr);
+    EXPECT_EQ(debugWarningDescriptor->displayName, "Warning Number");
+    EXPECT_EQ(debugWarningDescriptor->category, "Debug");
+    EXPECT_EQ(debugWarningDescriptor->iconId, "node.debug");
+    ASSERT_EQ(debugWarningDescriptor->pins.size(), 2U);
+    EXPECT_EQ(debugWarningDescriptor->pins[0].name, "Value");
+    EXPECT_EQ(debugWarningDescriptor->pins[0].direction, ScriptPinDirectionUVE::Input);
+    EXPECT_EQ(debugWarningDescriptor->pins[0].type, ScriptValueTypeUVE::Number);
+    EXPECT_EQ(debugWarningDescriptor->pins[1].name, "Result");
+    EXPECT_EQ(debugWarningDescriptor->pins[1].direction, ScriptPinDirectionUVE::Output);
+    EXPECT_EQ(debugWarningDescriptor->pins[1].type, ScriptValueTypeUVE::Boolean);
 }
 
 TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesEntityBeforeAudioSetVolume) {
@@ -6722,6 +6754,47 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_DebugPrintRejectsNonFiniteNumberB
 
     EXPECT_EQ(ExecuteScriptBytecodeUVE(program, context, options).status, ScriptVmStatusUVE::NodeExecutionFailed);
     EXPECT_EQ(capture.callCount, 0U);
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_DebugWarningPublishesAcceptedResult) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U, "debug.warning", {}, {}});
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(1U, "Value", 7.25F));
+    DebugWarningCaptureUVE capture;
+    ScriptEngineCallBindingsUVE bindings{};
+    bindings.userData = &capture;
+    bindings.debugWarning = CaptureDebugWarningUVE;
+    ScriptVmExecutionOptionsUVE options;
+    options.engineCallBindings = &bindings;
+
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(program, context, options);
+
+    ASSERT_TRUE(result.IsSuccessUVE());
+    EXPECT_EQ(capture.callCount, 1U);
+    EXPECT_FLOAT_EQ(capture.lastValue, 7.25F);
+    const std::optional<ScriptVmValueUVE> output = context.FindOutputUVE(1U, "Result");
+    ASSERT_TRUE(output.has_value());
+    ASSERT_TRUE(std::holds_alternative<bool>(*output));
+    EXPECT_TRUE(std::get<bool>(*output));
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_DebugWarningRejectsCallbackWithoutOutput) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U, "debug.warning", {}, {}});
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(1U, "Value", 7.25F));
+    DebugWarningCaptureUVE capture;
+    capture.accept = false;
+    ScriptEngineCallBindingsUVE bindings{};
+    bindings.userData = &capture;
+    bindings.debugWarning = CaptureDebugWarningUVE;
+    ScriptVmExecutionOptionsUVE options;
+    options.engineCallBindings = &bindings;
+
+    EXPECT_EQ(ExecuteScriptBytecodeUVE(program, context, options).status, ScriptVmStatusUVE::NodeExecutionFailed);
+    EXPECT_EQ(capture.callCount, 1U);
+    EXPECT_FALSE(context.FindOutputUVE(1U, "Result").has_value());
 }
 
 } // namespace

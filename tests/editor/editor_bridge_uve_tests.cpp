@@ -560,8 +560,8 @@ TEST(EditorBridgeUVETest, SnapshotUVE_CopiesHierarchyInspectorAndNativePanelSess
         EXPECT_EQ(snapshot.visualScripting.linkCount, 0U);
         EXPECT_EQ(snapshot.visualScripting.canvas.nodes.size(), 0U);
         EXPECT_EQ(snapshot.visualScripting.canvas.links.size(), 0U);
-        ASSERT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds.size(), 169U);
-        ASSERT_EQ(snapshot.visualScripting.canvas.paletteDescriptors.size(), 169U);
+        ASSERT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds.size(), 170U);
+        ASSERT_EQ(snapshot.visualScripting.canvas.paletteDescriptors.size(), 170U);
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[0], "flow.sequence");
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[1], "flow.branch");
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[2], "flow.return");
@@ -705,6 +705,7 @@ TEST(EditorBridgeUVETest, SnapshotUVE_CopiesHierarchyInspectorAndNativePanelSess
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[159], "physics.enable_gravity");
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[160], "physics.is_colliding");
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[168], "debug.print");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[169], "debug.warning");
         EXPECT_FALSE(snapshot.visualScripting.canvas.nodesTruncated);
         EXPECT_FALSE(snapshot.visualScripting.canvas.linksTruncated);
 

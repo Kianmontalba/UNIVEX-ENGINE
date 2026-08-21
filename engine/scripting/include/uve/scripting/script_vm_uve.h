@@ -182,6 +182,7 @@ struct ScriptVmTraceEventUVE final {
 };
 
 using ScriptEngineLogFunctionUVE = bool (*)(void* userData, float value) noexcept;
+using ScriptDebugWarningFunctionUVE = bool (*)(void* userData, float value, bool* outResult) noexcept;
 using ScriptEngineGetTimeFunctionUVE = bool (*)(void* userData, float* outSeconds) noexcept;
 using ScriptEntitySpawnFunctionUVE = bool (*)(void* userData, Scene::EntityUVE* outEntity) noexcept;
 using ScriptEntityDestroyFunctionUVE = bool (*)(void* userData, Scene::EntityUVE entity) noexcept;
@@ -354,6 +355,7 @@ struct ScriptEngineCallBindingsUVE final {
     ScriptAudioTriggerFunctionUVE audioStopSound = nullptr;
     ScriptAudioStateQueryFunctionUVE audioIsPlaying = nullptr;
     ScriptAudioAttenuationControlFunctionUVE audioSetAttenuation = nullptr;
+    ScriptDebugWarningFunctionUVE debugWarning = nullptr;
 };
 
 struct ScriptVmExecutionOptionsUVE final {
