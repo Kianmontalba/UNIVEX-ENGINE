@@ -13,6 +13,31 @@ constexpr std::uint32_t kHalfSequenceSpaceUVE = 0x80000000U;
     const std::uint32_t distance = candidate - reference;
     return distance != 0U && distance < kHalfSequenceSpaceUVE;
 }
+
+[[nodiscard]] bool IsConsistentActiveReassemblyStateUVE(
+    const ReliablePayloadReassemblyStateUVE& state) noexcept {
+    if (!state.IsActiveUVE() || state.fragmentCount == 0U ||
+        state.fragmentCount > kReliablePacketMaximumFragmentCountUVE ||
+        state.fragments.size() != state.fragmentCount || state.receivedFragmentCount == 0U ||
+        state.receivedFragmentCount > state.fragmentCount ||
+        state.receivedByteCount > kReliablePacketMaximumReassembledPayloadBytesUVE) {
+        return false;
+    }
+
+    std::size_t actualFragmentCount = 0U;
+    std::size_t actualByteCount = 0U;
+    for (const std::vector<std::uint8_t>& fragment : state.fragments) {
+        if (fragment.empty()) {
+            continue;
+        }
+        ++actualFragmentCount;
+        if (fragment.size() > kReliablePacketMaximumReassembledPayloadBytesUVE - actualByteCount) {
+            return false;
+        }
+        actualByteCount += fragment.size();
+    }
+    return actualFragmentCount == state.receivedFragmentCount && actualByteCount == state.receivedByteCount;
+}
 } // namespace
 
 bool SerializeReliablePacketHeaderUVE(const ReliablePacketHeaderUVE& header,
@@ -83,6 +108,9 @@ ReliablePayloadReassemblyStatusUVE AcceptReliablePayloadFragmentUVE(
             return ReliablePayloadReassemblyStatusUVE::Invalid;
         }
     } else {
+        if (!IsConsistentActiveReassemblyStateUVE(state)) {
+            return ReliablePayloadReassemblyStatusUVE::Invalid;
+        }
         if (state.messageId != messageId || state.fragmentCount != fragmentCount ||
             state.fragments.size() != fragmentCount) {
             return ReliablePayloadReassemblyStatusUVE::Conflict;
