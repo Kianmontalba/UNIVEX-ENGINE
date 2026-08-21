@@ -10,6 +10,7 @@
 #include "uve/input/key_code_uve.h"
 #include "uve/input/mouse_button_uve.h"
 #include "uve/window/window_events_uve.h"
+#include "uve/window/monitor_info_validation_uve.h"
 
 namespace UVE::Window {
 
@@ -292,6 +293,9 @@ std::vector<MonitorInfoUVE> WindowManagerUVE::EnumerateMonitorsUVE() const {
     std::vector<MonitorInfoUVE> monitors;
     int monitorCount = 0;
     GLFWmonitor** const glfwMonitors = glfwGetMonitors(&monitorCount);
+    if (monitorCount < 0 || (monitorCount > 0 && glfwMonitors == nullptr)) {
+        return {};
+    }
     GLFWmonitor* const primaryMonitor = glfwGetPrimaryMonitor();
 
     monitors.reserve(static_cast<std::size_t>(monitorCount));
@@ -304,6 +308,10 @@ std::vector<MonitorInfoUVE> WindowManagerUVE::EnumerateMonitorsUVE() const {
         const char* const name = glfwGetMonitorName(monitor);
         monitors.push_back(MonitorInfoUVE{name != nullptr ? name : "", static_cast<std::uint32_t>(mode->width),
                                            static_cast<std::uint32_t>(mode->height), monitor == primaryMonitor});
+    }
+    if (!ValidateMonitorSnapshotUVE(monitors)) {
+        UVE_ERROR("WindowManagerUVE: GLFW returned an invalid monitor snapshot");
+        return {};
     }
     return monitors;
 }

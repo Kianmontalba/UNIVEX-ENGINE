@@ -15,6 +15,7 @@
 #include "uve/events/event_system_uve.h"
 #include "uve/input/input_system_uve.h"
 #include "uve/window/window_events_uve.h"
+#include "uve/window/monitor_info_validation_uve.h"
 
 namespace UVE::Window::Tests {
 namespace {
@@ -100,9 +101,10 @@ TEST_F(WindowManagerUVETest, SetFullscreenUVE_RoundTripsWithoutCrashing) {
     EXPECT_FALSE(windowManager->IsFullscreenUVE());
 }
 
-TEST_F(WindowManagerUVETest, EnumerateMonitorsUVE_ReturnsAtLeastOneEntry) {
+TEST_F(WindowManagerUVETest, EnumerateMonitorsUVE_ReturnsValidatedSnapshot) {
     const std::vector<MonitorInfoUVE> monitors = windowManager->EnumerateMonitorsUVE();
     EXPECT_FALSE(monitors.empty());
+    EXPECT_TRUE(ValidateMonitorSnapshotUVE(monitors));
 }
 
 TEST_F(WindowManagerUVETest, ResizingWindow_PublishesWindowResizedEventUVE) {
