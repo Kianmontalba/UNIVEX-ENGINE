@@ -118,6 +118,23 @@ TEST(UveFileEnvelopeUVETest, ReadUveFileUVE_BadMagic_ReturnsNulloptAndLogsError)
     std::filesystem::remove(path);
 }
 
+TEST(UveFileEnvelopeUVETest, ReadUveFileUVE_InvalidAssetKind_ReturnsNullopt) {
+    const std::filesystem::path path = "uve_file_envelope_tests_bad_asset_kind.uveblob";
+    std::filesystem::remove(path);
+    ASSERT_TRUE(WriteUveFileUVE(path, AssetKindUVE::Blob, MakePayloadUVE("data")));
+
+    {
+        std::fstream file(path, std::ios::binary | std::ios::in | std::ios::out);
+        ASSERT_TRUE(file.is_open());
+        const std::uint32_t invalidAssetKind = 0xFFFFFFFFU;
+        file.seekp(8);
+        file.write(reinterpret_cast<const char*>(&invalidAssetKind), sizeof(invalidAssetKind));
+    }
+
+    EXPECT_FALSE(ReadUveFileUVE(path).has_value());
+    std::filesystem::remove(path);
+}
+
 TEST(UveFileEnvelopeUVETest, ReadUveFileUVE_UnsupportedCompression_ReturnsNulloptAndLogsError) {
     const std::filesystem::path path = "uve_file_envelope_tests_bad_compression.uveblob";
     std::filesystem::remove(path);

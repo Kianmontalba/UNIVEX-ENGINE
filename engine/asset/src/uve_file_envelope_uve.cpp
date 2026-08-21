@@ -22,6 +22,11 @@ constexpr std::uint64_t kMaximumPayloadBytesUVE = 512ULL * 1024ULL * 1024ULL;
 constexpr std::size_t kEnvelopeHeaderBytesUVE =
     kUveMagicUVE.size() + sizeof(std::uint32_t) + sizeof(std::uint32_t) + sizeof(std::uint32_t) + sizeof(std::uint64_t);
 
+[[nodiscard]] bool IsAssetKindValidUVE(const std::uint32_t assetType) noexcept {
+    return assetType >= static_cast<std::uint32_t>(AssetKindUVE::Scene) &&
+           assetType <= static_cast<std::uint32_t>(AssetKindUVE::Audio);
+}
+
 template <typename T>
 void AppendValueUVE(std::vector<std::byte>& bytes, const T value) {
     static_assert(std::is_trivially_copyable_v<T>);
@@ -82,6 +87,10 @@ DecodeUveFileEnvelopeUVE(const std::vector<std::byte>& envelope, const std::stri
 
     if (header.version != kEnvelopeVersionUVE) {
         UVE_ERROR("UveFileEnvelopeUVE: \"{}\" has unsupported envelope version {}", source, header.version);
+        return std::nullopt;
+    }
+    if (!IsAssetKindValidUVE(assetType)) {
+        UVE_ERROR("UveFileEnvelopeUVE: \"{}\" has an invalid asset kind {}", source, assetType);
         return std::nullopt;
     }
     if (header.compressionMethod != kCompressionMethodNoneUVE) {

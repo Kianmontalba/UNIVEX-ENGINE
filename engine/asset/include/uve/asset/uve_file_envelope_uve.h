@@ -59,8 +59,9 @@ struct UveFileHeaderUVE {
 
 /// Validates and decodes a universal `.uve*` binary envelope held in memory. `sourceDescription`
 /// appears in diagnostic logging and should identify the caller's logical source. Returns
-/// std::nullopt for bad magic, a truncated header/payload, unsupported version/compression, or an
-/// oversized payload. Trailing bytes remain permitted for compatibility with ReadUveFileUVE().
+/// std::nullopt for bad magic, a truncated header/payload, unsupported version/compression, an invalid
+/// asset-kind value, or an oversized payload. Trailing bytes remain permitted for compatibility with
+/// ReadUveFileUVE().
 [[nodiscard]] std::optional<std::pair<UveFileHeaderUVE, std::vector<std::byte>>>
 DecodeUveFileEnvelopeUVE(const std::vector<std::byte>& envelope,
                          std::string_view sourceDescription = "<memory>");
@@ -74,10 +75,10 @@ DecodeUveFileEnvelopeUVE(const std::vector<std::byte>& envelope,
 
 /// Reads and validates a `.uve*` file written by WriteUveFileUVE(), delegating binary parsing
 /// to DecodeUveFileEnvelopeUVE(). Returns `std::nullopt` (logging a detailed `UVE_ERROR`: path +
-/// reason) on any failure — missing file, bad magic, truncated header/payload, or an unsupported
-/// compression method — never throws and never crashes. Deliberately does not validate `assetType`
-/// against any specific expected value; callers that care (e.g. `SceneSerializerUVE` rejecting a
-/// Bundle file, or vice versa) check `UveFileHeaderUVE::assetType` themselves.
+/// reason) on any failure — missing file, bad magic, truncated header/payload, invalid asset-kind
+/// value, or an unsupported compression method — never throws and never crashes. It does not validate
+/// `assetType` against any specific expected value; callers that care (e.g. `SceneSerializerUVE` rejecting
+/// a Bundle file, or vice versa) check `UveFileHeaderUVE::assetType` themselves.
 [[nodiscard]] std::optional<std::pair<UveFileHeaderUVE, std::vector<std::byte>>>
 ReadUveFileUVE(const std::filesystem::path& path);
 
