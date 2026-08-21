@@ -49,10 +49,13 @@ float InputSystemUVE::GetBindingValueUVE(const InputBindingUVE& binding,
             return 0.0F;
         }
         const std::size_t axisIndex = static_cast<std::size_t>(binding.gamepadAxis);
-        if (axisIndex >= kGamepadAxisCountUVE || usePreviousGamepadSnapshot) {
+        if (axisIndex >= kGamepadAxisCountUVE) {
             return 0.0F;
         }
-        const float value = currentGamepadState[binding.gamepadIndex].axes[axisIndex] * binding.scale;
+        const GamepadStateSnapshotUVE& snapshot =
+            usePreviousGamepadSnapshot ? previousGamepadState[binding.gamepadIndex]
+                                        : currentGamepadState[binding.gamepadIndex];
+        const float value = snapshot.axes[axisIndex] * binding.scale;
         return std::isfinite(value) ? std::clamp(value, -1.0F, 1.0F) : 0.0F;
     }
     }
@@ -128,17 +131,41 @@ void InputSystemUVE::UpdateUVE() {
     }
     m_mouseDelta = m_currentMousePosition - m_previousMousePosition;
 
+    const auto GetAxisSnapshotValueUVE = [&](const InputActionUVE& action, const bool previous) {
+        const auto SumBindingValuesUVE = [&](const std::vector<InputBindingUVE>& bindings) {
+            float sum = 0.0F;
+            for (const InputBindingUVE& binding : bindings) {
+                sum += GetBindingValueUVE(
+                    binding, previous ? m_previousKeyState : m_currentKeyState,
+                    previous ? m_previousMouseButtonState : m_currentMouseButtonState,
+                    m_currentGamepadState, m_previousGamepadState, previous);
+            }
+            return sum;
+        };
+        return std::clamp(SumBindingValuesUVE(action.positiveBindings) -
+                              SumBindingValuesUVE(action.negativeBindings),
+                          -1.0F, 1.0F);
+    };
+
     for (const auto& [name, action] : m_actions) {
-        if (action.type != InputActionTypeUVE::Button) {
-            continue;
-        }
-        const bool isDownNow = AnyBindingDownUVE(action.positiveBindings, m_currentKeyState, m_currentMouseButtonState,
-                                             m_currentGamepadState, m_previousGamepadState, false);
-        const bool wasDownBefore =
-            AnyBindingDownUVE(action.positiveBindings, m_previousKeyState, m_previousMouseButtonState,
-                              m_currentGamepadState, m_previousGamepadState, true);
-        if (isDownNow && !wasDownBefore) {
-            m_eventSystem->QueueEvent(InputActionTriggeredEventUVE{name, InputActionTypeUVE::Button, 0.0F});
+        if (action.type == InputActionTypeUVE::Button) {
+            const bool isDownNow = AnyBindingDownUVE(action.positiveBindings, m_currentKeyState,
+                                                     m_currentMouseButtonState, m_currentGamepadState,
+                                                     m_previousGamepadState, false);
+            const bool wasDownBefore =
+                AnyBindingDownUVE(action.positiveBindings, m_previousKeyState, m_previousMouseButtonState,
+                                  m_currentGamepadState, m_previousGamepadState, true);
+            if (isDownNow && !wasDownBefore) {
+                m_eventSystem->QueueEvent(InputActionTriggeredEventUVE{name, InputActionTypeUVE::Button, 0.0F});
+            }
+        } else {
+            const float currentAxisValue = GetAxisSnapshotValueUVE(action, false);
+            const float previousAxisValue = GetAxisSnapshotValueUVE(action, true);
+            if (std::fabs(currentAxisValue) > kInputActionAxisTriggerThresholdUVE &&
+                std::fabs(previousAxisValue) <= kInputActionAxisTriggerThresholdUVE) {
+                m_eventSystem->QueueEvent(
+                    InputActionTriggeredEventUVE{name, InputActionTypeUVE::Axis1D, currentAxisValue});
+            }
         }
     }
 }

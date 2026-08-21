@@ -9,12 +9,13 @@
 
 namespace UVE::Input {
 
-/// Queued through IEventSystemUVE (Events::IEventSystemUVE::QueueEvent<T>()) whenever a Button
-/// InputActionUVE newly transitions to triggered — mirrors AssetLoadCompletedEventUVE's precedent
-/// of a plain event struct, not a bespoke observer/callback mechanism. `type`/`axisValue` let
-/// this one struct also serve Axis1D actions once a future increment adds rate-limited/
-/// threshold-crossing axis events; this increment only ever queues it for Button-type triggers,
-/// so `type` is always `Button` and `axisValue` is always `0.0F` today.
+inline constexpr float kInputActionAxisTriggerThresholdUVE = 0.5F;
+
+/// Queued through IEventSystemUVE (Events::IEventSystemUVE::QueueEvent<T>()) when a Button action
+/// newly transitions to triggered or an Axis1D action crosses from an absolute value at/below
+/// `kInputActionAxisTriggerThresholdUVE` to a value above it. This remains a plain copied event
+/// struct rather than a bespoke observer/callback mechanism; Axis1D events carry the current
+/// clamped value in `axisValue`, while Button events retain the zero default.
 struct InputActionTriggeredEventUVE {
     std::string actionName;
     InputActionTypeUVE type = InputActionTypeUVE::Button;
