@@ -3,6 +3,8 @@
 #include "uve/render/particle_render_bridge_uve.h"
 #include "uve/render/render_queue_uve.h"
 
+#include <limits>
+
 #include <gtest/gtest.h>
 
 namespace UVE::Render::Tests {
@@ -85,13 +87,30 @@ TEST(ParticleRenderBridgeUVETest, ExtractUVE_ZeroCapDoesNotCopyState) {
     EXPECT_TRUE(snapshot.truncated);
 }
 
+TEST(ParticleRenderBridgeUVETest, RenderQueueUVE_RejectsInvalidSnapshotWithoutMutatingExistingItems) {
+    RenderQueueUVE queue;
+    queue.particleItems = {{{8U, 1U}, {}, 1.0F, 2.0F, 1U}};
+    const RenderQueueUVE before = queue;
+
+    ParticleRenderSnapshotUVE invalidSnapshot;
+    invalidSnapshot.sourceParticleCount = 1U;
+    invalidSnapshot.items = {{{9U, 1U}, Math::Vector3UVE{std::numeric_limits<float>::infinity(), 0.0F, 0.0F},
+                               1.0F, 2.0F, 2U}};
+
+    queue.AppendParticleSnapshotUVE(invalidSnapshot);
+
+    EXPECT_EQ(queue.particleItems, before.particleItems);
+    EXPECT_TRUE(queue.particleItemsTruncated);
+}
+
 TEST(ParticleRenderBridgeUVETest, RenderQueueUVE_AppendsCopiesAndSortsParticleItemsDeterministically) {
     RenderQueueUVE queue;
     ParticleRenderSnapshotUVE snapshot;
+    snapshot.sourceParticleCount = 3U;
     snapshot.items = {
         {{9U, 1U}, {}, 1.0F, 1.0F, 2U},
         {{8U, 1U}, {}, 1.0F, 3.0F, 1U},
-        {{8U, 1U}, {}, 1.0F, 3.0F, 0U},
+        {{8U, 1U}, {}, 1.0F, 3.0F, 2U},
     };
     snapshot.truncated = true;
 
@@ -99,8 +118,8 @@ TEST(ParticleRenderBridgeUVETest, RenderQueueUVE_AppendsCopiesAndSortsParticleIt
     queue.SortUVE();
     ASSERT_EQ(queue.particleItems.size(), 3U);
     EXPECT_TRUE(queue.particleItemsTruncated);
-    EXPECT_EQ(queue.particleItems[0].sequence, 0U);
-    EXPECT_EQ(queue.particleItems[1].sequence, 1U);
+    EXPECT_EQ(queue.particleItems[0].sequence, 1U);
+    EXPECT_EQ(queue.particleItems[1].sequence, 2U);
     EXPECT_EQ(queue.particleItems[2].entity, (Scene::EntityUVE{9U, 1U}));
 }
 

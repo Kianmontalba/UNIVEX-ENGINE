@@ -27,6 +27,10 @@ void RenderQueueUVE::SortUVE() {
 }
 
 void RenderQueueUVE::AppendParticleSnapshotUVE(const ParticleRenderSnapshotUVE& snapshot) {
+    if (!ValidateParticleRenderSnapshotUVE(snapshot)) {
+        particleItemsTruncated = true;
+        return;
+    }
     particleItems.insert(particleItems.end(), snapshot.items.begin(), snapshot.items.end());
     particleItemsTruncated = particleItemsTruncated || snapshot.truncated;
 }
