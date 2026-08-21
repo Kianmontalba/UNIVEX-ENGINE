@@ -200,10 +200,10 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
 
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
     EXPECT_FALSE(RegisterBuiltInScriptNodesUVE(registry));
-    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 164U);
+    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 165U);
 
     const std::vector<ScriptNodeTypeDescriptorUVE> descriptors = registry.GetNodeTypeDescriptorsUVE();
-    ASSERT_EQ(descriptors.size(), 164U);
+    ASSERT_EQ(descriptors.size(), 165U);
     const std::vector<std::string> expectedIds{
         "flow.sequence", "flow.branch", "flow.return", "flow.do_once", "flow.gate", "flow.switch",
         "flow.event", "flow.loop", "flow.for_loop", "flow.while_loop", "flow.delay",
@@ -247,7 +247,7 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
         "physics.raycast", "physics.sphere_cast", "physics.box_cast", "physics.capsule_cast", "physics.overlap",
         "physics.apply_force", "physics.apply_impulse", "physics.set_velocity", "physics.get_velocity",
         "physics.enable_gravity", "physics.is_colliding", "audio.set_volume", "audio.set_pitch",
-        "audio.set_3d_position"};
+        "audio.set_3d_position", "audio.play_sound"};
     ASSERT_EQ(expectedIds.size(), descriptors.size());
     for (std::size_t index = 0U; index < expectedIds.size(); ++index) {
         EXPECT_EQ(descriptors[index].typeId, expectedIds[index]);
@@ -320,7 +320,7 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
         EXPECT_EQ(descriptors[index].category, "Physics");
         EXPECT_EQ(descriptors[index].iconId, "node.physics");
     }
-    for (std::size_t index = 161U; index < 164U; ++index) {
+    for (std::size_t index = 161U; index < 165U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Audio");
         EXPECT_EQ(descriptors[index].iconId, "node.audio");
     }
@@ -6089,6 +6089,16 @@ TEST(ScriptBuiltInNodeUVETest, RegisterBuiltInScriptNodesUVE_ContainsAudioSetVol
     EXPECT_EQ(positionDescriptor->pins[1].type, ScriptValueTypeUVE::Vector3);
     EXPECT_EQ(positionDescriptor->pins[2].name, "Result");
     EXPECT_EQ(positionDescriptor->pins[2].type, ScriptValueTypeUVE::Boolean);
+
+    const ScriptNodeTypeDescriptorUVE* playDescriptor = registry.FindNodeTypeUVE("audio.play_sound");
+    ASSERT_NE(playDescriptor, nullptr);
+    EXPECT_EQ(playDescriptor->displayName, "Play Sound");
+    EXPECT_EQ(playDescriptor->category, "Audio");
+    ASSERT_EQ(playDescriptor->pins.size(), 2U);
+    EXPECT_EQ(playDescriptor->pins[0].name, "Source");
+    EXPECT_EQ(playDescriptor->pins[0].type, ScriptValueTypeUVE::Entity);
+    EXPECT_EQ(playDescriptor->pins[1].name, "Result");
+    EXPECT_EQ(playDescriptor->pins[1].type, ScriptValueTypeUVE::Boolean);
 }
 
 TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesEntityBeforeAudioSetVolume) {
@@ -6347,6 +6357,75 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_AudioSet3dPositionFailsClosedForN
 
     EXPECT_EQ(result.status, ScriptVmStatusUVE::NodeExecutionFailed);
     EXPECT_EQ(capture.setPositionCount, 0U);
+}
+
+} // namespace
+} // namespace UVE::Scripting
+
+
+namespace UVE::Scripting {
+namespace {
+
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesEntityBeforeAudioPlaySound) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({1U, "entity.spawn"}));
+    ASSERT_TRUE(graph.AddNodeUVE({2U, "audio.play_sound"}));
+    ASSERT_TRUE(graph.AddLinkUVE({{1U, "Result"}, {2U, "Source"}}));
+
+    const ScriptIrCompileResultUVE result = CompileScriptGraphToIrUVE(graph, registry);
+
+    ASSERT_TRUE(result.IsSuccessUVE());
+    ASSERT_TRUE(result.program.has_value());
+    ASSERT_EQ(result.program->instructions.size(), 3U);
+    EXPECT_EQ(result.program->instructions[0].nodeTypeId, "entity.spawn");
+    EXPECT_EQ(result.program->instructions[1].kind, ScriptIrInstructionKindUVE::TransferValue);
+    EXPECT_EQ(result.program->instructions[2].nodeTypeId, "audio.play_sound");
+}
+
+bool CaptureAudioPlaySoundUVE(void* userData, Scene::EntityUVE source, bool* outResult) noexcept {
+    auto* capture = static_cast<AudioCaptureUVE*>(userData);
+    if (capture == nullptr || outResult == nullptr || source != capture->source) {
+        return false;
+    }
+    ++capture->setVolumeCount;
+    *outResult = true;
+    return true;
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_ExecutesAudioPlaySoundWithCopiedSource) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U,
+                                    "audio.play_sound", {}, {}});
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(1U, "Source", ScriptEntityValueUVE{Scene::EntityUVE{9U, 1U}}));
+    AudioCaptureUVE capture;
+    ScriptEngineCallBindingsUVE bindings{};
+    bindings.userData = &capture;
+    bindings.audioPlaySound = CaptureAudioPlaySoundUVE;
+    ScriptVmExecutionOptionsUVE options;
+    options.engineCallBindings = &bindings;
+
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(program, context, options);
+
+    ASSERT_TRUE(result.IsSuccessUVE());
+    EXPECT_EQ(result.instructionsExecuted, 1U);
+    EXPECT_EQ(capture.setVolumeCount, 1U);
+    const std::optional<ScriptVmValueUVE> output = context.FindOutputUVE(1U, "Result");
+    ASSERT_TRUE(output.has_value());
+    ASSERT_TRUE(std::holds_alternative<bool>(*output));
+    EXPECT_TRUE(std::get<bool>(*output));
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_AudioPlaySoundFailsClosedForMissingBinding) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U,
+                                    "audio.play_sound", {}, {}});
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(1U, "Source", ScriptEntityValueUVE{Scene::EntityUVE{9U, 1U}}));
+
+    EXPECT_EQ(ExecuteScriptBytecodeUVE(program, context).status, ScriptVmStatusUVE::NodeExecutionFailed);
 }
 
 } // namespace

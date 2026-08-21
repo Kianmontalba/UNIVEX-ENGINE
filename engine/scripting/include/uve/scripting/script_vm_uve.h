@@ -283,6 +283,8 @@ using ScriptAudioScalarControlFunctionUVE = bool (*) (
 using ScriptAudioPositionControlFunctionUVE = bool (*) (
     void* userData, Scene::EntityUVE source, const ScriptVector3ValueUVE& position,
     bool* outResult) noexcept;
+using ScriptAudioTriggerFunctionUVE = bool (*)(
+    void* userData, Scene::EntityUVE source, bool* outResult) noexcept;
 
 struct ScriptEngineCallBindingsUVE final {
     ScriptEngineLogFunctionUVE log = nullptr;
@@ -343,6 +345,7 @@ struct ScriptEngineCallBindingsUVE final {
     ScriptAudioScalarControlFunctionUVE audioSetVolume = nullptr;
     ScriptAudioScalarControlFunctionUVE audioSetPitch = nullptr;
     ScriptAudioPositionControlFunctionUVE audioSet3dPosition = nullptr;
+    ScriptAudioTriggerFunctionUVE audioPlaySound = nullptr;
 };
 
 struct ScriptVmExecutionOptionsUVE final {

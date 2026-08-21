@@ -1330,7 +1330,8 @@ namespace {
     const bool isSetVolume = instruction.nodeTypeId == "audio.set_volume";
     const bool isSetPitch = instruction.nodeTypeId == "audio.set_pitch";
     const bool isSetPosition = instruction.nodeTypeId == "audio.set_3d_position";
-    if (!isSetVolume && !isSetPitch && !isSetPosition) {
+    const bool isPlaySound = instruction.nodeTypeId == "audio.play_sound";
+    if (!isSetVolume && !isSetPitch && !isSetPosition && !isPlaySound) {
         return MakeNodeFailureUVE(instructionIndex, "Unknown Audio node type.");
     }
     const std::uint32_t nodeId = instruction.sourceNodeId;
@@ -1339,6 +1340,16 @@ namespace {
         return MakeNodeFailureUVE(instructionIndex, "Audio node requires a valid Source entity.");
     }
     bool accepted = false;
+    if (isPlaySound) {
+        const ScriptAudioTriggerFunctionUVE callback =
+            bindings == nullptr ? nullptr : bindings->audioPlaySound;
+        if (callback == nullptr || !callback(bindings->userData, source->entity, &accepted) || !accepted ||
+            !SetNodeOutputUVE(context, nodeId, "Result", true)) {
+            return MakeNodeFailureUVE(instructionIndex,
+                                      "Play Sound requires an accepted caller-owned trigger callback.");
+        }
+        return {};
+    }
     if (isSetPosition) {
         const ScriptAudioPositionControlFunctionUVE callback =
             bindings == nullptr ? nullptr : bindings->audioSet3dPosition;
@@ -2118,6 +2129,27 @@ namespace {
     return false;
 }
 
+[[nodiscard]] bool HasRequiredAudioNodeInputsUVE(const ScriptIrInstructionUVE& instruction,
+                                                       const ScriptVmExecutionContextUVE& context) {
+    const std::uint32_t nodeId = instruction.sourceNodeId;
+    if (FindEntityInputUVE(context, nodeId, "Source") == nullptr) {
+        return false;
+    }
+    if (instruction.nodeTypeId == "audio.play_sound") {
+        return true;
+    }
+    if (instruction.nodeTypeId == "audio.set_3d_position") {
+        return FindVector3InputUVE(context, nodeId, "Position") != nullptr;
+    }
+    if (instruction.nodeTypeId == "audio.set_volume") {
+        return FindNumberInputUVE(context, nodeId, "Volume") != nullptr;
+    }
+    if (instruction.nodeTypeId == "audio.set_pitch") {
+        return FindNumberInputUVE(context, nodeId, "Pitch") != nullptr;
+    }
+    return false;
+}
+
 [[nodiscard]] bool HasRequiredAnimationNodeInputsUVE(const ScriptIrInstructionUVE& instruction,
                                                           const ScriptVmExecutionContextUVE& context) {
     const std::uint32_t nodeId = instruction.sourceNodeId;
@@ -2610,11 +2642,7 @@ namespace {
             (isAnimationNode && !HasRequiredAnimationNodeInputsUVE(instruction, context)) ||
             (isMotionQueryNode && !HasRequiredMotionQueryNodeInputsUVE(instruction, context)) ||
             (isPhysicsNode && !HasRequiredPhysicsNodeInputsUVE(instruction, context)) ||
-            (isAudioNode && (FindEntityInputUVE(context, instruction.sourceNodeId, "Source") == nullptr ||
-                             (instruction.nodeTypeId == "audio.set_3d_position"
-                                  ? FindVector3InputUVE(context, instruction.sourceNodeId, "Position") == nullptr
-                                  : FindNumberInputUVE(context, instruction.sourceNodeId,
-                                                       instruction.nodeTypeId == "audio.set_pitch" ? "Pitch" : "Volume") == nullptr))) ||
+            (isAudioNode && !HasRequiredAudioNodeInputsUVE(instruction, context)) ||
             (isEngineLogNode && FindNumberInputUVE(context, instruction.sourceNodeId, "Value") == nullptr)) {
             ScriptVmExecutionResultUVE failure = MakeNodeFailureUVE(
                 instructionIndex, "Control-flow execution could not resolve typed node inputs.");
@@ -2918,11 +2946,7 @@ ScriptVmExecutionResultUVE ExecuteValidatedProgramUVE(const ScriptBytecodeProgra
                     (isAnimationNode && !HasRequiredAnimationNodeInputsUVE(instruction, *context)) ||
                     (isMotionQueryNode && !HasRequiredMotionQueryNodeInputsUVE(instruction, *context)) ||
                     (isPhysicsNode && !HasRequiredPhysicsNodeInputsUVE(instruction, *context)) ||
-                    (isAudioNode && (FindEntityInputUVE(*context, instruction.sourceNodeId, "Source") == nullptr ||
-                                     (instruction.nodeTypeId == "audio.set_3d_position"
-                                          ? FindVector3InputUVE(*context, instruction.sourceNodeId, "Position") == nullptr
-                                          : FindNumberInputUVE(*context, instruction.sourceNodeId,
-                                                               instruction.nodeTypeId == "audio.set_pitch" ? "Pitch" : "Volume") == nullptr))) ||
+                    (isAudioNode && !HasRequiredAudioNodeInputsUVE(instruction, *context)) ||
                     (isEngineLogNode && FindNumberInputUVE(*context, instruction.sourceNodeId, "Value") == nullptr)) {
                     continue;
                 }
