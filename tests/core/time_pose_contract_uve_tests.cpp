@@ -31,6 +31,30 @@ TEST(UnifiedTimeContractUVETest, AdvanceUVE_ClampsDeltaAndFixedStepBudget) {
     EXPECT_NEAR(state.fixedAccumulatorSeconds, 0.17, 1.0e-12);
 }
 
+TEST(UnifiedTimeContractUVETest, AdvanceUVE_RejectsDerivedTimeOverflowAtomically) {
+    const UnifiedTimeStateUVE previous{
+        7U, 1.0, 1.0, 0.5, std::numeric_limits<double>::max(), 0.01, 0.1, 0.2, 0.3, false};
+    std::size_t fixedSteps = 99U;
+    bool inputClamped = false;
+    const UnifiedTimeStateUVE next = UnifiedTimeContractUVE::AdvanceUVE(
+        previous, UnifiedTimeAdvanceInputUVE{0.25, 1.0, std::numeric_limits<double>::max(), 0.05, 8U, false},
+        fixedSteps, inputClamped);
+    EXPECT_EQ(next, previous);
+    EXPECT_EQ(fixedSteps, 0U);
+    EXPECT_TRUE(inputClamped);
+
+    const UnifiedTimeStateUVE scaledPrevious{
+        8U, 1.0, std::numeric_limits<double>::max(), 0.5, 0.75, 0.01, 0.1, 0.2, 0.3, false};
+    fixedSteps = 99U;
+    inputClamped = false;
+    const UnifiedTimeStateUVE scaledNext = UnifiedTimeContractUVE::AdvanceUVE(
+        scaledPrevious, UnifiedTimeAdvanceInputUVE{0.25, std::numeric_limits<double>::max(), 1.0, 0.05, 8U, false},
+        fixedSteps, inputClamped);
+    EXPECT_EQ(scaledNext, scaledPrevious);
+    EXPECT_EQ(fixedSteps, 0U);
+    EXPECT_TRUE(inputClamped);
+}
+
 TEST(UnifiedTimeContractUVETest, AdvanceUVE_PauseFreezesSimulationDomainsButAdvancesRealDomain) {
     const UnifiedTimeStateUVE previous{4U, 2.0, 1.0, 0.9, 1.5, 0.02, 0.1, 0.2, 0.3, false};
     std::size_t fixedSteps = 0U;
