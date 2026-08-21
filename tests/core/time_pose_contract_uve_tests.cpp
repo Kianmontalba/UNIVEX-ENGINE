@@ -96,6 +96,42 @@ TEST(AnimationPoseContractUVETest, RejectsDuplicateOrUnknownJointsAndMismatchedP
               AnimationContractValidationCodeUVE::SkeletonMismatch);
 }
 
+TEST(AnimationPoseContractUVETest, RejectsEmbeddedNulAnimationIdentifiers) {
+    SkeletonDefinitionUVE nulSkeleton{
+        std::string{"humanoid"} + std::string(1U, static_cast<char>(0)) + "suffix",
+        {SkeletonJointUVE{"root", ""}}};
+    EXPECT_EQ(ValidateSkeletonDefinitionUVE(nulSkeleton).code,
+              AnimationContractValidationCodeUVE::InvalidIdentifier);
+
+    SkeletonDefinitionUVE nulJoint{
+        "humanoid",
+        {SkeletonJointUVE{std::string{"root"} + std::string(1U, static_cast<char>(0)) + "suffix", ""}}};
+    EXPECT_EQ(ValidateSkeletonDefinitionUVE(nulJoint).code,
+              AnimationContractValidationCodeUVE::InvalidIdentifier);
+
+    SkeletonDefinitionUVE nulParent{
+        "humanoid",
+        {SkeletonJointUVE{"root", "root"},
+         SkeletonJointUVE{"hand", std::string{"root"} + std::string(1U, static_cast<char>(0)) + "suffix"}}};
+    EXPECT_EQ(ValidateSkeletonDefinitionUVE(nulParent).code,
+              AnimationContractValidationCodeUVE::InvalidIdentifier);
+
+    const SkeletonDefinitionUVE skeleton{
+        "humanoid", {SkeletonJointUVE{"root", ""}}};
+    const PoseBufferUVE nulPose{
+        std::string{"humanoid"} + std::string(1U, static_cast<char>(0)) + "suffix", {TransformPoseUVE{}}};
+    EXPECT_EQ(ValidatePoseBufferUVE(nulPose, skeleton).code,
+              AnimationContractValidationCodeUVE::InvalidIdentifier);
+
+    const SkeletonDefinitionUVE target{
+        "target", {SkeletonJointUVE{"pelvis", ""}}};
+    const auto nulMap = ValidateSkeletonRetargetMapUVE(
+        skeleton, target,
+        std::vector<SkeletonRetargetMapEntryUVE>{{
+            std::string{"root"} + std::string(1U, static_cast<char>(0)) + "suffix", "pelvis"}});
+    EXPECT_EQ(nulMap.code, AnimationContractValidationCodeUVE::InvalidIdentifier);
+}
+
 TEST(AnimationPoseContractUVETest, ValidatesOneToOneSkeletonRetargetMap) {
     const SkeletonDefinitionUVE source{
         "source", {SkeletonJointUVE{"root", ""}, SkeletonJointUVE{"hand", "root"}}};

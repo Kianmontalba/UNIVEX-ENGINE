@@ -17,6 +17,12 @@ namespace {
     return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
 }
 
+[[nodiscard]] bool IsAnimationIdentifierValidUVE(const std::string& identifier, const bool allowEmpty) noexcept {
+    return (allowEmpty || !identifier.empty()) &&
+           identifier.size() <= kMaximumAnimationIdentifierBytesUVE &&
+           identifier.find('\0') == std::string::npos;
+}
+
 } // namespace
 
 UnifiedTimeStateUVE UnifiedTimeContractUVE::AdvanceUVE(
@@ -77,7 +83,7 @@ AnimationContractValidationResultUVE ValidateSkeletonDefinitionUVE(
     if (skeleton.skeletonId.empty() && skeleton.joints.empty()) {
         return {AnimationContractValidationCodeUVE::Valid, 0U, "empty skeleton contract"};
     }
-    if (skeleton.skeletonId.empty() || skeleton.skeletonId.size() > kMaximumAnimationIdentifierBytesUVE) {
+    if (!IsAnimationIdentifierValidUVE(skeleton.skeletonId, false)) {
         return {AnimationContractValidationCodeUVE::InvalidIdentifier, 0U,
                 "skeleton identifier is empty or exceeds its bound"};
     }
@@ -87,8 +93,8 @@ AnimationContractValidationResultUVE ValidateSkeletonDefinitionUVE(
     }
     for (std::size_t index = 0U; index < skeleton.joints.size(); ++index) {
         const SkeletonJointUVE& joint = skeleton.joints[index];
-        if (joint.jointId.empty() || joint.jointId.size() > kMaximumAnimationIdentifierBytesUVE ||
-            joint.parentJointId.size() > kMaximumAnimationIdentifierBytesUVE) {
+        if (!IsAnimationIdentifierValidUVE(joint.jointId, false) ||
+            !IsAnimationIdentifierValidUVE(joint.parentJointId, true)) {
             return {AnimationContractValidationCodeUVE::InvalidIdentifier, index,
                     "skeleton joint identifier exceeds its bound"};
         }
@@ -133,9 +139,8 @@ AnimationContractValidationResultUVE ValidateSkeletonRetargetMapUVE(
     }
     for (std::size_t index = 0U; index < map.size(); ++index) {
         const SkeletonRetargetMapEntryUVE& entry = map[index];
-        if (entry.sourceJointId.empty() || entry.targetJointId.empty() ||
-            entry.sourceJointId.size() > kMaximumAnimationIdentifierBytesUVE ||
-            entry.targetJointId.size() > kMaximumAnimationIdentifierBytesUVE) {
+        if (!IsAnimationIdentifierValidUVE(entry.sourceJointId, false) ||
+            !IsAnimationIdentifierValidUVE(entry.targetJointId, false)) {
             return {AnimationContractValidationCodeUVE::InvalidIdentifier, index,
                     "retarget map joint identifiers are invalid"};
         }
@@ -168,6 +173,10 @@ AnimationContractValidationResultUVE ValidatePoseBufferUVE(
     const AnimationContractValidationResultUVE skeletonValidation = ValidateSkeletonDefinitionUVE(skeleton);
     if (!skeletonValidation.IsValidUVE()) {
         return skeletonValidation;
+    }
+    if (!IsAnimationIdentifierValidUVE(pose.skeletonId, true)) {
+        return {AnimationContractValidationCodeUVE::InvalidIdentifier, 0U,
+                "pose buffer skeleton identifier is empty, oversized, or contains NUL"};
     }
     if (skeleton.skeletonId.empty() && pose.skeletonId.empty() && pose.localJoints.empty()) {
         return {AnimationContractValidationCodeUVE::Valid, 0U, "empty pose contract"};
