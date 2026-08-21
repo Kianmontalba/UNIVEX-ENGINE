@@ -68,6 +68,15 @@ VoiceHandleUVE AudioSystemUVE::CreateSourceUVE(const AudioSourceDescUVE& desc) {
 
     const VoiceHandleUVE voice =
         m_impl->audioDevice.CreateVoiceUVE(AudioVoiceDescUVE{resolvedAudioAssetPath, desc.looping});
+    if (voice == kInvalidVoiceHandleUVE) {
+        UVE_ERROR("AudioSystemUVE: audio device returned an invalid voice handle for '{}'",
+                  resolvedAudioAssetPath);
+        return kInvalidVoiceHandleUVE;
+    }
+    if (m_impl->sources.contains(voice.value)) {
+        UVE_ERROR("AudioSystemUVE: audio device returned a duplicate voice handle ({})", voice.value);
+        return kInvalidVoiceHandleUVE;
+    }
     SourceStateUVE state;
     state.desc = desc;
     state.desc.audioAssetPath = resolvedAudioAssetPath;
