@@ -177,10 +177,22 @@ TEST_F(CameraSystemUVETest, ComputeProjectionMatrixUVE_EntityWithoutCameraCompon
     EXPECT_DEATH({ static_cast<void>(cameraSystem.ComputeProjectionMatrixUVE(entityManager, entity, 1.0F)); }, "");
 }
 
+TEST_F(CameraSystemUVETest, ComputeProjectionMatrixUVE_InvalidAspectRatio_Asserts) {
+    const Scene::EntityUVE entity = MakeCameraEntityUVE(Math::Vector3UVE{}, Math::QuaternionUVE{}, Scene::CameraComponentUVE{});
+    EXPECT_DEATH({ static_cast<void>(cameraSystem.ComputeProjectionMatrixUVE(entityManager, entity, 0.0F)); }, "");
+    EXPECT_DEATH({ static_cast<void>(cameraSystem.ComputeProjectionMatrixUVE(
+                       entityManager, entity, std::numeric_limits<float>::quiet_NaN())); }, "");
+}
+
 TEST_F(CameraSystemUVETest, ComputeProjectionMatrixUVE_InvalidCameraParameters_Asserts) {
     const Scene::EntityUVE entity = MakeCameraEntityUVE(Math::Vector3UVE{}, Math::QuaternionUVE{},
                                                         Scene::CameraComponentUVE{180.0F, 0.1F, 100.0F});
     EXPECT_DEATH({ static_cast<void>(cameraSystem.ComputeProjectionMatrixUVE(entityManager, entity, 1.0F)); }, "");
+}
+
+TEST_F(CameraSystemUVETest, ComputeFrustumCornersUVE_InvalidAspectRatio_Asserts) {
+    const Scene::EntityUVE entity = MakeCameraEntityUVE(Math::Vector3UVE{}, Math::QuaternionUVE{}, Scene::CameraComponentUVE{});
+    EXPECT_DEATH({ static_cast<void>(cameraSystem.ComputeFrustumCornersUVE(entityManager, entity, -1.0F)); }, "");
 }
 
 TEST_F(CameraSystemUVETest, GetWorldPositionUVE_EntityWithoutWorldTransform_Asserts) {

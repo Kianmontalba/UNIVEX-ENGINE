@@ -24,6 +24,7 @@ Math::Matrix4x4UVE CameraSystemUVE::ComputeProjectionMatrixUVE(const Scene::IEnt
                                                                  float aspectRatio) const {
     const Scene::CameraComponentUVE& camera = entityManager.GetComponentUVE<Scene::CameraComponentUVE>(cameraEntity);
     UVE_ASSERT(Scene::IsCameraComponentValidUVE(camera));
+    UVE_ASSERT(std::isfinite(aspectRatio) && aspectRatio > 0.0F);
     const float fovYRadians = camera.fieldOfViewDegrees * (std::numbers::pi_v<float> / 180.0F);
     return Math::Matrix4x4UVE::PerspectiveUVE(fovYRadians, aspectRatio, camera.nearPlane, camera.farPlane);
 }
@@ -46,6 +47,7 @@ CameraFrustumCornersUVE CameraSystemUVE::ComputeFrustumCornersUVE(const Scene::I
         entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(cameraEntity);
     const Scene::CameraComponentUVE& camera = entityManager.GetComponentUVE<Scene::CameraComponentUVE>(cameraEntity);
     UVE_ASSERT(Scene::IsCameraComponentValidUVE(camera));
+    UVE_ASSERT(std::isfinite(aspectRatio) && aspectRatio > 0.0F);
     const float tangent = std::tan(camera.fieldOfViewDegrees * (std::numbers::pi_v<float> / 360.0F));
     const float nearHalfHeight = camera.nearPlane * tangent;
     const float nearHalfWidth = nearHalfHeight * aspectRatio;
