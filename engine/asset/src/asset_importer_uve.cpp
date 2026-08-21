@@ -299,7 +299,13 @@ AssetGuidUVE AssetImporterUVE::ImportUVE(const std::filesystem::path& sourcePath
         return kInvalidAssetGuidUVE;
     }
 
-    return assetDatabase.RegisterUVE(destinationPath);
+    const AssetGuidUVE guid = assetDatabase.RegisterUVE(destinationPath);
+    if (guid == kInvalidAssetGuidUVE) {
+        UVE_ERROR("AssetImporterUVE: asset database rejected registration for destination \"{}\"",
+                  destinationPath.string());
+        return kInvalidAssetGuidUVE;
+    }
+    return guid;
 }
 
 } // namespace UVE::Asset
