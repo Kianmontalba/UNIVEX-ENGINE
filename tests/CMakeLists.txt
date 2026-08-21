@@ -105,6 +105,7 @@ add_executable(uve_tests
     audio/audio_mixer_group_uve_tests.cpp
     audio/null_audio_device_uve_tests.cpp
     audio/audio_system_uve_tests.cpp
+    audio/audio_listener_orientation_validation_uve_tests.cpp
     audio/audio_source_system_uve_tests.cpp
     audio/wav_metadata_uve_tests.cpp
     audio/pcm_gain_effect_uve_tests.cpp

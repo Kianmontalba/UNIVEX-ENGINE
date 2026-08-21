@@ -8,6 +8,7 @@
 #include <unordered_map>
 
 #include "uve/debug/logging_macros_uve.h"
+#include "uve/audio/audio_listener_orientation_validation_uve.h"
 
 namespace UVE::Audio {
 
@@ -50,6 +51,10 @@ void AudioSystemUVE::SetListenerPositionUVE(Math::Vector3UVE position) {
 }
 
 void AudioSystemUVE::SetListenerOrientationUVE(Math::Vector3UVE forward, Math::Vector3UVE up) {
+    if (!IsAudioListenerOrientationValidUVE(forward, up)) {
+        UVE_ERROR("AudioSystemUVE: SetListenerOrientationUVE rejected invalid orientation vectors");
+        return;
+    }
     m_impl->listenerForward = forward;
     m_impl->listenerUp = up;
 }
