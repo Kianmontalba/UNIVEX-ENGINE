@@ -3,6 +3,7 @@
 
 #include "uve/scene/scene_graph_uve.h"
 
+#include <cmath>
 #include <cstddef>
 #include <unordered_map>
 #include <vector>
@@ -35,6 +36,18 @@ bool IsAncestorUVE(IEntityManagerUVE& entityManager, EntityUVE potentialAncestor
     return false;
 }
 #endif
+
+[[nodiscard]] bool IsFiniteWorldTransformUVE(const WorldTransformComponentUVE& transform) noexcept {
+    return std::isfinite(transform.worldPosition.x) && std::isfinite(transform.worldPosition.y) &&
+           std::isfinite(transform.worldPosition.z) && Math::IsFiniteUVE(transform.worldRotation) &&
+           std::isfinite(transform.worldScale.x) && std::isfinite(transform.worldScale.y) &&
+           std::isfinite(transform.worldScale.z);
+}
+
+struct WorldTransformPassStateUVE final {
+    bool valid = false;
+    bool recomputed = false;
+};
 
 } // namespace
 
@@ -76,13 +89,14 @@ void SceneGraphUVE::UpdateUVE(IEntityManagerUVE& entityManager) {
                    WorldTransformComponentUVE&) { pending.push_back(entity); });
 
     // Level-order sweep, root-first: repeatedly process any pending entity whose parent has
-    // already been processed this pass (or is a root), tracking whether each processed entity's
-    // world transform was actually recomputed (as opposed to merely visited) — a processed
-    // parent's recomputation unconditionally forces every child to recompute too, even if the
+    // already been processed this pass (or is a root), tracking valid/invalid derived state and
+    // whether each valid processed entity's world transform was actually recomputed (as opposed
+    // to merely visited) — a processed parent's recomputation unconditionally forces every child
+    // to recompute too, even if the
     // child's own dirty flag is false. No persistent tree structure is needed:
     // HierarchyComponentUVE::parent is already the full source of truth, and SetParentUVE()
     // already prevents cycles.
-    std::unordered_map<EntityUVE, bool> recomputedThisPass;
+    std::unordered_map<EntityUVE, WorldTransformPassStateUVE> passState;
 
     bool madeProgress = true;
     while (madeProgress && !pending.empty()) {
@@ -91,8 +105,8 @@ void SceneGraphUVE::UpdateUVE(IEntityManagerUVE& entityManager) {
             const EntityUVE entity = pending[index];
             const EntityUVE parent = entityManager.GetComponentUVE<HierarchyComponentUVE>(entity).parent;
             const bool parentIsRoot = (parent == kInvalidEntityUVE);
-            const auto parentIt = parentIsRoot ? recomputedThisPass.end() : recomputedThisPass.find(parent);
-            const bool parentReady = parentIsRoot || parentIt != recomputedThisPass.end();
+            const auto parentIt = parentIsRoot ? passState.end() : passState.find(parent);
+            const bool parentReady = parentIsRoot || parentIt != passState.end();
 
             if (!parentReady) {
                 ++index;
@@ -100,28 +114,43 @@ void SceneGraphUVE::UpdateUVE(IEntityManagerUVE& entityManager) {
             }
 
             WorldTransformComponentUVE& world = entityManager.GetComponentUVE<WorldTransformComponentUVE>(entity);
-            const bool parentWasRecomputed = !parentIsRoot && parentIt->second;
-            const bool shouldRecompute = world.dirty || parentWasRecomputed;
+            if (!parentIsRoot && !parentIt->second.valid) {
+                world.dirty = true;
+                passState.emplace(entity, WorldTransformPassStateUVE{});
+                pending.erase(pending.begin() + static_cast<std::ptrdiff_t>(index));
+                madeProgress = true;
+                continue;
+            }
 
+            const bool parentWasRecomputed = !parentIsRoot && parentIt->second.recomputed;
+            const bool shouldRecompute = world.dirty || parentWasRecomputed;
+            bool publishedValid = IsFiniteWorldTransformUVE(world);
             if (shouldRecompute) {
                 const TransformComponentUVE& local = entityManager.GetComponentUVE<TransformComponentUVE>(entity);
+                WorldTransformComponentUVE candidate = world;
                 if (parentIsRoot) {
-                    world.worldPosition = local.localPosition;
-                    world.worldRotation = local.localRotation;
-                    world.worldScale = local.localScale;
+                    candidate.worldPosition = local.localPosition;
+                    candidate.worldRotation = local.localRotation;
+                    candidate.worldScale = local.localScale;
                 } else {
                     const WorldTransformComponentUVE& parentWorld =
                         entityManager.GetComponentUVE<WorldTransformComponentUVE>(parent);
-                    world.worldScale = parentWorld.worldScale * local.localScale;
-                    world.worldRotation = Math::MultiplyUVE(parentWorld.worldRotation, local.localRotation);
-                    world.worldPosition =
+                    candidate.worldScale = parentWorld.worldScale * local.localScale;
+                    candidate.worldRotation = Math::MultiplyUVE(parentWorld.worldRotation, local.localRotation);
+                    candidate.worldPosition =
                         parentWorld.worldPosition + Math::RotateVectorUVE(parentWorld.worldRotation,
                                                                             parentWorld.worldScale * local.localPosition);
                 }
-                world.dirty = false;
+                publishedValid = IsFiniteWorldTransformUVE(candidate);
+                if (publishedValid) {
+                    candidate.dirty = false;
+                    world = candidate;
+                } else {
+                    world.dirty = true;
+                }
             }
 
-            recomputedThisPass.emplace(entity, shouldRecompute);
+            passState.emplace(entity, WorldTransformPassStateUVE{publishedValid, shouldRecompute && publishedValid});
             pending.erase(pending.begin() + static_cast<std::ptrdiff_t>(index));
             madeProgress = true;
         }

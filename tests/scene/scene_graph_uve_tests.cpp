@@ -126,6 +126,29 @@ TEST_F(SceneGraphUVETest, MultiLevelHierarchy_PropagatesInOnePass) {
     EXPECT_NEAR(childWorld.worldPosition.x, 3.0F, kEpsilon);
 }
 
+TEST_F(SceneGraphUVETest, UpdateUVE_PreservesFiniteCacheWhenHierarchyCompositionOverflows) {
+    const float maximumFloat = std::numeric_limits<float>::max();
+    const EntityUVE parent = entityManager.CreateEntityUVE();
+    TransformComponentUVE parentLocal;
+    parentLocal.localScale = Math::Vector3UVE{maximumFloat, 1.0F, 1.0F};
+    sceneGraph.AttachTransformUVE(entityManager, parent, parentLocal);
+
+    const EntityUVE child = entityManager.CreateEntityUVE();
+    TransformComponentUVE childLocal;
+    childLocal.localPosition = Math::Vector3UVE{2.0F, 0.0F, 0.0F};
+    sceneGraph.AttachTransformUVE(entityManager, child, childLocal);
+    sceneGraph.SetParentUVE(entityManager, child, parent);
+
+    sceneGraph.UpdateUVE(entityManager);
+
+    const WorldTransformComponentUVE& childWorld = entityManager.GetComponentUVE<WorldTransformComponentUVE>(child);
+    EXPECT_TRUE(childWorld.dirty);
+    EXPECT_TRUE(std::isfinite(childWorld.worldPosition.x));
+    EXPECT_TRUE(std::isfinite(childWorld.worldPosition.y));
+    EXPECT_TRUE(std::isfinite(childWorld.worldPosition.z));
+    EXPECT_EQ(childWorld.worldPosition, (Math::Vector3UVE{}));
+}
+
 TEST_F(SceneGraphUVETest, MovingParent_RecomputesChildEvenWhenChildNotDirty) {
     const EntityUVE parent = entityManager.CreateEntityUVE();
     sceneGraph.AttachTransformUVE(entityManager, parent, TransformComponentUVE{});
