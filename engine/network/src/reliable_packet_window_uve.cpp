@@ -2,6 +2,7 @@
 #include "uve/network/reliable_packet_window_uve.h"
 
 #include <cmath>
+#include <limits>
 #include <new>
 #include <utility>
 namespace UVE::Network {
@@ -225,7 +226,10 @@ bool ApplyReliableAcknowledgementsUVE(
     const std::uint32_t cumulativeDistance = header.acknowledgedSequence - oldestPendingSequence;
     if (cumulativeDistance < kHalfSequenceSpaceUVE &&
         cumulativeDistance < kReliablePacketMaximumSelectiveAckBitsUVE) {
-        const std::uint32_t cumulativeMask = (1U << (cumulativeDistance + 1U)) - 1U;
+        const std::uint32_t cumulativeMask =
+            cumulativeDistance == kReliablePacketMaximumSelectiveAckBitsUVE - 1U
+                ? std::numeric_limits<std::uint32_t>::max()
+                : (1U << (cumulativeDistance + 1U)) - 1U;
         const std::uint32_t before = pendingSequenceMask;
         pendingSequenceMask &= ~cumulativeMask;
         changed = before != pendingSequenceMask;
