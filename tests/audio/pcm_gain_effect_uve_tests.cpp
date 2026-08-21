@@ -25,6 +25,8 @@ TEST(PcmGainEffectUVETest, InvalidChainStageOrCountLeavesOutputUnchanged) {
     std::vector<float> output{0.25F};
     EXPECT_FALSE(ApplyPcmGainEffectChainUVE(input, {-1.0F}, output));
     EXPECT_EQ(output, std::vector<float>{0.25F});
+    EXPECT_FALSE(ApplyPcmGainEffectChainUVE(input, {std::numeric_limits<float>::quiet_NaN()}, output));
+    EXPECT_EQ(output, std::vector<float>{0.25F});
     EXPECT_FALSE(ApplyPcmGainEffectChainUVE(input, std::vector<float>(kMaximumPcmGainChainEffectsUVE + 1U, 1.0F), output));
     EXPECT_EQ(output, std::vector<float>{0.25F});
 }

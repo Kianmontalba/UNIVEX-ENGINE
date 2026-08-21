@@ -19,7 +19,8 @@ struct PcmGainEffectWindowUVE final {
     const std::vector<float>& inputSamples, const std::vector<PcmGainEffectWindowUVE>& windows,
     std::vector<float>& outputSamples) noexcept;
 /// Applies an ordered bounded chain of finite nonnegative PCM gain stages to copied samples.
-/// The chain owns no mixer, device, stream, voice, or sample-buffer lifetime.
+/// Allocation and validation failures return false without publishing partial output. The chain owns
+/// no mixer, device, stream, voice, or sample-buffer lifetime.
 [[nodiscard]] bool ApplyPcmGainEffectChainUVE(const std::vector<float>& inputSamples,
                                                const std::vector<float>& gains,
                                                std::vector<float>& outputSamples) noexcept;

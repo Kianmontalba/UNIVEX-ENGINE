@@ -38,21 +38,25 @@ bool ApplyPcmGainEffectChainUVE(const std::vector<float>& inputSamples,
             return false;
         }
     }
-    if (gains.empty()) {
-        outputSamples = inputSamples;
-        return true;
-    }
-    std::vector<float> working = inputSamples;
-    std::vector<float> next;
-    for (const float gain : gains) {
-        if (!ApplyPcmGainEffectUVE(working, gain, next)) {
-            return false;
+    try {
+        if (gains.empty()) {
+            outputSamples = inputSamples;
+            return true;
         }
-        working.swap(next);
-        next.clear();
+        std::vector<float> working = inputSamples;
+        std::vector<float> next;
+        for (const float gain : gains) {
+            if (!ApplyPcmGainEffectUVE(working, gain, next)) {
+                return false;
+            }
+            working.swap(next);
+            next.clear();
+        }
+        outputSamples = std::move(working);
+        return true;
+    } catch (...) {
+        return false;
     }
-    outputSamples = std::move(working);
-    return true;
 }
 
 bool PlanPcm16StreamWindowUVE(const std::size_t totalSamples, const std::size_t cursorSample,
