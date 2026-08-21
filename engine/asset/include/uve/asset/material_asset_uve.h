@@ -35,13 +35,19 @@ struct MaterialAssetUVE {
     bool isTransparent = false;
 };
 
+/// Validates the CPU material descriptor before persistence or renderer handoff. Albedo channels and
+/// metallic/roughness are finite in [0,1]; emissive channels are finite and nonnegative; GUID
+/// references may be invalid to represent an intentionally unset texture or shader.
+[[nodiscard]] bool IsMaterialAssetValidUVE(const MaterialAssetUVE& material) noexcept;
+
 /// Loads `path` as a `.uve*` envelope with `AssetKindUVE::Material`, filling `outMaterial`.
 /// Returns false (logging the reason) if the file is missing/malformed, isn't actually a
 /// Material asset, or is missing an expected field.
 [[nodiscard]] bool LoadMaterialAssetUVE(const std::filesystem::path& path, MaterialAssetUVE& outMaterial);
 
 /// Writes `material` to `path` as a `.uve*` envelope with `AssetKindUVE::Material`. Returns false
-/// (logging the reason) if the file can't be written.
+/// (logging the reason) for invalid finite/range fields or a file publication failure; invalid
+/// descriptors are rejected before opening the destination.
 [[nodiscard]] bool SaveMaterialAssetUVE(const MaterialAssetUVE& material, const std::filesystem::path& path);
 
 } // namespace UVE::Asset
