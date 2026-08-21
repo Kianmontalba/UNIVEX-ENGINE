@@ -15,6 +15,7 @@
 #include "uve/asset/uve_file_envelope_uve.h"
 #include "uve/events/event_system_uve.h"
 #include "uve/memory/memory_manager_uve.h"
+#include "uve/save/save_payload_compression_uve.h"
 #include "uve/scene/components/hierarchy_component_uve.h"
 #include "uve/scene/components/light_component_uve.h"
 #include "uve/scene/components/mesh_component_uve.h"
@@ -90,6 +91,31 @@ TEST_F(SaveGameSystemUVETest, SaveThenLoad_MultipleRootEntitiesWithHierarchy_Rou
             }
         });
     EXPECT_NE(loadedChild, kInvalidEntityUVE);
+}
+
+TEST_F(SaveGameSystemUVETest, GetSaveMetadataUVE_RejectsTruncatedAndTrailingWorldSections) {
+    const EntityUVE entity = entityManager.CreateEntityUVE();
+    ASSERT_TRUE(saveGameSystem.SaveUVE(16, entityManager, {entity}, GameStateMetadataUVE{}));
+    const std::filesystem::path slotPath = saveDirectory / "slot_16.uvesave";
+    const auto originalFile = Asset::ReadUveFileUVE(slotPath);
+    ASSERT_TRUE(originalFile.has_value());
+
+    std::vector<std::byte> expandedPayload;
+    ASSERT_TRUE(DecompressSavePayloadUVE(originalFile->second, expandedPayload));
+    ASSERT_GT(expandedPayload.size(), sizeof(std::uint32_t) + sizeof(std::uint64_t));
+
+    std::vector<std::byte> truncatedPayload = expandedPayload;
+    truncatedPayload.pop_back();
+    ASSERT_TRUE(Asset::WriteUveFileUVE(slotPath, Asset::AssetKindUVE::Save,
+                                       CompressSavePayloadUVE(truncatedPayload)));
+    EXPECT_FALSE(saveGameSystem.GetSaveMetadataUVE(16).has_value());
+
+    ASSERT_TRUE(Asset::WriteUveFileUVE(slotPath, Asset::AssetKindUVE::Save,
+                                       CompressSavePayloadUVE(expandedPayload)));
+    expandedPayload.push_back(std::byte{0xA5});
+    ASSERT_TRUE(Asset::WriteUveFileUVE(slotPath, Asset::AssetKindUVE::Save,
+                                       CompressSavePayloadUVE(expandedPayload)));
+    EXPECT_FALSE(saveGameSystem.GetSaveMetadataUVE(16).has_value());
 }
 
 TEST_F(SaveGameSystemUVETest, SaveUVE_OverwritesExistingSlot) {
