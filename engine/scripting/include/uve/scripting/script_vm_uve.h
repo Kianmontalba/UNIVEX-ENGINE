@@ -287,6 +287,9 @@ using ScriptAudioTriggerFunctionUVE = bool (*)(
     void* userData, Scene::EntityUVE source, bool* outResult) noexcept;
 using ScriptAudioStateQueryFunctionUVE = bool (*)(
     void* userData, Scene::EntityUVE source, bool* outResult) noexcept;
+using ScriptAudioAttenuationControlFunctionUVE = bool (*)(
+    void* userData, Scene::EntityUVE source, float minDistance, float maxDistance,
+    float model, bool* outResult) noexcept;
 
 struct ScriptEngineCallBindingsUVE final {
     ScriptEngineLogFunctionUVE log = nullptr;
@@ -350,6 +353,7 @@ struct ScriptEngineCallBindingsUVE final {
     ScriptAudioTriggerFunctionUVE audioPlaySound = nullptr;
     ScriptAudioTriggerFunctionUVE audioStopSound = nullptr;
     ScriptAudioStateQueryFunctionUVE audioIsPlaying = nullptr;
+    ScriptAudioAttenuationControlFunctionUVE audioSetAttenuation = nullptr;
 };
 
 struct ScriptVmExecutionOptionsUVE final {

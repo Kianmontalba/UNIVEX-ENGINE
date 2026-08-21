@@ -200,10 +200,10 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
 
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
     EXPECT_FALSE(RegisterBuiltInScriptNodesUVE(registry));
-    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 167U);
+    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 168U);
 
     const std::vector<ScriptNodeTypeDescriptorUVE> descriptors = registry.GetNodeTypeDescriptorsUVE();
-    ASSERT_EQ(descriptors.size(), 167U);
+    ASSERT_EQ(descriptors.size(), 168U);
     const std::vector<std::string> expectedIds{
         "flow.sequence", "flow.branch", "flow.return", "flow.do_once", "flow.gate", "flow.switch",
         "flow.event", "flow.loop", "flow.for_loop", "flow.while_loop", "flow.delay",
@@ -247,7 +247,8 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
         "physics.raycast", "physics.sphere_cast", "physics.box_cast", "physics.capsule_cast", "physics.overlap",
         "physics.apply_force", "physics.apply_impulse", "physics.set_velocity", "physics.get_velocity",
         "physics.enable_gravity", "physics.is_colliding", "audio.set_volume", "audio.set_pitch",
-        "audio.set_3d_position", "audio.play_sound", "audio.stop_sound", "audio.is_playing"};
+        "audio.set_3d_position", "audio.play_sound", "audio.stop_sound", "audio.is_playing",
+        "audio.set_attenuation"};
     ASSERT_EQ(expectedIds.size(), descriptors.size());
     for (std::size_t index = 0U; index < expectedIds.size(); ++index) {
         EXPECT_EQ(descriptors[index].typeId, expectedIds[index]);
@@ -320,7 +321,7 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
         EXPECT_EQ(descriptors[index].category, "Physics");
         EXPECT_EQ(descriptors[index].iconId, "node.physics");
     }
-    for (std::size_t index = 161U; index < 167U; ++index) {
+    for (std::size_t index = 161U; index < 168U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Audio");
         EXPECT_EQ(descriptors[index].iconId, "node.audio");
     }
@@ -6119,6 +6120,22 @@ TEST(ScriptBuiltInNodeUVETest, RegisterBuiltInScriptNodesUVE_ContainsAudioSetVol
     EXPECT_EQ(playingDescriptor->pins[0].type, ScriptValueTypeUVE::Entity);
     EXPECT_EQ(playingDescriptor->pins[1].name, "Result");
     EXPECT_EQ(playingDescriptor->pins[1].type, ScriptValueTypeUVE::Boolean);
+
+    const ScriptNodeTypeDescriptorUVE* attenuationDescriptor = registry.FindNodeTypeUVE("audio.set_attenuation");
+    ASSERT_NE(attenuationDescriptor, nullptr);
+    EXPECT_EQ(attenuationDescriptor->displayName, "Set Attenuation");
+    EXPECT_EQ(attenuationDescriptor->category, "Audio");
+    ASSERT_EQ(attenuationDescriptor->pins.size(), 5U);
+    EXPECT_EQ(attenuationDescriptor->pins[0].name, "Source");
+    EXPECT_EQ(attenuationDescriptor->pins[0].type, ScriptValueTypeUVE::Entity);
+    EXPECT_EQ(attenuationDescriptor->pins[1].name, "Min Distance");
+    EXPECT_EQ(attenuationDescriptor->pins[1].type, ScriptValueTypeUVE::Number);
+    EXPECT_EQ(attenuationDescriptor->pins[2].name, "Max Distance");
+    EXPECT_EQ(attenuationDescriptor->pins[2].type, ScriptValueTypeUVE::Number);
+    EXPECT_EQ(attenuationDescriptor->pins[3].name, "Model");
+    EXPECT_EQ(attenuationDescriptor->pins[3].type, ScriptValueTypeUVE::Number);
+    EXPECT_EQ(attenuationDescriptor->pins[4].name, "Result");
+    EXPECT_EQ(attenuationDescriptor->pins[4].type, ScriptValueTypeUVE::Boolean);
 }
 
 TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesEntityBeforeAudioSetVolume) {
@@ -6572,6 +6589,92 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_AudioIsPlayingFailsClosedForMissi
     ASSERT_TRUE(context.SetInputUVE(1U, "Source", ScriptEntityValueUVE{Scene::EntityUVE{9U, 1U}}));
 
     EXPECT_EQ(ExecuteScriptBytecodeUVE(program, context).status, ScriptVmStatusUVE::NodeExecutionFailed);
+}
+
+
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesEntityBeforeAudioSetAttenuation) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({1U, "entity.spawn"}));
+    ASSERT_TRUE(graph.AddNodeUVE({2U, "audio.set_attenuation"}));
+    ASSERT_TRUE(graph.AddLinkUVE({{1U, "Result"}, {2U, "Source"}}));
+
+    const ScriptIrCompileResultUVE result = CompileScriptGraphToIrUVE(graph, registry);
+
+    ASSERT_TRUE(result.IsSuccessUVE());
+    ASSERT_TRUE(result.program.has_value());
+    ASSERT_EQ(result.program->instructions.size(), 3U);
+    EXPECT_EQ(result.program->instructions[0].nodeTypeId, "entity.spawn");
+    EXPECT_EQ(result.program->instructions[1].kind, ScriptIrInstructionKindUVE::TransferValue);
+    EXPECT_EQ(result.program->instructions[2].nodeTypeId, "audio.set_attenuation");
+}
+
+struct AudioAttenuationCaptureUVE final {
+    Scene::EntityUVE source = Scene::kInvalidEntityUVE;
+    float minDistance = 0.0F;
+    float maxDistance = 0.0F;
+    float model = -1.0F;
+};
+
+bool CaptureAudioAttenuationUVE(void* userData, Scene::EntityUVE source, float minDistance,
+                                float maxDistance, float model, bool* outResult) noexcept {
+    auto* capture = static_cast<AudioAttenuationCaptureUVE*>(userData);
+    if (capture == nullptr || outResult == nullptr) {
+        return false;
+    }
+    capture->source = source;
+    capture->minDistance = minDistance;
+    capture->maxDistance = maxDistance;
+    capture->model = model;
+    *outResult = true;
+    return true;
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_ExecutesAudioSetAttenuationWithCopiedValues) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U,
+                                    "audio.set_attenuation", {}, {}});
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(1U, "Source", ScriptEntityValueUVE{Scene::EntityUVE{9U, 1U}}));
+    ASSERT_TRUE(context.SetInputUVE(1U, "Min Distance", 2.0F));
+    ASSERT_TRUE(context.SetInputUVE(1U, "Max Distance", 40.0F));
+    ASSERT_TRUE(context.SetInputUVE(1U, "Model", 1.0F));
+    AudioAttenuationCaptureUVE capture;
+    ScriptEngineCallBindingsUVE bindings{};
+    bindings.userData = &capture;
+    bindings.audioSetAttenuation = CaptureAudioAttenuationUVE;
+    ScriptVmExecutionOptionsUVE options;
+    options.engineCallBindings = &bindings;
+
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(program, context, options);
+
+    ASSERT_TRUE(result.IsSuccessUVE());
+    EXPECT_EQ(capture.source, (Scene::EntityUVE{9U, 1U}));
+    EXPECT_FLOAT_EQ(capture.minDistance, 2.0F);
+    EXPECT_FLOAT_EQ(capture.maxDistance, 40.0F);
+    EXPECT_FLOAT_EQ(capture.model, 1.0F);
+    const std::optional<ScriptVmValueUVE> output = context.FindOutputUVE(1U, "Result");
+    ASSERT_TRUE(output.has_value());
+    ASSERT_TRUE(std::holds_alternative<bool>(*output));
+    EXPECT_TRUE(std::get<bool>(*output));
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_AudioSetAttenuationRejectsInvalidRangeAndModel) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U,
+                                    "audio.set_attenuation", {}, {}});
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(1U, "Source", ScriptEntityValueUVE{Scene::EntityUVE{9U, 1U}}));
+    ASSERT_TRUE(context.SetInputUVE(1U, "Min Distance", 10.0F));
+    ASSERT_TRUE(context.SetInputUVE(1U, "Max Distance", 10.0F));
+    ASSERT_TRUE(context.SetInputUVE(1U, "Model", 2.0F));
+    ScriptEngineCallBindingsUVE bindings{};
+    bindings.audioSetAttenuation = CaptureAudioAttenuationUVE;
+    ScriptVmExecutionOptionsUVE options;
+    options.engineCallBindings = &bindings;
+
+    EXPECT_EQ(ExecuteScriptBytecodeUVE(program, context, options).status, ScriptVmStatusUVE::NodeExecutionFailed);
 }
 
 } // namespace
