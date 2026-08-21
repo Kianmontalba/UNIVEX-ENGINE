@@ -88,6 +88,19 @@ TEST_F(InputSystemUVETest, MousePositionAndDelta_ComputedAcrossUpdateUVE) {
     EXPECT_NEAR(inputSystem.GetMouseDeltaUVE().y, 0.0F, kEpsilon);
 }
 
+TEST_F(InputSystemUVETest, MousePosition_RejectsNonFiniteAndPreservesLastValidState) {
+    inputSystem.SetMousePositionUVE(Math::Vector2UVE{4.0F, 7.0F});
+    inputSystem.UpdateUVE();
+    inputSystem.SetMousePositionUVE(Math::Vector2UVE{std::numeric_limits<float>::quiet_NaN(), 9.0F});
+    inputSystem.SetMousePositionUVE(Math::Vector2UVE{10.0F, std::numeric_limits<float>::infinity()});
+    inputSystem.UpdateUVE();
+
+    EXPECT_FLOAT_EQ(inputSystem.GetMousePositionUVE().x, 4.0F);
+    EXPECT_FLOAT_EQ(inputSystem.GetMousePositionUVE().y, 7.0F);
+    EXPECT_FLOAT_EQ(inputSystem.GetMouseDeltaUVE().x, 0.0F);
+    EXPECT_FLOAT_EQ(inputSystem.GetMouseDeltaUVE().y, 0.0F);
+}
+
 TEST_F(InputSystemUVETest, ScrollDelta_AccumulatesThenResetsAfterUpdateUVE) {
     inputSystem.SetMouseScrollDeltaUVE(1.0F);
     inputSystem.SetMouseScrollDeltaUVE(0.5F);

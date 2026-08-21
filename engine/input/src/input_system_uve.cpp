@@ -96,6 +96,9 @@ void InputSystemUVE::SetMouseButtonStateUVE(MouseButtonUVE button, bool isDown) 
 }
 
 void InputSystemUVE::SetMousePositionUVE(Math::Vector2UVE position) {
+    if (!std::isfinite(position.x) || !std::isfinite(position.y)) {
+        return;
+    }
     const std::lock_guard<std::mutex> lock(m_liveStateMutex);
     m_liveMousePosition = position;
 }
