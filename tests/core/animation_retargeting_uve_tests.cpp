@@ -2,6 +2,8 @@
 
 #include "uve/core/animation_retargeting_uve.h"
 
+#include <limits>
+
 #include <gtest/gtest.h>
 
 namespace UVE::Core {
@@ -69,6 +71,32 @@ TEST(AnimationRetargetingUVETest, RetargetAnimationPoseUVE_AppliesOptionalIKCont
     ASSERT_TRUE(result.IsSuccessUVE());
     EXPECT_EQ(result.appliedIKControlCount, 1U);
     EXPECT_NEAR(result.targetPose[1].pose.position.x, 4.0F, 1.0e-5F);
+}
+
+TEST(AnimationRetargetingUVETest, RetargetAnimationPoseUVE_RejectsNonFiniteLiveSourceAtomically) {
+    std::vector<RetargetBonePoseUVE> sourceCurrent = MakeSourceReferencePoseUVE();
+    sourceCurrent[1].pose.rotation.x = std::numeric_limits<float>::quiet_NaN();
+
+    const AnimationRetargetingResultUVE result = RetargetAnimationPoseUVE(
+        MakeSourceReferencePoseUVE(), sourceCurrent, MakeTargetReferencePoseUVE(), MakeProfileUVE());
+
+    EXPECT_FALSE(result.IsSuccessUVE());
+    EXPECT_TRUE(result.targetPose.empty());
+    EXPECT_EQ(result.mappedBoneCount, 0U);
+}
+
+TEST(AnimationRetargetingUVETest, RetargetAnimationPoseUVE_RejectsOverflowedTranslationAtomically) {
+    std::vector<RetargetBonePoseUVE> sourceCurrent = MakeSourceReferencePoseUVE();
+    sourceCurrent[1].pose.position = {std::numeric_limits<float>::max(), 0.0F, 0.0F};
+    AnimationRetargetingProfileUVE profile = MakeProfileUVE();
+    profile.translationScale = 2.0F;
+
+    const AnimationRetargetingResultUVE result = RetargetAnimationPoseUVE(
+        MakeSourceReferencePoseUVE(), sourceCurrent, MakeTargetReferencePoseUVE(), profile);
+
+    EXPECT_FALSE(result.IsSuccessUVE());
+    EXPECT_TRUE(result.targetPose.empty());
+    EXPECT_EQ(result.mappedBoneCount, 0U);
 }
 
 TEST(AnimationRetargetingUVETest, ValidateAnimationRetargetingUVE_RejectsDuplicateMappingAndMissingRootPolicy) {
