@@ -183,6 +183,38 @@ TEST(GltfPrimitiveConverterUVETest, ConvertGltfPrimitiveUVE_OverflowedFiniteNorm
     EXPECT_EQ(output.indices, original.indices);
 }
 
+TEST(GltfPrimitiveConverterUVETest, ConvertGltfPrimitiveUVE_OverflowedGeneratedNormalAccumulationPreservesOutput) {
+    const std::vector<std::byte> positions = [&] {
+        std::vector<std::byte> bytes;
+        AppendVector3UVE(bytes, 0.0F, 0.0F, 0.0F);
+        AppendVector3UVE(bytes, 1.0e19F, 0.0F, 0.0F);
+        AppendVector3UVE(bytes, 0.0F, 3.0e19F, 0.0F);
+        AppendVector3UVE(bytes, 1.0e19F, 0.0F, 0.0F);
+        AppendVector3UVE(bytes, 0.0F, 3.0e19F, 0.0F);
+        return bytes;
+    }();
+    const std::vector<std::byte> indices = [&] {
+        std::vector<std::byte> bytes;
+        for (const std::uint16_t index : {std::uint16_t{0U}, std::uint16_t{1U}, std::uint16_t{2U},
+                                           std::uint16_t{0U}, std::uint16_t{3U}, std::uint16_t{4U}}) {
+            AppendU16LittleEndianUVE(bytes, index);
+        }
+        return bytes;
+    }();
+    MeshAssetUVE output;
+    output.vertices = {MeshVertexUVE{Math::Vector3UVE{7.0F, 8.0F, 9.0F}, Math::Vector3UVE{0.0F, 1.0F, 0.0F}, 0.0F,
+                                     0.0F}};
+    output.indices = {0U};
+    const MeshAssetUVE original = output;
+    const GltfPrimitiveSourceUVE source{MakeAccessorUVE(positions, 5U, GltfComponentTypeUVE::Float), std::nullopt,
+                                        MakeAccessorUVE(indices, 6U, GltfComponentTypeUVE::UnsignedShort), std::nullopt,
+                                        4U};
+    EXPECT_FALSE(ConvertGltfPrimitiveUVE(source, output));
+    EXPECT_EQ(output.vertices.size(), original.vertices.size());
+    EXPECT_EQ(output.vertices[0].position, original.vertices[0].position);
+    EXPECT_EQ(output.indices, original.indices);
+}
+
 TEST(GltfPrimitiveConverterUVETest, ConvertGltfPrimitiveUVE_OutOfBoundsIndexPreservesOutput) {
     const std::vector<std::byte> positions = [&] {
         std::vector<std::byte> bytes;
