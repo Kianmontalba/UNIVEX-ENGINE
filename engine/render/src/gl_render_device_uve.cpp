@@ -326,6 +326,10 @@ PipelineHandleUVE GlRenderDeviceUVE::CreatePipelineUVE(const PipelineDescUVE& de
         UVE_ERROR("GlRenderDeviceUVE: CreatePipelineUVE received an unknown primitive topology");
         return kInvalidPipelineHandleUVE;
     }
+    if (!desc.vertexLayout.empty() && desc.vertexStride == 0U) {
+        UVE_ERROR("GlRenderDeviceUVE: CreatePipelineUVE requires a nonzero vertex stride for vertex attributes");
+        return kInvalidPipelineHandleUVE;
+    }
     const auto vertexIt = m_impl->state.shaders.find(desc.vertexShader.value);
     const auto fragmentIt = m_impl->state.shaders.find(desc.fragmentShader.value);
     if (vertexIt == m_impl->state.shaders.end() || fragmentIt == m_impl->state.shaders.end()) {
@@ -428,6 +432,11 @@ PipelineHandleUVE GlRenderDeviceUVE::CreatePipelineFromBinaryUVE(std::span<const
     }
     if (!IsPrimitiveTopologyValidUVE(desc.topology)) {
         UVE_ERROR("GlRenderDeviceUVE: CreatePipelineFromBinaryUVE received an unknown primitive topology");
+        return kInvalidPipelineHandleUVE;
+    }
+    if (!desc.vertexLayout.empty() && desc.vertexStride == 0U) {
+        UVE_ERROR(
+            "GlRenderDeviceUVE: CreatePipelineFromBinaryUVE requires a nonzero vertex stride for vertex attributes");
         return kInvalidPipelineHandleUVE;
     }
     const GLuint glProgram = m_impl->state.gl.glCreateProgram();
