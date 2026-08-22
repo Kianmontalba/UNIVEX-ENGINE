@@ -46,6 +46,15 @@ TEST_F(CheckpointManagerUVETest, UpdateUVE_BeforeIntervalElapses_NoSaveWritten) 
     EXPECT_FALSE(saveGameSystem.HasSaveUVE(kAutoSaveSlotIndexUVE));
 }
 
+TEST_F(CheckpointManagerUVETest, CheckpointUVE_FailedSavePreservesElapsedTime) {
+    checkpointManager.UpdateUVE(0.5, entityManager, MakeRootEntitiesUVE());
+    ASSERT_DOUBLE_EQ(checkpointManager.GetElapsedSinceLastSaveSecondsUVE(), 0.5);
+
+    EXPECT_FALSE(checkpointManager.CheckpointUVE(entityManager, {Scene::kInvalidEntityUVE}));
+    EXPECT_DOUBLE_EQ(checkpointManager.GetElapsedSinceLastSaveSecondsUVE(), 0.5);
+    EXPECT_FALSE(saveGameSystem.HasSaveUVE(kManualCheckpointSlotIndexUVE));
+}
+
 TEST_F(CheckpointManagerUVETest, UpdateUVE_AtOrAfterIntervalElapses_WritesAutoSaveAndResetsElapsed) {
     checkpointManager.UpdateUVE(1.0, entityManager, MakeRootEntitiesUVE());
     checkpointManager.UpdateUVE(1.5, entityManager, MakeRootEntitiesUVE());
