@@ -36,6 +36,32 @@ using Scene::MeshComponentUVE;
 using Scene::RigidBodyComponentUVE;
 using Scene::SceneSerializerUVE;
 
+class CountingSceneSerializerUVE final : public Scene::ISceneSerializerUVE {
+public:
+    [[nodiscard]] std::optional<Scene::SceneSnapshotUVE> CaptureUVE(
+        Scene::IEntityManagerUVE&, const std::vector<EntityUVE>&, Scene::SceneAssetTypeUVE) const override {
+        return std::nullopt;
+    }
+
+    [[nodiscard]] std::vector<EntityUVE> RestoreUVE(
+        Scene::IEntityManagerUVE&, const Scene::SceneSnapshotUVE&) const override {
+        return {};
+    }
+
+    [[nodiscard]] bool SaveUVE(Scene::IEntityManagerUVE&, const std::vector<EntityUVE>&,
+                               const std::filesystem::path&, Scene::SceneAssetTypeUVE) override {
+        ++saveCallCount;
+        return false;
+    }
+
+    [[nodiscard]] std::vector<EntityUVE> LoadUVE(
+        Scene::IEntityManagerUVE&, const std::filesystem::path&) override {
+        return {};
+    }
+
+    int saveCallCount = 0;
+};
+
 class SaveGameSystemUVETest : public ::testing::Test {
 protected:
     Memory::MemoryManagerUVE memoryManager;
@@ -741,6 +767,25 @@ TEST_F(SaveGameSystemUVETest, SaveUVE_DirectoryCannotBeCreated_FailsWithoutLeavi
     const EntityUVE entity = entityManager.CreateEntityUVE();
     EXPECT_FALSE(brokenSaveGameSystem.SaveUVE(3, entityManager, {entity}, GameStateMetadataUVE{}));
     EXPECT_FALSE(std::filesystem::exists(badSaveDirectory));
+
+    std::filesystem::remove(blockerFile);
+}
+
+TEST(SaveGameSystemUVE, SaveUVE_DirectoryPreparationFailureSkipsSceneSerialization) {
+    Memory::MemoryManagerUVE memoryManager;
+    Events::EventSystemUVE eventSystem;
+    EntityManagerUVE entityManager{memoryManager.GetDefaultAllocatorUVE(), eventSystem};
+    CountingSceneSerializerUVE sceneSerializer;
+    const std::filesystem::path blockerFile = "uve_save_game_system_tests_counting_blocker";
+    {
+        std::ofstream blocker(blockerFile);
+        blocker << "not a directory";
+    }
+
+    SaveGameSystemUVE saveGameSystem(sceneSerializer, blockerFile / "saves");
+    const EntityUVE entity = entityManager.CreateEntityUVE();
+    EXPECT_FALSE(saveGameSystem.SaveUVE(3, entityManager, {entity}, GameStateMetadataUVE{}));
+    EXPECT_EQ(sceneSerializer.saveCallCount, 0);
 
     std::filesystem::remove(blockerFile);
 }
