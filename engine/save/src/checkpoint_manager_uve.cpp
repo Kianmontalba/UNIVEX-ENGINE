@@ -45,7 +45,9 @@ bool CheckpointManagerUVE::SaveCheckpointUVE(const int slotIndex, Scene::IEntity
     metadata.playtimeSeconds = m_totalPlaytimeSeconds;
 
     const bool saved = m_saveGameSystem->SaveUVE(slotIndex, entityManager, rootEntities, metadata);
-    m_elapsedSinceLastSaveSeconds = 0.0;
+    if (saved) {
+        m_elapsedSinceLastSaveSeconds = 0.0;
+    }
     return saved;
 }
 

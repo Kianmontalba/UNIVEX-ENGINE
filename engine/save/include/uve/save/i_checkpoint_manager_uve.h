@@ -16,9 +16,10 @@ namespace UVE::Save {
 /// ISaveGameSystemUVE's reserved kAutoSaveSlotIndexUVE whenever the configured interval elapses;
 /// CheckpointUVE() writes to the distinct kManualCheckpointSlotIndexUVE immediately, on demand.
 ///
-/// A checkpoint — automatic or manual — resets the elapsed-time accumulator, so a manual
-/// CheckpointUVE() call defers the next automatic one rather than being immediately followed by a
-/// redundant one.
+/// A successfully written checkpoint — automatic or manual — resets the elapsed-time accumulator,
+/// so a successful manual CheckpointUVE() call defers the next automatic one rather than being
+/// immediately followed by a redundant one. A failed save preserves the accumulated time for a
+/// later retry.
 /// Thread-safety: not thread-safe, matching every other per-frame-driven system in this engine
 /// (PhysicsSystemUVE, AudioSourceSystemUVE) — UpdateUVE() is intended to be called once per frame
 /// from the main engine thread.
@@ -29,16 +30,16 @@ public:
     /// Accumulates `deltaTimeSeconds` into both the total-playtime counter and the
     /// since-last-save counter; once the latter reaches GetAutoSaveIntervalSecondsUVE(), saves
     /// `rootEntities` (from `entityManager`) to kAutoSaveSlotIndexUVE via the composed
-    /// ISaveGameSystemUVE and resets the since-last-save counter to 0, whether or not the save
-    /// succeeded (a save that fails once — e.g. a full disk — is retried on the next elapsed
-    /// interval, not spammed every subsequent frame).
+    /// ISaveGameSystemUVE and resets the since-last-save counter to 0 only when the save succeeds;
+    /// a failed save preserves accumulated time so it can be retried on a later update rather than
+    /// losing the elapsed interval.
     virtual void UpdateUVE(double deltaTimeSeconds, Scene::IEntityManagerUVE& entityManager,
                             const std::vector<Scene::EntityUVE>& rootEntities) = 0;
 
     /// Immediately saves `rootEntities` to kManualCheckpointSlotIndexUVE (the spec's "manual save points
-    /// - e.g. before boss fight"), regardless of how much time has elapsed since the last
-    /// auto-save, then resets the since-last-save counter to 0. Returns whatever the underlying
-    /// ISaveGameSystemUVE::SaveUVE() returned.
+    /// - e.g. before boss fight"), regardless of how much time has elapsed since the last auto-save,
+    /// then resets the since-last-save counter to 0 only when the save succeeds. Returns whatever the
+    /// underlying ISaveGameSystemUVE::SaveUVE() returned.
     [[nodiscard]] virtual bool CheckpointUVE(Scene::IEntityManagerUVE& entityManager,
                                               const std::vector<Scene::EntityUVE>& rootEntities) = 0;
 
@@ -48,8 +49,9 @@ public:
     virtual void SetAutoSaveIntervalSecondsUVE(double intervalSeconds) noexcept = 0;
     [[nodiscard]] virtual double GetAutoSaveIntervalSecondsUVE() const noexcept = 0;
 
-    /// Seconds accumulated since the last successful-or-attempted auto-save. Manual checkpoints
-    /// reset this accumulator because they defer the next automatic save. Exposed
+    /// Seconds accumulated since the last successful auto-save. Successful manual checkpoints
+    /// reset this accumulator because they defer the next automatic save; failed saves preserve it
+    /// for retry. Exposed
     /// so tests can assert "just under the interval, no save fired" / "at/over the interval, one
     /// fired" without a real wall-clock wait.
     [[nodiscard]] virtual double GetElapsedSinceLastSaveSecondsUVE() const noexcept = 0;
