@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <map>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -81,6 +82,37 @@ public:
     [[nodiscard]] std::vector<Asset::AssetRecordUVE> GetRegisteredAssetsUVE() const override { return {}; }
 
     std::size_t saveCallCount = 0U;
+};
+
+class ThrowingPrefabAssetDatabaseUVE final : public Asset::IAssetDatabaseUVE {
+public:
+    bool LoadUVE(const std::filesystem::path&) override { return false; }
+    bool SaveUVE() override { return true; }
+    bool SaveUVE(const std::filesystem::path&) override { return true; }
+    [[nodiscard]] Asset::AssetGuidUVE RegisterUVE(const std::filesystem::path&) override {
+        if (throwOnRegister) {
+            if (throwUnknown) {
+                throw 7;
+            }
+            throw std::runtime_error("injected prefab registration failure");
+        }
+        return Asset::AssetGuidUVE{99U};
+    }
+    [[nodiscard]] std::filesystem::path ResolveUVE(Asset::AssetGuidUVE) const override {
+        if (throwOnResolve) {
+            if (throwUnknown) {
+                throw 8;
+            }
+            throw std::runtime_error("injected prefab resolution failure");
+        }
+        return {};
+    }
+    [[nodiscard]] bool HasGuidUVE(Asset::AssetGuidUVE) const override { return false; }
+    [[nodiscard]] std::vector<Asset::AssetRecordUVE> GetRegisteredAssetsUVE() const override { return {}; }
+
+    bool throwOnRegister = false;
+    bool throwOnResolve = false;
+    bool throwUnknown = false;
 };
 
 class PrefabSystemUVETest : public ::testing::Test {
@@ -506,6 +538,31 @@ TEST_F(PrefabSystemUVETest, NestedPrefab_PreservesSourceGuidWithoutRecursiveRein
 
     std::filesystem::remove(innerPath);
     std::filesystem::remove(outerPath);
+}
+
+TEST_F(PrefabSystemUVETest, SavePrefabUVE_RegistrationExceptionFailsClosed) {
+    const EntityUVE source = entityManager.CreateEntityUVE();
+    const std::filesystem::path path = "uve_prefab_tests_registration_exception.uveprefab";
+    std::filesystem::remove(path);
+    ThrowingPrefabAssetDatabaseUVE throwingDatabase;
+    throwingDatabase.throwOnRegister = true;
+
+    const Asset::AssetGuidUVE guid = prefabSystem.SavePrefabUVE(entityManager, throwingDatabase, source, path);
+
+    EXPECT_EQ(guid, Asset::kInvalidAssetGuidUVE);
+    EXPECT_TRUE(std::filesystem::exists(path));
+    std::filesystem::remove(path);
+}
+
+TEST_F(PrefabSystemUVETest, InstantiateUVE_ResolutionUnknownExceptionFailsBeforeEntityPublication) {
+    ThrowingPrefabAssetDatabaseUVE throwingDatabase;
+    throwingDatabase.throwOnResolve = true;
+    throwingDatabase.throwUnknown = true;
+
+    const EntityUVE instance = prefabSystem.InstantiateUVE(entityManager, sceneGraph, throwingDatabase,
+                                                            Asset::AssetGuidUVE{424242}, kInvalidEntityUVE);
+
+    EXPECT_EQ(instance, kInvalidEntityUVE);
 }
 
 TEST_F(PrefabSystemUVETest, SavePrefabUVE_InvalidRegistrationFailsBeforeRegistrySave) {
