@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstddef>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "uve/debug/assert_uve.h"
@@ -19,15 +20,19 @@ namespace UVE::Scene {
 
 namespace {
 
-#if UVE_DEBUG
-/// True iff `potentialAncestor` appears in `entity`'s parent chain (including `entity` itself).
-/// Used by SetParentUVE() to reject reparenting that would create a cycle. Only referenced from
-/// inside UVE_ASSERT, whose condition is never evaluated in Release builds (see
-/// engine/debug/include/uve/debug/assert_uve.h) — guarded by #if UVE_DEBUG so it isn't left as
-/// an unreferenced internal-linkage function in Release.
-bool IsAncestorUVE(IEntityManagerUVE& entityManager, EntityUVE potentialAncestor, EntityUVE entity) {
+/// True iff `potentialAncestor` appears in `entity`'s parent chain, or the chain is malformed.
+/// The visited set prevents a pre-existing malformed cycle from making this public mutation path
+/// loop forever in a release build.
+bool IsAncestorOrMalformedUVE(IEntityManagerUVE& entityManager, EntityUVE potentialAncestor,
+                              EntityUVE entity) {
+    std::unordered_set<EntityUVE> visited;
     EntityUVE current = entity;
     while (current != kInvalidEntityUVE) {
+        if (!entityManager.IsAliveUVE(current) ||
+            !entityManager.HasComponentUVE<HierarchyComponentUVE>(current) ||
+            !visited.insert(current).second) {
+            return true;
+        }
         if (current == potentialAncestor) {
             return true;
         }
@@ -35,7 +40,6 @@ bool IsAncestorUVE(IEntityManagerUVE& entityManager, EntityUVE potentialAncestor
     }
     return false;
 }
-#endif
 
 [[nodiscard]] bool IsFiniteWorldTransformUVE(const WorldTransformComponentUVE& transform) noexcept {
     return std::isfinite(transform.worldPosition.x) && std::isfinite(transform.worldPosition.y) &&
@@ -53,9 +57,15 @@ struct WorldTransformPassStateUVE final {
 
 void SceneGraphUVE::AttachTransformUVE(IEntityManagerUVE& entityManager, EntityUVE entity,
                                         const TransformComponentUVE& localTransform) {
-    UVE_ASSERT(entityManager.IsAliveUVE(entity));
-    UVE_ASSERT(!entityManager.HasComponentUVE<TransformComponentUVE>(entity));
-    UVE_ASSERT(IsTransformComponentValidUVE(localTransform));
+    if (!entityManager.IsAliveUVE(entity) || entityManager.HasComponentUVE<TransformComponentUVE>(entity) ||
+        entityManager.HasComponentUVE<WorldTransformComponentUVE>(entity) ||
+        entityManager.HasComponentUVE<HierarchyComponentUVE>(entity) ||
+        !IsTransformComponentValidUVE(localTransform)) {
+        UVE_ASSERT(entityManager.IsAliveUVE(entity));
+        UVE_ASSERT(!entityManager.HasComponentUVE<TransformComponentUVE>(entity));
+        UVE_ASSERT(IsTransformComponentValidUVE(localTransform));
+        return;
+    }
 
     entityManager.AddComponentUVE<TransformComponentUVE>(entity, localTransform);
     entityManager.AddComponentUVE<WorldTransformComponentUVE>(entity);
@@ -64,19 +74,34 @@ void SceneGraphUVE::AttachTransformUVE(IEntityManagerUVE& entityManager, EntityU
 
 void SceneGraphUVE::SetLocalTransformUVE(IEntityManagerUVE& entityManager, EntityUVE entity,
                                          const TransformComponentUVE& localTransform) {
-    UVE_ASSERT(entityManager.HasComponentUVE<TransformComponentUVE>(entity));
-    UVE_ASSERT(IsTransformComponentValidUVE(localTransform));
+    if (!entityManager.IsAliveUVE(entity) || !entityManager.HasComponentUVE<TransformComponentUVE>(entity) ||
+        !entityManager.HasComponentUVE<WorldTransformComponentUVE>(entity) ||
+        !IsTransformComponentValidUVE(localTransform)) {
+        UVE_ASSERT(entityManager.HasComponentUVE<TransformComponentUVE>(entity));
+        UVE_ASSERT(IsTransformComponentValidUVE(localTransform));
+        return;
+    }
 
     entityManager.GetComponentUVE<TransformComponentUVE>(entity) = localTransform;
     entityManager.GetComponentUVE<WorldTransformComponentUVE>(entity).dirty = true;
 }
 
 void SceneGraphUVE::SetParentUVE(IEntityManagerUVE& entityManager, EntityUVE child, EntityUVE newParent) {
-    UVE_ASSERT(entityManager.HasComponentUVE<HierarchyComponentUVE>(child));
-    UVE_ASSERT(newParent == kInvalidEntityUVE || entityManager.HasComponentUVE<HierarchyComponentUVE>(newParent));
-#if UVE_DEBUG
-    UVE_ASSERT(newParent == kInvalidEntityUVE || !IsAncestorUVE(entityManager, child, newParent));
-#endif
+    const bool invalidChild = !entityManager.IsAliveUVE(child) ||
+                              !entityManager.HasComponentUVE<HierarchyComponentUVE>(child) ||
+                              !entityManager.HasComponentUVE<WorldTransformComponentUVE>(child);
+    const bool invalidParent =
+        newParent != kInvalidEntityUVE &&
+        (!entityManager.IsAliveUVE(newParent) ||
+         !entityManager.HasComponentUVE<HierarchyComponentUVE>(newParent));
+    const bool createsCycle = !invalidChild && !invalidParent && newParent != kInvalidEntityUVE &&
+                              IsAncestorOrMalformedUVE(entityManager, child, newParent);
+    if (invalidChild || invalidParent || createsCycle) {
+        UVE_ASSERT(!invalidChild);
+        UVE_ASSERT(!invalidParent);
+        UVE_ASSERT(!createsCycle);
+        return;
+    }
 
     entityManager.GetComponentUVE<HierarchyComponentUVE>(child).parent = newParent;
     entityManager.GetComponentUVE<WorldTransformComponentUVE>(child).dirty = true;

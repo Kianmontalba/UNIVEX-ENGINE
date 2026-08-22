@@ -56,6 +56,43 @@ TEST(TransformComponentUVETest, IsTransformComponentValidUVE_RejectsNonFiniteAnd
     EXPECT_TRUE(IsTransformComponentValidUVE(transform));
 }
 
+#if UVE_DEBUG
+TEST_F(SceneGraphUVETest, InvalidMutationInputsAssertBeforePublication) {
+    const EntityUVE unattached = entityManager.CreateEntityUVE();
+    TransformComponentUVE invalidTransform{};
+    invalidTransform.localPosition.x = std::numeric_limits<float>::quiet_NaN();
+    EXPECT_DEATH({ sceneGraph.AttachTransformUVE(entityManager, unattached, invalidTransform); }, "");
+
+    const EntityUVE attached = entityManager.CreateEntityUVE();
+    sceneGraph.AttachTransformUVE(entityManager, attached, TransformComponentUVE{});
+    EXPECT_DEATH({ sceneGraph.SetLocalTransformUVE(entityManager, attached, invalidTransform); }, "");
+
+    const EntityUVE invalidParent{0xFFFFFFFFU, 1U};
+    EXPECT_DEATH({ sceneGraph.SetParentUVE(entityManager, attached, invalidParent); }, "");
+}
+#else
+TEST_F(SceneGraphUVETest, InvalidMutationInputsFailClosedWithoutPublication) {
+    const EntityUVE unattached = entityManager.CreateEntityUVE();
+    TransformComponentUVE invalidTransform{};
+    invalidTransform.localPosition.x = std::numeric_limits<float>::quiet_NaN();
+    sceneGraph.AttachTransformUVE(entityManager, unattached, invalidTransform);
+    EXPECT_FALSE(entityManager.HasComponentUVE<TransformComponentUVE>(unattached));
+
+    const EntityUVE attached = entityManager.CreateEntityUVE();
+    sceneGraph.AttachTransformUVE(entityManager, attached, TransformComponentUVE{});
+    sceneGraph.UpdateUVE(entityManager);
+    const TransformComponentUVE before = entityManager.GetComponentUVE<TransformComponentUVE>(attached);
+    const WorldTransformComponentUVE worldBefore = entityManager.GetComponentUVE<WorldTransformComponentUVE>(attached);
+    sceneGraph.SetLocalTransformUVE(entityManager, attached, invalidTransform);
+    EXPECT_EQ(entityManager.GetComponentUVE<TransformComponentUVE>(attached).localPosition, before.localPosition);
+    EXPECT_EQ(entityManager.GetComponentUVE<WorldTransformComponentUVE>(attached).dirty, worldBefore.dirty);
+
+    const EntityUVE invalidParent{0xFFFFFFFFU, 1U};
+    sceneGraph.SetParentUVE(entityManager, attached, invalidParent);
+    EXPECT_EQ(entityManager.GetComponentUVE<HierarchyComponentUVE>(attached).parent, kInvalidEntityUVE);
+}
+#endif
+
 TEST_F(SceneGraphUVETest, UpdateUVE_RootEntity_WorldEqualsLocal) {
     const EntityUVE entity = entityManager.CreateEntityUVE();
     TransformComponentUVE local;
