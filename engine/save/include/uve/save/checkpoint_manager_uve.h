@@ -14,8 +14,9 @@ namespace UVE::Save {
 /// interval) — no per-entity state.
 class CheckpointManagerUVE final : public ICheckpointManagerUVE {
 public:
-    /// `saveGameSystem` must outlive this CheckpointManagerUVE. `autoSaveIntervalSeconds`
-    /// defaults to 300.0 (the spec's "e.g., every 5 minutes" example).
+    /// `saveGameSystem` must outlive this CheckpointManagerUVE. `autoSaveIntervalSeconds` must be
+    /// finite and positive; invalid construction input falls back to 300.0 (the spec's "e.g.,
+    /// every 5 minutes" example).
     explicit CheckpointManagerUVE(ISaveGameSystemUVE& saveGameSystem, double autoSaveIntervalSeconds = 300.0);
 
     void UpdateUVE(double deltaTimeSeconds, Scene::IEntityManagerUVE& entityManager,

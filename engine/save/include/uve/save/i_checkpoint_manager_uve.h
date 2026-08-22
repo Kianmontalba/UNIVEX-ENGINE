@@ -44,9 +44,10 @@ public:
     [[nodiscard]] virtual bool CheckpointUVE(Scene::IEntityManagerUVE& entityManager,
                                               const std::vector<Scene::EntityUVE>& rootEntities) = 0;
 
-    /// Changes the auto-save interval, in seconds, without resetting the current elapsed
-    /// counter — shortening the interval below the already-elapsed time triggers an auto-save on
-    /// the very next UpdateUVE() call, rather than silently skipping one.
+    /// Changes the auto-save interval to a finite positive number, in seconds, without resetting
+    /// the current elapsed counter. Invalid zero, negative, or non-finite values are ignored and
+    /// retain the last valid interval; shortening a valid interval below the already-elapsed time
+    /// triggers an auto-save on the very next UpdateUVE() call.
     virtual void SetAutoSaveIntervalSecondsUVE(double intervalSeconds) noexcept = 0;
     [[nodiscard]] virtual double GetAutoSaveIntervalSecondsUVE() const noexcept = 0;
 
