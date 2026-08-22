@@ -25,20 +25,22 @@ public:
 
     /// Makes `entity` a scene-graph node: adds TransformComponentUVE (set to `localTransform`),
     /// WorldTransformComponentUVE (dirty), and HierarchyComponentUVE (parent = invalid) in one
-    /// call, so callers never have to remember all three individually. Asserts `entity` is
-    /// alive and does not already have a TransformComponentUVE.
+    /// call, so callers never have to remember all three individually. Debug builds assert that
+    /// `entity` is alive, has no scene-graph components, and receives a valid transform; release
+    /// builds return without mutation when any precondition is invalid.
     virtual void AttachTransformUVE(IEntityManagerUVE& entityManager, EntityUVE entity,
                                      const TransformComponentUVE& localTransform) = 0;
 
     /// Overwrites `entity`'s authored local transform and marks its WorldTransformComponentUVE
-    /// dirty. Asserts `entity` already has a TransformComponentUVE (see AttachTransformUVE()).
+    /// dirty. Debug builds assert that the entity and transform are valid; release builds return
+    /// without mutation when the preconditions fail.
     virtual void SetLocalTransformUVE(IEntityManagerUVE& entityManager, EntityUVE entity,
                                        const TransformComponentUVE& localTransform) = 0;
 
     /// Reparents `child` under `newParent` (or makes it a root if `newParent ==
-    /// kInvalidEntityUVE`), marking `child` dirty. Asserts neither entity would create a cycle
-    /// (i.e. `child` is not currently an ancestor of `newParent`) — UVE_ASSERT fires rather than
-    /// silently corrupting the hierarchy.
+    /// kInvalidEntityUVE`), marking `child` dirty. Debug builds assert valid entities/components and
+    /// a cycle-free parent chain; release builds return without mutation for invalid input rather
+    /// than silently corrupting the hierarchy.
     virtual void SetParentUVE(IEntityManagerUVE& entityManager, EntityUVE child, EntityUVE newParent) = 0;
 
     /// The dirty-flag-propagation pass: recomputes every scene-graph entity's
