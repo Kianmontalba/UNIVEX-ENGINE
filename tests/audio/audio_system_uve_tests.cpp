@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <limits>
 #include <memory>
+#include <stdexcept>
 #include <variant>
 #include <vector>
 
@@ -55,10 +56,14 @@ class TestAudioClipResolverUVE final : public IAudioClipResolverUVE {
 public:
     [[nodiscard]] AudioClipResolutionUVE ResolveAudioClipUVE(std::string_view) const override {
         ++resolveCount;
+        if (throwException) {
+            throw std::runtime_error("injected resolver exception");
+        }
         return AudioClipResolutionUVE{accepted, resolvedPath, diagnostic};
     }
 
     bool accepted = true;
+    bool throwException = false;
     std::string resolvedPath;
     std::string diagnostic;
     mutable int resolveCount = 0;
@@ -103,6 +108,22 @@ TEST(AudioSystemDeviceFailureUVETest, DuplicateDeviceVoiceHandleFailsBeforeSecon
     EXPECT_EQ(duplicate, kInvalidVoiceHandleUVE);
     EXPECT_EQ(device.createCount, 2);
     EXPECT_EQ(audioSystem.GetMixerDiagnosticsUVE().routedSourceCount, 1U);
+}
+
+TEST(AudioClipResolutionUVETest, ResolverExceptionFailsAtomicallyBeforeDeviceCreation) {
+    RecordingAudioDeviceUVE device;
+    TestAudioClipResolverUVE resolver;
+    resolver.throwException = true;
+    AudioSystemUVE audioSystem{device, &resolver};
+
+    AudioSourceDescUVE desc;
+    desc.audioAssetPath = "sounds/throwing.wav";
+    const VoiceHandleUVE source = audioSystem.CreateSourceUVE(desc);
+
+    EXPECT_EQ(source, kInvalidVoiceHandleUVE);
+    EXPECT_EQ(resolver.resolveCount, 1);
+    EXPECT_EQ(device.createCount, 0);
+    EXPECT_EQ(audioSystem.GetMixerDiagnosticsUVE().routedSourceCount, 0U);
 }
 
 TEST(AudioClipResolutionUVETest, RejectedResolverPathFailsAtomicallyBeforeDeviceCreation) {

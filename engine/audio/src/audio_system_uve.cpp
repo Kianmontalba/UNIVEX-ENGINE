@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <exception>
 #include <unordered_map>
 
 #include "uve/debug/logging_macros_uve.h"
@@ -70,7 +71,18 @@ VoiceHandleUVE AudioSystemUVE::CreateSourceUVE(const AudioSourceDescUVE& desc) {
     }
     std::string resolvedAudioAssetPath = desc.audioAssetPath;
     if (m_impl->clipResolver != nullptr) {
-        const AudioClipResolutionUVE resolution = m_impl->clipResolver->ResolveAudioClipUVE(desc.audioAssetPath);
+        AudioClipResolutionUVE resolution;
+        try {
+            resolution = m_impl->clipResolver->ResolveAudioClipUVE(desc.audioAssetPath);
+        } catch (const std::exception& exception) {
+            UVE_ERROR("AudioSystemUVE: audio clip resolver threw for '{}': {}", desc.audioAssetPath,
+                      exception.what());
+            return kInvalidVoiceHandleUVE;
+        } catch (...) {
+            UVE_ERROR("AudioSystemUVE: audio clip resolver threw an unknown exception for '{}'",
+                      desc.audioAssetPath);
+            return kInvalidVoiceHandleUVE;
+        }
         if (!resolution.accepted) {
             UVE_ERROR("AudioSystemUVE: audio clip resolution rejected '{}': {}", desc.audioAssetPath,
                       resolution.diagnostic);
