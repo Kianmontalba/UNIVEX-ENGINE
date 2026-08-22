@@ -83,6 +83,17 @@ struct TextureDescUVE {
 /// since ShaderStageUVE crosses the RHI boundary.
 enum class ShaderStageUVE : std::uint8_t { Vertex, Fragment, Compute, Geometry };
 
+[[nodiscard]] constexpr bool IsShaderStageValidUVE(const ShaderStageUVE stage) noexcept {
+    switch (stage) {
+        case ShaderStageUVE::Vertex:
+        case ShaderStageUVE::Fragment:
+        case ShaderStageUVE::Compute:
+        case ShaderStageUVE::Geometry:
+            return true;
+    }
+    return false;
+}
+
 /// Describes a shader to create via IRenderDeviceUVE::CreateShaderUVE(). `sourceCode` is stored
 /// and validated as-is; NullRenderDeviceUVE never compiles it — no glslang/shaderc/DXC is
 /// available in this environment (see docs/CODING_STANDARDS.md).

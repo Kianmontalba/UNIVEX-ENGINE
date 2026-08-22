@@ -261,6 +261,13 @@ void GlRenderDeviceUVE::DestroyTextureUVE(TextureHandleUVE texture) {
 }
 
 ShaderHandleUVE GlRenderDeviceUVE::CreateShaderUVE(const ShaderDescUVE& desc, std::string* outInfoLog) {
+    if (!IsShaderStageValidUVE(desc.stage)) {
+        if (outInfoLog != nullptr) {
+            *outInfoLog = "Unknown shader stage.";
+        }
+        UVE_ERROR("GlRenderDeviceUVE: CreateShaderUVE received an unknown shader stage");
+        return kInvalidShaderHandleUVE;
+    }
     const GLenum stage = ShaderStageToGlUVE(desc.stage);
     const GLuint glShader = m_impl->state.gl.glCreateShader(stage);
 
