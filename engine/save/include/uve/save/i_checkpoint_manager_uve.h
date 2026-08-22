@@ -27,8 +27,9 @@ class ICheckpointManagerUVE {
 public:
     virtual ~ICheckpointManagerUVE() = default;
 
-    /// Accumulates `deltaTimeSeconds` into both the total-playtime counter and the
-    /// since-last-save counter; once the latter reaches GetAutoSaveIntervalSecondsUVE(), saves
+    /// Accumulates a finite nonnegative `deltaTimeSeconds` into both the total-playtime counter
+    /// and the since-last-save counter; invalid negative or non-finite deltas are ignored without
+    /// counter or save-state mutation. Once the latter reaches GetAutoSaveIntervalSecondsUVE(), saves
     /// `rootEntities` (from `entityManager`) to kAutoSaveSlotIndexUVE via the composed
     /// ISaveGameSystemUVE and resets the since-last-save counter to 0 only when the save succeeds;
     /// a failed save preserves accumulated time so it can be retried on a later update rather than
