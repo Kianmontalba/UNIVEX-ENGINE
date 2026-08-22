@@ -25,6 +25,16 @@ namespace {
     return false;
 }
 
+[[nodiscard]] bool IsValidMotionQueryMirrorAxisUVE(const MotionQueryMirrorAxisUVE axis) noexcept {
+    switch (axis) {
+    case MotionQueryMirrorAxisUVE::X:
+    case MotionQueryMirrorAxisUVE::Y:
+    case MotionQueryMirrorAxisUVE::Z:
+        return true;
+    }
+    return false;
+}
+
 void MirrorVectorComponentUVE(Math::Vector3UVE& value, MotionQueryMirrorAxisUVE axis) noexcept {
     switch (axis) {
     case MotionQueryMirrorAxisUVE::X:
@@ -152,7 +162,8 @@ bool MotionQueryHistoryBufferUVE::TryGetPoseAtOrBeforeUVE(
 bool TryMirrorMotionQueryHistoryFrameUVE(
     const MotionQueryHistoryFrameUVE& frame, MotionQueryMirrorSettingsUVE settings,
     MotionQueryHistoryFrameUVE& outFrame) noexcept {
-    if (!ValidateMotionQueryHistoryFrameUVE(frame).IsAcceptedUVE()) {
+    if (!IsValidMotionQueryMirrorAxisUVE(settings.axis) ||
+        !ValidateMotionQueryHistoryFrameUVE(frame).IsAcceptedUVE()) {
         return false;
     }
     MotionQueryHistoryFrameUVE mirrored = frame;

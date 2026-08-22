@@ -109,6 +109,8 @@ struct MotionQueryMirrorSettingsUVE final {
 [[nodiscard]] MotionQueryHistoryResultUVE ValidateMotionQueryHistoryNotifyUVE(
     const MotionQueryHistoryNotifyUVE& notify) noexcept;
 
+/// Mirrors a validated history frame across the requested X/Y/Z axis into staged output. Returns
+/// false for an unknown raw axis or invalid frame and leaves `outFrame` unchanged on failure.
 [[nodiscard]] bool TryMirrorMotionQueryHistoryFrameUVE(
     const MotionQueryHistoryFrameUVE& frame, MotionQueryMirrorSettingsUVE settings,
     MotionQueryHistoryFrameUVE& outFrame) noexcept;

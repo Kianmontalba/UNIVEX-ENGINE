@@ -80,6 +80,18 @@ TEST(MotionQueryHistoryUVETest, MirrorFrameUVE_MirrorsSelectedAxisWithoutOwningO
     EXPECT_FLOAT_EQ(mirrored.query.trajectory.front().relativePosition.x, -2.0F);
 }
 
+TEST(MotionQueryHistoryUVETest, MirrorFrameUVE_UnknownAxisRejectsAndPreservesOutput) {
+    const MotionQueryHistoryFrameUVE original = MakeFrameUVE(1.0, 2.0F);
+    MotionQueryHistoryFrameUVE output = MakeFrameUVE(3.0, 4.0F);
+    const MotionQueryHistoryFrameUVE before = output;
+    EXPECT_FALSE(TryMirrorMotionQueryHistoryFrameUVE(
+        original, MotionQueryMirrorSettingsUVE{static_cast<MotionQueryMirrorAxisUVE>(0xFFU)}, output));
+    EXPECT_DOUBLE_EQ(output.sample.timeSeconds, before.sample.timeSeconds);
+    EXPECT_FLOAT_EQ(output.sample.pose.position.x, before.sample.pose.position.x);
+    EXPECT_FLOAT_EQ(output.query.rootVelocity.x, before.query.rootVelocity.x);
+    EXPECT_EQ(output.attributes.size(), before.attributes.size());
+}
+
 TEST(MotionQueryHistoryUVETest, ClearUVE_RemovesFramesAndNotifies) {
     MotionQueryHistoryBufferUVE history;
     ASSERT_TRUE(history.AppendFrameUVE(MakeFrameUVE(0.0, 0.0F)).IsAcceptedUVE());

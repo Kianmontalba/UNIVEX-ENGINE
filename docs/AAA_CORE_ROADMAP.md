@@ -238,7 +238,7 @@ The following inventory contains UNIVEX-native target filenames only. These name
 | motion_query_feature_base_uve.cpp | To audit → adapt → integrate → verify |
 | motion_query_feature_body_uve.cpp | To audit → adapt → integrate → verify |
 | motion_query_feature_trajectory_uve.cpp | To audit → adapt → integrate → verify |
-| motion_query_history_uve.cpp | To audit → adapt → integrate → verify |
+| motion_query_history_uve.cpp | To audit → adapt → integrate → verify — Increment 444 adds X/Y/Z-only mirror-axis validation before staged frame publication, with unknown-axis failure-atomic regression coverage. |
 | motion_query_library_uve.cpp | To audit → adapt → integrate → verify |
 | motion_query_module_uve.cpp | To audit → adapt → integrate → verify |
 | motion_query_normalization_uve.cpp | To audit → adapt → integrate → verify |
@@ -266,7 +266,7 @@ The following inventory contains UNIVEX-native target filenames only. These name
 | motion_query_feature_base_uve.h | To audit → adapt → integrate → verify |
 | motion_query_feature_body_uve.h | To audit → adapt → integrate → verify |
 | motion_query_feature_trajectory_uve.h | To audit → adapt → integrate → verify |
-| motion_query_history_uve.h | To audit → adapt → integrate → verify |
+| motion_query_history_uve.h | To audit → adapt → integrate → verify — Increment 444 documents unknown raw mirror-axis rejection and unchanged output on failure. |
 | motion_query_library_uve.h | To audit → adapt → integrate → verify |
 | motion_query_module_uve.h | To audit → adapt → integrate → verify |
 | motion_query_normalization_uve.h | To audit → adapt → integrate → verify |
