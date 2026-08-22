@@ -106,6 +106,10 @@ PipelineHandleUVE NullRenderDeviceUVE::CreatePipelineUVE(const PipelineDescUVE& 
         UVE_ERROR("NullRenderDeviceUVE: CreatePipelineUVE received an unknown vertex attribute format");
         return kInvalidPipelineHandleUVE;
     }
+    if (!IsPipelineBlendModeValidUVE(desc.blendMode)) {
+        UVE_ERROR("NullRenderDeviceUVE: CreatePipelineUVE received an unknown blend mode");
+        return kInvalidPipelineHandleUVE;
+    }
     if (!m_impl->shaders.contains(desc.vertexShader.value) || !m_impl->shaders.contains(desc.fragmentShader.value)) {
         UVE_ERROR("NullRenderDeviceUVE: CreatePipelineUVE referenced an unknown vertex or fragment shader handle");
         return kInvalidPipelineHandleUVE;
@@ -140,6 +144,10 @@ PipelineHandleUVE NullRenderDeviceUVE::CreatePipelineFromBinaryUVE(std::span<con
                                                                     const PipelineBinaryDescUVE& desc) {
     if (!IsVertexLayoutValidUVE(desc.vertexLayout)) {
         UVE_ERROR("NullRenderDeviceUVE: CreatePipelineFromBinaryUVE received an unknown vertex attribute format");
+        return kInvalidPipelineHandleUVE;
+    }
+    if (!IsPipelineBlendModeValidUVE(desc.blendMode)) {
+        UVE_ERROR("NullRenderDeviceUVE: CreatePipelineFromBinaryUVE received an unknown blend mode");
         return kInvalidPipelineHandleUVE;
     }
     static_cast<void>(binary); // NullRenderDeviceUVE never inspects binary contents.
