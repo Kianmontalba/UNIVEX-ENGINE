@@ -10,6 +10,13 @@
 namespace UVE::Audio::Tests {
 namespace {
 
+TEST(AudioMixerGroupUVETest, SaturatingAddAudioMixerSourceCountUVE_ClampsAtSizeMaximum) {
+    const std::size_t maximum = std::numeric_limits<std::size_t>::max();
+    EXPECT_EQ(SaturatingAddAudioMixerSourceCountUVE(maximum - 1U, 1U), maximum);
+    EXPECT_EQ(SaturatingAddAudioMixerSourceCountUVE(maximum - 1U, 2U), maximum);
+    EXPECT_EQ(SaturatingAddAudioMixerSourceCountUVE(4U, 3U), 7U);
+}
+
 TEST(AudioMixerGroupUVETest, EvaluateAudioMixParametersUVE_ComposesFiniteFinalValues) {
     AudioMixParametersUVE parameters;
     ASSERT_TRUE(EvaluateAudioMixParametersUVE(0.8F, 1.5F, 0.5F, 2.0F, 0.25F, parameters));

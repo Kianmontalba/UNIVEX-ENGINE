@@ -147,7 +147,8 @@ AudioMixerDiagnosticsUVE AudioMixerGroupUVE::GetDiagnosticsUVE(const std::size_t
 
     std::size_t inspected = 0U;
     for (const auto& [name, state] : m_groups) {
-        diagnostics.routedSourceCount += state.sourceCount;
+        diagnostics.routedSourceCount = SaturatingAddAudioMixerSourceCountUVE(
+            diagnostics.routedSourceCount, state.sourceCount);
         if (inspected >= maximumGroups) {
             continue;
         }

@@ -3,6 +3,7 @@
 #pragma once
 
 #include <cstddef>
+#include <limits>
 #include <map>
 #include <string>
 #include <string_view>
@@ -15,6 +16,13 @@ inline constexpr std::size_t kMaximumAudioMixerGroupNameBytesUVE = 64U;
 inline constexpr float kMinimumAudioMixerPitchMultiplierUVE = 0.25F;
 inline constexpr float kMaximumAudioMixerPitchMultiplierUVE = 4.0F;
 inline constexpr std::string_view kMasterAudioMixerGroupNameUVE = "Master";
+
+[[nodiscard]] constexpr std::size_t SaturatingAddAudioMixerSourceCountUVE(
+    const std::size_t current, const std::size_t added) noexcept {
+    return added > std::numeric_limits<std::size_t>::max() - current
+               ? std::numeric_limits<std::size_t>::max()
+               : current + added;
+}
 
 struct AudioMixParametersUVE final {
     float gain = 1.0F;
@@ -40,6 +48,7 @@ struct AudioMixerGroupSnapshotUVE final {
 struct AudioMixerDiagnosticsUVE final {
     std::size_t groupCount = 0U;
     std::size_t inspectedGroupCount = 0U;
+    /// Total routed source count; aggregation saturates at std::size_t maximum.
     std::size_t routedSourceCount = 0U;
     bool truncated = false;
     std::vector<AudioMixerGroupSnapshotUVE> groups;
