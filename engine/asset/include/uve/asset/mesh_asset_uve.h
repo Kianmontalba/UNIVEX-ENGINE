@@ -53,9 +53,11 @@ struct MeshAssetUVE {
 void GenerateMeshTangentsUVE(std::span<MeshVertexUVE> vertices, std::span<const std::uint32_t> indices);
 
 /// Loads `path` as a `.uve*` envelope with `AssetKindUVE::Mesh`, filling `outMesh`. Returns false
-/// (logging the reason) if the file is missing/malformed, isn't actually a Mesh asset, or its
+/// (logging the reason) if the file is missing/malformed, isn't actually a Mesh asset, its
+/// serialized vertex/index counts do not fit the remaining payload before allocation, or its
 /// index data is structurally invalid (any index `>= outMesh.vertices.size()`, which would cause
-/// out-of-bounds reads once a future increment consumes this data) — matches the signature
+/// out-of-bounds reads once a future increment consumes this data). Candidate vectors and tangent
+/// fields remain private until every validation step succeeds — matching the signature
 /// `IAssetManagerUVE::RegisterLoaderUVE<MeshAssetUVE>()` expects.
 [[nodiscard]] bool LoadMeshAssetUVE(const std::filesystem::path& path, MeshAssetUVE& outMesh);
 
