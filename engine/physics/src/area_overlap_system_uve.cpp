@@ -33,13 +33,23 @@ struct AreaWorldAabbUVE final {
     std::uint32_t collisionMask;
 };
 
-[[nodiscard]] std::vector<AreaWorldAabbUVE> BuildAreaWorldAabbCacheUVE(
-    Scene::IEntityManagerUVE& entityManager) {
+struct AreaWorldAabbCacheUVE final {
     std::vector<AreaWorldAabbUVE> areas;
+    bool truncated = false;
+};
+
+[[nodiscard]] AreaWorldAabbCacheUVE BuildAreaWorldAabbCacheUVE(
+    Scene::IEntityManagerUVE& entityManager) {
+    AreaWorldAabbCacheUVE cache;
+    cache.areas.reserve(kMaximumAreaOverlapQueryAreasUVE);
     entityManager.ForEachUVE<Scene::WorldTransformComponentUVE, Scene::AreaComponentUVE>(
-        [&areas](const Scene::EntityUVE entity, const Scene::WorldTransformComponentUVE& worldTransform,
+        [&cache](const Scene::EntityUVE entity, const Scene::WorldTransformComponentUVE& worldTransform,
                  const Scene::AreaComponentUVE& area) {
             if (!Scene::IsAreaComponentValidUVE(area)) {
+                return;
+            }
+            if (cache.areas.size() >= kMaximumAreaOverlapQueryAreasUVE) {
+                cache.truncated = true;
                 return;
             }
             const Math::AabbUVE worldAabb =
@@ -47,24 +57,25 @@ struct AreaWorldAabbUVE final {
             if (!IsValidAabbUVE(worldAabb)) {
                 return;
             }
-            areas.push_back(AreaWorldAabbUVE{entity, worldAabb, area.collisionLayer, area.collisionMask});
+            cache.areas.push_back(AreaWorldAabbUVE{entity, worldAabb, area.collisionLayer, area.collisionMask});
         });
-    return areas;
+    return cache;
 }
 
 } // namespace
 
 AreaOverlapQueryResultUVE AreaOverlapSystemUVE::QueryUVE(
     Scene::IEntityManagerUVE& entityManager, const std::size_t maximumResults) {
-    const std::vector<AreaWorldAabbUVE> areas = BuildAreaWorldAabbCacheUVE(entityManager);
+    const AreaWorldAabbCacheUVE areaCache = BuildAreaWorldAabbCacheUVE(entityManager);
     const std::vector<Detail::ColliderWorldAabbUVE> colliders = Detail::BuildColliderWorldAabbCacheUVE(entityManager);
 
     const std::size_t resultCap = std::min(maximumResults, kMaximumAreaOverlapResultsUVE);
     AreaOverlapQueryResultUVE result;
-    result.inspectedAreas = areas.size();
+    result.inspectedAreas = areaCache.areas.size();
     result.inspectedColliders = colliders.size();
+    result.truncated = areaCache.truncated;
     result.overlaps.reserve(std::min(resultCap, colliders.size()));
-    for (const AreaWorldAabbUVE& area : areas) {
+    for (const AreaWorldAabbUVE& area : areaCache.areas) {
         for (const Detail::ColliderWorldAabbUVE& collider : colliders) {
             if ((area.collisionMask & collider.collisionLayer) == 0U ||
                 (collider.collisionMask & area.collisionLayer) == 0U) {

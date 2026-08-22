@@ -128,6 +128,24 @@ TEST_F(AreaOverlapSystemUVETest, QueryUVE_HardCapReportsTruncationAndStableFirst
     EXPECT_EQ(result.overlaps.front().other, first);
 }
 
+TEST_F(AreaOverlapSystemUVETest, QueryUVE_AreaCacheCapReportsTruncationAndInspectsBoundedPrefix) {
+    for (std::size_t index = 0U; index < kMaximumAreaOverlapQueryAreasUVE + 1U; ++index) {
+        const Scene::EntityUVE entity = entityManager.CreateEntityUVE();
+        Scene::TransformComponentUVE transform;
+        transform.localPosition = Math::Vector3UVE{static_cast<float>(index) * 4.0F, 0.0F, 0.0F};
+        sceneGraph.AttachTransformUVE(entityManager, entity, transform);
+        entityManager.AddComponentUVE<Scene::AreaComponentUVE>(
+            entity, Scene::AreaComponentUVE{Math::Vector3UVE{0.25F, 0.25F, 0.25F}, 1U, 0xFFFFFFFFU});
+    }
+    sceneGraph.UpdateUVE(entityManager);
+
+    const AreaOverlapQueryResultUVE result = AreaOverlapSystemUVE::QueryUVE(entityManager);
+
+    EXPECT_EQ(result.inspectedAreas, kMaximumAreaOverlapQueryAreasUVE);
+    EXPECT_TRUE(result.truncated);
+    EXPECT_TRUE(result.overlaps.empty());
+}
+
 TEST_F(AreaOverlapSystemUVETest, QueryUVE_NoAreaEntitiesDoesNotTreatColliderPairsAsAreaOverlaps) {
     MakeColliderEntityUVE(Math::Vector3UVE{0.0F, 0.0F, 0.0F}, Math::Vector3UVE{1.0F, 1.0F, 1.0F});
     MakeColliderEntityUVE(Math::Vector3UVE{0.5F, 0.0F, 0.0F}, Math::Vector3UVE{1.0F, 1.0F, 1.0F});
