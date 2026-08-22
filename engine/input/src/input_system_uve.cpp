@@ -227,7 +227,8 @@ float InputSystemUVE::GetMouseScrollDeltaUVE() const {
 void InputSystemUVE::RegisterActionUVE(InputActionUVE&& action) {
     if (action.name.empty() || action.name.size() > kMaximumInputActionNameBytesUVE ||
         action.name.find('\0') != std::string::npos ||
-        (action.type != InputActionTypeUVE::Button && action.type != InputActionTypeUVE::Axis1D)) {
+        (action.type != InputActionTypeUVE::Button && action.type != InputActionTypeUVE::Axis1D) ||
+        !AreBindingsValidUVE(action.positiveBindings) || !AreBindingsValidUVE(action.negativeBindings)) {
         return;
     }
     const auto existing = m_actions.find(action.name);
@@ -245,9 +246,9 @@ bool InputSystemUVE::UnregisterActionUVE(std::string_view actionName) {
     return m_actions.erase(std::string(actionName)) > 0;
 }
 
-bool InputSystemUVE::AreBindingsValidForRemapUVE(
+bool InputSystemUVE::AreBindingsValidUVE(
     const std::vector<InputBindingUVE>& bindings) noexcept {
-    if (bindings.size() > kMaximumRemappedBindingsPerSideUVE) {
+    if (bindings.size() > kMaximumBindingsPerSideUVE) {
         return false;
     }
     for (const InputBindingUVE& binding : bindings) {
@@ -286,8 +287,8 @@ bool InputSystemUVE::RemapActionUVE(std::string_view actionName,
                                     std::vector<InputBindingUVE> positiveBindings,
                                     std::vector<InputBindingUVE> negativeBindings) {
     const auto it = m_actions.find(std::string(actionName));
-    if (it == m_actions.end() || !AreBindingsValidForRemapUVE(positiveBindings) ||
-        !AreBindingsValidForRemapUVE(negativeBindings)) {
+    if (it == m_actions.end() || !AreBindingsValidUVE(positiveBindings) ||
+        !AreBindingsValidUVE(negativeBindings)) {
         return false;
     }
     it->second.positiveBindings = std::move(positiveBindings);

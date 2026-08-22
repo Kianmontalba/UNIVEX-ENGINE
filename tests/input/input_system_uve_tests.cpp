@@ -5,6 +5,8 @@
 
 #include <cmath>
 #include <limits>
+#include <utility>
+#include <vector>
 
 #include <gtest/gtest.h>
 
@@ -331,18 +333,23 @@ TEST_F(InputSystemUVETest, KeyboardAndMouseSentinelInputsAreIgnoredSafely) {
     EXPECT_FALSE(inputSystem.WasMouseButtonReleasedThisFrameUVE(MouseButtonUVE::Count));
 }
 
-TEST_F(InputSystemUVETest, SentinelBindingsEvaluateInertlyAndRemapRejectsThemAtomically) {
+TEST_F(InputSystemUVETest, InvalidInitialBindingsAreRejectedAtomically) {
     inputSystem.RegisterActionUVE(
         InputActionUVE{"Jump", InputActionTypeUVE::Button, {KeyBindingUVE(KeyCodeUVE::Space)}, {}});
     inputSystem.RegisterActionUVE(
         InputActionUVE{"Invalid", InputActionTypeUVE::Button, {KeyBindingUVE(KeyCodeUVE::Count),
                                                                   MouseBindingUVE(MouseButtonUVE::Count)}, {}});
 
+    std::vector<InputBindingUVE> overCapBindings(33U, KeyBindingUVE(KeyCodeUVE::Space));
+    inputSystem.RegisterActionUVE(
+        InputActionUVE{"OverCap", InputActionTypeUVE::Axis1D, std::move(overCapBindings), {}});
+
     inputSystem.SetKeyStateUVE(KeyCodeUVE::Space, true);
     inputSystem.UpdateUVE();
     EXPECT_TRUE(inputSystem.IsActionHeldUVE("Jump"));
     EXPECT_FALSE(inputSystem.IsActionTriggeredUVE("Invalid"));
     EXPECT_FALSE(inputSystem.IsActionHeldUVE("Invalid"));
+    EXPECT_NEAR(inputSystem.GetAxisValueUVE("OverCap"), 0.0F, kEpsilon);
 
     EXPECT_FALSE(inputSystem.RemapActionUVE("Jump", {KeyBindingUVE(KeyCodeUVE::Count)}, {}));
     EXPECT_FALSE(inputSystem.RemapActionUVE("Jump", {MouseBindingUVE(MouseButtonUVE::Count)}, {}));
