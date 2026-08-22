@@ -3,6 +3,8 @@
 
 #include "uve/save/checkpoint_manager_uve.h"
 
+#include <cmath>
+
 namespace UVE::Save {
 
 CheckpointManagerUVE::CheckpointManagerUVE(ISaveGameSystemUVE& saveGameSystem, double autoSaveIntervalSeconds)
@@ -10,6 +12,9 @@ CheckpointManagerUVE::CheckpointManagerUVE(ISaveGameSystemUVE& saveGameSystem, d
 
 void CheckpointManagerUVE::UpdateUVE(double deltaTimeSeconds, Scene::IEntityManagerUVE& entityManager,
                                       const std::vector<Scene::EntityUVE>& rootEntities) {
+    if (!std::isfinite(deltaTimeSeconds) || deltaTimeSeconds < 0.0) {
+        return;
+    }
     m_totalPlaytimeSeconds += deltaTimeSeconds;
     m_elapsedSinceLastSaveSeconds += deltaTimeSeconds;
 

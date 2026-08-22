@@ -30,9 +30,8 @@ public:
 private:
     /// Builds this checkpoint's GameStateMetadataUVE (playtimeSeconds = m_totalPlaytimeSeconds,
     /// every other field default) and calls m_saveGameSystem->SaveUVE() for the caller-selected
-    /// reserved slot, then resets
-    /// m_elapsedSinceLastSaveSeconds to 0 regardless of the result. Shared by both UpdateUVE()'s
-    /// interval-triggered path and CheckpointUVE()'s immediate path.
+    /// reserved slot, then resets m_elapsedSinceLastSaveSeconds to 0 only after success. Shared by
+    /// both UpdateUVE()'s interval-triggered path and CheckpointUVE()'s immediate path.
     [[nodiscard]] bool SaveCheckpointUVE(int slotIndex, Scene::IEntityManagerUVE& entityManager,
                                           const std::vector<Scene::EntityUVE>& rootEntities);
 
