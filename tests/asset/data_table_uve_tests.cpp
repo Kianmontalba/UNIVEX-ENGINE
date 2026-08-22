@@ -85,9 +85,12 @@ TEST(DataTableUVE, CsvImportRejectsHeaderAndDuplicateRowsDeterministically) {
     DataTableUVE table("items");
     ASSERT_TRUE(table.DefineColumnUVE("label", DataTableColumnTypeUVE::String));
 
+    const std::uint64_t beforeHeaderMismatch = table.GetSnapshotUVE().generation;
     EXPECT_FALSE(table.ImportCsvUVE("id,wrong\na,one\n"));
-    ASSERT_EQ(table.GetSnapshotUVE().diagnostics.size(), 1U);
-    EXPECT_EQ(table.GetSnapshotUVE().diagnostics.front().code, DataTableDiagnosticCodeUVE::HeaderMismatch);
+    const DataTableSnapshotUVE afterHeaderMismatch = table.GetSnapshotUVE();
+    EXPECT_GT(afterHeaderMismatch.generation, beforeHeaderMismatch);
+    ASSERT_EQ(afterHeaderMismatch.diagnostics.size(), 1U);
+    EXPECT_EQ(afterHeaderMismatch.diagnostics.front().code, DataTableDiagnosticCodeUVE::HeaderMismatch);
 
     EXPECT_FALSE(table.ImportCsvUVE("id,label\na,one\na,two\n"));
     const DataTableSnapshotUVE snapshot = table.GetSnapshotUVE();
