@@ -152,6 +152,7 @@ TEST_F(GlRenderDeviceUVETest, CreatePipelineUVE_UnknownVertexFormat_ReturnsInval
 
     PipelineDescUVE validDesc = invalidDesc;
     validDesc.vertexLayout = {VertexAttributeUVE{"POSITION", VertexAttributeFormatUVE::Float3, 0U}};
+    validDesc.vertexStride = 3U * static_cast<std::uint32_t>(sizeof(float));
     const PipelineHandleUVE validPipeline = renderDevice->CreatePipelineUVE(validDesc);
     EXPECT_EQ(validPipeline.value, 1U);
 
@@ -185,6 +186,8 @@ TEST_F(GlRenderDeviceUVETest, CreatePipelineUVE_UnknownBlendMode_ReturnsInvalidB
     EXPECT_EQ(renderDevice->GetLiveResourceCountUVE(), 2U);
 
     invalidDesc.blendMode = PipelineBlendModeUVE::Opaque;
+    invalidDesc.vertexLayout = {VertexAttributeUVE{"POSITION", VertexAttributeFormatUVE::Float3, 0U}};
+    invalidDesc.vertexStride = 3U * static_cast<std::uint32_t>(sizeof(float));
     const PipelineHandleUVE validPipeline = renderDevice->CreatePipelineUVE(invalidDesc);
     EXPECT_EQ(validPipeline.value, 1U);
 
@@ -218,6 +221,8 @@ TEST_F(GlRenderDeviceUVETest, CreatePipelineUVE_UnknownTopology_ReturnsInvalidBe
     EXPECT_EQ(renderDevice->GetLiveResourceCountUVE(), 2U);
 
     invalidDesc.topology = PrimitiveTopologyUVE::Triangles;
+    invalidDesc.vertexLayout = {VertexAttributeUVE{"POSITION", VertexAttributeFormatUVE::Float3, 0U}};
+    invalidDesc.vertexStride = 3U * static_cast<std::uint32_t>(sizeof(float));
     const PipelineHandleUVE validPipeline = renderDevice->CreatePipelineUVE(invalidDesc);
     EXPECT_EQ(validPipeline.value, 1U);
 
@@ -230,6 +235,39 @@ TEST_F(GlRenderDeviceUVETest, CreatePipelineFromBinaryUVE_UnknownTopology_Return
     const std::array<std::byte, 4> binary{};
     PipelineBinaryDescUVE invalidDesc;
     invalidDesc.topology = static_cast<PrimitiveTopologyUVE>(0xFFU);
+
+    EXPECT_EQ(renderDevice->CreatePipelineFromBinaryUVE(binary, 0U, invalidDesc), kInvalidPipelineHandleUVE);
+    EXPECT_EQ(renderDevice->GetLiveResourceCountUVE(), 0U);
+}
+
+TEST_F(GlRenderDeviceUVETest, CreatePipelineUVE_ZeroVertexStride_ReturnsInvalidBeforeAllocation) {
+    const ShaderHandleUVE vertexShader =
+        renderDevice->CreateShaderUVE(ShaderDescUVE{ShaderStageUVE::Vertex, std::string(kValidVertexShaderSource)});
+    const ShaderHandleUVE fragmentShader = renderDevice->CreateShaderUVE(
+        ShaderDescUVE{ShaderStageUVE::Fragment, std::string(kValidFragmentShaderSource)});
+    ASSERT_NE(vertexShader, kInvalidShaderHandleUVE);
+    ASSERT_NE(fragmentShader, kInvalidShaderHandleUVE);
+
+    PipelineDescUVE invalidDesc;
+    invalidDesc.vertexShader = vertexShader;
+    invalidDesc.fragmentShader = fragmentShader;
+    invalidDesc.vertexLayout = {VertexAttributeUVE{"POSITION", VertexAttributeFormatUVE::Float3, 0U}};
+    EXPECT_EQ(renderDevice->CreatePipelineUVE(invalidDesc), kInvalidPipelineHandleUVE);
+    EXPECT_EQ(renderDevice->GetLiveResourceCountUVE(), 2U);
+
+    invalidDesc.vertexStride = 3U * static_cast<std::uint32_t>(sizeof(float));
+    const PipelineHandleUVE validPipeline = renderDevice->CreatePipelineUVE(invalidDesc);
+    EXPECT_EQ(validPipeline.value, 1U);
+
+    renderDevice->DestroyPipelineUVE(validPipeline);
+    renderDevice->DestroyShaderUVE(fragmentShader);
+    renderDevice->DestroyShaderUVE(vertexShader);
+}
+
+TEST_F(GlRenderDeviceUVETest, CreatePipelineFromBinaryUVE_ZeroVertexStride_ReturnsInvalidBeforeAllocation) {
+    const std::array<std::byte, 4> binary{};
+    PipelineBinaryDescUVE invalidDesc;
+    invalidDesc.vertexLayout = {VertexAttributeUVE{"POSITION", VertexAttributeFormatUVE::Float3, 0U}};
 
     EXPECT_EQ(renderDevice->CreatePipelineFromBinaryUVE(binary, 0U, invalidDesc), kInvalidPipelineHandleUVE);
     EXPECT_EQ(renderDevice->GetLiveResourceCountUVE(), 0U);
