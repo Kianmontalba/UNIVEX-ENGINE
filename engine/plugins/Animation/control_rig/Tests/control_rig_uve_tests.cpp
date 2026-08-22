@@ -46,6 +46,16 @@ TEST(ControlRigUVETest, ValidateControlRigUVE_AcceptsControlsSpacesAndTwoBoneCon
     EXPECT_EQ(result.code, ControlRigValidationCodeUVE::Valid);
 }
 
+TEST(ControlRigUVETest, ValidateControlRigUVE_RejectsUnknownConstraintKind) {
+    ControlRigUVE rig = MakeRigUVE();
+    rig.constraints[0].kind = static_cast<ControlRigConstraintKindUVE>(0xFFU);
+    EXPECT_EQ(ValidateControlRigUVE(rig).code, ControlRigValidationCodeUVE::InvalidConstraint);
+
+    const ControlRigEvaluationResultUVE result = EvaluateControlRigUVE(rig);
+    EXPECT_FALSE(result.IsSuccessUVE());
+    EXPECT_EQ(result.appliedConstraintCount, 0U);
+}
+
 TEST(ControlRigUVETest, BlendControlRigPoseUVE_ClampsWeightAndNormalizesRotation) {
     const TransformPoseUVE source{{0.0F, 0.0F, 0.0F}, {0.0F, 0.0F, 0.0F, 1.0F},
                                   {1.0F, 1.0F, 1.0F}};
