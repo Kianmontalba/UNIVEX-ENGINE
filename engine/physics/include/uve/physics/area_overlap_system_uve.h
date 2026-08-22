@@ -12,6 +12,7 @@
 namespace UVE::Physics {
 
 inline constexpr std::size_t kMaximumAreaOverlapResultsUVE = 4096U;
+inline constexpr std::size_t kMaximumAreaOverlapQueryAreasUVE = 4096U;
 
 struct AreaOverlapPairUVE final {
     Scene::EntityUVE area;
