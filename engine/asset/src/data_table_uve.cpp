@@ -419,6 +419,7 @@ bool DataTableCsvImporterUVE::ImportDelimitedUVE(const std::string_view document
                              "The CSV header does not match the declared schema at column " +
                                  table.m_columns[index].name + ".");
             table.SetDiagnosticsUVE(std::move(diagnostics), diagnosticsTruncated);
+            table.IncrementGenerationUVE();
             return false;
         }
     }
