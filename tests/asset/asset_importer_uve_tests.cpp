@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -360,6 +361,40 @@ TEST_F(AssetImporterUVETest, RegisterImporterUVE_CustomExtension_IsPickedOverGen
     ASSERT_NE(guid, kInvalidAssetGuidUVE);
     EXPECT_TRUE(customImporterRan);
     EXPECT_EQ(ReadFileUVE(destinationPath), "written by custom importer");
+
+    std::filesystem::remove(sourcePath);
+    std::filesystem::remove(destinationPath);
+}
+
+TEST_F(AssetImporterUVETest, ImportUVE_ImporterExceptionReturnsInvalidWithoutDatabaseRegistration) {
+    const std::filesystem::path sourcePath = "uve_asset_importer_tests_source.throwing";
+    const std::filesystem::path destinationPath = "uve_asset_importer_tests_dest.throwing";
+    std::filesystem::remove(sourcePath);
+    std::filesystem::remove(destinationPath);
+    WriteFixtureFileUVE(sourcePath, "source");
+
+    class ThrowingAssetDatabaseUVE final : public IAssetDatabaseUVE {
+    public:
+        bool LoadUVE(const std::filesystem::path&) override { return false; }
+        bool SaveUVE() override { return false; }
+        bool SaveUVE(const std::filesystem::path&) override { return false; }
+        [[nodiscard]] AssetGuidUVE RegisterUVE(const std::filesystem::path&) override {
+            registered = true;
+            return AssetGuidUVE{777U};
+        }
+        [[nodiscard]] std::filesystem::path ResolveUVE(AssetGuidUVE) const override { return {}; }
+        [[nodiscard]] bool HasGuidUVE(AssetGuidUVE) const override { return false; }
+        [[nodiscard]] std::vector<AssetRecordUVE> GetRegisteredAssetsUVE() const override { return {}; }
+        bool registered = false;
+    } database;
+
+    importer.RegisterImporterUVE("throwing", [](const std::filesystem::path&, const std::filesystem::path&,
+                                                  const AssetImportSettingsUVE&) -> bool {
+        throw std::runtime_error("injected importer exception");
+    });
+    EXPECT_EQ(importer.ImportUVE(sourcePath, destinationPath, database), kInvalidAssetGuidUVE);
+    EXPECT_FALSE(database.registered);
+    EXPECT_FALSE(std::filesystem::exists(destinationPath));
 
     std::filesystem::remove(sourcePath);
     std::filesystem::remove(destinationPath);

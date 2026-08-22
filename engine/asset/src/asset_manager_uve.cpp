@@ -3,6 +3,7 @@
 
 #include "uve/asset/asset_manager_uve.h"
 
+#include <exception>
 #include <functional>
 #include <mutex>
 #include <string>
@@ -130,11 +131,17 @@ void AssetManagerUVE::ExecuteLoadUVE(AssetGuidUVE guid, std::type_index type, st
 
     bool success = false;
     void* newData = nullptr;
+    std::string failureReason;
     if (!path.empty() && loadFunc) {
-        newData = loadFunc(path, success);
+        try {
+            newData = loadFunc(path, success);
+        } catch (const std::exception& exception) {
+            failureReason = "asset loader threw: " + std::string(exception.what());
+        } catch (...) {
+            failureReason = "asset loader threw an unknown exception";
+        }
     }
 
-    std::string failureReason;
     if (path.empty()) {
         failureReason = "asset database resolved no path";
     } else if (!loadFunc) {
@@ -144,7 +151,7 @@ void AssetManagerUVE::ExecuteLoadUVE(AssetGuidUVE guid, std::type_index type, st
         if (!std::filesystem::exists(path, existsError)) {
             failureReason = existsError ? "asset file existence check failed: " + existsError.message()
                                         : "asset file does not exist";
-        } else if (!success) {
+        } else if (!success && failureReason.empty()) {
             failureReason = "registered asset loader rejected file";
         }
     }
