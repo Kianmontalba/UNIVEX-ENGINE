@@ -235,8 +235,10 @@ ReliablePacketReceiveStatusUVE AcceptReliableSequenceUVE(
     }
     if (IsNewerSequenceUVE(sequence, state.latestReceivedSequence)) {
         const std::uint32_t distance = sequence - state.latestReceivedSequence;
-        if (distance >= kReliablePacketMaximumSelectiveAckBitsUVE + 1U) {
+        if (distance > kReliablePacketMaximumSelectiveAckBitsUVE) {
             state.receivedHistoryBits = 0U;
+        } else if (distance == kReliablePacketMaximumSelectiveAckBitsUVE) {
+            state.receivedHistoryBits = 1U << (kReliablePacketMaximumSelectiveAckBitsUVE - 1U);
         } else {
             state.receivedHistoryBits <<= distance;
             state.receivedHistoryBits |= 1U << (distance - 1U);
