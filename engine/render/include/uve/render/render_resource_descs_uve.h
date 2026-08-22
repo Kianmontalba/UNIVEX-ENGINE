@@ -21,6 +21,16 @@ namespace UVE::Render {
 /// adding it later is additive, not a breaking change to this enum.
 enum class BufferUsageUVE : std::uint8_t { Vertex, Index, Uniform };
 
+[[nodiscard]] constexpr bool IsBufferUsageValidUVE(const BufferUsageUVE usage) noexcept {
+    switch (usage) {
+        case BufferUsageUVE::Vertex:
+        case BufferUsageUVE::Index:
+        case BufferUsageUVE::Uniform:
+            return true;
+    }
+    return false;
+}
+
 /// Describes a GPU buffer to create via IRenderDeviceUVE::CreateBufferUVE().
 struct BufferDescUVE {
     std::uint64_t sizeBytes = 0;

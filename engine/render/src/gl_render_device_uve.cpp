@@ -179,6 +179,10 @@ GlRenderDeviceUVE::GlRenderDeviceUVE(Window::IWindowManagerUVE& windowManager)
 GlRenderDeviceUVE::~GlRenderDeviceUVE() = default;
 
 BufferHandleUVE GlRenderDeviceUVE::CreateBufferUVE(const BufferDescUVE& desc, std::span<const std::byte> initialData) {
+    if (!IsBufferUsageValidUVE(desc.usage)) {
+        UVE_ERROR("GlRenderDeviceUVE: CreateBufferUVE received an unknown buffer usage");
+        return kInvalidBufferHandleUVE;
+    }
     const GLenum target = BufferUsageToGlTargetUVE(desc.usage);
     GLuint glBuffer = 0;
     m_impl->state.gl.glGenBuffers(1, &glBuffer);

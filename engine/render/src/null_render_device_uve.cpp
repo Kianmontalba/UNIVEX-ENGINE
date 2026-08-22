@@ -32,6 +32,10 @@ NullRenderDeviceUVE::~NullRenderDeviceUVE() = default;
 BufferHandleUVE NullRenderDeviceUVE::CreateBufferUVE(const BufferDescUVE& desc,
                                                        std::span<const std::byte> initialData) {
     static_cast<void>(initialData); // NullRenderDeviceUVE performs no real upload, bookkeeping only.
+    if (!IsBufferUsageValidUVE(desc.usage)) {
+        UVE_ERROR("NullRenderDeviceUVE: CreateBufferUVE received an unknown buffer usage");
+        return kInvalidBufferHandleUVE;
+    }
     const std::uint32_t handleValue = m_impl->nextBufferHandle++;
     m_impl->buffers.emplace(handleValue, desc);
     return BufferHandleUVE{handleValue};
