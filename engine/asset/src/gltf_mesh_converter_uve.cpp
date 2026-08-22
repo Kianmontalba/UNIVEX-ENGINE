@@ -216,8 +216,17 @@ bool ConvertGltfPrimitiveUVE(const GltfPrimitiveSourceUVE& source, MeshAssetUVE&
                 return false;
             }
             normalAccumulation[candidate.indices[triangle]] += faceNormal;
+            if (!IsFiniteVectorUVE(normalAccumulation[candidate.indices[triangle]])) {
+                return false;
+            }
             normalAccumulation[candidate.indices[triangle + 1U]] += faceNormal;
+            if (!IsFiniteVectorUVE(normalAccumulation[candidate.indices[triangle + 1U]])) {
+                return false;
+            }
             normalAccumulation[candidate.indices[triangle + 2U]] += faceNormal;
+            if (!IsFiniteVectorUVE(normalAccumulation[candidate.indices[triangle + 2U]])) {
+                return false;
+            }
         }
         for (std::size_t vertexIndex = 0U; vertexIndex < vertexCount; ++vertexIndex) {
             candidate.vertices[vertexIndex].normal = NormalizeOrFallbackUVE(normalAccumulation[vertexIndex]);
