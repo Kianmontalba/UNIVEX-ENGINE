@@ -50,8 +50,13 @@ public:
     }
 
     [[nodiscard]] bool SaveUVE(Scene::IEntityManagerUVE&, const std::vector<EntityUVE>&,
-                               const std::filesystem::path&, Scene::SceneAssetTypeUVE) override {
+                               const std::filesystem::path& scratchPath, Scene::SceneAssetTypeUVE) override {
         ++saveCallCount;
+        if (throwOnSave) {
+            std::ofstream scratch(scratchPath, std::ios::binary);
+            scratch << "partial scratch";
+            throw std::runtime_error("injected scene serializer save failure");
+        }
         return false;
     }
 
@@ -64,6 +69,7 @@ public:
     }
 
     bool throwOnLoad = false;
+    bool throwOnSave = false;
     int saveCallCount = 0;
 };
 
@@ -746,6 +752,22 @@ TEST_F(SaveGameSystemUVETest, LoadUVE_UnsupportedSchemaReportsBoundedMigrationDi
     diagnostics = saveGameSystem.GetLastMigrationDiagnosticsUVE();
     EXPECT_EQ(diagnostics.status, SaveMigrationStatusUVE::UnsupportedSourceVersion);
     EXPECT_EQ(diagnostics.sourceSchemaVersion, 9U);
+}
+
+TEST_F(SaveGameSystemUVETest, SaveUVE_SerializerExceptionPreservesPriorSaveAndCleansScratch) {
+    const EntityUVE entity = entityManager.CreateEntityUVE();
+    const std::filesystem::path finalPath = saveDirectory / "slot_15.uvesave";
+    ASSERT_TRUE(saveGameSystem.SaveUVE(15, entityManager, {entity}, GameStateMetadataUVE{}));
+    ASSERT_TRUE(std::filesystem::exists(finalPath));
+
+    CountingSceneSerializerUVE throwingSerializer;
+    throwingSerializer.throwOnSave = true;
+    SaveGameSystemUVE throwingSystem(throwingSerializer, saveDirectory);
+    EXPECT_FALSE(throwingSystem.SaveUVE(15, entityManager, {entity}, GameStateMetadataUVE{}));
+    EXPECT_EQ(throwingSerializer.saveCallCount, 1);
+    EXPECT_TRUE(std::filesystem::exists(finalPath));
+    EXPECT_FALSE(std::filesystem::exists(saveDirectory / ".slot_15_scratch.uvescene"));
+    EXPECT_FALSE(std::filesystem::exists(saveDirectory / "slot_15.uvesave.tmp"));
 }
 
 TEST_F(SaveGameSystemUVETest, SaveUVE_NegativePlaytimeMetadataFailsBeforeDirectoryMutation) {

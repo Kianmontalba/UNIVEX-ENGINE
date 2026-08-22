@@ -259,7 +259,20 @@ bool SaveGameSystemUVE::SaveUVE(int slotIndex, Scene::IEntityManagerUVE& entityM
     }
 
     const std::filesystem::path scratchPath = ScratchScenePathUVE(m_saveDirectory, slotIndex);
-    if (!m_sceneSerializer->SaveUVE(entityManager, rootEntities, scratchPath, Scene::SceneAssetTypeUVE::Scene)) {
+    const ScratchFileCleanupUVE scratchCleanup(scratchPath);
+    bool serialized = false;
+    try {
+        serialized = m_sceneSerializer->SaveUVE(entityManager, rootEntities, scratchPath,
+                                                 Scene::SceneAssetTypeUVE::Scene);
+    } catch (const std::exception& exception) {
+        UVE_ERROR("SaveGameSystemUVE: SaveUVE scene serializer threw for slot {}: {}", slotIndex,
+                  exception.what());
+        return false;
+    } catch (...) {
+        UVE_ERROR("SaveGameSystemUVE: SaveUVE scene serializer threw an unknown exception for slot {}", slotIndex);
+        return false;
+    }
+    if (!serialized) {
         UVE_ERROR("SaveGameSystemUVE: SaveUVE failed to serialize world state for slot {}", slotIndex);
         return false;
     }
