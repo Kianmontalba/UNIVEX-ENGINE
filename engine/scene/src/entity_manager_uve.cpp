@@ -161,10 +161,16 @@ void* EntityManagerUVE::AddComponentErased(EntityUVE entity, std::type_index com
 }
 
 void EntityManagerUVE::RemoveComponentErased(EntityUVE entity, std::type_index componentType) {
-    UVE_ASSERT(IsAliveUVE(entity));
+    if (!IsAliveUVE(entity)) {
+        UVE_ASSERT(IsAliveUVE(entity));
+        return;
+    }
     EntityRecordUVE& record = m_impl->records[entity.index];
     Detail::ArchetypeUVE& oldArchetype = *record.archetype;
-    UVE_ASSERT(oldArchetype.GetSignatureUVE().ContainsUVE(componentType));
+    if (!oldArchetype.GetSignatureUVE().ContainsUVE(componentType)) {
+        UVE_ASSERT(oldArchetype.GetSignatureUVE().ContainsUVE(componentType));
+        return;
+    }
 
     const Detail::ArchetypeSignatureUVE newSignature = oldArchetype.GetSignatureUVE().WithoutUVE(componentType);
     Detail::ArchetypeUVE& newArchetype = m_impl->FindOrCreateArchetypeUVE(newSignature);
