@@ -314,6 +314,10 @@ PipelineHandleUVE GlRenderDeviceUVE::CreatePipelineUVE(const PipelineDescUVE& de
         UVE_ERROR("GlRenderDeviceUVE: CreatePipelineUVE received an unknown vertex attribute format");
         return kInvalidPipelineHandleUVE;
     }
+    if (!IsPipelineBlendModeValidUVE(desc.blendMode)) {
+        UVE_ERROR("GlRenderDeviceUVE: CreatePipelineUVE received an unknown blend mode");
+        return kInvalidPipelineHandleUVE;
+    }
     const auto vertexIt = m_impl->state.shaders.find(desc.vertexShader.value);
     const auto fragmentIt = m_impl->state.shaders.find(desc.fragmentShader.value);
     if (vertexIt == m_impl->state.shaders.end() || fragmentIt == m_impl->state.shaders.end()) {
@@ -408,6 +412,10 @@ PipelineHandleUVE GlRenderDeviceUVE::CreatePipelineFromBinaryUVE(std::span<const
                                                                   const PipelineBinaryDescUVE& desc) {
     if (!IsVertexLayoutValidUVE(desc.vertexLayout)) {
         UVE_ERROR("GlRenderDeviceUVE: CreatePipelineFromBinaryUVE received an unknown vertex attribute format");
+        return kInvalidPipelineHandleUVE;
+    }
+    if (!IsPipelineBlendModeValidUVE(desc.blendMode)) {
+        UVE_ERROR("GlRenderDeviceUVE: CreatePipelineFromBinaryUVE received an unknown blend mode");
         return kInvalidPipelineHandleUVE;
     }
     const GLuint glProgram = m_impl->state.gl.glCreateProgram();

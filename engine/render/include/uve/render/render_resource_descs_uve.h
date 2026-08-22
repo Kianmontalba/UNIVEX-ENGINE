@@ -151,6 +151,15 @@ enum class PrimitiveTopologyUVE : std::uint8_t { Triangles };
 /// ordinary scene and tone-mapping pipelines preserve their existing opaque behavior.
 enum class PipelineBlendModeUVE : std::uint8_t { Opaque, SourceAlphaOver };
 
+[[nodiscard]] constexpr bool IsPipelineBlendModeValidUVE(const PipelineBlendModeUVE blendMode) noexcept {
+    switch (blendMode) {
+        case PipelineBlendModeUVE::Opaque:
+        case PipelineBlendModeUVE::SourceAlphaOver:
+            return true;
+    }
+    return false;
+}
+
 /// Describes a pipeline state object to create via IRenderDeviceUVE::CreatePipelineUVE().
 /// Fixed-function state remains deliberately small; blending is explicit because editor visual
 /// composition is the first proven consumer rather than an implicit global OpenGL side effect.

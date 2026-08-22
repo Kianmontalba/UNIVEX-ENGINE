@@ -317,6 +317,37 @@ TEST(NullRenderDeviceUVETest, CreatePipelineFromBinaryUVE_UnknownVertexFormat_Re
     EXPECT_EQ(validPipeline.value, 1U);
 }
 
+TEST(NullRenderDeviceUVETest, CreatePipelineUVE_UnknownBlendMode_ReturnsInvalidBeforePublication) {
+    NullRenderDeviceUVE device;
+    const ShaderHandleUVE vertexShader = device.CreateShaderUVE(ShaderDescUVE{ShaderStageUVE::Vertex, "vs"});
+    const ShaderHandleUVE fragmentShader = device.CreateShaderUVE(ShaderDescUVE{ShaderStageUVE::Fragment, "fs"});
+    PipelineDescUVE invalidDesc;
+    invalidDesc.vertexShader = vertexShader;
+    invalidDesc.fragmentShader = fragmentShader;
+    invalidDesc.blendMode = static_cast<PipelineBlendModeUVE>(0xFFU);
+
+    EXPECT_EQ(device.CreatePipelineUVE(invalidDesc), kInvalidPipelineHandleUVE);
+    EXPECT_EQ(device.GetLiveResourceCountUVE(), 2U);
+
+    invalidDesc.blendMode = PipelineBlendModeUVE::Opaque;
+    const PipelineHandleUVE validPipeline = device.CreatePipelineUVE(invalidDesc);
+    EXPECT_EQ(validPipeline.value, 1U);
+}
+
+TEST(NullRenderDeviceUVETest, CreatePipelineFromBinaryUVE_UnknownBlendMode_ReturnsInvalidBeforePublication) {
+    NullRenderDeviceUVE device;
+    const std::array<std::byte, 4> binary{};
+    PipelineBinaryDescUVE invalidDesc;
+    invalidDesc.blendMode = static_cast<PipelineBlendModeUVE>(0xFFU);
+
+    EXPECT_EQ(device.CreatePipelineFromBinaryUVE(binary, 0U, invalidDesc), kInvalidPipelineHandleUVE);
+    EXPECT_EQ(device.GetLiveResourceCountUVE(), 0U);
+
+    invalidDesc.blendMode = PipelineBlendModeUVE::Opaque;
+    const PipelineHandleUVE validPipeline = device.CreatePipelineFromBinaryUVE(binary, 0U, invalidDesc);
+    EXPECT_EQ(validPipeline.value, 1U);
+}
+
 TEST(NullRenderDeviceUVETest, GetPipelineUniformsUVE_AnyHandle_ReturnsEmpty) {
     NullRenderDeviceUVE device;
     EXPECT_TRUE(device.GetPipelineUniformsUVE(PipelineHandleUVE{1}).empty());
