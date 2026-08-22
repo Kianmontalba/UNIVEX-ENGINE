@@ -236,6 +236,11 @@ bool SaveGameSystemUVE::SaveUVE(int slotIndex, Scene::IEntityManagerUVE& entityM
 
     std::error_code errorCode;
     std::filesystem::create_directories(m_saveDirectory, errorCode);
+    if (errorCode) {
+        UVE_ERROR("SaveGameSystemUVE: SaveUVE could not prepare save directory \"{}\": {}",
+                  m_saveDirectory.string(), errorCode.message());
+        return false;
+    }
 
     const std::filesystem::path scratchPath = ScratchScenePathUVE(m_saveDirectory, slotIndex);
     if (!m_sceneSerializer->SaveUVE(entityManager, rootEntities, scratchPath, Scene::SceneAssetTypeUVE::Scene)) {
