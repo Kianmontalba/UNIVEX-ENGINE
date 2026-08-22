@@ -110,6 +110,10 @@ PipelineHandleUVE NullRenderDeviceUVE::CreatePipelineUVE(const PipelineDescUVE& 
         UVE_ERROR("NullRenderDeviceUVE: CreatePipelineUVE received an unknown blend mode");
         return kInvalidPipelineHandleUVE;
     }
+    if (!IsPrimitiveTopologyValidUVE(desc.topology)) {
+        UVE_ERROR("NullRenderDeviceUVE: CreatePipelineUVE received an unknown primitive topology");
+        return kInvalidPipelineHandleUVE;
+    }
     if (!m_impl->shaders.contains(desc.vertexShader.value) || !m_impl->shaders.contains(desc.fragmentShader.value)) {
         UVE_ERROR("NullRenderDeviceUVE: CreatePipelineUVE referenced an unknown vertex or fragment shader handle");
         return kInvalidPipelineHandleUVE;
@@ -148,6 +152,10 @@ PipelineHandleUVE NullRenderDeviceUVE::CreatePipelineFromBinaryUVE(std::span<con
     }
     if (!IsPipelineBlendModeValidUVE(desc.blendMode)) {
         UVE_ERROR("NullRenderDeviceUVE: CreatePipelineFromBinaryUVE received an unknown blend mode");
+        return kInvalidPipelineHandleUVE;
+    }
+    if (!IsPrimitiveTopologyValidUVE(desc.topology)) {
+        UVE_ERROR("NullRenderDeviceUVE: CreatePipelineFromBinaryUVE received an unknown primitive topology");
         return kInvalidPipelineHandleUVE;
     }
     static_cast<void>(binary); // NullRenderDeviceUVE never inspects binary contents.
