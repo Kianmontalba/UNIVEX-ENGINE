@@ -11,6 +11,7 @@
 #include <fstream>
 #include <memory>
 #include <numbers>
+#include <limits>
 #include <optional>
 #include <string>
 #include <thread>
@@ -887,7 +888,7 @@ TEST(EngineCoreUVETest, SaveGameSystemAndCheckpointManager_ReachableAndFunctiona
 TEST(EngineCoreUVETest, CheckpointManager_AutoSavesAfterConfiguredInterval_TickFrameUVEDriven) {
     EngineConfigUVE config = MakeTestConfigUVE();
     config.saveDirectoryPath = "uve_engine_core_tests_autosave_saves";
-    config.autoSaveIntervalSecondsUVE = 0.0; // fires on the very first CheckpointManagerUVE::UpdateUVE() call
+    config.autoSaveIntervalSecondsUVE = std::numeric_limits<double>::min(); // smallest positive interval
     std::filesystem::remove_all(config.saveDirectoryPath);
 
     EngineCoreUVE engine(config);
@@ -910,7 +911,7 @@ TEST(EngineCoreUVETest, CheckpointManager_AutoSavesAfterConfiguredInterval_TickF
 TEST(EngineCoreUVETest, SimulationControl_PausesStepsQueuesOneStepAndSuppressesTransientCheckpoints) {
     EngineConfigUVE config = MakeTestConfigUVE();
     config.saveDirectoryPath = "uve_engine_core_tests_transient_saves";
-    config.autoSaveIntervalSecondsUVE = 0.0;
+    config.autoSaveIntervalSecondsUVE = std::numeric_limits<double>::min(); // smallest positive interval
     std::filesystem::remove_all(config.saveDirectoryPath);
 
     EngineCoreUVE engine(config);
@@ -932,7 +933,11 @@ TEST(EngineCoreUVETest, SimulationControl_PausesStepsQueuesOneStepAndSuppressesT
 
     ASSERT_TRUE(engine.SetSimulationExecutionModeUVE(SimulationExecutionModeUVE::Running));
     ASSERT_TRUE(engine.SetTransientSimulationSessionActiveUVE(false));
-    engine.TickFrameUVE();
+    // A positive interval must observe a nonzero timer delta; allow the same three-frame cadence
+    // used by the neighboring autosave integration test after the paused frame.
+    for (int frame = 0; frame < 3; ++frame) {
+        engine.TickFrameUVE();
+    }
     EXPECT_TRUE(saveGameSystem.HasSaveUVE(Save::kAutoSaveSlotIndexUVE));
 
     engine.Shutdown();

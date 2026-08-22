@@ -6,9 +6,22 @@
 #include <cmath>
 
 namespace UVE::Save {
+namespace {
 
-CheckpointManagerUVE::CheckpointManagerUVE(ISaveGameSystemUVE& saveGameSystem, double autoSaveIntervalSeconds)
-    : m_saveGameSystem(&saveGameSystem), m_autoSaveIntervalSeconds(autoSaveIntervalSeconds) {}
+constexpr double kDefaultAutoSaveIntervalSecondsUVE = 300.0;
+
+[[nodiscard]] bool IsValidAutoSaveIntervalUVE(const double intervalSeconds) noexcept {
+    return std::isfinite(intervalSeconds) && intervalSeconds > 0.0;
+}
+
+} // namespace
+
+CheckpointManagerUVE::CheckpointManagerUVE(ISaveGameSystemUVE& saveGameSystem,
+                                             double autoSaveIntervalSeconds)
+    : m_saveGameSystem(&saveGameSystem),
+      m_autoSaveIntervalSeconds(IsValidAutoSaveIntervalUVE(autoSaveIntervalSeconds)
+                                    ? autoSaveIntervalSeconds
+                                    : kDefaultAutoSaveIntervalSecondsUVE) {}
 
 void CheckpointManagerUVE::UpdateUVE(double deltaTimeSeconds, Scene::IEntityManagerUVE& entityManager,
                                       const std::vector<Scene::EntityUVE>& rootEntities) {
@@ -28,8 +41,10 @@ bool CheckpointManagerUVE::CheckpointUVE(Scene::IEntityManagerUVE& entityManager
     return SaveCheckpointUVE(kManualCheckpointSlotIndexUVE, entityManager, rootEntities);
 }
 
-void CheckpointManagerUVE::SetAutoSaveIntervalSecondsUVE(double intervalSeconds) noexcept {
-    m_autoSaveIntervalSeconds = intervalSeconds;
+void CheckpointManagerUVE::SetAutoSaveIntervalSecondsUVE(const double intervalSeconds) noexcept {
+    if (IsValidAutoSaveIntervalUVE(intervalSeconds)) {
+        m_autoSaveIntervalSeconds = intervalSeconds;
+    }
 }
 
 double CheckpointManagerUVE::GetAutoSaveIntervalSecondsUVE() const noexcept {
