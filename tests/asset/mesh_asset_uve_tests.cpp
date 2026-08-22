@@ -89,6 +89,34 @@ TEST(MeshAssetUVETest, GenerateMeshTangentsUVE_DegenerateUvs_UsesDeterministicFa
     }
 }
 
+TEST(MeshAssetUVETest, TryGenerateMeshTangentsUVE_OverflowedSharedAccumulatorPreservesOutput) {
+    std::vector<MeshVertexUVE> vertices = {
+        MeshVertexUVE{Math::Vector3UVE{0.0F, 0.0F, 0.0F}, Math::Vector3UVE{0.0F, 0.0F, 1.0F}, 0.0F, 0.0F,
+                      Math::Vector3UVE{0.0F, 0.0F, 1.0F}, -1.0F},
+        MeshVertexUVE{Math::Vector3UVE{3.0e38F, 0.0F, 0.0F}, Math::Vector3UVE{0.0F, 0.0F, 1.0F}, 1.0F, 0.0F,
+                      Math::Vector3UVE{0.0F, 1.0F, 0.0F}, -1.0F},
+        MeshVertexUVE{Math::Vector3UVE{0.0F, 1.0F, 0.0F}, Math::Vector3UVE{0.0F, 0.0F, 1.0F}, 0.0F, 1.0F,
+                      Math::Vector3UVE{0.0F, 1.0F, 0.0F}, -1.0F},
+        MeshVertexUVE{Math::Vector3UVE{3.0e38F, 0.0F, 0.0F}, Math::Vector3UVE{0.0F, 0.0F, 1.0F}, 1.0F, 0.0F,
+                      Math::Vector3UVE{0.0F, 1.0F, 0.0F}, -1.0F},
+        MeshVertexUVE{Math::Vector3UVE{0.0F, 1.0F, 0.0F}, Math::Vector3UVE{0.0F, 0.0F, 1.0F}, 0.0F, 1.0F,
+                      Math::Vector3UVE{0.0F, 1.0F, 0.0F}, -1.0F},
+    };
+    const std::vector<MeshVertexUVE> original = vertices;
+    const std::vector<std::uint32_t> indices{0U, 1U, 2U, 0U, 3U, 4U};
+
+    EXPECT_FALSE(TryGenerateMeshTangentsUVE(vertices, indices));
+    ASSERT_EQ(vertices.size(), original.size());
+    for (std::size_t index = 0U; index < vertices.size(); ++index) {
+        EXPECT_EQ(vertices[index].position, original[index].position);
+        EXPECT_EQ(vertices[index].normal, original[index].normal);
+        EXPECT_EQ(vertices[index].u, original[index].u);
+        EXPECT_EQ(vertices[index].v, original[index].v);
+        EXPECT_EQ(vertices[index].tangent, original[index].tangent);
+        EXPECT_EQ(vertices[index].tangentHandedness, original[index].tangentHandedness);
+    }
+}
+
 TEST(MeshAssetUVETest, SaveThenLoad_RoundTripsByteExact) {
     const std::filesystem::path path = "uve_mesh_asset_tests_round_trip.uvemodel";
     std::filesystem::remove(path);

@@ -260,7 +260,9 @@ bool ConvertObjMeshUVE(const std::string_view source, MeshAssetUVE& outMesh) {
     if (candidate.vertices.empty() || candidate.indices.size() != candidate.vertices.size() || !hasBounds) {
         return false;
     }
-    GenerateMeshTangentsUVE(candidate.vertices, candidate.indices);
+    if (!TryGenerateMeshTangentsUVE(candidate.vertices, candidate.indices)) {
+        return false;
+    }
     if (!IsFiniteBoundsUVE(candidate.localBounds)) {
         return false;
     }

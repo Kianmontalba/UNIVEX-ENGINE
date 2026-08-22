@@ -233,7 +233,9 @@ bool ConvertGltfPrimitiveUVE(const GltfPrimitiveSourceUVE& source, MeshAssetUVE&
         }
     }
 
-    GenerateMeshTangentsUVE(candidate.vertices, candidate.indices);
+    if (!TryGenerateMeshTangentsUVE(candidate.vertices, candidate.indices)) {
+        return false;
+    }
     outMesh = std::move(candidate);
     return true;
     } catch (const std::bad_alloc&) {
