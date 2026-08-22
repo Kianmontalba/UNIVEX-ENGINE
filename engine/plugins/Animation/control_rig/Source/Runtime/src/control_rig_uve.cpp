@@ -24,6 +24,16 @@ constexpr float kEpsilonUVE = 1.0e-5F;
     return iterator == controls.cend() ? nullptr : &*iterator;
 }
 
+[[nodiscard]] bool IsValidControlRigConstraintKindUVE(const ControlRigConstraintKindUVE kind) noexcept {
+    switch (kind) {
+    case ControlRigConstraintKindUVE::TwoBoneIK:
+    case ControlRigConstraintKindUVE::AimLookAt:
+    case ControlRigConstraintKindUVE::SpringPosition:
+        return true;
+    }
+    return false;
+}
+
 [[nodiscard]] bool IsFiniteVectorUVE(const Math::Vector3UVE& value) noexcept {
     return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
 }
@@ -136,6 +146,10 @@ ControlRigValidationResultUVE ValidateControlRigUVE(const ControlRigUVE& rig) no
     std::vector<std::string> constraintIds;
     constraintIds.reserve(rig.constraints.size());
     for (const ControlRigConstraintUVE& constraint : rig.constraints) {
+        if (!IsValidControlRigConstraintKindUVE(constraint.kind)) {
+            return {ControlRigValidationCodeUVE::InvalidConstraint, constraint.constraintId,
+                    "Constraint kind is unknown."};
+        }
         if (!IsIdentifierUVE(constraint.constraintId) ||
             !std::isfinite(constraint.weight) || constraint.weight < 0.0F || constraint.weight > 1.0F) {
             return {ControlRigValidationCodeUVE::InvalidConstraint, constraint.constraintId,
