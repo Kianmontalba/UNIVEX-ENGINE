@@ -128,6 +128,18 @@ TEST(NullRenderDeviceUVETest, CreateTextureUVE_InvalidDescriptorOrUpload_Returns
     EXPECT_NE(valid, kInvalidTextureHandleUVE);
 }
 
+TEST(NullRenderDeviceUVETest, CreateShaderUVE_UnknownStage_ReturnsInvalidBeforeAllocation) {
+    NullRenderDeviceUVE device;
+    const ShaderHandleUVE invalid =
+        device.CreateShaderUVE(ShaderDescUVE{static_cast<ShaderStageUVE>(0xFFU), "vs"});
+
+    EXPECT_EQ(invalid, kInvalidShaderHandleUVE);
+    EXPECT_EQ(device.GetLiveResourceCountUVE(), 0U);
+
+    const ShaderHandleUVE valid = device.CreateShaderUVE(ShaderDescUVE{ShaderStageUVE::Vertex, "vs"});
+    EXPECT_EQ(valid.value, 1U);
+}
+
 TEST(NullRenderDeviceUVETest, CreateShaderUVE_ReturnsUniqueHandles) {
     NullRenderDeviceUVE device;
     const ShaderHandleUVE first = device.CreateShaderUVE(ShaderDescUVE{ShaderStageUVE::Vertex, "vs"});

@@ -80,6 +80,10 @@ void NullRenderDeviceUVE::DestroyTextureUVE(TextureHandleUVE texture) {
 
 ShaderHandleUVE NullRenderDeviceUVE::CreateShaderUVE(const ShaderDescUVE& desc, std::string* outInfoLog) {
     static_cast<void>(outInfoLog); // NullRenderDeviceUVE never compiles anything real - nothing to log.
+    if (!IsShaderStageValidUVE(desc.stage)) {
+        UVE_ERROR("NullRenderDeviceUVE: CreateShaderUVE received an unknown shader stage");
+        return kInvalidShaderHandleUVE;
+    }
     const std::uint32_t handleValue = m_impl->nextShaderHandle++;
     m_impl->shaders.emplace(handleValue, desc);
     return ShaderHandleUVE{handleValue};

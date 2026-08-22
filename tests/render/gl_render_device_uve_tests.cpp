@@ -115,6 +115,17 @@ TEST_F(GlRenderDeviceUVETest, GetBackendNameUVE_ReturnsOpenGL) {
     EXPECT_EQ(renderDevice->GetBackendNameUVE(), "OpenGL");
 }
 
+TEST_F(GlRenderDeviceUVETest, CreateShaderUVE_UnknownStage_ReturnsInvalidBeforeAllocation) {
+    ASSERT_EQ(renderDevice->GetLiveResourceCountUVE(), 0U);
+    std::string infoLog = "stale";
+    const ShaderHandleUVE invalid = renderDevice->CreateShaderUVE(
+        ShaderDescUVE{static_cast<ShaderStageUVE>(0xFFU), std::string(kValidVertexShaderSource)}, &infoLog);
+
+    EXPECT_EQ(invalid, kInvalidShaderHandleUVE);
+    EXPECT_EQ(infoLog, "Unknown shader stage.");
+    EXPECT_EQ(renderDevice->GetLiveResourceCountUVE(), 0U);
+}
+
 TEST_F(GlRenderDeviceUVETest, CreateThenDestroyBuffer_UpdatesLiveResourceCount) {
     ASSERT_EQ(renderDevice->GetLiveResourceCountUVE(), 0U);
     const BufferHandleUVE buffer = renderDevice->CreateBufferUVE(BufferDescUVE{64, BufferUsageUVE::Vertex});
