@@ -73,6 +73,8 @@ public:
     /// ownership transfer is visible at the call site
     /// (`inputSystem.RegisterActionUVE(std::move(action))`, or a temporary) — and the
     /// implementation moves it straight into its internal registry.
+    /// Invalid names, types, sentinel/malformed bindings, or over-cap binding vectors are ignored
+    /// without publishing a new action or replacing an existing one; empty vectors remain valid.
     virtual void RegisterActionUVE(InputActionUVE&& action) = 0;
     /// Returns true if an action with this name existed and was removed, false otherwise — no
     /// assertion for an unknown name. Needed for future editor workflows, hot reload, and

@@ -59,6 +59,8 @@ public:
     [[nodiscard]] Math::Vector2UVE GetMouseDeltaUVE() const override;
     [[nodiscard]] float GetMouseScrollDeltaUVE() const override;
 
+    /// Rejects malformed or over-cap binding vectors before registration or replacement; empty
+    /// vectors remain valid for actions that intentionally start unbound.
     void RegisterActionUVE(InputActionUVE&& action) override;
     bool UnregisterActionUVE(std::string_view actionName) override;
     bool RemapActionUVE(std::string_view actionName, std::vector<InputBindingUVE> positiveBindings,
@@ -72,9 +74,9 @@ private:
     static constexpr std::size_t kKeyCodeCount = static_cast<std::size_t>(KeyCodeUVE::Count);
     static constexpr std::size_t kMouseButtonCount = static_cast<std::size_t>(MouseButtonUVE::Count);
     using GamepadSnapshotArrayUVE = std::array<GamepadStateSnapshotUVE, kMaximumGamepadCountUVE>;
-    static constexpr std::size_t kMaximumRemappedBindingsPerSideUVE = 32U;
+    static constexpr std::size_t kMaximumBindingsPerSideUVE = 32U;
 
-    [[nodiscard]] static bool AreBindingsValidForRemapUVE(
+    [[nodiscard]] static bool AreBindingsValidUVE(
         const std::vector<InputBindingUVE>& bindings) noexcept;
 
     /// True iff any binding in `bindings` is down in the given state arrays.
