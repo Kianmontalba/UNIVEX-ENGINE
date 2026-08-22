@@ -2,8 +2,9 @@
 
 
 #include "gl_command_buffer_uve.h"
-
 #include <cstdint>
+#include <limits>
+
 
 #include "uve/debug/assert_uve.h"
 #include "uve/debug/logging_macros_uve.h"
@@ -264,6 +265,10 @@ void GlCommandBufferUVE::SetUniformMatrix4x4UVE(std::string_view name, const Mat
 }
 
 void GlCommandBufferUVE::DrawIndexedUVE(std::uint32_t indexCount, std::uint32_t instanceCount) {
+    if (indexCount > static_cast<std::uint32_t>(std::numeric_limits<GLsizei>::max())) {
+        UVE_ERROR("GlCommandBufferUVE: DrawIndexedUVE indexCount exceeds the GLsizei range");
+        return;
+    }
     if (instanceCount > 1) {
         UVE_WARNING("GlCommandBufferUVE: DrawIndexedUVE instanceCount > 1 is not yet supported - drawing once");
     }
@@ -271,6 +276,10 @@ void GlCommandBufferUVE::DrawIndexedUVE(std::uint32_t indexCount, std::uint32_t 
 }
 
 void GlCommandBufferUVE::DrawUVE(std::uint32_t vertexCount, std::uint32_t instanceCount) {
+    if (vertexCount > static_cast<std::uint32_t>(std::numeric_limits<GLsizei>::max())) {
+        UVE_ERROR("GlCommandBufferUVE: DrawUVE vertexCount exceeds the GLsizei range");
+        return;
+    }
     if (instanceCount > 1) {
         UVE_WARNING("GlCommandBufferUVE: DrawUVE instanceCount > 1 is not yet supported - drawing once");
     }
