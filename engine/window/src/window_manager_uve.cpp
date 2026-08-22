@@ -337,9 +337,16 @@ std::vector<MonitorInfoUVE> WindowManagerUVE::EnumerateMonitorsUVE() const {
         if (mode == nullptr) {
             continue; // Skip a monitor GLFW couldn't query a mode for rather than crashing.
         }
+        std::uint32_t monitorWidth = 0U;
+        std::uint32_t monitorHeight = 0U;
+        if (!ValidateMonitorDimensionsUVE(mode->width, mode->height, monitorWidth, monitorHeight)) {
+            UVE_ERROR("WindowManagerUVE: GLFW returned invalid dimensions for monitor {}x{}", mode->width,
+                      mode->height);
+            return {};
+        }
         const char* const name = glfwGetMonitorName(monitor);
-        monitors.push_back(MonitorInfoUVE{name != nullptr ? name : "", static_cast<std::uint32_t>(mode->width),
-                                           static_cast<std::uint32_t>(mode->height), monitor == primaryMonitor});
+        monitors.push_back(MonitorInfoUVE{name != nullptr ? name : "", monitorWidth, monitorHeight,
+                                           monitor == primaryMonitor});
     }
     if (!ValidateMonitorSnapshotUVE(monitors)) {
         UVE_ERROR("WindowManagerUVE: GLFW returned an invalid monitor snapshot");
