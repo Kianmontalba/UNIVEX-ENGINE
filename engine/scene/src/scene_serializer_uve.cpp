@@ -509,7 +509,19 @@ void RollbackRestoredEntitiesUVE(IEntityManagerUVE& entityManager, std::vector<E
             }
             for (const auto& [componentName, componentJson] : components.items()) {
                 if (componentName == "HierarchyComponentUVE") {
-                    static_cast<void>(componentJson.at("parentLocalId").get<std::int64_t>());
+                    if (!componentJson.is_object() || !componentJson.contains("parentLocalId") ||
+                        !componentJson.at("parentLocalId").is_number_integer()) {
+                        UVE_ERROR("SceneSerializerUVE: malformed hierarchy data in \"{}\"", sourceDescription);
+                        return std::nullopt;
+                    }
+                    const std::int64_t parentLocalId = componentJson.at("parentLocalId").get<std::int64_t>();
+                    if (parentLocalId < -1 ||
+                        (parentLocalId >= 0 &&
+                         static_cast<std::uint64_t>(parentLocalId) > std::numeric_limits<std::uint32_t>::max())) {
+                        UVE_ERROR("SceneSerializerUVE: hierarchy parent local ID is outside the uint32 range in \"{}\"",
+                                  sourceDescription);
+                        return std::nullopt;
+                    }
                     continue;
                 }
                 if (GetRegistrationsByNameUVE().find(componentName) == GetRegistrationsByNameUVE().end()) {
