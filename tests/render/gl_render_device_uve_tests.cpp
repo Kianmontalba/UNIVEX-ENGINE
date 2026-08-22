@@ -308,6 +308,41 @@ TEST_F(GlRenderDeviceUVETest, CreatePipelineFromBinaryUVE_AttributeExceedsVertex
     EXPECT_EQ(renderDevice->GetLiveResourceCountUVE(), 0U);
 }
 
+TEST_F(GlRenderDeviceUVETest, CreatePipelineUVE_VertexStrideExceedsGlsizei_ReturnsInvalidBeforeAllocation) {
+    const ShaderHandleUVE vertexShader =
+        renderDevice->CreateShaderUVE(ShaderDescUVE{ShaderStageUVE::Vertex, std::string(kValidVertexShaderSource)});
+    const ShaderHandleUVE fragmentShader = renderDevice->CreateShaderUVE(
+        ShaderDescUVE{ShaderStageUVE::Fragment, std::string(kValidFragmentShaderSource)});
+    ASSERT_NE(vertexShader, kInvalidShaderHandleUVE);
+    ASSERT_NE(fragmentShader, kInvalidShaderHandleUVE);
+
+    PipelineDescUVE invalidDesc;
+    invalidDesc.vertexShader = vertexShader;
+    invalidDesc.fragmentShader = fragmentShader;
+    invalidDesc.vertexLayout = {VertexAttributeUVE{"POSITION", VertexAttributeFormatUVE::Float3, 0U}};
+    invalidDesc.vertexStride = std::numeric_limits<std::uint32_t>::max();
+    EXPECT_EQ(renderDevice->CreatePipelineUVE(invalidDesc), kInvalidPipelineHandleUVE);
+    EXPECT_EQ(renderDevice->GetLiveResourceCountUVE(), 2U);
+
+    invalidDesc.vertexStride = 3U * static_cast<std::uint32_t>(sizeof(float));
+    const PipelineHandleUVE validPipeline = renderDevice->CreatePipelineUVE(invalidDesc);
+    EXPECT_EQ(validPipeline.value, 1U);
+
+    renderDevice->DestroyPipelineUVE(validPipeline);
+    renderDevice->DestroyShaderUVE(fragmentShader);
+    renderDevice->DestroyShaderUVE(vertexShader);
+}
+
+TEST_F(GlRenderDeviceUVETest, CreatePipelineFromBinaryUVE_VertexStrideExceedsGlsizei_ReturnsInvalidBeforeAllocation) {
+    const std::array<std::byte, 4> binary{};
+    PipelineBinaryDescUVE invalidDesc;
+    invalidDesc.vertexLayout = {VertexAttributeUVE{"POSITION", VertexAttributeFormatUVE::Float3, 0U}};
+    invalidDesc.vertexStride = std::numeric_limits<std::uint32_t>::max();
+
+    EXPECT_EQ(renderDevice->CreatePipelineFromBinaryUVE(binary, 0U, invalidDesc), kInvalidPipelineHandleUVE);
+    EXPECT_EQ(renderDevice->GetLiveResourceCountUVE(), 0U);
+}
+
 TEST_F(GlRenderDeviceUVETest, BeginRenderPassUVE_UnknownLoadOp_LeavesStateUntouched) {
     std::unique_ptr<ICommandBufferUVE> commandBuffer = renderDevice->CreateCommandBufferUVE();
     ASSERT_NE(commandBuffer, nullptr);
