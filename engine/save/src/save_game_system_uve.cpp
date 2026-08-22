@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <exception>
 #include <system_error>
 #include <utility>
 
@@ -62,6 +63,21 @@ namespace {
 [[nodiscard]] std::filesystem::path ScratchScenePathUVE(const std::filesystem::path& saveDirectory, int slotIndex) {
     return saveDirectory / ("." + SlotFileStemUVE(slotIndex) + "_scratch.uvescene");
 }
+
+class ScratchFileCleanupUVE final {
+public:
+    explicit ScratchFileCleanupUVE(std::filesystem::path path) : m_path(std::move(path)) {}
+    ~ScratchFileCleanupUVE() noexcept {
+        std::error_code errorCode;
+        std::filesystem::remove(m_path, errorCode);
+    }
+
+    ScratchFileCleanupUVE(const ScratchFileCleanupUVE&) = delete;
+    ScratchFileCleanupUVE& operator=(const ScratchFileCleanupUVE&) = delete;
+
+private:
+    std::filesystem::path m_path;
+};
 
 void AppendBytesUVE(std::vector<std::byte>& buffer, const void* data, std::size_t size) {
     const auto* const bytes = static_cast<const std::byte*>(data);
@@ -355,17 +371,20 @@ std::vector<Scene::EntityUVE> SaveGameSystemUVE::LoadUVE(int slotIndex, Scene::I
     }
 
     const std::filesystem::path scratchPath = ScratchScenePathUVE(m_saveDirectory, slotIndex);
+    const ScratchFileCleanupUVE scratchCleanup(scratchPath);
     if (!Asset::WriteUveFileUVE(scratchPath, Asset::AssetKindUVE::Scene, worldJsonBytes)) {
         UVE_ERROR("SaveGameSystemUVE: LoadUVE failed to write scratch world file for slot {}", slotIndex);
         return {};
     }
 
-    std::vector<Scene::EntityUVE> roots = m_sceneSerializer->LoadUVE(entityManager, scratchPath);
-
-    std::error_code errorCode;
-    std::filesystem::remove(scratchPath, errorCode);
-
-    return roots;
+    try {
+        return m_sceneSerializer->LoadUVE(entityManager, scratchPath);
+    } catch (const std::exception& exception) {
+        UVE_ERROR("SaveGameSystemUVE: LoadUVE scene serializer threw for slot {}: {}", slotIndex, exception.what());
+    } catch (...) {
+        UVE_ERROR("SaveGameSystemUVE: LoadUVE scene serializer threw an unknown exception for slot {}", slotIndex);
+    }
+    return {};
 }
 
 bool SaveGameSystemUVE::DeleteSaveUVE(int slotIndex) {
