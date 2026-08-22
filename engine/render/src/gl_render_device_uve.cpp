@@ -3,6 +3,7 @@
 
 #include "uve/render/gl_render_device_uve.h"
 
+#include <limits>
 #include <string>
 
 #define GLFW_INCLUDE_NONE
@@ -327,8 +328,9 @@ PipelineHandleUVE GlRenderDeviceUVE::CreatePipelineUVE(const PipelineDescUVE& de
         return kInvalidPipelineHandleUVE;
     }
     if (!desc.vertexLayout.empty() &&
-        (!IsVertexLayoutWithinStrideUVE(desc.vertexLayout, desc.vertexStride) || desc.vertexStride == 0U)) {
-        UVE_ERROR("GlRenderDeviceUVE: CreatePipelineUVE vertex attributes exceed the vertex stride");
+        (!IsVertexLayoutWithinStrideUVE(desc.vertexLayout, desc.vertexStride) || desc.vertexStride == 0U ||
+         desc.vertexStride > static_cast<std::uint32_t>(std::numeric_limits<GLsizei>::max()))) {
+        UVE_ERROR("GlRenderDeviceUVE: CreatePipelineUVE vertex attributes exceed the GL stride range");
         return kInvalidPipelineHandleUVE;
     }
     const auto vertexIt = m_impl->state.shaders.find(desc.vertexShader.value);
@@ -436,8 +438,9 @@ PipelineHandleUVE GlRenderDeviceUVE::CreatePipelineFromBinaryUVE(std::span<const
         return kInvalidPipelineHandleUVE;
     }
     if (!desc.vertexLayout.empty() &&
-        (!IsVertexLayoutWithinStrideUVE(desc.vertexLayout, desc.vertexStride) || desc.vertexStride == 0U)) {
-        UVE_ERROR("GlRenderDeviceUVE: CreatePipelineFromBinaryUVE vertex attributes exceed the vertex stride");
+        (!IsVertexLayoutWithinStrideUVE(desc.vertexLayout, desc.vertexStride) || desc.vertexStride == 0U ||
+         desc.vertexStride > static_cast<std::uint32_t>(std::numeric_limits<GLsizei>::max()))) {
+        UVE_ERROR("GlRenderDeviceUVE: CreatePipelineFromBinaryUVE vertex attributes exceed the GL stride range");
         return kInvalidPipelineHandleUVE;
     }
     const GLuint glProgram = m_impl->state.gl.glCreateProgram();
