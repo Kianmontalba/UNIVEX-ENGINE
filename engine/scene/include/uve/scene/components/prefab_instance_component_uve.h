@@ -193,7 +193,8 @@ struct PrefabOverrideConflictReportUVE final {
     IPrefabOverrideTargetUVE& sourceTarget,
     const std::optional<std::uint64_t> committedSourceRevision = std::nullopt) {
     if (!IsPrefabInstanceComponentValidUVE(instance) ||
-        (committedSourceRevision.has_value() && committedSourceRevision.value() == 0U)) {
+        (committedSourceRevision.has_value() &&
+         (committedSourceRevision.value() == 0U || committedSourceRevision.value() < instance.sourceRevision))) {
         return {PrefabOverrideOperationCodeUVE::InvalidInstance, 0U,
                 "Prefab source commit rejected because the instance or committed revision is invalid."};
     }
