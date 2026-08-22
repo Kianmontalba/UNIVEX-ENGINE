@@ -4,6 +4,8 @@
 #include "uve/memory/pool_allocator_uve.h"
 
 #include <cstdint>
+#include <limits>
+#include <new>
 #include <unordered_set>
 #include <vector>
 
@@ -24,6 +26,15 @@ TEST(PoolAllocatorUVETest, AllocateUpToCapacity_Succeeds) {
     }
     EXPECT_EQ(pool.GetUsedBlocksUVE(), 4U);
     EXPECT_EQ(pool.GetFreeBlocksUVE(), 0U);
+}
+
+TEST(PoolAllocatorUVETest, ConstructWithOverflowedAlignmentRoundUp_ThrowsBadAlloc) {
+    EXPECT_THROW({ PoolAllocatorUVE pool(std::numeric_limits<std::size_t>::max(), 64U, 1U); }, std::bad_alloc);
+}
+
+TEST(PoolAllocatorUVETest, ConstructWithOverflowedTotalFootprint_ThrowsBadAlloc) {
+    const std::size_t blockCount = std::numeric_limits<std::size_t>::max() / 64U + 1U;
+    EXPECT_THROW({ PoolAllocatorUVE pool(64U, 64U, blockCount); }, std::bad_alloc);
 }
 
 #if UVE_DEBUG

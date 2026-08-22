@@ -26,7 +26,8 @@ public:
     /// each (rounded up internally to at least `sizeof(void*)` so the free-list pointer always
     /// fits, and to a multiple of `blockAlignment` so every block stays aligned), freed in the
     /// destructor. `blockAlignment` must satisfy IsValidAlignmentUVE() (UVE_ASSERTs otherwise).
-    /// `tracker`, if non-null, must outlive this PoolAllocatorUVE.
+    /// `tracker`, if non-null, must outlive this PoolAllocatorUVE. Throws `std::bad_alloc` when
+    /// alignment rounding or the total block footprint cannot be represented by `std::size_t`.
     PoolAllocatorUVE(std::size_t blockSizeBytes, std::size_t blockAlignment,
                       std::size_t blockCount, IMemoryTrackerUVE* tracker = nullptr,
                       std::string_view allocatorTag = "PoolAllocatorUVE");
