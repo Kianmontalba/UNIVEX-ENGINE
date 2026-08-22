@@ -190,6 +190,10 @@ BufferHandleUVE GlRenderDeviceUVE::CreateBufferUVE(const BufferDescUVE& desc, st
         UVE_ERROR("GlRenderDeviceUVE: CreateBufferUVE received an unknown buffer usage");
         return kInvalidBufferHandleUVE;
     }
+    if (desc.sizeBytes > static_cast<std::uint64_t>(std::numeric_limits<GLsizeiptr>::max())) {
+        UVE_ERROR("GlRenderDeviceUVE: CreateBufferUVE size exceeds the GLsizeiptr range");
+        return kInvalidBufferHandleUVE;
+    }
     const GLenum target = BufferUsageToGlTargetUVE(desc.usage);
     GLuint glBuffer = 0;
     m_impl->state.gl.glGenBuffers(1, &glBuffer);
