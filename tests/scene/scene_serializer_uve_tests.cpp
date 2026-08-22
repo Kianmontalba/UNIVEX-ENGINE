@@ -7,6 +7,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <limits>
 #include <memory>
 #include <string>
 #include <vector>
@@ -166,6 +167,19 @@ TEST_F(SceneSerializerUVETest, CaptureThenRestore_AllRegisteredComponentTypes_Ro
     EXPECT_EQ(entityManager.GetComponentUVE<PrefabInstanceComponentUVE>(restored).sourcePrefabGuid,
               Asset::AssetGuidUVE{9001});
     EXPECT_TRUE(entityManager.HasComponentUVE<WorldTransformComponentUVE>(restored));
+}
+
+TEST_F(SceneSerializerUVETest, SaveUVE_InvalidAuthoredTransformFailsBeforeDestinationPublication) {
+    const EntityUVE entity = entityManager.CreateEntityUVE();
+    TransformComponentUVE transform;
+    transform.localPosition.x = std::numeric_limits<float>::quiet_NaN();
+    entityManager.AddComponentUVE<TransformComponentUVE>(entity, transform);
+
+    const std::filesystem::path path = "uve_scene_serializer_tests_invalid_authored_transform.uvescene";
+    std::filesystem::remove(path);
+    EXPECT_FALSE(serializer.SaveUVE(entityManager, {entity}, path, SceneAssetTypeUVE::Scene));
+    EXPECT_FALSE(std::filesystem::exists(path));
+    std::filesystem::remove(path);
 }
 
 TEST_F(SceneSerializerUVETest, CaptureUVE_UnregisteredComponent_ReturnsNulloptWithoutMutation) {
@@ -758,19 +772,17 @@ TEST_F(SceneSerializerUVETest, SaveThenLoad_ColliderComponentUVE_RoundTripsSpher
     std::filesystem::remove(path);
 }
 
-TEST_F(SceneSerializerUVETest, CaptureThenRestore_InvalidExpandedColliderShape_RollsBackCreatedEntities) {
+TEST_F(SceneSerializerUVETest, Capture_InvalidExpandedColliderShapeFailsBeforeSnapshotPublication) {
     const EntityUVE entity = entityManager.CreateEntityUVE();
     ColliderComponentUVE collider{Math::Vector3UVE{0.5F, 0.5F, 0.5F}};
     collider.shapeType = ColliderShapeTypeUVE::Sphere;
     collider.radius = 0.0F;
     entityManager.AddComponentUVE<ColliderComponentUVE>(entity, collider);
-    const std::optional<SceneSnapshotUVE> snapshot =
-        serializer.CaptureUVE(entityManager, {entity}, SceneAssetTypeUVE::Scene);
-    ASSERT_TRUE(snapshot.has_value());
+    const std::size_t entityCountBefore = entityManager.GetEntityCountUVE();
 
-    EntityManagerUVE loadedManager(memoryManager.GetDefaultAllocatorUVE(), eventSystem);
-    EXPECT_TRUE(serializer.RestoreUVE(loadedManager, *snapshot).empty());
-    EXPECT_EQ(loadedManager.GetEntityCountUVE(), 0U);
+    EXPECT_FALSE(serializer.CaptureUVE(entityManager, {entity}, SceneAssetTypeUVE::Scene).has_value());
+    EXPECT_EQ(entityManager.GetEntityCountUVE(), entityCountBefore);
+    EXPECT_TRUE(entityManager.IsAliveUVE(entity));
 }
 
 TEST_F(SceneSerializerUVETest, SaveThenLoad_LightComponentUVE_RoundTripsTypeRangeSpotAngle) {
