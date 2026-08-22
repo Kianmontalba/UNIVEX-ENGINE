@@ -7,6 +7,7 @@
 #include <atomic>
 #include <filesystem>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
@@ -225,6 +226,53 @@ TEST_F(AssetManagerUVETest, LoadUVE_LoaderRejectsExistingFile_ReportsReasonAndSu
     ASSERT_TRUE(WaitForTerminalStateUVE(handle));
     EXPECT_TRUE(handle.IsReadyUVE());
     EXPECT_TRUE(handle.GetFailureReasonUVE().empty());
+
+    std::filesystem::remove(path);
+}
+
+TEST_F(AssetManagerUVETest, LoaderExceptionFailsInitialLoadAndPreservesLastKnownGoodDataOnReload) {
+    const std::filesystem::path path = "uve_asset_manager_tests_loader_exception.uveblob";
+    std::filesystem::remove(path);
+    const std::string text = "stable asset";
+    const auto* const textBytes = reinterpret_cast<const std::byte*>(text.data());
+    ASSERT_TRUE(WriteUveFileUVE(path, AssetKindUVE::Blob,
+                                std::vector<std::byte>(textBytes, textBytes + text.size())));
+    const AssetGuidUVE guid = assetDatabase.RegisterUVE(path);
+
+    assetManager.RegisterLoaderUVE<BlobAssetUVE>(
+        [](const std::filesystem::path&, BlobAssetUVE&) -> bool {
+            throw std::runtime_error("injected loader exception");
+        });
+    const AssetHandleUVE<BlobAssetUVE> failedHandle = assetManager.LoadUVE<BlobAssetUVE>(guid, assetDatabase);
+    ASSERT_TRUE(WaitForTerminalStateUVE(failedHandle));
+    EXPECT_TRUE(failedHandle.HasFailedUVE());
+    EXPECT_EQ(failedHandle.GetFailureReasonUVE(), "asset loader threw: injected loader exception");
+
+    assetManager.RegisterLoaderUVE<BlobAssetUVE>(LoadBlobUVE);
+    assetManager.ReloadUVE(guid, assetDatabase);
+    ASSERT_TRUE(WaitForTerminalStateUVE(failedHandle));
+    ASSERT_TRUE(failedHandle.IsReadyUVE());
+    const BlobAssetUVE* const loaded = failedHandle.TryGetUVE();
+    ASSERT_NE(loaded, nullptr);
+    EXPECT_EQ(std::string(reinterpret_cast<const char*>(loaded->data()), loaded->size()), text);
+
+    assetManager.RegisterLoaderUVE<BlobAssetUVE>(
+        [](const std::filesystem::path&, BlobAssetUVE&) -> bool {
+            throw std::runtime_error("injected reload exception");
+        });
+    assetManager.ReloadUVE(guid, assetDatabase);
+    for (int iteration = 0; iteration < 200000; ++iteration) {
+        if (failedHandle.IsReadyUVE() &&
+            failedHandle.GetFailureReasonUVE() == "asset loader threw: injected reload exception") {
+            break;
+        }
+        std::this_thread::yield();
+    }
+    ASSERT_TRUE(failedHandle.IsReadyUVE());
+    EXPECT_EQ(failedHandle.GetFailureReasonUVE(), "asset loader threw: injected reload exception");
+    const BlobAssetUVE* const preserved = failedHandle.TryGetUVE();
+    ASSERT_NE(preserved, nullptr);
+    EXPECT_EQ(std::string(reinterpret_cast<const char*>(preserved->data()), preserved->size()), text);
 
     std::filesystem::remove(path);
 }
