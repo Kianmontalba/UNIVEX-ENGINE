@@ -9,6 +9,19 @@
 #include "uve/debug/logging_macros_uve.h"
 
 namespace UVE::Asset {
+namespace {
+
+[[nodiscard]] bool IsValidShaderStageValueUVE(const std::uint8_t value) noexcept {
+    return value == static_cast<std::uint8_t>(ShaderStageKindUVE::Vertex) ||
+           value == static_cast<std::uint8_t>(ShaderStageKindUVE::Fragment) ||
+           value == static_cast<std::uint8_t>(ShaderStageKindUVE::Compute);
+}
+
+[[nodiscard]] bool IsValidShaderStageUVE(const ShaderStageKindUVE stage) noexcept {
+    return IsValidShaderStageValueUVE(static_cast<std::uint8_t>(stage));
+}
+
+} // namespace
 
 bool LoadShaderAssetUVE(const std::filesystem::path& path, ShaderAssetUVE& outShader) {
     const std::optional<std::pair<UveFileHeaderUVE, std::vector<std::byte>>> file = ReadUveFileUVE(path);
@@ -33,8 +46,9 @@ bool LoadShaderAssetUVE(const std::filesystem::path& path, ShaderAssetUVE& outSh
     }
 
     ShaderAssetUVE shader;
+    std::uint8_t stageValue = 0U;
     try {
-        shader.stage = static_cast<ShaderStageKindUVE>(payload.at("stage").get<std::uint8_t>());
+        stageValue = payload.at("stage").get<std::uint8_t>();
         shader.sourceCode = payload.at("sourceCode").get<std::string>();
         shader.entryPointName = payload.value("entryPointName", std::string("main"));
     } catch (const nlohmann::json::exception& fieldError) {
@@ -42,6 +56,11 @@ bool LoadShaderAssetUVE(const std::filesystem::path& path, ShaderAssetUVE& outSh
         return false;
     }
 
+    if (!IsValidShaderStageValueUVE(stageValue)) {
+        UVE_ERROR("ShaderAssetUVE: \"{}\" has an unknown shader stage", path.string());
+        return false;
+    }
+    shader.stage = static_cast<ShaderStageKindUVE>(stageValue);
     if (shader.sourceCode.empty()) {
         UVE_ERROR("ShaderAssetUVE: \"{}\" has empty source code", path.string());
         return false;
@@ -52,6 +71,10 @@ bool LoadShaderAssetUVE(const std::filesystem::path& path, ShaderAssetUVE& outSh
 }
 
 bool SaveShaderAssetUVE(const ShaderAssetUVE& shader, const std::filesystem::path& path) {
+    if (!IsValidShaderStageUVE(shader.stage)) {
+        UVE_ERROR("ShaderAssetUVE: refusing to save an unknown shader stage to {}", path.string());
+        return false;
+    }
     nlohmann::json payload;
     payload["stage"] = static_cast<std::uint8_t>(shader.stage);
     payload["sourceCode"] = shader.sourceCode;
