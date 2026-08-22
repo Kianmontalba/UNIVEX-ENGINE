@@ -246,6 +246,11 @@ TextureHandleUVE GlRenderDeviceUVE::CreateTextureUVE(const TextureDescUVE& desc,
         UVE_WARNING("GlRenderDeviceUVE: CreateTextureUVE requested {} mip levels - only level 0 is populated",
                      desc.mipLevels);
     }
+    if (desc.width > static_cast<std::uint32_t>(std::numeric_limits<GLsizei>::max()) ||
+        desc.height > static_cast<std::uint32_t>(std::numeric_limits<GLsizei>::max())) {
+        UVE_ERROR("GlRenderDeviceUVE: CreateTextureUVE dimensions exceed the GLsizei range");
+        return kInvalidTextureHandleUVE;
+    }
 
     const GlTextureFormatUVE glFormat = TextureFormatToGlUVE(desc.format);
     GLuint glTexture = 0;
