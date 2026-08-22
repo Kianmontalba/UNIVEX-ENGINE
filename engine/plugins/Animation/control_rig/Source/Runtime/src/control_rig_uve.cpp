@@ -259,6 +259,9 @@ TwoBoneIKSolveResultUVE SolveTwoBoneIKUVE(const TransformPoseUVE& rootPose,
     const Math::Vector3UVE fallbackDirection{1.0F, 0.0F, 0.0F};
     const Math::Vector3UVE direction = NormalizeVectorUVE(targetOffset, fallbackDirection);
     const Math::Vector3UVE poleOffset = pole - root;
+    if (!IsFiniteVectorUVE(poleOffset)) {
+        return result;
+    }
     const Math::Vector3UVE projectedPole = poleOffset - direction * Math::DotUVE(poleOffset, direction);
     const Math::Vector3UVE bendDirection = NormalizeVectorUVE(projectedPole, {0.0F, 1.0F, 0.0F});
     const float cosine = std::clamp((firstLength * firstLength + solvedDistance * solvedDistance -
