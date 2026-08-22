@@ -8,6 +8,7 @@
 #include <fstream>
 #include <limits>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -56,9 +57,13 @@ public:
 
     [[nodiscard]] std::vector<EntityUVE> LoadUVE(
         Scene::IEntityManagerUVE&, const std::filesystem::path&) override {
+        if (throwOnLoad) {
+            throw std::runtime_error("injected scene serializer failure");
+        }
         return {};
     }
 
+    bool throwOnLoad = false;
     int saveCallCount = 0;
 };
 
@@ -678,6 +683,18 @@ TEST_F(SaveGameSystemUVETest, LegacyMetadataMigrationRunsBeforeDecodeForLoadAndM
     EntityManagerUVE loadedManager(memoryManager.GetDefaultAllocatorUVE(), eventSystem);
     ASSERT_FALSE(saveGameSystem.LoadUVE(16, loadedManager).empty());
     EXPECT_EQ(saveGameSystem.GetLastMigrationDiagnosticsUVE().status, SaveMigrationStatusUVE::Migrated);
+}
+
+TEST_F(SaveGameSystemUVETest, LoadUVE_SerializerExceptionReturnsEmptyAndCleansScratchFile) {
+    const EntityUVE entity = entityManager.CreateEntityUVE();
+    ASSERT_TRUE(saveGameSystem.SaveUVE(22, entityManager, {entity}, GameStateMetadataUVE{}));
+
+    CountingSceneSerializerUVE throwingSerializer;
+    throwingSerializer.throwOnLoad = true;
+    SaveGameSystemUVE throwingLoadSystem(throwingSerializer, saveDirectory);
+    EntityManagerUVE loadedManager(memoryManager.GetDefaultAllocatorUVE(), eventSystem);
+    EXPECT_TRUE(throwingLoadSystem.LoadUVE(22, loadedManager).empty());
+    EXPECT_FALSE(std::filesystem::exists(saveDirectory / ".slot_22_scratch.uvescene"));
 }
 
 TEST_F(SaveGameSystemUVETest, SaveThenLoad_CurrentSchemaReportsNoMigrationRequired) {
