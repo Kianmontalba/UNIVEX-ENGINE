@@ -211,6 +211,9 @@ std::optional<Math::PenetrationUVE> ComputeSphereSpherePenetrationUVE(
     const Math::Vector3UVE delta = secondCenter - firstCenter;
     const float distanceSquared = Math::LengthSquaredUVE(delta);
     const float combinedRadius = firstRadius + secondRadius;
+    if (!std::isfinite(combinedRadius)) {
+        return std::nullopt;
+    }
     const float combinedRadiusSquared = combinedRadius * combinedRadius;
     if (distanceSquared >= combinedRadiusSquared) {
         return std::nullopt;
@@ -246,6 +249,9 @@ std::optional<Math::PenetrationUVE> ComputeCapsuleSpherePenetrationUVE(
     const Math::Vector3UVE delta = sphereCenter - closestSegmentPoint;
     const float distanceSquared = Math::LengthSquaredUVE(delta);
     const float combinedRadius = capsuleRadius + sphereRadius;
+    if (!std::isfinite(combinedRadius)) {
+        return std::nullopt;
+    }
     if (distanceSquared >= combinedRadius * combinedRadius) {
         return std::nullopt;
     }
@@ -330,6 +336,9 @@ std::optional<Math::PenetrationUVE> ComputeCapsuleCapsulePenetrationUVE(
     const Math::Vector3UVE secondPoint = secondSegmentStart + secondDirection * bestSecondTime;
     const Math::Vector3UVE delta = secondPoint - firstPoint;
     const float combinedRadius = firstRadius + secondRadius;
+    if (!std::isfinite(combinedRadius)) {
+        return std::nullopt;
+    }
     if (bestDistanceSquared >= combinedRadius * combinedRadius) {
         return std::nullopt;
     }

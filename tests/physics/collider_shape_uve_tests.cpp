@@ -3,6 +3,7 @@
 #include "uve/scene/components/collider_component_uve.h"
 
 #include <algorithm>
+#include <limits>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -10,6 +11,7 @@
 #include "uve/events/event_system_uve.h"
 #include "uve/memory/memory_manager_uve.h"
 #include "uve/physics/collision_system_uve.h"
+#include "uve/physics/detail/shape_narrow_phase_uve.h"
 #include "uve/scene/components/transform_component_uve.h"
 #include "uve/scene/entity_manager_uve.h"
 #include "uve/scene/scene_graph_uve.h"
@@ -70,6 +72,19 @@ TEST(ColliderComponentUVETest, IsColliderComponentValidUVE_RejectsInvalidShapePa
     invalid.radius = 0.5F;
     invalid.height = 0.9F;
     EXPECT_FALSE(Scene::IsColliderComponentValidUVE(invalid));
+}
+
+TEST(ShapeNarrowPhaseUVETest, RadiusSumOverflowFailsClosedBeforePenetrationPublication) {
+    const float maximumRadius = std::numeric_limits<float>::max();
+    EXPECT_FALSE(Detail::ComputeSphereSpherePenetrationUVE(
+                     {}, maximumRadius, {}, maximumRadius)
+                     .has_value());
+    EXPECT_FALSE(Detail::ComputeCapsuleSpherePenetrationUVE(
+                     {}, {}, maximumRadius, {}, maximumRadius)
+                     .has_value());
+    EXPECT_FALSE(Detail::ComputeCapsuleCapsulePenetrationUVE(
+                     {}, {}, maximumRadius, {}, {}, maximumRadius)
+                     .has_value());
 }
 
 TEST(ColliderComponentUVETest, GetColliderLocalHalfExtentsUVE_UsesConservativeShapeBounds) {
