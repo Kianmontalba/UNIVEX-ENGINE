@@ -56,6 +56,16 @@ TEST(ControlRigUVETest, ValidateControlRigUVE_RejectsUnknownConstraintKind) {
     EXPECT_EQ(result.appliedConstraintCount, 0U);
 }
 
+TEST(ControlRigUVETest, ValidateControlRigUVE_RejectsUnknownControlSpace) {
+    ControlRigUVE rig = MakeRigUVE();
+    rig.controls[0].space = static_cast<ControlRigSpaceUVE>(0xFFU);
+    EXPECT_EQ(ValidateControlRigUVE(rig).code, ControlRigValidationCodeUVE::InvalidControl);
+
+    const ControlRigEvaluationResultUVE result = EvaluateControlRigUVE(rig);
+    EXPECT_FALSE(result.IsSuccessUVE());
+    EXPECT_EQ(result.appliedConstraintCount, 0U);
+}
+
 TEST(ControlRigUVETest, BlendControlRigPoseUVE_ClampsWeightAndNormalizesRotation) {
     const TransformPoseUVE source{{0.0F, 0.0F, 0.0F}, {0.0F, 0.0F, 0.0F, 1.0F},
                                   {1.0F, 1.0F, 1.0F}};
