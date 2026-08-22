@@ -59,6 +59,7 @@ void AssetManagerUVE::RegisterLoaderErased(std::type_index type, AssetLoaderInfo
 }
 
 void AssetManagerUVE::LoadErased(AssetGuidUVE guid, std::type_index type, IAssetDatabaseUVE& assetDatabase) {
+    bool missingLoader = false;
     {
         const std::lock_guard<std::mutex> lock(m_impl->mutex);
         const auto existingIt = m_impl->records.find(guid);
@@ -68,14 +69,24 @@ void AssetManagerUVE::LoadErased(AssetGuidUVE guid, std::type_index type, IAsset
         }
 
         const auto loaderIt = m_impl->loaders.find(type);
-        UVE_ASSERT(loaderIt != m_impl->loaders.end());
-
         AssetManagerRecordUVE record;
         record.type = type;
-        record.state = AssetLoadStateUVE::Loading;
         record.refCount = 1;
-        record.destroy = loaderIt->second.destroy;
+        if (loaderIt == m_impl->loaders.end()) {
+            record.state = AssetLoadStateUVE::Failed;
+            record.failureReason = "no loader registered for asset type";
+            missingLoader = true;
+        } else {
+            record.state = AssetLoadStateUVE::Loading;
+            record.destroy = loaderIt->second.destroy;
+        }
         m_impl->records.emplace(guid, std::move(record));
+    }
+
+    if (missingLoader) {
+        UVE_ERROR("AssetManagerUVE: no loader registered for requested asset type (GUID {})", guid.value);
+        m_impl->eventSystem.QueueEvent(AssetLoadCompletedEventUVE{guid, false});
+        return;
     }
 
     const std::filesystem::path path = assetDatabase.ResolveUVE(guid);
