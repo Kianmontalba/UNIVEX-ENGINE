@@ -146,6 +146,14 @@ struct VertexAttributeUVE {
 /// exists today — lines/points aren't needed by anything built so far.
 enum class PrimitiveTopologyUVE : std::uint8_t { Triangles };
 
+[[nodiscard]] constexpr bool IsPrimitiveTopologyValidUVE(const PrimitiveTopologyUVE topology) noexcept {
+    switch (topology) {
+        case PrimitiveTopologyUVE::Triangles:
+            return true;
+    }
+    return false;
+}
+
 /// Explicit color blending policy for a pipeline. SourceAlphaOver is the conventional premultiplied-
 /// independent source-alpha composite used by editor-only visual overlays; it remains opt-in so
 /// ordinary scene and tone-mapping pipelines preserve their existing opaque behavior.
