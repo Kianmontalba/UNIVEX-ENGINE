@@ -310,6 +310,10 @@ void GlRenderDeviceUVE::DestroyShaderUVE(ShaderHandleUVE shader) {
 }
 
 PipelineHandleUVE GlRenderDeviceUVE::CreatePipelineUVE(const PipelineDescUVE& desc, std::string* outInfoLog) {
+    if (!IsVertexLayoutValidUVE(desc.vertexLayout)) {
+        UVE_ERROR("GlRenderDeviceUVE: CreatePipelineUVE received an unknown vertex attribute format");
+        return kInvalidPipelineHandleUVE;
+    }
     const auto vertexIt = m_impl->state.shaders.find(desc.vertexShader.value);
     const auto fragmentIt = m_impl->state.shaders.find(desc.fragmentShader.value);
     if (vertexIt == m_impl->state.shaders.end() || fragmentIt == m_impl->state.shaders.end()) {
@@ -402,6 +406,10 @@ bool GlRenderDeviceUVE::GetPipelineBinaryUVE(PipelineHandleUVE pipeline, std::ve
 PipelineHandleUVE GlRenderDeviceUVE::CreatePipelineFromBinaryUVE(std::span<const std::byte> binary,
                                                                   std::uint32_t format,
                                                                   const PipelineBinaryDescUVE& desc) {
+    if (!IsVertexLayoutValidUVE(desc.vertexLayout)) {
+        UVE_ERROR("GlRenderDeviceUVE: CreatePipelineFromBinaryUVE received an unknown vertex attribute format");
+        return kInvalidPipelineHandleUVE;
+    }
     const GLuint glProgram = m_impl->state.gl.glCreateProgram();
     m_impl->state.gl.glProgramBinary(glProgram, static_cast<GLenum>(format), binary.data(),
                                        static_cast<GLsizei>(binary.size()));
