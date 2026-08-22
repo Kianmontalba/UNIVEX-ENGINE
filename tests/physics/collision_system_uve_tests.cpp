@@ -92,6 +92,22 @@ TEST_F(CollisionSystemUVETest, BuildColliderWorldAabbCacheUVE_SkipsFiniteBoundsT
     EXPECT_TRUE(collisionSystem.DetectCollisionsUVE(entityManager).empty());
 }
 
+TEST_F(CollisionSystemUVETest, BuildColliderWorldAabbCacheUVE_CapsCopiedProxiesAtBvhLimit) {
+    for (std::size_t index = 0U; index < Detail::DynamicAabbBvhUVE::kMaximumProxiesUVE + 1U; ++index) {
+        const Scene::EntityUVE entity = entityManager.CreateEntityUVE();
+        Scene::TransformComponentUVE local;
+        local.localPosition = Math::Vector3UVE{static_cast<float>(index) * 3.0F, 0.0F, 0.0F};
+        sceneGraph.AttachTransformUVE(entityManager, entity, local);
+        entityManager.AddComponentUVE<Scene::ColliderComponentUVE>(
+            entity, Scene::ColliderComponentUVE{Math::Vector3UVE{0.5F, 0.5F, 0.5F}});
+    }
+    sceneGraph.UpdateUVE(entityManager);
+
+    const std::vector<Detail::ColliderWorldAabbUVE> cache = Detail::BuildColliderWorldAabbCacheUVE(entityManager);
+    ASSERT_EQ(cache.size(), Detail::DynamicAabbBvhUVE::kMaximumProxiesUVE);
+    EXPECT_TRUE(Detail::DynamicAabbBvhUVE(cache).IsValidUVE());
+}
+
 TEST_F(CollisionSystemUVETest, DetectCollisionsUVE_MultipleSimultaneousOverlaps_AllReported) {
     const Scene::EntityUVE a = MakeColliderEntityUVE(Math::Vector3UVE{0.0F, 0.0F, 0.0F}, Math::Vector3UVE{1.0F, 1.0F, 1.0F});
     const Scene::EntityUVE b = MakeColliderEntityUVE(Math::Vector3UVE{1.5F, 0.0F, 0.0F}, Math::Vector3UVE{1.0F, 1.0F, 1.0F});
