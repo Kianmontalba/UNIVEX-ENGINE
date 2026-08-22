@@ -110,6 +110,18 @@ TEST(ReliablePacketWindowUVETest, NewAndOutOfOrderSequencesUpdateBoundedHistory)
     EXPECT_EQ(state.receivedHistoryBits, 3U);
     EXPECT_EQ(AcceptReliableSequenceUVE(11U, state), ReliablePacketReceiveStatusUVE::Duplicate);
 }
+TEST(ReliablePacketWindowUVETest, ExactThirtyTwoSequenceAdvancePreservesOldestHistoryBit) {
+    ReliableAcknowledgementStateUVE state;
+    ASSERT_EQ(AcceptReliableSequenceUVE(100U, state), ReliablePacketReceiveStatusUVE::Accepted);
+
+    EXPECT_EQ(AcceptReliableSequenceUVE(132U, state), ReliablePacketReceiveStatusUVE::Accepted);
+    EXPECT_EQ(state.latestReceivedSequence, 132U);
+    EXPECT_EQ(state.receivedHistoryBits, 0x80000000U);
+
+    EXPECT_EQ(AcceptReliableSequenceUVE(100U, state), ReliablePacketReceiveStatusUVE::Duplicate);
+    EXPECT_EQ(state.receivedHistoryBits, 0x80000000U);
+}
+
 TEST(ReliablePacketWindowUVETest, ZeroAndTooOldSequencesAreRejected) {
     ReliableAcknowledgementStateUVE state;
     EXPECT_EQ(AcceptReliableSequenceUVE(0U, state), ReliablePacketReceiveStatusUVE::Invalid);
