@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <limits>
 #include <new>
 
 #include "uve/debug/assert_uve.h"
@@ -15,7 +16,10 @@ namespace UVE::Memory {
 namespace {
 
 constexpr std::size_t RoundUpUVE(std::size_t value, std::size_t alignment) {
-    return ((value + alignment - 1) / alignment) * alignment;
+    if (alignment == 0U || value > std::numeric_limits<std::size_t>::max() - (alignment - 1U)) {
+        throw std::bad_alloc{};
+    }
+    return ((value + alignment - 1U) / alignment) * alignment;
 }
 
 // The pool's free list is intrusive: a free block's own bytes store the address of the next
@@ -48,6 +52,9 @@ PoolAllocatorUVE::PoolAllocatorUVE(std::size_t blockSizeBytes, std::size_t block
     UVE_ASSERT(IsValidAlignmentUVE(blockAlignment));
     UVE_ASSERT(blockSizeBytes > 0);
     UVE_ASSERT(blockCount > 0);
+    if (m_blockCount == 0U || m_blockStride > std::numeric_limits<std::size_t>::max() / m_blockCount) {
+        throw std::bad_alloc{};
+    }
 
     m_buffer = ::operator new(m_blockStride * m_blockCount, std::align_val_t{blockAlignment});
 

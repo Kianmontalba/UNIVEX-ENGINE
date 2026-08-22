@@ -11,7 +11,7 @@
 | Status | Completed foundation | Delivered capability | Ongoing boundary |
 |---|---|---|---|
 | **COMPLETED** | **Increment 1** | Engine loop, logging, timing, events, and `EngineCoreUVE`. | The documented `Init → Load → BeginFrame → Update → LateUpdate → Render → EndFrame → Shutdown` lifecycle remains the single runtime path. |
-| **COMPLETED** | **Increment 2** | Memory manager with pool, stack, and heap allocators. | RAII and measured allocation behavior remain required for future low-level work. |
+| **COMPLETED** | **Increment 2** | Memory manager with pool, stack, and heap allocators. | RAII and measured allocation behavior remain required for future low-level work; Increment 466 makes PoolAllocatorUVE reject alignment-rounding and total-footprint `std::size_t` overflow with `std::bad_alloc` before allocation while preserving valid pool behavior. |
 | **COMPLETED** | **Increment 3** | Work-stealing thread-pool job system. | Thread affinity and main-thread rendering constraints remain explicit. |
 | **COMPLETED** | **Increment 4** | Configuration and command-line foundations. | Settings must remain versioned and safely recover from malformed/missing files. |
 | **COMPLETED** | **Increments 5–6** | ECS, scene graph, prefabs, and scene serialization. | The runtime scene is authoritative; the editor only authors it through commands. |
