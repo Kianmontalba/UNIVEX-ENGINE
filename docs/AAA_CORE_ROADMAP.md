@@ -41,7 +41,7 @@ The complete filename inventory supplied for Motion Query/Motion Matching is mai
 | Capability | What it adds |
 |---|---|
 | **Frame Scheduler / Task Graph** | Dependency-aware jobs for animation, ECS, rendering preparation, physics, streaming, audio, and background asset work, with priorities and safe synchronization. |
-| **Unified Time System** | Game time, real time, fixed simulation time, animation time, audio time, pause/time-scale domains, and deterministic fixed-step support. |
+| **Unified Time System** | Game time, real time, fixed simulation time, animation time, audio time, pause/time-scale domains, and deterministic fixed-step support; Increment 438 makes TimerUVE retain safe finite-positive max-delta and fixed-timestep configuration by ignoring invalid setter values. |
 | **Transform Hierarchy & Pose Evaluation** | Centralized, cache-friendly transform/pose evaluation with dirty propagation, parent/child updates, local/global conversion, and safe multithreaded evaluation. |
 | **Resource Lifetime & Handle System** | Stable resource handles, reference/lifetime tracking, dependency-aware unloading, generation IDs, and protection against stale references. |
 | **Event / Signal Bus** | Typed engine events with scoped subscriptions, lifecycle safety, queued/immediate modes, and debugging without creating uncontrolled coupling. |

@@ -58,13 +58,15 @@ public:
     /// construction.
     virtual void Reset() = 0;
 
-    /// Sets the maximum value GetDeltaTimeUVE() (and therefore each
-    /// accumulator increment) can report in a single Tick(), regardless of
-    /// how much real time actually elapsed. Default is 0.25 seconds.
+    /// Sets the maximum finite positive value GetDeltaTimeUVE() (and therefore each accumulator
+    /// increment) can report in a single Tick(), regardless of how much real time actually elapsed.
+    /// Invalid zero, negative, or non-finite values are ignored; the default and last valid value are
+    /// retained. Default is 0.25 seconds.
     virtual void SetMaxDeltaTimeUVE(double maxDeltaSeconds) = 0;
 
-    /// Sets the size, in seconds, of one fixed simulation step consumed by
-    /// AdvanceFixedStepUVE(). Default is 1/60 second.
+    /// Sets the finite positive size, in seconds, of one fixed simulation step consumed by
+    /// AdvanceFixedStepUVE(). Invalid zero, negative, or non-finite values are ignored; the default
+    /// and last valid value are retained. Default is 1/60 second.
     virtual void SetFixedTimestepUVE(double fixedDeltaSeconds) = 0;
 
     /// Consumes as many fixed-size chunks of accumulated time as are
