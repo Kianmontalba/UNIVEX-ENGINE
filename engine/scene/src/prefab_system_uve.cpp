@@ -21,6 +21,10 @@ Asset::AssetGuidUVE PrefabSystemUVE::SavePrefabUVE(IEntityManagerUVE& entityMana
     }
 
     const Asset::AssetGuidUVE guid = assetDatabase.RegisterUVE(path);
+    if (guid == Asset::kInvalidAssetGuidUVE) {
+        UVE_ERROR("PrefabSystemUVE: asset database rejected prefab registration for \"{}\"", path.string());
+        return Asset::kInvalidAssetGuidUVE;
+    }
     assetDatabase.SaveUVE();
     return guid;
 }

@@ -65,6 +65,24 @@ public:
     }
 };
 
+class RejectingPrefabAssetDatabaseUVE final : public Asset::IAssetDatabaseUVE {
+public:
+    bool LoadUVE(const std::filesystem::path&) override { return false; }
+    bool SaveUVE() override {
+        ++saveCallCount;
+        return false;
+    }
+    bool SaveUVE(const std::filesystem::path&) override { return false; }
+    [[nodiscard]] Asset::AssetGuidUVE RegisterUVE(const std::filesystem::path&) override {
+        return Asset::kInvalidAssetGuidUVE;
+    }
+    [[nodiscard]] std::filesystem::path ResolveUVE(Asset::AssetGuidUVE) const override { return {}; }
+    [[nodiscard]] bool HasGuidUVE(Asset::AssetGuidUVE) const override { return false; }
+    [[nodiscard]] std::vector<Asset::AssetRecordUVE> GetRegisteredAssetsUVE() const override { return {}; }
+
+    std::size_t saveCallCount = 0U;
+};
+
 class PrefabSystemUVETest : public ::testing::Test {
 protected:
     Memory::MemoryManagerUVE memoryManager;
@@ -488,6 +506,19 @@ TEST_F(PrefabSystemUVETest, NestedPrefab_PreservesSourceGuidWithoutRecursiveRein
 
     std::filesystem::remove(innerPath);
     std::filesystem::remove(outerPath);
+}
+
+TEST_F(PrefabSystemUVETest, SavePrefabUVE_InvalidRegistrationFailsBeforeRegistrySave) {
+    const EntityUVE source = entityManager.CreateEntityUVE();
+    const std::filesystem::path path = "uve_prefab_tests_invalid_registration.uveprefab";
+    std::filesystem::remove(path);
+    RejectingPrefabAssetDatabaseUVE rejectingDatabase;
+
+    const Asset::AssetGuidUVE guid = prefabSystem.SavePrefabUVE(entityManager, rejectingDatabase, source, path);
+
+    EXPECT_EQ(guid, Asset::kInvalidAssetGuidUVE);
+    EXPECT_EQ(rejectingDatabase.saveCallCount, 0U);
+    std::filesystem::remove(path);
 }
 
 TEST_F(PrefabSystemUVETest, SavePrefabUVE_SamePathTwice_KeepsGuidStable) {
