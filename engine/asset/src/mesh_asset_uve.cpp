@@ -71,7 +71,16 @@ void AppendVector3UVE(std::vector<std::byte>& buffer, const Math::Vector3UVE& va
 
 } // namespace
 
-void GenerateMeshTangentsUVE(std::span<MeshVertexUVE> vertices, std::span<const std::uint32_t> indices) {
+[[nodiscard]] bool TryGenerateMeshTangentsUVE(std::span<MeshVertexUVE> vertices,
+                                               std::span<const std::uint32_t> indices) {
+    const auto isFiniteVector = [](const Math::Vector3UVE value) noexcept {
+        return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+    };
+    const auto addFinite = [&isFiniteVector](Math::Vector3UVE& sum,
+                                              const Math::Vector3UVE value) noexcept {
+        sum += value;
+        return isFiniteVector(sum);
+    };
     std::vector<Math::Vector3UVE> tangentSums(vertices.size());
     std::vector<Math::Vector3UVE> bitangentSums(vertices.size());
 
@@ -102,29 +111,77 @@ void GenerateMeshTangentsUVE(std::span<MeshVertexUVE> vertices, std::span<const 
             (positionEdgeOne * vEdgeTwo - positionEdgeTwo * vEdgeOne) * inverseDeterminant;
         const Math::Vector3UVE triangleBitangent =
             (positionEdgeTwo * uEdgeOne - positionEdgeOne * uEdgeTwo) * inverseDeterminant;
-        tangentSums[firstIndex] += triangleTangent;
-        tangentSums[secondIndex] += triangleTangent;
-        tangentSums[thirdIndex] += triangleTangent;
-        bitangentSums[firstIndex] += triangleBitangent;
-        bitangentSums[secondIndex] += triangleBitangent;
-        bitangentSums[thirdIndex] += triangleBitangent;
+        if (!isFiniteVector(triangleTangent) || !isFiniteVector(triangleBitangent) ||
+            !addFinite(tangentSums[firstIndex], triangleTangent) ||
+            !addFinite(tangentSums[secondIndex], triangleTangent) ||
+            !addFinite(tangentSums[thirdIndex], triangleTangent) ||
+            !addFinite(bitangentSums[firstIndex], triangleBitangent) ||
+            !addFinite(bitangentSums[secondIndex], triangleBitangent) ||
+            !addFinite(bitangentSums[thirdIndex], triangleBitangent)) {
+            return false;
+        }
     }
 
+    std::vector<MeshVertexUVE> generated(vertices.begin(), vertices.end());
     for (std::size_t vertexIndex = 0; vertexIndex < vertices.size(); ++vertexIndex) {
-        MeshVertexUVE& vertex = vertices[vertexIndex];
-        const Math::Vector3UVE normal = Math::LengthSquaredUVE(vertex.normal) > 0.00000001F
+        MeshVertexUVE& vertex = generated[vertexIndex];
+        const float normalLengthSquared = Math::LengthSquaredUVE(vertex.normal);
+        if (!std::isfinite(normalLengthSquared)) {
+            return false;
+        }
+        const Math::Vector3UVE normal = normalLengthSquared > 0.00000001F
                                             ? Math::NormalizeUVE(vertex.normal)
                                             : Math::Vector3UVE{0.0F, 1.0F, 0.0F};
-        Math::Vector3UVE tangent = tangentSums[vertexIndex] - normal * Math::DotUVE(normal, tangentSums[vertexIndex]);
-        if (Math::LengthSquaredUVE(tangent) <= 0.00000001F) {
+        if (!isFiniteVector(normal)) {
+            return false;
+        }
+        const float normalDotTangentSum = Math::DotUVE(normal, tangentSums[vertexIndex]);
+        if (!std::isfinite(normalDotTangentSum)) {
+            return false;
+        }
+        Math::Vector3UVE tangent =
+            tangentSums[vertexIndex] - normal * normalDotTangentSum;
+        if (!isFiniteVector(tangent)) {
+            return false;
+        }
+        const float tangentLengthSquared = Math::LengthSquaredUVE(tangent);
+        if (!std::isfinite(tangentLengthSquared)) {
+            return false;
+        }
+        if (tangentLengthSquared <= 0.00000001F) {
             tangent = DeterministicTangentFallbackUVE(normal);
         } else {
             tangent = Math::NormalizeUVE(tangent);
         }
+        if (!isFiniteVector(tangent)) {
+            return false;
+        }
+        const float handednessDot = Math::DotUVE(Math::CrossUVE(normal, tangent), bitangentSums[vertexIndex]);
+        if (!std::isfinite(handednessDot)) {
+            return false;
+        }
 
         vertex.tangent = tangent;
-        vertex.tangentHandedness =
-            Math::DotUVE(Math::CrossUVE(normal, tangent), bitangentSums[vertexIndex]) < 0.0F ? -1.0F : 1.0F;
+        vertex.tangentHandedness = handednessDot < 0.0F ? -1.0F : 1.0F;
+    }
+
+    for (std::size_t vertexIndex = 0; vertexIndex < vertices.size(); ++vertexIndex) {
+        vertices[vertexIndex] = generated[vertexIndex];
+    }
+    return true;
+}
+
+void GenerateMeshTangentsUVE(std::span<MeshVertexUVE> vertices, std::span<const std::uint32_t> indices) {
+    if (TryGenerateMeshTangentsUVE(vertices, indices)) {
+        return;
+    }
+    for (MeshVertexUVE& vertex : vertices) {
+        const float normalLengthSquared = Math::LengthSquaredUVE(vertex.normal);
+        const Math::Vector3UVE normal = std::isfinite(normalLengthSquared) && normalLengthSquared > 0.00000001F
+                                            ? Math::NormalizeUVE(vertex.normal)
+                                            : Math::Vector3UVE{0.0F, 1.0F, 0.0F};
+        vertex.tangent = DeterministicTangentFallbackUVE(normal);
+        vertex.tangentHandedness = 1.0F;
     }
 }
 
@@ -190,7 +247,10 @@ bool LoadMeshAssetUVE(const std::filesystem::path& path, MeshAssetUVE& outMesh) 
         return false;
     }
 
-    GenerateMeshTangentsUVE(vertices, indices);
+    if (!TryGenerateMeshTangentsUVE(vertices, indices)) {
+        UVE_ERROR("MeshAssetUVE: \"{}\" has non-finite generated tangent data", path.string());
+        return false;
+    }
     outMesh.vertices = std::move(vertices);
     outMesh.indices = std::move(indices);
     outMesh.localBounds = localBounds;

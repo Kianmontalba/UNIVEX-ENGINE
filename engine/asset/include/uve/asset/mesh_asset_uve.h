@@ -39,10 +39,17 @@ struct MeshAssetUVE {
 };
 
 /// Derives a normalized tangent and handedness for every vertex from indexed triangles and UVs.
-/// Degenerate triangles/UVs receive a deterministic orthogonal fallback so a malformed tangent
-/// never propagates into the GPU. The function does not serialize data or mutate indices; callers
-/// loading legacy `.uvemodel` payloads and callers creating meshes in memory can use the same
-/// result. Thread-safety: operates only on caller-owned spans.
+/// Degenerate triangles/UVs receive a deterministic orthogonal fallback. Returns false before
+/// mutating the caller-owned vertices when a finite triangle-derived tangent or bitangent
+/// accumulator overflows; callers converting assets can therefore reject the candidate
+/// failure-atomically. The function does not serialize data or mutate indices. Thread-safety:
+/// operates only on caller-owned spans.
+[[nodiscard]] bool TryGenerateMeshTangentsUVE(std::span<MeshVertexUVE> vertices,
+                                               std::span<const std::uint32_t> indices);
+
+/// Derives tangents through TryGenerateMeshTangentsUVE and applies deterministic orthogonal
+/// fallbacks if malformed runtime geometry cannot produce a finite tangent basis. Runtime callers
+/// that can reject an asset should use TryGenerateMeshTangentsUVE instead.
 void GenerateMeshTangentsUVE(std::span<MeshVertexUVE> vertices, std::span<const std::uint32_t> indices);
 
 /// Loads `path` as a `.uve*` envelope with `AssetKindUVE::Mesh`, filling `outMesh`. Returns false
