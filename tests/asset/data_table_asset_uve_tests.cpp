@@ -76,6 +76,17 @@ TEST(DataTableAssetUVE, RejectsWrongKindAndMalformedPayloadWithoutChangingDestin
     EXPECT_NE(destination.GetSnapshotUVE(), original.GetSnapshotUVE());
 }
 
+TEST(DataTableAssetUVE, RejectsOversizedEnvelopeBeforeDocumentConstruction) {
+    const TemporaryAssetPathUVE path(TestPathUVE("oversized_envelope"));
+    std::vector<std::byte> oversizedPayload(DataTableUVE::kMaximumDocumentBytesUVE + 1U, std::byte{'x'});
+    ASSERT_TRUE(WriteUveFileUVE(path.GetUVE(), AssetKindUVE::DataTable, oversizedPayload));
+
+    DataTableUVE destination = MakeTableUVE("destination", "keep", 7);
+    const DataTableSnapshotUVE before = destination.GetSnapshotUVE();
+    EXPECT_FALSE(LoadDataTableAssetUVE(path.GetUVE(), destination));
+    EXPECT_EQ(destination.GetSnapshotUVE(), before);
+}
+
 TEST(DataTableAssetUVE, RejectsInvalidSourceAndMissingFile) {
     const TemporaryAssetPathUVE invalidPath(TestPathUVE("invalid_source"));
     DataTableUVE invalid("contains space");
