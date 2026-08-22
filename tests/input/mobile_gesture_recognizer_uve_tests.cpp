@@ -71,6 +71,17 @@ TEST(MobileGestureRecognizerUVETest, EvaluatesExactTouchChordCentroid) {
     EXPECT_NEAR(centroid.y, 4.0F, kEpsilon);
 }
 
+TEST(MobileGestureRecognizerUVETest, RejectsOverflowedChordCentroidAtomically) {
+    MobileInputSnapshotUVE snapshot{};
+    snapshot.touches[0U] = TouchPointStateUVE{
+        true, 11U, Math::Vector2UVE{std::numeric_limits<float>::max(), 0.0F}, {}, 1.0F};
+    snapshot.touches[1U] = TouchPointStateUVE{
+        true, 22U, Math::Vector2UVE{std::numeric_limits<float>::max(), 0.0F}, {}, 1.0F};
+    Math::Vector2UVE centroid{9.0F, 9.0F};
+    EXPECT_FALSE(EvaluateTouchChordUVE(snapshot, 2U, centroid));
+    EXPECT_EQ(centroid, (Math::Vector2UVE{9.0F, 9.0F}));
+}
+
 TEST(MobileGestureRecognizerUVETest, RejectsChordCountDuplicatesAndInvalidPositionAtomically) {
     MobileInputSnapshotUVE snapshot{};
     snapshot.touches[0U] = TouchPointStateUVE{true, 11U, Math::Vector2UVE{0.0F, 2.0F}, {}, 1.0F};
