@@ -81,7 +81,10 @@ EntityUVE EntityManagerUVE::CreateEntityUVE() {
 }
 
 void EntityManagerUVE::DestroyEntityUVE(EntityUVE entity) {
-    UVE_ASSERT(IsAliveUVE(entity));
+    if (!IsAliveUVE(entity)) {
+        UVE_ASSERT(IsAliveUVE(entity));
+        return;
+    }
     EntityRecordUVE& record = m_impl->records[entity.index];
 
     m_impl->eventSystem.Publish(EntityDestroyedEventUVE{entity});
@@ -117,7 +120,10 @@ std::size_t EntityManagerUVE::GetEntityCountUVE() const noexcept {
 }
 
 std::vector<std::type_index> EntityManagerUVE::GetComponentTypesUVE(EntityUVE entity) const {
-    UVE_ASSERT(IsAliveUVE(entity));
+    if (!IsAliveUVE(entity)) {
+        UVE_ASSERT(IsAliveUVE(entity));
+        return {};
+    }
     return m_impl->records[entity.index].archetype->GetSignatureUVE().GetTypesUVE();
 }
 
@@ -184,7 +190,10 @@ void EntityManagerUVE::RemoveComponentErased(EntityUVE entity, std::type_index c
 }
 
 bool EntityManagerUVE::HasComponentErased(EntityUVE entity, std::type_index componentType) const {
-    UVE_ASSERT(IsAliveUVE(entity));
+    if (!IsAliveUVE(entity)) {
+        UVE_ASSERT(IsAliveUVE(entity));
+        return false;
+    }
     return m_impl->records[entity.index].archetype->GetSignatureUVE().ContainsUVE(componentType);
 }
 

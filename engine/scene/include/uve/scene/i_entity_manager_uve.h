@@ -46,8 +46,9 @@ public:
     /// Creates a new, component-less entity and publishes EntityCreatedEventUVE.
     [[nodiscard]] virtual EntityUVE CreateEntityUVE() = 0;
 
-    /// Destroys `entity` (asserting it is currently alive), destroying every component it owns,
-    /// and publishes EntityDestroyedEventUVE.
+    /// Destroys `entity`, destroying every component it owns and publishing EntityDestroyedEventUVE.
+    /// Debug builds assert that the entity is alive; release builds return without mutation for a
+    /// stale or invalid handle.
     virtual void DestroyEntityUVE(EntityUVE entity) = 0;
 
     /// True iff `entity`'s generation matches the current occupant of its index slot.
@@ -56,8 +57,9 @@ public:
     /// Number of currently-alive entities.
     [[nodiscard]] virtual std::size_t GetEntityCountUVE() const noexcept = 0;
 
-    /// Returns the std::type_index of every component `entity` (which must be alive) currently
-    /// has, in unspecified order. The generic, runtime-enumerable counterpart to
+    /// Returns the std::type_index of every component `entity` currently has, in unspecified
+    /// order. Debug builds assert that the entity is alive; release builds return an empty vector
+    /// for a stale or invalid handle. The generic, runtime-enumerable counterpart to
     /// HasComponentUVE<T>()/GetComponentUVE<T>() — used by SceneSerializerUVE to walk an
     /// entity's full component set without knowing the types in advance.
     [[nodiscard]] virtual std::vector<std::type_index> GetComponentTypesUVE(EntityUVE entity) const = 0;
@@ -79,7 +81,8 @@ public:
         RemoveComponentErased(entity, std::type_index(typeid(T)));
     }
 
-    /// True iff `entity` (which must be alive) currently has a `T`.
+    /// True iff a live `entity` currently has a `T`. Debug builds assert that the entity is alive;
+    /// release builds return false for a stale or invalid handle.
     template <typename T>
     [[nodiscard]] bool HasComponentUVE(EntityUVE entity) const {
         return HasComponentErased(entity, std::type_index(typeid(T)));
