@@ -21,6 +21,18 @@
 namespace UVE::Render::Tests {
 namespace {
 
+TEST(NullRenderDeviceUVETest, CreateBufferUVE_UnknownUsage_ReturnsInvalidBeforeAllocation) {
+    NullRenderDeviceUVE device;
+    const BufferHandleUVE invalid =
+        device.CreateBufferUVE(BufferDescUVE{16U, static_cast<BufferUsageUVE>(0xFFU)});
+
+    EXPECT_EQ(invalid, kInvalidBufferHandleUVE);
+    EXPECT_EQ(device.GetLiveResourceCountUVE(), 0U);
+
+    const BufferHandleUVE valid = device.CreateBufferUVE(BufferDescUVE{16U, BufferUsageUVE::Vertex});
+    EXPECT_EQ(valid.value, 1U);
+}
+
 TEST(NullRenderDeviceUVETest, CreateBufferUVE_ReturnsUniqueHandles) {
     NullRenderDeviceUVE device;
     const BufferHandleUVE first = device.CreateBufferUVE(BufferDescUVE{16, BufferUsageUVE::Vertex});
