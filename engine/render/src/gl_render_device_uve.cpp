@@ -172,6 +172,7 @@ GlRenderDeviceUVE::GlRenderDeviceUVE(Window::IWindowManagerUVE& windowManager)
     if (!m_impl->state.gl.IsCompleteUVE()) {
         UVE_FATAL("GlRenderDeviceUVE: one or more required GL function pointers failed to load");
     } else {
+        glGetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, &m_impl->state.maxCombinedTextureImageUnits);
         UVE_INFO("GlRenderDeviceUVE: initialized, backend GL_VERSION={}",
                   reinterpret_cast<const char*>(glGetString(GL_VERSION)));
     }

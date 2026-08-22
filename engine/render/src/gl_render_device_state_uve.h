@@ -24,6 +24,7 @@ namespace UVE::Render::Detail {
 struct GlDeviceStateUVE {
     Window::IWindowManagerUVE* windowManager;
     GlFunctionsUVE gl;
+    GLint maxCombinedTextureImageUnits = 0;
 
     struct BufferRecordUVE {
         GLuint glBuffer = 0;
