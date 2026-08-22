@@ -243,15 +243,23 @@ void* AssetManagerUVE::TryGetErased(AssetGuidUVE guid) {
 void AssetManagerUVE::AddRefErased(AssetGuidUVE guid) {
     const std::lock_guard<std::mutex> lock(m_impl->mutex);
     const auto it = m_impl->records.find(guid);
-    UVE_ASSERT(it != m_impl->records.end());
+    if (it == m_impl->records.end()) {
+        UVE_ASSERT(it != m_impl->records.end());
+        return;
+    }
     ++it->second.refCount;
 }
 
 void AssetManagerUVE::ReleaseErased(AssetGuidUVE guid) {
     const std::lock_guard<std::mutex> lock(m_impl->mutex);
     const auto it = m_impl->records.find(guid);
-    UVE_ASSERT(it != m_impl->records.end());
-    UVE_ASSERT(it->second.refCount > 0);
+    if (it == m_impl->records.end() || it->second.refCount == 0U) {
+        UVE_ASSERT(it != m_impl->records.end());
+        if (it != m_impl->records.end()) {
+            UVE_ASSERT(it->second.refCount > 0);
+        }
+        return;
+    }
     --it->second.refCount;
 }
 
