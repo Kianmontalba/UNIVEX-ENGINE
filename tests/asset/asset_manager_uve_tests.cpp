@@ -21,6 +21,7 @@
 #include "uve/debug/log_sink_uve.h"
 #include "uve/debug/logger_uve.h"
 #include "uve/events/event_system_uve.h"
+#include "uve/platform/platform_uve.h"
 #include "uve/threading/thread_pool_uve.h"
 
 namespace UVE::Asset::Tests {
@@ -79,6 +80,21 @@ protected:
 
     void SetUp() override { assetManager.RegisterLoaderUVE<BlobAssetUVE>(LoadBlobUVE); }
 };
+
+#if UVE_DEBUG
+TEST_F(AssetManagerUVETest, AddRefUVE_MissingRecord_Asserts) {
+    EXPECT_DEATH({ assetManager.AddRefUVE(AssetGuidUVE{0xBAD001U}); }, "");
+}
+
+TEST_F(AssetManagerUVETest, ReleaseUVE_MissingRecord_Asserts) {
+    EXPECT_DEATH({ assetManager.ReleaseUVE(AssetGuidUVE{0xBAD002U}); }, "");
+}
+#else
+TEST_F(AssetManagerUVETest, MissingRecordRefcountCallsFailClosed) {
+    EXPECT_NO_FATAL_FAILURE(assetManager.AddRefUVE(AssetGuidUVE{0xBAD001U}));
+    EXPECT_NO_FATAL_FAILURE(assetManager.ReleaseUVE(AssetGuidUVE{0xBAD002U}));
+}
+#endif
 
 TEST_F(AssetManagerUVETest, LoadUVE_MissingLoaderReturnsFailedHandleWithoutWorkerSubmission) {
     const AssetHandleUVE<UnregisteredAssetUVE> handle =
