@@ -151,6 +151,31 @@ TEST(MobileGestureRecognizerUVETest, RejectsOverflowedReleaseDeltaWithoutPublish
     EXPECT_FALSE(report.truncated);
 }
 
+TEST(MobileGestureRecognizerUVETest, RejectsInvalidDirectSnapshotAtomically) {
+    MobileGestureRecognizerUVE recognizer;
+    MobileInputSnapshotUVE pressed{};
+    pressed.frameNumber = 1U;
+    pressed.touches[0U] = TouchPointStateUVE{true, 7U, Math::Vector2UVE{25.0F, 30.0F}, {}, 0.5F};
+    EXPECT_EQ(recognizer.ConsumeSnapshotUVE(pressed, 0.1F).count, 0U);
+
+    MobileInputSnapshotUVE invalidIdentifier = pressed;
+    invalidIdentifier.frameNumber = 2U;
+    invalidIdentifier.touches[0U].identifier = 0U;
+    EXPECT_EQ(recognizer.ConsumeSnapshotUVE(invalidIdentifier, 0.1F).count, 0U);
+
+    MobileInputSnapshotUVE invalidPressure = pressed;
+    invalidPressure.frameNumber = 3U;
+    invalidPressure.touches[0U].pressure = std::numeric_limits<float>::quiet_NaN();
+    EXPECT_EQ(recognizer.ConsumeSnapshotUVE(invalidPressure, 0.1F).count, 0U);
+
+    MobileInputSnapshotUVE released{};
+    released.frameNumber = 4U;
+    const MobileGestureReportUVE report = recognizer.ConsumeSnapshotUVE(released, 0.1F);
+    ASSERT_EQ(report.count, 1U);
+    EXPECT_EQ(report.events[0U].type, MobileGestureTypeUVE::Tap);
+    EXPECT_EQ(report.events[0U].touchIdentifier, 7U);
+}
+
 TEST(MobileGestureRecognizerUVETest, RejectsInvalidFrameDeltaAndResetClearsTrackedTouch) {
     MobileGestureRecognizerUVE recognizer;
     MobileInputSnapshotUVE pressed{};
