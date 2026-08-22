@@ -189,6 +189,11 @@ void GlCommandBufferUVE::BindIndexBufferUVE(BufferHandleUVE buffer) {
 }
 
 void GlCommandBufferUVE::BindTextureUVE(TextureHandleUVE texture, std::uint32_t slot) {
+    if (m_state->maxCombinedTextureImageUnits <= 0 ||
+        slot >= static_cast<std::uint32_t>(m_state->maxCombinedTextureImageUnits)) {
+        UVE_ERROR("GlCommandBufferUVE: BindTextureUVE texture slot exceeds GL texture-unit limits");
+        return;
+    }
     const auto textureIt = m_state->textures.find(texture.value);
     if (textureIt == m_state->textures.end()) {
         UVE_ERROR("GlCommandBufferUVE: BindTextureUVE referenced an unknown texture handle");
