@@ -139,6 +139,29 @@ TEST_F(AudioSourceSystemUVETest, MovingEntity_UpdatesPushedPositionAndGain) {
     EXPECT_FLOAT_EQ(params.gain, 0.5F);
 }
 
+TEST_F(AudioSourceSystemUVETest, InvalidAudioSource_SkipsCreationAndPreservesExistingVoice) {
+    Scene::AudioSourceComponentUVE invalid = {};
+    invalid.spatial = true;
+    invalid.minDistance = 2.0F;
+    invalid.maxDistance = 2.0F;
+    const Scene::EntityUVE entity = MakeAudioEntityUVE(invalid);
+
+    audioSourceSystem.SyncUVE(entityManager, audioSystem);
+    EXPECT_EQ(device.GetLiveVoiceCountUVE(), 0U);
+    EXPECT_TRUE(device.GetRecordedCallsUVE().empty());
+
+    entityManager.GetComponentUVE<Scene::AudioSourceComponentUVE>(entity).maxDistance = 4.0F;
+    audioSourceSystem.SyncUVE(entityManager, audioSystem);
+    ASSERT_EQ(device.GetLiveVoiceCountUVE(), 1U);
+    device.ClearRecordedCallsUVE();
+
+    entityManager.GetComponentUVE<Scene::AudioSourceComponentUVE>(entity).maxDistance = 2.0F;
+    audioSourceSystem.SyncUVE(entityManager, audioSystem);
+
+    EXPECT_EQ(device.GetLiveVoiceCountUVE(), 1U);
+    EXPECT_TRUE(device.GetRecordedCallsUVE().empty());
+}
+
 TEST_F(AudioSourceSystemUVETest, RemovingAudioSourceComponent_DestroysVoice) {
     Scene::AudioSourceComponentUVE audioSource;
     const Scene::EntityUVE entity = MakeAudioEntityUVE(audioSource);
@@ -264,15 +287,6 @@ TEST_F(AudioSourceSystemUVETest, FailedReplacement_PreservesOldVoice) {
     EXPECT_TRUE(device.GetRecordedCallsUVE().empty());
 }
 
-#if UVE_DEBUG
-TEST_F(AudioSourceSystemUVETest, SyncUVE_InvalidSpatialDistance_Asserts) {
-    Scene::AudioSourceComponentUVE invalid = {};
-    invalid.maxDistance = invalid.minDistance;
-    MakeAudioEntityUVE(invalid);
-
-    EXPECT_DEATH({ audioSourceSystem.SyncUVE(entityManager, audioSystem); }, "");
-}
-#endif
 
 } // namespace
 } // namespace UVE::Audio::Tests
