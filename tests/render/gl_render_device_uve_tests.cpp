@@ -162,6 +162,29 @@ TEST_F(GlRenderDeviceUVETest, CreateTextureUVE_DimensionExceedsGlsizei_ReturnsIn
     EXPECT_EQ(valid.value, 1U);
 }
 
+TEST_F(GlRenderDeviceUVETest, CreatePipelineUVE_VertexLayoutExceedsGlLimit_ReturnsInvalidBeforeAllocation) {
+    GLint maxVertexAttribs = 0;
+    glGetIntegerv(GL_MAX_VERTEX_ATTRIBS, &maxVertexAttribs);
+    ASSERT_GT(maxVertexAttribs, 0);
+
+    const ShaderHandleUVE vertexShader =
+        renderDevice->CreateShaderUVE(ShaderDescUVE{ShaderStageUVE::Vertex, std::string(kValidVertexShaderSource)});
+    const ShaderHandleUVE fragmentShader = renderDevice->CreateShaderUVE(
+        ShaderDescUVE{ShaderStageUVE::Fragment, std::string(kValidFragmentShaderSource)});
+    ASSERT_NE(vertexShader, kInvalidShaderHandleUVE);
+    ASSERT_NE(fragmentShader, kInvalidShaderHandleUVE);
+
+    PipelineDescUVE oversizedDesc;
+    oversizedDesc.vertexShader = vertexShader;
+    oversizedDesc.fragmentShader = fragmentShader;
+    oversizedDesc.vertexStride = 3U * static_cast<std::uint32_t>(sizeof(float));
+    oversizedDesc.vertexLayout.resize(static_cast<std::size_t>(maxVertexAttribs) + 1U,
+                                      VertexAttributeUVE{"POSITION", VertexAttributeFormatUVE::Float3, 0U});
+
+    EXPECT_EQ(renderDevice->CreatePipelineUVE(oversizedDesc), kInvalidPipelineHandleUVE);
+    EXPECT_EQ(renderDevice->GetLiveResourceCountUVE(), 2U);
+}
+
 TEST_F(GlRenderDeviceUVETest, CreatePipelineUVE_UnknownVertexFormat_ReturnsInvalidBeforeAllocation) {
     const ShaderHandleUVE vertexShader =
         renderDevice->CreateShaderUVE(ShaderDescUVE{ShaderStageUVE::Vertex, std::string(kValidVertexShaderSource)});
