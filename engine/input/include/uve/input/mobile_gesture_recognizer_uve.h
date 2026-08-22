@@ -37,7 +37,8 @@ enum class TouchChordLifecycleTransitionUVE : std::uint8_t {
     std::size_t requiredTouchCount, TouchChordLifecycleTransitionUVE& outTransition) noexcept;
 
 /// Evaluates an exact-count multi-touch chord over one copied snapshot and publishes its centroid.
-/// The policy owns no gesture lifecycle, platform framework, touch polling, or ECS state.
+/// Non-finite running sums fail closed without changing the caller's prior centroid. The policy owns
+/// no gesture lifecycle, platform framework, touch polling, or ECS state.
 [[nodiscard]] bool EvaluateTouchChordUVE(const MobileInputSnapshotUVE& snapshot,
                                           std::size_t requiredTouchCount,
                                           Math::Vector2UVE& outCentroid) noexcept;

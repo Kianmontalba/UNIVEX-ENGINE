@@ -115,8 +115,13 @@ bool EvaluateTouchChordUVE(const MobileInputSnapshotUVE& snapshot,
                 return false;
             }
         }
-        sum.x += touch.position.x;
-        sum.y += touch.position.y;
+        const float candidateX = sum.x + touch.position.x;
+        const float candidateY = sum.y + touch.position.y;
+        if (!std::isfinite(candidateX) || !std::isfinite(candidateY)) {
+            return false;
+        }
+        sum.x = candidateX;
+        sum.y = candidateY;
         ++activeCount;
     }
     if (activeCount != requiredTouchCount) {
