@@ -112,6 +112,42 @@ TEST(ShaderAssetUVETest, LoadShaderAssetUVE_EmptySourceCode_FailsAndLogsError) {
     std::filesystem::remove(path);
 }
 
+TEST(ShaderAssetUVETest, LoadShaderAssetUVE_UnknownStageFailsBeforePublication) {
+    const std::filesystem::path path = "uve_shader_asset_tests_unknown_stage.uveshader";
+    std::filesystem::remove(path);
+    const std::string invalidPayload =
+        R"({"stage":255,"sourceCode":"void main() { }","entryPointName":"main"})";
+    const auto* const payloadBytes = reinterpret_cast<const std::byte*>(invalidPayload.data());
+    ASSERT_TRUE(WriteUveFileUVE(path, AssetKindUVE::Shader,
+                                std::vector<std::byte>(payloadBytes, payloadBytes + invalidPayload.size())));
+
+    ShaderAssetUVE loaded = MakeTestShaderUVE();
+    const ShaderAssetUVE original = loaded;
+    EXPECT_FALSE(LoadShaderAssetUVE(path, loaded));
+    EXPECT_EQ(loaded.stage, original.stage);
+    EXPECT_EQ(loaded.sourceCode, original.sourceCode);
+    EXPECT_EQ(loaded.entryPointName, original.entryPointName);
+    std::filesystem::remove(path);
+}
+
+TEST(ShaderAssetUVETest, SaveShaderAssetUVE_UnknownStagePreservesExistingEnvelope) {
+    const std::filesystem::path path = "uve_shader_asset_tests_unknown_stage_save.uveshader";
+    std::filesystem::remove(path);
+    const ShaderAssetUVE original = MakeTestShaderUVE();
+    ASSERT_TRUE(SaveShaderAssetUVE(original, path));
+
+    ShaderAssetUVE invalid = original;
+    invalid.stage = static_cast<ShaderStageKindUVE>(0xFFU);
+    EXPECT_FALSE(SaveShaderAssetUVE(invalid, path));
+
+    ShaderAssetUVE loaded;
+    ASSERT_TRUE(LoadShaderAssetUVE(path, loaded));
+    EXPECT_EQ(loaded.stage, original.stage);
+    EXPECT_EQ(loaded.sourceCode, original.sourceCode);
+    EXPECT_EQ(loaded.entryPointName, original.entryPointName);
+    std::filesystem::remove(path);
+}
+
 TEST(ShaderAssetUVETest, LoadShaderAssetUVE_MalformedJson_FailsAndLogsError) {
     const std::filesystem::path path = "uve_shader_asset_tests_malformed_json.uveshader";
     std::filesystem::remove(path);

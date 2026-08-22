@@ -28,12 +28,14 @@ struct ShaderAssetUVE {
 };
 
 /// Loads `path` as a `.uve*` envelope with `AssetKindUVE::Shader`, filling `outShader`. Returns
-/// false (logging the reason) if the file is missing/malformed, isn't actually a Shader asset, or
-/// its `sourceCode` is empty (a shader asset with no source is meaningless).
+/// false (logging the reason) if the file is missing/malformed, isn't actually a Shader asset, its
+/// `stage` is not one of the known `ShaderStageKindUVE` values, or its `sourceCode` is empty (a
+/// shader asset with no source is meaningless). The reserved `Compute` enum value remains a valid
+/// typed asset value even though runtime compilation is future work.
 [[nodiscard]] bool LoadShaderAssetUVE(const std::filesystem::path& path, ShaderAssetUVE& outShader);
 
 /// Writes `shader` to `path` as a `.uve*` envelope with `AssetKindUVE::Shader`. Returns false
-/// (logging the reason) if the file can't be written.
+/// (logging the reason) for an unknown `ShaderStageKindUVE` value or if the file can't be written.
 [[nodiscard]] bool SaveShaderAssetUVE(const ShaderAssetUVE& shader, const std::filesystem::path& path);
 
 } // namespace UVE::Asset
