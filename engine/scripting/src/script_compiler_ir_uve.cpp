@@ -836,6 +836,35 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
                                                 stagedVector2Links.size() + stagedVector3ScaleLinks.size() +
                                                 stagedVector3Links.size() + stagedRotationLinks.size() + stagedTransformLinks.size() +
                                                 stagedCollectionLinks.size() + stagedConversionLinks.size();
+    const auto isStagedLinkUVE = [&](const ScriptLinkUVE& link) {
+        const auto containsLink = [&](const std::vector<ScriptLinkUVE>& stagedLinks) {
+            return std::find_if(stagedLinks.begin(), stagedLinks.end(), [&](const ScriptLinkUVE& stagedLink) {
+                       return stagedLink.output.nodeId == link.output.nodeId &&
+                              stagedLink.output.pinName == link.output.pinName &&
+                              stagedLink.input.nodeId == link.input.nodeId &&
+                              stagedLink.input.pinName == link.input.pinName;
+                   }) != stagedLinks.end();
+        };
+        return containsLink(stagedConditionLinks) || containsLink(stagedComponentLinks) ||
+               containsLink(stagedEntityLinks) || containsLink(stagedBooleanLinks) ||
+               containsLink(stagedNumberLinks) || containsLink(stagedComparisonNumberLinks) ||
+               containsLink(stagedVector2ScaleLinks) || containsLink(stagedVector2Links) ||
+               containsLink(stagedVector3ScaleLinks) || containsLink(stagedVector3Links) ||
+               containsLink(stagedRotationLinks) || containsLink(stagedTransformLinks) ||
+               containsLink(stagedCollectionLinks) || containsLink(stagedConversionLinks);
+    };
+    std::size_t nonStagedDataLinkCount = 0U;
+    for (const ScriptLinkUVE& link : links) {
+        if (!IsExecutionLinkUVE(link, nodes, registry) && !isStagedLinkUVE(link)) {
+            ++nonStagedDataLinkCount;
+        }
+    }
+    if (stagedInstructionCount > ScriptIrProgramUVE::kMaximumInstructionsUVE ||
+        nonStagedDataLinkCount > ScriptIrProgramUVE::kMaximumInstructionsUVE - stagedInstructionCount) {
+        result.diagnostics.push_back({ScriptValidationCodeUVE::InstructionCountExceeded, 0U, {},
+                                      "Compiled IR instruction count exceeds the maximum of 256."});
+        return result;
+    }
     const auto findStagedInstructionIndex = [&](const std::uint32_t nodeId) -> std::optional<std::size_t> {
         const std::optional<std::size_t> baseIndex = FindNodeInstructionIndexUVE(instructionNodes, nodeId);
         if (!baseIndex.has_value()) {
@@ -1044,22 +1073,7 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
     }
 
     for (const ScriptLinkUVE& link : links) {
-        const auto isStagedLink = [&](const std::vector<ScriptLinkUVE>& stagedLinks) {
-            return std::find_if(stagedLinks.begin(), stagedLinks.end(),
-                                [&](const ScriptLinkUVE& stagedLink) {
-                                    return stagedLink.output.nodeId == link.output.nodeId &&
-                                           stagedLink.output.pinName == link.output.pinName &&
-                                           stagedLink.input.nodeId == link.input.nodeId &&
-                                           stagedLink.input.pinName == link.input.pinName;
-                                }) != stagedLinks.end();
-        };
-        if (isStagedLink(stagedConditionLinks) || isStagedLink(stagedComponentLinks) ||
-            isStagedLink(stagedEntityLinks) || isStagedLink(stagedBooleanLinks) || isStagedLink(stagedNumberLinks) ||
-            isStagedLink(stagedComparisonNumberLinks) || isStagedLink(stagedVector2ScaleLinks) ||
-            isStagedLink(stagedVector2Links) || isStagedLink(stagedVector3ScaleLinks) ||
-            isStagedLink(stagedVector3Links) || isStagedLink(stagedRotationLinks) ||
-            isStagedLink(stagedTransformLinks) || isStagedLink(stagedCollectionLinks) ||
-            isStagedLink(stagedConversionLinks)) {
+        if (isStagedLinkUVE(link)) {
             continue;
         }
         if (IsExecutionLinkUVE(link, nodes, registry)) {

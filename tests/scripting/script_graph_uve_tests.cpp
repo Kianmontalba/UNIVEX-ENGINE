@@ -23,6 +23,7 @@
 #include <cstdint>
 #include <limits>
 #include <optional>
+#include <string>
 #include <vector>
 
 #include "uve/events/event_system_uve.h"
@@ -2341,6 +2342,45 @@ TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_SortsNodesAndLinksDeterm
     EXPECT_EQ(result.program->instructions[2].sourceNodeId, 10U);
     EXPECT_EQ(result.program->instructions[2].targetNodeId, 20U);
     EXPECT_EQ(result.program->sourceNodeIds, (std::vector<std::uint32_t>{10U, 20U, 10U}));
+}
+
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsInstructionCountBeforeProgramPublication) {
+    ScriptNodeRegistryUVE registry;
+    std::vector<ScriptPinDescriptorUVE> sourcePins;
+    for (std::size_t index = 0U; index < 8U; ++index) {
+        sourcePins.push_back({"Out" + std::to_string(index), ScriptPinDirectionUVE::Output,
+                              ScriptValueTypeUVE::Number});
+    }
+    ASSERT_TRUE(registry.RegisterNodeTypeUVE(
+        ScriptNodeTypeDescriptorUVE{"test.bulk_source", "Bulk Source", std::move(sourcePins)}));
+
+    std::vector<ScriptPinDescriptorUVE> sinkPins;
+    for (std::size_t index = 0U; index < 8U; ++index) {
+        sinkPins.push_back({"In" + std::to_string(index), ScriptPinDirectionUVE::Input,
+                            ScriptValueTypeUVE::Number});
+    }
+    ASSERT_TRUE(registry.RegisterNodeTypeUVE(
+        ScriptNodeTypeDescriptorUVE{"test.bulk_sink", "Bulk Sink", std::move(sinkPins)}));
+
+    ScriptGraphUVE graph;
+    for (std::uint32_t index = 0U; index < 32U; ++index) {
+        ASSERT_TRUE(graph.AddNodeUVE({index + 1U, "test.bulk_source"}));
+        ASSERT_TRUE(graph.AddNodeUVE({index + 101U, "test.bulk_sink"}));
+        for (std::size_t pinIndex = 0U; pinIndex < 8U; ++pinIndex) {
+            ASSERT_TRUE(graph.AddLinkUVE({{index + 1U, "Out" + std::to_string(pinIndex)},
+                                          {index + 101U, "In" + std::to_string(pinIndex)}}));
+        }
+    }
+
+    const ScriptIrCompileResultUVE result = CompileScriptGraphToIrUVE(graph, registry);
+
+    ASSERT_FALSE(result.IsSuccessUVE());
+    EXPECT_FALSE(result.program.has_value());
+    ASSERT_EQ(result.diagnostics.size(), 1U);
+    EXPECT_EQ(result.diagnostics.front().code, ScriptValidationCodeUVE::InstructionCountExceeded);
+    EXPECT_EQ(result.diagnostics.front().nodeId, 0U);
+    EXPECT_EQ(result.diagnostics.front().message,
+              "Compiled IR instruction count exceeds the maximum of 256.");
 }
 
 TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_BoundsDiagnosticPresentationFields) {
