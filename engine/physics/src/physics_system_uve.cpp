@@ -124,7 +124,10 @@ void PhysicsSystemUVE::StepUVE(Scene::IEntityManagerUVE& entityManager, Scene::I
         [&entityManager, &sceneGraph, this, fixedDeltaTimeSeconds](
             Scene::EntityUVE entity, const Scene::TransformComponentUVE& transform,
             Scene::RigidBodyComponentUVE& rigidBody) {
-            UVE_ASSERT(Scene::IsRigidBodyComponentValidUVE(rigidBody));
+            if (!Scene::IsRigidBodyComponentValidUVE(rigidBody)) {
+                UVE_ASSERT(Scene::IsRigidBodyComponentValidUVE(rigidBody));
+                return;
+            }
             if (rigidBody.isKinematic) {
                 return;
             }

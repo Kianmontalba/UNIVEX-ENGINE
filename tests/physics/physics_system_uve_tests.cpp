@@ -11,6 +11,7 @@
 
 #include "uve/events/event_system_uve.h"
 #include "uve/memory/memory_manager_uve.h"
+#include "uve/platform/platform_uve.h"
 #include "uve/physics/collision_system_uve.h"
 #include "uve/scene/components/collider_component_uve.h"
 #include "uve/scene/components/rigid_body_component_uve.h"
@@ -423,6 +424,26 @@ TEST_F(PhysicsSystemUVETest, StepUVE_InvalidRigidBodyParameters_Asserts) {
 
     ASSERT_NE(body, Scene::kInvalidEntityUVE);
     EXPECT_DEATH({ physicsSystem.StepUVE(entityManager, sceneGraph, 1.0F / 60.0F); }, "");
+}
+#else
+TEST_F(PhysicsSystemUVETest, StepUVE_InvalidRigidBodyParameters_FailsClosedWithoutIntegration) {
+    Scene::RigidBodyComponentUVE invalid = {};
+    invalid.drag = -1.0F;
+    invalid.velocity = Math::Vector3UVE{3.0F, 4.0F, 5.0F};
+    const Scene::EntityUVE body = MakeBodyEntityUVE(Math::Vector3UVE{}, invalid);
+    PhysicsSystemUVE physicsSystem(collisionSystem);
+
+    ASSERT_NE(body, Scene::kInvalidEntityUVE);
+    const Scene::TransformComponentUVE beforeTransform =
+        entityManager.GetComponentUVE<Scene::TransformComponentUVE>(body);
+    const Scene::RigidBodyComponentUVE beforeBody =
+        entityManager.GetComponentUVE<Scene::RigidBodyComponentUVE>(body);
+    physicsSystem.StepUVE(entityManager, sceneGraph, 1.0F / 60.0F);
+
+    EXPECT_EQ(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(body).localPosition,
+              beforeTransform.localPosition);
+    EXPECT_EQ(entityManager.GetComponentUVE<Scene::RigidBodyComponentUVE>(body).velocity,
+              beforeBody.velocity);
 }
 #endif
 
