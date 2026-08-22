@@ -343,6 +343,40 @@ TEST_F(GlRenderDeviceUVETest, CreatePipelineFromBinaryUVE_VertexStrideExceedsGls
     EXPECT_EQ(renderDevice->GetLiveResourceCountUVE(), 0U);
 }
 
+TEST_F(GlRenderDeviceUVETest, DrawUVE_CountExceedsGlsizei_DoesNotIssueGlCall) {
+    std::unique_ptr<ICommandBufferUVE> commandBuffer = renderDevice->CreateCommandBufferUVE();
+    ASSERT_NE(commandBuffer, nullptr);
+    RenderPassDescUVE passDesc;
+    passDesc.colorAttachment = kInvalidTextureHandleUVE;
+    passDesc.depthLoadOp = LoadOpUVE::DontCare;
+    commandBuffer->BeginRenderPassUVE(passDesc);
+    while (glGetError() != GL_NO_ERROR) {
+    }
+
+    commandBuffer->DrawUVE(std::numeric_limits<std::uint32_t>::max());
+    EXPECT_EQ(glGetError(), GL_NO_ERROR);
+
+    commandBuffer->EndRenderPassUVE();
+    renderDevice->SubmitUVE(std::move(commandBuffer));
+}
+
+TEST_F(GlRenderDeviceUVETest, DrawIndexedUVE_CountExceedsGlsizei_DoesNotIssueGlCall) {
+    std::unique_ptr<ICommandBufferUVE> commandBuffer = renderDevice->CreateCommandBufferUVE();
+    ASSERT_NE(commandBuffer, nullptr);
+    RenderPassDescUVE passDesc;
+    passDesc.colorAttachment = kInvalidTextureHandleUVE;
+    passDesc.depthLoadOp = LoadOpUVE::DontCare;
+    commandBuffer->BeginRenderPassUVE(passDesc);
+    while (glGetError() != GL_NO_ERROR) {
+    }
+
+    commandBuffer->DrawIndexedUVE(std::numeric_limits<std::uint32_t>::max());
+    EXPECT_EQ(glGetError(), GL_NO_ERROR);
+
+    commandBuffer->EndRenderPassUVE();
+    renderDevice->SubmitUVE(std::move(commandBuffer));
+}
+
 TEST_F(GlRenderDeviceUVETest, BeginRenderPassUVE_UnknownLoadOp_LeavesStateUntouched) {
     std::unique_ptr<ICommandBufferUVE> commandBuffer = renderDevice->CreateCommandBufferUVE();
     ASSERT_NE(commandBuffer, nullptr);
