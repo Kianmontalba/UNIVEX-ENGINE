@@ -36,6 +36,10 @@ bool LoadDataTableAssetUVE(const std::filesystem::path& path, DataTableUVE& tabl
     }
 
     const std::vector<std::byte>& payload = file->second;
+    if (payload.empty() || payload.size() > DataTableUVE::kMaximumDocumentBytesUVE) {
+        UVE_ERROR("DataTableAssetUVE: {} has an empty or oversized document payload", path.string());
+        return false;
+    }
     const std::string document(reinterpret_cast<const char*>(payload.data()), payload.size());
     DataTableUVE candidate;
     if (!DataTableAssetSerializerUVE::DeserializeUVE(document, candidate)) {
