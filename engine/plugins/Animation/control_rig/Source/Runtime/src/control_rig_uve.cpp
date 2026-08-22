@@ -24,6 +24,15 @@ constexpr float kEpsilonUVE = 1.0e-5F;
     return iterator == controls.cend() ? nullptr : &*iterator;
 }
 
+[[nodiscard]] bool IsValidControlRigSpaceUVE(const ControlRigSpaceUVE space) noexcept {
+    switch (space) {
+    case ControlRigSpaceUVE::Local:
+    case ControlRigSpaceUVE::World:
+        return true;
+    }
+    return false;
+}
+
 [[nodiscard]] bool IsValidControlRigConstraintKindUVE(const ControlRigConstraintKindUVE kind) noexcept {
     switch (kind) {
     case ControlRigConstraintKindUVE::TwoBoneIK:
@@ -120,6 +129,10 @@ ControlRigValidationResultUVE ValidateControlRigUVE(const ControlRigUVE& rig) no
     std::vector<std::string> controlIds;
     controlIds.reserve(rig.controls.size());
     for (const ControlRigControlUVE& control : rig.controls) {
+        if (!IsValidControlRigSpaceUVE(control.space)) {
+            return {ControlRigValidationCodeUVE::InvalidControl, control.controlId,
+                    "Control space is unknown."};
+        }
         if (!IsIdentifierUVE(control.controlId) ||
             !IsFiniteTransformPoseUVE(control.pose)) {
             return {ControlRigValidationCodeUVE::InvalidControl, control.controlId,
