@@ -3,6 +3,7 @@
 
 #include "uve/scene/prefab_system_uve.h"
 
+#include <exception>
 #include <vector>
 
 #include "uve/debug/logging_macros_uve.h"
@@ -20,12 +21,23 @@ Asset::AssetGuidUVE PrefabSystemUVE::SavePrefabUVE(IEntityManagerUVE& entityMana
         return Asset::kInvalidAssetGuidUVE;
     }
 
-    const Asset::AssetGuidUVE guid = assetDatabase.RegisterUVE(path);
-    if (guid == Asset::kInvalidAssetGuidUVE) {
-        UVE_ERROR("PrefabSystemUVE: asset database rejected prefab registration for \"{}\"", path.string());
+    Asset::AssetGuidUVE guid = Asset::kInvalidAssetGuidUVE;
+    try {
+        guid = assetDatabase.RegisterUVE(path);
+        if (guid == Asset::kInvalidAssetGuidUVE) {
+            UVE_ERROR("PrefabSystemUVE: asset database rejected prefab registration for \"{}\"", path.string());
+            return Asset::kInvalidAssetGuidUVE;
+        }
+        static_cast<void>(assetDatabase.SaveUVE());
+    } catch (const std::exception& exception) {
+        UVE_ERROR("PrefabSystemUVE: asset database threw while registering prefab \"{}\": {}", path.string(),
+                  exception.what());
+        return Asset::kInvalidAssetGuidUVE;
+    } catch (...) {
+        UVE_ERROR("PrefabSystemUVE: asset database threw an unknown exception while registering prefab \"{}\"",
+                  path.string());
         return Asset::kInvalidAssetGuidUVE;
     }
-    assetDatabase.SaveUVE();
     return guid;
 }
 
@@ -47,7 +59,18 @@ EntityUVE PrefabSystemUVE::InstantiateWithRevisionUVE(
                   prefabGuid.value, parent.index, parent.generation);
         return kInvalidEntityUVE;
     }
-    const std::filesystem::path path = assetDatabase.ResolveUVE(prefabGuid);
+    std::filesystem::path path;
+    try {
+        path = assetDatabase.ResolveUVE(prefabGuid);
+    } catch (const std::exception& exception) {
+        UVE_ERROR("PrefabSystemUVE: asset database threw while resolving prefab GUID {}: {}", prefabGuid.value,
+                  exception.what());
+        return kInvalidEntityUVE;
+    } catch (...) {
+        UVE_ERROR("PrefabSystemUVE: asset database threw an unknown exception while resolving prefab GUID {}",
+                  prefabGuid.value);
+        return kInvalidEntityUVE;
+    }
     if (path.empty()) {
         UVE_ERROR("PrefabSystemUVE: unknown prefab GUID {}", prefabGuid.value);
         return kInvalidEntityUVE;
