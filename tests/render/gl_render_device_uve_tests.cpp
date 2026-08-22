@@ -148,6 +148,20 @@ TEST_F(GlRenderDeviceUVETest, CreateBufferUVE_SizeExceedsGlsizeiptr_ReturnsInval
     EXPECT_EQ(valid.value, 1U);
 }
 
+TEST_F(GlRenderDeviceUVETest, CreateTextureUVE_DimensionExceedsGlsizei_ReturnsInvalidBeforeAllocation) {
+    ASSERT_EQ(renderDevice->GetLiveResourceCountUVE(), 0U);
+    TextureDescUVE oversizedDesc;
+    oversizedDesc.width = static_cast<std::uint32_t>(std::numeric_limits<GLsizei>::max()) + 1U;
+    oversizedDesc.height = 1U;
+
+    EXPECT_EQ(renderDevice->CreateTextureUVE(oversizedDesc), kInvalidTextureHandleUVE);
+    EXPECT_EQ(renderDevice->GetLiveResourceCountUVE(), 0U);
+
+    const TextureHandleUVE valid = renderDevice->CreateTextureUVE(TextureDescUVE{1U, 1U});
+    ASSERT_NE(valid, kInvalidTextureHandleUVE);
+    EXPECT_EQ(valid.value, 1U);
+}
+
 TEST_F(GlRenderDeviceUVETest, CreatePipelineUVE_UnknownVertexFormat_ReturnsInvalidBeforeAllocation) {
     const ShaderHandleUVE vertexShader =
         renderDevice->CreateShaderUVE(ShaderDescUVE{ShaderStageUVE::Vertex, std::string(kValidVertexShaderSource)});
