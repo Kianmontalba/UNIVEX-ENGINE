@@ -3,6 +3,7 @@
 
 #include "uve/physics/detail/collider_world_aabb_cache_uve.h"
 
+#include <algorithm>
 #include <cmath>
 
 #include "uve/scene/components/collider_component_uve.h"
@@ -24,9 +25,13 @@ namespace {
 
 std::vector<ColliderWorldAabbUVE> BuildColliderWorldAabbCacheUVE(Scene::IEntityManagerUVE& entityManager) {
     std::vector<ColliderWorldAabbUVE> cache;
+    cache.reserve(std::min(entityManager.GetEntityCountUVE(), DynamicAabbBvhUVE::kMaximumProxiesUVE));
     entityManager.ForEachUVE<Scene::WorldTransformComponentUVE, Scene::ColliderComponentUVE>(
         [&](Scene::EntityUVE entity, const Scene::WorldTransformComponentUVE& worldTransform,
                  const Scene::ColliderComponentUVE& collider) {
+            if (cache.size() >= DynamicAabbBvhUVE::kMaximumProxiesUVE) {
+                return;
+            }
             const bool isSphere = collider.shapeType == Scene::ColliderShapeTypeUVE::Sphere;
             const bool isCapsule = collider.shapeType == Scene::ColliderShapeTypeUVE::Capsule;
             const Math::Vector3UVE localHalfExtents = Scene::GetColliderLocalHalfExtentsUVE(collider);
