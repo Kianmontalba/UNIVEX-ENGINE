@@ -9,6 +9,7 @@
 #include <utility>
 #include <vector>
 
+#include "uve/debug/assert_uve.h"
 #include "uve/scene/component_type_info_uve.h"
 #include "uve/scene/entity_uve.h"
 
@@ -101,17 +102,26 @@ public:
             const_cast<IEntityManagerUVE*>(this)->GetComponentErased(entity, std::type_index(typeid(T))));
     }
 
-    /// Returns a type-erased pointer to `entity`'s component of type `componentType`. Asserts
-    /// `entity` is alive and currently has one. The runtime-typed counterpart to
+    /// Returns a type-erased pointer to `entity`'s component of type `componentType`. Debug builds
+    /// assert that the entity is alive and currently has the component; release builds return
+    /// nullptr for a stale entity or absent component. The runtime-typed counterpart to
     /// GetComponentUVE<T>(), used together with GetComponentTypesUVE() by SceneSerializerUVE to
     /// read every component of an entity whose types are only known at runtime.
     [[nodiscard]] void* GetComponentPointerUVE(EntityUVE entity, std::type_index componentType) {
+        if (!IsAliveUVE(entity)) {
+            UVE_ASSERT(IsAliveUVE(entity));
+            return nullptr;
+        }
+        if (!HasComponentErased(entity, componentType)) {
+            UVE_ASSERT(HasComponentErased(entity, componentType));
+            return nullptr;
+        }
         return GetComponentErased(entity, componentType);
     }
 
     /// Const overload of GetComponentPointerUVE().
     [[nodiscard]] const void* GetComponentPointerUVE(EntityUVE entity, std::type_index componentType) const {
-        return const_cast<IEntityManagerUVE*>(this)->GetComponentErased(entity, componentType);
+        return const_cast<IEntityManagerUVE*>(this)->GetComponentPointerUVE(entity, componentType);
     }
 
     /// Invokes `callback(EntityUVE, TComponents&...)` once for every entity whose current
