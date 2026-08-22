@@ -1,6 +1,7 @@
 // Copyright (c) 2026 UniVex Studios. All Rights Reserved.
 
 #include "uve/input/gamepad_input_system_uve.h"
+#include "uve/input/input_frame_counter_uve.h"
 
 #include <cmath>
 #include <limits>
@@ -11,6 +12,14 @@ namespace UVE::Input::Tests {
 namespace {
 
 constexpr float kEpsilon = 1e-5F;
+
+TEST(InputFrameCounterUVETest, AdvanceInputFrameNumberUVE_SaturatesWithoutWrap) {
+    std::uint64_t frameNumber = std::numeric_limits<std::uint64_t>::max() - 1U;
+    AdvanceInputFrameNumberUVE(frameNumber);
+    EXPECT_EQ(frameNumber, std::numeric_limits<std::uint64_t>::max());
+    AdvanceInputFrameNumberUVE(frameNumber);
+    EXPECT_EQ(frameNumber, std::numeric_limits<std::uint64_t>::max());
+}
 
 TEST(GamepadInputSystemUVETest, EvaluateGamepadConnectionTransitionUVE_ClassifiesEdges) {
     GamepadStateSnapshotUVE previous{};

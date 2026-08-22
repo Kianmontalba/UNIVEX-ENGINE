@@ -1,6 +1,7 @@
 // Copyright (c) 2026 UniVex Studios. All Rights Reserved.
 
 #include "uve/input/gamepad_input_system_uve.h"
+#include "uve/input/input_frame_counter_uve.h"
 
 #include <algorithm>
 #include <cmath>
@@ -75,7 +76,7 @@ void GamepadInputSystemUVE::SetButtonStateUVE(const std::size_t gamepadIndex, co
 void GamepadInputSystemUVE::UpdateUVE() {
     const std::lock_guard<std::mutex> lock(m_liveStateMutex);
     m_previousState = m_currentState;
-    ++m_frameNumber;
+    AdvanceInputFrameNumberUVE(m_frameNumber);
 
     for (std::size_t gamepadIndex = 0U; gamepadIndex < kMaximumGamepadCountUVE; ++gamepadIndex) {
         GamepadStateSnapshotUVE committed{};

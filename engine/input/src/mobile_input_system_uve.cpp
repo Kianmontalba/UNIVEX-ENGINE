@@ -1,6 +1,7 @@
 // Copyright (c) 2026 UniVex Studios. All Rights Reserved.
 
 #include "uve/input/mobile_input_system_uve.h"
+#include "uve/input/input_frame_counter_uve.h"
 
 #include <algorithm>
 #include <cmath>
@@ -54,7 +55,7 @@ void MobileInputSystemUVE::SetGyroscopeRotationRateUVE(const Math::Vector3UVE ro
 void MobileInputSystemUVE::UpdateUVE() {
     const std::lock_guard<std::mutex> lock(m_liveStateMutex);
     m_previousState = m_currentState;
-    ++m_liveState.frameNumber;
+    AdvanceInputFrameNumberUVE(m_liveState.frameNumber);
     m_currentState = m_liveState;
 
     for (std::size_t touchSlot = 0U; touchSlot < kMaximumTouchCountUVE; ++touchSlot) {
