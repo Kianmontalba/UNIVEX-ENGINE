@@ -147,6 +147,29 @@ struct VertexAttributeUVE {
     return true;
 }
 
+[[nodiscard]] inline bool IsVertexLayoutWithinStrideUVE(const std::span<const VertexAttributeUVE> vertexLayout,
+                                                         const std::uint32_t vertexStride) noexcept {
+    for (const VertexAttributeUVE& attribute : vertexLayout) {
+        std::uint32_t componentCount = 0;
+        switch (attribute.format) {
+            case VertexAttributeFormatUVE::Float2:
+                componentCount = 2U;
+                break;
+            case VertexAttributeFormatUVE::Float3:
+                componentCount = 3U;
+                break;
+            case VertexAttributeFormatUVE::Float4:
+                componentCount = 4U;
+                break;
+        }
+        const std::uint32_t attributeByteWidth = componentCount * static_cast<std::uint32_t>(sizeof(float));
+        if (attribute.offset > vertexStride || attributeByteWidth > vertexStride - attribute.offset) {
+            return false;
+        }
+    }
+    return true;
+}
+
 /// How a pipeline's bound vertex/index buffers are assembled into primitives. Only `Triangles`
 /// exists today — lines/points aren't needed by anything built so far.
 enum class PrimitiveTopologyUVE : std::uint8_t { Triangles };
