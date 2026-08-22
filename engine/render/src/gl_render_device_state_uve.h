@@ -26,6 +26,7 @@ struct GlDeviceStateUVE {
     GlFunctionsUVE gl;
     GLint maxCombinedTextureImageUnits = 0;
     GLint maxUniformBufferBindings = 0;
+    GLint maxVertexAttribs = 0;
 
     struct BufferRecordUVE {
         GLuint glBuffer = 0;
