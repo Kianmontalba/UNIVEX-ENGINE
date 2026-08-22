@@ -167,6 +167,16 @@ struct PipelineBinaryDescUVE {
 /// What happens to a render pass attachment's existing contents at the start of the pass.
 enum class LoadOpUVE : std::uint8_t { Clear, Load, DontCare };
 
+[[nodiscard]] constexpr bool IsLoadOpValidUVE(const LoadOpUVE loadOp) noexcept {
+    switch (loadOp) {
+        case LoadOpUVE::Clear:
+        case LoadOpUVE::Load:
+        case LoadOpUVE::DontCare:
+            return true;
+    }
+    return false;
+}
+
 /// Describes one BeginRenderPassUVE() call: which color/depth textures are rendered into and how
 /// they're cleared. `depthAttachment` may be `kInvalidTextureHandleUVE` for a color-only pass.
 /// `colorAttachment` itself may also be `kInvalidTextureHandleUVE`, meaning "render into the

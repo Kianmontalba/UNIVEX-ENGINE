@@ -342,6 +342,22 @@ TEST(NullRenderDeviceUVETest, CommandBuffer_SetUniformCalls_AreRecordedInOrderWi
     ASSERT_TRUE(std::holds_alternative<EndRenderPassCommandUVE>(recorded[6]));
 }
 
+TEST(NullCommandBufferUVETest, BeginRenderPassUVE_UnknownLoadOp_DoesNotRecordOrEnterPass) {
+    NullRenderDeviceUVE device;
+    std::unique_ptr<ICommandBufferUVE> invalidCommandBuffer = device.CreateCommandBufferUVE();
+    RenderPassDescUVE invalidDesc;
+    invalidDesc.colorLoadOp = static_cast<LoadOpUVE>(0xFFU);
+    invalidCommandBuffer->BeginRenderPassUVE(invalidDesc);
+    device.SubmitUVE(std::move(invalidCommandBuffer));
+    EXPECT_TRUE(device.GetLastSubmittedCommandsUVE().empty());
+
+    std::unique_ptr<ICommandBufferUVE> validCommandBuffer = device.CreateCommandBufferUVE();
+    validCommandBuffer->BeginRenderPassUVE(RenderPassDescUVE{});
+    validCommandBuffer->EndRenderPassUVE();
+    device.SubmitUVE(std::move(validCommandBuffer));
+    EXPECT_EQ(device.GetLastSubmittedCommandsUVE().size(), 2U);
+}
+
 #if UVE_DEBUG
 TEST(NullRenderDeviceUVEDeathTest, CommandBuffer_NestedBeginRenderPass_Asserts) {
     NullRenderDeviceUVE device;

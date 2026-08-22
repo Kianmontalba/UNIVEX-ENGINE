@@ -11,6 +11,10 @@ namespace UVE::Render {
 
 void NullCommandBufferUVE::BeginRenderPassUVE(const RenderPassDescUVE& renderPassDesc) {
     UVE_ASSERT(!m_insideRenderPass);
+    if (!IsLoadOpValidUVE(renderPassDesc.colorLoadOp) || !IsLoadOpValidUVE(renderPassDesc.depthLoadOp)) {
+        UVE_ERROR("NullCommandBufferUVE: BeginRenderPassUVE received an unknown load operation");
+        return;
+    }
     m_insideRenderPass = true;
     m_commands.emplace_back(BeginRenderPassCommandUVE{renderPassDesc});
 }
