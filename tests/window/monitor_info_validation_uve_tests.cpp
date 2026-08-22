@@ -1,8 +1,25 @@
 #include "uve/window/monitor_info_validation_uve.h"
 
+#include <limits>
+
 #include <gtest/gtest.h>
 
 namespace UVE::Window::Tests {
+
+TEST(MonitorInfoValidationUVETest, ValidatesSignedDimensionsBeforeUnsignedConversionAtomically) {
+    std::uint32_t width = 77U;
+    std::uint32_t height = 88U;
+    EXPECT_FALSE(ValidateMonitorDimensionsUVE(0, 1080, width, height));
+    EXPECT_EQ(width, 77U);
+    EXPECT_EQ(height, 88U);
+    EXPECT_FALSE(ValidateMonitorDimensionsUVE(1920, -1, width, height));
+    EXPECT_EQ(width, 77U);
+    EXPECT_EQ(height, 88U);
+    EXPECT_TRUE(ValidateMonitorDimensionsUVE(std::numeric_limits<int>::max(),
+                                             std::numeric_limits<int>::max(), width, height));
+    EXPECT_EQ(width, static_cast<std::uint32_t>(std::numeric_limits<int>::max()));
+    EXPECT_EQ(height, static_cast<std::uint32_t>(std::numeric_limits<int>::max()));
+}
 
 TEST(MonitorInfoValidationUVETest, AcceptsValidSnapshotWithAtMostOnePrimary) {
     EXPECT_TRUE(ValidateMonitorInfoUVE({"Primary", 1920U, 1080U, true}));

@@ -2,6 +2,16 @@
 
 namespace UVE::Window {
 
+bool ValidateMonitorDimensionsUVE(const int width, const int height, std::uint32_t& outWidth,
+                                  std::uint32_t& outHeight) noexcept {
+    if (width <= 0 || height <= 0) {
+        return false;
+    }
+    outWidth = static_cast<std::uint32_t>(width);
+    outHeight = static_cast<std::uint32_t>(height);
+    return true;
+}
+
 bool ValidateMonitorInfoUVE(const MonitorInfoUVE& monitor) noexcept {
     return !monitor.name.empty() && monitor.name.size() <= 256U && monitor.width > 0U &&
            monitor.height > 0U;
