@@ -445,6 +445,10 @@ PipelineHandleUVE GlRenderDeviceUVE::CreatePipelineFromBinaryUVE(std::span<const
         UVE_ERROR("GlRenderDeviceUVE: CreatePipelineFromBinaryUVE vertex attributes exceed the GL stride range");
         return kInvalidPipelineHandleUVE;
     }
+    if (binary.size() > static_cast<std::size_t>(std::numeric_limits<GLsizei>::max())) {
+        UVE_ERROR("GlRenderDeviceUVE: CreatePipelineFromBinaryUVE binary exceeds the GLsizei range");
+        return kInvalidPipelineHandleUVE;
+    }
     const GLuint glProgram = m_impl->state.gl.glCreateProgram();
     m_impl->state.gl.glProgramBinary(glProgram, static_cast<GLenum>(format), binary.data(),
                                        static_cast<GLsizei>(binary.size()));

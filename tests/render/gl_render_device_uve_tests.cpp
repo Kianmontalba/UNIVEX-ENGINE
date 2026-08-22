@@ -400,6 +400,16 @@ TEST_F(GlRenderDeviceUVETest, BindTextureUVE_SlotExceedsGlLimit_DoesNotIssueGlCa
     renderDevice->DestroyTextureUVE(texture);
 }
 
+TEST_F(GlRenderDeviceUVETest, CreatePipelineFromBinaryUVE_BinarySizeExceedsGlsizei_ReturnsInvalidBeforeAllocation) {
+    const std::array<std::byte, 1> storage{};
+    const std::size_t oversizedBinarySize = static_cast<std::size_t>(std::numeric_limits<GLsizei>::max()) + 1U;
+    const std::span<const std::byte> oversizedBinary(storage.data(), oversizedBinarySize);
+    const PipelineBinaryDescUVE desc;
+
+    EXPECT_EQ(renderDevice->CreatePipelineFromBinaryUVE(oversizedBinary, 0U, desc), kInvalidPipelineHandleUVE);
+    EXPECT_EQ(renderDevice->GetLiveResourceCountUVE(), 0U);
+}
+
 TEST_F(GlRenderDeviceUVETest, BindUniformBufferUVE_SlotExceedsGlLimit_DoesNotIssueGlCall) {
     const BufferHandleUVE buffer = renderDevice->CreateBufferUVE(BufferDescUVE{16U, BufferUsageUVE::Uniform});
     ASSERT_NE(buffer, kInvalidBufferHandleUVE);
