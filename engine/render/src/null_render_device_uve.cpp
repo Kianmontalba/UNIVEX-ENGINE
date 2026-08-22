@@ -102,6 +102,10 @@ void NullRenderDeviceUVE::DestroyShaderUVE(ShaderHandleUVE shader) {
 
 PipelineHandleUVE NullRenderDeviceUVE::CreatePipelineUVE(const PipelineDescUVE& desc, std::string* outInfoLog) {
     static_cast<void>(outInfoLog); // NullRenderDeviceUVE never links anything real - nothing to log.
+    if (!IsVertexLayoutValidUVE(desc.vertexLayout)) {
+        UVE_ERROR("NullRenderDeviceUVE: CreatePipelineUVE received an unknown vertex attribute format");
+        return kInvalidPipelineHandleUVE;
+    }
     if (!m_impl->shaders.contains(desc.vertexShader.value) || !m_impl->shaders.contains(desc.fragmentShader.value)) {
         UVE_ERROR("NullRenderDeviceUVE: CreatePipelineUVE referenced an unknown vertex or fragment shader handle");
         return kInvalidPipelineHandleUVE;
@@ -134,6 +138,10 @@ bool NullRenderDeviceUVE::GetPipelineBinaryUVE(PipelineHandleUVE pipeline, std::
 PipelineHandleUVE NullRenderDeviceUVE::CreatePipelineFromBinaryUVE(std::span<const std::byte> binary,
                                                                     std::uint32_t format,
                                                                     const PipelineBinaryDescUVE& desc) {
+    if (!IsVertexLayoutValidUVE(desc.vertexLayout)) {
+        UVE_ERROR("NullRenderDeviceUVE: CreatePipelineFromBinaryUVE received an unknown vertex attribute format");
+        return kInvalidPipelineHandleUVE;
+    }
     static_cast<void>(binary); // NullRenderDeviceUVE never inspects binary contents.
     static_cast<void>(format);
     PipelineDescUVE bookkeepingDesc;

@@ -123,6 +123,25 @@ struct VertexAttributeUVE {
     std::uint32_t offset = 0;
 };
 
+[[nodiscard]] constexpr bool IsVertexAttributeFormatValidUVE(const VertexAttributeFormatUVE format) noexcept {
+    switch (format) {
+        case VertexAttributeFormatUVE::Float2:
+        case VertexAttributeFormatUVE::Float3:
+        case VertexAttributeFormatUVE::Float4:
+            return true;
+    }
+    return false;
+}
+
+[[nodiscard]] inline bool IsVertexLayoutValidUVE(const std::span<const VertexAttributeUVE> vertexLayout) noexcept {
+    for (const VertexAttributeUVE& attribute : vertexLayout) {
+        if (!IsVertexAttributeFormatValidUVE(attribute.format)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 /// How a pipeline's bound vertex/index buffers are assembled into primitives. Only `Triangles`
 /// exists today — lines/points aren't needed by anything built so far.
 enum class PrimitiveTopologyUVE : std::uint8_t { Triangles };
