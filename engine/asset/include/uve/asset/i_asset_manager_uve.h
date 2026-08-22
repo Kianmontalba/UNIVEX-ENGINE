@@ -73,7 +73,8 @@ public:
     /// Resolves `guid` via `assetDatabase` and begins (or reuses an already in-flight/completed)
     /// an asynchronous load of it as type `T`, returning a ref-counted handle immediately — this
     /// call never blocks; poll AssetHandleUVE::IsReadyUVE()/TryGetUVE() on the returned handle.
-    /// `T` must already be registered via RegisterLoaderUVE<T>().
+    /// `T` should be registered via RegisterLoaderUVE<T>(); if it is missing, the returned handle
+    /// enters Failed immediately with a diagnostic and no worker job or asset-database resolution.
     template <typename T>
     [[nodiscard]] AssetHandleUVE<T> LoadUVE(AssetGuidUVE guid, IAssetDatabaseUVE& assetDatabase) {
         LoadErased(guid, std::type_index(typeid(T)), assetDatabase);

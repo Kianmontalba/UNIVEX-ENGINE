@@ -70,6 +70,8 @@ template <typename T>
 
 class AssetManagerUVETest : public ::testing::Test {
 protected:
+    struct UnregisteredAssetUVE final {};
+
     Threading::ThreadPoolUVE threadPool{2};
     Events::EventSystemUVE eventSystem;
     AssetDatabaseUVE assetDatabase;
@@ -77,6 +79,17 @@ protected:
 
     void SetUp() override { assetManager.RegisterLoaderUVE<BlobAssetUVE>(LoadBlobUVE); }
 };
+
+TEST_F(AssetManagerUVETest, LoadUVE_MissingLoaderReturnsFailedHandleWithoutWorkerSubmission) {
+    const AssetHandleUVE<UnregisteredAssetUVE> handle =
+        assetManager.LoadUVE<UnregisteredAssetUVE>(AssetGuidUVE{9001U}, assetDatabase);
+
+    EXPECT_TRUE(WaitForTerminalStateUVE(handle));
+    EXPECT_FALSE(handle.IsReadyUVE());
+    EXPECT_TRUE(handle.HasFailedUVE());
+    EXPECT_EQ(handle.GetFailureReasonUVE(), "no loader registered for asset type");
+    EXPECT_EQ(assetManager.GetLoadedAssetCountUVE(), 0U);
+}
 
 TEST_F(AssetManagerUVETest, LoadUVE_RealFile_BecomesReadyWithMatchingBytes) {
     const std::filesystem::path path = "uve_asset_manager_tests_basic.uveblob";
