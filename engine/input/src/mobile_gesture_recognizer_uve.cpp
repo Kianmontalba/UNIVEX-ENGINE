@@ -159,6 +159,32 @@ bool MobileGestureRecognizerUVE::IsFiniteVectorUVE(const Math::Vector2UVE value)
     return std::isfinite(value.x) && std::isfinite(value.y);
 }
 
+namespace {
+
+[[nodiscard]] bool IsValidGestureSnapshotUVE(const MobileInputSnapshotUVE& snapshot) noexcept {
+    for (std::size_t slot = 0U; slot < kMaximumTouchCountUVE; ++slot) {
+        const TouchPointStateUVE& touch = snapshot.touches[slot];
+        if (!touch.active) {
+            continue;
+        }
+        if (touch.identifier == 0U || !std::isfinite(touch.position.x) ||
+            !std::isfinite(touch.position.y) || !std::isfinite(touch.delta.x) ||
+            !std::isfinite(touch.delta.y) || !std::isfinite(touch.pressure) ||
+            touch.pressure < 0.0F || touch.pressure > 1.0F) {
+            return false;
+        }
+        for (std::size_t previousSlot = 0U; previousSlot < slot; ++previousSlot) {
+            if (snapshot.touches[previousSlot].active &&
+                snapshot.touches[previousSlot].identifier == touch.identifier) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+} // namespace
+
 MobileSwipeDirectionUVE MobileGestureRecognizerUVE::GetSwipeDirectionUVE(
     const Math::Vector2UVE delta) noexcept {
     if (std::fabs(delta.x) >= std::fabs(delta.y)) {
@@ -214,7 +240,8 @@ MobileGestureReportUVE MobileGestureRecognizerUVE::ConsumeSnapshotUVE(
     const MobileInputSnapshotUVE& snapshot, const float frameDeltaSeconds) noexcept {
     MobileGestureReportUVE report{};
     if (snapshot.frameNumber == 0U || snapshot.frameNumber <= m_lastFrameNumber ||
-        !std::isfinite(frameDeltaSeconds) || frameDeltaSeconds < 0.0F) {
+        !std::isfinite(frameDeltaSeconds) || frameDeltaSeconds < 0.0F ||
+        !IsValidGestureSnapshotUVE(snapshot)) {
         return report;
     }
     m_lastFrameNumber = snapshot.frameNumber;
