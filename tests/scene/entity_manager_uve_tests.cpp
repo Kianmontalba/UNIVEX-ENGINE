@@ -92,6 +92,30 @@ TEST_F(EntityManagerUVETest, ReusedIndex_YieldsDifferentGeneration) {
     EXPECT_TRUE(entityManager.IsAliveUVE(second));
 }
 
+#if UVE_DEBUG
+TEST_F(EntityManagerUVETest, RemoveComponentUVE_StaleHandleAsserts) {
+    const EntityUVE entity = entityManager.CreateEntityUVE();
+    entityManager.DestroyEntityUVE(entity);
+    EXPECT_DEATH({ entityManager.RemoveComponentUVE<PositionComponentUVE>(entity); }, "");
+}
+
+TEST_F(EntityManagerUVETest, RemoveComponentUVE_AbsentComponentAsserts) {
+    const EntityUVE entity = entityManager.CreateEntityUVE();
+    EXPECT_DEATH({ entityManager.RemoveComponentUVE<PositionComponentUVE>(entity); }, "");
+}
+#else
+TEST_F(EntityManagerUVETest, RemoveComponentUVE_InvalidRequestsFailClosed) {
+    const EntityUVE stale = entityManager.CreateEntityUVE();
+    entityManager.DestroyEntityUVE(stale);
+    EXPECT_NO_FATAL_FAILURE(entityManager.RemoveComponentUVE<PositionComponentUVE>(stale));
+
+    const EntityUVE live = entityManager.CreateEntityUVE();
+    EXPECT_NO_FATAL_FAILURE(entityManager.RemoveComponentUVE<PositionComponentUVE>(live));
+    EXPECT_TRUE(entityManager.IsAliveUVE(live));
+    EXPECT_FALSE(entityManager.HasComponentUVE<PositionComponentUVE>(live));
+}
+#endif
+
 TEST_F(EntityManagerUVETest, AddGetHasRemoveComponent_PlainData_RoundTrips) {
     const EntityUVE entity = entityManager.CreateEntityUVE();
 
