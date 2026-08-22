@@ -17,9 +17,16 @@ namespace {
     return !value.empty() && value.size() <= TypeMetadataRegistryUVE::kMaximumDisplayNameBytesUVE;
 }
 
+[[nodiscard]] bool ExceedsMemberCapacityUVE(const TypeMetadataEntryUVE& entry) noexcept {
+    return entry.properties.size() > TypeMetadataRegistryUVE::kMaximumMembersPerTypeUVE ||
+           entry.methods.size() > TypeMetadataRegistryUVE::kMaximumMembersPerTypeUVE -
+                                      std::min(entry.properties.size(),
+                                               TypeMetadataRegistryUVE::kMaximumMembersPerTypeUVE);
+}
+
 [[nodiscard]] bool HasDuplicateMemberNamesUVE(const TypeMetadataEntryUVE& entry) noexcept {
     std::vector<std::string_view> names;
-    names.reserve(entry.properties.size() + entry.methods.size());
+    names.reserve(std::min(entry.properties.size(), TypeMetadataRegistryUVE::kMaximumMembersPerTypeUVE));
     for (const TypeMetadataPropertyUVE& property : entry.properties) {
         if (!IsBoundedIdentifierUVE(property.name) || !IsBoundedDisplayNameUVE(property.displayName) ||
             !IsBoundedIdentifierUVE(property.typeId)) {
@@ -46,7 +53,7 @@ namespace {
 
 TypeMetadataRegistrationResultUVE TypeMetadataRegistryUVE::RegisterTypeUVE(TypeMetadataEntryUVE entry) {
     if (!IsBoundedIdentifierUVE(entry.typeId) || !IsBoundedDisplayNameUVE(entry.displayName) || entry.version == 0U ||
-        entry.properties.size() + entry.methods.size() > kMaximumMembersPerTypeUVE ||
+        ExceedsMemberCapacityUVE(entry) ||
         HasDuplicateMemberNamesUVE(entry)) {
         return {TypeMetadataRegistrationCodeUVE::InvalidEntry,
                 "Type metadata requires bounded identity, display, version, and unique members."};

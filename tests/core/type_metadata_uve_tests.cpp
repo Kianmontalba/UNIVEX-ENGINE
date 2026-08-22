@@ -4,6 +4,8 @@
 
 #include <gtest/gtest.h>
 
+#include <utility>
+
 namespace UVE::Core {
 
 TEST(TypeMetadataRegistryUVETest, RegisterTypeUVE_OrdersCopiedSnapshotAndAdvancesGeneration) {
@@ -56,6 +58,24 @@ TEST(TypeMetadataRegistryUVETest, RegisterTypeUVE_RejectsDuplicateAndMalformedMe
     EXPECT_EQ(malformed.code, TypeMetadataRegistrationCodeUVE::InvalidEntry);
     EXPECT_EQ(registry.GetTypeCountUVE(), 1U);
     EXPECT_EQ(registry.GetGenerationUVE(), 1U);
+}
+
+TEST(TypeMetadataRegistryUVETest, RegisterTypeUVE_RejectsOversizedMemberCollectionsBeforeMutation) {
+    TypeMetadataRegistryUVE registry;
+    TypeMetadataEntryUVE oversized{TypeMetadataKindUVE::VisualScriptNode,
+                                   "node.oversized",
+                                   "Oversized Node",
+                                   1U,
+                                   std::vector<TypeMetadataPropertyUVE>(
+                                       TypeMetadataRegistryUVE::kMaximumMembersPerTypeUVE + 1U),
+                                   std::vector<TypeMetadataMethodUVE>(
+                                       TypeMetadataRegistryUVE::kMaximumMembersPerTypeUVE + 1U)};
+
+    const TypeMetadataRegistrationResultUVE result = registry.RegisterTypeUVE(std::move(oversized));
+
+    EXPECT_EQ(result.code, TypeMetadataRegistrationCodeUVE::InvalidEntry);
+    EXPECT_EQ(registry.GetTypeCountUVE(), 0U);
+    EXPECT_EQ(registry.GetGenerationUVE(), 0U);
 }
 
 TEST(TypeMetadataRegistryUVETest, RegisterTypeUVE_RejectsUnboundedIdentityBeforeMutation) {
