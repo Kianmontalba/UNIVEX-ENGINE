@@ -30,6 +30,10 @@ GlCommandBufferUVE::GlCommandBufferUVE(Detail::GlDeviceStateUVE& state) : m_stat
 
 void GlCommandBufferUVE::BeginRenderPassUVE(const RenderPassDescUVE& renderPassDesc) {
     UVE_ASSERT(!m_insideRenderPass);
+    if (!IsLoadOpValidUVE(renderPassDesc.colorLoadOp) || !IsLoadOpValidUVE(renderPassDesc.depthLoadOp)) {
+        UVE_ERROR("GlCommandBufferUVE: BeginRenderPassUVE received an unknown load operation");
+        return;
+    }
 
     if (renderPassDesc.colorAttachment == kInvalidTextureHandleUVE &&
         renderPassDesc.depthAttachment == kInvalidTextureHandleUVE) {
