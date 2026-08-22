@@ -176,6 +176,7 @@ add_executable(uve_tests
     ../engine/plugins/Animation/motion_query/Tests/motion_query_runtime_telemetry_uve_tests.cpp
     ../engine/plugins/Animation/motion_query/Tests/motion_query_search_index_uve_tests.cpp
     ../engine/plugins/Animation/motion_query/Tests/motion_query_animation_node_uve_tests.cpp
+    ../engine/plugins/Animation/motion_query/Tests/motion_query_history_uve_tests.cpp
     ../engine/plugins/Animation/motion_query/Tests/motion_query_interaction_runtime_uve_tests.cpp
     ../engine/plugins/Animation/motion_query/Tests/motion_query_editor_authoring_uve_tests.cpp
     ../engine/plugins/Animation/motion_query/Tests/motion_query_debugging_uve_tests.cpp
