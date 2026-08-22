@@ -230,8 +230,15 @@ void InputSystemUVE::RegisterActionUVE(InputActionUVE&& action) {
         (action.type != InputActionTypeUVE::Button && action.type != InputActionTypeUVE::Axis1D)) {
         return;
     }
-    const std::string name = action.name;
-    m_actions[name] = std::move(action);
+    const auto existing = m_actions.find(action.name);
+    if (existing == m_actions.end() && m_actions.size() >= kMaximumInputActionsUVE) {
+        return;
+    }
+    if (existing == m_actions.end()) {
+        m_actions.emplace(action.name, std::move(action));
+    } else {
+        existing->second = std::move(action);
+    }
 }
 
 bool InputSystemUVE::UnregisterActionUVE(std::string_view actionName) {
