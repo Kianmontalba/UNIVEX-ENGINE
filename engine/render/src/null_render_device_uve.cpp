@@ -31,6 +31,10 @@ NullRenderDeviceUVE::~NullRenderDeviceUVE() = default;
 
 BufferHandleUVE NullRenderDeviceUVE::CreateBufferUVE(const BufferDescUVE& desc,
                                                        std::span<const std::byte> initialData) {
+    if (!ValidateBufferUploadUVE(desc, initialData)) {
+        UVE_ERROR("NullRenderDeviceUVE: CreateBufferUVE initial data exceeds buffer size");
+        return kInvalidBufferHandleUVE;
+    }
     static_cast<void>(initialData); // NullRenderDeviceUVE performs no real upload, bookkeeping only.
     if (!IsBufferUsageValidUVE(desc.usage)) {
         UVE_ERROR("NullRenderDeviceUVE: CreateBufferUVE received an unknown buffer usage");

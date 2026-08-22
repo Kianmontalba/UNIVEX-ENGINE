@@ -179,6 +179,10 @@ GlRenderDeviceUVE::GlRenderDeviceUVE(Window::IWindowManagerUVE& windowManager)
 GlRenderDeviceUVE::~GlRenderDeviceUVE() = default;
 
 BufferHandleUVE GlRenderDeviceUVE::CreateBufferUVE(const BufferDescUVE& desc, std::span<const std::byte> initialData) {
+    if (!ValidateBufferUploadUVE(desc, initialData)) {
+        UVE_ERROR("GlRenderDeviceUVE: CreateBufferUVE initial data exceeds buffer size");
+        return kInvalidBufferHandleUVE;
+    }
     if (!IsBufferUsageValidUVE(desc.usage)) {
         UVE_ERROR("GlRenderDeviceUVE: CreateBufferUVE received an unknown buffer usage");
         return kInvalidBufferHandleUVE;
