@@ -204,6 +204,11 @@ void GlCommandBufferUVE::BindTextureUVE(TextureHandleUVE texture, std::uint32_t 
 }
 
 void GlCommandBufferUVE::BindUniformBufferUVE(BufferHandleUVE buffer, std::uint32_t slot) {
+    if (m_state->maxUniformBufferBindings <= 0 ||
+        slot >= static_cast<std::uint32_t>(m_state->maxUniformBufferBindings)) {
+        UVE_ERROR("GlCommandBufferUVE: BindUniformBufferUVE slot exceeds GL uniform-buffer limits");
+        return;
+    }
     const auto bufferIt = m_state->buffers.find(buffer.value);
     if (bufferIt == m_state->buffers.end()) {
         UVE_ERROR("GlCommandBufferUVE: BindUniformBufferUVE referenced an unknown buffer handle");
