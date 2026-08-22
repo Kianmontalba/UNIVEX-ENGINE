@@ -225,7 +225,7 @@ bool GlRenderDeviceUVE::UpdateBufferUVE(BufferHandleUVE buffer, std::span<const 
         UVE_ERROR("GlRenderDeviceUVE: UpdateBufferUVE called with an unknown handle ({})", buffer.value);
         return false;
     }
-    if (offsetBytes + data.size() > it->second.sizeBytes) {
+    if (!ValidateBufferUpdateUVE(it->second.sizeBytes, data.size(), offsetBytes)) {
         UVE_ERROR("GlRenderDeviceUVE: UpdateBufferUVE write of {} bytes at offset {} exceeds buffer size {}",
                    data.size(), offsetBytes, it->second.sizeBytes);
         return false;

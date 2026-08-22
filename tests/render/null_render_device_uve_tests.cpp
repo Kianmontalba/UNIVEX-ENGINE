@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <limits>
 #include <memory>
 #include <variant>
 #include <vector>
@@ -104,6 +105,14 @@ TEST(NullRenderDeviceUVETest, UpdateBufferUVE_WriteWithinSize_ReturnsTrue) {
 
     EXPECT_TRUE(device.UpdateBufferUVE(buffer, data, 0));
     EXPECT_TRUE(device.UpdateBufferUVE(buffer, data, 12));
+}
+
+TEST(NullRenderDeviceUVETest, UpdateBufferUVE_OverflowedOffset_ReturnsFalse) {
+    NullRenderDeviceUVE device;
+    const BufferHandleUVE buffer = device.CreateBufferUVE(BufferDescUVE{16, BufferUsageUVE::Uniform});
+    const std::array<std::byte, 4> data{};
+
+    EXPECT_FALSE(device.UpdateBufferUVE(buffer, data, std::numeric_limits<std::uint64_t>::max()));
 }
 
 TEST(NullRenderDeviceUVETest, UpdateBufferUVE_WriteExceedingSize_ReturnsFalseAndLogsError) {

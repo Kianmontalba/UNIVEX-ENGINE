@@ -42,6 +42,12 @@ struct BufferDescUVE {
     return initialData.size() <= desc.sizeBytes;
 }
 
+[[nodiscard]] constexpr bool ValidateBufferUpdateUVE(const std::uint64_t bufferSizeBytes,
+                                                       const std::size_t dataSize,
+                                                       const std::uint64_t offsetBytes) noexcept {
+    return offsetBytes <= bufferSizeBytes && dataSize <= bufferSizeBytes - offsetBytes;
+}
+
 /// Pixel formats an IRenderDeviceUVE texture can use. `Depth32Float` exists here (even though no
 /// loadable asset ever uses it — see the deliberately separate Asset::TextureFormatUVE) because
 /// depth render targets are created directly through this RHI, never loaded from disk.

@@ -511,6 +511,17 @@ TEST_F(GlRenderDeviceUVETest, UpdateBufferUVE_OutOfBounds_ReturnsFalse) {
     renderDevice->DestroyBufferUVE(buffer);
 }
 
+TEST_F(GlRenderDeviceUVETest, UpdateBufferUVE_OverflowedOffset_ReturnsFalseWithoutGlError) {
+    const BufferHandleUVE buffer = renderDevice->CreateBufferUVE(BufferDescUVE{16, BufferUsageUVE::Vertex});
+    const std::array<std::byte, 4> data{};
+    while (glGetError() != GL_NO_ERROR) {
+    }
+
+    EXPECT_FALSE(renderDevice->UpdateBufferUVE(buffer, data, std::numeric_limits<std::uint64_t>::max()));
+    EXPECT_EQ(glGetError(), GL_NO_ERROR);
+    renderDevice->DestroyBufferUVE(buffer);
+}
+
 TEST_F(GlRenderDeviceUVETest, CreateThenDestroyTexture_UpdatesLiveResourceCount) {
     ASSERT_EQ(renderDevice->GetLiveResourceCountUVE(), 0U);
     const TextureHandleUVE texture =

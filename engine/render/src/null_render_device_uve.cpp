@@ -59,7 +59,7 @@ bool NullRenderDeviceUVE::UpdateBufferUVE(BufferHandleUVE buffer, std::span<cons
         UVE_ERROR("NullRenderDeviceUVE: UpdateBufferUVE called with an unknown handle ({})", buffer.value);
         return false;
     }
-    if (offsetBytes + data.size() > iterator->second.sizeBytes) {
+    if (!ValidateBufferUpdateUVE(iterator->second.sizeBytes, data.size(), offsetBytes)) {
         UVE_ERROR("NullRenderDeviceUVE: UpdateBufferUVE write of {} bytes at offset {} exceeds buffer size {}",
                    data.size(), offsetBytes, iterator->second.sizeBytes);
         return false;
