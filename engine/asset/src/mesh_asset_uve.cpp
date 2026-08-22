@@ -204,6 +204,14 @@ bool LoadMeshAssetUVE(const std::filesystem::path& path, MeshAssetUVE& outMesh) 
         UVE_ERROR("MeshAssetUVE: \"{}\" has a truncated vertex count", path.string());
         return false;
     }
+    constexpr std::size_t kSerializedMeshVertexBytesUVE = sizeof(float) * 8U;
+    constexpr std::size_t kSerializedMeshTailBytesUVE = sizeof(std::uint32_t) + sizeof(float) * 6U;
+    if (payload.size() < offset || payload.size() - offset < kSerializedMeshTailBytesUVE ||
+        vertexCount > (payload.size() - offset - kSerializedMeshTailBytesUVE) /
+                          kSerializedMeshVertexBytesUVE) {
+        UVE_ERROR("MeshAssetUVE: \"{}\" has an impossible vertex count", path.string());
+        return false;
+    }
 
     std::vector<MeshVertexUVE> vertices;
     vertices.reserve(vertexCount);
@@ -221,6 +229,10 @@ bool LoadMeshAssetUVE(const std::filesystem::path& path, MeshAssetUVE& outMesh) 
     std::uint32_t indexCount = 0;
     if (!ReadUint32FromBufferUVE(payload, offset, indexCount)) {
         UVE_ERROR("MeshAssetUVE: \"{}\" has a truncated index count", path.string());
+        return false;
+    }
+    if (payload.size() < offset || indexCount > (payload.size() - offset) / sizeof(std::uint32_t)) {
+        UVE_ERROR("MeshAssetUVE: \"{}\" has an impossible index count", path.string());
         return false;
     }
 

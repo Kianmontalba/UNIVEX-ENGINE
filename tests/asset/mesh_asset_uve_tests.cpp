@@ -4,7 +4,9 @@
 #include "uve/asset/mesh_asset_uve.h"
 
 #include <algorithm>
+#include <cstring>
 #include <filesystem>
+#include <limits>
 #include <memory>
 #include <thread>
 #include <vector>
@@ -165,6 +167,23 @@ TEST(MeshAssetUVETest, LoadMeshAssetUVE_WrongAssetKind_FailsCleanlyAndLogsError)
     EXPECT_TRUE(foundError);
 
     logger.Shutdown();
+    std::filesystem::remove(path);
+}
+
+TEST(MeshAssetUVETest, LoadMeshAssetUVE_ImpossibleVertexCountFailsBeforeReserve) {
+    const std::filesystem::path path = "uve_mesh_asset_tests_impossible_vertex_count.uvemodel";
+    std::filesystem::remove(path);
+    const std::uint32_t impossibleVertexCount = std::numeric_limits<std::uint32_t>::max();
+    std::vector<std::byte> payload(sizeof(impossibleVertexCount));
+    std::memcpy(payload.data(), &impossibleVertexCount, sizeof(impossibleVertexCount));
+    ASSERT_TRUE(WriteUveFileUVE(path, AssetKindUVE::Mesh, payload));
+
+    MeshAssetUVE loaded = MakeTestMeshUVE();
+    const MeshAssetUVE original = loaded;
+    EXPECT_FALSE(LoadMeshAssetUVE(path, loaded));
+    EXPECT_EQ(loaded.vertices.size(), original.vertices.size());
+    EXPECT_EQ(loaded.indices, original.indices);
+    EXPECT_EQ(loaded.localBounds, original.localBounds);
     std::filesystem::remove(path);
 }
 
