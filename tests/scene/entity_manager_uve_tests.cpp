@@ -13,6 +13,7 @@
 
 #include "uve/events/event_system_uve.h"
 #include "uve/memory/memory_manager_uve.h"
+#include "uve/platform/platform_uve.h"
 #include "uve/scene/entity_lifecycle_events_uve.h"
 
 namespace UVE::Scene::Tests {
@@ -49,6 +50,36 @@ TEST_F(EntityManagerUVETest, DestroyEntityUVE_IsNoLongerAlive) {
     EXPECT_FALSE(entityManager.IsAliveUVE(entity));
     EXPECT_EQ(entityManager.GetEntityCountUVE(), 0U);
 }
+
+#if UVE_DEBUG
+TEST_F(EntityManagerUVETest, DestroyEntityUVE_StaleHandleAsserts) {
+    const EntityUVE entity = entityManager.CreateEntityUVE();
+    entityManager.DestroyEntityUVE(entity);
+    EXPECT_DEATH({ entityManager.DestroyEntityUVE(entity); }, "");
+}
+
+TEST_F(EntityManagerUVETest, HasComponentUVE_StaleHandleAsserts) {
+    const EntityUVE entity = entityManager.CreateEntityUVE();
+    entityManager.DestroyEntityUVE(entity);
+    EXPECT_DEATH({ static_cast<void>(entityManager.HasComponentUVE<PositionComponentUVE>(entity)); }, "");
+}
+
+TEST_F(EntityManagerUVETest, GetComponentTypesUVE_StaleHandleAsserts) {
+    const EntityUVE entity = entityManager.CreateEntityUVE();
+    entityManager.DestroyEntityUVE(entity);
+    EXPECT_DEATH({ static_cast<void>(entityManager.GetComponentTypesUVE(entity)); }, "");
+}
+#else
+TEST_F(EntityManagerUVETest, StaleHandleQueriesAndDestroyFailClosed) {
+    const EntityUVE entity = entityManager.CreateEntityUVE();
+    entityManager.DestroyEntityUVE(entity);
+
+    EXPECT_NO_FATAL_FAILURE(entityManager.DestroyEntityUVE(entity));
+    EXPECT_FALSE(entityManager.HasComponentUVE<PositionComponentUVE>(entity));
+    EXPECT_TRUE(entityManager.GetComponentTypesUVE(entity).empty());
+    EXPECT_EQ(entityManager.GetEntityCountUVE(), 0U);
+}
+#endif
 
 TEST_F(EntityManagerUVETest, ReusedIndex_YieldsDifferentGeneration) {
     const EntityUVE first = entityManager.CreateEntityUVE();
