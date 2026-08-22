@@ -200,21 +200,24 @@ namespace {
     return instance;
 }
 
-/// One entry in the component-serializer table: `toJson` reads `entity`'s component of the
-/// registered type via IEntityManagerUVE::GetComponentPointerUVE(); `fromJson` adds a fresh
-/// component (built from `json`) to `entity`.
+/// One entry in the component-serializer table: `isValid` checks the authored component before
+/// `toJson` reads it; `fromJson` adds a fresh component (built from `json`) to `entity`.
 struct ComponentRegistrationUVE {
     std::type_index typeIndex;
     std::function<nlohmann::json(IEntityManagerUVE&, EntityUVE)> toJson;
+    std::function<bool(IEntityManagerUVE&, EntityUVE)> isValid;
     std::function<void(IEntityManagerUVE&, EntityUVE, const nlohmann::json&)> fromJson;
 };
 
-template <typename T, typename FromJsonFunc>
-[[nodiscard]] ComponentRegistrationUVE MakeRegistrationUVE(FromJsonFunc fromJsonFunc) {
+template <typename T, typename FromJsonFunc, typename ValidateFunc>
+[[nodiscard]] ComponentRegistrationUVE MakeRegistrationUVE(FromJsonFunc fromJsonFunc, ValidateFunc validateFunc) {
     return ComponentRegistrationUVE{
         std::type_index(typeid(T)),
         [](IEntityManagerUVE& entityManager, EntityUVE entity) -> nlohmann::json {
             return ToJsonUVE(entityManager.GetComponentUVE<T>(entity));
+        },
+        [validateFunc](IEntityManagerUVE& entityManager, EntityUVE entity) {
+            return validateFunc(entityManager.GetComponentUVE<T>(entity));
         },
         [fromJsonFunc](IEntityManagerUVE& entityManager, EntityUVE entity, const nlohmann::json& json) {
             entityManager.AddComponentUVE<T>(entity, fromJsonFunc(json));
@@ -234,7 +237,7 @@ template <typename T, typename FromJsonFunc>
                               throw std::runtime_error("Invalid TransformComponentUVE payload");
                           }
                           return transform;
-                      }));
+                      }, IsTransformComponentValidUVE));
         table.emplace("MeshComponentUVE", MakeRegistrationUVE<MeshComponentUVE>([](const nlohmann::json& json) {
                           const MeshComponentUVE mesh{Asset::AssetGuidUVE{json.at("meshGuid").get<std::uint64_t>()},
                                                      Asset::AssetGuidUVE{json.at("materialGuid").get<std::uint64_t>()}};
@@ -242,7 +245,7 @@ template <typename T, typename FromJsonFunc>
                               throw std::runtime_error("Invalid MeshComponentUVE payload");
                           }
                           return mesh;
-                      }));
+                      }, IsMeshComponentValidUVE));
         table.emplace("PrimitiveMeshComponentUVE",
                       MakeRegistrationUVE<PrimitiveMeshComponentUVE>([](const nlohmann::json& json) {
                           PrimitiveMeshComponentUVE primitive;
@@ -252,7 +255,7 @@ template <typename T, typename FromJsonFunc>
                               throw std::runtime_error("Invalid PrimitiveMeshComponentUVE payload");
                           }
                           return primitive;
-                      }));
+                      }, IsPrimitiveMeshComponentValidUVE));
         table.emplace("LightComponentUVE", MakeRegistrationUVE<LightComponentUVE>([](const nlohmann::json& json) {
                           LightComponentUVE light;
                           light.color = Vector3FromJsonUVE(json.at("color"));
@@ -265,7 +268,7 @@ template <typename T, typename FromJsonFunc>
                               throw std::runtime_error("Invalid LightComponentUVE payload");
                           }
                           return light;
-                      }));
+                      }, IsLightComponentValidUVE));
         table.emplace("CameraComponentUVE", MakeRegistrationUVE<CameraComponentUVE>([](const nlohmann::json& json) {
                           const CameraComponentUVE camera{json.at("fieldOfViewDegrees").get<float>(),
                                                           json.at("nearPlane").get<float>(),
@@ -274,14 +277,14 @@ template <typename T, typename FromJsonFunc>
                               throw std::runtime_error("Invalid CameraComponentUVE payload");
                           }
                           return camera;
-                      }));
+                      }, IsCameraComponentValidUVE));
         table.emplace("NameComponentUVE", MakeRegistrationUVE<NameComponentUVE>([](const nlohmann::json& json) {
                           const NameComponentUVE component{json.at("name").get<std::string>()};
                           if (!IsNameComponentValidUVE(component)) {
                               throw std::runtime_error("Invalid NameComponentUVE payload");
                           }
                           return component;
-                      }));
+                      }, IsNameComponentValidUVE));
         table.emplace("ColliderComponentUVE", MakeRegistrationUVE<ColliderComponentUVE>([](const nlohmann::json& json) {
                           ColliderComponentUVE collider;
                           collider.halfExtents = Vector3FromJsonUVE(json.at("halfExtents"));
@@ -298,7 +301,7 @@ template <typename T, typename FromJsonFunc>
                               throw std::runtime_error("Invalid ColliderComponentUVE payload");
                           }
                           return collider;
-                      }));
+                      }, IsColliderComponentValidUVE));
         table.emplace("AreaComponentUVE", MakeRegistrationUVE<AreaComponentUVE>([](const nlohmann::json& json) {
                           AreaComponentUVE area;
                           area.halfExtents = Vector3FromJsonUVE(json.at("halfExtents"));
@@ -308,7 +311,7 @@ template <typename T, typename FromJsonFunc>
                               throw std::runtime_error("Invalid AreaComponentUVE payload");
                           }
                           return area;
-                      }));
+                      }, IsAreaComponentValidUVE));
         table.emplace("RigidBodyComponentUVE", MakeRegistrationUVE<RigidBodyComponentUVE>([](const nlohmann::json& json) {
                           RigidBodyComponentUVE rigidBody;
                           rigidBody.mass = json.at("mass").get<float>();
@@ -327,7 +330,7 @@ template <typename T, typename FromJsonFunc>
                               throw std::runtime_error("Invalid RigidBodyComponentUVE payload");
                           }
                           return rigidBody;
-                      }));
+                      }, IsRigidBodyComponentValidUVE));
         table.emplace("AudioSourceComponentUVE",
                       MakeRegistrationUVE<AudioSourceComponentUVE>([](const nlohmann::json& json) {
                           AudioSourceComponentUVE source;
@@ -345,14 +348,14 @@ template <typename T, typename FromJsonFunc>
                               throw std::runtime_error("Invalid AudioSourceComponentUVE payload");
                           }
                           return source;
-                      }));
+                      }, IsAudioSourceComponentValidUVE));
         table.emplace("ScriptComponentUVE", MakeRegistrationUVE<ScriptComponentUVE>([](const nlohmann::json& json) {
                           const ScriptComponentUVE script{json.at("scriptAssetPath").get<std::string>()};
                           if (!IsScriptComponentValidUVE(script)) {
                               throw std::runtime_error("Invalid ScriptComponentUVE payload");
                           }
                           return script;
-                      }));
+                      }, IsScriptComponentValidUVE));
         table.emplace("ParticleEmitterComponentUVE",
                       MakeRegistrationUVE<ParticleEmitterComponentUVE>([](const nlohmann::json& json) {
                           const ParticleEmitterComponentUVE emitter{json.at("maxParticles").get<std::uint32_t>()};
@@ -360,10 +363,11 @@ template <typename T, typename FromJsonFunc>
                               throw std::runtime_error("Invalid ParticleEmitterComponentUVE payload");
                           }
                           return emitter;
-                      }));
+                      }, IsParticleEmitterComponentValidUVE));
         table.emplace("PrefabInstanceComponentUVE",
                       MakeRegistrationUVE<PrefabInstanceComponentUVE>(
-                          [](const nlohmann::json& json) { return PrefabInstanceFromJsonUVE(json); }));
+                          [](const nlohmann::json& json) { return PrefabInstanceFromJsonUVE(json); },
+                          IsPrefabInstanceComponentValidUVE));
 
         return table;
     }();
@@ -465,7 +469,14 @@ template <typename T, typename FromJsonFunc>
                           entity.index, sourceDescription);
                 return std::nullopt;
             }
-            componentsJson[*name] = GetRegistrationsByNameUVE().at(*name).toJson(entityManager, entity);
+            const ComponentRegistrationUVE& registration = GetRegistrationsByNameUVE().at(*name);
+            if (!registration.isValid(entityManager, entity)) {
+                UVE_ERROR("SceneSerializerUVE: component type \"{}\" on entity index {} failed authored validation "
+                          "while encoding \"{}\"",
+                          *name, entity.index, sourceDescription);
+                return std::nullopt;
+            }
+            componentsJson[*name] = registration.toJson(entityManager, entity);
         }
         entitiesJson.push_back({{"localId", entityToLocalId.at(entity)}, {"components", std::move(componentsJson)}});
     }
