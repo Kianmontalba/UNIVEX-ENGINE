@@ -32,7 +32,7 @@ The complete filename inventory supplied for Motion Query/Motion Matching is mai
 | **Control Rig Controls** | Position/rotation/scale controls, custom shapes, local/world/bone spaces, parent switching, limits, and animator-friendly handles. |
 | **IK & Constraint Suite** | Two-bone IK, FABRIK/full-body solving where appropriate, pole vectors, foot IK, hand IK, aim/look-at, parent/orient/position constraints, limits, and space switching. |
 | **Animation Baking from Control Rig** | Evaluate the rig across a timeline and bake the resulting poses into an animation clip, preserving curves/events where applicable. |
-| **Runtime Control Rig** | Allow selected rig logic to run during gameplay for procedural aiming, weapon IK, foot placement, recoil, look-at, leaning, climbing, and pose correction. |
+| **Runtime Control Rig** | Allow selected rig logic to run during gameplay for procedural aiming, weapon IK, foot placement, recoil, look-at, leaning, climbing, and pose correction. Increment 465 hardens the existing TwoBoneIK runtime slice to reject finite control positions whose pole-minus-root vector overflows before fallback projection or pose publication; broader runtime Control Rig behavior remains partial. |
 
 ---
 
