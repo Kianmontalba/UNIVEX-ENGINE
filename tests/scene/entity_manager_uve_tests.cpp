@@ -116,6 +116,26 @@ TEST_F(EntityManagerUVETest, RemoveComponentUVE_InvalidRequestsFailClosed) {
 }
 #endif
 
+#if UVE_DEBUG
+TEST_F(EntityManagerUVETest, GetComponentPointerUVE_InvalidRequestsAsserts) {
+    const EntityUVE stale = entityManager.CreateEntityUVE();
+    entityManager.DestroyEntityUVE(stale);
+    EXPECT_DEATH({ static_cast<void>(entityManager.GetComponentPointerUVE(stale, std::type_index(typeid(PositionComponentUVE)))); }, "");
+
+    const EntityUVE live = entityManager.CreateEntityUVE();
+    EXPECT_DEATH({ static_cast<void>(entityManager.GetComponentPointerUVE(live, std::type_index(typeid(PositionComponentUVE)))); }, "");
+}
+#else
+TEST_F(EntityManagerUVETest, GetComponentPointerUVE_InvalidRequestsReturnNull) {
+    const EntityUVE stale = entityManager.CreateEntityUVE();
+    entityManager.DestroyEntityUVE(stale);
+    EXPECT_EQ(entityManager.GetComponentPointerUVE(stale, std::type_index(typeid(PositionComponentUVE))), nullptr);
+
+    const EntityUVE live = entityManager.CreateEntityUVE();
+    EXPECT_EQ(entityManager.GetComponentPointerUVE(live, std::type_index(typeid(PositionComponentUVE))), nullptr);
+}
+#endif
+
 TEST_F(EntityManagerUVETest, AddGetHasRemoveComponent_PlainData_RoundTrips) {
     const EntityUVE entity = entityManager.CreateEntityUVE();
 
