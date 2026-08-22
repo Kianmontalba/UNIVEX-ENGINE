@@ -10,6 +10,7 @@
 #include "uve/asset/png_importer_uve.h"
 
 #include <cctype>
+#include <exception>
 #include <fstream>
 #include <iterator>
 #include <mutex>
@@ -294,8 +295,21 @@ AssetGuidUVE AssetImporterUVE::ImportUVE(const std::filesystem::path& sourcePath
         importFunc = it->second;
     }
 
-    if (!importFunc(sourcePath, destinationPath, settings)) {
-        UVE_ERROR("AssetImporterUVE: import failed for \"{}\"", sourcePath.string());
+    bool imported = false;
+    std::string failureReason;
+    try {
+        imported = importFunc(sourcePath, destinationPath, settings);
+    } catch (const std::exception& exception) {
+        failureReason = "importer threw: " + std::string(exception.what());
+    } catch (...) {
+        failureReason = "importer threw an unknown exception";
+    }
+    if (!imported) {
+        if (failureReason.empty()) {
+            UVE_ERROR("AssetImporterUVE: import failed for \"{}\"", sourcePath.string());
+        } else {
+            UVE_ERROR("AssetImporterUVE: import failed for \"{}\": {}", sourcePath.string(), failureReason);
+        }
         return kInvalidAssetGuidUVE;
     }
 
