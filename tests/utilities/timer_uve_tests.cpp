@@ -4,6 +4,7 @@
 #include "uve/utilities/timer_uve.h"
 
 #include <chrono>
+#include <limits>
 #include <thread>
 
 #include <gtest/gtest.h>
@@ -38,6 +39,26 @@ TEST(TimerUVETest, DeltaTime_ClampedToConfiguredMax) {
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
     timer.Tick();
     EXPECT_LE(timer.GetDeltaTimeUVE(), 0.01 + 1e-6);
+}
+
+TEST(TimerUVETest, InvalidTimingConfigurationPreservesLastValidValues) {
+    TimerUVE timer;
+    timer.SetMaxDeltaTimeUVE(0.01);
+    timer.SetFixedTimestepUVE(0.01);
+    timer.SetMaxDeltaTimeUVE(0.0);
+    timer.SetMaxDeltaTimeUVE(-1.0);
+    timer.SetMaxDeltaTimeUVE(std::numeric_limits<double>::quiet_NaN());
+    timer.SetMaxDeltaTimeUVE(std::numeric_limits<double>::infinity());
+    timer.SetFixedTimestepUVE(0.0);
+    timer.SetFixedTimestepUVE(-1.0);
+    timer.SetFixedTimestepUVE(std::numeric_limits<double>::quiet_NaN());
+    timer.SetFixedTimestepUVE(std::numeric_limits<double>::infinity());
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(35));
+    timer.Tick();
+    EXPECT_LE(timer.GetDeltaTimeUVE(), 0.01 + 1e-6);
+    const FixedStepResultUVE result = timer.AdvanceFixedStepUVE();
+    EXPECT_EQ(result.stepsToRun, 1);
 }
 
 TEST(TimerUVETest, Reset_ZerosTotalTime) {

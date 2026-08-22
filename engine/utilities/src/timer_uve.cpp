@@ -7,6 +7,13 @@
 #include <cmath>
 
 namespace UVE::Utilities {
+namespace {
+
+[[nodiscard]] bool IsValidPositiveTimingValueUVE(const double value) noexcept {
+    return std::isfinite(value) && value > 0.0;
+}
+
+} // namespace
 
 TimerUVE::TimerUVE() : m_lastTickTime(std::chrono::steady_clock::now()) {}
 
@@ -40,11 +47,15 @@ void TimerUVE::Reset() {
 }
 
 void TimerUVE::SetMaxDeltaTimeUVE(double maxDeltaSeconds) {
-    m_maxDeltaTime = maxDeltaSeconds;
+    if (IsValidPositiveTimingValueUVE(maxDeltaSeconds)) {
+        m_maxDeltaTime = maxDeltaSeconds;
+    }
 }
 
 void TimerUVE::SetFixedTimestepUVE(double fixedDeltaSeconds) {
-    m_fixedDeltaTime = fixedDeltaSeconds;
+    if (IsValidPositiveTimingValueUVE(fixedDeltaSeconds)) {
+        m_fixedDeltaTime = fixedDeltaSeconds;
+    }
 }
 
 FixedStepResultUVE TimerUVE::AdvanceFixedStepUVE() {
