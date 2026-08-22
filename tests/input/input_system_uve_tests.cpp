@@ -157,6 +157,21 @@ TEST_F(InputSystemUVETest, RegisterActionUVE_RejectsUnboundedAndMalformedNames) 
     EXPECT_TRUE(inputSystem.IsActionHeldUVE("InvalidType"));
 }
 
+TEST_F(InputSystemUVETest, RegisterActionUVE_RejectsNewEntriesAtCountCapButAllowsReplacement) {
+    for (std::size_t index = 0U; index < kMaximumInputActionsUVE; ++index) {
+        inputSystem.RegisterActionUVE(
+            InputActionUVE{"Action_" + std::to_string(index), InputActionTypeUVE::Button, {}, {}});
+    }
+
+    const std::string overflowName = "Action_" + std::to_string(kMaximumInputActionsUVE);
+    inputSystem.RegisterActionUVE(InputActionUVE{overflowName, InputActionTypeUVE::Button, {}, {}});
+    EXPECT_FALSE(inputSystem.RemapActionUVE(overflowName, {KeyBindingUVE(KeyCodeUVE::Enter)}, {}));
+
+    inputSystem.RegisterActionUVE(
+        InputActionUVE{"Action_0", InputActionTypeUVE::Button, {KeyBindingUVE(KeyCodeUVE::Enter)}, {}});
+    EXPECT_TRUE(inputSystem.RemapActionUVE("Action_0", {KeyBindingUVE(KeyCodeUVE::Space)}, {}));
+}
+
 TEST_F(InputSystemUVETest, ButtonAction_SingleBinding_TriggeredHeldReleased) {
     inputSystem.RegisterActionUVE(
         InputActionUVE{"Jump", InputActionTypeUVE::Button, {KeyBindingUVE(KeyCodeUVE::Space)}, {}});
