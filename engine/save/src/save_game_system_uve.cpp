@@ -284,6 +284,11 @@ bool SaveGameSystemUVE::SaveUVE(int slotIndex, Scene::IEntityManagerUVE& entityM
         UVE_ERROR("SaveGameSystemUVE: SaveUVE failed to re-read scratch world file for slot {}", slotIndex);
         return false;
     }
+    if (scratchFile->first.assetType != Asset::AssetKindUVE::Scene) {
+        UVE_ERROR("SaveGameSystemUVE: SaveUVE scratch world file has unexpected asset type {} for slot {}",
+                  static_cast<std::uint32_t>(scratchFile->first.assetType), slotIndex);
+        return false;
+    }
 
     GameStateMetadataUVE finalMetadata = metadata;
     finalMetadata.savedAtUnixSecondsUVE =
