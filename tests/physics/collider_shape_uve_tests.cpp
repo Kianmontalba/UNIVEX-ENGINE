@@ -129,6 +129,21 @@ TEST(ShapeNarrowPhaseUVETest, CapsuleCapsuleUsesFinitePrecisionForLargeRadiusOve
     EXPECT_FLOAT_EQ(penetration->axis.z, 0.0F);
 }
 
+TEST(ShapeNarrowPhaseUVETest, CapsuleAabbUsesFinitePrecisionForLargeRadiusOverlap) {
+    const float maximumRadius = std::numeric_limits<float>::max();
+    const float expectedDepth = 2.0e30F;
+    const Math::AabbUVE box{{0.0F, -1.0F, -1.0F}, {expectedDepth, 1.0F, 1.0F}};
+    const std::optional<Math::PenetrationUVE> penetration =
+        Detail::ComputeCapsuleAabbPenetrationUVE(
+            box, {maximumRadius, 0.0F, 0.0F}, {maximumRadius, 0.0F, 0.0F}, maximumRadius);
+    ASSERT_TRUE(penetration.has_value());
+    EXPECT_TRUE(std::isfinite(penetration->depth));
+    EXPECT_FLOAT_EQ(penetration->depth, expectedDepth);
+    EXPECT_FLOAT_EQ(penetration->axis.x, -1.0F);
+    EXPECT_FLOAT_EQ(penetration->axis.y, 0.0F);
+    EXPECT_FLOAT_EQ(penetration->axis.z, 0.0F);
+}
+
 TEST(ShapeNarrowPhaseUVETest, SphereAabbUsesFinitePrecisionForLargeRadiusOverlap) {
     const float maximumRadius = std::numeric_limits<float>::max();
     const Math::AabbUVE box{{0.0F, -1.0F, -1.0F}, {1.0F, 1.0F, 1.0F}};
