@@ -3,6 +3,7 @@
 #include "uve/scripting/script_rotation_value_uve.h"
 
 #include <cmath>
+#include <limits>
 #include <numbers>
 
 namespace UVE::Scripting {
@@ -113,10 +114,37 @@ ScriptRotationVectorResultUVE EvaluateScriptRotationRotateUVE(
     if (!Math::TryNormalizeUVE(rotation.value, normalized)) {
         return {ScriptRotationEvaluationCodeUVE::DegenerateInput, {}};
     }
-    const Math::Vector3UVE rotated = Math::RotateVectorUVE(normalized, vector.value);
-    if (!std::isfinite(rotated.x) || !std::isfinite(rotated.y) || !std::isfinite(rotated.z)) {
+    const double axisX = static_cast<double>(normalized.x);
+    const double axisY = static_cast<double>(normalized.y);
+    const double axisZ = static_cast<double>(normalized.z);
+    const double vectorX = static_cast<double>(vector.value.x);
+    const double vectorY = static_cast<double>(vector.value.y);
+    const double vectorZ = static_cast<double>(vector.value.z);
+    const double crossX = axisY * vectorZ - axisZ * vectorY;
+    const double crossY = axisZ * vectorX - axisX * vectorZ;
+    const double crossZ = axisX * vectorY - axisY * vectorX;
+    const double twiceCrossX = 2.0 * crossX;
+    const double twiceCrossY = 2.0 * crossY;
+    const double twiceCrossZ = 2.0 * crossZ;
+    const double correctionX = axisY * twiceCrossZ - axisZ * twiceCrossY;
+    const double correctionY = axisZ * twiceCrossX - axisX * twiceCrossZ;
+    const double correctionZ = axisX * twiceCrossY - axisY * twiceCrossX;
+    const double rotatedX = vectorX + twiceCrossX * static_cast<double>(normalized.w) + correctionX;
+    const double rotatedY = vectorY + twiceCrossY * static_cast<double>(normalized.w) + correctionY;
+    const double rotatedZ = vectorZ + twiceCrossZ * static_cast<double>(normalized.w) + correctionZ;
+    const double maximumFloat = static_cast<double>(std::numeric_limits<float>::max());
+    const auto IsRepresentableFloatUVE = [maximumFloat](const double value) noexcept {
+        return std::isfinite(value) && std::fabs(value) <= maximumFloat;
+    };
+    if (!IsRepresentableFloatUVE(rotatedX) || !IsRepresentableFloatUVE(rotatedY) ||
+        !IsRepresentableFloatUVE(rotatedZ)) {
         return {ScriptRotationEvaluationCodeUVE::NonFiniteInput, {}};
     }
+    const Math::Vector3UVE rotated{
+        static_cast<float>(rotatedX),
+        static_cast<float>(rotatedY),
+        static_cast<float>(rotatedZ),
+    };
     return {ScriptRotationEvaluationCodeUVE::Applied, {rotated}};
 }
 
