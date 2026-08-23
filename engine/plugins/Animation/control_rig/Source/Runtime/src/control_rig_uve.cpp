@@ -124,6 +124,30 @@ constexpr float kEpsilonUVE = 1.0e-5F;
     return IsFiniteVectorUVE(outVector);
 }
 
+[[nodiscard]] Math::Vector3UVE NormalizeProjectedPoleUVE(
+    const Math::Vector3UVE& poleOffset, const Math::Vector3UVE& direction,
+    const Math::Vector3UVE& fallback) noexcept {
+    const double poleX = static_cast<double>(poleOffset.x);
+    const double poleY = static_cast<double>(poleOffset.y);
+    const double poleZ = static_cast<double>(poleOffset.z);
+    const double directionX = static_cast<double>(direction.x);
+    const double directionY = static_cast<double>(direction.y);
+    const double directionZ = static_cast<double>(direction.z);
+    const double dot = poleX * directionX + poleY * directionY + poleZ * directionZ;
+    const double projectedX = poleX - directionX * dot;
+    const double projectedY = poleY - directionY * dot;
+    const double projectedZ = poleZ - directionZ * dot;
+    const double scale = std::max(std::fabs(projectedX),
+                                  std::max(std::fabs(projectedY), std::fabs(projectedZ)));
+    if (!std::isfinite(dot) || !std::isfinite(scale) || scale == 0.0) {
+        return fallback;
+    }
+    return NormalizeVectorUVE(
+        {static_cast<float>(projectedX / scale), static_cast<float>(projectedY / scale),
+         static_cast<float>(projectedZ / scale)},
+        fallback);
+}
+
 [[nodiscard]] bool TryMakeBoneDirectionRotationUVE(const Math::Vector3UVE& direction,
                                                       Math::QuaternionUVE& outRotation) noexcept {
     const Math::Vector3UVE normalizedDirection = NormalizeVectorUVE(direction, {});
@@ -328,8 +352,8 @@ TwoBoneIKSolveResultUVE SolveTwoBoneIKUVE(const TransformPoseUVE& rootPose,
     if (!IsFiniteVectorUVE(poleOffset)) {
         return result;
     }
-    const Math::Vector3UVE projectedPole = poleOffset - direction * Math::DotUVE(poleOffset, direction);
-    const Math::Vector3UVE bendDirection = NormalizeVectorUVE(projectedPole, {0.0F, 1.0F, 0.0F});
+    const Math::Vector3UVE bendDirection = NormalizeProjectedPoleUVE(
+        poleOffset, direction, {0.0F, 1.0F, 0.0F});
     const double cosine = std::clamp((firstLength * firstLength + solvedDistance * solvedDistance -
                                       secondLength * secondLength) /
                                          (2.0 * firstLength * solvedDistance), -1.0, 1.0);
