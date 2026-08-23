@@ -3,6 +3,7 @@
 #include "uve/scene/components/collider_component_uve.h"
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include <vector>
 
@@ -85,6 +86,19 @@ TEST(ShapeNarrowPhaseUVETest, RadiusSumOverflowFailsClosedBeforePenetrationPubli
     EXPECT_FALSE(Detail::ComputeCapsuleCapsulePenetrationUVE(
                      {}, {}, maximumRadius, {}, {}, maximumRadius)
                      .has_value());
+}
+
+TEST(ShapeNarrowPhaseUVETest, SphereSphereUsesFinitePrecisionForLargeRadiusOverlap) {
+    const float radius = std::numeric_limits<float>::max() * 0.5F;
+    const std::optional<Math::PenetrationUVE> penetration =
+        Detail::ComputeSphereSpherePenetrationUVE({-radius, 0.0F, 0.0F}, radius,
+                                                   {0.0F, 0.0F, 0.0F}, radius);
+    ASSERT_TRUE(penetration.has_value());
+    EXPECT_TRUE(std::isfinite(penetration->depth));
+    EXPECT_FLOAT_EQ(penetration->depth, radius);
+    EXPECT_FLOAT_EQ(penetration->axis.x, 1.0F);
+    EXPECT_FLOAT_EQ(penetration->axis.y, 0.0F);
+    EXPECT_FLOAT_EQ(penetration->axis.z, 0.0F);
 }
 
 TEST(ShapeNarrowPhaseUVETest, SphereAabbUsesFinitePrecisionForLargeRadiusOverlap) {
