@@ -35,9 +35,29 @@ constexpr float kTieToleranceUVE = 1.0e-6F;
     return MotionMatchingDatabaseValidationResultUVE{code, index, message};
 }
 
-[[nodiscard]] float DistanceSquaredUVE(const Math::Vector3UVE& lhs,
-                                       const Math::Vector3UVE& rhs) noexcept {
-    return Math::LengthSquaredUVE(lhs - rhs);
+[[nodiscard]] double DistanceSquaredUVE(const Math::Vector3UVE& lhs,
+                                        const Math::Vector3UVE& rhs) noexcept {
+    if (!IsFiniteVectorUVE(lhs) || !IsFiniteVectorUVE(rhs)) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+    const double x = static_cast<double>(lhs.x) - static_cast<double>(rhs.x);
+    const double y = static_cast<double>(lhs.y) - static_cast<double>(rhs.y);
+    const double z = static_cast<double>(lhs.z) - static_cast<double>(rhs.z);
+    const double scale = std::max(std::fabs(x), std::max(std::fabs(y), std::fabs(z)));
+    if (!std::isfinite(scale)) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+    if (scale == 0.0) {
+        return 0.0;
+    }
+    const double scaledLengthSquared = (x / scale) * (x / scale) +
+                                       (y / scale) * (y / scale) +
+                                       (z / scale) * (z / scale);
+    if (!std::isfinite(scaledLengthSquared)) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+    const double distanceSquared = (scale * scale) * scaledLengthSquared;
+    return std::isfinite(distanceSquared) ? distanceSquared : std::numeric_limits<double>::quiet_NaN();
 }
 
 [[nodiscard]] bool TryBuildFiniteVelocityUVE(const TransformPoseUVE& previousPose,
@@ -302,11 +322,11 @@ MotionMatchingResultUVE FindBestMotionMatchUVE(const MotionQueryUVE& query,
             continue;
         }
 
-        float cost = weights.velocityWeight *
-                     DistanceSquaredUVE(query.rootVelocity, candidate.feature.rootVelocity);
+        double cost = static_cast<double>(weights.velocityWeight) *
+                      DistanceSquaredUVE(query.rootVelocity, candidate.feature.rootVelocity);
         const float facingDot = std::clamp(Math::DotUVE(normalizedQueryFacing,
                                                          normalizedCandidateFacing), -1.0F, 1.0F);
-        cost += weights.facingWeight * (1.0F - facingDot);
+        cost += static_cast<double>(weights.facingWeight) * (1.0 - static_cast<double>(facingDot));
         if (!query.trajectory.empty()) {
             double trajectoryCost = 0.0;
             for (std::size_t sampleIndex = 0U; sampleIndex < query.trajectory.size(); ++sampleIndex) {
@@ -317,23 +337,26 @@ MotionMatchingResultUVE FindBestMotionMatchUVE(const MotionQueryUVE& query,
             const double trajectoryContribution =
                 static_cast<double>(weights.trajectoryWeight) * trajectoryCost /
                 static_cast<double>(query.trajectory.size());
-            if (!std::isfinite(trajectoryContribution) ||
-                trajectoryContribution > static_cast<double>(std::numeric_limits<float>::max())) {
-                cost = std::numeric_limits<float>::infinity();
+            if (!std::isfinite(trajectoryContribution)) {
+                cost = std::numeric_limits<double>::infinity();
             } else {
-                cost += static_cast<float>(trajectoryContribution);
+                cost += trajectoryContribution;
             }
         }
-        if (!std::isfinite(cost)) {
+        if (!std::isfinite(cost) || cost > static_cast<double>(std::numeric_limits<float>::max())) {
+            continue;
+        }
+        const float narrowedCost = static_cast<float>(cost);
+        if (!std::isfinite(narrowedCost)) {
             continue;
         }
 
         ++evaluated;
-        if (!hasBest || IsBetterMatchUVE(cost, candidate.candidateId, candidate.sampleTimeSeconds,
+        if (!hasBest || IsBetterMatchUVE(narrowedCost, candidate.candidateId, candidate.sampleTimeSeconds,
                                          index, bestCost, bestId, bestTime, bestIndex)) {
             hasBest = true;
             bestIndex = index;
-            bestCost = cost;
+            bestCost = narrowedCost;
             bestId = candidate.candidateId;
             bestTime = candidate.sampleTimeSeconds;
         }
