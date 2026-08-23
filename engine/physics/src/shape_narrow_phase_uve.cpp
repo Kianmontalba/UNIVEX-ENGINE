@@ -367,49 +367,99 @@ std::optional<Math::PenetrationUVE> ComputeCapsuleCapsulePenetrationUVE(
         return std::nullopt;
     }
 
-    const Math::Vector3UVE firstDirection = firstSegmentEnd - firstSegmentStart;
-    const Math::Vector3UVE secondDirection = secondSegmentEnd - secondSegmentStart;
-    const double firstLengthSquared = static_cast<double>(Math::LengthSquaredUVE(firstDirection));
-    const double secondLengthSquared = static_cast<double>(Math::LengthSquaredUVE(secondDirection));
-    const double directionDot = static_cast<double>(Math::DotUVE(firstDirection, secondDirection));
-    const Math::Vector3UVE offset = secondSegmentStart - firstSegmentStart;
-    const double firstOffsetDot = static_cast<double>(Math::DotUVE(firstDirection, offset));
-    const double secondOffsetDot = static_cast<double>(Math::DotUVE(secondDirection, offset));
+    const double firstDirectionX = static_cast<double>(firstSegmentEnd.x) - static_cast<double>(firstSegmentStart.x);
+    const double firstDirectionY = static_cast<double>(firstSegmentEnd.y) - static_cast<double>(firstSegmentStart.y);
+    const double firstDirectionZ = static_cast<double>(firstSegmentEnd.z) - static_cast<double>(firstSegmentStart.z);
+    const double secondDirectionX = static_cast<double>(secondSegmentEnd.x) - static_cast<double>(secondSegmentStart.x);
+    const double secondDirectionY = static_cast<double>(secondSegmentEnd.y) - static_cast<double>(secondSegmentStart.y);
+    const double secondDirectionZ = static_cast<double>(secondSegmentEnd.z) - static_cast<double>(secondSegmentStart.z);
+    const double firstLengthSquared = firstDirectionX * firstDirectionX + firstDirectionY * firstDirectionY +
+                                      firstDirectionZ * firstDirectionZ;
+    const double secondLengthSquared = secondDirectionX * secondDirectionX + secondDirectionY * secondDirectionY +
+                                       secondDirectionZ * secondDirectionZ;
+    const double directionDot = firstDirectionX * secondDirectionX + firstDirectionY * secondDirectionY +
+                                firstDirectionZ * secondDirectionZ;
+    const double offsetX = static_cast<double>(secondSegmentStart.x) - static_cast<double>(firstSegmentStart.x);
+    const double offsetY = static_cast<double>(secondSegmentStart.y) - static_cast<double>(firstSegmentStart.y);
+    const double offsetZ = static_cast<double>(secondSegmentStart.z) - static_cast<double>(firstSegmentStart.z);
+    const double firstOffsetDot = firstDirectionX * offsetX + firstDirectionY * offsetY + firstDirectionZ * offsetZ;
+    const double secondOffsetDot = secondDirectionX * offsetX + secondDirectionY * offsetY + secondDirectionZ * offsetZ;
+    if (!std::isfinite(firstLengthSquared) || !std::isfinite(secondLengthSquared) || !std::isfinite(directionDot) ||
+        !std::isfinite(firstOffsetDot) || !std::isfinite(secondOffsetDot)) {
+        return std::nullopt;
+    }
 
-    float bestFirstTime = 0.0F;
-    float bestSecondTime = 0.0F;
-    float bestDistanceSquared = std::numeric_limits<float>::infinity();
-    const auto ConsiderPairUVE = [&](const float firstTime, const float secondTime) {
-        const Math::Vector3UVE firstPoint = firstSegmentStart + firstDirection * firstTime;
-        const Math::Vector3UVE secondPoint = secondSegmentStart + secondDirection * secondTime;
-        const float distanceSquared = Math::LengthSquaredUVE(secondPoint - firstPoint);
+    double bestFirstTime = 0.0;
+    double bestSecondTime = 0.0;
+    double bestDistanceSquared = std::numeric_limits<double>::infinity();
+    double bestDeltaX = 0.0;
+    double bestDeltaY = 0.0;
+    double bestDeltaZ = 0.0;
+    const auto ConsiderPairUVE = [&](const double firstTime, const double secondTime) {
+        const double firstPointX = static_cast<double>(firstSegmentStart.x) + firstDirectionX * firstTime;
+        const double firstPointY = static_cast<double>(firstSegmentStart.y) + firstDirectionY * firstTime;
+        const double firstPointZ = static_cast<double>(firstSegmentStart.z) + firstDirectionZ * firstTime;
+        const double secondPointX = static_cast<double>(secondSegmentStart.x) + secondDirectionX * secondTime;
+        const double secondPointY = static_cast<double>(secondSegmentStart.y) + secondDirectionY * secondTime;
+        const double secondPointZ = static_cast<double>(secondSegmentStart.z) + secondDirectionZ * secondTime;
+        const double deltaX = secondPointX - firstPointX;
+        const double deltaY = secondPointY - firstPointY;
+        const double deltaZ = secondPointZ - firstPointZ;
+        const double scale = std::max(std::fabs(deltaX), std::max(std::fabs(deltaY), std::fabs(deltaZ)));
+        if (!std::isfinite(scale)) {
+            return;
+        }
+        double distanceSquared = 0.0;
+        if (scale != 0.0) {
+            const double scaledDistanceSquared = (deltaX / scale) * (deltaX / scale) +
+                                                 (deltaY / scale) * (deltaY / scale) +
+                                                 (deltaZ / scale) * (deltaZ / scale);
+            if (!std::isfinite(scaledDistanceSquared)) {
+                return;
+            }
+            distanceSquared = (scale * scale) * scaledDistanceSquared;
+            if (!std::isfinite(distanceSquared)) {
+                return;
+            }
+        }
         if (distanceSquared < bestDistanceSquared) {
             bestDistanceSquared = distanceSquared;
             bestFirstTime = firstTime;
             bestSecondTime = secondTime;
+            bestDeltaX = deltaX;
+            bestDeltaY = deltaY;
+            bestDeltaZ = deltaZ;
         }
     };
-    const auto ClosestSecondTimeUVE = [&](const Math::Vector3UVE firstPoint) {
+    const auto ClosestSecondTimeUVE = [&](const double pointX, const double pointY, const double pointZ) {
         if (secondLengthSquared <= 0.0) {
-            return 0.0F;
+            return 0.0;
         }
-        return std::clamp(Math::DotUVE(firstPoint - secondSegmentStart, secondDirection) /
-                              static_cast<float>(secondLengthSquared),
-                          0.0F, 1.0F);
+        const double relativeX = pointX - static_cast<double>(secondSegmentStart.x);
+        const double relativeY = pointY - static_cast<double>(secondSegmentStart.y);
+        const double relativeZ = pointZ - static_cast<double>(secondSegmentStart.z);
+        return std::clamp((relativeX * secondDirectionX + relativeY * secondDirectionY +
+                           relativeZ * secondDirectionZ) /
+                              secondLengthSquared,
+                          0.0, 1.0);
     };
-    const auto ClosestFirstTimeUVE = [&](const Math::Vector3UVE secondPoint) {
+    const auto ClosestFirstTimeUVE = [&](const double pointX, const double pointY, const double pointZ) {
         if (firstLengthSquared <= 0.0) {
-            return 0.0F;
+            return 0.0;
         }
-        return std::clamp(Math::DotUVE(secondPoint - firstSegmentStart, firstDirection) /
-                              static_cast<float>(firstLengthSquared),
-                          0.0F, 1.0F);
+        const double relativeX = pointX - static_cast<double>(firstSegmentStart.x);
+        const double relativeY = pointY - static_cast<double>(firstSegmentStart.y);
+        const double relativeZ = pointZ - static_cast<double>(firstSegmentStart.z);
+        return std::clamp((relativeX * firstDirectionX + relativeY * firstDirectionY +
+                           relativeZ * firstDirectionZ) /
+                              firstLengthSquared,
+                          0.0, 1.0);
     };
 
-    ConsiderPairUVE(0.0F, ClosestSecondTimeUVE(firstSegmentStart));
-    ConsiderPairUVE(1.0F, ClosestSecondTimeUVE(firstSegmentEnd));
-    ConsiderPairUVE(ClosestFirstTimeUVE(secondSegmentStart), 0.0F);
-    ConsiderPairUVE(ClosestFirstTimeUVE(secondSegmentEnd), 1.0F);
+    ConsiderPairUVE(0.0, ClosestSecondTimeUVE(firstSegmentStart.x, firstSegmentStart.y, firstSegmentStart.z));
+    ConsiderPairUVE(1.0, ClosestSecondTimeUVE(firstSegmentEnd.x, firstSegmentEnd.y, firstSegmentEnd.z));
+    ConsiderPairUVE(ClosestFirstTimeUVE(secondSegmentStart.x, secondSegmentStart.y, secondSegmentStart.z), 0.0);
+    ConsiderPairUVE(ClosestFirstTimeUVE(secondSegmentEnd.x, secondSegmentEnd.y, secondSegmentEnd.z), 1.0);
 
     const double denominator = firstLengthSquared * secondLengthSquared - directionDot * directionDot;
     constexpr double kParallelEpsilonUVE = 1.0e-12;
@@ -418,27 +468,43 @@ std::optional<Math::PenetrationUVE> ComputeCapsuleCapsulePenetrationUVE(
                                  denominator;
         const double secondTime = (firstLengthSquared * secondOffsetDot - directionDot * firstOffsetDot) /
                                   denominator;
-        if (firstTime >= 0.0 && firstTime <= 1.0 && secondTime >= 0.0 && secondTime <= 1.0) {
-            ConsiderPairUVE(static_cast<float>(firstTime), static_cast<float>(secondTime));
+        if (std::isfinite(firstTime) && std::isfinite(secondTime) && firstTime >= 0.0 && firstTime <= 1.0 &&
+            secondTime >= 0.0 && secondTime <= 1.0) {
+            ConsiderPairUVE(firstTime, secondTime);
         }
     }
-
-    const Math::Vector3UVE firstPoint = firstSegmentStart + firstDirection * bestFirstTime;
-    const Math::Vector3UVE secondPoint = secondSegmentStart + secondDirection * bestSecondTime;
-    const Math::Vector3UVE delta = secondPoint - firstPoint;
-    const float combinedRadius = firstRadius + secondRadius;
-    if (!std::isfinite(combinedRadius)) {
+    if (!std::isfinite(bestDistanceSquared)) {
         return std::nullopt;
     }
-    if (bestDistanceSquared >= combinedRadius * combinedRadius) {
+
+    const double combinedRadius = static_cast<double>(firstRadius) + static_cast<double>(secondRadius);
+    const double maximumFloat = static_cast<double>(std::numeric_limits<float>::max());
+    if (!std::isfinite(combinedRadius) || combinedRadius <= 0.0 || combinedRadius > maximumFloat) {
         return std::nullopt;
     }
-    if (bestDistanceSquared <= 0.0F) {
-        return Math::PenetrationUVE{{1.0F, 0.0F, 0.0F}, combinedRadius};
+    const double combinedRadiusSquared = combinedRadius * combinedRadius;
+    if (!std::isfinite(combinedRadiusSquared) || bestDistanceSquared >= combinedRadiusSquared) {
+        return std::nullopt;
+    }
+    if (bestDistanceSquared == 0.0) {
+        return Math::PenetrationUVE{{1.0F, 0.0F, 0.0F}, static_cast<float>(combinedRadius)};
     }
 
-    const float distance = std::sqrt(bestDistanceSquared);
-    return Math::PenetrationUVE{delta * (1.0F / distance), combinedRadius - distance};
+    const double distance = std::sqrt(bestDistanceSquared);
+    const double depth = combinedRadius - distance;
+    if (!std::isfinite(distance) || !std::isfinite(depth) || depth <= 0.0 || depth > maximumFloat) {
+        return std::nullopt;
+    }
+    const double inverseDistance = 1.0 / distance;
+    const Math::Vector3UVE axis{
+        static_cast<float>(bestDeltaX * inverseDistance),
+        static_cast<float>(bestDeltaY * inverseDistance),
+        static_cast<float>(bestDeltaZ * inverseDistance),
+    };
+    if (!IsFiniteVectorUVE(axis)) {
+        return std::nullopt;
+    }
+    return Math::PenetrationUVE{axis, static_cast<float>(depth)};
 }
 
 std::optional<Math::PenetrationUVE> ComputeSphereOrientedBoxPenetrationUVE(
