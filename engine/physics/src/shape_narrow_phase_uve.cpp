@@ -639,32 +639,52 @@ std::optional<Math::PenetrationUVE> ComputeOrientedBoxOrientedBoxPenetrationUVE(
         Math::RotateVectorUVE(normalizedSecondRotation, {0.0F, 1.0F, 0.0F}),
         Math::RotateVectorUVE(normalizedSecondRotation, {0.0F, 0.0F, 1.0F}),
     };
-    const Math::Vector3UVE centerDelta = secondCenter - firstCenter;
-    constexpr float kAxisEpsilonUVE = 1.0e-6F;
+    const double centerDeltaX = static_cast<double>(secondCenter.x) - static_cast<double>(firstCenter.x);
+    const double centerDeltaY = static_cast<double>(secondCenter.y) - static_cast<double>(firstCenter.y);
+    const double centerDeltaZ = static_cast<double>(secondCenter.z) - static_cast<double>(firstCenter.z);
+    if (!std::isfinite(centerDeltaX) || !std::isfinite(centerDeltaY) || !std::isfinite(centerDeltaZ)) {
+        return std::nullopt;
+    }
+    constexpr double kAxisEpsilonUVE = 1.0e-6;
     (void)inverseFirstRotation;
     (void)inverseSecondRotation;
 
-    float minimumOverlap = std::numeric_limits<float>::infinity();
+    double minimumOverlap = std::numeric_limits<double>::infinity();
     Math::Vector3UVE minimumAxis{1.0F, 0.0F, 0.0F};
     const auto TestAxisUVE = [&](Math::Vector3UVE axis) noexcept {
-        const float axisLengthSquared = Math::LengthSquaredUVE(axis);
+        const double axisLengthSquared = static_cast<double>(axis.x) * static_cast<double>(axis.x) +
+                                         static_cast<double>(axis.y) * static_cast<double>(axis.y) +
+                                         static_cast<double>(axis.z) * static_cast<double>(axis.z);
+        if (!std::isfinite(axisLengthSquared)) {
+            return false;
+        }
         if (axisLengthSquared <= kAxisEpsilonUVE * kAxisEpsilonUVE) {
             return true;
         }
-        axis = axis * (1.0F / std::sqrt(axisLengthSquared));
-        const float firstRadius = std::fabs(Math::DotUVE(axis, firstAxes[0])) * firstHalfExtents.x +
-                                   std::fabs(Math::DotUVE(axis, firstAxes[1])) * firstHalfExtents.y +
-                                   std::fabs(Math::DotUVE(axis, firstAxes[2])) * firstHalfExtents.z;
-        const float secondRadius = std::fabs(Math::DotUVE(axis, secondAxes[0])) * secondHalfExtents.x +
-                                    std::fabs(Math::DotUVE(axis, secondAxes[1])) * secondHalfExtents.y +
-                                    std::fabs(Math::DotUVE(axis, secondAxes[2])) * secondHalfExtents.z;
-        const float overlap = firstRadius + secondRadius - std::fabs(Math::DotUVE(centerDelta, axis));
-        if (!std::isfinite(overlap) || overlap <= 0.0F) {
+        const double inverseAxisLength = 1.0 / std::sqrt(axisLengthSquared);
+        axis = {
+            static_cast<float>(static_cast<double>(axis.x) * inverseAxisLength),
+            static_cast<float>(static_cast<double>(axis.y) * inverseAxisLength),
+            static_cast<float>(static_cast<double>(axis.z) * inverseAxisLength),
+        };
+        const double firstRadius =
+            std::fabs(static_cast<double>(Math::DotUVE(axis, firstAxes[0]))) * static_cast<double>(firstHalfExtents.x) +
+            std::fabs(static_cast<double>(Math::DotUVE(axis, firstAxes[1]))) * static_cast<double>(firstHalfExtents.y) +
+            std::fabs(static_cast<double>(Math::DotUVE(axis, firstAxes[2]))) * static_cast<double>(firstHalfExtents.z);
+        const double secondRadius =
+            std::fabs(static_cast<double>(Math::DotUVE(axis, secondAxes[0]))) * static_cast<double>(secondHalfExtents.x) +
+            std::fabs(static_cast<double>(Math::DotUVE(axis, secondAxes[1]))) * static_cast<double>(secondHalfExtents.y) +
+            std::fabs(static_cast<double>(Math::DotUVE(axis, secondAxes[2]))) * static_cast<double>(secondHalfExtents.z);
+        const double centerProjection = centerDeltaX * static_cast<double>(axis.x) +
+                                        centerDeltaY * static_cast<double>(axis.y) +
+                                        centerDeltaZ * static_cast<double>(axis.z);
+        const double overlap = firstRadius + secondRadius - std::fabs(centerProjection);
+        if (!std::isfinite(firstRadius) || !std::isfinite(secondRadius) || !std::isfinite(overlap) || overlap <= 0.0) {
             return false;
         }
         if (overlap < minimumOverlap) {
             minimumOverlap = overlap;
-            minimumAxis = Math::DotUVE(centerDelta, axis) < 0.0F ? -axis : axis;
+            minimumAxis = centerProjection < 0.0 ? -axis : axis;
         }
         return true;
     };
@@ -686,10 +706,11 @@ std::optional<Math::PenetrationUVE> ComputeOrientedBoxOrientedBoxPenetrationUVE(
             }
         }
     }
-    if (!std::isfinite(minimumOverlap)) {
+    const double maximumFloat = static_cast<double>(std::numeric_limits<float>::max());
+    if (!std::isfinite(minimumOverlap) || minimumOverlap > maximumFloat || !IsFiniteVectorUVE(minimumAxis)) {
         return std::nullopt;
     }
-    return Math::PenetrationUVE{minimumAxis, minimumOverlap};
+    return Math::PenetrationUVE{minimumAxis, static_cast<float>(minimumOverlap)};
 }
 
 } // namespace UVE::Physics::Detail
