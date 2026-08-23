@@ -9,7 +9,7 @@
 namespace UVE::Math {
 
 float LengthUVE(const Vector3UVE& v) noexcept {
-    return std::sqrt(LengthSquaredUVE(v));
+    return std::hypot(v.x, v.y, v.z);
 }
 
 Vector3UVE NormalizeUVE(const Vector3UVE& v) noexcept {
