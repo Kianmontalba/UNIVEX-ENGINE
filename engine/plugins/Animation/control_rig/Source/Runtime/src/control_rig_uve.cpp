@@ -49,8 +49,21 @@ constexpr float kEpsilonUVE = 1.0e-5F;
 
 [[nodiscard]] Math::Vector3UVE NormalizeVectorUVE(const Math::Vector3UVE& value,
                                                    const Math::Vector3UVE& fallback) noexcept {
-    const float lengthSquared = Math::LengthSquaredUVE(value);
-    if (!std::isfinite(lengthSquared) || lengthSquared <= kEpsilonUVE * kEpsilonUVE) {
+    if (!IsFiniteVectorUVE(value)) {
+        return fallback;
+    }
+    const double x = static_cast<double>(value.x);
+    const double y = static_cast<double>(value.y);
+    const double z = static_cast<double>(value.z);
+    const double scale = std::max(std::fabs(x), std::max(std::fabs(y), std::fabs(z)));
+    if (!std::isfinite(scale) || scale == 0.0) {
+        return fallback;
+    }
+    const double scaledLengthSquared = (x / scale) * (x / scale) +
+                                       (y / scale) * (y / scale) +
+                                       (z / scale) * (z / scale);
+    if (!std::isfinite(scaledLengthSquared) ||
+        scaledLengthSquared <= static_cast<double>(kEpsilonUVE * kEpsilonUVE)) {
         return fallback;
     }
     return Math::NormalizeUVE(value);
