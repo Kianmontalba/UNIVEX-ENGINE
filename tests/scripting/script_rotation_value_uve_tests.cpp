@@ -10,6 +10,7 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <limits>
 #include <numbers>
 
 namespace UVE::Scripting {
@@ -33,6 +34,18 @@ TEST(ScriptRotationValueUVETest, AxisAngleBreakAndRotateAreDeterministic) {
     EXPECT_NEAR(rotated.value.value.x, 0.0F, kTolerance);
     EXPECT_NEAR(rotated.value.value.y, 1.0F, kTolerance);
     EXPECT_NEAR(rotated.value.value.z, 0.0F, kTolerance);
+}
+
+TEST(ScriptRotationValueUVETest, RotatePreservesFiniteExtremeVectorUnderHalfTurn) {
+    const float maximum = std::numeric_limits<float>::max();
+    const ScriptRotationValueResultUVE rotation = EvaluateScriptRotationQuaternionUVE(
+        1.0F, 0.0F, 0.0F, 0.0F);
+    ASSERT_TRUE(rotation.IsAppliedUVE());
+
+    const ScriptRotationVectorResultUVE rotated = EvaluateScriptRotationRotateUVE(
+        rotation.value, ScriptVector3ValueUVE{{0.0F, maximum, 0.0F}});
+    ASSERT_TRUE(rotated.IsAppliedUVE());
+    EXPECT_EQ(rotated.value.value, (Math::Vector3UVE{0.0F, -maximum, 0.0F}));
 }
 
 TEST(ScriptRotationValueUVETest, EulerQuaternionLookAtAndSlerpProduceUnitRotations) {
