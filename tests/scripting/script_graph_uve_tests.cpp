@@ -2177,6 +2177,26 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_EngineGetTimeWritesFiniteCopiedOu
     EXPECT_FLOAT_EQ(std::get<float>(*context.FindOutputUVE(72U, "Value")), 12.75F);
 }
 
+TEST(ScriptVmUVETest, CallbackBackedEngineGetTimeRejectsOutputCapacityBeforeCallback) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 73U, 0U, "engine.get_time", {}, {}});
+    ScriptVmExecutionContextUVE context;
+    for (std::uint32_t nodeId = 1U; nodeId <= ScriptVmExecutionContextUVE::kMaximumBindingsUVE; ++nodeId) {
+        ASSERT_TRUE(context.SetOutputUVE(nodeId, "Result", 0.0F));
+    }
+    EngineTimeCaptureUVE capture;
+    const ScriptEngineCallBindingsUVE bindings{nullptr, &capture, CaptureEngineTimeUVE};
+    ScriptVmExecutionOptionsUVE options;
+    options.engineCallBindings = &bindings;
+
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(program, context, options);
+
+    EXPECT_EQ(result.status, ScriptVmStatusUVE::NodeExecutionFailed);
+    EXPECT_EQ(capture.callCount, 0U);
+    EXPECT_EQ(context.outputs.size(), ScriptVmExecutionContextUVE::kMaximumBindingsUVE);
+    EXPECT_FALSE(context.FindOutputUVE(73U, "Value").has_value());
+}
+
 TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_EngineGetTimeRejectsUnboundRejectedOrNonFiniteOutput) {
     ScriptBytecodeProgramUVE program;
     program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 73U, 0U, "engine.get_time", {}, {}});
