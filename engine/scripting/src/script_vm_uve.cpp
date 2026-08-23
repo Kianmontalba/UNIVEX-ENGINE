@@ -167,6 +167,12 @@ namespace {
     return context.SetOutputUVE(nodeId, pinName, std::move(value));
 }
 
+[[nodiscard]] bool CanSetNodeOutputUVE(const ScriptVmExecutionContextUVE& context,
+                                       const std::uint32_t nodeId, const char* pinName) noexcept {
+    return FindBindingUVE(context.outputs, nodeId, pinName) != nullptr ||
+           context.outputs.size() < ScriptVmExecutionContextUVE::kMaximumBindingsUVE;
+}
+
 [[nodiscard]] ScriptVmExecutionResultUVE ExecuteConversionNodeUVE(
     const ScriptIrInstructionUVE& instruction, const std::size_t instructionIndex,
     ScriptVmExecutionContextUVE& context) {
@@ -276,6 +282,7 @@ namespace {
             ScriptVmLocalVariableUVE* existing = FindMutableLocalVariableUVE(context.localVariables, slot);
             if (existing == nullptr) {
                 if (context.localVariables.size() >= ScriptVmExecutionContextUVE::kMaximumLocalVariablesUVE ||
+                    !CanSetNodeOutputUVE(context, nodeId, "Result") ||
                     !context.InitializeLocalVariableUVE(slot, *input)) {
                     return MakeNodeFailureUVE(instructionIndex, makeMessage("Make ", "rejected local capacity."));
                 }
@@ -284,7 +291,8 @@ namespace {
             return std::holds_alternative<CollectionType>(existing->value) ? setResult(existing->value) : rejectType();
         }
         if (isSetOperation) {
-            if (input == nullptr || !isValid(*input) || !context.SetLocalVariableUVE(slot, *input)) {
+            if (input == nullptr || !isValid(*input) || !CanSetNodeOutputUVE(context, nodeId, "Result") ||
+                !context.SetLocalVariableUVE(slot, *input)) {
                 return MakeNodeFailureUVE(instructionIndex, makeMessage("Set ", "requires a valid Value and matching local slot."));
             }
             return setResult(*input);
@@ -297,6 +305,9 @@ namespace {
             const float* value = FindNumberInputUVE(context, nodeId, "Value");
             if (value == nullptr || !std::isfinite(*value)) {
                 return MakeNodeFailureUVE(instructionIndex, "Make Number Variable requires a finite Value.");
+            }
+            if (!CanSetNodeOutputUVE(context, nodeId, "Result")) {
+                return MakeNodeFailureUVE(instructionIndex, "Make Number Variable rejected Result output capacity.");
             }
             ScriptVmLocalVariableUVE* existing = FindMutableLocalVariableUVE(context.localVariables, slot);
             if (existing == nullptr) {
@@ -316,7 +327,7 @@ namespace {
             if (value == nullptr || !std::isfinite(*value)) {
                 return MakeNodeFailureUVE(instructionIndex, "Set Number Variable requires a finite Value.");
             }
-            if (!context.SetLocalVariableUVE(slot, *value)) {
+            if (!CanSetNodeOutputUVE(context, nodeId, "Result") || !context.SetLocalVariableUVE(slot, *value)) {
                 return rejectType();
             }
             return setResult(*value);
@@ -329,6 +340,9 @@ namespace {
             const bool* value = FindBooleanInputUVE(context, nodeId, "Value");
             if (value == nullptr) {
                 return MakeNodeFailureUVE(instructionIndex, "Make Boolean Variable requires a Boolean Value.");
+            }
+            if (!CanSetNodeOutputUVE(context, nodeId, "Result")) {
+                return MakeNodeFailureUVE(instructionIndex, "Make Boolean Variable rejected Result output capacity.");
             }
             ScriptVmLocalVariableUVE* existing = FindMutableLocalVariableUVE(context.localVariables, slot);
             if (existing == nullptr) {
@@ -345,7 +359,8 @@ namespace {
         }
         if (isSetOperation) {
             const bool* value = FindBooleanInputUVE(context, nodeId, "Value");
-            if (value == nullptr || !context.SetLocalVariableUVE(slot, *value)) {
+            if (value == nullptr || !CanSetNodeOutputUVE(context, nodeId, "Result") ||
+                !context.SetLocalVariableUVE(slot, *value)) {
                 return rejectType();
             }
             return setResult(*value);
@@ -360,6 +375,9 @@ namespace {
                 !std::isfinite(value->value.z)) {
                 return MakeNodeFailureUVE(instructionIndex, "Make Vector3 Variable requires a finite Value.");
             }
+            if (!CanSetNodeOutputUVE(context, nodeId, "Result")) {
+                return MakeNodeFailureUVE(instructionIndex, "Make Vector3 Variable rejected Result output capacity.");
+            }
             ScriptVmLocalVariableUVE* existing = FindMutableLocalVariableUVE(context.localVariables, slot);
             if (existing == nullptr) {
                 if (context.localVariables.size() >= ScriptVmExecutionContextUVE::kMaximumLocalVariablesUVE ||
@@ -372,7 +390,8 @@ namespace {
         }
         if (isSetOperation) {
             const ScriptVector3ValueUVE* value = FindVector3InputUVE(context, nodeId, "Value");
-            if (value == nullptr || !context.SetLocalVariableUVE(slot, *value)) {
+            if (value == nullptr || !CanSetNodeOutputUVE(context, nodeId, "Result") ||
+                !context.SetLocalVariableUVE(slot, *value)) {
                 return rejectType();
             }
             return setResult(*value);

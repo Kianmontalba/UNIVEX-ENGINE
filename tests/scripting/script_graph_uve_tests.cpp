@@ -6923,6 +6923,48 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_DebugErrorRejectsCallbackWithoutO
     EXPECT_FALSE(context.FindOutputUVE(1U, "Result").has_value());
 }
 
+TEST(ScriptVmUVETest, VariableMakeRejectsOutputCapacityWithoutMutatingLocalStorage) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U,
+                                    "variable.make_number", {}, {}});
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(1U, "Slot", 3.0F));
+    ASSERT_TRUE(context.SetInputUVE(1U, "Value", 42.0F));
+    for (std::uint32_t nodeId = 2U; nodeId <= 1025U; ++nodeId) {
+        ASSERT_TRUE(context.SetOutputUVE(nodeId, "Result", 0.0F));
+    }
+
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(program, context);
+
+    EXPECT_EQ(result.status, ScriptVmStatusUVE::NodeExecutionFailed);
+    EXPECT_TRUE(context.localVariables.empty());
+    EXPECT_EQ(context.outputs.size(), ScriptVmExecutionContextUVE::kMaximumBindingsUVE);
+    EXPECT_FALSE(context.FindOutputUVE(1U, "Result").has_value());
+}
+
+TEST(ScriptVmUVETest, VariableSetRejectsOutputCapacityWithoutMutatingLocalStorage) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U,
+                                    "variable.set_number", {}, {}});
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(1U, "Slot", 3.0F));
+    ASSERT_TRUE(context.SetInputUVE(1U, "Value", 42.0F));
+    ASSERT_TRUE(context.InitializeLocalVariableUVE(3U, 7.0F));
+    for (std::uint32_t nodeId = 2U; nodeId <= 1025U; ++nodeId) {
+        ASSERT_TRUE(context.SetOutputUVE(nodeId, "Result", 0.0F));
+    }
+
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(program, context);
+
+    EXPECT_EQ(result.status, ScriptVmStatusUVE::NodeExecutionFailed);
+    const std::optional<ScriptVmValueUVE> localValue = context.FindLocalVariableUVE(3U);
+    ASSERT_TRUE(localValue.has_value());
+    ASSERT_TRUE(std::holds_alternative<float>(*localValue));
+    EXPECT_FLOAT_EQ(std::get<float>(*localValue), 7.0F);
+    EXPECT_EQ(context.outputs.size(), ScriptVmExecutionContextUVE::kMaximumBindingsUVE);
+    EXPECT_FALSE(context.FindOutputUVE(1U, "Result").has_value());
+}
+
 TEST(ScriptVmExecutionContextUVE, SetBindingsAndComponentFactsRejectMalformedIdentifiersAtomically) {
     ScriptVmExecutionContextUVE context;
     ASSERT_TRUE(context.SetInputUVE(7U, "Value", 1.0F));
