@@ -4,6 +4,41 @@
 #include <cmath>
 #include <utility>
 namespace UVE::Audio {
+bool PcmGainEffectScheduleUVE::ScheduleWindowUVE(const PcmGainEffectWindowUVE& window) noexcept {
+    if (m_count >= kMaximumPcmGainScheduledWindowsUVE || window.sampleCount == 0U ||
+        !std::isfinite(window.gain) || window.gain < 0.0F) {
+        return false;
+    }
+    m_windows[m_count] = window;
+    ++m_count;
+    return true;
+}
+
+bool PcmGainEffectScheduleUVE::ApplyPendingUVE(const std::vector<float>& inputSamples,
+                                                std::vector<float>& outputSamples) noexcept {
+    try {
+        std::vector<PcmGainEffectWindowUVE> windows;
+        windows.reserve(m_count);
+        for (std::size_t index = 0U; index < m_count; ++index) {
+            windows.push_back(m_windows[index]);
+        }
+        std::vector<float> candidateOutput;
+        if (!ApplyScheduledPcmGainEffectsUVE(inputSamples, windows, candidateOutput)) {
+            return false;
+        }
+        outputSamples = std::move(candidateOutput);
+        ResetUVE();
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+void PcmGainEffectScheduleUVE::ResetUVE() noexcept {
+    m_windows.fill(PcmGainEffectWindowUVE{});
+    m_count = 0U;
+}
+
 bool ApplyScheduledPcmGainEffectsUVE(const std::vector<float>& inputSamples,
                                        const std::vector<PcmGainEffectWindowUVE>& windows,
                                        std::vector<float>& outputSamples) noexcept {
