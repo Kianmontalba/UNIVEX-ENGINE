@@ -13,6 +13,13 @@ namespace {
     return Vector3UVE{vector.x * scalar, vector.y * scalar, vector.z * scalar};
 }
 
+[[nodiscard]] float DotWideUVE(const Vector3UVE& lhs, const Vector3UVE& rhs) noexcept {
+    const double sum = static_cast<double>(lhs.x) * static_cast<double>(rhs.x) +
+                       static_cast<double>(lhs.y) * static_cast<double>(rhs.y) +
+                       static_cast<double>(lhs.z) * static_cast<double>(rhs.z);
+    return static_cast<float>(sum);
+}
+
 } // namespace
 
 Matrix4x4UVE Matrix4x4UVE::ComposeTrsUVE(Vector3UVE translation, QuaternionUVE rotation, Vector3UVE scale) noexcept {
@@ -91,15 +98,15 @@ Matrix4x4UVE Matrix4x4UVE::ViewFromPositionAndRotationUVE(Vector3UVE position, Q
     result.m[0][0] = right.x;
     result.m[0][1] = right.y;
     result.m[0][2] = right.z;
-    result.m[0][3] = -DotUVE(right, position);
+    result.m[0][3] = -DotWideUVE(right, position);
     result.m[1][0] = up.x;
     result.m[1][1] = up.y;
     result.m[1][2] = up.z;
-    result.m[1][3] = -DotUVE(up, position);
+    result.m[1][3] = -DotWideUVE(up, position);
     result.m[2][0] = -forward.x;
     result.m[2][1] = -forward.y;
     result.m[2][2] = -forward.z;
-    result.m[2][3] = DotUVE(forward, position);
+    result.m[2][3] = DotWideUVE(forward, position);
     return result;
 }
 

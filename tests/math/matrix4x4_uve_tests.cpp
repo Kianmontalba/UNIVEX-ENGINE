@@ -162,6 +162,25 @@ TEST(Matrix4x4UVETest, ViewFromPositionAndRotationUVE_NinetyDegreeYaw_PointAhead
     EXPECT_NEAR(viewSpacePoint.z, -5.0F, kEpsilon);
 }
 
+TEST(Matrix4x4UVETest, ViewFromPositionAndRotationUVE_PreservesFiniteExtremePositionCancellation) {
+    const float oneOverRootThree = 1.0F / std::sqrt(3.0F);
+    const float normalization = std::sqrt(2.0F * (1.0F + oneOverRootThree));
+    const QuaternionUVE rotation{
+        0.0F,
+        -oneOverRootThree / normalization,
+        oneOverRootThree / normalization,
+        (1.0F + oneOverRootThree) / normalization,
+    };
+    const float maximum = std::numeric_limits<float>::max();
+
+    const Matrix4x4UVE view = Matrix4x4UVE::ViewFromPositionAndRotationUVE(
+        Vector3UVE{maximum, maximum, -maximum}, rotation);
+
+    EXPECT_TRUE(std::isfinite(view.m[0][3]));
+    EXPECT_LT(std::fabs(view.m[0][3]), maximum);
+    EXPECT_LT(view.m[0][3], 0.0F);
+}
+
 TEST(Matrix4x4UVETest, MatrixMultiply_WithIdentity_IsUnchanged) {
     const Matrix4x4UVE matrix = Matrix4x4UVE::ComposeTrsUVE(Vector3UVE{1.0F, 2.0F, 3.0F}, QuaternionUVE{},
                                                               Vector3UVE{1.0F, 1.0F, 1.0F});
