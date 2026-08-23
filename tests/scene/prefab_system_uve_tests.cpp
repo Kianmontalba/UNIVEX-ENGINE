@@ -344,6 +344,41 @@ TEST(PrefabInstanceComponentUVE, DetectPrefabOverrideConflictsUVE_ClampsCallerLi
     EXPECT_EQ(target.writeCount, 0U);
 }
 
+TEST(PrefabInstanceComponentUVE, MergePrefabOverridesUVE_CombinesNonConflictingLocalAndRemoteChanges) {
+    const PrefabInstanceComponentUVE instance{
+        Asset::AssetGuidUVE{14U}, {{"A.value", "base-a"}, {"B.value", "local-b"}}};
+    const std::vector<PrefabPropertyOverrideUVE> baseline{{"A.value", "base-a"}, {"B.value", "base-b"}};
+    const std::vector<PrefabPropertyOverrideUVE> remote{{"A.value", "remote-a"}, {"B.value", "base-b"}};
+    std::vector<PrefabPropertyOverrideUVE> merged;
+
+    const PrefabOverrideOperationResultUVE result =
+        MergePrefabOverridesUVE(instance, baseline, remote, merged);
+
+    EXPECT_EQ(result.code, PrefabOverrideOperationCodeUVE::Applied);
+    EXPECT_EQ(result.affectedCount, 2U);
+    ASSERT_EQ(merged.size(), 2U);
+    EXPECT_EQ(merged[0].propertyPath, "A.value");
+    EXPECT_EQ(merged[0].serializedValue, "remote-a");
+    EXPECT_EQ(merged[1].propertyPath, "B.value");
+    EXPECT_EQ(merged[1].serializedValue, "local-b");
+}
+
+TEST(PrefabInstanceComponentUVE, MergePrefabOverridesUVE_RejectsConflictsWithoutPartialOutput) {
+    const PrefabInstanceComponentUVE instance{
+        Asset::AssetGuidUVE{15U}, {{"A.value", "local-a"}}};
+    const std::vector<PrefabPropertyOverrideUVE> baseline{{"A.value", "base-a"}};
+    const std::vector<PrefabPropertyOverrideUVE> remote{{"A.value", "remote-a"}};
+    std::vector<PrefabPropertyOverrideUVE> merged{{"sentinel", "unchanged"}};
+
+    const PrefabOverrideOperationResultUVE result =
+        MergePrefabOverridesUVE(instance, baseline, remote, merged);
+
+    EXPECT_EQ(result.code, PrefabOverrideOperationCodeUVE::ConflictDetected);
+    EXPECT_EQ(result.affectedCount, 1U);
+    ASSERT_EQ(merged.size(), 1U);
+    EXPECT_EQ(merged.front().propertyPath, "sentinel");
+}
+
 TEST(PrefabInstanceComponentUVE, RevertPrefabOverridesUVE_RejectsInvalidBaselineWithoutMutation) {
     PrefabInstanceComponentUVE instance{Asset::AssetGuidUVE{9U}, {{"A.value", "new-a"}}};
     FakePrefabOverrideTargetUVE target;
