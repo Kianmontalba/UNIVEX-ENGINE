@@ -317,6 +317,9 @@ std::uint32_t WindowManagerUVE::GetHeightUVE() const noexcept {
 }
 
 std::vector<MonitorInfoUVE> WindowManagerUVE::EnumerateMonitorsUVE() const {
+    if (!m_impl->valid) {
+        return {};
+    }
     std::vector<MonitorInfoUVE> monitors;
     int monitorCount = 0;
     GLFWmonitor** const glfwMonitors = glfwGetMonitors(&monitorCount);

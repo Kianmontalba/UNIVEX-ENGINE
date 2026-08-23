@@ -113,6 +113,7 @@ TEST_F(WindowManagerUVETest, InvalidWindowDescriptor_FailsClosedBeforeCreation) 
     WindowManagerUVE invalidManager(eventSystem, invalid);
     EXPECT_FALSE(invalidManager.IsValidUVE());
     EXPECT_EQ(invalidManager.GetNativeWindowHandleUVE(), nullptr);
+    EXPECT_TRUE(invalidManager.EnumerateMonitorsUVE().empty());
 }
 
 TEST_F(WindowManagerUVETest, EnumerateMonitorsUVE_ReturnsValidatedSnapshot) {
