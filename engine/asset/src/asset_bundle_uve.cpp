@@ -128,6 +128,10 @@ void AppendUint64UVE(std::vector<std::byte>& buffer, std::uint64_t value) {
         }
         const std::string_view name(reinterpret_cast<const char*>(payload.data() + offset), nameLength);
         offset += nameLength;
+        if (!IsSafeRelativePathUVE(name)) {
+            UVE_ERROR("AssetBundleUVE: \"{}\" contains an unsafe entry name", bundlePath.string());
+            return false;
+        }
 
         std::uint64_t dataLength = 0;
         if (!ReadUint64FromBufferUVE(payload, offset, dataLength)) {

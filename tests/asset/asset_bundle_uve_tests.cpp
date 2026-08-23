@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -38,6 +39,21 @@ void WriteFixtureFileUVE(const std::filesystem::path& path, std::string_view con
     char buffer[17];
     std::snprintf(buffer, sizeof(buffer), "%016llx", static_cast<unsigned long long>(value));
     return std::string(buffer);
+}
+
+void AppendUint32UVE(std::vector<std::byte>& buffer, std::uint32_t value) {
+    const auto* const bytes = reinterpret_cast<const std::byte*>(&value);
+    buffer.insert(buffer.end(), bytes, bytes + sizeof(value));
+}
+
+void AppendUint64UVE(std::vector<std::byte>& buffer, std::uint64_t value) {
+    const auto* const bytes = reinterpret_cast<const std::byte*>(&value);
+    buffer.insert(buffer.end(), bytes, bytes + sizeof(value));
+}
+
+void AppendStringUVE(std::vector<std::byte>& buffer, std::string_view value) {
+    const auto* const bytes = reinterpret_cast<const std::byte*>(value.data());
+    buffer.insert(buffer.end(), bytes, bytes + value.size());
 }
 
 TEST(AssetBundleUVETest, PackThenUnpack_RoundTripsThreeFilesByteExact) {
@@ -136,6 +152,28 @@ TEST(AssetBundleUVETest, PackAndScan_RejectUnboundedEntryCountsAndNames) {
     EXPECT_FALSE(bundle.HasEntryUVE(bundlePath, "anything"));
 
     std::filesystem::remove(source);
+    std::filesystem::remove(bundlePath);
+}
+
+TEST(AssetBundleUVETest, HasEntryAndReadEntry_RejectUnsafeStoredEntryName) {
+    const std::filesystem::path bundlePath = "uve_asset_bundle_tests_unsafe_stored_name.uvebundle";
+    std::filesystem::remove(bundlePath);
+
+    std::vector<std::byte> payload;
+    AppendUint32UVE(payload, 1U);
+    AppendUint64UVE(payload, 9001U);
+    const std::string unsafeName = "../outside.txt";
+    AppendUint32UVE(payload, static_cast<std::uint32_t>(unsafeName.size()));
+    AppendStringUVE(payload, unsafeName);
+    const std::string contents = "unsafe";
+    AppendUint64UVE(payload, static_cast<std::uint64_t>(contents.size()));
+    AppendStringUVE(payload, contents);
+    ASSERT_TRUE(WriteUveFileUVE(bundlePath, AssetKindUVE::Bundle, payload));
+
+    AssetBundleUVE bundle;
+    EXPECT_FALSE(bundle.HasEntryUVE(bundlePath, unsafeName));
+    EXPECT_FALSE(bundle.ReadEntryUVE(bundlePath, unsafeName).has_value());
+
     std::filesystem::remove(bundlePath);
 }
 
