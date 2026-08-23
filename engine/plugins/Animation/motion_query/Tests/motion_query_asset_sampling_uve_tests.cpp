@@ -4,6 +4,8 @@
 
 #include <gtest/gtest.h>
 
+#include <limits>
+
 namespace UVE::Plugins {
 namespace {
 
@@ -37,6 +39,24 @@ TEST(MotionQueryAssetSamplingUVETest, BuildDerivedDataUVE_NormalizesCopiedSample
     EXPECT_FLOAT_EQ(derived.normalizedSamples[1].values[0], 1.0F);
     EXPECT_FLOAT_EQ(derived.normalizedSamples[1].values[1], 1.0F);
     EXPECT_EQ(derived.key, request.key);
+}
+
+TEST(MotionQueryAssetSamplingUVETest, BuildDerivedDataUVE_PreservesFiniteExtremeRanges) {
+    MotionQueryAssetSamplingRequestUVE request = MakeRequestUVE();
+    const float maximumValue = std::numeric_limits<float>::max();
+    request.samples[0].values = {-maximumValue, maximumValue};
+    request.normalizationRanges[0] =
+        MotionQueryNormalizationRangeUVE{-maximumValue, maximumValue};
+    request.normalizationRanges[1] =
+        MotionQueryNormalizationRangeUVE{-maximumValue, maximumValue};
+
+    MotionQueryDerivedDataUVE derived;
+    const MotionQueryAssetSamplingResultUVE result =
+        BuildMotionQueryDerivedDataUVE(request, derived);
+    ASSERT_TRUE(result.IsAcceptedUVE()) << result.message;
+    ASSERT_EQ(derived.normalizedSamples.size(), 2U);
+    EXPECT_FLOAT_EQ(derived.normalizedSamples[0].values[0], 0.0F);
+    EXPECT_FLOAT_EQ(derived.normalizedSamples[0].values[1], 1.0F);
 }
 
 TEST(MotionQueryAssetSamplingUVETest, BuildDerivedDataUVE_ClampsOutOfRangeValues) {

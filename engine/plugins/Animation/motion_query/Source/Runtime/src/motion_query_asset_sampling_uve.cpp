@@ -68,10 +68,19 @@ MotionQueryAssetSamplingResultUVE BuildMotionQueryDerivedDataUVE(
                                             featureIndex, "motion query feature value is non-finite");
             }
             const MotionQueryNormalizationRangeUVE& range = request.normalizationRanges[featureIndex];
-            const float normalizedValue = range.maximum == range.minimum
-                                              ? 0.0F
-                                              : (value - range.minimum) / (range.maximum - range.minimum);
-            normalized.values.push_back(std::clamp(normalizedValue, 0.0F, 1.0F));
+            const double normalizedValue = range.maximum == range.minimum
+                                               ? 0.0
+                                               : (static_cast<double>(value) -
+                                                  static_cast<double>(range.minimum)) /
+                                                     (static_cast<double>(range.maximum) -
+                                                      static_cast<double>(range.minimum));
+            if (!std::isfinite(normalizedValue)) {
+                return MakeSamplingErrorUVE(MotionQueryAssetSamplingCodeUVE::NonFiniteFeature,
+                                            featureIndex,
+                                            "motion query normalized feature value is non-finite");
+            }
+            normalized.values.push_back(
+                static_cast<float>(std::clamp(normalizedValue, 0.0, 1.0)));
         }
         derived.normalizedSamples.push_back(std::move(normalized));
     }
