@@ -56,6 +56,8 @@ add_executable(uve_tests
     asset/uve_file_envelope_uve_tests.cpp
     asset/asset_manager_uve_tests.cpp
     asset/asset_importer_uve_tests.cpp
+    asset/bmp_metadata_uve_tests.cpp
+    asset/bmp_importer_uve_tests.cpp
     asset/png_metadata_uve_tests.cpp
     asset/png_importer_uve_tests.cpp
     asset/obj_metadata_uve_tests.cpp
