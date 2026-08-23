@@ -118,10 +118,25 @@ Matrix4x4UVE operator*(const Matrix4x4UVE& lhs, const Matrix4x4UVE& rhs) noexcep
 }
 
 Vector3UVE TransformPointUVE(const Matrix4x4UVE& matrix, Vector3UVE point) noexcept {
+    const double pointX = static_cast<double>(point.x);
+    const double pointY = static_cast<double>(point.y);
+    const double pointZ = static_cast<double>(point.z);
+    const double transformedX = static_cast<double>(matrix.m[0][0]) * pointX +
+                                static_cast<double>(matrix.m[0][1]) * pointY +
+                                static_cast<double>(matrix.m[0][2]) * pointZ +
+                                static_cast<double>(matrix.m[0][3]);
+    const double transformedY = static_cast<double>(matrix.m[1][0]) * pointX +
+                                static_cast<double>(matrix.m[1][1]) * pointY +
+                                static_cast<double>(matrix.m[1][2]) * pointZ +
+                                static_cast<double>(matrix.m[1][3]);
+    const double transformedZ = static_cast<double>(matrix.m[2][0]) * pointX +
+                                static_cast<double>(matrix.m[2][1]) * pointY +
+                                static_cast<double>(matrix.m[2][2]) * pointZ +
+                                static_cast<double>(matrix.m[2][3]);
     return Vector3UVE{
-        matrix.m[0][0] * point.x + matrix.m[0][1] * point.y + matrix.m[0][2] * point.z + matrix.m[0][3],
-        matrix.m[1][0] * point.x + matrix.m[1][1] * point.y + matrix.m[1][2] * point.z + matrix.m[1][3],
-        matrix.m[2][0] * point.x + matrix.m[2][1] * point.y + matrix.m[2][2] * point.z + matrix.m[2][3],
+        static_cast<float>(transformedX),
+        static_cast<float>(transformedY),
+        static_cast<float>(transformedZ),
     };
 }
 

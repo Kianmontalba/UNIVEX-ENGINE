@@ -10,6 +10,7 @@
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <limits>
 #include <numbers>
 #include <optional>
 #include <variant>
@@ -70,6 +71,29 @@ TEST(ScriptTransformValueUVETest, TransformPointAppliesTranslationScaleAndRotati
     EXPECT_NEAR(rotatedPoint.value.value.x, 0.0F, kTolerance);
     EXPECT_NEAR(rotatedPoint.value.value.y, 1.0F, kTolerance);
     EXPECT_NEAR(rotatedPoint.value.value.z, 0.0F, kTolerance);
+}
+
+TEST(ScriptTransformValueUVETest, TransformPointPreservesFiniteExtremeRotationTranslation) {
+    const float maximum = std::numeric_limits<float>::max();
+    const float halfAngle = std::numbers::pi_v<float> * 0.125F;
+    const ScriptRotationValueResultUVE rotation = EvaluateScriptRotationQuaternionUVE(
+        0.0F, 0.0F, std::sin(halfAngle), std::cos(halfAngle));
+    ASSERT_TRUE(rotation.IsAppliedUVE());
+    const ScriptTransformValueResultUVE transform = EvaluateScriptTransformMakeUVE(
+        ScriptVector3ValueUVE{{-maximum, 0.0F, 0.0F}}, rotation.value,
+        ScriptVector3ValueUVE{{1.0F, 1.0F, 1.0F}});
+    ASSERT_TRUE(transform.IsAppliedUVE());
+
+    const ScriptTransformVectorResultUVE point = EvaluateScriptTransformPointUVE(
+        transform.value, ScriptVector3ValueUVE{{maximum, -maximum, 0.0F}});
+    ASSERT_TRUE(point.IsAppliedUVE());
+    EXPECT_TRUE(std::isfinite(point.value.value.x));
+    EXPECT_TRUE(std::isfinite(point.value.value.y));
+    EXPECT_TRUE(std::isfinite(point.value.value.z));
+    EXPECT_GT(point.value.value.x, 0.0F);
+    EXPECT_LT(point.value.value.x, maximum);
+    EXPECT_NEAR(point.value.value.y, 0.0F, maximum * 1.0e-6F);
+    EXPECT_FLOAT_EQ(point.value.value.z, 0.0F);
 }
 
 TEST(ScriptTransformValueUVETest, DegenerateRotationIsRejectedByMakeAndRotate) {
