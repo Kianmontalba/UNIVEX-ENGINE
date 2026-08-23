@@ -119,6 +119,18 @@ TEST(Matrix4x4UVETest, OrthographicUVE_PreservesFiniteExtremeExtentScale) {
     EXPECT_FLOAT_EQ(projection.m[0][0], expectedScale);
 }
 
+TEST(Matrix4x4UVETest, OrthographicUVE_PreservesFiniteExtremeVerticalExtentScale) {
+    const float maximum = std::numeric_limits<float>::max();
+
+    const Matrix4x4UVE projection = Matrix4x4UVE::OrthographicUVE(
+        -1.0F, 1.0F, -maximum, maximum, 1.0F, 2.0F);
+    const float expectedScale = static_cast<float>(2.0 / (2.0 * static_cast<double>(maximum)));
+
+    EXPECT_TRUE(std::isfinite(projection.m[1][1]));
+    EXPECT_GT(projection.m[1][1], 0.0F);
+    EXPECT_FLOAT_EQ(projection.m[1][1], expectedScale);
+}
+
 TEST(Matrix4x4UVETest, OrthographicUVE_MapsNearPlaneToDepthZero) {
     const Matrix4x4UVE projection = Matrix4x4UVE::OrthographicUVE(-10.0F, 10.0F, -10.0F, 10.0F, 1.0F, 100.0F);
 
