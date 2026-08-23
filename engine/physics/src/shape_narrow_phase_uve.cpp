@@ -45,13 +45,16 @@ std::optional<Math::PenetrationUVE> ComputeSphereAabbPenetrationUVE(
         std::clamp(sphereCenter.z, box.min.z, box.max.z),
     };
     const Math::Vector3UVE delta = closestPoint - sphereCenter;
-    const float distanceSquared = Math::LengthSquaredUVE(delta);
-    const float radiusSquared = sphereRadius * sphereRadius;
-    if (distanceSquared > 0.0F) {
+    const double deltaX = static_cast<double>(delta.x);
+    const double deltaY = static_cast<double>(delta.y);
+    const double deltaZ = static_cast<double>(delta.z);
+    const double distanceSquared = deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ;
+    const double radiusSquared = static_cast<double>(sphereRadius) * static_cast<double>(sphereRadius);
+    if (distanceSquared > 0.0) {
         if (distanceSquared >= radiusSquared) {
             return std::nullopt;
         }
-        const float distance = std::sqrt(distanceSquared);
+        const float distance = static_cast<float>(std::sqrt(distanceSquared));
         return Math::PenetrationUVE{delta * (1.0F / distance), sphereRadius - distance};
     }
 

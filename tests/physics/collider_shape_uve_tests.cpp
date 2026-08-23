@@ -87,6 +87,16 @@ TEST(ShapeNarrowPhaseUVETest, RadiusSumOverflowFailsClosedBeforePenetrationPubli
                      .has_value());
 }
 
+TEST(ShapeNarrowPhaseUVETest, SphereAabbUsesFinitePrecisionForLargeRadiusOverlap) {
+    const float maximumRadius = std::numeric_limits<float>::max();
+    const Math::AabbUVE box{{0.0F, -1.0F, -1.0F}, {1.0F, 1.0F, 1.0F}};
+    const std::optional<Math::PenetrationUVE> penetration =
+        Detail::ComputeSphereAabbPenetrationUVE(box, {2.0e38F, 0.0F, 0.0F}, maximumRadius);
+    ASSERT_TRUE(penetration.has_value());
+    EXPECT_TRUE(std::isfinite(penetration->depth));
+    EXPECT_GT(penetration->depth, 0.0F);
+}
+
 TEST(ColliderComponentUVETest, GetColliderLocalHalfExtentsUVE_UsesConservativeShapeBounds) {
     Scene::ColliderComponentUVE sphere;
     sphere.shapeType = Scene::ColliderShapeTypeUVE::Sphere;
