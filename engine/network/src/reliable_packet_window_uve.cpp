@@ -156,6 +156,52 @@ bool DeserializeReliablePayloadFragmentUVE(const std::vector<std::uint8_t>& byte
     }
 }
 
+bool SerializeReliablePacketFragmentUVE(const ReliablePacketHeaderUVE& header,
+                                         const ReliablePayloadFragmentUVE& fragment,
+                                         std::vector<std::uint8_t>& outBytes) noexcept {
+    try {
+        std::vector<std::uint8_t> headerBytes;
+        std::vector<std::uint8_t> fragmentBytes;
+        if (!SerializeReliablePacketHeaderUVE(header, headerBytes) ||
+            !SerializeReliablePayloadFragmentUVE(fragment, fragmentBytes)) {
+            return false;
+        }
+        std::vector<std::uint8_t> bytes;
+        bytes.reserve(headerBytes.size() + fragmentBytes.size());
+        bytes.insert(bytes.end(), headerBytes.begin(), headerBytes.end());
+        bytes.insert(bytes.end(), fragmentBytes.begin(), fragmentBytes.end());
+        outBytes = std::move(bytes);
+        return true;
+    } catch (const std::bad_alloc&) {
+        return false;
+    }
+}
+
+bool DeserializeReliablePacketFragmentUVE(const std::vector<std::uint8_t>& bytes,
+                                           ReliablePacketHeaderUVE& outHeader,
+                                           ReliablePayloadFragmentUVE& outFragment) noexcept {
+    if (bytes.size() < kReliablePacketFragmentWireHeaderBytesUVE ||
+        bytes.size() > kReliablePacketFragmentWireHeaderBytesUVE + kReliablePacketMaximumPayloadBytesUVE) {
+        return false;
+    }
+    try {
+        const auto headerEnd = bytes.begin() + static_cast<std::ptrdiff_t>(kReliablePacketHeaderWireBytesUVE);
+        std::vector<std::uint8_t> headerBytes(bytes.begin(), headerEnd);
+        std::vector<std::uint8_t> fragmentBytes(headerEnd, bytes.end());
+        ReliablePacketHeaderUVE decodedHeader;
+        ReliablePayloadFragmentUVE decodedFragment;
+        if (!DeserializeReliablePacketHeaderUVE(headerBytes, decodedHeader) ||
+            !DeserializeReliablePayloadFragmentUVE(fragmentBytes, decodedFragment)) {
+            return false;
+        }
+        outHeader = decodedHeader;
+        outFragment = std::move(decodedFragment);
+        return true;
+    } catch (const std::bad_alloc&) {
+        return false;
+    }
+}
+
 ReliablePayloadReassemblyStatusUVE AcceptReliablePayloadFragmentUVE(
     const std::uint32_t messageId, const std::size_t fragmentIndex, const std::size_t fragmentCount,
     const std::vector<std::uint8_t>& fragmentBytes, ReliablePayloadReassemblyStateUVE& state,
