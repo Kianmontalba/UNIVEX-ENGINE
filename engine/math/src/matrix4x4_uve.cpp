@@ -72,7 +72,8 @@ Matrix4x4UVE Matrix4x4UVE::PerspectiveUVE(float fovYRadians, float aspectRatio, 
 Matrix4x4UVE Matrix4x4UVE::OrthographicUVE(float left, float right, float bottom, float top, float nearPlane,
                                             float farPlane) noexcept {
     Matrix4x4UVE result{};
-    result.m[0][0] = 2.0F / (right - left);
+    result.m[0][0] = static_cast<float>(
+        2.0 / (static_cast<double>(right) - static_cast<double>(left)));
     result.m[0][1] = 0.0F;
     result.m[0][2] = 0.0F;
     result.m[0][3] = -(right + left) / (right - left);
