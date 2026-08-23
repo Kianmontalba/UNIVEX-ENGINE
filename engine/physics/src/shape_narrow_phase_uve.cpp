@@ -126,7 +126,15 @@ std::optional<Math::PenetrationUVE> ComputeCapsuleAabbPenetrationUVE(
     AddAxisBreakpointsUVE(segmentStart.y, directionY, box.min.y, box.max.y);
     AddAxisBreakpointsUVE(segmentStart.z, directionZ, box.min.z, box.max.z);
 
-    std::sort(breakpoints.begin(), breakpoints.begin() + static_cast<std::ptrdiff_t>(breakpointCount));
+    for (std::size_t index = 1U; index < breakpointCount; ++index) {
+        const double value = breakpoints[index];
+        std::size_t insertionIndex = index;
+        while (insertionIndex > 0U && breakpoints[insertionIndex - 1U] > value) {
+            breakpoints[insertionIndex] = breakpoints[insertionIndex - 1U];
+            --insertionIndex;
+        }
+        breakpoints[insertionIndex] = value;
+    }
     std::size_t uniqueCount = 0U;
     for (std::size_t index = 0U; index < breakpointCount; ++index) {
         if (uniqueCount == 0U || std::fabs(breakpoints[index] - breakpoints[uniqueCount - 1U]) >
