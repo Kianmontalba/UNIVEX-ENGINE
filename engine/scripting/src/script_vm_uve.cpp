@@ -1507,6 +1507,10 @@ namespace {
         return MakeNodeFailureUVE(instructionIndex,
                                   "engine.get_time requires a caller-owned engine time binding.");
     }
+    if (!CanSetNodeOutputUVE(context, instruction.sourceNodeId, "Value")) {
+        return MakeNodeFailureUVE(instructionIndex,
+                                  "engine.get_time rejected its bounded Value output capacity before callback.");
+    }
     float seconds = 0.0F;
     if (!bindings->getTime(bindings->userData, &seconds)) {
         return MakeNodeFailureUVE(instructionIndex,
