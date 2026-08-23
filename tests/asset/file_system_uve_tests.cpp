@@ -205,6 +205,7 @@ TEST_F(FileSystemUVETest, WriteFileUVE_TraversalPath_ReturnsFalseWithoutEscaping
     fileSystem.MountDirectoryUVE("", directory, 0);
 
     EXPECT_FALSE(fileSystem.WriteFileUVE("../uve_file_system_tests_escaped.txt", ToBytesUVE("blocked")));
+    EXPECT_FALSE(fileSystem.WriteFileUVE("..\\\\uve_file_system_tests_escaped.txt", ToBytesUVE("blocked")));
     EXPECT_FALSE(std::filesystem::exists(escapedPath));
 
     std::filesystem::remove_all(directory);
