@@ -1,0 +1,80 @@
+{
+  "version": 4,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 24,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "uve-debug",
+      "displayName": "UVE Debug",
+      "description": "Debug symbols, assertions, and the native test suite.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/preset-debug",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "UVE_BUILD_CONFIGURATION": "Debug",
+        "UVE_BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "uve-development",
+      "displayName": "UVE Development",
+      "description": "Optimized development build with debug information and the native test suite.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/preset-development",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "UVE_BUILD_CONFIGURATION": "Development",
+        "UVE_BUILD_TESTS": "ON"
+      }
+    },
+    {
+      "name": "uve-release",
+      "displayName": "UVE Release",
+      "description": "Optimized distribution build with debug information disabled.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/preset-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "UVE_BUILD_CONFIGURATION": "Release",
+        "UVE_BUILD_TESTS": "OFF"
+      }
+    },
+    {
+      "name": "uve-shipping",
+      "displayName": "UVE Shipping",
+      "description": "Size-optimized shipping build with tests disabled and shipping markers enabled.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/preset-shipping",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "MinSizeRel",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "UVE_BUILD_CONFIGURATION": "Shipping",
+        "UVE_BUILD_TESTS": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "uve-debug",
+      "configurePreset": "uve-debug"
+    },
+    {
+      "name": "uve-development",
+      "configurePreset": "uve-development"
+    },
+    {
+      "name": "uve-release",
+      "configurePreset": "uve-release"
+    },
+    {
+      "name": "uve-shipping",
+      "configurePreset": "uve-shipping"
+    }
+  ]
+}
