@@ -133,6 +133,15 @@ TEST(QuaternionUVETest, CheckedHelpers_AxisAngleAcceptsLargeFiniteAxis) {
     EXPECT_NEAR(LengthSquaredUVE(rotation), 1.0F, kEpsilon);
 }
 
+TEST(QuaternionUVETest, CheckedHelpers_LookAtAcceptsLargeFiniteDirectionAndUp) {
+    const float maximum = std::numeric_limits<float>::max();
+    QuaternionUVE lookAt{};
+    ASSERT_TRUE(TryMakeLookAtUVE(Vector3UVE{maximum, 0.0F, 0.0F},
+                                 Vector3UVE{0.0F, maximum, 0.0F}, lookAt));
+    EXPECT_TRUE(IsFiniteUVE(lookAt));
+    EXPECT_NEAR(LengthSquaredUVE(lookAt), 1.0F, kEpsilon);
+}
+
 TEST(QuaternionUVETest, CheckedHelpers_RejectNonFiniteOrZeroInputWithoutChangingOutput) {
     QuaternionUVE preserved{1.0F, 2.0F, 3.0F, 4.0F};
     EXPECT_FALSE(TryNormalizeUVE(QuaternionUVE{0.0F, 0.0F, 0.0F, 0.0F}, preserved));

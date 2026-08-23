@@ -219,13 +219,22 @@ bool TryMakeEulerUVE(const Vector3UVE& radians, QuaternionUVE& outRotation) noex
 
 bool TryMakeLookAtUVE(const Vector3UVE& direction, const Vector3UVE& up,
                       QuaternionUVE& outRotation) noexcept {
-    if (!IsFiniteVectorUVE(direction) || !IsFiniteVectorUVE(up) ||
-        LengthSquaredUVE(direction) <= kMinimumQuaternionLengthSquaredUVE ||
-        LengthSquaredUVE(up) <= kMinimumQuaternionLengthSquaredUVE) {
+    if (!IsFiniteVectorUVE(direction) || !IsFiniteVectorUVE(up)) {
+        return false;
+    }
+    const float directionLengthSquared = LengthSquaredUVE(direction);
+    const float upLengthSquared = LengthSquaredUVE(up);
+    if ((std::isfinite(directionLengthSquared) &&
+         directionLengthSquared <= kMinimumQuaternionLengthSquaredUVE) ||
+        (std::isfinite(upLengthSquared) && upLengthSquared <= kMinimumQuaternionLengthSquaredUVE)) {
         return false;
     }
     const Vector3UVE forward = NormalizeUVE(direction);
-    const Vector3UVE rightUnnormalized = CrossUVE(up, forward);
+    const Vector3UVE normalizedUp = NormalizeUVE(up);
+    if (!IsFiniteVectorUVE(forward) || !IsFiniteVectorUVE(normalizedUp)) {
+        return false;
+    }
+    const Vector3UVE rightUnnormalized = CrossUVE(normalizedUp, forward);
     if (!IsFiniteVectorUVE(rightUnnormalized) ||
         LengthSquaredUVE(rightUnnormalized) <= kMinimumQuaternionLengthSquaredUVE) {
         return false;
