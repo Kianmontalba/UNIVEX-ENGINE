@@ -572,16 +572,46 @@ std::optional<Math::PenetrationUVE> ComputeSphereOrientedBoxPenetrationUVE(
         return std::nullopt;
     }
 
-    const Math::Vector3UVE localSphereCenter =
-        Math::RotateVectorUVE(inverseRotation, sphereCenter - boxCenter);
-    const Math::AabbUVE localBox = Math::AabbUVE::FromCenterExtentsUVE({0.0F, 0.0F, 0.0F}, boxHalfExtents);
+    const double centerDeltaX = static_cast<double>(sphereCenter.x) - static_cast<double>(boxCenter.x);
+    const double centerDeltaY = static_cast<double>(sphereCenter.y) - static_cast<double>(boxCenter.y);
+    const double centerDeltaZ = static_cast<double>(sphereCenter.z) - static_cast<double>(boxCenter.z);
+    const double centerScale = std::max(1.0, std::max(std::fabs(centerDeltaX),
+                                                      std::max(std::fabs(centerDeltaY), std::fabs(centerDeltaZ))));
+    if (!std::isfinite(centerScale)) {
+        return std::nullopt;
+    }
+    const Math::Vector3UVE scaledSphereOffset{
+        static_cast<float>(centerDeltaX / centerScale),
+        static_cast<float>(centerDeltaY / centerScale),
+        static_cast<float>(centerDeltaZ / centerScale),
+    };
+    const Math::Vector3UVE scaledHalfExtents{
+        static_cast<float>(static_cast<double>(boxHalfExtents.x) / centerScale),
+        static_cast<float>(static_cast<double>(boxHalfExtents.y) / centerScale),
+        static_cast<float>(static_cast<double>(boxHalfExtents.z) / centerScale),
+    };
+    const float scaledSphereRadius = static_cast<float>(static_cast<double>(sphereRadius) / centerScale);
+    if (!IsFiniteVectorUVE(scaledSphereOffset) || !IsFiniteVectorUVE(scaledHalfExtents) ||
+        !std::isfinite(scaledSphereRadius) || scaledSphereRadius <= 0.0F ||
+        scaledHalfExtents.x <= 0.0F || scaledHalfExtents.y <= 0.0F || scaledHalfExtents.z <= 0.0F) {
+        return std::nullopt;
+    }
+    const Math::Vector3UVE localSphereCenter = Math::RotateVectorUVE(inverseRotation, scaledSphereOffset);
+    const Math::AabbUVE localBox =
+        Math::AabbUVE::FromCenterExtentsUVE({0.0F, 0.0F, 0.0F}, scaledHalfExtents);
     const std::optional<Math::PenetrationUVE> localPenetration =
-        ComputeSphereAabbPenetrationUVE(localBox, localSphereCenter, sphereRadius);
+        ComputeSphereAabbPenetrationUVE(localBox, localSphereCenter, scaledSphereRadius);
     if (!localPenetration.has_value()) {
         return std::nullopt;
     }
-    return Math::PenetrationUVE{
-        Math::RotateVectorUVE(normalizedRotation, localPenetration->axis), localPenetration->depth};
+    const double worldDepth = static_cast<double>(localPenetration->depth) * centerScale;
+    const double maximumFloat = static_cast<double>(std::numeric_limits<float>::max());
+    const Math::Vector3UVE worldAxis = Math::RotateVectorUVE(normalizedRotation, localPenetration->axis);
+    if (!std::isfinite(worldDepth) || worldDepth <= 0.0 || worldDepth > maximumFloat ||
+        !IsFiniteVectorUVE(worldAxis)) {
+        return std::nullopt;
+    }
+    return Math::PenetrationUVE{worldAxis, static_cast<float>(worldDepth)};
 }
 
 std::optional<Math::PenetrationUVE> ComputeCapsuleOrientedBoxPenetrationUVE(
