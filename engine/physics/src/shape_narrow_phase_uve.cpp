@@ -628,17 +628,67 @@ std::optional<Math::PenetrationUVE> ComputeCapsuleOrientedBoxPenetrationUVE(
         return std::nullopt;
     }
 
-    const Math::Vector3UVE localSegmentStart =
-        Math::RotateVectorUVE(inverseRotation, capsuleSegmentStart - boxCenter);
-    const Math::Vector3UVE localSegmentEnd = Math::RotateVectorUVE(inverseRotation, capsuleSegmentEnd - boxCenter);
-    const Math::AabbUVE localBox = Math::AabbUVE::FromCenterExtentsUVE({0.0F, 0.0F, 0.0F}, boxHalfExtents);
+    const double startOffsetX = static_cast<double>(capsuleSegmentStart.x) - static_cast<double>(boxCenter.x);
+    const double startOffsetY = static_cast<double>(capsuleSegmentStart.y) - static_cast<double>(boxCenter.y);
+    const double startOffsetZ = static_cast<double>(capsuleSegmentStart.z) - static_cast<double>(boxCenter.z);
+    const double endOffsetX = static_cast<double>(capsuleSegmentEnd.x) - static_cast<double>(boxCenter.x);
+    const double endOffsetY = static_cast<double>(capsuleSegmentEnd.y) - static_cast<double>(boxCenter.y);
+    const double endOffsetZ = static_cast<double>(capsuleSegmentEnd.z) - static_cast<double>(boxCenter.z);
+    const double geometryScale = std::max(
+        1.0,
+        std::max(std::fabs(startOffsetX),
+                 std::max(std::fabs(startOffsetY),
+                          std::max(std::fabs(startOffsetZ),
+                                   std::max(std::fabs(endOffsetX),
+                                            std::max(std::fabs(endOffsetY),
+                                                     std::max(std::fabs(endOffsetZ),
+                                                              std::max(static_cast<double>(boxHalfExtents.x),
+                                                                       std::max(static_cast<double>(boxHalfExtents.y),
+                                                                                std::max(static_cast<double>(boxHalfExtents.z),
+                                                                                         static_cast<double>(capsuleRadius)))))))))));
+    if (!std::isfinite(geometryScale)) {
+        return std::nullopt;
+    }
+    const Math::Vector3UVE scaledSegmentStart{
+        static_cast<float>(startOffsetX / geometryScale),
+        static_cast<float>(startOffsetY / geometryScale),
+        static_cast<float>(startOffsetZ / geometryScale),
+    };
+    const Math::Vector3UVE scaledSegmentEnd{
+        static_cast<float>(endOffsetX / geometryScale),
+        static_cast<float>(endOffsetY / geometryScale),
+        static_cast<float>(endOffsetZ / geometryScale),
+    };
+    const Math::Vector3UVE scaledHalfExtents{
+        static_cast<float>(static_cast<double>(boxHalfExtents.x) / geometryScale),
+        static_cast<float>(static_cast<double>(boxHalfExtents.y) / geometryScale),
+        static_cast<float>(static_cast<double>(boxHalfExtents.z) / geometryScale),
+    };
+    const float scaledCapsuleRadius = static_cast<float>(static_cast<double>(capsuleRadius) / geometryScale);
+    if (!IsFiniteVectorUVE(scaledSegmentStart) || !IsFiniteVectorUVE(scaledSegmentEnd) ||
+        !IsFiniteVectorUVE(scaledHalfExtents) || !std::isfinite(scaledCapsuleRadius) ||
+        scaledCapsuleRadius <= 0.0F || scaledHalfExtents.x <= 0.0F || scaledHalfExtents.y <= 0.0F ||
+        scaledHalfExtents.z <= 0.0F) {
+        return std::nullopt;
+    }
+    const Math::Vector3UVE localSegmentStart = Math::RotateVectorUVE(
+        inverseRotation, scaledSegmentStart);
+    const Math::Vector3UVE localSegmentEnd = Math::RotateVectorUVE(inverseRotation, scaledSegmentEnd);
+    const Math::AabbUVE localBox =
+        Math::AabbUVE::FromCenterExtentsUVE({0.0F, 0.0F, 0.0F}, scaledHalfExtents);
     const std::optional<Math::PenetrationUVE> localPenetration = ComputeCapsuleAabbPenetrationUVE(
-        localBox, localSegmentStart, localSegmentEnd, capsuleRadius);
+        localBox, localSegmentStart, localSegmentEnd, scaledCapsuleRadius);
     if (!localPenetration.has_value()) {
         return std::nullopt;
     }
-    return Math::PenetrationUVE{
-        Math::RotateVectorUVE(normalizedRotation, localPenetration->axis), localPenetration->depth};
+    const double worldDepth = static_cast<double>(localPenetration->depth) * geometryScale;
+    const double maximumFloat = static_cast<double>(std::numeric_limits<float>::max());
+    const Math::Vector3UVE worldAxis = Math::RotateVectorUVE(normalizedRotation, localPenetration->axis);
+    if (!std::isfinite(worldDepth) || worldDepth <= 0.0 || worldDepth > maximumFloat ||
+        !IsFiniteVectorUVE(worldAxis)) {
+        return std::nullopt;
+    }
+    return Math::PenetrationUVE{worldAxis, static_cast<float>(worldDepth)};
 }
 
 std::optional<Math::PenetrationUVE> ComputeOrientedBoxOrientedBoxPenetrationUVE(
