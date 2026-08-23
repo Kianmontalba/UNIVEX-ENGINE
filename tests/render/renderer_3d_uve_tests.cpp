@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <memory>
+#include <limits>
 #include <string>
 #include <thread>
 #include <vector>
@@ -325,6 +326,23 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_VisiblePrimitive_RecordsCanonicalGeomet
     });
     ASSERT_NE(primitiveColor, commands.cend());
     EXPECT_EQ(std::get<SetUniformVector3CommandUVE>(*primitiveColor).value, baseColor);
+}
+
+TEST_F(Renderer3DUVETest, RenderFrameUVE_FiniteExtremePrimitiveTransformIsRejectedBeforeQueuePublication) {
+    const Scene::EntityUVE cameraEntity = MakeCameraEntityUVE();
+    const Scene::EntityUVE primitiveEntity = entityManager.CreateEntityUVE();
+    Scene::TransformComponentUVE transform;
+    transform.localPosition = Math::Vector3UVE{std::numeric_limits<float>::max(), 0.0F, -10.0F};
+    transform.localScale = Math::Vector3UVE{std::numeric_limits<float>::max(), 1.0F, 1.0F};
+    sceneGraph.AttachTransformUVE(entityManager, primitiveEntity, transform);
+    sceneGraph.UpdateUVE(entityManager);
+    entityManager.AddComponentUVE<Scene::PrimitiveMeshComponentUVE>(primitiveEntity);
+
+    renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+    const Renderer3DFrameDiagnosticsUVE diagnostics = renderer3D->GetLastFrameDiagnosticsUVE();
+    EXPECT_EQ(diagnostics.primitiveCandidates, 1U);
+    EXPECT_EQ(diagnostics.primitiveItemsExtracted, 0U);
+    EXPECT_EQ(diagnostics.primitiveDrawCallsRecorded, 0U);
 }
 
 TEST_F(Renderer3DUVETest, RenderFrameUVE_VisiblePrimitive_ReportsEvidenceSpecificDiagnostics) {

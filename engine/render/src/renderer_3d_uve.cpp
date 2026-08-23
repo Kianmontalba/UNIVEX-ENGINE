@@ -24,6 +24,7 @@
 #include "uve/debug/logging_macros_uve.h"
 #include "uve/math/frustum_uve.h"
 #include "uve/math/matrix4x4_uve.h"
+#include "uve/math/quaternion_uve.h"
 #include "uve/render/i_light_system_uve.h"
 #include "uve/render/render_graph_uve.h"
 #include "uve/render/primitive_geometry_uve.h"
@@ -40,6 +41,26 @@
 namespace UVE::Render {
 
 namespace {
+
+[[nodiscard]] bool IsFiniteVectorUVE(const Math::Vector3UVE& value) noexcept {
+    return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+}
+
+[[nodiscard]] bool IsFiniteMatrixUVE(const Math::Matrix4x4UVE& matrix) noexcept {
+    for (const auto& row : matrix.m) {
+        for (const float value : row) {
+            if (!std::isfinite(value)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+[[nodiscard]] bool IsOrderedFiniteAabbUVE(const Math::AabbUVE& bounds) noexcept {
+    return IsFiniteVectorUVE(bounds.min) && IsFiniteVectorUVE(bounds.max) && bounds.min.x <= bounds.max.x &&
+           bounds.min.y <= bounds.max.y && bounds.min.z <= bounds.max.z;
+}
 
 [[nodiscard]] Math::AabbUVE ComputeLightSpaceCameraBoundsUVE(const CameraFrustumCornersUVE& cameraCorners,
                                                               const Math::Matrix4x4UVE& lightView) noexcept {
@@ -609,13 +630,31 @@ struct Renderer3DUVE::ImplUVE {
                     return;
                 }
                 ++lastFrameDiagnostics.primitiveCandidates;
+                if (!IsFiniteVectorUVE(worldTransform.worldPosition) || !IsFiniteVectorUVE(worldTransform.worldScale) ||
+                    !Math::IsFiniteUVE(worldTransform.worldRotation)) {
+                    return;
+                }
+                Math::QuaternionUVE normalizedRotation;
+                if (!Math::TryNormalizeUVE(worldTransform.worldRotation, normalizedRotation)) {
+                    return;
+                }
+                const PrimitiveGeometryUVE& geometry = GetPrimitiveGeometryUVE(primitive.kind);
+                if (!IsOrderedFiniteAabbUVE(geometry.localBounds)) {
+                    return;
+                }
                 const Math::Matrix4x4UVE worldMatrix = Math::Matrix4x4UVE::ComposeTrsUVE(
-                    worldTransform.worldPosition, worldTransform.worldRotation, worldTransform.worldScale);
-                const Math::AabbUVE worldBounds = GetPrimitiveGeometryUVE(primitive.kind).localBounds.TransformUVE(worldMatrix);
-                if (!frustum.IntersectsUVE(worldBounds)) {
+                    worldTransform.worldPosition, normalizedRotation, worldTransform.worldScale);
+                if (!IsFiniteMatrixUVE(worldMatrix)) {
+                    return;
+                }
+                const Math::AabbUVE worldBounds = geometry.localBounds.TransformUVE(worldMatrix);
+                if (!IsOrderedFiniteAabbUVE(worldBounds) || !frustum.IntersectsUVE(worldBounds)) {
                     return;
                 }
                 const float sortDepth = frustum.planes[4U].GetSignedDistanceUVE(worldBounds.GetCenterUVE());
+                if (!std::isfinite(sortDepth)) {
+                    return;
+                }
                 items.push_back(PrimitiveRenderItemUVE{worldMatrix, primitive.kind, primitive.baseColor, sortDepth});
             });
         std::sort(items.begin(), items.end(),
