@@ -40,6 +40,7 @@ TEST(DataTableUVE, InvalidMutationsAreFailureAtomic) {
     const DataTableSnapshotUVE before = table.GetSnapshotUVE();
 
     EXPECT_FALSE(table.DefineColumnUVE("value", DataTableColumnTypeUVE::String));
+    EXPECT_FALSE(table.DefineColumnUVE("invalid", static_cast<DataTableColumnTypeUVE>(0xFFU)));
     EXPECT_FALSE(table.AddRowUVE("one", {std::int64_t{2}}));
     EXPECT_FALSE(table.AddRowUVE("two", {std::string{"wrong type"}}));
     EXPECT_FALSE(table.AddRowUVE("bad id!", {std::int64_t{3}}));

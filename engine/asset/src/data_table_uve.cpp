@@ -323,7 +323,11 @@ bool DataTableUVE::ValidateRowUVE(const std::string_view identifier,
 }
 
 bool DataTableUVE::DefineColumnUVE(std::string name, const DataTableColumnTypeUVE type) {
-    if (!IsBoundedIdentifierUVE(name) || m_columns.size() >= kMaximumColumnsUVE ||
+    const bool validType = type == DataTableColumnTypeUVE::Boolean ||
+                           type == DataTableColumnTypeUVE::Integer ||
+                           type == DataTableColumnTypeUVE::Number ||
+                           type == DataTableColumnTypeUVE::String;
+    if (!validType || !IsBoundedIdentifierUVE(name) || m_columns.size() >= kMaximumColumnsUVE ||
         std::any_of(m_columns.begin(), m_columns.end(), [&name](const DataTableColumnUVE& column) {
             return column.name == name;
         })) {
