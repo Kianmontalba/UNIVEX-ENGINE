@@ -3,6 +3,8 @@
 
 #include <gtest/gtest.h>
 
+#include <limits>
+
 namespace UVE::Plugins {
 namespace {
 UVE::Core::MotionQueryFeatureSchemaUVE MakeSchemaUVE() {
@@ -83,6 +85,24 @@ TEST(MotionQuerySearchIndexUVETest, BuildFromEntriesUVE_RejectsDuplicateAndIncon
     };
     EXPECT_EQ(index.BuildFromEntriesUVE(inconsistent).code,
               MotionQuerySearchIndexResultUVE::Code::InconsistentFeatureDimensions);
+}
+
+TEST(MotionQuerySearchIndexUVETest, FindNearestUVE_PreservesFiniteExtremeFeatureDistances) {
+    const float maximumValue = std::numeric_limits<float>::max();
+    MotionQuerySearchIndexUVE index;
+    const std::vector<MotionQuerySearchEntryUVE> entries = {
+        MotionQuerySearchEntryUVE{0U, UVE::Core::MotionQueryFeatureVectorUVE{{-maximumValue}, 1.0F}},
+        MotionQuerySearchEntryUVE{1U, UVE::Core::MotionQueryFeatureVectorUVE{{maximumValue}, 1.0F}},
+    };
+    ASSERT_TRUE(index.BuildFromEntriesUVE(entries).IsAcceptedUVE());
+
+    std::vector<std::size_t> candidates;
+    const MotionQuerySearchIndexResultUVE result = index.FindNearestUVE(
+        UVE::Core::MotionQueryFeatureVectorUVE{{maximumValue}, 1.0F}, 2U, candidates);
+    ASSERT_TRUE(result.IsAcceptedUVE()) << result.message;
+    ASSERT_EQ(candidates.size(), 2U);
+    EXPECT_EQ(candidates[0], 1U);
+    EXPECT_EQ(candidates[1], 0U);
 }
 
 TEST(MotionQuerySearchIndexUVETest, FindNearestUVE_RejectsInvalidQueryAndResultCount) {

@@ -93,7 +93,7 @@ private:
 
     struct RankedCandidateUVE final {
         std::size_t candidateIndex = 0U;
-        float distanceSquared = 0.0F;
+        double distanceSquared = 0.0;
     };
 
     [[nodiscard]] std::size_t BuildTreeUVE(std::vector<MotionQuerySearchEntryUVE>& entries,

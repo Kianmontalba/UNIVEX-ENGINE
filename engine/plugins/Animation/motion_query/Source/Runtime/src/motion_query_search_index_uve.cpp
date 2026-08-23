@@ -191,14 +191,16 @@ void MotionQuerySearchIndexUVE::SearchTreeUVE(
         return;
     }
     const NodeUVE& node = nodes_[nodeIndex];
-    const float difference = query[node.splitDimension] - node.entry.feature.values[node.splitDimension];
-    const std::size_t nearChild = difference < 0.0F ? node.left : node.right;
-    const std::size_t farChild = difference < 0.0F ? node.right : node.left;
+    const double difference = static_cast<double>(query[node.splitDimension]) -
+                              static_cast<double>(node.entry.feature.values[node.splitDimension]);
+    const std::size_t nearChild = difference < 0.0 ? node.left : node.right;
+    const std::size_t farChild = difference < 0.0 ? node.right : node.left;
     SearchTreeUVE(nearChild, query, maximumResults, outRanked);
 
-    float distanceSquared = 0.0F;
+    double distanceSquared = 0.0;
     for (std::size_t dimension = 0U; dimension < query.size(); ++dimension) {
-        const float delta = query[dimension] - node.entry.feature.values[dimension];
+        const double delta = static_cast<double>(query[dimension]) -
+                             static_cast<double>(node.entry.feature.values[dimension]);
         distanceSquared += delta * delta;
     }
     if (std::isfinite(distanceSquared)) {
@@ -209,7 +211,7 @@ void MotionQuerySearchIndexUVE::SearchTreeUVE(
 
     bool searchFar = outRanked.size() < maximumResults;
     if (!searchFar) {
-        const float splitDistanceSquared = difference * difference;
+        const double splitDistanceSquared = difference * difference;
         searchFar = !std::isfinite(splitDistanceSquared) ||
                     splitDistanceSquared <= outRanked.back().distanceSquared + kDistanceTieEpsilonUVE;
     }
