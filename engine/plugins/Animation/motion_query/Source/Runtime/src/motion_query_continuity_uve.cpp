@@ -18,9 +18,10 @@ namespace {
 
 [[nodiscard]] UVE::Math::Vector3UVE BlendVectorUVE(const UVE::Math::Vector3UVE& previous,
                                                     const UVE::Math::Vector3UVE& current) noexcept {
-    return UVE::Math::Vector3UVE{(previous.x + current.x) * 0.5F,
-                                 (previous.y + current.y) * 0.5F,
-                                 (previous.z + current.z) * 0.5F};
+    return UVE::Math::Vector3UVE{
+        static_cast<float>((static_cast<double>(previous.x) + static_cast<double>(current.x)) * 0.5),
+        static_cast<float>((static_cast<double>(previous.y) + static_cast<double>(current.y)) * 0.5),
+        static_cast<float>((static_cast<double>(previous.z) + static_cast<double>(current.z)) * 0.5)};
 }
 } // namespace
 
@@ -70,6 +71,10 @@ MotionQueryContinuityResultUVE ApplyMotionQueryContinuityUVE(
     UVE::Core::TransformPoseUVE blended = currentPose;
     blended.position = BlendVectorUVE(previousSample->pose.position, currentPose.position);
     blended.scale = BlendVectorUVE(previousSample->pose.scale, currentPose.scale);
+    if (!UVE::Core::IsFiniteTransformPoseUVE(blended)) {
+        return MakeContinuityResultUVE(MotionQueryContinuityCodeUVE::InvalidPose, age, currentPose,
+                                       "motion query continuity blended pose is invalid");
+    }
     // Quaternion interpolation is intentionally not performed until an authoritative SLERP
     // contract exists in the math layer. Current sampled rotation remains authoritative.
     return MakeContinuityResultUVE(MotionQueryContinuityCodeUVE::Applied, age, blended,

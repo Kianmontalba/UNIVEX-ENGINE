@@ -3,6 +3,8 @@
 
 #include <gtest/gtest.h>
 
+#include <limits>
+
 namespace UVE::Plugins {
 namespace {
 UVE::Core::TransformPoseUVE MakeCurrentPoseUVE() {
@@ -45,6 +47,26 @@ TEST(MotionQueryContinuityUVETest, BlendUVE_AveragesTranslationAndScaleButKeepsC
     EXPECT_DOUBLE_EQ(result.previousAgeSeconds, 0.1);
     EXPECT_EQ(result.pose.position, (UVE::Math::Vector3UVE{1.0F, 3.0F, 5.0F}));
     EXPECT_EQ(result.pose.scale, (UVE::Math::Vector3UVE{1.5F, 3.0F, 4.5F}));
+    EXPECT_EQ(result.pose.rotation, current.rotation);
+}
+
+TEST(MotionQueryContinuityUVETest, BlendUVE_PreservesFiniteExtremePositionAndScale) {
+    const float maximumValue = std::numeric_limits<float>::max();
+    UVE::Core::TransformPoseUVE current = MakeCurrentPoseUVE();
+    current.position = UVE::Math::Vector3UVE{maximumValue, maximumValue, maximumValue};
+    current.scale = UVE::Math::Vector3UVE{maximumValue, maximumValue, maximumValue};
+    UVE::Core::PoseSampleUVE previous = MakePreviousSampleUVE(0.9);
+    previous.pose.position = UVE::Math::Vector3UVE{maximumValue, maximumValue, maximumValue};
+    previous.pose.scale = UVE::Math::Vector3UVE{maximumValue, maximumValue, maximumValue};
+
+    MotionQueryContinuitySettingsUVE settings;
+    settings.policy = MotionQueryContinuityPolicyUVE::BlendPreviousWithinWindow;
+    settings.maximumPreviousAgeSeconds = 0.2;
+    const auto result = ApplyMotionQueryContinuityUVE(current, &previous, 1.0, settings);
+    ASSERT_EQ(result.code, MotionQueryContinuityCodeUVE::Applied);
+    EXPECT_TRUE(result.IsAcceptedUVE());
+    EXPECT_EQ(result.pose.position, current.position);
+    EXPECT_EQ(result.pose.scale, current.scale);
     EXPECT_EQ(result.pose.rotation, current.rotation);
 }
 
