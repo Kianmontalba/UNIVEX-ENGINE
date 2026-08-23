@@ -116,22 +116,36 @@ VoiceHandleUVE AudioSystemUVE::CreateSourceUVE(const AudioSourceDescUVE& desc) {
 
 void AudioSystemUVE::DestroySourceUVE(VoiceHandleUVE source) {
     const auto iterator = m_impl->sources.find(source.value);
-    if (iterator != m_impl->sources.end()) {
-        static_cast<void>(m_impl->mixerGroups.DetachSourceUVE(iterator->second.mixerGroup));
-        m_impl->sources.erase(iterator);
+    if (iterator == m_impl->sources.end()) {
+        UVE_ERROR("AudioSystemUVE: DestroySourceUVE called with an unknown handle ({})", source.value);
+        return;
     }
+    static_cast<void>(m_impl->mixerGroups.DetachSourceUVE(iterator->second.mixerGroup));
+    m_impl->sources.erase(iterator);
     m_impl->audioDevice.DestroyVoiceUVE(source);
 }
 
 bool AudioSystemUVE::PlayUVE(VoiceHandleUVE source) {
+    if (!m_impl->sources.contains(source.value)) {
+        UVE_ERROR("AudioSystemUVE: PlayUVE called with an unknown handle ({})", source.value);
+        return false;
+    }
     return m_impl->audioDevice.PlayUVE(source);
 }
 
 bool AudioSystemUVE::StopUVE(VoiceHandleUVE source) {
+    if (!m_impl->sources.contains(source.value)) {
+        UVE_ERROR("AudioSystemUVE: StopUVE called with an unknown handle ({})", source.value);
+        return false;
+    }
     return m_impl->audioDevice.StopUVE(source);
 }
 
 VoicePlaybackStateUVE AudioSystemUVE::GetSourceStateUVE(VoiceHandleUVE source) const {
+    if (!m_impl->sources.contains(source.value)) {
+        UVE_ERROR("AudioSystemUVE: GetSourceStateUVE called with an unknown handle ({})", source.value);
+        return VoicePlaybackStateUVE::Stopped;
+    }
     return m_impl->audioDevice.GetVoiceStateUVE(source);
 }
 

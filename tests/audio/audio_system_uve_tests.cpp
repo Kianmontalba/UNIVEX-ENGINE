@@ -38,18 +38,36 @@ public:
         ++createCount;
         return nextHandle;
     }
-    void DestroyVoiceUVE(VoiceHandleUVE) override {}
-    [[nodiscard]] bool PlayUVE(VoiceHandleUVE) override { return true; }
-    [[nodiscard]] bool StopUVE(VoiceHandleUVE) override { return true; }
+    void DestroyVoiceUVE(VoiceHandleUVE voice) override {
+        lastHandle = voice;
+        ++destroyCount;
+    }
+    [[nodiscard]] bool PlayUVE(VoiceHandleUVE voice) override {
+        lastHandle = voice;
+        ++playCount;
+        return true;
+    }
+    [[nodiscard]] bool StopUVE(VoiceHandleUVE voice) override {
+        lastHandle = voice;
+        ++stopCount;
+        return true;
+    }
     [[nodiscard]] bool SetVoiceParamsUVE(VoiceHandleUVE, const AudioVoiceParamsUVE&) override { return true; }
-    [[nodiscard]] VoicePlaybackStateUVE GetVoiceStateUVE(VoiceHandleUVE) const override {
+    [[nodiscard]] VoicePlaybackStateUVE GetVoiceStateUVE(VoiceHandleUVE voice) const override {
+        lastHandle = voice;
+        ++stateCount;
         return VoicePlaybackStateUVE::Stopped;
     }
     [[nodiscard]] std::string_view GetBackendNameUVE() const noexcept override { return "Recording"; }
 
     AudioVoiceDescUVE lastDescription{};
+    mutable VoiceHandleUVE lastHandle = kInvalidVoiceHandleUVE;
     VoiceHandleUVE nextHandle{1U};
     int createCount = 0;
+    mutable int destroyCount = 0;
+    mutable int playCount = 0;
+    mutable int stopCount = 0;
+    mutable int stateCount = 0;
 };
 
 class TestAudioClipResolverUVE final : public IAudioClipResolverUVE {
@@ -168,6 +186,27 @@ TEST_F(AudioSystemUVETest, CreateSourceUVE_ForwardsCorrectlyShapedVoiceDescToDev
     const VoiceHandleUVE source = audioSystem.CreateSourceUVE(desc);
     EXPECT_NE(source, kInvalidVoiceHandleUVE);
     EXPECT_EQ(device.GetLiveVoiceCountUVE(), 1U);
+}
+
+TEST(AudioSystemLifecycleValidationUVETest, UnknownAndInvalidSourceHandlesFailClosedBeforeDeviceCallbacks) {
+    RecordingAudioDeviceUVE device;
+    AudioSystemUVE audioSystem{device};
+    ASSERT_EQ(audioSystem.CreateSourceUVE(AudioSourceDescUVE{}), VoiceHandleUVE{1U});
+    const VoiceHandleUVE unknown{99U};
+
+    EXPECT_FALSE(audioSystem.PlayUVE(unknown));
+    EXPECT_FALSE(audioSystem.StopUVE(unknown));
+    EXPECT_EQ(audioSystem.GetSourceStateUVE(unknown), VoicePlaybackStateUVE::Stopped);
+    audioSystem.DestroySourceUVE(unknown);
+    EXPECT_FALSE(audioSystem.PlayUVE(kInvalidVoiceHandleUVE));
+    EXPECT_FALSE(audioSystem.StopUVE(kInvalidVoiceHandleUVE));
+    EXPECT_EQ(audioSystem.GetSourceStateUVE(kInvalidVoiceHandleUVE), VoicePlaybackStateUVE::Stopped);
+    audioSystem.DestroySourceUVE(kInvalidVoiceHandleUVE);
+
+    EXPECT_EQ(device.playCount, 0);
+    EXPECT_EQ(device.stopCount, 0);
+    EXPECT_EQ(device.stateCount, 0);
+    EXPECT_EQ(device.destroyCount, 0);
 }
 
 TEST_F(AudioSystemUVETest, PlayStopGetSourceStateUVE_RoundTripThroughDevice) {
