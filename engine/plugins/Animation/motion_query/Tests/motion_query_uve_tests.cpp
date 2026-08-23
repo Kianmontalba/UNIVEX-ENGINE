@@ -89,6 +89,23 @@ TEST(MotionQueryUVETest, ValidateMotionMatchingDatabaseUVE_RequiresUniqueConsist
               MotionMatchingDatabaseValidationCodeUVE::InconsistentTrajectorySchema);
 }
 
+TEST(MotionQueryUVETest, FindBestMotionMatchUVE_AcceptsFiniteExtremeFacingDirection) {
+    const float maximum = std::numeric_limits<float>::max();
+    MotionQueryUVE query = MakeFeatureUVE(1.0F, 1.0F);
+    query.facingDirection = {0.0F, 0.0F, maximum};
+    MotionMatchingDatabaseUVE database = MakeDatabaseUVE();
+    for (MotionMatchingCandidateUVE& candidate : database.candidates) {
+        candidate.feature.facingDirection = {0.0F, 0.0F, maximum};
+    }
+
+    const MotionMatchingResultUVE result =
+        FindBestMotionMatchUVE(query, database, MotionMatchingWeightsUVE{});
+    ASSERT_TRUE(result.IsMatchUVE()) << result.message;
+    EXPECT_EQ(result.candidatesEvaluated, database.candidates.size());
+    EXPECT_EQ(result.candidateIndex, 2U);
+    EXPECT_FLOAT_EQ(result.cost, 0.0F);
+}
+
 TEST(MotionQueryUVETest, FindBestMotionMatchUVE_SelectsLowestWeightedFeatureCost) {
     const MotionQueryUVE query = MakeFeatureUVE(1.0F, 1.0F);
     const MotionMatchingResultUVE result =

@@ -63,7 +63,21 @@ constexpr float kTieToleranceUVE = 1.0e-6F;
 
 [[nodiscard]] bool TryNormalizeDirectionUVE(const Math::Vector3UVE& value,
                                             Math::Vector3UVE& outDirection) noexcept {
-    if (!IsFiniteVectorUVE(value) || Math::LengthSquaredUVE(value) < kMinimumVectorLengthSquaredUVE) {
+    if (!IsFiniteVectorUVE(value)) {
+        return false;
+    }
+    const double x = static_cast<double>(value.x);
+    const double y = static_cast<double>(value.y);
+    const double z = static_cast<double>(value.z);
+    const double scale = std::max(std::fabs(x), std::max(std::fabs(y), std::fabs(z)));
+    if (!std::isfinite(scale) || scale == 0.0) {
+        return false;
+    }
+    const double scaledLengthSquared = (x / scale) * (x / scale) +
+                                       (y / scale) * (y / scale) +
+                                       (z / scale) * (z / scale);
+    if (!std::isfinite(scaledLengthSquared) ||
+        scaledLengthSquared < static_cast<double>(kMinimumVectorLengthSquaredUVE)) {
         return false;
     }
     outDirection = Math::NormalizeUVE(value);
