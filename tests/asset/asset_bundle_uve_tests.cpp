@@ -104,6 +104,7 @@ TEST(AssetBundleUVETest, PackUVE_TraversalVirtualName_ReturnsFalse) {
 
     AssetBundleUVE bundle;
     EXPECT_FALSE(bundle.PackUVE({{AssetGuidUVE{99}, source, "../outside.txt"}}, bundlePath));
+    EXPECT_FALSE(bundle.PackUVE({{AssetGuidUVE{100}, source, "..\\\\outside.txt"}}, bundlePath));
     EXPECT_FALSE(std::filesystem::exists(bundlePath));
 
     std::filesystem::remove(source);

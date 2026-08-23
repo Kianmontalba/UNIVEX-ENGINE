@@ -45,7 +45,7 @@ void AppendUint64UVE(std::vector<std::byte>& buffer, std::uint64_t value) {
 
 [[nodiscard]] bool IsSafeRelativePathUVE(std::string_view name) {
     if (name.empty() || name.size() > kMaximumAssetBundleEntryNameBytesUVE ||
-        name.find('\0') != std::string_view::npos) {
+        name.find('\0') != std::string_view::npos || name.find('\\') != std::string_view::npos) {
         return false;
     }
     const std::filesystem::path path{std::string(name)};
