@@ -120,10 +120,13 @@ ScriptVector3NumberResultUVE EvaluateScriptVector3LengthUVE(
     if (!IsFiniteInputUVE(vector)) {
         return MakeNumberResultUVE(ScriptVector3EvaluationCodeUVE::NonFiniteInput);
     }
-    const float value = Math::LengthUVE(vector.value);
-    return IsFiniteUVE(value)
-        ? MakeNumberResultUVE(ScriptVector3EvaluationCodeUVE::Applied, value)
-        : MakeNumberResultUVE(ScriptVector3EvaluationCodeUVE::NonFiniteInput);
+    const double value = std::hypot(static_cast<double>(vector.value.x), static_cast<double>(vector.value.y),
+                                    static_cast<double>(vector.value.z));
+    const double maximumFloat = static_cast<double>(std::numeric_limits<float>::max());
+    if (!std::isfinite(value) || value > maximumFloat) {
+        return MakeNumberResultUVE(ScriptVector3EvaluationCodeUVE::NonFiniteInput);
+    }
+    return MakeNumberResultUVE(ScriptVector3EvaluationCodeUVE::Applied, static_cast<float>(value));
 }
 
 ScriptVector3ValueResultUVE EvaluateScriptVector3NormalizeUVE(
