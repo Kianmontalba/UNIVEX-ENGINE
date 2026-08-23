@@ -57,6 +57,11 @@ public:
             scratch << "partial scratch";
             throw std::runtime_error("injected scene serializer save failure");
         }
+        if (scratchPayloadBytes != 0U) {
+            return Asset::WriteUveFileUVE(
+                scratchPath, Asset::AssetKindUVE::Scene,
+                std::vector<std::byte>(scratchPayloadBytes, std::byte{0x5A}));
+        }
         return false;
     }
 
@@ -70,6 +75,7 @@ public:
 
     bool throwOnLoad = false;
     bool throwOnSave = false;
+    std::size_t scratchPayloadBytes = 0U;
     int saveCallCount = 0;
 };
 
@@ -767,6 +773,26 @@ TEST_F(SaveGameSystemUVETest, LoadUVE_UnsupportedSchemaReportsBoundedMigrationDi
     diagnostics = saveGameSystem.GetLastMigrationDiagnosticsUVE();
     EXPECT_EQ(diagnostics.status, SaveMigrationStatusUVE::UnsupportedSourceVersion);
     EXPECT_EQ(diagnostics.sourceSchemaVersion, 9U);
+}
+
+TEST_F(SaveGameSystemUVETest, SaveUVE_OversizedCompressedPayloadPreservesPriorSaveAndCleansScratch) {
+    const EntityUVE entity = entityManager.CreateEntityUVE();
+    const std::filesystem::path finalPath = saveDirectory / "slot_15.uvesave";
+    ASSERT_TRUE(saveGameSystem.SaveUVE(15, entityManager, {entity}, GameStateMetadataUVE{}));
+    const auto priorFile = Asset::ReadUveFileUVE(finalPath);
+    ASSERT_TRUE(priorFile.has_value());
+
+    CountingSceneSerializerUVE oversizedSerializer;
+    oversizedSerializer.scratchPayloadBytes = kMaximumCompressedSavePayloadBytesUVE + 1U;
+    SaveGameSystemUVE oversizedSystem(oversizedSerializer, saveDirectory);
+
+    EXPECT_FALSE(oversizedSystem.SaveUVE(15, entityManager, {entity}, GameStateMetadataUVE{}));
+    EXPECT_EQ(oversizedSerializer.saveCallCount, 1);
+    const auto afterFile = Asset::ReadUveFileUVE(finalPath);
+    ASSERT_TRUE(afterFile.has_value());
+    EXPECT_EQ(afterFile->second, priorFile->second);
+    EXPECT_FALSE(std::filesystem::exists(saveDirectory / ".slot_15_scratch.uvescene"));
+    EXPECT_FALSE(std::filesystem::exists(saveDirectory / "slot_15.uvesave.tmp"));
 }
 
 TEST_F(SaveGameSystemUVETest, SaveUVE_SerializerExceptionPreservesPriorSaveAndCleansScratch) {

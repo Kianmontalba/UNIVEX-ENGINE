@@ -293,6 +293,10 @@ bool SaveGameSystemUVE::SaveUVE(int slotIndex, Scene::IEntityManagerUVE& entityM
 
     const std::vector<std::byte> metadataJsonBytes = EncodeMetadataJsonUVE(finalMetadata);
     const std::vector<std::byte> payload = BuildSavePayloadUVE(metadataJsonBytes, scratchFile->second);
+    if (payload.empty()) {
+        UVE_ERROR("SaveGameSystemUVE: SaveUVE rejected an oversized or unrepresentable payload for slot {}", slotIndex);
+        return false;
+    }
 
     const std::filesystem::path tempPath = TempSaveFilePathUVE(m_saveDirectory, slotIndex);
     if (!Asset::WriteUveFileUVE(tempPath, Asset::AssetKindUVE::Save, payload)) {
