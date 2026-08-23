@@ -802,6 +802,10 @@ namespace {
         return MakeNodeFailureUVE(instructionIndex, "Camera node requires caller-owned camera bindings.");
     }
     const std::uint32_t nodeId = instruction.sourceNodeId;
+    if (!CanSetNodeOutputUVE(context, nodeId, "Result")) {
+        return MakeNodeFailureUVE(instructionIndex,
+                                  "Camera node rejected its bounded Result output capacity before callback.");
+    }
     if (instruction.nodeTypeId == "camera.get_camera") {
         if (bindings->cameraGet == nullptr) {
             return MakeNodeFailureUVE(instructionIndex, "Get Camera requires a caller-owned camera binding.");

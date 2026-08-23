@@ -5448,6 +5448,49 @@ TEST(ScriptVmUVETest, CallbackBackedInputNodesRejectOutputCapacityBeforeCallback
     EXPECT_FALSE(positionContext.FindOutputUVE(1U, "Position").has_value());
 }
 
+TEST(ScriptVmUVETest, CallbackBackedCameraNodesRejectOutputCapacityBeforeCallback) {
+    ScriptBytecodeProgramUVE getProgram;
+    getProgram.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U,
+                                       "camera.get_camera", {}, {}});
+    ScriptVmExecutionContextUVE getContext;
+    FillVmOutputCapacityExceptNodeOneUVE(getContext);
+    InputCameraCaptureUVE getCapture;
+    ScriptEngineCallBindingsUVE getBindings{};
+    getBindings.userData = &getCapture;
+    getBindings.cameraGet = CaptureCameraGetUVE;
+    ScriptVmExecutionOptionsUVE getOptions;
+    getOptions.engineCallBindings = &getBindings;
+
+    const ScriptVmExecutionResultUVE getResult = ExecuteScriptBytecodeUVE(getProgram, getContext, getOptions);
+
+    EXPECT_EQ(getResult.status, ScriptVmStatusUVE::NodeExecutionFailed);
+    EXPECT_EQ(getCapture.cameraGetCount, 0U);
+    EXPECT_EQ(getContext.outputs.size(), ScriptVmExecutionContextUVE::kMaximumBindingsUVE);
+    EXPECT_FALSE(getContext.FindOutputUVE(1U, "Result").has_value());
+
+    ScriptBytecodeProgramUVE positionProgram;
+    positionProgram.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U,
+                                            "camera.set_position", {}, {}});
+    ScriptVmExecutionContextUVE positionContext;
+    ASSERT_TRUE(positionContext.SetInputUVE(1U, "Camera", ScriptEntityValueUVE{Scene::EntityUVE{7U, 2U}}));
+    ASSERT_TRUE(positionContext.SetInputUVE(1U, "Position", ScriptVector3ValueUVE{{1.0F, 2.0F, 3.0F}}));
+    FillVmOutputCapacityExceptNodeOneUVE(positionContext);
+    InputCameraCaptureUVE positionCapture;
+    ScriptEngineCallBindingsUVE positionBindings{};
+    positionBindings.userData = &positionCapture;
+    positionBindings.cameraSetPosition = CaptureCameraPositionUVE;
+    ScriptVmExecutionOptionsUVE positionOptions;
+    positionOptions.engineCallBindings = &positionBindings;
+
+    const ScriptVmExecutionResultUVE positionResult =
+        ExecuteScriptBytecodeUVE(positionProgram, positionContext, positionOptions);
+
+    EXPECT_EQ(positionResult.status, ScriptVmStatusUVE::NodeExecutionFailed);
+    EXPECT_EQ(positionCapture.cameraPositionCount, 0U);
+    EXPECT_EQ(positionContext.outputs.size(), ScriptVmExecutionContextUVE::kMaximumBindingsUVE);
+    EXPECT_FALSE(positionContext.FindOutputUVE(1U, "Result").has_value());
+}
+
 TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_InputAndCameraNodesFailClosedWithoutBindings) {
     const Scene::EntityUVE camera{7U, 2U};
     const std::array<const char*, 15U> nodeTypes{
