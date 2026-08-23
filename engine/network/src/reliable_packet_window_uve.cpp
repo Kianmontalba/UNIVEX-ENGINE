@@ -156,6 +156,38 @@ bool DeserializeReliablePayloadFragmentUVE(const std::vector<std::uint8_t>& byte
     }
 }
 
+bool BuildReliablePayloadFragmentsUVE(const std::uint32_t messageId,
+                                       const std::vector<std::uint8_t>& payloadBytes,
+                                       const std::size_t maximumFragmentBytes,
+                                       std::vector<ReliablePayloadFragmentUVE>& outFragments) noexcept {
+    ReliablePayloadFragmentPlanUVE plan;
+    if (messageId == 0U || !PlanReliablePayloadFragmentsUVE(payloadBytes.size(), maximumFragmentBytes, plan)) {
+        return false;
+    }
+    try {
+        std::vector<ReliablePayloadFragmentUVE> fragments;
+        fragments.reserve(plan.fragmentCount);
+        std::size_t payloadOffset = 0U;
+        for (std::size_t index = 0U; index < plan.fragmentCount; ++index) {
+            const std::size_t remainingBytes = payloadBytes.size() - payloadOffset;
+            const std::size_t currentBytes = std::min(remainingBytes, maximumFragmentBytes);
+            ReliablePayloadFragmentUVE fragment;
+            fragment.messageId = messageId;
+            fragment.fragmentIndex = static_cast<std::uint32_t>(index);
+            fragment.fragmentCount = static_cast<std::uint32_t>(plan.fragmentCount);
+            fragment.payloadBytes.assign(
+                payloadBytes.begin() + static_cast<std::ptrdiff_t>(payloadOffset),
+                payloadBytes.begin() + static_cast<std::ptrdiff_t>(payloadOffset + currentBytes));
+            fragments.push_back(std::move(fragment));
+            payloadOffset += currentBytes;
+        }
+        outFragments = std::move(fragments);
+        return true;
+    } catch (const std::bad_alloc&) {
+        return false;
+    }
+}
+
 bool SerializeReliablePacketFragmentUVE(const ReliablePacketHeaderUVE& header,
                                          const ReliablePayloadFragmentUVE& fragment,
                                          std::vector<std::uint8_t>& outBytes) noexcept {
