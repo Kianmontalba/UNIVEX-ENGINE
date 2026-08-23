@@ -108,6 +108,24 @@ TEST_F(CameraSystemUVETest, ComputeFrustumCornersUVE_IdentityCamera_ReturnsExpec
     EXPECT_EQ(corners[7], (Math::Vector3UVE{6.0F, 3.0F, -3.0F}));
 }
 
+TEST_F(CameraSystemUVETest, ComputeFrustumCornersUVE_PreservesFiniteExtremeFarCornerCancellation) {
+    Scene::CameraComponentUVE camera;
+    camera.fieldOfViewDegrees = 90.0F;
+    camera.nearPlane = 1.0F;
+    camera.farPlane = std::numeric_limits<float>::max();
+    const float maximum = std::numeric_limits<float>::max();
+    const Math::QuaternionUVE yawMinusFortyFive{0.0F, -0.3826834324F, 0.0F, 0.9238795325F};
+    const Scene::EntityUVE cameraEntity =
+        MakeCameraEntityUVE(Math::Vector3UVE{maximum, maximum, maximum}, yawMinusFortyFive, camera);
+
+    const CameraFrustumCornersUVE corners = cameraSystem.ComputeFrustumCornersUVE(entityManager, cameraEntity, 1.0F);
+
+    EXPECT_TRUE(std::isfinite(corners[4].x));
+    EXPECT_TRUE(std::isfinite(corners[4].y));
+    EXPECT_TRUE(std::isfinite(corners[4].z));
+    EXPECT_GT(corners[4].x, maximum * 0.99F);
+}
+
 TEST_F(CameraSystemUVETest, ExtractFrustumUVE_EndToEnd_ClassifiesKnownBoxesCorrectly) {
     Scene::CameraComponentUVE camera;
     camera.fieldOfViewDegrees = 90.0F;

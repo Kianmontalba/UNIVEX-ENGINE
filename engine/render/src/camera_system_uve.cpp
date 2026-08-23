@@ -60,7 +60,7 @@ CameraFrustumCornersUVE CameraSystemUVE::ComputeFrustumCornersUVE(const Scene::I
     const Math::Vector3UVE nearCenter = worldTransform.worldPosition + forward * camera.nearPlane;
     const Math::Vector3UVE farCenter = worldTransform.worldPosition + forward * camera.farPlane;
 
-    return {
+    const CameraFrustumCornersUVE floatCorners{
         nearCenter - right * nearHalfWidth - up * nearHalfHeight,
         nearCenter + right * nearHalfWidth - up * nearHalfHeight,
         nearCenter - right * nearHalfWidth + up * nearHalfHeight,
@@ -69,6 +69,84 @@ CameraFrustumCornersUVE CameraSystemUVE::ComputeFrustumCornersUVE(const Scene::I
         farCenter + right * farHalfWidth - up * farHalfHeight,
         farCenter - right * farHalfWidth + up * farHalfHeight,
         farCenter + right * farHalfWidth + up * farHalfHeight,
+    };
+    bool floatCornersFinite = true;
+    for (const Math::Vector3UVE corner : floatCorners) {
+        floatCornersFinite = floatCornersFinite && std::isfinite(corner.x) && std::isfinite(corner.y) &&
+                              std::isfinite(corner.z);
+    }
+    if (floatCornersFinite) {
+        return floatCorners;
+    }
+
+    const double tangentWide = std::tan(static_cast<double>(camera.fieldOfViewDegrees) *
+                                        (static_cast<double>(std::numbers::pi_v<float>) / 360.0));
+    const double nearPlaneWide = static_cast<double>(camera.nearPlane);
+    const double farPlaneWide = static_cast<double>(camera.farPlane);
+    const double aspectWide = static_cast<double>(aspectRatio);
+    const double nearHalfHeightWide = nearPlaneWide * tangentWide;
+    const double nearHalfWidthWide = nearHalfHeightWide * aspectWide;
+    const double farHalfHeightWide = farPlaneWide * tangentWide;
+    const double farHalfWidthWide = farHalfHeightWide * aspectWide;
+    const double positionX = static_cast<double>(worldTransform.worldPosition.x);
+    const double positionY = static_cast<double>(worldTransform.worldPosition.y);
+    const double positionZ = static_cast<double>(worldTransform.worldPosition.z);
+    const double forwardX = static_cast<double>(forward.x);
+    const double forwardY = static_cast<double>(forward.y);
+    const double forwardZ = static_cast<double>(forward.z);
+    const double rightX = static_cast<double>(right.x);
+    const double rightY = static_cast<double>(right.y);
+    const double rightZ = static_cast<double>(right.z);
+    const double upX = static_cast<double>(up.x);
+    const double upY = static_cast<double>(up.y);
+    const double upZ = static_cast<double>(up.z);
+    const double nearCenterX = positionX + forwardX * nearPlaneWide;
+    const double nearCenterY = positionY + forwardY * nearPlaneWide;
+    const double nearCenterZ = positionZ + forwardZ * nearPlaneWide;
+    const double farCenterX = positionX + forwardX * farPlaneWide;
+    const double farCenterY = positionY + forwardY * farPlaneWide;
+    const double farCenterZ = positionZ + forwardZ * farPlaneWide;
+    const double nearRightX = rightX * nearHalfWidthWide;
+    const double nearRightY = rightY * nearHalfWidthWide;
+    const double nearRightZ = rightZ * nearHalfWidthWide;
+    const double nearUpX = upX * nearHalfHeightWide;
+    const double nearUpY = upY * nearHalfHeightWide;
+    const double nearUpZ = upZ * nearHalfHeightWide;
+    const double farRightX = rightX * farHalfWidthWide;
+    const double farRightY = rightY * farHalfWidthWide;
+    const double farRightZ = rightZ * farHalfWidthWide;
+    const double farUpX = upX * farHalfHeightWide;
+    const double farUpY = upY * farHalfHeightWide;
+    const double farUpZ = upZ * farHalfHeightWide;
+    const auto MakeCornerUVE = [](const double centerX, const double centerY, const double centerZ,
+                                  const double rightComponentX, const double rightComponentY,
+                                  const double rightComponentZ, const double upComponentX,
+                                  const double upComponentY, const double upComponentZ,
+                                  const double rightSign, const double upSign) {
+        return Math::Vector3UVE{
+            static_cast<float>(centerX + rightSign * rightComponentX + upSign * upComponentX),
+            static_cast<float>(centerY + rightSign * rightComponentY + upSign * upComponentY),
+            static_cast<float>(centerZ + rightSign * rightComponentZ + upSign * upComponentZ),
+        };
+    };
+
+    return {
+        MakeCornerUVE(nearCenterX, nearCenterY, nearCenterZ, nearRightX, nearRightY, nearRightZ,
+                      nearUpX, nearUpY, nearUpZ, -1.0, -1.0),
+        MakeCornerUVE(nearCenterX, nearCenterY, nearCenterZ, nearRightX, nearRightY, nearRightZ,
+                      nearUpX, nearUpY, nearUpZ, 1.0, -1.0),
+        MakeCornerUVE(nearCenterX, nearCenterY, nearCenterZ, nearRightX, nearRightY, nearRightZ,
+                      nearUpX, nearUpY, nearUpZ, -1.0, 1.0),
+        MakeCornerUVE(nearCenterX, nearCenterY, nearCenterZ, nearRightX, nearRightY, nearRightZ,
+                      nearUpX, nearUpY, nearUpZ, 1.0, 1.0),
+        MakeCornerUVE(farCenterX, farCenterY, farCenterZ, farRightX, farRightY, farRightZ,
+                      farUpX, farUpY, farUpZ, -1.0, -1.0),
+        MakeCornerUVE(farCenterX, farCenterY, farCenterZ, farRightX, farRightY, farRightZ,
+                      farUpX, farUpY, farUpZ, 1.0, -1.0),
+        MakeCornerUVE(farCenterX, farCenterY, farCenterZ, farRightX, farRightY, farRightZ,
+                      farUpX, farUpY, farUpZ, -1.0, 1.0),
+        MakeCornerUVE(farCenterX, farCenterY, farCenterZ, farRightX, farRightY, farRightZ,
+                      farUpX, farUpY, farUpZ, 1.0, 1.0),
     };
 }
 
