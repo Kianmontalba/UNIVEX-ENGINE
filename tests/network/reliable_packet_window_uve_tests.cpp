@@ -4,6 +4,55 @@
 #include <gtest/gtest.h>
 namespace UVE::Network::Tests {
 namespace {
+TEST(ReliablePacketWindowUVETest, ReliablePacketFragmentWireRoundTrip_ComposesValidatedEnvelopes) {
+    const ReliablePacketHeaderUVE originalHeader{7U, 3U, 0x01020304U};
+    const ReliablePayloadFragmentUVE originalFragment{17U, 1U, 2U, {0xAAU, 0xBBU}};
+    std::vector<std::uint8_t> bytes;
+    ASSERT_TRUE(SerializeReliablePacketFragmentUVE(originalHeader, originalFragment, bytes));
+    EXPECT_EQ(bytes, (std::vector<std::uint8_t>{0x07U, 0x00U, 0x00U, 0x00U,
+                                                  0x03U, 0x00U, 0x00U, 0x00U,
+                                                  0x04U, 0x03U, 0x02U, 0x01U,
+                                                  0x11U, 0x00U, 0x00U, 0x00U,
+                                                  0x01U, 0x00U, 0x00U, 0x00U,
+                                                  0x02U, 0x00U, 0x00U, 0x00U,
+                                                  0x02U, 0x00U, 0x00U, 0x00U,
+                                                  0xAAU, 0xBBU}));
+    ReliablePacketHeaderUVE decodedHeader;
+    ReliablePayloadFragmentUVE decodedFragment;
+    ASSERT_TRUE(DeserializeReliablePacketFragmentUVE(bytes, decodedHeader, decodedFragment));
+    EXPECT_EQ(decodedHeader.sequence, originalHeader.sequence);
+    EXPECT_EQ(decodedHeader.acknowledgedSequence, originalHeader.acknowledgedSequence);
+    EXPECT_EQ(decodedHeader.selectiveAcknowledgementBits, originalHeader.selectiveAcknowledgementBits);
+    EXPECT_EQ(decodedFragment.messageId, originalFragment.messageId);
+    EXPECT_EQ(decodedFragment.fragmentIndex, originalFragment.fragmentIndex);
+    EXPECT_EQ(decodedFragment.fragmentCount, originalFragment.fragmentCount);
+    EXPECT_EQ(decodedFragment.payloadBytes, originalFragment.payloadBytes);
+}
+
+TEST(ReliablePacketWindowUVETest, ReliablePacketFragmentWireRejectsInvalidAndMalformedInputsAtomically) {
+    const ReliablePacketHeaderUVE originalHeader{7U, 3U, 9U};
+    const ReliablePayloadFragmentUVE originalFragment{17U, 1U, 2U, {0xAAU}};
+    ReliablePacketHeaderUVE decodedHeader = originalHeader;
+    ReliablePayloadFragmentUVE decodedFragment = originalFragment;
+    EXPECT_FALSE(DeserializeReliablePacketFragmentUVE({1U, 2U, 3U}, decodedHeader, decodedFragment));
+    EXPECT_EQ(decodedHeader.sequence, originalHeader.sequence);
+    EXPECT_EQ(decodedFragment.payloadBytes, originalFragment.payloadBytes);
+
+    std::vector<std::uint8_t> bytes{4U, 5U};
+    EXPECT_FALSE(SerializeReliablePacketFragmentUVE(
+        ReliablePacketHeaderUVE{0U, 3U, 0U}, originalFragment, bytes));
+    EXPECT_EQ(bytes, (std::vector<std::uint8_t>{4U, 5U}));
+    EXPECT_FALSE(SerializeReliablePacketFragmentUVE(
+        originalHeader, ReliablePayloadFragmentUVE{17U, 2U, 2U, {0xAAU}}, bytes));
+    EXPECT_EQ(bytes, (std::vector<std::uint8_t>{4U, 5U}));
+
+    EXPECT_TRUE(SerializeReliablePacketFragmentUVE(originalHeader, originalFragment, bytes));
+    bytes.pop_back();
+    EXPECT_FALSE(DeserializeReliablePacketFragmentUVE(bytes, decodedHeader, decodedFragment));
+    EXPECT_EQ(decodedHeader.sequence, originalHeader.sequence);
+    EXPECT_EQ(decodedFragment.payloadBytes, originalFragment.payloadBytes);
+}
+
 TEST(ReliablePacketWindowUVETest, ReliablePayloadFragmentWireRoundTrip_IsLittleEndianAndExact) {
     const ReliablePayloadFragmentUVE original{0x12345678U, 2U, 3U, {0xAAU, 0xBBU}};
     std::vector<std::uint8_t> bytes;
