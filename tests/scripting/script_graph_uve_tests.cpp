@@ -6283,6 +6283,50 @@ TEST(ScriptVmUVETest, CallbackBackedPhysicsBodyNodesRejectOutputCapacityBeforeCa
     EXPECT_FALSE(velocityContext.FindOutputUVE(1U, "Velocity").has_value());
 }
 
+TEST(ScriptVmUVETest, CallbackBackedPhysicsQueryNodesRejectOutputCapacityBeforeCallback) {
+    ScriptBytecodeProgramUVE raycastProgram;
+    raycastProgram.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U,
+                                           "physics.raycast", {}, {}});
+    ScriptVmExecutionContextUVE raycastContext;
+    ASSERT_TRUE(SetPhysicsInputsUVE(raycastContext, 1U, 0U));
+    FillVmOutputCapacityExceptNodeOneUVE(raycastContext);
+    PhysicsCaptureUVE raycastCapture;
+    ScriptEngineCallBindingsUVE raycastBindings = MakePhysicsBindingsUVE(raycastCapture);
+    ScriptVmExecutionOptionsUVE raycastOptions;
+    raycastOptions.engineCallBindings = &raycastBindings;
+
+    const ScriptVmExecutionResultUVE raycastResult =
+        ExecuteScriptBytecodeUVE(raycastProgram, raycastContext, raycastOptions);
+
+    EXPECT_EQ(raycastResult.status, ScriptVmStatusUVE::NodeExecutionFailed);
+    EXPECT_EQ(raycastCapture.raycastCount, 0U);
+    EXPECT_EQ(raycastContext.outputs.size(), ScriptVmExecutionContextUVE::kMaximumBindingsUVE);
+    EXPECT_FALSE(raycastContext.FindOutputUVE(1U, "Hit").has_value());
+    EXPECT_FALSE(raycastContext.FindOutputUVE(1U, "Entity").has_value());
+    EXPECT_FALSE(raycastContext.FindOutputUVE(1U, "Point").has_value());
+    EXPECT_FALSE(raycastContext.FindOutputUVE(1U, "Normal").has_value());
+    EXPECT_FALSE(raycastContext.FindOutputUVE(1U, "Distance").has_value());
+
+    ScriptBytecodeProgramUVE overlapProgram;
+    overlapProgram.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U,
+                                            "physics.overlap", {}, {}});
+    ScriptVmExecutionContextUVE overlapContext;
+    ASSERT_TRUE(SetPhysicsInputsUVE(overlapContext, 1U, 4U));
+    FillVmOutputCapacityExceptNodeOneUVE(overlapContext);
+    PhysicsCaptureUVE overlapCapture;
+    ScriptEngineCallBindingsUVE overlapBindings = MakePhysicsBindingsUVE(overlapCapture);
+    ScriptVmExecutionOptionsUVE overlapOptions;
+    overlapOptions.engineCallBindings = &overlapBindings;
+
+    const ScriptVmExecutionResultUVE overlapResult =
+        ExecuteScriptBytecodeUVE(overlapProgram, overlapContext, overlapOptions);
+
+    EXPECT_EQ(overlapResult.status, ScriptVmStatusUVE::NodeExecutionFailed);
+    EXPECT_EQ(overlapCapture.overlapCount, 0U);
+    EXPECT_EQ(overlapContext.outputs.size(), ScriptVmExecutionContextUVE::kMaximumBindingsUVE);
+    EXPECT_FALSE(overlapContext.FindOutputUVE(1U, "Count").has_value());
+}
+
 TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_ExecutesPhysicsFamilyWithCopiedValues) {
     const std::array<const char*, 11U> nodeTypes{
         "physics.raycast", "physics.sphere_cast", "physics.box_cast", "physics.capsule_cast", "physics.overlap",
