@@ -99,27 +99,32 @@ std::optional<Math::PenetrationUVE> ComputeCapsuleAabbPenetrationUVE(
         return std::nullopt;
     }
 
-    const Math::Vector3UVE direction = segmentEnd - segmentStart;
-    constexpr float kBreakpointEpsilonUVE = 1.0e-6F;
-    std::array<float, 8U> breakpoints{0.0F, 1.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F, 0.0F};
+    const double directionX = static_cast<double>(segmentEnd.x) - static_cast<double>(segmentStart.x);
+    const double directionY = static_cast<double>(segmentEnd.y) - static_cast<double>(segmentStart.y);
+    const double directionZ = static_cast<double>(segmentEnd.z) - static_cast<double>(segmentStart.z);
+    if (!std::isfinite(directionX) || !std::isfinite(directionY) || !std::isfinite(directionZ)) {
+        return std::nullopt;
+    }
+    constexpr double kBreakpointEpsilonUVE = 1.0e-6;
+    std::array<double, 8U> breakpoints{0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
     std::size_t breakpointCount = 2U;
-    const auto AddBreakpointUVE = [&](const float value) {
-        if (value > kBreakpointEpsilonUVE && value < 1.0F - kBreakpointEpsilonUVE &&
+    const auto AddBreakpointUVE = [&](const double value) {
+        if (std::isfinite(value) && value > kBreakpointEpsilonUVE && value < 1.0 - kBreakpointEpsilonUVE &&
             breakpointCount < breakpoints.size()) {
             breakpoints[breakpointCount++] = value;
         }
     };
-    const auto AddAxisBreakpointsUVE = [&](const float start, const float delta, const float minimum,
+    const auto AddAxisBreakpointsUVE = [&](const double start, const double delta, const float minimum,
                                            const float maximum) {
         if (std::fabs(delta) <= kBreakpointEpsilonUVE) {
             return;
         }
-        AddBreakpointUVE((minimum - start) / delta);
-        AddBreakpointUVE((maximum - start) / delta);
+        AddBreakpointUVE((static_cast<double>(minimum) - start) / delta);
+        AddBreakpointUVE((static_cast<double>(maximum) - start) / delta);
     };
-    AddAxisBreakpointsUVE(segmentStart.x, direction.x, box.min.x, box.max.x);
-    AddAxisBreakpointsUVE(segmentStart.y, direction.y, box.min.y, box.max.y);
-    AddAxisBreakpointsUVE(segmentStart.z, direction.z, box.min.z, box.max.z);
+    AddAxisBreakpointsUVE(segmentStart.x, directionX, box.min.x, box.max.x);
+    AddAxisBreakpointsUVE(segmentStart.y, directionY, box.min.y, box.max.y);
+    AddAxisBreakpointsUVE(segmentStart.z, directionZ, box.min.z, box.max.z);
 
     std::sort(breakpoints.begin(), breakpoints.begin() + static_cast<std::ptrdiff_t>(breakpointCount));
     std::size_t uniqueCount = 0U;
@@ -130,19 +135,44 @@ std::optional<Math::PenetrationUVE> ComputeCapsuleAabbPenetrationUVE(
         }
     }
 
-    float bestDistanceSquared = std::numeric_limits<float>::infinity();
-    float bestTime = 0.0F;
-    const auto ConsiderTimeUVE = [&](const float time) {
-        const Math::Vector3UVE point = segmentStart + direction * time;
-        const Math::Vector3UVE closestPoint{
-            std::clamp(point.x, box.min.x, box.max.x),
-            std::clamp(point.y, box.min.y, box.max.y),
-            std::clamp(point.z, box.min.z, box.max.z),
-        };
-        const float distanceSquared = Math::LengthSquaredUVE(closestPoint - point);
+    double bestDistanceSquared = std::numeric_limits<double>::infinity();
+    double bestTime = 0.0;
+    double bestDeltaX = 0.0;
+    double bestDeltaY = 0.0;
+    double bestDeltaZ = 0.0;
+    const auto ConsiderTimeUVE = [&](const double time) {
+        const double pointX = static_cast<double>(segmentStart.x) + directionX * time;
+        const double pointY = static_cast<double>(segmentStart.y) + directionY * time;
+        const double pointZ = static_cast<double>(segmentStart.z) + directionZ * time;
+        const double closestX = std::clamp(pointX, static_cast<double>(box.min.x), static_cast<double>(box.max.x));
+        const double closestY = std::clamp(pointY, static_cast<double>(box.min.y), static_cast<double>(box.max.y));
+        const double closestZ = std::clamp(pointZ, static_cast<double>(box.min.z), static_cast<double>(box.max.z));
+        const double deltaX = closestX - pointX;
+        const double deltaY = closestY - pointY;
+        const double deltaZ = closestZ - pointZ;
+        const double scale = std::max(std::fabs(deltaX), std::max(std::fabs(deltaY), std::fabs(deltaZ)));
+        if (!std::isfinite(scale)) {
+            return;
+        }
+        double distanceSquared = 0.0;
+        if (scale != 0.0) {
+            const double scaledDistanceSquared = (deltaX / scale) * (deltaX / scale) +
+                                                 (deltaY / scale) * (deltaY / scale) +
+                                                 (deltaZ / scale) * (deltaZ / scale);
+            if (!std::isfinite(scaledDistanceSquared)) {
+                return;
+            }
+            distanceSquared = scale * scale * scaledDistanceSquared;
+            if (!std::isfinite(distanceSquared)) {
+                return;
+            }
+        }
         if (distanceSquared < bestDistanceSquared) {
             bestDistanceSquared = distanceSquared;
             bestTime = time;
+            bestDeltaX = deltaX;
+            bestDeltaY = deltaY;
+            bestDeltaZ = deltaZ;
         }
     };
 
@@ -150,55 +180,76 @@ std::optional<Math::PenetrationUVE> ComputeCapsuleAabbPenetrationUVE(
         ConsiderTimeUVE(breakpoints[index]);
     }
     for (std::size_t index = 0U; index + 1U < uniqueCount; ++index) {
-        const float intervalStart = breakpoints[index];
-        const float intervalEnd = breakpoints[index + 1U];
+        const double intervalStart = breakpoints[index];
+        const double intervalEnd = breakpoints[index + 1U];
         if (intervalEnd - intervalStart <= kBreakpointEpsilonUVE) {
             continue;
         }
-        const float midpoint = (intervalStart + intervalEnd) * 0.5F;
-        const Math::Vector3UVE midpointPoint = segmentStart + direction * midpoint;
+        const double midpoint = (intervalStart + intervalEnd) * 0.5;
+        const double midpointX = static_cast<double>(segmentStart.x) + directionX * midpoint;
+        const double midpointY = static_cast<double>(segmentStart.y) + directionY * midpoint;
+        const double midpointZ = static_cast<double>(segmentStart.z) + directionZ * midpoint;
         double quadraticA = 0.0;
         double quadraticB = 0.0;
-        const auto AccumulateAxisUVE = [&](const float start, const float delta, const float minimum,
-                                           const float maximum, const float midpointValue) {
-            if (midpointValue < minimum) {
-                const double constant = static_cast<double>(minimum - start);
-                const double slope = static_cast<double>(delta);
-                quadraticA += slope * slope;
-                quadraticB -= 2.0 * constant * slope;
-            } else if (midpointValue > maximum) {
-                const double constant = static_cast<double>(start - maximum);
-                const double slope = static_cast<double>(delta);
-                quadraticA += slope * slope;
-                quadraticB += 2.0 * constant * slope;
+        const auto AccumulateAxisUVE = [&](const double start, const double delta, const float minimum,
+                                           const float maximum, const double midpointValue) {
+            if (midpointValue < static_cast<double>(minimum)) {
+                const double constant = static_cast<double>(minimum) - start;
+                quadraticA += delta * delta;
+                quadraticB -= 2.0 * constant * delta;
+            } else if (midpointValue > static_cast<double>(maximum)) {
+                const double constant = start - static_cast<double>(maximum);
+                quadraticA += delta * delta;
+                quadraticB += 2.0 * constant * delta;
             }
         };
-        AccumulateAxisUVE(segmentStart.x, direction.x, box.min.x, box.max.x, midpointPoint.x);
-        AccumulateAxisUVE(segmentStart.y, direction.y, box.min.y, box.max.y, midpointPoint.y);
-        AccumulateAxisUVE(segmentStart.z, direction.z, box.min.z, box.max.z, midpointPoint.z);
-        if (quadraticA > 0.0) {
-            const float stationary = static_cast<float>(-quadraticB / (2.0 * quadraticA));
-            if (stationary > intervalStart && stationary < intervalEnd) {
+        AccumulateAxisUVE(static_cast<double>(segmentStart.x), directionX, box.min.x, box.max.x, midpointX);
+        AccumulateAxisUVE(static_cast<double>(segmentStart.y), directionY, box.min.y, box.max.y, midpointY);
+        AccumulateAxisUVE(static_cast<double>(segmentStart.z), directionZ, box.min.z, box.max.z, midpointZ);
+        if (quadraticA > 0.0 && std::isfinite(quadraticA) && std::isfinite(quadraticB)) {
+            const double stationary = -quadraticB / (2.0 * quadraticA);
+            if (std::isfinite(stationary) && stationary > intervalStart && stationary < intervalEnd) {
                 ConsiderTimeUVE(stationary);
             }
         }
     }
 
-    const Math::Vector3UVE closestSegmentPoint = segmentStart + direction * bestTime;
-    if (bestDistanceSquared >= capsuleRadius * capsuleRadius) {
+    if (!std::isfinite(bestDistanceSquared)) {
         return std::nullopt;
     }
-    if (bestDistanceSquared <= 0.0F) {
+    const double capsuleRadiusDouble = static_cast<double>(capsuleRadius);
+    const double capsuleRadiusSquared = capsuleRadiusDouble * capsuleRadiusDouble;
+    const double maximumFloat = static_cast<double>(std::numeric_limits<float>::max());
+    if (!std::isfinite(capsuleRadiusSquared) || bestDistanceSquared >= capsuleRadiusSquared) {
+        return std::nullopt;
+    }
+    const double closestX = static_cast<double>(segmentStart.x) + directionX * bestTime;
+    const double closestY = static_cast<double>(segmentStart.y) + directionY * bestTime;
+    const double closestZ = static_cast<double>(segmentStart.z) + directionZ * bestTime;
+    if (bestDistanceSquared <= 0.0) {
+        const Math::Vector3UVE closestSegmentPoint{
+            static_cast<float>(closestX), static_cast<float>(closestY), static_cast<float>(closestZ)};
+        if (!IsFiniteVectorUVE(closestSegmentPoint)) {
+            return std::nullopt;
+        }
         return ComputeSphereAabbPenetrationUVE(box, closestSegmentPoint, capsuleRadius);
     }
-    const Math::Vector3UVE closestBoxPoint{
-        std::clamp(closestSegmentPoint.x, box.min.x, box.max.x),
-        std::clamp(closestSegmentPoint.y, box.min.y, box.max.y),
-        std::clamp(closestSegmentPoint.z, box.min.z, box.max.z),
+
+    const double distance = std::sqrt(bestDistanceSquared);
+    const double depth = capsuleRadiusDouble - distance;
+    if (!std::isfinite(distance) || !std::isfinite(depth) || depth <= 0.0 || depth > maximumFloat) {
+        return std::nullopt;
+    }
+    const double inverseDistance = 1.0 / distance;
+    const Math::Vector3UVE axis{
+        static_cast<float>(bestDeltaX * inverseDistance),
+        static_cast<float>(bestDeltaY * inverseDistance),
+        static_cast<float>(bestDeltaZ * inverseDistance),
     };
-    const Math::Vector3UVE delta = closestBoxPoint - closestSegmentPoint;
-    const float distance = std::sqrt(bestDistanceSquared);
-    return Math::PenetrationUVE{delta * (1.0F / distance), capsuleRadius - distance};
+    if (!IsFiniteVectorUVE(axis)) {
+        return std::nullopt;
+    }
+    return Math::PenetrationUVE{axis, static_cast<float>(depth)};
 }
 
 std::optional<Math::PenetrationUVE> ComputeSphereSpherePenetrationUVE(
