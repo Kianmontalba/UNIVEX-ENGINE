@@ -77,13 +77,13 @@ AssetDatabaseUVE::~AssetDatabaseUVE() = default;
 
 bool AssetDatabaseUVE::LoadUVE(const std::filesystem::path& path) {
     const std::lock_guard<std::mutex> lock(m_impl->mutex);
-    m_impl->loadedPath = path;
 
     std::ifstream file(path);
     if (!file.is_open()) {
         UVE_WARNING("AssetDatabaseUVE: registry file not found at \"{}\" - starting with an "
                     "empty registry",
                     path.string());
+        m_impl->loadedPath = path;
         m_impl->guidToPath.clear();
         m_impl->pathToGuid.clear();
         return false;
@@ -111,6 +111,7 @@ bool AssetDatabaseUVE::LoadUVE(const std::filesystem::path& path) {
         }
         m_impl->guidToPath = std::move(guidToPath);
         m_impl->pathToGuid = std::move(pathToGuid);
+        m_impl->loadedPath = path;
         return true;
     } catch (const nlohmann::json::exception& parseError) {
         UVE_ERROR("AssetDatabaseUVE: failed to parse registry file \"{}\": {}", path.string(),

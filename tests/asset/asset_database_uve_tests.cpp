@@ -221,6 +221,32 @@ TEST(AssetDatabaseUVETest, LoadUVE_MissingFile_LogsWarning) {
     logger.Shutdown();
 }
 
+TEST(AssetDatabaseUVETest, LoadUVE_MalformedJson_PreservesPreviousRegistryAndSaveTarget) {
+    const std::filesystem::path previousPath = "uve_asset_database_tests_previous_target.uveassetdb";
+    const std::filesystem::path malformedPath = "uve_asset_database_tests_malformed_target.uveassetdb";
+    std::filesystem::remove(previousPath);
+    std::filesystem::remove(malformedPath);
+
+    AssetDatabaseUVE database;
+    const AssetGuidUVE stableGuid = database.RegisterUVE("assets/stable.uveasset");
+    ASSERT_TRUE(database.SaveUVE(previousPath));
+    WriteFixtureFileUVE(malformedPath, "{ not valid json");
+
+    EXPECT_FALSE(database.LoadUVE(malformedPath));
+    EXPECT_TRUE(database.HasGuidUVE(stableGuid));
+    const AssetGuidUVE laterGuid = database.RegisterUVE("assets/later.uveasset");
+    ASSERT_TRUE(database.SaveUVE());
+
+    AssetDatabaseUVE reader;
+    ASSERT_TRUE(reader.LoadUVE(previousPath));
+    EXPECT_TRUE(reader.HasGuidUVE(stableGuid));
+    EXPECT_TRUE(reader.HasGuidUVE(laterGuid));
+    EXPECT_EQ(std::ifstream(malformedPath).peek(), std::char_traits<char>::to_int_type('{'));
+
+    std::filesystem::remove(previousPath);
+    std::filesystem::remove(malformedPath);
+}
+
 TEST(AssetDatabaseUVETest, LoadUVE_MalformedJson_ReturnsFalseAndLogsError) {
     const std::filesystem::path fixturePath = "uve_asset_database_tests_malformed.uveassetdb";
     WriteFixtureFileUVE(fixturePath, "{ not valid json");
