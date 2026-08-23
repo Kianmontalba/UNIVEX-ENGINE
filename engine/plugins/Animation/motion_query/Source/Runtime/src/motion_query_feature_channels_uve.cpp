@@ -2,6 +2,7 @@
 
 #include "uve/plugins/motion_query_feature_channels_uve.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace UVE::Core {
@@ -24,6 +25,56 @@ namespace {
 
 [[nodiscard]] bool IsFiniteNonNegativeUVE(float value) noexcept {
     return std::isfinite(value) && value >= 0.0F;
+}
+
+[[nodiscard]] bool TrySquaredLengthUVE(const Math::Vector3UVE& value,
+                                       double& outValue) noexcept {
+    if (!std::isfinite(value.x) || !std::isfinite(value.y) || !std::isfinite(value.z)) {
+        return false;
+    }
+    const double x = static_cast<double>(value.x);
+    const double y = static_cast<double>(value.y);
+    const double z = static_cast<double>(value.z);
+    const double scale = std::max(std::fabs(x), std::max(std::fabs(y), std::fabs(z)));
+    if (!std::isfinite(scale)) {
+        return false;
+    }
+    if (scale == 0.0) {
+        outValue = 0.0;
+        return true;
+    }
+    const double scaledLengthSquared = (x / scale) * (x / scale) +
+                                       (y / scale) * (y / scale) +
+                                       (z / scale) * (z / scale);
+    if (!std::isfinite(scaledLengthSquared)) {
+        return false;
+    }
+    outValue = (scale * scale) * scaledLengthSquared;
+    return std::isfinite(outValue);
+}
+
+[[nodiscard]] bool TrySquaredDifferenceUVE(const Math::Vector3UVE& lhs,
+                                           const Math::Vector3UVE& rhs,
+                                           double& outValue) noexcept {
+    const double x = static_cast<double>(lhs.x) - static_cast<double>(rhs.x);
+    const double y = static_cast<double>(lhs.y) - static_cast<double>(rhs.y);
+    const double z = static_cast<double>(lhs.z) - static_cast<double>(rhs.z);
+    const double scale = std::max(std::fabs(x), std::max(std::fabs(y), std::fabs(z)));
+    if (!std::isfinite(scale)) {
+        return false;
+    }
+    if (scale == 0.0) {
+        outValue = 0.0;
+        return true;
+    }
+    const double scaledLengthSquared = (x / scale) * (x / scale) +
+                                       (y / scale) * (y / scale) +
+                                       (z / scale) * (z / scale);
+    if (!std::isfinite(scaledLengthSquared)) {
+        return false;
+    }
+    outValue = (scale * scale) * scaledLengthSquared;
+    return std::isfinite(outValue);
 }
 
 } // namespace
@@ -88,43 +139,43 @@ MotionQueryFeatureValidationResultUVE TryBuildMotionQueryFeatureVectorUVE(
             return MakeFeatureErrorUVE(MotionQueryFeatureValidationCodeUVE::InvalidSampleIndex,
                                        vector.values.size(), "feature channel trajectory index is unavailable");
         }
-        float value = 0.0F;
+        double value = 0.0;
+        bool valueIsValid = true;
         switch (channel.kind) {
         case MotionQueryFeatureChannelKindUVE::RootVelocity:
-            value = Math::LengthSquaredUVE(query.rootVelocity);
+            valueIsValid = TrySquaredLengthUVE(query.rootVelocity, value);
             break;
         case MotionQueryFeatureChannelKindUVE::FacingDirection:
-            value = query.facingDirection.z;
+            value = static_cast<double>(query.facingDirection.z);
             break;
         case MotionQueryFeatureChannelKindUVE::TrajectoryPosition:
-            value = Math::LengthSquaredUVE(
-                query.trajectory[channel.trajectorySampleIndex].relativePosition);
+            valueIsValid = TrySquaredLengthUVE(
+                query.trajectory[channel.trajectorySampleIndex].relativePosition, value);
             break;
         case MotionQueryFeatureChannelKindUVE::TrajectoryDistance:
             if (channel.trajectorySampleIndex == 0U) {
-                value = Math::LengthSquaredUVE(query.trajectory.front().relativePosition);
+                valueIsValid = TrySquaredLengthUVE(
+                    query.trajectory.front().relativePosition, value);
             } else {
-                const Math::Vector3UVE delta =
-                    query.trajectory[channel.trajectorySampleIndex].relativePosition -
-                    query.trajectory[channel.trajectorySampleIndex - 1U].relativePosition;
-                value = Math::LengthSquaredUVE(delta);
+                valueIsValid = TrySquaredDifferenceUVE(
+                    query.trajectory[channel.trajectorySampleIndex].relativePosition,
+                    query.trajectory[channel.trajectorySampleIndex - 1U].relativePosition, value);
             }
             break;
         case MotionQueryFeatureChannelKindUVE::TrajectoryTime:
-            value = static_cast<float>(query.trajectory[channel.trajectorySampleIndex].offsetSeconds);
+            value = static_cast<double>(static_cast<float>(
+                query.trajectory[channel.trajectorySampleIndex].offsetSeconds));
             break;
         }
-        if (!std::isfinite(value)) {
-            return MakeFeatureErrorUVE(MotionQueryFeatureValidationCodeUVE::InvalidQuery,
-                                       vector.values.size(), "feature extraction produced a non-finite value");
-        }
-        const float weightedValue = value * channel.weight;
+        const double weightedValue = value * static_cast<double>(channel.weight);
+        const float narrowedWeightedValue = static_cast<float>(weightedValue);
         const float totalWeight = vector.totalWeight + channel.weight;
-        if (!std::isfinite(weightedValue) || !std::isfinite(totalWeight)) {
+        if (!valueIsValid || !std::isfinite(value) || !std::isfinite(weightedValue) ||
+            !std::isfinite(narrowedWeightedValue) || !std::isfinite(totalWeight)) {
             return MakeFeatureErrorUVE(MotionQueryFeatureValidationCodeUVE::InvalidQuery,
                                        vector.values.size(), "feature extraction produced a non-finite weighted value");
         }
-        vector.values.push_back(weightedValue);
+        vector.values.push_back(narrowedWeightedValue);
         vector.totalWeight = totalWeight;
     }
     outVector = vector;

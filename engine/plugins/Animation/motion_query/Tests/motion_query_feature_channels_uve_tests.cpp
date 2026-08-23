@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 
+#include <cmath>
 #include <limits>
 
 namespace UVE::Core {
@@ -63,6 +64,34 @@ TEST(MotionQueryFeatureChannelsUVETest, ValidateSchemaUVE_RejectsDuplicatesWeigh
     schema.channels[2].trajectorySampleIndex = MotionQueryUVE::kMaximumTrajectorySamplesUVE;
     EXPECT_EQ(ValidateMotionQueryFeatureSchemaUVE(schema).code,
               MotionQueryFeatureValidationCodeUVE::InvalidSampleIndex);
+}
+
+TEST(MotionQueryFeatureChannelsUVETest, TryBuildVectorUVE_PreservesFiniteExtremeSquaredFeatures) {
+    const float maximum = std::numeric_limits<float>::max();
+    MotionQueryUVE query;
+    query.rootVelocity = {maximum, 0.0F, 0.0F};
+    query.trajectory = {
+        MotionTrajectorySampleUVE{0.25, {-maximum, 0.0F, 0.0F}},
+        MotionTrajectorySampleUVE{0.5, {maximum, 0.0F, 0.0F}},
+    };
+    MotionQueryFeatureSchemaUVE schema;
+    schema.channels = {
+        MotionQueryFeatureChannelUVE{"velocity", MotionQueryFeatureChannelKindUVE::RootVelocity, 0U,
+                                     1.0e-40F},
+        MotionQueryFeatureChannelUVE{"distance", MotionQueryFeatureChannelKindUVE::TrajectoryDistance, 1U,
+                                     1.0e-40F},
+    };
+    MotionQueryFeatureVectorUVE vector;
+
+    const MotionQueryFeatureValidationResultUVE result =
+        TryBuildMotionQueryFeatureVectorUVE(query, schema, vector);
+    ASSERT_TRUE(result.IsValidUVE()) << result.message;
+    ASSERT_EQ(vector.values.size(), 2U);
+    EXPECT_TRUE(std::isfinite(vector.values[0]));
+    EXPECT_TRUE(std::isfinite(vector.values[1]));
+    EXPECT_GT(vector.values[0], 0.0F);
+    EXPECT_GT(vector.values[1], 0.0F);
+    EXPECT_FLOAT_EQ(vector.totalWeight, 2.0e-40F);
 }
 
 TEST(MotionQueryFeatureChannelsUVETest, TryBuildVectorUVE_RejectsNonFiniteWeightedValueWithoutPublishing) {
