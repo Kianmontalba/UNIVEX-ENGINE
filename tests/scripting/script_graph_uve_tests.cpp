@@ -5818,6 +5818,47 @@ void SetActorInputUVE(ScriptVmExecutionContextUVE& context, std::uint32_t nodeId
 
 } // namespace
 
+TEST(ScriptVmUVETest, CallbackBackedAnimationNodesRejectOutputCapacityBeforeCallback) {
+    ScriptBytecodeProgramUVE playProgram;
+    playProgram.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U,
+                                        "animation.play", {}, {}});
+    ScriptVmExecutionContextUVE playContext;
+    SetActorInputUVE(playContext, 1U, Scene::EntityUVE{9U, 1U});
+    ASSERT_TRUE(playContext.SetInputUVE(1U, "Clip", 12.0F));
+    ASSERT_TRUE(playContext.SetInputUVE(1U, "Blend Duration", 0.25F));
+    FillVmOutputCapacityExceptNodeOneUVE(playContext);
+    AnimationMotionCaptureUVE playCapture;
+    ScriptEngineCallBindingsUVE playBindings = MakeAnimationMotionBindingsUVE(playCapture);
+    ScriptVmExecutionOptionsUVE playOptions;
+    playOptions.engineCallBindings = &playBindings;
+
+    const ScriptVmExecutionResultUVE playResult = ExecuteScriptBytecodeUVE(playProgram, playContext, playOptions);
+
+    EXPECT_EQ(playResult.status, ScriptVmStatusUVE::NodeExecutionFailed);
+    EXPECT_EQ(playCapture.animationClipCount, 0U);
+    EXPECT_EQ(playContext.outputs.size(), ScriptVmExecutionContextUVE::kMaximumBindingsUVE);
+    EXPECT_FALSE(playContext.FindOutputUVE(1U, "Result").has_value());
+
+    ScriptBytecodeProgramUVE currentProgram;
+    currentProgram.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U,
+                                            "animation.get_current_animation", {}, {}});
+    ScriptVmExecutionContextUVE currentContext;
+    SetActorInputUVE(currentContext, 1U, Scene::EntityUVE{9U, 1U});
+    FillVmOutputCapacityExceptNodeOneUVE(currentContext);
+    AnimationMotionCaptureUVE currentCapture;
+    ScriptEngineCallBindingsUVE currentBindings = MakeAnimationMotionBindingsUVE(currentCapture);
+    ScriptVmExecutionOptionsUVE currentOptions;
+    currentOptions.engineCallBindings = &currentBindings;
+
+    const ScriptVmExecutionResultUVE currentResult =
+        ExecuteScriptBytecodeUVE(currentProgram, currentContext, currentOptions);
+
+    EXPECT_EQ(currentResult.status, ScriptVmStatusUVE::NodeExecutionFailed);
+    EXPECT_EQ(currentCapture.animationCurrentCount, 0U);
+    EXPECT_EQ(currentContext.outputs.size(), ScriptVmExecutionContextUVE::kMaximumBindingsUVE);
+    EXPECT_FALSE(currentContext.FindOutputUVE(1U, "Result").has_value());
+}
+
 TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_ExecutesAnimationAndMotionQueryFamiliesWithCopiedValues) {
     const std::array<const char*, 20U> nodeTypes{
         "animation.play", "animation.stop", "animation.pause", "animation.blend", "animation.blend_space",
