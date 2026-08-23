@@ -321,6 +321,44 @@ TEST(ReliablePacketWindowUVETest, AcknowledgementRejectsReservedZeroPacketSequen
     EXPECT_EQ(pending, 0xA5A5A5A5U);
 }
 
+TEST(ReliablePacketWindowUVETest, ReliableRetryScheduleUVE_AccumulatesCommitsAndExhausts) {
+    ReliableRetryScheduleUVE schedule;
+    ASSERT_TRUE(schedule.ConfigureUVE(0.5F, 2.0F, 2U));
+    EXPECT_EQ(schedule.GetRetryCountUVE(), 0U);
+    EXPECT_EQ(schedule.AdvanceUVE(0.25F), ReliableRetransmitStatusUVE::Waiting);
+    EXPECT_EQ(schedule.AdvanceUVE(0.25F), ReliableRetransmitStatusUVE::Due);
+    ASSERT_TRUE(schedule.CommitRetryUVE());
+    EXPECT_EQ(schedule.GetRetryCountUVE(), 1U);
+    EXPECT_FLOAT_EQ(schedule.GetElapsedSecondsUVE(), 0.0F);
+    EXPECT_EQ(schedule.AdvanceUVE(0.99F), ReliableRetransmitStatusUVE::Waiting);
+    EXPECT_EQ(schedule.AdvanceUVE(0.01F), ReliableRetransmitStatusUVE::Due);
+    ASSERT_TRUE(schedule.CommitRetryUVE());
+    EXPECT_EQ(schedule.GetRetryCountUVE(), 2U);
+    EXPECT_EQ(schedule.AdvanceUVE(2.0F), ReliableRetransmitStatusUVE::Exhausted);
+    EXPECT_FALSE(schedule.CommitRetryUVE());
+    schedule.ResetUVE();
+    EXPECT_FALSE(schedule.IsConfiguredUVE());
+    EXPECT_EQ(schedule.GetRetryCountUVE(), 0U);
+}
+
+TEST(ReliablePacketWindowUVETest, ReliableRetryScheduleUVE_RejectsInvalidInputsAtomically) {
+    ReliableRetryScheduleUVE schedule;
+    ASSERT_TRUE(schedule.ConfigureUVE(0.5F, 2.0F, 3U));
+    const ReliableRetryScheduleUVE original = schedule;
+    EXPECT_EQ(schedule.AdvanceUVE(-0.1F), ReliableRetransmitStatusUVE::Invalid);
+    EXPECT_EQ(schedule.GetElapsedSecondsUVE(), original.GetElapsedSecondsUVE());
+    EXPECT_EQ(schedule.GetRetryCountUVE(), original.GetRetryCountUVE());
+    EXPECT_FALSE(schedule.ConfigureUVE(0.0F, 2.0F, 3U));
+    EXPECT_FALSE(schedule.ConfigureUVE(0.5F, 0.25F, 3U));
+    EXPECT_FALSE(schedule.ConfigureUVE(0.5F, 2.0F, 32U));
+    EXPECT_EQ(schedule.GetRetryCountUVE(), original.GetRetryCountUVE());
+    EXPECT_TRUE(schedule.IsConfiguredUVE());
+    EXPECT_EQ(schedule.AdvanceUVE(std::numeric_limits<float>::max()), ReliableRetransmitStatusUVE::Due);
+    const float finiteElapsed = schedule.GetElapsedSecondsUVE();
+    EXPECT_EQ(schedule.AdvanceUVE(std::numeric_limits<float>::max()), ReliableRetransmitStatusUVE::Invalid);
+    EXPECT_EQ(schedule.GetElapsedSecondsUVE(), finiteElapsed);
+}
+
 TEST(ReliablePacketWindowUVETest, ReliablePacketHeaderWireRoundTrip_IsLittleEndianAndExactSize) {
     const ReliablePacketHeaderUVE original{0x12345678U, 0x90ABCDEFU, 0x01020304U};
     std::vector<std::uint8_t> bytes;

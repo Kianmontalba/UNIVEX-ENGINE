@@ -78,6 +78,27 @@ struct ReliableRetransmitPolicyInputUVE final {
     std::uint32_t retryCount = 0U;
     std::uint32_t maximumRetries = 0U;
 };
+/// Caller-owned persistent retry timing state. It owns no clock, timer, packet, socket, peer,
+/// retransmission queue, or transport lifecycle; callers provide elapsed time and commit a due retry.
+class ReliableRetryScheduleUVE final {
+public:
+    [[nodiscard]] bool ConfigureUVE(float baseTimeoutSeconds, float maximumTimeoutSeconds,
+                                    std::uint32_t maximumRetries) noexcept;
+    [[nodiscard]] ReliableRetransmitStatusUVE AdvanceUVE(float elapsedSeconds) noexcept;
+    [[nodiscard]] bool CommitRetryUVE() noexcept;
+    void ResetUVE() noexcept;
+    [[nodiscard]] bool IsConfiguredUVE() const noexcept { return m_configured; }
+    [[nodiscard]] std::uint32_t GetRetryCountUVE() const noexcept { return m_retryCount; }
+    [[nodiscard]] float GetElapsedSecondsUVE() const noexcept { return m_elapsedSeconds; }
+
+private:
+    float m_baseTimeoutSeconds = 0.0F;
+    float m_maximumTimeoutSeconds = 0.0F;
+    float m_elapsedSeconds = 0.0F;
+    std::uint32_t m_retryCount = 0U;
+    std::uint32_t m_maximumRetries = 0U;
+    bool m_configured = false;
+};
 /// Computes a bounded caller-owned exponential retry timeout without owning a clock, timer, socket,
 /// retry queue, or transport lifecycle. Retry zero returns the base timeout; later retries double it
 /// until the caller-selected maximum timeout is reached.
