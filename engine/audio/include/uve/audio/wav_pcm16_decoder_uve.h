@@ -1,9 +1,11 @@
 // Copyright (c) 2026 UniVex Studios. All Rights Reserved.
 #pragma once
+#include <array>
 #include <cstddef>
 #include <vector>
 namespace UVE::Audio {
 inline constexpr std::size_t kMaximumWavPcm16SamplesUVE = 1U << 20U;
+inline constexpr std::size_t kMaximumPcm16StreamRefillWindowsUVE = 8U;
 
 struct Pcm16StreamWindowPlanUVE final {
     std::size_t startSample = 0U;
@@ -35,6 +37,27 @@ private:
     std::size_t m_cursorSample = 0U;
     std::size_t m_maximumSamples = kMaximumWavPcm16SamplesUVE;
     bool m_loop = false;
+};
+
+/// Owns a fixed-capacity FIFO of planned PCM16 refill windows and a persistent cursor. It owns no sample
+/// bytes, decoder, refill thread, voice, device, or backend; callers pop plans and perform refill work.
+class Pcm16StreamRefillSchedulerUVE final {
+public:
+    [[nodiscard]] bool ResetUVE(std::size_t totalSamples, bool loop, std::size_t cursorSample = 0U,
+                                std::size_t maximumSamples = kMaximumWavPcm16SamplesUVE) noexcept;
+    [[nodiscard]] bool ScheduleWindowUVE(std::size_t requestedSamples) noexcept;
+    [[nodiscard]] bool PopNextWindowUVE(Pcm16StreamWindowPlanUVE& outPlan) noexcept;
+
+    [[nodiscard]] std::size_t GetTotalSamplesUVE() const noexcept { return m_cursor.GetTotalSamplesUVE(); }
+    [[nodiscard]] std::size_t GetCursorSampleUVE() const noexcept { return m_cursor.GetCursorSampleUVE(); }
+    [[nodiscard]] bool IsLoopingUVE() const noexcept { return m_cursor.IsLoopingUVE(); }
+    [[nodiscard]] std::size_t GetPendingWindowCountUVE() const noexcept { return m_count; }
+
+private:
+    Pcm16StreamCursorUVE m_cursor;
+    std::array<Pcm16StreamWindowPlanUVE, kMaximumPcm16StreamRefillWindowsUVE> m_pending{};
+    std::size_t m_head = 0U;
+    std::size_t m_count = 0U;
 };
 
 /// Plans one contiguous bounded PCM16 refill window from a caller-owned cursor. Both totalSamples and

@@ -98,6 +98,48 @@ bool Pcm16StreamCursorUVE::AdvanceUVE(const std::size_t advanceSamples, bool& ou
     return true;
 }
 
+bool Pcm16StreamRefillSchedulerUVE::ResetUVE(const std::size_t totalSamples, const bool loop,
+                                               const std::size_t cursorSample,
+                                               const std::size_t maximumSamples) noexcept {
+    Pcm16StreamCursorUVE candidateCursor;
+    if (!candidateCursor.ResetUVE(totalSamples, loop, cursorSample, maximumSamples)) {
+        return false;
+    }
+    m_cursor = candidateCursor;
+    m_pending.fill(Pcm16StreamWindowPlanUVE{});
+    m_head = 0U;
+    m_count = 0U;
+    return true;
+}
+
+bool Pcm16StreamRefillSchedulerUVE::ScheduleWindowUVE(const std::size_t requestedSamples) noexcept {
+    if (m_count >= kMaximumPcm16StreamRefillWindowsUVE) {
+        return false;
+    }
+    Pcm16StreamWindowPlanUVE candidatePlan;
+    Pcm16StreamCursorUVE candidateCursor = m_cursor;
+    if (!candidateCursor.ConsumeWindowUVE(requestedSamples, candidatePlan) || candidatePlan.sampleCount == 0U) {
+        return false;
+    }
+    const std::size_t writeIndex = (m_head + m_count) % kMaximumPcm16StreamRefillWindowsUVE;
+    m_pending[writeIndex] = candidatePlan;
+    m_cursor = candidateCursor;
+    ++m_count;
+    return true;
+}
+
+bool Pcm16StreamRefillSchedulerUVE::PopNextWindowUVE(Pcm16StreamWindowPlanUVE& outPlan) noexcept {
+    if (m_count == 0U) {
+        return false;
+    }
+    const Pcm16StreamWindowPlanUVE candidatePlan = m_pending[m_head];
+    m_pending[m_head] = Pcm16StreamWindowPlanUVE{};
+    m_head = (m_head + 1U) % kMaximumPcm16StreamRefillWindowsUVE;
+    --m_count;
+    outPlan = candidatePlan;
+    return true;
+}
+
 bool PlanPcm16StreamWindowUVE(const std::size_t totalSamples, const std::size_t cursorSample,
                                const std::size_t requestedSamples, const bool loop,
                                Pcm16StreamWindowPlanUVE& outPlan, const std::size_t maximumSamples) noexcept {
