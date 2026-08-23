@@ -23,6 +23,8 @@ struct ReliablePayloadFragmentUVE final {
     std::uint32_t fragmentIndex = 0U;
     std::uint32_t fragmentCount = 0U;
     std::vector<std::uint8_t> payloadBytes;
+
+    [[nodiscard]] bool operator==(const ReliablePayloadFragmentUVE&) const noexcept = default;
 };
 /// Serializes one validated reliable header into an exact 12-byte little-endian wire representation.
 /// The helper owns only copied bytes and publishes output failure-atomically.
@@ -39,6 +41,11 @@ struct ReliablePayloadFragmentUVE final {
 /// Deserializes one exact bounded payload fragment envelope and publishes copied output atomically.
 [[nodiscard]] bool DeserializeReliablePayloadFragmentUVE(
     const std::vector<std::uint8_t>& bytes, ReliablePayloadFragmentUVE& outFragment) noexcept;
+/// Materializes one bounded caller-owned payload into ordered copied fragments using the existing planner.
+/// The helper owns no packet sequence, socket, timer, retransmission, peer, or transport lifecycle.
+[[nodiscard]] bool BuildReliablePayloadFragmentsUVE(
+    std::uint32_t messageId, const std::vector<std::uint8_t>& payloadBytes,
+    std::size_t maximumFragmentBytes, std::vector<ReliablePayloadFragmentUVE>& outFragments) noexcept;
 /// Serializes one reliable header and one validated payload fragment into one copied wire packet.
 /// The helper owns no socket, timer, peer, retransmission, or transport lifecycle.
 [[nodiscard]] bool SerializeReliablePacketFragmentUVE(

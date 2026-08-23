@@ -4,6 +4,47 @@
 #include <gtest/gtest.h>
 namespace UVE::Network::Tests {
 namespace {
+TEST(ReliablePacketWindowUVETest, BuildsReliablePayloadFragmentsUVE_SplitsAndReassemblesPayload) {
+    const std::vector<std::uint8_t> original{1U, 2U, 3U, 4U, 5U};
+    std::vector<ReliablePayloadFragmentUVE> fragments;
+    ASSERT_TRUE(BuildReliablePayloadFragmentsUVE(17U, original, 2U, fragments));
+    ASSERT_EQ(fragments.size(), 3U);
+    EXPECT_EQ(fragments[0].fragmentIndex, 0U);
+    EXPECT_EQ(fragments[0].fragmentCount, 3U);
+    EXPECT_EQ(fragments[0].payloadBytes, (std::vector<std::uint8_t>{1U, 2U}));
+    EXPECT_EQ(fragments[2].payloadBytes, (std::vector<std::uint8_t>{5U}));
+
+    ReliablePayloadReassemblyStateUVE state;
+    std::vector<std::uint8_t> decoded;
+    for (const std::size_t index : {2U, 0U, 1U}) {
+        const ReliablePayloadFragmentUVE& fragment = fragments[index];
+        const auto status = AcceptReliablePayloadFragmentUVE(
+            fragment.messageId, fragment.fragmentIndex, fragment.fragmentCount, fragment.payloadBytes, state, decoded);
+        EXPECT_EQ(status, index == 1U ? ReliablePayloadReassemblyStatusUVE::Complete
+                                      : ReliablePayloadReassemblyStatusUVE::Accepted);
+    }
+    EXPECT_EQ(decoded, original);
+}
+
+TEST(ReliablePacketWindowUVETest, BuildsReliablePayloadFragmentsUVE_RejectsInvalidInputsAtomically) {
+    const std::vector<ReliablePayloadFragmentUVE> original{{17U, 0U, 1U, {9U}}};
+    std::vector<ReliablePayloadFragmentUVE> fragments = original;
+    EXPECT_FALSE(BuildReliablePayloadFragmentsUVE(0U, {1U}, 1U, fragments));
+    EXPECT_EQ(fragments, original);
+    EXPECT_FALSE(BuildReliablePayloadFragmentsUVE(17U, {}, 1U, fragments));
+    EXPECT_EQ(fragments, original);
+    EXPECT_FALSE(BuildReliablePayloadFragmentsUVE(17U, {1U}, 0U, fragments));
+    EXPECT_EQ(fragments, original);
+    EXPECT_FALSE(BuildReliablePayloadFragmentsUVE(17U, {1U}, kReliablePacketMaximumPayloadBytesUVE + 1U, fragments));
+    EXPECT_EQ(fragments, original);
+    EXPECT_FALSE(BuildReliablePayloadFragmentsUVE(
+        17U, std::vector<std::uint8_t>(kReliablePacketMaximumPayloadBytesUVE + 1U, 0U), 1U, fragments));
+    EXPECT_EQ(fragments, original);
+    EXPECT_FALSE(BuildReliablePayloadFragmentsUVE(
+        17U, std::vector<std::uint8_t>(kReliablePacketMaximumFragmentCountUVE + 1U, 0U), 1U, fragments));
+    EXPECT_EQ(fragments, original);
+}
+
 TEST(ReliablePacketWindowUVETest, ReliablePacketFragmentWireRoundTrip_ComposesValidatedEnvelopes) {
     const ReliablePacketHeaderUVE originalHeader{7U, 3U, 0x01020304U};
     const ReliablePayloadFragmentUVE originalFragment{17U, 1U, 2U, {0xAAU, 0xBBU}};
