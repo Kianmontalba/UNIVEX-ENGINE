@@ -96,6 +96,15 @@ TEST(ScriptVector3ValueUVETest, DotUsesFinitePrecisionForCancellation) {
     EXPECT_FLOAT_EQ(dot.value, 0.0F);
 }
 
+TEST(ScriptVector3ValueUVETest, CrossUsesFinitePrecisionForCancellation) {
+    const float maximum = std::numeric_limits<float>::max();
+    const ScriptVector3ValueResultUVE cross = EvaluateScriptVector3CrossUVE(
+        ValueUVE(maximum, maximum, 0.0F), ValueUVE(maximum, maximum, 0.0F));
+
+    ASSERT_TRUE(cross.IsAppliedUVE());
+    EXPECT_EQ(cross.value, ValueUVE(0.0F, 0.0F, 0.0F));
+}
+
 TEST(ScriptVector3ValueUVETest, RejectsNonFiniteInputsAndOverflowedOutputs) {
     const float nan = std::numeric_limits<float>::quiet_NaN();
     const float infinity = std::numeric_limits<float>::infinity();
@@ -112,6 +121,9 @@ TEST(ScriptVector3ValueUVETest, RejectsNonFiniteInputsAndOverflowedOutputs) {
               ScriptVector3EvaluationCodeUVE::NonFiniteInput);
     EXPECT_EQ(EvaluateScriptVector3DotUVE(ValueUVE(std::numeric_limits<float>::max(), 0.0F, 0.0F),
                                           ValueUVE(std::numeric_limits<float>::max(), 0.0F, 0.0F)).code,
+              ScriptVector3EvaluationCodeUVE::NonFiniteInput);
+    EXPECT_EQ(EvaluateScriptVector3CrossUVE(ValueUVE(std::numeric_limits<float>::max(), 0.0F, 0.0F),
+                                            ValueUVE(0.0F, std::numeric_limits<float>::max(), 0.0F)).code,
               ScriptVector3EvaluationCodeUVE::NonFiniteInput);
     EXPECT_EQ(EvaluateScriptVector3DotUVE(ValueUVE(infinity, 0.0F, 0.0F), ValueUVE(1.0F, 0.0F, 0.0F)).code,
               ScriptVector3EvaluationCodeUVE::NonFiniteInput);
