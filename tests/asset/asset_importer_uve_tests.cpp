@@ -65,7 +65,7 @@ TEST_F(AssetImporterUVETest, ClassifySourceUVE_ReportsAuthorityAndRawParserBound
         std::string_view diagnostic;
     };
 
-    constexpr std::array<ClassificationCaseUVE, 8> kCases = {{
+    constexpr std::array<ClassificationCaseUVE, 9> kCases = {{
         {"Readme.TXT", AssetImportSourceKindUVE::PlainText, "txt", true, false,
          "built-in text parser is registered"},
         {"Character.UVEMODEL", AssetImportSourceKindUVE::MeshEnvelope, "uvemodel", true, false,
@@ -75,6 +75,8 @@ TEST_F(AssetImporterUVETest, ClassifySourceUVE_ReportsAuthorityAndRawParserBound
         {"Character.OBJ", AssetImportSourceKindUVE::RawModel, "obj", true, true,
          "format-specific parser is registered"},
         {"Albedo.PNG", AssetImportSourceKindUVE::RawTexture, "png", true, true,
+         "format-specific parser is registered"},
+        {"Albedo.BMP", AssetImportSourceKindUVE::RawTexture, "bmp", true, true,
          "format-specific parser is registered"},
         {"Surface.MTL", AssetImportSourceKindUVE::RawMaterial, "mtl", true, true,
          "format-specific parser is registered"},

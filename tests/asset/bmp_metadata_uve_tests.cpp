@@ -1,0 +1,121 @@
+// Copyright (c) 2026 UniVex Studios. All Rights Reserved.
+
+#include "uve/asset/bmp_metadata_uve.h"
+
+#include <cstddef>
+#include <cstdint>
+#include <iterator>
+#include <vector>
+
+#include <gtest/gtest.h>
+
+namespace UVE::Asset::Tests {
+namespace {
+
+void AppendU16LittleEndianUVE(std::vector<std::byte>& bytes, const std::uint16_t value) {
+    bytes.push_back(std::byte{static_cast<unsigned char>(value & 0xFFU)});
+    bytes.push_back(std::byte{static_cast<unsigned char>((value >> 8U) & 0xFFU)});
+}
+
+void AppendU32LittleEndianUVE(std::vector<std::byte>& bytes, const std::uint32_t value) {
+    for (unsigned int shift = 0U; shift < 32U; shift += 8U) {
+        bytes.push_back(std::byte{static_cast<unsigned char>((value >> shift) & 0xFFU)});
+    }
+}
+
+[[nodiscard]] std::vector<std::byte> MakeBmp24TwoByTwoUVE() {
+    std::vector<std::byte> bmp;
+    bmp.reserve(70U);
+    bmp.push_back(std::byte{'B'});
+    bmp.push_back(std::byte{'M'});
+    AppendU32LittleEndianUVE(bmp, 70U);
+    AppendU16LittleEndianUVE(bmp, 0U);
+    AppendU16LittleEndianUVE(bmp, 0U);
+    AppendU32LittleEndianUVE(bmp, 54U);
+    AppendU32LittleEndianUVE(bmp, 40U);
+    AppendU32LittleEndianUVE(bmp, 2U);
+    AppendU32LittleEndianUVE(bmp, 2U);
+    AppendU16LittleEndianUVE(bmp, 1U);
+    AppendU16LittleEndianUVE(bmp, 24U);
+    AppendU32LittleEndianUVE(bmp, 0U);
+    AppendU32LittleEndianUVE(bmp, 16U);
+    AppendU32LittleEndianUVE(bmp, 2835U);
+    AppendU32LittleEndianUVE(bmp, 2835U);
+    AppendU32LittleEndianUVE(bmp, 0U);
+    AppendU32LittleEndianUVE(bmp, 0U);
+    // Bottom-up storage: blue, white, then top red, green. Each 24-bit row has two pad bytes.
+    const std::byte pixels[] = {
+        // Bottom row: blue, white, then two bytes of row padding.
+        std::byte{0xFF}, std::byte{0x00}, std::byte{0x00}, std::byte{0xFF}, std::byte{0xFF}, std::byte{0xFF},
+        std::byte{0x00}, std::byte{0x00},
+        // Top row: red, green, then two bytes of row padding.
+        std::byte{0x00}, std::byte{0x00}, std::byte{0xFF}, std::byte{0x00}, std::byte{0xFF}, std::byte{0x00},
+        std::byte{0x00}, std::byte{0x00}};
+    bmp.insert(bmp.end(), std::begin(pixels), std::end(pixels));
+    return bmp;
+}
+
+[[nodiscard]] std::vector<std::byte> MakeBmp32TopDownOneByTwoUVE() {
+    std::vector<std::byte> bmp;
+    bmp.reserve(62U);
+    bmp.push_back(std::byte{'B'});
+    bmp.push_back(std::byte{'M'});
+    AppendU32LittleEndianUVE(bmp, 62U);
+    AppendU16LittleEndianUVE(bmp, 0U);
+    AppendU16LittleEndianUVE(bmp, 0U);
+    AppendU32LittleEndianUVE(bmp, 54U);
+    AppendU32LittleEndianUVE(bmp, 40U);
+    AppendU32LittleEndianUVE(bmp, 1U);
+    AppendU32LittleEndianUVE(bmp, static_cast<std::uint32_t>(-2));
+    AppendU16LittleEndianUVE(bmp, 1U);
+    AppendU16LittleEndianUVE(bmp, 32U);
+    AppendU32LittleEndianUVE(bmp, 0U);
+    AppendU32LittleEndianUVE(bmp, 8U);
+    AppendU32LittleEndianUVE(bmp, 2835U);
+    AppendU32LittleEndianUVE(bmp, 2835U);
+    AppendU32LittleEndianUVE(bmp, 0U);
+    AppendU32LittleEndianUVE(bmp, 0U);
+    // Top-down storage: source alpha is intentionally ignored for canonical opaque RGBA8 output.
+    const std::byte pixels[] = {std::byte{0x00}, std::byte{0x00}, std::byte{0xFF}, std::byte{0x12},
+                                std::byte{0xFF}, std::byte{0x00}, std::byte{0x00}, std::byte{0x34}};
+    bmp.insert(bmp.end(), std::begin(pixels), std::end(pixels));
+    return bmp;
+}
+
+TEST(BmpMetadataUVETest, DecodeBmpRgba8ImageUVE_DecodesBottomUp24BitRowsToTopDownRgba) {
+    BmpRgba8ImageUVE image;
+    ASSERT_TRUE(DecodeBmpRgba8ImageUVE(MakeBmp24TwoByTwoUVE(), image));
+    EXPECT_EQ(image.width, 2U);
+    EXPECT_EQ(image.height, 2U);
+    EXPECT_EQ(image.pixels, (std::vector<std::byte>{
+                                 std::byte{0xFF}, std::byte{0x00}, std::byte{0x00}, std::byte{0xFF},
+                                 std::byte{0x00}, std::byte{0xFF}, std::byte{0x00}, std::byte{0xFF},
+                                 std::byte{0x00}, std::byte{0x00}, std::byte{0xFF}, std::byte{0xFF},
+                                 std::byte{0xFF}, std::byte{0xFF}, std::byte{0xFF}, std::byte{0xFF}}));
+}
+
+TEST(BmpMetadataUVETest, DecodeBmpRgba8ImageUVE_DecodesTopDown32BitRowsWithOpaqueAlpha) {
+    BmpRgba8ImageUVE image;
+    ASSERT_TRUE(DecodeBmpRgba8ImageUVE(MakeBmp32TopDownOneByTwoUVE(), image));
+    EXPECT_EQ(image.width, 1U);
+    EXPECT_EQ(image.height, 2U);
+    EXPECT_EQ(image.pixels, (std::vector<std::byte>{std::byte{0xFF}, std::byte{0x00}, std::byte{0x00}, std::byte{0xFF},
+                                                      std::byte{0x00}, std::byte{0x00}, std::byte{0xFF}, std::byte{0xFF}}));
+}
+
+TEST(BmpMetadataUVETest, DecodeBmpRgba8ImageUVE_RejectsMalformedInputAtomically) {
+    const BmpRgba8ImageUVE original{1U, 1U, {std::byte{0x11}, std::byte{0x22}, std::byte{0x33}, std::byte{0x44}}};
+    BmpRgba8ImageUVE image = original;
+    const std::vector<std::byte> valid = MakeBmp24TwoByTwoUVE();
+    std::vector<std::byte> truncated = valid;
+    truncated.resize(53U);
+    EXPECT_FALSE(DecodeBmpRgba8ImageUVE(truncated, image));
+    EXPECT_EQ(image.width, original.width);
+    EXPECT_EQ(image.height, original.height);
+    EXPECT_EQ(image.pixels, original.pixels);
+    EXPECT_FALSE(DecodeBmpRgba8ImageUVE({std::byte{'N'}, std::byte{'O'}}, image));
+    EXPECT_EQ(image.pixels, original.pixels);
+}
+
+} // namespace
+} // namespace UVE::Asset::Tests
