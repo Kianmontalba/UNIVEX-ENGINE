@@ -104,6 +104,22 @@ TEST(ShapeNarrowPhaseUVETest, OrientedBoxOrientedBoxUsesFinitePrecisionForLargeC
     EXPECT_FLOAT_EQ(penetration->axis.z, 0.0F);
 }
 
+TEST(ShapeNarrowPhaseUVETest, SphereOrientedBoxUsesFinitePrecisionForLargeCenterDelta) {
+    const float maximumValue = std::numeric_limits<float>::max();
+    const float centerMagnitude = maximumValue * 0.99F;
+    const Math::QuaternionUVE identityRotation{};
+    const std::optional<Math::PenetrationUVE> penetration =
+        Detail::ComputeSphereOrientedBoxPenetrationUVE(
+            {centerMagnitude, 0.0F, 0.0F}, {maximumValue, 1.0F, 1.0F}, identityRotation,
+            {-centerMagnitude, 0.0F, 0.0F}, maximumValue);
+    ASSERT_TRUE(penetration.has_value());
+    EXPECT_TRUE(std::isfinite(penetration->depth));
+    EXPECT_GT(penetration->depth, 0.0F);
+    EXPECT_GT(penetration->axis.x, 0.0F);
+    EXPECT_FLOAT_EQ(penetration->axis.y, 0.0F);
+    EXPECT_FLOAT_EQ(penetration->axis.z, 0.0F);
+}
+
 TEST(ShapeNarrowPhaseUVETest, SphereSphereUsesFinitePrecisionForLargeRadiusOverlap) {
     const float radius = std::numeric_limits<float>::max() * 0.5F;
     const std::optional<Math::PenetrationUVE> penetration =
