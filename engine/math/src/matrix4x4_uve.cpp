@@ -76,7 +76,9 @@ Matrix4x4UVE Matrix4x4UVE::OrthographicUVE(float left, float right, float bottom
         2.0 / (static_cast<double>(right) - static_cast<double>(left)));
     result.m[0][1] = 0.0F;
     result.m[0][2] = 0.0F;
-    result.m[0][3] = -(right + left) / (right - left);
+    result.m[0][3] = static_cast<float>(
+        -(static_cast<double>(right) + static_cast<double>(left)) /
+        (static_cast<double>(right) - static_cast<double>(left)));
     result.m[1][0] = 0.0F;
     result.m[1][1] = static_cast<float>(
         2.0 / (static_cast<double>(top) - static_cast<double>(bottom)));
