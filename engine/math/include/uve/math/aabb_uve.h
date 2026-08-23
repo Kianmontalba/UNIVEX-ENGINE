@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <limits>
 #include <optional>
 #include <string>
 
@@ -30,7 +31,21 @@ struct AabbUVE {
     }
 
     [[nodiscard]] constexpr Vector3UVE GetCenterUVE() const noexcept {
-        return Vector3UVE{(min.x + max.x) * 0.5F, (min.y + max.y) * 0.5F, (min.z + max.z) * 0.5F};
+        const float floatCenterX = (min.x + max.x) * 0.5F;
+        const float floatCenterY = (min.y + max.y) * 0.5F;
+        const float floatCenterZ = (min.z + max.z) * 0.5F;
+        const auto IsFiniteFloatUVE = [](const float value) constexpr {
+            return value == value && value <= std::numeric_limits<float>::max() &&
+                   value >= -std::numeric_limits<float>::max();
+        };
+        if (IsFiniteFloatUVE(floatCenterX) && IsFiniteFloatUVE(floatCenterY) && IsFiniteFloatUVE(floatCenterZ)) {
+            return Vector3UVE{floatCenterX, floatCenterY, floatCenterZ};
+        }
+        return Vector3UVE{
+            static_cast<float>((static_cast<double>(min.x) + static_cast<double>(max.x)) * 0.5),
+            static_cast<float>((static_cast<double>(min.y) + static_cast<double>(max.y)) * 0.5),
+            static_cast<float>((static_cast<double>(min.z) + static_cast<double>(max.z)) * 0.5),
+        };
     }
 
     [[nodiscard]] constexpr Vector3UVE GetExtentsUVE() const noexcept {

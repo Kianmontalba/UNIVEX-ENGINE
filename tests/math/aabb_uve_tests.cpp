@@ -31,6 +31,21 @@ TEST(AabbUVETest, GetCenterUVE_And_GetExtentsUVE_RoundTripFromCenterExtentsUVE) 
     EXPECT_EQ(box.GetExtentsUVE(), extents);
 }
 
+TEST(AabbUVETest, GetCenterUVE_PreservesFiniteExtremeOrderedBounds) {
+    const float maximum = std::numeric_limits<float>::max();
+    const AabbUVE box{Vector3UVE{maximum * 0.5F, maximum * 0.5F, maximum * 0.5F},
+                      Vector3UVE{maximum, maximum, maximum}};
+
+    const Vector3UVE center = box.GetCenterUVE();
+
+    EXPECT_TRUE(std::isfinite(center.x));
+    EXPECT_TRUE(std::isfinite(center.y));
+    EXPECT_TRUE(std::isfinite(center.z));
+    EXPECT_FLOAT_EQ(center.x, maximum * 0.75F);
+    EXPECT_FLOAT_EQ(center.y, maximum * 0.75F);
+    EXPECT_FLOAT_EQ(center.z, maximum * 0.75F);
+}
+
 TEST(AabbUVETest, UnionUVE_CombinesTwoBoxesIntoTheirEnclosingBox) {
     const AabbUVE a{Vector3UVE{-1.0F, -1.0F, -1.0F}, Vector3UVE{1.0F, 1.0F, 1.0F}};
     const AabbUVE b{Vector3UVE{0.0F, 0.0F, 0.0F}, Vector3UVE{5.0F, 5.0F, 5.0F}};
