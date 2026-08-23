@@ -191,7 +191,34 @@ bool TryMakeAxisAngleUVE(const Vector3UVE& axis, const float radians, Quaternion
 Vector3UVE RotateVectorUVE(const QuaternionUVE& rotation, const Vector3UVE& vector) noexcept {
     const Vector3UVE axis{rotation.x, rotation.y, rotation.z};
     const Vector3UVE twiceCross = CrossUVE(axis, vector) * 2.0F;
-    return vector + twiceCross * rotation.w + CrossUVE(axis, twiceCross);
+    const Vector3UVE scalarPart = twiceCross * rotation.w;
+    const Vector3UVE correction = CrossUVE(axis, twiceCross);
+    const Vector3UVE floatResult = vector + scalarPart + correction;
+    if (IsFiniteVectorUVE(twiceCross) && IsFiniteVectorUVE(scalarPart) && IsFiniteVectorUVE(correction) &&
+        IsFiniteVectorUVE(floatResult)) {
+        return floatResult;
+    }
+
+    const double axisX = static_cast<double>(rotation.x);
+    const double axisY = static_cast<double>(rotation.y);
+    const double axisZ = static_cast<double>(rotation.z);
+    const double vectorX = static_cast<double>(vector.x);
+    const double vectorY = static_cast<double>(vector.y);
+    const double vectorZ = static_cast<double>(vector.z);
+
+    const double twiceCrossX = 2.0 * (axisY * vectorZ - axisZ * vectorY);
+    const double twiceCrossY = 2.0 * (axisZ * vectorX - axisX * vectorZ);
+    const double twiceCrossZ = 2.0 * (axisX * vectorY - axisY * vectorX);
+    const double correctionX = axisY * twiceCrossZ - axisZ * twiceCrossY;
+    const double correctionY = axisZ * twiceCrossX - axisX * twiceCrossZ;
+    const double correctionZ = axisX * twiceCrossY - axisY * twiceCrossX;
+    const double scalar = static_cast<double>(rotation.w);
+
+    return Vector3UVE{
+        static_cast<float>(vectorX + twiceCrossX * scalar + correctionX),
+        static_cast<float>(vectorY + twiceCrossY * scalar + correctionY),
+        static_cast<float>(vectorZ + twiceCrossZ * scalar + correctionZ),
+    };
 }
 
 bool TryMakeEulerUVE(const Vector3UVE& radians, QuaternionUVE& outRotation) noexcept {
