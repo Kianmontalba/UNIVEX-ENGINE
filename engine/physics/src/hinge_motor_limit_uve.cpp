@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace UVE::Physics {
 namespace {
@@ -29,14 +30,20 @@ bool EvaluateHingeMotorLimitUVE(
     HingeMotorLimitResultUVE candidate{};
     if (input.motorEnabled && input.deltaTimeSeconds > 0.0F &&
         input.effectiveInverseInertia > 0.0F && input.maximumMotorTorque > 0.0F) {
-        const float maximumSpeedDelta = input.maximumMotorTorque * input.effectiveInverseInertia *
-                                        input.deltaTimeSeconds;
-        if (!IsFiniteUVE(maximumSpeedDelta)) {
+        const double maximumSpeedDelta = static_cast<double>(input.maximumMotorTorque) *
+                                         static_cast<double>(input.effectiveInverseInertia) *
+                                         static_cast<double>(input.deltaTimeSeconds);
+        if (!std::isfinite(maximumSpeedDelta)) {
             return false;
         }
-        const float requestedSpeedDelta = input.targetSpeedRadians - input.currentRelativeSpeedRadians;
-        candidate.angularSpeedDeltaRadians =
-            std::clamp(requestedSpeedDelta, -maximumSpeedDelta, maximumSpeedDelta);
+        const double requestedSpeedDelta = static_cast<double>(input.targetSpeedRadians) -
+                                          static_cast<double>(input.currentRelativeSpeedRadians);
+        const double cappedSpeedDelta = std::clamp(requestedSpeedDelta, -maximumSpeedDelta, maximumSpeedDelta);
+        if (!std::isfinite(cappedSpeedDelta) ||
+            std::fabs(cappedSpeedDelta) > static_cast<double>(std::numeric_limits<float>::max())) {
+            return false;
+        }
+        candidate.angularSpeedDeltaRadians = static_cast<float>(cappedSpeedDelta);
         candidate.motorApplied = std::fabs(candidate.angularSpeedDeltaRadians) > 0.0F;
     }
 
