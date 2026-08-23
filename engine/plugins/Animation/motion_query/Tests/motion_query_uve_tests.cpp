@@ -159,6 +159,26 @@ TEST(MotionQueryUVETest, SharedSkeletonPoseAndEvaluationContext_RejectMismatches
               MotionQueryValidationCodeUVE::InvalidEvaluationTime);
 }
 
+TEST(MotionQueryUVETest, FindBestMotionMatchUVE_PreservesFiniteExtremeVelocityDistance) {
+    const float maximum = std::numeric_limits<float>::max();
+    MotionQueryUVE query;
+    query.rootVelocity = {maximum, 0.0F, 0.0F};
+    MotionMatchingCandidateUVE candidate;
+    candidate.candidateId = "extreme-velocity";
+    candidate.sourceClipId = "locomotion";
+    candidate.feature.rootVelocity = {-maximum, 0.0F, 0.0F};
+    MotionMatchingDatabaseUVE database;
+    database.candidates = {candidate};
+
+    const MotionMatchingResultUVE result = FindBestMotionMatchUVE(
+        query, database, MotionMatchingWeightsUVE{1.0e-40F, 0.0F, 0.0F});
+    ASSERT_TRUE(result.IsMatchUVE()) << result.message;
+    EXPECT_EQ(result.candidateIndex, 0U);
+    EXPECT_EQ(result.candidatesEvaluated, 1U);
+    EXPECT_TRUE(std::isfinite(result.cost));
+    EXPECT_GT(result.cost, 0.0F);
+}
+
 TEST(MotionQueryUVETest, FindBestMotionMatchUVE_PreservesFiniteTrajectoryMean) {
     const float extent = std::sqrt(std::numeric_limits<float>::max());
     MotionQueryUVE query;
