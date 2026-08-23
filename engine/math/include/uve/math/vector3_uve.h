@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <limits>
 #include <string>
 
 namespace UVE::Math {
@@ -71,7 +72,17 @@ constexpr Vector3UVE& operator*=(Vector3UVE& v, float scalar) noexcept {
 
 /// Dot product.
 [[nodiscard]] constexpr float DotUVE(const Vector3UVE& lhs, const Vector3UVE& rhs) noexcept {
-    return lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z;
+    const float floatResult = lhs.x * rhs.x + lhs.y * rhs.y + lhs.z * rhs.z;
+    const auto IsFiniteFloatUVE = [](const float value) constexpr {
+        return value == value && value <= std::numeric_limits<float>::max() &&
+               value >= -std::numeric_limits<float>::max();
+    };
+    if (IsFiniteFloatUVE(floatResult)) {
+        return floatResult;
+    }
+    return static_cast<float>(static_cast<double>(lhs.x) * static_cast<double>(rhs.x) +
+                              static_cast<double>(lhs.y) * static_cast<double>(rhs.y) +
+                              static_cast<double>(lhs.z) * static_cast<double>(rhs.z));
 }
 
 /// Cross product.

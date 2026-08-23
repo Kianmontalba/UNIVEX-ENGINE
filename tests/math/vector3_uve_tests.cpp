@@ -4,6 +4,7 @@
 #include "uve/math/vector3_uve.h"
 
 #include <cmath>
+#include <limits>
 #include <string>
 
 #include <gtest/gtest.h>
@@ -101,6 +102,18 @@ TEST(Vector3UVETest, DotUVE_KnownVectors_MatchesHandComputedValue) {
     constexpr Vector3UVE lhs{1.0F, 2.0F, 3.0F};
     constexpr Vector3UVE rhs{4.0F, 5.0F, 6.0F};
     EXPECT_EQ(DotUVE(lhs, rhs), 32.0F); // 1*4 + 2*5 + 3*6
+}
+
+TEST(Vector3UVETest, DotUVE_PreservesFiniteExtremeCancellation) {
+    const float maximum = std::numeric_limits<float>::max();
+    const float diagonal = 0.57735026919F;
+    const Vector3UVE lhs{maximum, maximum, maximum};
+    const Vector3UVE rhs{diagonal, diagonal, -diagonal};
+
+    const float result = DotUVE(lhs, rhs);
+
+    EXPECT_TRUE(std::isfinite(result));
+    EXPECT_FLOAT_EQ(result, diagonal * maximum);
 }
 
 TEST(Vector3UVETest, CrossUVE_RightCrossUp_IsForward) {
