@@ -93,9 +93,10 @@ constexpr Vector3UVE& operator*=(Vector3UVE& v, float scalar) noexcept {
 
 /// Returns `v` scaled to unit length. Contract: `v` must not be the zero vector (or within
 /// floating-point epsilon of it) — callers that cannot guarantee this must check
-/// `LengthSquaredUVE(v)` first; NormalizeUVE() does not itself guard against it (matching this
-/// codebase's "don't validate what the caller must already ensure" convention for value-type
-/// math, e.g. AabbUVE::TransformUVE assumes an affine matrix without checking).
+/// `LengthSquaredUVE(v)` first; NormalizeUVE() does not itself guard against zero and scales
+/// finite inputs before measuring length so large nonzero vectors do not overflow that intermediate
+/// (matching this codebase's "don't validate what the caller must already ensure" convention for
+/// value-type math, e.g. AabbUVE::TransformUVE assumes an affine matrix without checking).
 [[nodiscard]] Vector3UVE NormalizeUVE(const Vector3UVE& v) noexcept;
 
 /// Formats `vector` as `"(x, y, z)"`, for logging/debugging.
