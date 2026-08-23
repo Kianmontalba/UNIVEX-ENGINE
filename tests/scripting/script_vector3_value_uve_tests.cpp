@@ -63,6 +63,21 @@ TEST(ScriptVector3ValueUVETest, NormalizeRejectsZeroLengthAndReturnsUnitVector) 
     EXPECT_FLOAT_EQ(normalized.value.value.z, 0.8F);
 }
 
+TEST(ScriptVector3ValueUVETest, DirectionUsesFinitePrecisionForLargeEndpointDelta) {
+    const float maximum = std::numeric_limits<float>::max();
+    const float endpointMagnitude = maximum * 0.99F;
+    const ScriptVector3ValueResultUVE direction = EvaluateScriptVector3DirectionUVE(
+        ValueUVE(-endpointMagnitude, 0.0F, 0.0F), ValueUVE(endpointMagnitude, 0.0F, 0.0F));
+
+    ASSERT_TRUE(direction.IsAppliedUVE());
+    EXPECT_TRUE(std::isfinite(direction.value.value.x));
+    EXPECT_TRUE(std::isfinite(direction.value.value.y));
+    EXPECT_TRUE(std::isfinite(direction.value.value.z));
+    EXPECT_FLOAT_EQ(direction.value.value.x, 1.0F);
+    EXPECT_FLOAT_EQ(direction.value.value.y, 0.0F);
+    EXPECT_FLOAT_EQ(direction.value.value.z, 0.0F);
+}
+
 TEST(ScriptVector3ValueUVETest, RejectsNonFiniteInputsAndOverflowedOutputs) {
     const float nan = std::numeric_limits<float>::quiet_NaN();
     const float infinity = std::numeric_limits<float>::infinity();
