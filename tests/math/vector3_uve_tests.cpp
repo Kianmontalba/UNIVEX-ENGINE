@@ -117,6 +117,13 @@ TEST(Vector3UVETest, LengthUVE_KnownVector_MatchesHandComputedValue) {
     EXPECT_NEAR(LengthSquaredUVE(v), 25.0F, kEpsilon);
 }
 
+TEST(Vector3UVETest, LengthUVE_PreservesFiniteMaximumAxis) {
+    const float maximum = std::numeric_limits<float>::max();
+
+    EXPECT_TRUE(std::isfinite(LengthUVE(Vector3UVE{maximum, 0.0F, 0.0F})));
+    EXPECT_FLOAT_EQ(LengthUVE(Vector3UVE{maximum, 0.0F, 0.0F}), maximum);
+}
+
 TEST(Vector3UVETest, NormalizeUVE_NonZeroVector_ProducesUnitLength) {
     const Vector3UVE v{3.0F, 4.0F, 0.0F};
     const Vector3UVE normalized = NormalizeUVE(v);
