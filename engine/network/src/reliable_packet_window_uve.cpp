@@ -91,6 +91,71 @@ bool DeserializeReliablePacketHeaderUVE(const std::vector<std::uint8_t>& bytes,
     return true;
 }
 
+bool SerializeReliablePayloadFragmentUVE(const ReliablePayloadFragmentUVE& fragment,
+                                         std::vector<std::uint8_t>& outBytes) noexcept {
+    if (fragment.messageId == 0U || fragment.fragmentCount == 0U ||
+        fragment.fragmentCount > kReliablePacketMaximumFragmentCountUVE ||
+        fragment.fragmentIndex >= fragment.fragmentCount || fragment.payloadBytes.empty() ||
+        fragment.payloadBytes.size() > kReliablePacketMaximumPayloadBytesUVE) {
+        return false;
+    }
+    try {
+        std::vector<std::uint8_t> bytes;
+        bytes.reserve(kReliablePayloadFragmentHeaderWireBytesUVE + fragment.payloadBytes.size());
+        const auto appendUint32 = [&bytes](const std::uint32_t value) {
+            bytes.push_back(static_cast<std::uint8_t>(value & 0xFFU));
+            bytes.push_back(static_cast<std::uint8_t>((value >> 8U) & 0xFFU));
+            bytes.push_back(static_cast<std::uint8_t>((value >> 16U) & 0xFFU));
+            bytes.push_back(static_cast<std::uint8_t>((value >> 24U) & 0xFFU));
+        };
+        appendUint32(fragment.messageId);
+        appendUint32(fragment.fragmentIndex);
+        appendUint32(fragment.fragmentCount);
+        appendUint32(static_cast<std::uint32_t>(fragment.payloadBytes.size()));
+        bytes.insert(bytes.end(), fragment.payloadBytes.begin(), fragment.payloadBytes.end());
+        outBytes = std::move(bytes);
+        return true;
+    } catch (const std::bad_alloc&) {
+        return false;
+    }
+}
+
+bool DeserializeReliablePayloadFragmentUVE(const std::vector<std::uint8_t>& bytes,
+                                           ReliablePayloadFragmentUVE& outFragment) noexcept {
+    if (bytes.size() < kReliablePayloadFragmentHeaderWireBytesUVE ||
+        bytes.size() > kReliablePayloadFragmentHeaderWireBytesUVE + kReliablePacketMaximumPayloadBytesUVE) {
+        return false;
+    }
+    const auto readUint32 = [&bytes](const std::size_t offset) {
+        return static_cast<std::uint32_t>(bytes[offset]) |
+               (static_cast<std::uint32_t>(bytes[offset + 1U]) << 8U) |
+               (static_cast<std::uint32_t>(bytes[offset + 2U]) << 16U) |
+               (static_cast<std::uint32_t>(bytes[offset + 3U]) << 24U);
+    };
+    const std::uint32_t messageId = readUint32(0U);
+    const std::uint32_t fragmentIndex = readUint32(4U);
+    const std::uint32_t fragmentCount = readUint32(8U);
+    const std::uint32_t payloadSize = readUint32(12U);
+    if (messageId == 0U || fragmentCount == 0U || fragmentCount > kReliablePacketMaximumFragmentCountUVE ||
+        fragmentIndex >= fragmentCount || payloadSize == 0U ||
+        payloadSize > kReliablePacketMaximumPayloadBytesUVE ||
+        static_cast<std::size_t>(payloadSize) != bytes.size() - kReliablePayloadFragmentHeaderWireBytesUVE) {
+        return false;
+    }
+    try {
+        ReliablePayloadFragmentUVE decoded;
+        decoded.messageId = messageId;
+        decoded.fragmentIndex = fragmentIndex;
+        decoded.fragmentCount = fragmentCount;
+        decoded.payloadBytes.assign(bytes.begin() + static_cast<std::ptrdiff_t>(kReliablePayloadFragmentHeaderWireBytesUVE),
+                                     bytes.end());
+        outFragment = std::move(decoded);
+        return true;
+    } catch (const std::bad_alloc&) {
+        return false;
+    }
+}
+
 ReliablePayloadReassemblyStatusUVE AcceptReliablePayloadFragmentUVE(
     const std::uint32_t messageId, const std::size_t fragmentIndex, const std::size_t fragmentCount,
     const std::vector<std::uint8_t>& fragmentBytes, ReliablePayloadReassemblyStateUVE& state,

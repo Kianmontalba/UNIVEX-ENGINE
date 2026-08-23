@@ -10,10 +10,17 @@ inline constexpr std::size_t kReliablePacketMaximumFragmentCountUVE = 1024U;
 inline constexpr std::size_t kReliablePacketMaximumReassembledPayloadBytesUVE =
     kReliablePacketMaximumPayloadBytesUVE * kReliablePacketMaximumFragmentCountUVE;
 inline constexpr std::size_t kReliablePacketHeaderWireBytesUVE = 12U;
+inline constexpr std::size_t kReliablePayloadFragmentHeaderWireBytesUVE = 16U;
 struct ReliablePacketHeaderUVE final {
     std::uint32_t sequence = 0U;
     std::uint32_t acknowledgedSequence = 0U;
     std::uint32_t selectiveAcknowledgementBits = 0U;
+};
+struct ReliablePayloadFragmentUVE final {
+    std::uint32_t messageId = 0U;
+    std::uint32_t fragmentIndex = 0U;
+    std::uint32_t fragmentCount = 0U;
+    std::vector<std::uint8_t> payloadBytes;
 };
 /// Serializes one validated reliable header into an exact 12-byte little-endian wire representation.
 /// The helper owns only copied bytes and publishes output failure-atomically.
@@ -23,6 +30,13 @@ struct ReliablePacketHeaderUVE final {
 /// The helper owns no packet, socket, payload, timer, or transport lifecycle.
 [[nodiscard]] bool DeserializeReliablePacketHeaderUVE(
     const std::vector<std::uint8_t>& bytes, ReliablePacketHeaderUVE& outHeader) noexcept;
+/// Serializes one bounded payload fragment as a 16-byte little-endian envelope followed by copied bytes.
+/// The helper owns no socket, timer, peer, retransmission, or transport lifecycle.
+[[nodiscard]] bool SerializeReliablePayloadFragmentUVE(
+    const ReliablePayloadFragmentUVE& fragment, std::vector<std::uint8_t>& outBytes) noexcept;
+/// Deserializes one exact bounded payload fragment envelope and publishes copied output atomically.
+[[nodiscard]] bool DeserializeReliablePayloadFragmentUVE(
+    const std::vector<std::uint8_t>& bytes, ReliablePayloadFragmentUVE& outFragment) noexcept;
 enum class ReliablePacketReceiveStatusUVE : std::uint8_t {
     Accepted = 0,
     Duplicate,

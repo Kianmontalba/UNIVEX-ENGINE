@@ -4,6 +4,50 @@
 #include <gtest/gtest.h>
 namespace UVE::Network::Tests {
 namespace {
+TEST(ReliablePacketWindowUVETest, ReliablePayloadFragmentWireRoundTrip_IsLittleEndianAndExact) {
+    const ReliablePayloadFragmentUVE original{0x12345678U, 2U, 3U, {0xAAU, 0xBBU}};
+    std::vector<std::uint8_t> bytes;
+    ASSERT_TRUE(SerializeReliablePayloadFragmentUVE(original, bytes));
+    EXPECT_EQ(bytes, (std::vector<std::uint8_t>{0x78U, 0x56U, 0x34U, 0x12U,
+                                                  0x02U, 0x00U, 0x00U, 0x00U,
+                                                  0x03U, 0x00U, 0x00U, 0x00U,
+                                                  0x02U, 0x00U, 0x00U, 0x00U,
+                                                  0xAAU, 0xBBU}));
+    ReliablePayloadFragmentUVE decoded;
+    ASSERT_TRUE(DeserializeReliablePayloadFragmentUVE(bytes, decoded));
+    EXPECT_EQ(decoded.messageId, original.messageId);
+    EXPECT_EQ(decoded.fragmentIndex, original.fragmentIndex);
+    EXPECT_EQ(decoded.fragmentCount, original.fragmentCount);
+    EXPECT_EQ(decoded.payloadBytes, original.payloadBytes);
+}
+
+TEST(ReliablePacketWindowUVETest, ReliablePayloadFragmentWireRejectsInvalidAndMalformedInputsAtomically) {
+    const ReliablePayloadFragmentUVE original{9U, 1U, 2U, {7U}};
+    ReliablePayloadFragmentUVE decoded = original;
+    EXPECT_FALSE(DeserializeReliablePayloadFragmentUVE({1U, 2U, 3U}, decoded));
+    EXPECT_EQ(decoded.messageId, original.messageId);
+    EXPECT_EQ(decoded.payloadBytes, original.payloadBytes);
+
+    std::vector<std::uint8_t> bytes{4U, 5U};
+    EXPECT_FALSE(SerializeReliablePayloadFragmentUVE(ReliablePayloadFragmentUVE{0U, 0U, 1U, {1U}}, bytes));
+    EXPECT_EQ(bytes, (std::vector<std::uint8_t>{4U, 5U}));
+    EXPECT_FALSE(SerializeReliablePayloadFragmentUVE(
+        ReliablePayloadFragmentUVE{1U, 2U, 2U, {1U}}, bytes));
+    EXPECT_EQ(bytes, (std::vector<std::uint8_t>{4U, 5U}));
+    EXPECT_FALSE(SerializeReliablePayloadFragmentUVE(
+        ReliablePayloadFragmentUVE{1U, 0U, 1U, std::vector<std::uint8_t>(kReliablePacketMaximumPayloadBytesUVE + 1U, 0U)},
+        bytes));
+    EXPECT_EQ(bytes, (std::vector<std::uint8_t>{4U, 5U}));
+
+    std::vector<std::uint8_t> malformed(16U, 0U);
+    malformed[0] = 1U;
+    malformed[8] = 1U;
+    malformed[12] = 2U;
+    EXPECT_FALSE(DeserializeReliablePayloadFragmentUVE(malformed, decoded));
+    EXPECT_EQ(decoded.messageId, original.messageId);
+    EXPECT_EQ(decoded.payloadBytes, original.payloadBytes);
+}
+
 TEST(ReliablePacketWindowUVETest, PlansReliablePayloadFragmentsUVE_CalculatesBoundaries) {
     ReliablePayloadFragmentPlanUVE plan{99U, 99U, 99U, true};
     ASSERT_TRUE(PlanReliablePayloadFragmentsUVE(500U, 1200U, plan));
