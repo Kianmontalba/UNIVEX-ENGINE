@@ -78,6 +78,15 @@ TEST(ScriptVector3ValueUVETest, DirectionUsesFinitePrecisionForLargeEndpointDelt
     EXPECT_FLOAT_EQ(direction.value.value.z, 0.0F);
 }
 
+TEST(ScriptVector3ValueUVETest, LerpUsesFinitePrecisionForLargeEndpointDelta) {
+    const float maximum = std::numeric_limits<float>::max();
+    const ScriptVector3ValueResultUVE midpoint = EvaluateScriptVector3LerpUVE(
+        ValueUVE(-maximum, 2.0F, 0.0F), ValueUVE(maximum, 4.0F, 0.0F), 0.5F);
+
+    ASSERT_TRUE(midpoint.IsAppliedUVE());
+    EXPECT_EQ(midpoint.value, ValueUVE(0.0F, 3.0F, 0.0F));
+}
+
 TEST(ScriptVector3ValueUVETest, RejectsNonFiniteInputsAndOverflowedOutputs) {
     const float nan = std::numeric_limits<float>::quiet_NaN();
     const float infinity = std::numeric_limits<float>::infinity();
@@ -87,6 +96,10 @@ TEST(ScriptVector3ValueUVETest, RejectsNonFiniteInputsAndOverflowedOutputs) {
               ScriptVector3EvaluationCodeUVE::NonFiniteInput);
     EXPECT_EQ(EvaluateScriptVector3AddUVE(ValueUVE(std::numeric_limits<float>::max(), 0.0F, 0.0F),
                                           ValueUVE(std::numeric_limits<float>::max(), 0.0F, 0.0F)).code,
+              ScriptVector3EvaluationCodeUVE::NonFiniteInput);
+    EXPECT_EQ(EvaluateScriptVector3LerpUVE(ValueUVE(0.0F, 0.0F, 0.0F),
+                                           ValueUVE(std::numeric_limits<float>::max(), 0.0F, 0.0F),
+                                           2.0F).code,
               ScriptVector3EvaluationCodeUVE::NonFiniteInput);
     EXPECT_EQ(EvaluateScriptVector3DotUVE(ValueUVE(infinity, 0.0F, 0.0F), ValueUVE(1.0F, 0.0F, 0.0F)).code,
               ScriptVector3EvaluationCodeUVE::NonFiniteInput);
