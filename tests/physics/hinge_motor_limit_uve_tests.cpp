@@ -21,6 +21,19 @@ TEST(HingeMotorLimitUVETest, EvaluateUVE_MotorSpeedCorrectionIsCappedByTorqueAnd
     EXPECT_FALSE(result.limitApplied);
 }
 
+TEST(HingeMotorLimitUVETest, EvaluateUVE_MotorCapBeyondFloatRangeStillAcceptsFiniteRequest) {
+    HingeMotorLimitResultUVE result;
+    const bool accepted = EvaluateHingeMotorLimitUVE(
+        HingeMotorLimitInputUVE{0.0F, 0.0F, 2.0F, 2.0F, true, 1.0F,
+                                std::numeric_limits<float>::max(), false, 0.0F, 0.0F},
+        result);
+
+    ASSERT_TRUE(accepted);
+    EXPECT_FLOAT_EQ(result.angularSpeedDeltaRadians, 1.0F);
+    EXPECT_TRUE(result.motorApplied);
+    EXPECT_FALSE(result.limitApplied);
+}
+
 TEST(HingeMotorLimitUVETest, EvaluateUVE_MotorMovesTowardTargetWithoutOvershoot) {
     HingeMotorLimitResultUVE result;
     const bool accepted = EvaluateHingeMotorLimitUVE(
