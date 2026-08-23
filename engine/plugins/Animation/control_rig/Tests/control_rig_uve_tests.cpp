@@ -170,7 +170,7 @@ TEST(ControlRigUVETest, TryMakeAimLookAtRotationUVE_AcceptsFiniteExtremeDirectio
     Math::QuaternionUVE rotation;
     const float maximum = std::numeric_limits<float>::max();
     ASSERT_TRUE(TryMakeAimLookAtRotationUVE(
-        {0.0F, 0.0F, 0.0F}, {0.0F, 0.0F, -maximum}, {0.0F, 1.0F, 0.0F}, rotation));
+        {0.0F, 0.0F, maximum}, {0.0F, 0.0F, -maximum}, {0.0F, 1.0F, 0.0F}, rotation));
     EXPECT_NEAR(Math::LengthSquaredUVE(rotation), 1.0F, 1.0e-4F);
 }
 
