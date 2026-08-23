@@ -870,6 +870,7 @@ TEST_F(SceneSerializerUVETest, SaveThenLoad_AudioSourceComponentUVE_RoundTripsAl
     audioSource.minDistance = 2.0F;
     audioSource.maxDistance = 50.0F;
     audioSource.attenuationCurve = AudioAttenuationCurveUVE::InverseSquare;
+    audioSource.mixerGroup = "SFX";
     audioSource.playOnAwake = false;
     entityManager.AddComponentUVE<AudioSourceComponentUVE>(entity, audioSource);
 
@@ -890,6 +891,7 @@ TEST_F(SceneSerializerUVETest, SaveThenLoad_AudioSourceComponentUVE_RoundTripsAl
     EXPECT_FLOAT_EQ(loaded.minDistance, 2.0F);
     EXPECT_FLOAT_EQ(loaded.maxDistance, 50.0F);
     EXPECT_EQ(loaded.attenuationCurve, AudioAttenuationCurveUVE::InverseSquare);
+    EXPECT_EQ(loaded.mixerGroup, "SFX");
     EXPECT_FALSE(loaded.playOnAwake);
 
     std::filesystem::remove(path);
@@ -917,6 +919,7 @@ TEST_F(SceneSerializerUVETest, SaveThenLoad_AudioSourceComponentUVE_DefaultsRoun
     EXPECT_FLOAT_EQ(loaded.minDistance, 1.0F);
     EXPECT_FLOAT_EQ(loaded.maxDistance, 25.0F);
     EXPECT_EQ(loaded.attenuationCurve, AudioAttenuationCurveUVE::Linear);
+    EXPECT_TRUE(loaded.mixerGroup.empty());
     EXPECT_TRUE(loaded.playOnAwake);
 
     std::filesystem::remove(path);

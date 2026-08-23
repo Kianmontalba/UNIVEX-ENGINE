@@ -11,6 +11,7 @@
 namespace UVE::Scene {
 
 inline constexpr std::size_t kMaximumAudioAssetPathBytesUVE = 1024U;
+inline constexpr std::size_t kMaximumAudioMixerGroupNameBytesUVE = 64U;
 
 /// Distance-attenuation curve shape a spatial AudioSourceComponentUVE uses, consumed by
 /// Audio::AudioSourceSystemUVE (which converts it to Audio::AudioAttenuationModelUVE) — kept as a
@@ -31,6 +32,8 @@ enum class AudioAttenuationCurveUVE : std::uint8_t { Linear, InverseSquare };
 /// precedent of keeping derived/runtime state out of the authored component.
 struct AudioSourceComponentUVE final {
     std::string audioAssetPath;
+    /// Empty preserves the legacy/default runtime Master route; non-empty names are resolved by AudioSystemUVE.
+    std::string mixerGroup;
     float volume = 1.0F;
     bool looping = false;
     float pitch = 1.0F;
@@ -59,7 +62,9 @@ struct AudioSourceComponentUVE final {
                             std::isfinite(source.maxDistance) && source.maxDistance > source.minDistance);
     const bool assetPathValid = source.audioAssetPath.size() <= kMaximumAudioAssetPathBytesUVE &&
                                 source.audioAssetPath.find('\0') == std::string::npos;
-    return assetPathValid && std::isfinite(source.volume) && source.volume >= 0.0F &&
+    const bool mixerGroupValid = source.mixerGroup.size() <= kMaximumAudioMixerGroupNameBytesUVE &&
+                                 source.mixerGroup.find('\0') == std::string::npos;
+    return assetPathValid && mixerGroupValid && std::isfinite(source.volume) && source.volume >= 0.0F &&
            std::isfinite(source.pitch) && source.pitch > 0.0F &&
            IsAudioAttenuationCurveValidUVE(source.attenuationCurve) && spatialDistanceValid;
 }

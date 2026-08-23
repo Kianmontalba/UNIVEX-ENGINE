@@ -86,6 +86,12 @@ TEST(AudioSourceComponentUVETest, IsAudioSourceComponentValidUVE_RejectsUnsafePa
     invalid = {};
     invalid.attenuationCurve = static_cast<Scene::AudioAttenuationCurveUVE>(99U);
     EXPECT_FALSE(Scene::IsAudioSourceComponentValidUVE(invalid));
+    invalid = {};
+    invalid.mixerGroup.assign(65U, 'X');
+    EXPECT_FALSE(Scene::IsAudioSourceComponentValidUVE(invalid));
+    invalid = {};
+    invalid.mixerGroup = std::string("SFX\0invalid", 11U);
+    EXPECT_FALSE(Scene::IsAudioSourceComponentValidUVE(invalid));
 }
 
 TEST_F(AudioSourceSystemUVETest, PlayOnAwakeEntity_CreatesAndPlaysSourceOnFirstSync) {
@@ -97,6 +103,33 @@ TEST_F(AudioSourceSystemUVETest, PlayOnAwakeEntity_CreatesAndPlaysSourceOnFirstS
 
     EXPECT_EQ(device.GetLiveVoiceCountUVE(), 1U);
     EXPECT_TRUE(AnyRecordedPlayCallUVE());
+}
+
+TEST_F(AudioSourceSystemUVETest, AuthoredMixerGroup_RoutesAndReroutesWithoutReplacingVoice) {
+    ASSERT_TRUE(audioSystem.RegisterMixerGroupUVE("SFX"));
+    ASSERT_TRUE(audioSystem.RegisterMixerGroupUVE("Music"));
+    Scene::AudioSourceComponentUVE audioSource;
+    audioSource.mixerGroup = "SFX";
+    const Scene::EntityUVE entity = MakeAudioEntityUVE(audioSource);
+
+    audioSourceSystem.SyncUVE(entityManager, audioSystem);
+    ASSERT_EQ(device.GetLiveVoiceCountUVE(), 1U);
+    auto diagnostics = audioSystem.GetMixerDiagnosticsUVE();
+    ASSERT_EQ(diagnostics.groups.size(), 3U);
+    const auto sourceCountFor = [](const AudioMixerDiagnosticsUVE& snapshot, const std::string_view name) {
+        const auto iterator = std::find_if(snapshot.groups.begin(), snapshot.groups.end(),
+                                           [name](const AudioMixerGroupSnapshotUVE& group) { return group.name == name; });
+        return iterator == snapshot.groups.end() ? 0U : iterator->sourceCount;
+    };
+    EXPECT_EQ(sourceCountFor(diagnostics, "SFX"), 1U);
+
+    device.ClearRecordedCallsUVE();
+    entityManager.GetComponentUVE<Scene::AudioSourceComponentUVE>(entity).mixerGroup = "Music";
+    audioSourceSystem.SyncUVE(entityManager, audioSystem);
+    EXPECT_EQ(device.GetLiveVoiceCountUVE(), 1U);
+    diagnostics = audioSystem.GetMixerDiagnosticsUVE();
+    EXPECT_EQ(sourceCountFor(diagnostics, "SFX"), 0U);
+    EXPECT_EQ(sourceCountFor(diagnostics, "Music"), 1U);
 }
 
 TEST_F(AudioSourceSystemUVETest, PlayOnAwakeFalse_CreatesButDoesNotAutoPlay) {
