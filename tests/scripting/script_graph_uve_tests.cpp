@@ -6243,6 +6243,46 @@ bool SetPhysicsInputsUVE(ScriptVmExecutionContextUVE& context, const std::uint32
 
 } // namespace
 
+TEST(ScriptVmUVETest, CallbackBackedPhysicsBodyNodesRejectOutputCapacityBeforeCallback) {
+    ScriptBytecodeProgramUVE gravityProgram;
+    gravityProgram.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U,
+                                           "physics.enable_gravity", {}, {}});
+    ScriptVmExecutionContextUVE gravityContext;
+    ASSERT_TRUE(SetPhysicsInputsUVE(gravityContext, 1U, 9U));
+    FillVmOutputCapacityExceptNodeOneUVE(gravityContext);
+    PhysicsCaptureUVE gravityCapture;
+    ScriptEngineCallBindingsUVE gravityBindings = MakePhysicsBindingsUVE(gravityCapture);
+    ScriptVmExecutionOptionsUVE gravityOptions;
+    gravityOptions.engineCallBindings = &gravityBindings;
+
+    const ScriptVmExecutionResultUVE gravityResult =
+        ExecuteScriptBytecodeUVE(gravityProgram, gravityContext, gravityOptions);
+
+    EXPECT_EQ(gravityResult.status, ScriptVmStatusUVE::NodeExecutionFailed);
+    EXPECT_EQ(gravityCapture.gravityCount, 0U);
+    EXPECT_EQ(gravityContext.outputs.size(), ScriptVmExecutionContextUVE::kMaximumBindingsUVE);
+    EXPECT_FALSE(gravityContext.FindOutputUVE(1U, "Result").has_value());
+
+    ScriptBytecodeProgramUVE velocityProgram;
+    velocityProgram.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U,
+                                            "physics.get_velocity", {}, {}});
+    ScriptVmExecutionContextUVE velocityContext;
+    ASSERT_TRUE(SetPhysicsInputsUVE(velocityContext, 1U, 8U));
+    FillVmOutputCapacityExceptNodeOneUVE(velocityContext);
+    PhysicsCaptureUVE velocityCapture;
+    ScriptEngineCallBindingsUVE velocityBindings = MakePhysicsBindingsUVE(velocityCapture);
+    ScriptVmExecutionOptionsUVE velocityOptions;
+    velocityOptions.engineCallBindings = &velocityBindings;
+
+    const ScriptVmExecutionResultUVE velocityResult =
+        ExecuteScriptBytecodeUVE(velocityProgram, velocityContext, velocityOptions);
+
+    EXPECT_EQ(velocityResult.status, ScriptVmStatusUVE::NodeExecutionFailed);
+    EXPECT_EQ(velocityCapture.getVelocityCount, 0U);
+    EXPECT_EQ(velocityContext.outputs.size(), ScriptVmExecutionContextUVE::kMaximumBindingsUVE);
+    EXPECT_FALSE(velocityContext.FindOutputUVE(1U, "Velocity").has_value());
+}
+
 TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_ExecutesPhysicsFamilyWithCopiedValues) {
     const std::array<const char*, 11U> nodeTypes{
         "physics.raycast", "physics.sphere_cast", "physics.box_cast", "physics.capsule_cast", "physics.overlap",
