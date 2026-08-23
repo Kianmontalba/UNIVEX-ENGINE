@@ -26,6 +26,57 @@ std::vector<std::byte> BuildWav16(const std::vector<std::int16_t>& samples, cons
     for (const std::int16_t sample : samples) AppendU16(bytes, static_cast<std::uint16_t>(sample));
     return bytes;
 }
+TEST(WavPcm16DecoderUVETest, Pcm16StreamRefillSchedulerUVE_QueuesBoundedNonLoopingWindowsInOrder) {
+    Pcm16StreamRefillSchedulerUVE scheduler;
+    ASSERT_TRUE(scheduler.ResetUVE(10U, false));
+    ASSERT_TRUE(scheduler.ScheduleWindowUVE(4U));
+    ASSERT_TRUE(scheduler.ScheduleWindowUVE(8U));
+    EXPECT_EQ(scheduler.GetPendingWindowCountUVE(), 2U);
+    EXPECT_EQ(scheduler.GetCursorSampleUVE(), 10U);
+    EXPECT_FALSE(scheduler.ScheduleWindowUVE(1U));
+    EXPECT_EQ(scheduler.GetPendingWindowCountUVE(), 2U);
+
+    Pcm16StreamWindowPlanUVE plan;
+    ASSERT_TRUE(scheduler.PopNextWindowUVE(plan));
+    EXPECT_EQ(plan, (Pcm16StreamWindowPlanUVE{0U, 4U, 4U, false, false}));
+    ASSERT_TRUE(scheduler.PopNextWindowUVE(plan));
+    EXPECT_EQ(plan, (Pcm16StreamWindowPlanUVE{4U, 6U, 10U, true, false}));
+    EXPECT_EQ(scheduler.GetPendingWindowCountUVE(), 0U);
+    const Pcm16StreamWindowPlanUVE original{7U, 2U, 9U, false, false};
+    plan = original;
+    EXPECT_FALSE(scheduler.PopNextWindowUVE(plan));
+    EXPECT_EQ(plan, original);
+}
+
+TEST(WavPcm16DecoderUVETest, Pcm16StreamRefillSchedulerUVE_QueuesLoopingWindowsAndResetsAtomically) {
+    Pcm16StreamRefillSchedulerUVE scheduler;
+    ASSERT_TRUE(scheduler.ResetUVE(10U, true, 8U));
+    ASSERT_TRUE(scheduler.ScheduleWindowUVE(4U));
+    ASSERT_TRUE(scheduler.ScheduleWindowUVE(4U));
+    EXPECT_EQ(scheduler.GetPendingWindowCountUVE(), 2U);
+    EXPECT_EQ(scheduler.GetCursorSampleUVE(), 4U);
+    Pcm16StreamWindowPlanUVE plan;
+    ASSERT_TRUE(scheduler.PopNextWindowUVE(plan));
+    EXPECT_EQ(plan, (Pcm16StreamWindowPlanUVE{8U, 2U, 0U, true, true}));
+    ASSERT_TRUE(scheduler.PopNextWindowUVE(plan));
+    EXPECT_EQ(plan, (Pcm16StreamWindowPlanUVE{0U, 4U, 4U, false, false}));
+    EXPECT_FALSE(scheduler.ResetUVE(0U, false));
+    EXPECT_EQ(scheduler.GetCursorSampleUVE(), 4U);
+    EXPECT_EQ(scheduler.GetPendingWindowCountUVE(), 0U);
+}
+
+TEST(WavPcm16DecoderUVETest, Pcm16StreamRefillSchedulerUVE_RejectsZeroWindowsAndQueueOverflowAtomically) {
+    Pcm16StreamRefillSchedulerUVE scheduler;
+    ASSERT_TRUE(scheduler.ResetUVE(20U, false));
+    EXPECT_FALSE(scheduler.ScheduleWindowUVE(0U));
+    for (std::size_t i = 0U; i < kMaximumPcm16StreamRefillWindowsUVE; ++i) {
+        ASSERT_TRUE(scheduler.ScheduleWindowUVE(1U));
+    }
+    EXPECT_FALSE(scheduler.ScheduleWindowUVE(1U));
+    EXPECT_EQ(scheduler.GetPendingWindowCountUVE(), kMaximumPcm16StreamRefillWindowsUVE);
+    EXPECT_EQ(scheduler.GetCursorSampleUVE(), kMaximumPcm16StreamRefillWindowsUVE);
+}
+
 TEST(WavPcm16DecoderUVETest, Pcm16StreamCursorUVE_ConsumesNonLoopingWindowsAndClampsAtEnd) {
     Pcm16StreamCursorUVE cursor;
     ASSERT_TRUE(cursor.ResetUVE(10U, false));
