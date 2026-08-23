@@ -4,6 +4,40 @@
 #include <limits>
 namespace UVE::Audio::Tests {
 namespace {
+TEST(PcmGainEffectUVETest, PcmGainEffectScheduleUVE_AppliesQueuedWindowsAndConsumesOnSuccess) {
+    PcmGainEffectScheduleUVE schedule;
+    ASSERT_TRUE(schedule.ScheduleWindowUVE({0U, 3U, 2.0F}));
+    ASSERT_TRUE(schedule.ScheduleWindowUVE({1U, 1U, 0.5F}));
+    EXPECT_EQ(schedule.GetPendingWindowCountUVE(), 2U);
+    const std::vector<float> input{-0.5F, 0.25F, 0.75F, -0.25F};
+    std::vector<float> output;
+    ASSERT_TRUE(schedule.ApplyPendingUVE(input, output));
+    EXPECT_EQ(output, (std::vector<float>{-1.0F, 0.25F, 1.0F, -0.25F}));
+    EXPECT_EQ(schedule.GetPendingWindowCountUVE(), 0U);
+}
+
+TEST(PcmGainEffectUVETest, PcmGainEffectScheduleUVE_RetainsQueuedWindowsWhenApplicationFails) {
+    PcmGainEffectScheduleUVE schedule;
+    ASSERT_TRUE(schedule.ScheduleWindowUVE({1U, 2U, 2.0F}));
+    const std::vector<float> original{0.75F};
+    std::vector<float> output = original;
+    EXPECT_FALSE(schedule.ApplyPendingUVE({0.5F}, output));
+    EXPECT_EQ(output, original);
+    EXPECT_EQ(schedule.GetPendingWindowCountUVE(), 1U);
+}
+
+TEST(PcmGainEffectUVETest, PcmGainEffectScheduleUVE_RejectsInvalidWindowsAndQueueOverflow) {
+    PcmGainEffectScheduleUVE schedule;
+    EXPECT_FALSE(schedule.ScheduleWindowUVE({0U, 0U, 1.0F}));
+    EXPECT_FALSE(schedule.ScheduleWindowUVE({0U, 1U, -1.0F}));
+    EXPECT_FALSE(schedule.ScheduleWindowUVE({0U, 1U, std::numeric_limits<float>::quiet_NaN()}));
+    for (std::size_t i = 0U; i < kMaximumPcmGainScheduledWindowsUVE; ++i) {
+        ASSERT_TRUE(schedule.ScheduleWindowUVE({0U, 1U, 1.0F}));
+    }
+    EXPECT_FALSE(schedule.ScheduleWindowUVE({0U, 1U, 1.0F}));
+    EXPECT_EQ(schedule.GetPendingWindowCountUVE(), kMaximumPcmGainScheduledWindowsUVE);
+}
+
 TEST(PcmGainEffectUVETest, AppliesOrderedGainChainAndClampsEachStage) {
     const std::vector<float> input{-0.75F, 0.25F, 0.9F};
     std::vector<float> output;
