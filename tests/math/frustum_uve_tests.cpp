@@ -3,6 +3,8 @@
 
 #include "uve/math/frustum_uve.h"
 
+#include <cmath>
+#include <limits>
 #include <numbers>
 
 #include <gtest/gtest.h>
@@ -17,6 +19,25 @@ namespace {
         Matrix4x4UVE::PerspectiveUVE(std::numbers::pi_v<float> / 2.0F, 1.0F, 1.0F, 100.0F);
     const Matrix4x4UVE view = Matrix4x4UVE::ViewFromPositionAndRotationUVE(Vector3UVE{0.0F, 0.0F, 0.0F}, QuaternionUVE{});
     return FrustumUVE::FromViewProjectionUVE(projection * view);
+}
+
+TEST(FrustumUVETest, FromViewProjectionUVE_PreservesExtremeFiniteAxisPlaneNormals) {
+    const float maximum = std::numeric_limits<float>::max();
+    Matrix4x4UVE viewProjection{};
+    viewProjection.m[0][0] = maximum;
+    viewProjection.m[1][1] = maximum;
+    viewProjection.m[2][2] = maximum;
+    viewProjection.m[3][3] = 1.0F;
+
+    const FrustumUVE frustum = FrustumUVE::FromViewProjectionUVE(viewProjection);
+
+    EXPECT_TRUE(std::isfinite(frustum.planes[0].normal.x));
+    EXPECT_FLOAT_EQ(frustum.planes[0].normal.x, 1.0F);
+    EXPECT_FLOAT_EQ(frustum.planes[1].normal.x, -1.0F);
+    EXPECT_FLOAT_EQ(frustum.planes[2].normal.y, 1.0F);
+    EXPECT_FLOAT_EQ(frustum.planes[3].normal.y, -1.0F);
+    EXPECT_FLOAT_EQ(frustum.planes[4].normal.z, 1.0F);
+    EXPECT_FLOAT_EQ(frustum.planes[5].normal.z, -1.0F);
 }
 
 TEST(FrustumUVETest, IntersectsUVE_BoxDirectlyAheadWithinRange_IsVisible) {
