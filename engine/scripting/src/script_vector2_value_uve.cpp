@@ -139,8 +139,20 @@ ScriptVector2ValueResultUVE EvaluateScriptVector2LerpUVE(
     if (!IsFiniteInputUVE(lhs) || !IsFiniteInputUVE(rhs) || !IsFiniteUVE(alpha)) {
         return MakeValueResultUVE(ScriptVector2EvaluationCodeUVE::NonFiniteInput);
     }
-    const Math::Vector2UVE value{lhs.value.x + ((rhs.value.x - lhs.value.x) * alpha),
-                                 lhs.value.y + ((rhs.value.y - lhs.value.y) * alpha)};
+    const double valueX = static_cast<double>(lhs.value.x) +
+                          ((static_cast<double>(rhs.value.x) - static_cast<double>(lhs.value.x)) *
+                           static_cast<double>(alpha));
+    const double valueY = static_cast<double>(lhs.value.y) +
+                          ((static_cast<double>(rhs.value.y) - static_cast<double>(lhs.value.y)) *
+                           static_cast<double>(alpha));
+    const double maximumFloat = static_cast<double>(std::numeric_limits<float>::max());
+    const auto IsRepresentableFloatUVE = [maximumFloat](const double value) noexcept {
+        return std::isfinite(value) && std::fabs(value) <= maximumFloat;
+    };
+    if (!IsRepresentableFloatUVE(valueX) || !IsRepresentableFloatUVE(valueY)) {
+        return MakeValueResultUVE(ScriptVector2EvaluationCodeUVE::NonFiniteInput);
+    }
+    const Math::Vector2UVE value{static_cast<float>(valueX), static_cast<float>(valueY)};
     return IsFiniteUVE(value)
         ? MakeValueResultUVE(ScriptVector2EvaluationCodeUVE::Applied, value)
         : MakeValueResultUVE(ScriptVector2EvaluationCodeUVE::NonFiniteInput);
