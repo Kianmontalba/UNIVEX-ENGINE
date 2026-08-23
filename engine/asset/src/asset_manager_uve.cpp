@@ -90,7 +90,16 @@ void AssetManagerUVE::LoadErased(AssetGuidUVE guid, std::type_index type, IAsset
         return;
     }
 
-    const std::filesystem::path path = assetDatabase.ResolveUVE(guid);
+    std::filesystem::path path;
+    try {
+        path = assetDatabase.ResolveUVE(guid);
+    } catch (const std::exception& exception) {
+        FailResolutionUVE(guid, "asset database resolver threw: " + std::string(exception.what()));
+        return;
+    } catch (...) {
+        FailResolutionUVE(guid, "asset database resolver threw an unknown exception");
+        return;
+    }
     m_impl->threadPool.SubmitUVE([this, guid, type, path]() { ExecuteLoadUVE(guid, type, path); },
                                   m_impl->pendingJobs);
 }
@@ -114,7 +123,16 @@ void AssetManagerUVE::ReloadUVE(AssetGuidUVE guid, IAssetDatabaseUVE& assetDatab
         type = it->second.type;
     }
 
-    const std::filesystem::path path = assetDatabase.ResolveUVE(guid);
+    std::filesystem::path path;
+    try {
+        path = assetDatabase.ResolveUVE(guid);
+    } catch (const std::exception& exception) {
+        FailResolutionUVE(guid, "asset database resolver threw: " + std::string(exception.what()));
+        return;
+    } catch (...) {
+        FailResolutionUVE(guid, "asset database resolver threw an unknown exception");
+        return;
+    }
     m_impl->threadPool.SubmitUVE([this, guid, type, path]() { ExecuteLoadUVE(guid, type, path); },
                                   m_impl->pendingJobs);
 }
@@ -192,6 +210,20 @@ void AssetManagerUVE::ExecuteLoadUVE(AssetGuidUVE guid, std::type_index type, st
     }
 
     m_impl->eventSystem.QueueEvent(AssetLoadCompletedEventUVE{guid, success});
+}
+
+void AssetManagerUVE::FailResolutionUVE(AssetGuidUVE guid, std::string failureReason) {
+    {
+        const std::lock_guard<std::mutex> lock(m_impl->mutex);
+        const auto it = m_impl->records.find(guid);
+        if (it == m_impl->records.end()) {
+            return;
+        }
+        it->second.state = it->second.data != nullptr ? AssetLoadStateUVE::Loaded : AssetLoadStateUVE::Failed;
+        it->second.failureReason = std::move(failureReason);
+    }
+    UVE_ERROR("AssetManagerUVE: failed to resolve asset GUID {}", guid.value);
+    m_impl->eventSystem.QueueEvent(AssetLoadCompletedEventUVE{guid, false});
 }
 
 void AssetManagerUVE::CollectGarbageUVE() {
