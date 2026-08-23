@@ -230,10 +230,12 @@ MotionMatchingResultUVE FindBestMotionMatchUVE(const MotionQueryUVE& query,
         return MotionMatchingResultUVE{MotionMatchingResultCodeUVE::InvalidDatabase, 0U, 0U, 0.0F,
                                       databaseValidation.message};
     }
+    const float totalWeight = weights.velocityWeight + weights.facingWeight +
+                               weights.trajectoryWeight;
     if (!std::isfinite(weights.velocityWeight) || !std::isfinite(weights.facingWeight) ||
-        !std::isfinite(weights.trajectoryWeight) || weights.velocityWeight < 0.0F ||
-        weights.facingWeight < 0.0F || weights.trajectoryWeight < 0.0F ||
-        (weights.velocityWeight + weights.facingWeight + weights.trajectoryWeight) <= 0.0F) {
+        !std::isfinite(weights.trajectoryWeight) || !std::isfinite(totalWeight) ||
+        weights.velocityWeight < 0.0F || weights.facingWeight < 0.0F ||
+        weights.trajectoryWeight < 0.0F || totalWeight <= 0.0F) {
         return MotionMatchingResultUVE{MotionMatchingResultCodeUVE::InvalidWeights, 0U, 0U, 0.0F,
                                       "motion matching weights must be finite, non-negative, and non-zero"};
     }

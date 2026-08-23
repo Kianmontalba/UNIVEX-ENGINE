@@ -4,6 +4,8 @@
 
 #include <gtest/gtest.h>
 
+#include <limits>
+
 namespace UVE::Core {
 namespace {
 
@@ -127,6 +129,16 @@ TEST(MotionQueryUVETest, SharedSkeletonPoseAndEvaluationContext_RejectMismatches
     query.evaluationContext.time.animationDeltaSeconds = -0.01;
     EXPECT_EQ(ValidateMotionQueryUVE(query).code,
               MotionQueryValidationCodeUVE::InvalidEvaluationTime);
+}
+
+TEST(MotionQueryUVETest, FindBestMotionMatchUVE_RejectsNonFiniteWeightTotal) {
+    const float maximumWeight = std::numeric_limits<float>::max();
+    const MotionMatchingWeightsUVE weights{maximumWeight, maximumWeight, 0.0F};
+
+    const MotionMatchingResultUVE result =
+        FindBestMotionMatchUVE(MakeFeatureUVE(1.0F), MakeDatabaseUVE(), weights);
+    EXPECT_EQ(result.code, MotionMatchingResultCodeUVE::InvalidWeights);
+    EXPECT_EQ(result.candidatesEvaluated, 0U);
 }
 
 TEST(MotionQueryUVETest, FindBestMotionMatchUVE_RejectsInvalidWeights) {
