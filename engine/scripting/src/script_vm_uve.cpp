@@ -1309,6 +1309,15 @@ namespace {
     if (body == nullptr || !body->IsValidUVE()) {
         return MakeNodeFailureUVE(instructionIndex, "Physics body node requires a valid Body entity input.");
     }
+    const bool publishesResult = instruction.nodeTypeId == "physics.apply_force" ||
+        instruction.nodeTypeId == "physics.apply_impulse" || instruction.nodeTypeId == "physics.set_velocity" ||
+        instruction.nodeTypeId == "physics.enable_gravity" || instruction.nodeTypeId == "physics.is_colliding";
+    const char* const outputPin = instruction.nodeTypeId == "physics.get_velocity" ? "Velocity" : "Result";
+    if ((publishesResult || instruction.nodeTypeId == "physics.get_velocity") &&
+        !CanSetNodeOutputUVE(context, nodeId, outputPin)) {
+        return MakeNodeFailureUVE(instructionIndex,
+                                  "Physics body node rejected its bounded output capacity before callback.");
+    }
     if (instruction.nodeTypeId == "physics.apply_force" || instruction.nodeTypeId == "physics.apply_impulse" ||
         instruction.nodeTypeId == "physics.set_velocity") {
         const char* pinName = instruction.nodeTypeId == "physics.apply_force" ? "Force" :
