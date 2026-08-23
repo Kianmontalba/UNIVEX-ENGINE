@@ -274,29 +274,84 @@ std::optional<Math::PenetrationUVE> ComputeCapsuleSpherePenetrationUVE(
         return std::nullopt;
     }
 
-    const Math::Vector3UVE segment = capsuleSegmentEnd - capsuleSegmentStart;
-    const float segmentLengthSquared = Math::LengthSquaredUVE(segment);
-    float segmentTime = 0.0F;
-    if (segmentLengthSquared > 0.0F) {
-        segmentTime = std::clamp(
-            Math::DotUVE(sphereCenter - capsuleSegmentStart, segment) / segmentLengthSquared, 0.0F, 1.0F);
-    }
-    const Math::Vector3UVE closestSegmentPoint = capsuleSegmentStart + segment * segmentTime;
-    const Math::Vector3UVE delta = sphereCenter - closestSegmentPoint;
-    const float distanceSquared = Math::LengthSquaredUVE(delta);
-    const float combinedRadius = capsuleRadius + sphereRadius;
-    if (!std::isfinite(combinedRadius)) {
+    const double segmentX = static_cast<double>(capsuleSegmentEnd.x) -
+                            static_cast<double>(capsuleSegmentStart.x);
+    const double segmentY = static_cast<double>(capsuleSegmentEnd.y) -
+                            static_cast<double>(capsuleSegmentStart.y);
+    const double segmentZ = static_cast<double>(capsuleSegmentEnd.z) -
+                            static_cast<double>(capsuleSegmentStart.z);
+    const double segmentLengthSquared = segmentX * segmentX + segmentY * segmentY + segmentZ * segmentZ;
+    if (!std::isfinite(segmentLengthSquared)) {
         return std::nullopt;
     }
-    if (distanceSquared >= combinedRadius * combinedRadius) {
-        return std::nullopt;
-    }
-    if (distanceSquared <= 0.0F) {
-        return Math::PenetrationUVE{{1.0F, 0.0F, 0.0F}, combinedRadius};
+    double segmentTime = 0.0;
+    if (segmentLengthSquared > 0.0) {
+        const double offsetX = static_cast<double>(sphereCenter.x) -
+                               static_cast<double>(capsuleSegmentStart.x);
+        const double offsetY = static_cast<double>(sphereCenter.y) -
+                               static_cast<double>(capsuleSegmentStart.y);
+        const double offsetZ = static_cast<double>(sphereCenter.z) -
+                               static_cast<double>(capsuleSegmentStart.z);
+        const double projection = (offsetX * segmentX + offsetY * segmentY + offsetZ * segmentZ) /
+                                  segmentLengthSquared;
+        if (!std::isfinite(projection)) {
+            return std::nullopt;
+        }
+        segmentTime = std::clamp(projection, 0.0, 1.0);
     }
 
-    const float distance = std::sqrt(distanceSquared);
-    return Math::PenetrationUVE{delta * (1.0F / distance), combinedRadius - distance};
+    const double closestX = static_cast<double>(capsuleSegmentStart.x) + segmentX * segmentTime;
+    const double closestY = static_cast<double>(capsuleSegmentStart.y) + segmentY * segmentTime;
+    const double closestZ = static_cast<double>(capsuleSegmentStart.z) + segmentZ * segmentTime;
+    const double deltaX = static_cast<double>(sphereCenter.x) - closestX;
+    const double deltaY = static_cast<double>(sphereCenter.y) - closestY;
+    const double deltaZ = static_cast<double>(sphereCenter.z) - closestZ;
+    const double scale = std::max(std::fabs(deltaX), std::max(std::fabs(deltaY), std::fabs(deltaZ)));
+    if (!std::isfinite(scale)) {
+        return std::nullopt;
+    }
+    double distanceSquared = 0.0;
+    if (scale != 0.0) {
+        const double scaledDistanceSquared = (deltaX / scale) * (deltaX / scale) +
+                                             (deltaY / scale) * (deltaY / scale) +
+                                             (deltaZ / scale) * (deltaZ / scale);
+        if (!std::isfinite(scaledDistanceSquared)) {
+            return std::nullopt;
+        }
+        distanceSquared = (scale * scale) * scaledDistanceSquared;
+        if (!std::isfinite(distanceSquared)) {
+            return std::nullopt;
+        }
+    }
+
+    const double combinedRadius = static_cast<double>(capsuleRadius) + static_cast<double>(sphereRadius);
+    const double maximumFloat = static_cast<double>(std::numeric_limits<float>::max());
+    if (!std::isfinite(combinedRadius) || combinedRadius <= 0.0 || combinedRadius > maximumFloat) {
+        return std::nullopt;
+    }
+    const double combinedRadiusSquared = combinedRadius * combinedRadius;
+    if (!std::isfinite(combinedRadiusSquared) || distanceSquared >= combinedRadiusSquared) {
+        return std::nullopt;
+    }
+    if (distanceSquared == 0.0) {
+        return Math::PenetrationUVE{{1.0F, 0.0F, 0.0F}, static_cast<float>(combinedRadius)};
+    }
+
+    const double distance = std::sqrt(distanceSquared);
+    const double depth = combinedRadius - distance;
+    if (!std::isfinite(distance) || !std::isfinite(depth) || depth <= 0.0 || depth > maximumFloat) {
+        return std::nullopt;
+    }
+    const double inverseDistance = 1.0 / distance;
+    const Math::Vector3UVE axis{
+        static_cast<float>(deltaX * inverseDistance),
+        static_cast<float>(deltaY * inverseDistance),
+        static_cast<float>(deltaZ * inverseDistance),
+    };
+    if (!IsFiniteVectorUVE(axis)) {
+        return std::nullopt;
+    }
+    return Math::PenetrationUVE{axis, static_cast<float>(depth)};
 }
 
 std::optional<Math::PenetrationUVE> ComputeCapsuleCapsulePenetrationUVE(
