@@ -31,6 +31,8 @@ namespace {
     const Scene::AudioSourceComponentUVE& audioSource) {
     AudioSourceDescUVE desc;
     desc.audioAssetPath = audioSource.audioAssetPath;
+    desc.mixerGroup = audioSource.mixerGroup.empty() ? std::string(kMasterAudioMixerGroupNameUVE)
+                                                      : audioSource.mixerGroup;
     desc.looping = audioSource.looping;
     desc.volume = audioSource.volume;
     desc.pitch = audioSource.pitch;
@@ -107,6 +109,10 @@ void AudioSourceSystemUVE::SyncUVE(Scene::IEntityManagerUVE& entityManager, IAud
                 }
             }
 
+            if (iterator->second.descriptor.mixerGroup != desiredDesc.mixerGroup &&
+                audioSystem.SetSourceMixerGroupUVE(iterator->second.voice, desiredDesc.mixerGroup)) {
+                iterator->second.descriptor.mixerGroup = desiredDesc.mixerGroup;
+            }
             audioSystem.SetSourcePositionUVE(iterator->second.voice, worldTransform.worldPosition);
             audioSystem.SetSourceVolumeUVE(iterator->second.voice, audioSource.volume);
             audioSystem.SetSourcePitchUVE(iterator->second.voice, audioSource.pitch);

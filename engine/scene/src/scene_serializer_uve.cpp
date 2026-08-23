@@ -142,6 +142,7 @@ namespace {
 
 [[nodiscard]] nlohmann::json ToJsonUVE(const AudioSourceComponentUVE& component) {
     return {{"audioAssetPath", component.audioAssetPath},
+            {"mixerGroup", component.mixerGroup},
             {"volume", component.volume},
             {"looping", component.looping},
             {"pitch", component.pitch},
@@ -336,6 +337,7 @@ template <typename T, typename FromJsonFunc, typename ValidateFunc>
                       MakeRegistrationUVE<AudioSourceComponentUVE>([](const nlohmann::json& json) {
                           AudioSourceComponentUVE source;
                           source.audioAssetPath = json.at("audioAssetPath").get<std::string>();
+                          source.mixerGroup = json.value("mixerGroup", std::string{});
                           source.volume = json.at("volume").get<float>();
                           source.looping = json.value("looping", false);
                           source.pitch = json.value("pitch", 1.0F);
