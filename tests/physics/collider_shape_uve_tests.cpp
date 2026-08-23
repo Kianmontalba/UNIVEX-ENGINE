@@ -88,6 +88,22 @@ TEST(ShapeNarrowPhaseUVETest, RadiusSumOverflowFailsClosedBeforePenetrationPubli
                      .has_value());
 }
 
+TEST(ShapeNarrowPhaseUVETest, OrientedBoxOrientedBoxUsesFinitePrecisionForLargeCenterDelta) {
+    const float maximumExtent = std::numeric_limits<float>::max();
+    const float centerMagnitude = maximumExtent * 0.99F;
+    const Math::QuaternionUVE identityRotation{};
+    const std::optional<Math::PenetrationUVE> penetration =
+        Detail::ComputeOrientedBoxOrientedBoxPenetrationUVE(
+            {-centerMagnitude, 0.0F, 0.0F}, {maximumExtent, 1.0F, 1.0F}, identityRotation,
+            {centerMagnitude, 0.0F, 0.0F}, {maximumExtent, 1.0F, 1.0F}, identityRotation);
+    ASSERT_TRUE(penetration.has_value());
+    EXPECT_TRUE(std::isfinite(penetration->depth));
+    EXPECT_FLOAT_EQ(penetration->depth, 2.0F);
+    EXPECT_FLOAT_EQ(penetration->axis.x, 0.0F);
+    EXPECT_FLOAT_EQ(penetration->axis.y, 1.0F);
+    EXPECT_FLOAT_EQ(penetration->axis.z, 0.0F);
+}
+
 TEST(ShapeNarrowPhaseUVETest, SphereSphereUsesFinitePrecisionForLargeRadiusOverlap) {
     const float radius = std::numeric_limits<float>::max() * 0.5F;
     const std::optional<Math::PenetrationUVE> penetration =
