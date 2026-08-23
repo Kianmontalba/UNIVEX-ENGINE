@@ -20,10 +20,24 @@ using RowUVE = std::array<float, 4>;
 [[nodiscard]] PlaneUVE MakePlaneUVE(const RowUVE& coefficients) noexcept {
     const Vector3UVE normal{coefficients[0], coefficients[1], coefficients[2]};
     const float length = std::sqrt(normal.x * normal.x + normal.y * normal.y + normal.z * normal.z);
-    const float inverseLength = length > 0.0F ? 1.0F / length : 0.0F;
+    if (std::isfinite(length)) {
+        const float inverseLength = length > 0.0F ? 1.0F / length : 0.0F;
+        return PlaneUVE{
+            Vector3UVE{normal.x * inverseLength, normal.y * inverseLength, normal.z * inverseLength},
+            coefficients[3] * inverseLength,
+        };
+    }
+
+    const double lengthWide = std::hypot(static_cast<double>(normal.x), static_cast<double>(normal.y),
+                                         static_cast<double>(normal.z));
+    const double inverseLengthWide = lengthWide > 0.0 && std::isfinite(lengthWide) ? 1.0 / lengthWide : 0.0;
     return PlaneUVE{
-        Vector3UVE{normal.x * inverseLength, normal.y * inverseLength, normal.z * inverseLength},
-        coefficients[3] * inverseLength,
+        Vector3UVE{
+            static_cast<float>(static_cast<double>(normal.x) * inverseLengthWide),
+            static_cast<float>(static_cast<double>(normal.y) * inverseLengthWide),
+            static_cast<float>(static_cast<double>(normal.z) * inverseLengthWide),
+        },
+        static_cast<float>(static_cast<double>(coefficients[3]) * inverseLengthWide),
     };
 }
 
