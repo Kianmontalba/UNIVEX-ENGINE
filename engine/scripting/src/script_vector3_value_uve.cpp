@@ -76,10 +76,14 @@ ScriptVector3NumberResultUVE EvaluateScriptVector3DotUVE(
     if (!IsFiniteInputUVE(lhs) || !IsFiniteInputUVE(rhs)) {
         return MakeNumberResultUVE(ScriptVector3EvaluationCodeUVE::NonFiniteInput);
     }
-    const float value = Math::DotUVE(lhs.value, rhs.value);
-    return IsFiniteUVE(value)
-        ? MakeNumberResultUVE(ScriptVector3EvaluationCodeUVE::Applied, value)
-        : MakeNumberResultUVE(ScriptVector3EvaluationCodeUVE::NonFiniteInput);
+    const double value = static_cast<double>(lhs.value.x) * static_cast<double>(rhs.value.x) +
+                         static_cast<double>(lhs.value.y) * static_cast<double>(rhs.value.y) +
+                         static_cast<double>(lhs.value.z) * static_cast<double>(rhs.value.z);
+    const double maximumFloat = static_cast<double>(std::numeric_limits<float>::max());
+    if (!std::isfinite(value) || std::fabs(value) > maximumFloat) {
+        return MakeNumberResultUVE(ScriptVector3EvaluationCodeUVE::NonFiniteInput);
+    }
+    return MakeNumberResultUVE(ScriptVector3EvaluationCodeUVE::Applied, static_cast<float>(value));
 }
 
 ScriptVector3ValueResultUVE EvaluateScriptVector3CrossUVE(
