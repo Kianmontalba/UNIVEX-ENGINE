@@ -4,6 +4,7 @@
 #include "uve/math/matrix4x4_uve.h"
 
 #include <cmath>
+#include <limits>
 #include <numbers>
 #include <string>
 
@@ -182,6 +183,26 @@ TEST(Matrix4x4UVETest, MatrixMultiply_ComposesInRightToLeftOrder) {
     EXPECT_NEAR(transformed.x, 10.0F, kEpsilon);
     EXPECT_NEAR(transformed.y, 5.0F, kEpsilon);
     EXPECT_NEAR(transformed.z, 0.0F, kEpsilon);
+}
+
+TEST(Matrix4x4UVETest, MatrixMultiply_PreservesFiniteCancellationAtFloatBoundary) {
+    constexpr float maximum = std::numeric_limits<float>::max();
+    Matrix4x4UVE lhs{};
+    lhs.m[0][0] = 1.0F;
+    lhs.m[0][1] = 1.0F;
+    lhs.m[0][2] = -1.0F;
+    lhs.m[0][3] = 0.0F;
+
+    Matrix4x4UVE rhs{};
+    rhs.m[0][0] = maximum;
+    rhs.m[1][0] = maximum;
+    rhs.m[2][0] = maximum;
+    rhs.m[3][0] = 0.0F;
+
+    const Matrix4x4UVE product = lhs * rhs;
+
+    EXPECT_TRUE(std::isfinite(product.m[0][0]));
+    EXPECT_FLOAT_EQ(product.m[0][0], maximum);
 }
 
 TEST(Matrix4x4UVETest, EqualityOperators_CompareAllSixteenComponents) {

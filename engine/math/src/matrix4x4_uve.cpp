@@ -107,11 +107,11 @@ Matrix4x4UVE operator*(const Matrix4x4UVE& lhs, const Matrix4x4UVE& rhs) noexcep
     Matrix4x4UVE result{};
     for (int row = 0; row < 4; ++row) {
         for (int col = 0; col < 4; ++col) {
-            float sum = 0.0F;
+            double sum = 0.0;
             for (int k = 0; k < 4; ++k) {
-                sum += lhs.m[row][k] * rhs.m[k][col];
+                sum += static_cast<double>(lhs.m[row][k]) * static_cast<double>(rhs.m[k][col]);
             }
-            result.m[row][col] = sum;
+            result.m[row][col] = static_cast<float>(sum);
         }
     }
     return result;
