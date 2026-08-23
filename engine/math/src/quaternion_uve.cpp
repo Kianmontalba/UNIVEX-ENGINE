@@ -17,6 +17,10 @@ constexpr float kMinimumQuaternionLengthSquaredUVE = std::numeric_limits<float>:
     return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
 }
 
+[[nodiscard]] float LargestAbsoluteComponentUVE(const QuaternionUVE& value) noexcept {
+    return std::max(std::fabs(value.x), std::max(std::fabs(value.y), std::max(std::fabs(value.z), std::fabs(value.w))));
+}
+
 } // namespace
 
 QuaternionUVE MultiplyUVE(const QuaternionUVE& lhs, const QuaternionUVE& rhs) noexcept {
@@ -42,20 +46,48 @@ bool TryNormalizeUVE(const QuaternionUVE& value, QuaternionUVE& outNormalized) n
     }
 
     const float lengthSquared = LengthSquaredUVE(value);
-    if (!std::isfinite(lengthSquared) || lengthSquared <= kMinimumQuaternionLengthSquaredUVE) {
-        return false;
+    if (std::isfinite(lengthSquared)) {
+        if (lengthSquared <= kMinimumQuaternionLengthSquaredUVE) {
+            return false;
+        }
+
+        const float inverseLength = 1.0F / std::sqrt(lengthSquared);
+        if (!std::isfinite(inverseLength)) {
+            return false;
+        }
+
+        const QuaternionUVE candidate{
+            value.x * inverseLength,
+            value.y * inverseLength,
+            value.z * inverseLength,
+            value.w * inverseLength,
+        };
+        if (!IsFiniteUVE(candidate)) {
+            return false;
+        }
+
+        outNormalized = candidate;
+        return true;
     }
 
-    const float inverseLength = 1.0F / std::sqrt(lengthSquared);
-    if (!std::isfinite(inverseLength)) {
+    const float scale = LargestAbsoluteComponentUVE(value);
+    if (!std::isfinite(scale) || scale <= 0.0F) {
         return false;
     }
-
+    const double scaledX = static_cast<double>(value.x) / static_cast<double>(scale);
+    const double scaledY = static_cast<double>(value.y) / static_cast<double>(scale);
+    const double scaledZ = static_cast<double>(value.z) / static_cast<double>(scale);
+    const double scaledW = static_cast<double>(value.w) / static_cast<double>(scale);
+    const double scaledLengthSquared = scaledX * scaledX + scaledY * scaledY + scaledZ * scaledZ + scaledW * scaledW;
+    const double inverseScaledLength = 1.0 / std::sqrt(scaledLengthSquared);
+    if (!std::isfinite(inverseScaledLength)) {
+        return false;
+    }
     const QuaternionUVE candidate{
-        value.x * inverseLength,
-        value.y * inverseLength,
-        value.z * inverseLength,
-        value.w * inverseLength,
+        static_cast<float>(scaledX * inverseScaledLength),
+        static_cast<float>(scaledY * inverseScaledLength),
+        static_cast<float>(scaledZ * inverseScaledLength),
+        static_cast<float>(scaledW * inverseScaledLength),
     };
     if (!IsFiniteUVE(candidate)) {
         return false;
@@ -71,20 +103,48 @@ bool TryInverseUVE(const QuaternionUVE& value, QuaternionUVE& outInverse) noexce
     }
 
     const float lengthSquared = LengthSquaredUVE(value);
-    if (!std::isfinite(lengthSquared) || lengthSquared <= kMinimumQuaternionLengthSquaredUVE) {
-        return false;
+    if (std::isfinite(lengthSquared)) {
+        if (lengthSquared <= kMinimumQuaternionLengthSquaredUVE) {
+            return false;
+        }
+
+        const float inverseLengthSquared = 1.0F / lengthSquared;
+        if (!std::isfinite(inverseLengthSquared)) {
+            return false;
+        }
+
+        const QuaternionUVE candidate{
+            -value.x * inverseLengthSquared,
+            -value.y * inverseLengthSquared,
+            -value.z * inverseLengthSquared,
+            value.w * inverseLengthSquared,
+        };
+        if (!IsFiniteUVE(candidate)) {
+            return false;
+        }
+
+        outInverse = candidate;
+        return true;
     }
 
-    const float inverseLengthSquared = 1.0F / lengthSquared;
+    const float scale = LargestAbsoluteComponentUVE(value);
+    if (!std::isfinite(scale) || scale <= 0.0F) {
+        return false;
+    }
+    const double scaledX = static_cast<double>(value.x) / static_cast<double>(scale);
+    const double scaledY = static_cast<double>(value.y) / static_cast<double>(scale);
+    const double scaledZ = static_cast<double>(value.z) / static_cast<double>(scale);
+    const double scaledW = static_cast<double>(value.w) / static_cast<double>(scale);
+    const double scaledLengthSquared = scaledX * scaledX + scaledY * scaledY + scaledZ * scaledZ + scaledW * scaledW;
+    const double inverseLengthSquared = 1.0 / (static_cast<double>(scale) * static_cast<double>(scale) * scaledLengthSquared);
     if (!std::isfinite(inverseLengthSquared)) {
         return false;
     }
-
     const QuaternionUVE candidate{
-        -value.x * inverseLengthSquared,
-        -value.y * inverseLengthSquared,
-        -value.z * inverseLengthSquared,
-        value.w * inverseLengthSquared,
+        static_cast<float>(-static_cast<double>(value.x) * inverseLengthSquared),
+        static_cast<float>(-static_cast<double>(value.y) * inverseLengthSquared),
+        static_cast<float>(-static_cast<double>(value.z) * inverseLengthSquared),
+        static_cast<float>(static_cast<double>(value.w) * inverseLengthSquared),
     };
     if (!IsFiniteUVE(candidate)) {
         return false;

@@ -103,6 +103,27 @@ TEST(QuaternionUVETest, CheckedHelpers_NormalizeInvertAndConstructAxisAngle) {
     EXPECT_NEAR(rotated.z, 0.0F, kEpsilon);
 }
 
+TEST(QuaternionUVETest, CheckedHelpers_LargeFiniteInputUsesScaledMagnitude) {
+    const float maximum = std::numeric_limits<float>::max();
+    const QuaternionUVE large{maximum, maximum, 0.0F, 0.0F};
+
+    QuaternionUVE normalized{};
+    ASSERT_TRUE(TryNormalizeUVE(large, normalized));
+    EXPECT_TRUE(IsFiniteUVE(normalized));
+    EXPECT_NEAR(LengthSquaredUVE(normalized), 1.0F, kEpsilon);
+    EXPECT_NEAR(normalized.x, 0.70710677F, 1.0e-6F);
+    EXPECT_NEAR(normalized.y, 0.70710677F, 1.0e-6F);
+
+    QuaternionUVE inverse{};
+    ASSERT_TRUE(TryInverseUVE(large, inverse));
+    EXPECT_TRUE(IsFiniteUVE(inverse));
+    const QuaternionUVE identity = MultiplyUVE(large, inverse);
+    EXPECT_NEAR(identity.x, 0.0F, 1.0e-6F);
+    EXPECT_NEAR(identity.y, 0.0F, 1.0e-6F);
+    EXPECT_NEAR(identity.z, 0.0F, 1.0e-6F);
+    EXPECT_NEAR(identity.w, 1.0F, 1.0e-6F);
+}
+
 TEST(QuaternionUVETest, CheckedHelpers_RejectNonFiniteOrZeroInputWithoutChangingOutput) {
     QuaternionUVE preserved{1.0F, 2.0F, 3.0F, 4.0F};
     EXPECT_FALSE(TryNormalizeUVE(QuaternionUVE{0.0F, 0.0F, 0.0F, 0.0F}, preserved));
