@@ -4,6 +4,8 @@
 
 #include <gtest/gtest.h>
 
+#include <limits>
+
 namespace UVE::Core {
 namespace {
 
@@ -61,6 +63,39 @@ TEST(MotionQueryFeatureChannelsUVETest, ValidateSchemaUVE_RejectsDuplicatesWeigh
     schema.channels[2].trajectorySampleIndex = MotionQueryUVE::kMaximumTrajectorySamplesUVE;
     EXPECT_EQ(ValidateMotionQueryFeatureSchemaUVE(schema).code,
               MotionQueryFeatureValidationCodeUVE::InvalidSampleIndex);
+}
+
+TEST(MotionQueryFeatureChannelsUVETest, TryBuildVectorUVE_RejectsNonFiniteWeightedValueWithoutPublishing) {
+    MotionQueryFeatureSchemaUVE schema;
+    schema.channels = {MotionQueryFeatureChannelUVE{
+        "velocity", MotionQueryFeatureChannelKindUVE::RootVelocity, 0U,
+        std::numeric_limits<float>::max()}};
+    MotionQueryUVE query = MakeQueryUVE();
+    MotionQueryFeatureVectorUVE vector{{7.0F}, 3.0F};
+
+    const MotionQueryFeatureValidationResultUVE result =
+        TryBuildMotionQueryFeatureVectorUVE(query, schema, vector);
+    EXPECT_EQ(result.code, MotionQueryFeatureValidationCodeUVE::InvalidQuery);
+    EXPECT_EQ(vector.values, (std::vector<float>{7.0F}));
+    EXPECT_FLOAT_EQ(vector.totalWeight, 3.0F);
+}
+
+TEST(MotionQueryFeatureChannelsUVETest, TryBuildVectorUVE_RejectsNonFiniteTotalWeightWithoutPublishing) {
+    MotionQueryFeatureSchemaUVE schema;
+    schema.channels = {
+        MotionQueryFeatureChannelUVE{"first", MotionQueryFeatureChannelKindUVE::FacingDirection, 0U,
+                                     std::numeric_limits<float>::max()},
+        MotionQueryFeatureChannelUVE{"second", MotionQueryFeatureChannelKindUVE::FacingDirection, 0U,
+                                     std::numeric_limits<float>::max()},
+    };
+    const MotionQueryUVE query = MakeQueryUVE();
+    MotionQueryFeatureVectorUVE vector{{7.0F}, 3.0F};
+
+    const MotionQueryFeatureValidationResultUVE result =
+        TryBuildMotionQueryFeatureVectorUVE(query, schema, vector);
+    EXPECT_EQ(result.code, MotionQueryFeatureValidationCodeUVE::InvalidQuery);
+    EXPECT_EQ(vector.values, (std::vector<float>{7.0F}));
+    EXPECT_FLOAT_EQ(vector.totalWeight, 3.0F);
 }
 
 TEST(MotionQueryFeatureChannelsUVETest, TryBuildVectorUVE_RejectsQueryTrajectoryMismatch) {

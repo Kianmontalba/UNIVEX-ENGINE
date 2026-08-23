@@ -118,8 +118,14 @@ MotionQueryFeatureValidationResultUVE TryBuildMotionQueryFeatureVectorUVE(
             return MakeFeatureErrorUVE(MotionQueryFeatureValidationCodeUVE::InvalidQuery,
                                        vector.values.size(), "feature extraction produced a non-finite value");
         }
-        vector.values.push_back(value * channel.weight);
-        vector.totalWeight += channel.weight;
+        const float weightedValue = value * channel.weight;
+        const float totalWeight = vector.totalWeight + channel.weight;
+        if (!std::isfinite(weightedValue) || !std::isfinite(totalWeight)) {
+            return MakeFeatureErrorUVE(MotionQueryFeatureValidationCodeUVE::InvalidQuery,
+                                       vector.values.size(), "feature extraction produced a non-finite weighted value");
+        }
+        vector.values.push_back(weightedValue);
+        vector.totalWeight = totalWeight;
     }
     outVector = vector;
     return MotionQueryFeatureValidationResultUVE{MotionQueryFeatureValidationCodeUVE::Valid, 0U,
