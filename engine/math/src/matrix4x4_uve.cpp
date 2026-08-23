@@ -83,7 +83,9 @@ Matrix4x4UVE Matrix4x4UVE::OrthographicUVE(float left, float right, float bottom
     result.m[1][1] = static_cast<float>(
         2.0 / (static_cast<double>(top) - static_cast<double>(bottom)));
     result.m[1][2] = 0.0F;
-    result.m[1][3] = -(top + bottom) / (top - bottom);
+    result.m[1][3] = static_cast<float>(
+        -(static_cast<double>(top) + static_cast<double>(bottom)) /
+        (static_cast<double>(top) - static_cast<double>(bottom)));
     result.m[2][0] = 0.0F;
     result.m[2][1] = 0.0F;
     result.m[2][2] = -1.0F / (farPlane - nearPlane);

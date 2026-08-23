@@ -130,6 +130,17 @@ TEST(Matrix4x4UVETest, OrthographicUVE_PreservesFiniteExtremeExtentOffset) {
     EXPECT_FLOAT_EQ(projection.m[0][3], -3.0F);
 }
 
+TEST(Matrix4x4UVETest, OrthographicUVE_PreservesFiniteExtremeVerticalExtentOffset) {
+    const float maximum = std::numeric_limits<float>::max();
+    const float bottom = maximum * 0.5F;
+
+    const Matrix4x4UVE projection = Matrix4x4UVE::OrthographicUVE(
+        -1.0F, 1.0F, bottom, maximum, 1.0F, 2.0F);
+
+    EXPECT_TRUE(std::isfinite(projection.m[1][3]));
+    EXPECT_FLOAT_EQ(projection.m[1][3], -3.0F);
+}
+
 TEST(Matrix4x4UVETest, OrthographicUVE_PreservesFiniteExtremeVerticalExtentScale) {
     const float maximum = std::numeric_limits<float>::max();
 
