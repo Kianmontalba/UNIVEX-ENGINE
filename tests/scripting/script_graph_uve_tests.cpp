@@ -3596,6 +3596,40 @@ TEST(ScriptRuntimeUVETest, AttachDetailedUVEReturnsStructuredDiagnosticsForValid
     EXPECT_FALSE(capacity.message.empty());
 }
 
+TEST(ScriptRuntimeUVETest, AttachAndTickUVE_SupportsFlowControlDispatchPrograms) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::FlowControlDispatch, 1U, 0U,
+                                    "flow.return", "In", {}, 1U, 1U, 0U, 0U, false, 1U});
+    ScriptRuntimeUVE runtime;
+
+    const ScriptRuntimeAttachResultUVE attached = runtime.AttachDetailedUVE({1U, 1U}, program);
+
+    ASSERT_TRUE(attached.IsAcceptedUVE());
+    const ScriptRuntimeTickBatchResultUVE tick = runtime.TickDetailedUVE();
+    ASSERT_TRUE(tick.IsSuccessUVE());
+    ASSERT_EQ(tick.results.size(), 1U);
+    EXPECT_EQ(tick.results.front().execution.instructionsExecuted, 1U);
+
+    ScriptBytecodeProgramUVE conditionalProgram;
+    conditionalProgram.instructions.push_back({ScriptIrInstructionKindUVE::ConditionalJump, 2U, 0U,
+                                                "flow.branch", "Condition", {}, 1U, 1U});
+    ScriptRuntimeUVE conditionalRuntime;
+    EXPECT_TRUE(conditionalRuntime.AttachUVE({2U, 1U}, conditionalProgram));
+
+    ScriptBytecodeProgramUVE sequenceProgram;
+    sequenceProgram.instructions.push_back({ScriptIrInstructionKindUVE::SequenceDispatch, 3U, 0U,
+                                             "flow.sequence", "Then", {}, 1U, 1U});
+    ScriptRuntimeUVE sequenceRuntime;
+    EXPECT_TRUE(sequenceRuntime.AttachUVE({3U, 1U}, sequenceProgram));
+
+    ScriptBytecodeProgramUVE invalidTargetProgram = program;
+    invalidTargetProgram.instructions.front().trueTargetInstructionIndex = 2U;
+    ScriptRuntimeUVE invalidTargetRuntime;
+    const ScriptRuntimeAttachResultUVE rejected =
+        invalidTargetRuntime.AttachDetailedUVE({4U, 1U}, invalidTargetProgram);
+    EXPECT_EQ(rejected.code, ScriptRuntimeAttachCodeUVE::InvalidProgram);
+}
+
 TEST(ScriptRuntimeUVETest, TickDetailedUVE_UsesBorrowedEngineTimeBinding) {
     ScriptRuntimeUVE runtime;
     ScriptBytecodeProgramUVE program;

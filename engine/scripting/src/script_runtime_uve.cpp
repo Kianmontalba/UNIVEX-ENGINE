@@ -103,10 +103,35 @@ namespace {
         return diagnostics;
     }
     for (std::size_t index = 0U; index < program.instructions.size(); ++index) {
-        const ScriptIrInstructionKindUVE kind = program.instructions[index].kind;
-        if (kind != ScriptIrInstructionKindUVE::ExecuteNode && kind != ScriptIrInstructionKindUVE::TransferValue) {
+        const ScriptIrInstructionUVE& instruction = program.instructions[index];
+        const ScriptIrInstructionKindUVE kind = instruction.kind;
+        if (kind != ScriptIrInstructionKindUVE::ExecuteNode && kind != ScriptIrInstructionKindUVE::TransferValue &&
+            kind != ScriptIrInstructionKindUVE::ConditionalJump && kind != ScriptIrInstructionKindUVE::SequenceDispatch &&
+            kind != ScriptIrInstructionKindUVE::FlowControlDispatch) {
             diagnostics.push_back({ScriptBytecodeDiagnosticCodeUVE::InvalidInstruction, index,
                                    "Runtime program contains an unsupported instruction kind."});
+            return diagnostics;
+        }
+        if (kind == ScriptIrInstructionKindUVE::ConditionalJump &&
+            (instruction.trueTargetInstructionIndex > program.instructions.size() ||
+             instruction.falseTargetInstructionIndex > program.instructions.size())) {
+            diagnostics.push_back({ScriptBytecodeDiagnosticCodeUVE::InvalidInstruction, index,
+                                   "Runtime ConditionalJump target is outside the instruction range."});
+            return diagnostics;
+        }
+        if (kind == ScriptIrInstructionKindUVE::SequenceDispatch &&
+            (instruction.firstTargetInstructionIndex > program.instructions.size() ||
+             instruction.secondTargetInstructionIndex > program.instructions.size())) {
+            diagnostics.push_back({ScriptBytecodeDiagnosticCodeUVE::InvalidInstruction, index,
+                                   "Runtime SequenceDispatch target is outside the instruction range."});
+            return diagnostics;
+        }
+        if (kind == ScriptIrInstructionKindUVE::FlowControlDispatch &&
+            (instruction.trueTargetInstructionIndex > program.instructions.size() ||
+             instruction.falseTargetInstructionIndex > program.instructions.size() ||
+             instruction.defaultTargetInstructionIndex > program.instructions.size())) {
+            diagnostics.push_back({ScriptBytecodeDiagnosticCodeUVE::InvalidInstruction, index,
+                                   "Runtime FlowControlDispatch target is outside the instruction range."});
             return diagnostics;
         }
     }
