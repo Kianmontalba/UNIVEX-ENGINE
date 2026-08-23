@@ -6330,6 +6330,12 @@ struct AudioCaptureUVE final {
     std::size_t setPositionCount = 0U;
 };
 
+void FillVmOutputCapacityExceptNodeOneUVE(ScriptVmExecutionContextUVE& context) {
+    for (std::uint32_t nodeId = 2U; nodeId <= 1025U; ++nodeId) {
+        ASSERT_TRUE(context.SetOutputUVE(nodeId, "Result", 0.0F));
+    }
+}
+
 bool CaptureAudioSetVolumeUVE(void* userData, Scene::EntityUVE source, float volume,
                               bool* outResult) noexcept {
     auto* capture = static_cast<AudioCaptureUVE*>(userData);
@@ -6954,6 +6960,50 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_DebugErrorRejectsCallbackWithoutO
     options.engineCallBindings = &bindings;
 
     EXPECT_EQ(ExecuteScriptBytecodeUVE(program, context, options).status, ScriptVmStatusUVE::NodeExecutionFailed);
+    EXPECT_FALSE(context.FindOutputUVE(1U, "Result").has_value());
+}
+
+TEST(ScriptVmUVETest, CallbackBackedAudioNodeRejectsOutputCapacityBeforeCallback) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U,
+                                    "audio.play_sound", {}, {}});
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(1U, "Source", ScriptEntityValueUVE{Scene::EntityUVE{9U, 1U}}));
+    FillVmOutputCapacityExceptNodeOneUVE(context);
+    AudioCaptureUVE capture;
+    ScriptEngineCallBindingsUVE bindings{};
+    bindings.userData = &capture;
+    bindings.audioPlaySound = CaptureAudioPlaySoundUVE;
+    ScriptVmExecutionOptionsUVE options;
+    options.engineCallBindings = &bindings;
+
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(program, context, options);
+
+    EXPECT_EQ(result.status, ScriptVmStatusUVE::NodeExecutionFailed);
+    EXPECT_EQ(capture.setVolumeCount, 0U);
+    EXPECT_EQ(context.outputs.size(), ScriptVmExecutionContextUVE::kMaximumBindingsUVE);
+    EXPECT_FALSE(context.FindOutputUVE(1U, "Result").has_value());
+}
+
+TEST(ScriptVmUVETest, CallbackBackedDebugNodeRejectsOutputCapacityBeforeCallback) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U,
+                                    "debug.warning", {}, {}});
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(1U, "Value", 7.25F));
+    FillVmOutputCapacityExceptNodeOneUVE(context);
+    DebugWarningCaptureUVE capture;
+    ScriptEngineCallBindingsUVE bindings{};
+    bindings.userData = &capture;
+    bindings.debugWarning = CaptureDebugWarningUVE;
+    ScriptVmExecutionOptionsUVE options;
+    options.engineCallBindings = &bindings;
+
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(program, context, options);
+
+    EXPECT_EQ(result.status, ScriptVmStatusUVE::NodeExecutionFailed);
+    EXPECT_EQ(capture.callCount, 0U);
+    EXPECT_EQ(context.outputs.size(), ScriptVmExecutionContextUVE::kMaximumBindingsUVE);
     EXPECT_FALSE(context.FindOutputUVE(1U, "Result").has_value());
 }
 

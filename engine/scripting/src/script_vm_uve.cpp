@@ -1362,6 +1362,10 @@ namespace {
     if (source == nullptr || !source->IsValidUVE()) {
         return MakeNodeFailureUVE(instructionIndex, "Audio node requires a valid Source entity.");
     }
+    if (!CanSetNodeOutputUVE(context, nodeId, "Result")) {
+        return MakeNodeFailureUVE(instructionIndex,
+                                  "Audio node rejected its bounded Result output capacity before callback.");
+    }
     bool accepted = false;
     if (isPlayingQuery) {
         const ScriptAudioStateQueryFunctionUVE callback =
@@ -1494,6 +1498,10 @@ namespace {
     if (value == nullptr || !std::isfinite(*value)) {
         return MakeNodeFailureUVE(instructionIndex, "debug.warning requires a finite Number Value input.");
     }
+    if (!CanSetNodeOutputUVE(context, instruction.sourceNodeId, "Result")) {
+        return MakeNodeFailureUVE(instructionIndex,
+                                  "debug.warning rejected its bounded Result output capacity before callback.");
+    }
     if (bindings == nullptr || bindings->debugWarning == nullptr ||
         !bindings->debugWarning(bindings->userData, *value, &accepted) || !accepted ||
         !SetNodeOutputUVE(context, instruction.sourceNodeId, "Result", true)) {
@@ -1510,6 +1518,10 @@ namespace {
     bool accepted = false;
     if (value == nullptr || !std::isfinite(*value)) {
         return MakeNodeFailureUVE(instructionIndex, "debug.error requires a finite Number Value input.");
+    }
+    if (!CanSetNodeOutputUVE(context, instruction.sourceNodeId, "Result")) {
+        return MakeNodeFailureUVE(instructionIndex,
+                                  "debug.error rejected its bounded Result output capacity before callback.");
     }
     if (bindings == nullptr || bindings->debugError == nullptr ||
         !bindings->debugError(bindings->userData, *value, &accepted) || !accepted ||
