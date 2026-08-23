@@ -873,6 +873,10 @@ namespace {
     if (actor == nullptr || !actor->IsValidUVE()) {
         return MakeNodeFailureUVE(instructionIndex, "Animation node requires a valid Actor entity input.");
     }
+    if (!CanSetNodeOutputUVE(context, nodeId, "Result")) {
+        return MakeNodeFailureUVE(instructionIndex,
+                                  "Animation node rejected its bounded Result output capacity before callback.");
+    }
     const auto setAcceptedResult = [&]() -> ScriptVmExecutionResultUVE {
         return SetNodeOutputUVE(context, nodeId, "Result", true)
             ? ScriptVmExecutionResultUVE{}
