@@ -126,6 +126,17 @@ TEST(Vector3UVETest, NormalizeUVE_NonZeroVector_ProducesUnitLength) {
     EXPECT_NEAR(normalized.y, 0.8F, kEpsilon);
 }
 
+TEST(Vector3UVETest, NormalizeUVE_LargeFiniteVector_ProducesUnitLength) {
+    const float maximum = std::numeric_limits<float>::max();
+    const Vector3UVE normalized = NormalizeUVE(Vector3UVE{maximum, maximum, 0.0F});
+    EXPECT_TRUE(std::isfinite(normalized.x));
+    EXPECT_TRUE(std::isfinite(normalized.y));
+    EXPECT_TRUE(std::isfinite(normalized.z));
+    EXPECT_NEAR(LengthSquaredUVE(normalized), 1.0F, kEpsilon);
+    EXPECT_NEAR(normalized.x, 0.70710677F, 1.0e-6F);
+    EXPECT_NEAR(normalized.y, 0.70710677F, 1.0e-6F);
+}
+
 TEST(Vector3UVETest, NormalizeUVE_ZeroVector_ProducesInfRatherThanTrapping) {
     // Documents NormalizeUVE()'s zero-length contract (see its doc comment): callers must not
     // pass the zero vector, but IEEE754 float division by zero produces +/-inf, not a crash —

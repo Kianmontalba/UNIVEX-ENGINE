@@ -3,6 +3,7 @@
 
 #include "uve/math/vector3_uve.h"
 
+#include <algorithm>
 #include <cmath>
 
 namespace UVE::Math {
@@ -12,7 +13,12 @@ float LengthUVE(const Vector3UVE& v) noexcept {
 }
 
 Vector3UVE NormalizeUVE(const Vector3UVE& v) noexcept {
-    return v * (1.0F / LengthUVE(v));
+    const float scale = std::max(std::fabs(v.x), std::max(std::fabs(v.y), std::fabs(v.z)));
+    if (scale == 0.0F || !std::isfinite(scale)) {
+        return v * (1.0F / LengthUVE(v));
+    }
+    const Vector3UVE scaled{v.x / scale, v.y / scale, v.z / scale};
+    return scaled * (1.0F / LengthUVE(scaled));
 }
 
 std::string ToStringUVE(const Vector3UVE& vector) {
