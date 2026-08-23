@@ -69,6 +69,7 @@ enum class ScriptValidationCodeUVE : std::uint8_t {
     DataLinkCardinality,
     NodeCountExceeded,
     LinkCountExceeded,
+    InstructionCountExceeded,
 };
 
 struct ScriptPinDescriptorUVE final {
