@@ -611,6 +611,10 @@ namespace {
     if (bindings == nullptr) {
         return MakeNodeFailureUVE(instructionIndex, "Entity node requires caller-owned scene bindings.");
     }
+    if (!CanSetNodeOutputUVE(context, nodeId, "Result")) {
+        return MakeNodeFailureUVE(instructionIndex,
+                                  "Entity node rejected its bounded Result output capacity before callback.");
+    }
     if (instruction.nodeTypeId == "entity.spawn") {
         if (bindings->spawnEntity == nullptr) {
             return MakeNodeFailureUVE(instructionIndex, "Spawn Entity requires a caller-owned spawn binding.");

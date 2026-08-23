@@ -4991,6 +4991,57 @@ TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesVector2ProducerBef
 
 
 namespace UVE::Scripting {
+namespace {
+
+void FillVmOutputCapacityExceptNodeOneUVE(ScriptVmExecutionContextUVE& context) {
+    for (std::uint32_t nodeId = 2U; nodeId <= 1025U; ++nodeId) {
+        ASSERT_TRUE(context.SetOutputUVE(nodeId, "Result", 0.0F));
+    }
+}
+
+} // namespace
+
+TEST(ScriptVmUVETest, CallbackBackedEntityNodesRejectOutputCapacityBeforeCallback) {
+    ScriptBytecodeProgramUVE spawnProgram;
+    spawnProgram.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U,
+                                         "entity.spawn", {}, {}});
+    ScriptVmExecutionContextUVE spawnContext;
+    FillVmOutputCapacityExceptNodeOneUVE(spawnContext);
+    EntityLifecycleCaptureUVE spawnCapture;
+    ScriptEngineCallBindingsUVE spawnBindings{};
+    spawnBindings.userData = &spawnCapture;
+    spawnBindings.spawnEntity = CaptureEntitySpawnUVE;
+    ScriptVmExecutionOptionsUVE spawnOptions;
+    spawnOptions.engineCallBindings = &spawnBindings;
+
+    const ScriptVmExecutionResultUVE spawnResult = ExecuteScriptBytecodeUVE(spawnProgram, spawnContext, spawnOptions);
+
+    EXPECT_EQ(spawnResult.status, ScriptVmStatusUVE::NodeExecutionFailed);
+    EXPECT_EQ(spawnCapture.spawnCount, 0U);
+    EXPECT_EQ(spawnContext.outputs.size(), ScriptVmExecutionContextUVE::kMaximumBindingsUVE);
+    EXPECT_FALSE(spawnContext.FindOutputUVE(1U, "Result").has_value());
+
+    ScriptBytecodeProgramUVE destroyProgram;
+    destroyProgram.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U,
+                                           "entity.destroy", {}, {}});
+    ScriptVmExecutionContextUVE destroyContext;
+    ASSERT_TRUE(destroyContext.SetInputUVE(1U, "Entity", ScriptEntityValueUVE{Scene::EntityUVE{42U, 3U}}));
+    FillVmOutputCapacityExceptNodeOneUVE(destroyContext);
+    EntityLifecycleCaptureUVE destroyCapture;
+    ScriptEngineCallBindingsUVE destroyBindings{};
+    destroyBindings.userData = &destroyCapture;
+    destroyBindings.destroyEntity = CaptureEntityDestroyUVE;
+    ScriptVmExecutionOptionsUVE destroyOptions;
+    destroyOptions.engineCallBindings = &destroyBindings;
+
+    const ScriptVmExecutionResultUVE destroyResult =
+        ExecuteScriptBytecodeUVE(destroyProgram, destroyContext, destroyOptions);
+
+    EXPECT_EQ(destroyResult.status, ScriptVmStatusUVE::NodeExecutionFailed);
+    EXPECT_EQ(destroyCapture.destroyCount, 0U);
+    EXPECT_EQ(destroyContext.outputs.size(), ScriptVmExecutionContextUVE::kMaximumBindingsUVE);
+    EXPECT_FALSE(destroyContext.FindOutputUVE(1U, "Result").has_value());
+}
 
 TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_ExecutesEntityLifecycleCallbacksAndStoresTypedOutputs) {
     ScriptBytecodeProgramUVE program;
@@ -5144,12 +5195,6 @@ struct InputCameraCaptureUVE final {
     Math::Vector2UVE mousePosition{12.0F, -4.0F};
     float axisResult = 0.5F;
 };
-
-void FillVmOutputCapacityExceptNodeOneUVE(ScriptVmExecutionContextUVE& context) {
-    for (std::uint32_t nodeId = 2U; nodeId <= 1025U; ++nodeId) {
-        ASSERT_TRUE(context.SetOutputUVE(nodeId, "Result", 0.0F));
-    }
-}
 
 bool CaptureInputKeyUVE(void* userData, const float token, bool* outResult) noexcept {
     auto* capture = static_cast<InputCameraCaptureUVE*>(userData);
