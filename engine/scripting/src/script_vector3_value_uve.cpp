@@ -91,7 +91,25 @@ ScriptVector3ValueResultUVE EvaluateScriptVector3CrossUVE(
     if (!IsFiniteInputUVE(lhs) || !IsFiniteInputUVE(rhs)) {
         return MakeValueResultUVE(ScriptVector3EvaluationCodeUVE::NonFiniteInput);
     }
-    const Math::Vector3UVE value = Math::CrossUVE(lhs.value, rhs.value);
+    const double valueX = static_cast<double>(lhs.value.y) * static_cast<double>(rhs.value.z) -
+                          static_cast<double>(lhs.value.z) * static_cast<double>(rhs.value.y);
+    const double valueY = static_cast<double>(lhs.value.z) * static_cast<double>(rhs.value.x) -
+                          static_cast<double>(lhs.value.x) * static_cast<double>(rhs.value.z);
+    const double valueZ = static_cast<double>(lhs.value.x) * static_cast<double>(rhs.value.y) -
+                          static_cast<double>(lhs.value.y) * static_cast<double>(rhs.value.x);
+    const double maximumFloat = static_cast<double>(std::numeric_limits<float>::max());
+    const auto IsRepresentableFloatUVE = [maximumFloat](const double value) noexcept {
+        return std::isfinite(value) && std::fabs(value) <= maximumFloat;
+    };
+    if (!IsRepresentableFloatUVE(valueX) || !IsRepresentableFloatUVE(valueY) ||
+        !IsRepresentableFloatUVE(valueZ)) {
+        return MakeValueResultUVE(ScriptVector3EvaluationCodeUVE::NonFiniteInput);
+    }
+    const Math::Vector3UVE value{
+        static_cast<float>(valueX),
+        static_cast<float>(valueY),
+        static_cast<float>(valueZ),
+    };
     return IsFiniteUVE(value)
         ? MakeValueResultUVE(ScriptVector3EvaluationCodeUVE::Applied, value)
         : MakeValueResultUVE(ScriptVector3EvaluationCodeUVE::NonFiniteInput);
