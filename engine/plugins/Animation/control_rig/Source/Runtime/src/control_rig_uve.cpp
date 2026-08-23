@@ -87,6 +87,43 @@ constexpr float kEpsilonUVE = 1.0e-5F;
         fallback);
 }
 
+[[nodiscard]] double LengthDifferenceUVE(const Math::Vector3UVE& lhs,
+                                         const Math::Vector3UVE& rhs) noexcept {
+    if (!IsFiniteVectorUVE(lhs) || !IsFiniteVectorUVE(rhs)) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+    const double x = static_cast<double>(lhs.x) - static_cast<double>(rhs.x);
+    const double y = static_cast<double>(lhs.y) - static_cast<double>(rhs.y);
+    const double z = static_cast<double>(lhs.z) - static_cast<double>(rhs.z);
+    const double scale = std::max(std::fabs(x), std::max(std::fabs(y), std::fabs(z)));
+    if (!std::isfinite(scale)) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+    if (scale == 0.0) {
+        return 0.0;
+    }
+    const double scaledLengthSquared = (x / scale) * (x / scale) +
+                                       (y / scale) * (y / scale) +
+                                       (z / scale) * (z / scale);
+    if (!std::isfinite(scaledLengthSquared)) {
+        return std::numeric_limits<double>::quiet_NaN();
+    }
+    const double length = scale * std::sqrt(scaledLengthSquared);
+    return std::isfinite(length) ? length : std::numeric_limits<double>::quiet_NaN();
+}
+
+[[nodiscard]] bool TryNarrowFiniteVectorUVE(const double x, const double y, const double z,
+                                             Math::Vector3UVE& outVector) noexcept {
+    constexpr double kMaximumFloatUVE = static_cast<double>(std::numeric_limits<float>::max());
+    if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z) ||
+        std::fabs(x) > kMaximumFloatUVE || std::fabs(y) > kMaximumFloatUVE ||
+        std::fabs(z) > kMaximumFloatUVE) {
+        return false;
+    }
+    outVector = {static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)};
+    return IsFiniteVectorUVE(outVector);
+}
+
 [[nodiscard]] bool TryMakeBoneDirectionRotationUVE(const Math::Vector3UVE& direction,
                                                       Math::QuaternionUVE& outRotation) noexcept {
     const Math::Vector3UVE normalizedDirection = NormalizeVectorUVE(direction, {});
@@ -266,46 +303,56 @@ TwoBoneIKSolveResultUVE SolveTwoBoneIKUVE(const TransformPoseUVE& rootPose,
         return result;
     }
     const Math::Vector3UVE root = rootPose.position;
-    const float firstLength = Math::LengthUVE(midPose.position - root);
-    const float secondLength = Math::LengthUVE(endPose.position - midPose.position);
+    const double firstLength = LengthDifferenceUVE(midPose.position, root);
+    const double secondLength = LengthDifferenceUVE(endPose.position, midPose.position);
     if (!std::isfinite(firstLength) || !std::isfinite(secondLength) ||
-        firstLength <= kEpsilonUVE || secondLength <= kEpsilonUVE) {
+        firstLength <= static_cast<double>(kEpsilonUVE) || secondLength <= static_cast<double>(kEpsilonUVE)) {
         return result;
     }
-    const Math::Vector3UVE targetOffset = target - root;
-    const float requestedDistance = Math::LengthUVE(targetOffset);
+    const double requestedDistance = LengthDifferenceUVE(target, root);
     if (!std::isfinite(requestedDistance)) {
         return result;
     }
-    const float minimumDistance = std::abs(firstLength - secondLength) + kEpsilonUVE;
-    const float maximumDistance = firstLength + secondLength - kEpsilonUVE;
+    const double minimumDistance = std::abs(firstLength - secondLength) + static_cast<double>(kEpsilonUVE);
+    const double maximumDistance = firstLength + secondLength - static_cast<double>(kEpsilonUVE);
     if (!std::isfinite(minimumDistance) || !std::isfinite(maximumDistance) ||
-        minimumDistance > maximumDistance || maximumDistance <= kEpsilonUVE) {
+        minimumDistance > maximumDistance || maximumDistance <= static_cast<double>(kEpsilonUVE)) {
         return result;
     }
-    const float solvedDistance = std::clamp(requestedDistance, minimumDistance, maximumDistance);
-    result.reachable = requestedDistance >= minimumDistance && requestedDistance <= maximumDistance;
-    result.targetClamped = !result.reachable;
-
+    const double solvedDistance = std::clamp(requestedDistance, minimumDistance, maximumDistance);
+    const bool reachable = requestedDistance >= minimumDistance && requestedDistance <= maximumDistance;
+    const bool targetClamped = !reachable;
     const Math::Vector3UVE fallbackDirection{1.0F, 0.0F, 0.0F};
-    const Math::Vector3UVE direction = NormalizeVectorUVE(targetOffset, fallbackDirection);
+    const Math::Vector3UVE direction = NormalizeDifferenceVectorUVE(target, root, fallbackDirection);
     const Math::Vector3UVE poleOffset = pole - root;
     if (!IsFiniteVectorUVE(poleOffset)) {
         return result;
     }
     const Math::Vector3UVE projectedPole = poleOffset - direction * Math::DotUVE(poleOffset, direction);
     const Math::Vector3UVE bendDirection = NormalizeVectorUVE(projectedPole, {0.0F, 1.0F, 0.0F});
-    const float cosine = std::clamp((firstLength * firstLength + solvedDistance * solvedDistance -
-                                     secondLength * secondLength) /
-                                        (2.0F * firstLength * solvedDistance), -1.0F, 1.0F);
-    const float along = firstLength * cosine;
-    const float bend = firstLength * std::sqrt(std::max(0.0F, 1.0F - cosine * cosine));
+    const double cosine = std::clamp((firstLength * firstLength + solvedDistance * solvedDistance -
+                                      secondLength * secondLength) /
+                                         (2.0 * firstLength * solvedDistance), -1.0, 1.0);
+    const double along = firstLength * cosine;
+    const double bend = firstLength * std::sqrt(std::max(0.0, 1.0 - cosine * cosine));
     if (!std::isfinite(cosine) || !std::isfinite(along) || !std::isfinite(bend)) {
         return result;
     }
-    const Math::Vector3UVE solvedMid = root + direction * along + bendDirection * bend;
-    const Math::Vector3UVE solvedEnd = root + direction * solvedDistance;
-    if (!IsFiniteVectorUVE(solvedMid) || !IsFiniteVectorUVE(solvedEnd)) {
+    Math::Vector3UVE solvedMid;
+    Math::Vector3UVE solvedEnd;
+    if (!TryNarrowFiniteVectorUVE(
+            static_cast<double>(root.x) + static_cast<double>(direction.x) * along +
+                static_cast<double>(bendDirection.x) * bend,
+            static_cast<double>(root.y) + static_cast<double>(direction.y) * along +
+                static_cast<double>(bendDirection.y) * bend,
+            static_cast<double>(root.z) + static_cast<double>(direction.z) * along +
+                static_cast<double>(bendDirection.z) * bend,
+            solvedMid) ||
+        !TryNarrowFiniteVectorUVE(
+            static_cast<double>(root.x) + static_cast<double>(direction.x) * solvedDistance,
+            static_cast<double>(root.y) + static_cast<double>(direction.y) * solvedDistance,
+            static_cast<double>(root.z) + static_cast<double>(direction.z) * solvedDistance,
+            solvedEnd)) {
         return result;
     }
     TransformPoseUVE solvedMidPose = midPose;
@@ -324,6 +371,8 @@ TwoBoneIKSolveResultUVE SolveTwoBoneIKUVE(const TransformPoseUVE& rootPose,
     }
     result.midPose = BlendControlRigPoseUVE(midPose, solvedMidPose, weight);
     result.endPose = BlendControlRigPoseUVE(endPose, solvedEndPose, weight);
+    result.reachable = reachable;
+    result.targetClamped = targetClamped;
     return result;
 }
 
