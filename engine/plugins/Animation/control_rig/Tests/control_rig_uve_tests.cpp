@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 
+#include <cmath>
 #include <limits>
 
 namespace UVE::Core {
@@ -103,17 +104,22 @@ TEST(ControlRigUVETest, SolveTwoBoneIKUVE_ReachesTargetWithPoleVectorDeterminist
     EXPECT_NEAR(result.endPose.position.y, 1.0F, 1.0e-4F);
 }
 
-TEST(ControlRigUVETest, SolveTwoBoneIKUVE_RejectsOverflowedFiniteGeometry) {
-    const TransformPoseUVE root{{-std::numeric_limits<float>::max(), 0.0F, 0.0F}, {}, {1.0F, 1.0F, 1.0F}};
+TEST(ControlRigUVETest, SolveTwoBoneIKUVE_PreservesFiniteExtremeGeometry) {
+    const float maximum = std::numeric_limits<float>::max();
+    const TransformPoseUVE root{{-maximum, 0.0F, 0.0F}, {}, {1.0F, 1.0F, 1.0F}};
     const TransformPoseUVE mid{{0.0F, 0.0F, 0.0F}, {}, {1.0F, 1.0F, 1.0F}};
-    const TransformPoseUVE end{{std::numeric_limits<float>::max(), 0.0F, 0.0F}, {}, {1.0F, 1.0F, 1.0F}};
+    const TransformPoseUVE end{{maximum, 0.0F, 0.0F}, {}, {1.0F, 1.0F, 1.0F}};
     const TwoBoneIKSolveResultUVE result = SolveTwoBoneIKUVE(
         root, mid, end, {0.0F, 1.0F, 0.0F}, {0.0F, 1.0F, 0.0F}, 1.0F);
 
-    EXPECT_FALSE(result.IsSuccessUVE());
-    EXPECT_EQ(result.rootPose, root);
-    EXPECT_EQ(result.midPose, mid);
-    EXPECT_EQ(result.endPose, end);
+    ASSERT_TRUE(result.IsSuccessUVE());
+    EXPECT_TRUE(result.reachable);
+    EXPECT_FALSE(result.targetClamped);
+    EXPECT_TRUE(std::isfinite(result.midPose.position.x));
+    EXPECT_TRUE(std::isfinite(result.midPose.position.y));
+    EXPECT_TRUE(std::isfinite(result.endPose.position.x));
+    EXPECT_TRUE(std::isfinite(result.endPose.position.y));
+    EXPECT_NEAR(result.endPose.position.x, 0.0F, maximum * 1.0e-6F);
 }
 
 TEST(ControlRigUVETest, SolveTwoBoneIKUVE_RejectsOverflowedPoleOffset) {
