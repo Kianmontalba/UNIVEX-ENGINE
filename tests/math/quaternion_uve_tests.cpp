@@ -174,6 +174,19 @@ TEST(QuaternionUVETest, CheckedHelpers_EulerLookAtSlerpAndAxisAngleDecomposition
     EXPECT_FALSE(TryMakeLookAtUVE(Vector3UVE{0.0F, 0.0F, 0.0F}, Vector3UVE{0.0F, 1.0F, 0.0F}, half));
 }
 
+TEST(QuaternionUVETest, RotateVectorUVE_PreservesFiniteExtremeHalfTurn) {
+    const float maximum = std::numeric_limits<float>::max();
+    const Vector3UVE result = RotateVectorUVE(QuaternionUVE{0.0F, 0.0F, 1.0F, 0.0F},
+                                               Vector3UVE{maximum, -maximum, 0.0F});
+
+    EXPECT_TRUE(std::isfinite(result.x));
+    EXPECT_TRUE(std::isfinite(result.y));
+    EXPECT_TRUE(std::isfinite(result.z));
+    EXPECT_FLOAT_EQ(result.x, -maximum);
+    EXPECT_FLOAT_EQ(result.y, maximum);
+    EXPECT_FLOAT_EQ(result.z, 0.0F);
+}
+
 TEST(QuaternionUVETest, ToStringUVE_FormatsAllFourComponents) {
     const QuaternionUVE rotation{0.0F, 0.0F, 0.0F, 1.0F};
     const std::string text = ToStringUVE(rotation);
