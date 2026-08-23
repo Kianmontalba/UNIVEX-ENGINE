@@ -271,14 +271,21 @@ MotionMatchingResultUVE FindBestMotionMatchUVE(const MotionQueryUVE& query,
                                                          normalizedCandidateFacing), -1.0F, 1.0F);
         cost += weights.facingWeight * (1.0F - facingDot);
         if (!query.trajectory.empty()) {
-            float trajectoryCost = 0.0F;
+            double trajectoryCost = 0.0;
             for (std::size_t sampleIndex = 0U; sampleIndex < query.trajectory.size(); ++sampleIndex) {
-                trajectoryCost += DistanceSquaredUVE(
+                trajectoryCost += static_cast<double>(DistanceSquaredUVE(
                     query.trajectory[sampleIndex].relativePosition,
-                    candidate.feature.trajectory[sampleIndex].relativePosition);
+                    candidate.feature.trajectory[sampleIndex].relativePosition));
             }
-            cost += weights.trajectoryWeight * trajectoryCost /
-                    static_cast<float>(query.trajectory.size());
+            const double trajectoryContribution =
+                static_cast<double>(weights.trajectoryWeight) * trajectoryCost /
+                static_cast<double>(query.trajectory.size());
+            if (!std::isfinite(trajectoryContribution) ||
+                trajectoryContribution > static_cast<double>(std::numeric_limits<float>::max())) {
+                cost = std::numeric_limits<float>::infinity();
+            } else {
+                cost += static_cast<float>(trajectoryContribution);
+            }
         }
         if (!std::isfinite(cost)) {
             continue;

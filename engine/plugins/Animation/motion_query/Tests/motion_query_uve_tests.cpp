@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 
+#include <cmath>
 #include <limits>
 
 namespace UVE::Core {
@@ -129,6 +130,32 @@ TEST(MotionQueryUVETest, SharedSkeletonPoseAndEvaluationContext_RejectMismatches
     query.evaluationContext.time.animationDeltaSeconds = -0.01;
     EXPECT_EQ(ValidateMotionQueryUVE(query).code,
               MotionQueryValidationCodeUVE::InvalidEvaluationTime);
+}
+
+TEST(MotionQueryUVETest, FindBestMotionMatchUVE_PreservesFiniteTrajectoryMean) {
+    const float extent = std::sqrt(std::numeric_limits<float>::max());
+    MotionQueryUVE query;
+    query.facingDirection = {0.0F, 0.0F, 1.0F};
+    MotionMatchingCandidateUVE candidate;
+    candidate.candidateId = "extreme-trajectory";
+    candidate.sourceClipId = "locomotion";
+    candidate.feature.facingDirection = {0.0F, 0.0F, 1.0F};
+    for (std::size_t index = 0U; index < MotionQueryUVE::kMaximumTrajectorySamplesUVE; ++index) {
+        const double offsetSeconds = static_cast<double>(index) * 0.25;
+        query.trajectory.push_back(MotionTrajectorySampleUVE{offsetSeconds, {0.0F, 0.0F, 0.0F}});
+        candidate.feature.trajectory.push_back(
+            MotionTrajectorySampleUVE{offsetSeconds, {extent, 0.0F, 0.0F}});
+    }
+    MotionMatchingDatabaseUVE database;
+    database.candidates = {candidate};
+
+    const MotionMatchingResultUVE result = FindBestMotionMatchUVE(
+        query, database, MotionMatchingWeightsUVE{0.0F, 0.0F, 1.0F});
+    ASSERT_TRUE(result.IsMatchUVE()) << result.message;
+    EXPECT_EQ(result.candidateIndex, 0U);
+    EXPECT_EQ(result.candidatesEvaluated, 1U);
+    EXPECT_TRUE(std::isfinite(result.cost));
+    EXPECT_FLOAT_EQ(result.cost, std::numeric_limits<float>::max());
 }
 
 TEST(MotionQueryUVETest, FindBestMotionMatchUVE_RejectsNonFiniteWeightTotal) {
