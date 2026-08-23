@@ -76,6 +76,21 @@ TEST(EngineCoreUVETest, InitialState_IsUninitialized) {
     EXPECT_EQ(engine.GetStateUVE(), EngineStateUVE::Uninitialized);
 }
 
+TEST(EngineCoreUVETest, BuildProfileDefaultsMatchCompiledPolicy) {
+    const EngineConfigUVE config{};
+#if defined(UVE_PROFILE_DEFAULT_LOG_LEVEL)
+    EXPECT_EQ(config.minLogLevel,
+              static_cast<Debug::LogLevelUVE>(UVE_PROFILE_DEFAULT_LOG_LEVEL));
+#else
+    EXPECT_EQ(config.minLogLevel, Debug::LogLevelUVE::Trace);
+#endif
+#if defined(UVE_PROFILE_ASSERTIONS_ENABLED)
+    EXPECT_EQ(UVE_DEBUG, UVE_PROFILE_ASSERTIONS_ENABLED);
+#else
+    EXPECT_EQ(UVE_DEBUG, 1);
+#endif
+}
+
 TEST(EngineCoreUVETest, RunUVE_BoundedFrames_ReachesShutdownWithCorrectFrameCount) {
     EngineCoreUVE engine(MakeTestConfigUVE());
     const int exitCode = engine.RunUVE(10);

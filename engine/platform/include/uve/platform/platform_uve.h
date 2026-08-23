@@ -22,10 +22,12 @@
 /// can be swapped in without editing every declaration.
 #define UVE_INLINE inline
 
-/// UVE_DEBUG is 1 in debug builds (NDEBUG not defined) and 0 otherwise.
-/// Prefer `#if UVE_DEBUG` over `#if !defined(NDEBUG)` in engine code so the
-/// debug/release seam always goes through this one macro.
-#if !defined(NDEBUG)
+/// UVE_DEBUG follows the named UVE profile when configured by CMake. External
+/// integrations that do not use the profile module retain the historical
+/// NDEBUG-based behavior.
+#if defined(UVE_PROFILE_ASSERTIONS_ENABLED)
+#define UVE_DEBUG UVE_PROFILE_ASSERTIONS_ENABLED
+#elif !defined(NDEBUG)
 #define UVE_DEBUG 1
 #else
 #define UVE_DEBUG 0

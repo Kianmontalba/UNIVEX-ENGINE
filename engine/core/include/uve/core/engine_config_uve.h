@@ -45,8 +45,16 @@ struct EngineConfigUVE {
     /// spiral of death after a debugger pause or long stall.
     double maxDeltaTimeSeconds = 0.25;
 
-    /// Minimum severity a log message must have to reach any sink.
+    /// Minimum severity a log message must have to reach any sink. Named UVE
+    /// profiles provide Trace/Debug/Info/Warning defaults from the build
+    /// configuration; integrations outside CMake retain the historical Trace
+    /// default.
+#if defined(UVE_PROFILE_DEFAULT_LOG_LEVEL)
+    Debug::LogLevelUVE minLogLevel =
+        static_cast<Debug::LogLevelUVE>(UVE_PROFILE_DEFAULT_LOG_LEVEL);
+#else
     Debug::LogLevelUVE minLogLevel = Debug::LogLevelUVE::Trace;
+#endif
 
     /// Path the FileSinkUVE attached during Init() will append to.
     std::filesystem::path logFilePath = "uve_engine.log";
