@@ -352,6 +352,67 @@ bool ComputeReliableRetryTimeoutUVE(const float baseTimeoutSeconds, const std::u
     return std::isfinite(outTimeoutSeconds);
 }
 
+bool ReliableRetryScheduleUVE::ConfigureUVE(const float baseTimeoutSeconds,
+                                           const float maximumTimeoutSeconds,
+                                           const std::uint32_t maximumRetries) noexcept {
+    if (!std::isfinite(baseTimeoutSeconds) || baseTimeoutSeconds <= 0.0F ||
+        !std::isfinite(maximumTimeoutSeconds) || maximumTimeoutSeconds < baseTimeoutSeconds ||
+        maximumRetries > 31U) {
+        return false;
+    }
+    m_baseTimeoutSeconds = baseTimeoutSeconds;
+    m_maximumTimeoutSeconds = maximumTimeoutSeconds;
+    m_elapsedSeconds = 0.0F;
+    m_retryCount = 0U;
+    m_maximumRetries = maximumRetries;
+    m_configured = true;
+    return true;
+}
+
+ReliableRetransmitStatusUVE ReliableRetryScheduleUVE::AdvanceUVE(const float elapsedSeconds) noexcept {
+    if (!m_configured || !std::isfinite(elapsedSeconds) || elapsedSeconds < 0.0F) {
+        return ReliableRetransmitStatusUVE::Invalid;
+    }
+    float retryTimeoutSeconds = 0.0F;
+    if (!ComputeReliableRetryTimeoutUVE(m_baseTimeoutSeconds, m_retryCount, m_maximumTimeoutSeconds,
+                                        retryTimeoutSeconds)) {
+        return ReliableRetransmitStatusUVE::Invalid;
+    }
+    const float candidateElapsedSeconds = m_elapsedSeconds + elapsedSeconds;
+    if (!std::isfinite(candidateElapsedSeconds)) {
+        return ReliableRetransmitStatusUVE::Invalid;
+    }
+    m_elapsedSeconds = candidateElapsedSeconds;
+    return EvaluateReliableRetransmitPolicyUVE(
+        ReliableRetransmitPolicyInputUVE{m_elapsedSeconds, retryTimeoutSeconds, m_retryCount, m_maximumRetries});
+}
+
+bool ReliableRetryScheduleUVE::CommitRetryUVE() noexcept {
+    if (!m_configured || m_retryCount >= m_maximumRetries) {
+        return false;
+    }
+    float retryTimeoutSeconds = 0.0F;
+    if (!ComputeReliableRetryTimeoutUVE(m_baseTimeoutSeconds, m_retryCount, m_maximumTimeoutSeconds,
+                                        retryTimeoutSeconds) ||
+        EvaluateReliableRetransmitPolicyUVE(
+            ReliableRetransmitPolicyInputUVE{m_elapsedSeconds, retryTimeoutSeconds, m_retryCount, m_maximumRetries}) !=
+            ReliableRetransmitStatusUVE::Due) {
+        return false;
+    }
+    ++m_retryCount;
+    m_elapsedSeconds = 0.0F;
+    return true;
+}
+
+void ReliableRetryScheduleUVE::ResetUVE() noexcept {
+    m_baseTimeoutSeconds = 0.0F;
+    m_maximumTimeoutSeconds = 0.0F;
+    m_elapsedSeconds = 0.0F;
+    m_retryCount = 0U;
+    m_maximumRetries = 0U;
+    m_configured = false;
+}
+
 ReliableRetransmitStatusUVE EvaluateReliableRetransmitPolicyUVE(
     const ReliableRetransmitPolicyInputUVE& input) noexcept {
     if (!std::isfinite(input.elapsedSeconds) || input.elapsedSeconds < 0.0F ||
