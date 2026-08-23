@@ -105,10 +105,13 @@ ScriptVector2NumberResultUVE EvaluateScriptVector2DotUVE(
     if (!IsFiniteInputUVE(lhs) || !IsFiniteInputUVE(rhs)) {
         return MakeNumberResultUVE(ScriptVector2EvaluationCodeUVE::NonFiniteInput);
     }
-    const float value = (lhs.value.x * rhs.value.x) + (lhs.value.y * rhs.value.y);
-    return IsFiniteUVE(value)
-        ? MakeNumberResultUVE(ScriptVector2EvaluationCodeUVE::Applied, value)
-        : MakeNumberResultUVE(ScriptVector2EvaluationCodeUVE::NonFiniteInput);
+    const double value = static_cast<double>(lhs.value.x) * static_cast<double>(rhs.value.x) +
+                         static_cast<double>(lhs.value.y) * static_cast<double>(rhs.value.y);
+    const double maximumFloat = static_cast<double>(std::numeric_limits<float>::max());
+    if (!std::isfinite(value) || std::fabs(value) > maximumFloat) {
+        return MakeNumberResultUVE(ScriptVector2EvaluationCodeUVE::NonFiniteInput);
+    }
+    return MakeNumberResultUVE(ScriptVector2EvaluationCodeUVE::Applied, static_cast<float>(value));
 }
 
 ScriptVector2NumberResultUVE EvaluateScriptVector2DistanceUVE(
