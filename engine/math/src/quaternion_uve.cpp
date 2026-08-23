@@ -160,13 +160,12 @@ bool TryMakeAxisAngleUVE(const Vector3UVE& axis, const float radians, Quaternion
     }
 
     const float axisLengthSquared = axis.x * axis.x + axis.y * axis.y + axis.z * axis.z;
-    if (!std::isfinite(axisLengthSquared) || axisLengthSquared <= kMinimumQuaternionLengthSquaredUVE) {
+    if (std::isfinite(axisLengthSquared) && axisLengthSquared <= kMinimumQuaternionLengthSquaredUVE) {
         return false;
     }
 
-    const float inverseAxisLength = 1.0F / std::sqrt(axisLengthSquared);
     const float halfAngle = radians * 0.5F;
-    if (!std::isfinite(inverseAxisLength) || !std::isfinite(halfAngle)) {
+    if (!std::isfinite(halfAngle)) {
         return false;
     }
 
@@ -176,10 +175,14 @@ bool TryMakeAxisAngleUVE(const Vector3UVE& axis, const float radians, Quaternion
         return false;
     }
 
+    const Vector3UVE normalizedAxis = NormalizeUVE(axis);
+    if (!IsFiniteVectorUVE(normalizedAxis)) {
+        return false;
+    }
     const QuaternionUVE candidate{
-        axis.x * inverseAxisLength * sine,
-        axis.y * inverseAxisLength * sine,
-        axis.z * inverseAxisLength * sine,
+        normalizedAxis.x * sine,
+        normalizedAxis.y * sine,
+        normalizedAxis.z * sine,
         cosine,
     };
     return TryNormalizeUVE(candidate, outRotation);

@@ -124,6 +124,15 @@ TEST(QuaternionUVETest, CheckedHelpers_LargeFiniteInputUsesScaledMagnitude) {
     EXPECT_NEAR(identity.w, 1.0F, 1.0e-6F);
 }
 
+TEST(QuaternionUVETest, CheckedHelpers_AxisAngleAcceptsLargeFiniteAxis) {
+    const float maximum = std::numeric_limits<float>::max();
+    QuaternionUVE rotation{};
+    ASSERT_TRUE(TryMakeAxisAngleUVE(Vector3UVE{maximum, maximum, 0.0F}, std::numbers::pi_v<float> * 0.5F,
+                                    rotation));
+    EXPECT_TRUE(IsFiniteUVE(rotation));
+    EXPECT_NEAR(LengthSquaredUVE(rotation), 1.0F, kEpsilon);
+}
+
 TEST(QuaternionUVETest, CheckedHelpers_RejectNonFiniteOrZeroInputWithoutChangingOutput) {
     QuaternionUVE preserved{1.0F, 2.0F, 3.0F, 4.0F};
     EXPECT_FALSE(TryNormalizeUVE(QuaternionUVE{0.0F, 0.0F, 0.0F, 0.0F}, preserved));
