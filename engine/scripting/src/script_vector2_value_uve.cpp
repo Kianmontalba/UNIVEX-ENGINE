@@ -1,6 +1,7 @@
 // Copyright (c) 2026 UniVex Studios. All Rights Reserved.
 #include "uve/scripting/script_vector2_value_uve.h"
 
+#include <algorithm>
 #include <cmath>
 #include <limits>
 
@@ -130,8 +131,17 @@ ScriptVector2ValueResultUVE EvaluateScriptVector2DirectionUVE(
     if (!IsFiniteInputUVE(from) || !IsFiniteInputUVE(to)) {
         return MakeValueResultUVE(ScriptVector2EvaluationCodeUVE::NonFiniteInput);
     }
-    return EvaluateScriptVector2NormalizeUVE(
-        ScriptVector2ValueUVE{Math::Vector2UVE{to.value.x - from.value.x, to.value.y - from.value.y}});
+    const double deltaX = static_cast<double>(to.value.x) - static_cast<double>(from.value.x);
+    const double deltaY = static_cast<double>(to.value.y) - static_cast<double>(from.value.y);
+    const double scale = std::max(1.0, std::max(std::fabs(deltaX), std::fabs(deltaY)));
+    if (!std::isfinite(scale)) {
+        return MakeValueResultUVE(ScriptVector2EvaluationCodeUVE::NonFiniteInput);
+    }
+    const Math::Vector2UVE scaledDelta{
+        static_cast<float>(deltaX / scale),
+        static_cast<float>(deltaY / scale),
+    };
+    return EvaluateScriptVector2NormalizeUVE(ScriptVector2ValueUVE{scaledDelta});
 }
 
 ScriptVector2ValueResultUVE EvaluateScriptVector2LerpUVE(

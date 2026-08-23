@@ -849,6 +849,15 @@ TEST(ScriptVectorMathUVETest, Vector2V2FunctionsAreFiniteAndDeterministic) {
               ScriptVector2EvaluationCodeUVE::NonFiniteInput);
 }
 
+TEST(ScriptVectorMathUVETest, Vector2DirectionUsesFinitePrecisionForLargeEndpointDelta) {
+    const float maximum = std::numeric_limits<float>::max();
+    const ScriptVector2ValueResultUVE direction = EvaluateScriptVector2DirectionUVE(
+        ScriptVector2ValueUVE{{-maximum, 0.0F}}, ScriptVector2ValueUVE{{maximum, 0.0F}});
+
+    ASSERT_TRUE(direction.IsAppliedUVE());
+    EXPECT_EQ(direction.value, (ScriptVector2ValueUVE{{1.0F, 0.0F}}));
+}
+
 TEST(ScriptVectorMathUVETest, Vector2LerpUsesFinitePrecisionForLargeEndpointDelta) {
     const float maximum = std::numeric_limits<float>::max();
     const ScriptVector2ValueResultUVE midpoint = EvaluateScriptVector2LerpUVE(
