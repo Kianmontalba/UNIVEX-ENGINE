@@ -69,6 +69,24 @@ constexpr float kEpsilonUVE = 1.0e-5F;
     return Math::NormalizeUVE(value);
 }
 
+[[nodiscard]] Math::Vector3UVE NormalizeDifferenceVectorUVE(
+    const Math::Vector3UVE& lhs, const Math::Vector3UVE& rhs,
+    const Math::Vector3UVE& fallback) noexcept {
+    if (!IsFiniteVectorUVE(lhs) || !IsFiniteVectorUVE(rhs)) {
+        return fallback;
+    }
+    const double x = static_cast<double>(lhs.x) - static_cast<double>(rhs.x);
+    const double y = static_cast<double>(lhs.y) - static_cast<double>(rhs.y);
+    const double z = static_cast<double>(lhs.z) - static_cast<double>(rhs.z);
+    const double scale = std::max(std::fabs(x), std::max(std::fabs(y), std::fabs(z)));
+    if (!std::isfinite(scale) || scale == 0.0) {
+        return fallback;
+    }
+    return NormalizeVectorUVE(
+        {static_cast<float>(x / scale), static_cast<float>(y / scale), static_cast<float>(z / scale)},
+        fallback);
+}
+
 [[nodiscard]] bool TryMakeBoneDirectionRotationUVE(const Math::Vector3UVE& direction,
                                                       Math::QuaternionUVE& outRotation) noexcept {
     const Math::Vector3UVE normalizedDirection = NormalizeVectorUVE(direction, {});
@@ -313,7 +331,7 @@ bool TryMakeAimLookAtRotationUVE(const Math::Vector3UVE& source, const Math::Vec
                                  const Math::Vector3UVE& up,
                                  Math::QuaternionUVE& outRotation) noexcept {
     const Math::Vector3UVE forward{0.0F, 0.0F, -1.0F};
-    const Math::Vector3UVE direction = NormalizeVectorUVE(target - source, {});
+    const Math::Vector3UVE direction = NormalizeDifferenceVectorUVE(target, source, {});
     if (Math::LengthSquaredUVE(direction) <= kEpsilonUVE * kEpsilonUVE) {
         return false;
     }
@@ -392,7 +410,8 @@ ControlRigEvaluationResultUVE EvaluateControlRigUVE(const ControlRigUVE& rig) {
                 if (!constraint.poleControlId.empty()) {
                     const auto pole = findMutable(constraint.poleControlId);
                     if (pole != result.controls.end()) {
-                        const Math::Vector3UVE poleDirection = pole->pose.position - source->pose.position;
+                        const Math::Vector3UVE poleDirection =
+                            NormalizeDifferenceVectorUVE(pole->pose.position, source->pose.position, {});
                         if (Math::LengthSquaredUVE(poleDirection) > kEpsilonUVE * kEpsilonUVE) {
                             up = Math::NormalizeUVE(poleDirection);
                         }
