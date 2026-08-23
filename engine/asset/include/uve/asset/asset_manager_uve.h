@@ -5,6 +5,7 @@
 
 #include <filesystem>
 #include <memory>
+#include <string>
 #include <typeindex>
 
 #include "uve/asset/i_asset_manager_uve.h"
@@ -54,6 +55,7 @@ private:
     /// successful reload), tracks/untracks with HotReloadUVE as appropriate, and queues
     /// AssetLoadCompletedEventUVE. Runs on a IThreadPoolUVE worker thread.
     void ExecuteLoadUVE(AssetGuidUVE guid, std::type_index type, std::filesystem::path path);
+    void FailResolutionUVE(AssetGuidUVE guid, std::string failureReason);
 
     struct ImplUVE;
     std::unique_ptr<ImplUVE> m_impl;

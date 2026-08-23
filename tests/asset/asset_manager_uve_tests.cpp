@@ -70,6 +70,21 @@ template <typename T>
     return false;
 }
 
+class ThrowingResolveAssetDatabaseUVE final : public IAssetDatabaseUVE {
+public:
+    bool LoadUVE(const std::filesystem::path&) override { return false; }
+    bool SaveUVE() override { return false; }
+    bool SaveUVE(const std::filesystem::path&) override { return false; }
+    [[nodiscard]] AssetGuidUVE RegisterUVE(const std::filesystem::path&) override {
+        return kInvalidAssetGuidUVE;
+    }
+    [[nodiscard]] std::filesystem::path ResolveUVE(AssetGuidUVE) const override {
+        throw std::runtime_error("injected asset database resolver exception");
+    }
+    [[nodiscard]] bool HasGuidUVE(AssetGuidUVE) const override { return false; }
+    [[nodiscard]] std::vector<AssetRecordUVE> GetRegisteredAssetsUVE() const override { return {}; }
+};
+
 class AssetManagerUVETest : public ::testing::Test {
 protected:
     struct UnregisteredAssetUVE final {};
@@ -96,6 +111,56 @@ TEST_F(AssetManagerUVETest, MissingRecordRefcountCallsFailClosed) {
     EXPECT_NO_FATAL_FAILURE(assetManager.ReleaseUVE(AssetGuidUVE{0xBAD002U}));
 }
 #endif
+
+TEST_F(AssetManagerUVETest, LoadUVE_ResolverExceptionBecomesFailedHandleAndCompletionEvent) {
+    ThrowingResolveAssetDatabaseUVE throwingDatabase;
+    int completedCount = 0;
+    bool completedSuccessfully = true;
+    eventSystem.Subscribe<AssetLoadCompletedEventUVE>([&](const AssetLoadCompletedEventUVE& event) {
+        ++completedCount;
+        completedSuccessfully = event.success;
+    });
+
+    std::optional<AssetHandleUVE<BlobAssetUVE>> handle;
+    EXPECT_NO_THROW(handle.emplace(assetManager.LoadUVE<BlobAssetUVE>(AssetGuidUVE{9002U}, throwingDatabase)));
+    ASSERT_TRUE(handle.has_value());
+    ASSERT_TRUE(WaitForTerminalStateUVE(*handle));
+    EXPECT_FALSE(handle->IsReadyUVE());
+    EXPECT_TRUE(handle->HasFailedUVE());
+    EXPECT_EQ(handle->GetFailureReasonUVE(),
+              "asset database resolver threw: injected asset database resolver exception");
+    eventSystem.DispatchQueuedUVE();
+    EXPECT_EQ(completedCount, 1);
+    EXPECT_FALSE(completedSuccessfully);
+}
+
+TEST_F(AssetManagerUVETest, ReloadUVE_ResolverExceptionPreservesLoadedValueAndReportsFailure) {
+    const std::filesystem::path path = "uve_asset_manager_tests_resolver_exception.uveblob";
+    std::filesystem::remove(path);
+    const std::string text = "resolver exception keeps this value";
+    const auto* const textBytes = reinterpret_cast<const std::byte*>(text.data());
+    ASSERT_TRUE(WriteUveFileUVE(
+        path, AssetKindUVE::Blob, std::vector<std::byte>(textBytes, textBytes + text.size())));
+
+    const AssetGuidUVE guid = assetDatabase.RegisterUVE(path);
+    const AssetHandleUVE<BlobAssetUVE> handle = assetManager.LoadUVE<BlobAssetUVE>(guid, assetDatabase);
+    ASSERT_TRUE(WaitForTerminalStateUVE(handle));
+    ASSERT_TRUE(handle.IsReadyUVE());
+    ThrowingResolveAssetDatabaseUVE throwingDatabase;
+
+    assetManager.ReloadUVE(guid, throwingDatabase);
+
+    ASSERT_TRUE(handle.IsReadyUVE());
+    ASSERT_NE(handle.TryGetUVE(), nullptr);
+    const BlobAssetUVE* const blob = handle.TryGetUVE();
+    ASSERT_NE(blob, nullptr);
+    const std::string roundTripped(reinterpret_cast<const char*>(blob->data()), blob->size());
+    EXPECT_EQ(roundTripped, text);
+    EXPECT_EQ(handle.GetFailureReasonUVE(),
+              "asset database resolver threw: injected asset database resolver exception");
+
+    std::filesystem::remove(path);
+}
 
 TEST_F(AssetManagerUVETest, LoadUVE_MissingLoaderReturnsFailedHandleWithoutWorkerSubmission) {
     const AssetHandleUVE<UnregisteredAssetUVE> handle =
