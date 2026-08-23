@@ -59,7 +59,9 @@ Matrix4x4UVE Matrix4x4UVE::PerspectiveUVE(float fovYRadians, float aspectRatio, 
     result.m[2][0] = 0.0F;
     result.m[2][1] = 0.0F;
     result.m[2][2] = farPlane / (nearPlane - farPlane);
-    result.m[2][3] = (farPlane * nearPlane) / (nearPlane - farPlane);
+    result.m[2][3] = static_cast<float>(
+        (static_cast<double>(farPlane) * static_cast<double>(nearPlane)) /
+        (static_cast<double>(nearPlane) - static_cast<double>(farPlane)));
     result.m[3][0] = 0.0F;
     result.m[3][1] = 0.0F;
     result.m[3][2] = -1.0F;

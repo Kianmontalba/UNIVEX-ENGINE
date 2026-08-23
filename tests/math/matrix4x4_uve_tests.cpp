@@ -88,6 +88,16 @@ TEST(Matrix4x4UVETest, PerspectiveUVE_MapsNearPlaneToDepthZero) {
     EXPECT_NEAR(clip.z / clip.w, 0.0F, kEpsilon);
 }
 
+TEST(Matrix4x4UVETest, PerspectiveUVE_PreservesFiniteExtremeFarPlaneTranslation) {
+    const float maximum = std::numeric_limits<float>::max();
+
+    const Matrix4x4UVE projection = Matrix4x4UVE::PerspectiveUVE(
+        std::numbers::pi_v<float> / 2.0F, 1.0F, 2.0F, maximum);
+
+    EXPECT_TRUE(std::isfinite(projection.m[2][3]));
+    EXPECT_FLOAT_EQ(projection.m[2][3], -2.0F);
+}
+
 TEST(Matrix4x4UVETest, PerspectiveUVE_MapsFarPlaneToDepthOne) {
     const Matrix4x4UVE projection =
         Matrix4x4UVE::PerspectiveUVE(std::numbers::pi_v<float> / 2.0F, 1.0F, 1.0F, 100.0F);
