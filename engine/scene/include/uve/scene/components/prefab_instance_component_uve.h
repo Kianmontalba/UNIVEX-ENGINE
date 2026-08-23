@@ -184,6 +184,53 @@ struct PrefabOverrideConflictReportUVE final {
     return report;
 }
 
+/// Performs a deterministic value-only three-way merge of one local instance override set against
+/// a caller-supplied baseline and current source snapshot. A local change wins when the source is
+/// unchanged; a source change wins when the instance is unchanged; divergent edits are reported as
+/// conflicts. No source target, asset database, instance component, or live entity is mutated, and
+/// the output vector is published only after every path has been validated and merged.
+[[nodiscard]] inline PrefabOverrideOperationResultUVE MergePrefabOverridesUVE(
+    const PrefabInstanceComponentUVE& instance, const std::vector<PrefabPropertyOverrideUVE>& baseline,
+    const std::vector<PrefabPropertyOverrideUVE>& remote,
+    std::vector<PrefabPropertyOverrideUVE>& outMerged) {
+    if (!IsPrefabInstanceComponentValidUVE(instance)) {
+        return {PrefabOverrideOperationCodeUVE::InvalidInstance, 0U,
+                "Prefab override merge rejected because the instance data is invalid."};
+    }
+    const PrefabInstanceComponentUVE baselineInstance{instance.sourcePrefabGuid, baseline};
+    const PrefabInstanceComponentUVE remoteInstance{instance.sourcePrefabGuid, remote};
+    if (!IsPrefabInstanceComponentValidUVE(baselineInstance) ||
+        !IsPrefabInstanceComponentValidUVE(remoteInstance) || baseline.size() != instance.overrides.size() ||
+        remote.size() != baseline.size()) {
+        return {PrefabOverrideOperationCodeUVE::InvalidBaseline, 0U,
+                "Prefab override merge rejected because the snapshots are invalid or have different paths."};
+    }
+
+    std::vector<PrefabPropertyOverrideUVE> merged;
+    merged.reserve(instance.overrides.size());
+    for (std::size_t index = 0U; index < instance.overrides.size(); ++index) {
+        const PrefabPropertyOverrideUVE& local = instance.overrides[index];
+        const PrefabPropertyOverrideUVE& base = baseline[index];
+        const PrefabPropertyOverrideUVE& current = remote[index];
+        if (local.propertyPath != base.propertyPath || base.propertyPath != current.propertyPath) {
+            return {PrefabOverrideOperationCodeUVE::InvalidBaseline, index,
+                    "Prefab override merge rejected because snapshot paths are not aligned."};
+        }
+        if (local.serializedValue != base.serializedValue &&
+            current.serializedValue != base.serializedValue &&
+            local.serializedValue != current.serializedValue) {
+            return {PrefabOverrideOperationCodeUVE::ConflictDetected, index + 1U,
+                    "Prefab override merge found divergent local and source edits."};
+        }
+        const std::string& mergedValue =
+            local.serializedValue == base.serializedValue ? current.serializedValue : local.serializedValue;
+        merged.push_back({local.propertyPath, mergedValue});
+    }
+    outMerged = std::move(merged);
+    return {PrefabOverrideOperationCodeUVE::Applied, instance.overrides.size(),
+            "Prefab overrides merged without conflicts."};
+}
+
 /// Commits the instance's overrides into a caller-owned source-prefab target only when the
 /// supplied baseline still matches. The source target is mutated through ApplyPrefabOverridesUVE;
 /// the instance override records are cleared only after every source write succeeds. When supplied,
