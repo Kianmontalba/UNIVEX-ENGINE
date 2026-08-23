@@ -233,6 +233,13 @@ TEST(MotionQueryAnimationNodeUVETest, SettingsValidationUVE_AcceptsDefaultAndRej
     EXPECT_EQ(ValidateMotionQueryAnimationNodeSettingsUVE(invalidWeights).code,
               MotionQueryAnimationSettingsValidationCodeUVE::InvalidWeights);
 
+    invalidWeights = defaults;
+    invalidWeights.weights.velocityWeight = std::numeric_limits<float>::max();
+    invalidWeights.weights.facingWeight = std::numeric_limits<float>::max();
+    invalidWeights.weights.trajectoryWeight = std::numeric_limits<float>::max();
+    EXPECT_EQ(ValidateMotionQueryAnimationNodeSettingsUVE(invalidWeights).code,
+              MotionQueryAnimationSettingsValidationCodeUVE::InvalidWeights);
+
     MotionQueryAnimationNodeSettingsUVE invalidContinuity = defaults;
     invalidContinuity.continuity.policy = static_cast<MotionQueryContinuityPolicyUVE>(255U);
     EXPECT_EQ(ValidateMotionQueryAnimationNodeSettingsUVE(invalidContinuity).code,

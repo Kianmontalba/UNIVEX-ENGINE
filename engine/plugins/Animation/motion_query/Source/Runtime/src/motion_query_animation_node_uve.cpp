@@ -17,10 +17,14 @@ namespace {
 }
 
 [[nodiscard]] bool HasValidWeightsUVE(const UVE::Core::MotionMatchingWeightsUVE weights) noexcept {
+    const double totalWeight = static_cast<double>(weights.velocityWeight) +
+                                static_cast<double>(weights.facingWeight) +
+                                static_cast<double>(weights.trajectoryWeight);
+    const float floatTotalWeight = static_cast<float>(totalWeight);
     return std::isfinite(weights.velocityWeight) && std::isfinite(weights.facingWeight) &&
-           std::isfinite(weights.trajectoryWeight) && weights.velocityWeight >= 0.0F &&
-           weights.facingWeight >= 0.0F && weights.trajectoryWeight >= 0.0F &&
-           (weights.velocityWeight + weights.facingWeight + weights.trajectoryWeight) > 0.0F;
+           std::isfinite(weights.trajectoryWeight) && std::isfinite(totalWeight) &&
+           std::isfinite(floatTotalWeight) && weights.velocityWeight >= 0.0F &&
+           weights.facingWeight >= 0.0F && weights.trajectoryWeight >= 0.0F && totalWeight > 0.0;
 }
 } // namespace
 
