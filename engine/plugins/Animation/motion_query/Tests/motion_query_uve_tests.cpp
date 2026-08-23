@@ -53,6 +53,16 @@ TEST(MotionQueryUVETest, TryBuildMotionQueryUVE_DerivesVelocityAndCopiesTrajecto
     EXPECT_TRUE(ValidateMotionQueryUVE(query).IsValidUVE());
 }
 
+TEST(MotionQueryUVETest, TryBuildMotionQueryUVE_PreservesFiniteExtremePositionDelta) {
+    const float maximum = std::numeric_limits<float>::max();
+    MotionQueryUVE query;
+    ASSERT_TRUE(TryBuildMotionQueryUVE(MakePoseUVE(-maximum), MakePoseUVE(maximum), 2.0, {}, query));
+    EXPECT_FLOAT_EQ(query.rootVelocity.x, maximum);
+    EXPECT_FLOAT_EQ(query.rootVelocity.y, 0.0F);
+    EXPECT_FLOAT_EQ(query.rootVelocity.z, 0.0F);
+    EXPECT_TRUE(ValidateMotionQueryUVE(query).IsValidUVE());
+}
+
 TEST(MotionQueryUVETest, ValidateMotionQueryUVE_RejectsUnsortedAndZeroFacingData) {
     MotionQueryUVE query = MakeFeatureUVE(1.0F);
     query.trajectory[1].offsetSeconds = 0.1;

@@ -40,6 +40,27 @@ constexpr float kTieToleranceUVE = 1.0e-6F;
     return Math::LengthSquaredUVE(lhs - rhs);
 }
 
+[[nodiscard]] bool TryBuildFiniteVelocityUVE(const TransformPoseUVE& previousPose,
+                                             const TransformPoseUVE& currentPose,
+                                             const double deltaSeconds,
+                                             Math::Vector3UVE& outVelocity) noexcept {
+    const double inverseDeltaSeconds = 1.0 / deltaSeconds;
+    const double x = (static_cast<double>(currentPose.position.x) -
+                      static_cast<double>(previousPose.position.x)) * inverseDeltaSeconds;
+    const double y = (static_cast<double>(currentPose.position.y) -
+                      static_cast<double>(previousPose.position.y)) * inverseDeltaSeconds;
+    const double z = (static_cast<double>(currentPose.position.z) -
+                      static_cast<double>(previousPose.position.z)) * inverseDeltaSeconds;
+    const double maximumFloat = static_cast<double>(std::numeric_limits<float>::max());
+    if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z) ||
+        x < -maximumFloat || x > maximumFloat || y < -maximumFloat || y > maximumFloat ||
+        z < -maximumFloat || z > maximumFloat) {
+        return false;
+    }
+    outVelocity = Math::Vector3UVE{static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)};
+    return IsFiniteVectorUVE(outVelocity);
+}
+
 [[nodiscard]] bool TryNormalizeDirectionUVE(const Math::Vector3UVE& value,
                                             Math::Vector3UVE& outDirection) noexcept {
     if (!IsFiniteVectorUVE(value) || Math::LengthSquaredUVE(value) < kMinimumVectorLengthSquaredUVE) {
@@ -202,9 +223,11 @@ bool TryBuildMotionQueryUVE(const TransformPoseUVE& previousPose,
         return false;
     }
 
-    const Math::Vector3UVE displacement = normalizedCurrentPose.position - normalizedPreviousPose.position;
     MotionQueryUVE candidate;
-    candidate.rootVelocity = displacement * static_cast<float>(1.0 / deltaSeconds);
+    if (!TryBuildFiniteVelocityUVE(normalizedPreviousPose, normalizedCurrentPose, deltaSeconds,
+                                   candidate.rootVelocity)) {
+        return false;
+    }
     candidate.facingDirection = Math::RotateVectorUVE(
         normalizedCurrentPose.rotation, Math::Vector3UVE{0.0F, 0.0F, 1.0F});
     candidate.trajectory = futureTrajectory;
