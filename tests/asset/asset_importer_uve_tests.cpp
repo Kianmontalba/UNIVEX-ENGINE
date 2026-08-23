@@ -400,6 +400,43 @@ TEST_F(AssetImporterUVETest, ImportUVE_ImporterExceptionReturnsInvalidWithoutDat
     std::filesystem::remove(destinationPath);
 }
 
+TEST_F(AssetImporterUVETest, ImportUVE_DatabaseRegistrationExceptionReturnsInvalidWithoutEscaping) {
+    const std::filesystem::path sourcePath = "uve_asset_importer_tests_source.database_throwing";
+    const std::filesystem::path destinationPath = "uve_asset_importer_tests_dest.database_throwing";
+    std::filesystem::remove(sourcePath);
+    std::filesystem::remove(destinationPath);
+    WriteFixtureFileUVE(sourcePath, "source");
+
+    class ThrowingRegistrationDatabaseUVE final : public IAssetDatabaseUVE {
+    public:
+        bool LoadUVE(const std::filesystem::path&) override { return false; }
+        bool SaveUVE() override { return false; }
+        bool SaveUVE(const std::filesystem::path&) override { return false; }
+        [[nodiscard]] AssetGuidUVE RegisterUVE(const std::filesystem::path&) override {
+            throw std::runtime_error("injected registration exception");
+        }
+        [[nodiscard]] std::filesystem::path ResolveUVE(AssetGuidUVE) const override { return {}; }
+        [[nodiscard]] bool HasGuidUVE(AssetGuidUVE) const override { return false; }
+        [[nodiscard]] std::vector<AssetRecordUVE> GetRegisteredAssetsUVE() const override { return {}; }
+    } database;
+
+    importer.RegisterImporterUVE("database_throwing", [](const std::filesystem::path&,
+                                                           const std::filesystem::path& destination,
+                                                           const AssetImportSettingsUVE&) -> bool {
+        std::ofstream file(destination, std::ios::binary | std::ios::trunc);
+        file << "converted before registration failure";
+        return file.good();
+    });
+
+    AssetGuidUVE guid = kInvalidAssetGuidUVE;
+    EXPECT_NO_THROW(guid = importer.ImportUVE(sourcePath, destinationPath, database));
+    EXPECT_EQ(guid, kInvalidAssetGuidUVE);
+    EXPECT_TRUE(std::filesystem::exists(destinationPath));
+
+    std::filesystem::remove(sourcePath);
+    std::filesystem::remove(destinationPath);
+}
+
 TEST_F(AssetImporterUVETest, ImportUVE_ImporterReportsFailure_ReturnsInvalidAndLogsError) {
     const std::filesystem::path sourcePath = "uve_asset_importer_tests_source.failing";
     std::filesystem::remove(sourcePath);

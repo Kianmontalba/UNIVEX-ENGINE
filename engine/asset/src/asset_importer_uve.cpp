@@ -313,7 +313,18 @@ AssetGuidUVE AssetImporterUVE::ImportUVE(const std::filesystem::path& sourcePath
         return kInvalidAssetGuidUVE;
     }
 
-    const AssetGuidUVE guid = assetDatabase.RegisterUVE(destinationPath);
+    AssetGuidUVE guid = kInvalidAssetGuidUVE;
+    try {
+        guid = assetDatabase.RegisterUVE(destinationPath);
+    } catch (const std::exception& exception) {
+        UVE_ERROR("AssetImporterUVE: asset database registration threw for destination \"{}\": {}",
+                  destinationPath.string(), exception.what());
+        return kInvalidAssetGuidUVE;
+    } catch (...) {
+        UVE_ERROR("AssetImporterUVE: asset database registration threw an unknown exception for destination \"{}\"",
+                  destinationPath.string());
+        return kInvalidAssetGuidUVE;
+    }
     if (guid == kInvalidAssetGuidUVE) {
         UVE_ERROR("AssetImporterUVE: asset database rejected registration for destination \"{}\"",
                   destinationPath.string());
