@@ -3,6 +3,7 @@
 
 #include "uve/scene/scene_serializer_uve.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
@@ -569,6 +570,39 @@ void RollbackRestoredEntitiesUVE(IEntityManagerUVE& entityManager, std::vector<E
         if (rootCount != *expectedRootCount) {
             UVE_ERROR("SceneSerializerUVE: \"{}\" has {} roots but requires {} before entity creation",
                       sourceDescription, rootCount, *expectedRootCount);
+            return std::nullopt;
+        }
+    }
+
+    // Restore bypasses SceneGraphUVE::SetParentUVE(), so reject parent cycles before creating any
+    // ECS entities. The bounded step count is sufficient because a cycle cannot contain more
+    // distinct local IDs than this already parsed entity vector; a missing parent terminates at a
+    // restored root, matching the existing external-parent-to-root behavior.
+    for (const auto& [startingLocalId, unusedEntityJson] : orderedEntities) {
+        static_cast<void>(unusedEntityJson);
+        std::uint32_t currentLocalId = startingLocalId;
+        std::size_t steps = 0U;
+        for (; steps < orderedEntities.size(); ++steps) {
+            const auto entityIt = std::find_if(
+                orderedEntities.begin(), orderedEntities.end(),
+                [currentLocalId](const auto& entry) { return entry.first == currentLocalId; });
+            if (entityIt == orderedEntities.end()) {
+                break;
+            }
+            const auto& components = entityIt->second.at("components");
+            if (!components.contains("HierarchyComponentUVE")) {
+                break;
+            }
+            const std::int64_t parentLocalId =
+                components.at("HierarchyComponentUVE").at("parentLocalId").get<std::int64_t>();
+            if (parentLocalId < 0 ||
+                static_cast<std::uint64_t>(parentLocalId) > std::numeric_limits<std::uint32_t>::max()) {
+                break;
+            }
+            currentLocalId = static_cast<std::uint32_t>(parentLocalId);
+        }
+        if (steps == orderedEntities.size()) {
+            UVE_ERROR("SceneSerializerUVE: \"{}\" contains a cyclic hierarchy", sourceDescription);
             return std::nullopt;
         }
     }
