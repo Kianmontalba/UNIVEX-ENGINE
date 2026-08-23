@@ -136,10 +136,22 @@ ScriptVector3ValueResultUVE EvaluateScriptVector3DirectionUVE(
     if (!IsFiniteInputUVE(from) || !IsFiniteInputUVE(to)) {
         return MakeValueResultUVE(ScriptVector3EvaluationCodeUVE::NonFiniteInput);
     }
-    return EvaluateScriptVector3NormalizeUVE(
-        ScriptVector3ValueUVE{Math::Vector3UVE{to.value.x - from.value.x,
-                                              to.value.y - from.value.y,
-                                              to.value.z - from.value.z}});
+    const double deltaX = static_cast<double>(to.value.x) - static_cast<double>(from.value.x);
+    const double deltaY = static_cast<double>(to.value.y) - static_cast<double>(from.value.y);
+    const double deltaZ = static_cast<double>(to.value.z) - static_cast<double>(from.value.z);
+    const double scale = std::max(1.0, std::max(std::fabs(deltaX), std::max(std::fabs(deltaY), std::fabs(deltaZ))));
+    if (!std::isfinite(scale)) {
+        return MakeValueResultUVE(ScriptVector3EvaluationCodeUVE::NonFiniteInput);
+    }
+    const Math::Vector3UVE scaledDelta{
+        static_cast<float>(deltaX / scale),
+        static_cast<float>(deltaY / scale),
+        static_cast<float>(deltaZ / scale),
+    };
+    if (!IsFiniteUVE(scaledDelta)) {
+        return MakeValueResultUVE(ScriptVector3EvaluationCodeUVE::NonFiniteInput);
+    }
+    return EvaluateScriptVector3NormalizeUVE(ScriptVector3ValueUVE{scaledDelta});
 }
 
 ScriptVector3ValueResultUVE EvaluateScriptVector3LerpUVE(

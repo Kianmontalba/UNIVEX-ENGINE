@@ -288,7 +288,7 @@
 
 | Status | Roadmap area | Intended direction | Entry condition |
 |---|---|---|---|
-| **PARTIAL** | Native C++ Visual Scripting | Continue the native C++ node registry, graph compiler, typed Vector3 value kernel, bounded typed runtime storage, explicit dependency-aware VM dispatch, and per-entity typed runtime ticks toward broader graph execution. | Stable scene/editor command and property contracts; engine-call binding and broader node runtime coverage remain separate increments. |
+| **PARTIAL** | Native C++ Visual Scripting | Continue the native C++ node registry, graph compiler, typed Vector3 value kernel, bounded typed runtime storage, explicit dependency-aware VM dispatch, and per-entity typed runtime ticks toward broader graph execution. | Stable scene/editor command and property contracts; engine-call binding and broader node runtime coverage remain separate increments. Increment 496 hardens the typed Vector3 direction node to derive finite opposite-extreme endpoint deltas through scaled double arithmetic before existing normalization, preserving the applied/non-finite/zero-length result contract. |
 | **PARTIAL** | Plugin architecture | Design a native extension contract with lifecycle, ownership, ABI/versioning, and safety rules. | Stable editor and scripting foundations. |
 | **PARTIAL** | Asset pipeline depth | Add format-specific model, texture, audio, material, and thumbnail workflows only after format/licensing/derived-data contracts are selected. | Project Health and Content Browser foundations. |
 | **PARTIAL** | Advanced editor tools | Animation, terrain, world streaming, profiling, cinematics, source control, and collaboration. | Proven viewport, scene, asset, and session foundations. |
