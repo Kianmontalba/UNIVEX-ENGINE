@@ -171,9 +171,10 @@ SaveMigrationDiagnosticsUVE MigrateSavePayloadUVE(const std::uint32_t sourceSche
         diagnostics.reason = BoundedReasonUVE("source save payload schema version is unsupported");
         return diagnostics;
     }
-    if (payload.empty()) {
+    if (payload.empty() || payload.size() > kMaximumSaveMigrationPayloadBytesUVE) {
         diagnostics.status = SaveMigrationStatusUVE::InvalidPayload;
-        diagnostics.reason = BoundedReasonUVE("save payload is empty");
+        diagnostics.reason = BoundedReasonUVE(payload.empty() ? "save payload is empty"
+                                                               : "save payload exceeds migration cap");
         return diagnostics;
     }
 
