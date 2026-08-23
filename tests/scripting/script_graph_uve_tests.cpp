@@ -5145,6 +5145,12 @@ struct InputCameraCaptureUVE final {
     float axisResult = 0.5F;
 };
 
+void FillVmOutputCapacityExceptNodeOneUVE(ScriptVmExecutionContextUVE& context) {
+    for (std::uint32_t nodeId = 2U; nodeId <= 1025U; ++nodeId) {
+        ASSERT_TRUE(context.SetOutputUVE(nodeId, "Result", 0.0F));
+    }
+}
+
 bool CaptureInputKeyUVE(void* userData, const float token, bool* outResult) noexcept {
     auto* capture = static_cast<InputCameraCaptureUVE*>(userData);
     if (capture == nullptr || outResult == nullptr) {
@@ -5398,6 +5404,48 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_InputAndCameraSchedulerPathUsesCo
     EXPECT_TRUE(result.IsSuccessUVE());
     EXPECT_EQ(result.instructionsExecuted, 1U);
     EXPECT_EQ(capture.mousePositionCount, 1U);
+}
+
+TEST(ScriptVmUVETest, CallbackBackedInputNodesRejectOutputCapacityBeforeCallback) {
+    ScriptBytecodeProgramUVE keyProgram;
+    keyProgram.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U,
+                                       "input.key_pressed", {}, {}});
+    ScriptVmExecutionContextUVE keyContext;
+    ASSERT_TRUE(keyContext.SetInputUVE(1U, "Key", 32.0F));
+    FillVmOutputCapacityExceptNodeOneUVE(keyContext);
+    InputCameraCaptureUVE keyCapture;
+    ScriptEngineCallBindingsUVE keyBindings{};
+    keyBindings.userData = &keyCapture;
+    keyBindings.inputKeyPressed = CaptureInputKeyUVE;
+    ScriptVmExecutionOptionsUVE keyOptions;
+    keyOptions.engineCallBindings = &keyBindings;
+
+    const ScriptVmExecutionResultUVE keyResult = ExecuteScriptBytecodeUVE(keyProgram, keyContext, keyOptions);
+
+    EXPECT_EQ(keyResult.status, ScriptVmStatusUVE::NodeExecutionFailed);
+    EXPECT_EQ(keyCapture.keyCount, 0U);
+    EXPECT_EQ(keyContext.outputs.size(), ScriptVmExecutionContextUVE::kMaximumBindingsUVE);
+    EXPECT_FALSE(keyContext.FindOutputUVE(1U, "Result").has_value());
+
+    ScriptBytecodeProgramUVE positionProgram;
+    positionProgram.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U,
+                                            "input.mouse_position", {}, {}});
+    ScriptVmExecutionContextUVE positionContext;
+    FillVmOutputCapacityExceptNodeOneUVE(positionContext);
+    InputCameraCaptureUVE positionCapture;
+    ScriptEngineCallBindingsUVE positionBindings{};
+    positionBindings.userData = &positionCapture;
+    positionBindings.inputMousePosition = CaptureInputMousePositionUVE;
+    ScriptVmExecutionOptionsUVE positionOptions;
+    positionOptions.engineCallBindings = &positionBindings;
+
+    const ScriptVmExecutionResultUVE positionResult =
+        ExecuteScriptBytecodeUVE(positionProgram, positionContext, positionOptions);
+
+    EXPECT_EQ(positionResult.status, ScriptVmStatusUVE::NodeExecutionFailed);
+    EXPECT_EQ(positionCapture.mousePositionCount, 0U);
+    EXPECT_EQ(positionContext.outputs.size(), ScriptVmExecutionContextUVE::kMaximumBindingsUVE);
+    EXPECT_FALSE(positionContext.FindOutputUVE(1U, "Position").has_value());
 }
 
 TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_InputAndCameraNodesFailClosedWithoutBindings) {
@@ -6329,12 +6377,6 @@ struct AudioCaptureUVE final {
     std::size_t setVolumeCount = 0U;
     std::size_t setPositionCount = 0U;
 };
-
-void FillVmOutputCapacityExceptNodeOneUVE(ScriptVmExecutionContextUVE& context) {
-    for (std::uint32_t nodeId = 2U; nodeId <= 1025U; ++nodeId) {
-        ASSERT_TRUE(context.SetOutputUVE(nodeId, "Result", 0.0F));
-    }
-}
 
 bool CaptureAudioSetVolumeUVE(void* userData, Scene::EntityUVE source, float volume,
                               bool* outResult) noexcept {

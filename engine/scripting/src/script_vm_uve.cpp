@@ -699,6 +699,11 @@ namespace {
         return MakeNodeFailureUVE(instructionIndex, "Input node requires caller-owned input bindings.");
     }
     const std::uint32_t nodeId = instruction.sourceNodeId;
+    const char* const outputPin = instruction.nodeTypeId == "input.mouse_position" ? "Position" : "Result";
+    if (!CanSetNodeOutputUVE(context, nodeId, outputPin)) {
+        return MakeNodeFailureUVE(instructionIndex,
+                                  "Input node rejected its bounded output capacity before callback.");
+    }
     if (instruction.nodeTypeId == "input.key_pressed" || instruction.nodeTypeId == "input.key_released" ||
         instruction.nodeTypeId == "input.key_down") {
         std::uint32_t keyToken = 0U;
