@@ -1154,6 +1154,13 @@ namespace {
             ? ScriptVmExecutionResultUVE{}
             : MakeNodeFailureUVE(instructionIndex, "Physics node rejected its Boolean output capacity.");
     };
+    const auto canSetCastOutputs = [&](const bool includeNormal) noexcept {
+        return CanSetNodeOutputUVE(context, nodeId, "Hit") &&
+               CanSetNodeOutputUVE(context, nodeId, "Entity") &&
+               CanSetNodeOutputUVE(context, nodeId, "Point") &&
+               (!includeNormal || CanSetNodeOutputUVE(context, nodeId, "Normal")) &&
+               CanSetNodeOutputUVE(context, nodeId, "Distance");
+    };
     const auto setCastOutputs = [&](const bool hit, const Scene::EntityUVE entity,
                                     const ScriptVector3ValueUVE& point, const ScriptVector3ValueUVE& normal,
                                     const float distance, const bool includeNormal) -> ScriptVmExecutionResultUVE {
@@ -1194,6 +1201,10 @@ namespace {
         if (ignore != nullptr && ignore->entity == Scene::kInvalidEntityUVE) {
             return MakeNodeFailureUVE(instructionIndex, "Raycast Ignore must be a valid or omitted Entity value.");
         }
+        if (!canSetCastOutputs(true)) {
+            return MakeNodeFailureUVE(instructionIndex,
+                                      "Raycast rejected its bounded output capacity before callback.");
+        }
         if (!bindings->physicsRaycast(bindings->userData, *origin, *direction, *maximumDistance, layerMask,
                                       ignore == nullptr ? Scene::kInvalidEntityUVE : ignore->entity, &hit, &entity,
                                       &point, &normal, &distance) ||
@@ -1222,6 +1233,10 @@ namespace {
         float distance = 0.0F;
         if (ignore != nullptr && ignore->entity == Scene::kInvalidEntityUVE) {
             return MakeNodeFailureUVE(instructionIndex, "Sphere Cast Ignore must be a valid or omitted Entity value.");
+        }
+        if (!canSetCastOutputs(false)) {
+            return MakeNodeFailureUVE(instructionIndex,
+                                      "Sphere Cast rejected its bounded output capacity before callback.");
         }
         if (!bindings->physicsSphereCast(bindings->userData, *origin, *direction, *radius, *maximumDistance, layerMask,
                                          ignore == nullptr ? Scene::kInvalidEntityUVE : ignore->entity, &hit, &entity,
@@ -1253,6 +1268,10 @@ namespace {
         if (ignore != nullptr && ignore->entity == Scene::kInvalidEntityUVE) {
             return MakeNodeFailureUVE(instructionIndex, "Box Cast Ignore must be a valid or omitted Entity value.");
         }
+        if (!canSetCastOutputs(false)) {
+            return MakeNodeFailureUVE(instructionIndex,
+                                      "Box Cast rejected its bounded output capacity before callback.");
+        }
         if (!bindings->physicsBoxCast(bindings->userData, *origin, *halfExtents, *direction, *maximumDistance,
                                       layerMask, ignore == nullptr ? Scene::kInvalidEntityUVE : ignore->entity, &hit,
                                       &entity, &point, &distance) ||
@@ -1283,6 +1302,10 @@ namespace {
         if (ignore != nullptr && ignore->entity == Scene::kInvalidEntityUVE) {
             return MakeNodeFailureUVE(instructionIndex, "Capsule Cast Ignore must be a valid or omitted Entity value.");
         }
+        if (!canSetCastOutputs(false)) {
+            return MakeNodeFailureUVE(instructionIndex,
+                                      "Capsule Cast rejected its bounded output capacity before callback.");
+        }
         if (!bindings->physicsCapsuleCast(bindings->userData, *origin, *direction, *radius, *halfHeight,
                                           *maximumDistance, layerMask, ignore == nullptr ? Scene::kInvalidEntityUVE : ignore->entity,
                                           &hit, &entity, &point, &distance) ||
@@ -1299,7 +1322,14 @@ namespace {
         if (origin == nullptr || halfExtents == nullptr || !IsFiniteVector3ValueUVE(*origin) ||
             !IsFiniteVector3ValueUVE(*halfExtents) || halfExtents->value.x <= 0.0F || halfExtents->value.y <= 0.0F ||
             halfExtents->value.z <= 0.0F || !TryGetIntegralNumberInputUVE(context, nodeId, "Layer Mask", 65535.0F, &layerMask) ||
-            bindings->physicsOverlap == nullptr || !bindings->physicsOverlap(bindings->userData, *origin, *halfExtents, layerMask, &count) ||
+            bindings->physicsOverlap == nullptr) {
+            return MakeNodeFailureUVE(instructionIndex, "Overlap requires finite positive extents, a bounded Layer Mask, and a bounded callback count.");
+        }
+        if (!CanSetNodeOutputUVE(context, nodeId, "Count")) {
+            return MakeNodeFailureUVE(instructionIndex,
+                                      "Overlap rejected its bounded Count output capacity before callback.");
+        }
+        if (!bindings->physicsOverlap(bindings->userData, *origin, *halfExtents, layerMask, &count) ||
             count > 4096U || !SetNodeOutputUVE(context, nodeId, "Count", static_cast<float>(count))) {
             return MakeNodeFailureUVE(instructionIndex, "Overlap requires finite positive extents, a bounded Layer Mask, and a bounded callback count.");
         }
