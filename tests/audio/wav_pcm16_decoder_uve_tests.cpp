@@ -26,6 +26,56 @@ std::vector<std::byte> BuildWav16(const std::vector<std::int16_t>& samples, cons
     for (const std::int16_t sample : samples) AppendU16(bytes, static_cast<std::uint16_t>(sample));
     return bytes;
 }
+TEST(WavPcm16DecoderUVETest, Pcm16StreamCursorUVE_ConsumesNonLoopingWindowsAndClampsAtEnd) {
+    Pcm16StreamCursorUVE cursor;
+    ASSERT_TRUE(cursor.ResetUVE(10U, false));
+    Pcm16StreamWindowPlanUVE plan;
+    ASSERT_TRUE(cursor.ConsumeWindowUVE(4U, plan));
+    EXPECT_EQ(plan, (Pcm16StreamWindowPlanUVE{0U, 4U, 4U, false, false}));
+    EXPECT_EQ(cursor.GetCursorSampleUVE(), 4U);
+    ASSERT_TRUE(cursor.ConsumeWindowUVE(16U, plan));
+    EXPECT_EQ(plan, (Pcm16StreamWindowPlanUVE{4U, 6U, 10U, true, false}));
+    EXPECT_EQ(cursor.GetCursorSampleUVE(), 10U);
+    ASSERT_TRUE(cursor.ConsumeWindowUVE(1U, plan));
+    EXPECT_EQ(plan, (Pcm16StreamWindowPlanUVE{10U, 0U, 10U, true, false}));
+}
+
+TEST(WavPcm16DecoderUVETest, Pcm16StreamCursorUVE_WrapsLoopingWindowsAndAdvancesPersistently) {
+    Pcm16StreamCursorUVE cursor;
+    ASSERT_TRUE(cursor.ResetUVE(10U, true, 8U));
+    Pcm16StreamWindowPlanUVE plan;
+    ASSERT_TRUE(cursor.ConsumeWindowUVE(4U, plan));
+    EXPECT_EQ(plan, (Pcm16StreamWindowPlanUVE{8U, 2U, 0U, true, true}));
+    ASSERT_TRUE(cursor.ConsumeWindowUVE(3U, plan));
+    EXPECT_EQ(plan, (Pcm16StreamWindowPlanUVE{0U, 3U, 3U, false, false}));
+    EXPECT_EQ(cursor.GetCursorSampleUVE(), 3U);
+    bool reachedEnd = false;
+    bool wrapped = false;
+    ASSERT_TRUE(cursor.AdvanceUVE(7U, reachedEnd, wrapped));
+    EXPECT_EQ(cursor.GetCursorSampleUVE(), 0U);
+    EXPECT_TRUE(reachedEnd);
+    EXPECT_TRUE(wrapped);
+}
+
+TEST(WavPcm16DecoderUVETest, Pcm16StreamCursorUVE_RejectsInvalidResetAndConsumptionAtomically) {
+    Pcm16StreamCursorUVE cursor;
+    ASSERT_TRUE(cursor.ResetUVE(10U, false, 3U));
+    Pcm16StreamWindowPlanUVE original{7U, 2U, 9U, false, false};
+    Pcm16StreamWindowPlanUVE plan = original;
+    EXPECT_FALSE(cursor.ResetUVE(0U, false));
+    EXPECT_EQ(cursor.GetTotalSamplesUVE(), 10U);
+    EXPECT_EQ(cursor.GetCursorSampleUVE(), 3U);
+    EXPECT_FALSE(cursor.ConsumeWindowUVE(0U, plan));
+    EXPECT_EQ(plan, original);
+    bool reachedEnd = true;
+    bool wrapped = true;
+    Pcm16StreamCursorUVE unconfigured;
+    EXPECT_FALSE(unconfigured.AdvanceUVE(1U, reachedEnd, wrapped));
+    EXPECT_TRUE(reachedEnd);
+    EXPECT_TRUE(wrapped);
+    EXPECT_EQ(cursor.GetCursorSampleUVE(), 3U);
+}
+
 TEST(WavPcm16DecoderUVETest, PlanPcm16StreamWindowUVE_PlansContiguousAndLoopingWindows) {
     Pcm16StreamWindowPlanUVE plan;
     ASSERT_TRUE(PlanPcm16StreamWindowUVE(100U, 20U, 16U, false, plan));

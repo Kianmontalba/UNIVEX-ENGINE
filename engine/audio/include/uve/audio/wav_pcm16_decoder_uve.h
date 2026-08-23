@@ -14,6 +14,29 @@ struct Pcm16StreamWindowPlanUVE final {
     [[nodiscard]] bool operator==(const Pcm16StreamWindowPlanUVE&) const noexcept = default;
 };
 
+/// Owns only persistent bounded PCM16 cursor state. It delegates window and advance semantics to the
+/// stateless helpers below, but owns no sample bytes, decoder, refill schedule, voice, device, or backend.
+class Pcm16StreamCursorUVE final {
+public:
+    [[nodiscard]] bool ResetUVE(std::size_t totalSamples, bool loop, std::size_t cursorSample = 0U,
+                                std::size_t maximumSamples = kMaximumWavPcm16SamplesUVE) noexcept;
+    [[nodiscard]] bool ConsumeWindowUVE(std::size_t requestedSamples,
+                                         Pcm16StreamWindowPlanUVE& outPlan) noexcept;
+    [[nodiscard]] bool AdvanceUVE(std::size_t advanceSamples, bool& outReachedEnd,
+                                  bool& outWrapped) noexcept;
+
+    [[nodiscard]] std::size_t GetTotalSamplesUVE() const noexcept { return m_totalSamples; }
+    [[nodiscard]] std::size_t GetCursorSampleUVE() const noexcept { return m_cursorSample; }
+    [[nodiscard]] bool IsLoopingUVE() const noexcept { return m_loop; }
+    [[nodiscard]] std::size_t GetMaximumSamplesUVE() const noexcept { return m_maximumSamples; }
+
+private:
+    std::size_t m_totalSamples = 0U;
+    std::size_t m_cursorSample = 0U;
+    std::size_t m_maximumSamples = kMaximumWavPcm16SamplesUVE;
+    bool m_loop = false;
+};
+
 /// Plans one contiguous bounded PCM16 refill window from a caller-owned cursor. Both totalSamples and
 /// requestedSamples must remain within maximumSamples. The planner does not mutate a cursor, decode bytes,
 /// schedule refills, own voices, or select a stream backend.

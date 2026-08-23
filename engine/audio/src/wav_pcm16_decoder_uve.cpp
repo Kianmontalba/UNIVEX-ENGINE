@@ -59,6 +59,45 @@ bool ApplyPcmGainEffectChainUVE(const std::vector<float>& inputSamples,
     }
 }
 
+bool Pcm16StreamCursorUVE::ResetUVE(const std::size_t totalSamples, const bool loop,
+                                     const std::size_t cursorSample, const std::size_t maximumSamples) noexcept {
+    if (totalSamples == 0U || maximumSamples == 0U || totalSamples > maximumSamples || cursorSample > totalSamples) {
+        return false;
+    }
+    m_totalSamples = totalSamples;
+    m_cursorSample = cursorSample;
+    m_maximumSamples = maximumSamples;
+    m_loop = loop;
+    return true;
+}
+
+bool Pcm16StreamCursorUVE::ConsumeWindowUVE(const std::size_t requestedSamples,
+                                             Pcm16StreamWindowPlanUVE& outPlan) noexcept {
+    Pcm16StreamWindowPlanUVE candidatePlan;
+    if (!PlanPcm16StreamWindowUVE(m_totalSamples, m_cursorSample, requestedSamples, m_loop, candidatePlan,
+                                  m_maximumSamples)) {
+        return false;
+    }
+    m_cursorSample = candidatePlan.nextCursorSample;
+    outPlan = candidatePlan;
+    return true;
+}
+
+bool Pcm16StreamCursorUVE::AdvanceUVE(const std::size_t advanceSamples, bool& outReachedEnd,
+                                      bool& outWrapped) noexcept {
+    std::size_t candidateCursor = m_cursorSample;
+    bool candidateReachedEnd = outReachedEnd;
+    bool candidateWrapped = outWrapped;
+    if (!AdvancePcm16StreamCursorUVE(m_totalSamples, m_cursorSample, advanceSamples, m_loop, candidateCursor,
+                                      candidateReachedEnd, candidateWrapped, m_maximumSamples)) {
+        return false;
+    }
+    m_cursorSample = candidateCursor;
+    outReachedEnd = candidateReachedEnd;
+    outWrapped = candidateWrapped;
+    return true;
+}
+
 bool PlanPcm16StreamWindowUVE(const std::size_t totalSamples, const std::size_t cursorSample,
                                const std::size_t requestedSamples, const bool loop,
                                Pcm16StreamWindowPlanUVE& outPlan, const std::size_t maximumSamples) noexcept {
