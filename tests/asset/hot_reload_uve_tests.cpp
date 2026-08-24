@@ -7,6 +7,7 @@
 #include <atomic>
 #include <chrono>
 #include <filesystem>
+#include <limits>
 #include <memory>
 #include <string>
 #include <thread>
@@ -106,6 +107,44 @@ TEST_F(HotReloadUVETest, PollUVE_DetectsOnDiskChange_ReloadsAssetAndPublishesEve
     }
     EXPECT_TRUE(reloadEventReceived.load());
     EXPECT_TRUE(contentReloaded);
+
+    std::filesystem::remove(path);
+}
+
+TEST_F(HotReloadUVETest, PollUVE_InvalidDeltaTimes_DoNotMutateAccumulatorOrTriggerReload) {
+    const std::filesystem::path path = "uve_hot_reload_tests_invalid_delta.uveblob";
+    std::filesystem::remove(path);
+    ASSERT_TRUE(WriteUveFileUVE(path, AssetKindUVE::Blob, MakePayloadUVE("version1")));
+    const AssetGuidUVE guid = assetDatabase.RegisterUVE(path);
+
+    const AssetHandleUVE<BlobAssetUVE> handle = assetManager.LoadUVE<BlobAssetUVE>(guid, assetDatabase);
+    ASSERT_TRUE(WaitForTerminalStateUVE(handle));
+    ASSERT_TRUE(handle.IsReadyUVE());
+    hotReload.PollUVE(assetManager, assetDatabase, 10.0); // establish the baseline mtime
+
+    ASSERT_TRUE(WriteUveFileUVE(path, AssetKindUVE::Blob, MakePayloadUVE("version2")));
+    const auto farFuture = std::filesystem::file_time_type::clock::now() + std::chrono::hours(1);
+    std::filesystem::last_write_time(path, farFuture);
+
+    std::atomic<bool> reloadEventReceived{false};
+    eventSystem.Subscribe<AssetReloadedEventUVE>([&reloadEventReceived, guid](const AssetReloadedEventUVE& event) {
+        if (event.guid == guid) {
+            reloadEventReceived = true;
+        }
+    });
+
+    hotReload.PollUVE(assetManager, assetDatabase, -1.0);
+    hotReload.PollUVE(assetManager, assetDatabase, std::numeric_limits<double>::quiet_NaN());
+    hotReload.PollUVE(assetManager, assetDatabase, 0.04); // below the 0.05s interval if invalid deltas were ignored
+    eventSystem.DispatchQueuedUVE();
+
+    EXPECT_FALSE(reloadEventReceived.load());
+    EXPECT_TRUE(handle.IsReadyUVE());
+    const BlobAssetUVE* const blob = handle.TryGetUVE();
+    if (blob != nullptr) {
+        const std::string content(reinterpret_cast<const char*>(blob->data()), blob->size());
+        EXPECT_EQ(content, "version1");
+    }
 
     std::filesystem::remove(path);
 }

@@ -28,6 +28,7 @@ public:
 
     void TrackUVE(AssetGuidUVE guid) override;
     void UntrackUVE(AssetGuidUVE guid) override;
+    /// Negative or non-finite deltas are ignored before accumulator or reload-state mutation.
     void PollUVE(IAssetManagerUVE& assetManager, IAssetDatabaseUVE& assetDatabase,
                  double deltaTimeSeconds) override;
 

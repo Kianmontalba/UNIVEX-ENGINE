@@ -3,6 +3,7 @@
 
 #include "uve/asset/hot_reload_uve.h"
 
+#include <cmath>
 #include <filesystem>
 #include <mutex>
 #include <system_error>
@@ -42,6 +43,9 @@ void HotReloadUVE::UntrackUVE(AssetGuidUVE guid) {
 
 void HotReloadUVE::PollUVE(IAssetManagerUVE& assetManager, IAssetDatabaseUVE& assetDatabase,
                             double deltaTimeSeconds) {
+    if (!std::isfinite(deltaTimeSeconds) || deltaTimeSeconds < 0.0) {
+        return;
+    }
     m_impl->accumulatedSeconds += deltaTimeSeconds;
     if (m_impl->accumulatedSeconds < m_impl->pollIntervalSeconds) {
         return;
