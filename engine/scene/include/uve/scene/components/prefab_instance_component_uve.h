@@ -94,7 +94,14 @@ public:
     previousValues.reserve(instance.overrides.size());
     for (const PrefabPropertyOverrideUVE& override : instance.overrides) {
         std::string previousValue;
-        if (!target.ReadPropertyUVE(override.propertyPath, previousValue) || previousValue.empty() ||
+        bool readSucceeded = false;
+        try {
+            readSucceeded = target.ReadPropertyUVE(override.propertyPath, previousValue);
+        } catch (...) {
+            return {PrefabOverrideOperationCodeUVE::ReadFailed, previousValues.size(),
+                    "Prefab override apply could not read the existing target property."};
+        }
+        if (!readSucceeded || previousValue.empty() ||
             previousValue.size() > kMaximumPrefabOverrideValueBytesUVE ||
             previousValue.find('\0') != std::string::npos) {
             return {PrefabOverrideOperationCodeUVE::ReadFailed, previousValues.size(),
@@ -105,13 +112,28 @@ public:
 
     for (std::size_t index = 0U; index < instance.overrides.size(); ++index) {
         const PrefabPropertyOverrideUVE& override = instance.overrides[index];
-        if (target.WritePropertyUVE(override.propertyPath, override.serializedValue)) {
+        bool writeSucceeded = false;
+        bool writeThrew = false;
+        try {
+            writeSucceeded = target.WritePropertyUVE(override.propertyPath, override.serializedValue);
+        } catch (...) {
+            writeThrew = true;
+        }
+        if (writeSucceeded) {
             continue;
         }
-        for (std::size_t rollbackIndex = index; rollbackIndex > 0U; --rollbackIndex) {
-            const PrefabPropertyOverrideUVE& previous = previousValues[rollbackIndex - 1U];
-            if (!target.WritePropertyUVE(previous.propertyPath, previous.serializedValue)) {
-                return {PrefabOverrideOperationCodeUVE::RollbackFailed, rollbackIndex - 1U,
+        const std::size_t rollbackEnd = writeThrew ? index + 1U : index;
+        for (std::size_t rollbackIndex = rollbackEnd; rollbackIndex > 0U; --rollbackIndex) {
+            const std::size_t propertyIndex = rollbackIndex - 1U;
+            const PrefabPropertyOverrideUVE& previous = previousValues[propertyIndex];
+            bool rollbackSucceeded = false;
+            try {
+                rollbackSucceeded = target.WritePropertyUVE(previous.propertyPath, previous.serializedValue);
+            } catch (...) {
+                rollbackSucceeded = false;
+            }
+            if (!rollbackSucceeded) {
+                return {PrefabOverrideOperationCodeUVE::RollbackFailed, propertyIndex,
                         "Prefab override apply failed and rollback could not restore the target."};
             }
         }
@@ -163,7 +185,14 @@ struct PrefabOverrideConflictReportUVE final {
     report.conflicts.reserve(std::min(baseline.size(), conflictLimit));
     for (const PrefabPropertyOverrideUVE& expected : baseline) {
         std::string actualValue;
-        if (!target.ReadPropertyUVE(expected.propertyPath, actualValue) || actualValue.empty() ||
+        bool readSucceeded = false;
+        try {
+            readSucceeded = target.ReadPropertyUVE(expected.propertyPath, actualValue);
+        } catch (...) {
+            report.code = PrefabOverrideOperationCodeUVE::ReadFailed;
+            return report;
+        }
+        if (!readSucceeded || actualValue.empty() ||
             actualValue.size() > kMaximumPrefabOverrideValueBytesUVE ||
             actualValue.find('\0') != std::string::npos) {
             report.code = PrefabOverrideOperationCodeUVE::ReadFailed;
