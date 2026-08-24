@@ -9,4 +9,15 @@ PrefabRevisionStatusUVE EvaluatePrefabRevisionUVE(const std::uint64_t sourceRevi
     return sourceRevision == instanceRevision ? PrefabRevisionStatusUVE::Current
                                                : PrefabRevisionStatusUVE::Stale;
 }
+
+bool RefreshPrefabInstanceRevisionUVE(PrefabInstanceComponentUVE& instance,
+                                      const std::uint64_t observedSourceRevision) noexcept {
+    if (!IsPrefabInstanceComponentValidUVE(instance) || observedSourceRevision == 0U ||
+        observedSourceRevision < instance.sourceRevision || !instance.overrides.empty()) {
+        return false;
+    }
+    instance.sourceRevision = observedSourceRevision;
+    instance.instanceRevision = observedSourceRevision;
+    return true;
+}
 } // namespace UVE::Scene
