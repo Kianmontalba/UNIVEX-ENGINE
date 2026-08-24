@@ -65,8 +65,9 @@ bool DecodeBmpRgba8ImageUVE(const std::vector<std::byte>& bytes, BmpRgba8ImageUV
     const std::uint32_t compression = ReadU32LittleEndianUVE(bytes, kFileHeaderBytesUVE + 16U);
     const std::uint32_t colorsUsed = ReadU32LittleEndianUVE(bytes, kFileHeaderBytesUVE + 32U);
     const bool indexedImage = bitsPerPixel == 8U;
+    const bool packed16Image = bitsPerPixel == 16U;
     if (signedWidth <= 0 || signedHeight == 0 || planes != 1U ||
-        (!indexedImage && bitsPerPixel != 24U && bitsPerPixel != 32U) || compression != 0U) {
+        (!indexedImage && !packed16Image && bitsPerPixel != 24U && bitsPerPixel != 32U) || compression != 0U) {
         return false;
     }
 
@@ -129,6 +130,15 @@ bool DecodeBmpRgba8ImageUVE(const std::vector<std::byte>& bytes, BmpRgba8ImageUV
                     rgba[0] = bytes[palettePixelOffset + 2U];
                     rgba[1] = bytes[palettePixelOffset + 1U];
                     rgba[2] = bytes[palettePixelOffset];
+                } else if (packed16Image) {
+                    const std::uint16_t packed = static_cast<std::uint16_t>(std::to_integer<std::uint8_t>(pixel[0])) |
+                                                  static_cast<std::uint16_t>(std::to_integer<std::uint8_t>(pixel[1]) << 8U);
+                    const auto expandFiveBit = [](const std::uint16_t value) noexcept {
+                        return std::byte{static_cast<unsigned char>((value * 255U + 15U) / 31U)};
+                    };
+                    rgba[0] = expandFiveBit((packed >> 10U) & 0x1FU);
+                    rgba[1] = expandFiveBit((packed >> 5U) & 0x1FU);
+                    rgba[2] = expandFiveBit(packed & 0x1FU);
                 } else {
                     rgba[0] = pixel[2];
                     rgba[1] = pixel[1];
