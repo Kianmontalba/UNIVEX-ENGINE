@@ -7,6 +7,7 @@
 #include "uve/asset/jpeg_importer_uve.h"
 #include "uve/asset/mtl_importer_uve.h"
 #include "uve/asset/obj_importer_uve.h"
+#include "uve/asset/shader_source_importer_uve.h"
 
 #include "uve/asset/png_importer_uve.h"
 #include "uve/asset/tga_importer_uve.h"
@@ -174,6 +175,9 @@ using ImportFuncUVE = std::function<bool(const std::filesystem::path&, const std
     if (extension == "uvemat") {
         return AssetImportSourceKindUVE::MaterialEnvelope;
     }
+    if (extension == "vert" || extension == "frag" || extension == "comp") {
+        return AssetImportSourceKindUVE::RawShader;
+    }
     if (extension == "fbx" || extension == "obj" || extension == "gltf" || extension == "glb" ||
         extension == "dae") {
         return AssetImportSourceKindUVE::RawModel;
@@ -194,7 +198,8 @@ using ImportFuncUVE = std::function<bool(const std::filesystem::path&, const std
 
 [[nodiscard]] bool RequiresFormatSpecificParserUVE(const AssetImportSourceKindUVE kind) {
     return kind == AssetImportSourceKindUVE::RawModel || kind == AssetImportSourceKindUVE::RawTexture ||
-           kind == AssetImportSourceKindUVE::RawMaterial || kind == AssetImportSourceKindUVE::RawAudio;
+           kind == AssetImportSourceKindUVE::RawMaterial || kind == AssetImportSourceKindUVE::RawShader ||
+           kind == AssetImportSourceKindUVE::RawAudio;
 }
 
 } // namespace
@@ -211,8 +216,9 @@ AssetImporterUVE::AssetImporterUVE() : m_impl(std::make_unique<ImplUVE>()) {
 
     // Typed UVE envelopes are already validated by their corresponding asset loaders. Importing
     // them here is an intentionally format-neutral, deterministic copy/re-register operation;
-    // bounded BMP/PNG/TGA, OBJ, MTL, glTF/GLB one-primitive, and JPEG source conversions are registered separately;
-    // FBX/audio and broader glTF scene/material/image conversion remains independent parser-owned work.
+    // bounded BMP/PNG/TGA, OBJ, MTL, glTF/GLB one-primitive, JPEG, and explicit-stage shader source
+    // conversions are registered separately; FBX/audio, ambiguous combined GLSL, and broader glTF
+    // scene/material/image conversion remains independent parser-owned work.
     RegisterImporterUVE("uvemodel", &GenericFileImportUVE);
     RegisterImporterUVE("uvetex", &GenericFileImportUVE);
     RegisterImporterUVE("uveshader", &GenericFileImportUVE);
@@ -224,6 +230,7 @@ AssetImporterUVE::AssetImporterUVE() : m_impl(std::make_unique<ImplUVE>()) {
     RegisterGltfImporterUVE(*this);
     RegisterJpegImporterUVE(*this);
     RegisterMtlImporterUVE(*this);
+    RegisterShaderSourceImporterUVE(*this);
 }
 
 AssetImporterUVE::~AssetImporterUVE() = default;
