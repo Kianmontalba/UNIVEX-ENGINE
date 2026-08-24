@@ -28,6 +28,11 @@ TEST(MonitorInfoValidationUVETest, AcceptsValidSnapshotWithAtMostOnePrimary) {
     EXPECT_TRUE(ValidateMonitorSnapshotUVE({}));
 }
 
+TEST(MonitorInfoValidationUVETest, RejectsEmbeddedNulMonitorName) {
+    const std::string nameWithNul{"Monitor\0Name", 12U};
+    EXPECT_FALSE(ValidateMonitorInfoUVE({nameWithNul, 1920U, 1080U, false}));
+}
+
 TEST(MonitorInfoValidationUVETest, RejectsMonitorSnapshotBeyondBoundedEntryCap) {
     std::vector<MonitorInfoUVE> monitors;
     monitors.resize(kMaximumMonitorSnapshotEntriesUVE + 1U,
