@@ -78,6 +78,41 @@ void AppendU16LittleEndianUVE(std::vector<std::byte>& bytes, const std::uint16_t
     return tga;
 }
 
+[[nodiscard]] std::vector<std::byte> MakeTga8PaletteTwoByOneTopLeftUVE() {
+    std::vector<std::byte> tga;
+    tga.reserve(26U);
+    tga.insert(tga.end(), 18U, std::byte{0});
+    tga[1] = std::byte{1};
+    tga[2] = std::byte{1};
+    tga[5] = std::byte{2};
+    tga[7] = std::byte{24};
+    tga[12] = std::byte{2};
+    tga[14] = std::byte{1};
+    tga[16] = std::byte{8};
+    tga[17] = std::byte{0x20};
+    // Palette entries: red, green (BGR order), followed by palette indices 0 and 1.
+    tga.insert(tga.end(), {std::byte{0x00}, std::byte{0x00}, std::byte{0xFF}, std::byte{0x00},
+                           std::byte{0xFF}, std::byte{0x00}, std::byte{0x00}, std::byte{0x01}});
+    return tga;
+}
+
+[[nodiscard]] std::vector<std::byte> MakeTga8PaletteRleThreeByOneTopLeftUVE() {
+    std::vector<std::byte> tga;
+    tga.reserve(23U);
+    tga.insert(tga.end(), 18U, std::byte{0});
+    tga[1] = std::byte{1};
+    tga[2] = std::byte{9};
+    tga[5] = std::byte{1};
+    tga[7] = std::byte{24};
+    tga[12] = std::byte{3};
+    tga[14] = std::byte{1};
+    tga[16] = std::byte{8};
+    tga[17] = std::byte{0x20};
+    // One blue palette entry and one run packet containing three index-zero pixels.
+    tga.insert(tga.end(), {std::byte{0xFF}, std::byte{0x00}, std::byte{0x00}, std::byte{0x82}, std::byte{0x00}});
+    return tga;
+}
+
 [[nodiscard]] std::vector<std::byte> MakeTga32OneByTwoTopRightUVE() {
     std::vector<std::byte> tga;
     tga.reserve(26U);
@@ -139,6 +174,27 @@ TEST(TgaMetadataUVETest, DecodeTgaRgba8ImageUVE_DecodesRle8BitGrayscaleToOpaqueR
                                  std::byte{0x77}, std::byte{0x77}, std::byte{0x77}, std::byte{0xFF}}));
 }
 
+TEST(TgaMetadataUVETest, DecodeTgaRgba8ImageUVE_Decodes8BitPaletteToTopDownOpaqueRgba) {
+    TgaRgba8ImageUVE image;
+    ASSERT_TRUE(DecodeTgaRgba8ImageUVE(MakeTga8PaletteTwoByOneTopLeftUVE(), image));
+    EXPECT_EQ(image.width, 2U);
+    EXPECT_EQ(image.height, 1U);
+    EXPECT_EQ(image.pixels, (std::vector<std::byte>{
+                                 std::byte{0xFF}, std::byte{0x00}, std::byte{0x00}, std::byte{0xFF},
+                                 std::byte{0x00}, std::byte{0xFF}, std::byte{0x00}, std::byte{0xFF}}));
+}
+
+TEST(TgaMetadataUVETest, DecodeTgaRgba8ImageUVE_DecodesRle8BitPaletteToOpaqueRgba) {
+    TgaRgba8ImageUVE image;
+    ASSERT_TRUE(DecodeTgaRgba8ImageUVE(MakeTga8PaletteRleThreeByOneTopLeftUVE(), image));
+    EXPECT_EQ(image.width, 3U);
+    EXPECT_EQ(image.height, 1U);
+    EXPECT_EQ(image.pixels, (std::vector<std::byte>{
+                                 std::byte{0x00}, std::byte{0x00}, std::byte{0xFF}, std::byte{0xFF},
+                                 std::byte{0x00}, std::byte{0x00}, std::byte{0xFF}, std::byte{0xFF},
+                                 std::byte{0x00}, std::byte{0x00}, std::byte{0xFF}, std::byte{0xFF}}));
+}
+
 TEST(TgaMetadataUVETest, DecodeTgaRgba8ImageUVE_DecodesTopRight32BitWithOpaqueAlpha) {
     TgaRgba8ImageUVE image;
     ASSERT_TRUE(DecodeTgaRgba8ImageUVE(MakeTga32OneByTwoTopRightUVE(), image));
@@ -167,6 +223,15 @@ TEST(TgaMetadataUVETest, DecodeTgaRgba8ImageUVE_RejectsMalformedInputAtomically)
     std::vector<std::byte> invalidGrayscaleDepth = MakeTga8GrayscaleTwoByOneBottomRightUVE();
     invalidGrayscaleDepth[16] = std::byte{16};
     EXPECT_FALSE(DecodeTgaRgba8ImageUVE(invalidGrayscaleDepth, image));
+    std::vector<std::byte> invalidPaletteIndex = MakeTga8PaletteTwoByOneTopLeftUVE();
+    invalidPaletteIndex[25] = std::byte{2};
+    EXPECT_FALSE(DecodeTgaRgba8ImageUVE(invalidPaletteIndex, image));
+    std::vector<std::byte> truncatedPalette = MakeTga8PaletteTwoByOneTopLeftUVE();
+    truncatedPalette.resize(20U);
+    EXPECT_FALSE(DecodeTgaRgba8ImageUVE(truncatedPalette, image));
+    std::vector<std::byte> oversizedImageId = MakeTga8PaletteTwoByOneTopLeftUVE();
+    oversizedImageId[0] = std::byte{0xFF};
+    EXPECT_FALSE(DecodeTgaRgba8ImageUVE(oversizedImageId, image));
     EXPECT_EQ(image.width, original.width);
     EXPECT_EQ(image.height, original.height);
     EXPECT_EQ(image.pixels, original.pixels);
