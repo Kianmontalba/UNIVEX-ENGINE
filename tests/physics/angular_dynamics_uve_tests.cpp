@@ -21,6 +21,18 @@ TEST(AngularDynamicsUVETest, ComputeBoxInverseInertiaUVE_MatchesDiagonalBoxFormu
     EXPECT_NEAR(inverseInertia->z, 3.0F / 10.0F, kEpsilon);
 }
 
+TEST(AngularDynamicsUVETest, ComputeBoxInverseInertiaUVE_PreservesLargeFiniteHalfExtents) {
+    const auto inverseInertia =
+        ComputeBoxInverseInertiaUVE(1.0F, Math::Vector3UVE{1.0e20F, 1.0F, 1.0F});
+
+    ASSERT_TRUE(inverseInertia.has_value());
+    EXPECT_NEAR(inverseInertia->x, 1.5F, 1.0e-5F);
+    EXPECT_TRUE(std::isfinite(inverseInertia->y));
+    EXPECT_TRUE(std::isfinite(inverseInertia->z));
+    EXPECT_GT(inverseInertia->y, 0.0F);
+    EXPECT_GT(inverseInertia->z, 0.0F);
+}
+
 TEST(AngularDynamicsUVETest, ComputeBoxInverseInertiaUVE_ZeroMassReturnsStaticZeroTensor) {
     const auto inverseInertia = ComputeBoxInverseInertiaUVE(0.0F, Math::Vector3UVE{1.0F, 1.0F, 1.0F});
 

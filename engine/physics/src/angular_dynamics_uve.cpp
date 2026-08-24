@@ -28,24 +28,34 @@ std::optional<Math::Vector3UVE> ComputeBoxInverseInertiaUVE(
         return Math::Vector3UVE{};
     }
 
-    const float xSquared = halfExtents.x * halfExtents.x;
-    const float ySquared = halfExtents.y * halfExtents.y;
-    const float zSquared = halfExtents.z * halfExtents.z;
-    const float inverseMass = 1.0F / mass;
+    const double doubleMass = static_cast<double>(mass);
+    const double xSquared = static_cast<double>(halfExtents.x) * static_cast<double>(halfExtents.x);
+    const double ySquared = static_cast<double>(halfExtents.y) * static_cast<double>(halfExtents.y);
+    const double zSquared = static_cast<double>(halfExtents.z) * static_cast<double>(halfExtents.z);
+    const double inverseMass = 1.0 / doubleMass;
     if (!std::isfinite(xSquared) || !std::isfinite(ySquared) || !std::isfinite(zSquared) ||
         !std::isfinite(inverseMass)) {
         return std::nullopt;
     }
-    const Math::Vector3UVE inertia{
-        (mass / 3.0F) * (ySquared + zSquared),
-        (mass / 3.0F) * (xSquared + zSquared),
-        (mass / 3.0F) * (xSquared + ySquared),
+    const double inertiaX = (doubleMass / 3.0) * (ySquared + zSquared);
+    const double inertiaY = (doubleMass / 3.0) * (xSquared + zSquared);
+    const double inertiaZ = (doubleMass / 3.0) * (xSquared + ySquared);
+    const double inverseInertiaX = 1.0 / inertiaX;
+    const double inverseInertiaY = 1.0 / inertiaY;
+    const double inverseInertiaZ = 1.0 / inertiaZ;
+    const Math::Vector3UVE result{
+        static_cast<float>(inverseInertiaX),
+        static_cast<float>(inverseInertiaY),
+        static_cast<float>(inverseInertiaZ),
     };
-    if (!IsFiniteVectorUVE(inertia) || inertia.x <= 0.0F || inertia.y <= 0.0F || inertia.z <= 0.0F ||
-        !std::isfinite(inverseMass)) {
+    if (!std::isfinite(inertiaX) || !std::isfinite(inertiaY) || !std::isfinite(inertiaZ) ||
+        inertiaX <= 0.0 || inertiaY <= 0.0 || inertiaZ <= 0.0 ||
+        !std::isfinite(inverseInertiaX) || !std::isfinite(inverseInertiaY) ||
+        !std::isfinite(inverseInertiaZ) || !IsFiniteVectorUVE(result) ||
+        result.x <= 0.0F || result.y <= 0.0F || result.z <= 0.0F) {
         return std::nullopt;
     }
-    return Math::Vector3UVE{1.0F / inertia.x, 1.0F / inertia.y, 1.0F / inertia.z};
+    return result;
 }
 
 std::optional<Math::Vector3UVE> IntegrateAngularVelocityUVE(

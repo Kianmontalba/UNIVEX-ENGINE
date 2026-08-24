@@ -9,7 +9,9 @@
 namespace UVE::Physics {
 
 /// Returns the diagonal inverse inertia tensor for a box of `halfExtents` and `mass`.
-/// The result is represented by its diagonal vector because this bounded slice has no rotation
+/// Finite box arithmetic is widened before each result is narrowed to a finite positive float;
+/// constructible large boxes remain representable when their public inverse-inertia components do
+/// so. The result is represented by its diagonal vector because this bounded slice has no rotation
 /// integration or gyroscopic coupling; zero mass returns zero inverse inertia.
 [[nodiscard]] std::optional<Math::Vector3UVE> ComputeBoxInverseInertiaUVE(
     float mass, Math::Vector3UVE halfExtents) noexcept;
