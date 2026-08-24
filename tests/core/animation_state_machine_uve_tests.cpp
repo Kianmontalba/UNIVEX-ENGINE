@@ -32,6 +32,27 @@ AnimationStateMachineUVE MakeMachineUVE() {
     return machine;
 }
 
+AnimationStateMachineUVE MakeInterruptibleMachineUVE(const AnimationInterruptionPolicyUVE policy) {
+    AnimationStateMachineUVE machine = MakeMachineUVE();
+    machine.clips.push_back(MakeClipUVE("jumpClip", 30.0F, 40.0F));
+    machine.states.push_back(AnimationStateUVE{"jump", "jumpClip", "locomotion", "upper", 1.0F});
+    machine.transitions[0].priority = 10;
+    machine.transitions[0].exitTime = 0.0F;
+    machine.transitions[0].interruption = policy;
+    machine.transitions.push_back(AnimationTransitionUVE{
+        "idle_to_jump", "idle", "jump", 1.0F, 0.0F, 9, AnimationInterruptionPolicyUVE::None});
+    machine.transitions.push_back(AnimationTransitionUVE{
+        "run_to_jump", "run", "jump", 1.0F, 0.0F, 8, AnimationInterruptionPolicyUVE::None});
+    return machine;
+}
+
+const AnimationStateMachineEvaluationResultUVE BeginTransitionUVE(
+    AnimationStateMachineEvaluatorUVE& evaluator) {
+    const AnimationStateMachineEvaluationResultUVE result = evaluator.EvaluateUVE(0.01);
+    EXPECT_TRUE(result.IsSuccessUVE());
+    return result;
+}
+
 } // namespace
 
 TEST(AnimationStateMachineUVETest, ValidateAnimationStateMachineUVE_AcceptsBoundedStatesAndTransition) {
@@ -76,6 +97,59 @@ TEST(AnimationStateMachineUVETest, EvaluateUVE_SelectsHighestPriorityEligibleTra
     ASSERT_TRUE(result.IsSuccessUVE());
     EXPECT_EQ(result.debug.activeTransitionId, "idle_to_run");
     EXPECT_EQ(result.debug.selectedTransitionPriority, 8);
+}
+
+TEST(AnimationStateMachineUVETest, EvaluateUVE_NoneInterruptionKeepsActiveTransition) {
+    const AnimationStateMachineUVE machine =
+        MakeInterruptibleMachineUVE(AnimationInterruptionPolicyUVE::None);
+    AnimationStateMachineEvaluatorUVE evaluator(machine);
+    ASSERT_EQ(BeginTransitionUVE(evaluator).debug.activeTransitionId, "idle_to_run");
+
+    const AnimationStateMachineEvaluationResultUVE result = evaluator.EvaluateUVE(0.01);
+
+    ASSERT_TRUE(result.IsSuccessUVE());
+    EXPECT_EQ(result.debug.activeTransitionId, "idle_to_run");
+    EXPECT_EQ(result.debug.targetStateId, "run");
+}
+
+TEST(AnimationStateMachineUVETest, EvaluateUVE_SourceInterruptionSelectsSourceTransition) {
+    const AnimationStateMachineUVE machine =
+        MakeInterruptibleMachineUVE(AnimationInterruptionPolicyUVE::Source);
+    AnimationStateMachineEvaluatorUVE evaluator(machine);
+    ASSERT_EQ(BeginTransitionUVE(evaluator).debug.activeTransitionId, "idle_to_run");
+
+    const AnimationStateMachineEvaluationResultUVE result = evaluator.EvaluateUVE(0.01);
+
+    ASSERT_TRUE(result.IsSuccessUVE());
+    EXPECT_EQ(result.debug.activeTransitionId, "idle_to_jump");
+    EXPECT_EQ(result.debug.targetStateId, "jump");
+}
+
+TEST(AnimationStateMachineUVETest, EvaluateUVE_TargetInterruptionSelectsTargetTransition) {
+    const AnimationStateMachineUVE machine =
+        MakeInterruptibleMachineUVE(AnimationInterruptionPolicyUVE::Target);
+    AnimationStateMachineEvaluatorUVE evaluator(machine);
+    ASSERT_EQ(BeginTransitionUVE(evaluator).debug.activeTransitionId, "idle_to_run");
+
+    const AnimationStateMachineEvaluationResultUVE result = evaluator.EvaluateUVE(0.01);
+
+    ASSERT_TRUE(result.IsSuccessUVE());
+    EXPECT_EQ(result.debug.activeTransitionId, "run_to_jump");
+    EXPECT_EQ(result.debug.targetStateId, "jump");
+}
+
+TEST(AnimationStateMachineUVETest, EvaluateUVE_SourceOrTargetUsesPriorityAcrossBothStates) {
+    const AnimationStateMachineUVE machine =
+        MakeInterruptibleMachineUVE(AnimationInterruptionPolicyUVE::SourceOrTarget);
+    AnimationStateMachineEvaluatorUVE evaluator(machine);
+    ASSERT_EQ(BeginTransitionUVE(evaluator).debug.activeTransitionId, "idle_to_run");
+
+    const AnimationStateMachineEvaluationResultUVE result = evaluator.EvaluateUVE(0.01);
+
+    ASSERT_TRUE(result.IsSuccessUVE());
+    EXPECT_EQ(result.debug.activeTransitionId, "idle_to_jump");
+    EXPECT_EQ(result.debug.targetStateId, "jump");
+    EXPECT_EQ(result.debug.selectedTransitionPriority, 9);
 }
 
 TEST(AnimationStateMachineUVETest, ValidateAnimationStateMachineUVE_RejectsUnknownClipAndInvalidExitTime) {

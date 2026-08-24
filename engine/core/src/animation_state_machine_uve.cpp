@@ -119,6 +119,7 @@ AnimationStateMachineEvaluationResultUVE AnimationStateMachineEvaluatorUVE::Eval
     m_debug.normalizedTime += clampedDelta * static_cast<double>(current->speed);
     m_debug.normalizedTime = std::fmod(m_debug.normalizedTime, 1.0);
 
+    const bool transitionWasActiveAtFrameStart = m_debug.transitioning;
     if (!m_debug.transitioning) {
         const AnimationTransitionUVE* transition = SelectTransitionUVE(*current);
         if (transition != nullptr) {
@@ -147,9 +148,32 @@ AnimationStateMachineEvaluationResultUVE AnimationStateMachineEvaluatorUVE::Eval
             return result;
         }
         const AnimationTransitionUVE& transition = *transitionIterator;
-        m_debug.transitionAlpha = std::min(1.0, m_debug.transitionAlpha +
-            (transition.durationSeconds <= 0.0F ? 1.0 : clampedDelta / transition.durationSeconds));
-        if (m_debug.transitionAlpha >= 1.0) {
+        const AnimationTransitionUVE* transitionToAdvance = &transition;
+        if (transitionWasActiveAtFrameStart) {
+            if (const AnimationTransitionUVE* interruption = SelectInterruptionTransitionUVE(transition);
+                interruption != nullptr) {
+                m_debug.activeTransitionId = interruption->transitionId;
+                m_debug.targetStateId = interruption->targetStateId;
+                m_debug.transitionAlpha = interruption->durationSeconds <= 0.0F ? 1.0 : 0.0;
+                m_debug.selectedTransitionPriority = interruption->priority;
+                transitionToAdvance = interruption;
+                if (interruption->durationSeconds <= 0.0F) {
+                    m_debug.currentStateId = interruption->targetStateId;
+                    m_debug.targetStateId.clear();
+                    m_debug.activeTransitionId.clear();
+                    m_debug.transitioning = false;
+                    m_debug.transitionAlpha = 0.0;
+                    m_debug.normalizedTime = 0.0;
+                    current = FindStateUVE(m_debug.currentStateId);
+                }
+            }
+        }
+        if (m_debug.transitioning) {
+            m_debug.transitionAlpha = std::min(1.0, m_debug.transitionAlpha +
+                (transitionToAdvance->durationSeconds <= 0.0F ? 1.0 :
+                 clampedDelta / transitionToAdvance->durationSeconds));
+        }
+        if (m_debug.transitioning && m_debug.transitionAlpha >= 1.0) {
             m_debug.currentStateId = m_debug.targetStateId;
             m_debug.targetStateId.clear();
             m_debug.activeTransitionId.clear();
@@ -209,6 +233,31 @@ const AnimationStateUVE* AnimationStateMachineEvaluatorUVE::FindStateUVE(const s
         return state.stateId == stateId;
     });
     return iterator == m_machine.states.cend() ? nullptr : &*iterator;
+}
+
+const AnimationTransitionUVE* AnimationStateMachineEvaluatorUVE::SelectInterruptionTransitionUVE(
+    const AnimationTransitionUVE& activeTransition) const noexcept {
+    if (activeTransition.interruption == AnimationInterruptionPolicyUVE::None) {
+        return nullptr;
+    }
+    const auto allowsSource = activeTransition.interruption == AnimationInterruptionPolicyUVE::Source ||
+                              activeTransition.interruption == AnimationInterruptionPolicyUVE::SourceOrTarget;
+    const auto allowsTarget = activeTransition.interruption == AnimationInterruptionPolicyUVE::Target ||
+                              activeTransition.interruption == AnimationInterruptionPolicyUVE::SourceOrTarget;
+    const AnimationTransitionUVE* selected = nullptr;
+    for (const AnimationTransitionUVE& candidate : m_machine.transitions) {
+        const bool sourceMatch = allowsSource && candidate.sourceStateId == activeTransition.sourceStateId;
+        const bool targetMatch = allowsTarget && candidate.sourceStateId == activeTransition.targetStateId;
+        if (candidate.transitionId == activeTransition.transitionId || (!sourceMatch && !targetMatch) ||
+            m_debug.normalizedTime + 1.0e-9 < static_cast<double>(candidate.exitTime)) {
+            continue;
+        }
+        if (selected == nullptr || candidate.priority > selected->priority ||
+            (candidate.priority == selected->priority && candidate.transitionId < selected->transitionId)) {
+            selected = &candidate;
+        }
+    }
+    return selected;
 }
 
 const AnimationTransitionUVE* AnimationStateMachineEvaluatorUVE::SelectTransitionUVE(
