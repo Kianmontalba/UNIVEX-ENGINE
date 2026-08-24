@@ -3327,6 +3327,33 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_DispatchesScalarMathUtilityNodes)
     ASSERT_TRUE(ExecuteScriptBytecodeUVE(makeProgram(37U, "math.float.remap"), remapContext).IsSuccessUVE());
     EXPECT_FLOAT_EQ(std::get<float>(*remapContext.FindOutputUVE(37U, "Result")), 150.0F);
 
+    constexpr float kFloatMax = std::numeric_limits<float>::max();
+    ScriptVmExecutionContextUVE extremeLerpContext;
+    ASSERT_TRUE(extremeLerpContext.SetInputUVE(47U, "A", -kFloatMax));
+    ASSERT_TRUE(extremeLerpContext.SetInputUVE(47U, "B", kFloatMax));
+    ASSERT_TRUE(extremeLerpContext.SetInputUVE(47U, "Alpha", 0.5F));
+    ASSERT_TRUE(ExecuteScriptBytecodeUVE(makeProgram(47U, "math.float.lerp"), extremeLerpContext).IsSuccessUVE());
+    EXPECT_FLOAT_EQ(std::get<float>(*extremeLerpContext.FindOutputUVE(47U, "Result")), 0.0F);
+
+    ScriptVmExecutionContextUVE extremeRemapContext;
+    ASSERT_TRUE(extremeRemapContext.SetInputUVE(48U, "Value", 0.0F));
+    ASSERT_TRUE(extremeRemapContext.SetInputUVE(48U, "FromMin", -kFloatMax));
+    ASSERT_TRUE(extremeRemapContext.SetInputUVE(48U, "FromMax", kFloatMax));
+    ASSERT_TRUE(extremeRemapContext.SetInputUVE(48U, "ToMin", -1.0F));
+    ASSERT_TRUE(extremeRemapContext.SetInputUVE(48U, "ToMax", 1.0F));
+    ASSERT_TRUE(ExecuteScriptBytecodeUVE(makeProgram(48U, "math.float.remap"), extremeRemapContext).IsSuccessUVE());
+    EXPECT_FLOAT_EQ(std::get<float>(*extremeRemapContext.FindOutputUVE(48U, "Result")), 0.0F);
+
+    ScriptVmExecutionContextUVE extremeRandomRangeContext;
+    ASSERT_TRUE(extremeRandomRangeContext.SetInputUVE(49U, "Seed", 123.0F));
+    ASSERT_TRUE(extremeRandomRangeContext.SetInputUVE(49U, "Min", -kFloatMax));
+    ASSERT_TRUE(extremeRandomRangeContext.SetInputUVE(49U, "Max", kFloatMax));
+    ASSERT_TRUE(ExecuteScriptBytecodeUVE(makeProgram(49U, "math.float.random_range"), extremeRandomRangeContext).IsSuccessUVE());
+    const auto extremeRandomRange = extremeRandomRangeContext.FindOutputUVE(49U, "Result");
+    ASSERT_TRUE(extremeRandomRange.has_value());
+    ASSERT_TRUE(std::holds_alternative<float>(*extremeRandomRange));
+    EXPECT_TRUE(std::isfinite(std::get<float>(*extremeRandomRange)));
+
     const auto runUnary = [&](const std::uint32_t nodeId, const char* nodeTypeId, const float value) {
         ScriptVmExecutionContextUVE context;
         EXPECT_TRUE(context.SetInputUVE(nodeId, "Value", value));
