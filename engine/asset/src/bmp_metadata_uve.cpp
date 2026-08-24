@@ -68,10 +68,10 @@ bool DecodeBmpRgba8ImageUVE(const std::vector<std::byte>& bytes, BmpRgba8ImageUV
     const bool packed4Image = bitsPerPixel == 4U;
     const bool indexedImage = packed1Image || packed4Image || bitsPerPixel == 8U;
     const bool packed16Image = bitsPerPixel == 16U;
-    const bool bitfields565Image = packed16Image && compression == 3U;
+    const bool bitfieldsImage = packed16Image && compression == 3U;
     if (signedWidth <= 0 || signedHeight == 0 || planes != 1U ||
         (!indexedImage && !packed16Image && bitsPerPixel != 24U && bitsPerPixel != 32U) ||
-        (!bitfields565Image && compression != 0U)) {
+        (!bitfieldsImage && compression != 0U)) {
         return false;
     }
 
@@ -93,14 +93,23 @@ bool DecodeBmpRgba8ImageUVE(const std::vector<std::byte>& bytes, BmpRgba8ImageUV
     }
     constexpr std::size_t kBmpBitfieldsOffsetUVE = kFileHeaderBytesUVE + kInfoHeaderBytesUVE;
     constexpr std::size_t kBmpBitfieldsBytesUVE = 12U;
-    if (bitfields565Image && (infoHeaderSize != kInfoHeaderBytesUVE ||
-                              !CanReadUVE(bytes, kBmpBitfieldsOffsetUVE, kBmpBitfieldsBytesUVE) ||
-                              static_cast<std::uint64_t>(pixelOffset) <
-                                  static_cast<std::uint64_t>(kBmpBitfieldsOffsetUVE + kBmpBitfieldsBytesUVE) ||
-                              ReadU32LittleEndianUVE(bytes, kBmpBitfieldsOffsetUVE) != 0xF800U ||
-                              ReadU32LittleEndianUVE(bytes, kBmpBitfieldsOffsetUVE + 4U) != 0x07E0U ||
-                              ReadU32LittleEndianUVE(bytes, kBmpBitfieldsOffsetUVE + 8U) != 0x001FU)) {
-        return false;
+    bool bitfields555Image = false;
+    bool bitfields565Image = false;
+    if (bitfieldsImage) {
+        if (infoHeaderSize != kInfoHeaderBytesUVE ||
+            !CanReadUVE(bytes, kBmpBitfieldsOffsetUVE, kBmpBitfieldsBytesUVE) ||
+            static_cast<std::uint64_t>(pixelOffset) <
+                static_cast<std::uint64_t>(kBmpBitfieldsOffsetUVE + kBmpBitfieldsBytesUVE)) {
+            return false;
+        }
+        const std::uint32_t redMask = ReadU32LittleEndianUVE(bytes, kBmpBitfieldsOffsetUVE);
+        const std::uint32_t greenMask = ReadU32LittleEndianUVE(bytes, kBmpBitfieldsOffsetUVE + 4U);
+        const std::uint32_t blueMask = ReadU32LittleEndianUVE(bytes, kBmpBitfieldsOffsetUVE + 8U);
+        bitfields555Image = redMask == 0x7C00U && greenMask == 0x03E0U && blueMask == 0x001FU;
+        bitfields565Image = redMask == 0xF800U && greenMask == 0x07E0U && blueMask == 0x001FU;
+        if (!bitfields555Image && !bitfields565Image) {
+            return false;
+        }
     }
     const std::uint64_t absoluteHeight = signedHeight < 0
                                               ? static_cast<std::uint64_t>(-(static_cast<std::int64_t>(signedHeight)))
