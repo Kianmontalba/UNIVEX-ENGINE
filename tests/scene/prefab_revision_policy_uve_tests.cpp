@@ -1,5 +1,6 @@
 // Copyright (c) 2026 UniVex Studios. All Rights Reserved.
 #include "uve/scene/prefab_revision_policy_uve.h"
+#include "uve/scene/components/prefab_instance_component_uve.h"
 #include <gtest/gtest.h>
 namespace UVE::Scene::Tests {
 namespace {
@@ -12,6 +13,29 @@ TEST(PrefabRevisionPolicyUVETest, MismatchedNonzeroRevisionsAreStale) {
 TEST(PrefabRevisionPolicyUVETest, ZeroRevisionIsInvalid) {
     EXPECT_EQ(EvaluatePrefabRevisionUVE(0U, 7U), PrefabRevisionStatusUVE::Invalid);
     EXPECT_EQ(EvaluatePrefabRevisionUVE(7U, 0U), PrefabRevisionStatusUVE::Invalid);
+}
+TEST(PrefabRevisionPolicyUVETest, RefreshPrefabInstanceRevisionUVE_UpdatesBothRevisionsWithoutOverrides) {
+    PrefabInstanceComponentUVE instance{Asset::AssetGuidUVE{7U}, {}, 3U, 3U};
+
+    EXPECT_TRUE(RefreshPrefabInstanceRevisionUVE(instance, 9U));
+    EXPECT_EQ(instance.sourceRevision, 9U);
+    EXPECT_EQ(instance.instanceRevision, 9U);
+}
+TEST(PrefabRevisionPolicyUVETest, RefreshPrefabInstanceRevisionUVE_RejectsLocalOverridesAtomically) {
+    PrefabInstanceComponentUVE instance{Asset::AssetGuidUVE{8U}, {{"Transform.position", "[1,2,3]"}}, 3U, 3U};
+
+    EXPECT_FALSE(RefreshPrefabInstanceRevisionUVE(instance, 9U));
+    EXPECT_EQ(instance.sourceRevision, 3U);
+    EXPECT_EQ(instance.instanceRevision, 3U);
+    ASSERT_EQ(instance.overrides.size(), 1U);
+    EXPECT_EQ(instance.overrides.front().serializedValue, "[1,2,3]");
+}
+TEST(PrefabRevisionPolicyUVETest, RefreshPrefabInstanceRevisionUVE_RejectsRevisionRegressionAtomically) {
+    PrefabInstanceComponentUVE instance{Asset::AssetGuidUVE{9U}, {}, 7U, 7U};
+
+    EXPECT_FALSE(RefreshPrefabInstanceRevisionUVE(instance, 6U));
+    EXPECT_EQ(instance.sourceRevision, 7U);
+    EXPECT_EQ(instance.instanceRevision, 7U);
 }
 } // namespace
 } // namespace UVE::Scene::Tests
