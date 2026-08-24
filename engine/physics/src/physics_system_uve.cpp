@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <vector>
 
 #include "uve/debug/assert_uve.h"
@@ -30,6 +31,23 @@ namespace {
 /// on demand rather than stored on RigidBodyComponentUVE, so mass/inverseMass can never desync.
 [[nodiscard]] float EffectiveInverseMassUVE(bool isKinematic, float mass) noexcept {
     return (isKinematic || mass <= 0.0F) ? 0.0F : 1.0F / mass;
+}
+
+[[nodiscard]] bool TryIntegratePositionUVE(const Math::Vector3UVE& position,
+                                           const Math::Vector3UVE& velocity,
+                                           float fixedDeltaTimeSeconds,
+                                           Math::Vector3UVE& integratedPosition) noexcept {
+    const double deltaTime = static_cast<double>(fixedDeltaTimeSeconds);
+    const double maxFloat = static_cast<double>(std::numeric_limits<float>::max());
+    const double x = static_cast<double>(position.x) + static_cast<double>(velocity.x) * deltaTime;
+    const double y = static_cast<double>(position.y) + static_cast<double>(velocity.y) * deltaTime;
+    const double z = static_cast<double>(position.z) + static_cast<double>(velocity.z) * deltaTime;
+    if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(z) || std::abs(x) > maxFloat ||
+        std::abs(y) > maxFloat || std::abs(z) > maxFloat) {
+        return false;
+    }
+    integratedPosition = Math::Vector3UVE{static_cast<float>(x), static_cast<float>(y), static_cast<float>(z)};
+    return IsFiniteVector3UVE(integratedPosition);
 }
 
 /// Moves `entity` by `positionDelta` (via SetLocalTransformUVE, so dirty-flag propagation stays
@@ -167,8 +185,8 @@ void PhysicsSystemUVE::StepUVE(Scene::IEntityManagerUVE& entityManager, Scene::I
             candidateAngularVelocity = *integratedAngularVelocity;
 
             Scene::TransformComponentUVE newTransform = transform;
-            newTransform.localPosition += candidateVelocity * fixedDeltaTimeSeconds;
-            if (!IsFiniteVector3UVE(newTransform.localPosition)) {
+            if (!TryIntegratePositionUVE(transform.localPosition, candidateVelocity, fixedDeltaTimeSeconds,
+                                         newTransform.localPosition)) {
                 return;
             }
             const float angularSpeedSquared = Math::LengthSquaredUVE(candidateAngularVelocity);
