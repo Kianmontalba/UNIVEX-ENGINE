@@ -36,6 +36,22 @@ void AppendU16LittleEndianUVE(std::vector<std::byte>& bytes, const std::uint16_t
     return tga;
 }
 
+[[nodiscard]] std::vector<std::byte> MakeTga24RleTwoByTwoTopLeftUVE() {
+    std::vector<std::byte> tga;
+    tga.reserve(28U);
+    tga.insert(tga.end(), 12U, std::byte{0});
+    tga[2] = std::byte{10};
+    AppendU16LittleEndianUVE(tga, 2U);
+    AppendU16LittleEndianUVE(tga, 2U);
+    tga.push_back(std::byte{24});
+    tga.push_back(std::byte{0x20});
+    // One raw packet for red/green, followed by one run packet for two blue pixels.
+    tga.insert(tga.end(), {std::byte{0x01}, std::byte{0x00}, std::byte{0x00}, std::byte{0xFF},
+                           std::byte{0x00}, std::byte{0xFF}, std::byte{0x00}, std::byte{0x81},
+                           std::byte{0xFF}, std::byte{0x00}, std::byte{0x00}});
+    return tga;
+}
+
 [[nodiscard]] std::vector<std::byte> MakeTga32OneByTwoTopRightUVE() {
     std::vector<std::byte> tga;
     tga.reserve(26U);
@@ -64,6 +80,18 @@ TEST(TgaMetadataUVETest, DecodeTgaRgba8ImageUVE_DecodesBottomLeft24BitToTopDownO
                                  std::byte{0xFF}, std::byte{0xFF}, std::byte{0xFF}, std::byte{0xFF}}));
 }
 
+TEST(TgaMetadataUVETest, DecodeTgaRgba8ImageUVE_DecodesRle24BitPacketsToTopDownOpaqueRgba) {
+    TgaRgba8ImageUVE image;
+    ASSERT_TRUE(DecodeTgaRgba8ImageUVE(MakeTga24RleTwoByTwoTopLeftUVE(), image));
+    EXPECT_EQ(image.width, 2U);
+    EXPECT_EQ(image.height, 2U);
+    EXPECT_EQ(image.pixels, (std::vector<std::byte>{
+                                 std::byte{0xFF}, std::byte{0x00}, std::byte{0x00}, std::byte{0xFF},
+                                 std::byte{0x00}, std::byte{0xFF}, std::byte{0x00}, std::byte{0xFF},
+                                 std::byte{0x00}, std::byte{0x00}, std::byte{0xFF}, std::byte{0xFF},
+                                 std::byte{0x00}, std::byte{0x00}, std::byte{0xFF}, std::byte{0xFF}}));
+}
+
 TEST(TgaMetadataUVETest, DecodeTgaRgba8ImageUVE_DecodesTopRight32BitWithOpaqueAlpha) {
     TgaRgba8ImageUVE image;
     ASSERT_TRUE(DecodeTgaRgba8ImageUVE(MakeTga32OneByTwoTopRightUVE(), image));
@@ -85,6 +113,12 @@ TEST(TgaMetadataUVETest, DecodeTgaRgba8ImageUVE_RejectsMalformedInputAtomically)
     std::vector<std::byte> invalidDescriptor = MakeTga24TwoByTwoBottomLeftUVE();
     invalidDescriptor[17] = std::byte{0x40};
     EXPECT_FALSE(DecodeTgaRgba8ImageUVE(invalidDescriptor, image));
+    EXPECT_EQ(image.pixels, original.pixels);
+    std::vector<std::byte> truncatedRle = MakeTga24RleTwoByTwoTopLeftUVE();
+    truncatedRle.resize(truncatedRle.size() - 1U);
+    EXPECT_FALSE(DecodeTgaRgba8ImageUVE(truncatedRle, image));
+    EXPECT_EQ(image.width, original.width);
+    EXPECT_EQ(image.height, original.height);
     EXPECT_EQ(image.pixels, original.pixels);
 }
 
