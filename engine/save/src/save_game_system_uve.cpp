@@ -191,7 +191,7 @@ void AppendUint64UVE(std::vector<std::byte>& buffer, std::uint64_t value) {
 }
 
 /// Splits a `.uvesave` payload back into its metadata and world JSON byte sections. Returns
-/// false (no logging — callers attach path/slot context) on any truncation/bounds failure.
+/// false (no logging — callers attach path/slot context) on any truncation, bounds, or trailing-byte failure.
 [[nodiscard]] bool SplitSavePayloadUVE(const std::vector<std::byte>& payload,
                                         std::vector<std::byte>& outMetadataJsonBytes,
                                         std::vector<std::byte>& outWorldJsonBytes) {
@@ -206,7 +206,7 @@ void AppendUint64UVE(std::vector<std::byte>& buffer, std::uint64_t value) {
         !ReadBytesFromBufferUVE(payload, offset, worldLength, outWorldJsonBytes)) {
         return false;
     }
-    return true;
+    return offset == payload.size();
 }
 
 /// Reads only the metadata section of a `.uvesave` payload — never copies the (potentially much

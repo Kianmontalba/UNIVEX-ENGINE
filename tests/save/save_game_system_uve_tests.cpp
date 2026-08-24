@@ -163,6 +163,24 @@ TEST_F(SaveGameSystemUVETest, GetSaveMetadataUVE_RejectsTruncatedAndTrailingWorl
     EXPECT_FALSE(saveGameSystem.GetSaveMetadataUVE(16).has_value());
 }
 
+TEST_F(SaveGameSystemUVETest, LoadUVE_RejectsTrailingWorldSection) {
+    const EntityUVE entity = entityManager.CreateEntityUVE();
+    ASSERT_TRUE(saveGameSystem.SaveUVE(21, entityManager, {entity}, GameStateMetadataUVE{}));
+
+    const std::filesystem::path slotPath = saveDirectory / "slot_21.uvesave";
+    const auto originalFile = Asset::ReadUveFileUVE(slotPath);
+    ASSERT_TRUE(originalFile.has_value());
+    std::vector<std::byte> expandedPayload;
+    ASSERT_TRUE(DecompressSavePayloadUVE(originalFile->second, expandedPayload));
+    expandedPayload.push_back(std::byte{0xA5});
+    ASSERT_TRUE(Asset::WriteUveFileUVE(slotPath, Asset::AssetKindUVE::Save,
+                                       CompressSavePayloadUVE(expandedPayload)));
+
+    EntityManagerUVE loadedManager(memoryManager.GetDefaultAllocatorUVE(), eventSystem);
+    EXPECT_TRUE(saveGameSystem.LoadUVE(21, loadedManager).empty());
+    EXPECT_EQ(loadedManager.GetEntityCountUVE(), 0U);
+}
+
 TEST_F(SaveGameSystemUVETest, SaveUVE_OverwritesExistingSlot) {
     const EntityUVE firstEntity = entityManager.CreateEntityUVE();
     entityManager.AddComponentUVE<RigidBodyComponentUVE>(firstEntity, RigidBodyComponentUVE{1.0F, false});
