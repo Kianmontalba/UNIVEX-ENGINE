@@ -22,6 +22,8 @@ public:
 
     [[nodiscard]] std::optional<DerivedArtifactCacheRecordUVE>
     LoadImportRecordUVE(const std::filesystem::path& destinationPath) const override;
+    /// Rejects stale caller records before cache-root or artifact mutation; only fresh import results
+    /// may be persisted through the generic store path.
     [[nodiscard]] bool StoreImportRecordUVE(const std::filesystem::path& destinationPath,
                                              const DerivedArtifactCacheRecordUVE& record) override;
     [[nodiscard]] std::size_t MarkStaleForSourceUVE(const std::filesystem::path& sourcePath) override;

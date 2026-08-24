@@ -47,8 +47,10 @@ public:
     [[nodiscard]] virtual std::optional<DerivedArtifactCacheRecordUVE>
     LoadImportRecordUVE(const std::filesystem::path& destinationPath) const = 0;
 
-    /// Persists one metadata record at the deterministic artifact location associated with
-    /// `destinationPath`. Implementations may create only their own configured cache directories.
+    /// Persists one fresh metadata record at the deterministic artifact location associated with
+    /// `destinationPath`. Generic stores reject `record.stale == true`; stale state is created only
+    /// by targeted MarkStaleForSourceUVE() invalidation and remains until a successful fresh import
+    /// overwrites it. Implementations may create only their own configured cache directories.
     /// Returns false without modifying the previous valid artifact when the record is invalid or
     /// cannot be written atomically.
     [[nodiscard]] virtual bool StoreImportRecordUVE(const std::filesystem::path& destinationPath,

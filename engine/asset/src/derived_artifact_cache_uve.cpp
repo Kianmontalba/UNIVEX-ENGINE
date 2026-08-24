@@ -156,7 +156,7 @@ bool DerivedArtifactCacheUVE::StoreImportRecordUVE(const std::filesystem::path& 
                                                     const DerivedArtifactCacheRecordUVE& record) {
     if (destinationPath.empty() || record.schemaVersion != kDerivedArtifactCacheSchemaVersionUVE ||
         record.sourcePath.empty() || record.destinationPath.empty() || record.settingsVersion.empty() ||
-        record.assetGuid == kInvalidAssetGuidUVE ||
+        record.assetGuid == kInvalidAssetGuidUVE || record.stale ||
         NormalizePathUVE(destinationPath) != NormalizePathUVE(record.destinationPath)) {
         return false;
     }
