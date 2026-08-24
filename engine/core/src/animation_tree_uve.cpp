@@ -13,6 +13,22 @@ namespace {
 
 constexpr std::size_t kMaximumIdentifierBytesUVE = 128U;
 
+struct AnimationTreeCacheKeyUVE final {
+    std::uint32_t nodeId = 0U;
+    double localTime = 0.0;
+
+    [[nodiscard]] bool operator==(const AnimationTreeCacheKeyUVE&) const noexcept = default;
+};
+
+struct AnimationTreeCacheKeyHashUVE final {
+    [[nodiscard]] std::size_t operator()(const AnimationTreeCacheKeyUVE& key) const noexcept {
+        const std::size_t nodeHash = std::hash<std::uint32_t>{}(key.nodeId);
+        const std::size_t timeHash = std::hash<double>{}(key.localTime);
+        return nodeHash ^ (timeHash + static_cast<std::size_t>(0x9e3779b9U) +
+                           (nodeHash << 6U) + (nodeHash >> 2U));
+    }
+};
+
 [[nodiscard]] const AnimationTreeNodeUVE* FindNodeUVE(
     const AnimationTreeUVE& tree, const std::uint32_t id) noexcept {
     const auto iterator = std::find_if(tree.nodes.cbegin(), tree.nodes.cend(), [id](const auto& node) {
@@ -172,11 +188,12 @@ AnimationTreeEvaluationResultUVE EvaluateAnimationTreeUVE(
         result.message = "AnimationTree has no output node.";
         return result;
     }
-    std::unordered_map<std::uint32_t, TransformPoseUVE> cache;
+    std::unordered_map<AnimationTreeCacheKeyUVE, TransformPoseUVE, AnimationTreeCacheKeyHashUVE> cache;
     std::unordered_set<std::uint32_t> evaluating;
     std::function<bool(const AnimationTreeNodeUVE&, double, TransformPoseUVE&)> evaluate =
         [&](const AnimationTreeNodeUVE& node, const double localTime, TransformPoseUVE& outPose) {
-            if (const auto cached = cache.find(node.id); cached != cache.end()) {
+            const AnimationTreeCacheKeyUVE cacheKey{node.id, localTime};
+            if (const auto cached = cache.find(cacheKey); cached != cache.end()) {
                 outPose = cached->second;
                 return true;
             }
@@ -225,7 +242,7 @@ AnimationTreeEvaluationResultUVE EvaluateAnimationTreeUVE(
             }
             evaluating.erase(node.id);
             if (success) {
-                cache.emplace(node.id, outPose);
+                cache.emplace(cacheKey, outPose);
                 ++result.evaluatedNodeCount;
             }
             return success;
