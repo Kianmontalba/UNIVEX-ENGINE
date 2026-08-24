@@ -241,6 +241,25 @@ TEST_F(PhysicsSystemUVETest, StepUVE_DerivedOverflowFailsClosedWithoutPublishing
     EXPECT_EQ(GetWorldPositionUVE(angularBody), (Math::Vector3UVE{2.0F, 3.0F, 4.0F}));
 }
 
+TEST_F(PhysicsSystemUVETest, StepUVE_FinitePositionCancellation_PreservesRepresentableResult) {
+    Scene::RigidBodyComponentUVE rigidBody;
+    rigidBody.velocity = Math::Vector3UVE{std::numeric_limits<float>::max(), 0.0F, 0.0F};
+    const Scene::EntityUVE body = MakeBodyEntityUVE(
+        Math::Vector3UVE{-std::numeric_limits<float>::max(), 2.0F, 3.0F}, rigidBody);
+    PhysicsSystemUVE physicsSystem(collisionSystem, Math::Vector3UVE{});
+
+    physicsSystem.StepUVE(entityManager, sceneGraph, 2.0F);
+
+    const Scene::TransformComponentUVE& transform =
+        entityManager.GetComponentUVE<Scene::TransformComponentUVE>(body);
+    const Scene::RigidBodyComponentUVE& bodyAfter =
+        entityManager.GetComponentUVE<Scene::RigidBodyComponentUVE>(body);
+    EXPECT_FLOAT_EQ(transform.localPosition.x, std::numeric_limits<float>::max());
+    EXPECT_FLOAT_EQ(transform.localPosition.y, 2.0F);
+    EXPECT_FLOAT_EQ(transform.localPosition.z, 3.0F);
+    EXPECT_FLOAT_EQ(bodyAfter.velocity.x, std::numeric_limits<float>::max());
+}
+
 TEST_F(PhysicsSystemUVETest, StepUVE_GravityScaleDouble_FallsExactlyTwiceAsFar) {
     PhysicsSystemUVE physicsSystem(collisionSystem, Math::Vector3UVE{0.0F, -10.0F, 0.0F});
     Scene::RigidBodyComponentUVE normalScale;

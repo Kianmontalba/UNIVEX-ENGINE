@@ -26,6 +26,8 @@ public:
     explicit PhysicsSystemUVE(ICollisionSystemUVE& collisionSystem,
                                Math::Vector3UVE gravity = Math::Vector3UVE{0.0F, -9.81F, 0.0F});
 
+    /// Integrates finite rigid-body positions with widened intermediates before safe float-domain
+    /// publication; invalid inputs and results preserve the prior state atomically.
     void StepUVE(Scene::IEntityManagerUVE& entityManager, Scene::ISceneGraphUVE& sceneGraph,
                  float fixedDeltaTimeSeconds) override;
 
