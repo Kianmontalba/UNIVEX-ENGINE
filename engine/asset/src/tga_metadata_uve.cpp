@@ -13,6 +13,7 @@ namespace {
 
 constexpr std::size_t kTgaHeaderBytesUVE = 18U;
 constexpr std::uint8_t kTgaTrueColorImageTypeUVE = 2U;
+constexpr std::uint8_t kTgaRleTrueColorImageTypeUVE = 10U;
 constexpr std::uint8_t kTgaTopOriginBitUVE = 0x20U;
 constexpr std::uint8_t kTgaRightOriginBitUVE = 0x10U;
 constexpr std::uint8_t kTgaUnsupportedInterleaveBitsUVE = 0xC0U;
@@ -38,7 +39,9 @@ bool DecodeTgaRgba8ImageUVE(const std::vector<std::byte>& bytes,
     const std::uint16_t height = ReadU16LittleEndianUVE(bytes, 14U);
     const std::uint8_t pixelDepth = std::to_integer<std::uint8_t>(bytes[16]);
     const std::uint8_t imageDescriptor = std::to_integer<std::uint8_t>(bytes[17]);
-    if (colorMapType != 0U || imageType != kTgaTrueColorImageTypeUVE || width == 0U || height == 0U ||
+    if (colorMapType != 0U ||
+        (imageType != kTgaTrueColorImageTypeUVE && imageType != kTgaRleTrueColorImageTypeUVE) || width == 0U ||
+        height == 0U ||
         (pixelDepth != 24U && pixelDepth != 32U) ||
         (imageDescriptor & kTgaUnsupportedInterleaveBitsUVE) != 0U) {
         return false;
@@ -59,8 +62,9 @@ bool DecodeTgaRgba8ImageUVE(const std::vector<std::byte>& bytes,
         return false;
     }
     const std::size_t pixelOffset = kTgaHeaderBytesUVE + idLength;
-    if (sourcePixelBytes > kMaximumSizeT - pixelOffset ||
-        pixelOffset + sourcePixelBytes > bytes.size()) {
+    if (imageType == kTgaTrueColorImageTypeUVE &&
+        (sourcePixelBytes > kMaximumSizeT - pixelOffset ||
+         pixelOffset + sourcePixelBytes > bytes.size())) {
         return false;
     }
     if (static_cast<std::size_t>(width) > kMaximumSizeT / static_cast<std::size_t>(height)) {
@@ -84,17 +88,58 @@ bool DecodeTgaRgba8ImageUVE(const std::vector<std::byte>& bytes,
 
     const bool topOrigin = (imageDescriptor & kTgaTopOriginBitUVE) != 0U;
     const bool rightOrigin = (imageDescriptor & kTgaRightOriginBitUVE) != 0U;
-    for (std::size_t sourceY = 0U; sourceY < static_cast<std::size_t>(height); ++sourceY) {
+    const auto writePixel = [&](const std::size_t decodedIndex, const std::size_t sourceOffset) noexcept {
+        const std::size_t sourceY = decodedIndex / static_cast<std::size_t>(width);
+        const std::size_t sourceX = decodedIndex % static_cast<std::size_t>(width);
         const std::size_t outputY = topOrigin ? sourceY : static_cast<std::size_t>(height) - 1U - sourceY;
-        for (std::size_t sourceX = 0U; sourceX < static_cast<std::size_t>(width); ++sourceX) {
-            const std::size_t outputX = rightOrigin ? static_cast<std::size_t>(width) - 1U - sourceX : sourceX;
-            const std::size_t sourceOffset = pixelOffset + sourceY * rowBytes + sourceX * bytesPerPixel;
-            const std::size_t outputOffset = (outputY * static_cast<std::size_t>(width) + outputX) * 4U;
-            candidatePixels[outputOffset] = bytes[sourceOffset + 2U];
-            candidatePixels[outputOffset + 1U] = bytes[sourceOffset + 1U];
-            candidatePixels[outputOffset + 2U] = bytes[sourceOffset];
-            candidatePixels[outputOffset + 3U] = std::byte{0xFF};
+        const std::size_t outputX = rightOrigin ? static_cast<std::size_t>(width) - 1U - sourceX : sourceX;
+        const std::size_t outputOffset = (outputY * static_cast<std::size_t>(width) + outputX) * 4U;
+        candidatePixels[outputOffset] = bytes[sourceOffset + 2U];
+        candidatePixels[outputOffset + 1U] = bytes[sourceOffset + 1U];
+        candidatePixels[outputOffset + 2U] = bytes[sourceOffset];
+        candidatePixels[outputOffset + 3U] = std::byte{0xFF};
+    };
+
+    std::size_t encodedOffset = pixelOffset;
+    std::size_t decodedPixelCount = 0U;
+    while (decodedPixelCount < pixelCount) {
+        if (imageType == kTgaTrueColorImageTypeUVE) {
+            if (bytes.size() - encodedOffset < bytesPerPixel) {
+                return false;
+            }
+            writePixel(decodedPixelCount, encodedOffset);
+            encodedOffset += bytesPerPixel;
+            ++decodedPixelCount;
+            continue;
         }
+
+        if (encodedOffset >= bytes.size()) {
+            return false;
+        }
+        const std::uint8_t packetHeader = std::to_integer<std::uint8_t>(bytes[encodedOffset]);
+        ++encodedOffset;
+        const std::size_t packetPixelCount = static_cast<std::size_t>(packetHeader & 0x7FU) + 1U;
+        if (packetPixelCount > pixelCount - decodedPixelCount) {
+            return false;
+        }
+        if ((packetHeader & 0x80U) == 0U) {
+            if (packetPixelCount > (bytes.size() - encodedOffset) / bytesPerPixel) {
+                return false;
+            }
+            for (std::size_t packetIndex = 0U; packetIndex < packetPixelCount; ++packetIndex) {
+                writePixel(decodedPixelCount + packetIndex, encodedOffset + packetIndex * bytesPerPixel);
+            }
+            encodedOffset += packetPixelCount * bytesPerPixel;
+        } else {
+            if (bytes.size() - encodedOffset < bytesPerPixel) {
+                return false;
+            }
+            for (std::size_t packetIndex = 0U; packetIndex < packetPixelCount; ++packetIndex) {
+                writePixel(decodedPixelCount + packetIndex, encodedOffset);
+            }
+            encodedOffset += bytesPerPixel;
+        }
+        decodedPixelCount += packetPixelCount;
     }
 
     outImage.width = width;
