@@ -15,10 +15,12 @@ inline constexpr std::size_t kMaximumObjMeshSourceBytesUVE = 64U * 1024U * 1024U
 inline constexpr std::uint32_t kMaximumObjMeshVerticesUVE = 1'000'000U;
 
 /// Converts a bounded OBJ source into a failure-atomic CPU MeshAssetUVE. The v1 path supports
-/// position/UV/normal declarations, `v`, `v/vt`, `v//vn`, and `v/vt/vn` face tokens, fan-triangulates
+/// position/UV/normal declarations, exactly three position coordinates or an optional finite nonzero
+/// homogeneous position weight, `v`, `v/vt`, `v//vn`, and `v/vt/vn` face tokens, fan-triangulates
 /// polygons, computes finite fallback face normals when `vn` is absent, and publishes copied local
-/// bounds. It does not load MTL files, resolve external textures, preserve groups/materials, or own
-/// filesystem, importer-registration, or GPU resources.
+/// bounds. It rejects trailing position coordinates instead of silently ignoring malformed source. It
+/// does not load MTL files, resolve external textures, preserve groups/materials, or own filesystem,
+/// importer-registration, or GPU resources.
 [[nodiscard]] bool ConvertObjMeshUVE(std::string_view source, MeshAssetUVE& outMesh);
 
 } // namespace UVE::Asset

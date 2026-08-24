@@ -74,6 +74,9 @@ constexpr float kDegenerateTriangleEpsilonSquaredUVE = 0.00000001F;
     } else {
         outPosition = Math::Vector3UVE{*x, *y, *z};
     }
+    if (!NextTokenUVE(rest).empty()) {
+        return false;
+    }
     return std::isfinite(outPosition.x) && std::isfinite(outPosition.y) && std::isfinite(outPosition.z);
 }
 
