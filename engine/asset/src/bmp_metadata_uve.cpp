@@ -64,8 +64,9 @@ bool DecodeBmpRgba8ImageUVE(const std::vector<std::byte>& bytes, BmpRgba8ImageUV
     const std::uint16_t bitsPerPixel = ReadU16LittleEndianUVE(bytes, kFileHeaderBytesUVE + 14U);
     const std::uint32_t compression = ReadU32LittleEndianUVE(bytes, kFileHeaderBytesUVE + 16U);
     const std::uint32_t colorsUsed = ReadU32LittleEndianUVE(bytes, kFileHeaderBytesUVE + 32U);
+    const bool packed1Image = bitsPerPixel == 1U;
     const bool packed4Image = bitsPerPixel == 4U;
-    const bool indexedImage = packed4Image || bitsPerPixel == 8U;
+    const bool indexedImage = packed1Image || packed4Image || bitsPerPixel == 8U;
     const bool packed16Image = bitsPerPixel == 16U;
     const bool bitfields565Image = packed16Image && compression == 3U;
     if (signedWidth <= 0 || signedHeight == 0 || planes != 1U ||
@@ -77,10 +78,11 @@ bool DecodeBmpRgba8ImageUVE(const std::vector<std::byte>& bytes, BmpRgba8ImageUV
     const std::uint64_t width = static_cast<std::uint32_t>(signedWidth);
     const std::size_t paletteOffset = kFileHeaderBytesUVE + static_cast<std::size_t>(infoHeaderSize);
     const std::uint32_t paletteEntryCount = indexedImage
-                                                  ? (colorsUsed == 0U ? (packed4Image ? 16U : 256U) : colorsUsed)
+                                                  ? (colorsUsed == 0U ? (packed1Image ? 2U : (packed4Image ? 16U : 256U))
+                                                                      : colorsUsed)
                                                   : 0U;
     constexpr std::size_t kBmpPaletteEntryBytesUVE = 4U;
-    const std::uint32_t maximumPaletteEntries = packed4Image ? 16U : 256U;
+    const std::uint32_t maximumPaletteEntries = packed1Image ? 2U : (packed4Image ? 16U : 256U);
     if (indexedImage && paletteEntryCount > maximumPaletteEntries) {
         return false;
     }
@@ -104,7 +106,8 @@ bool DecodeBmpRgba8ImageUVE(const std::vector<std::byte>& bytes, BmpRgba8ImageUV
                                               ? static_cast<std::uint64_t>(-(static_cast<std::int64_t>(signedHeight)))
                                               : static_cast<std::uint32_t>(signedHeight);
     const std::uint64_t bytesPerPixel = bitsPerPixel / 8U;
-    const std::uint64_t rawRowBytes = packed4Image ? (width + 1U) / 2U : width * bytesPerPixel;
+    const std::uint64_t rawRowBytes = packed1Image ? (width + 7U) / 8U
+                                                    : (packed4Image ? (width + 1U) / 2U : width * bytesPerPixel);
     const std::uint64_t rowStride = (rawRowBytes + 3U) & ~3U;
     const std::uint64_t pixelBytes = rowStride * absoluteHeight;
     const std::uint64_t decodedBytes = width * absoluteHeight * 4U;
@@ -136,15 +139,19 @@ bool DecodeBmpRgba8ImageUVE(const std::vector<std::byte>& bytes, BmpRgba8ImageUV
             std::byte* const destination = candidate.pixels.data() + outputRow * outputStride;
             for (std::size_t column = 0U; column < static_cast<std::size_t>(width); ++column) {
                 const std::byte* const pixel = source +
-                                                 (packed4Image ? column / 2U : column * static_cast<std::size_t>(bytesPerPixel));
+                                                 (packed1Image ? column / 8U
+                                                               : (packed4Image ? column / 2U
+                                                                               : column * static_cast<std::size_t>(bytesPerPixel)));
                 std::byte* const rgba = destination + column * 4U;
                 if (indexedImage) {
                     const std::uint8_t packedIndices = std::to_integer<std::uint8_t>(*pixel);
-                    const std::uint8_t paletteIndex = packed4Image
-                                                           ? static_cast<std::uint8_t>((packedIndices >>
-                                                                                        ((column & 1U) == 0U ? 4U : 0U)) &
-                                                                                       0x0FU)
-                                                           : packedIndices;
+                    const std::uint8_t paletteIndex = packed1Image
+                                                           ? static_cast<std::uint8_t>((packedIndices >> (7U - (column & 7U))) & 0x01U)
+                                                           : (packed4Image
+                                                                  ? static_cast<std::uint8_t>((packedIndices >>
+                                                                                               ((column & 1U) == 0U ? 4U : 0U)) &
+                                                                                              0x0FU)
+                                                                  : packedIndices);
                     if (paletteIndex >= paletteEntryCount) {
                         return false;
                     }

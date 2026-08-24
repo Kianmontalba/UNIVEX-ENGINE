@@ -87,6 +87,38 @@ void AppendU32LittleEndianUVE(std::vector<std::byte>& bytes, const std::uint32_t
     return bmp;
 }
 
+[[nodiscard]] std::vector<std::byte> MakeBmp1IndexedTenByTwoUVE() {
+    std::vector<std::byte> bmp;
+    bmp.reserve(70U);
+    bmp.push_back(std::byte{'B'});
+    bmp.push_back(std::byte{'M'});
+    AppendU32LittleEndianUVE(bmp, 70U);
+    AppendU16LittleEndianUVE(bmp, 0U);
+    AppendU16LittleEndianUVE(bmp, 0U);
+    AppendU32LittleEndianUVE(bmp, 62U);
+    AppendU32LittleEndianUVE(bmp, 40U);
+    AppendU32LittleEndianUVE(bmp, 10U);
+    AppendU32LittleEndianUVE(bmp, 2U);
+    AppendU16LittleEndianUVE(bmp, 1U);
+    AppendU16LittleEndianUVE(bmp, 1U);
+    AppendU32LittleEndianUVE(bmp, 0U);
+    AppendU32LittleEndianUVE(bmp, 8U);
+    AppendU32LittleEndianUVE(bmp, 2835U);
+    AppendU32LittleEndianUVE(bmp, 2835U);
+    AppendU32LittleEndianUVE(bmp, 2U);
+    AppendU32LittleEndianUVE(bmp, 0U);
+    // BGRA palette entries 0..1 are black and white; each row has two pad bytes.
+    const std::byte paletteAndPixels[] = {
+        std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0x00},
+        std::byte{0xFF}, std::byte{0xFF}, std::byte{0xFF}, std::byte{0x00},
+        // Bottom row: 10110010 10, then two bytes of row padding.
+        std::byte{0xB2}, std::byte{0x80}, std::byte{0xAA}, std::byte{0xBB},
+        // Top row: 01001101 01, then two bytes of row padding.
+        std::byte{0x4D}, std::byte{0x40}, std::byte{0xCC}, std::byte{0xDD}};
+    bmp.insert(bmp.end(), std::begin(paletteAndPixels), std::end(paletteAndPixels));
+    return bmp;
+}
+
 [[nodiscard]] std::vector<std::byte> MakeBmp4IndexedFiveByTwoUVE() {
     std::vector<std::byte> bmp;
     bmp.reserve(78U);
@@ -227,6 +259,34 @@ TEST(BmpMetadataUVETest, DecodeBmpRgba8ImageUVE_Decodes8BitIndexedRowsWithPalett
                                  std::byte{0x00}, std::byte{0x00}, std::byte{0xFF}, std::byte{0xFF}}));
 }
 
+TEST(BmpMetadataUVETest, DecodeBmpRgba8ImageUVE_Decodes1BitIndexedRowsWithPaletteAndPadding) {
+    BmpRgba8ImageUVE image;
+    ASSERT_TRUE(DecodeBmpRgba8ImageUVE(MakeBmp1IndexedTenByTwoUVE(), image));
+    EXPECT_EQ(image.width, 10U);
+    EXPECT_EQ(image.height, 2U);
+    EXPECT_EQ(image.pixels, (std::vector<std::byte>{
+                                 std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0xFF},
+                                 std::byte{0xFF}, std::byte{0xFF}, std::byte{0xFF}, std::byte{0xFF},
+                                 std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0xFF},
+                                 std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0xFF},
+                                 std::byte{0xFF}, std::byte{0xFF}, std::byte{0xFF}, std::byte{0xFF},
+                                 std::byte{0xFF}, std::byte{0xFF}, std::byte{0xFF}, std::byte{0xFF},
+                                 std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0xFF},
+                                 std::byte{0xFF}, std::byte{0xFF}, std::byte{0xFF}, std::byte{0xFF},
+                                 std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0xFF},
+                                 std::byte{0xFF}, std::byte{0xFF}, std::byte{0xFF}, std::byte{0xFF},
+                                 std::byte{0xFF}, std::byte{0xFF}, std::byte{0xFF}, std::byte{0xFF},
+                                 std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0xFF},
+                                 std::byte{0xFF}, std::byte{0xFF}, std::byte{0xFF}, std::byte{0xFF},
+                                 std::byte{0xFF}, std::byte{0xFF}, std::byte{0xFF}, std::byte{0xFF},
+                                 std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0xFF},
+                                 std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0xFF},
+                                 std::byte{0xFF}, std::byte{0xFF}, std::byte{0xFF}, std::byte{0xFF},
+                                 std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0xFF},
+                                 std::byte{0xFF}, std::byte{0xFF}, std::byte{0xFF}, std::byte{0xFF},
+                                 std::byte{0x00}, std::byte{0x00}, std::byte{0x00}, std::byte{0xFF}}));
+}
+
 TEST(BmpMetadataUVETest, DecodeBmpRgba8ImageUVE_Decodes4BitIndexedRowsWithPaletteAndPadding) {
     BmpRgba8ImageUVE image;
     ASSERT_TRUE(DecodeBmpRgba8ImageUVE(MakeBmp4IndexedFiveByTwoUVE(), image));
@@ -286,6 +346,13 @@ TEST(BmpMetadataUVETest, DecodeBmpRgba8ImageUVE_RejectsMalformedInputAtomically)
     EXPECT_EQ(image.pixels, original.pixels);
     EXPECT_FALSE(DecodeBmpRgba8ImageUVE({std::byte{'N'}, std::byte{'O'}}, image));
     EXPECT_EQ(image.pixels, original.pixels);
+    const std::vector<std::byte> valid1BitIndexed = MakeBmp1IndexedTenByTwoUVE();
+    std::vector<std::byte> excessive1BitPalette = valid1BitIndexed;
+    excessive1BitPalette[46] = std::byte{0x03};
+    excessive1BitPalette[47] = std::byte{0x00};
+    excessive1BitPalette[48] = std::byte{0x00};
+    excessive1BitPalette[49] = std::byte{0x00};
+    EXPECT_FALSE(DecodeBmpRgba8ImageUVE(excessive1BitPalette, image));
     const std::vector<std::byte> valid4BitIndexed = MakeBmp4IndexedFiveByTwoUVE();
     std::vector<std::byte> excessive4BitPalette = valid4BitIndexed;
     excessive4BitPalette[46] = std::byte{0x11};

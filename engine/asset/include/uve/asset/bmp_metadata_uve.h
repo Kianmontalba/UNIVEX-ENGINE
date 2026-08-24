@@ -16,7 +16,7 @@ struct BmpRgba8ImageUVE final {
     std::vector<std::byte> pixels;
 };
 
-/// Decodes bounded Windows BMP BITMAPINFOHEADER images with 4/8-bit indexed BGRA palette pixels, 16-bit BI_RGB BGR555, 16-bit BI_BITFIELDS BGR565, 24-bit BGR, or 32-bit BGRA pixels,
+/// Decodes bounded Windows BMP BITMAPINFOHEADER images with 1/4/8-bit indexed BGRA palette pixels, 16-bit BI_RGB BGR555, 16-bit BI_BITFIELDS BGR565, 24-bit BGR, or 32-bit BGRA pixels,
 /// BI_RGB or the supported BI_BITFIELDS form, and bottom-up or top-down rows into copied top-down opaque RGBA8 pixels.
 /// Unsupported headers, malformed bounds, oversized dimensions, and allocation failures return false
 /// without publishing partial output.
