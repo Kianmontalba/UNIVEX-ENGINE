@@ -291,7 +291,7 @@ void AppendU16LittleEndianUVE(std::vector<std::byte>& bytes, const std::uint16_t
     tga[14] = std::byte{1};
     tga[16] = std::byte{32};
     tga[17] = std::byte{0x28};
-    // One BGRA green sample at alpha 0x66 in a three-pixel run.
+    // One BGRA red sample at alpha 0x66 in a three-pixel run.
     tga.insert(tga.end(), {std::byte{0x82}, std::byte{0x00}, std::byte{0x00}, std::byte{0xFF}, std::byte{0x66}});
     return tga;
 }
