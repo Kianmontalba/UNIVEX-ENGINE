@@ -46,6 +46,14 @@ using ImportFuncUVE = std::function<bool(const std::filesystem::path&, const std
                                          const std::filesystem::path& destination,
                                          const AssetImportSettingsUVE& /*settings*/) {
     std::error_code errorCode;
+    if (const std::filesystem::path parent = destination.parent_path(); !parent.empty()) {
+        std::filesystem::create_directories(parent, errorCode);
+        if (errorCode) {
+            UVE_ERROR("AssetImporterUVE: failed to create destination directory \"{}\": {}", parent.string(),
+                      errorCode.message());
+            return false;
+        }
+    }
     const std::filesystem::path temporaryPath = destination.string() + ".uve_generic_tmp";
     std::filesystem::remove(temporaryPath, errorCode);
     if (!std::filesystem::copy_file(source, temporaryPath, std::filesystem::copy_options::overwrite_existing,
