@@ -439,6 +439,15 @@ TEST_F(ColliderShapeUVETest, DetectCollisionsUVE_OrientedBoxesRejectDiagonalAabb
     EXPECT_TRUE(collisionSystem.DetectCollisionsUVE(entityManager).empty());
 }
 
+TEST(ShapeNarrowPhaseUVETest, AreaAabbOrientedBoxUsesExactSatForDiagonalSeparation) {
+    const std::optional<Math::PenetrationUVE> penetration =
+        Detail::ComputeOrientedBoxOrientedBoxPenetrationUVE(
+            {}, {0.5F, 0.5F, 0.5F}, {}, {0.7F, 0.0F, 0.7F}, {1.0F, 0.2F, 0.2F},
+            Math::QuaternionUVE{0.0F, 0.3826834324F, 0.0F, 0.9238795325F});
+
+    EXPECT_FALSE(penetration.has_value());
+}
+
 TEST_F(ColliderShapeUVETest, DetectCollisionsUVE_CapsuleCapsuleUsesExactSegmentDistanceAndOrientation) {
     Scene::ColliderComponentUVE firstCapsule;
     firstCapsule.shapeType = Scene::ColliderShapeTypeUVE::Capsule;

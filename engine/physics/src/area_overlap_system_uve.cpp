@@ -10,6 +10,7 @@
 
 #include "uve/math/aabb_uve.h"
 #include "uve/physics/detail/collider_world_aabb_cache_uve.h"
+#include "uve/physics/detail/shape_narrow_phase_uve.h"
 #include "uve/scene/components/area_component_uve.h"
 #include "uve/scene/components/world_transform_component_uve.h"
 
@@ -62,6 +63,24 @@ struct AreaWorldAabbCacheUVE final {
     return cache;
 }
 
+[[nodiscard]] std::optional<Math::PenetrationUVE> ComputeAreaColliderPenetrationUVE(
+    const AreaWorldAabbUVE& area, const Detail::ColliderWorldAabbUVE& collider) {
+    switch (collider.shapeType) {
+    case Scene::ColliderShapeTypeUVE::Sphere:
+        return Detail::ComputeSphereAabbPenetrationUVE(
+            area.worldAabb, collider.worldAabb.GetCenterUVE(), collider.shapeRadius);
+    case Scene::ColliderShapeTypeUVE::Capsule:
+        return Detail::ComputeCapsuleAabbPenetrationUVE(
+            area.worldAabb, collider.shapeSegmentStart, collider.shapeSegmentEnd, collider.shapeRadius);
+    case Scene::ColliderShapeTypeUVE::Box:
+        return Detail::ComputeOrientedBoxOrientedBoxPenetrationUVE(
+            area.worldAabb.GetCenterUVE(), area.worldAabb.GetExtentsUVE(), {},
+            collider.worldAabb.GetCenterUVE(), collider.shapeHalfExtents, collider.shapeRotation);
+    default:
+        return Math::ComputePenetrationUVE(area.worldAabb, collider.worldAabb);
+    }
+}
+
 } // namespace
 
 AreaOverlapQueryResultUVE AreaOverlapSystemUVE::QueryUVE(
@@ -82,7 +101,7 @@ AreaOverlapQueryResultUVE AreaOverlapSystemUVE::QueryUVE(
                 continue;
             }
             const std::optional<Math::PenetrationUVE> penetration =
-                Math::ComputePenetrationUVE(area.worldAabb, collider.worldAabb);
+                ComputeAreaColliderPenetrationUVE(area, collider);
             if (!penetration.has_value() || !std::isfinite(penetration->depth) || penetration->depth <= 0.0F) {
                 continue;
             }

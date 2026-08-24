@@ -32,9 +32,11 @@ struct AreaOverlapQueryResultUVE final {
 };
 
 /// Performs a bounded, read-only overlap query for AreaComponentUVE volumes against
-/// ColliderComponentUVE volumes. Results are copied in deterministic entity iteration order and
-/// require symmetric layer/mask acceptance. Areas never enter CollisionSystemUVE or
-/// PhysicsSystemUVE resolution, and this seam publishes no global events or owns entity state.
+/// ColliderComponentUVE volumes. Known Box/Sphere/Capsule targets use exact oriented-box, sphere,
+/// and capsule penetration helpers; unknown shape values retain conservative AABB penetration.
+/// Results are copied in deterministic entity iteration order and require symmetric layer/mask
+/// acceptance. Areas never enter CollisionSystemUVE or PhysicsSystemUVE resolution, and this seam
+/// publishes no global events or owns entity state.
 class AreaOverlapSystemUVE final {
 public:
     [[nodiscard]] static AreaOverlapQueryResultUVE QueryUVE(

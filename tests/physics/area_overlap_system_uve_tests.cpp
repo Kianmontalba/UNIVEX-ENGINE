@@ -51,7 +51,45 @@ protected:
             entity, Scene::ColliderComponentUVE{halfExtents, collisionLayer, collisionMask});
         return entity;
     }
+
+    Scene::EntityUVE MakeTypedColliderEntityUVE(Math::Vector3UVE position,
+                                                 const Scene::ColliderComponentUVE& collider,
+                                                 Math::QuaternionUVE rotation = {}) {
+        const Scene::EntityUVE entity = entityManager.CreateEntityUVE();
+        Scene::TransformComponentUVE transform;
+        transform.localPosition = position;
+        transform.localRotation = rotation;
+        sceneGraph.AttachTransformUVE(entityManager, entity, transform);
+        sceneGraph.UpdateUVE(entityManager);
+        entityManager.AddComponentUVE<Scene::ColliderComponentUVE>(entity, collider);
+        return entity;
+    }
 };
+
+TEST_F(AreaOverlapSystemUVETest, QueryUVE_ExactShapeRoutingRejectsDiagonalAabbFalsePositives) {
+    MakeAreaEntityUVE({0.0F, 0.0F, 0.0F}, {0.5F, 0.5F, 0.5F});
+
+    Scene::ColliderComponentUVE sphere;
+    sphere.shapeType = Scene::ColliderShapeTypeUVE::Sphere;
+    sphere.radius = 0.5F;
+    MakeTypedColliderEntityUVE({0.9F, 0.9F, 0.0F}, sphere);
+    ASSERT_EQ(AreaOverlapSystemUVE::QueryUVE(entityManager).overlaps.size(), 0U);
+
+    Scene::ColliderComponentUVE capsule;
+    capsule.shapeType = Scene::ColliderShapeTypeUVE::Capsule;
+    capsule.radius = 0.5F;
+    capsule.height = 4.0F;
+    MakeTypedColliderEntityUVE({0.9F, 0.0F, 0.9F}, capsule);
+    ASSERT_EQ(AreaOverlapSystemUVE::QueryUVE(entityManager).overlaps.size(), 0U);
+
+    Scene::ColliderComponentUVE box;
+    box.shapeType = Scene::ColliderShapeTypeUVE::Box;
+    box.halfExtents = {1.0F, 0.2F, 0.2F};
+    MakeTypedColliderEntityUVE({0.7F, 0.0F, 0.7F}, box,
+                               Math::QuaternionUVE{0.0F, 0.3826834324F, 0.0F, 0.9238795325F});
+
+    EXPECT_TRUE(AreaOverlapSystemUVE::QueryUVE(entityManager).overlaps.empty());
+}
 
 TEST_F(AreaOverlapSystemUVETest, QueryUVE_CompatibleOverlapReturnsCopiedPair) {
     const Scene::EntityUVE area = MakeAreaEntityUVE(
