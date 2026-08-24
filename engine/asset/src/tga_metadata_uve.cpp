@@ -1,0 +1,106 @@
+// Copyright (c) 2026 UniVex Studios. All Rights Reserved.
+
+#include "uve/asset/tga_metadata_uve.h"
+
+#include <cstddef>
+#include <cstdint>
+#include <limits>
+#include <new>
+#include <utility>
+
+namespace UVE::Asset {
+namespace {
+
+constexpr std::size_t kTgaHeaderBytesUVE = 18U;
+constexpr std::uint8_t kTgaTrueColorImageTypeUVE = 2U;
+constexpr std::uint8_t kTgaTopOriginBitUVE = 0x20U;
+constexpr std::uint8_t kTgaRightOriginBitUVE = 0x10U;
+constexpr std::uint8_t kTgaUnsupportedInterleaveBitsUVE = 0xC0U;
+
+[[nodiscard]] std::uint16_t ReadU16LittleEndianUVE(const std::vector<std::byte>& bytes,
+                                                   const std::size_t offset) noexcept {
+    return static_cast<std::uint16_t>(std::to_integer<std::uint8_t>(bytes[offset]) |
+                                      (static_cast<std::uint16_t>(std::to_integer<std::uint8_t>(bytes[offset + 1U]))
+                                       << 8U));
+}
+
+} // namespace
+
+bool DecodeTgaRgba8ImageUVE(const std::vector<std::byte>& bytes,
+                            TgaRgba8ImageUVE& outImage) noexcept {
+    if (bytes.size() > kMaximumTgaDecodedPixelBytesUVE || bytes.size() < kTgaHeaderBytesUVE) {
+        return false;
+    }
+
+    const std::uint8_t colorMapType = std::to_integer<std::uint8_t>(bytes[1]);
+    const std::uint8_t imageType = std::to_integer<std::uint8_t>(bytes[2]);
+    const std::uint16_t width = ReadU16LittleEndianUVE(bytes, 12U);
+    const std::uint16_t height = ReadU16LittleEndianUVE(bytes, 14U);
+    const std::uint8_t pixelDepth = std::to_integer<std::uint8_t>(bytes[16]);
+    const std::uint8_t imageDescriptor = std::to_integer<std::uint8_t>(bytes[17]);
+    if (colorMapType != 0U || imageType != kTgaTrueColorImageTypeUVE || width == 0U || height == 0U ||
+        (pixelDepth != 24U && pixelDepth != 32U) ||
+        (imageDescriptor & kTgaUnsupportedInterleaveBitsUVE) != 0U) {
+        return false;
+    }
+
+    const std::size_t bytesPerPixel = pixelDepth / 8U;
+    constexpr std::size_t kMaximumSizeT = std::numeric_limits<std::size_t>::max();
+    if (static_cast<std::size_t>(width) > kMaximumSizeT / bytesPerPixel) {
+        return false;
+    }
+    const std::size_t rowBytes = static_cast<std::size_t>(width) * bytesPerPixel;
+    if (static_cast<std::size_t>(height) > kMaximumSizeT / rowBytes) {
+        return false;
+    }
+    const std::size_t sourcePixelBytes = rowBytes * static_cast<std::size_t>(height);
+    const std::size_t idLength = std::to_integer<std::uint8_t>(bytes[0]);
+    if (idLength > kMaximumSizeT - kTgaHeaderBytesUVE) {
+        return false;
+    }
+    const std::size_t pixelOffset = kTgaHeaderBytesUVE + idLength;
+    if (sourcePixelBytes > kMaximumSizeT - pixelOffset ||
+        pixelOffset + sourcePixelBytes > bytes.size()) {
+        return false;
+    }
+    if (static_cast<std::size_t>(width) > kMaximumSizeT / static_cast<std::size_t>(height)) {
+        return false;
+    }
+    const std::size_t pixelCount = static_cast<std::size_t>(width) * static_cast<std::size_t>(height);
+    if (pixelCount > kMaximumSizeT / 4U) {
+        return false;
+    }
+    const std::size_t outputBytes = pixelCount * 4U;
+    if (outputBytes > kMaximumTgaDecodedPixelBytesUVE) {
+        return false;
+    }
+
+    std::vector<std::byte> candidatePixels;
+    try {
+        candidatePixels.resize(outputBytes);
+    } catch (const std::bad_alloc&) {
+        return false;
+    }
+
+    const bool topOrigin = (imageDescriptor & kTgaTopOriginBitUVE) != 0U;
+    const bool rightOrigin = (imageDescriptor & kTgaRightOriginBitUVE) != 0U;
+    for (std::size_t sourceY = 0U; sourceY < static_cast<std::size_t>(height); ++sourceY) {
+        const std::size_t outputY = topOrigin ? sourceY : static_cast<std::size_t>(height) - 1U - sourceY;
+        for (std::size_t sourceX = 0U; sourceX < static_cast<std::size_t>(width); ++sourceX) {
+            const std::size_t outputX = rightOrigin ? static_cast<std::size_t>(width) - 1U - sourceX : sourceX;
+            const std::size_t sourceOffset = pixelOffset + sourceY * rowBytes + sourceX * bytesPerPixel;
+            const std::size_t outputOffset = (outputY * static_cast<std::size_t>(width) + outputX) * 4U;
+            candidatePixels[outputOffset] = bytes[sourceOffset + 2U];
+            candidatePixels[outputOffset + 1U] = bytes[sourceOffset + 1U];
+            candidatePixels[outputOffset + 2U] = bytes[sourceOffset];
+            candidatePixels[outputOffset + 3U] = std::byte{0xFF};
+        }
+    }
+
+    outImage.width = width;
+    outImage.height = height;
+    outImage.pixels = std::move(candidatePixels);
+    return true;
+}
+
+} // namespace UVE::Asset

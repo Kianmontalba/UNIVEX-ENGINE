@@ -9,6 +9,7 @@
 #include "uve/asset/obj_importer_uve.h"
 
 #include "uve/asset/png_importer_uve.h"
+#include "uve/asset/tga_importer_uve.h"
 
 #include <cctype>
 #include <exception>
@@ -210,7 +211,7 @@ AssetImporterUVE::AssetImporterUVE() : m_impl(std::make_unique<ImplUVE>()) {
 
     // Typed UVE envelopes are already validated by their corresponding asset loaders. Importing
     // them here is an intentionally format-neutral, deterministic copy/re-register operation;
-    // bounded BMP/PNG, OBJ, MTL, glTF/GLB one-primitive, and JPEG source conversions are registered separately;
+    // bounded BMP/PNG/TGA, OBJ, MTL, glTF/GLB one-primitive, and JPEG source conversions are registered separately;
     // FBX/audio and broader glTF scene/material/image conversion remains independent parser-owned work.
     RegisterImporterUVE("uvemodel", &GenericFileImportUVE);
     RegisterImporterUVE("uvetex", &GenericFileImportUVE);
@@ -218,6 +219,7 @@ AssetImporterUVE::AssetImporterUVE() : m_impl(std::make_unique<ImplUVE>()) {
     RegisterImporterUVE("uvemat", &GenericFileImportUVE);
     RegisterBmpImporterUVE(*this);
     RegisterPngImporterUVE(*this);
+    RegisterTgaImporterUVE(*this);
     RegisterObjImporterUVE(*this);
     RegisterGltfImporterUVE(*this);
     RegisterJpegImporterUVE(*this);
