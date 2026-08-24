@@ -15,9 +15,9 @@ class IEntityManagerUVE;
 
 namespace UVE::Physics {
 
-/// Conservative sphere-cast query. The moving sphere is swept along a unit-direction ray; each
-/// target collider is expanded by the radius in world axes and tested as its cached world AABB.
-/// This is a bounded read-only query, not an exact oriented sphere cast or backend replacement.
+/// Bounded sphere-cast query. Sphere targets use exact moving-sphere/sphere time-of-impact and
+/// report the target-sphere normal; box and capsule targets remain conservatively expanded cached
+/// world AABBs. This is read-only and does not claim exact oriented box/capsule casts or backend replacement.
 struct SphereCastQueryUVE final {
     Math::RayUVE ray{};
     float radius = 0.0F;

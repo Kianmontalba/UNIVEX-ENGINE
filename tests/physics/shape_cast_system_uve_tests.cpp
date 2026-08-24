@@ -44,6 +44,21 @@ protected:
         return entity;
     }
 
+    Scene::EntityUVE MakeSphereColliderEntityUVE(Math::Vector3UVE position, float radius,
+                                                  std::uint32_t collisionLayer = 1U) {
+        const Scene::EntityUVE entity = entityManager.CreateEntityUVE();
+        Scene::TransformComponentUVE local;
+        local.localPosition = position;
+        sceneGraph.AttachTransformUVE(entityManager, entity, local);
+        sceneGraph.UpdateUVE(entityManager);
+        Scene::ColliderComponentUVE collider;
+        collider.shapeType = Scene::ColliderShapeTypeUVE::Sphere;
+        collider.radius = radius;
+        collider.collisionLayer = collisionLayer;
+        entityManager.AddComponentUVE<Scene::ColliderComponentUVE>(entity, collider);
+        return entity;
+    }
+
     [[nodiscard]] static SphereCastQueryUVE MakeXAxisQueryUVE(float originX = -10.0F,
                                                                float radius = 0.5F,
                                                                float maxDistance = 100.0F) {
@@ -70,6 +85,20 @@ TEST_F(ShapeCastSystemUVETest, SphereCastUVE_ExpandsAabbAndReportsMovingCenter) 
     EXPECT_NEAR(hit->material.friction, 0.4F, kEpsilon);
     EXPECT_NEAR(hit->material.restitution, 0.9F, kEpsilon);
     EXPECT_NEAR(hit->material.density, 3.0F, kEpsilon);
+}
+
+TEST_F(ShapeCastSystemUVETest, SphereCastUVE_SphereTargetUsesExactSweepInsteadOfAabbFalsePositive) {
+    const Scene::EntityUVE entity = MakeSphereColliderEntityUVE({0.0F, 1.4F, 0.0F}, 1.0F);
+    SphereCastQueryUVE query = MakeXAxisQueryUVE(-5.0F, 0.5F);
+
+    const std::optional<SphereCastHitUVE> hit = ShapeCastSystemUVE::SphereCastUVE(entityManager, query);
+
+    ASSERT_TRUE(hit.has_value());
+    EXPECT_EQ(hit->entity, entity);
+    EXPECT_NEAR(hit->distance, 5.0F - std::sqrt(0.29F), kEpsilon);
+    EXPECT_NEAR(hit->center.x, -std::sqrt(0.29F), kEpsilon);
+    EXPECT_NEAR(hit->center.y, 0.0F, kEpsilon);
+    EXPECT_LT(hit->normal.x, 0.0F);
 }
 
 TEST_F(ShapeCastSystemUVETest, SphereCastUVE_MultipleCollidersReturnsClosestDeterministically) {

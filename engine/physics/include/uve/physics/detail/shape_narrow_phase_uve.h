@@ -9,6 +9,14 @@
 
 namespace UVE::Physics::Detail {
 
+/// Computes the first bounded hit of a moving sphere against a stationary sphere along `ray`.
+/// The combined radius is used for exact quadratic time-of-impact; an origin already inside or
+/// touching the combined sphere reports distance zero with a zero normal. Invalid, non-finite,
+/// overflowed, or out-of-range results fail closed. This value-only helper owns no ECS or backend state.
+[[nodiscard]] std::optional<Math::RayHitUVE> IntersectMovingSphereSphereUVE(
+    const Math::RayUVE& ray, Math::Vector3UVE targetCenter, float movingRadius, float targetRadius,
+    float maxDistance) noexcept;
+
 /// Computes exact sphere-vs-axis-aligned-box penetration for the current Physics v1 geometry
 /// contract. The returned axis points from the sphere center toward the box, matching
 /// CollisionPairUVE's first-to-second separation convention when the sphere is the first shape.
