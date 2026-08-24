@@ -48,7 +48,7 @@ struct PngRgba8ImageUVE final {
 
 /// Decodes bounded non-interlaced and Adam7-interlaced 1/2/4-bit grayscale/indexed, non-interlaced 8-bit grayscale/grayscale-alpha/RGB/indexed/RGBA, and 16-bit grayscale/grayscale-alpha/RGB/RGBA PNG forms using zlib and the existing scanline
 /// unfilter primitive, normalizing grayscale/RGB input to opaque RGBA8, indexed input through validated PLTE/tRNS
-/// palette facts, bounded grayscale/RGB tRNS key transparency, 16-bit grayscale/grayscale-alpha/RGB/RGBA input through big-endian high-byte down-conversion, and Adam7-interlaced
+/// palette facts, packed/8/16-bit grayscale and 8/16-bit RGB tRNS key transparency, 16-bit grayscale/grayscale-alpha/RGB/RGBA input through big-endian high-byte down-conversion, and Adam7-interlaced
 /// 8-bit grayscale/grayscale-alpha/RGB/indexed/RGBA plus Adam7-interlaced 8-bit grayscale/grayscale-alpha/RGB/indexed/RGBA and 16-bit grayscale/grayscale-alpha/RGB/RGBA input through bounded pass reconstruction,
 /// validated palette mapping, high-byte conversion, and opaque-alpha normalization. It rejects unsupported
 /// color/depth/interlace modes and owns no filesystem or GPU state.
