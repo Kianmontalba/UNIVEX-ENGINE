@@ -87,6 +87,31 @@ void AppendU32LittleEndianUVE(std::vector<std::byte>& bytes, const std::uint32_t
     return bmp;
 }
 
+[[nodiscard]] std::vector<std::byte> MakeBmp16TwoByOneUVE() {
+    std::vector<std::byte> bmp;
+    bmp.reserve(58U);
+    bmp.push_back(std::byte{'B'});
+    bmp.push_back(std::byte{'M'});
+    AppendU32LittleEndianUVE(bmp, 58U);
+    AppendU16LittleEndianUVE(bmp, 0U);
+    AppendU16LittleEndianUVE(bmp, 0U);
+    AppendU32LittleEndianUVE(bmp, 54U);
+    AppendU32LittleEndianUVE(bmp, 40U);
+    AppendU32LittleEndianUVE(bmp, 2U);
+    AppendU32LittleEndianUVE(bmp, 1U);
+    AppendU16LittleEndianUVE(bmp, 1U);
+    AppendU16LittleEndianUVE(bmp, 16U);
+    AppendU32LittleEndianUVE(bmp, 0U);
+    AppendU32LittleEndianUVE(bmp, 4U);
+    AppendU32LittleEndianUVE(bmp, 2835U);
+    AppendU32LittleEndianUVE(bmp, 2835U);
+    AppendU32LittleEndianUVE(bmp, 0U);
+    AppendU32LittleEndianUVE(bmp, 0U);
+    // Bottom-up BI_RGB BGR555: opaque red followed by opaque blue.
+    bmp.insert(bmp.end(), {std::byte{0x00}, std::byte{0x7C}, std::byte{0x1F}, std::byte{0x00}});
+    return bmp;
+}
+
 [[nodiscard]] std::vector<std::byte> MakeBmp32TopDownOneByTwoUVE() {
     std::vector<std::byte> bmp;
     bmp.reserve(62U);
@@ -136,6 +161,16 @@ TEST(BmpMetadataUVETest, DecodeBmpRgba8ImageUVE_Decodes8BitIndexedRowsWithPalett
                                  std::byte{0x00}, std::byte{0x00}, std::byte{0xFF}, std::byte{0xFF},
                                  std::byte{0xFF}, std::byte{0x00}, std::byte{0x00}, std::byte{0xFF},
                                  std::byte{0x00}, std::byte{0x00}, std::byte{0xFF}, std::byte{0xFF},
+                                 std::byte{0xFF}, std::byte{0x00}, std::byte{0x00}, std::byte{0xFF},
+                                 std::byte{0x00}, std::byte{0x00}, std::byte{0xFF}, std::byte{0xFF}}));
+}
+
+TEST(BmpMetadataUVETest, DecodeBmpRgba8ImageUVE_Decodes16BitBgr555RowsToOpaqueRgba) {
+    BmpRgba8ImageUVE image;
+    ASSERT_TRUE(DecodeBmpRgba8ImageUVE(MakeBmp16TwoByOneUVE(), image));
+    EXPECT_EQ(image.width, 2U);
+    EXPECT_EQ(image.height, 1U);
+    EXPECT_EQ(image.pixels, (std::vector<std::byte>{
                                  std::byte{0xFF}, std::byte{0x00}, std::byte{0x00}, std::byte{0xFF},
                                  std::byte{0x00}, std::byte{0x00}, std::byte{0xFF}, std::byte{0xFF}}));
 }
