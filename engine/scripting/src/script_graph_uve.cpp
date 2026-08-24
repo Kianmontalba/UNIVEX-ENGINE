@@ -122,7 +122,7 @@ std::size_t ScriptNodeRegistryUVE::GetNodeTypeCountUVE() const noexcept {
 }
 
 bool ScriptGraphUVE::AddNodeUVE(ScriptNodeUVE node) {
-    if (node.typeId.empty() || FindNodeUVE(m_nodes, node.id) != nullptr) {
+    if (node.id == 0U || node.typeId.empty() || FindNodeUVE(m_nodes, node.id) != nullptr) {
         return false;
     }
     m_nodes.push_back(std::move(node));

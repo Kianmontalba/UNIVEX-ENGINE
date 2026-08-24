@@ -109,6 +109,7 @@ struct ScriptNodeTypeDescriptorUVE final {
 };
 
 struct ScriptNodeUVE final {
+    // Zero is reserved as the graph-level diagnostic/sentinel ID; live graph nodes use nonzero IDs.
     std::uint32_t id = 0U;
     std::string typeId;
 };
