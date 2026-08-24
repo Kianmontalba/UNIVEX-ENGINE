@@ -97,6 +97,168 @@ std::optional<Math::RayHitUVE> IntersectMovingSphereSphereUVE(
     return Math::RayHitUVE{static_cast<float>(distance), normal};
 }
 
+std::optional<Math::RayHitUVE> IntersectRaySphereUVE(
+    const Math::RayUVE& ray, const Math::Vector3UVE targetCenter, const float targetRadius,
+    const float maxDistance) noexcept {
+    return IntersectMovingSphereSphereUVE(ray, targetCenter, 0.0F, targetRadius, maxDistance);
+}
+
+std::optional<Math::RayHitUVE> IntersectRayCapsuleUVE(
+    const Math::RayUVE& ray, const Math::Vector3UVE segmentStart, const Math::Vector3UVE segmentEnd,
+    const float capsuleRadius, const float maxDistance) noexcept {
+    if (!IsFiniteVectorUVE(ray.origin) || !IsFiniteVectorUVE(ray.direction) ||
+        !IsFiniteVectorUVE(segmentStart) || !IsFiniteVectorUVE(segmentEnd) ||
+        !std::isfinite(capsuleRadius) || capsuleRadius <= 0.0F || !std::isfinite(maxDistance) ||
+        maxDistance < 0.0F) {
+        return std::nullopt;
+    }
+
+    const double segmentX = static_cast<double>(segmentEnd.x) - static_cast<double>(segmentStart.x);
+    const double segmentY = static_cast<double>(segmentEnd.y) - static_cast<double>(segmentStart.y);
+    const double segmentZ = static_cast<double>(segmentEnd.z) - static_cast<double>(segmentStart.z);
+    const double segmentLengthSquared = segmentX * segmentX + segmentY * segmentY + segmentZ * segmentZ;
+    if (!std::isfinite(segmentLengthSquared)) {
+        return std::nullopt;
+    }
+    if (segmentLengthSquared <= 0.0) {
+        return IntersectRaySphereUVE(ray, segmentStart, capsuleRadius, maxDistance);
+    }
+
+    const double segmentLength = std::sqrt(segmentLengthSquared);
+    const Math::Vector3UVE axis{static_cast<float>(segmentX / segmentLength),
+                                static_cast<float>(segmentY / segmentLength),
+                                static_cast<float>(segmentZ / segmentLength)};
+    if (!IsFiniteVectorUVE(axis)) {
+        return std::nullopt;
+    }
+    const double originX = static_cast<double>(ray.origin.x) - static_cast<double>(segmentStart.x);
+    const double originY = static_cast<double>(ray.origin.y) - static_cast<double>(segmentStart.y);
+    const double originZ = static_cast<double>(ray.origin.z) - static_cast<double>(segmentStart.z);
+    const double axialOrigin = originX * segmentX / segmentLength + originY * segmentY / segmentLength +
+                               originZ * segmentZ / segmentLength;
+    const double radialX = originX - axialOrigin * static_cast<double>(axis.x);
+    const double radialY = originY - axialOrigin * static_cast<double>(axis.y);
+    const double radialZ = originZ - axialOrigin * static_cast<double>(axis.z);
+    const double radiusSquared = static_cast<double>(capsuleRadius) * static_cast<double>(capsuleRadius);
+    const double closestAxial = std::clamp(axialOrigin, 0.0, segmentLength);
+    const double closestDeltaX = originX - closestAxial * static_cast<double>(axis.x);
+    const double closestDeltaY = originY - closestAxial * static_cast<double>(axis.y);
+    const double closestDeltaZ = originZ - closestAxial * static_cast<double>(axis.z);
+    const double closestDistanceSquared = closestDeltaX * closestDeltaX + closestDeltaY * closestDeltaY +
+                                         closestDeltaZ * closestDeltaZ;
+    if (!std::isfinite(axialOrigin) || !std::isfinite(radiusSquared) || !std::isfinite(closestDistanceSquared)) {
+        return std::nullopt;
+    }
+    if (closestDistanceSquared <= radiusSquared) {
+        return Math::RayHitUVE{0.0F, Math::Vector3UVE{}};
+    }
+
+    std::optional<Math::RayHitUVE> closestHit;
+    const auto ConsiderHitUVE = [&](const std::optional<Math::RayHitUVE>& candidate) {
+        if (!candidate.has_value() || candidate->distance < 0.0F ||
+            (closestHit.has_value() && candidate->distance >= closestHit->distance)) {
+            return;
+        }
+        closestHit = candidate;
+    };
+
+    const double directionX = static_cast<double>(ray.direction.x);
+    const double directionY = static_cast<double>(ray.direction.y);
+    const double directionZ = static_cast<double>(ray.direction.z);
+    const double axialDirection = directionX * static_cast<double>(axis.x) +
+                                  directionY * static_cast<double>(axis.y) +
+                                  directionZ * static_cast<double>(axis.z);
+    const double radialDirectionX = directionX - axialDirection * static_cast<double>(axis.x);
+    const double radialDirectionY = directionY - axialDirection * static_cast<double>(axis.y);
+    const double radialDirectionZ = directionZ - axialDirection * static_cast<double>(axis.z);
+    const double quadraticA = radialDirectionX * radialDirectionX + radialDirectionY * radialDirectionY +
+                              radialDirectionZ * radialDirectionZ;
+    const double quadraticB = 2.0 * (radialX * radialDirectionX + radialY * radialDirectionY + radialZ * radialDirectionZ);
+    const double quadraticC = radialX * radialX + radialY * radialY + radialZ * radialZ - radiusSquared;
+    const double discriminant = quadraticB * quadraticB - 4.0 * quadraticA * quadraticC;
+    if (std::isfinite(quadraticA) && std::isfinite(quadraticB) && std::isfinite(quadraticC) &&
+        std::isfinite(discriminant) && quadraticA > 0.0 && discriminant > 0.0) {
+        const double root = std::sqrt(discriminant);
+        const double roots[2] = {(-quadraticB - root) / (2.0 * quadraticA),
+                                 (-quadraticB + root) / (2.0 * quadraticA)};
+        for (const double candidateDistance : roots) {
+            if (!std::isfinite(candidateDistance) || candidateDistance < 0.0 ||
+                candidateDistance > static_cast<double>(maxDistance)) {
+                continue;
+            }
+            const double axial = axialOrigin + axialDirection * candidateDistance;
+            if (axial <= 0.0 || axial >= segmentLength) {
+                continue;
+            }
+            const double contactRadialX = radialX + radialDirectionX * candidateDistance;
+            const double contactRadialY = radialY + radialDirectionY * candidateDistance;
+            const double contactRadialZ = radialZ + radialDirectionZ * candidateDistance;
+            const double normalLength = std::sqrt(contactRadialX * contactRadialX +
+                                                  contactRadialY * contactRadialY + contactRadialZ * contactRadialZ);
+            if (!std::isfinite(normalLength) || normalLength <= 0.0) {
+                continue;
+            }
+            ConsiderHitUVE(Math::RayHitUVE{
+                static_cast<float>(candidateDistance),
+                {static_cast<float>(contactRadialX / normalLength), static_cast<float>(contactRadialY / normalLength),
+                 static_cast<float>(contactRadialZ / normalLength)}});
+        }
+    }
+
+    const std::optional<Math::RayHitUVE> startHit =
+        IntersectRaySphereUVE(ray, segmentStart, capsuleRadius, maxDistance);
+    if (startHit.has_value()) {
+        const Math::Vector3UVE point = ray.origin + ray.direction * startHit->distance;
+        const double axial = static_cast<double>(point.x - segmentStart.x) * static_cast<double>(axis.x) +
+                             static_cast<double>(point.y - segmentStart.y) * static_cast<double>(axis.y) +
+                             static_cast<double>(point.z - segmentStart.z) * static_cast<double>(axis.z);
+        if (axial <= 0.0) {
+            ConsiderHitUVE(startHit);
+        }
+    }
+    const std::optional<Math::RayHitUVE> endHit =
+        IntersectRaySphereUVE(ray, segmentEnd, capsuleRadius, maxDistance);
+    if (endHit.has_value()) {
+        const Math::Vector3UVE point = ray.origin + ray.direction * endHit->distance;
+        const double axial = static_cast<double>(point.x - segmentStart.x) * static_cast<double>(axis.x) +
+                             static_cast<double>(point.y - segmentStart.y) * static_cast<double>(axis.y) +
+                             static_cast<double>(point.z - segmentStart.z) * static_cast<double>(axis.z);
+        if (axial >= segmentLength) {
+            ConsiderHitUVE(endHit);
+        }
+    }
+    return closestHit;
+}
+
+std::optional<Math::RayHitUVE> IntersectRayOrientedBoxUVE(
+    const Math::RayUVE& ray, const Math::Vector3UVE boxCenter, const Math::Vector3UVE boxHalfExtents,
+    const Math::QuaternionUVE boxRotation, const float maxDistance) noexcept {
+    if (!IsFiniteVectorUVE(ray.origin) || !IsFiniteVectorUVE(ray.direction) || !IsFiniteVectorUVE(boxCenter) ||
+        !IsFiniteVectorUVE(boxHalfExtents) || boxHalfExtents.x <= 0.0F || boxHalfExtents.y <= 0.0F ||
+        boxHalfExtents.z <= 0.0F || !std::isfinite(maxDistance) || maxDistance < 0.0F) {
+        return std::nullopt;
+    }
+    Math::QuaternionUVE normalizedRotation;
+    Math::QuaternionUVE inverseRotation;
+    if (!Math::TryNormalizeUVE(boxRotation, normalizedRotation) ||
+        !Math::TryInverseUVE(normalizedRotation, inverseRotation)) {
+        return std::nullopt;
+    }
+    const Math::Vector3UVE localOrigin = Math::RotateVectorUVE(inverseRotation, ray.origin - boxCenter);
+    const Math::Vector3UVE localDirection = Math::RotateVectorUVE(inverseRotation, ray.direction);
+    const Math::RayUVE localRay{localOrigin, localDirection};
+    const std::optional<Math::RayHitUVE> localHit = Math::IntersectRayUVE(
+        localRay, Math::AabbUVE::FromCenterExtentsUVE({}, boxHalfExtents), maxDistance);
+    if (!localHit.has_value()) {
+        return std::nullopt;
+    }
+    const Math::Vector3UVE worldNormal = Math::RotateVectorUVE(normalizedRotation, localHit->normal);
+    if (!IsFiniteVectorUVE(worldNormal)) {
+        return std::nullopt;
+    }
+    return Math::RayHitUVE{localHit->distance, worldNormal};
+}
+
 std::optional<Math::PenetrationUVE> ComputeSphereAabbPenetrationUVE(
     const Math::AabbUVE& box, const Math::Vector3UVE sphereCenter, const float sphereRadius) noexcept {
     if (!IsFiniteAabbUVE(box) || !std::isfinite(sphereCenter.x) || !std::isfinite(sphereCenter.y) ||

@@ -17,6 +17,24 @@ namespace UVE::Physics::Detail {
     const Math::RayUVE& ray, Math::Vector3UVE targetCenter, float movingRadius, float targetRadius,
     float maxDistance) noexcept;
 
+/// Intersects a point ray against a stationary sphere using the same bounded quadratic policy as
+/// `IntersectMovingSphereSphereUVE`; initial containment reports distance zero and a zero normal.
+[[nodiscard]] std::optional<Math::RayHitUVE> IntersectRaySphereUVE(
+    const Math::RayUVE& ray, Math::Vector3UVE targetCenter, float targetRadius, float maxDistance) noexcept;
+
+/// Intersects a point ray against a finite capsule represented by its world-space centerline segment.
+/// Cylinder and hemispherical-cap candidates are evaluated in double precision; initial containment
+/// reports distance zero and a zero normal. Invalid or tangent-only inputs fail closed.
+[[nodiscard]] std::optional<Math::RayHitUVE> IntersectRayCapsuleUVE(
+    const Math::RayUVE& ray, Math::Vector3UVE segmentStart, Math::Vector3UVE segmentEnd,
+    float capsuleRadius, float maxDistance) noexcept;
+
+/// Intersects a point ray against a stationary oriented box by transforming the ray to box-local
+/// space and reusing bounded slab math. The returned normal is restored to world space.
+[[nodiscard]] std::optional<Math::RayHitUVE> IntersectRayOrientedBoxUVE(
+    const Math::RayUVE& ray, Math::Vector3UVE boxCenter, Math::Vector3UVE boxHalfExtents,
+    Math::QuaternionUVE boxRotation, float maxDistance) noexcept;
+
 /// Computes exact sphere-vs-axis-aligned-box penetration for the current Physics v1 geometry
 /// contract. The returned axis points from the sphere center toward the box, matching
 /// CollisionPairUVE's first-to-second separation convention when the sphere is the first shape.
