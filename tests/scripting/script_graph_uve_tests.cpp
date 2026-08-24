@@ -6205,6 +6205,29 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_AnimationMotionQueryNodesFailClos
 
 namespace UVE::Scripting {
 
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesEntityProducerForMultipleConsumers) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({10U, "entity.spawn"}));
+    ASSERT_TRUE(graph.AddNodeUVE({20U, "camera.set_active"}));
+    ASSERT_TRUE(graph.AddNodeUVE({30U, "audio.play_sound"}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{10U, "Result"}, {20U, "Camera"}}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{10U, "Result"}, {30U, "Source"}}));
+
+    const ScriptIrCompileResultUVE compiled = CompileScriptGraphToIrUVE(graph, registry);
+    ASSERT_TRUE(compiled.IsSuccessUVE());
+    ASSERT_TRUE(compiled.program.has_value());
+    ASSERT_EQ(compiled.program->instructions.size(), 5U);
+    EXPECT_EQ(compiled.program->instructions[0].nodeTypeId, "entity.spawn");
+    EXPECT_EQ(compiled.program->instructions[1].kind, ScriptIrInstructionKindUVE::TransferValue);
+    EXPECT_EQ(compiled.program->instructions[1].targetPinName, "Camera");
+    EXPECT_EQ(compiled.program->instructions[2].kind, ScriptIrInstructionKindUVE::TransferValue);
+    EXPECT_EQ(compiled.program->instructions[2].targetPinName, "Source");
+    EXPECT_EQ(compiled.program->instructions[3].nodeTypeId, "camera.set_active");
+    EXPECT_EQ(compiled.program->instructions[4].nodeTypeId, "audio.play_sound");
+}
+
 TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesEntityProducerBeforeAnimationAndMotionQuery) {
     ScriptNodeRegistryUVE registry;
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
