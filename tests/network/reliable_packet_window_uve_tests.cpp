@@ -443,6 +443,43 @@ TEST(ReliablePacketWindowUVETest, ReassemblyRejectsInvalidBoundsAndMessageConfli
     EXPECT_EQ(payload, (std::vector<std::uint8_t>{9U}));
 }
 
+TEST(ReliablePacketWindowUVETest, ReassemblyRejectsMalformedInactiveStateAtomically) {
+    ReliablePayloadReassemblyStateUVE state;
+    state.fragmentCount = 1U;
+    state.receivedByteCount = 1U;
+    state.fragments.resize(1U);
+    state.fragments[0U] = {7U};
+    std::vector<std::uint8_t> payload{9U};
+
+    EXPECT_EQ(AcceptReliablePayloadFragmentUVE(25U, 0U, 1U, {1U}, state, payload),
+              ReliablePayloadReassemblyStatusUVE::Invalid);
+    EXPECT_EQ(state.messageId, 0U);
+    EXPECT_EQ(state.fragmentCount, 1U);
+    EXPECT_EQ(state.receivedByteCount, 1U);
+    EXPECT_EQ(state.fragments[0U], (std::vector<std::uint8_t>{7U}));
+    EXPECT_EQ(payload, (std::vector<std::uint8_t>{9U}));
+}
+
+TEST(ReliablePacketWindowUVETest, ReassemblyRejectsOversizedStoredFragmentAtomically) {
+    ReliablePayloadReassemblyStateUVE state;
+    state.messageId = 26U;
+    state.fragmentCount = 2U;
+    state.receivedFragmentCount = 1U;
+    state.receivedByteCount = kReliablePacketMaximumPayloadBytesUVE + 1U;
+    state.fragments.resize(2U);
+    state.fragments[0U].resize(kReliablePacketMaximumPayloadBytesUVE + 1U, 7U);
+    std::vector<std::uint8_t> payload{9U};
+
+    EXPECT_EQ(AcceptReliablePayloadFragmentUVE(26U, 1U, 2U, {2U}, state, payload),
+              ReliablePayloadReassemblyStatusUVE::Invalid);
+    EXPECT_EQ(state.messageId, 26U);
+    EXPECT_EQ(state.receivedFragmentCount, 1U);
+    EXPECT_EQ(state.receivedByteCount, kReliablePacketMaximumPayloadBytesUVE + 1U);
+    EXPECT_EQ(state.fragments[0U].size(), kReliablePacketMaximumPayloadBytesUVE + 1U);
+    EXPECT_TRUE(state.fragments[1U].empty());
+    EXPECT_EQ(payload, (std::vector<std::uint8_t>{9U}));
+}
+
 TEST(ReliablePacketWindowUVETest, ReassemblyRejectsOverBudgetAggregateStateAtomically) {
     ReliablePayloadReassemblyStateUVE state;
     state.messageId = 23U;

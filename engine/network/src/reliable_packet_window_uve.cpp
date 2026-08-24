@@ -22,6 +22,12 @@ constexpr std::uint32_t kHalfSequenceSpaceUVE = 0x80000000U;
     return state.latestReceivedSequence != 0U;
 }
 
+[[nodiscard]] bool IsConsistentInactiveReassemblyStateUVE(
+    const ReliablePayloadReassemblyStateUVE& state) noexcept {
+    return !state.IsActiveUVE() && state.fragmentCount == 0U && state.receivedFragmentCount == 0U &&
+           state.receivedByteCount == 0U && state.fragments.empty();
+}
+
 [[nodiscard]] bool IsConsistentActiveReassemblyStateUVE(
     const ReliablePayloadReassemblyStateUVE& state) noexcept {
     if (!state.IsActiveUVE() || state.fragmentCount == 0U ||
@@ -39,7 +45,9 @@ constexpr std::uint32_t kHalfSequenceSpaceUVE = 0x80000000U;
             continue;
         }
         ++actualFragmentCount;
-        if (fragment.size() > kReliablePacketMaximumReassembledPayloadBytesUVE - actualByteCount) {
+        if (fragment.size() > kReliablePacketMaximumPayloadBytesUVE ||
+            actualByteCount > kReliablePacketMaximumReassembledPayloadBytesUVE ||
+            fragment.size() > kReliablePacketMaximumReassembledPayloadBytesUVE - actualByteCount) {
             return false;
         }
         actualByteCount += fragment.size();
@@ -245,6 +253,9 @@ ReliablePayloadReassemblyStatusUVE AcceptReliablePayloadFragmentUVE(
     }
 
     if (!state.IsActiveUVE()) {
+        if (!IsConsistentInactiveReassemblyStateUVE(state)) {
+            return ReliablePayloadReassemblyStatusUVE::Invalid;
+        }
         try {
             ReliablePayloadReassemblyStateUVE initialState;
             initialState.messageId = messageId;
