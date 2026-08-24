@@ -59,10 +59,12 @@ class IProjectChangeWatcherUVE {
 public:
     virtual ~IProjectChangeWatcherUVE() = default;
 
-    /// Accumulates `deltaTimeSeconds` and performs at most one portable baseline scan when the
-    /// configured interval has elapsed, or immediately when no baseline exists yet. Returns true
-    /// only when a successful scan replaced the baseline; failed scans retain the last good
-    /// baseline and report a copied diagnostic through GetSnapshotUVE().
+    /// Accumulates finite, non-negative `deltaTimeSeconds` and performs at most one portable
+    /// baseline scan when the configured interval has elapsed, or immediately when no baseline
+    /// exists yet. Negative or non-finite deltas are ignored before accumulator, baseline, journal,
+    /// derived-cache, or filesystem state mutation. Returns true only when a successful scan
+    /// replaced the baseline; failed scans retain the last good baseline and report a copied
+    /// diagnostic through GetSnapshotUVE().
     [[nodiscard]] virtual bool PollUVE(double deltaTimeSeconds, const IAssetDatabaseUVE& assetDatabase,
                                        IDerivedArtifactCacheUVE& derivedArtifactCache) = 0;
 

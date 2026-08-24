@@ -24,6 +24,7 @@ public:
     ProjectChangeWatcherUVE(const ProjectChangeWatcherUVE&) = delete;
     ProjectChangeWatcherUVE& operator=(const ProjectChangeWatcherUVE&) = delete;
 
+    /// Negative or non-finite deltas are ignored before accumulator, scan, journal, or cache mutation.
     [[nodiscard]] bool PollUVE(double deltaTimeSeconds, const IAssetDatabaseUVE& assetDatabase,
                                 IDerivedArtifactCacheUVE& derivedArtifactCache) override;
     [[nodiscard]] bool PollNowUVE(const IAssetDatabaseUVE& assetDatabase,

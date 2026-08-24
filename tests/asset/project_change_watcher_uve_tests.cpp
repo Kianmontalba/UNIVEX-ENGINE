@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <limits>
 #include <optional>
 #include <string>
 #include <vector>
@@ -98,6 +99,28 @@ TEST_F(ProjectChangeWatcherUVETest, PollNowUVE_NormalizesRelativeTrailingSeparat
     EXPECT_EQ(snapshot.successfulScanGeneration, 1U);
     EXPECT_TRUE(snapshot.changes.empty());
     EXPECT_FALSE(snapshot.lastScanDiagnostic.has_value());
+}
+
+TEST_F(ProjectChangeWatcherUVETest, PollUVE_NonFiniteDeltaDoesNotMutateBaselineOrJournal) {
+    const std::filesystem::path source = root / "tracked.txt";
+    WriteFixtureFileUVE(source, "before");
+    ProjectChangeWatcherUVE watcher(root, 1.0, 16U);
+    ASSERT_TRUE(watcher.PollNowUVE(assetDatabase, derivedArtifactCache));
+    const ProjectChangeSnapshotUVE baselineSnapshot = watcher.GetSnapshotUVE();
+
+    WriteFixtureFileUVE(source, "after");
+    EXPECT_FALSE(watcher.PollUVE(std::numeric_limits<double>::infinity(), assetDatabase, derivedArtifactCache));
+
+    const ProjectChangeSnapshotUVE retainedSnapshot = watcher.GetSnapshotUVE();
+    EXPECT_EQ(retainedSnapshot.successfulScanGeneration, baselineSnapshot.successfulScanGeneration);
+    EXPECT_EQ(retainedSnapshot.latestSequence, baselineSnapshot.latestSequence);
+    EXPECT_TRUE(retainedSnapshot.changes.empty());
+    EXPECT_TRUE(derivedArtifactCache.markedSources.empty());
+
+    EXPECT_FALSE(watcher.PollUVE(0.5, assetDatabase, derivedArtifactCache));
+    EXPECT_TRUE(watcher.PollUVE(0.5, assetDatabase, derivedArtifactCache));
+    const ProjectChangeSnapshotUVE changedSnapshot = watcher.GetSnapshotUVE();
+    ASSERT_NE(FindChangeUVE(changedSnapshot, "tracked.txt", ProjectFileChangeKindUVE::Modified), nullptr);
 }
 
 TEST_F(ProjectChangeWatcherUVETest, PollUVE_DefersScanUntilConfiguredInterval) {
