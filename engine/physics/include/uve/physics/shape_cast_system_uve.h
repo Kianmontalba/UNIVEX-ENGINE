@@ -16,8 +16,9 @@ class IEntityManagerUVE;
 namespace UVE::Physics {
 
 /// Bounded sphere-cast query. Sphere targets use exact moving-sphere/sphere time-of-impact and
-/// report the target-sphere normal; box and capsule targets remain conservatively expanded cached
-/// world AABBs. This is read-only and does not claim exact oriented box/capsule casts or backend replacement.
+/// capsule targets use exact point-ray/capsule time-of-impact with the moving radius expanded into
+/// the capsule; box and unknown targets remain conservatively expanded cached world AABBs. This is
+/// read-only and does not claim exact oriented-box casts or backend replacement.
 struct SphereCastQueryUVE final {
     Math::RayUVE ray{};
     float radius = 0.0F;
@@ -65,9 +66,11 @@ struct BoxCastHitUVE final {
 
 struct SphereCastHitUVE final {
     Scene::EntityUVE entity;
-    /// Center of the moving sphere at first entry into the conservative expanded AABB.
+    /// Center of the moving sphere at first contact with the exact sphere/capsule target or the
+    /// conservative expanded AABB fallback.
     Math::Vector3UVE center;
-    /// Axis-aligned face normal of the expanded AABB; zero when the ray starts inside it.
+    /// Exact target-surface normal for sphere/capsule targets; axis-aligned fallback normal for an
+    /// expanded AABB, and zero when the ray starts inside the target.
     Math::Vector3UVE normal;
     float distance = 0.0F;
     PhysicsMaterialUVE material;

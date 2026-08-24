@@ -2,6 +2,7 @@
 
 #include "uve/physics/shape_cast_system_uve.h"
 
+#include <cmath>
 #include <cstdint>
 #include <limits>
 #include <optional>
@@ -99,6 +100,32 @@ TEST_F(ShapeCastSystemUVETest, SphereCastUVE_SphereTargetUsesExactSweepInsteadOf
     EXPECT_NEAR(hit->center.x, -std::sqrt(0.29F), kEpsilon);
     EXPECT_NEAR(hit->center.y, 0.0F, kEpsilon);
     EXPECT_LT(hit->normal.x, 0.0F);
+}
+
+TEST_F(ShapeCastSystemUVETest, SphereCastUVE_CapsuleTargetUsesExactSweepInsteadOfAabbFalsePositive) {
+    const Scene::EntityUVE entity = entityManager.CreateEntityUVE();
+    Scene::TransformComponentUVE local;
+    local.localPosition = Math::Vector3UVE{0.0F, 0.0F, 0.0F};
+    sceneGraph.AttachTransformUVE(entityManager, entity, local);
+    sceneGraph.UpdateUVE(entityManager);
+    Scene::ColliderComponentUVE collider;
+    collider.shapeType = Scene::ColliderShapeTypeUVE::Capsule;
+    collider.radius = 0.5F;
+    collider.height = 4.0F;
+    entityManager.AddComponentUVE<Scene::ColliderComponentUVE>(entity, collider);
+
+    SphereCastQueryUVE query = MakeXAxisQueryUVE(-5.0F, 0.5F);
+    query.ray.origin.y = 2.0F;
+
+    const std::optional<SphereCastHitUVE> hit = ShapeCastSystemUVE::SphereCastUVE(entityManager, query);
+
+    ASSERT_TRUE(hit.has_value());
+    EXPECT_EQ(hit->entity, entity);
+    EXPECT_NEAR(hit->distance, 5.0F - std::sqrt(0.75F), kEpsilon);
+    EXPECT_NEAR(hit->center.x, -std::sqrt(0.75F), kEpsilon);
+    EXPECT_NEAR(hit->center.y, 2.0F, kEpsilon);
+    EXPECT_LT(hit->normal.x, 0.0F);
+    EXPECT_GT(hit->normal.y, 0.0F);
 }
 
 TEST_F(ShapeCastSystemUVETest, SphereCastUVE_MultipleCollidersReturnsClosestDeterministically) {
