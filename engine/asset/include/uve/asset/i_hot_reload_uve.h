@@ -30,10 +30,11 @@ public:
     /// CollectGarbageUVE().
     virtual void UntrackUVE(AssetGuidUVE guid) = 0;
 
-    /// Accumulates `deltaTimeSeconds`; once the configured poll interval has elapsed, checks
-    /// every tracked GUID's resolved path (via `assetDatabase`) for an mtime change since it was
-    /// last observed and calls `assetManager.ReloadUVE()` for each one that changed. A tracked
-    /// file that no longer exists logs a warning and is skipped for this poll (never crashes,
+    /// Accumulates a finite, non-negative `deltaTimeSeconds`; once the configured poll interval has
+    /// elapsed, checks every tracked GUID's resolved path (via `assetDatabase`) for an mtime change
+    /// since it was last observed and calls `assetManager.ReloadUVE()` for each one that changed.
+    /// Negative or non-finite deltas are ignored before accumulator or reload state mutation. A
+    /// tracked file that no longer exists logs a warning and is skipped for this poll (never crashes,
     /// never untracks it — the file may reappear).
     virtual void PollUVE(IAssetManagerUVE& assetManager, IAssetDatabaseUVE& assetDatabase,
                           double deltaTimeSeconds) = 0;
