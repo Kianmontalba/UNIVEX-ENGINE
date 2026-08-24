@@ -54,7 +54,8 @@ bool DecodeTgaRgba8ImageUVE(const std::vector<std::byte>& bytes,
                                   pixelDepth == kTgaTrueColor16BitDepthUVE;
     const bool palette16Image = paletteImage && colorMapEntryDepth == kTgaTrueColor16BitDepthUVE;
     const bool palette32AlphaImage = paletteImage && colorMapEntryDepth == 32U && (imageDescriptor & 0x0FU) == 8U;
-    const bool bgr5551Image = trueColor16Image || palette16Image;
+    const bool packed16Image = trueColor16Image || palette16Image;
+    const bool bgr5551Image = packed16Image && (imageDescriptor & 0x0FU) == 1U;
     const bool rleImage = imageType == kTgaRleTrueColorImageTypeUVE || imageType == kTgaRleGrayscaleImageTypeUVE ||
                           imageType == kTgaRleColorMappedImageTypeUVE;
     const bool supportedImageType = imageType == kTgaTrueColorImageTypeUVE ||
@@ -62,13 +63,13 @@ bool DecodeTgaRgba8ImageUVE(const std::vector<std::byte>& bytes,
     const bool supportedPixelDepth = paletteImage ? pixelDepth == 8U
                                                    : grayscaleImage ? (pixelDepth == 8U || pixelDepth == 16U)
                                                                      : (pixelDepth == 16U || pixelDepth == 24U || pixelDepth == 32U);
-    const bool supportedTrueColorDescriptor = !bgr5551Image || (imageDescriptor & 0x0FU) == 1U;
+    const bool supportedPacked16Descriptor = !packed16Image || (imageDescriptor & 0x0FU) <= 1U;
     const bool supportedColorMap = paletteImage ? colorMapType == 1U && colorMapLength > 0U &&
                                                      (colorMapEntryDepth == 16U || colorMapEntryDepth == 24U ||
                                                       colorMapEntryDepth == 32U)
                                                : colorMapType == 0U;
     if (!supportedImageType || width == 0U || height == 0U || !supportedPixelDepth || !supportedColorMap ||
-        !supportedTrueColorDescriptor || (imageDescriptor & kTgaUnsupportedInterleaveBitsUVE) != 0U) {
+        !supportedPacked16Descriptor || (imageDescriptor & kTgaUnsupportedInterleaveBitsUVE) != 0U) {
         return false;
     }
 
@@ -150,17 +151,27 @@ bool DecodeTgaRgba8ImageUVE(const std::vector<std::byte>& bytes,
             candidatePixels[outputOffset + 1U] = bytes[colorOffset + 1U];
             candidatePixels[outputOffset + 2U] = bytes[colorOffset];
             candidatePixels[outputOffset + 3U] = bytes[colorOffset + 3U];
-        } else if (bgr5551Image) {
+        } else if (packed16Image) {
             const std::uint16_t packed = static_cast<std::uint16_t>(
                 std::to_integer<std::uint8_t>(bytes[colorOffset]) |
                 (static_cast<std::uint16_t>(std::to_integer<std::uint8_t>(bytes[colorOffset + 1U])) << 8U));
             const auto expandFiveBit = [](const std::uint16_t value) noexcept {
                 return std::byte{static_cast<unsigned char>((value * 255U + 15U) / 31U)};
             };
-            candidatePixels[outputOffset] = expandFiveBit((packed >> 10U) & 0x1FU);
-            candidatePixels[outputOffset + 1U] = expandFiveBit((packed >> 5U) & 0x1FU);
-            candidatePixels[outputOffset + 2U] = expandFiveBit(packed & 0x1FU);
-            candidatePixels[outputOffset + 3U] = (packed & 0x8000U) != 0U ? std::byte{0xFF} : std::byte{0x00};
+            if (bgr5551Image) {
+                candidatePixels[outputOffset] = expandFiveBit((packed >> 10U) & 0x1FU);
+                candidatePixels[outputOffset + 1U] = expandFiveBit((packed >> 5U) & 0x1FU);
+                candidatePixels[outputOffset + 2U] = expandFiveBit(packed & 0x1FU);
+                candidatePixels[outputOffset + 3U] = (packed & 0x8000U) != 0U ? std::byte{0xFF} : std::byte{0x00};
+            } else {
+                const auto expandSixBit = [](const std::uint16_t value) noexcept {
+                    return std::byte{static_cast<unsigned char>((value * 255U + 31U) / 63U)};
+                };
+                candidatePixels[outputOffset] = expandFiveBit((packed >> 11U) & 0x1FU);
+                candidatePixels[outputOffset + 1U] = expandSixBit((packed >> 5U) & 0x3FU);
+                candidatePixels[outputOffset + 2U] = expandFiveBit(packed & 0x1FU);
+                candidatePixels[outputOffset + 3U] = std::byte{0xFF};
+            }
         } else if (grayscaleImage) {
             candidatePixels[outputOffset] = bytes[colorOffset];
             candidatePixels[outputOffset + 1U] = bytes[colorOffset];
