@@ -22,7 +22,11 @@ LightListUVE LightSystemUVE::ExtractActiveLightsUVE(Scene::IEntityManagerUVE& en
             if (filledCount >= kMaxLightsUVE) {
                 return;
             }
-            UVE_ASSERT(Scene::IsLightComponentValidUVE(light));
+            const bool validLight = Scene::IsLightComponentValidUVE(light);
+            UVE_ASSERT(validLight);
+            if (!validLight) {
+                return;
+            }
             LightDataUVE& slot = result[filledCount];
             slot.type = light.type;
             slot.position = worldTransform.worldPosition;
