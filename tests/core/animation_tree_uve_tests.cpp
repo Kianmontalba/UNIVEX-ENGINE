@@ -66,6 +66,25 @@ TEST(AnimationTreeUVETest, EvaluateAnimationTreeUVE_SelectsTransitionAndPropagat
     EXPECT_EQ(result.evaluatedNodeCount, 4U);
 }
 
+TEST(AnimationTreeUVETest, EvaluateAnimationTreeUVE_SharedNodeCacheIncludesLocalTime) {
+    AnimationTreeUVE tree;
+    tree.clips = {MakeClipUVE("shared", 0.0F, 10.0F)};
+    tree.nodes = {
+        AnimationTreeNodeUVE{1U, AnimationTreeNodeKindUVE::ClipPlayer, "Shared", "shared", {}, 0U, 0U, 0.5F, 1.0F, true},
+        AnimationTreeNodeUVE{2U, AnimationTreeNodeKindUVE::TimeScale, "Slow", {}, {}, 1U, 0U, 0.5F, 0.5F, true},
+        AnimationTreeNodeUVE{3U, AnimationTreeNodeKindUVE::TimeScale, "Full", {}, {}, 1U, 0U, 0.5F, 1.0F, true},
+        AnimationTreeNodeUVE{4U, AnimationTreeNodeKindUVE::Blend, "Blend", {}, {}, 2U, 3U, 0.5F, 1.0F, true},
+        AnimationTreeNodeUVE{5U, AnimationTreeNodeKindUVE::OutputPose, "Output", {}, {}, 4U, 0U, 0.5F, 1.0F, true},
+    };
+
+    const AnimationTreeEvaluationResultUVE result = EvaluateAnimationTreeUVE(tree, 0.8);
+
+    ASSERT_TRUE(result.IsSuccessUVE());
+    EXPECT_FLOAT_EQ(result.pose.position.x, 6.0F);
+    // The shared clip is evaluated once for each distinct local time.
+    EXPECT_EQ(result.evaluatedNodeCount, 6U);
+}
+
 TEST(AnimationTreeUVETest, EvaluateAnimationTreeUVE_RejectsNonFiniteScaledTimeBeforeRecursion) {
     AnimationTreeUVE tree;
     tree.clips = {MakeClipUVE("a", 0.0F, 1.0F)};

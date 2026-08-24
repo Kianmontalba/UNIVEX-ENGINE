@@ -89,6 +89,8 @@ struct AnimationTreeEvaluationResultUVE final {
 [[nodiscard]] AnimationTreeValidationResultUVE ValidateAnimationTreeUVE(
     const AnimationTreeUVE& tree) noexcept;
 
+/// Evaluates shared nodes independently for distinct local times; memoization is keyed by node ID
+/// and exact local evaluation time, while active recursion remains cycle-checked by node ID.
 [[nodiscard]] AnimationTreeEvaluationResultUVE EvaluateAnimationTreeUVE(
     const AnimationTreeUVE& tree, double timeSeconds, const std::vector<AnimationTreeParameterUVE>& parameters = {});
 
