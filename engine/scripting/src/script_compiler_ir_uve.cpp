@@ -314,10 +314,17 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
                 return dependency.input.nodeId == sourceNode->id &&
                        !IsExecutionLinkUVE(dependency, nodes, registry);
             }) != links.end();
-        if (!validEntityType || !approvedEntityProducer || hasProducerDependency || !stagedEntityLinks.empty()) {
+        const bool duplicateEntityLink = std::any_of(
+            stagedEntityLinks.begin(), stagedEntityLinks.end(), [&](const ScriptLinkUVE& stagedLink) {
+                return stagedLink.output.nodeId == link.output.nodeId &&
+                       stagedLink.output.pinName == link.output.pinName &&
+                       stagedLink.input.nodeId == link.input.nodeId &&
+                       stagedLink.input.pinName == link.input.pinName;
+            });
+        if (!validEntityType || !approvedEntityProducer || hasProducerDependency || duplicateEntityLink) {
             result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode, link.input.nodeId,
                                           link.input.pinName,
-                                          "Entity staging supports one direct entity.spawn or camera.get_camera Result producer; composed dependencies and additional Entity consumers remain deferred."});
+                                          "Entity staging supports bounded direct fan-out from entity.spawn or camera.get_camera.Result; composed dependencies, duplicate links, and invalid Entity links remain deferred."});
             continue;
         }
         stagedEntityLinks.push_back(link);
