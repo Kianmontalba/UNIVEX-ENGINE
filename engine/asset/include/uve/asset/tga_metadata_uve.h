@@ -17,7 +17,7 @@ struct TgaRgba8ImageUVE final {
 };
 
 /// Decodes bounded TGA images into canonical top-down RGBA8 pixels.
-/// Supports image type 2 (uncompressed) and type 10 (run-length encoded) with 16-bit BGR5551 or BGR565,
+/// Supports image type 2 (uncompressed) and type 10 (run-length encoded) with 15-bit BGR555 or 16-bit BGR5551/BGR565,
 /// 24-bit BGR, or 32-bit BGRA source pixels with descriptor-declared alpha preservation, 8-bit grayscale image types 3 and 11,
 /// 16-bit grayscale+alpha image
 /// types 3 and 11, and 8-bit or 16-bit indexed pixel data in image types 1 and 9 with 16-bit BGR5551 or BGR565, 24-bit BGR,

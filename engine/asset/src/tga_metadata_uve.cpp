@@ -49,6 +49,9 @@ bool DecodeTgaRgba8ImageUVE(const std::vector<std::byte>& bytes,
     const std::uint8_t colorMapEntryDepth = std::to_integer<std::uint8_t>(bytes[7]);
     const bool grayscaleImage = imageType == kTgaGrayscaleImageTypeUVE || imageType == kTgaRleGrayscaleImageTypeUVE;
     const bool paletteImage = imageType == kTgaColorMappedImageTypeUVE || imageType == kTgaRleColorMappedImageTypeUVE;
+    const bool trueColor15Image = !grayscaleImage && !paletteImage &&
+                                  (imageType == kTgaTrueColorImageTypeUVE || imageType == kTgaRleTrueColorImageTypeUVE) &&
+                                  pixelDepth == 15U;
     const bool trueColor16Image = !grayscaleImage && !paletteImage &&
                                   (imageType == kTgaTrueColorImageTypeUVE || imageType == kTgaRleTrueColorImageTypeUVE) &&
                                   pixelDepth == kTgaTrueColor16BitDepthUVE;
@@ -58,16 +61,19 @@ bool DecodeTgaRgba8ImageUVE(const std::vector<std::byte>& bytes,
                                        (imageType == kTgaTrueColorImageTypeUVE || imageType == kTgaRleTrueColorImageTypeUVE) &&
                                        pixelDepth == 32U && (imageDescriptor & 0x0FU) == 8U;
     const bool bgraAlphaImage = palette32AlphaImage || trueColor32AlphaImage;
-    const bool packed16Image = trueColor16Image || palette16Image;
-    const bool bgr5551Image = packed16Image && (imageDescriptor & 0x0FU) == 1U;
+    const bool packed16Image = trueColor15Image || trueColor16Image || palette16Image;
+    const bool bgr555Image = trueColor15Image;
+    const bool bgr5551Image = !trueColor15Image && packed16Image && (imageDescriptor & 0x0FU) == 1U;
     const bool rleImage = imageType == kTgaRleTrueColorImageTypeUVE || imageType == kTgaRleGrayscaleImageTypeUVE ||
                           imageType == kTgaRleColorMappedImageTypeUVE;
     const bool supportedImageType = imageType == kTgaTrueColorImageTypeUVE ||
                                     imageType == kTgaRleTrueColorImageTypeUVE || grayscaleImage || paletteImage;
     const bool supportedPixelDepth = paletteImage ? (pixelDepth == 8U || pixelDepth == 16U)
                                                    : grayscaleImage ? (pixelDepth == 8U || pixelDepth == 16U)
-                                                                     : (pixelDepth == 16U || pixelDepth == 24U || pixelDepth == 32U);
-    const bool supportedPacked16Descriptor = !packed16Image || (imageDescriptor & 0x0FU) <= 1U;
+                                                                     : (pixelDepth == 15U || pixelDepth == 16U || pixelDepth == 24U || pixelDepth == 32U);
+    const bool supportedPacked16Descriptor = !packed16Image ||
+                                             (trueColor15Image ? (imageDescriptor & 0x0FU) == 0U
+                                                               : (imageDescriptor & 0x0FU) <= 1U);
     const bool supportedColorMap = paletteImage ? colorMapType == 1U && colorMapLength > 0U &&
                                                      (colorMapEntryDepth == 16U || colorMapEntryDepth == 24U ||
                                                       colorMapEntryDepth == 32U)
@@ -77,7 +83,7 @@ bool DecodeTgaRgba8ImageUVE(const std::vector<std::byte>& bytes,
         return false;
     }
 
-    const std::size_t bytesPerPixel = pixelDepth / 8U;
+    const std::size_t bytesPerPixel = pixelDepth == 15U ? 2U : pixelDepth / 8U;
     constexpr std::size_t kMaximumSizeT = std::numeric_limits<std::size_t>::max();
     if (static_cast<std::size_t>(width) > kMaximumSizeT / bytesPerPixel) {
         return false;
@@ -164,11 +170,12 @@ bool DecodeTgaRgba8ImageUVE(const std::vector<std::byte>& bytes,
             const auto expandFiveBit = [](const std::uint16_t value) noexcept {
                 return std::byte{static_cast<unsigned char>((value * 255U + 15U) / 31U)};
             };
-            if (bgr5551Image) {
+            if (bgr5551Image || bgr555Image) {
                 candidatePixels[outputOffset] = expandFiveBit((packed >> 10U) & 0x1FU);
                 candidatePixels[outputOffset + 1U] = expandFiveBit((packed >> 5U) & 0x1FU);
                 candidatePixels[outputOffset + 2U] = expandFiveBit(packed & 0x1FU);
-                candidatePixels[outputOffset + 3U] = (packed & 0x8000U) != 0U ? std::byte{0xFF} : std::byte{0x00};
+                candidatePixels[outputOffset + 3U] = bgr5551Image && (packed & 0x8000U) == 0U ? std::byte{0x00}
+                                                                                               : std::byte{0xFF};
             } else {
                 const auto expandSixBit = [](const std::uint16_t value) noexcept {
                     return std::byte{static_cast<unsigned char>((value * 255U + 31U) / 63U)};
