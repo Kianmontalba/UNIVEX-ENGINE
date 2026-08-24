@@ -37,5 +37,19 @@ TEST(PrefabRevisionPolicyUVETest, RefreshPrefabInstanceRevisionUVE_RejectsRevisi
     EXPECT_EQ(instance.sourceRevision, 7U);
     EXPECT_EQ(instance.instanceRevision, 7U);
 }
+TEST(PrefabRevisionPolicyUVETest, EvaluatePrefabRevisionRefreshDecisionUVE_DistinguishesNoOpRefreshAndMerge) {
+    EXPECT_EQ(EvaluatePrefabRevisionRefreshDecisionUVE(7U, 7U, false),
+              PrefabRevisionRefreshDecisionUVE::NoOp);
+    EXPECT_EQ(EvaluatePrefabRevisionRefreshDecisionUVE(9U, 7U, false),
+              PrefabRevisionRefreshDecisionUVE::Refresh);
+    EXPECT_EQ(EvaluatePrefabRevisionRefreshDecisionUVE(9U, 7U, true),
+              PrefabRevisionRefreshDecisionUVE::MergeRequired);
+}
+TEST(PrefabRevisionPolicyUVETest, EvaluatePrefabRevisionRefreshDecisionUVE_RejectsInvalidRevisionOrder) {
+    EXPECT_EQ(EvaluatePrefabRevisionRefreshDecisionUVE(0U, 7U, false),
+              PrefabRevisionRefreshDecisionUVE::Invalid);
+    EXPECT_EQ(EvaluatePrefabRevisionRefreshDecisionUVE(6U, 7U, false),
+              PrefabRevisionRefreshDecisionUVE::Invalid);
+}
 } // namespace
 } // namespace UVE::Scene::Tests
