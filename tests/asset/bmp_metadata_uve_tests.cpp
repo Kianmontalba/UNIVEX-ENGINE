@@ -307,6 +307,55 @@ void AppendU32LittleEndianUVE(std::vector<std::byte>& bytes, const std::uint32_t
     return bmp;
 }
 
+[[nodiscard]] std::vector<std::byte> MakeBmp32V4AlphaBitfieldsTwoByOneUVE() {
+    std::vector<std::byte> bmp;
+    bmp.reserve(130U);
+    bmp.push_back(std::byte{'B'});
+    bmp.push_back(std::byte{'M'});
+    AppendU32LittleEndianUVE(bmp, 130U);
+    AppendU16LittleEndianUVE(bmp, 0U);
+    AppendU16LittleEndianUVE(bmp, 0U);
+    AppendU32LittleEndianUVE(bmp, 122U);
+    AppendU32LittleEndianUVE(bmp, 108U);
+    AppendU32LittleEndianUVE(bmp, 2U);
+    AppendU32LittleEndianUVE(bmp, 1U);
+    AppendU16LittleEndianUVE(bmp, 1U);
+    AppendU16LittleEndianUVE(bmp, 32U);
+    AppendU32LittleEndianUVE(bmp, 3U);
+    AppendU32LittleEndianUVE(bmp, 8U);
+    AppendU32LittleEndianUVE(bmp, 2835U);
+    AppendU32LittleEndianUVE(bmp, 2835U);
+    AppendU32LittleEndianUVE(bmp, 0U);
+    AppendU32LittleEndianUVE(bmp, 0U);
+    // BITMAPV4 exact BGRA masks embedded after the 40-byte base header.
+    AppendU32LittleEndianUVE(bmp, 0x00FF0000U);
+    AppendU32LittleEndianUVE(bmp, 0x0000FF00U);
+    AppendU32LittleEndianUVE(bmp, 0x000000FFU);
+    AppendU32LittleEndianUVE(bmp, 0xFF000000U);
+    bmp.insert(bmp.end(), 52U, std::byte{0x00});
+    bmp.insert(bmp.end(), {std::byte{0x00}, std::byte{0x00}, std::byte{0xFF}, std::byte{0x35},
+                           std::byte{0x00}, std::byte{0xFF}, std::byte{0x00}, std::byte{0xC5}});
+    return bmp;
+}
+
+[[nodiscard]] std::vector<std::byte> MakeBmp32V5AlphaBitfieldsTwoByOneUVE() {
+    std::vector<std::byte> bmp = MakeBmp32V4AlphaBitfieldsTwoByOneUVE();
+    bmp[2] = std::byte{0x92};
+    bmp[3] = std::byte{0x00};
+    bmp[4] = std::byte{0x00};
+    bmp[5] = std::byte{0x00};
+    bmp[10] = std::byte{0x8A};
+    bmp[11] = std::byte{0x00};
+    bmp[12] = std::byte{0x00};
+    bmp[13] = std::byte{0x00};
+    bmp[14] = std::byte{0x7C};
+    bmp[15] = std::byte{0x00};
+    bmp[16] = std::byte{0x00};
+    bmp[17] = std::byte{0x00};
+    bmp.insert(bmp.begin() + 122, 16U, std::byte{0x00});
+    return bmp;
+}
+
 [[nodiscard]] std::vector<std::byte> MakeBmp16Bgr555BitfieldsTwoByOneUVE() {
     std::vector<std::byte> bmp;
     bmp.reserve(70U);
@@ -548,6 +597,39 @@ TEST(BmpMetadataUVETest, DecodeBmpRgba8ImageUVE_Decodes32BitAlphaBitfieldsRowsWi
 
 TEST(BmpMetadataUVETest, DecodeBmpRgba8ImageUVE_RejectsMalformedAlphaBitfieldsAtomically) {
     std::vector<std::byte> malformed = MakeBmp32AlphaBitfieldsTwoByOneUVE();
+    malformed[66] = std::byte{0x00};
+    malformed[67] = std::byte{0x00};
+    malformed[68] = std::byte{0x00};
+    malformed[69] = std::byte{0x80};
+    BmpRgba8ImageUVE image{3U, 4U, {std::byte{0x11}, std::byte{0x22}, std::byte{0x33}, std::byte{0x44}}};
+    EXPECT_FALSE(DecodeBmpRgba8ImageUVE(malformed, image));
+    EXPECT_EQ(image.width, 3U);
+    EXPECT_EQ(image.height, 4U);
+    EXPECT_EQ(image.pixels, std::vector<std::byte>({std::byte{0x11}, std::byte{0x22}, std::byte{0x33}, std::byte{0x44}}));
+}
+
+TEST(BmpMetadataUVETest, DecodeBmpRgba8ImageUVE_Decodes32BitV4AlphaBitfieldsRowsWithSourceAlpha) {
+    BmpRgba8ImageUVE image;
+    ASSERT_TRUE(DecodeBmpRgba8ImageUVE(MakeBmp32V4AlphaBitfieldsTwoByOneUVE(), image));
+    EXPECT_EQ(image.width, 2U);
+    EXPECT_EQ(image.height, 1U);
+    EXPECT_EQ(image.pixels, (std::vector<std::byte>{
+                                 std::byte{0xFF}, std::byte{0x00}, std::byte{0x00}, std::byte{0x35},
+                                 std::byte{0x00}, std::byte{0xFF}, std::byte{0x00}, std::byte{0xC5}}));
+}
+
+TEST(BmpMetadataUVETest, DecodeBmpRgba8ImageUVE_Decodes32BitV5AlphaBitfieldsRowsWithSourceAlpha) {
+    BmpRgba8ImageUVE image;
+    ASSERT_TRUE(DecodeBmpRgba8ImageUVE(MakeBmp32V5AlphaBitfieldsTwoByOneUVE(), image));
+    EXPECT_EQ(image.width, 2U);
+    EXPECT_EQ(image.height, 1U);
+    EXPECT_EQ(image.pixels, (std::vector<std::byte>{
+                                 std::byte{0xFF}, std::byte{0x00}, std::byte{0x00}, std::byte{0x35},
+                                 std::byte{0x00}, std::byte{0xFF}, std::byte{0x00}, std::byte{0xC5}}));
+}
+
+TEST(BmpMetadataUVETest, DecodeBmpRgba8ImageUVE_RejectsMalformedV4AlphaMaskAtomically) {
+    std::vector<std::byte> malformed = MakeBmp32V4AlphaBitfieldsTwoByOneUVE();
     malformed[66] = std::byte{0x00};
     malformed[67] = std::byte{0x00};
     malformed[68] = std::byte{0x00};
