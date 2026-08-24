@@ -35,7 +35,7 @@ enum class PngFilterTypeUVE : std::uint8_t { None = 0U, Sub = 1U, Up = 2U, Avera
     const std::vector<std::byte>& previousRow, std::vector<std::byte>& outRow);
 
 /// Checks the supported grayscale/grayscale-alpha/RGB/indexed/RGBA decoded-pixel budget after normalization to RGBA8,
-/// including the bounded non-interlaced 1/2/4-bit grayscale and 16-bit grayscale/grayscale-alpha/RGB/RGBA source forms, without allocating or decoding pixel data.
+/// including the bounded non-interlaced 1/2/4-bit grayscale/indexed and 16-bit grayscale/grayscale-alpha/RGB/RGBA source forms, without allocating or decoding pixel data.
 [[nodiscard]] bool ValidatePngRgba8PixelBudgetUVE(
     const PngMetadataUVE& metadata,
     std::uint64_t maximumBytes = kMaximumPngDecodedPixelBytesUVE) noexcept;
@@ -46,7 +46,7 @@ struct PngRgba8ImageUVE final {
     std::vector<std::byte> pixels;
 };
 
-/// Decodes bounded non-interlaced 1/2/4-bit grayscale, 8-bit grayscale/grayscale-alpha/RGB/indexed/RGBA, and 16-bit grayscale/grayscale-alpha/RGB/RGBA PNG forms using zlib and the existing scanline
+/// Decodes bounded non-interlaced 1/2/4-bit grayscale/indexed, 8-bit grayscale/grayscale-alpha/RGB/indexed/RGBA, and 16-bit grayscale/grayscale-alpha/RGB/RGBA PNG forms using zlib and the existing scanline
 /// unfilter primitive, normalizing grayscale/RGB input to opaque RGBA8, indexed input through validated PLTE/tRNS
 /// palette facts, 16-bit grayscale/grayscale-alpha/RGB/RGBA input through big-endian high-byte down-conversion, and Adam7-interlaced
 /// 8-bit grayscale/grayscale-alpha/RGB/indexed/RGBA plus Adam7-interlaced 8-bit grayscale/grayscale-alpha/RGB/indexed/RGBA and 16-bit grayscale/grayscale-alpha/RGB/RGBA input through bounded pass reconstruction,

@@ -156,13 +156,15 @@ bool UnfilterPngRgba8ScanlineUVE(const PngFilterTypeUVE filter,
 bool ValidatePngRgba8PixelBudgetUVE(const PngMetadataUVE& metadata,
                                     const std::uint64_t maximumBytes) noexcept {
     const bool supportedPackedGray = metadata.bitDepth >= 1U && metadata.bitDepth <= 4U && metadata.colorType == 0U;
+    const bool supportedPackedIndexed = metadata.bitDepth >= 1U && metadata.bitDepth <= 4U && metadata.colorType == 3U;
     const bool supportedEightBit = metadata.bitDepth == 8U &&
                                    (metadata.colorType == 0U || metadata.colorType == 2U || metadata.colorType == 3U ||
                                     metadata.colorType == 4U || metadata.colorType == 6U);
     const bool supportedSixteenBit = metadata.bitDepth == 16U &&
                                      (metadata.colorType == 0U || metadata.colorType == 2U || metadata.colorType == 4U ||
                                       metadata.colorType == 6U);
-    if (metadata.width == 0U || metadata.height == 0U || !(supportedPackedGray || supportedEightBit || supportedSixteenBit) ||
+    if (metadata.width == 0U || metadata.height == 0U ||
+        !(supportedPackedGray || supportedPackedIndexed || supportedEightBit || supportedSixteenBit) ||
         maximumBytes == 0U) {
         return false;
     }
@@ -182,6 +184,7 @@ bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUV
             return false;
         }
         const bool supportedPackedGray = metadata->bitDepth >= 1U && metadata->bitDepth <= 4U && metadata->colorType == 0U;
+        const bool supportedPackedIndexed = metadata->bitDepth >= 1U && metadata->bitDepth <= 4U && metadata->colorType == 3U;
         const bool supportedEightBit = metadata->bitDepth == 8U &&
                                        (metadata->colorType == 0U || metadata->colorType == 2U || metadata->colorType == 3U ||
                                         metadata->colorType == 4U || metadata->colorType == 6U);
@@ -195,7 +198,7 @@ bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUV
                                      (metadata->bitDepth == 16U &&
                                       (metadata->colorType == 0U || metadata->colorType == 2U ||
                                        metadata->colorType == 4U || metadata->colorType == 6U)));
-        if (!(supportedPackedGray || supportedEightBit || supportedSixteenBit) ||
+        if (!(supportedPackedGray || supportedPackedIndexed || supportedEightBit || supportedSixteenBit) ||
             (metadata->interlaceMethod != 0U && !supportedAdam7) || !ValidatePngRgba8PixelBudgetUVE(*metadata)) {
             return false;
         }
@@ -292,6 +295,16 @@ bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUV
                 return (width * static_cast<std::size_t>(metadata->bitDepth) + 7U) / 8U;
             }
             return width * sourceBytesPerPixel;
+        };
+        const auto readPackedSample = [metadata](const std::vector<std::byte>& decodedRow,
+                                                   const std::size_t x) noexcept {
+            const std::size_t samplesPerByte = 8U / metadata->bitDepth;
+            const std::size_t packedOffset = x / samplesPerByte;
+            const std::size_t sampleShift = 8U - metadata->bitDepth -
+                                            (x % samplesPerByte) * metadata->bitDepth;
+            const std::uint8_t packed = std::to_integer<std::uint8_t>(decodedRow[packedOffset]);
+            const std::uint8_t sampleMask = static_cast<std::uint8_t>((1U << metadata->bitDepth) - 1U);
+            return static_cast<std::uint8_t>((packed >> sampleShift) & sampleMask);
         };
         const auto passWidth = [metadata](const std::size_t start, const std::size_t step) noexcept {
             if (metadata->width <= start) return std::size_t{0U};
@@ -424,13 +437,8 @@ bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUV
                         pixels[outputOffset + 2U] = decodedRow[sourceOffset + 4U];
                         pixels[outputOffset + 3U] = decodedRow[sourceOffset + 6U];
                     } else if (metadata->bitDepth < 8U && metadata->colorType == 0U) {
-                        const std::size_t samplesPerByte = 8U / metadata->bitDepth;
-                        const std::size_t packedOffset = x / samplesPerByte;
-                        const std::size_t sampleShift = 8U - metadata->bitDepth -
-                                                        (x % samplesPerByte) * metadata->bitDepth;
-                        const std::uint8_t packed = std::to_integer<std::uint8_t>(decodedRow[packedOffset]);
+                        const std::uint8_t sample = readPackedSample(decodedRow, x);
                         const std::uint8_t sampleMask = static_cast<std::uint8_t>((1U << metadata->bitDepth) - 1U);
-                        const std::uint8_t sample = static_cast<std::uint8_t>((packed >> sampleShift) & sampleMask);
                         const std::byte gray = std::byte{static_cast<unsigned char>(
                             (static_cast<unsigned int>(sample) * 255U) / sampleMask)};
                         pixels[outputOffset] = gray;
@@ -438,7 +446,9 @@ bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUV
                         pixels[outputOffset + 2U] = gray;
                         pixels[outputOffset + 3U] = std::byte{0xFF};
                     } else if (metadata->colorType == 3U) {
-                        const std::size_t paletteIndex = std::to_integer<std::uint8_t>(decodedRow[sourceOffset]);
+                        const std::size_t paletteIndex = metadata->bitDepth < 8U
+                            ? readPackedSample(decodedRow, x)
+                            : std::to_integer<std::uint8_t>(decodedRow[sourceOffset]);
                         if (paletteIndex >= paletteAlpha.size()) return false;
                         const std::size_t paletteOffset = paletteIndex * 3U;
                         pixels[outputOffset] = paletteRgb[paletteOffset];
