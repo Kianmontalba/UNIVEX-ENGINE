@@ -3519,7 +3519,7 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_DispatchesNumberComparisonNodes) 
     EXPECT_TRUE(runComparison("logic.boolean.less_equal", 2.0F, 2.0F));
 
     ScriptVmExecutionContextUVE nonFiniteContext;
-    ASSERT_TRUE(nonFiniteContext.SetInputUVE(40U, "A", std::numeric_limits<float>::quiet_NaN()));
+    nonFiniteContext.inputs.push_back({40U, "A", std::numeric_limits<float>::quiet_NaN()});
     ASSERT_TRUE(nonFiniteContext.SetInputUVE(40U, "B", 1.0F));
     const ScriptVmExecutionResultUVE nonFiniteResult =
         ExecuteScriptBytecodeUVE(makeProgram("logic.boolean.equal"), nonFiniteContext);
@@ -5100,7 +5100,7 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_EvaluatesExplicitConversionsAndDe
     invalidProgram.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 5U, 0U,
                                            "convert.number_to_boolean", {}, {}});
     ScriptVmExecutionContextUVE invalidContext;
-    ASSERT_TRUE(invalidContext.SetInputUVE(5U, "Value", std::numeric_limits<float>::quiet_NaN()));
+    invalidContext.inputs.push_back({5U, "Value", std::numeric_limits<float>::quiet_NaN()});
     const ScriptVmExecutionResultUVE invalidResult = ExecuteScriptBytecodeUVE(invalidProgram, invalidContext);
     EXPECT_FALSE(invalidResult.IsSuccessUVE());
 }
@@ -6968,8 +6968,8 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_AudioSet3dPositionFailsClosedForN
                                     "audio.set_3d_position", {}, {}});
     ScriptVmExecutionContextUVE context;
     ASSERT_TRUE(context.SetInputUVE(1U, "Source", ScriptEntityValueUVE{Scene::EntityUVE{9U, 1U}}));
-    ASSERT_TRUE(context.SetInputUVE(1U, "Position",
-                                    ScriptVector3ValueUVE{{std::numeric_limits<float>::quiet_NaN(), 0.0F, 0.0F}}));
+    context.inputs.push_back({1U, "Position",
+                               ScriptVector3ValueUVE{{std::numeric_limits<float>::quiet_NaN(), 0.0F, 0.0F}}});
     AudioCaptureUVE capture;
     ScriptEngineCallBindingsUVE bindings{};
     bindings.userData = &capture;
@@ -7287,7 +7287,7 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_DebugPrintRejectsNonFiniteNumberB
     ScriptBytecodeProgramUVE program;
     program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U, "debug.print", {}, {}});
     ScriptVmExecutionContextUVE context;
-    ASSERT_TRUE(context.SetInputUVE(1U, "Value", std::numeric_limits<float>::quiet_NaN()));
+    context.inputs.push_back({1U, "Value", std::numeric_limits<float>::quiet_NaN()});
     EngineLogCaptureUVE capture;
     ScriptEngineCallBindingsUVE bindings{};
     bindings.userData = &capture;
@@ -7462,6 +7462,31 @@ TEST(ScriptVmUVETest, VariableSetRejectsOutputCapacityWithoutMutatingLocalStorag
     EXPECT_FLOAT_EQ(std::get<float>(*localValue), 7.0F);
     EXPECT_EQ(context.outputs.size(), ScriptVmExecutionContextUVE::kMaximumBindingsUVE);
     EXPECT_FALSE(context.FindOutputUVE(1U, "Result").has_value());
+}
+
+TEST(ScriptVmExecutionContextUVE, SetBindingsRejectNonFiniteValuesAtomically) {
+    ScriptVmExecutionContextUVE context;
+    const ScriptVector3ValueUVE validVector{{1.0F, 2.0F, 3.0F}};
+    ASSERT_TRUE(context.SetInputUVE(7U, "Value", 1.0F));
+    ASSERT_TRUE(context.SetOutputUVE(7U, "Vector", validVector));
+
+    const float notFinite = std::numeric_limits<float>::quiet_NaN();
+    const ScriptVector3ValueUVE nonFiniteVector{{1.0F, std::numeric_limits<float>::infinity(), 3.0F}};
+    EXPECT_FALSE(context.SetInputUVE(7U, "Value", notFinite));
+    EXPECT_FALSE(context.SetOutputUVE(7U, "Vector", nonFiniteVector));
+    EXPECT_FALSE(context.SetInputUVE(8U, "Value", notFinite));
+    EXPECT_FALSE(context.SetOutputUVE(8U, "Vector", nonFiniteVector));
+
+    ASSERT_EQ(context.inputs.size(), 1U);
+    ASSERT_EQ(context.outputs.size(), 1U);
+    const std::optional<ScriptVmValueUVE> input = context.FindInputUVE(7U, "Value");
+    const std::optional<ScriptVmValueUVE> output = context.FindOutputUVE(7U, "Vector");
+    ASSERT_TRUE(input.has_value());
+    ASSERT_TRUE(output.has_value());
+    ASSERT_TRUE(std::holds_alternative<float>(*input));
+    ASSERT_TRUE(std::holds_alternative<ScriptVector3ValueUVE>(*output));
+    EXPECT_FLOAT_EQ(std::get<float>(*input), 1.0F);
+    EXPECT_EQ(std::get<ScriptVector3ValueUVE>(*output), validVector);
 }
 
 TEST(ScriptVmExecutionContextUVE, SetBindingsAndComponentFactsRejectMalformedIdentifiersAtomically) {
