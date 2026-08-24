@@ -13,8 +13,8 @@ bool ValidateMonitorDimensionsUVE(const int width, const int height, std::uint32
 }
 
 bool ValidateMonitorInfoUVE(const MonitorInfoUVE& monitor) noexcept {
-    return !monitor.name.empty() && monitor.name.size() <= 256U && monitor.width > 0U &&
-           monitor.height > 0U;
+    return !monitor.name.empty() && monitor.name.size() <= 256U &&
+           monitor.name.find('\0') == std::string::npos && monitor.width > 0U && monitor.height > 0U;
 }
 
 bool ValidateMonitorSnapshotUVE(const std::vector<MonitorInfoUVE>& monitors) noexcept {
