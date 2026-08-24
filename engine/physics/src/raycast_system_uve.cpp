@@ -5,6 +5,7 @@
 
 #include "uve/math/aabb_uve.h"
 #include "uve/physics/detail/collider_world_aabb_cache_uve.h"
+#include "uve/physics/detail/shape_narrow_phase_uve.h"
 #include "uve/physics/physics_material_uve.h"
 #include "uve/scene/components/collider_component_uve.h"
 
@@ -23,8 +24,26 @@ std::optional<RaycastHitUVE> RaycastSystemUVE::RaycastUVE(Scene::IEntityManagerU
             continue;
         }
 
-        const std::optional<Math::RayHitUVE> hit =
-            Math::IntersectRayUVE(query.ray, collider.worldAabb, query.maxDistance);
+        std::optional<Math::RayHitUVE> hit;
+        switch (collider.shapeType) {
+        case Scene::ColliderShapeTypeUVE::Sphere:
+            hit = Detail::IntersectRaySphereUVE(
+                query.ray, collider.worldAabb.GetCenterUVE(), collider.shapeRadius, query.maxDistance);
+            break;
+        case Scene::ColliderShapeTypeUVE::Capsule:
+            hit = Detail::IntersectRayCapsuleUVE(
+                query.ray, collider.shapeSegmentStart, collider.shapeSegmentEnd, collider.shapeRadius,
+                query.maxDistance);
+            break;
+        case Scene::ColliderShapeTypeUVE::Box:
+            hit = Detail::IntersectRayOrientedBoxUVE(
+                query.ray, collider.worldAabb.GetCenterUVE(), collider.shapeHalfExtents,
+                collider.shapeRotation, query.maxDistance);
+            break;
+        default:
+            hit = Math::IntersectRayUVE(query.ray, collider.worldAabb, query.maxDistance);
+            break;
+        }
         if (!hit.has_value()) {
             continue;
         }

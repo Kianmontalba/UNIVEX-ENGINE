@@ -3,6 +3,7 @@
 
 #include "uve/physics/raycast_system_uve.h"
 
+#include <cmath>
 #include <cstdint>
 #include <optional>
 
@@ -45,6 +46,19 @@ protected:
         return entity;
     }
 
+    Scene::EntityUVE MakeTypedColliderEntityUVE(Math::Vector3UVE position,
+                                                 const Scene::ColliderComponentUVE& collider,
+                                                 Math::QuaternionUVE rotation = {}) {
+        const Scene::EntityUVE entity = entityManager.CreateEntityUVE();
+        Scene::TransformComponentUVE local;
+        local.localPosition = position;
+        local.localRotation = rotation;
+        sceneGraph.AttachTransformUVE(entityManager, entity, local);
+        sceneGraph.UpdateUVE(entityManager);
+        entityManager.AddComponentUVE<Scene::ColliderComponentUVE>(entity, collider);
+        return entity;
+    }
+
     [[nodiscard]] static RaycastQueryUVE MakeXAxisQueryUVE(float originX = -10.0F, float maxDistance = 100.0F) {
         RaycastQueryUVE query;
         query.ray = Math::RayUVE{Math::Vector3UVE{originX, 0.0F, 0.0F}, Math::Vector3UVE{1.0F, 0.0F, 0.0F}};
@@ -64,6 +78,61 @@ TEST_F(RaycastSystemUVETest, RaycastUVE_SingleCollider_ReturnsHit) {
     EXPECT_NEAR(hit->distance, 4.0F, kEpsilon);
     EXPECT_NEAR(hit->point.x, -1.0F, kEpsilon);
     EXPECT_NEAR(hit->normal.x, -1.0F, kEpsilon);
+}
+
+TEST_F(RaycastSystemUVETest, RaycastUVE_UsesExactSphereTargetGeometry) {
+    Scene::ColliderComponentUVE sphere;
+    sphere.shapeType = Scene::ColliderShapeTypeUVE::Sphere;
+    sphere.radius = 1.0F;
+    const Scene::EntityUVE entity = MakeTypedColliderEntityUVE({0.0F, 0.9F, 0.0F}, sphere);
+
+    const std::optional<RaycastHitUVE> hit = raycastSystem.RaycastUVE(entityManager, MakeXAxisQueryUVE(-5.0F));
+
+    ASSERT_TRUE(hit.has_value());
+    EXPECT_EQ(hit->entity, entity);
+    EXPECT_NEAR(hit->distance, 5.0F - std::sqrt(0.19F), kEpsilon);
+    EXPECT_NEAR(hit->point.x, -std::sqrt(0.19F), kEpsilon);
+    EXPECT_NEAR(hit->point.y, 0.0F, kEpsilon);
+    EXPECT_NEAR(hit->normal.x, -std::sqrt(0.19F), kEpsilon);
+    EXPECT_NEAR(hit->normal.y, -0.9F, kEpsilon);
+}
+
+TEST_F(RaycastSystemUVETest, RaycastUVE_UsesExactCapsuleTargetGeometry) {
+    Scene::ColliderComponentUVE capsule;
+    capsule.shapeType = Scene::ColliderShapeTypeUVE::Capsule;
+    capsule.radius = 0.5F;
+    capsule.height = 4.0F;
+    const Scene::EntityUVE entity = MakeTypedColliderEntityUVE({0.0F, 0.0F, 0.0F}, capsule);
+
+    RaycastQueryUVE query = MakeXAxisQueryUVE(-5.0F);
+    query.ray.origin.y = 1.9F;
+    const std::optional<RaycastHitUVE> hit = raycastSystem.RaycastUVE(entityManager, query);
+
+    ASSERT_TRUE(hit.has_value());
+    EXPECT_EQ(hit->entity, entity);
+    EXPECT_NEAR(hit->distance, 4.7F, kEpsilon);
+    EXPECT_NEAR(hit->normal.x, -0.6F, kEpsilon);
+    EXPECT_NEAR(hit->normal.y, 0.8F, kEpsilon);
+}
+
+TEST_F(RaycastSystemUVETest, RaycastUVE_UsesExactRotatedBoxTargetGeometry) {
+    Scene::ColliderComponentUVE box;
+    box.shapeType = Scene::ColliderShapeTypeUVE::Box;
+    box.halfExtents = {0.25F, 1.0F, 0.25F};
+    const float halfAngle = 0.3826834324F;
+    const float quarterTurnZ = 0.9238795325F;
+    const Scene::EntityUVE entity = MakeTypedColliderEntityUVE(
+        {}, box, Math::QuaternionUVE{0.0F, 0.0F, halfAngle, quarterTurnZ});
+
+    RaycastQueryUVE query = MakeXAxisQueryUVE(-5.0F);
+    query.ray.origin.y = 0.5F;
+    const std::optional<RaycastHitUVE> hit = raycastSystem.RaycastUVE(entityManager, query);
+
+    ASSERT_TRUE(hit.has_value());
+    EXPECT_EQ(hit->entity, entity);
+    EXPECT_NEAR(hit->distance, 5.0F - (0.25F * std::sqrt(2.0F) + 0.5F), kEpsilon);
+    EXPECT_NEAR(hit->normal.x, -std::sqrt(0.5F), kEpsilon);
+    EXPECT_NEAR(hit->normal.y, -std::sqrt(0.5F), kEpsilon);
 }
 
 TEST_F(RaycastSystemUVETest, RaycastUVE_NoColliders_ReturnsNullopt) {

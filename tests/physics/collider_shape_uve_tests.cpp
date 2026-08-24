@@ -101,6 +101,39 @@ TEST(ShapeNarrowPhaseUVETest, MovingSphereSphereSweepReportsExactHitAndDetermini
                      .has_value());
 }
 
+TEST(ShapeNarrowPhaseUVETest, RayTargetHelpersUseExactGeometryAndFailureClosedBounds) {
+    const Math::RayUVE ray{{-5.0F, 0.0F, 0.0F}, {1.0F, 0.0F, 0.0F}};
+    const std::optional<Math::RayHitUVE> sphereHit =
+        Detail::IntersectRaySphereUVE(ray, {0.0F, 0.9F, 0.0F}, 1.0F, 100.0F);
+    ASSERT_TRUE(sphereHit.has_value());
+    EXPECT_NEAR(sphereHit->distance, 5.0F - std::sqrt(0.19F), 1.0e-4F);
+    EXPECT_NEAR(sphereHit->normal.x, -std::sqrt(0.19F), 1.0e-4F);
+    EXPECT_NEAR(sphereHit->normal.y, -0.9F, 1.0e-4F);
+
+    const std::optional<Math::RayHitUVE> capsuleHit = Detail::IntersectRayCapsuleUVE(
+        Math::RayUVE{{-5.0F, 1.9F, 0.0F}, {1.0F, 0.0F, 0.0F}}, {0.0F, -1.5F, 0.0F},
+        {0.0F, 1.5F, 0.0F}, 0.5F, 100.0F);
+    ASSERT_TRUE(capsuleHit.has_value());
+    EXPECT_NEAR(capsuleHit->distance, 4.7F, 1.0e-4F);
+    EXPECT_NEAR(capsuleHit->normal.x, -0.6F, 1.0e-4F);
+    EXPECT_NEAR(capsuleHit->normal.y, 0.8F, 1.0e-4F);
+
+    const std::optional<Math::RayHitUVE> boxHit = Detail::IntersectRayOrientedBoxUVE(
+        Math::RayUVE{{-5.0F, 0.5F, 0.0F}, {1.0F, 0.0F, 0.0F}}, {}, {0.25F, 1.0F, 0.25F},
+        Math::QuaternionUVE{0.0F, 0.0F, 0.3826834324F, 0.9238795325F}, 100.0F);
+    ASSERT_TRUE(boxHit.has_value());
+    EXPECT_NEAR(boxHit->distance, 5.0F - (0.25F * std::sqrt(2.0F) + 0.5F), 1.0e-4F);
+    EXPECT_NEAR(boxHit->normal.x, -std::sqrt(0.5F), 1.0e-4F);
+    EXPECT_NEAR(boxHit->normal.y, -std::sqrt(0.5F), 1.0e-4F);
+
+    const std::optional<Math::RayHitUVE> initialSphere =
+        Detail::IntersectRaySphereUVE(ray, {-4.0F, 0.0F, 0.0F}, 2.0F, 100.0F);
+    ASSERT_TRUE(initialSphere.has_value());
+    EXPECT_FLOAT_EQ(initialSphere->distance, 0.0F);
+    EXPECT_EQ(initialSphere->normal, (Math::Vector3UVE{}));
+    EXPECT_FALSE(Detail::IntersectRaySphereUVE(ray, {}, 1.0F, -1.0F).has_value());
+}
+
 TEST(ShapeNarrowPhaseUVETest, RadiusSumOverflowFailsClosedBeforePenetrationPublication) {
     const float maximumRadius = std::numeric_limits<float>::max();
     EXPECT_FALSE(Detail::ComputeSphereSpherePenetrationUVE(

@@ -11,13 +11,11 @@
 
 namespace UVE::Physics {
 
-/// IRaycastSystemUVE is the spec's `RaycastSystemUVE` (Part 7.5). This increment implements only
-/// the `Raycast` query (single closest-hit point query) — `SphereCast`/`BoxCast`/`CapsuleCast` are
-/// deferred as a group: colliders are box-only (nothing to sphere/capsule-cast against), and even
-/// a `BoxCast` is a genuinely harder continuous-sweep problem, not a small extension of a point
-/// ray test. Deliberately interfaced the same way ICollisionSystemUVE/IPhysicsSystemUVE are, so a
-/// future backend-wrapping implementation (Jolt/Bullet) could replace RaycastSystemUVE without any
-/// call-site change.
+/// IRaycastSystemUVE is the spec's `RaycastSystemUVE` (Part 7.5). The point query routes known
+/// Box/Sphere/Capsule colliders through exact bounded target geometry: oriented-box slab tests,
+/// sphere quadratics, and finite capsule cylinder/cap tests. Unknown shape values retain the
+/// conservative cached-AABB fallback. Shape casts remain a separate continuous-sweep API. The
+/// interface is stateless and can later be replaced by a backend wrapper without call-site change.
 /// Thread-safety: implementations should be stateless (no members), matching CollisionSystemUVE's
 /// contract — every method only reads the IEntityManagerUVE passed in; RaycastUVE() performs no
 /// mutation, so concurrent read-only calls are safe as long as the passed-in IEntityManagerUVE's

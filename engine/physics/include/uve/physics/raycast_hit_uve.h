@@ -20,7 +20,8 @@ struct RaycastHitUVE {
     Scene::EntityUVE entity;
     /// `ray.origin + ray.direction * distance`.
     Math::Vector3UVE point;
-    /// Unit vector, one of the 6 axis-aligned face normals.
+    /// Unit vector pointing outward from the hit target: an axis-aligned face for boxes, or the
+    /// exact sphere/capsule surface normal for rounded targets. Zero when the ray starts inside.
     Math::Vector3UVE normal;
     float distance = 0.0F;
     PhysicsMaterialUVE material;
