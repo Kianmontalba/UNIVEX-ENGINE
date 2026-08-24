@@ -397,10 +397,22 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
                                             (consumerNode->typeId != "flow.switch" && consumerNode->typeId != "flow.loop" &&
                                              consumerNode->typeId != "flow.for_loop" && consumerNode->typeId != "flow.delay" &&
                                              (link.input.pinName == "A" || link.input.pinName == "B")));
-        if (!validDirectNumberLink || conversionHasDataDependency(*sourceNode) || !stagedNumberLinks.empty()) {
+        const bool duplicateNumberInput = std::any_of(
+            stagedNumberLinks.begin(), stagedNumberLinks.end(), [&](const ScriptLinkUVE& stagedLink) {
+                return stagedLink.input.nodeId == link.input.nodeId && stagedLink.input.pinName == link.input.pinName;
+            });
+        const bool sameNumberConsumer = stagedNumberLinks.empty() ||
+                                        std::all_of(stagedNumberLinks.begin(), stagedNumberLinks.end(),
+                                                    [&](const ScriptLinkUVE& stagedLink) {
+                                                        return stagedLink.input.nodeId == link.input.nodeId;
+                                                    });
+        const bool supportsTwoInputs = consumerNode->typeId.rfind("math.float.", 0U) == 0U &&
+                                       (link.input.pinName == "A" || link.input.pinName == "B");
+        if (!validDirectNumberLink || conversionHasDataDependency(*sourceNode) || duplicateNumberInput ||
+            !sameNumberConsumer || stagedNumberLinks.size() >= (supportsTwoInputs ? 2U : 1U)) {
             result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode, link.input.nodeId,
                                           link.input.pinName,
-                                          "Float data-link staging supports one direct built-in Number or variable.get_number.Result producer; additional composed and deeper Number dependencies remain deferred."});
+                                          "Float data-link staging supports up to two direct Number producers on one math.float A/B pair; flow inputs remain single-link, while composed/deeper dependencies and additional consumers remain deferred."});
             continue;
         }
         stagedNumberLinks.push_back(link);
