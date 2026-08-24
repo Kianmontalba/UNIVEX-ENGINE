@@ -93,4 +93,11 @@ TEST(MtlMetadataUVETest, ParseMtlMetadataUVE_RejectsMissingRequiredTokens) {
     EXPECT_FALSE(ParseMtlMetadataUVE("newmtl\n").has_value()); EXPECT_FALSE(ParseMtlMetadataUVE("Kd 1 0\n").has_value());
     EXPECT_FALSE(ParseMtlMetadataUVE("map_Kd\n").has_value());
 }
+
+TEST(MtlMetadataUVETest, ParseMtlMetadataUVE_RejectsTrailingTokensOnRecognizedDeclarations) {
+    EXPECT_FALSE(ParseMtlMetadataUVE("newmtl Brick extra\n").has_value());
+    EXPECT_FALSE(ParseMtlMetadataUVE("newmtl Brick\nKd 1 0.5 0.2 extra\n").has_value());
+    EXPECT_FALSE(ParseMtlMetadataUVE("newmtl Brick\nNs 32 extra\n").has_value());
+    EXPECT_FALSE(ParseMtlMetadataUVE("newmtl Brick\nmap_Kd brick.png other.png\n").has_value());
+}
 }
