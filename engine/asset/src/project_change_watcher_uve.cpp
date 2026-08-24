@@ -3,6 +3,7 @@
 #include "uve/asset/project_change_watcher_uve.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <map>
 #include <mutex>
@@ -278,8 +279,11 @@ bool ProjectChangeWatcherUVE::ScanNowLockedUVE(const IAssetDatabaseUVE& assetDat
 
 bool ProjectChangeWatcherUVE::PollUVE(const double deltaTimeSeconds, const IAssetDatabaseUVE& assetDatabase,
                                       IDerivedArtifactCacheUVE& derivedArtifactCache) {
+    if (!std::isfinite(deltaTimeSeconds) || deltaTimeSeconds < 0.0) {
+        return false;
+    }
     std::lock_guard<std::mutex> lock(m_impl->mutex);
-    m_impl->accumulatedSeconds += std::max(0.0, deltaTimeSeconds);
+    m_impl->accumulatedSeconds += deltaTimeSeconds;
     if (m_impl->baselineInitialized && m_impl->pollIntervalSeconds > 0.0 &&
         m_impl->accumulatedSeconds < m_impl->pollIntervalSeconds) {
         return false;
