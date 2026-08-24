@@ -68,7 +68,8 @@ bool DecodeBmpRgba8ImageUVE(const std::vector<std::byte>& bytes, BmpRgba8ImageUV
     const bool packed4Image = bitsPerPixel == 4U;
     const bool indexedImage = packed1Image || packed4Image || bitsPerPixel == 8U;
     const bool packed16Image = bitsPerPixel == 16U;
-    const bool bitfieldsImage = packed16Image && compression == 3U;
+    const bool bitfields32Image = bitsPerPixel == 32U && compression == 3U;
+    const bool bitfieldsImage = (packed16Image || bitfields32Image) && compression == 3U;
     if (signedWidth <= 0 || signedHeight == 0 || planes != 1U ||
         (!indexedImage && !packed16Image && bitsPerPixel != 24U && bitsPerPixel != 32U) ||
         (!bitfieldsImage && compression != 0U)) {
@@ -95,6 +96,7 @@ bool DecodeBmpRgba8ImageUVE(const std::vector<std::byte>& bytes, BmpRgba8ImageUV
     constexpr std::size_t kBmpBitfieldsBytesUVE = 12U;
     bool bitfields555Image = false;
     bool bitfields565Image = false;
+    bool bitfields32BgrxImage = false;
     if (bitfieldsImage) {
         if (infoHeaderSize != kInfoHeaderBytesUVE ||
             !CanReadUVE(bytes, kBmpBitfieldsOffsetUVE, kBmpBitfieldsBytesUVE) ||
@@ -107,7 +109,8 @@ bool DecodeBmpRgba8ImageUVE(const std::vector<std::byte>& bytes, BmpRgba8ImageUV
         const std::uint32_t blueMask = ReadU32LittleEndianUVE(bytes, kBmpBitfieldsOffsetUVE + 8U);
         bitfields555Image = redMask == 0x7C00U && greenMask == 0x03E0U && blueMask == 0x001FU;
         bitfields565Image = redMask == 0xF800U && greenMask == 0x07E0U && blueMask == 0x001FU;
-        if (!bitfields555Image && !bitfields565Image) {
+        bitfields32BgrxImage = redMask == 0x00FF0000U && greenMask == 0x0000FF00U && blueMask == 0x000000FFU;
+        if (!bitfields555Image && !bitfields565Image && !bitfields32BgrxImage) {
             return false;
         }
     }
@@ -169,6 +172,14 @@ bool DecodeBmpRgba8ImageUVE(const std::vector<std::byte>& bytes, BmpRgba8ImageUV
                     rgba[0] = bytes[palettePixelOffset + 2U];
                     rgba[1] = bytes[palettePixelOffset + 1U];
                     rgba[2] = bytes[palettePixelOffset];
+                } else if (bitfields32BgrxImage) {
+                    const std::uint32_t packed = static_cast<std::uint32_t>(std::to_integer<std::uint8_t>(pixel[0])) |
+                                                  (static_cast<std::uint32_t>(std::to_integer<std::uint8_t>(pixel[1])) << 8U) |
+                                                  (static_cast<std::uint32_t>(std::to_integer<std::uint8_t>(pixel[2])) << 16U) |
+                                                  (static_cast<std::uint32_t>(std::to_integer<std::uint8_t>(pixel[3])) << 24U);
+                    rgba[0] = std::byte{static_cast<unsigned char>((packed >> 16U) & 0xFFU)};
+                    rgba[1] = std::byte{static_cast<unsigned char>((packed >> 8U) & 0xFFU)};
+                    rgba[2] = std::byte{static_cast<unsigned char>(packed & 0xFFU)};
                 } else if (packed16Image) {
                     const std::uint16_t packed = static_cast<std::uint16_t>(std::to_integer<std::uint8_t>(pixel[0])) |
                                                   static_cast<std::uint16_t>(std::to_integer<std::uint8_t>(pixel[1]) << 8U);
