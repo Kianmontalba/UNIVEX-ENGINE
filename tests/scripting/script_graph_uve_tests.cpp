@@ -1908,6 +1908,47 @@ TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesVector3ProducerBef
     EXPECT_EQ(result.program->instructions[2].nodeTypeId, "math.vector3.add");
 }
 
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesTwoIndependentVector3ProducersBeforeConsumer) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({10U, "math.vector3.subtract"}));
+    ASSERT_TRUE(graph.AddNodeUVE({20U, "math.vector3.add"}));
+    ASSERT_TRUE(graph.AddNodeUVE({30U, "math.vector3.cross"}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{10U, "Result"}, {20U, "A"}}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{30U, "Result"}, {20U, "B"}}));
+
+    const ScriptIrCompileResultUVE compiled = CompileScriptGraphToIrUVE(graph, registry);
+    ASSERT_TRUE(compiled.IsSuccessUVE());
+    ASSERT_TRUE(compiled.program.has_value());
+    ASSERT_EQ(compiled.program->instructions.size(), 5U);
+    EXPECT_EQ(compiled.program->instructions[0].nodeTypeId, "math.vector3.subtract");
+    EXPECT_EQ(compiled.program->instructions[1].kind, ScriptIrInstructionKindUVE::TransferValue);
+    EXPECT_EQ(compiled.program->instructions[1].targetPinName, "A");
+    EXPECT_EQ(compiled.program->instructions[2].nodeTypeId, "math.vector3.cross");
+    EXPECT_EQ(compiled.program->instructions[3].kind, ScriptIrInstructionKindUVE::TransferValue);
+    EXPECT_EQ(compiled.program->instructions[3].targetPinName, "B");
+    EXPECT_EQ(compiled.program->instructions[4].nodeTypeId, "math.vector3.add");
+
+    std::vector<ScriptBytecodeDiagnosticUVE> diagnostics;
+    const std::optional<ScriptBytecodeProgramUVE> bytecode =
+        LowerIrToBytecodeUVE(*compiled.program, diagnostics);
+    ASSERT_TRUE(bytecode.has_value());
+    ASSERT_TRUE(diagnostics.empty());
+
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(10U, "A", ScriptVector3ValueUVE{{7.0F, 8.0F, 9.0F}}));
+    ASSERT_TRUE(context.SetInputUVE(10U, "B", ScriptVector3ValueUVE{{1.0F, 2.0F, 3.0F}}));
+    ASSERT_TRUE(context.SetInputUVE(30U, "A", ScriptVector3ValueUVE{{1.0F, 0.0F, 0.0F}}));
+    ASSERT_TRUE(context.SetInputUVE(30U, "B", ScriptVector3ValueUVE{{0.0F, 1.0F, 0.0F}}));
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(*bytecode, context);
+    ASSERT_TRUE(result.IsSuccessUVE());
+    EXPECT_EQ(result.instructionsExecuted, 5U);
+    ASSERT_TRUE(context.FindOutputUVE(20U, "Result").has_value());
+    EXPECT_EQ(std::get<ScriptVector3ValueUVE>(*context.FindOutputUVE(20U, "Result")),
+              (ScriptVector3ValueUVE{{6.0F, 6.0F, 7.0F}}));
+}
+
 TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsComposedVector3DependencyScheduling) {
     ScriptNodeRegistryUVE registry;
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
