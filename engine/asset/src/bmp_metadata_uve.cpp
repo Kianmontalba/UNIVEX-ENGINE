@@ -67,12 +67,13 @@ bool DecodeBmpRgba8ImageUVE(const std::vector<std::byte>& bytes, BmpRgba8ImageUV
     const bool packed1Image = bitsPerPixel == 1U;
     const bool packed4Image = bitsPerPixel == 4U;
     const bool indexedImage = packed1Image || packed4Image || bitsPerPixel == 8U;
+    const bool rle8Image = bitsPerPixel == 8U && compression == 1U;
     const bool packed16Image = bitsPerPixel == 16U;
     const bool bitfields32Image = bitsPerPixel == 32U && compression == 3U;
     const bool bitfieldsImage = (packed16Image || bitfields32Image) && compression == 3U;
     if (signedWidth <= 0 || signedHeight == 0 || planes != 1U ||
         (!indexedImage && !packed16Image && bitsPerPixel != 24U && bitsPerPixel != 32U) ||
-        (!bitfieldsImage && compression != 0U)) {
+        (!bitfieldsImage && !rle8Image && compression != 0U)) {
         return false;
     }
 
@@ -125,14 +126,23 @@ bool DecodeBmpRgba8ImageUVE(const std::vector<std::byte>& bytes, BmpRgba8ImageUV
     const std::uint64_t decodedBytes = width * absoluteHeight * 4U;
     if (width > std::numeric_limits<std::uint32_t>::max() ||
         absoluteHeight > std::numeric_limits<std::uint32_t>::max() ||
-        pixelBytes > std::numeric_limits<std::size_t>::max() ||
         decodedBytes > kMaximumBmpDecodedPixelBytesUVE ||
-        static_cast<std::uint64_t>(pixelOffset) > bytes.size() ||
-        pixelBytes > static_cast<std::uint64_t>(bytes.size() - static_cast<std::size_t>(pixelOffset))) {
+        static_cast<std::uint64_t>(pixelOffset) > bytes.size()) {
+        return false;
+    }
+    if (!rle8Image &&
+        (pixelBytes > std::numeric_limits<std::size_t>::max() ||
+         pixelBytes > static_cast<std::uint64_t>(bytes.size() - static_cast<std::size_t>(pixelOffset)))) {
         return false;
     }
     const std::uint64_t fileEnd = static_cast<std::uint64_t>(pixelOffset) + pixelBytes;
-    if (declaredFileSize != 0U && fileEnd > declaredFileSize) {
+    if (!rle8Image && declaredFileSize != 0U && fileEnd > declaredFileSize) {
+        return false;
+    }
+    const std::size_t streamEnd = rle8Image
+                                      ? (declaredFileSize == 0U ? bytes.size() : static_cast<std::size_t>(declaredFileSize))
+                                      : static_cast<std::size_t>(fileEnd);
+    if (rle8Image && streamEnd < static_cast<std::size_t>(pixelOffset)) {
         return false;
     }
 
@@ -145,6 +155,100 @@ bool DecodeBmpRgba8ImageUVE(const std::vector<std::byte>& bytes, BmpRgba8ImageUV
         const std::size_t sourceStride = static_cast<std::size_t>(rowStride);
         const std::size_t sourceOffset = static_cast<std::size_t>(pixelOffset);
         const std::size_t outputStride = static_cast<std::size_t>(width) * 4U;
+        if (rle8Image) {
+            const auto writePalettePixel = [&](const std::uint64_t x, const std::uint64_t y,
+                                               const std::uint8_t paletteIndex) noexcept {
+                if (x >= width || y >= absoluteHeight || paletteIndex >= paletteEntryCount) {
+                    return false;
+                }
+                const std::size_t outputRow = topDown
+                                                  ? static_cast<std::size_t>(y)
+                                                  : static_cast<std::size_t>(absoluteHeight - y - 1U);
+                std::byte* const rgba = candidate.pixels.data() + outputRow * outputStride +
+                                        static_cast<std::size_t>(x) * 4U;
+                const std::size_t palettePixelOffset = paletteOffset +
+                                                       static_cast<std::size_t>(paletteIndex) * kBmpPaletteEntryBytesUVE;
+                rgba[0] = bytes[palettePixelOffset + 2U];
+                rgba[1] = bytes[palettePixelOffset + 1U];
+                rgba[2] = bytes[palettePixelOffset];
+                rgba[3] = std::byte{0xFF};
+                return true;
+            };
+            const std::byte defaultRed = bytes[paletteOffset + 2U];
+            const std::byte defaultGreen = bytes[paletteOffset + 1U];
+            const std::byte defaultBlue = bytes[paletteOffset];
+            for (std::size_t outputOffset = 0U; outputOffset < candidate.pixels.size(); outputOffset += 4U) {
+                candidate.pixels[outputOffset] = defaultRed;
+                candidate.pixels[outputOffset + 1U] = defaultGreen;
+                candidate.pixels[outputOffset + 2U] = defaultBlue;
+                candidate.pixels[outputOffset + 3U] = std::byte{0xFF};
+            }
+            const std::size_t streamOffset = static_cast<std::size_t>(pixelOffset);
+            std::size_t cursor = streamOffset;
+            std::uint64_t x = 0U;
+            std::uint64_t y = 0U;
+            bool sawEndOfBitmap = false;
+            while (!sawEndOfBitmap) {
+                if (cursor > streamEnd || streamEnd - cursor < 2U) {
+                    return false;
+                }
+                const std::uint8_t count = std::to_integer<std::uint8_t>(bytes[cursor++]);
+                const std::uint8_t value = std::to_integer<std::uint8_t>(bytes[cursor++]);
+                if (count != 0U) {
+                    if (y >= absoluteHeight || x + count > width) {
+                        return false;
+                    }
+                    for (std::uint8_t index = 0U; index < count; ++index) {
+                        if (!writePalettePixel(x + index, y, value)) {
+                            return false;
+                        }
+                    }
+                    x += count;
+                    continue;
+                }
+                if (value == 0U) {
+                    if (y >= absoluteHeight) {
+                        return false;
+                    }
+                    x = 0U;
+                    ++y;
+                } else if (value == 1U) {
+                    sawEndOfBitmap = true;
+                } else if (value == 2U) {
+                    if (streamEnd - cursor < 2U) {
+                        return false;
+                    }
+                    const std::uint8_t deltaX = std::to_integer<std::uint8_t>(bytes[cursor++]);
+                    const std::uint8_t deltaY = std::to_integer<std::uint8_t>(bytes[cursor++]);
+                    if (x + deltaX > width || y + deltaY > absoluteHeight) {
+                        return false;
+                    }
+                    x += deltaX;
+                    y += deltaY;
+                } else {
+                    const std::size_t absoluteCount = value;
+                    if (y >= absoluteHeight || x + absoluteCount > width ||
+                        streamEnd - cursor < absoluteCount ||
+                        ((absoluteCount & 1U) != 0U && streamEnd - cursor < absoluteCount + 1U)) {
+                        return false;
+                    }
+                    for (std::size_t index = 0U; index < absoluteCount; ++index) {
+                        if (!writePalettePixel(x + index, y,
+                                               std::to_integer<std::uint8_t>(bytes[cursor + index]))) {
+                            return false;
+                        }
+                    }
+                    cursor += absoluteCount;
+                    if ((absoluteCount & 1U) != 0U) {
+                        ++cursor;
+                    }
+                    x += absoluteCount;
+                }
+            }
+            if (!sawEndOfBitmap) {
+                return false;
+            }
+        } else {
         for (std::size_t outputRow = 0U; outputRow < static_cast<std::size_t>(absoluteHeight); ++outputRow) {
             const std::size_t sourceRow = topDown ? outputRow : static_cast<std::size_t>(absoluteHeight) - outputRow - 1U;
             const std::byte* const source = bytes.data() + sourceOffset + sourceRow * sourceStride;
@@ -205,6 +309,7 @@ bool DecodeBmpRgba8ImageUVE(const std::vector<std::byte>& bytes, BmpRgba8ImageUV
                 }
                 rgba[3] = std::byte{0xFF};
             }
+        }
         }
         outImage = std::move(candidate);
         return true;
