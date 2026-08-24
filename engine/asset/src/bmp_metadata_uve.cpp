@@ -72,8 +72,8 @@ bool DecodeBmpRgba8ImageUVE(const std::vector<std::byte>& bytes, BmpRgba8ImageUV
     const bool rleImage = rle4Image || rle8Image;
     const bool packed16Image = bitsPerPixel == 16U;
     const bool bitfields32Image = bitsPerPixel == 32U && (compression == 3U || compression == 6U);
-    const bool extendedBitfields32Header = bitfields32Image && (infoHeaderSize == 108U || infoHeaderSize == 124U);
     const bool bitfieldsImage = (packed16Image && compression == 3U) || bitfields32Image;
+    const bool extendedBitfieldsHeader = bitfieldsImage && (infoHeaderSize == 108U || infoHeaderSize == 124U);
     if (signedWidth <= 0 || signedHeight == 0 || planes != 1U ||
         (!indexedImage && !packed16Image && bitsPerPixel != 24U && bitsPerPixel != 32U) ||
         (!bitfieldsImage && !rleImage && compression != 0U)) {
@@ -102,12 +102,12 @@ bool DecodeBmpRgba8ImageUVE(const std::vector<std::byte>& bytes, BmpRgba8ImageUV
     bool bitfields565Image = false;
     bool bitfields32BgraImage = false;
     if (bitfieldsImage) {
-        const bool hasAlphaMask = bitfields32Image && (compression == 6U || extendedBitfields32Header);
+        const bool hasAlphaMask = bitsPerPixel == 32U && (compression == 6U || extendedBitfieldsHeader);
         const std::size_t maskBytes = hasAlphaMask ? 16U : kBmpBitfieldsBytesUVE;
-        const std::uint64_t requiredPixelOffset = extendedBitfields32Header
+        const std::uint64_t requiredPixelOffset = extendedBitfieldsHeader
             ? static_cast<std::uint64_t>(kFileHeaderBytesUVE) + infoHeaderSize
             : static_cast<std::uint64_t>(kBmpBitfieldsOffsetUVE + maskBytes);
-        if ((!extendedBitfields32Header && infoHeaderSize != kInfoHeaderBytesUVE) ||
+        if ((!extendedBitfieldsHeader && infoHeaderSize != kInfoHeaderBytesUVE) ||
             !CanReadUVE(bytes, kBmpBitfieldsOffsetUVE, maskBytes) ||
             static_cast<std::uint64_t>(pixelOffset) < requiredPixelOffset) {
             return false;
@@ -119,7 +119,7 @@ bool DecodeBmpRgba8ImageUVE(const std::vector<std::byte>& bytes, BmpRgba8ImageUV
             ? ReadU32LittleEndianUVE(bytes, kBmpBitfieldsOffsetUVE + 12U) : 0U;
         bitfields555Image = redMask == 0x7C00U && greenMask == 0x03E0U && blueMask == 0x001FU;
         bitfields565Image = redMask == 0xF800U && greenMask == 0x07E0U && blueMask == 0x001FU;
-        const bool validBgrxMasks = bitfields32Image && compression == 3U && !extendedBitfields32Header &&
+        const bool validBgrxMasks = bitfields32Image && compression == 3U && !extendedBitfieldsHeader &&
                                     redMask == 0x00FF0000U && greenMask == 0x0000FF00U &&
                                     blueMask == 0x000000FFU;
         const bool validBgraMasks = hasAlphaMask && bitfields32Image &&
