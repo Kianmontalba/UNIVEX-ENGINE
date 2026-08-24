@@ -127,12 +127,13 @@ std::optional<MtlMetadataUVE> ParseMtlMetadataUVE(const std::string_view source)
     MtlMetadataUVE out; std::size_t start=0U;
     while (start <= source.size()) {
         const auto end=source.find('\n', start); auto line=source.substr(start, end==std::string_view::npos?std::string_view::npos:end-start); if(!line.empty()&&line.back()=='\r') line.remove_suffix(1U);
+        const auto comment = line.find('#'); if (comment != std::string_view::npos) line = line.substr(0U, comment);
         while(!line.empty()&&(line.front()==' '||line.front()=='\t')) line.remove_prefix(1U);
-        if(!line.empty()&&line.front()!='#') { auto rest=line; const auto directive=Token(rest);
-            if(directive=="newmtl") { if(!Has(rest,1U)||!Inc(out.materialCount)) return std::nullopt; }
-            else if(directive.rfind("map_",0U)==0U) { if(!Has(rest,1U)||!Inc(out.textureMapCount)) return std::nullopt; }
-            else if(directive=="Kd"||directive=="Ka"||directive=="Ks"||directive=="Ke"||directive=="Tf") { if(!Has(rest,3U)||!Inc(out.vectorPropertyCount)) return std::nullopt; }
-            else if(directive=="Ns"||directive=="Ni"||directive=="d"||directive=="Tr"||directive=="illum") { if(!Has(rest,1U)||!Inc(out.scalarPropertyCount)) return std::nullopt; }
+        if(!line.empty()) { auto rest=line; const auto directive=Token(rest);
+            if(directive=="newmtl") { if(!Has(rest,1U)||!Token(rest).empty()||!Inc(out.materialCount)) return std::nullopt; }
+            else if(directive.rfind("map_",0U)==0U) { MtlTextureMapUVE map; if(!ParseMtlTextureMapUVE(line, map)||!Inc(out.textureMapCount)) return std::nullopt; }
+            else if(directive=="Kd"||directive=="Ka"||directive=="Ks"||directive=="Ke"||directive=="Tf") { if(!Has(rest,3U)||!Token(rest).empty()||!Inc(out.vectorPropertyCount)) return std::nullopt; }
+            else if(directive=="Ns"||directive=="Ni"||directive=="d"||directive=="Tr"||directive=="illum") { if(!Has(rest,1U)||!Token(rest).empty()||!Inc(out.scalarPropertyCount)) return std::nullopt; }
             else if(!Inc(out.ignoredStatementCount)) return std::nullopt;
         }
         if (end == std::string_view::npos) {

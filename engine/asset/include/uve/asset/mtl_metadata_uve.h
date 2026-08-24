@@ -47,7 +47,8 @@ struct MtlMetadataUVE final {
 [[nodiscard]] bool ValidateMtlTextureReferenceUVE(std::string_view path) noexcept;
 
 /// Parses bounded Wavefront MTL declaration statistics from caller-owned text. It validates
-/// required tokens and returns counts only; it does not load texture paths, compile shaders,
-/// resolve assets, or own material/renderer state.
+/// required tokens and complete recognized-declaration consumption, including supported map options,
+/// and returns counts only; it does not load texture paths, compile shaders, resolve assets, or own
+/// material/renderer state.
 [[nodiscard]] std::optional<MtlMetadataUVE> ParseMtlMetadataUVE(std::string_view source);
 } // namespace UVE::Asset
