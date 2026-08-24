@@ -35,7 +35,7 @@ enum class PngFilterTypeUVE : std::uint8_t { None = 0U, Sub = 1U, Up = 2U, Avera
     const std::vector<std::byte>& previousRow, std::vector<std::byte>& outRow);
 
 /// Checks the supported grayscale/RGB/indexed/RGBA decoded-pixel budget after normalization to RGBA8,
-/// including the bounded non-interlaced 16-bit grayscale/RGB/RGBA source forms, without allocating or decoding pixel data.
+/// including the bounded non-interlaced 16-bit grayscale/grayscale-alpha/RGB/RGBA source forms, without allocating or decoding pixel data.
 [[nodiscard]] bool ValidatePngRgba8PixelBudgetUVE(
     const PngMetadataUVE& metadata,
     std::uint64_t maximumBytes = kMaximumPngDecodedPixelBytesUVE) noexcept;
@@ -48,7 +48,7 @@ struct PngRgba8ImageUVE final {
 
 /// Decodes bounded non-interlaced grayscale, RGB, indexed, or RGBA PNG forms using zlib and the existing scanline
 /// unfilter primitive, normalizing grayscale/RGB input to opaque RGBA8, indexed input through validated PLTE/tRNS
-/// palette facts, 16-bit grayscale/RGB/RGBA input through big-endian high-byte down-conversion, and Adam7-interlaced
+/// palette facts, 16-bit grayscale/grayscale-alpha/RGB/RGBA input through big-endian high-byte down-conversion, and Adam7-interlaced
 /// 8-bit grayscale/RGB/indexed/RGBA plus Adam7-interlaced 16-bit grayscale/grayscale-alpha/RGB/RGBA input through bounded pass reconstruction,
 /// validated palette mapping, high-byte conversion, and opaque-alpha normalization. It rejects unsupported
 /// color/depth/interlace modes and owns no filesystem or GPU state.
