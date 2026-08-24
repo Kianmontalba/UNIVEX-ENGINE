@@ -214,6 +214,16 @@ bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUV
         std::vector<std::byte> paletteAlpha;
         bool foundIdat = false;
         bool foundIend = false;
+        bool hasTransparentGray = false;
+        bool hasTransparentRgb = false;
+        std::uint16_t transparentGray = 0U;
+        std::uint16_t transparentRed = 0U;
+        std::uint16_t transparentGreen = 0U;
+        std::uint16_t transparentBlue = 0U;
+        const auto readU16BE = [](const std::vector<std::byte>& source, const std::size_t valueOffset) noexcept {
+            return static_cast<std::uint16_t>((std::to_integer<std::uint16_t>(source[valueOffset]) << 8U) |
+                                              std::to_integer<std::uint16_t>(source[valueOffset + 1U]));
+        };
         std::size_t offset = kSignatureBytes;
         while (offset <= bytes.size() && bytes.size() - offset >= kChunkOverheadBytes) {
             const std::uint32_t chunkLength = ReadU32BE(bytes, offset);
@@ -242,12 +252,28 @@ bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUV
                                   bytes.begin() + static_cast<std::ptrdiff_t>(payloadOffset + payloadLength));
                 paletteAlpha.assign(payloadLength / 3U, std::byte{0xFF});
             } else if (HasBytes(bytes, typeOffset, {'t', 'R', 'N', 'S'})) {
-                if (metadata->colorType != 3U || foundIdat || paletteAlpha.empty() ||
-                    payloadLength > paletteAlpha.size()) {
+                if (foundIdat) return false;
+                if (metadata->colorType == 3U) {
+                    if (paletteAlpha.empty() || payloadLength > paletteAlpha.size()) return false;
+                    std::copy(bytes.begin() + static_cast<std::ptrdiff_t>(payloadOffset),
+                              bytes.begin() + static_cast<std::ptrdiff_t>(payloadOffset + payloadLength), paletteAlpha.begin());
+                } else if (metadata->colorType == 0U) {
+                    if ((metadata->bitDepth != 8U && metadata->bitDepth != 16U) || payloadLength != 2U || hasTransparentGray) {
+                        return false;
+                    }
+                    transparentGray = readU16BE(bytes, payloadOffset);
+                    hasTransparentGray = true;
+                } else if (metadata->colorType == 2U) {
+                    if ((metadata->bitDepth != 8U && metadata->bitDepth != 16U) || payloadLength != 6U || hasTransparentRgb) {
+                        return false;
+                    }
+                    transparentRed = readU16BE(bytes, payloadOffset);
+                    transparentGreen = readU16BE(bytes, payloadOffset + 2U);
+                    transparentBlue = readU16BE(bytes, payloadOffset + 4U);
+                    hasTransparentRgb = true;
+                } else {
                     return false;
                 }
-                std::copy(bytes.begin() + static_cast<std::ptrdiff_t>(payloadOffset),
-                          bytes.begin() + static_cast<std::ptrdiff_t>(payloadOffset + payloadLength), paletteAlpha.begin());
             } else if (HasBytes(bytes, typeOffset, {'I', 'D', 'A', 'T'})) {
                 if (compressed.size() > kMaximumPngDecodedPixelBytesUVE -
                                        std::min<std::size_t>(compressed.size(), kMaximumPngDecodedPixelBytesUVE) ||
@@ -366,15 +392,20 @@ bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUV
                     const std::size_t outputOffset = outputY * outputRowBytes + outputX * 4U;
                     if (metadata->interlaceMethod == 1U && metadata->bitDepth == 16U && metadata->colorType == 0U) {
                         const std::byte gray = decodedRow[sourceOffset];
+                        const std::uint16_t sample = readU16BE(decodedRow, sourceOffset);
                         pixels[outputOffset] = gray;
                         pixels[outputOffset + 1U] = gray;
                         pixels[outputOffset + 2U] = gray;
-                        pixels[outputOffset + 3U] = std::byte{0xFF};
+                        pixels[outputOffset + 3U] = hasTransparentGray && sample == transparentGray ? std::byte{0} : std::byte{0xFF};
                     } else if (metadata->interlaceMethod == 1U && metadata->bitDepth == 16U && metadata->colorType == 2U) {
+                        const std::uint16_t red = readU16BE(decodedRow, sourceOffset);
+                        const std::uint16_t green = readU16BE(decodedRow, sourceOffset + 2U);
+                        const std::uint16_t blue = readU16BE(decodedRow, sourceOffset + 4U);
                         pixels[outputOffset] = decodedRow[sourceOffset];
                         pixels[outputOffset + 1U] = decodedRow[sourceOffset + 2U];
                         pixels[outputOffset + 2U] = decodedRow[sourceOffset + 4U];
-                        pixels[outputOffset + 3U] = std::byte{0xFF};
+                        pixels[outputOffset + 3U] = hasTransparentRgb && red == transparentRed && green == transparentGreen &&
+                            blue == transparentBlue ? std::byte{0} : std::byte{0xFF};
                     } else if (metadata->interlaceMethod == 1U && metadata->bitDepth == 16U && metadata->colorType == 4U) {
                         const std::byte gray = decodedRow[sourceOffset];
                         pixels[outputOffset] = gray;
@@ -416,12 +447,19 @@ bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUV
                         pixels[outputOffset] = gray;
                         pixels[outputOffset + 1U] = gray;
                         pixels[outputOffset + 2U] = gray;
-                        pixels[outputOffset + 3U] = std::byte{0xFF};
+                        pixels[outputOffset + 3U] = hasTransparentGray &&
+                            std::to_integer<std::uint16_t>(gray) == transparentGray ? std::byte{0} : std::byte{0xFF};
                     } else if (metadata->interlaceMethod == 1U && metadata->colorType == 2U) {
-                        pixels[outputOffset] = decodedRow[sourceOffset];
-                        pixels[outputOffset + 1U] = decodedRow[sourceOffset + 1U];
-                        pixels[outputOffset + 2U] = decodedRow[sourceOffset + 2U];
-                        pixels[outputOffset + 3U] = std::byte{0xFF};
+                        const std::byte red = decodedRow[sourceOffset];
+                        const std::byte green = decodedRow[sourceOffset + 1U];
+                        const std::byte blue = decodedRow[sourceOffset + 2U];
+                        pixels[outputOffset] = red;
+                        pixels[outputOffset + 1U] = green;
+                        pixels[outputOffset + 2U] = blue;
+                        pixels[outputOffset + 3U] = hasTransparentRgb &&
+                            std::to_integer<std::uint16_t>(red) == transparentRed &&
+                            std::to_integer<std::uint16_t>(green) == transparentGreen &&
+                            std::to_integer<std::uint16_t>(blue) == transparentBlue ? std::byte{0} : std::byte{0xFF};
                     } else if (metadata->interlaceMethod == 1U && metadata->colorType == 4U) {
                         const std::byte gray = decodedRow[sourceOffset];
                         pixels[outputOffset] = gray;
@@ -435,15 +473,28 @@ bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUV
                         pixels[outputOffset + 3U] = decodedRow[sourceOffset + 3U];
                     } else if (metadata->bitDepth == 16U && metadata->colorType == 0U) {
                         const std::byte gray = decodedRow[sourceOffset];
+                        const std::uint16_t sample = static_cast<std::uint16_t>(
+                            (std::to_integer<std::uint16_t>(decodedRow[sourceOffset]) << 8U) |
+                            std::to_integer<std::uint16_t>(decodedRow[sourceOffset + 1U]));
                         pixels[outputOffset] = gray;
                         pixels[outputOffset + 1U] = gray;
                         pixels[outputOffset + 2U] = gray;
-                        pixels[outputOffset + 3U] = std::byte{0xFF};
+                        pixels[outputOffset + 3U] = hasTransparentGray && sample == transparentGray ? std::byte{0} : std::byte{0xFF};
                     } else if (metadata->bitDepth == 16U && metadata->colorType == 2U) {
+                        const std::uint16_t red = static_cast<std::uint16_t>(
+                            (std::to_integer<std::uint16_t>(decodedRow[sourceOffset]) << 8U) |
+                            std::to_integer<std::uint16_t>(decodedRow[sourceOffset + 1U]));
+                        const std::uint16_t green = static_cast<std::uint16_t>(
+                            (std::to_integer<std::uint16_t>(decodedRow[sourceOffset + 2U]) << 8U) |
+                            std::to_integer<std::uint16_t>(decodedRow[sourceOffset + 3U]));
+                        const std::uint16_t blue = static_cast<std::uint16_t>(
+                            (std::to_integer<std::uint16_t>(decodedRow[sourceOffset + 4U]) << 8U) |
+                            std::to_integer<std::uint16_t>(decodedRow[sourceOffset + 5U]));
                         pixels[outputOffset] = decodedRow[sourceOffset];
                         pixels[outputOffset + 1U] = decodedRow[sourceOffset + 2U];
                         pixels[outputOffset + 2U] = decodedRow[sourceOffset + 4U];
-                        pixels[outputOffset + 3U] = std::byte{0xFF};
+                        pixels[outputOffset + 3U] = hasTransparentRgb && red == transparentRed && green == transparentGreen &&
+                            blue == transparentBlue ? std::byte{0} : std::byte{0xFF};
                     } else if (metadata->bitDepth == 16U && metadata->colorType == 4U) {
                         const std::byte gray = decodedRow[sourceOffset];
                         pixels[outputOffset] = gray;
@@ -482,10 +533,17 @@ bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUV
                         pixels[outputOffset + 3U] = decodedRow[sourceOffset + 1U];
                     } else {
                         const std::byte red = decodedRow[sourceOffset];
+                        const std::byte green = sourceBytesPerPixel == 1U ? red : decodedRow[sourceOffset + 1U];
+                        const std::byte blue = sourceBytesPerPixel == 1U ? red : decodedRow[sourceOffset + 2U];
                         pixels[outputOffset] = red;
-                        pixels[outputOffset + 1U] = sourceBytesPerPixel == 1U ? red : decodedRow[sourceOffset + 1U];
-                        pixels[outputOffset + 2U] = sourceBytesPerPixel == 1U ? red : decodedRow[sourceOffset + 2U];
-                        pixels[outputOffset + 3U] = metadata->colorType == 6U ? decodedRow[sourceOffset + 3U] : std::byte{0xFF};
+                        pixels[outputOffset + 1U] = green;
+                        pixels[outputOffset + 2U] = blue;
+                        pixels[outputOffset + 3U] = metadata->colorType == 6U ? decodedRow[sourceOffset + 3U] :
+                            (metadata->colorType == 0U ?
+                                (hasTransparentGray && std::to_integer<std::uint16_t>(red) == transparentGray ? std::byte{0} : std::byte{0xFF}) :
+                                (hasTransparentRgb && std::to_integer<std::uint16_t>(red) == transparentRed &&
+                                 std::to_integer<std::uint16_t>(green) == transparentGreen &&
+                                 std::to_integer<std::uint16_t>(blue) == transparentBlue ? std::byte{0} : std::byte{0xFF}));
                     }
                 }
                 previousRow = std::move(decodedRow);
