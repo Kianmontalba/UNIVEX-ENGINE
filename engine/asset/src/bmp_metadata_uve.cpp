@@ -63,12 +63,25 @@ bool DecodeBmpRgba8ImageUVE(const std::vector<std::byte>& bytes, BmpRgba8ImageUV
     const std::uint16_t planes = ReadU16LittleEndianUVE(bytes, kFileHeaderBytesUVE + 12U);
     const std::uint16_t bitsPerPixel = ReadU16LittleEndianUVE(bytes, kFileHeaderBytesUVE + 14U);
     const std::uint32_t compression = ReadU32LittleEndianUVE(bytes, kFileHeaderBytesUVE + 16U);
+    const std::uint32_t colorsUsed = ReadU32LittleEndianUVE(bytes, kFileHeaderBytesUVE + 32U);
+    const bool indexedImage = bitsPerPixel == 8U;
     if (signedWidth <= 0 || signedHeight == 0 || planes != 1U ||
-        (bitsPerPixel != 24U && bitsPerPixel != 32U) || compression != 0U) {
+        (!indexedImage && bitsPerPixel != 24U && bitsPerPixel != 32U) || compression != 0U) {
         return false;
     }
 
     const std::uint64_t width = static_cast<std::uint32_t>(signedWidth);
+    const std::size_t paletteOffset = kFileHeaderBytesUVE + static_cast<std::size_t>(infoHeaderSize);
+    const std::uint32_t paletteEntryCount = indexedImage ? (colorsUsed == 0U ? 256U : colorsUsed) : 0U;
+    constexpr std::size_t kBmpPaletteEntryBytesUVE = 4U;
+    if (indexedImage && paletteEntryCount > 256U) {
+        return false;
+    }
+    const std::size_t paletteBytes = static_cast<std::size_t>(paletteEntryCount) * kBmpPaletteEntryBytesUVE;
+    if (indexedImage && (!CanReadUVE(bytes, paletteOffset, paletteBytes) ||
+                         static_cast<std::uint64_t>(pixelOffset) < static_cast<std::uint64_t>(paletteOffset) + paletteBytes)) {
+        return false;
+    }
     const std::uint64_t absoluteHeight = signedHeight < 0
                                               ? static_cast<std::uint64_t>(-(static_cast<std::int64_t>(signedHeight)))
                                               : static_cast<std::uint32_t>(signedHeight);
@@ -106,9 +119,21 @@ bool DecodeBmpRgba8ImageUVE(const std::vector<std::byte>& bytes, BmpRgba8ImageUV
             for (std::size_t column = 0U; column < static_cast<std::size_t>(width); ++column) {
                 const std::byte* const pixel = source + column * static_cast<std::size_t>(bytesPerPixel);
                 std::byte* const rgba = destination + column * 4U;
-                rgba[0] = pixel[2];
-                rgba[1] = pixel[1];
-                rgba[2] = pixel[0];
+                if (indexedImage) {
+                    const std::uint8_t paletteIndex = std::to_integer<std::uint8_t>(*pixel);
+                    if (paletteIndex >= paletteEntryCount) {
+                        return false;
+                    }
+                    const std::size_t palettePixelOffset = paletteOffset +
+                                                           static_cast<std::size_t>(paletteIndex) * kBmpPaletteEntryBytesUVE;
+                    rgba[0] = bytes[palettePixelOffset + 2U];
+                    rgba[1] = bytes[palettePixelOffset + 1U];
+                    rgba[2] = bytes[palettePixelOffset];
+                } else {
+                    rgba[0] = pixel[2];
+                    rgba[1] = pixel[1];
+                    rgba[2] = pixel[0];
+                }
                 rgba[3] = std::byte{0xFF};
             }
         }
