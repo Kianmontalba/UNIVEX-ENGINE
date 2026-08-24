@@ -64,7 +64,7 @@ bool DecodeTgaRgba8ImageUVE(const std::vector<std::byte>& bytes,
                           imageType == kTgaRleColorMappedImageTypeUVE;
     const bool supportedImageType = imageType == kTgaTrueColorImageTypeUVE ||
                                     imageType == kTgaRleTrueColorImageTypeUVE || grayscaleImage || paletteImage;
-    const bool supportedPixelDepth = paletteImage ? pixelDepth == 8U
+    const bool supportedPixelDepth = paletteImage ? (pixelDepth == 8U || pixelDepth == 16U)
                                                    : grayscaleImage ? (pixelDepth == 8U || pixelDepth == 16U)
                                                                      : (pixelDepth == 16U || pixelDepth == 24U || pixelDepth == 32U);
     const bool supportedPacked16Descriptor = !packed16Image || (imageDescriptor & 0x0FU) <= 1U;
@@ -77,7 +77,7 @@ bool DecodeTgaRgba8ImageUVE(const std::vector<std::byte>& bytes,
         return false;
     }
 
-    const std::size_t bytesPerPixel = paletteImage ? 1U : pixelDepth / 8U;
+    const std::size_t bytesPerPixel = pixelDepth / 8U;
     constexpr std::size_t kMaximumSizeT = std::numeric_limits<std::size_t>::max();
     if (static_cast<std::size_t>(width) > kMaximumSizeT / bytesPerPixel) {
         return false;
@@ -143,7 +143,9 @@ bool DecodeTgaRgba8ImageUVE(const std::vector<std::byte>& bytes,
         const std::size_t outputOffset = (outputY * static_cast<std::size_t>(width) + outputX) * 4U;
         std::size_t colorOffset = sourceOffset;
         if (paletteImage) {
-            const std::uint8_t paletteIndex = std::to_integer<std::uint8_t>(bytes[sourceOffset]);
+            const std::uint16_t paletteIndex = pixelDepth == 8U
+                                                    ? static_cast<std::uint16_t>(std::to_integer<std::uint8_t>(bytes[sourceOffset]))
+                                                    : ReadU16LittleEndianUVE(bytes, sourceOffset);
             if (paletteIndex < colorMapFirstIndex ||
                 static_cast<std::size_t>(paletteIndex - colorMapFirstIndex) >= static_cast<std::size_t>(colorMapLength)) {
                 return false;
