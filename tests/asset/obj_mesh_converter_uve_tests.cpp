@@ -37,6 +37,42 @@ f 1/1/1 2/2/1 3/3/1
               (Math::AabbUVE{Math::Vector3UVE{0.0F, 0.0F, 0.0F}, Math::Vector3UVE{1.0F, 1.0F, 0.0F}}));
 }
 
+TEST(ObjMeshConverterUVETest, ConvertObjMeshUVE_AcceptsFiniteHomogeneousPositionWeight) {
+    constexpr std::string_view source = R"OBJ(
+v 0 0 0 1
+v 2 0 0 2
+v 0 2 0 2
+f 1 2 3
+)OBJ";
+
+    MeshAssetUVE mesh;
+    ASSERT_TRUE(ConvertObjMeshUVE(source, mesh));
+    ASSERT_EQ(mesh.vertices.size(), 3U);
+    EXPECT_EQ(mesh.vertices[1].position, (Math::Vector3UVE{1.0F, 0.0F, 0.0F}));
+    EXPECT_EQ(mesh.vertices[2].position, (Math::Vector3UVE{0.0F, 1.0F, 0.0F}));
+}
+
+TEST(ObjMeshConverterUVETest, ConvertObjMeshUVE_RejectsTrailingPositionCoordinateAtomically) {
+    MeshAssetUVE original;
+    original.vertices = {
+        MeshVertexUVE{Math::Vector3UVE{4.0F, 5.0F, 6.0F}, Math::Vector3UVE{0.0F, 1.0F, 0.0F}, 0.0F, 0.0F}};
+    original.indices = {0U};
+    original.localBounds = Math::AabbUVE{Math::Vector3UVE{4.0F, 5.0F, 6.0F}, Math::Vector3UVE{4.0F, 5.0F, 6.0F}};
+    MeshAssetUVE output = original;
+
+    constexpr std::string_view invalidSource = R"OBJ(
+v 0 0 0 1 99
+v 1 0 0
+v 0 1 0
+f 1 2 3
+)OBJ";
+    EXPECT_FALSE(ConvertObjMeshUVE(invalidSource, output));
+    EXPECT_EQ(output.vertices.size(), original.vertices.size());
+    EXPECT_EQ(output.vertices[0].position, original.vertices[0].position);
+    EXPECT_EQ(output.indices, original.indices);
+    EXPECT_EQ(output.localBounds, original.localBounds);
+}
+
 TEST(ObjMeshConverterUVETest, ConvertObjMeshUVE_NegativeIndexQuadFanComputesFaceNormals) {
     constexpr std::string_view source = R"OBJ(
 v 0 0 0
