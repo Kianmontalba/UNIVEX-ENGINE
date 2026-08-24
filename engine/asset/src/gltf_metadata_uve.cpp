@@ -281,7 +281,20 @@ std::optional<GltfMetadataUVE> ParseGlbMetadataUVE(const std::vector<std::byte>&
     if (ReadU32LE(bytes, 16U) != 0x4E4F534AU || jsonLength > bytes.size() - 20U) return std::nullopt;
     const auto* begin = reinterpret_cast<const char*>(bytes.data() + 20U);
     const std::string_view json{begin, jsonLength};
-    const bool hasBinaryChunk = bytes.size() > 20U + jsonLength;
+    bool hasBinaryChunk = false;
+    std::size_t offset = 20U + jsonLength;
+    while (offset < bytes.size()) {
+        if (bytes.size() - offset < kChunkHeaderBytes) return std::nullopt;
+        const std::uint32_t chunkLength = ReadU32LE(bytes, offset);
+        const std::uint32_t chunkType = ReadU32LE(bytes, offset + 4U);
+        offset += kChunkHeaderBytes;
+        if (static_cast<std::size_t>(chunkLength) > bytes.size() - offset) return std::nullopt;
+        if (chunkType == 0x004E4942U) {
+            if (hasBinaryChunk) return std::nullopt;
+            hasBinaryChunk = true;
+        }
+        offset += static_cast<std::size_t>(chunkLength);
+    }
     return ParseJsonUVE(json, GltfContainerKindUVE::Binary, hasBinaryChunk);
 }
 } // namespace UVE::Asset
