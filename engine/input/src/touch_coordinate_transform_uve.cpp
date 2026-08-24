@@ -36,12 +36,7 @@ bool NormalizeTouchCoordinateUVE(const Math::Vector2UVE pixelPosition,
                                  const TouchCoordinateViewportUVE& viewport,
                                  Math::Vector2UVE& outNormalized) noexcept {
     if (!std::isfinite(pixelPosition.x) || !std::isfinite(pixelPosition.y) ||
-        !std::isfinite(viewport.width) || !std::isfinite(viewport.height) || viewport.width <= 0.0F ||
-        viewport.height <= 0.0F || !std::isfinite(viewport.safeLeft) || !std::isfinite(viewport.safeTop) ||
-        !std::isfinite(viewport.safeRight) || !std::isfinite(viewport.safeBottom) || viewport.safeLeft < 0.0F ||
-        viewport.safeTop < 0.0F || viewport.safeRight < 0.0F || viewport.safeBottom < 0.0F ||
-        viewport.safeLeft + viewport.safeRight >= viewport.width ||
-        viewport.safeTop + viewport.safeBottom >= viewport.height) {
+        !ValidateTouchCoordinateViewportUVE(viewport)) {
         return false;
     }
     const float usableWidth = viewport.width - viewport.safeLeft - viewport.safeRight;

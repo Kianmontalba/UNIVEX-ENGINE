@@ -6,9 +6,16 @@ namespace UVE::Input::Tests {
 namespace {
 TEST(TouchCoordinateTransformUVETest, ValidateTouchCoordinateViewportUVE_AcceptsBoundedSafeArea) {
     EXPECT_TRUE(ValidateTouchCoordinateViewportUVE(
-        TouchCoordinateViewportUVE{100.0F, 80.0F, 0.0F, 0.0F, 100.0F, 80.0F}));
+        TouchCoordinateViewportUVE{100.0F, 80.0F, 0.0F, 0.0F, 0.0F, 0.0F}));
     EXPECT_TRUE(ValidateTouchCoordinateViewportUVE(
-        TouchCoordinateViewportUVE{100.0F, 80.0F, 10.0F, 20.0F, 90.0F, 70.0F}));
+        TouchCoordinateViewportUVE{100.0F, 80.0F, 10.0F, 20.0F, 20.0F, 10.0F}));
+}
+
+TEST(TouchCoordinateTransformUVETest, ValidateTouchCoordinateViewportUVE_UsesInsetMarginsConsistently) {
+    EXPECT_TRUE(ValidateTouchCoordinateViewportUVE(
+        TouchCoordinateViewportUVE{1000.0F, 800.0F, 100.0F, 50.0F, 100.0F, 50.0F}));
+    EXPECT_FALSE(ValidateTouchCoordinateViewportUVE(
+        TouchCoordinateViewportUVE{1000.0F, 800.0F, 100.0F, 50.0F, 900.0F, 750.0F}));
 }
 
 TEST(TouchCoordinateTransformUVETest, ValidateTouchCoordinateViewportUVE_RejectsUnsafeSnapshots) {
