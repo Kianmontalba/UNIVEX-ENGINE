@@ -123,6 +123,30 @@ TEST(GltfMetadataUVETest, ParseGlbMetadataUVE_ValidatesHeaderJsonChunkAndBinaryT
     ASSERT_TRUE(metadata.has_value()); EXPECT_EQ(metadata->container, GltfContainerKindUVE::Binary);
     EXPECT_EQ(metadata->nodeCount, 1U); EXPECT_TRUE(metadata->hasBinaryChunk);
 }
+TEST(GltfMetadataUVETest, ParseGlbMetadataUVE_RejectsTruncatedAndDuplicateBinaryChunks) {
+    const std::string json = R"({"asset":{"version":"2.0"}})";
+
+    std::vector<std::byte> truncated;
+    AppendU32LEUVE(truncated, 0x46546C67U); AppendU32LEUVE(truncated, 2U);
+    AppendU32LEUVE(truncated, static_cast<std::uint32_t>(20U + json.size() + 8U + 2U));
+    AppendU32LEUVE(truncated, static_cast<std::uint32_t>(json.size())); AppendU32LEUVE(truncated, 0x4E4F534AU);
+    truncated.insert(truncated.end(), reinterpret_cast<const std::byte*>(json.data()),
+                    reinterpret_cast<const std::byte*>(json.data() + json.size()));
+    AppendU32LEUVE(truncated, 4U); AppendU32LEUVE(truncated, 0x004E4942U);
+    truncated.insert(truncated.end(), {std::byte{0xAA}, std::byte{0xBB}});
+    EXPECT_FALSE(ParseGlbMetadataUVE(truncated).has_value());
+
+    std::vector<std::byte> duplicate;
+    AppendU32LEUVE(duplicate, 0x46546C67U); AppendU32LEUVE(duplicate, 2U);
+    AppendU32LEUVE(duplicate, static_cast<std::uint32_t>(20U + json.size() + 16U));
+    AppendU32LEUVE(duplicate, static_cast<std::uint32_t>(json.size())); AppendU32LEUVE(duplicate, 0x4E4F534AU);
+    duplicate.insert(duplicate.end(), reinterpret_cast<const std::byte*>(json.data()),
+                     reinterpret_cast<const std::byte*>(json.data() + json.size()));
+    AppendU32LEUVE(duplicate, 0U); AppendU32LEUVE(duplicate, 0x004E4942U);
+    AppendU32LEUVE(duplicate, 0U); AppendU32LEUVE(duplicate, 0x004E4942U);
+    EXPECT_FALSE(ParseGlbMetadataUVE(duplicate).has_value());
+}
+
 TEST(GltfMetadataUVETest, ParseGltfMetadataUVE_RejectsWrongVersionAndMalformedGlb) {
     EXPECT_FALSE(ParseGltfMetadataUVE(R"({"asset":{"version":"1.0"}})").has_value());
     std::vector<std::byte> bad{std::byte{0}, std::byte{1}, std::byte{2}, std::byte{3}};

@@ -57,6 +57,8 @@ struct GltfMetadataUVE final {
 /// It does not resolve buffers, decode images, convert meshes, load external resources, or own
 /// renderer/importer state.
 [[nodiscard]] std::optional<GltfMetadataUVE> ParseGltfMetadataUVE(std::string_view jsonSource);
+/// Validates the complete bounded GLB chunk stream, including trailing chunk headers and payload
+/// bounds, and rejects duplicate BIN chunks before publishing copied metadata counts.
 [[nodiscard]] std::optional<GltfMetadataUVE> ParseGlbMetadataUVE(const std::vector<std::byte>& bytes);
 
 } // namespace UVE::Asset
