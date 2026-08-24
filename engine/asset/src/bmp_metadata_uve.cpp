@@ -67,13 +67,15 @@ bool DecodeBmpRgba8ImageUVE(const std::vector<std::byte>& bytes, BmpRgba8ImageUV
     const bool packed1Image = bitsPerPixel == 1U;
     const bool packed4Image = bitsPerPixel == 4U;
     const bool indexedImage = packed1Image || packed4Image || bitsPerPixel == 8U;
+    const bool rle4Image = bitsPerPixel == 4U && compression == 2U;
     const bool rle8Image = bitsPerPixel == 8U && compression == 1U;
+    const bool rleImage = rle4Image || rle8Image;
     const bool packed16Image = bitsPerPixel == 16U;
     const bool bitfields32Image = bitsPerPixel == 32U && compression == 3U;
     const bool bitfieldsImage = (packed16Image || bitfields32Image) && compression == 3U;
     if (signedWidth <= 0 || signedHeight == 0 || planes != 1U ||
         (!indexedImage && !packed16Image && bitsPerPixel != 24U && bitsPerPixel != 32U) ||
-        (!bitfieldsImage && !rle8Image && compression != 0U)) {
+        (!bitfieldsImage && !rleImage && compression != 0U)) {
         return false;
     }
 
@@ -130,19 +132,19 @@ bool DecodeBmpRgba8ImageUVE(const std::vector<std::byte>& bytes, BmpRgba8ImageUV
         static_cast<std::uint64_t>(pixelOffset) > bytes.size()) {
         return false;
     }
-    if (!rle8Image &&
+    if (!rleImage &&
         (pixelBytes > std::numeric_limits<std::size_t>::max() ||
          pixelBytes > static_cast<std::uint64_t>(bytes.size() - static_cast<std::size_t>(pixelOffset)))) {
         return false;
     }
     const std::uint64_t fileEnd = static_cast<std::uint64_t>(pixelOffset) + pixelBytes;
-    if (!rle8Image && declaredFileSize != 0U && fileEnd > declaredFileSize) {
+    if (!rleImage && declaredFileSize != 0U && fileEnd > declaredFileSize) {
         return false;
     }
-    const std::size_t streamEnd = rle8Image
+    const std::size_t streamEnd = rleImage
                                       ? (declaredFileSize == 0U ? bytes.size() : static_cast<std::size_t>(declaredFileSize))
                                       : static_cast<std::size_t>(fileEnd);
-    if (rle8Image && streamEnd < static_cast<std::size_t>(pixelOffset)) {
+    if (rleImage && streamEnd < static_cast<std::size_t>(pixelOffset)) {
         return false;
     }
 
@@ -155,7 +157,7 @@ bool DecodeBmpRgba8ImageUVE(const std::vector<std::byte>& bytes, BmpRgba8ImageUV
         const std::size_t sourceStride = static_cast<std::size_t>(rowStride);
         const std::size_t sourceOffset = static_cast<std::size_t>(pixelOffset);
         const std::size_t outputStride = static_cast<std::size_t>(width) * 4U;
-        if (rle8Image) {
+        if (rleImage) {
             const auto writePalettePixel = [&](const std::uint64_t x, const std::uint64_t y,
                                                const std::uint8_t paletteIndex) noexcept {
                 if (x >= width || y >= absoluteHeight || paletteIndex >= paletteEntryCount) {
@@ -199,7 +201,12 @@ bool DecodeBmpRgba8ImageUVE(const std::vector<std::byte>& bytes, BmpRgba8ImageUV
                         return false;
                     }
                     for (std::uint8_t index = 0U; index < count; ++index) {
-                        if (!writePalettePixel(x + index, y, value)) {
+                        const std::uint8_t paletteIndex = rle4Image
+                                                               ? static_cast<std::uint8_t>((index & 1U) == 0U
+                                                                                                 ? value >> 4U
+                                                                                                 : value & 0x0FU)
+                                                               : value;
+                        if (!writePalettePixel(x + index, y, paletteIndex)) {
                             return false;
                         }
                     }
@@ -227,19 +234,26 @@ bool DecodeBmpRgba8ImageUVE(const std::vector<std::byte>& bytes, BmpRgba8ImageUV
                     y += deltaY;
                 } else {
                     const std::size_t absoluteCount = value;
+                    const std::size_t packedBytes = rle4Image ? (absoluteCount + 1U) / 2U : absoluteCount;
                     if (y >= absoluteHeight || x + absoluteCount > width ||
-                        streamEnd - cursor < absoluteCount ||
-                        ((absoluteCount & 1U) != 0U && streamEnd - cursor < absoluteCount + 1U)) {
+                        streamEnd - cursor < packedBytes ||
+                        ((packedBytes & 1U) != 0U && streamEnd - cursor < packedBytes + 1U)) {
                         return false;
                     }
                     for (std::size_t index = 0U; index < absoluteCount; ++index) {
-                        if (!writePalettePixel(x + index, y,
-                                               std::to_integer<std::uint8_t>(bytes[cursor + index]))) {
+                        const std::uint8_t packedIndices =
+                            std::to_integer<std::uint8_t>(bytes[cursor + (rle4Image ? index / 2U : index)]);
+                        const std::uint8_t paletteIndex = rle4Image
+                                                               ? static_cast<std::uint8_t>((index & 1U) == 0U
+                                                                                                 ? packedIndices >> 4U
+                                                                                                 : packedIndices & 0x0FU)
+                                                               : packedIndices;
+                        if (!writePalettePixel(x + index, y, paletteIndex)) {
                             return false;
                         }
                     }
-                    cursor += absoluteCount;
-                    if ((absoluteCount & 1U) != 0U) {
+                    cursor += packedBytes;
+                    if ((packedBytes & 1U) != 0U) {
                         ++cursor;
                     }
                     x += absoluteCount;
@@ -249,67 +263,67 @@ bool DecodeBmpRgba8ImageUVE(const std::vector<std::byte>& bytes, BmpRgba8ImageUV
                 return false;
             }
         } else {
-        for (std::size_t outputRow = 0U; outputRow < static_cast<std::size_t>(absoluteHeight); ++outputRow) {
-            const std::size_t sourceRow = topDown ? outputRow : static_cast<std::size_t>(absoluteHeight) - outputRow - 1U;
-            const std::byte* const source = bytes.data() + sourceOffset + sourceRow * sourceStride;
-            std::byte* const destination = candidate.pixels.data() + outputRow * outputStride;
-            for (std::size_t column = 0U; column < static_cast<std::size_t>(width); ++column) {
-                const std::byte* const pixel = source +
-                                                 (packed1Image ? column / 8U
-                                                               : (packed4Image ? column / 2U
-                                                                               : column * static_cast<std::size_t>(bytesPerPixel)));
-                std::byte* const rgba = destination + column * 4U;
-                if (indexedImage) {
-                    const std::uint8_t packedIndices = std::to_integer<std::uint8_t>(*pixel);
-                    const std::uint8_t paletteIndex = packed1Image
-                                                           ? static_cast<std::uint8_t>((packedIndices >> (7U - (column & 7U))) & 0x01U)
-                                                           : (packed4Image
-                                                                  ? static_cast<std::uint8_t>((packedIndices >>
-                                                                                               ((column & 1U) == 0U ? 4U : 0U)) &
-                                                                                              0x0FU)
-                                                                  : packedIndices);
-                    if (paletteIndex >= paletteEntryCount) {
-                        return false;
-                    }
-                    const std::size_t palettePixelOffset = paletteOffset +
-                                                           static_cast<std::size_t>(paletteIndex) * kBmpPaletteEntryBytesUVE;
-                    rgba[0] = bytes[palettePixelOffset + 2U];
-                    rgba[1] = bytes[palettePixelOffset + 1U];
-                    rgba[2] = bytes[palettePixelOffset];
-                } else if (bitfields32BgrxImage) {
-                    const std::uint32_t packed = static_cast<std::uint32_t>(std::to_integer<std::uint8_t>(pixel[0])) |
-                                                  (static_cast<std::uint32_t>(std::to_integer<std::uint8_t>(pixel[1])) << 8U) |
-                                                  (static_cast<std::uint32_t>(std::to_integer<std::uint8_t>(pixel[2])) << 16U) |
-                                                  (static_cast<std::uint32_t>(std::to_integer<std::uint8_t>(pixel[3])) << 24U);
-                    rgba[0] = std::byte{static_cast<unsigned char>((packed >> 16U) & 0xFFU)};
-                    rgba[1] = std::byte{static_cast<unsigned char>((packed >> 8U) & 0xFFU)};
-                    rgba[2] = std::byte{static_cast<unsigned char>(packed & 0xFFU)};
-                } else if (packed16Image) {
-                    const std::uint16_t packed = static_cast<std::uint16_t>(std::to_integer<std::uint8_t>(pixel[0])) |
-                                                  static_cast<std::uint16_t>(std::to_integer<std::uint8_t>(pixel[1]) << 8U);
-                    const auto expandFiveBit = [](const std::uint16_t value) noexcept {
-                        return std::byte{static_cast<unsigned char>((value * 255U + 15U) / 31U)};
-                    };
-                    const auto expandSixBit = [](const std::uint16_t value) noexcept {
-                        return std::byte{static_cast<unsigned char>((value * 255U + 31U) / 63U)};
-                    };
-                    if (bitfields565Image) {
-                        rgba[0] = expandFiveBit((packed >> 11U) & 0x1FU);
-                        rgba[1] = expandSixBit((packed >> 5U) & 0x3FU);
-                        rgba[2] = expandFiveBit(packed & 0x1FU);
+            for (std::size_t outputRow = 0U; outputRow < static_cast<std::size_t>(absoluteHeight); ++outputRow) {
+                const std::size_t sourceRow = topDown ? outputRow : static_cast<std::size_t>(absoluteHeight) - outputRow - 1U;
+                const std::byte* const source = bytes.data() + sourceOffset + sourceRow * sourceStride;
+                std::byte* const destination = candidate.pixels.data() + outputRow * outputStride;
+                for (std::size_t column = 0U; column < static_cast<std::size_t>(width); ++column) {
+                    const std::byte* const pixel = source +
+                                                     (packed1Image ? column / 8U
+                                                                   : (packed4Image ? column / 2U
+                                                                                   : column * static_cast<std::size_t>(bytesPerPixel)));
+                    std::byte* const rgba = destination + column * 4U;
+                    if (indexedImage) {
+                        const std::uint8_t packedIndices = std::to_integer<std::uint8_t>(*pixel);
+                        const std::uint8_t paletteIndex = packed1Image
+                                                               ? static_cast<std::uint8_t>((packedIndices >> (7U - (column & 7U))) & 0x01U)
+                                                               : (packed4Image
+                                                                      ? static_cast<std::uint8_t>((packedIndices >>
+                                                                                                   ((column & 1U) == 0U ? 4U : 0U)) &
+                                                                                                  0x0FU)
+                                                                      : packedIndices);
+                        if (paletteIndex >= paletteEntryCount) {
+                            return false;
+                        }
+                        const std::size_t palettePixelOffset = paletteOffset +
+                                                               static_cast<std::size_t>(paletteIndex) * kBmpPaletteEntryBytesUVE;
+                        rgba[0] = bytes[palettePixelOffset + 2U];
+                        rgba[1] = bytes[palettePixelOffset + 1U];
+                        rgba[2] = bytes[palettePixelOffset];
+                    } else if (bitfields32BgrxImage) {
+                        const std::uint32_t packed = static_cast<std::uint32_t>(std::to_integer<std::uint8_t>(pixel[0])) |
+                                                      (static_cast<std::uint32_t>(std::to_integer<std::uint8_t>(pixel[1])) << 8U) |
+                                                      (static_cast<std::uint32_t>(std::to_integer<std::uint8_t>(pixel[2])) << 16U) |
+                                                      (static_cast<std::uint32_t>(std::to_integer<std::uint8_t>(pixel[3])) << 24U);
+                        rgba[0] = std::byte{static_cast<unsigned char>((packed >> 16U) & 0xFFU)};
+                        rgba[1] = std::byte{static_cast<unsigned char>((packed >> 8U) & 0xFFU)};
+                        rgba[2] = std::byte{static_cast<unsigned char>(packed & 0xFFU)};
+                    } else if (packed16Image) {
+                        const std::uint16_t packed = static_cast<std::uint16_t>(std::to_integer<std::uint8_t>(pixel[0])) |
+                                                      static_cast<std::uint16_t>(std::to_integer<std::uint8_t>(pixel[1]) << 8U);
+                        const auto expandFiveBit = [](const std::uint16_t value) noexcept {
+                            return std::byte{static_cast<unsigned char>((value * 255U + 15U) / 31U)};
+                        };
+                        const auto expandSixBit = [](const std::uint16_t value) noexcept {
+                            return std::byte{static_cast<unsigned char>((value * 255U + 31U) / 63U)};
+                        };
+                        if (bitfields565Image) {
+                            rgba[0] = expandFiveBit((packed >> 11U) & 0x1FU);
+                            rgba[1] = expandSixBit((packed >> 5U) & 0x3FU);
+                            rgba[2] = expandFiveBit(packed & 0x1FU);
+                        } else {
+                            rgba[0] = expandFiveBit((packed >> 10U) & 0x1FU);
+                            rgba[1] = expandFiveBit((packed >> 5U) & 0x1FU);
+                            rgba[2] = expandFiveBit(packed & 0x1FU);
+                        }
                     } else {
-                        rgba[0] = expandFiveBit((packed >> 10U) & 0x1FU);
-                        rgba[1] = expandFiveBit((packed >> 5U) & 0x1FU);
-                        rgba[2] = expandFiveBit(packed & 0x1FU);
+                        rgba[0] = pixel[2];
+                        rgba[1] = pixel[1];
+                        rgba[2] = pixel[0];
                     }
-                } else {
-                    rgba[0] = pixel[2];
-                    rgba[1] = pixel[1];
-                    rgba[2] = pixel[0];
+                    rgba[3] = std::byte{0xFF};
                 }
-                rgba[3] = std::byte{0xFF};
             }
-        }
         }
         outImage = std::move(candidate);
         return true;
