@@ -214,6 +214,18 @@ TEST_F(LightSystemUVETest, ExtractActiveLightsUVE_InvalidLightParameters_Asserts
 
     EXPECT_DEATH({ static_cast<void>(lightSystem.ExtractActiveLightsUVE(entityManager)); }, "");
 }
+#else
+TEST_F(LightSystemUVETest, ExtractActiveLightsUVE_InvalidLightParameters_SkipsWithoutPublishing) {
+    Scene::LightComponentUVE invalid = {};
+    invalid.intensity = -1.0F;
+    static_cast<void>(MakeLightEntityUVE(Math::Vector3UVE{}, Math::QuaternionUVE{}, invalid));
+
+    const LightListUVE result = lightSystem.ExtractActiveLightsUVE(entityManager);
+
+    for (const LightDataUVE& slot : result) {
+        EXPECT_FLOAT_EQ(slot.intensity, 0.0F);
+    }
+}
 #endif
 
 } // namespace
