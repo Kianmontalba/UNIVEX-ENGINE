@@ -328,6 +328,40 @@ TEST_F(AssetImportQueueUVETest, DerivedArtifactCacheUVE_MarkStaleForSourceUVE_Is
     EXPECT_FALSE(cache.LoadImportRecordUVE(secondDestination)->stale);
 }
 
+TEST_F(AssetImportQueueUVETest, CacheUVE_StoreRejectsCallerStaleRecordAndRetainsFreshArtifact) {
+    const std::filesystem::path source = root / "source.custom";
+    const std::filesystem::path destination = contentRoot / "output.custom";
+    WriteFixtureFileUVE(source, "source bytes");
+    WriteFixtureFileUVE(destination, "output bytes");
+
+    const std::optional<AssetContentFingerprintUVE> sourceFingerprint =
+        ComputeAssetContentFingerprintUVE(source);
+    const std::optional<AssetContentFingerprintUVE> destinationFingerprint =
+        ComputeAssetContentFingerprintUVE(destination);
+    ASSERT_TRUE(sourceFingerprint.has_value());
+    ASSERT_TRUE(destinationFingerprint.has_value());
+
+    const DerivedArtifactCacheRecordUVE freshRecord{kDerivedArtifactCacheSchemaVersionUVE,
+                                                     source,
+                                                     destination,
+                                                     *sourceFingerprint,
+                                                     *destinationFingerprint,
+                                                     "generic-v1",
+                                                     AssetGuidUVE{1U},
+                                                     false};
+    ASSERT_TRUE(cache.StoreImportRecordUVE(destination, freshRecord));
+
+    DerivedArtifactCacheRecordUVE staleCallerRecord = freshRecord;
+    staleCallerRecord.stale = true;
+    EXPECT_FALSE(cache.StoreImportRecordUVE(destination, staleCallerRecord));
+
+    const std::optional<DerivedArtifactCacheRecordUVE> retainedRecord = cache.LoadImportRecordUVE(destination);
+    ASSERT_TRUE(retainedRecord.has_value());
+    EXPECT_FALSE(retainedRecord->stale);
+    EXPECT_EQ(retainedRecord->sourceFingerprint, freshRecord.sourceFingerprint);
+    EXPECT_EQ(retainedRecord->destinationFingerprint, freshRecord.destinationFingerprint);
+}
+
 TEST_F(AssetImportQueueUVETest, CacheUVE_StaleRecordForcesFreshImportAndSuccessfulWriteClearsStaleState) {
     const std::filesystem::path source = root / "source.custom";
     const std::filesystem::path destination = contentRoot / "output.custom";
