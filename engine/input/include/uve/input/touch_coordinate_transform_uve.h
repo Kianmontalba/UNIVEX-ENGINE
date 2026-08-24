@@ -5,6 +5,7 @@
 #include <cstdint>
 namespace UVE::Input {
 enum class TouchOrientationUVE : std::uint8_t { Deg0, Deg90, Deg180, Deg270 };
+/// Safe-area fields are non-negative inset margins from the corresponding viewport edges.
 struct TouchCoordinateViewportUVE final {
     float width = 0.0F;
     float height = 0.0F;
@@ -14,17 +15,18 @@ struct TouchCoordinateViewportUVE final {
     float safeBottom = 0.0F;
 };
 
-/// Validates a copied mobile viewport/safe-area snapshot without acquiring native metrics or
-/// selecting a platform coordinate backend.
+/// Validates a copied mobile viewport/safe-area snapshot whose safe-area fields are inset margins,
+/// without acquiring native metrics or selecting a platform coordinate backend.
 [[nodiscard]] inline bool ValidateTouchCoordinateViewportUVE(
     const TouchCoordinateViewportUVE& viewport) noexcept {
     return std::isfinite(viewport.width) && std::isfinite(viewport.height) &&
            std::isfinite(viewport.safeLeft) && std::isfinite(viewport.safeTop) &&
            std::isfinite(viewport.safeRight) && std::isfinite(viewport.safeBottom) &&
            viewport.width > 0.0F && viewport.height > 0.0F && viewport.safeLeft >= 0.0F &&
-           viewport.safeTop >= 0.0F && viewport.safeRight <= viewport.width &&
-           viewport.safeBottom <= viewport.height && viewport.safeLeft < viewport.safeRight &&
-           viewport.safeTop < viewport.safeBottom;
+           viewport.safeTop >= 0.0F && viewport.safeRight >= 0.0F && viewport.safeBottom >= 0.0F &&
+           viewport.safeLeft < viewport.width && viewport.safeTop < viewport.height &&
+           viewport.safeRight < viewport.width - viewport.safeLeft &&
+           viewport.safeBottom < viewport.height - viewport.safeTop;
 }
 /// Applies a finite cardinal orientation to normalized [0,1] touch coordinates.
 [[nodiscard]] bool ApplyTouchOrientationUVE(Math::Vector2UVE normalizedPosition,
