@@ -589,11 +589,23 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
         const bool approvedInput = link.input.pinName == "A" || link.input.pinName == "B" ||
                                    link.input.pinName == "Vector" || link.input.pinName == "Position" ||
                                    link.input.pinName == "Translation";
+        const bool duplicateVector3Input = std::any_of(
+            stagedVector3Links.begin(), stagedVector3Links.end(), [&](const ScriptLinkUVE& stagedLink) {
+                return stagedLink.input.nodeId == link.input.nodeId && stagedLink.input.pinName == link.input.pinName;
+            });
+        const bool sameVector3Consumer = stagedVector3Links.empty() ||
+                                         std::all_of(stagedVector3Links.begin(), stagedVector3Links.end(),
+                                                     [&](const ScriptLinkUVE& stagedLink) {
+                                                         return stagedLink.input.nodeId == link.input.nodeId;
+                                                     });
+        const bool supportsTwoInputs = consumerNode->typeId.rfind("math.vector3.", 0U) == 0U &&
+                                       (link.input.pinName == "A" || link.input.pinName == "B");
         if (!approvedProducer || conversionHasDataDependency(*sourceNode) || !approvedOutput || !approvedInput ||
-            !stagedVector3Links.empty()) {
+            duplicateVector3Input || !sameVector3Consumer ||
+            stagedVector3Links.size() >= (supportsTwoInputs ? 2U : 1U)) {
             result.diagnostics.push_back({ScriptValidationCodeUVE::UnsupportedRuntimeNode, link.input.nodeId,
                                           link.input.pinName,
-                                          "Vector3 data-link staging supports one direct built-in or variable.get_vector3.Result producer; composed and deeper vector dependencies remain deferred."});
+                                          "Vector3 data-link staging supports up to two direct producers on one math.vector3 A/B pair; transform and single-input vector consumers remain single-link, while composed/deeper dependencies and additional consumers remain deferred."});
             continue;
         }
         stagedVector3Links.push_back(link);
