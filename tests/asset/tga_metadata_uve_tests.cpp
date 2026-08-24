@@ -92,6 +92,34 @@ void AppendU16LittleEndianUVE(std::vector<std::byte>& bytes, const std::uint16_t
     return tga;
 }
 
+[[nodiscard]] std::vector<std::byte> MakeTga16TrueColor565TwoByOneTopLeftUVE() {
+    std::vector<std::byte> tga;
+    tga.reserve(22U);
+    tga.insert(tga.end(), 18U, std::byte{0});
+    tga[2] = std::byte{2};
+    tga[12] = std::byte{2};
+    tga[14] = std::byte{1};
+    tga[16] = std::byte{16};
+    tga[17] = std::byte{0x20};
+    // Little-endian BGR565: opaque red, opaque blue.
+    tga.insert(tga.end(), {std::byte{0x00}, std::byte{0xF8}, std::byte{0x1F}, std::byte{0x00}});
+    return tga;
+}
+
+[[nodiscard]] std::vector<std::byte> MakeTga16TrueColor565RleThreeByOneTopLeftUVE() {
+    std::vector<std::byte> tga;
+    tga.reserve(23U);
+    tga.insert(tga.end(), 18U, std::byte{0});
+    tga[2] = std::byte{10};
+    tga[12] = std::byte{3};
+    tga[14] = std::byte{1};
+    tga[16] = std::byte{16};
+    tga[17] = std::byte{0x20};
+    // One opaque green BGR565 sample in a three-pixel run.
+    tga.insert(tga.end(), {std::byte{0x82}, std::byte{0xE0}, std::byte{0x07}});
+    return tga;
+}
+
 [[nodiscard]] std::vector<std::byte> MakeTga16TrueColorRleThreeByOneTopLeftUVE() {
     std::vector<std::byte> tga;
     tga.reserve(23U);
@@ -300,6 +328,27 @@ TEST(TgaMetadataUVETest, DecodeTgaRgba8ImageUVE_DecodesRle8BitGrayscaleToOpaqueR
                                  std::byte{0x77}, std::byte{0x77}, std::byte{0x77}, std::byte{0xFF}}));
 }
 
+TEST(TgaMetadataUVETest, DecodeTgaRgba8ImageUVE_Decodes16BitTrueColor565ToRgba) {
+    TgaRgba8ImageUVE image;
+    ASSERT_TRUE(DecodeTgaRgba8ImageUVE(MakeTga16TrueColor565TwoByOneTopLeftUVE(), image));
+    EXPECT_EQ(image.width, 2U);
+    EXPECT_EQ(image.height, 1U);
+    EXPECT_EQ(image.pixels, (std::vector<std::byte>{
+                                 std::byte{0xFF}, std::byte{0x00}, std::byte{0x00}, std::byte{0xFF},
+                                 std::byte{0x00}, std::byte{0x00}, std::byte{0xFF}, std::byte{0xFF}}));
+}
+
+TEST(TgaMetadataUVETest, DecodeTgaRgba8ImageUVE_DecodesRle16BitTrueColor565ToRgba) {
+    TgaRgba8ImageUVE image;
+    ASSERT_TRUE(DecodeTgaRgba8ImageUVE(MakeTga16TrueColor565RleThreeByOneTopLeftUVE(), image));
+    EXPECT_EQ(image.width, 3U);
+    EXPECT_EQ(image.height, 1U);
+    EXPECT_EQ(image.pixels, (std::vector<std::byte>{
+                                 std::byte{0x00}, std::byte{0xFF}, std::byte{0x00}, std::byte{0xFF},
+                                 std::byte{0x00}, std::byte{0xFF}, std::byte{0x00}, std::byte{0xFF},
+                                 std::byte{0x00}, std::byte{0xFF}, std::byte{0x00}, std::byte{0xFF}}));
+}
+
 TEST(TgaMetadataUVETest, DecodeTgaRgba8ImageUVE_Decodes16BitTrueColor5551ToRgba) {
     TgaRgba8ImageUVE image;
     ASSERT_TRUE(DecodeTgaRgba8ImageUVE(MakeTga16TrueColorTwoByOneTopLeftUVE(), image));
@@ -434,10 +483,10 @@ TEST(TgaMetadataUVETest, DecodeTgaRgba8ImageUVE_RejectsMalformedInputAtomically)
     invalidGrayscaleDepth[16] = std::byte{24};
     EXPECT_FALSE(DecodeTgaRgba8ImageUVE(invalidGrayscaleDepth, image));
     std::vector<std::byte> invalidTrueColorDescriptor = MakeTga16TrueColorTwoByOneTopLeftUVE();
-    invalidTrueColorDescriptor[17] = std::byte{0x20};
+    invalidTrueColorDescriptor[17] = std::byte{0x22};
     EXPECT_FALSE(DecodeTgaRgba8ImageUVE(invalidTrueColorDescriptor, image));
     std::vector<std::byte> invalidPaletteDescriptor = MakeTga16PaletteTwoByOneTopLeftUVE();
-    invalidPaletteDescriptor[17] = std::byte{0x20};
+    invalidPaletteDescriptor[17] = std::byte{0x22};
     EXPECT_FALSE(DecodeTgaRgba8ImageUVE(invalidPaletteDescriptor, image));
     std::vector<std::byte> invalidPaletteIndex = MakeTga8PaletteTwoByOneTopLeftUVE();
     invalidPaletteIndex[25] = std::byte{2};
