@@ -301,6 +301,41 @@ void AppendU16LittleEndianUVE(std::vector<std::byte>& bytes, const std::uint16_t
     return tga;
 }
 
+[[nodiscard]] std::vector<std::byte> MakeTga15PaletteTwoByOneTopLeftUVE() {
+    std::vector<std::byte> tga;
+    tga.reserve(24U);
+    tga.insert(tga.end(), 18U, std::byte{0});
+    tga[1] = std::byte{1};
+    tga[2] = std::byte{1};
+    tga[5] = std::byte{2};
+    tga[7] = std::byte{15};
+    tga[12] = std::byte{2};
+    tga[14] = std::byte{1};
+    tga[16] = std::byte{8};
+    tga[17] = std::byte{0x20};
+    // BGR555 palette entries: opaque red, opaque blue, followed by indices 0 and 1.
+    tga.insert(tga.end(), {std::byte{0x00}, std::byte{0x7C}, std::byte{0x1F}, std::byte{0x00},
+                           std::byte{0x00}, std::byte{0x01}});
+    return tga;
+}
+
+[[nodiscard]] std::vector<std::byte> MakeTga15PaletteRleThreeByOneTopLeftUVE() {
+    std::vector<std::byte> tga;
+    tga.reserve(22U);
+    tga.insert(tga.end(), 18U, std::byte{0});
+    tga[1] = std::byte{1};
+    tga[2] = std::byte{9};
+    tga[5] = std::byte{1};
+    tga[7] = std::byte{15};
+    tga[12] = std::byte{3};
+    tga[14] = std::byte{1};
+    tga[16] = std::byte{8};
+    tga[17] = std::byte{0x20};
+    // One BGR555 green palette entry and one run packet containing three index-zero pixels.
+    tga.insert(tga.end(), {std::byte{0xE0}, std::byte{0x03}, std::byte{0x82}, std::byte{0x00}});
+    return tga;
+}
+
 [[nodiscard]] std::vector<std::byte> MakeTga16PaletteTwoByOneTopLeftUVE() {
     std::vector<std::byte> tga;
     tga.reserve(22U);
@@ -573,6 +608,27 @@ TEST(TgaMetadataUVETest, DecodeTgaRgba8ImageUVE_DecodesRle16BitIndexedPixelsToRg
                                  std::byte{0x00}, std::byte{0xFF}, std::byte{0x00}, std::byte{0xFF}}));
 }
 
+TEST(TgaMetadataUVETest, DecodeTgaRgba8ImageUVE_Decodes15BitPaletteToRgba) {
+    TgaRgba8ImageUVE image;
+    ASSERT_TRUE(DecodeTgaRgba8ImageUVE(MakeTga15PaletteTwoByOneTopLeftUVE(), image));
+    EXPECT_EQ(image.width, 2U);
+    EXPECT_EQ(image.height, 1U);
+    EXPECT_EQ(image.pixels, (std::vector<std::byte>{
+                                 std::byte{0xFF}, std::byte{0x00}, std::byte{0x00}, std::byte{0xFF},
+                                 std::byte{0x00}, std::byte{0x00}, std::byte{0xFF}, std::byte{0xFF}}));
+}
+
+TEST(TgaMetadataUVETest, DecodeTgaRgba8ImageUVE_DecodesRle15BitPaletteToRgba) {
+    TgaRgba8ImageUVE image;
+    ASSERT_TRUE(DecodeTgaRgba8ImageUVE(MakeTga15PaletteRleThreeByOneTopLeftUVE(), image));
+    EXPECT_EQ(image.width, 3U);
+    EXPECT_EQ(image.height, 1U);
+    EXPECT_EQ(image.pixels, (std::vector<std::byte>{
+                                 std::byte{0x00}, std::byte{0xFF}, std::byte{0x00}, std::byte{0xFF},
+                                 std::byte{0x00}, std::byte{0xFF}, std::byte{0x00}, std::byte{0xFF},
+                                 std::byte{0x00}, std::byte{0xFF}, std::byte{0x00}, std::byte{0xFF}}));
+}
+
 TEST(TgaMetadataUVETest, DecodeTgaRgba8ImageUVE_Decodes16BitPaletteToRgba) {
     TgaRgba8ImageUVE image;
     ASSERT_TRUE(DecodeTgaRgba8ImageUVE(MakeTga16PaletteTwoByOneTopLeftUVE(), image));
@@ -652,6 +708,9 @@ TEST(TgaMetadataUVETest, DecodeTgaRgba8ImageUVE_RejectsMalformedInputAtomically)
     std::vector<std::byte> invalidPaletteDescriptor = MakeTga16PaletteTwoByOneTopLeftUVE();
     invalidPaletteDescriptor[17] = std::byte{0x22};
     EXPECT_FALSE(DecodeTgaRgba8ImageUVE(invalidPaletteDescriptor, image));
+    std::vector<std::byte> invalid15BitPaletteDescriptor = MakeTga15PaletteTwoByOneTopLeftUVE();
+    invalid15BitPaletteDescriptor[17] = std::byte{0x21};
+    EXPECT_FALSE(DecodeTgaRgba8ImageUVE(invalid15BitPaletteDescriptor, image));
     std::vector<std::byte> invalidPaletteIndex = MakeTga8PaletteTwoByOneTopLeftUVE();
     invalidPaletteIndex[25] = std::byte{2};
     EXPECT_FALSE(DecodeTgaRgba8ImageUVE(invalidPaletteIndex, image));
