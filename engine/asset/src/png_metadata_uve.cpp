@@ -390,6 +390,12 @@ bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUV
                         pixels[outputOffset + 1U] = decodedRow[sourceOffset + 2U];
                         pixels[outputOffset + 2U] = decodedRow[sourceOffset + 4U];
                         pixels[outputOffset + 3U] = std::byte{0xFF};
+                    } else if (metadata->bitDepth == 16U && metadata->colorType == 4U) {
+                        const std::byte gray = decodedRow[sourceOffset];
+                        pixels[outputOffset] = gray;
+                        pixels[outputOffset + 1U] = gray;
+                        pixels[outputOffset + 2U] = gray;
+                        pixels[outputOffset + 3U] = decodedRow[sourceOffset + 2U];
                     } else if (metadata->bitDepth == 16U) {
                         pixels[outputOffset] = decodedRow[sourceOffset];
                         pixels[outputOffset + 1U] = decodedRow[sourceOffset + 2U];
