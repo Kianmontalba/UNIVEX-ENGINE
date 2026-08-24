@@ -26,6 +26,9 @@ struct AnimationStateUVE final {
     float speed = 1.0F;
 };
 
+/// Controls whether a transition already in progress may be replaced by an eligible transition
+/// from its source state, target state, both, or neither. Replacement preserves deterministic
+/// priority/identifier selection and starts the replacement crossfade from zero alpha.
 struct AnimationTransitionUVE final {
     std::string transitionId;
     std::string sourceStateId;
@@ -109,6 +112,8 @@ private:
     [[nodiscard]] const AnimationStateUVE* FindStateUVE(const std::string& stateId) const noexcept;
     [[nodiscard]] const AnimationTransitionUVE* SelectTransitionUVE(
         const AnimationStateUVE& source) const noexcept;
+    [[nodiscard]] const AnimationTransitionUVE* SelectInterruptionTransitionUVE(
+        const AnimationTransitionUVE& activeTransition) const noexcept;
     [[nodiscard]] bool SampleStateUVE(const AnimationStateUVE& state, double timeSeconds,
                                       TransformPoseUVE& outPose) const noexcept;
 
