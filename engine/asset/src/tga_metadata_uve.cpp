@@ -14,6 +14,8 @@ namespace {
 constexpr std::size_t kTgaHeaderBytesUVE = 18U;
 constexpr std::uint8_t kTgaTrueColorImageTypeUVE = 2U;
 constexpr std::uint8_t kTgaRleTrueColorImageTypeUVE = 10U;
+constexpr std::uint8_t kTgaGrayscaleImageTypeUVE = 3U;
+constexpr std::uint8_t kTgaRleGrayscaleImageTypeUVE = 11U;
 constexpr std::uint8_t kTgaTopOriginBitUVE = 0x20U;
 constexpr std::uint8_t kTgaRightOriginBitUVE = 0x10U;
 constexpr std::uint8_t kTgaUnsupportedInterleaveBitsUVE = 0xC0U;
@@ -39,15 +41,17 @@ bool DecodeTgaRgba8ImageUVE(const std::vector<std::byte>& bytes,
     const std::uint16_t height = ReadU16LittleEndianUVE(bytes, 14U);
     const std::uint8_t pixelDepth = std::to_integer<std::uint8_t>(bytes[16]);
     const std::uint8_t imageDescriptor = std::to_integer<std::uint8_t>(bytes[17]);
-    if (colorMapType != 0U ||
-        (imageType != kTgaTrueColorImageTypeUVE && imageType != kTgaRleTrueColorImageTypeUVE) || width == 0U ||
-        height == 0U ||
-        (pixelDepth != 24U && pixelDepth != 32U) ||
+    const bool grayscaleImage = imageType == kTgaGrayscaleImageTypeUVE || imageType == kTgaRleGrayscaleImageTypeUVE;
+    const bool rleImage = imageType == kTgaRleTrueColorImageTypeUVE || imageType == kTgaRleGrayscaleImageTypeUVE;
+    const bool supportedImageType = imageType == kTgaTrueColorImageTypeUVE ||
+                                    imageType == kTgaRleTrueColorImageTypeUVE || grayscaleImage;
+    const bool supportedPixelDepth = grayscaleImage ? pixelDepth == 8U : (pixelDepth == 24U || pixelDepth == 32U);
+    if (colorMapType != 0U || !supportedImageType || width == 0U || height == 0U || !supportedPixelDepth ||
         (imageDescriptor & kTgaUnsupportedInterleaveBitsUVE) != 0U) {
         return false;
     }
 
-    const std::size_t bytesPerPixel = pixelDepth / 8U;
+    const std::size_t bytesPerPixel = grayscaleImage ? 1U : pixelDepth / 8U;
     constexpr std::size_t kMaximumSizeT = std::numeric_limits<std::size_t>::max();
     if (static_cast<std::size_t>(width) > kMaximumSizeT / bytesPerPixel) {
         return false;
@@ -62,7 +66,7 @@ bool DecodeTgaRgba8ImageUVE(const std::vector<std::byte>& bytes,
         return false;
     }
     const std::size_t pixelOffset = kTgaHeaderBytesUVE + idLength;
-    if (imageType == kTgaTrueColorImageTypeUVE &&
+    if (!rleImage &&
         (sourcePixelBytes > kMaximumSizeT - pixelOffset ||
          pixelOffset + sourcePixelBytes > bytes.size())) {
         return false;
@@ -94,16 +98,22 @@ bool DecodeTgaRgba8ImageUVE(const std::vector<std::byte>& bytes,
         const std::size_t outputY = topOrigin ? sourceY : static_cast<std::size_t>(height) - 1U - sourceY;
         const std::size_t outputX = rightOrigin ? static_cast<std::size_t>(width) - 1U - sourceX : sourceX;
         const std::size_t outputOffset = (outputY * static_cast<std::size_t>(width) + outputX) * 4U;
-        candidatePixels[outputOffset] = bytes[sourceOffset + 2U];
-        candidatePixels[outputOffset + 1U] = bytes[sourceOffset + 1U];
-        candidatePixels[outputOffset + 2U] = bytes[sourceOffset];
+        if (grayscaleImage) {
+            candidatePixels[outputOffset] = bytes[sourceOffset];
+            candidatePixels[outputOffset + 1U] = bytes[sourceOffset];
+            candidatePixels[outputOffset + 2U] = bytes[sourceOffset];
+        } else {
+            candidatePixels[outputOffset] = bytes[sourceOffset + 2U];
+            candidatePixels[outputOffset + 1U] = bytes[sourceOffset + 1U];
+            candidatePixels[outputOffset + 2U] = bytes[sourceOffset];
+        }
         candidatePixels[outputOffset + 3U] = std::byte{0xFF};
     };
 
     std::size_t encodedOffset = pixelOffset;
     std::size_t decodedPixelCount = 0U;
     while (decodedPixelCount < pixelCount) {
-        if (imageType == kTgaTrueColorImageTypeUVE) {
+        if (!rleImage) {
             if (bytes.size() - encodedOffset < bytesPerPixel) {
                 return false;
             }
