@@ -52,7 +52,8 @@ bool DecodeTgaRgba8ImageUVE(const std::vector<std::byte>& bytes,
                           imageType == kTgaRleColorMappedImageTypeUVE;
     const bool supportedImageType = imageType == kTgaTrueColorImageTypeUVE ||
                                     imageType == kTgaRleTrueColorImageTypeUVE || grayscaleImage || paletteImage;
-    const bool supportedPixelDepth = paletteImage || grayscaleImage ? pixelDepth == 8U
+    const bool supportedPixelDepth = paletteImage ? pixelDepth == 8U
+                                                   : grayscaleImage ? (pixelDepth == 8U || pixelDepth == 16U)
                                                                      : (pixelDepth == 24U || pixelDepth == 32U);
     const bool supportedColorMap = paletteImage ? colorMapType == 1U && colorMapLength > 0U &&
                                                      (colorMapEntryDepth == 24U || colorMapEntryDepth == 32U)
@@ -62,7 +63,7 @@ bool DecodeTgaRgba8ImageUVE(const std::vector<std::byte>& bytes,
         return false;
     }
 
-    const std::size_t bytesPerPixel = paletteImage || grayscaleImage ? 1U : pixelDepth / 8U;
+    const std::size_t bytesPerPixel = paletteImage ? 1U : pixelDepth / 8U;
     constexpr std::size_t kMaximumSizeT = std::numeric_limits<std::size_t>::max();
     if (static_cast<std::size_t>(width) > kMaximumSizeT / bytesPerPixel) {
         return false;
@@ -119,6 +120,7 @@ bool DecodeTgaRgba8ImageUVE(const std::vector<std::byte>& bytes,
 
     const bool topOrigin = (imageDescriptor & kTgaTopOriginBitUVE) != 0U;
     const bool rightOrigin = (imageDescriptor & kTgaRightOriginBitUVE) != 0U;
+    const bool grayscaleAlphaImage = grayscaleImage && pixelDepth == 16U;
     const auto writePixel = [&](const std::size_t decodedIndex, const std::size_t sourceOffset) noexcept -> bool {
         const std::size_t sourceY = decodedIndex / static_cast<std::size_t>(width);
         const std::size_t sourceX = decodedIndex % static_cast<std::size_t>(width);
@@ -138,12 +140,13 @@ bool DecodeTgaRgba8ImageUVE(const std::vector<std::byte>& bytes,
             candidatePixels[outputOffset] = bytes[colorOffset];
             candidatePixels[outputOffset + 1U] = bytes[colorOffset];
             candidatePixels[outputOffset + 2U] = bytes[colorOffset];
+            candidatePixels[outputOffset + 3U] = grayscaleAlphaImage ? bytes[colorOffset + 1U] : std::byte{0xFF};
         } else {
             candidatePixels[outputOffset] = bytes[colorOffset + 2U];
             candidatePixels[outputOffset + 1U] = bytes[colorOffset + 1U];
             candidatePixels[outputOffset + 2U] = bytes[colorOffset];
+            candidatePixels[outputOffset + 3U] = std::byte{0xFF};
         }
-        candidatePixels[outputOffset + 3U] = std::byte{0xFF};
         return true;
     };
 
