@@ -23,6 +23,7 @@
 #include "uve/scene/components/prefab_instance_component_uve.h"
 #include "uve/scene/components/rigid_body_component_uve.h"
 #include "uve/scene/components/transform_component_uve.h"
+#include "uve/scene/components/world_transform_component_uve.h"
 #include "uve/scene/entity_manager_uve.h"
 #include "uve/scene/scene_graph_uve.h"
 
@@ -505,6 +506,28 @@ TEST_F(PrefabSystemUVETest, InstantiateUVE_WithParent_ReparentsNewRoot) {
 
     const EntityUVE instance = prefabSystem.InstantiateUVE(entityManager, sceneGraph, assetDatabase, guid, parent);
     ASSERT_NE(instance, kInvalidEntityUVE);
+    EXPECT_EQ(entityManager.GetComponentUVE<HierarchyComponentUVE>(instance).parent, parent);
+
+    std::filesystem::remove(prefabPath);
+}
+
+TEST_F(PrefabSystemUVETest, InstantiateUVE_WithParent_AttachesTransformToTransformlessRoot) {
+    const EntityUVE parent = entityManager.CreateEntityUVE();
+    sceneGraph.AttachTransformUVE(entityManager, parent, TransformComponentUVE{});
+
+    const EntityUVE source = entityManager.CreateEntityUVE();
+    entityManager.AddComponentUVE<MeshComponentUVE>(source, MeshComponentUVE{Asset::AssetGuidUVE{23}, Asset::AssetGuidUVE{24}});
+
+    const std::filesystem::path prefabPath = "uve_prefab_tests_transformless_parent.uveprefab";
+    std::filesystem::remove(prefabPath);
+    const Asset::AssetGuidUVE guid = prefabSystem.SavePrefabUVE(entityManager, assetDatabase, source, prefabPath);
+    ASSERT_NE(guid, Asset::kInvalidAssetGuidUVE);
+
+    const EntityUVE instance = prefabSystem.InstantiateUVE(entityManager, sceneGraph, assetDatabase, guid, parent);
+    ASSERT_NE(instance, kInvalidEntityUVE);
+    ASSERT_TRUE(entityManager.HasComponentUVE<TransformComponentUVE>(instance));
+    ASSERT_TRUE(entityManager.HasComponentUVE<WorldTransformComponentUVE>(instance));
+    ASSERT_TRUE(entityManager.HasComponentUVE<HierarchyComponentUVE>(instance));
     EXPECT_EQ(entityManager.GetComponentUVE<HierarchyComponentUVE>(instance).parent, parent);
 
     std::filesystem::remove(prefabPath);

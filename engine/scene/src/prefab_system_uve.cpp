@@ -7,7 +7,10 @@
 #include <vector>
 
 #include "uve/debug/logging_macros_uve.h"
+#include "uve/scene/components/hierarchy_component_uve.h"
 #include "uve/scene/components/prefab_instance_component_uve.h"
+#include "uve/scene/components/transform_component_uve.h"
+#include "uve/scene/components/world_transform_component_uve.h"
 
 namespace UVE::Scene {
 
@@ -96,6 +99,14 @@ EntityUVE PrefabSystemUVE::InstantiateWithRevisionUVE(
         root, PrefabInstanceComponentUVE{prefabGuid, {}, sourceRevision, sourceRevision});
 
     if (parent != kInvalidEntityUVE) {
+        const bool hasTransform = entityManager.HasComponentUVE<TransformComponentUVE>(root);
+        const bool hasWorldTransform = entityManager.HasComponentUVE<WorldTransformComponentUVE>(root);
+        const bool hasHierarchy = entityManager.HasComponentUVE<HierarchyComponentUVE>(root);
+        if (!hasTransform && !hasWorldTransform && !hasHierarchy) {
+            // A parented prefab must participate in the scene graph even when its authored root
+            // had no transform components; preserve transform-less roots only for unparented use.
+            sceneGraph.AttachTransformUVE(entityManager, root, TransformComponentUVE{});
+        }
         sceneGraph.SetParentUVE(entityManager, root, parent);
     }
 
