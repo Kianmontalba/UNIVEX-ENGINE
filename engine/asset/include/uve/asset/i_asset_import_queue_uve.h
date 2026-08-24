@@ -45,6 +45,7 @@ enum class AssetImportDiagnosticCodeUVE {
     SourceFingerprintFailed,
     DestinationFingerprintFailed,
     ImporterFailed,
+    CacheReadFailed,
     CacheWriteFailed,
 };
 
@@ -94,7 +95,8 @@ public:
     EnqueueUVE(AssetImportRequestUVE request) = 0;
 
     /// Synchronously processes at most one FIFO job. Returns true only when a queued job was
-    /// transitioned through Running to Succeeded or Failed; returns false when no queued job exists.
+    /// transitioned through Running to Succeeded or Failed; caller-boundary exceptions are translated
+    /// into terminal diagnostics, and returns false when no queued job exists.
     [[nodiscard]] virtual bool TickUVE() = 0;
 
     /// Requeues one failed job at the FIFO tail while preserving its stable id. Result data and

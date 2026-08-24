@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <deque>
+#include <exception>
 #include <filesystem>
 #include <mutex>
 #include <utility>
@@ -156,11 +157,25 @@ bool AssetImportQueueUVE::TickUVE() {
     }
 
     AssetContentFingerprintUVE cachedDestinationFingerprint;
-    const std::optional<DerivedArtifactCacheRecordUVE> cachedRecord =
-        m_impl->derivedArtifactCache.LoadImportRecordUVE(request.destinationPath);
-    if (cachedRecord.has_value() &&
-        IsCacheRecordValidUVE(*cachedRecord, request, *sourceFingerprint, m_impl->assetDatabase,
-                              cachedDestinationFingerprint)) {
+    std::optional<DerivedArtifactCacheRecordUVE> cachedRecord;
+    try {
+        cachedRecord = m_impl->derivedArtifactCache.LoadImportRecordUVE(request.destinationPath);
+        if (cachedRecord.has_value() &&
+            !IsCacheRecordValidUVE(*cachedRecord, request, *sourceFingerprint, m_impl->assetDatabase,
+                                   cachedDestinationFingerprint)) {
+            cachedRecord.reset();
+        }
+    } catch (const std::exception& exception) {
+        completeFailure(AssetImportDiagnosticCodeUVE::CacheReadFailed,
+                        std::string("The derived import cache threw an exception while reading: ") +
+                            exception.what());
+        return true;
+    } catch (...) {
+        completeFailure(AssetImportDiagnosticCodeUVE::CacheReadFailed,
+                        "The derived import cache threw an unknown exception while reading.");
+        return true;
+    }
+    if (cachedRecord.has_value()) {
         std::lock_guard<std::mutex> lock(m_impl->mutex);
         if (AssetImportJobUVE* const job = m_impl->FindJobUVE(id); job != nullptr) {
             job->destinationFingerprint = cachedDestinationFingerprint;
@@ -171,8 +186,19 @@ bool AssetImportQueueUVE::TickUVE() {
         return true;
     }
 
-    const AssetGuidUVE assetGuid =
-        m_impl->importer.ImportUVE(request.sourcePath, request.destinationPath, m_impl->assetDatabase, *request.settings);
+    AssetGuidUVE assetGuid;
+    try {
+        assetGuid = m_impl->importer.ImportUVE(request.sourcePath, request.destinationPath,
+                                               m_impl->assetDatabase, *request.settings);
+    } catch (const std::exception& exception) {
+        completeFailure(AssetImportDiagnosticCodeUVE::ImporterFailed,
+                        std::string("The registered importer threw an exception: ") + exception.what());
+        return true;
+    } catch (...) {
+        completeFailure(AssetImportDiagnosticCodeUVE::ImporterFailed,
+                        "The registered importer threw an unknown exception.");
+        return true;
+    }
     if (assetGuid == kInvalidAssetGuidUVE) {
         completeFailure(AssetImportDiagnosticCodeUVE::ImporterFailed,
                         "The registered importer failed or no importer accepted this source extension.");
@@ -194,7 +220,16 @@ bool AssetImportQueueUVE::TickUVE() {
                                                      *destinationFingerprint,
                                                      request.settingsVersion,
                                                      assetGuid};
-    const bool cacheStored = m_impl->derivedArtifactCache.StoreImportRecordUVE(request.destinationPath, cacheRecord);
+    bool cacheStored = false;
+    std::string cacheWriteDiagnostic;
+    try {
+        cacheStored = m_impl->derivedArtifactCache.StoreImportRecordUVE(request.destinationPath, cacheRecord);
+    } catch (const std::exception& exception) {
+        cacheWriteDiagnostic =
+            std::string("Import succeeded but derived cache metadata threw an exception: ") + exception.what();
+    } catch (...) {
+        cacheWriteDiagnostic = "Import succeeded but derived cache metadata threw an unknown exception.";
+    }
 
     std::lock_guard<std::mutex> lock(m_impl->mutex);
     AssetImportJobUVE* const job = m_impl->FindJobUVE(id);
@@ -206,10 +241,13 @@ bool AssetImportQueueUVE::TickUVE() {
     job->cacheHit = false;
     job->state = AssetImportJobStateUVE::Succeeded;
     if (!cacheStored) {
+        if (cacheWriteDiagnostic.empty()) {
+            cacheWriteDiagnostic = "Import succeeded but derived cache metadata could not be written.";
+        }
         job->diagnostics.push_back(AssetImportDiagnosticUVE{AssetImportDiagnosticSeverityUVE::Warning,
                                                              AssetImportDiagnosticCodeUVE::CacheWriteFailed,
-                                                             "Import succeeded but derived cache metadata could not be written.",
-                                                             request.sourcePath, request.destinationPath, attempt});
+                                                             std::move(cacheWriteDiagnostic), request.sourcePath,
+                                                             request.destinationPath, attempt});
     }
     return true;
 }

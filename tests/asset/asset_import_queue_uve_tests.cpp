@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <fstream>
 #include <memory>
+#include <stdexcept>
 #include <string>
 
 #include <gtest/gtest.h>
@@ -38,6 +39,49 @@ void WriteFixtureFileUVE(const std::filesystem::path& path, const std::string_vi
     return request;
 }
 
+class ThrowingAssetImporterUVE final : public IAssetImporterUVE {
+public:
+    void RegisterImporterUVE(
+        std::string,
+        std::function<bool(const std::filesystem::path&, const std::filesystem::path&,
+                           const AssetImportSettingsUVE&)>) override {}
+
+    [[nodiscard]] AssetGuidUVE ImportUVE(const std::filesystem::path&, const std::filesystem::path&,
+                                         IAssetDatabaseUVE&, const AssetImportSettingsUVE&) override {
+        throw std::runtime_error("importer boundary failure");
+    }
+};
+
+class ThrowingDerivedArtifactCacheUVE final : public IDerivedArtifactCacheUVE {
+public:
+    explicit ThrowingDerivedArtifactCacheUVE(const bool throwOnLoad, const bool throwOnStore)
+        : m_throwOnLoad(throwOnLoad), m_throwOnStore(throwOnStore) {}
+
+    [[nodiscard]] std::optional<DerivedArtifactCacheRecordUVE> LoadImportRecordUVE(
+        const std::filesystem::path&) const override {
+        if (m_throwOnLoad) {
+            throw std::runtime_error("cache load boundary failure");
+        }
+        return std::nullopt;
+    }
+
+    [[nodiscard]] bool StoreImportRecordUVE(const std::filesystem::path&,
+                                            const DerivedArtifactCacheRecordUVE&) override {
+        if (m_throwOnStore) {
+            throw std::runtime_error("cache store boundary failure");
+        }
+        return false;
+    }
+
+    [[nodiscard]] std::size_t MarkStaleForSourceUVE(const std::filesystem::path&) override { return 0U; }
+
+    [[nodiscard]] std::filesystem::path GetCacheRootUVE() const override { return "throwing-cache"; }
+
+private:
+    bool m_throwOnLoad;
+    bool m_throwOnStore;
+};
+
 class AssetImportQueueUVETest : public ::testing::Test {
 protected:
     const std::filesystem::path root = "uve_asset_import_queue_tests";
@@ -51,6 +95,77 @@ protected:
     void SetUp() override { std::filesystem::remove_all(root); }
     void TearDown() override { std::filesystem::remove_all(root); }
 };
+
+TEST_F(AssetImportQueueUVETest, TickUVE_TranslatesThrowingImporterIntoRetryableFailure) {
+    const std::filesystem::path source = root / "source.throwing";
+    const std::filesystem::path destination = contentRoot / "output.throwing";
+    WriteFixtureFileUVE(source, "source bytes");
+
+    ThrowingAssetImporterUVE throwingImporter;
+    AssetImportQueueUVE throwingQueue{throwingImporter, assetDatabase, cache};
+    const std::optional<AssetImportJobIdUVE> id =
+        throwingQueue.EnqueueUVE(MakeRequestUVE(source, destination));
+    ASSERT_TRUE(id.has_value());
+
+    EXPECT_TRUE(throwingQueue.TickUVE());
+    const std::vector<AssetImportJobUVE> jobs = throwingQueue.GetJobsUVE();
+    ASSERT_EQ(jobs.size(), 1U);
+    EXPECT_EQ(jobs.front().state, AssetImportJobStateUVE::Failed);
+    EXPECT_EQ(jobs.front().attemptCount, 1U);
+    ASSERT_EQ(jobs.front().diagnostics.size(), 1U);
+    EXPECT_EQ(jobs.front().diagnostics.front().code, AssetImportDiagnosticCodeUVE::ImporterFailed);
+    EXPECT_NE(jobs.front().diagnostics.front().message.find("importer boundary failure"), std::string::npos);
+    EXPECT_TRUE(throwingQueue.RetryUVE(*id));
+}
+
+TEST_F(AssetImportQueueUVETest, TickUVE_TranslatesThrowingCacheLoadIntoRetryableFailure) {
+    const std::filesystem::path source = root / "source.txt";
+    const std::filesystem::path destination = contentRoot / "output.txt";
+    WriteFixtureFileUVE(source, "source bytes");
+
+    ThrowingDerivedArtifactCacheUVE throwingCache(true, false);
+    AssetImportQueueUVE throwingQueue{importer, assetDatabase, throwingCache};
+    const std::optional<AssetImportJobIdUVE> id =
+        throwingQueue.EnqueueUVE(MakeRequestUVE(source, destination));
+    ASSERT_TRUE(id.has_value());
+
+    EXPECT_TRUE(throwingQueue.TickUVE());
+    const std::vector<AssetImportJobUVE> jobs = throwingQueue.GetJobsUVE();
+    ASSERT_EQ(jobs.size(), 1U);
+    EXPECT_EQ(jobs.front().state, AssetImportJobStateUVE::Failed);
+    ASSERT_EQ(jobs.front().diagnostics.size(), 1U);
+    EXPECT_EQ(jobs.front().diagnostics.front().code, AssetImportDiagnosticCodeUVE::CacheReadFailed);
+    EXPECT_NE(jobs.front().diagnostics.front().message.find("cache load boundary failure"), std::string::npos);
+    EXPECT_TRUE(throwingQueue.RetryUVE(*id));
+}
+
+TEST_F(AssetImportQueueUVETest, TickUVE_TranslatesThrowingCacheStoreIntoExistingWarning) {
+    const std::filesystem::path source = root / "source.custom";
+    const std::filesystem::path destination = contentRoot / "output.custom";
+    WriteFixtureFileUVE(source, "source bytes");
+    std::filesystem::create_directories(contentRoot);
+
+    importer.RegisterImporterUVE("custom", [](const std::filesystem::path& sourcePath,
+                                               const std::filesystem::path& destinationPath,
+                                               const AssetImportSettingsUVE&) {
+        std::ifstream input(sourcePath, std::ios::binary);
+        std::ofstream output(destinationPath, std::ios::binary);
+        output << input.rdbuf();
+        return input.good() || input.eof();
+    });
+    ThrowingDerivedArtifactCacheUVE throwingCache(false, true);
+    AssetImportQueueUVE throwingQueue{importer, assetDatabase, throwingCache};
+    ASSERT_TRUE(throwingQueue.EnqueueUVE(MakeRequestUVE(source, destination)).has_value());
+
+    EXPECT_TRUE(throwingQueue.TickUVE());
+    const std::vector<AssetImportJobUVE> jobs = throwingQueue.GetJobsUVE();
+    ASSERT_EQ(jobs.size(), 1U);
+    EXPECT_EQ(jobs.front().state, AssetImportJobStateUVE::Succeeded);
+    ASSERT_EQ(jobs.front().diagnostics.size(), 1U);
+    EXPECT_EQ(jobs.front().diagnostics.front().severity, AssetImportDiagnosticSeverityUVE::Warning);
+    EXPECT_EQ(jobs.front().diagnostics.front().code, AssetImportDiagnosticCodeUVE::CacheWriteFailed);
+    EXPECT_NE(jobs.front().diagnostics.front().message.find("cache store boundary failure"), std::string::npos);
+}
 
 TEST_F(AssetImportQueueUVETest, EnqueueAndTickUVE_ProcessExactlyOneFifoJobPerTick) {
     const std::filesystem::path firstSource = root / "source_first.txt";
