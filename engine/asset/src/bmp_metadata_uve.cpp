@@ -66,8 +66,10 @@ bool DecodeBmpRgba8ImageUVE(const std::vector<std::byte>& bytes, BmpRgba8ImageUV
     const std::uint32_t colorsUsed = ReadU32LittleEndianUVE(bytes, kFileHeaderBytesUVE + 32U);
     const bool indexedImage = bitsPerPixel == 8U;
     const bool packed16Image = bitsPerPixel == 16U;
+    const bool bitfields565Image = packed16Image && compression == 3U;
     if (signedWidth <= 0 || signedHeight == 0 || planes != 1U ||
-        (!indexedImage && !packed16Image && bitsPerPixel != 24U && bitsPerPixel != 32U) || compression != 0U) {
+        (!indexedImage && !packed16Image && bitsPerPixel != 24U && bitsPerPixel != 32U) ||
+        (!bitfields565Image && compression != 0U)) {
         return false;
     }
 
@@ -81,6 +83,17 @@ bool DecodeBmpRgba8ImageUVE(const std::vector<std::byte>& bytes, BmpRgba8ImageUV
     const std::size_t paletteBytes = static_cast<std::size_t>(paletteEntryCount) * kBmpPaletteEntryBytesUVE;
     if (indexedImage && (!CanReadUVE(bytes, paletteOffset, paletteBytes) ||
                          static_cast<std::uint64_t>(pixelOffset) < static_cast<std::uint64_t>(paletteOffset) + paletteBytes)) {
+        return false;
+    }
+    constexpr std::size_t kBmpBitfieldsOffsetUVE = kFileHeaderBytesUVE + kInfoHeaderBytesUVE;
+    constexpr std::size_t kBmpBitfieldsBytesUVE = 12U;
+    if (bitfields565Image && (infoHeaderSize != kInfoHeaderBytesUVE ||
+                              !CanReadUVE(bytes, kBmpBitfieldsOffsetUVE, kBmpBitfieldsBytesUVE) ||
+                              static_cast<std::uint64_t>(pixelOffset) <
+                                  static_cast<std::uint64_t>(kBmpBitfieldsOffsetUVE + kBmpBitfieldsBytesUVE) ||
+                              ReadU32LittleEndianUVE(bytes, kBmpBitfieldsOffsetUVE) != 0xF800U ||
+                              ReadU32LittleEndianUVE(bytes, kBmpBitfieldsOffsetUVE + 4U) != 0x07E0U ||
+                              ReadU32LittleEndianUVE(bytes, kBmpBitfieldsOffsetUVE + 8U) != 0x001FU)) {
         return false;
     }
     const std::uint64_t absoluteHeight = signedHeight < 0
@@ -136,9 +149,18 @@ bool DecodeBmpRgba8ImageUVE(const std::vector<std::byte>& bytes, BmpRgba8ImageUV
                     const auto expandFiveBit = [](const std::uint16_t value) noexcept {
                         return std::byte{static_cast<unsigned char>((value * 255U + 15U) / 31U)};
                     };
-                    rgba[0] = expandFiveBit((packed >> 10U) & 0x1FU);
-                    rgba[1] = expandFiveBit((packed >> 5U) & 0x1FU);
-                    rgba[2] = expandFiveBit(packed & 0x1FU);
+                    const auto expandSixBit = [](const std::uint16_t value) noexcept {
+                        return std::byte{static_cast<unsigned char>((value * 255U + 31U) / 63U)};
+                    };
+                    if (bitfields565Image) {
+                        rgba[0] = expandFiveBit((packed >> 11U) & 0x1FU);
+                        rgba[1] = expandSixBit((packed >> 5U) & 0x3FU);
+                        rgba[2] = expandFiveBit(packed & 0x1FU);
+                    } else {
+                        rgba[0] = expandFiveBit((packed >> 10U) & 0x1FU);
+                        rgba[1] = expandFiveBit((packed >> 5U) & 0x1FU);
+                        rgba[2] = expandFiveBit(packed & 0x1FU);
+                    }
                 } else {
                     rgba[0] = pixel[2];
                     rgba[1] = pixel[1];
