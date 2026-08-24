@@ -258,10 +258,16 @@ bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUV
                     std::copy(bytes.begin() + static_cast<std::ptrdiff_t>(payloadOffset),
                               bytes.begin() + static_cast<std::ptrdiff_t>(payloadOffset + payloadLength), paletteAlpha.begin());
                 } else if (metadata->colorType == 0U) {
-                    if ((metadata->bitDepth != 8U && metadata->bitDepth != 16U) || payloadLength != 2U || hasTransparentGray) {
+                    const bool supportedGrayTransparencyDepth = metadata->bitDepth == 1U || metadata->bitDepth == 2U ||
+                        metadata->bitDepth == 4U || metadata->bitDepth == 8U || metadata->bitDepth == 16U;
+                    if (!supportedGrayTransparencyDepth || payloadLength != 2U || hasTransparentGray) {
                         return false;
                     }
                     transparentGray = readU16BE(bytes, payloadOffset);
+                    if (metadata->bitDepth < 16U &&
+                        static_cast<std::uint32_t>(transparentGray) >= (1U << metadata->bitDepth)) {
+                        return false;
+                    }
                     hasTransparentGray = true;
                 } else if (metadata->colorType == 2U) {
                     if ((metadata->bitDepth != 8U && metadata->bitDepth != 16U) || payloadLength != 6U || hasTransparentRgb) {
@@ -425,7 +431,7 @@ bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUV
                         pixels[outputOffset] = gray;
                         pixels[outputOffset + 1U] = gray;
                         pixels[outputOffset + 2U] = gray;
-                        pixels[outputOffset + 3U] = std::byte{0xFF};
+                        pixels[outputOffset + 3U] = hasTransparentGray && sample == transparentGray ? std::byte{0} : std::byte{0xFF};
                     } else if (metadata->interlaceMethod == 1U && metadata->bitDepth < 8U && metadata->colorType == 3U) {
                         const std::size_t paletteIndex = readPackedSample(decodedRow, x);
                         if (paletteIndex >= paletteAlpha.size()) return false;
@@ -514,7 +520,7 @@ bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUV
                         pixels[outputOffset] = gray;
                         pixels[outputOffset + 1U] = gray;
                         pixels[outputOffset + 2U] = gray;
-                        pixels[outputOffset + 3U] = std::byte{0xFF};
+                        pixels[outputOffset + 3U] = hasTransparentGray && sample == transparentGray ? std::byte{0} : std::byte{0xFF};
                     } else if (metadata->colorType == 3U) {
                         const std::size_t paletteIndex = metadata->bitDepth < 8U
                             ? readPackedSample(decodedRow, x)
