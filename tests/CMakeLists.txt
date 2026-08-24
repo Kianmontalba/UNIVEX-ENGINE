@@ -58,6 +58,8 @@ add_executable(uve_tests
     asset/asset_importer_uve_tests.cpp
     asset/bmp_metadata_uve_tests.cpp
     asset/bmp_importer_uve_tests.cpp
+    asset/tga_metadata_uve_tests.cpp
+    asset/tga_importer_uve_tests.cpp
     asset/png_metadata_uve_tests.cpp
     asset/png_importer_uve_tests.cpp
     asset/obj_metadata_uve_tests.cpp

@@ -30,6 +30,8 @@ add_library(uve_asset STATIC
     src/audio_asset_uve.cpp
     src/bmp_metadata_uve.cpp
     src/bmp_importer_uve.cpp
+    src/tga_metadata_uve.cpp
+    src/tga_importer_uve.cpp
     src/png_metadata_uve.cpp
     src/png_importer_uve.cpp
     src/obj_metadata_uve.cpp
