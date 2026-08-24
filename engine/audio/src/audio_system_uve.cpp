@@ -100,6 +100,7 @@ VoiceHandleUVE AudioSystemUVE::CreateSourceUVE(const AudioSourceDescUVE& desc) {
     }
     if (m_impl->sources.contains(voice.value)) {
         UVE_ERROR("AudioSystemUVE: audio device returned a duplicate voice handle ({})", voice.value);
+        m_impl->audioDevice.DestroyVoiceUVE(voice);
         return kInvalidVoiceHandleUVE;
     }
     SourceStateUVE state;

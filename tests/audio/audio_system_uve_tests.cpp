@@ -125,6 +125,8 @@ TEST(AudioSystemDeviceFailureUVETest, DuplicateDeviceVoiceHandleFailsBeforeSecon
     EXPECT_EQ(first, VoiceHandleUVE{1U});
     EXPECT_EQ(duplicate, kInvalidVoiceHandleUVE);
     EXPECT_EQ(device.createCount, 2);
+    EXPECT_EQ(device.destroyCount, 1);
+    EXPECT_EQ(device.lastHandle, VoiceHandleUVE{1U});
     EXPECT_EQ(audioSystem.GetMixerDiagnosticsUVE().routedSourceCount, 1U);
 }
 
