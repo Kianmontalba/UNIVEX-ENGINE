@@ -53,6 +53,7 @@ bool DecodeTgaRgba8ImageUVE(const std::vector<std::byte>& bytes,
                                   (imageType == kTgaTrueColorImageTypeUVE || imageType == kTgaRleTrueColorImageTypeUVE) &&
                                   pixelDepth == kTgaTrueColor16BitDepthUVE;
     const bool palette16Image = paletteImage && colorMapEntryDepth == kTgaTrueColor16BitDepthUVE;
+    const bool palette32AlphaImage = paletteImage && colorMapEntryDepth == 32U && (imageDescriptor & 0x0FU) == 8U;
     const bool bgr5551Image = trueColor16Image || palette16Image;
     const bool rleImage = imageType == kTgaRleTrueColorImageTypeUVE || imageType == kTgaRleGrayscaleImageTypeUVE ||
                           imageType == kTgaRleColorMappedImageTypeUVE;
@@ -144,7 +145,12 @@ bool DecodeTgaRgba8ImageUVE(const std::vector<std::byte>& bytes,
             }
             colorOffset = colorMapOffset + static_cast<std::size_t>(paletteIndex - colorMapFirstIndex) * colorMapEntryBytes;
         }
-        if (bgr5551Image) {
+        if (palette32AlphaImage) {
+            candidatePixels[outputOffset] = bytes[colorOffset + 2U];
+            candidatePixels[outputOffset + 1U] = bytes[colorOffset + 1U];
+            candidatePixels[outputOffset + 2U] = bytes[colorOffset];
+            candidatePixels[outputOffset + 3U] = bytes[colorOffset + 3U];
+        } else if (bgr5551Image) {
             const std::uint16_t packed = static_cast<std::uint16_t>(
                 std::to_integer<std::uint8_t>(bytes[colorOffset]) |
                 (static_cast<std::uint16_t>(std::to_integer<std::uint8_t>(bytes[colorOffset + 1U])) << 8U));

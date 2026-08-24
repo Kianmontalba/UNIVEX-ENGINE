@@ -20,7 +20,8 @@ struct TgaRgba8ImageUVE final {
 /// Supports image type 2 (uncompressed) and type 10 (run-length encoded) with 16-bit BGR5551,
 /// 24-bit BGR, or 32-bit BGRA source pixels, 8-bit grayscale image types 3 and 11, 16-bit grayscale+alpha image
 /// types 3 and 11, and 8-bit indexed image types 1 and 9 with 16-bit BGR5551, 24-bit BGR, or
-/// 32-bit BGRA palette entries, with 16-bit BGR5551 indexed alpha conversion, honors the origin bits,
+/// 32-bit BGRA palette entries, with 16-bit BGR5551 and 32-bit BGRA indexed alpha conversion,
+/// honors the origin bits,
 /// and leaves the caller's output unchanged on every failure.
 [[nodiscard]] bool DecodeTgaRgba8ImageUVE(const std::vector<std::byte>& bytes,
                                           TgaRgba8ImageUVE& outImage) noexcept;
