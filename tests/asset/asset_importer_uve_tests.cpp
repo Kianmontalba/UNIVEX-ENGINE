@@ -16,6 +16,7 @@
 #include <gtest/gtest.h>
 
 #include "uve/asset/asset_database_uve.h"
+#include "uve/asset/shader_asset_uve.h"
 #include "uve/debug/log_sink_uve.h"
 #include "uve/debug/logger_uve.h"
 
@@ -65,7 +66,7 @@ TEST_F(AssetImporterUVETest, ClassifySourceUVE_ReportsAuthorityAndRawParserBound
         std::string_view diagnostic;
     };
 
-    constexpr std::array<ClassificationCaseUVE, 10> kCases = {{
+    constexpr std::array<ClassificationCaseUVE, 13> kCases = {{
         {"Readme.TXT", AssetImportSourceKindUVE::PlainText, "txt", true, false,
          "built-in text parser is registered"},
         {"Character.UVEMODEL", AssetImportSourceKindUVE::MeshEnvelope, "uvemodel", true, false,
@@ -81,6 +82,12 @@ TEST_F(AssetImporterUVETest, ClassifySourceUVE_ReportsAuthorityAndRawParserBound
         {"Albedo.TGA", AssetImportSourceKindUVE::RawTexture, "tga", true, true,
          "format-specific parser is registered"},
         {"Surface.MTL", AssetImportSourceKindUVE::RawMaterial, "mtl", true, true,
+         "format-specific parser is registered"},
+        {"Main.VERT", AssetImportSourceKindUVE::RawShader, "vert", true, true,
+         "format-specific parser is registered"},
+        {"Main.FRAG", AssetImportSourceKindUVE::RawShader, "frag", true, true,
+         "format-specific parser is registered"},
+        {"Compute.COMP", AssetImportSourceKindUVE::RawShader, "comp", true, true,
          "format-specific parser is registered"},
         {"Music.OGG", AssetImportSourceKindUVE::RawAudio, "ogg", false, true,
          "format-specific parser is not registered"},
@@ -285,6 +292,55 @@ TEST_F(AssetImporterUVETest, ImportUVE_TypedUVEEnvelopeExtensions_CopyAndRegiste
         std::filesystem::remove(sourcePath);
         std::filesystem::remove(destinationPath);
     }
+}
+
+TEST_F(AssetImporterUVETest, ImportUVE_RawShaderSource_InfersStageAndPublishesTypedEnvelope) {
+    struct ShaderCaseUVE {
+        std::string_view extension;
+        ShaderStageKindUVE stage;
+    };
+    constexpr std::array<ShaderCaseUVE, 3> kCases = {{
+        {".vert", ShaderStageKindUVE::Vertex},
+        {".frag", ShaderStageKindUVE::Fragment},
+        {".comp", ShaderStageKindUVE::Compute},
+    }};
+
+    for (const ShaderCaseUVE& expected : kCases) {
+        const std::filesystem::path sourcePath =
+            std::string("uve_asset_importer_raw_shader_source") + std::string(expected.extension);
+        const std::filesystem::path destinationPath =
+            std::string("uve_asset_importer_raw_shader_destination") + std::string(expected.extension) + ".uveshader";
+        std::filesystem::remove(sourcePath);
+        std::filesystem::remove(destinationPath);
+        WriteFixtureFileUVE(sourcePath, "#version 450\nvoid main() {}\n");
+
+        const AssetGuidUVE guid = importer.ImportUVE(sourcePath, destinationPath, assetDatabase);
+
+        ASSERT_NE(guid, kInvalidAssetGuidUVE) << expected.extension;
+        ShaderAssetUVE shader;
+        ASSERT_TRUE(LoadShaderAssetUVE(destinationPath, shader)) << expected.extension;
+        EXPECT_EQ(shader.stage, expected.stage);
+        EXPECT_EQ(shader.sourceCode, "#version 450\nvoid main() {}\n");
+        EXPECT_EQ(shader.entryPointName, "main");
+
+        std::filesystem::remove(sourcePath);
+        std::filesystem::remove(destinationPath);
+    }
+}
+
+TEST_F(AssetImporterUVETest, ImportUVE_RawShaderSource_RejectsEmptySourceAndPreservesDestination) {
+    const std::filesystem::path sourcePath = "uve_asset_importer_raw_shader_empty.vert";
+    const std::filesystem::path destinationPath = "uve_asset_importer_raw_shader_empty.uveshader";
+    std::filesystem::remove(sourcePath);
+    std::filesystem::remove(destinationPath);
+    WriteFixtureFileUVE(destinationPath, "prior typed shader");
+    WriteFixtureFileUVE(sourcePath, "");
+
+    EXPECT_EQ(importer.ImportUVE(sourcePath, destinationPath, assetDatabase), kInvalidAssetGuidUVE);
+    EXPECT_EQ(ReadFileUVE(destinationPath), "prior typed shader");
+
+    std::filesystem::remove(sourcePath);
+    std::filesystem::remove(destinationPath);
 }
 
 TEST_F(AssetImporterUVETest, ImportUVE_UnregisteredExtension_ReturnsInvalidAndLogsError) {

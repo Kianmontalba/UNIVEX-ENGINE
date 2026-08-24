@@ -47,6 +47,11 @@ TEST(EditorBridgeUVETest, ContentBrowserImportCapabilityUVE_ReportsRawParserBoun
         ASSERT_TRUE(fixture.is_open());
         fixture << "plain source document";
     }
+    {
+        std::ofstream fixture(contentRoot / "basic.vert", std::ios::binary);
+        ASSERT_TRUE(fixture.is_open());
+        fixture << "#version 450\nvoid main() {}\n";
+    }
 
     Core::EngineConfigUVE config = MakeBridgeTestConfigUVE();
     config.projectContentRootUVE = contentRoot;
@@ -86,10 +91,27 @@ TEST(EditorBridgeUVETest, ContentBrowserImportCapabilityUVE_ReportsRawParserBoun
         EXPECT_EQ(selected.snapshot.contentBrowser.importAction.diagnostic,
                   "format-specific parser is not registered");
 
+        EditorBridgeRequestUVE selectShader{};
+        selectShader.protocolVersion = kEditorBridgeProtocolVersionUVE;
+        selectShader.requestId = 3U;
+        selectShader.expectedRevision = selected.snapshot.revision;
+        selectShader.kind = EditorBridgeRequestKindUVE::SelectContentBrowserEntry;
+        selectShader.contentEntryPath = "basic.vert";
+        const EditorBridgeResponseUVE selectedShader = bridge.DispatchUVE(selectShader);
+        ASSERT_TRUE(selectedShader.applied);
+        EXPECT_TRUE(selectedShader.snapshot.contentBrowser.importAction.hasSelection);
+        EXPECT_TRUE(selectedShader.snapshot.contentBrowser.importAction.canImport);
+        EXPECT_FALSE(selectedShader.snapshot.contentBrowser.importAction.canReimport);
+        EXPECT_TRUE(selectedShader.snapshot.contentBrowser.importAction.importerRegistered);
+        EXPECT_TRUE(selectedShader.snapshot.contentBrowser.importAction.requiresFormatSpecificParser);
+        EXPECT_EQ(selectedShader.snapshot.contentBrowser.importAction.sourceKind, "rawShader");
+        EXPECT_EQ(selectedShader.snapshot.contentBrowser.importAction.diagnostic,
+                  "format-specific parser is registered");
+
         EditorBridgeRequestUVE selectPlain{};
         selectPlain.protocolVersion = kEditorBridgeProtocolVersionUVE;
-        selectPlain.requestId = 3U;
-        selectPlain.expectedRevision = selected.snapshot.revision;
+        selectPlain.requestId = 4U;
+        selectPlain.expectedRevision = selectedShader.snapshot.revision;
         selectPlain.kind = EditorBridgeRequestKindUVE::SelectContentBrowserEntry;
         selectPlain.contentEntryPath = "notes.txt";
         const EditorBridgeResponseUVE selectedPlain = bridge.DispatchUVE(selectPlain);
@@ -97,7 +119,7 @@ TEST(EditorBridgeUVETest, ContentBrowserImportCapabilityUVE_ReportsRawParserBoun
 
         EditorBridgeRequestUVE queueImport{};
         queueImport.protocolVersion = kEditorBridgeProtocolVersionUVE;
-        queueImport.requestId = 4U;
+        queueImport.requestId = 5U;
         queueImport.expectedRevision = selectedPlain.snapshot.revision;
         queueImport.kind = EditorBridgeRequestKindUVE::QueueContentBrowserImport;
         queueImport.contentEntryPath = "notes.txt";

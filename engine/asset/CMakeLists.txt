@@ -47,6 +47,7 @@ add_library(uve_asset STATIC
     src/mtl_importer_uve.cpp
     src/animation_clip_metadata_uve.cpp
     src/shader_asset_uve.cpp
+    src/shader_source_importer_uve.cpp
     src/material_asset_uve.cpp
     src/data_table_uve.cpp
     src/data_table_asset_uve.cpp

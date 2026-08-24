@@ -13,9 +13,8 @@
 
 namespace UVE::Asset {
 
-/// The source-kind vocabulary is intentionally explicit even while raw format parsers remain
-/// deferred; future format-specific importers extend this classification rather than hiding parser
-/// authority inside generic copy behavior.
+/// The source-kind vocabulary is intentionally explicit; format-specific importers extend this
+/// classification rather than hiding parser authority inside generic copy behavior.
 enum class AssetImportSourceKindUVE {
     Unknown,
     PlainText,
@@ -28,6 +27,7 @@ enum class AssetImportSourceKindUVE {
     RawModel,
     RawTexture,
     RawMaterial,
+    RawShader,
     RawAudio,
 };
 
@@ -92,7 +92,7 @@ public:
                             const AssetImportSettingsUVE&)>
             importFunc) = 0;
 
-    /// Classifies a source path without touching the filesystem. Raw model/texture/material/audio kinds
+    /// Classifies a source path without touching the filesystem. Raw model/texture/material/shader/audio kinds
     /// explicitly report that a format-specific parser is required; current built-in UVE envelope
     /// kinds report deterministic generic copy authority, while PlainText reports the
     /// bounded text parser authority.
