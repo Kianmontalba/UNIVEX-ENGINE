@@ -5,6 +5,7 @@
 #include <bit>
 #include <cmath>
 #include <iterator>
+#include <limits>
 #include <type_traits>
 #include <utility>
 
@@ -19,6 +20,15 @@ namespace {
     state *= 0x846CA68BU;
     state ^= state >> 16U;
     return static_cast<float>(state) / 4294967296.0F;
+}
+
+[[nodiscard]] bool NarrowFiniteDoubleToNumberUVE(const double value, float& outValue) noexcept {
+    constexpr double kFloatMaximum = static_cast<double>(std::numeric_limits<float>::max());
+    if (!std::isfinite(value) || value < -kFloatMaximum || value > kFloatMaximum) {
+        return false;
+    }
+    outValue = static_cast<float>(value);
+    return std::isfinite(outValue);
 }
 
 [[nodiscard]] ScriptVmValueBindingUVE* FindMutableBindingUVE(
@@ -462,7 +472,12 @@ namespace {
             !std::isfinite(*rhs) || !std::isfinite(*alpha)) {
             return MakeNodeFailureUVE(instructionIndex, "Lerp Float requires finite Number inputs A, B, and Alpha.");
         }
-        result = *lhs + ((*rhs - *lhs) * *alpha);
+        if (!NarrowFiniteDoubleToNumberUVE(
+                static_cast<double>(*lhs) +
+                    ((static_cast<double>(*rhs) - static_cast<double>(*lhs)) * static_cast<double>(*alpha)),
+                result)) {
+            return MakeNodeFailureUVE(instructionIndex, "Lerp Float rejected an unrepresentable result.");
+        }
     } else if (nodeTypeId == "math.float.remap") {
         const float* value = FindNumberInputUVE(context, nodeId, "Value");
         const float* fromMin = FindNumberInputUVE(context, nodeId, "FromMin");
@@ -478,8 +493,14 @@ namespace {
         if (*fromMin == *fromMax) {
             return MakeNodeFailureUVE(instructionIndex, "Remap Float requires a non-zero source range.");
         }
-        const float alpha = (*value - *fromMin) / (*fromMax - *fromMin);
-        result = *toMin + ((*toMax - *toMin) * alpha);
+        const double alpha = (static_cast<double>(*value) - static_cast<double>(*fromMin)) /
+                             (static_cast<double>(*fromMax) - static_cast<double>(*fromMin));
+        if (!NarrowFiniteDoubleToNumberUVE(
+                static_cast<double>(*toMin) +
+                    ((static_cast<double>(*toMax) - static_cast<double>(*toMin)) * alpha),
+                result)) {
+            return MakeNodeFailureUVE(instructionIndex, "Remap Float rejected an unrepresentable result.");
+        }
     } else if (nodeTypeId == "math.float.random") {
         const float* seed = FindNumberInputUVE(context, nodeId, "Seed");
         if (seed == nullptr || !std::isfinite(*seed)) {
@@ -498,7 +519,13 @@ namespace {
         if (*minimum > *maximum) {
             return MakeNodeFailureUVE(instructionIndex, "Random Range Float requires Min not greater than Max.");
         }
-        result = *minimum + ((*maximum - *minimum) * RandomUnitFromSeedUVE(*seed));
+        if (!NarrowFiniteDoubleToNumberUVE(
+                static_cast<double>(*minimum) +
+                    ((static_cast<double>(*maximum) - static_cast<double>(*minimum)) *
+                     static_cast<double>(RandomUnitFromSeedUVE(*seed))),
+                result)) {
+            return MakeNodeFailureUVE(instructionIndex, "Random Range Float rejected an unrepresentable result.");
+        }
     } else {
         const float* lhs = FindNumberInputUVE(context, nodeId, "A");
         const float* rhs = FindNumberInputUVE(context, nodeId, "B");
