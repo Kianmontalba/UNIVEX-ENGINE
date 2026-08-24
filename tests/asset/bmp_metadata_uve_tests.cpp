@@ -277,6 +277,36 @@ void AppendU32LittleEndianUVE(std::vector<std::byte>& bytes, const std::uint32_t
     return bmp;
 }
 
+[[nodiscard]] std::vector<std::byte> MakeBmp32AlphaBitfieldsTwoByOneUVE() {
+    std::vector<std::byte> bmp;
+    bmp.reserve(78U);
+    bmp.push_back(std::byte{'B'});
+    bmp.push_back(std::byte{'M'});
+    AppendU32LittleEndianUVE(bmp, 78U);
+    AppendU16LittleEndianUVE(bmp, 0U);
+    AppendU16LittleEndianUVE(bmp, 0U);
+    AppendU32LittleEndianUVE(bmp, 70U);
+    AppendU32LittleEndianUVE(bmp, 40U);
+    AppendU32LittleEndianUVE(bmp, 2U);
+    AppendU32LittleEndianUVE(bmp, 1U);
+    AppendU16LittleEndianUVE(bmp, 1U);
+    AppendU16LittleEndianUVE(bmp, 32U);
+    AppendU32LittleEndianUVE(bmp, 6U);
+    AppendU32LittleEndianUVE(bmp, 8U);
+    AppendU32LittleEndianUVE(bmp, 2835U);
+    AppendU32LittleEndianUVE(bmp, 2835U);
+    AppendU32LittleEndianUVE(bmp, 0U);
+    AppendU32LittleEndianUVE(bmp, 0U);
+    // BI_ALPHABITFIELDS exact BGRA masks followed by bottom-up red/green pixels with source alpha.
+    AppendU32LittleEndianUVE(bmp, 0x00FF0000U);
+    AppendU32LittleEndianUVE(bmp, 0x0000FF00U);
+    AppendU32LittleEndianUVE(bmp, 0x000000FFU);
+    AppendU32LittleEndianUVE(bmp, 0xFF000000U);
+    bmp.insert(bmp.end(), {std::byte{0x00}, std::byte{0x00}, std::byte{0xFF}, std::byte{0x40},
+                           std::byte{0x00}, std::byte{0xFF}, std::byte{0x00}, std::byte{0xA0}});
+    return bmp;
+}
+
 [[nodiscard]] std::vector<std::byte> MakeBmp16Bgr555BitfieldsTwoByOneUVE() {
     std::vector<std::byte> bmp;
     bmp.reserve(70U);
@@ -504,6 +534,29 @@ TEST(BmpMetadataUVETest, DecodeBmpRgba8ImageUVE_Decodes32BitBitfieldsBgrxRowsToO
     EXPECT_EQ(image.pixels, (std::vector<std::byte>{
                                  std::byte{0xFF}, std::byte{0x00}, std::byte{0x00}, std::byte{0xFF},
                                  std::byte{0x00}, std::byte{0xFF}, std::byte{0x00}, std::byte{0xFF}}));
+}
+
+TEST(BmpMetadataUVETest, DecodeBmpRgba8ImageUVE_Decodes32BitAlphaBitfieldsRowsWithSourceAlpha) {
+    BmpRgba8ImageUVE image;
+    ASSERT_TRUE(DecodeBmpRgba8ImageUVE(MakeBmp32AlphaBitfieldsTwoByOneUVE(), image));
+    EXPECT_EQ(image.width, 2U);
+    EXPECT_EQ(image.height, 1U);
+    EXPECT_EQ(image.pixels, (std::vector<std::byte>{
+                                 std::byte{0xFF}, std::byte{0x00}, std::byte{0x00}, std::byte{0x40},
+                                 std::byte{0x00}, std::byte{0xFF}, std::byte{0x00}, std::byte{0xA0}}));
+}
+
+TEST(BmpMetadataUVETest, DecodeBmpRgba8ImageUVE_RejectsMalformedAlphaBitfieldsAtomically) {
+    std::vector<std::byte> malformed = MakeBmp32AlphaBitfieldsTwoByOneUVE();
+    malformed[66] = std::byte{0x00};
+    malformed[67] = std::byte{0x00};
+    malformed[68] = std::byte{0x00};
+    malformed[69] = std::byte{0x80};
+    BmpRgba8ImageUVE image{3U, 4U, {std::byte{0x11}, std::byte{0x22}, std::byte{0x33}, std::byte{0x44}}};
+    EXPECT_FALSE(DecodeBmpRgba8ImageUVE(malformed, image));
+    EXPECT_EQ(image.width, 3U);
+    EXPECT_EQ(image.height, 4U);
+    EXPECT_EQ(image.pixels, std::vector<std::byte>({std::byte{0x11}, std::byte{0x22}, std::byte{0x33}, std::byte{0x44}}));
 }
 
 TEST(BmpMetadataUVETest, DecodeBmpRgba8ImageUVE_DecodesTopDown32BitRowsWithOpaqueAlpha) {
