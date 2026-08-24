@@ -155,11 +155,15 @@ bool UnfilterPngRgba8ScanlineUVE(const PngFilterTypeUVE filter,
 
 bool ValidatePngRgba8PixelBudgetUVE(const PngMetadataUVE& metadata,
                                     const std::uint64_t maximumBytes) noexcept {
-    if (metadata.width == 0U || metadata.height == 0U ||
-        !((metadata.bitDepth == 8U && (metadata.colorType == 0U || metadata.colorType == 2U ||
-                                       metadata.colorType == 3U || metadata.colorType == 4U || metadata.colorType == 6U)) ||
-          (metadata.bitDepth == 16U && (metadata.colorType == 0U || metadata.colorType == 2U ||
-                                           metadata.colorType == 4U || metadata.colorType == 6U))) || maximumBytes == 0U) {
+    const bool supportedPackedGray = metadata.bitDepth >= 1U && metadata.bitDepth <= 4U && metadata.colorType == 0U;
+    const bool supportedEightBit = metadata.bitDepth == 8U &&
+                                   (metadata.colorType == 0U || metadata.colorType == 2U || metadata.colorType == 3U ||
+                                    metadata.colorType == 4U || metadata.colorType == 6U);
+    const bool supportedSixteenBit = metadata.bitDepth == 16U &&
+                                     (metadata.colorType == 0U || metadata.colorType == 2U || metadata.colorType == 4U ||
+                                      metadata.colorType == 6U);
+    if (metadata.width == 0U || metadata.height == 0U || !(supportedPackedGray || supportedEightBit || supportedSixteenBit) ||
+        maximumBytes == 0U) {
         return false;
     }
     constexpr std::uint64_t kBytesPerRgba8Pixel = 4ULL;
@@ -174,19 +178,25 @@ bool ValidatePngRgba8PixelBudgetUVE(const PngMetadataUVE& metadata,
 bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUVE& outImage) noexcept {
     try {
         const auto metadata = ParsePngMetadataUVE(bytes);
-        if (!metadata.has_value() ||
-            !((metadata->bitDepth == 8U && (metadata->colorType == 0U || metadata->colorType == 2U ||
-                                             metadata->colorType == 3U || metadata->colorType == 4U || metadata->colorType == 6U)) ||
-              (metadata->bitDepth == 16U && (metadata->colorType == 0U || metadata->colorType == 2U ||
-                                               metadata->colorType == 4U || metadata->colorType == 6U))) ||
-            (metadata->interlaceMethod != 0U &&
-             !((metadata->interlaceMethod == 1U && metadata->bitDepth == 8U &&
-                (metadata->colorType == 0U || metadata->colorType == 2U || metadata->colorType == 3U ||
-                 metadata->colorType == 4U || metadata->colorType == 6U)) ||
-               (metadata->interlaceMethod == 1U && metadata->bitDepth == 16U &&
-                (metadata->colorType == 0U || metadata->colorType == 2U || metadata->colorType == 4U ||
-                 metadata->colorType == 6U)))) ||
-            !ValidatePngRgba8PixelBudgetUVE(*metadata)) {
+        if (!metadata.has_value()) {
+            return false;
+        }
+        const bool supportedPackedGray = metadata->bitDepth >= 1U && metadata->bitDepth <= 4U && metadata->colorType == 0U;
+        const bool supportedEightBit = metadata->bitDepth == 8U &&
+                                       (metadata->colorType == 0U || metadata->colorType == 2U || metadata->colorType == 3U ||
+                                        metadata->colorType == 4U || metadata->colorType == 6U);
+        const bool supportedSixteenBit = metadata->bitDepth == 16U &&
+                                         (metadata->colorType == 0U || metadata->colorType == 2U ||
+                                          metadata->colorType == 4U || metadata->colorType == 6U);
+        const bool supportedAdam7 = metadata->interlaceMethod == 1U &&
+                                    ((metadata->bitDepth == 8U &&
+                                      (metadata->colorType == 0U || metadata->colorType == 2U || metadata->colorType == 3U ||
+                                       metadata->colorType == 4U || metadata->colorType == 6U)) ||
+                                     (metadata->bitDepth == 16U &&
+                                      (metadata->colorType == 0U || metadata->colorType == 2U ||
+                                       metadata->colorType == 4U || metadata->colorType == 6U)));
+        if (!(supportedPackedGray || supportedEightBit || supportedSixteenBit) ||
+            (metadata->interlaceMethod != 0U && !supportedAdam7) || !ValidatePngRgba8PixelBudgetUVE(*metadata)) {
             return false;
         }
         constexpr std::size_t kSignatureBytes = 8U;
@@ -251,11 +261,12 @@ bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUV
         if (!foundIdat || !foundIend || compressed.empty() || (metadata->colorType == 3U && paletteRgb.empty())) {
             return false;
         }
-        const std::size_t sourceBytesPerPixel = metadata->bitDepth == 16U ?
-            (metadata->colorType == 0U ? 2U : (metadata->colorType == 2U ? 6U :
-             (metadata->colorType == 4U ? 4U : 8U))) :
-            (metadata->colorType == 0U || metadata->colorType == 3U ? 1U :
-             (metadata->colorType == 2U ? 3U : (metadata->colorType == 4U ? 2U : 4U)));
+        const std::size_t sourceBytesPerPixel = metadata->bitDepth < 8U ? 1U :
+            (metadata->bitDepth == 16U ?
+                 (metadata->colorType == 0U ? 2U : (metadata->colorType == 2U ? 6U :
+                  (metadata->colorType == 4U ? 4U : 8U))) :
+                 (metadata->colorType == 0U || metadata->colorType == 3U ? 1U :
+                  (metadata->colorType == 2U ? 3U : (metadata->colorType == 4U ? 2U : 4U))));
         const std::uint64_t outputRowBytes64 = static_cast<std::uint64_t>(metadata->width) * 4ULL;
         if (outputRowBytes64 > std::numeric_limits<std::size_t>::max()) {
             return false;
@@ -276,6 +287,12 @@ bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUV
             result = left * right;
             return true;
         };
+        const auto sourceRowBytesForWidth = [metadata, sourceBytesPerPixel](const std::size_t width) noexcept {
+            if (metadata->bitDepth < 8U) {
+                return (width * static_cast<std::size_t>(metadata->bitDepth) + 7U) / 8U;
+            }
+            return width * sourceBytesPerPixel;
+        };
         const auto passWidth = [metadata](const std::size_t start, const std::size_t step) noexcept {
             if (metadata->width <= start) return std::size_t{0U};
             return (static_cast<std::size_t>(metadata->width) - start + step - 1U) / step;
@@ -294,10 +311,9 @@ bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUV
             const std::size_t width = metadata->interlaceMethod == 1U ? passWidth(kAdam7StartX[pass], kAdam7StepX[pass]) : metadata->width;
             const std::size_t height = metadata->interlaceMethod == 1U ? passHeight(kAdam7StartY[pass], kAdam7StepY[pass]) : metadata->height;
             if (width == 0U || height == 0U) continue;
-            std::uint64_t rowBytes = 0U;
+            std::uint64_t rowBytes = static_cast<std::uint64_t>(sourceRowBytesForWidth(width));
             std::uint64_t passBytes = 0U;
-            if (!checkedMultiply(static_cast<std::uint64_t>(width), static_cast<std::uint64_t>(sourceBytesPerPixel), rowBytes) ||
-                rowBytes > kMaximumPngRgba8ScanlineBytesUVE ||
+            if (rowBytes > kMaximumPngRgba8ScanlineBytesUVE ||
                 !checkedAdd(rowBytes, 1U, rowBytes) ||
                 !checkedMultiply(rowBytes, static_cast<std::uint64_t>(height), passBytes) ||
                 !checkedAdd(inflatedBytes64, passBytes, inflatedBytes64) ||
@@ -319,7 +335,7 @@ bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUV
         const auto decodePass = [&](const std::size_t passWidthValue, const std::size_t passHeightValue,
                                     const std::size_t startX, const std::size_t startY,
                                     const std::size_t stepX, const std::size_t stepY) noexcept {
-            const std::size_t sourceRowBytes = passWidthValue * sourceBytesPerPixel;
+            const std::size_t sourceRowBytes = sourceRowBytesForWidth(passWidthValue);
             std::vector<std::byte> previousRow;
             for (std::size_t row = 0U; row < passHeightValue; ++row) {
                 const std::size_t rowOffset = inflatedOffset + row * (sourceRowBytes + 1U);
@@ -407,6 +423,20 @@ bool DecodePngRgba8ImageUVE(const std::vector<std::byte>& bytes, PngRgba8ImageUV
                         pixels[outputOffset + 1U] = decodedRow[sourceOffset + 2U];
                         pixels[outputOffset + 2U] = decodedRow[sourceOffset + 4U];
                         pixels[outputOffset + 3U] = decodedRow[sourceOffset + 6U];
+                    } else if (metadata->bitDepth < 8U && metadata->colorType == 0U) {
+                        const std::size_t samplesPerByte = 8U / metadata->bitDepth;
+                        const std::size_t packedOffset = x / samplesPerByte;
+                        const std::size_t sampleShift = 8U - metadata->bitDepth -
+                                                        (x % samplesPerByte) * metadata->bitDepth;
+                        const std::uint8_t packed = std::to_integer<std::uint8_t>(decodedRow[packedOffset]);
+                        const std::uint8_t sampleMask = static_cast<std::uint8_t>((1U << metadata->bitDepth) - 1U);
+                        const std::uint8_t sample = static_cast<std::uint8_t>((packed >> sampleShift) & sampleMask);
+                        const std::byte gray = std::byte{static_cast<unsigned char>(
+                            (static_cast<unsigned int>(sample) * 255U) / sampleMask)};
+                        pixels[outputOffset] = gray;
+                        pixels[outputOffset + 1U] = gray;
+                        pixels[outputOffset + 2U] = gray;
+                        pixels[outputOffset + 3U] = std::byte{0xFF};
                     } else if (metadata->colorType == 3U) {
                         const std::size_t paletteIndex = std::to_integer<std::uint8_t>(decodedRow[sourceOffset]);
                         if (paletteIndex >= paletteAlpha.size()) return false;

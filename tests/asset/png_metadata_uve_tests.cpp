@@ -2,6 +2,7 @@
 
 #include "uve/asset/png_metadata_uve.h"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -172,6 +173,18 @@ TEST(PngMetadataUVETest, ValidatePngRgba8PixelBudgetUVE_AcceptsDefaultHdBudget) 
 
 [[nodiscard]] std::vector<std::byte> MakePngGrayAlphaOneByOneUVE() {
     return MakePngOneByOneUVE(4U, {std::byte{0}, std::byte{0x80}, std::byte{0xC0}});
+}
+
+[[nodiscard]] std::vector<std::byte> MakePngGray1BitEightByOneUVE() {
+    return MakePngOneByOneUVE(0U, {std::byte{0}, std::byte{0x59}}, {}, {}, 1U, 8U, 1U);
+}
+
+[[nodiscard]] std::vector<std::byte> MakePngGray2BitFourByOneUVE() {
+    return MakePngOneByOneUVE(0U, {std::byte{0}, std::byte{0x1B}}, {}, {}, 2U, 4U, 1U);
+}
+
+[[nodiscard]] std::vector<std::byte> MakePngGray4BitTwoByOneUVE() {
+    return MakePngOneByOneUVE(0U, {std::byte{0}, std::byte{0x1E}}, {}, {}, 4U, 2U, 1U);
 }
 
 [[nodiscard]] std::vector<std::byte> MakePngIndexedOneByOneUVE(const std::byte index = std::byte{1}) {
@@ -588,6 +601,68 @@ TEST(PngMetadataUVETest, DecodePngRgba8ImageUVE_ExpandsRgbToRgba) {
     EXPECT_EQ(image.pixels[1], std::byte{0x00});
     EXPECT_EQ(image.pixels[2], std::byte{0x00});
     EXPECT_EQ(image.pixels[3], std::byte{0xFF});
+}
+
+TEST(PngMetadataUVETest, DecodePngRgba8ImageUVE_DecodesPackedGray1BitToRgba) {
+    const std::vector<std::byte> png = MakePngGray1BitEightByOneUVE();
+    ASSERT_FALSE(png.empty());
+    PngRgba8ImageUVE image;
+    ASSERT_TRUE(DecodePngRgba8ImageUVE(png, image));
+    ASSERT_EQ(image.width, 8U);
+    ASSERT_EQ(image.height, 1U);
+    ASSERT_EQ(image.pixels.size(), 32U);
+    const std::array<std::byte, 8> expected{std::byte{0x00}, std::byte{0xFF}, std::byte{0x00}, std::byte{0xFF},
+                                             std::byte{0xFF}, std::byte{0x00}, std::byte{0x00}, std::byte{0xFF}};
+    for (std::size_t pixel = 0U; pixel < expected.size(); ++pixel) {
+        EXPECT_EQ(image.pixels[pixel * 4U], expected[pixel]);
+        EXPECT_EQ(image.pixels[pixel * 4U + 1U], expected[pixel]);
+        EXPECT_EQ(image.pixels[pixel * 4U + 2U], expected[pixel]);
+        EXPECT_EQ(image.pixels[pixel * 4U + 3U], std::byte{0xFF});
+    }
+}
+
+TEST(PngMetadataUVETest, DecodePngRgba8ImageUVE_DecodesPackedGray2BitToRgba) {
+    const std::vector<std::byte> png = MakePngGray2BitFourByOneUVE();
+    ASSERT_FALSE(png.empty());
+    PngRgba8ImageUVE image;
+    ASSERT_TRUE(DecodePngRgba8ImageUVE(png, image));
+    ASSERT_EQ(image.width, 4U);
+    ASSERT_EQ(image.height, 1U);
+    ASSERT_EQ(image.pixels.size(), 16U);
+    const std::array<std::byte, 4> expected{std::byte{0x00}, std::byte{0x55}, std::byte{0xAA}, std::byte{0xFF}};
+    for (std::size_t pixel = 0U; pixel < expected.size(); ++pixel) {
+        EXPECT_EQ(image.pixels[pixel * 4U], expected[pixel]);
+        EXPECT_EQ(image.pixels[pixel * 4U + 1U], expected[pixel]);
+        EXPECT_EQ(image.pixels[pixel * 4U + 2U], expected[pixel]);
+        EXPECT_EQ(image.pixels[pixel * 4U + 3U], std::byte{0xFF});
+    }
+}
+
+TEST(PngMetadataUVETest, DecodePngRgba8ImageUVE_DecodesPackedGray4BitToRgba) {
+    const std::vector<std::byte> png = MakePngGray4BitTwoByOneUVE();
+    ASSERT_FALSE(png.empty());
+    PngRgba8ImageUVE image;
+    ASSERT_TRUE(DecodePngRgba8ImageUVE(png, image));
+    ASSERT_EQ(image.width, 2U);
+    ASSERT_EQ(image.height, 1U);
+    ASSERT_EQ(image.pixels.size(), 8U);
+    EXPECT_EQ(image.pixels[0], std::byte{0x11});
+    EXPECT_EQ(image.pixels[1], std::byte{0x11});
+    EXPECT_EQ(image.pixels[2], std::byte{0x11});
+    EXPECT_EQ(image.pixels[3], std::byte{0xFF});
+    EXPECT_EQ(image.pixels[4], std::byte{0xEE});
+    EXPECT_EQ(image.pixels[5], std::byte{0xEE});
+    EXPECT_EQ(image.pixels[6], std::byte{0xEE});
+    EXPECT_EQ(image.pixels[7], std::byte{0xFF});
+}
+
+TEST(PngMetadataUVETest, DecodePngRgba8ImageUVE_RejectsTruncatedPackedGrayRowAtomically) {
+    const std::vector<std::byte> png = MakePngOneByOneUVE(0U, {std::byte{0}}, {}, {}, 4U, 2U, 1U);
+    PngRgba8ImageUVE image{7U, 8U, {std::byte{0xAA}}};
+    EXPECT_FALSE(DecodePngRgba8ImageUVE(png, image));
+    EXPECT_EQ(image.width, 7U);
+    EXPECT_EQ(image.height, 8U);
+    EXPECT_EQ(image.pixels, std::vector<std::byte>({std::byte{0xAA}}));
 }
 
 TEST(PngMetadataUVETest, DecodePngRgba8ImageUVE_ExpandsGrayscaleAlphaToRgba) {
