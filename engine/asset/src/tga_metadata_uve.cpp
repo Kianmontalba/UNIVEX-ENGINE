@@ -52,6 +52,8 @@ bool DecodeTgaRgba8ImageUVE(const std::vector<std::byte>& bytes,
     const bool trueColor16Image = !grayscaleImage && !paletteImage &&
                                   (imageType == kTgaTrueColorImageTypeUVE || imageType == kTgaRleTrueColorImageTypeUVE) &&
                                   pixelDepth == kTgaTrueColor16BitDepthUVE;
+    const bool palette16Image = paletteImage && colorMapEntryDepth == kTgaTrueColor16BitDepthUVE;
+    const bool bgr5551Image = trueColor16Image || palette16Image;
     const bool rleImage = imageType == kTgaRleTrueColorImageTypeUVE || imageType == kTgaRleGrayscaleImageTypeUVE ||
                           imageType == kTgaRleColorMappedImageTypeUVE;
     const bool supportedImageType = imageType == kTgaTrueColorImageTypeUVE ||
@@ -59,9 +61,10 @@ bool DecodeTgaRgba8ImageUVE(const std::vector<std::byte>& bytes,
     const bool supportedPixelDepth = paletteImage ? pixelDepth == 8U
                                                    : grayscaleImage ? (pixelDepth == 8U || pixelDepth == 16U)
                                                                      : (pixelDepth == 16U || pixelDepth == 24U || pixelDepth == 32U);
-    const bool supportedTrueColorDescriptor = !trueColor16Image || (imageDescriptor & 0x0FU) == 1U;
+    const bool supportedTrueColorDescriptor = !bgr5551Image || (imageDescriptor & 0x0FU) == 1U;
     const bool supportedColorMap = paletteImage ? colorMapType == 1U && colorMapLength > 0U &&
-                                                     (colorMapEntryDepth == 24U || colorMapEntryDepth == 32U)
+                                                     (colorMapEntryDepth == 16U || colorMapEntryDepth == 24U ||
+                                                      colorMapEntryDepth == 32U)
                                                : colorMapType == 0U;
     if (!supportedImageType || width == 0U || height == 0U || !supportedPixelDepth || !supportedColorMap ||
         !supportedTrueColorDescriptor || (imageDescriptor & kTgaUnsupportedInterleaveBitsUVE) != 0U) {
@@ -141,7 +144,7 @@ bool DecodeTgaRgba8ImageUVE(const std::vector<std::byte>& bytes,
             }
             colorOffset = colorMapOffset + static_cast<std::size_t>(paletteIndex - colorMapFirstIndex) * colorMapEntryBytes;
         }
-        if (trueColor16Image) {
+        if (bgr5551Image) {
             const std::uint16_t packed = static_cast<std::uint16_t>(
                 std::to_integer<std::uint8_t>(bytes[colorOffset]) |
                 (static_cast<std::uint16_t>(std::to_integer<std::uint8_t>(bytes[colorOffset + 1U])) << 8U));
