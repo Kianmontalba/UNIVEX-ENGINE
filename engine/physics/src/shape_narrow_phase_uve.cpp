@@ -32,6 +32,71 @@ namespace {
 
 } // namespace
 
+std::optional<Math::RayHitUVE> IntersectMovingSphereSphereUVE(
+    const Math::RayUVE& ray, const Math::Vector3UVE targetCenter, const float movingRadius,
+    const float targetRadius, const float maxDistance) noexcept {
+    if (!IsFiniteVectorUVE(ray.origin) || !IsFiniteVectorUVE(ray.direction) ||
+        !IsFiniteVectorUVE(targetCenter) || !std::isfinite(movingRadius) || movingRadius < 0.0F ||
+        !std::isfinite(targetRadius) || targetRadius <= 0.0F || !std::isfinite(maxDistance) ||
+        maxDistance < 0.0F) {
+        return std::nullopt;
+    }
+
+    const double directionX = static_cast<double>(ray.direction.x);
+    const double directionY = static_cast<double>(ray.direction.y);
+    const double directionZ = static_cast<double>(ray.direction.z);
+    const double originDeltaX = static_cast<double>(ray.origin.x) - static_cast<double>(targetCenter.x);
+    const double originDeltaY = static_cast<double>(ray.origin.y) - static_cast<double>(targetCenter.y);
+    const double originDeltaZ = static_cast<double>(ray.origin.z) - static_cast<double>(targetCenter.z);
+    const double combinedRadius = static_cast<double>(movingRadius) + static_cast<double>(targetRadius);
+    const double directionSquared = directionX * directionX + directionY * directionY + directionZ * directionZ;
+    const double originDistanceSquared = originDeltaX * originDeltaX + originDeltaY * originDeltaY +
+                                         originDeltaZ * originDeltaZ;
+    const double radiusSquared = combinedRadius * combinedRadius;
+    if (!std::isfinite(combinedRadius) || !std::isfinite(directionSquared) || directionSquared <= 0.0 ||
+        !std::isfinite(originDistanceSquared) || !std::isfinite(radiusSquared)) {
+        return std::nullopt;
+    }
+
+    if (originDistanceSquared <= radiusSquared) {
+        return Math::RayHitUVE{0.0F, Math::Vector3UVE{}};
+    }
+
+    const double linear = originDeltaX * directionX + originDeltaY * directionY + originDeltaZ * directionZ;
+    const double constant = originDistanceSquared - radiusSquared;
+    const double discriminant = linear * linear - directionSquared * constant;
+    if (!std::isfinite(linear) || !std::isfinite(constant) || !std::isfinite(discriminant) || discriminant <= 0.0) {
+        return std::nullopt;
+    }
+
+    const double root = std::sqrt(discriminant);
+    const double nearRoot = (-linear - root) / directionSquared;
+    const double farRoot = (-linear + root) / directionSquared;
+    double distance = nearRoot >= 0.0 ? nearRoot : farRoot;
+    if (!std::isfinite(distance) || distance < 0.0 || distance > static_cast<double>(maxDistance)) {
+        return std::nullopt;
+    }
+
+    const double contactX = static_cast<double>(ray.origin.x) + directionX * distance;
+    const double contactY = static_cast<double>(ray.origin.y) + directionY * distance;
+    const double contactZ = static_cast<double>(ray.origin.z) + directionZ * distance;
+    const double normalX = contactX - static_cast<double>(targetCenter.x);
+    const double normalY = contactY - static_cast<double>(targetCenter.y);
+    const double normalZ = contactZ - static_cast<double>(targetCenter.z);
+    const double normalLength = std::sqrt(normalX * normalX + normalY * normalY + normalZ * normalZ);
+    if (!std::isfinite(contactX) || !std::isfinite(contactY) || !std::isfinite(contactZ) ||
+        !std::isfinite(normalLength) || normalLength <= 0.0) {
+        return std::nullopt;
+    }
+    const Math::Vector3UVE normal{static_cast<float>(normalX / normalLength),
+                                  static_cast<float>(normalY / normalLength),
+                                  static_cast<float>(normalZ / normalLength)};
+    if (!IsFiniteVectorUVE(normal)) {
+        return std::nullopt;
+    }
+    return Math::RayHitUVE{static_cast<float>(distance), normal};
+}
+
 std::optional<Math::PenetrationUVE> ComputeSphereAabbPenetrationUVE(
     const Math::AabbUVE& box, const Math::Vector3UVE sphereCenter, const float sphereRadius) noexcept {
     if (!IsFiniteAabbUVE(box) || !std::isfinite(sphereCenter.x) || !std::isfinite(sphereCenter.y) ||

@@ -8,6 +8,7 @@
 
 #include "uve/math/aabb_uve.h"
 #include "uve/physics/detail/collider_world_aabb_cache_uve.h"
+#include "uve/physics/detail/shape_narrow_phase_uve.h"
 #include "uve/physics/physics_material_uve.h"
 #include "uve/scene/components/collider_component_uve.h"
 #include "uve/scene/i_entity_manager_uve.h"
@@ -47,16 +48,21 @@ std::optional<SphereCastHitUVE> ShapeCastSystemUVE::SphereCastUVE(
             continue;
         }
 
-        const Math::Vector3UVE radiusExtents{query.radius, query.radius, query.radius};
-        const Math::AabbUVE expandedAabb{
-            collider.worldAabb.min - radiusExtents,
-            collider.worldAabb.max + radiusExtents,
-        };
-        if (!IsFiniteAabbUVE(expandedAabb)) {
-            continue;
+        std::optional<Math::RayHitUVE> hit;
+        if (collider.shapeType == Scene::ColliderShapeTypeUVE::Sphere) {
+            hit = Detail::IntersectMovingSphereSphereUVE(
+                query.ray, collider.worldAabb.GetCenterUVE(), query.radius, collider.shapeRadius, query.maxDistance);
+        } else {
+            const Math::Vector3UVE radiusExtents{query.radius, query.radius, query.radius};
+            const Math::AabbUVE expandedAabb{
+                collider.worldAabb.min - radiusExtents,
+                collider.worldAabb.max + radiusExtents,
+            };
+            if (!IsFiniteAabbUVE(expandedAabb)) {
+                continue;
+            }
+            hit = Math::IntersectRayUVE(query.ray, expandedAabb, query.maxDistance);
         }
-        const std::optional<Math::RayHitUVE> hit =
-            Math::IntersectRayUVE(query.ray, expandedAabb, query.maxDistance);
         if (!hit.has_value() || (closestHit.has_value() && hit->distance >= closestHit->distance)) {
             continue;
         }

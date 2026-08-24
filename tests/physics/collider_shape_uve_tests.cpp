@@ -75,6 +75,32 @@ TEST(ColliderComponentUVETest, IsColliderComponentValidUVE_RejectsInvalidShapePa
     EXPECT_FALSE(Scene::IsColliderComponentValidUVE(invalid));
 }
 
+TEST(ShapeNarrowPhaseUVETest, MovingSphereSphereSweepReportsExactHitAndDeterministicNormal) {
+    const Math::RayUVE ray{{-5.0F, 0.0F, 0.0F}, {1.0F, 0.0F, 0.0F}};
+    const std::optional<Math::RayHitUVE> hit =
+        Detail::IntersectMovingSphereSphereUVE(ray, {0.0F, 1.4F, 0.0F}, 0.5F, 1.0F, 100.0F);
+    ASSERT_TRUE(hit.has_value());
+    EXPECT_NEAR(hit->distance, 5.0F - std::sqrt(0.29F), 1.0e-4F);
+    EXPECT_LT(hit->normal.x, 0.0F);
+    EXPECT_LT(hit->normal.y, 0.0F);
+    EXPECT_NEAR(Math::LengthSquaredUVE(hit->normal), 1.0F, 1.0e-4F);
+
+    const std::optional<Math::RayHitUVE> initialOverlap =
+        Detail::IntersectMovingSphereSphereUVE(Math::RayUVE{{0.0F, 0.0F, 0.0F}, {1.0F, 0.0F, 0.0F}},
+                                               {0.0F, 0.0F, 0.0F}, 0.5F, 1.0F, 1.0F);
+    ASSERT_TRUE(initialOverlap.has_value());
+    EXPECT_FLOAT_EQ(initialOverlap->distance, 0.0F);
+    EXPECT_EQ(initialOverlap->normal, (Math::Vector3UVE{}));
+
+    EXPECT_FALSE(Detail::IntersectMovingSphereSphereUVE(
+                     Math::RayUVE{{-5.0F, 0.0F, 0.0F}, {1.0F, 0.0F, 0.0F}}, {0.0F, 1.5F, 0.0F}, 0.5F, 1.0F,
+                     100.0F)
+                     .has_value());
+    EXPECT_FALSE(Detail::IntersectMovingSphereSphereUVE(
+                     ray, {0.0F, 1.4F, 0.0F}, 0.5F, 1.0F, 1.0F)
+                     .has_value());
+}
+
 TEST(ShapeNarrowPhaseUVETest, RadiusSumOverflowFailsClosedBeforePenetrationPublication) {
     const float maximumRadius = std::numeric_limits<float>::max();
     EXPECT_FALSE(Detail::ComputeSphereSpherePenetrationUVE(
