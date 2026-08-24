@@ -86,6 +86,9 @@ constexpr float kDegenerateTriangleEpsilonSquaredUVE = 0.00000001F;
     if (!u || !v) {
         return false;
     }
+    if (!NextTokenUVE(rest).empty()) {
+        return false;
+    }
     outTexcoord = Math::Vector2UVE{*u, *v};
     return true;
 }
@@ -95,6 +98,9 @@ constexpr float kDegenerateTriangleEpsilonSquaredUVE = 0.00000001F;
     const std::optional<float> y = ParseFiniteFloatUVE(NextTokenUVE(rest));
     const std::optional<float> z = ParseFiniteFloatUVE(NextTokenUVE(rest));
     if (!x || !y || !z) {
+        return false;
+    }
+    if (!NextTokenUVE(rest).empty()) {
         return false;
     }
     outNormal = Math::Vector3UVE{*x, *y, *z};

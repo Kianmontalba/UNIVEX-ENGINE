@@ -52,6 +52,50 @@ f 1 2 3
     EXPECT_EQ(mesh.vertices[2].position, (Math::Vector3UVE{0.0F, 1.0F, 0.0F}));
 }
 
+TEST(ObjMeshConverterUVETest, ConvertObjMeshUVE_RejectsTrailingTexcoordCoordinateAtomically) {
+    MeshAssetUVE original;
+    original.vertices = {
+        MeshVertexUVE{Math::Vector3UVE{4.0F, 5.0F, 6.0F}, Math::Vector3UVE{0.0F, 1.0F, 0.0F}, 0.0F, 0.0F}};
+    original.indices = {0U};
+    original.localBounds = Math::AabbUVE{Math::Vector3UVE{4.0F, 5.0F, 6.0F}, Math::Vector3UVE{4.0F, 5.0F, 6.0F}};
+    MeshAssetUVE output = original;
+
+    constexpr std::string_view invalidSource = R"OBJ(
+v 0 0 0
+v 1 0 0
+v 0 1 0
+vt 0 1 0.5
+f 1/1 2/1 3/1
+)OBJ";
+    EXPECT_FALSE(ConvertObjMeshUVE(invalidSource, output));
+    EXPECT_EQ(output.vertices.size(), original.vertices.size());
+    EXPECT_EQ(output.vertices[0].position, original.vertices[0].position);
+    EXPECT_EQ(output.indices, original.indices);
+    EXPECT_EQ(output.localBounds, original.localBounds);
+}
+
+TEST(ObjMeshConverterUVETest, ConvertObjMeshUVE_RejectsTrailingNormalCoordinateAtomically) {
+    MeshAssetUVE original;
+    original.vertices = {
+        MeshVertexUVE{Math::Vector3UVE{4.0F, 5.0F, 6.0F}, Math::Vector3UVE{0.0F, 1.0F, 0.0F}, 0.0F, 0.0F}};
+    original.indices = {0U};
+    original.localBounds = Math::AabbUVE{Math::Vector3UVE{4.0F, 5.0F, 6.0F}, Math::Vector3UVE{4.0F, 5.0F, 6.0F}};
+    MeshAssetUVE output = original;
+
+    constexpr std::string_view invalidSource = R"OBJ(
+v 0 0 0
+v 1 0 0
+v 0 1 0
+vn 0 0 1 0
+f 1//1 2//1 3//1
+)OBJ";
+    EXPECT_FALSE(ConvertObjMeshUVE(invalidSource, output));
+    EXPECT_EQ(output.vertices.size(), original.vertices.size());
+    EXPECT_EQ(output.vertices[0].position, original.vertices[0].position);
+    EXPECT_EQ(output.indices, original.indices);
+    EXPECT_EQ(output.localBounds, original.localBounds);
+}
+
 TEST(ObjMeshConverterUVETest, ConvertObjMeshUVE_RejectsTrailingPositionCoordinateAtomically) {
     MeshAssetUVE original;
     original.vertices = {
