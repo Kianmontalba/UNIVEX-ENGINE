@@ -2293,6 +2293,15 @@ TEST(ScriptGraphUVETest, AddNodeUVE_RejectsEmptyTypeAndDuplicateIdsWithoutMutati
     EXPECT_EQ(graph.GetNodesUVE().size(), 1U);
 }
 
+TEST(ScriptGraphUVETest, AddNodeUVE_RejectsZeroIdsWithoutMutation) {
+    ScriptGraphUVE graph;
+    EXPECT_FALSE(graph.AddNodeUVE({0U, "test.source"}));
+    EXPECT_TRUE(graph.GetNodesUVE().empty());
+    EXPECT_TRUE(graph.AddNodeUVE({1U, "test.source"}));
+    EXPECT_EQ(graph.GetNodesUVE().size(), 1U);
+    EXPECT_EQ(graph.GetNodesUVE().front().id, 1U);
+}
+
 TEST(ScriptGraphUVETest, AddLinkUVE_RejectsEmptyEndpointsAndDuplicateLinks) {
     ScriptGraphUVE graph;
     EXPECT_FALSE(graph.AddLinkUVE({{0U, "Out"}, {2U, "In"}}));
