@@ -158,6 +158,24 @@ TEST_F(AssetImporterUVETest, ImportUVE_GenericImporter_CopiesFileAndRegistersGui
     std::filesystem::remove(destinationPath);
 }
 
+TEST_F(AssetImporterUVETest, ImportUVE_GenericImporter_CreatesMissingDestinationDirectories) {
+    const std::filesystem::path sourcePath = "uve_asset_importer_nested_source.uvemodel";
+    const std::filesystem::path destinationDirectory = "uve_asset_importer_nested_destination";
+    const std::filesystem::path destinationPath = destinationDirectory / "nested" / "asset.uvemodel";
+    std::filesystem::remove(sourcePath);
+    std::filesystem::remove_all(destinationDirectory);
+    WriteFixtureFileUVE(sourcePath, "typed UVE envelope import");
+
+    const AssetGuidUVE guid = importer.ImportUVE(sourcePath, destinationPath, assetDatabase);
+
+    ASSERT_NE(guid, kInvalidAssetGuidUVE);
+    EXPECT_EQ(ReadFileUVE(destinationPath), "typed UVE envelope import");
+    EXPECT_EQ(assetDatabase.ResolveUVE(guid), destinationPath);
+
+    std::filesystem::remove(sourcePath);
+    std::filesystem::remove_all(destinationDirectory);
+}
+
 TEST_F(AssetImporterUVETest, TextImportUVE_PreservesTextVerbatim) {
     const std::filesystem::path sourcePath = "uve_text_parser_preserve_source.txt";
     const std::filesystem::path destinationPath = "uve_text_parser_preserve_destination.txt";
