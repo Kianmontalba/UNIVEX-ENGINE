@@ -267,6 +267,35 @@ void AppendU16LittleEndianUVE(std::vector<std::byte>& bytes, const std::uint16_t
     return tga;
 }
 
+[[nodiscard]] std::vector<std::byte> MakeTga32TrueColorAlphaTwoByOneTopLeftUVE() {
+    std::vector<std::byte> tga;
+    tga.reserve(26U);
+    tga.insert(tga.end(), 18U, std::byte{0});
+    tga[2] = std::byte{2};
+    tga[12] = std::byte{2};
+    tga[14] = std::byte{1};
+    tga[16] = std::byte{32};
+    tga[17] = std::byte{0x28};
+    // BGRA true-color pixels: red at alpha 0x40, blue at alpha 0x90.
+    tga.insert(tga.end(), {std::byte{0x00}, std::byte{0x00}, std::byte{0xFF}, std::byte{0x40},
+                           std::byte{0xFF}, std::byte{0x00}, std::byte{0x00}, std::byte{0x90}});
+    return tga;
+}
+
+[[nodiscard]] std::vector<std::byte> MakeTga32TrueColorAlphaRleThreeByOneTopLeftUVE() {
+    std::vector<std::byte> tga;
+    tga.reserve(23U);
+    tga.insert(tga.end(), 18U, std::byte{0});
+    tga[2] = std::byte{10};
+    tga[12] = std::byte{3};
+    tga[14] = std::byte{1};
+    tga[16] = std::byte{32};
+    tga[17] = std::byte{0x28};
+    // One BGRA green sample at alpha 0x66 in a three-pixel run.
+    tga.insert(tga.end(), {std::byte{0x82}, std::byte{0x00}, std::byte{0x00}, std::byte{0xFF}, std::byte{0x66}});
+    return tga;
+}
+
 [[nodiscard]] std::vector<std::byte> MakeTga32OneByTwoTopRightUVE() {
     std::vector<std::byte> tga;
     tga.reserve(26U);
@@ -452,6 +481,27 @@ TEST(TgaMetadataUVETest, DecodeTgaRgba8ImageUVE_DecodesRle16BitPaletteToRgba) {
                                  std::byte{0x00}, std::byte{0xFF}, std::byte{0x00}, std::byte{0xFF},
                                  std::byte{0x00}, std::byte{0xFF}, std::byte{0x00}, std::byte{0xFF},
                                  std::byte{0x00}, std::byte{0xFF}, std::byte{0x00}, std::byte{0xFF}}));
+}
+
+TEST(TgaMetadataUVETest, DecodeTgaRgba8ImageUVE_Decodes32BitTrueColorAlphaToRgba) {
+    TgaRgba8ImageUVE image;
+    ASSERT_TRUE(DecodeTgaRgba8ImageUVE(MakeTga32TrueColorAlphaTwoByOneTopLeftUVE(), image));
+    EXPECT_EQ(image.width, 2U);
+    EXPECT_EQ(image.height, 1U);
+    EXPECT_EQ(image.pixels, (std::vector<std::byte>{
+                                 std::byte{0xFF}, std::byte{0x00}, std::byte{0x00}, std::byte{0x40},
+                                 std::byte{0x00}, std::byte{0x00}, std::byte{0xFF}, std::byte{0x90}}));
+}
+
+TEST(TgaMetadataUVETest, DecodeTgaRgba8ImageUVE_DecodesRle32BitTrueColorAlphaToRgba) {
+    TgaRgba8ImageUVE image;
+    ASSERT_TRUE(DecodeTgaRgba8ImageUVE(MakeTga32TrueColorAlphaRleThreeByOneTopLeftUVE(), image));
+    EXPECT_EQ(image.width, 3U);
+    EXPECT_EQ(image.height, 1U);
+    EXPECT_EQ(image.pixels, (std::vector<std::byte>{
+                                 std::byte{0xFF}, std::byte{0x00}, std::byte{0x00}, std::byte{0x66},
+                                 std::byte{0xFF}, std::byte{0x00}, std::byte{0x00}, std::byte{0x66},
+                                 std::byte{0xFF}, std::byte{0x00}, std::byte{0x00}, std::byte{0x66}}));
 }
 
 TEST(TgaMetadataUVETest, DecodeTgaRgba8ImageUVE_DecodesTopRight32BitWithOpaqueAlpha) {
