@@ -1,5 +1,9 @@
 # UNIVEX Engine — Motion Query / Motion Matching Inventory Roadmap
 
+> **Consolidated status authority:** [`ROADMAP_INDEX.md`](ROADMAP_INDEX.md) is the single concise execution view. This document remains the detailed domain history and evidence record; status changes must be synchronized with the consolidated roadmap.
+
+
+
 > This roadmap preserves every filename from the supplied inventory while translating each target into the UNIVEX-native `*_uve.h` / `*_uve.cpp` contract style. The original names are planning inputs, not code-copy instructions.
 
 ## Integration rules

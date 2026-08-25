@@ -6,6 +6,8 @@
 
 </div>
 
+> **Consolidated status authority:** [`ROADMAP_INDEX.md`](ROADMAP_INDEX.md) is the single concise execution view. This document remains the detailed domain history and evidence record; status changes must be synchronized with the consolidated roadmap.
+
 > **Visual truth rule:** A renderer or viewport item is `COMPLETED` only when the real runtime output is visible through the intended presentation path and the claim is backed by build/test/smoke evidence. A black-only capture is a diagnostic result, not a visual completion claim.
 
 | Status | Completed foundation | Delivered capability | Ongoing boundary |

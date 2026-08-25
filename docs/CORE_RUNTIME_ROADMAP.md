@@ -6,6 +6,8 @@
 
 </div>
 
+> **Consolidated status authority:** [`ROADMAP_INDEX.md`](ROADMAP_INDEX.md) is the single concise execution view. This document remains the detailed domain history and evidence record; status changes must be synchronized with the consolidated roadmap.
+
 > This roadmap protects the engine-owned C++ runtime. Editor features consume these contracts through `EngineServicesUVE`; they do not create a second scene, asset, or runtime lifecycle.
 
 | Status | Completed foundation | Delivered capability | Ongoing boundary |

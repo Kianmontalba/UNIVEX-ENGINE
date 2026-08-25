@@ -1,5 +1,9 @@
 # UNIVEX ENGINE — ADDITIONAL CORE & AAA ROADMAP
 
+> **Consolidated status authority:** [`ROADMAP_INDEX.md`](ROADMAP_INDEX.md) is the single concise execution view. This document remains the detailed domain history and evidence record; status changes must be synchronized with the consolidated roadmap.
+
+
+
 > **Purpose:** Additional capabilities to strengthen UNIVEX as a production/AAA-oriented engine. No Increment numbers are assigned so the implementation agent can determine the correct order. Existing roadmap capabilities should be integrated rather than duplicated.
 
 ---

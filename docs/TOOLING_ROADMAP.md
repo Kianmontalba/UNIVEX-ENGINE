@@ -6,6 +6,8 @@
 
 </div>
 
+> **Consolidated status authority:** [`ROADMAP_INDEX.md`](ROADMAP_INDEX.md) is the single concise execution view. This document remains the detailed domain history and evidence record; status changes must be synchronized with the consolidated roadmap.
+
 > Tooling exists to make verified engine systems easier to author and diagnose. It must not invent parallel runtime ownership or present controls that cannot affect real engine state.
 
 | Status | Completed foundation | Delivered capability | Ongoing boundary |
@@ -19,7 +21,7 @@
 
 <div align="center">
 
-<h2><strong>PARTIAL — ACTIVE TOOLING SEQUENCE</strong></h2>
+<h2><strong>COMPLETED — DEVELOPER TOOLING SEQUENCE</strong></h2>
 
 </div>
 
