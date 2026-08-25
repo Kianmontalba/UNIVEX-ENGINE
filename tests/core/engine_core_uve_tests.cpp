@@ -23,6 +23,8 @@
 #include "uve/asset/asset_handle_uve.h"
 #include "uve/asset/asset_importer_uve.h"
 #include "uve/asset/asset_manager_uve.h"
+#include "uve/asset/animation_clip_asset_uve.h"
+#include "uve/asset/audio_asset_uve.h"
 #include "uve/asset/blob_asset_uve.h"
 #include "uve/asset/data_table_importer_uve.h"
 #include "uve/asset/data_table_uve.h"
@@ -536,6 +538,124 @@ TEST(EngineCoreUVETest, TypedUVEEnvelopeImporters_ComposedAndReachableAfterInit)
     engine.Shutdown();
 }
 
+TEST(EngineCoreUVETest, AudioAssetLoader_RegisteredAndReachableThroughBuiltInPipeline) {
+    EngineConfigUVE config = MakeTestConfigUVE();
+    const std::filesystem::path root = std::filesystem::temp_directory_path();
+    config.assetDatabaseFilePath = root / "uve_engine_core_audio_asset_tests.uveassetdb";
+    const std::filesystem::path sourcePath = root / "uve_engine_core_audio_asset_tests.wav";
+    const std::filesystem::path destinationPath = root / "uve_engine_core_audio_asset_tests.uveaudio";
+    std::filesystem::remove(config.assetDatabaseFilePath);
+    std::filesystem::remove(sourcePath);
+    std::filesystem::remove(destinationPath);
+    struct CleanupUVE final {
+        std::filesystem::path database;
+        std::filesystem::path source;
+        std::filesystem::path destination;
+        ~CleanupUVE() {
+            std::filesystem::remove(database);
+            std::filesystem::remove(source);
+            std::filesystem::remove(destination);
+        }
+    } cleanup{config.assetDatabaseFilePath, sourcePath, destinationPath};
+    const std::array<unsigned char, 48U> wavBytes{
+        'R', 'I', 'F', 'F', 40U, 0U, 0U, 0U, 'W', 'A', 'V', 'E',
+        'f', 'm', 't', ' ', 16U, 0U, 0U, 0U, 1U, 0U, 1U, 0U,
+        0x80U, 0xBBU, 0U, 0U, 0x00U, 0x77U, 0x01U, 0U, 2U, 0U, 16U, 0U,
+        'd', 'a', 't', 'a', 4U, 0U, 0U, 0U, 0U, 0U, 0xFFU, 0x7FU};
+    {
+        std::ofstream output(sourcePath, std::ios::binary | std::ios::trunc);
+        ASSERT_TRUE(output.is_open());
+        output.write(reinterpret_cast<const char*>(wavBytes.data()),
+                     static_cast<std::streamsize>(wavBytes.size()));
+    }
+
+    EngineCoreUVE engine(config);
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+    Asset::IAssetDatabaseUVE& assetDatabase = engine.GetServicesUVE().GetAssetDatabaseUVE();
+    Asset::IAssetImporterUVE& importer = engine.GetServicesUVE().GetAssetImporterUVE();
+    Asset::IAssetManagerUVE& assetManager = engine.GetServicesUVE().GetAssetManagerUVE();
+    const Asset::AssetGuidUVE guid = importer.ImportUVE(sourcePath, destinationPath, assetDatabase);
+    ASSERT_NE(guid, Asset::kInvalidAssetGuidUVE);
+    {
+        const Asset::AssetHandleUVE<Asset::AudioAssetUVE> handle =
+            assetManager.LoadUVE<Asset::AudioAssetUVE>(guid, assetDatabase);
+        bool terminal = false;
+        for (int iteration = 0; iteration < 200000 && !terminal; ++iteration) {
+            terminal = handle.IsReadyUVE() || handle.HasFailedUVE();
+            if (!terminal) {
+                std::this_thread::yield();
+            }
+        }
+        ASSERT_TRUE(terminal);
+        ASSERT_TRUE(handle.IsReadyUVE());
+        const Asset::AudioAssetUVE* const audio = handle.TryGetUVE();
+        ASSERT_NE(audio, nullptr);
+        EXPECT_EQ(audio->channels, 1U);
+        EXPECT_EQ(audio->sampleRate, 48000U);
+        ASSERT_EQ(audio->samples.size(), 2U);
+        EXPECT_FLOAT_EQ(audio->samples[0], 0.0F);
+        EXPECT_NEAR(audio->samples[1], 0.9999695F, 1.0e-6F);
+    }
+    engine.Shutdown();
+}
+TEST(EngineCoreUVETest, AnimationAssetLoader_RegisteredAndReachableThroughBuiltInPipeline) {
+    EngineConfigUVE config = MakeTestConfigUVE();
+    const std::filesystem::path root = std::filesystem::temp_directory_path();
+    config.assetDatabaseFilePath = root / "uve_engine_core_animation_asset_tests.uveassetdb";
+    const std::filesystem::path sourcePath = root / "uve_engine_core_animation_asset_tests_source.uveanim";
+    const std::filesystem::path destinationPath = root / "uve_engine_core_animation_asset_tests_dest.uveanim";
+    std::filesystem::remove(config.assetDatabaseFilePath);
+    std::filesystem::remove(sourcePath);
+    std::filesystem::remove(destinationPath);
+    struct CleanupUVE final {
+        std::filesystem::path database;
+        std::filesystem::path source;
+        std::filesystem::path destination;
+        ~CleanupUVE() {
+            std::filesystem::remove(database);
+            std::filesystem::remove(source);
+            std::filesystem::remove(destination);
+        }
+    } cleanup{config.assetDatabaseFilePath, sourcePath, destinationPath};
+    Asset::AnimationClipAssetUVE sourceClip;
+    sourceClip.clipId = "walk";
+    sourceClip.durationSeconds = 1.0;
+    sourceClip.samples = {Asset::AnimationAssetSampleUVE{
+        0.0, Asset::AnimationAssetPoseUVE{Math::Vector3UVE{0.0F, 0.0F, 0.0F}, Math::QuaternionUVE{},
+                                           Math::Vector3UVE{1.0F, 1.0F, 1.0F}}}};
+    sourceClip.events = {Asset::AnimationAssetEventUVE{0.5, "footstep"}};
+    ASSERT_TRUE(Asset::SaveAnimationClipAssetUVE(sourceClip, sourcePath));
+
+    EngineCoreUVE engine(config);
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+    Asset::IAssetDatabaseUVE& assetDatabase = engine.GetServicesUVE().GetAssetDatabaseUVE();
+    Asset::IAssetImporterUVE& importer = engine.GetServicesUVE().GetAssetImporterUVE();
+    Asset::IAssetManagerUVE& assetManager = engine.GetServicesUVE().GetAssetManagerUVE();
+    const Asset::AssetGuidUVE guid = importer.ImportUVE(sourcePath, destinationPath, assetDatabase);
+    ASSERT_NE(guid, Asset::kInvalidAssetGuidUVE);
+    {
+        const Asset::AssetHandleUVE<Asset::AnimationClipAssetUVE> handle =
+            assetManager.LoadUVE<Asset::AnimationClipAssetUVE>(guid, assetDatabase);
+        bool terminal = false;
+        for (int iteration = 0; iteration < 200000 && !terminal; ++iteration) {
+            terminal = handle.IsReadyUVE() || handle.HasFailedUVE();
+            if (!terminal) {
+                std::this_thread::yield();
+            }
+        }
+        ASSERT_TRUE(terminal);
+        ASSERT_TRUE(handle.IsReadyUVE());
+        const Asset::AnimationClipAssetUVE* const clip = handle.TryGetUVE();
+        ASSERT_NE(clip, nullptr);
+        EXPECT_EQ(clip->clipId, "walk");
+        ASSERT_EQ(clip->samples.size(), 1U);
+        ASSERT_EQ(clip->events.size(), 1U);
+        EXPECT_EQ(clip->events.front().eventId, "footstep");
+    }
+    engine.Shutdown();
+}
 TEST(EngineCoreUVETest, DataTablePipeline_RegisteredAndReachableThroughServicesAfterInit) {
     EngineConfigUVE config = MakeTestConfigUVE();
     const std::filesystem::path root = std::filesystem::temp_directory_path();

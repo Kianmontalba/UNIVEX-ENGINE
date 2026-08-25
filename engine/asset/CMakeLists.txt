@@ -28,6 +28,7 @@ add_library(uve_asset STATIC
     src/mesh_asset_uve.cpp
     src/texture_asset_uve.cpp
     src/audio_asset_uve.cpp
+    src/animation_clip_asset_uve.cpp
     src/bmp_metadata_uve.cpp
     src/bmp_importer_uve.cpp
     src/tga_metadata_uve.cpp

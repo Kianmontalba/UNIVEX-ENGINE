@@ -144,6 +144,57 @@ TEST(EditorBridgeUVETest, ContentBrowserImportCapabilityUVE_ReportsRawParserBoun
     std::filesystem::remove_all(contentRoot);
 }
 
+TEST(EditorBridgeUVETest, ContentBrowserAnimationEnvelopeUVE_ReportsTypedImporterAuthority) {
+    const std::filesystem::path contentRoot = "uve_editor_bridge_animation_asset";
+    std::filesystem::remove_all(contentRoot);
+    std::filesystem::create_directories(contentRoot);
+    {
+        std::ofstream fixture(contentRoot / "walk.uveanim", std::ios::binary);
+        ASSERT_TRUE(fixture.is_open());
+        fixture << "typed animation envelope placeholder";
+    }
+
+    Core::EngineConfigUVE config = MakeBridgeTestConfigUVE();
+    config.projectContentRootUVE = contentRoot;
+    Core::EngineCoreUVE engine(config);
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_bridge_animation_asset.uvescene");
+        editor.InitUVE();
+        EditorBridgeUVE bridge(editor);
+        const EditorBridgeSnapshotUVE initial = bridge.GetSnapshotUVE();
+
+        EditorBridgeRequestUVE refresh{};
+        refresh.protocolVersion = kEditorBridgeProtocolVersionUVE;
+        refresh.requestId = 1U;
+        refresh.expectedRevision = initial.revision;
+        refresh.kind = EditorBridgeRequestKindUVE::RefreshContentBrowser;
+        const EditorBridgeResponseUVE refreshed = bridge.DispatchUVE(refresh);
+        ASSERT_TRUE(refreshed.applied);
+
+        EditorBridgeRequestUVE select{};
+        select.protocolVersion = kEditorBridgeProtocolVersionUVE;
+        select.requestId = 2U;
+        select.expectedRevision = refreshed.snapshot.revision;
+        select.kind = EditorBridgeRequestKindUVE::SelectContentBrowserEntry;
+        select.contentEntryPath = "walk.uveanim";
+        const EditorBridgeResponseUVE selected = bridge.DispatchUVE(select);
+        ASSERT_TRUE(selected.applied);
+        ASSERT_TRUE(selected.snapshot.contentBrowser.importAction.hasSelection);
+        EXPECT_TRUE(selected.snapshot.contentBrowser.importAction.canImport);
+        EXPECT_TRUE(selected.snapshot.contentBrowser.importAction.importerRegistered);
+        EXPECT_FALSE(selected.snapshot.contentBrowser.importAction.requiresFormatSpecificParser);
+        EXPECT_EQ(selected.snapshot.contentBrowser.importAction.sourceKind, "animationEnvelope");
+        EXPECT_EQ(selected.snapshot.contentBrowser.importAction.diagnostic,
+                  "built-in generic copy importer is registered");
+
+        editor.ShutdownUVE();
+    }
+    engine.Shutdown();
+    std::filesystem::remove_all(contentRoot);
+}
+
 TEST(EditorBridgeUVETest, ContentBrowserMotionQueryFocusUVE_ParsesFocusAndCopiesTypedEntry) {
     const std::filesystem::path contentRoot = "uve_editor_bridge_motion_query_focus";
     std::filesystem::remove_all(contentRoot);

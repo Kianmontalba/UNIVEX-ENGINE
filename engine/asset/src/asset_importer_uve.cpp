@@ -183,6 +183,9 @@ using ImportFuncUVE = std::function<bool(const std::filesystem::path&, const std
     if (extension == "uvemat") {
         return AssetImportSourceKindUVE::MaterialEnvelope;
     }
+    if (extension == "uveanim") {
+        return AssetImportSourceKindUVE::AnimationEnvelope;
+    }
     if (extension == "vert" || extension == "frag" || extension == "comp") {
         return AssetImportSourceKindUVE::RawShader;
     }
@@ -226,11 +229,12 @@ AssetImporterUVE::AssetImporterUVE() : m_impl(std::make_unique<ImplUVE>()) {
     // them here is an intentionally format-neutral, deterministic copy/re-register operation;
     // bounded BMP/PNG/TGA, OBJ, MTL, glTF/GLB one-primitive, JPEG, and explicit-stage shader source
     // conversions are registered separately; FBX/audio, ambiguous combined GLSL, and broader glTF
-    // scene/material/image conversion remains independent parser-owned work.
+    // scene/material/image conversion, and raw animation clip decoding remain independently deferred parser-owned work.
     RegisterImporterUVE("uvemodel", &GenericFileImportUVE);
     RegisterImporterUVE("uvetex", &GenericFileImportUVE);
     RegisterImporterUVE("uveshader", &GenericFileImportUVE);
     RegisterImporterUVE("uvemat", &GenericFileImportUVE);
+    RegisterImporterUVE("uveanim", &GenericFileImportUVE);
     RegisterBmpImporterUVE(*this);
     RegisterPngImporterUVE(*this);
     RegisterTgaImporterUVE(*this);

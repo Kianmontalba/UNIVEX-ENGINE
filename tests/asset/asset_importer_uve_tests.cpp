@@ -66,10 +66,12 @@ TEST_F(AssetImporterUVETest, ClassifySourceUVE_ReportsAuthorityAndRawParserBound
         std::string_view diagnostic;
     };
 
-    constexpr std::array<ClassificationCaseUVE, 13> kCases = {{
+    constexpr std::array<ClassificationCaseUVE, 14> kCases = {{
         {"Readme.TXT", AssetImportSourceKindUVE::PlainText, "txt", true, false,
          "built-in text parser is registered"},
         {"Character.UVEMODEL", AssetImportSourceKindUVE::MeshEnvelope, "uvemodel", true, false,
+         "built-in generic copy importer is registered"},
+        {"Walk.UVEANIM", AssetImportSourceKindUVE::AnimationEnvelope, "uveanim", true, false,
          "built-in generic copy importer is registered"},
         {"Character.FBX", AssetImportSourceKindUVE::RawModel, "fbx", false, true,
          "format-specific parser is not registered"},

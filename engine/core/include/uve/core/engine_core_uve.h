@@ -161,7 +161,7 @@ public:
     /// HotReload* constructor argument and construction must stay strictly
     /// forward-dependency (immediately after, RegisterBuiltInAssetLoadersUVE()
     /// registers the built-in MeshAssetUVE/TextureAssetUVE/ShaderAssetUVE/
-    /// MaterialAssetUVE loaders with it); AssetImporter and AssetBundle grouped immediately
+    /// MaterialAssetUVE/AudioAssetUVE/AnimationClipAssetUVE loaders with it); AssetImporter and AssetBundle grouped immediately
     /// after, both stateless; FileSystem right after, needing AssetBundle
     /// (its bundle-backed mounts read entries through it); WindowManager right after — a real
     /// Window::WindowManagerUVE (owning the entire GLFW/GL context lifecycle) unless
@@ -302,7 +302,8 @@ public:
     [[nodiscard]] static VersionUVE GetEngineVersionUVE() noexcept;
 
 private:
-    /// Registers the built-in MeshAssetUVE/TextureAssetUVE/ShaderAssetUVE/MaterialAssetUVE
+    /// Registers the built-in MeshAssetUVE/TextureAssetUVE/ShaderAssetUVE/MaterialAssetUVE/
+    /// AudioAssetUVE/AnimationClipAssetUVE
     /// loaders with AssetManagerUVE (Part 7.2's rendering-facing asset types). Called once from
     /// Init(), immediately after AssetManagerUVE is constructed. A private orchestration step,
     /// not a new service — AssetManagerUVE itself stays generic and unaware of these concrete
