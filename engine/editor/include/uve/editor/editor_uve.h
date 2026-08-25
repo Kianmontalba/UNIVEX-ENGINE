@@ -17,6 +17,7 @@
 #include "uve/core/engine_services_uve.h"
 #include "uve/core/i_simulation_control_uve.h"
 #include "uve/editor/editor_tool_session_uve.h"
+#include "uve/editor/developer_console_uve.h"
 #include "uve/editor/inspector_drawer_registry_uve.h"
 #include "uve/math/ray_uve.h"
 #include "uve/math/vector2_uve.h"
@@ -445,6 +446,13 @@ private:
         Signals,
     };
 
+    /// Selects the editor viewport surface. Game remains unavailable until a runtime presentation
+    /// target is connected; the tab is shown for stable workspace orientation only.
+    enum class EditorViewportTabUVE {
+        Scene,
+        Game,
+    };
+
     /// Selects one docked lower-workspace panel. FileSystem is the safe default and keeps the
     /// former Assets database view visible without introducing an AI tooling implementation.
     enum class EditorBottomDockUVE {
@@ -764,6 +772,7 @@ private:
                                                                const std::filesystem::path& directory) const;
     void ReconcileContentBrowserDirectoryUVE(const Asset::ProjectFileSnapshotUVE& snapshot) noexcept;
     void DrawAssetsPanelUVE();
+    void DrawConsolePanelUVE();
 
     Core::EngineServicesUVE* m_services = nullptr;
     Core::ISimulationControlUVE* m_simulationControl = nullptr;
@@ -790,8 +799,10 @@ private:
     std::deque<HistoryEntryUVE> m_undoHistory;
     std::deque<HistoryEntryUVE> m_redoHistory;
     EditorWorkspaceUVE m_activeWorkspace = EditorWorkspaceUVE::Library;
+    EditorViewportTabUVE m_viewportTab = EditorViewportTabUVE::Scene;
     EditorRightPanelTabUVE m_activeRightPanelTab = EditorRightPanelTabUVE::Inspector;
     InspectorDrawerRegistryUVE m_inspectorDrawerRegistry;
+    DeveloperConsoleUVE m_developerConsole;
     EditorBottomDockUVE m_activeBottomDock = EditorBottomDockUVE::FileSystem;
     /// Empty is the ProjectFileIndexUVE content root. This value is session-only and must name a
     /// directory in the latest successful copied snapshot before it is used as a browser location.
@@ -799,6 +810,8 @@ private:
     ContentBrowserTypeFocusUVE m_contentBrowserTypeFocus = ContentBrowserTypeFocusUVE::All;
     std::string m_assetFilter;
     std::string m_inspectorFilter;
+    std::string m_consoleFilter;
+    std::string m_consoleCommand;
     std::string m_hierarchyFilter;
     std::string m_cachedHierarchyFilter;
     std::vector<Scene::EntityUVE> m_cachedHierarchyVisibleEntities;
