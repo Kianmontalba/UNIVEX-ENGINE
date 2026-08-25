@@ -51,6 +51,62 @@ using JsonUVE = nlohmann::json;
                    {"selectable", control.selectable}};
 }
 
+[[nodiscard]] JsonUVE ToJsonUVE(const Core::TimeSampledTrajectorySampleUVE& sample) {
+    return JsonUVE{{"offsetSeconds", sample.offsetSeconds},
+                   {"relativePosition", ToJsonUVE(sample.relativePosition)},
+                   {"velocity", ToJsonUVE(sample.velocity)},
+                   {"facingDirection", ToJsonUVE(sample.facingDirection)},
+                   {"capsuleRadius", sample.capsuleRadius},
+                   {"capsuleHalfHeight", sample.capsuleHalfHeight}};
+}
+
+[[nodiscard]] JsonUVE ToJsonUVE(const Physics::CapsuleCastHitUVE& hit) {
+    return JsonUVE{{"entity", JsonUVE{{"index", hit.entity.index}, {"generation", hit.entity.generation}}},
+                   {"center", ToJsonUVE(hit.center)},
+                   {"normal", ToJsonUVE(hit.normal)},
+                   {"distance", hit.distance},
+                   {"material", JsonUVE{{"friction", hit.material.friction},
+                                         {"restitution", hit.material.restitution},
+                                         {"density", hit.material.density}}}};
+}
+
+[[nodiscard]] JsonUVE ToJsonUVE(const Physics::TrajectoryCollisionPredictionSampleUVE& sample) {
+    return JsonUVE{{"offsetSeconds", sample.offsetSeconds},
+                   {"center", ToJsonUVE(sample.center)},
+                   {"capsuleRadius", sample.capsuleRadius},
+                   {"capsuleHalfHeight", sample.capsuleHalfHeight},
+                   {"swept", sample.swept},
+                   {"hit", sample.hit.has_value() ? ToJsonUVE(*sample.hit) : JsonUVE(nullptr)}};
+}
+
+[[nodiscard]] JsonUVE ToJsonUVE(const Core::TimeSampledTrajectoryUVE& trajectory) {
+    JsonUVE samples = JsonUVE::array();
+    for (const auto& sample : trajectory.samples) {
+        samples.push_back(ToJsonUVE(sample));
+    }
+    return JsonUVE{{"schemaVersion", trajectory.schemaVersion},
+                   {"context", static_cast<std::uint8_t>(trajectory.context)},
+                   {"samples", std::move(samples)}};
+}
+
+[[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeMotionQueryTrajectoryPreviewUVE& preview) {
+    JsonUVE collisionSamples = JsonUVE::array();
+    if (preview.collisionPrediction.has_value()) {
+        for (const auto& sample : preview.collisionPrediction->samples) {
+            collisionSamples.push_back(ToJsonUVE(sample));
+        }
+    }
+    return JsonUVE{{"available", preview.available},
+                   {"trajectory", ToJsonUVE(preview.trajectory)},
+                   {"collisionPrediction", preview.collisionPrediction.has_value()
+                                                ? JsonUVE{{"code", static_cast<std::uint8_t>(preview.collisionPrediction->code)},
+                                                          {"context", static_cast<std::uint8_t>(preview.collisionPrediction->context)},
+                                                          {"samples", std::move(collisionSamples)},
+                                                          {"message", preview.collisionPrediction->message}}
+                                                : JsonUVE(nullptr)},
+                   {"diagnostic", preview.diagnostic}};
+}
+
 [[nodiscard]] JsonUVE ToJsonUVE(const Core::ControlRigAuthoringSnapshotUVE& snapshot) {
     JsonUVE controls = JsonUVE::array();
     for (const auto& control : snapshot.viewportControls) {
@@ -747,7 +803,8 @@ enum class FrameReadResultUVE : std::uint8_t {
                        }
                        return history;
                    }()},
-                   {"replaySessionFacts", ToJsonUVE(snapshot.replaySessionFacts)}};
+                   {"replaySessionFacts", ToJsonUVE(snapshot.replaySessionFacts)},
+                   {"trajectoryPreview", ToJsonUVE(snapshot.trajectoryPreview)}};
 }
 
 [[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeSnapshotUVE& snapshot) {

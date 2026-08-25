@@ -88,6 +88,10 @@ TEST(EditorBridgeStdioUVETest, ServeUVE_HandshakesAndRoutesExistingBridgeDispatc
         runtimeProgram.instructions.resize(2U);
         ASSERT_TRUE(runtime.AttachUVE(runtimeEntity, std::move(runtimeProgram)));
         EditorBridgeUVE bridge(editor, nullptr, &debugger, &runtime);
+        Core::TimeSampledTrajectoryUVE trajectoryPreview;
+        trajectoryPreview.context = Core::AnimationMotionContextUVE::Slide;
+        trajectoryPreview.samples = {{0.0, {0.0F, 0.0F, 0.0F}, {}, {0.0F, 0.0F, 1.0F}, 0.4F, 0.9F}};
+        bridge.SetMotionQueryTrajectoryPreviewUVE(std::move(trajectoryPreview));
         Asset::DataTableUVE previewTable("weapons");
         ASSERT_TRUE(previewTable.DefineColumnUVE("damage", Asset::DataTableColumnTypeUVE::Integer));
         ASSERT_TRUE(previewTable.AddRowUVE("pistol", {std::int64_t{25}}));
@@ -237,6 +241,13 @@ TEST(EditorBridgeStdioUVETest, ServeUVE_HandshakesAndRoutesExistingBridgeDispatc
         ASSERT_TRUE(handshakeSnapshot.at("motionQuery").at("replayWorkflow").is_object());
         EXPECT_EQ(handshakeSnapshot.at("motionQuery").at("replayWorkflow").at("baselineCount").get<std::uint64_t>(), 0U);
         EXPECT_FALSE(handshakeSnapshot.at("motionQuery").at("replayWorkflow").at("readyForComparison").get<bool>());
+        ASSERT_TRUE(handshakeSnapshot.at("motionQuery").at("trajectoryPreview").is_object());
+        EXPECT_TRUE(handshakeSnapshot.at("motionQuery").at("trajectoryPreview").at("available").get<bool>());
+        EXPECT_EQ(handshakeSnapshot.at("motionQuery").at("trajectoryPreview").at("trajectory").at("context").get<std::uint8_t>(),
+                  static_cast<std::uint8_t>(Core::AnimationMotionContextUVE::Slide));
+        ASSERT_EQ(handshakeSnapshot.at("motionQuery").at("trajectoryPreview").at("trajectory").at("samples").size(), 1U);
+        EXPECT_FLOAT_EQ(handshakeSnapshot.at("motionQuery").at("trajectoryPreview").at("trajectory").at("samples").front().at("capsuleRadius").get<float>(), 0.4F);
+        EXPECT_TRUE(handshakeSnapshot.at("motionQuery").at("trajectoryPreview").at("collisionPrediction").is_null());
         ASSERT_TRUE(handshakeSnapshot.at("motionQuery").at("replayBatch").is_object());
         EXPECT_TRUE(handshakeSnapshot.at("motionQuery").at("replayBatch").at("available").get<bool>());
         EXPECT_EQ(handshakeSnapshot.at("motionQuery").at("replayBatch").at("evaluatedBaselineCount").get<std::size_t>(), 0U);

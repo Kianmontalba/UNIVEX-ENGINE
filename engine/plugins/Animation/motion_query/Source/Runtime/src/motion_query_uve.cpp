@@ -116,13 +116,13 @@ constexpr float kTieToleranceUVE = 1.0e-6F;
 }
 
 [[nodiscard]] bool HasSameTrajectorySchemaUVE(
-    const std::vector<MotionTrajectorySampleUVE>& lhs,
-    const std::vector<MotionTrajectorySampleUVE>& rhs) noexcept {
-    if (lhs.size() != rhs.size()) {
+    const TimeSampledTrajectoryUVE& lhs,
+    const TimeSampledTrajectoryUVE& rhs) noexcept {
+    if (lhs.samples.size() != rhs.samples.size()) {
         return false;
     }
-    for (std::size_t index = 0U; index < lhs.size(); ++index) {
-        if (lhs[index].offsetSeconds != rhs[index].offsetSeconds) {
+    for (std::size_t index = 0U; index < lhs.samples.size(); ++index) {
+        if (lhs.samples[index].offsetSeconds != rhs.samples[index].offsetSeconds) {
             return false;
         }
     }
@@ -182,6 +182,17 @@ MotionQueryValidationResultUVE ValidateMotionQueryUVE(const MotionQueryUVE& quer
                                  "motion query evaluation context is invalid");
     }
 
+    const TimeSampledTrajectoryValidationResultUVE trajectoryValidation =
+        ValidateTimeSampledTrajectoryUVE(query.trajectory);
+    if (!trajectoryValidation.IsValidUVE()) {
+        const MotionQueryValidationCodeUVE code =
+            trajectoryValidation.code == TimeSampledTrajectoryValidationCodeUVE::CapacityExceeded
+                ? MotionQueryValidationCodeUVE::CapacityExceeded
+                : trajectoryValidation.code == TimeSampledTrajectoryValidationCodeUVE::UnsortedSamples
+                    ? MotionQueryValidationCodeUVE::UnsortedTrajectory
+                    : MotionQueryValidationCodeUVE::InvalidTrajectoryTime;
+        return MakeQueryErrorUVE(code, trajectoryValidation.index, trajectoryValidation.message.c_str());
+    }
     double previousOffsetSeconds = -std::numeric_limits<double>::infinity();
     for (std::size_t index = 0U; index < query.trajectory.size(); ++index) {
         const MotionTrajectorySampleUVE& sample = query.trajectory[index];
@@ -211,7 +222,7 @@ MotionMatchingDatabaseValidationResultUVE ValidateMotionMatchingDatabaseUVE(
                                     "motion matching database exceeds its bounded capacity");
     }
 
-    const std::vector<MotionTrajectorySampleUVE>& schema = database.candidates.front().feature.trajectory;
+    const TimeSampledTrajectoryUVE& schema = database.candidates.front().feature.trajectory;
     for (std::size_t index = 0U; index < database.candidates.size(); ++index) {
         const MotionMatchingCandidateUVE& candidate = database.candidates[index];
         if (candidate.candidateId.empty() ||
@@ -246,14 +257,14 @@ MotionMatchingDatabaseValidationResultUVE ValidateMotionMatchingDatabaseUVE(
 
 bool TryBuildMotionQueryUVE(const TransformPoseUVE& previousPose,
                            const TransformPoseUVE& currentPose, double deltaSeconds,
-                           const std::vector<MotionTrajectorySampleUVE>& futureTrajectory,
+                           const TimeSampledTrajectoryUVE& futureTrajectory,
                            MotionQueryUVE& outQuery) noexcept {
     TransformPoseUVE normalizedPreviousPose;
     TransformPoseUVE normalizedCurrentPose;
     if (!TryNormalizeTransformPoseUVE(previousPose, normalizedPreviousPose) ||
         !TryNormalizeTransformPoseUVE(currentPose, normalizedCurrentPose) ||
         !std::isfinite(deltaSeconds) || deltaSeconds <= 0.0 ||
-        futureTrajectory.size() > MotionQueryUVE::kMaximumTrajectorySamplesUVE) {
+        !ValidateTimeSampledTrajectoryUVE(futureTrajectory).IsValidUVE()) {
         return false;
     }
 
@@ -303,7 +314,7 @@ MotionMatchingResultUVE FindBestMotionMatchUVE(const MotionQueryUVE& query,
                                       "motion query facing direction cannot be normalized"};
     }
 
-    const std::vector<MotionTrajectorySampleUVE>& schema = database.candidates.front().feature.trajectory;
+    const TimeSampledTrajectoryUVE& schema = database.candidates.front().feature.trajectory;
     bool hasBest = false;
     std::size_t bestIndex = 0U;
     float bestCost = std::numeric_limits<float>::infinity();
