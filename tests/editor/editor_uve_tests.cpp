@@ -144,6 +144,40 @@ TEST(EditorUVETest, InitUVE_CreatesCameraOutsideDocumentRootsAndSupportsHeadless
     engine.Shutdown();
 }
 
+TEST(EditorUVETest, CreateDaylightPreviewSceneUVE_CreatesRealUndoableStarterHierarchy) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_daylight_preview.uvescene");
+        editor.InitUVE();
+        Core::EngineServicesUVE& services = engine.GetServicesUVE();
+
+        const Scene::EntityUVE root = editor.CreateDaylightPreviewSceneUVE();
+
+        ASSERT_NE(root, Scene::kInvalidEntityUVE);
+        ASSERT_EQ(editor.GetDocumentRootsUVE().size(), 1U);
+        const std::vector<Scene::EntityUVE> children =
+            services.GetSceneGraphUVE().GetChildrenUVE(services.GetEntityManagerUVE(), root);
+        ASSERT_EQ(children.size(), 2U);
+        EXPECT_TRUE(services.GetEntityManagerUVE().HasComponentUVE<Scene::NameComponentUVE>(root));
+        EXPECT_TRUE(editor.IsSceneDirtyUVE());
+        EXPECT_TRUE(editor.CanUndoUVE());
+        EXPECT_EQ(editor.CreateDaylightPreviewSceneUVE(), Scene::kInvalidEntityUVE);
+
+        ASSERT_TRUE(editor.UndoUVE());
+        EXPECT_TRUE(editor.GetDocumentRootsUVE().empty());
+        ASSERT_TRUE(editor.RedoUVE());
+        ASSERT_EQ(editor.GetDocumentRootsUVE().size(), 1U);
+        EXPECT_EQ(editor.CreateDaylightPreviewSceneUVE(), Scene::kInvalidEntityUVE);
+
+        editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
+}
+
 TEST(EditorUVETest, RenderOverlayUVE_HeadlessWorkspaceCompositionDoesNotMutateEditorState) {
     Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
     engine.Init();

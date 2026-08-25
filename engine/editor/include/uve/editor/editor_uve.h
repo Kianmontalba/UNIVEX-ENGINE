@@ -327,6 +327,11 @@ public:
     /// entity handle without mutation when the editor is not running or `kind` is unsupported.
     [[nodiscard]] Scene::EntityUVE CreateDocumentEntityUVE(EditorEntityKindUVE kind);
 
+    /// Creates an explicit, undoable starter scene using only existing UVE Empty, Plane, and
+    /// DirectionalLight entities. It is rejected when document content already exists and never
+    /// creates hidden renderer-owned content.
+    [[nodiscard]] Scene::EntityUVE CreateDaylightPreviewSceneUVE();
+
     /// Creates a user-facing node from the centralized SceneNode registry. Runtime ownership remains
     /// in core/physics/render/audio/scripting; this method only creates the authored scene façade.
     [[nodiscard]] Scene::EntityUVE CreateDocumentSceneNodeUVE(Scene::Nodes::SceneNodeKindUVE kind);
@@ -794,6 +799,7 @@ private:
     std::filesystem::path m_contentBrowserDirectory;
     ContentBrowserTypeFocusUVE m_contentBrowserTypeFocus = ContentBrowserTypeFocusUVE::All;
     std::string m_assetFilter;
+    std::string m_inspectorFilter;
     std::string m_hierarchyFilter;
     std::string m_cachedHierarchyFilter;
     std::vector<Scene::EntityUVE> m_cachedHierarchyVisibleEntities;

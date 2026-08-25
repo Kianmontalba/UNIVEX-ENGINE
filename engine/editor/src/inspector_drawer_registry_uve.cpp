@@ -3,9 +3,26 @@
 #include "uve/editor/inspector_drawer_registry_uve.h"
 
 #include <algorithm>
+#include <cctype>
 #include <utility>
 
 namespace UVE::Editor {
+
+namespace {
+
+[[nodiscard]] bool ContainsCaseInsensitiveUVE(const std::string_view text,
+                                               const std::string_view query) noexcept {
+    if (query.empty()) {
+        return true;
+    }
+    const auto equalsCaseInsensitive = [](const char lhs, const char rhs) noexcept {
+        return std::tolower(static_cast<unsigned char>(lhs)) ==
+               std::tolower(static_cast<unsigned char>(rhs));
+    };
+    return std::search(text.begin(), text.end(), query.begin(), query.end(), equalsCaseInsensitive) != text.end();
+}
+
+} // namespace
 
 bool InspectorDrawerRegistryUVE::RegisterDrawerUVE(InspectorDrawerEntryUVE entry) {
     if (entry.id.empty() || !entry.isEligible || !entry.draw || HasDrawerUVE(entry.id)) {
@@ -16,10 +33,15 @@ bool InspectorDrawerRegistryUVE::RegisterDrawerUVE(InspectorDrawerEntryUVE entry
 }
 
 void InspectorDrawerRegistryUVE::DrawEligibleUVE(const Scene::EntityUVE entity) const {
+    DrawEligibleMatchingUVE(entity, {});
+}
+
+void InspectorDrawerRegistryUVE::DrawEligibleMatchingUVE(const Scene::EntityUVE entity,
+                                                           const std::string_view filter) const {
     const std::size_t drawerCount = m_entries.size();
     for (std::size_t index = 0U; index < drawerCount; ++index) {
         const InspectorDrawerEntryUVE& entry = m_entries[index];
-        if (entry.isEligible(entity)) {
+        if (entry.isEligible(entity) && ContainsCaseInsensitiveUVE(entry.id, filter)) {
             entry.draw(entity);
         }
     }
