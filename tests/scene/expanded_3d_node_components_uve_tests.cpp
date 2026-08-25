@@ -35,6 +35,56 @@ TEST(Expanded3DNodeComponentsUVETest, DefaultContractsAreValid) {
     EXPECT_TRUE(IsWorldPartition3DNodeComponentValidUVE(WorldPartition3DNodeComponentUVE{}));
 }
 
+TEST(Expanded3DNodeComponentsUVETest, Skeleton3DDefaultIsEmptyAndBoneAttachmentIsInert) {
+    const Skeleton3DNodeComponentUVE skeleton;
+    const BoneAttachment3DNodeComponentUVE attachment;
+
+    EXPECT_TRUE(skeleton.skeletonAssetPath.empty());
+    EXPECT_TRUE(skeleton.bones.empty());
+    EXPECT_FALSE(IsBoneAttachment3DNodeComponentResolvableUVE(attachment));
+}
+
+TEST(Expanded3DNodeComponentsUVETest, ExplicitSkeletonAssetBindingIsFailureAtomic) {
+    Skeleton3DNodeComponentUVE skeleton;
+    skeleton.enabled = false;
+    const Skeleton3DNodeComponentUVE original = skeleton;
+
+    EXPECT_FALSE(TryBindExplicitSkeleton3DAssetUVE(
+        skeleton, {}, {SkeletonBoneUVE{"root", -1, {}, {}, {1.0F, 1.0F, 1.0F}}}));
+    EXPECT_EQ(skeleton.skeletonAssetPath, original.skeletonAssetPath);
+    EXPECT_TRUE(skeleton.bones.empty());
+    EXPECT_EQ(skeleton.enabled, original.enabled);
+
+    EXPECT_FALSE(TryBindExplicitSkeleton3DAssetUVE(skeleton, "assets/character.uveskel", {}));
+    EXPECT_EQ(skeleton.skeletonAssetPath, original.skeletonAssetPath);
+    EXPECT_TRUE(skeleton.bones.empty());
+}
+
+TEST(Expanded3DNodeComponentsUVETest, ExplicitSkeletonAssetBindingHydratesOnlySuppliedHierarchy) {
+    Skeleton3DNodeComponentUVE skeleton;
+    const std::vector<SkeletonBoneUVE> authoredBones{
+        SkeletonBoneUVE{"root", -1, {}, {}, {1.0F, 1.0F, 1.0F}},
+        SkeletonBoneUVE{"hand", 0, {1.0F, 0.0F, 0.0F}, {}, {1.0F, 1.0F, 1.0F}}};
+
+    EXPECT_TRUE(TryBindExplicitSkeleton3DAssetUVE(
+        skeleton, "assets/character.uveskel", authoredBones));
+    EXPECT_EQ(skeleton.skeletonAssetPath, "assets/character.uveskel");
+    ASSERT_EQ(skeleton.bones.size(), authoredBones.size());
+    EXPECT_EQ(skeleton.bones[0].name, authoredBones[0].name);
+    EXPECT_EQ(skeleton.bones[1].name, authoredBones[1].name);
+    EXPECT_EQ(skeleton.bones[1].parentIndex, authoredBones[1].parentIndex);
+}
+
+TEST(Expanded3DNodeComponentsUVETest, BoneAttachmentBecomesResolvableOnlyWithExplicitReferences) {
+    BoneAttachment3DNodeComponentUVE attachment;
+    attachment.skeletonLocalId = 7U;
+    attachment.boneName = "hand";
+
+    EXPECT_TRUE(IsBoneAttachment3DNodeComponentResolvableUVE(attachment));
+    attachment.enabled = false;
+    EXPECT_FALSE(IsBoneAttachment3DNodeComponentResolvableUVE(attachment));
+}
+
 TEST(Expanded3DNodeComponentsUVETest, BoundedContractsRejectUnsafeValues) {
     RayCast3DNodeComponentUVE ray;
     ray.exclusionCount = static_cast<std::uint8_t>(kMaximumRayCastExclusionsUVE + 1U);

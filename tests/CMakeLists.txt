@@ -156,6 +156,7 @@ add_executable(uve_tests
     core/animation_tree_uve_tests.cpp
     core/animation_state_machine_uve_tests.cpp
     core/animation_retargeting_uve_tests.cpp
+    core/retarget_map_uve_tests.cpp
     core/frame_scheduler_uve_tests.cpp
     core/profiler_diagnostics_uve_tests.cpp
     editor/editor_tool_session_uve_tests.cpp
