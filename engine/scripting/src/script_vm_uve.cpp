@@ -3455,7 +3455,7 @@ std::optional<ScriptVmDelayStateUVE> ScriptVmExecutionContextUVE::FindDelayState
 
 bool ScriptVmExecutionContextUVE::SetInputUVE(const std::uint32_t nodeId, std::string pinName,
                                               ScriptVmValueUVE value) {
-    if (nodeId == 0U || !IsValidScriptVmIdentifierUVE(pinName)) {
+    if (nodeId == 0U || !IsValidScriptVmIdentifierUVE(pinName) || !IsFiniteScriptVmValueUVE(value)) {
         return false;
     }
     if (ScriptVmValueBindingUVE* existing = FindMutableBindingUVE(inputs, nodeId, pinName);
@@ -3472,7 +3472,7 @@ bool ScriptVmExecutionContextUVE::SetInputUVE(const std::uint32_t nodeId, std::s
 
 bool ScriptVmExecutionContextUVE::SetOutputUVE(const std::uint32_t nodeId, std::string pinName,
                                                ScriptVmValueUVE value) {
-    if (nodeId == 0U || !IsValidScriptVmIdentifierUVE(pinName)) {
+    if (nodeId == 0U || !IsValidScriptVmIdentifierUVE(pinName) || !IsFiniteScriptVmValueUVE(value)) {
         return false;
     }
     if (ScriptVmValueBindingUVE* existing = FindMutableBindingUVE(outputs, nodeId, pinName);
