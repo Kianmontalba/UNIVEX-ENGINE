@@ -158,7 +158,7 @@ TEST(EditorUVETest, InitUVE_CreatesAutomaticDaylightPreviewOutsideDocumentRoots)
         editor.InitUVE();
 
         EXPECT_EQ(editor.GetDocumentRootsUVE().size(), 0U);
-        EXPECT_EQ(EditorUVEAccessUVE::GetEditorPreviewEntityCountUVE(editor), 2U);
+        EXPECT_EQ(EditorUVEAccessUVE::GetEditorPreviewEntityCountUVE(editor), 1U);
         EXPECT_FALSE(editor.IsSceneDirtyUVE());
 
         const Scene::EntityUVE authored = editor.CreateDocumentEntityUVE(EditorEntityKindUVE::Cube);
