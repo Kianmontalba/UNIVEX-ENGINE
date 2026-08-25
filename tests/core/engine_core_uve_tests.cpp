@@ -1152,6 +1152,15 @@ TEST(EngineCoreUVETest, SaveGameSystemAndCheckpointManager_ReachableAndFunctiona
     EXPECT_FALSE(saveGameSystem.HasSaveUVE(Save::kAutoSaveSlotIndexUVE));
     EXPECT_TRUE(saveGameSystem.HasSaveUVE(0));
 
+    const std::optional<Save::GameStateMetadataUVE> checkpointMetadata =
+        saveGameSystem.GetSaveMetadataUVE(Save::kManualCheckpointSlotIndexUVE);
+    ASSERT_TRUE(checkpointMetadata.has_value());
+    const VersionUVE engineVersion = engine.GetEngineVersionUVE();
+    EXPECT_EQ(checkpointMetadata->engineVersionMajor, engineVersion.major);
+    EXPECT_EQ(checkpointMetadata->engineVersionMinor, engineVersion.minor);
+    EXPECT_EQ(checkpointMetadata->engineVersionPatch, engineVersion.patch);
+    EXPECT_EQ(checkpointMetadata->engineVersionBuild, engineVersion.build);
+
     engine.Shutdown();
     std::filesystem::remove_all(config.saveDirectoryPath);
 }

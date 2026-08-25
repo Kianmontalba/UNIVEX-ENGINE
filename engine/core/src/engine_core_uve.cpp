@@ -381,9 +381,16 @@ void EngineCoreUVE::Init() {
     m_saveGameSystem = std::make_unique<Save::SaveGameSystemUVE>(*m_sceneSerializer, m_config.saveDirectoryPath);
 
     // CheckpointManager thirty-third: needs SaveGameSystem (composed by reference) and
-    // EngineConfigUVE::autoSaveIntervalSecondsUVE.
-    m_checkpointManager =
-        std::make_unique<Save::CheckpointManagerUVE>(*m_saveGameSystem, m_config.autoSaveIntervalSecondsUVE);
+    // EngineConfigUVE::autoSaveIntervalSecondsUVE. Preserve the canonical engine version in
+    // checkpoint metadata; the checkpoint manager overlays playtime for each save.
+    const VersionUVE engineVersion = GetEngineVersionUVE();
+    Save::GameStateMetadataUVE checkpointMetadata;
+    checkpointMetadata.engineVersionMajor = engineVersion.major;
+    checkpointMetadata.engineVersionMinor = engineVersion.minor;
+    checkpointMetadata.engineVersionPatch = engineVersion.patch;
+    checkpointMetadata.engineVersionBuild = engineVersion.build;
+    m_checkpointManager = std::make_unique<Save::CheckpointManagerUVE>(
+        *m_saveGameSystem, m_config.autoSaveIntervalSecondsUVE, checkpointMetadata);
 
     // ConfigManager last: it immediately calls LoadUVE(), which logs its
     // outcome (missing/malformed/success) through the Logger constructed

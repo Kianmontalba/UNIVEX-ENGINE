@@ -16,8 +16,11 @@ class CheckpointManagerUVE final : public ICheckpointManagerUVE {
 public:
     /// `saveGameSystem` must outlive this CheckpointManagerUVE. `autoSaveIntervalSeconds` must be
     /// finite and positive; invalid construction input falls back to 300.0 (the spec's "e.g.,
-    /// every 5 minutes" example).
-    explicit CheckpointManagerUVE(ISaveGameSystemUVE& saveGameSystem, double autoSaveIntervalSeconds = 300.0);
+    /// every 5 minutes" example). `metadataTemplate` is copied and supplies caller-owned policy
+    /// fields (such as the canonical engine version) to both automatic and manual checkpoints;
+    /// SaveGameSystemUVE still overwrites timestamp, slot, and payload schema.
+    explicit CheckpointManagerUVE(ISaveGameSystemUVE& saveGameSystem, double autoSaveIntervalSeconds = 300.0,
+                                  GameStateMetadataUVE metadataTemplate = {});
 
     void UpdateUVE(double deltaTimeSeconds, Scene::IEntityManagerUVE& entityManager,
                     const std::vector<Scene::EntityUVE>& rootEntities) override;
@@ -37,6 +40,7 @@ private:
                                           const std::vector<Scene::EntityUVE>& rootEntities);
 
     ISaveGameSystemUVE* m_saveGameSystem;
+    GameStateMetadataUVE m_metadataTemplate;
     double m_autoSaveIntervalSeconds;
     double m_elapsedSinceLastSaveSeconds = 0.0;
     double m_totalPlaytimeSeconds = 0.0;

@@ -4,6 +4,7 @@
 #include "uve/save/checkpoint_manager_uve.h"
 
 #include <cmath>
+#include <utility>
 
 namespace UVE::Save {
 namespace {
@@ -17,8 +18,10 @@ constexpr double kDefaultAutoSaveIntervalSecondsUVE = 300.0;
 } // namespace
 
 CheckpointManagerUVE::CheckpointManagerUVE(ISaveGameSystemUVE& saveGameSystem,
-                                             double autoSaveIntervalSeconds)
+                                             double autoSaveIntervalSeconds,
+                                             GameStateMetadataUVE metadataTemplate)
     : m_saveGameSystem(&saveGameSystem),
+      m_metadataTemplate(std::move(metadataTemplate)),
       m_autoSaveIntervalSeconds(IsValidAutoSaveIntervalUVE(autoSaveIntervalSeconds)
                                     ? autoSaveIntervalSeconds
                                     : kDefaultAutoSaveIntervalSecondsUVE) {}
@@ -61,7 +64,7 @@ double CheckpointManagerUVE::GetTotalPlaytimeSecondsUVE() const noexcept {
 
 bool CheckpointManagerUVE::SaveCheckpointUVE(const int slotIndex, Scene::IEntityManagerUVE& entityManager,
                                               const std::vector<Scene::EntityUVE>& rootEntities) {
-    GameStateMetadataUVE metadata;
+    GameStateMetadataUVE metadata = m_metadataTemplate;
     metadata.playtimeSeconds = m_totalPlaytimeSeconds;
 
     const bool saved = m_saveGameSystem->SaveUVE(slotIndex, entityManager, rootEntities, metadata);
