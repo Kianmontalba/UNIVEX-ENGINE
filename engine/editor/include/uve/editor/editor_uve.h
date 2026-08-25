@@ -32,6 +32,7 @@
 #include "uve/scene/components/rigid_body_component_uve.h"
 #include "uve/scene/components/script_component_uve.h"
 #include "uve/scene/components/transform_component_uve.h"
+#include "uve/scene/nodes/scene_node_registry_uve.h"
 #include "uve/scene/entity_uve.h"
 #include "uve/scene/i_scene_serializer_uve.h"
 
@@ -326,6 +327,10 @@ public:
     /// entity handle without mutation when the editor is not running or `kind` is unsupported.
     [[nodiscard]] Scene::EntityUVE CreateDocumentEntityUVE(EditorEntityKindUVE kind);
 
+    /// Creates a user-facing node from the centralized SceneNode registry. Runtime ownership remains
+    /// in core/physics/render/audio/scripting; this method only creates the authored scene façade.
+    [[nodiscard]] Scene::EntityUVE CreateDocumentSceneNodeUVE(Scene::Nodes::SceneNodeKindUVE kind);
+
     /// Duplicates the selected live document entity and all descendants under the selected root's
     /// current parent, assigns the duplicate root a deterministic available name when it has name
     /// metadata, selects the fresh root, marks the scene dirty, and records one Undo/Redo entry.
@@ -555,6 +560,18 @@ private:
         bool dirtyAfter = false;
     };
 
+    /// A centralized scene node is restored from one complete authored snapshot so compound node
+    /// creation (for example CharacterBody3D plus Collider and kinematic RigidBody) is one history unit.
+    struct SceneNodeCreationHistoryEntryUVE final {
+        Scene::SceneSnapshotUVE snapshot;
+        Scene::Nodes::SceneNodeKindUVE kind = Scene::Nodes::SceneNodeKindUVE::Empty;
+        Scene::EntityUVE activeEntity = Scene::kInvalidEntityUVE;
+        EditorSelectionSnapshotUVE selectionBefore;
+        EditorSelectionSnapshotUVE selectionAfter;
+        bool dirtyBefore = false;
+        bool dirtyAfter = false;
+    };
+
     /// A duplicated subtree is restored from a scene-envelope snapshot instead of relying on stale
     /// ECS handles. `activeEntity` is invalid after Undo and becomes a fresh root after Redo.
     struct DuplicationHistoryEntryUVE final {
@@ -595,7 +612,8 @@ private:
 
     using HistoryEntryUVE =
         std::variant<TransformHistoryEntryUVE, NameHistoryEntryUVE, PrimitiveAppearanceHistoryEntryUVE,
-                     SceneComponentHistoryEntryUVE, CreationHistoryEntryUVE, DuplicationHistoryEntryUVE,
+                     SceneComponentHistoryEntryUVE, CreationHistoryEntryUVE, SceneNodeCreationHistoryEntryUVE,
+                     DuplicationHistoryEntryUVE,
                      DeletionHistoryEntryUVE,
                      ReparentHistoryEntryUVE>;
 
