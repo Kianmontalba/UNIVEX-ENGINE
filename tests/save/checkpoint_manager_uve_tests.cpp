@@ -171,5 +171,25 @@ TEST_F(CheckpointManagerUVETest, GetTotalPlaytimeSecondsUVE_FeedsIntoSavedMetada
     EXPECT_DOUBLE_EQ(metadata->playtimeSeconds, checkpointManager.GetTotalPlaytimeSecondsUVE());
 }
 
+TEST_F(CheckpointManagerUVETest, CheckpointUVE_PreservesMetadataTemplateFields) {
+    GameStateMetadataUVE metadataTemplate;
+    metadataTemplate.engineVersionMajor = 4;
+    metadataTemplate.engineVersionMinor = 2;
+    metadataTemplate.engineVersionPatch = 7;
+    metadataTemplate.engineVersionBuild = 19;
+    metadataTemplate.saveName = "checkpoint-template";
+    CheckpointManagerUVE templatedManager{saveGameSystem, 2.0, metadataTemplate};
+
+    ASSERT_TRUE(templatedManager.CheckpointUVE(entityManager, MakeRootEntitiesUVE()));
+    const std::optional<GameStateMetadataUVE> metadata =
+        saveGameSystem.GetSaveMetadataUVE(kManualCheckpointSlotIndexUVE);
+    ASSERT_TRUE(metadata.has_value());
+    EXPECT_EQ(metadata->engineVersionMajor, metadataTemplate.engineVersionMajor);
+    EXPECT_EQ(metadata->engineVersionMinor, metadataTemplate.engineVersionMinor);
+    EXPECT_EQ(metadata->engineVersionPatch, metadataTemplate.engineVersionPatch);
+    EXPECT_EQ(metadata->engineVersionBuild, metadataTemplate.engineVersionBuild);
+    EXPECT_EQ(metadata->saveName, metadataTemplate.saveName);
+}
+
 } // namespace
 } // namespace UVE::Save::Tests
