@@ -155,6 +155,10 @@ TEST(EditorBridgeStdioUVETest, ServeUVE_HandshakesAndRoutesExistingBridgeDispatc
         EXPECT_TRUE(handshakeSnapshot.at("selectedEntitiesTruncated").is_boolean());
         EXPECT_TRUE(handshakeSnapshot.at("hierarchy").at("entries").is_array());
         EXPECT_TRUE(handshakeSnapshot.at("inspector").at("eligibleDrawerIds").is_array());
+        ASSERT_TRUE(handshakeSnapshot.at("inspector").at("attachedComponentIds").is_array());
+        ASSERT_EQ(handshakeSnapshot.at("inspector").at("attachedComponentIds").size(), 2U);
+        EXPECT_EQ(handshakeSnapshot.at("inspector").at("attachedComponentIds").at(0).get<std::string>(), "mesh");
+        EXPECT_EQ(handshakeSnapshot.at("inspector").at("attachedComponentIds").at(1).get<std::string>(), "collider");
         ASSERT_TRUE(handshakeSnapshot.at("inspector").at("assetBinding").is_object());
         EXPECT_EQ(handshakeSnapshot.at("inspector").at("assetBinding").at("meshGuid").get<std::uint64_t>(), 0x3333U);
         EXPECT_EQ(handshakeSnapshot.at("inspector").at("assetBinding").at("materialGuid").get<std::uint64_t>(), 0x4444U);

@@ -55,6 +55,7 @@
 #include "uve/save/i_checkpoint_manager_uve.h"
 #include "uve/save/i_save_game_system_uve.h"
 #include "uve/scene/i_entity_manager_uve.h"
+#include "uve/scene/particle_runtime_uve.h"
 #include "uve/scene/i_prefab_system_uve.h"
 #include "uve/scene/i_scene_graph_uve.h"
 #include "uve/scene/i_scene_serializer_uve.h"
@@ -252,6 +253,7 @@ public:
 
     [[nodiscard]] EngineStateUVE GetStateUVE() const noexcept;
     [[nodiscard]] const FrameStatsUVE& GetFrameStatsUVE() const noexcept;
+    [[nodiscard]] Scene::ParticleRuntimeSnapshotUVE GetParticleRuntimeSnapshotUVE() const;
 
     /// Requests normal fixed simulation or a held simulation state. Frame maintenance and rendering
     /// continue in both modes. Returns false outside EngineStateUVE::Running.
@@ -338,6 +340,9 @@ private:
     /// calls, draining any completed background shader preprocessing, compiling/linking on this
     /// (the main) thread, and polling hot-reload-tracked programs for on-disk changes.
     void Update();
+    /// Reconciles authored ParticleEmitterComponentUVE values with the existing bounded particle
+    /// runtime, simulates one frame under configured gravity, and leaves renderer extraction read-only.
+    void SyncParticleRuntimeUVE();
 
     /// Queries the bounded area-overlap snapshot, advances the copied lifecycle baseline, and queues
     /// typed Entered/Exited DTOs in the tracker-provided deterministic order. Truncated snapshots
@@ -406,6 +411,7 @@ private:
     std::unique_ptr<Physics::ICollisionSystemUVE> m_collisionSystem;
     std::unique_ptr<Physics::IPhysicsSystemUVE> m_physicsSystem;
     std::unique_ptr<Physics::IRaycastSystemUVE> m_raycastSystem;
+    std::unique_ptr<Scene::ParticleRuntimeUVE> m_particleRuntime;
     Physics::AreaOverlapLifecycleTrackerUVE m_areaOverlapLifecycleTracker;
     std::unique_ptr<Input::IInputSystemUVE> m_inputSystem;
     std::unique_ptr<Audio::IAudioDeviceUVE> m_audioDevice;

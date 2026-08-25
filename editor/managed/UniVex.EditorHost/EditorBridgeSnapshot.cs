@@ -57,6 +57,7 @@ public sealed record BridgeInspectorSnapshot(
     bool CanEditSelectedName)
 {
     public BridgeAssetBindingSnapshot? AssetBinding { get; init; }
+    public IReadOnlyList<string> AttachedComponentIds { get; init; } = Array.Empty<string>();
 }
 
 public sealed record BridgeContentBrowserEntry(
@@ -1918,6 +1919,17 @@ public static class BridgeSnapshotParser
                 OptionalNullableUInt64(assetBindingValue, "materialGuid"));
         }
 
+        List<string> attachedComponentIds = new();
+        if (value.TryGetProperty("attachedComponentIds", out JsonElement attachedComponents) &&
+            attachedComponents.ValueKind != JsonValueKind.Null)
+        {
+            EnsureBoundedArray(attachedComponents, "inspector.attachedComponentIds");
+            foreach (JsonElement identifier in attachedComponents.EnumerateArray())
+            {
+                attachedComponentIds.Add(BoundedStringValue(identifier, "inspector attached component identifier"));
+            }
+        }
+
         BridgeInspectorSnapshot snapshot = new(
             (BridgeInspectorMode)rawMode,
             RequiredBoolean(value, "selectedEntitiesTruncated"),
@@ -1927,7 +1939,7 @@ public static class BridgeSnapshotParser
             parsedAncestry,
             parsedDrawerIds,
             RequiredBoolean(value, "canEditSelectedName"));
-        return snapshot with { AssetBinding = assetBinding };
+        return snapshot with { AssetBinding = assetBinding, AttachedComponentIds = attachedComponentIds };
     }
 
     private static BridgeViewportSurfaceSnapshot ParseViewportSurface(JsonElement value)

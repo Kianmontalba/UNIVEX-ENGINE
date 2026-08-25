@@ -162,6 +162,7 @@ add_executable(uve_tests
     editor/developer_console_bridge_uve_tests.cpp
     editor/data_table_registry_bridge_uve_tests.cpp
     editor/editor_uve_tests.cpp
+    editor/scene_component_authoring_uve_tests.cpp
     editor/inspector_drawer_registry_uve_tests.cpp
     scripting/script_graph_uve_tests.cpp
     scripting/script_asset_loader_uve_tests.cpp

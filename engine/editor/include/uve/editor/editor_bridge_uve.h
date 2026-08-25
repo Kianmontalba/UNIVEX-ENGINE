@@ -246,6 +246,7 @@ struct EditorBridgeInspectorSnapshotUVE final {
     std::optional<EditorBridgeEntitySnapshotUVE> parent;
     std::vector<EditorBridgeEntitySnapshotUVE> ancestry;
     std::vector<std::string> eligibleDrawerIds;
+    std::vector<std::string> attachedComponentIds;
     std::optional<EditorBridgeAssetBindingSnapshotUVE> assetBinding;
     bool canEditSelectedName = false;
 
