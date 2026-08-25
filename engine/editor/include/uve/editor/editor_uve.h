@@ -71,12 +71,16 @@ struct EditorViewportRectUVE final {
 
 /// Canonical named axes used by EditorUVE's Translate, Rotate, and Scale gizmos. The active
 /// coordinate space chooses whether their world or selected-entity-local basis is used.
-enum class EditorTranslateAxisUVE {
+enum class EditorTransformAxisUVE {
     None,
     X,
     Y,
     Z,
 };
+
+/// Source-compatible name retained for downstream editor callers; new code should use the
+/// transform-wide name because the same axis contract is shared by Translate, Rotate, and Scale.
+using EditorTranslateAxisUVE = EditorTransformAxisUVE;
 
 /// Selects the active transform-gizmo handle family. Handles use the session-local World or Local
 /// coordinate space; negative and proportional/multiplicative scale remain future work.
@@ -277,18 +281,18 @@ public:
     /// axis. Parent world rotation and scale are converted back to a local position delta before
     /// applying the existing scene-graph transform path. Returns false without mutation if the
     /// entity, parent transform, axis, or distance is invalid.
-    [[nodiscard]] bool TranslateSelectedAlongAxisUVE(EditorTranslateAxisUVE axis, float worldDistance);
+    [[nodiscard]] bool TranslateSelectedAlongAxisUVE(EditorTransformAxisUVE axis, float worldDistance);
 
     /// Rotates the selected document entity around one finite world axis by radians. A parented
     /// entity receives the equivalent local quaternion delta through the current parent world
     /// rotation. Returns false without mutation for invalid state, axis, angle, transform, parent,
     /// or active editor gesture.
-    [[nodiscard]] bool RotateSelectedAroundWorldAxisUVE(EditorTranslateAxisUVE axis, float radians);
+    [[nodiscard]] bool RotateSelectedAroundWorldAxisUVE(EditorTransformAxisUVE axis, float radians);
 
     /// Changes one positive authored local-scale component of the selected document entity by a
     /// finite additive delta. Returns false without mutation for invalid state, axis, delta, active
     /// gesture, or a proposed zero/negative/non-finite scale result.
-    [[nodiscard]] bool ScaleSelectedAlongAxisUVE(EditorTranslateAxisUVE axis, float localScaleDelta);
+    [[nodiscard]] bool ScaleSelectedAlongAxisUVE(EditorTransformAxisUVE axis, float localScaleDelta);
 
     /// Adds one finite local-scale offset to every authored local-scale component of the selected
     /// entity. The command rejects as a whole if any proposed component is non-finite or below the
@@ -499,7 +503,7 @@ private:
     struct GizmoDragUVE final {
         EditorGizmoModeUVE mode = EditorGizmoModeUVE::Translate;
         GizmoHandleKindUVE handleKind = GizmoHandleKindUVE::Axis;
-        EditorTranslateAxisUVE axis = EditorTranslateAxisUVE::None;
+        EditorTransformAxisUVE axis = EditorTransformAxisUVE::None;
         EditorTranslatePlaneUVE plane = EditorTranslatePlaneUVE::None;
         Scene::EntityUVE entity = Scene::kInvalidEntityUVE;
         Math::Vector2UVE initialPointer{};
@@ -641,8 +645,8 @@ private:
     [[nodiscard]] bool AreTransformSnappingSettingsValidUVE(
         const EditorTransformSnappingSettingsUVE& settings) const noexcept;
     [[nodiscard]] float SnapScalarUVE(float value, float increment) const noexcept;
-    [[nodiscard]] Math::Vector3UVE GetAxisVectorUVE(EditorTranslateAxisUVE axis) const noexcept;
-    [[nodiscard]] bool GetGizmoAxisWorldVectorUVE(Scene::EntityUVE entity, EditorTranslateAxisUVE axis,
+    [[nodiscard]] Math::Vector3UVE GetAxisVectorUVE(EditorTransformAxisUVE axis) const noexcept;
+    [[nodiscard]] bool GetGizmoAxisWorldVectorUVE(Scene::EntityUVE entity, EditorTransformAxisUVE axis,
                                                     Math::Vector3UVE& outAxis) const;
     [[nodiscard]] bool GetPlaneAxesUVE(EditorTranslatePlaneUVE plane, Math::Vector3UVE& outAxisA,
                                         Math::Vector3UVE& outAxisB) const noexcept;
@@ -667,7 +671,7 @@ private:
                                                Math::Vector2UVE pointerPosition,
                                                Math::Vector3UVE& outVector) const noexcept;
     [[nodiscard]] bool FindClosestRingParameterUVE(const EditorViewportRectUVE& viewportRect,
-                                                    Scene::EntityUVE entity, EditorTranslateAxisUVE axis,
+                                                    Scene::EntityUVE entity, EditorTransformAxisUVE axis,
                                                     Math::Vector2UVE pointerPosition,
                                                     float& outParameterRadians,
                                                     float& outDistanceSquared) const;

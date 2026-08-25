@@ -199,16 +199,16 @@ constexpr const char* kHierarchyEntityPayloadUVE = "UVE_SCENE_HIERARCHY_ENTITY";
                             -std::cos(yawRadians) * cosinePitch};
 }
 
-[[nodiscard]] ImU32 GizmoAxisColorUVE(const EditorTranslateAxisUVE axis, const bool active) noexcept {
+[[nodiscard]] ImU32 GizmoAxisColorUVE(const EditorTransformAxisUVE axis, const bool active) noexcept {
     const std::uint8_t alpha = active ? 255U : 210U;
     switch (axis) {
-        case EditorTranslateAxisUVE::X:
+        case EditorTransformAxisUVE::X:
             return IM_COL32(224, 83, 83, alpha);
-        case EditorTranslateAxisUVE::Y:
+        case EditorTransformAxisUVE::Y:
             return IM_COL32(97, 196, 111, alpha);
-        case EditorTranslateAxisUVE::Z:
+        case EditorTransformAxisUVE::Z:
             return IM_COL32(87, 139, 231, alpha);
-        case EditorTranslateAxisUVE::None:
+        case EditorTransformAxisUVE::None:
             return IM_COL32(190, 190, 190, alpha);
     }
     return IM_COL32(190, 190, 190, alpha);
@@ -252,22 +252,22 @@ void ApplyEditorVisualThemeUVE() noexcept {
     colors[ImGuiCol_TabActive] = ImVec4{0.08F, 0.18F, 0.30F, 1.0F};
 }
 
-[[nodiscard]] bool GetRingBasisUVE(const EditorTranslateAxisUVE axis, Math::Vector3UVE& outFirst,
+[[nodiscard]] bool GetRingBasisUVE(const EditorTransformAxisUVE axis, Math::Vector3UVE& outFirst,
                                    Math::Vector3UVE& outSecond) noexcept {
     switch (axis) {
-        case EditorTranslateAxisUVE::X:
+        case EditorTransformAxisUVE::X:
             outFirst = Math::Vector3UVE{0.0F, 1.0F, 0.0F};
             outSecond = Math::Vector3UVE{0.0F, 0.0F, 1.0F};
             return true;
-        case EditorTranslateAxisUVE::Y:
+        case EditorTransformAxisUVE::Y:
             outFirst = Math::Vector3UVE{1.0F, 0.0F, 0.0F};
             outSecond = Math::Vector3UVE{0.0F, 0.0F, 1.0F};
             return true;
-        case EditorTranslateAxisUVE::Z:
+        case EditorTransformAxisUVE::Z:
             outFirst = Math::Vector3UVE{1.0F, 0.0F, 0.0F};
             outSecond = Math::Vector3UVE{0.0F, 1.0F, 0.0F};
             return true;
-        case EditorTranslateAxisUVE::None:
+        case EditorTransformAxisUVE::None:
             return false;
     }
     return false;
@@ -348,7 +348,7 @@ void EditorUVE::TickUVE() {
     if (m_playModeState == EditorPlayModeStateUVE::Edit) {
         RefreshEditorPreviewSceneUVE();
     }
-    if (m_gizmoDrag.axis != EditorTranslateAxisUVE::None &&
+    if (m_gizmoDrag.axis != EditorTransformAxisUVE::None &&
         (!HasSingleDocumentSelectionUVE() || !IsDocumentEntityUVE(m_gizmoDrag.entity) ||
          m_gizmoDrag.entity != m_selectedEntity)) {
         CancelGizmoDragUVE();
@@ -356,7 +356,7 @@ void EditorUVE::TickUVE() {
     if (m_hierarchyRenameEntity != Scene::kInvalidEntityUVE &&
         (!IsAuthoringCommandAllowedUVE() || !HasSingleDocumentSelectionUVE() ||
          !IsDocumentEntityUVE(m_hierarchyRenameEntity) || m_hierarchyRenameEntity != m_selectedEntity ||
-         m_gizmoDrag.axis != EditorTranslateAxisUVE::None ||
+         m_gizmoDrag.axis != EditorTransformAxisUVE::None ||
          m_viewportNavigationMode != EditorViewportNavigationModeUVE::None)) {
         CancelHierarchyRenameUVE();
     }
@@ -365,7 +365,7 @@ void EditorUVE::TickUVE() {
 bool EditorUVE::EnterPlayModeUVE() {
     if (m_state != EditorStateUVE::Running || m_playModeState != EditorPlayModeStateUVE::Edit ||
         m_simulationControl == nullptr || !IsAuthoringCommandAllowedUVE() ||
-        m_gizmoDrag.axis != EditorTranslateAxisUVE::None ||
+        m_gizmoDrag.axis != EditorTransformAxisUVE::None ||
         m_viewportNavigationMode != EditorViewportNavigationModeUVE::None) {
         return false;
     }
@@ -684,7 +684,7 @@ bool EditorUVE::SetSelectedLocalTransformUVE(const Scene::TransformComponentUVE&
 
 bool EditorUVE::SetSelectedPrimitiveMeshUVE(const Scene::PrimitiveMeshComponentUVE& primitive) {
     if (!IsAuthoringCommandAllowedUVE() || !HasSingleDocumentSelectionUVE() ||
-        m_gizmoDrag.axis != EditorTranslateAxisUVE::None ||
+        m_gizmoDrag.axis != EditorTransformAxisUVE::None ||
         m_viewportNavigationMode != EditorViewportNavigationModeUVE::None ||
         !Scene::IsPrimitiveMeshComponentValidUVE(primitive)) {
         return false;
@@ -847,7 +847,7 @@ bool EditorUVE::ApplySceneComponentStateUVE(
 bool EditorUVE::SetSelectedSceneComponentUVE(const EditorSceneComponentKindUVE kind,
                                               const EditorSceneComponentValueUVE& value) {
     if (!IsAuthoringCommandAllowedUVE() || !HasSingleDocumentSelectionUVE() ||
-        m_gizmoDrag.axis != EditorTranslateAxisUVE::None ||
+        m_gizmoDrag.axis != EditorTransformAxisUVE::None ||
         m_viewportNavigationMode != EditorViewportNavigationModeUVE::None ||
         !IsSceneComponentValueValidUVE(kind, value)) {
         return false;
@@ -919,7 +919,7 @@ bool EditorUVE::SetSelectedSceneComponentUVE(const EditorSceneComponentKindUVE k
 
 bool EditorUVE::RemoveSelectedSceneComponentUVE(const EditorSceneComponentKindUVE kind) {
     if (!IsAuthoringCommandAllowedUVE() || !HasSingleDocumentSelectionUVE() ||
-        m_gizmoDrag.axis != EditorTranslateAxisUVE::None ||
+        m_gizmoDrag.axis != EditorTransformAxisUVE::None ||
         m_viewportNavigationMode != EditorViewportNavigationModeUVE::None) {
         return false;
     }
@@ -1088,9 +1088,9 @@ bool EditorUVE::PickViewportUVE(const EditorViewportRectUVE& viewportRect,
     return false;
 }
 
-bool EditorUVE::TranslateSelectedAlongAxisUVE(const EditorTranslateAxisUVE axis, const float worldDistance) {
+bool EditorUVE::TranslateSelectedAlongAxisUVE(const EditorTransformAxisUVE axis, const float worldDistance) {
     if (!IsAuthoringCommandAllowedUVE() || !HasSingleDocumentSelectionUVE() ||
-        !IsFiniteUVE(worldDistance) || axis == EditorTranslateAxisUVE::None) {
+        !IsFiniteUVE(worldDistance) || axis == EditorTransformAxisUVE::None) {
         return false;
     }
 
@@ -1114,10 +1114,10 @@ bool EditorUVE::TranslateSelectedAlongAxisUVE(const EditorTranslateAxisUVE axis,
     return SetSelectedLocalTransformUVE(updated);
 }
 
-bool EditorUVE::RotateSelectedAroundWorldAxisUVE(const EditorTranslateAxisUVE axis, const float radians) {
+bool EditorUVE::RotateSelectedAroundWorldAxisUVE(const EditorTransformAxisUVE axis, const float radians) {
     if (!IsAuthoringCommandAllowedUVE() || !HasSingleDocumentSelectionUVE() ||
-        !IsFiniteUVE(radians) || axis == EditorTranslateAxisUVE::None ||
-        m_gizmoDrag.axis != EditorTranslateAxisUVE::None ||
+        !IsFiniteUVE(radians) || axis == EditorTransformAxisUVE::None ||
+        m_gizmoDrag.axis != EditorTransformAxisUVE::None ||
         m_viewportNavigationMode != EditorViewportNavigationModeUVE::None) {
         return false;
     }
@@ -1143,11 +1143,11 @@ bool EditorUVE::RotateSelectedAroundWorldAxisUVE(const EditorTranslateAxisUVE ax
     return SetSelectedLocalTransformUVE(updated);
 }
 
-bool EditorUVE::ScaleSelectedAlongAxisUVE(const EditorTranslateAxisUVE axis,
+bool EditorUVE::ScaleSelectedAlongAxisUVE(const EditorTransformAxisUVE axis,
                                            const float localScaleDelta) {
     if (!IsAuthoringCommandAllowedUVE() || !HasSingleDocumentSelectionUVE() ||
-        !IsFiniteUVE(localScaleDelta) || axis == EditorTranslateAxisUVE::None ||
-        m_gizmoDrag.axis != EditorTranslateAxisUVE::None ||
+        !IsFiniteUVE(localScaleDelta) || axis == EditorTransformAxisUVE::None ||
+        m_gizmoDrag.axis != EditorTransformAxisUVE::None ||
         m_viewportNavigationMode != EditorViewportNavigationModeUVE::None) {
         return false;
     }
@@ -1161,16 +1161,16 @@ bool EditorUVE::ScaleSelectedAlongAxisUVE(const EditorTranslateAxisUVE axis,
         entityManager.GetComponentUVE<Scene::TransformComponentUVE>(m_selectedEntity);
     float* component = nullptr;
     switch (axis) {
-        case EditorTranslateAxisUVE::X:
+        case EditorTransformAxisUVE::X:
             component = &updated.localScale.x;
             break;
-        case EditorTranslateAxisUVE::Y:
+        case EditorTransformAxisUVE::Y:
             component = &updated.localScale.y;
             break;
-        case EditorTranslateAxisUVE::Z:
+        case EditorTransformAxisUVE::Z:
             component = &updated.localScale.z;
             break;
-        case EditorTranslateAxisUVE::None:
+        case EditorTransformAxisUVE::None:
             return false;
     }
     const float snappedScaleDelta = m_transformSnappingSettings.enabled
@@ -1185,7 +1185,7 @@ bool EditorUVE::ScaleSelectedAlongAxisUVE(const EditorTranslateAxisUVE axis,
 
 bool EditorUVE::ScaleSelectedUniformlyUVE(const float localScaleOffset) {
     if (!IsAuthoringCommandAllowedUVE() || !HasSingleDocumentSelectionUVE() ||
-        !IsFiniteUVE(localScaleOffset) || m_gizmoDrag.axis != EditorTranslateAxisUVE::None ||
+        !IsFiniteUVE(localScaleOffset) || m_gizmoDrag.axis != EditorTransformAxisUVE::None ||
         m_viewportNavigationMode != EditorViewportNavigationModeUVE::None) {
         return false;
     }
@@ -1211,7 +1211,7 @@ bool EditorUVE::ScaleSelectedUniformlyUVE(const float localScaleOffset) {
 }
 
 void EditorUVE::SetGizmoModeUVE(const EditorGizmoModeUVE mode) noexcept {
-    if (!IsAuthoringCommandAllowedUVE() || m_gizmoDrag.axis != EditorTranslateAxisUVE::None ||
+    if (!IsAuthoringCommandAllowedUVE() || m_gizmoDrag.axis != EditorTransformAxisUVE::None ||
         m_viewportNavigationMode != EditorViewportNavigationModeUVE::None) {
         return;
     }
@@ -1223,7 +1223,7 @@ EditorGizmoModeUVE EditorUVE::GetGizmoModeUVE() const noexcept {
 }
 
 bool EditorUVE::SetGizmoCoordinateSpaceUVE(const EditorGizmoCoordinateSpaceUVE coordinateSpace) {
-    if (!IsAuthoringCommandAllowedUVE() || m_gizmoDrag.axis != EditorTranslateAxisUVE::None ||
+    if (!IsAuthoringCommandAllowedUVE() || m_gizmoDrag.axis != EditorTransformAxisUVE::None ||
         m_viewportNavigationMode != EditorViewportNavigationModeUVE::None) {
         return false;
     }
@@ -1236,7 +1236,7 @@ EditorGizmoCoordinateSpaceUVE EditorUVE::GetGizmoCoordinateSpaceUVE() const noex
 }
 
 bool EditorUVE::IsReparentModeChangeAllowedUVE() const noexcept {
-    return IsAuthoringCommandAllowedUVE() && m_gizmoDrag.axis == EditorTranslateAxisUVE::None &&
+    return IsAuthoringCommandAllowedUVE() && m_gizmoDrag.axis == EditorTransformAxisUVE::None &&
            m_viewportNavigationMode == EditorViewportNavigationModeUVE::None;
 }
 
@@ -1253,7 +1253,7 @@ EditorReparentTransformModeUVE EditorUVE::GetReparentTransformModeUVE() const no
 }
 
 bool EditorUVE::SetTransformSnappingSettingsUVE(const EditorTransformSnappingSettingsUVE& settings) {
-    if (!IsAuthoringCommandAllowedUVE() || m_gizmoDrag.axis != EditorTranslateAxisUVE::None ||
+    if (!IsAuthoringCommandAllowedUVE() || m_gizmoDrag.axis != EditorTransformAxisUVE::None ||
         m_viewportNavigationMode != EditorViewportNavigationModeUVE::None ||
         !AreTransformSnappingSettingsValidUVE(settings)) {
         return false;
@@ -1463,7 +1463,7 @@ Scene::EntityUVE EditorUVE::CreateDocumentEntityUVE(const EditorEntityKindUVE ki
 Scene::EntityUVE EditorUVE::CreateDocumentSceneNodeUVE(
     const Scene::Nodes::SceneNodeKindUVE kind) {
     if (!IsAuthoringCommandAllowedUVE() || m_selectedEntities.size() > 1U ||
-        m_gizmoDrag.axis != EditorTranslateAxisUVE::None ||
+        m_gizmoDrag.axis != EditorTransformAxisUVE::None ||
         m_viewportNavigationMode != EditorViewportNavigationModeUVE::None) {
         return Scene::kInvalidEntityUVE;
     }
@@ -2156,7 +2156,7 @@ std::string EditorUVE::GetHierarchyCandidateLabelUVE(const Scene::EntityUVE enti
 
 bool EditorUVE::IsLifecycleCommandAllowedUVE() const noexcept {
     return IsAuthoringCommandAllowedUVE() && HasSingleDocumentSelectionUVE() &&
-           m_gizmoDrag.axis == EditorTranslateAxisUVE::None &&
+           m_gizmoDrag.axis == EditorTransformAxisUVE::None &&
            m_viewportNavigationMode == EditorViewportNavigationModeUVE::None;
 }
 
@@ -2889,11 +2889,11 @@ bool EditorUVE::IsFiniteVectorUVE(const Math::Vector3UVE& vector) const noexcept
     return IsFiniteUVE(vector.x) && IsFiniteUVE(vector.y) && IsFiniteUVE(vector.z);
 }
 
-bool EditorUVE::GetGizmoAxisWorldVectorUVE(const Scene::EntityUVE entity, const EditorTranslateAxisUVE axis,
+bool EditorUVE::GetGizmoAxisWorldVectorUVE(const Scene::EntityUVE entity, const EditorTransformAxisUVE axis,
                                             Math::Vector3UVE& outAxis) const {
     outAxis = GetAxisVectorUVE(axis);
-    if (axis == EditorTranslateAxisUVE::None || m_gizmoCoordinateSpace == EditorGizmoCoordinateSpaceUVE::World) {
-        return axis != EditorTranslateAxisUVE::None;
+    if (axis == EditorTransformAxisUVE::None || m_gizmoCoordinateSpace == EditorGizmoCoordinateSpaceUVE::World) {
+        return axis != EditorTransformAxisUVE::None;
     }
     if (!IsDocumentEntityUVE(entity)) {
         return false;
@@ -2923,15 +2923,15 @@ bool EditorUVE::GetPlaneAxesUVE(const EditorTranslatePlaneUVE plane, Math::Vecto
     return false;
 }
 
-Math::Vector3UVE EditorUVE::GetAxisVectorUVE(const EditorTranslateAxisUVE axis) const noexcept {
+Math::Vector3UVE EditorUVE::GetAxisVectorUVE(const EditorTransformAxisUVE axis) const noexcept {
     switch (axis) {
-        case EditorTranslateAxisUVE::X:
+        case EditorTransformAxisUVE::X:
             return Math::Vector3UVE{1.0F, 0.0F, 0.0F};
-        case EditorTranslateAxisUVE::Y:
+        case EditorTransformAxisUVE::Y:
             return Math::Vector3UVE{0.0F, 1.0F, 0.0F};
-        case EditorTranslateAxisUVE::Z:
+        case EditorTransformAxisUVE::Z:
             return Math::Vector3UVE{0.0F, 0.0F, 1.0F};
-        case EditorTranslateAxisUVE::None:
+        case EditorTransformAxisUVE::None:
             return Math::Vector3UVE{};
     }
     return Math::Vector3UVE{};
@@ -3108,12 +3108,12 @@ bool EditorUVE::BeginGizmoDragUVE(const EditorViewportRectUVE& viewportRect,
     float uniformPixelsPerWorldUnitSum = 0.0F;
     std::size_t uniformPixelsPerWorldUnitCount = 0U;
     GizmoDragUVE candidate{};
-    constexpr std::array<EditorTranslateAxisUVE, 3> axes{
-        EditorTranslateAxisUVE::X,
-        EditorTranslateAxisUVE::Y,
-        EditorTranslateAxisUVE::Z,
+    constexpr std::array<EditorTransformAxisUVE, 3> axes{
+        EditorTransformAxisUVE::X,
+        EditorTransformAxisUVE::Y,
+        EditorTransformAxisUVE::Z,
     };
-    for (const EditorTranslateAxisUVE axis : axes) {
+    for (const EditorTransformAxisUVE axis : axes) {
         Math::Vector3UVE worldAxis{};
         if (!GetGizmoAxisWorldVectorUVE(m_selectedEntity, axis, worldAxis)) {
             continue;
@@ -3156,14 +3156,14 @@ bool EditorUVE::BeginGizmoDragUVE(const EditorViewportRectUVE& viewportRect,
     }
 
     // Axis/endpoint candidates win deterministically. The Scale center is a fallback only after every axis hit.
-    if (candidate.axis == EditorTranslateAxisUVE::None && m_gizmoMode == EditorGizmoModeUVE::Scale &&
+    if (candidate.axis == EditorTransformAxisUVE::None && m_gizmoMode == EditorGizmoModeUVE::Scale &&
         uniformPixelsPerWorldUnitCount > 0U) {
         const Math::Vector2UVE centerOffset{pointerPosition.x - center.x, pointerPosition.y - center.y};
         const float centerDistanceSquared = LengthSquared2UVE(centerOffset);
         if (centerDistanceSquared <= (kGizmoHandleRadiusPixelsUVE * kGizmoHandleRadiusPixelsUVE)) {
             candidate.mode = EditorGizmoModeUVE::Scale;
             candidate.handleKind = GizmoHandleKindUVE::UniformScaleOffset;
-            candidate.axis = EditorTranslateAxisUVE::X;
+            candidate.axis = EditorTransformAxisUVE::X;
             candidate.entity = m_selectedEntity;
             candidate.initialPointer = pointerPosition;
             candidate.screenCenter = center;
@@ -3173,7 +3173,7 @@ bool EditorUVE::BeginGizmoDragUVE(const EditorViewportRectUVE& viewportRect,
     }
 
     // Axis/endpoint candidates win deterministically. Plane handles are considered only when no axis hit exists.
-    if (candidate.axis == EditorTranslateAxisUVE::None && candidate.handleKind != GizmoHandleKindUVE::UniformScaleOffset &&
+    if (candidate.axis == EditorTransformAxisUVE::None && candidate.handleKind != GizmoHandleKindUVE::UniformScaleOffset &&
         m_gizmoMode == EditorGizmoModeUVE::Translate) {
         constexpr std::array<EditorTranslatePlaneUVE, 3> planes{
             EditorTranslatePlaneUVE::XY, EditorTranslatePlaneUVE::XZ, EditorTranslatePlaneUVE::YZ};
@@ -3183,8 +3183,8 @@ bool EditorUVE::BeginGizmoDragUVE(const EditorViewportRectUVE& viewportRect,
             if (!GetPlaneAxesUVE(plane, localAxisA, localAxisB)) {
                 continue;
             }
-            const EditorTranslateAxisUVE axisA = plane == EditorTranslatePlaneUVE::YZ ? EditorTranslateAxisUVE::Y : EditorTranslateAxisUVE::X;
-            const EditorTranslateAxisUVE axisB = plane == EditorTranslatePlaneUVE::XY ? EditorTranslateAxisUVE::Y : EditorTranslateAxisUVE::Z;
+            const EditorTransformAxisUVE axisA = plane == EditorTranslatePlaneUVE::YZ ? EditorTransformAxisUVE::Y : EditorTransformAxisUVE::X;
+            const EditorTransformAxisUVE axisB = plane == EditorTranslatePlaneUVE::XY ? EditorTransformAxisUVE::Y : EditorTransformAxisUVE::Z;
             Math::Vector3UVE worldAxisA{};
             Math::Vector3UVE worldAxisB{};
             if (!GetGizmoAxisWorldVectorUVE(m_selectedEntity, axisA, worldAxisA) ||
@@ -3223,7 +3223,7 @@ bool EditorUVE::BeginGizmoDragUVE(const EditorViewportRectUVE& viewportRect,
         }
     }
 
-    if ((candidate.axis == EditorTranslateAxisUVE::None &&
+    if ((candidate.axis == EditorTransformAxisUVE::None &&
          candidate.handleKind != GizmoHandleKindUVE::UniformScaleOffset) ||
         candidate.pixelsPerWorldUnit <= kVectorEpsilonUVE ||
         !IsFiniteUVE(candidate.pixelsPerWorldUnit)) {
@@ -3270,7 +3270,7 @@ bool EditorUVE::MapTrackballPointerUVE(const Math::Vector2UVE center, const floa
 
 bool EditorUVE::FindClosestRingParameterUVE(const EditorViewportRectUVE& viewportRect,
                                             const Scene::EntityUVE entity,
-                                            const EditorTranslateAxisUVE axis,
+                                            const EditorTransformAxisUVE axis,
                                             const Math::Vector2UVE pointerPosition,
                                             float& outParameterRadians,
                                             float& outDistanceSquared) const {
@@ -3362,14 +3362,14 @@ bool EditorUVE::BeginRotateGizmoDragUVE(const EditorViewportRectUVE& viewportRec
         return false;
     }
 
-    constexpr std::array<EditorTranslateAxisUVE, 3> axes{
-        EditorTranslateAxisUVE::X,
-        EditorTranslateAxisUVE::Y,
-        EditorTranslateAxisUVE::Z,
+    constexpr std::array<EditorTransformAxisUVE, 3> axes{
+        EditorTransformAxisUVE::X,
+        EditorTransformAxisUVE::Y,
+        EditorTransformAxisUVE::Z,
     };
     GizmoDragUVE candidate{};
     float bestDistanceSquared = std::numeric_limits<float>::max();
-    for (const EditorTranslateAxisUVE axis : axes) {
+    for (const EditorTransformAxisUVE axis : axes) {
         float parameterRadians = 0.0F;
         float distanceSquared = 0.0F;
         if (!FindClosestRingParameterUVE(viewportRect, m_selectedEntity, axis, pointerPosition,
@@ -3391,7 +3391,7 @@ bool EditorUVE::BeginRotateGizmoDragUVE(const EditorViewportRectUVE& viewportRec
     }
 
     // Ring candidates have explicit priority; the camera-oriented center trackball is fallback only.
-    if (candidate.axis == EditorTranslateAxisUVE::None) {
+    if (candidate.axis == EditorTransformAxisUVE::None) {
         const Scene::WorldTransformComponentUVE& selectedWorld =
             entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(m_selectedEntity);
         Math::Vector2UVE center{};
@@ -3408,7 +3408,7 @@ bool EditorUVE::BeginRotateGizmoDragUVE(const EditorViewportRectUVE& viewportRec
                 !cameraWorld.dirty && Math::TryNormalizeUVE(cameraWorld.worldRotation, viewRotation)) {
                 candidate.mode = EditorGizmoModeUVE::Rotate;
                 candidate.handleKind = GizmoHandleKindUVE::Trackball;
-                candidate.axis = EditorTranslateAxisUVE::X;
+                candidate.axis = EditorTransformAxisUVE::X;
                 candidate.entity = m_selectedEntity;
                 candidate.initialPointer = pointerPosition;
                 candidate.screenCenter = center;
@@ -3420,7 +3420,7 @@ bool EditorUVE::BeginRotateGizmoDragUVE(const EditorViewportRectUVE& viewportRec
         }
     }
 
-    if (candidate.axis == EditorTranslateAxisUVE::None) {
+    if (candidate.axis == EditorTransformAxisUVE::None) {
         return false;
     }
     const Scene::TransformComponentUVE baseline =
@@ -3435,7 +3435,7 @@ bool EditorUVE::BeginRotateGizmoDragUVE(const EditorViewportRectUVE& viewportRec
 void EditorUVE::UpdateGizmoDragUVE(const Math::Vector2UVE pointerPosition) {
     const std::optional<EditorToolSessionSnapshotUVE>& session = m_toolSession.GetSnapshotUVE();
     if (!session.has_value() || !IsAuthoringCommandAllowedUVE() ||
-        (m_gizmoDrag.axis == EditorTranslateAxisUVE::None &&
+        (m_gizmoDrag.axis == EditorTransformAxisUVE::None &&
          m_gizmoDrag.handleKind != GizmoHandleKindUVE::UniformScaleOffset) ||
         !HasSingleDocumentSelectionUVE() || !IsDocumentEntityUVE(m_gizmoDrag.entity) ||
         m_gizmoDrag.entity != m_selectedEntity || m_gizmoDrag.entity != session->entity ||
@@ -3617,16 +3617,16 @@ void EditorUVE::UpdateGizmoDragUVE(const Math::Vector2UVE pointerPosition) {
         Scene::TransformComponentUVE updated = sessionSnapshot.baselineTransform;
         float* component = nullptr;
         switch (m_gizmoDrag.axis) {
-            case EditorTranslateAxisUVE::X:
+            case EditorTransformAxisUVE::X:
                 component = &updated.localScale.x;
                 break;
-            case EditorTranslateAxisUVE::Y:
+            case EditorTransformAxisUVE::Y:
                 component = &updated.localScale.y;
                 break;
-            case EditorTranslateAxisUVE::Z:
+            case EditorTransformAxisUVE::Z:
                 component = &updated.localScale.z;
                 break;
-            case EditorTranslateAxisUVE::None:
+            case EditorTransformAxisUVE::None:
                 CancelGizmoDragUVE();
                 return;
         }
@@ -3668,7 +3668,7 @@ void EditorUVE::CommitGizmoDragUVE() {
     }
 
     const EditorToolSessionSnapshotUVE sessionSnapshot = *activeSession;
-    if ((m_gizmoDrag.axis == EditorTranslateAxisUVE::None &&
+    if ((m_gizmoDrag.axis == EditorTransformAxisUVE::None &&
          m_gizmoDrag.handleKind != GizmoHandleKindUVE::UniformScaleOffset) ||
         m_gizmoDrag.entity != sessionSnapshot.entity || !IsDocumentEntityUVE(sessionSnapshot.entity)) {
         CancelGizmoDragUVE();
@@ -3859,8 +3859,8 @@ void EditorUVE::DrawTranslateGizmoUVE(const EditorViewportRectUVE& viewportRect)
     constexpr std::array<EditorTranslatePlaneUVE, 3> planes{
         EditorTranslatePlaneUVE::XY, EditorTranslatePlaneUVE::XZ, EditorTranslatePlaneUVE::YZ};
     for (const EditorTranslatePlaneUVE plane : planes) {
-        const EditorTranslateAxisUVE axisA = plane == EditorTranslatePlaneUVE::YZ ? EditorTranslateAxisUVE::Y : EditorTranslateAxisUVE::X;
-        const EditorTranslateAxisUVE axisB = plane == EditorTranslatePlaneUVE::XY ? EditorTranslateAxisUVE::Y : EditorTranslateAxisUVE::Z;
+        const EditorTransformAxisUVE axisA = plane == EditorTranslatePlaneUVE::YZ ? EditorTransformAxisUVE::Y : EditorTransformAxisUVE::X;
+        const EditorTransformAxisUVE axisB = plane == EditorTranslatePlaneUVE::XY ? EditorTransformAxisUVE::Y : EditorTransformAxisUVE::Z;
         Math::Vector3UVE worldAxisA{};
         Math::Vector3UVE worldAxisB{};
         if (!GetGizmoAxisWorldVectorUVE(m_selectedEntity, axisA, worldAxisA) ||
@@ -3885,12 +3885,12 @@ void EditorUVE::DrawTranslateGizmoUVE(const EditorViewportRectUVE& viewportRect)
                                 ImVec2{corners[2].x, corners[2].y}, ImVec2{corners[3].x, corners[3].y}, fill);
     }
 
-    constexpr std::array<EditorTranslateAxisUVE, 3> axes{
-        EditorTranslateAxisUVE::X,
-        EditorTranslateAxisUVE::Y,
-        EditorTranslateAxisUVE::Z,
+    constexpr std::array<EditorTransformAxisUVE, 3> axes{
+        EditorTransformAxisUVE::X,
+        EditorTransformAxisUVE::Y,
+        EditorTransformAxisUVE::Z,
     };
-    for (const EditorTranslateAxisUVE axis : axes) {
+    for (const EditorTransformAxisUVE axis : axes) {
         Math::Vector3UVE worldAxis{};
         Math::Vector2UVE endpoint{};
         if (!GetGizmoAxisWorldVectorUVE(m_selectedEntity, axis, worldAxis) ||
@@ -3925,10 +3925,10 @@ void EditorUVE::DrawScaleGizmoUVE(const EditorViewportRectUVE& viewportRect) {
         return;
     }
 
-    constexpr std::array<EditorTranslateAxisUVE, 3> axes{
-        EditorTranslateAxisUVE::X,
-        EditorTranslateAxisUVE::Y,
-        EditorTranslateAxisUVE::Z,
+    constexpr std::array<EditorTransformAxisUVE, 3> axes{
+        EditorTransformAxisUVE::X,
+        EditorTransformAxisUVE::Y,
+        EditorTransformAxisUVE::Z,
     };
     ImDrawList* const drawList = ImGui::GetForegroundDrawList();
     const ImVec2 centerPoint{center.x, center.y};
@@ -3938,7 +3938,7 @@ void EditorUVE::DrawScaleGizmoUVE(const EditorViewportRectUVE& viewportRect) {
     drawList->AddRectFilled(ImVec2{center.x - uniformHalfSize, center.y - uniformHalfSize},
                             ImVec2{center.x + uniformHalfSize, center.y + uniformHalfSize},
                             uniformActive ? IM_COL32(255, 230, 90, 245) : IM_COL32(235, 235, 235, 220));
-    for (const EditorTranslateAxisUVE axis : axes) {
+    for (const EditorTransformAxisUVE axis : axes) {
         Math::Vector3UVE worldAxis{};
         Math::Vector2UVE endpoint{};
         if (!GetGizmoAxisWorldVectorUVE(m_selectedEntity, axis, worldAxis) ||
@@ -3975,10 +3975,10 @@ void EditorUVE::DrawRotateGizmoUVE(const EditorViewportRectUVE& viewportRect) {
         return;
     }
 
-    constexpr std::array<EditorTranslateAxisUVE, 3> axes{
-        EditorTranslateAxisUVE::X,
-        EditorTranslateAxisUVE::Y,
-        EditorTranslateAxisUVE::Z,
+    constexpr std::array<EditorTransformAxisUVE, 3> axes{
+        EditorTransformAxisUVE::X,
+        EditorTransformAxisUVE::Y,
+        EditorTransformAxisUVE::Z,
     };
     constexpr int kRingSegmentCountUVE = 64;
     constexpr float kFullTurnRadiansUVE = std::numbers::pi_v<float> * 2.0F;
@@ -3992,7 +3992,7 @@ void EditorUVE::DrawRotateGizmoUVE(const EditorViewportRectUVE& viewportRect) {
                         trackballActive ? IM_COL32(255, 232, 110, 235) : IM_COL32(210, 220, 235, 145), 32,
                         trackballActive ? 2.5F : 1.25F);
 
-    for (const EditorTranslateAxisUVE axis : axes) {
+    for (const EditorTransformAxisUVE axis : axes) {
         Math::Vector3UVE first{};
         Math::Vector3UVE second{};
         if (!GetRingBasisUVE(axis, first, second)) {
@@ -4121,7 +4121,7 @@ void EditorUVE::LoadSessionSettingsUVE() {
 }
 
 bool EditorUVE::SaveSessionSettingsUVE() {
-    if (m_state != EditorStateUVE::Running || m_gizmoDrag.axis != EditorTranslateAxisUVE::None ||
+    if (m_state != EditorStateUVE::Running || m_gizmoDrag.axis != EditorTransformAxisUVE::None ||
         m_viewportNavigationMode != EditorViewportNavigationModeUVE::None ||
         !AreTransformSnappingSettingsValidUVE(m_transformSnappingSettings)) {
         return false;
@@ -4154,11 +4154,11 @@ void EditorUVE::DrawMenuBarUVE() {
     ImGuiIO& io = ImGui::GetIO();
     const bool lifecycleCommandAllowed = IsLifecycleCommandAllowedUVE() && IsDocumentEntityUVE(m_selectedEntity);
     const bool gizmoModeChangeAllowed = IsAuthoringCommandAllowedUVE() &&
-                                        m_gizmoDrag.axis == EditorTranslateAxisUVE::None &&
+                                        m_gizmoDrag.axis == EditorTransformAxisUVE::None &&
                                         m_viewportNavigationMode == EditorViewportNavigationModeUVE::None;
     const bool canEnterPlayMode = m_simulationControl != nullptr &&
                                   m_playModeState == EditorPlayModeStateUVE::Edit &&
-                                  m_gizmoDrag.axis == EditorTranslateAxisUVE::None &&
+                                  m_gizmoDrag.axis == EditorTransformAxisUVE::None &&
                                   m_viewportNavigationMode == EditorViewportNavigationModeUVE::None;
     if (!io.WantTextInput && canEnterPlayMode && ImGui::IsKeyPressed(ImGuiKey_F5, false)) {
         static_cast<void>(EnterPlayModeUVE());
@@ -4737,14 +4737,14 @@ void EditorUVE::DrawHierarchyNodeUVE(const Scene::EntityUVE entity) {
     }
     if (!renaming && HasSingleDocumentSelectionUVE() && entity == m_selectedEntity &&
         IsAuthoringCommandAllowedUVE() &&
-        m_gizmoDrag.axis == EditorTranslateAxisUVE::None &&
+        m_gizmoDrag.axis == EditorTransformAxisUVE::None &&
         m_viewportNavigationMode == EditorViewportNavigationModeUVE::None && ImGui::IsKeyPressed(ImGuiKey_F2)) {
         m_hierarchyRenameEntity = entity;
         m_hierarchyRenameBuffer = GetEntityDisplayLabelUVE(entity);
         m_hierarchyRenameFocusRequested = true;
     }
     if (!renaming && HasSingleDocumentSelectionUVE() && entity == m_selectedEntity &&
-        IsAuthoringCommandAllowedUVE() && m_gizmoDrag.axis == EditorTranslateAxisUVE::None &&
+        IsAuthoringCommandAllowedUVE() && m_gizmoDrag.axis == EditorTransformAxisUVE::None &&
         m_viewportNavigationMode == EditorViewportNavigationModeUVE::None) {
         ImGui::SameLine();
         const std::string renameLabel = "Rename##entity-" + std::to_string(entity.index) + ":" +
@@ -5782,7 +5782,7 @@ void EditorUVE::DrawViewportPanelUVE() {
         const Math::Vector2UVE pointerPosition{mousePosition.x, mousePosition.y};
 
         ImGuiIO& io = ImGui::GetIO();
-        if (m_gizmoDrag.axis != EditorTranslateAxisUVE::None) {
+        if (m_gizmoDrag.axis != EditorTransformAxisUVE::None) {
             if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
                 UpdateGizmoDragUVE(pointerPosition);
             } else {
