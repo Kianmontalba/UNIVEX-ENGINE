@@ -79,6 +79,18 @@ TEST(InspectorDrawerRegistryUVETest, DrawEligibleUVE_PreservesRegistrationOrderA
     EXPECT_EQ(invocationOrder, (std::vector<std::string>{"first", "last"}));
 }
 
+TEST(InspectorDrawerRegistryUVETest, DrawEligibleMatchingUVE_FiltersEligibleSectionsByIdentifier) {
+    InspectorDrawerRegistryUVE registry;
+    std::vector<std::string> invocationOrder;
+
+    ASSERT_TRUE(registry.RegisterDrawerUVE(MakeAlwaysEligibleDrawerUVE("transform", invocationOrder)));
+    ASSERT_TRUE(registry.RegisterDrawerUVE(MakeAlwaysEligibleDrawerUVE("primitive-mesh", invocationOrder)));
+
+    registry.DrawEligibleMatchingUVE(Scene::EntityUVE{2U, 1U}, "transform");
+
+    EXPECT_EQ(invocationOrder, (std::vector<std::string>{"transform"}));
+}
+
 TEST(InspectorDrawerRegistryUVETest, DrawEligibleUVE_EmptyRegistryDoesNotInvokeCallbacks) {
     InspectorDrawerRegistryUVE registry;
 

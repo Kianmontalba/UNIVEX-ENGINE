@@ -45,6 +45,10 @@ public:
     /// methods own them.
     void DrawEligibleUVE(Scene::EntityUVE entity) const;
 
+    /// Draws only eligible sections whose stable identifiers contain `filter` (case-insensitive). Empty
+    /// filters draw all eligible sections. This is presentation-only and never changes registry order.
+    void DrawEligibleMatchingUVE(Scene::EntityUVE entity, std::string_view filter) const;
+
     /// Returns copied stable identifiers for the drawers currently eligible for `entity`, in the
     /// same registration order used by DrawEligibleUVE(). This is presentation metadata only: it
     /// never invokes a drawer, exposes its callback, or transfers ECS/editor ownership.

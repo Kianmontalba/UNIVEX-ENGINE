@@ -208,6 +208,44 @@ constexpr const char* kHierarchyEntityPayloadUVE = "UVE_SCENE_HIERARCHY_ENTITY";
     return IM_COL32(190, 190, 190, alpha);
 }
 
+void ApplyEditorVisualThemeUVE() noexcept {
+    ImGuiStyle& style = ImGui::GetStyle();
+    style.WindowPadding = ImVec2{10.0F, 8.0F};
+    style.FramePadding = ImVec2{7.0F, 4.0F};
+    style.ItemSpacing = ImVec2{6.0F, 5.0F};
+    style.ItemInnerSpacing = ImVec2{5.0F, 4.0F};
+    style.WindowRounding = 4.0F;
+    style.ChildRounding = 3.0F;
+    style.FrameRounding = 3.0F;
+    style.PopupRounding = 3.0F;
+    style.ScrollbarRounding = 4.0F;
+    style.GrabRounding = 3.0F;
+    style.TabRounding = 3.0F;
+
+    ImVec4* const colors = style.Colors;
+    colors[ImGuiCol_Text] = ImVec4{0.93F, 0.96F, 1.0F, 1.0F};
+    colors[ImGuiCol_TextDisabled] = ImVec4{0.52F, 0.59F, 0.70F, 1.0F};
+    colors[ImGuiCol_WindowBg] = ImVec4{0.012F, 0.022F, 0.055F, 0.98F};
+    colors[ImGuiCol_ChildBg] = ImVec4{0.020F, 0.032F, 0.075F, 0.96F};
+    colors[ImGuiCol_PopupBg] = ImVec4{0.025F, 0.040F, 0.085F, 0.99F};
+    colors[ImGuiCol_Border] = ImVec4{0.18F, 0.25F, 0.38F, 0.72F};
+    colors[ImGuiCol_FrameBg] = ImVec4{0.055F, 0.080F, 0.135F, 1.0F};
+    colors[ImGuiCol_FrameBgHovered] = ImVec4{0.09F, 0.15F, 0.24F, 1.0F};
+    colors[ImGuiCol_FrameBgActive] = ImVec4{0.10F, 0.22F, 0.34F, 1.0F};
+    colors[ImGuiCol_Header] = ImVec4{0.08F, 0.14F, 0.23F, 1.0F};
+    colors[ImGuiCol_HeaderHovered] = ImVec4{0.12F, 0.24F, 0.37F, 1.0F};
+    colors[ImGuiCol_HeaderActive] = ImVec4{0.16F, 0.32F, 0.48F, 1.0F};
+    colors[ImGuiCol_Button] = ImVec4{0.06F, 0.12F, 0.20F, 1.0F};
+    colors[ImGuiCol_ButtonHovered] = ImVec4{0.10F, 0.24F, 0.36F, 1.0F};
+    colors[ImGuiCol_ButtonActive] = ImVec4{0.14F, 0.34F, 0.48F, 1.0F};
+    colors[ImGuiCol_CheckMark] = ImVec4{0.32F, 0.82F, 0.62F, 1.0F};
+    colors[ImGuiCol_SliderGrab] = ImVec4{0.25F, 0.62F, 0.84F, 1.0F};
+    colors[ImGuiCol_SliderGrabActive] = ImVec4{0.36F, 0.80F, 0.96F, 1.0F};
+    colors[ImGuiCol_Tab] = ImVec4{0.045F, 0.080F, 0.14F, 1.0F};
+    colors[ImGuiCol_TabHovered] = ImVec4{0.10F, 0.24F, 0.36F, 1.0F};
+    colors[ImGuiCol_TabActive] = ImVec4{0.08F, 0.18F, 0.30F, 1.0F};
+}
+
 [[nodiscard]] bool GetRingBasisUVE(const EditorTranslateAxisUVE axis, Math::Vector3UVE& outFirst,
                                    Math::Vector3UVE& outSecond) noexcept {
     switch (axis) {
@@ -271,6 +309,7 @@ void EditorUVE::InitUVE() {
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
         ImGui::StyleColorsDark();
+        ApplyEditorVisualThemeUVE();
 
         auto* const nativeWindow = static_cast<GLFWwindow*>(windowManager.GetNativeWindowHandleUVE());
         // Install the backend's chained GLFW callbacks so the interactive overlay receives cursor
@@ -1407,6 +1446,64 @@ Scene::EntityUVE EditorUVE::CreateDocumentEntityUVE(const EditorEntityKindUVE ki
     RecordHistoryUVE(CreationHistoryEntryUVE{
         kind, createdName, entity, selectionBefore, CaptureSelectionSnapshotUVE(), dirtyBefore, true});
     return entity;
+}
+
+Scene::EntityUVE EditorUVE::CreateDaylightPreviewSceneUVE() {
+    if (!IsAuthoringCommandAllowedUVE() || !GetDocumentRootsUVE().empty() ||
+        m_gizmoDrag.axis != EditorTranslateAxisUVE::None ||
+        m_viewportNavigationMode != EditorViewportNavigationModeUVE::None) {
+        return Scene::kInvalidEntityUVE;
+    }
+
+    const EditorSelectionSnapshotUVE selectionBefore = CaptureSelectionSnapshotUVE();
+    const bool dirtyBefore = m_sceneDirty;
+    const Scene::EntityUVE root = CreateDocumentEntityInternalUVE(
+        EditorEntityKindUVE::Empty, std::string{"EditorDayPreview"});
+    const Scene::EntityUVE ground = CreateDocumentEntityInternalUVE(
+        EditorEntityKindUVE::Plane, std::string{"PreviewGround"});
+    const Scene::EntityUVE sun = CreateDocumentEntityInternalUVE(
+        EditorEntityKindUVE::DirectionalLight, std::string{"PreviewSun"});
+    const auto cleanup = [this](const Scene::EntityUVE entity) {
+        if (IsDocumentEntityUVE(entity)) {
+            DestroyDocumentSubtreeUVE(entity);
+        }
+    };
+    if (root == Scene::kInvalidEntityUVE || ground == Scene::kInvalidEntityUVE ||
+        sun == Scene::kInvalidEntityUVE) {
+        cleanup(sun);
+        cleanup(ground);
+        cleanup(root);
+        RestoreSelectionUVE(selectionBefore);
+        m_sceneDirty = dirtyBefore;
+        return Scene::kInvalidEntityUVE;
+    }
+
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    Scene::ISceneGraphUVE& sceneGraph = m_services->GetSceneGraphUVE();
+    sceneGraph.SetParentUVE(entityManager, ground, root);
+    sceneGraph.SetParentUVE(entityManager, sun, root);
+
+    Scene::TransformComponentUVE groundTransform{};
+    groundTransform.localPosition = {0.0F, -0.025F, 0.0F};
+    groundTransform.localScale = {12.0F, 1.0F, 12.0F};
+    sceneGraph.SetLocalTransformUVE(entityManager, ground, groundTransform);
+    Scene::TransformComponentUVE sunTransform{};
+    sunTransform.localPosition = {0.0F, 5.0F, 0.0F};
+    sceneGraph.SetLocalTransformUVE(entityManager, sun, sunTransform);
+
+    const std::optional<Scene::SceneSnapshotUVE> snapshot = CaptureSubtreeUVE(root);
+    if (!snapshot.has_value()) {
+        cleanup(root);
+        RestoreSelectionUVE(selectionBefore);
+        m_sceneDirty = dirtyBefore;
+        return Scene::kInvalidEntityUVE;
+    }
+    SelectEntityUVE(root);
+    m_sceneDirty = true;
+    RecordHistoryUVE(SceneNodeCreationHistoryEntryUVE{
+        *snapshot, Scene::Nodes::SceneNodeKindUVE::Empty, root, selectionBefore,
+        CaptureSelectionSnapshotUVE(), dirtyBefore, true});
+    return root;
 }
 
 Scene::EntityUVE EditorUVE::CreateDocumentSceneNodeUVE(
@@ -4114,16 +4211,57 @@ void EditorUVE::DrawMenuBarUVE() {
     drawWorkspaceTab("Asset", EditorWorkspaceUVE::Asset);
     drawWorkspaceTab("Scripting", EditorWorkspaceUVE::Scripting);
     drawWorkspaceTab("Debug", EditorWorkspaceUVE::Debug);
+    ImGui::SameLine();
+    ImGui::TextDisabled("| %s | %zu selected | %s",
+                       m_sceneDirty ? "unsaved" : "saved", m_selectedEntities.size(),
+                       m_playModeState == EditorPlayModeStateUVE::Edit
+                           ? "edit"
+                           : (m_playModeState == EditorPlayModeStateUVE::Paused ? "paused" : "playing"));
     const bool pluginActive = m_activeWorkspace == EditorWorkspaceUVE::Plugin;
     if (ImGui::Selectable("Plugin", pluginActive, ImGuiSelectableFlags_DontClosePopups, ImVec2{0.0F, 0.0F})) {
         m_activeWorkspace = EditorWorkspaceUVE::Plugin;
     }
 
     ImGui::SameLine();
+    const bool canSave = IsAuthoringCommandAllowedUVE() && !m_activeScenePath.empty();
+    ImGui::BeginDisabled(!canSave);
+    if (ImGui::SmallButton("Save")) {
+        static_cast<void>(SaveSceneUVE());
+    }
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    ImGui::BeginDisabled(!CanUndoUVE());
+    if (ImGui::SmallButton("Undo")) {
+        static_cast<void>(UndoUVE());
+    }
+    ImGui::EndDisabled();
+    ImGui::SameLine();
+    ImGui::BeginDisabled(!CanRedoUVE());
+    if (ImGui::SmallButton("Redo")) {
+        static_cast<void>(RedoUVE());
+    }
+    ImGui::EndDisabled();
+    ImGui::SameLine();
     if (ImGui::BeginMenu("View")) {
         ImGui::MenuItem("Scene Panel", nullptr, &m_scenePanelVisible);
         ImGui::MenuItem("Inspector Panel", nullptr, &m_inspectorPanelVisible);
         ImGui::MenuItem("Bottom Dock", nullptr, &m_bottomDockVisible);
+        ImGui::Separator();
+        if (ImGui::MenuItem("Reset Viewport Camera")) {
+            m_viewportFocusPoint = {0.0F, 1.5F, 0.0F};
+            m_viewportYawRadians = 0.0F;
+            m_viewportPitchRadians = 0.0F;
+            m_viewportDistance = 6.0F;
+            static_cast<void>(ApplyViewportCameraUVE());
+        }
+        if (ImGui::MenuItem("Toggle Local Gizmo Space", nullptr,
+                            m_gizmoCoordinateSpace == EditorGizmoCoordinateSpaceUVE::Local)) {
+            static_cast<void>(SetGizmoCoordinateSpaceUVE(
+                m_gizmoCoordinateSpace == EditorGizmoCoordinateSpaceUVE::World
+                    ? EditorGizmoCoordinateSpaceUVE::Local
+                    : EditorGizmoCoordinateSpaceUVE::World));
+        }
+        ImGui::MenuItem("Snap Transforms", nullptr, &m_transformSnappingSettings.enabled);
         ImGui::Separator();
         if (ImGui::MenuItem("Default Layout")) {
             ApplyLayoutPresetUVE(EditorLayoutPresetUVE::Default);
@@ -4217,13 +4355,57 @@ void EditorUVE::DrawBottomDockContentUVE() {
     constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize;
     ImGui::Begin("Lower Workspace", nullptr, flags);
     switch (m_activeBottomDock) {
-        case EditorBottomDockUVE::Debugger:
-            ImGui::TextUnformatted("Debugger workspace");
-            ImGui::TextDisabled("Runtime diagnostics will appear here while Play Mode is active.");
+        case EditorBottomDockUVE::Debugger: {
+            ImGui::TextUnformatted("Runtime Diagnostics");
+            const Render::Renderer3DFrameDiagnosticsUVE diagnostics =
+                m_services->GetRenderer3DUVE().GetLastFrameDiagnosticsUVE();
+            ImGui::Text("Frame: primitives %zu | meshes %zu | particles %zu",
+                        diagnostics.primitiveItemsExtracted, diagnostics.meshItemsExtracted,
+                        diagnostics.particleItemsExtracted);
+            ImGui::Text("Submission: mesh draws %zu | primitive draws %zu | GL draws %zu",
+                        diagnostics.meshDrawCallsRecorded, diagnostics.primitiveDrawCallsRecorded,
+                        diagnostics.glDrawCallsIssued);
+            ImGui::Text("Editor overlay: %s | pass: %s",
+                        diagnostics.editorVisualProgramReady ? "ready" : "unavailable",
+                        diagnostics.editorVisualPassRecorded ? "recorded" : "idle");
+            ImGui::Text("Scene state: %s | Undo: %s | Redo: %s",
+                        m_sceneDirty ? "unsaved" : "saved", CanUndoUVE() ? "available" : "empty",
+                        CanRedoUVE() ? "available" : "empty");
             break;
+        }
         case EditorBottomDockUVE::Animator:
-            ImGui::TextUnformatted("Animator workspace");
-            ImGui::TextDisabled("Animation authoring remains a future editor capability.");
+            ImGui::TextUnformatted("Animation Preview");
+            ImGui::TextDisabled("Preview controls share the editor simulation boundary; transient playback is not saved.");
+            ImGui::Text("State: %s", m_playModeState == EditorPlayModeStateUVE::Edit
+                                           ? "Edit"
+                                           : (m_playModeState == EditorPlayModeStateUVE::Paused ? "Paused" : "Playing"));
+            if (m_playModeState == EditorPlayModeStateUVE::Edit) {
+                ImGui::BeginDisabled(m_simulationControl == nullptr);
+                if (ImGui::Button("Play Preview")) {
+                    static_cast<void>(EnterPlayModeUVE());
+                }
+                ImGui::EndDisabled();
+            } else if (m_playModeState == EditorPlayModeStateUVE::Playing) {
+                if (ImGui::Button("Pause Preview")) {
+                    static_cast<void>(PausePlayModeUVE());
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Stop Preview")) {
+                    static_cast<void>(StopPlayModeUVE());
+                }
+            } else {
+                if (ImGui::Button("Resume Preview")) {
+                    static_cast<void>(ResumePlayModeUVE());
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Step")) {
+                    static_cast<void>(StepPlayModeUVE());
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Stop Preview")) {
+                    static_cast<void>(StopPlayModeUVE());
+                }
+            }
             break;
         case EditorBottomDockUVE::AIToolbar:
             ImGui::TextUnformatted("AI Toolbar workspace");
@@ -4269,7 +4451,16 @@ void EditorUVE::RebuildHierarchyFilterCacheUVE() {
         if (!IsDocumentEntityUVE(entity)) {
             return false;
         }
-        bool visible = ContainsCaseInsensitiveUVE(GetEntityDisplayLabelUVE(entity), m_hierarchyFilter);
+        const std::string displayLabel = GetEntityDisplayLabelUVE(entity);
+        const std::string typeTag = GetOutlinerTypeTagUVE(entity);
+        const bool hasTypeQuery = m_hierarchyFilter.rfind("type:", 0U) == 0U;
+        const std::string_view typeQuery = hasTypeQuery ? std::string_view{m_hierarchyFilter}.substr(5U) : std::string_view{};
+        const bool typeMatches = !hasTypeQuery || ContainsCaseInsensitiveUVE(typeTag, typeQuery);
+        Scene::EntityUVE parent = Scene::kInvalidEntityUVE;
+        const bool isRoot = !TryGetDocumentParentUVE(entity, parent) || parent == Scene::kInvalidEntityUVE;
+        const bool nameMatches = hasTypeQuery || ContainsCaseInsensitiveUVE(displayLabel, m_hierarchyFilter) ||
+                                 (m_hierarchyFilter == "root" && isRoot);
+        bool visible = typeMatches && nameMatches;
         Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
         for (const Scene::EntityUVE child : m_services->GetSceneGraphUVE().GetChildrenUVE(entityManager, entity)) {
             visible = self(self, child) || visible;
@@ -4294,7 +4485,8 @@ void EditorUVE::DrawHierarchyPanelUVE() {
                                                   mainViewport->WorkSize.y - menuBarHeight - (m_bottomDockVisible ? kAssetsPanelHeightUVE : 0.0F));
     ImGui::SetNextWindowPos(ImVec2{mainViewport->WorkPos.x, mainViewport->WorkPos.y + menuBarHeight},
                             ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2{250.0F, workspaceHeight}, ImGuiCond_Always);
+    const float scenePanelWidth = std::clamp(mainViewport->WorkSize.x * 0.20F, 220.0F, 320.0F);
+    ImGui::SetNextWindowSize(ImVec2{scenePanelWidth, workspaceHeight}, ImGuiCond_Always);
     ImGui::Begin("Scene");
     std::array<char, 256> filterBuffer{};
     m_hierarchyFilter.copy(filterBuffer.data(), filterBuffer.size() - 1U);
@@ -4486,10 +4678,11 @@ void EditorUVE::DrawInspectorPanelUVE() {
     const float menuBarHeight = ImGui::GetFrameHeight();
     const float workspaceHeight = std::max(kMinimumViewportHeightUVE,
                                            mainViewport->WorkSize.y - menuBarHeight - (m_bottomDockVisible ? kAssetsPanelHeightUVE : 0.0F));
+    const float inspectorPanelWidth = std::clamp(mainViewport->WorkSize.x * 0.24F, 280.0F, 390.0F);
     ImGui::SetNextWindowPos(
-        ImVec2{mainViewport->WorkPos.x + mainViewport->WorkSize.x - 330.0F, mainViewport->WorkPos.y + menuBarHeight},
-        ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2{330.0F, workspaceHeight}, ImGuiCond_Always);
+        ImVec2{mainViewport->WorkPos.x + mainViewport->WorkSize.x - inspectorPanelWidth,
+               mainViewport->WorkPos.y + menuBarHeight}, ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2{inspectorPanelWidth, workspaceHeight}, ImGuiCond_Always);
     constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove |
                                        ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar;
     ImGui::Begin("##right-panel", nullptr, flags);
@@ -4586,7 +4779,18 @@ void EditorUVE::DrawInspectorContentUVE() {
     ImGui::BeginDisabled(!IsAuthoringCommandAllowedUVE());
     ImGui::Text("%s", GetEntityDisplayLabelUVE(m_selectedEntity).c_str());
     ImGui::TextDisabled("%s", EntityLabelUVE(m_selectedEntity).c_str());
-    m_inspectorDrawerRegistry.DrawEligibleUVE(m_selectedEntity);
+    std::array<char, 128> inspectorFilterBuffer{};
+    m_inspectorFilter.copy(inspectorFilterBuffer.data(), inspectorFilterBuffer.size() - 1U);
+    ImGui::SetNextItemWidth(-1.0F);
+    if (ImGui::InputTextWithHint("##inspector-filter", "Search properties...",
+                                inspectorFilterBuffer.data(), inspectorFilterBuffer.size())) {
+        m_inspectorFilter = inspectorFilterBuffer.data();
+    }
+    if (m_inspectorFilter.empty()) {
+        m_inspectorDrawerRegistry.DrawEligibleUVE(m_selectedEntity);
+    } else {
+        m_inspectorDrawerRegistry.DrawEligibleMatchingUVE(m_selectedEntity, m_inspectorFilter);
+    }
     DrawSceneComponentAddPanelUVE();
     if (!m_services->GetEntityManagerUVE().HasComponentUVE<Scene::TransformComponentUVE>(m_selectedEntity)) {
         ImGui::TextUnformatted("No local Transform component.");
@@ -5315,8 +5519,8 @@ void EditorUVE::DrawViewportPanelUVE() {
     // therefore owns only a transparent interactive input rectangle; it does not duplicate render
     // target, shader, or presentation ownership.
     const ImGuiViewport* const mainViewport = ImGui::GetMainViewport();
-    const float leftInset = m_scenePanelVisible ? 250.0F : 0.0F;
-    const float rightInset = m_inspectorPanelVisible ? 330.0F : 0.0F;
+    const float leftInset = m_scenePanelVisible ? std::clamp(mainViewport->WorkSize.x * 0.20F, 220.0F, 320.0F) : 0.0F;
+    const float rightInset = m_inspectorPanelVisible ? std::clamp(mainViewport->WorkSize.x * 0.24F, 280.0F, 390.0F) : 0.0F;
     const float menuBarHeight = ImGui::GetFrameHeight();
     const float bottomInset = m_bottomDockVisible ? kAssetsPanelHeightUVE : 0.0F;
     const ImVec2 desiredPosition{mainViewport->WorkPos.x + leftInset, mainViewport->WorkPos.y + menuBarHeight};
@@ -5446,6 +5650,31 @@ void EditorUVE::DrawViewportPanelUVE() {
             " (GL " + std::to_string(rendererDiagnostics.glDrawCallsIssued) + ")";
         drawList->AddText(ImVec2{contentOrigin.x + 10.0F, contentOrigin.y + 52.0F}, IM_COL32(166, 198, 176, 220),
                           diagnosticsLabel.c_str());
+        const char* const documentStateLabel = m_sceneDirty ? "UNSAVED CHANGES" : "SCENE SAVED";
+        const ImU32 documentStateColor = m_sceneDirty ? IM_COL32(236, 181, 86, 235) : IM_COL32(104, 202, 150, 225);
+        drawList->AddText(ImVec2{contentOrigin.x + contentSize.x - 150.0F, contentOrigin.y + 10.0F},
+                          documentStateColor, documentStateLabel);
+        if (GetDocumentRootsUVE().empty() && IsAuthoringCommandAllowedUVE()) {
+            const ImVec2 emptyStateSize{310.0F, 76.0F};
+            const ImVec2 emptyStatePosition{contentOrigin.x + (contentSize.x - emptyStateSize.x) * 0.5F,
+                                            contentOrigin.y + (contentSize.y - emptyStateSize.y) * 0.5F};
+            drawList->AddRectFilled(emptyStatePosition,
+                                    ImVec2{emptyStatePosition.x + emptyStateSize.x,
+                                           emptyStatePosition.y + emptyStateSize.y},
+                                    IM_COL32(7, 18, 37, 235), 6.0F);
+            drawList->AddRect(emptyStatePosition,
+                              ImVec2{emptyStatePosition.x + emptyStateSize.x,
+                                     emptyStatePosition.y + emptyStateSize.y},
+                              IM_COL32(73, 125, 170, 220), 6.0F, 0, 1.0F);
+            drawList->AddText(ImVec2{emptyStatePosition.x + 16.0F, emptyStatePosition.y + 12.0F},
+                              IM_COL32(233, 242, 255, 255), "EMPTY SCENE");
+            drawList->AddText(ImVec2{emptyStatePosition.x + 16.0F, emptyStatePosition.y + 32.0F},
+                              IM_COL32(154, 176, 205, 255), "Create an explicit daylight preview to start authoring.");
+            ImGui::SetCursorScreenPos(ImVec2{emptyStatePosition.x + 16.0F, emptyStatePosition.y + 50.0F});
+            if (ImGui::SmallButton("Create Daylight Preview")) {
+                static_cast<void>(CreateDaylightPreviewSceneUVE());
+            }
+        }
         if (m_playModeState != EditorPlayModeStateUVE::Edit) {
             const bool paused = m_playModeState == EditorPlayModeStateUVE::Paused;
             const char* const playLabel = paused ? "PAUSED" : "PLAYING";
