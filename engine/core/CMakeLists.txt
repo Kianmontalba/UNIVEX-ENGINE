@@ -19,6 +19,7 @@ add_library(uve_core STATIC
     src/animation_tree_uve.cpp
     src/animation_state_machine_uve.cpp
     src/animation_retargeting_uve.cpp
+    src/retarget_map_uve.cpp
     src/frame_scheduler_uve.cpp
     src/profiler_diagnostics_uve.cpp
 )

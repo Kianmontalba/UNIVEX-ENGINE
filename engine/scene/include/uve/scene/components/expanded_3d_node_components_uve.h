@@ -10,6 +10,7 @@
 #include <limits>
 #include <string>
 #include <vector>
+#include <utility>
 
 #include "uve/math/quaternion_uve.h"
 #include "uve/math/vector3_uve.h"
@@ -167,7 +168,24 @@ struct Skeleton3DNodeComponentUVE final {
     return true;
 }
 
+/// Applies only an explicit authored/imported skeleton asset payload. This function deliberately
+/// rejects an empty asset or empty hierarchy so retarget metadata cannot hydrate a Skeleton3D node.
+[[nodiscard]] inline bool TryBindExplicitSkeleton3DAssetUVE(
+    Skeleton3DNodeComponentUVE& target, std::string assetPath, std::vector<SkeletonBoneUVE> bones) {
+    Skeleton3DNodeComponentUVE candidate;
+    candidate.skeletonAssetPath = std::move(assetPath);
+    candidate.bones = std::move(bones);
+    candidate.enabled = target.enabled;
+    if (candidate.skeletonAssetPath.empty() || candidate.bones.empty() ||
+        !IsSkeleton3DNodeComponentValidUVE(candidate)) {
+        return false;
+    }
+    target = std::move(candidate);
+    return true;
+}
+
 struct BoneAttachment3DNodeComponentUVE final {
+
     std::uint32_t skeletonLocalId = std::numeric_limits<std::uint32_t>::max();
     std::uint32_t boneIndex = std::numeric_limits<std::uint32_t>::max();
     std::string boneName;
@@ -184,7 +202,18 @@ struct BoneAttachment3DNodeComponentUVE final {
            value.localScale.x > 0.0F && value.localScale.y > 0.0F && value.localScale.z > 0.0F;
 }
 
+/// Returns whether an attachment has enough explicit references to participate in runtime
+/// binding. A default attachment is valid scene data but remains inert until this is true.
+[[nodiscard]] inline bool IsBoneAttachment3DNodeComponentResolvableUVE(
+    const BoneAttachment3DNodeComponentUVE& value) noexcept {
+    const bool hasSkeletonReference = value.skeletonLocalId != std::numeric_limits<std::uint32_t>::max();
+    const bool hasBoneReference = value.boneIndex != std::numeric_limits<std::uint32_t>::max() ||
+                                  !value.boneName.empty();
+    return value.enabled && hasSkeletonReference && hasBoneReference;
+}
+
 struct SpringArm3DNodeComponentUVE final {
+
     float armLength = 4.0F;
     float margin = 0.1F;
     float smoothing = 8.0F;
