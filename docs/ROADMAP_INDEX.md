@@ -7,7 +7,7 @@
 
 </div>
 
-> This document is the consolidated execution view for the UNIVEX Engine. The linked domain roadmaps remain detailed evidence and historical source records; they must not introduce a conflicting status. When a status changes, this document and the owning detail document are updated in the same increment.
+> This document is the consolidated execution view for the UNIVEX Engine. The former domain roadmaps have been summarized and retired; this file is now the single status, scope, and execution authority. Detailed implementation history remains in Git commits and source documentation where applicable.
 
 ## Status language and counting
 
@@ -44,7 +44,7 @@ These are the authoritative engine-only families. Each family must be completed 
 | 8 | **Platform abstraction** | Desktop window/monitor/framebuffer validation, inert invalid-window behavior, and NUL-safe monitor snapshots exist. Remaining work is mobile lifecycle/safe areas, power management, hot-plug policy, and native display-mode application/enumeration breadth. |
 | 9 | **Networking** | Bounded reliable sequence windows, packet/reassembly invariants, and failure-safe primitives exist. Remaining work is reliable UDP channels, replication, ownership/RPC policy, prediction, reconciliation, interpolation, and dedicated-server integration. |
 
-The detailed evidence for these nine families remains in [`CORE_RUNTIME_ROADMAP.md`](CORE_RUNTIME_ROADMAP.md). The owner-facing metric after Increment 650 is **64 → 63 engine-only broad PARTIAL families**.
+The nine families above are the authoritative Core Runtime queue. The owner-facing metric after Increment 650 is **64 → 63 engine-only broad PARTIAL families**.
 
 ## Editor and workflow — active partial boundaries
 
@@ -59,7 +59,7 @@ The completed Scene Editor, bridge, canvas, debugger, animation foundations, and
 | **Advanced editor tools** | Animation authoring depth, terrain, world streaming, profiling UI, cinematics, source control, and collaboration remain. |
 | **Platform and shipping workflow** | Cooking, packaging, deployment, and sample-project growth remain after asset/project validation and renderer presentation are stable. |
 
-The detailed increment history and completion evidence remain in [`EDITOR_ROADMAP.md`](EDITOR_ROADMAP.md) and [`TOOLING_ROADMAP.md`](TOOLING_ROADMAP.md). The stale Editor Visual Scripting row is synchronized to `COMPLETED` in the current documentation update.
+The editor and tooling histories were summarized into the family boundaries above. The stale Editor Visual Scripting row is synchronized to `COMPLETED` in the current documentation update.
 
 ## Rendering — active partial boundaries
 
@@ -78,39 +78,39 @@ The renderer has verified RHI, Null/OpenGL execution, shader/material/PBR, light
 | **Cinematic presentation** | Camera/sequence-driven controlled render capture. |
 | **Advanced visual systems** | Scalable effects and plugin-provided visual systems after renderer budgets and ownership are explicit. |
 
-See [`RENDERING_ROADMAP.md`](RENDERING_ROADMAP.md) for detailed completed increments and verification boundaries.
+The renderer’s completed increments and verification boundaries are summarized above and remain available through Git history.
 
 ## Gameplay and content — active partial boundaries
 
 The gameplay/content foundation shares one ECS scene model with the editor, serializer, physics, audio, input, renderer, and completed Visual Scripting runtime. The remaining families are **Core 3D nodes**, **Core 2D/UI nodes**, **Character and interaction**, **Animation**, **Particles/VFX**, **Audio gameplay**, **Spline system**, **Procedural generation**, **Data-driven gameplay**, **Cinematic sequencer**, **Decals/billboards/impostors**, and **Lightmap baking**. Existing validation and runtime slices are foundations only; each family still requires real authoring/runtime behavior and focused tests before promotion.
 
-See [`GAMEPLAY_CONTENT_ROADMAP.md`](GAMEPLAY_CONTENT_ROADMAP.md) for the per-family completion boundaries and the one-scene-model gate.
+The per-family completion boundaries and one-scene-model gate are summarized above.
 
 ## Platform and release — active partial boundaries
 
 The release path has desktop windowing, GCC CI, and reproducible core build foundations. Remaining work covers **Windows support**, **Linux release support**, **Android support**, **iOS support**, **build configurations**, **asset cooking**, **packaging**, **release automation**, **sample project**, **Engine API reference**, **Editor user manual**, **Visual Scripting reference**, **plugin guide**, and **build/deployment guide**. These are release and documentation units, not substitutes for unfinished engine behavior.
 
-See [`PLATFORM_RELEASE_ROADMAP.md`](PLATFORM_RELEASE_ROADMAP.md) for the fourteen detailed platform/release boundaries.
+The fourteen platform/release boundaries are summarized above.
 
 ## Ecosystem — intentionally separate delivery track
 
 The ecosystem is not part of the engine completion count. Its eight partial families are **UniVex Hub**, **project management**, **engine-to-Hub integration**, **account service**, **public website/news**, **cloud/collaboration**, **marketplace/community**, and **closed beta/public launch**. These require independent security, privacy, operational, release-artifact, and support ownership.
 
-See [`ECOSYSTEM_ROADMAP.md`](ECOSYSTEM_ROADMAP.md). Ecosystem work must not displace the engine critical path or imply that account, payment, cloud, or public-launch contracts exist in the engine.
+Ecosystem work must not displace the engine critical path or imply that account, payment, cloud, or public-launch contracts exist in the engine.
 
 ## Motion Query and Control Rig — separate plugin/future scope
 
-Motion Query and Control Rig remain organized under the Animation plugin boundary and are **not counted as Core Runtime engine partials**. The current Motion Query file inventory contains 179 file-level PARTIAL entries across runtime, editor, diagnostics, profiling, build, and validation areas. The detailed inventory preserves the UVE-native filename targets, dependency order, dispositions, and public-technique authorship rule. It must remain separate from Core Runtime implementation increments unless a direct dependency is demonstrated.
+Motion Query and Control Rig remain organized under the Animation plugin boundary and are **not counted as Core Runtime engine partials**. The retired Motion Query file inventory contained 179 file-level PARTIAL entries across runtime, editor, diagnostics, profiling, build, and validation areas; its UVE-native target naming, dependency order, dispositions, and public-technique authorship rule were summarized into this section before deletion. Motion Query must remain separate from Core Runtime implementation increments unless a direct dependency is demonstrated.
 
 Control Rig has shared pose and validation foundations, but broader authoring/runtime behavior remains future scope. No speculative plugin edits are implied by completion of Native C++ Visual Scripting.
 
-See [`MOTION_QUERY_INVENTORY_ROADMAP.md`](MOTION_QUERY_INVENTORY_ROADMAP.md) and [`AAA_CORE_ROADMAP.md`](AAA_CORE_ROADMAP.md).
+The Motion Query and AAA boundaries are summarized above and remain separate from the engine completion count.
 
 ## AAA future capability map
 
 The AAA roadmap is a future-capability map, not an additional engine-count ledger. Its summarized capability groups are **Animation authoring/runtime**, **Control Rig/procedural animation**, **frame scheduling and task graphs**, **unified time**, **transform/pose evaluation**, **resource lifetime**, **event/signal bus**, **reflection/type metadata**, **asset dependency graphs**, **derived-data cache**, **profiling**, **crash diagnostics**, **RenderGraph completion**, **GPU-driven submission**, **post-processing**, **world streaming**, **navigation/AI**, **VFX/GPU compute**, **production editor tools**, **replication/prediction**, **production audio**, **cooking/build graphs**, **compatibility/migration**, **deterministic replay**, **soak/stress testing**, **performance budgets**, and **capability/platform matrices**. Existing foundations must be reused rather than duplicated.
 
-See [`AAA_CORE_ROADMAP.md`](AAA_CORE_ROADMAP.md). Its Motion Query inventory section points to the separate file-level authority above.
+The AAA future-capability groups are summarized above; they are not an additional implementation-count ledger.
 
 ## Consolidated execution rules
 
@@ -118,19 +118,6 @@ A new implementation increment begins with a whole-family audit across headers, 
 
 The execution state is **RED** when the intended behavior fails, **ORANGE** when implementation or review reveals an incomplete contract, and **GREEN** only after source, tests, build, integration, and hosted checks pass. Every merged increment requires signed history, a PR targeting `main`, hosted GCC and managed checks, squash merge, four-ref synchronization, and evidence recording. Protected unrelated work must never be mixed into the active family.
 
-## Supporting roadmap documents
+## Single-roadmap policy
 
-| Document | Role in the consolidated system |
-|---|---|
-| [`CORE_RUNTIME_ROADMAP.md`](CORE_RUNTIME_ROADMAP.md) | Detailed authority for the nine Core Runtime partial families and completed runtime foundations. |
-| [`EDITOR_ROADMAP.md`](EDITOR_ROADMAP.md) | Detailed editor/workflow history, completion gates, and remaining editor milestones. |
-| [`TOOLING_ROADMAP.md`](TOOLING_ROADMAP.md) | Detailed developer-tooling history and completed Visual Scripting/editor/tooling increments. |
-| [`RENDERING_ROADMAP.md`](RENDERING_ROADMAP.md) | Detailed renderer, RHI, shader, material, light, shadow, and viewport history. |
-| [`GAMEPLAY_CONTENT_ROADMAP.md`](GAMEPLAY_CONTENT_ROADMAP.md) | Detailed user-facing node, component, animation, particle, procedural, and cinematic boundaries. |
-| [`PLATFORM_RELEASE_ROADMAP.md`](PLATFORM_RELEASE_ROADMAP.md) | Detailed platform, cooking, packaging, sample, and release-documentation boundaries. |
-| [`ECOSYSTEM_ROADMAP.md`](ECOSYSTEM_ROADMAP.md) | Separate Hub, account, public-web, cloud, marketplace, and launch planning. |
-| [`MOTION_QUERY_INVENTORY_ROADMAP.md`](MOTION_QUERY_INVENTORY_ROADMAP.md) | File-level Motion Query/Motion Matching inventory and plugin implementation dispositions. |
-| [`AAA_CORE_ROADMAP.md`](AAA_CORE_ROADMAP.md) | High-level future/AAA capability map and public-technique design rules. |
-| [`LOOPS_EXECUTION_QUEUE.md`](LOOPS_EXECUTION_QUEUE.md) | Operational queue and historical execution notes; it is not an independent status authority. |
-
-> The original full vision remains in [`MASTER_SPEC.md`](MASTER_SPEC.md). This consolidated roadmap is the concise execution view; detailed files remain available for audit, implementation history, and per-file evidence.
+This file is the repository’s only active roadmap. The former domain roadmaps and operational queue have been retired because they duplicated status and scope across multiple views. Their unique capability information has been summarized above; implementation history remains in Git commits, while the original product vision remains in [`MASTER_SPEC.md`](MASTER_SPEC.md), which is a specification rather than a roadmap.
