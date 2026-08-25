@@ -1,23 +1,10 @@
 # Copyright (c) 2026 UniVex Studios. All Rights Reserved.
 
 #
-# ConfigManagerUVE is the first module with a third-party data-format
-# dependency: nlohmann::json, fetched here and confined behind
-# ConfigManagerUVE's PIMPL (config_manager_uve.cpp is the only file in the
-# repo that includes <nlohmann/json.hpp>) — linked PRIVATE so it never
-# leaks into consumers' include paths.
-
-include(FetchContent)
-set(JSON_BuildTests OFF CACHE INTERNAL "")
-set(JSON_Install OFF CACHE INTERNAL "")
-set(JSON_Examples OFF CACHE INTERNAL "")
-FetchContent_Declare(
-    nlohmann_json
-    GIT_REPOSITORY https://github.com/nlohmann/json.git
-    GIT_TAG v3.11.3
-    GIT_SHALLOW TRUE
-)
-FetchContent_MakeAvailable(nlohmann_json)
+# ConfigManagerUVE uses the root-owned pinned nlohmann::json dependency and
+# confines it behind ConfigManagerUVE's PIMPL (config_manager_uve.cpp is the
+# only file in the repo that includes <nlohmann/json.hpp>) — linked PRIVATE so
+# it never leaks into consumers' include paths.
 
 add_library(uve_config STATIC
     src/config_manager_uve.cpp
