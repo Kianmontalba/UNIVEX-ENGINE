@@ -1008,6 +1008,30 @@ TEST(EngineCoreUVETest, AudioSystem_ReachableAndFunctionalAfterInit) {
     engine.Shutdown();
 }
 
+TEST(EngineCoreUVETest, AudioStreamAndPcmEffects_ReachableThroughEngineServices) {
+    EngineCoreUVE engine(MakeTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    Audio::IAudioSystemUVE& audioSystem = engine.GetServicesUVE().GetAudioSystemUVE();
+    const Audio::VoiceHandleUVE source = audioSystem.CreateSourceUVE(Audio::AudioSourceDescUVE{});
+    ASSERT_NE(source, Audio::kInvalidVoiceHandleUVE);
+
+    ASSERT_TRUE(audioSystem.ResetSourceStreamUVE(source, 8U, false));
+    ASSERT_TRUE(audioSystem.ScheduleSourceStreamWindowUVE(source, 3U));
+    Audio::Pcm16StreamWindowPlanUVE plan;
+    ASSERT_TRUE(audioSystem.PopSourceStreamWindowUVE(source, plan));
+    EXPECT_EQ(plan, (Audio::Pcm16StreamWindowPlanUVE{0U, 3U, 3U, false, false}));
+
+    ASSERT_TRUE(audioSystem.ScheduleSourcePcmGainWindowUVE(
+        source, Audio::PcmGainEffectWindowUVE{0U, 2U, 0.25F}));
+    std::vector<float> output;
+    ASSERT_TRUE(audioSystem.ApplySourcePcmGainEffectsUVE(source, {0.8F, -0.4F, 0.5F}, output));
+    EXPECT_EQ(output, (std::vector<float>{0.2F, -0.1F, 0.5F}));
+
+    engine.Shutdown();
+}
+
 TEST(EngineCoreUVETest, AudioListener_TracksActiveCameraWorldPosition) {
     EngineCoreUVE engine(MakeTestConfigUVE());
     engine.Init();

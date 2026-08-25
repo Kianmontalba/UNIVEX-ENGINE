@@ -21,6 +21,8 @@ struct SourceStateUVE {
     Math::Vector3UVE position{};
     float volume = 1.0F;
     float pitch = 1.0F;
+    Pcm16StreamRefillSchedulerUVE streamScheduler;
+    PcmGainEffectScheduleUVE effectSchedule;
 };
 
 } // namespace
@@ -226,6 +228,58 @@ bool AudioSystemUVE::SetSourceMixerGroupUVE(const VoiceHandleUVE source, const s
 
 AudioMixerDiagnosticsUVE AudioSystemUVE::GetMixerDiagnosticsUVE(const std::size_t maximumGroups) const {
     return m_impl->mixerGroups.GetDiagnosticsUVE(maximumGroups);
+}
+
+bool AudioSystemUVE::ResetSourceStreamUVE(const VoiceHandleUVE source, const std::size_t totalSamples,
+                                          const bool loop, const std::size_t cursorSample,
+                                          const std::size_t maximumSamples) {
+    const auto iterator = m_impl->sources.find(source.value);
+    if (iterator == m_impl->sources.end()) {
+        UVE_ERROR("AudioSystemUVE: ResetSourceStreamUVE called with an unknown handle ({})", source.value);
+        return false;
+    }
+    return iterator->second.streamScheduler.ResetUVE(totalSamples, loop, cursorSample, maximumSamples);
+}
+
+bool AudioSystemUVE::ScheduleSourceStreamWindowUVE(const VoiceHandleUVE source,
+                                                    const std::size_t requestedSamples) {
+    const auto iterator = m_impl->sources.find(source.value);
+    if (iterator == m_impl->sources.end()) {
+        UVE_ERROR("AudioSystemUVE: ScheduleSourceStreamWindowUVE called with an unknown handle ({})", source.value);
+        return false;
+    }
+    return iterator->second.streamScheduler.ScheduleWindowUVE(requestedSamples);
+}
+
+bool AudioSystemUVE::PopSourceStreamWindowUVE(const VoiceHandleUVE source,
+                                               Pcm16StreamWindowPlanUVE& outPlan) {
+    const auto iterator = m_impl->sources.find(source.value);
+    if (iterator == m_impl->sources.end()) {
+        UVE_ERROR("AudioSystemUVE: PopSourceStreamWindowUVE called with an unknown handle ({})", source.value);
+        return false;
+    }
+    return iterator->second.streamScheduler.PopNextWindowUVE(outPlan);
+}
+
+bool AudioSystemUVE::ScheduleSourcePcmGainWindowUVE(const VoiceHandleUVE source,
+                                                     const PcmGainEffectWindowUVE& window) {
+    const auto iterator = m_impl->sources.find(source.value);
+    if (iterator == m_impl->sources.end()) {
+        UVE_ERROR("AudioSystemUVE: ScheduleSourcePcmGainWindowUVE called with an unknown handle ({})", source.value);
+        return false;
+    }
+    return iterator->second.effectSchedule.ScheduleWindowUVE(window);
+}
+
+bool AudioSystemUVE::ApplySourcePcmGainEffectsUVE(const VoiceHandleUVE source,
+                                                   const std::vector<float>& inputSamples,
+                                                   std::vector<float>& outputSamples) {
+    const auto iterator = m_impl->sources.find(source.value);
+    if (iterator == m_impl->sources.end()) {
+        UVE_ERROR("AudioSystemUVE: ApplySourcePcmGainEffectsUVE called with an unknown handle ({})", source.value);
+        return false;
+    }
+    return iterator->second.effectSchedule.ApplyPendingUVE(inputSamples, outputSamples);
 }
 
 void AudioSystemUVE::UpdateUVE() {

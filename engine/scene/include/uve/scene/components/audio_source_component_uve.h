@@ -23,13 +23,12 @@ enum class AudioAttenuationCurveUVE : std::uint8_t { Linear, InverseSquare };
 
 /// One of the master spec's named built-in components (Part 7.3), extended in Part 7.6's
 /// AudioSystemUVE (Increment 18) exactly as this component's own original doc comment predicted.
-/// `audioAssetPath` remains a path-based identity only — no AudioClipUVE/decoded-audio asset type
-/// exists yet (a future Part 7.4 extension); AudioSourceSystemUVE only needs to know *which*
-/// sound this entity refers to, not its decoded samples, to drive IAudioSystemUVE's
-/// position/gain bookkeeping this increment. No runtime "isPlaying" field is stored here —
-/// AudioSourceSystemUVE tracks the live entity->voice mapping itself, and playback state is
-/// queryable via IAudioSystemUVE::GetSourceStateUVE(), matching WorldTransformComponentUVE's own
-/// precedent of keeping derived/runtime state out of the authored component.
+/// `audioAssetPath` remains a path-based identity only. The typed `.uveaudio` AudioAssetUVE envelope
+/// and bounded caller-owned stream/effect preparation now exist, but this authored component still
+/// owns no decoded samples, stream cursor, effect queue, device voice, or backend state. No runtime
+/// "isPlaying" field is stored here — AudioSourceSystemUVE tracks the live entity->voice mapping
+/// itself, and playback state is queryable via IAudioSystemUVE::GetSourceStateUVE(), matching
+/// WorldTransformComponentUVE's own precedent of keeping derived/runtime state out of authored data.
 struct AudioSourceComponentUVE final {
     std::string audioAssetPath;
     /// Empty preserves the legacy/default runtime Master route; non-empty names are resolved by AudioSystemUVE.
@@ -54,8 +53,8 @@ struct AudioSourceComponentUVE final {
 }
 
 /// Validates source parameters before persistence and audio-source synchronization. An empty path
-/// remains valid as the existing default/no-clip source state; a future asset resolver owns path
-/// existence. Distance ordering is required only for spatial sources because 2D sources ignore it.
+/// remains valid as the existing default/no-clip source state; an optional runtime clip resolver owns
+/// any path/database policy. Distance ordering is required only for spatial sources because 2D sources ignore it.
 [[nodiscard]] inline bool IsAudioSourceComponentValidUVE(const AudioSourceComponentUVE& source) noexcept {
     const bool spatialDistanceValid =
         !source.spatial || (std::isfinite(source.minDistance) && source.minDistance > 0.0F &&

@@ -11,9 +11,9 @@
 namespace UVE::Audio {
 
 /// Describes a voice to create via IAudioDeviceUVE::CreateVoiceUVE(). `audioAssetPath` is an
-/// identity only — no decoded PCM/streaming data exists this increment (see
-/// Scene::AudioSourceComponentUVE's own doc comment); a real backend would resolve this path to
-/// real audio data itself.
+/// identity only; caller-owned decoded PCM and bounded stream/effect preparation are supplied
+/// separately through IAudioSystemUVE and are never stored in this device descriptor. A concrete
+/// backend may resolve the identity to real audio data when it owns that capability.
 struct AudioVoiceDescUVE {
     std::string audioAssetPath;
     bool looping = false;
