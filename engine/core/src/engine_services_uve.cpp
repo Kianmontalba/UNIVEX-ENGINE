@@ -46,6 +46,9 @@ EngineServicesUVE::EngineServicesUVE(Debug::ILoggerUVE& logger, Utilities::ITime
                                       Physics::IRaycastSystemUVE& raycastSystem,
                                       Physics::PhysicsConstraintSystemUVE& physicsConstraintSystem,
                                       Input::IInputSystemUVE& inputSystem,
+                                      Input::IGamepadInputSystemUVE& gamepadInputSystem,
+                                      Input::IMobileInputSystemUVE& mobileInputSystem,
+                                      Input::IMobileGestureSystemUVE& mobileGestureSystem,
                                       Audio::IAudioDeviceUVE& audioDevice,
                                       Audio::IAudioSystemUVE& audioSystem,
                                       Audio::IAudioSourceSystemUVE& audioSourceSystem,
@@ -67,7 +70,8 @@ EngineServicesUVE::EngineServicesUVE(Debug::ILoggerUVE& logger, Utilities::ITime
       m_collisionSystem(&collisionSystem),
       m_physicsSystem(&physicsSystem), m_physicsQuerySystem(&physicsQuerySystem),
       m_raycastSystem(&raycastSystem), m_physicsConstraintSystem(&physicsConstraintSystem),
-      m_inputSystem(&inputSystem),
+      m_inputSystem(&inputSystem), m_gamepadInputSystem(&gamepadInputSystem),
+      m_mobileInputSystem(&mobileInputSystem), m_mobileGestureSystem(&mobileGestureSystem),
       m_audioDevice(&audioDevice), m_audioSystem(&audioSystem), m_audioSourceSystem(&audioSourceSystem),
       m_saveGameSystem(&saveGameSystem), m_checkpointManager(&checkpointManager),
       m_windowManager(&windowManager) {}
@@ -206,6 +210,18 @@ Physics::PhysicsConstraintSystemUVE& EngineServicesUVE::GetPhysicsConstraintSyst
 
 Input::IInputSystemUVE& EngineServicesUVE::GetInputSystemUVE() const noexcept {
     return *m_inputSystem;
+}
+
+Input::IGamepadInputSystemUVE& EngineServicesUVE::GetGamepadInputSystemUVE() const noexcept {
+    return *m_gamepadInputSystem;
+}
+
+Input::IMobileInputSystemUVE& EngineServicesUVE::GetMobileInputSystemUVE() const noexcept {
+    return *m_mobileInputSystem;
+}
+
+Input::IMobileGestureSystemUVE& EngineServicesUVE::GetMobileGestureSystemUVE() const noexcept {
+    return *m_mobileGestureSystem;
 }
 
 Audio::IAudioDeviceUVE& EngineServicesUVE::GetAudioDeviceUVE() const noexcept {

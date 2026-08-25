@@ -988,6 +988,45 @@ TEST(EngineCoreUVETest, InputSystem_ReachableAndFunctionalAfterInit) {
     engine.Shutdown();
 }
 
+TEST(EngineCoreUVETest, ExtendedInputServices_ReachableAndUpdatedThroughEngineCore) {
+    EngineCoreUVE engine(MakeTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    Input::IInputSystemUVE& inputSystem = engine.GetServicesUVE().GetInputSystemUVE();
+    Input::IGamepadInputSystemUVE& gamepad = engine.GetServicesUVE().GetGamepadInputSystemUVE();
+    Input::IMobileInputSystemUVE& mobile = engine.GetServicesUVE().GetMobileInputSystemUVE();
+    Input::IMobileGestureSystemUVE& gestures = engine.GetServicesUVE().GetMobileGestureSystemUVE();
+
+    Input::InputActionUVE action;
+    action.name = "GamepadJump";
+    action.type = Input::InputActionTypeUVE::Button;
+    action.positiveBindings.push_back(Input::GamepadButtonBindingUVE(0U, Input::GamepadButtonUVE::South));
+    inputSystem.RegisterActionUVE(std::move(action));
+
+    gamepad.SetConnectedUVE(0U, true);
+    gamepad.SetButtonStateUVE(0U, Input::GamepadButtonUVE::South, true);
+    mobile.SetTouchStateUVE(0U, true, 42U, Math::Vector2UVE{10.0F, 20.0F}, 0.5F);
+    engine.TickFrameUVE();
+
+    EXPECT_TRUE(inputSystem.IsActionTriggeredUVE("GamepadJump"));
+    EXPECT_EQ(gamepad.GetSnapshotUVE(0U).frameNumber, 1U);
+    EXPECT_EQ(mobile.GetSnapshotUVE().frameNumber, 1U);
+    EXPECT_EQ(gestures.GetLastReportUVE().count, 0U);
+
+    gamepad.SetButtonStateUVE(0U, Input::GamepadButtonUVE::South, false);
+    mobile.SetTouchStateUVE(0U, false, 0U, Math::Vector2UVE{}, 0.0F);
+    engine.TickFrameUVE();
+
+    EXPECT_TRUE(inputSystem.IsActionReleasedUVE("GamepadJump"));
+    const Input::MobileGestureReportUVE report = gestures.GetLastReportUVE();
+    ASSERT_EQ(report.count, 1U);
+    EXPECT_EQ(report.events[0].type, Input::MobileGestureTypeUVE::Tap);
+    EXPECT_EQ(report.events[0].touchIdentifier, 42U);
+
+    engine.Shutdown();
+}
+
 TEST(EngineCoreUVETest, AudioSystem_ReachableAndFunctionalAfterInit) {
     EngineCoreUVE engine(MakeTestConfigUVE());
     engine.Init();

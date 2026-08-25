@@ -28,7 +28,10 @@
 #include "uve/config/i_config_manager_uve.h"
 #include "uve/debug/i_logger_uve.h"
 #include "uve/events/i_event_system_uve.h"
+#include "uve/input/i_gamepad_input_system_uve.h"
 #include "uve/input/i_input_system_uve.h"
+#include "uve/input/i_mobile_gesture_system_uve.h"
+#include "uve/input/i_mobile_input_system_uve.h"
 #include "uve/memory/i_memory_manager_uve.h"
 #include "uve/physics/i_collision_system_uve.h"
 #include "uve/physics/i_physics_system_uve.h"
@@ -61,9 +64,9 @@ namespace UVE::Core {
 /// ProjectChangeWatcher, SceneSerializer, PrefabSystem, HotReload, AssetManager, AssetImporter, AssetImportQueue, AssetBundle,
 /// FileSystem, RenderDevice, ShaderManager, RenderSystem, CameraSystem,
 /// MeshRenderer, LightSystem, Renderer3D, CollisionSystem, PhysicsSystem,
-/// PhysicsQuerySystem, RaycastSystem, PhysicsConstraintSystem, InputSystem, AudioDevice, AudioSystem, AudioSourceSystem,
+/// PhysicsQuerySystem, RaycastSystem, PhysicsConstraintSystem, InputSystem, GamepadInputSystem, MobileInputSystem, MobileGestureSystem, AudioDevice, AudioSystem, AudioSourceSystem,
 /// SaveGameSystem, CheckpointManager, WindowManager), built once
-/// EngineCoreUVE has constructed all thirty-five. Any future subsystem that
+/// EngineCoreUVE has constructed all thirty-eight. Any future subsystem that
 /// needs access to one of these should receive an EngineServicesUVE&
 /// (obtained from EngineCoreUVE::GetServicesUVE()) rather than a raw global
 /// pointer — the logging macros' internal active-instance pointer remains
@@ -77,10 +80,11 @@ namespace UVE::Core {
 /// IRenderDeviceUVE/Shader::IShaderManagerUVE/IRenderSystemUVE/
 /// ICameraSystemUVE/IMeshRendererUVE/ILightSystemUVE/
 /// IRenderer3DUVE/ICollisionSystemUVE/IPhysicsSystemUVE/IPhysicsQuerySystemUVE/
-/// IRaycastSystemUVE/PhysicsConstraintSystemUVE/IInputSystemUVE/IAudioDeviceUVE/IAudioSystemUVE/IAudioSourceSystemUVE/
+/// IRaycastSystemUVE/PhysicsConstraintSystemUVE/IInputSystemUVE/IGamepadInputSystemUVE/IMobileInputSystemUVE/
+/// IMobileGestureSystemUVE/IAudioDeviceUVE/IAudioSystemUVE/IAudioSourceSystemUVE/
 /// ISaveGameSystemUVE/ICheckpointManagerUVE/IWindowManagerUVE interfaces,
 /// not the concrete types, so a future substitute implementation of any of
-/// the thirty-five requires no change here.
+/// the thirty-eight requires no change here.
 /// Thread-safety: EngineServicesUVE itself holds only non-owning pointers
 /// and has no mutable state of its own; the thread-safety of each accessor
 /// is whatever the referenced service documents.
@@ -119,6 +123,9 @@ public:
                        Physics::IRaycastSystemUVE& raycastSystem,
                        Physics::PhysicsConstraintSystemUVE& physicsConstraintSystem,
                        Input::IInputSystemUVE& inputSystem,
+                       Input::IGamepadInputSystemUVE& gamepadInputSystem,
+                       Input::IMobileInputSystemUVE& mobileInputSystem,
+                       Input::IMobileGestureSystemUVE& mobileGestureSystem,
                        Audio::IAudioDeviceUVE& audioDevice,
                        Audio::IAudioSystemUVE& audioSystem,
                        Audio::IAudioSourceSystemUVE& audioSourceSystem,
@@ -160,6 +167,9 @@ public:
     [[nodiscard]] Physics::IRaycastSystemUVE& GetRaycastSystemUVE() const noexcept;
     [[nodiscard]] Physics::PhysicsConstraintSystemUVE& GetPhysicsConstraintSystemUVE() const noexcept;
     [[nodiscard]] Input::IInputSystemUVE& GetInputSystemUVE() const noexcept;
+    [[nodiscard]] Input::IGamepadInputSystemUVE& GetGamepadInputSystemUVE() const noexcept;
+    [[nodiscard]] Input::IMobileInputSystemUVE& GetMobileInputSystemUVE() const noexcept;
+    [[nodiscard]] Input::IMobileGestureSystemUVE& GetMobileGestureSystemUVE() const noexcept;
     [[nodiscard]] Audio::IAudioDeviceUVE& GetAudioDeviceUVE() const noexcept;
     [[nodiscard]] Audio::IAudioSystemUVE& GetAudioSystemUVE() const noexcept;
     [[nodiscard]] Audio::IAudioSourceSystemUVE& GetAudioSourceSystemUVE() const noexcept;
@@ -202,6 +212,9 @@ private:
     Physics::IRaycastSystemUVE* m_raycastSystem;
     Physics::PhysicsConstraintSystemUVE* m_physicsConstraintSystem;
     Input::IInputSystemUVE* m_inputSystem;
+    Input::IGamepadInputSystemUVE* m_gamepadInputSystem;
+    Input::IMobileInputSystemUVE* m_mobileInputSystem;
+    Input::IMobileGestureSystemUVE* m_mobileGestureSystem;
     Audio::IAudioDeviceUVE* m_audioDevice;
     Audio::IAudioSystemUVE* m_audioSystem;
     Audio::IAudioSourceSystemUVE* m_audioSourceSystem;
