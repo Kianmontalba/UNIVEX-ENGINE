@@ -38,6 +38,8 @@
 #include "uve/memory/i_memory_manager_uve.h"
 #include "uve/physics/i_collision_system_uve.h"
 #include "uve/physics/i_physics_system_uve.h"
+#include "uve/physics/physics_constraint_system_uve.h"
+#include "uve/physics/physics_query_system_uve.h"
 #include "uve/physics/i_raycast_system_uve.h"
 #include "uve/render/i_camera_system_uve.h"
 #include "uve/render/i_light_system_uve.h"
@@ -867,6 +869,8 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     FakeRenderer3DUVE renderer3D;
     FakeCollisionSystemUVE collisionSystem;
     FakePhysicsSystemUVE physicsSystem;
+    Physics::PhysicsQuerySystemUVE physicsQuerySystem(collisionSystem);
+    Physics::PhysicsConstraintSystemUVE physicsConstraintSystem;
     FakeRaycastSystemUVE raycastSystem;
     FakeInputSystemUVE inputSystem;
     FakeAudioDeviceUVE audioDevice;
@@ -883,7 +887,8 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
                                       hotReload, assetManager, assetImporter, assetImportQueue, assetBundle, fileSystem,
                                       renderDevice, shaderManager, renderSystem, cameraSystem,
                                       meshRenderer, lightSystem, renderer3D, collisionSystem, physicsSystem,
-                                      raycastSystem, inputSystem, audioDevice, audioSystem,
+                                      physicsQuerySystem, raycastSystem, physicsConstraintSystem, inputSystem,
+                                      audioDevice, audioSystem,
                                       audioSourceSystem, saveGameSystem, checkpointManager,
                                       windowManager);
 
@@ -916,7 +921,9 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     EXPECT_EQ(&services.GetRenderer3DUVE(), &renderer3D);
     EXPECT_EQ(&services.GetCollisionSystemUVE(), &collisionSystem);
     EXPECT_EQ(&services.GetPhysicsSystemUVE(), &physicsSystem);
+    EXPECT_EQ(&services.GetPhysicsQuerySystemUVE(), &physicsQuerySystem);
     EXPECT_EQ(&services.GetRaycastSystemUVE(), &raycastSystem);
+    EXPECT_EQ(&services.GetPhysicsConstraintSystemUVE(), &physicsConstraintSystem);
     EXPECT_EQ(&services.GetInputSystemUVE(), &inputSystem);
     EXPECT_EQ(&services.GetAudioDeviceUVE(), &audioDevice);
     EXPECT_EQ(&services.GetAudioSystemUVE(), &audioSystem);
@@ -957,6 +964,8 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     FakeRenderer3DUVE renderer3D;
     FakeCollisionSystemUVE collisionSystem;
     FakePhysicsSystemUVE physicsSystem;
+    Physics::PhysicsQuerySystemUVE physicsQuerySystem(collisionSystem);
+    Physics::PhysicsConstraintSystemUVE physicsConstraintSystem;
     FakeRaycastSystemUVE raycastSystem;
     FakeInputSystemUVE inputSystem;
     FakeAudioDeviceUVE audioDevice;
@@ -972,7 +981,8 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
                                       hotReload, assetManager, assetImporter, assetImportQueue, assetBundle, fileSystem,
                                       renderDevice, shaderManager, renderSystem, cameraSystem,
                                       meshRenderer, lightSystem, renderer3D, collisionSystem, physicsSystem,
-                                      raycastSystem, inputSystem, audioDevice, audioSystem,
+                                      physicsQuerySystem, raycastSystem, physicsConstraintSystem, inputSystem,
+                                      audioDevice, audioSystem,
                                       audioSourceSystem, saveGameSystem, checkpointManager,
                                       windowManager);
 

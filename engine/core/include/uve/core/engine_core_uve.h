@@ -44,7 +44,10 @@
 #include "uve/physics/area_overlap_lifecycle_tracker_uve.h"
 #include "uve/physics/i_collision_system_uve.h"
 #include "uve/physics/i_physics_system_uve.h"
+#include "uve/physics/i_physics_query_system_uve.h"
 #include "uve/physics/i_raycast_system_uve.h"
+#include "uve/physics/physics_constraint_system_uve.h"
+#include "uve/physics/physics_query_system_uve.h"
 #include "uve/render/i_camera_system_uve.h"
 #include "uve/render/i_light_system_uve.h"
 #include "uve/render/i_mesh_renderer_uve.h"
@@ -410,7 +413,9 @@ private:
     std::unique_ptr<Render::ILightSystemUVE> m_lightSystem;
     std::unique_ptr<Render::IRenderer3DUVE> m_renderer3D;
     std::unique_ptr<Physics::ICollisionSystemUVE> m_collisionSystem;
+    std::unique_ptr<Physics::PhysicsConstraintSystemUVE> m_physicsConstraintSystem;
     std::unique_ptr<Physics::IPhysicsSystemUVE> m_physicsSystem;
+    std::unique_ptr<Physics::IPhysicsQuerySystemUVE> m_physicsQuerySystem;
     std::unique_ptr<Physics::IRaycastSystemUVE> m_raycastSystem;
     std::unique_ptr<Scene::ParticleRuntimeUVE> m_particleRuntime;
     Physics::AreaOverlapLifecycleTrackerUVE m_areaOverlapLifecycleTracker;

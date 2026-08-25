@@ -42,7 +42,9 @@ EngineServicesUVE::EngineServicesUVE(Debug::ILoggerUVE& logger, Utilities::ITime
                                       Render::IRenderer3DUVE& renderer3D,
                                       Physics::ICollisionSystemUVE& collisionSystem,
                                       Physics::IPhysicsSystemUVE& physicsSystem,
+                                      Physics::IPhysicsQuerySystemUVE& physicsQuerySystem,
                                       Physics::IRaycastSystemUVE& raycastSystem,
+                                      Physics::PhysicsConstraintSystemUVE& physicsConstraintSystem,
                                       Input::IInputSystemUVE& inputSystem,
                                       Audio::IAudioDeviceUVE& audioDevice,
                                       Audio::IAudioSystemUVE& audioSystem,
@@ -63,7 +65,9 @@ EngineServicesUVE::EngineServicesUVE(Debug::ILoggerUVE& logger, Utilities::ITime
       m_cameraSystem(&cameraSystem),
       m_meshRenderer(&meshRenderer), m_lightSystem(&lightSystem), m_renderer3D(&renderer3D),
       m_collisionSystem(&collisionSystem),
-      m_physicsSystem(&physicsSystem), m_raycastSystem(&raycastSystem), m_inputSystem(&inputSystem),
+      m_physicsSystem(&physicsSystem), m_physicsQuerySystem(&physicsQuerySystem),
+      m_raycastSystem(&raycastSystem), m_physicsConstraintSystem(&physicsConstraintSystem),
+      m_inputSystem(&inputSystem),
       m_audioDevice(&audioDevice), m_audioSystem(&audioSystem), m_audioSourceSystem(&audioSourceSystem),
       m_saveGameSystem(&saveGameSystem), m_checkpointManager(&checkpointManager),
       m_windowManager(&windowManager) {}
@@ -188,8 +192,16 @@ Physics::IPhysicsSystemUVE& EngineServicesUVE::GetPhysicsSystemUVE() const noexc
     return *m_physicsSystem;
 }
 
+Physics::IPhysicsQuerySystemUVE& EngineServicesUVE::GetPhysicsQuerySystemUVE() const noexcept {
+    return *m_physicsQuerySystem;
+}
+
 Physics::IRaycastSystemUVE& EngineServicesUVE::GetRaycastSystemUVE() const noexcept {
     return *m_raycastSystem;
+}
+
+Physics::PhysicsConstraintSystemUVE& EngineServicesUVE::GetPhysicsConstraintSystemUVE() const noexcept {
+    return *m_physicsConstraintSystem;
 }
 
 Input::IInputSystemUVE& EngineServicesUVE::GetInputSystemUVE() const noexcept {

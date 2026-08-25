@@ -11,6 +11,7 @@ add_library(uve_physics STATIC
     src/collision_system_uve.cpp
     src/hinge_motor_limit_uve.cpp
     src/physics_constraint_system_uve.cpp
+    src/physics_query_system_uve.cpp
     src/physics_system_uve.cpp
     src/raycast_system_uve.cpp
     src/shape_cast_system_uve.cpp

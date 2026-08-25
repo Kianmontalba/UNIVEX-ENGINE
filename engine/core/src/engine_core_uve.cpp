@@ -322,11 +322,24 @@ void EngineCoreUVE::Init() {
     // CollisionSystem twenty-fifth: stateless, no dependencies of its own.
     m_collisionSystem = std::make_unique<Physics::CollisionSystemUVE>();
 
-    // PhysicsSystem twenty-sixth: needs only CollisionSystem (composed by reference) and
-    // EngineConfigUVE::gravity, both already available.
-    m_physicsSystem = std::make_unique<Physics::PhysicsSystemUVE>(*m_collisionSystem, m_config.gravity);
+    // PhysicsConstraintSystem twenty-sixth: EngineCore owns the bounded registry so constraints
+    // added through EngineServices participate in the normal fixed-step runtime. It is constructed
+    // before PhysicsSystem and reset after it, preventing the PhysicsSystem's non-owning attachment
+    // from ever outliving the registry.
+    m_physicsConstraintSystem = std::make_unique<Physics::PhysicsConstraintSystemUVE>();
 
-    // RaycastSystem twenty-seventh: stateless, no dependencies of its own.
+    // PhysicsSystem twenty-seventh: needs CollisionSystem and EngineConfigUVE::gravity. Attach the
+    // EngineCore-owned constraint registry before publishing the system through EngineServices.
+    auto physicsSystem = std::make_unique<Physics::PhysicsSystemUVE>(*m_collisionSystem, m_config.gravity);
+    physicsSystem->SetConstraintSystemUVE(m_physicsConstraintSystem.get());
+    m_physicsSystem = std::move(physicsSystem);
+
+    // PhysicsQuerySystem twenty-eighth: stateless façade over existing shape-cast, overlap, and
+    // caller-owned character-controller authorities. It borrows CollisionSystem only for controller
+    // commands and owns no ECS or scene state.
+    m_physicsQuerySystem = std::make_unique<Physics::PhysicsQuerySystemUVE>(*m_collisionSystem);
+
+    // RaycastSystem twenty-ninth: stateless, no dependencies of its own.
     m_raycastSystem = std::make_unique<Physics::RaycastSystemUVE>();
 
     // ParticleRuntime twenty-eighth: owns only bounded authored-emitter runtime state; ECS remains
@@ -375,7 +388,8 @@ void EngineCoreUVE::Init() {
 
                         *m_renderDevice, *m_shaderManager, *m_renderSystem, *m_cameraSystem,
                         *m_meshRenderer, *m_lightSystem, *m_renderer3D, *m_collisionSystem, *m_physicsSystem,
-                        *m_raycastSystem, *m_inputSystem, *m_audioDevice, *m_audioSystem,
+                        *m_physicsQuerySystem, *m_raycastSystem, *m_physicsConstraintSystem, *m_inputSystem,
+                        *m_audioDevice, *m_audioSystem,
                         *m_audioSourceSystem, *m_saveGameSystem, *m_checkpointManager,
                         *m_windowManager);
 
@@ -617,7 +631,9 @@ void EngineCoreUVE::Shutdown() {
     m_audioDevice.reset();
     m_inputSystem.reset();
     m_raycastSystem.reset();
+    m_physicsQuerySystem.reset();
     m_physicsSystem.reset();
+    m_physicsConstraintSystem.reset();
     m_collisionSystem.reset();
     m_areaOverlapLifecycleTracker.ResetUVE();
     m_renderer3D.reset();

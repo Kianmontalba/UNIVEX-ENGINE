@@ -42,6 +42,7 @@ add_executable(uve_tests
     physics/collider_shape_uve_tests.cpp
     physics/hinge_motor_limit_uve_tests.cpp
     physics/physics_constraint_system_uve_tests.cpp
+    physics/physics_query_system_uve_tests.cpp
     physics/physics_system_uve_tests.cpp
     physics/physics_material_uve_tests.cpp
     physics/raycast_system_uve_tests.cpp
