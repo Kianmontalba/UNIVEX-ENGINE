@@ -16,6 +16,14 @@ The engine completion queue is closed at the current supported boundaries. Polis
 
 The polish program must not reopen completed foundations as scattered partials. Each number below is one heavy increment with a clear owner-facing outcome, explicit dependencies, and a hard completion gate. Future capabilities may remain planned after a level closes; they must not be silently treated as implemented merely because a neighboring system exists.
 
+## 1.1 Design-stack decision
+
+The Editor UX/UI, Visual Scripting node surfaces, and 3D-node surfaces will use **TypeScript + HTML/CSS + JSON** as their design and presentation stack. TypeScript owns typed UI state, node interaction behavior, search, selection, drag/drop, inspector behavior, keyboard commands, and graph-editor coordination. HTML/CSS owns semantic structure, layout, themes, panels, node cards, ports, toolbars, inspector states, focus states, and responsive presentation. JSON owns versioned and validated node catalogs, pin/type metadata, defaults, categories, layout presets, icons, and editor presentation data.
+
+This stack is a presentation and authoring layer, not a replacement for the engine runtime. C++ remains the runtime authority for simulation, rendering, ECS, ownership, validation, and persistence rules. Communication must use a bounded value-only bridge/DTO contract; the UI must never receive native pointers or own native resources. Dependencies will target the latest stable 2026-compatible releases available at implementation time, then be pinned for reproducible builds rather than using unverified nightly versions.
+
+The TypeScript/HTML/CSS layer is a planned Polish implementation boundary. It must not be reported as implemented until actual source integration, bridge tests, visual verification, accessibility checks, and full repository validation pass.
+
 | Rule | Requirement |
 |---|---|
 | **One number, one cohesive increment** | Each level groups the entire audited family needed for its outcome. No artificial four-file or one-symbol slices. |
