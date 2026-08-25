@@ -1319,7 +1319,7 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_RunsEntityQueryConditionBranch) {
     EXPECT_TRUE(std::get<bool>(*context.FindOutputUVE(2U, "Result")));
 }
 
-TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsFlowBranchTooDeepConditionDependency) {
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_SchedulesDeepFlowBranchConditionDependency) {
     ScriptNodeRegistryUVE registry;
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
     ScriptGraphUVE graph;
@@ -1332,11 +1332,9 @@ TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsFlowBranchTooDeep
     ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{2U, "Result"}, {1U, "Condition"}}));
 
     const ScriptIrCompileResultUVE result = CompileScriptGraphToIrUVE(graph, registry);
-    EXPECT_FALSE(result.IsSuccessUVE());
-    ASSERT_EQ(result.diagnostics.size(), 1U);
-    EXPECT_EQ(result.diagnostics.front().code, ScriptValidationCodeUVE::UnsupportedRuntimeNode);
-    EXPECT_EQ(result.diagnostics.front().nodeId, 3U);
-    EXPECT_EQ(result.diagnostics.front().pinName, "Value");
+    ASSERT_TRUE(result.IsSuccessUVE());
+    ASSERT_TRUE(result.program.has_value());
+    EXPECT_TRUE(result.diagnostics.empty());
 }
 
 TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsFlowBranchConditionCycle) {
@@ -1354,8 +1352,47 @@ TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsFlowBranchConditi
     EXPECT_FALSE(result.IsSuccessUVE());
     ASSERT_EQ(result.diagnostics.size(), 1U);
     EXPECT_EQ(result.diagnostics.front().code, ScriptValidationCodeUVE::UnsupportedRuntimeNode);
-    EXPECT_EQ(result.diagnostics.front().nodeId, 3U);
-    EXPECT_EQ(result.diagnostics.front().pinName, "Value");
+    EXPECT_EQ(result.diagnostics.front().nodeId, 1U);
+    EXPECT_TRUE(result.diagnostics.front().pinName.empty());
+}
+
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_PreservesFlowDispatchCardinalityGuards) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+
+    ScriptGraphUVE sequenceGraph;
+    ASSERT_TRUE(sequenceGraph.AddNodeUVE({1U, "flow.sequence"}));
+    ASSERT_TRUE(sequenceGraph.AddNodeUVE({2U, "flow.sequence"}));
+    const ScriptIrCompileResultUVE sequenceResult = CompileScriptGraphToIrUVE(sequenceGraph, registry);
+    EXPECT_FALSE(sequenceResult.IsSuccessUVE());
+    ASSERT_EQ(sequenceResult.diagnostics.size(), 1U);
+    EXPECT_EQ(sequenceResult.diagnostics.front().code, ScriptValidationCodeUVE::UnsupportedRuntimeNode);
+    EXPECT_EQ(sequenceResult.diagnostics.front().nodeId, 2U);
+
+    ScriptGraphUVE branchGraph;
+    ASSERT_TRUE(branchGraph.AddNodeUVE({1U, "flow.branch"}));
+    ASSERT_TRUE(branchGraph.AddNodeUVE({2U, "flow.branch"}));
+    const ScriptIrCompileResultUVE branchResult = CompileScriptGraphToIrUVE(branchGraph, registry);
+    EXPECT_FALSE(branchResult.IsSuccessUVE());
+    ASSERT_EQ(branchResult.diagnostics.size(), 1U);
+    EXPECT_EQ(branchResult.diagnostics.front().code, ScriptValidationCodeUVE::UnsupportedRuntimeNode);
+    EXPECT_EQ(branchResult.diagnostics.front().nodeId, 2U);
+}
+
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_PreservesFlowDispatchTargetGuards) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({1U, "flow.sequence"}));
+    ASSERT_TRUE(graph.AddNodeUVE({2U, "flow.branch"}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{1U, "Then"}, {2U, "In"}}));
+
+    const ScriptIrCompileResultUVE result = CompileScriptGraphToIrUVE(graph, registry);
+    EXPECT_FALSE(result.IsSuccessUVE());
+    ASSERT_EQ(result.diagnostics.size(), 1U);
+    EXPECT_EQ(result.diagnostics.front().code, ScriptValidationCodeUVE::UnsupportedRuntimeNode);
+    EXPECT_EQ(result.diagnostics.front().nodeId, 1U);
+    EXPECT_EQ(result.diagnostics.front().pinName, "Then");
 }
 
 TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsNonBuiltinConditionProducer) {
@@ -1444,7 +1481,7 @@ TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesEntityQueryBoolean
     EXPECT_EQ(result.program->instructions[2].nodeTypeId, "logic.boolean.and");
 }
 
-TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsSecondEntityQueryBooleanConsumer) {
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_SchedulesMultipleEntityQueryBooleanConsumers) {
     ScriptNodeRegistryUVE registry;
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
     ScriptGraphUVE graph;
@@ -1455,11 +1492,9 @@ TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsSecondEntityQuery
     ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{10U, "Result"}, {30U, "B"}}));
 
     const ScriptIrCompileResultUVE result = CompileScriptGraphToIrUVE(graph, registry);
-    EXPECT_FALSE(result.IsSuccessUVE());
-    ASSERT_EQ(result.diagnostics.size(), 1U);
-    EXPECT_EQ(result.diagnostics.front().code, ScriptValidationCodeUVE::UnsupportedRuntimeNode);
-    EXPECT_EQ(result.diagnostics.front().nodeId, 30U);
-    EXPECT_EQ(result.diagnostics.front().pinName, "B");
+    ASSERT_TRUE(result.IsSuccessUVE());
+    ASSERT_TRUE(result.program.has_value());
+    EXPECT_TRUE(result.diagnostics.empty());
 }
 
 TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_RunsStagedEntityQueryBooleanChain) {
@@ -1513,7 +1548,7 @@ TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesQueryComponentToke
     EXPECT_EQ(result.program->instructions[2].nodeTypeId, "query.entity.has_component");
 }
 
-TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsSecondQueryComponentConsumer) {
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_SchedulesMultipleQueryComponentConsumers) {
     ScriptNodeRegistryUVE registry;
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
     ScriptGraphUVE graph;
@@ -1524,11 +1559,9 @@ TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsSecondQueryCompon
     ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{10U, "Result"}, {30U, "Component"}}));
 
     const ScriptIrCompileResultUVE result = CompileScriptGraphToIrUVE(graph, registry);
-    EXPECT_FALSE(result.IsSuccessUVE());
-    ASSERT_EQ(result.diagnostics.size(), 1U);
-    EXPECT_EQ(result.diagnostics.front().code, ScriptValidationCodeUVE::UnsupportedRuntimeNode);
-    EXPECT_EQ(result.diagnostics.front().nodeId, 30U);
-    EXPECT_EQ(result.diagnostics.front().pinName, "Component");
+    ASSERT_TRUE(result.IsSuccessUVE());
+    ASSERT_TRUE(result.program.has_value());
+    EXPECT_TRUE(result.diagnostics.empty());
 }
 
 TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_RunsStagedQueryComponentToken) {
@@ -1608,7 +1641,7 @@ TEST(ScriptDebuggerUVETest, StepUVE_ReportsStagedValueTransferTrace) {
     EXPECT_EQ(stepped.trace.front().targetNodeId, 9U);
 }
 
-TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsSecondBooleanStagedConsumer) {
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_SchedulesComposedBooleanDependency) {
     ScriptNodeRegistryUVE registry;
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
     ScriptGraphUVE graph;
@@ -1619,11 +1652,9 @@ TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsSecondBooleanStag
     ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{20U, "Result"}, {30U, "B"}}));
 
     const ScriptIrCompileResultUVE result = CompileScriptGraphToIrUVE(graph, registry);
-    EXPECT_FALSE(result.IsSuccessUVE());
-    ASSERT_EQ(result.diagnostics.size(), 1U);
-    EXPECT_EQ(result.diagnostics.front().code, ScriptValidationCodeUVE::UnsupportedRuntimeNode);
-    EXPECT_EQ(result.diagnostics.front().nodeId, 30U);
-    EXPECT_EQ(result.diagnostics.front().pinName, "B");
+    ASSERT_TRUE(result.IsSuccessUVE());
+    ASSERT_TRUE(result.program.has_value());
+    EXPECT_TRUE(result.diagnostics.empty());
 }
 
 TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_RunsStagedBooleanChain) {
@@ -1702,7 +1733,7 @@ TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesTwoNumbersBeforeCo
     EXPECT_EQ(result.program->instructions[4].nodeTypeId, "logic.boolean.greater_equal");
 }
 
-TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsSecondComparisonConsumer) {
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_SchedulesMultipleComparisonConsumers) {
     ScriptNodeRegistryUVE registry;
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
     ScriptGraphUVE graph;
@@ -1715,11 +1746,9 @@ TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsSecondComparisonC
     ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{10U, "Value"}, {30U, "A"}}));
 
     const ScriptIrCompileResultUVE result = CompileScriptGraphToIrUVE(graph, registry);
-    EXPECT_FALSE(result.IsSuccessUVE());
-    ASSERT_EQ(result.diagnostics.size(), 1U);
-    EXPECT_EQ(result.diagnostics.front().code, ScriptValidationCodeUVE::UnsupportedRuntimeNode);
-    EXPECT_EQ(result.diagnostics.front().nodeId, 30U);
-    EXPECT_EQ(result.diagnostics.front().pinName, "A");
+    ASSERT_TRUE(result.IsSuccessUVE());
+    ASSERT_TRUE(result.program.has_value());
+    EXPECT_TRUE(result.diagnostics.empty());
 }
 
 TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_RunsStagedNumbersIntoComparison) {
@@ -1754,7 +1783,7 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_RunsStagedNumbersIntoComparison) 
     EXPECT_TRUE(std::get<bool>(*context.FindOutputUVE(20U, "Result")));
 }
 
-TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsComposedFloatDependencyScheduling) {
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_SchedulesComposedFloatDependency) {
     ScriptNodeRegistryUVE registry;
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
     ScriptGraphUVE graph;
@@ -1765,11 +1794,9 @@ TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsComposedFloatDepe
     ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{20U, "Result"}, {30U, "A"}}));
 
     const ScriptIrCompileResultUVE result = CompileScriptGraphToIrUVE(graph, registry);
-    EXPECT_FALSE(result.IsSuccessUVE());
-    ASSERT_EQ(result.diagnostics.size(), 1U);
-    EXPECT_EQ(result.diagnostics.front().code, ScriptValidationCodeUVE::UnsupportedRuntimeNode);
-    EXPECT_EQ(result.diagnostics.front().nodeId, 30U);
-    EXPECT_EQ(result.diagnostics.front().pinName, "A");
+    ASSERT_TRUE(result.IsSuccessUVE());
+    ASSERT_TRUE(result.program.has_value());
+    EXPECT_TRUE(result.diagnostics.empty());
 }
 
 TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_RunsStagedEngineTimeFloatLink) {
@@ -1823,7 +1850,7 @@ TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesNumberBeforeVector
     EXPECT_EQ(result.program->instructions[2].nodeTypeId, "math.vector3.multiply");
 }
 
-TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsSecondVector3ScaleConsumer) {
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_SchedulesMultipleVector3ScaleConsumers) {
     ScriptNodeRegistryUVE registry;
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
     ScriptGraphUVE graph;
@@ -1835,14 +1862,12 @@ TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsSecondVector3Scal
     ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{30U, "Result"}, {40U, "Scale"}}));
 
     const ScriptIrCompileResultUVE result = CompileScriptGraphToIrUVE(graph, registry);
-    EXPECT_FALSE(result.IsSuccessUVE());
-    ASSERT_EQ(result.diagnostics.size(), 1U);
-    EXPECT_EQ(result.diagnostics.front().code, ScriptValidationCodeUVE::UnsupportedRuntimeNode);
-    EXPECT_EQ(result.diagnostics.front().nodeId, 40U);
-    EXPECT_EQ(result.diagnostics.front().pinName, "Scale");
+    ASSERT_TRUE(result.IsSuccessUVE());
+    ASSERT_TRUE(result.program.has_value());
+    EXPECT_TRUE(result.diagnostics.empty());
 }
 
-TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsComposedNumberBeforeVector3Scale) {
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_SchedulesComposedNumberBeforeVector3Scale) {
     ScriptNodeRegistryUVE registry;
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
     ScriptGraphUVE graph;
@@ -1853,11 +1878,9 @@ TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsComposedNumberBef
     ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{30U, "Result"}, {20U, "Scale"}}));
 
     const ScriptIrCompileResultUVE result = CompileScriptGraphToIrUVE(graph, registry);
-    EXPECT_FALSE(result.IsSuccessUVE());
-    ASSERT_EQ(result.diagnostics.size(), 1U);
-    EXPECT_EQ(result.diagnostics.front().code, ScriptValidationCodeUVE::UnsupportedRuntimeNode);
-    EXPECT_EQ(result.diagnostics.front().nodeId, 20U);
-    EXPECT_EQ(result.diagnostics.front().pinName, "Scale");
+    ASSERT_TRUE(result.IsSuccessUVE());
+    ASSERT_TRUE(result.program.has_value());
+    EXPECT_TRUE(result.diagnostics.empty());
 }
 
 TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_RunsFloatProducerIntoVector3Scale) {
@@ -1949,7 +1972,7 @@ TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesTwoIndependentVect
               (ScriptVector3ValueUVE{{6.0F, 6.0F, 7.0F}}));
 }
 
-TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsComposedVector3DependencyScheduling) {
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_SchedulesComposedVector3Dependency) {
     ScriptNodeRegistryUVE registry;
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
     ScriptGraphUVE graph;
@@ -1960,11 +1983,9 @@ TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsComposedVector3De
     ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{20U, "Result"}, {30U, "A"}}));
 
     const ScriptIrCompileResultUVE result = CompileScriptGraphToIrUVE(graph, registry);
-    EXPECT_FALSE(result.IsSuccessUVE());
-    ASSERT_EQ(result.diagnostics.size(), 1U);
-    EXPECT_EQ(result.diagnostics.front().code, ScriptValidationCodeUVE::UnsupportedRuntimeNode);
-    EXPECT_EQ(result.diagnostics.front().nodeId, 30U);
-    EXPECT_EQ(result.diagnostics.front().pinName, "A");
+    ASSERT_TRUE(result.IsSuccessUVE());
+    ASSERT_TRUE(result.program.has_value());
+    EXPECT_TRUE(result.diagnostics.empty());
 }
 
 TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_RunsStagedVector3Link) {
@@ -2073,7 +2094,7 @@ TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesVector3LengthNumbe
     EXPECT_EQ(result.program->instructions[2].nodeTypeId, "math.float.multiply");
 }
 
-TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsComposedNumberDependencyScheduling) {
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_SchedulesComposedNumberDependency) {
     ScriptNodeRegistryUVE registry;
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
     ScriptGraphUVE graph;
@@ -2084,11 +2105,9 @@ TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsComposedNumberDep
     ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{20U, "Result"}, {30U, "A"}}));
 
     const ScriptIrCompileResultUVE result = CompileScriptGraphToIrUVE(graph, registry);
-    EXPECT_FALSE(result.IsSuccessUVE());
-    ASSERT_EQ(result.diagnostics.size(), 1U);
-    EXPECT_EQ(result.diagnostics.front().code, ScriptValidationCodeUVE::UnsupportedRuntimeNode);
-    EXPECT_EQ(result.diagnostics.front().nodeId, 30U);
-    EXPECT_EQ(result.diagnostics.front().pinName, "A");
+    ASSERT_TRUE(result.IsSuccessUVE());
+    ASSERT_TRUE(result.program.has_value());
+    EXPECT_TRUE(result.diagnostics.empty());
 }
 
 TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_RunsStagedVector3DotNumberIntoFloat) {
@@ -2178,7 +2197,7 @@ TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesTwoIndependentFloa
     EXPECT_FLOAT_EQ(std::get<float>(*context.FindOutputUVE(20U, "Result")), 13.0F);
 }
 
-TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsSecondFloatStagedConsumer) {
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_SchedulesComposedFloatChain) {
     ScriptNodeRegistryUVE registry;
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
     ScriptGraphUVE graph;
@@ -2189,11 +2208,9 @@ TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsSecondFloatStaged
     ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{20U, "Result"}, {30U, "B"}}));
 
     const ScriptIrCompileResultUVE result = CompileScriptGraphToIrUVE(graph, registry);
-    EXPECT_FALSE(result.IsSuccessUVE());
-    ASSERT_EQ(result.diagnostics.size(), 1U);
-    EXPECT_EQ(result.diagnostics.front().code, ScriptValidationCodeUVE::UnsupportedRuntimeNode);
-    EXPECT_EQ(result.diagnostics.front().nodeId, 30U);
-    EXPECT_EQ(result.diagnostics.front().pinName, "B");
+    ASSERT_TRUE(result.IsSuccessUVE());
+    ASSERT_TRUE(result.program.has_value());
+    EXPECT_TRUE(result.diagnostics.empty());
 }
 
 TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_RunsStagedFloatChain) {
@@ -2484,11 +2501,11 @@ TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_SortsNodesAndLinksDeterm
     ASSERT_EQ(result.program->instructions.size(), 3U);
     EXPECT_EQ(result.program->instructions[0].kind, ScriptIrInstructionKindUVE::ExecuteNode);
     EXPECT_EQ(result.program->instructions[0].sourceNodeId, 10U);
-    EXPECT_EQ(result.program->instructions[1].sourceNodeId, 20U);
-    EXPECT_EQ(result.program->instructions[2].kind, ScriptIrInstructionKindUVE::TransferValue);
-    EXPECT_EQ(result.program->instructions[2].sourceNodeId, 10U);
-    EXPECT_EQ(result.program->instructions[2].targetNodeId, 20U);
-    EXPECT_EQ(result.program->sourceNodeIds, (std::vector<std::uint32_t>{10U, 20U, 10U}));
+    EXPECT_EQ(result.program->instructions[1].kind, ScriptIrInstructionKindUVE::TransferValue);
+    EXPECT_EQ(result.program->instructions[1].sourceNodeId, 10U);
+    EXPECT_EQ(result.program->instructions[1].targetNodeId, 20U);
+    EXPECT_EQ(result.program->instructions[2].sourceNodeId, 20U);
+    EXPECT_EQ(result.program->sourceNodeIds, (std::vector<std::uint32_t>{10U, 10U, 20U}));
 }
 
 TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_RejectsInstructionCountBeforeProgramPublication) {
@@ -7515,4 +7532,55 @@ TEST(ScriptVmExecutionContextUVE, SetBindingsAndComponentFactsRejectMalformedIde
 }
 
 } // namespace
+} // namespace UVE::Scripting
+
+
+namespace UVE::Scripting {
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_SchedulesReversedMultiHopVector3FanOut) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({10U, "math.vector3.add"}));
+    ASSERT_TRUE(graph.AddNodeUVE({20U, "math.vector3.length"}));
+    ASSERT_TRUE(graph.AddNodeUVE({30U, "math.vector3.subtract"}));
+    ASSERT_TRUE(graph.AddNodeUVE({40U, "math.vector3.make"}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{40U, "Vector"}, {10U, "A"}}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{40U, "Vector"}, {30U, "A"}}));
+    ASSERT_TRUE(graph.AddLinkUVE(ScriptLinkUVE{{10U, "Result"}, {20U, "Vector"}}));
+
+    const ScriptIrCompileResultUVE compiled = CompileScriptGraphToIrUVE(graph, registry);
+    ASSERT_TRUE(compiled.IsSuccessUVE());
+
+    std::vector<ScriptBytecodeDiagnosticUVE> diagnostics;
+    const std::optional<ScriptBytecodeProgramUVE> bytecode =
+        LowerIrToBytecodeUVE(*compiled.program, diagnostics);
+    ASSERT_TRUE(bytecode.has_value());
+    ASSERT_TRUE(diagnostics.empty());
+
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(40U, "X", 1.0F));
+    ASSERT_TRUE(context.SetInputUVE(40U, "Y", 2.0F));
+    ASSERT_TRUE(context.SetInputUVE(40U, "Z", 3.0F));
+    ASSERT_TRUE(context.SetInputUVE(10U, "B", ScriptVector3ValueUVE{{1.0F, 1.0F, 1.0F}}));
+    ASSERT_TRUE(context.SetInputUVE(30U, "B", ScriptVector3ValueUVE{{0.5F, 1.0F, 1.0F}}));
+
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(*bytecode, context);
+
+    EXPECT_TRUE(result.IsSuccessUVE());
+    const std::optional<ScriptVmValueUVE> addOutput = context.FindOutputUVE(10U, "Result");
+    const std::optional<ScriptVmValueUVE> subtractOutput = context.FindOutputUVE(30U, "Result");
+    ASSERT_TRUE(addOutput.has_value());
+    ASSERT_TRUE(subtractOutput.has_value());
+    const ScriptVector3ValueUVE* addResult = std::get_if<ScriptVector3ValueUVE>(&*addOutput);
+    const ScriptVector3ValueUVE* subtractResult = std::get_if<ScriptVector3ValueUVE>(&*subtractOutput);
+    ASSERT_NE(addResult, nullptr);
+    ASSERT_NE(subtractResult, nullptr);
+    EXPECT_EQ(*addResult, (ScriptVector3ValueUVE{{2.0F, 3.0F, 4.0F}}));
+    EXPECT_EQ(*subtractResult, (ScriptVector3ValueUVE{{0.5F, 1.0F, 2.0F}}));
+    ASSERT_TRUE(context.FindOutputUVE(20U, "Length").has_value());
+    EXPECT_NEAR(std::get<float>(*context.FindOutputUVE(20U, "Length")), std::sqrt(29.0F), 1.0e-5F);
+}
+
 } // namespace UVE::Scripting
