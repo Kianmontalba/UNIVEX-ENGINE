@@ -1407,6 +1407,119 @@ Scene::EntityUVE EditorUVE::CreateDocumentEntityUVE(const EditorEntityKindUVE ki
     return entity;
 }
 
+Scene::EntityUVE EditorUVE::CreateDocumentSceneNodeUVE(
+    const Scene::Nodes::SceneNodeKindUVE kind) {
+    if (!IsAuthoringCommandAllowedUVE() || m_selectedEntities.size() > 1U ||
+        m_gizmoDrag.axis != EditorTranslateAxisUVE::None ||
+        m_viewportNavigationMode != EditorViewportNavigationModeUVE::None) {
+        return Scene::kInvalidEntityUVE;
+    }
+    const Scene::Nodes::SceneNodeDescriptorUVE* descriptor =
+        Scene::Nodes::FindSceneNodeDescriptorUVE(kind);
+    if (descriptor == nullptr || !descriptor->libraryCreatable) {
+        return Scene::kInvalidEntityUVE;
+    }
+
+    const EditorSelectionSnapshotUVE selectionBefore = CaptureSelectionSnapshotUVE();
+    const bool dirtyBefore = m_sceneDirty;
+    Scene::EntityUVE entity = Scene::kInvalidEntityUVE;
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+
+    switch (kind) {
+        case Scene::Nodes::SceneNodeKindUVE::Empty:
+            entity = CreateDocumentEntityInternalUVE(EditorEntityKindUVE::Empty, std::nullopt);
+            break;
+        case Scene::Nodes::SceneNodeKindUVE::Camera3D:
+            entity = CreateDocumentEntityInternalUVE(EditorEntityKindUVE::Camera, std::nullopt);
+            break;
+        case Scene::Nodes::SceneNodeKindUVE::MeshInstance3D:
+            entity = CreateDocumentEntityInternalUVE(EditorEntityKindUVE::Empty, std::nullopt);
+            if (entity != Scene::kInvalidEntityUVE) {
+                entityManager.AddComponentUVE<Scene::MeshComponentUVE>(entity, Scene::MeshComponentUVE{});
+            }
+            break;
+        case Scene::Nodes::SceneNodeKindUVE::BoxMesh3D:
+            entity = CreateDocumentEntityInternalUVE(EditorEntityKindUVE::Cube, std::nullopt);
+            break;
+        case Scene::Nodes::SceneNodeKindUVE::SphereMesh3D:
+            entity = CreateDocumentEntityInternalUVE(EditorEntityKindUVE::UVSphere, std::nullopt);
+            break;
+        case Scene::Nodes::SceneNodeKindUVE::PlaneMesh3D:
+            entity = CreateDocumentEntityInternalUVE(EditorEntityKindUVE::Plane, std::nullopt);
+            break;
+        case Scene::Nodes::SceneNodeKindUVE::Light3D:
+            entity = CreateDocumentEntityInternalUVE(EditorEntityKindUVE::DirectionalLight, std::nullopt);
+            break;
+        case Scene::Nodes::SceneNodeKindUVE::Collider3D:
+            entity = CreateDocumentEntityInternalUVE(EditorEntityKindUVE::CollisionBox, std::nullopt);
+            break;
+        case Scene::Nodes::SceneNodeKindUVE::CharacterBody3D:
+            entity = CreateDocumentEntityInternalUVE(EditorEntityKindUVE::Empty, std::nullopt);
+            if (entity != Scene::kInvalidEntityUVE) {
+                entityManager.AddComponentUVE<Scene::ColliderComponentUVE>(entity,
+                                                                            Scene::ColliderComponentUVE{});
+                Scene::RigidBodyComponentUVE body{};
+                body.isKinematic = true;
+                entityManager.AddComponentUVE<Scene::RigidBodyComponentUVE>(entity, body);
+            }
+            break;
+        case Scene::Nodes::SceneNodeKindUVE::RigidBody3D:
+            entity = CreateDocumentEntityInternalUVE(EditorEntityKindUVE::Empty, std::nullopt);
+            if (entity != Scene::kInvalidEntityUVE) {
+                entityManager.AddComponentUVE<Scene::RigidBodyComponentUVE>(
+                    entity, Scene::RigidBodyComponentUVE{});
+            }
+            break;
+        case Scene::Nodes::SceneNodeKindUVE::AnimationPlayer:
+            entity = CreateDocumentEntityInternalUVE(EditorEntityKindUVE::Empty, std::nullopt);
+            if (entity != Scene::kInvalidEntityUVE) {
+                entityManager.AddComponentUVE<Scene::AnimationPlayerComponentUVE>(
+                    entity, Scene::AnimationPlayerComponentUVE{});
+            }
+            break;
+        case Scene::Nodes::SceneNodeKindUVE::AudioSource3D:
+            entity = CreateDocumentEntityInternalUVE(EditorEntityKindUVE::Empty, std::nullopt);
+            if (entity != Scene::kInvalidEntityUVE) {
+                entityManager.AddComponentUVE<Scene::AudioSourceComponentUVE>(
+                    entity, Scene::AudioSourceComponentUVE{});
+            }
+            break;
+        case Scene::Nodes::SceneNodeKindUVE::ParticleEmitter3D:
+            entity = CreateDocumentEntityInternalUVE(EditorEntityKindUVE::Empty, std::nullopt);
+            if (entity != Scene::kInvalidEntityUVE) {
+                entityManager.AddComponentUVE<Scene::ParticleEmitterComponentUVE>(
+                    entity, Scene::ParticleEmitterComponentUVE{});
+            }
+            break;
+        case Scene::Nodes::SceneNodeKindUVE::Script:
+            entity = CreateDocumentEntityInternalUVE(EditorEntityKindUVE::Empty, std::nullopt);
+            if (entity != Scene::kInvalidEntityUVE) {
+                entityManager.AddComponentUVE<Scene::ScriptComponentUVE>(entity, Scene::ScriptComponentUVE{});
+            }
+            break;
+        case Scene::Nodes::SceneNodeKindUVE::AnimationTree:
+            return Scene::kInvalidEntityUVE;
+    }
+
+    if (entity == Scene::kInvalidEntityUVE) {
+        return Scene::kInvalidEntityUVE;
+    }
+
+    const std::optional<Scene::SceneSnapshotUVE> snapshot = CaptureSubtreeUVE(entity);
+    if (!snapshot.has_value()) {
+        DestroyDocumentSubtreeUVE(entity);
+        RestoreSelectionUVE(selectionBefore);
+        m_sceneDirty = dirtyBefore;
+        return Scene::kInvalidEntityUVE;
+    }
+
+    SelectEntityUVE(entity);
+    m_sceneDirty = true;
+    RecordHistoryUVE(SceneNodeCreationHistoryEntryUVE{
+        *snapshot, kind, entity, selectionBefore, CaptureSelectionSnapshotUVE(), dirtyBefore, true});
+    return entity;
+}
+
 Scene::EntityUVE EditorUVE::DuplicateSelectedEntityUVE() {
     if (!IsLifecycleCommandAllowedUVE() || !IsDocumentEntityUVE(m_selectedEntity)) {
         return Scene::kInvalidEntityUVE;
@@ -2173,6 +2286,15 @@ bool EditorUVE::UndoHistoryEntryUVE(HistoryEntryUVE& entry) {
                 RestoreSelectionUVE(typedEntry.selectionBefore);
                 m_sceneDirty = typedEntry.dirtyBefore;
                 return true;
+            } else if constexpr (std::is_same_v<EntryType, SceneNodeCreationHistoryEntryUVE>) {
+                if (!IsDocumentEntityUVE(typedEntry.activeEntity)) {
+                    return false;
+                }
+                DestroyDocumentSubtreeUVE(typedEntry.activeEntity);
+                typedEntry.activeEntity = Scene::kInvalidEntityUVE;
+                RestoreSelectionUVE(typedEntry.selectionBefore);
+                m_sceneDirty = typedEntry.dirtyBefore;
+                return true;
             } else if constexpr (std::is_same_v<EntryType, DuplicationHistoryEntryUVE>) {
                 if (!IsDocumentEntityUVE(typedEntry.activeEntity)) {
                     return false;
@@ -2263,6 +2385,22 @@ bool EditorUVE::RedoHistoryEntryUVE(HistoryEntryUVE& entry) {
                 typedEntry.selectionAfter = EditorSelectionSnapshotUVE{{recreated}, recreated};
                 RestoreSelectionUVE(typedEntry.selectionAfter);
                 m_sceneDirty = typedEntry.dirtyAfter;
+                return true;
+            } else if constexpr (std::is_same_v<EntryType, SceneNodeCreationHistoryEntryUVE>) {
+                if (typedEntry.activeEntity != Scene::kInvalidEntityUVE &&
+                    m_services->GetEntityManagerUVE().IsAliveUVE(typedEntry.activeEntity)) {
+                    return false;
+                }
+                const Scene::EntityUVE restored =
+                    RestoreSubtreeUnderParentUVE(typedEntry.snapshot, Scene::kInvalidEntityUVE);
+                if (restored == Scene::kInvalidEntityUVE) {
+                    return false;
+                }
+                typedEntry.activeEntity = restored;
+                typedEntry.selectionAfter = EditorSelectionSnapshotUVE{{restored}, restored};
+                RestoreSelectionUVE(typedEntry.selectionAfter);
+                m_sceneDirty = typedEntry.dirtyAfter;
+                InvalidateHierarchyFilterCacheUVE();
                 return true;
             } else if constexpr (std::is_same_v<EntryType, DuplicationHistoryEntryUVE>) {
                 if (typedEntry.activeEntity != Scene::kInvalidEntityUVE &&
@@ -3919,23 +4057,18 @@ void EditorUVE::DrawMenuBarUVE() {
     ImGui::TextDisabled("|");
     ImGui::SameLine();
     if (m_activeWorkspace == EditorWorkspaceUVE::Library) {
-        ImGui::BeginDisabled(!IsAuthoringCommandAllowedUVE());
-        if (ImGui::SmallButton("+ Cube")) {
-            static_cast<void>(CreateDocumentEntityUVE(EditorEntityKindUVE::Cube));
+        if (ImGui::BeginMenu("Add Node")) {
+            const bool canCreateNode = IsAuthoringCommandAllowedUVE();
+            for (const Scene::Nodes::SceneNodeDescriptorUVE& descriptor :
+                 Scene::Nodes::GetSceneNodeDescriptorsUVE()) {
+                ImGui::BeginDisabled(!canCreateNode || !descriptor.libraryCreatable);
+                if (ImGui::MenuItem(descriptor.displayName.data())) {
+                    static_cast<void>(CreateDocumentSceneNodeUVE(descriptor.kind));
+                }
+                ImGui::EndDisabled();
+            }
+            ImGui::EndMenu();
         }
-        ImGui::SameLine();
-        if (ImGui::SmallButton("+ Sphere")) {
-            static_cast<void>(CreateDocumentEntityUVE(EditorEntityKindUVE::UVSphere));
-        }
-        ImGui::SameLine();
-        if (ImGui::SmallButton("+ Plane")) {
-            static_cast<void>(CreateDocumentEntityUVE(EditorEntityKindUVE::Plane));
-        }
-        ImGui::SameLine();
-        if (ImGui::SmallButton("+ Light")) {
-            static_cast<void>(CreateDocumentEntityUVE(EditorEntityKindUVE::DirectionalLight));
-        }
-        ImGui::EndDisabled();
         ImGui::SameLine();
         ImGui::TextDisabled("|");
         ImGui::SameLine();

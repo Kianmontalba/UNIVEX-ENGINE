@@ -140,6 +140,7 @@ add_executable(uve_tests
     scene/prefab_maturity_uve_tests.cpp
     scene/prefab_revision_policy_uve_tests.cpp
     scene/particle_runtime_uve_tests.cpp
+    scene/scene_node_registry_uve_tests.cpp
     core/engine_state_uve_tests.cpp
     core/engine_core_uve_tests.cpp
     core/engine_services_uve_tests.cpp
@@ -164,6 +165,7 @@ add_executable(uve_tests
     editor/data_table_registry_bridge_uve_tests.cpp
     editor/editor_uve_tests.cpp
     editor/scene_component_authoring_uve_tests.cpp
+    editor/scene_node_editor_uve_tests.cpp
     editor/prefab_maturity_editor_uve_tests.cpp
     editor/inspector_drawer_registry_uve_tests.cpp
     scripting/script_graph_uve_tests.cpp
