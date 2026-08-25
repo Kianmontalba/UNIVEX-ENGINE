@@ -767,6 +767,25 @@ public:
     bool SetMixerGroupPitchUVE(std::string_view, float) override { return false; }
     bool SetSourceMixerGroupUVE(Audio::VoiceHandleUVE, std::string_view) override { return false; }
     [[nodiscard]] Audio::AudioMixerDiagnosticsUVE GetMixerDiagnosticsUVE(std::size_t) const override { return {}; }
+    [[nodiscard]] bool ResetSourceStreamUVE(Audio::VoiceHandleUVE, std::size_t, bool, std::size_t,
+                                             std::size_t) override {
+        return false;
+    }
+    [[nodiscard]] bool ScheduleSourceStreamWindowUVE(Audio::VoiceHandleUVE, std::size_t) override {
+        return false;
+    }
+    [[nodiscard]] bool PopSourceStreamWindowUVE(Audio::VoiceHandleUVE,
+                                                 Audio::Pcm16StreamWindowPlanUVE&) override {
+        return false;
+    }
+    [[nodiscard]] bool ScheduleSourcePcmGainWindowUVE(
+        Audio::VoiceHandleUVE, const Audio::PcmGainEffectWindowUVE&) override {
+        return false;
+    }
+    [[nodiscard]] bool ApplySourcePcmGainEffectsUVE(
+        Audio::VoiceHandleUVE, const std::vector<float>&, std::vector<float>&) override {
+        return false;
+    }
     void UpdateUVE() override { ++updateCallCount; }
 
     int updateCallCount = 0;

@@ -3,7 +3,12 @@
 
 #pragma once
 
+#include <cstddef>
+#include <vector>
+
 #include "uve/audio/audio_mixer_group_uve.h"
+#include "uve/audio/pcm_gain_effect_uve.h"
+#include "uve/audio/wav_pcm16_decoder_uve.h"
 #include "uve/audio/audio_source_desc_uve.h"
 #include "uve/audio/voice_handle_uve.h"
 #include "uve/audio/voice_playback_state_uve.h"
@@ -57,6 +62,27 @@ public:
     virtual bool SetSourceMixerGroupUVE(VoiceHandleUVE source, std::string_view name) = 0;
     [[nodiscard]] virtual AudioMixerDiagnosticsUVE GetMixerDiagnosticsUVE(
         std::size_t maximumGroups = kMaximumAudioMixerGroupsUVE) const = 0;
+
+    // --- Caller-owned bounded stream/effect preparation. ---
+    /// Resets one source's bounded PCM16 refill cursor. The source retains only cursor/scheduler
+    /// state; decoded samples remain caller-owned and are never copied into AudioSystemUVE.
+    [[nodiscard]] virtual bool ResetSourceStreamUVE(
+        VoiceHandleUVE source, std::size_t totalSamples, bool loop, std::size_t cursorSample = 0U,
+        std::size_t maximumSamples = kMaximumWavPcm16SamplesUVE) = 0;
+    /// Plans and queues one bounded contiguous refill window, advancing only the source-owned cursor.
+    [[nodiscard]] virtual bool ScheduleSourceStreamWindowUVE(VoiceHandleUVE source,
+                                                               std::size_t requestedSamples) = 0;
+    /// Pops the oldest queued refill plan for caller-owned decoding/publication.
+    [[nodiscard]] virtual bool PopSourceStreamWindowUVE(VoiceHandleUVE source,
+                                                         Pcm16StreamWindowPlanUVE& outPlan) = 0;
+    /// Queues one bounded PCM gain window for the source's next caller-owned sample-buffer pass.
+    [[nodiscard]] virtual bool ScheduleSourcePcmGainWindowUVE(
+        VoiceHandleUVE source, const PcmGainEffectWindowUVE& window) = 0;
+    /// Applies queued gain windows atomically to copied caller-owned samples and clears them only
+    /// after successful output publication. No device submission is performed by this method.
+    [[nodiscard]] virtual bool ApplySourcePcmGainEffectsUVE(
+        VoiceHandleUVE source, const std::vector<float>& inputSamples,
+        std::vector<float>& outputSamples) = 0;
 
     // --- Frame advance. ---
     /// Recomputes ComputeDistanceAttenuationUVE() for every live spatial source against the

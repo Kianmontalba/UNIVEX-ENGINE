@@ -48,6 +48,19 @@ public:
     [[nodiscard]] AudioMixerDiagnosticsUVE GetMixerDiagnosticsUVE(
         std::size_t maximumGroups = kMaximumAudioMixerGroupsUVE) const override;
 
+    [[nodiscard]] bool ResetSourceStreamUVE(
+        VoiceHandleUVE source, std::size_t totalSamples, bool loop, std::size_t cursorSample = 0U,
+        std::size_t maximumSamples = kMaximumWavPcm16SamplesUVE) override;
+    [[nodiscard]] bool ScheduleSourceStreamWindowUVE(VoiceHandleUVE source,
+                                                       std::size_t requestedSamples) override;
+    [[nodiscard]] bool PopSourceStreamWindowUVE(VoiceHandleUVE source,
+                                                 Pcm16StreamWindowPlanUVE& outPlan) override;
+    [[nodiscard]] bool ScheduleSourcePcmGainWindowUVE(
+        VoiceHandleUVE source, const PcmGainEffectWindowUVE& window) override;
+    [[nodiscard]] bool ApplySourcePcmGainEffectsUVE(
+        VoiceHandleUVE source, const std::vector<float>& inputSamples,
+        std::vector<float>& outputSamples) override;
+
     void UpdateUVE() override;
 
 private:

@@ -412,6 +412,29 @@ TEST_F(AudioSystemUVETest, InvalidSourceRuntimeParameters_PreserveLastValidState
     EXPECT_FLOAT_EQ(params.pitch, 1.5F);
 }
 
+TEST_F(AudioSystemUVETest, SourceStreamAndPcmEffects_UseBoundedCallerOwnedRuntimeState) {
+    AudioSourceDescUVE desc;
+    desc.spatial = false;
+    const VoiceHandleUVE source = audioSystem.CreateSourceUVE(desc);
+    ASSERT_NE(source, kInvalidVoiceHandleUVE);
+
+    ASSERT_TRUE(audioSystem.ResetSourceStreamUVE(source, 10U, true, 2U));
+    ASSERT_TRUE(audioSystem.ScheduleSourceStreamWindowUVE(source, 4U));
+    Pcm16StreamWindowPlanUVE plan;
+    ASSERT_TRUE(audioSystem.PopSourceStreamWindowUVE(source, plan));
+    EXPECT_EQ(plan, (Pcm16StreamWindowPlanUVE{2U, 4U, 6U, false, false}));
+
+    ASSERT_TRUE(audioSystem.ScheduleSourcePcmGainWindowUVE(source, PcmGainEffectWindowUVE{1U, 2U, 0.5F}));
+    const std::vector<float> input{0.2F, 0.8F, -0.4F, 1.0F};
+    std::vector<float> output;
+    ASSERT_TRUE(audioSystem.ApplySourcePcmGainEffectsUVE(source, input, output));
+    EXPECT_EQ(output, (std::vector<float>{0.2F, 0.4F, -0.2F, 1.0F}));
+
+    std::vector<float> retained{9.0F};
+    EXPECT_FALSE(audioSystem.ApplySourcePcmGainEffectsUVE(VoiceHandleUVE{999U}, input, retained));
+    EXPECT_EQ(retained, (std::vector<float>{9.0F}));
+}
+
 TEST_F(AudioSystemUVETest, UpdateUVE_WithZeroSources_IsSafeNoOp) {
     EXPECT_NO_FATAL_FAILURE(audioSystem.UpdateUVE());
 }
