@@ -19,6 +19,53 @@ namespace {
 
 using JsonUVE = nlohmann::json;
 
+[[nodiscard]] JsonUVE ToJsonUVE(const Math::Vector3UVE& value) {
+    return JsonUVE{{"x", value.x}, {"y", value.y}, {"z", value.z}};
+}
+
+[[nodiscard]] JsonUVE ToJsonUVE(const Math::QuaternionUVE& value) {
+    return JsonUVE{{"x", value.x}, {"y", value.y}, {"z", value.z}, {"w", value.w}};
+}
+
+[[nodiscard]] JsonUVE ToJsonUVE(const Core::TransformPoseUVE& value) {
+    return JsonUVE{{"position", ToJsonUVE(value.position)},
+                   {"rotation", ToJsonUVE(value.rotation)},
+                   {"scale", ToJsonUVE(value.scale)}};
+}
+
+[[nodiscard]] JsonUVE ToJsonUVE(const Core::ControlRigControlShapeUVE& shape) {
+    return JsonUVE{{"kind", static_cast<std::uint8_t>(shape.kind)},
+                   {"size", shape.size},
+                   {"thickness", shape.thickness},
+                   {"length", shape.length}};
+}
+
+[[nodiscard]] JsonUVE ToJsonUVE(const Core::ControlRigViewportControlFactUVE& control) {
+    return JsonUVE{{"controlId", control.controlId},
+                   {"role", static_cast<std::uint8_t>(control.role)},
+                   {"side", static_cast<std::uint8_t>(control.side)},
+                   {"shape", ToJsonUVE(control.shape)},
+                   {"pose", ToJsonUVE(control.pose)},
+                   {"selected", control.selected},
+                   {"visible", control.visible},
+                   {"selectable", control.selectable}};
+}
+
+[[nodiscard]] JsonUVE ToJsonUVE(const Core::ControlRigAuthoringSnapshotUVE& snapshot) {
+    JsonUVE controls = JsonUVE::array();
+    for (const auto& control : snapshot.viewportControls) {
+        controls.push_back(ToJsonUVE(control));
+    }
+    return JsonUVE{{"rigId", snapshot.rigId},
+                   {"revision", snapshot.revision},
+                   {"tool", static_cast<std::uint8_t>(snapshot.tool)},
+                   {"selectedControlId", snapshot.selectedControlId},
+                   {"viewportControls", std::move(controls)},
+                   {"dirty", snapshot.dirty},
+                   {"evaluated", snapshot.evaluated},
+                   {"message", snapshot.message}};
+}
+
 enum class FrameReadResultUVE : std::uint8_t {
     Body,
     EndOfFile,
@@ -742,6 +789,7 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"dataTableCatalog", ToJsonUVE(snapshot.dataTableCatalog)},
                    {"dataTablePreview", ToJsonUVE(snapshot.dataTablePreview)},
                    {"motionQuery", ToJsonUVE(snapshot.motionQuery)},
+                   {"controlRig", ToJsonUVE(snapshot.controlRig)},
                    {"capabilities", std::move(capabilities)}};
 }
 

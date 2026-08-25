@@ -22,6 +22,8 @@ struct ControlRigControlUVE final {
     ControlRigSpaceUVE space = ControlRigSpaceUVE::Local;
     TransformPoseUVE pose;
     bool enabled = true;
+
+    [[nodiscard]] bool operator==(const ControlRigControlUVE&) const noexcept = default;
 };
 
 enum class ControlRigConstraintKindUVE : std::uint8_t {
@@ -43,6 +45,8 @@ struct ControlRigConstraintUVE final {
     float damping = 0.0F;
     float minAimAngleDegrees = 0.0F;
     float maxAimAngleDegrees = 180.0F;
+
+    [[nodiscard]] bool operator==(const ControlRigConstraintUVE&) const noexcept = default;
 };
 
 struct ControlRigUVE final {
@@ -54,6 +58,8 @@ struct ControlRigUVE final {
     SkeletonDefinitionUVE skeleton;
     PoseBufferUVE pose;
     AnimationEvaluationContextUVE evaluationContext;
+
+    [[nodiscard]] bool operator==(const ControlRigUVE&) const noexcept = default;
 };
 
 enum class ControlRigValidationCodeUVE : std::uint8_t {

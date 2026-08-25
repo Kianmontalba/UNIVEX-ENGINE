@@ -23,6 +23,7 @@
 #include "uve/plugins/motion_query_live_debug_session_uve.h"
 #include "uve/plugins/motion_query_trace_replay_regression_uve.h"
 #include "uve/plugins/motion_query_trace_replay_baseline_registry_uve.h"
+#include "uve/plugins/control_rig_editor_uve.h"
 
 namespace UVE::Editor {
 
@@ -97,6 +98,7 @@ enum class EditorBridgeCapabilityUVE : std::uint8_t {
     ImportMotionQueryReplayBaselineRegistry,
     RenameMotionQueryReplayBaseline,
     ExportMotionQueryReplayEvidence,
+    ReadControlRig,
 };
 
 /// The deliberately small v1 request vocabulary. No generic command string is accepted because
@@ -152,6 +154,7 @@ enum class EditorBridgeRequestKindUVE : std::uint8_t {
     ImportMotionQueryReplayBaselineRegistry,
     RenameMotionQueryReplayBaseline,
     ExportMotionQueryReplayEvidence,
+    ReadControlRig,
 };
 
 /// Explicitly describes whether this bridge session has a native-owned viewport surface. No raw
@@ -639,6 +642,7 @@ struct EditorBridgeSnapshotUVE final {
     EditorBridgeDataTableCatalogSnapshotUVE dataTableCatalog;
     EditorBridgeDataTablePreviewSnapshotUVE dataTablePreview;
     EditorBridgeMotionQuerySnapshotUVE motionQuery;
+    Core::ControlRigAuthoringSnapshotUVE controlRig;
     std::vector<EditorBridgeCapabilityUVE> capabilities;
 };
 
@@ -725,7 +729,8 @@ public:
     explicit EditorBridgeUVE(EditorUVE& editor,
                              const Asset::DataTableRegistryUVE* dataTableRegistry = nullptr,
                              const Scripting::ScriptDebuggerUVE* scriptDebugger = nullptr,
-                             Scripting::ScriptRuntimeUVE* scriptRuntime = nullptr);
+                             Scripting::ScriptRuntimeUVE* scriptRuntime = nullptr,
+                             Core::ControlRigEditorAuthoringSessionUVE* controlRigAuthoring = nullptr);
 
     [[nodiscard]] EditorBridgeSnapshotUVE GetSnapshotUVE();
     [[nodiscard]] EditorBridgeResponseUVE DispatchUVE(const EditorBridgeRequestUVE& request);
@@ -736,6 +741,9 @@ public:
     void SetDataTablePreviewSnapshotUVE(Asset::DataTableSnapshotUVE snapshot);
     void SetMotionQueryReplayFixtureUVE(Plugins::Editor::MotionQueryTraceReplayFixtureUVE fixture);
     void ClearMotionQueryReplayFixtureUVE();
+    /// Attaches a non-owning native Control Rig authoring session for copied read-only snapshots.
+    /// The caller retains ownership and must keep the session alive while the bridge uses it.
+    void SetControlRigAuthoringSessionUVE(Core::ControlRigEditorAuthoringSessionUVE* session) noexcept;
 
     [[nodiscard]] static const std::vector<EditorBridgeCapabilityUVE>& GetCapabilitiesUVE() noexcept;
 
@@ -759,6 +767,7 @@ private:
         EditorBridgeScriptRuntimeSnapshotUVE scriptRuntime;
         EditorBridgeDataTableCatalogSnapshotUVE dataTableCatalog;
         EditorBridgeDataTablePreviewSnapshotUVE dataTablePreview;
+        Core::ControlRigAuthoringSnapshotUVE controlRig;
 
         [[nodiscard]] bool operator==(const ObservedStateUVE&) const = default;
     };
@@ -779,6 +788,7 @@ private:
     [[nodiscard]] EditorBridgeDataTableCatalogSnapshotUVE CaptureDataTableCatalogUVE() const;
     [[nodiscard]] EditorBridgeDataTablePreviewSnapshotUVE CaptureDataTablePreviewUVE() const;
     [[nodiscard]] EditorBridgeMotionQuerySnapshotUVE CaptureMotionQueryUVE() const;
+    [[nodiscard]] Core::ControlRigAuthoringSnapshotUVE CaptureControlRigUVE() const;
     void RecordMotionQueryReplayComparisonHistoryUVE(std::string_view baselineNameOverride = {});
     void RecordMotionQueryReplayBatchHistoryUVE(const EditorBridgeMotionQueryReplayBatchSnapshotUVE& batch);
     [[nodiscard]] EditorBridgeHierarchySnapshotUVE CaptureHierarchyUVE();
@@ -816,6 +826,7 @@ private:
     std::optional<Plugins::Editor::MotionQueryTraceReplayFixtureUVE> m_motionQueryReplayFixture;
     std::optional<std::string> m_motionQueryActiveBaselineName;
     Plugins::Editor::MotionQueryTraceReplayBaselineRegistryUVE m_motionQueryReplayBaselineRegistry;
+    Core::ControlRigEditorAuthoringSessionUVE* m_controlRigAuthoring = nullptr;
     std::uint64_t m_revision = 0U;
 };
 

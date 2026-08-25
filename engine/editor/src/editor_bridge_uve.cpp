@@ -96,6 +96,7 @@ namespace {
         EditorBridgeCapabilityUVE::AddVisualScriptNodeType,
         EditorBridgeCapabilityUVE::SetVisualScriptPinDefault,
         EditorBridgeCapabilityUVE::ReadMotionQuery,
+        EditorBridgeCapabilityUVE::ReadControlRig,
         EditorBridgeCapabilityUVE::DispatchMotionQueryCommand,
         EditorBridgeCapabilityUVE::DispatchMotionQueryDebugCommand,
         EditorBridgeCapabilityUVE::LoadMotionQueryReplayBaseline,
@@ -115,6 +116,7 @@ namespace {
            kind != EditorBridgeRequestKindUVE::ReadScriptRuntimeTickDiagnostics &&
            kind != EditorBridgeRequestKindUVE::SerializeVisualScriptGraph &&
            kind != EditorBridgeRequestKindUVE::ReadMotionQuery &&
+           kind != EditorBridgeRequestKindUVE::ReadControlRig &&
            kind != EditorBridgeRequestKindUVE::RunMotionQueryReplayBaselineBatch;
 }
 
@@ -200,12 +202,14 @@ namespace {
 EditorBridgeUVE::EditorBridgeUVE(EditorUVE& editor,
                                    const Asset::DataTableRegistryUVE* dataTableRegistry,
                                    const Scripting::ScriptDebuggerUVE* scriptDebugger,
-                                   Scripting::ScriptRuntimeUVE* scriptRuntime)
+                                   Scripting::ScriptRuntimeUVE* scriptRuntime,
+                                   Core::ControlRigEditorAuthoringSessionUVE* controlRigAuthoring)
     : m_editor(&editor),
       m_visualScriptCanvas(m_visualScriptRegistry),
       m_dataTableRegistry(dataTableRegistry),
       m_scriptDebugger(scriptDebugger),
-      m_scriptRuntime(scriptRuntime) {
+      m_scriptRuntime(scriptRuntime),
+      m_controlRigAuthoring(controlRigAuthoring) {
     if (!Scripting::RegisterBuiltInScriptNodesUVE(m_visualScriptRegistry)) {
         throw std::logic_error("Failed to register built-in Visual Scripting nodes.");
     }
@@ -266,6 +270,17 @@ void EditorBridgeUVE::SetMotionQueryReplayFixtureUVE(
         SynchronizeRevisionUVE();
     }
     RecordMotionQueryReplayComparisonHistoryUVE();
+}
+
+void EditorBridgeUVE::SetControlRigAuthoringSessionUVE(
+    Core::ControlRigEditorAuthoringSessionUVE* session) noexcept {
+    if (m_controlRigAuthoring == session) {
+        return;
+    }
+    m_controlRigAuthoring = session;
+    if (m_lastObservedState.has_value()) {
+        SynchronizeRevisionUVE();
+    }
 }
 
 void EditorBridgeUVE::ClearMotionQueryReplayFixtureUVE() {
@@ -329,6 +344,14 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
     }
     if (request.kind == EditorBridgeRequestKindUVE::ReadSnapshot) {
         return MakeResponseUVE(request, true, "bridge.snapshot.read", "Bridge-visible editor state was copied.");
+    }
+    if (request.kind == EditorBridgeRequestKindUVE::ReadControlRig) {
+        return MakeResponseUVE(request, m_controlRigAuthoring != nullptr,
+                               m_controlRigAuthoring == nullptr ? "bridge.control_rig.unavailable"
+                                                                 : "bridge.control_rig.snapshot.read",
+                               m_controlRigAuthoring == nullptr
+                                   ? "No native Control Rig authoring session is attached."
+                                   : "The native Control Rig authoring snapshot was copied.");
     }
     if (request.kind == EditorBridgeRequestKindUVE::ReadVisualScriptCanvas) {
         return MakeResponseUVE(request, true, "bridge.visual_scripting.snapshot.read",
@@ -1127,6 +1150,7 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
             break;
         }
         case EditorBridgeRequestKindUVE::ReadSnapshot:
+        case EditorBridgeRequestKindUVE::ReadControlRig:
             break;
     }
 
@@ -1171,7 +1195,14 @@ EditorBridgeUVE::ObservedStateUVE EditorBridgeUVE::CaptureObservedStateUVE() {
     observed.scriptRuntime = CaptureScriptRuntimeUVE();
     observed.dataTableCatalog = CaptureDataTableCatalogUVE();
     observed.dataTablePreview = CaptureDataTablePreviewUVE();
+    observed.controlRig = CaptureControlRigUVE();
     return observed;
+}
+
+Core::ControlRigAuthoringSnapshotUVE EditorBridgeUVE::CaptureControlRigUVE() const {
+    return m_controlRigAuthoring == nullptr
+        ? Core::ControlRigAuthoringSnapshotUVE{}
+        : m_controlRigAuthoring->CaptureSnapshotUVE();
 }
 
 EditorBridgeScriptRuntimeSnapshotUVE EditorBridgeUVE::CaptureScriptRuntimeUVE() const {
@@ -1499,6 +1530,7 @@ EditorBridgeSnapshotUVE EditorBridgeUVE::BuildSnapshotUVE() const {
     snapshot.dataTableCatalog = observed.dataTableCatalog;
     snapshot.dataTablePreview = observed.dataTablePreview;
     snapshot.motionQuery = CaptureMotionQueryUVE();
+    snapshot.controlRig = CaptureControlRigUVE();
     snapshot.capabilities = GetCapabilitiesUVE();
     return snapshot;
 }

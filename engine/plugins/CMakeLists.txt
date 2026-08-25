@@ -3,6 +3,8 @@ add_library(uve_plugins STATIC
     src/plugin_manifest_validation_uve.cpp
     src/plugin_registry_uve.cpp
     Animation/control_rig/Source/Runtime/src/control_rig_uve.cpp
+    Animation/control_rig/Source/Runtime/src/control_rig_autorig_uve.cpp
+    Animation/control_rig/Source/Editor/src/control_rig_editor_uve.cpp
     Animation/motion_query/Source/Runtime/src/motion_query_uve.cpp
     Animation/motion_query/Source/Runtime/src/motion_query_feature_channels_uve.cpp
     Animation/motion_query/Source/Runtime/src/motion_query_history_uve.cpp
@@ -31,6 +33,7 @@ add_library(uve_plugins STATIC
 target_include_directories(uve_plugins PUBLIC
     include
     Animation/control_rig/Source/Runtime/include
+    Animation/control_rig/Source/Editor/include
     Animation/motion_query/Source/Runtime/include
     Animation/motion_query/Source/Editor/include
 )
