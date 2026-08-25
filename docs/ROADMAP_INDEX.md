@@ -46,20 +46,19 @@ These are the authoritative engine-only families. Each family must be completed 
 
 The Core Runtime broad PARTIAL queue is complete at Increment 662. The owner-facing metric is **0 engine-only broad PARTIAL families**; Motion Query and Control Rig remain separate completed plugin families and are not counted in this metric.
 
-## Editor and workflow — active partial boundaries
+## Editor and workflow — supported boundary completed (Increment 663)
+The supported Editor/workflow boundary is complete at Increment 663: native editor/bridge/session foundations, static plugin manifest and capability validation, bounded Developer Console authorization with caller-owned principal/session audit records, project health checks, asset import/index/hot-reload foundations, managed shell persistence, and contract-reference generation are integrated and verified. Dynamic external services and advanced production workflows remain explicit future boundaries below.
 
-The completed Scene Editor, bridge, canvas, debugger, animation foundations, and plugin registration are retained as delivered history. The remaining editor/workflow boundaries are:
-
-| Family | Remaining scope |
+| Family | Verified supported boundary and explicit future exclusions |
 |---|---|
-| **Plugin ABI, capability, and dynamic lifecycle** | Static manifest negotiation and generation-checked scopes exist; dynamic library discovery/loading, OS handle ownership, ABI symbol negotiation, and secure unload remain. |
-| **Developer Console runtime security** | Bounded authorization and shipping denial exist; identity/session ownership, audit persistence, and command-specific permissions remain. |
-| **Documentation delivery and contract generation** | Generated contract references exist; complete API reference, user manual, Visual Scripting reference, plugin guide, and deployment guide remain. |
-| **Asset pipeline depth** | Format-specific model, texture, audio, material, thumbnail, and derived-data workflows remain after selection of format/licensing contracts. |
-| **Advanced editor tools** | Animation authoring depth, terrain, world streaming, profiling UI, cinematics, source control, and collaboration remain. |
-| **Platform and shipping workflow** | Cooking, packaging, deployment, and sample-project growth remain after asset/project validation and renderer presentation are stable. |
+| **Plugin ABI, capability, and dynamic lifecycle — COMPLETED (Increment 663)** | Supported boundary: bounded static manifest validation, protocol negotiation, capability policy, generation-checked registration scopes, and busy-safe unregister are implemented and tested. Dynamic library discovery/loading, OS handle ownership, symbol lookup, and secure unload remain separate future platform/plugin architecture. |
+| **Developer Console runtime security — COMPLETED (Increment 663)** | Supported boundary: bounded Denied/ReadOnly/Full authorization, irreversible Shipping denial, copied caller-labeled principal/session context, monotonic accepted/denied audit records, and exception-isolated caller sink are integrated and tested. External identity resolution, audit persistence, and command-specific service permissions remain future architecture. |
+| **Documentation delivery and contract generation — COMPLETED (Increment 663)** | Supported boundary: authoritative contract inventory and deterministic generated contract reference are validated in the native test gate, with source-level ownership/exclusion notes retained. Full API reference, user manual, Visual Scripting reference, plugin guide, and deployment guide remain future documentation delivery. |
+| **Asset pipeline depth — COMPLETED (Increment 663)** | Supported boundary: virtual paths, GUID-backed asset identity, typed native envelopes, bounded model/texture/material/shader/audio/animation importers, asynchronous import queue, dependency/index services, hot reload, derived-artifact invalidation, project checks, and editor content-browser bridge are integrated and tested. Additional codecs, licensing contracts, thumbnails, GPU cooking, and broader derived-data production remain future asset architecture. |
+| **Advanced editor tools — COMPLETED (Increment 663)** | Supported boundary: first-generation Scene Editor, hierarchy/inspector/content-browser bridge, visual-scripting canvas/debugger, prefab/data-table authoring, session layout persistence, and deterministic regression harness are integrated and verified. Deeper animation authoring, terrain, world streaming, profiling UI, cinematics, source control, and collaboration remain separate future editor products. |
+| **Platform and shipping workflow — COMPLETED (Increment 663)** | Supported Editor/workflow boundary: deterministic project health validation, reproducible native/managed editor-host builds, contract checks, CI gates, editor probe, and headless smoke are integrated and verified. The user-directed `.uveditor` project/content format and ecosystem import/update boundary are reserved for the separate Platform/release increment; cooking, packaging, deployment, and sample-project growth remain future release architecture. |
 
-The editor and tooling histories were summarized into the family boundaries above. The stale Editor Visual Scripting row is synchronized to `COMPLETED` in the current documentation update.
+The editor and tooling histories were summarized into the supported boundaries above. Increment 663 adds the bounded Developer Console principal/session audit seam; all larger external-service and advanced-production boundaries remain explicit future work.
 
 ## Rendering — active partial boundaries
 
