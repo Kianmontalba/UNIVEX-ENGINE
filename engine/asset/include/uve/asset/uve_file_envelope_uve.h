@@ -25,7 +25,8 @@ namespace UVE::Asset {
 /// section), deliberately distinct in shape from `Bundle`'s variable-length entry table, since a
 /// save file always has exactly these two sections, never a variable named set. `DataTable` is the
 /// envelope-backed typed data-table asset format. `Audio` is the bounded
-/// interleaved PCM16-derived normalized sample envelope used by `.uveaudio` importer output. The
+/// interleaved PCM16-derived normalized sample envelope used by `.uveaudio` importer output. `Animation`
+/// is the bounded JSON transform-sample/event envelope used by `.uveanim` importer output. The
 /// `assetType` value is never reused.
 inline constexpr std::size_t kMaximumUveFilePayloadBytesUVE = 512U * 1024U * 1024U;
 
@@ -41,6 +42,7 @@ enum class AssetKindUVE : std::uint32_t {
     Save = 9,
     DataTable = 10,
     Audio = 11,
+    Animation = 12,
 };
 
 /// The fixed-size portion of a `.uve*` file's header, returned by ReadUveFileUVE() alongside the

@@ -24,7 +24,7 @@ constexpr std::size_t kEnvelopeHeaderBytesUVE =
 
 [[nodiscard]] bool IsAssetKindValidUVE(const std::uint32_t assetType) noexcept {
     return assetType >= static_cast<std::uint32_t>(AssetKindUVE::Scene) &&
-           assetType <= static_cast<std::uint32_t>(AssetKindUVE::Audio);
+           assetType <= static_cast<std::uint32_t>(AssetKindUVE::Animation);
 }
 
 template <typename T>

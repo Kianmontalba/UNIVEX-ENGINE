@@ -22,6 +22,8 @@
 #include "uve/asset/asset_importer_uve.h"
 #include "uve/asset/asset_import_queue_uve.h"
 #include "uve/asset/asset_manager_uve.h"
+#include "uve/asset/animation_clip_asset_uve.h"
+#include "uve/asset/audio_asset_uve.h"
 #include "uve/asset/data_table_pipeline_uve.h"
 #include "uve/asset/derived_artifact_cache_uve.h"
 #include "uve/asset/file_system_uve.h"
@@ -93,6 +95,8 @@ void EngineCoreUVE::RegisterBuiltInAssetLoadersUVE() {
     m_assetManager->RegisterLoaderUVE<Asset::TextureAssetUVE>(&Asset::LoadTextureAssetUVE);
     m_assetManager->RegisterLoaderUVE<Asset::ShaderAssetUVE>(&Asset::LoadShaderAssetUVE);
     m_assetManager->RegisterLoaderUVE<Asset::MaterialAssetUVE>(&Asset::LoadMaterialAssetUVE);
+    m_assetManager->RegisterLoaderUVE<Asset::AudioAssetUVE>(&Asset::LoadAudioAssetUVE);
+    m_assetManager->RegisterLoaderUVE<Asset::AnimationClipAssetUVE>(&Asset::LoadAnimationClipAssetUVE);
 }
 
 void EngineCoreUVE::Init() {

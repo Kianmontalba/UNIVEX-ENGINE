@@ -36,6 +36,8 @@ namespace {
             return "shaderEnvelope";
         case Asset::AssetImportSourceKindUVE::MaterialEnvelope:
             return "materialEnvelope";
+        case Asset::AssetImportSourceKindUVE::AnimationEnvelope:
+            return "animationEnvelope";
         case Asset::AssetImportSourceKindUVE::RawModel:
             return "rawModel";
         case Asset::AssetImportSourceKindUVE::RawTexture:
