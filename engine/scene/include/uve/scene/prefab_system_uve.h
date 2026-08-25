@@ -26,6 +26,10 @@ public:
         IEntityManagerUVE& entityManager, ISceneGraphUVE& sceneGraph,
         Asset::IAssetDatabaseUVE& assetDatabase, Asset::AssetGuidUVE prefabGuid, EntityUVE parent,
         std::uint64_t sourceRevision) override;
+    [[nodiscard]] PrefabRefreshResultUVE RefreshInstanceUVE(
+        IEntityManagerUVE& entityManager, ISceneGraphUVE& sceneGraph,
+        Asset::IAssetDatabaseUVE& assetDatabase, EntityUVE instanceRoot,
+        bool forceRefresh = false) override;
 
 private:
     SceneSerializerUVE m_sceneSerializer;

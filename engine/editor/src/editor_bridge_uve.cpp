@@ -1,6 +1,8 @@
 // Copyright (c) 2026 UniVex Studios. All Rights Reserved.
 
 #include "uve/editor/editor_bridge_uve.h"
+
+#include "uve/scene/components/prefab_instance_component_uve.h"
 #include "uve/scripting/script_builtin_nodes_uve.h"
 
 #include <algorithm>
@@ -1669,6 +1671,32 @@ EditorBridgeInspectorSnapshotUVE EditorBridgeUVE::CaptureInspectorUVE() const {
 
     snapshot.mode = EditorBridgeInspectorModeUVE::SingleSelection;
     Scene::IEntityManagerUVE& entityManager = m_editor->m_services->GetEntityManagerUVE();
+    if (entityManager.HasComponentUVE<Scene::PrefabInstanceComponentUVE>(active)) {
+        const Scene::PrefabInstanceComponentUVE& instance =
+            entityManager.GetComponentUVE<Scene::PrefabInstanceComponentUVE>(active);
+        EditorBridgePrefabSnapshotUVE prefabSnapshot{};
+        prefabSnapshot.sourcePrefabGuid = instance.sourcePrefabGuid != Asset::kInvalidAssetGuidUVE
+                                              ? std::optional<std::uint64_t>{instance.sourcePrefabGuid.value}
+                                              : std::nullopt;
+        prefabSnapshot.instanceRevision = instance.instanceRevision;
+        prefabSnapshot.overrideCount = instance.overrides.size();
+        const std::filesystem::path sourcePath =
+            m_editor->m_services->GetAssetDatabaseUVE().ResolveUVE(instance.sourcePrefabGuid);
+        const std::optional<std::uint64_t> observedRevision =
+            Scene::ComputePrefabSourceRevisionUVE(sourcePath);
+        if (observedRevision.has_value()) {
+            prefabSnapshot.sourceRevision = *observedRevision;
+            prefabSnapshot.status = instance.overrides.empty() && *observedRevision == instance.instanceRevision
+                                        ? EditorBridgePrefabRevisionStatusUVE::Current
+                                        : (instance.overrides.empty()
+                                               ? EditorBridgePrefabRevisionStatusUVE::Stale
+                                               : EditorBridgePrefabRevisionStatusUVE::MergeRequired);
+            prefabSnapshot.canRefresh = instance.overrides.empty() &&
+                                        prefabSnapshot.status == EditorBridgePrefabRevisionStatusUVE::Stale &&
+                                        m_editor->IsAuthoringCommandAllowedUVE();
+        }
+        snapshot.prefab = prefabSnapshot;
+    }
     if (entityManager.HasComponentUVE<Scene::MeshComponentUVE>(active)) {
         const Scene::MeshComponentUVE& meshComponent =
             entityManager.GetComponentUVE<Scene::MeshComponentUVE>(active);

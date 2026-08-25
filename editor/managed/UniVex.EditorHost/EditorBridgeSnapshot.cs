@@ -46,6 +46,22 @@ public sealed record BridgeAssetBindingSnapshot(ulong? MeshGuid, ulong? Material
                                  $"Material: {(MaterialGuid.HasValue ? MaterialGuid.Value.ToString("X16") : "none")}";
 }
 
+public enum BridgePrefabRevisionStatus : byte
+{
+    Unavailable = 0,
+    Current = 1,
+    Stale = 2,
+    MergeRequired = 3,
+}
+
+public sealed record BridgePrefabSnapshot(
+    ulong? SourcePrefabGuid,
+    ulong SourceRevision,
+    ulong InstanceRevision,
+    ulong OverrideCount,
+    BridgePrefabRevisionStatus Status,
+    bool CanRefresh);
+
 public sealed record BridgeInspectorSnapshot(
     BridgeInspectorMode Mode,
     bool SelectedEntitiesTruncated,
@@ -57,6 +73,7 @@ public sealed record BridgeInspectorSnapshot(
     bool CanEditSelectedName)
 {
     public BridgeAssetBindingSnapshot? AssetBinding { get; init; }
+    public BridgePrefabSnapshot? Prefab { get; init; }
     public IReadOnlyList<string> AttachedComponentIds { get; init; } = Array.Empty<string>();
 }
 
@@ -1919,6 +1936,24 @@ public static class BridgeSnapshotParser
                 OptionalNullableUInt64(assetBindingValue, "materialGuid"));
         }
 
+        BridgePrefabSnapshot? prefab = null;
+        if (value.TryGetProperty("prefab", out JsonElement prefabValue) &&
+            prefabValue.ValueKind != JsonValueKind.Null)
+        {
+            byte rawStatus = RequiredByte(prefabValue, "status");
+            if (!Enum.IsDefined((BridgePrefabRevisionStatus)rawStatus))
+            {
+                throw Invalid("The backend returned an unsupported prefab revision status.");
+            }
+            prefab = new BridgePrefabSnapshot(
+                OptionalNullableUInt64(prefabValue, "sourcePrefabGuid"),
+                RequiredUInt64(prefabValue, "sourceRevision"),
+                RequiredUInt64(prefabValue, "instanceRevision"),
+                RequiredUInt64(prefabValue, "overrideCount"),
+                (BridgePrefabRevisionStatus)rawStatus,
+                RequiredBoolean(prefabValue, "canRefresh"));
+        }
+
         List<string> attachedComponentIds = new();
         if (value.TryGetProperty("attachedComponentIds", out JsonElement attachedComponents) &&
             attachedComponents.ValueKind != JsonValueKind.Null)
@@ -1939,7 +1974,12 @@ public static class BridgeSnapshotParser
             parsedAncestry,
             parsedDrawerIds,
             RequiredBoolean(value, "canEditSelectedName"));
-        return snapshot with { AssetBinding = assetBinding, AttachedComponentIds = attachedComponentIds };
+        return snapshot with
+        {
+            AssetBinding = assetBinding,
+            Prefab = prefab,
+            AttachedComponentIds = attachedComponentIds
+        };
     }
 
     private static BridgeViewportSurfaceSnapshot ParseViewportSurface(JsonElement value)

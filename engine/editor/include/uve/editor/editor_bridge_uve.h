@@ -238,6 +238,24 @@ enum class EditorBridgeInspectorModeUVE : std::uint8_t {
 
 /// Read-only inspector context. Drawer identifiers are copied stable native registry facts, not
 /// reflection metadata or a managed authorization to edit arbitrary components.
+enum class EditorBridgePrefabRevisionStatusUVE : std::uint8_t {
+    Unavailable,
+    Current,
+    Stale,
+    MergeRequired,
+};
+
+struct EditorBridgePrefabSnapshotUVE final {
+    std::optional<std::uint64_t> sourcePrefabGuid;
+    std::uint64_t sourceRevision = 0U;
+    std::uint64_t instanceRevision = 0U;
+    std::size_t overrideCount = 0U;
+    EditorBridgePrefabRevisionStatusUVE status = EditorBridgePrefabRevisionStatusUVE::Unavailable;
+    bool canRefresh = false;
+
+    [[nodiscard]] bool operator==(const EditorBridgePrefabSnapshotUVE&) const noexcept = default;
+};
+
 struct EditorBridgeInspectorSnapshotUVE final {
     EditorBridgeInspectorModeUVE mode = EditorBridgeInspectorModeUVE::NoSelection;
     bool selectedEntitiesTruncated = false;
@@ -248,6 +266,7 @@ struct EditorBridgeInspectorSnapshotUVE final {
     std::vector<std::string> eligibleDrawerIds;
     std::vector<std::string> attachedComponentIds;
     std::optional<EditorBridgeAssetBindingSnapshotUVE> assetBinding;
+    std::optional<EditorBridgePrefabSnapshotUVE> prefab;
     bool canEditSelectedName = false;
 
     [[nodiscard]] bool operator==(const EditorBridgeInspectorSnapshotUVE&) const = default;

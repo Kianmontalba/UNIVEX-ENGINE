@@ -4,19 +4,54 @@
 #include "uve/scene/prefab_system_uve.h"
 
 #include <exception>
+#include <optional>
 #include <vector>
+
+#include "uve/asset/asset_content_fingerprint_uve.h"
 
 #include "uve/debug/logging_macros_uve.h"
 #include "uve/scene/components/hierarchy_component_uve.h"
 #include "uve/scene/components/prefab_instance_component_uve.h"
 #include "uve/scene/components/transform_component_uve.h"
 #include "uve/scene/components/world_transform_component_uve.h"
+#include "uve/scene/prefab_revision_policy_uve.h"
 
 namespace UVE::Scene {
+namespace {
+
+void DestroySubtreeUVE(IEntityManagerUVE& entityManager, ISceneGraphUVE& sceneGraph, const EntityUVE root) {
+    if (!entityManager.IsAliveUVE(root)) {
+        return;
+    }
+    const std::vector<EntityUVE> children = sceneGraph.GetChildrenUVE(entityManager, root);
+    for (const EntityUVE child : children) {
+        DestroySubtreeUVE(entityManager, sceneGraph, child);
+    }
+    entityManager.DestroyEntityUVE(root);
+}
+
+} // namespace
+
+std::optional<std::uint64_t> ComputePrefabSourceRevisionUVE(const std::filesystem::path& path) {
+    const std::optional<Asset::AssetContentFingerprintUVE> fingerprint =
+        Asset::ComputeAssetContentFingerprintUVE(path);
+    if (!fingerprint.has_value() || fingerprint->byteCount == 0U) {
+        return std::nullopt;
+    }
+    std::uint64_t revision = fingerprint->hash;
+    if (revision == 0U) {
+        revision = fingerprint->byteCount;
+    }
+    return revision == 0U ? std::optional<std::uint64_t>{1U} : std::optional<std::uint64_t>{revision};
+}
 
 Asset::AssetGuidUVE PrefabSystemUVE::SavePrefabUVE(IEntityManagerUVE& entityManager,
                                                     Asset::IAssetDatabaseUVE& assetDatabase,
                                                     EntityUVE rootEntity, const std::filesystem::path& path) {
+    if (path.empty() || path.extension() != ".uveprefab") {
+        UVE_ERROR("PrefabSystemUVE: prefab path must use the .uveprefab extension");
+        return Asset::kInvalidAssetGuidUVE;
+    }
     const bool saved =
         m_sceneSerializer.SaveUVE(entityManager, {rootEntity}, path, SceneAssetTypeUVE::Prefab);
     if (!saved) {
@@ -47,7 +82,28 @@ Asset::AssetGuidUVE PrefabSystemUVE::SavePrefabUVE(IEntityManagerUVE& entityMana
 EntityUVE PrefabSystemUVE::InstantiateUVE(IEntityManagerUVE& entityManager, ISceneGraphUVE& sceneGraph,
                                            Asset::IAssetDatabaseUVE& assetDatabase,
                                            Asset::AssetGuidUVE prefabGuid, EntityUVE parent) {
-    return InstantiateWithRevisionUVE(entityManager, sceneGraph, assetDatabase, prefabGuid, parent, 1U);
+    std::filesystem::path path;
+    try {
+        path = assetDatabase.ResolveUVE(prefabGuid);
+    } catch (const std::exception& exception) {
+        UVE_ERROR("PrefabSystemUVE: asset database threw while resolving prefab GUID {}: {}", prefabGuid.value,
+                  exception.what());
+        return kInvalidEntityUVE;
+    } catch (...) {
+        UVE_ERROR("PrefabSystemUVE: asset database threw an unknown exception while resolving prefab GUID {}",
+                  prefabGuid.value);
+        return kInvalidEntityUVE;
+    }
+    if (path.empty()) {
+        UVE_ERROR("PrefabSystemUVE: unknown prefab GUID {}", prefabGuid.value);
+        return kInvalidEntityUVE;
+    }
+    const std::optional<std::uint64_t> sourceRevision = ComputePrefabSourceRevisionUVE(path);
+    if (!sourceRevision.has_value()) {
+        UVE_ERROR("PrefabSystemUVE: could not compute source revision for prefab GUID {}", prefabGuid.value);
+        return kInvalidEntityUVE;
+    }
+    return InstantiateWithRevisionUVE(entityManager, sceneGraph, assetDatabase, prefabGuid, parent, *sourceRevision);
 }
 
 EntityUVE PrefabSystemUVE::InstantiateWithRevisionUVE(
@@ -111,6 +167,68 @@ EntityUVE PrefabSystemUVE::InstantiateWithRevisionUVE(
     }
 
     return root;
+}
+
+PrefabRefreshResultUVE PrefabSystemUVE::RefreshInstanceUVE(
+    IEntityManagerUVE& entityManager, ISceneGraphUVE& sceneGraph,
+    Asset::IAssetDatabaseUVE& assetDatabase, const EntityUVE instanceRoot, const bool forceRefresh) {
+    if (!entityManager.IsAliveUVE(instanceRoot) ||
+        !entityManager.HasComponentUVE<PrefabInstanceComponentUVE>(instanceRoot)) {
+        return {PrefabRefreshCodeUVE::InvalidInstance, instanceRoot, 0U,
+                "Prefab refresh requires a live entity with a prefab instance component."};
+    }
+
+    const PrefabInstanceComponentUVE instance =
+        entityManager.GetComponentUVE<PrefabInstanceComponentUVE>(instanceRoot);
+    std::filesystem::path path;
+    try {
+        path = assetDatabase.ResolveUVE(instance.sourcePrefabGuid);
+    } catch (const std::exception&) {
+        return {PrefabRefreshCodeUVE::SourceUnavailable, instanceRoot, 0U,
+                "Prefab refresh could not resolve the source asset."};
+    } catch (...) {
+        return {PrefabRefreshCodeUVE::SourceUnavailable, instanceRoot, 0U,
+                "Prefab refresh could not resolve the source asset."};
+    }
+    const std::optional<std::uint64_t> observedRevision = ComputePrefabSourceRevisionUVE(path);
+    if (path.empty() || !observedRevision.has_value()) {
+        return {PrefabRefreshCodeUVE::SourceUnavailable, instanceRoot, 0U,
+                "Prefab refresh could not resolve or fingerprint the source asset."};
+    }
+
+    const PrefabRevisionRefreshDecisionUVE decision =
+        *observedRevision == instance.instanceRevision
+            ? PrefabRevisionRefreshDecisionUVE::NoOp
+            : (instance.overrides.empty() ? PrefabRevisionRefreshDecisionUVE::Refresh
+                                           : PrefabRevisionRefreshDecisionUVE::MergeRequired);
+    if (decision == PrefabRevisionRefreshDecisionUVE::NoOp) {
+        return {PrefabRefreshCodeUVE::NoOp, instanceRoot, *observedRevision,
+                "Prefab instance already matches its source revision."};
+    }
+    if (decision == PrefabRevisionRefreshDecisionUVE::MergeRequired && !forceRefresh) {
+        return {PrefabRefreshCodeUVE::MergeRequired, instanceRoot, *observedRevision,
+                "Prefab source changed while local overrides are present; merge is required."};
+    }
+    if (decision != PrefabRevisionRefreshDecisionUVE::Refresh &&
+        !(forceRefresh && decision == PrefabRevisionRefreshDecisionUVE::MergeRequired)) {
+        return {PrefabRefreshCodeUVE::SourceRevisionInvalid, instanceRoot, *observedRevision,
+                "Prefab source revision cannot safely refresh this instance."};
+    }
+
+    EntityUVE parent = kInvalidEntityUVE;
+    if (entityManager.HasComponentUVE<HierarchyComponentUVE>(instanceRoot)) {
+        parent = entityManager.GetComponentUVE<HierarchyComponentUVE>(instanceRoot).parent;
+    }
+    const EntityUVE replacement = InstantiateWithRevisionUVE(
+        entityManager, sceneGraph, assetDatabase, instance.sourcePrefabGuid, parent, *observedRevision);
+    if (replacement == kInvalidEntityUVE) {
+        return {PrefabRefreshCodeUVE::SourceUnavailable, instanceRoot, *observedRevision,
+                "Prefab refresh could not load a replacement source subtree."};
+    }
+
+    DestroySubtreeUVE(entityManager, sceneGraph, instanceRoot);
+    return {PrefabRefreshCodeUVE::Refreshed, replacement, *observedRevision,
+            "Prefab instance refreshed from its current source revision."};
 }
 
 } // namespace UVE::Scene
