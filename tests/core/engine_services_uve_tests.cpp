@@ -54,6 +54,7 @@
 #include "uve/save/i_checkpoint_manager_uve.h"
 #include "uve/save/i_save_game_system_uve.h"
 #include "uve/scene/i_entity_manager_uve.h"
+#include "uve/scene/i_particle_runtime_uve.h"
 #include "uve/scene/i_prefab_system_uve.h"
 #include "uve/scene/i_scene_graph_uve.h"
 #include "uve/scene/i_scene_serializer_uve.h"
@@ -264,6 +265,59 @@ public:
     }
 
     int updateCallCount = 0;
+};
+
+class FakeParticleRuntimeUVE final : public Scene::IParticleRuntimeUVE {
+public:
+    [[nodiscard]] Scene::ParticleRuntimeResultUVE AttachDetailedUVE(
+        Scene::EntityUVE, const Scene::ParticleEmitterComponentUVE&) override {
+        ++attachCallCount;
+        return {Scene::ParticleRuntimeCodeUVE::Applied, "attached"};
+    }
+    [[nodiscard]] Scene::ParticleRuntimeResultUVE DetachDetailedUVE(Scene::EntityUVE) noexcept override {
+        ++detachCallCount;
+        return {Scene::ParticleRuntimeCodeUVE::Applied, "detached"};
+    }
+    [[nodiscard]] Scene::ParticleRuntimeResultUVE SetEnabledDetailedUVE(Scene::EntityUVE, bool) noexcept override {
+        ++setEnabledCallCount;
+        return {Scene::ParticleRuntimeCodeUVE::Applied, "enabled"};
+    }
+    [[nodiscard]] Scene::ParticleRuntimeResultUVE SetLiveParticleCountDetailedUVE(
+        Scene::EntityUVE, std::uint32_t) noexcept override {
+        ++setLiveParticleCountCallCount;
+        return {Scene::ParticleRuntimeCodeUVE::Applied, "live count"};
+    }
+    [[nodiscard]] Scene::ParticleRuntimeResultUVE EmitDetailedUVE(
+        Scene::EntityUVE, const Scene::ParticleEmissionUVE&) override {
+        ++emitCallCount;
+        return {Scene::ParticleRuntimeCodeUVE::Applied, "emitted"};
+    }
+    [[nodiscard]] Scene::ParticleRuntimeResultUVE SimulateDetailedUVE(
+        float, const Math::Vector3UVE&) noexcept override {
+        ++simulateCallCount;
+        return {Scene::ParticleRuntimeCodeUVE::Applied, "simulated"};
+    }
+    [[nodiscard]] Scene::ParticleRuntimeSnapshotUVE GetSnapshotUVE() const override {
+        ++snapshotCallCount;
+        return {};
+    }
+    [[nodiscard]] std::optional<Scene::ParticleStateSnapshotUVE> GetParticleSnapshotUVE(
+        Scene::EntityUVE) const override {
+        ++particleSnapshotCallCount;
+        return std::nullopt;
+    }
+    [[nodiscard]] bool HasInstanceUVE(Scene::EntityUVE) const noexcept override { return false; }
+    [[nodiscard]] std::size_t GetInstanceCountUVE() const noexcept override { return 0U; }
+    [[nodiscard]] std::uint64_t GetTotalBudgetUVE() const noexcept override { return 0U; }
+
+    mutable int snapshotCallCount = 0;
+    mutable int particleSnapshotCallCount = 0;
+    int attachCallCount = 0;
+    int detachCallCount = 0;
+    int setEnabledCallCount = 0;
+    int setLiveParticleCountCallCount = 0;
+    int emitCallCount = 0;
+    int simulateCallCount = 0;
 };
 
 class FakeAssetDatabaseUVE final : public Asset::IAssetDatabaseUVE {
@@ -876,6 +930,7 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     FakeProjectChangeWatcherUVE projectChangeWatcher;
     FakeSceneSerializerUVE sceneSerializer;
     FakePrefabSystemUVE prefabSystem;
+    FakeParticleRuntimeUVE particleRuntime;
     FakeHotReloadUVE hotReload;
     FakeAssetManagerUVE assetManager;
     FakeAssetImporterUVE assetImporter;
@@ -908,7 +963,7 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     const EngineServicesUVE services(logger, timer, eventSystem, memoryManager, threadPool,
                                       commandLine, configManager, entityManager, sceneGraph,
                                       assetDatabase, projectFileIndex, derivedArtifactCache, projectChangeWatcher,
-                                      sceneSerializer, prefabSystem,
+                                      sceneSerializer, prefabSystem, particleRuntime,
                                       hotReload, assetManager, assetImporter, assetImportQueue, assetBundle, fileSystem,
                                       renderDevice, shaderManager, renderSystem, cameraSystem,
                                       meshRenderer, lightSystem, renderer3D, collisionSystem, physicsSystem,
@@ -932,6 +987,7 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     EXPECT_EQ(&services.GetProjectChangeWatcherUVE(), &projectChangeWatcher);
     EXPECT_EQ(&services.GetSceneSerializerUVE(), &sceneSerializer);
     EXPECT_EQ(&services.GetPrefabSystemUVE(), &prefabSystem);
+    EXPECT_EQ(&services.GetParticleRuntimeUVE(), &particleRuntime);
     EXPECT_EQ(&services.GetHotReloadUVE(), &hotReload);
     EXPECT_EQ(&services.GetAssetManagerUVE(), &assetManager);
     EXPECT_EQ(&services.GetAssetImporterUVE(), &assetImporter);
@@ -977,6 +1033,7 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     FakeProjectChangeWatcherUVE projectChangeWatcher;
     FakeSceneSerializerUVE sceneSerializer;
     FakePrefabSystemUVE prefabSystem;
+    FakeParticleRuntimeUVE particleRuntime;
     FakeHotReloadUVE hotReload;
     FakeAssetManagerUVE assetManager;
     FakeAssetImporterUVE assetImporter;
@@ -1008,7 +1065,7 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     const EngineServicesUVE services(logger, timer, eventSystem, memoryManager, threadPool,
                                       commandLine, configManager, entityManager, sceneGraph,
                                       assetDatabase, projectFileIndex, derivedArtifactCache, projectChangeWatcher,
-                                      sceneSerializer, prefabSystem,
+                                      sceneSerializer, prefabSystem, particleRuntime,
                                       hotReload, assetManager, assetImporter, assetImportQueue, assetBundle, fileSystem,
                                       renderDevice, shaderManager, renderSystem, cameraSystem,
                                       meshRenderer, lightSystem, renderer3D, collisionSystem, physicsSystem,
@@ -1025,6 +1082,7 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     services.GetConfigManagerUVE().SaveUVE();
     static_cast<void>(services.GetEntityManagerUVE().CreateEntityUVE());
     services.GetSceneGraphUVE().UpdateUVE(services.GetEntityManagerUVE());
+    EXPECT_TRUE(services.GetParticleRuntimeUVE().AttachUVE(Scene::EntityUVE{1, 1}, Scene::ParticleEmitterComponentUVE{}));
     services.GetAssetDatabaseUVE().SaveUVE();
     static_cast<void>(services.GetProjectFileIndexUVE().RefreshUVE(services.GetAssetDatabaseUVE()));
     static_cast<void>(services.GetDerivedArtifactCacheUVE().LoadImportRecordUVE("unused.asset"));
@@ -1076,6 +1134,7 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     EXPECT_EQ(configManager.saveCallCount, 1);
     EXPECT_EQ(entityManager.createEntityCallCount, 1);
     EXPECT_EQ(sceneGraph.updateCallCount, 1);
+    EXPECT_EQ(particleRuntime.attachCallCount, 1);
     EXPECT_EQ(assetDatabase.saveCallCount, 1);
     EXPECT_EQ(projectFileIndex.refreshCallCount, 1);
     EXPECT_EQ(derivedArtifactCache.loadCallCount, 1);
