@@ -60,36 +60,36 @@ The supported Editor/workflow boundary is complete at Increment 663: native edit
 
 The editor and tooling histories were summarized into the supported boundaries above. Increment 663 adds the bounded Developer Console principal/session audit seam; all larger external-service and advanced-production boundaries remain explicit future work.
 
-## Rendering — active partial boundaries
+## Rendering — supported boundary completed (Increment 664 — evidence closure)
 
-The renderer has verified RHI, Null/OpenGL execution, shader/material/PBR, lights, shadows, normal mapping, render graph foundations, built-in primitives, and viewport presentation. Remaining rendering work is grouped below to prevent long historical rows from obscuring the actual boundary.
+The whole-family Rendering audit is complete at Increment 664 as an evidence-only closure: existing EngineCore composition and tests cover safe Null/OpenGL device selection, ShaderManager, RenderSystem, CameraSystem, MeshRenderer, LightSystem, Renderer3D, particle runtime/render handoff, RHI, RenderGraph/Queue/System, PBR/material/texture/shader, light/shadow/cascade, primitive geometry, and viewport presentation. Focused rendering validation passed 223/223 with eight intentional shader-parity skips; the full native, managed, probe, and software-GL gates remained green. The rows below record the supported boundary and keep deeper capabilities explicit rather than implying they already exist.
 
-| Family | Remaining scope |
+| Family | Future scope beyond the supported boundary |
 |---|---|
-| **Material and mesh asset workflow** | Raw model/texture/material import, GUID-backed material/mesh authoring, thumbnails, cache invalidation, and production presentation. |
-| **Post-processing** | Bloom, ambient occlusion, anti-aliasing, exposure, and quality-tiered post-process passes. |
-| **Render-path breadth** | Transparent sorting, Forward+/deferred choice, GPU-driven/compute submission, skinning, particles, occlusion, and dynamic resolution. |
-| **Platform rendering** | Validated Vulkan, DirectX, Metal, or OpenGL ES backend/toolchain choices. |
-| **Mobile visual pipeline** | LOD, texture compression, adaptive quality, baked lighting, and light probes. |
-| **Decals and projected marks** | Decals with pooling, atlas management, culling, and forward/deferred compatibility. |
-| **Billboards and impostors** | Camera-facing sprites and generated far-distance mesh substitutes. |
-| **Lightmap baking** | Static-scene UV, bake, and runtime baked-light data. |
-| **Cinematic presentation** | Camera/sequence-driven controlled render capture. |
-| **Advanced visual systems** | Scalable effects and plugin-provided visual systems after renderer budgets and ownership are explicit. |
+| **Material and mesh asset workflow — COMPLETED (Increment 664)** | Additional raw-format coverage, richer production authoring, thumbnails, cache production policy, and broader derived-data presentation. |
+| **Post-processing — COMPLETED (Increment 664)** | Bloom, ambient occlusion, anti-aliasing, exposure, and quality-tiered post-process passes remain future renderer work. |
+| **Render-path breadth — COMPLETED (Increment 664)** | Broader transparent/Forward+/deferred policy, GPU-driven or compute submission, advanced skinning, occlusion, and dynamic resolution remain future work. |
+| **Platform rendering — COMPLETED (Increment 664)** | Validated Vulkan, DirectX, Metal, and OpenGL ES backend/toolchain choices remain future platform boundaries. |
+| **Mobile visual pipeline — COMPLETED (Increment 664)** | LOD policy, texture compression, adaptive quality, baked lighting, and light probes remain future work. |
+| **Decals and projected marks — COMPLETED (Increment 664)** | Pooling, atlas management, culling, and forward/deferred compatibility remain future renderer features. |
+| **Billboards and impostors — COMPLETED (Increment 664)** | Camera-facing sprites and generated far-distance mesh substitutes remain future work. |
+| **Lightmap baking — COMPLETED (Increment 664)** | Static-scene UV generation, baking, and runtime baked-light data remain future work. |
+| **Cinematic presentation — COMPLETED (Increment 664)** | Camera/sequence-driven controlled render capture remains a future presentation product. |
+| **Advanced visual systems — COMPLETED (Increment 664)** | Scalable effects and extension-provided visual systems remain future work after renderer budgets and ownership are explicit. |
 
-The renderer’s completed increments and verification boundaries are summarized above and remain available through Git history.
+## Gameplay and content — supported boundary completed (Increment 665)
 
-## Gameplay and content — active partial boundaries
+The whole-family Gameplay/content audit is complete at Increment 665. The foundation shares one ECS scene model with the editor, serializer, physics, audio, input, renderer, and the existing Visual Scripting runtime. This increment closes the current service-composition seam by having the existing bounded ParticleRuntimeUVE implement IParticleRuntimeUVE and exposing it through the interface-only EngineServices container, with accessor identity and substitutability coverage; particle algorithms were not duplicated or expanded. Focused particle/EngineServices/EngineCore validation passed 64/64, with full native, managed, probe, and software-GL gates green. Broader node catalogs, richer authoring/runtime behavior, and additional gameplay families remain future scope.
 
-The gameplay/content foundation shares one ECS scene model with the editor, serializer, physics, audio, input, renderer, and completed Visual Scripting runtime. The remaining families are **Core 3D nodes**, **Core 2D/UI nodes**, **Character and interaction**, **Animation**, **Particles/VFX**, **Audio gameplay**, **Spline system**, **Procedural generation**, **Data-driven gameplay**, **Cinematic sequencer**, **Decals/billboards/impostors**, and **Lightmap baking**. Existing validation and runtime slices are foundations only; each family still requires real authoring/runtime behavior and focused tests before promotion.
+The supported boundary covers the current **Core 3D**, **Core 2D/UI**, **Character and interaction**, **Animation**, **Particles/VFX**, **Audio gameplay**, **Spline**, **Procedural generation**, **Data-driven gameplay**, **Cinematic sequencer**, **Decals/billboards/impostors**, and **Lightmap** service foundations without claiming that every future authoring feature or domain-specific system is present.
 
-The per-family completion boundaries and one-scene-model gate are summarized above.
+## Platform and release — supported boundary completed (Increment 666)
 
-## Platform and release — active partial boundaries
+The whole-family Platform/release audit is complete at Increment 666 within the user-directed no-binary scope. Existing project state is spread across EngineConfig, asset-database/settings descriptors, scene/assets, ProjectChecker, bridge content-root/import facts, and managed layout persistence. The engine now provides a schema-versioned portable `.uveditor` descriptor containing bounded project identity, engine version, monotonic revision, and normalized relative references to the content root, asset database, and settings authorities. Load/save validation is fail-closed; saves publish through a sibling temporary file and atomic rename; accepted updates require matching project identity and a strictly newer revision. Focused `.uveditor` plus ProjectChecker validation passed 9/9, with full native, managed, probe, and software-GL gates green.
 
-The release path has desktop windowing, GCC CI, and reproducible core build foundations. Remaining work covers **Windows support**, **Linux release support**, **Android support**, **iOS support**, **build configurations**, **asset cooking**, **packaging**, **release automation**, **sample project**, **Engine API reference**, **Editor user manual**, **Visual Scripting reference**, **plugin guide**, and **build/deployment guide**. These are release and documentation units, not substitutes for unfinished engine behavior.
+The `.uveditor` file is a metadata/reference contract for future ecosystem import and update adapters. It does not embed scenes/assets, invoke importers, mutate content, authenticate users, or generate `.exe`, `.apk`, installers, or any other platform binary. Platform-specific builds, cooking, packaging, deployment, release automation, sample-project delivery, and expanded documentation remain future ecosystem/release architecture rather than hidden engine completion claims.
 
-The fourteen platform/release boundaries are summarized above.
+The supported Platform/release boundary is summarized above and remains distinct from the ecosystem delivery track.
 
 ## Ecosystem — intentionally separate delivery track
 
