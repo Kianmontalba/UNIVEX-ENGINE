@@ -47,6 +47,10 @@ struct EditorUVEAccessUVE final {
         return editor.m_inspectorDrawerRegistry.GetDrawerCountUVE();
     }
 
+    [[nodiscard]] static std::size_t GetEditorPreviewEntityCountUVE(const EditorUVE& editor) {
+        return editor.m_editorPreviewEntities.size();
+    }
+
     [[nodiscard]] static std::string GetContentBrowserItemTypeLabelUVE(const Asset::ProjectFileEntryUVE& entry) {
         return EditorUVE::GetContentBrowserItemTypeLabelUVE(EditorUVE::ClassifyContentBrowserEntryUVE(entry));
     }
@@ -144,7 +148,7 @@ TEST(EditorUVETest, InitUVE_CreatesCameraOutsideDocumentRootsAndSupportsHeadless
     engine.Shutdown();
 }
 
-TEST(EditorUVETest, CreateDaylightPreviewSceneUVE_CreatesRealUndoableStarterHierarchy) {
+TEST(EditorUVETest, InitUVE_CreatesAutomaticDaylightPreviewOutsideDocumentRoots) {
     Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
     engine.Init();
     ASSERT_TRUE(engine.Load());
@@ -152,25 +156,16 @@ TEST(EditorUVETest, CreateDaylightPreviewSceneUVE_CreatesRealUndoableStarterHier
     {
         EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_daylight_preview.uvescene");
         editor.InitUVE();
-        Core::EngineServicesUVE& services = engine.GetServicesUVE();
 
-        const Scene::EntityUVE root = editor.CreateDaylightPreviewSceneUVE();
+        EXPECT_EQ(editor.GetDocumentRootsUVE().size(), 0U);
+        EXPECT_EQ(EditorUVEAccessUVE::GetEditorPreviewEntityCountUVE(editor), 2U);
+        EXPECT_FALSE(editor.IsSceneDirtyUVE());
 
-        ASSERT_NE(root, Scene::kInvalidEntityUVE);
-        ASSERT_EQ(editor.GetDocumentRootsUVE().size(), 1U);
-        const std::vector<Scene::EntityUVE> children =
-            services.GetSceneGraphUVE().GetChildrenUVE(services.GetEntityManagerUVE(), root);
-        ASSERT_EQ(children.size(), 2U);
-        EXPECT_TRUE(services.GetEntityManagerUVE().HasComponentUVE<Scene::NameComponentUVE>(root));
-        EXPECT_TRUE(editor.IsSceneDirtyUVE());
-        EXPECT_TRUE(editor.CanUndoUVE());
-        EXPECT_EQ(editor.CreateDaylightPreviewSceneUVE(), Scene::kInvalidEntityUVE);
-
-        ASSERT_TRUE(editor.UndoUVE());
-        EXPECT_TRUE(editor.GetDocumentRootsUVE().empty());
-        ASSERT_TRUE(editor.RedoUVE());
-        ASSERT_EQ(editor.GetDocumentRootsUVE().size(), 1U);
-        EXPECT_EQ(editor.CreateDaylightPreviewSceneUVE(), Scene::kInvalidEntityUVE);
+        const Scene::EntityUVE authored = editor.CreateDocumentEntityUVE(EditorEntityKindUVE::Cube);
+        ASSERT_NE(authored, Scene::kInvalidEntityUVE);
+        editor.TickUVE();
+        EXPECT_EQ(editor.GetDocumentRootsUVE().size(), 1U);
+        EXPECT_EQ(EditorUVEAccessUVE::GetEditorPreviewEntityCountUVE(editor), 0U);
 
         editor.ShutdownUVE();
     }

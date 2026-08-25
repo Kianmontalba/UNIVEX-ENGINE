@@ -327,11 +327,6 @@ public:
     /// entity handle without mutation when the editor is not running or `kind` is unsupported.
     [[nodiscard]] Scene::EntityUVE CreateDocumentEntityUVE(EditorEntityKindUVE kind);
 
-    /// Creates an explicit, undoable starter scene using only existing UVE Empty, Plane, and
-    /// DirectionalLight entities. It is rejected when document content already exists and never
-    /// creates hidden renderer-owned content.
-    [[nodiscard]] Scene::EntityUVE CreateDaylightPreviewSceneUVE();
-
     /// Creates a user-facing node from the centralized SceneNode registry. Runtime ownership remains
     /// in core/physics/render/audio/scripting; this method only creates the authored scene façade.
     [[nodiscard]] Scene::EntityUVE CreateDocumentSceneNodeUVE(Scene::Nodes::SceneNodeKindUVE kind);
@@ -623,6 +618,9 @@ private:
                      ReparentHistoryEntryUVE>;
 
     [[nodiscard]] bool IsDocumentEntityUVE(Scene::EntityUVE entity) const noexcept;
+    [[nodiscard]] bool IsEditorPreviewEntityUVE(Scene::EntityUVE entity) const noexcept;
+    void RefreshEditorPreviewSceneUVE();
+    void DestroyEditorPreviewSceneUVE() noexcept;
     [[nodiscard]] bool HasSceneGraphNodeUVE(Scene::EntityUVE entity) const noexcept;
     [[nodiscard]] bool IsTransformFiniteUVE(const Scene::TransformComponentUVE& transform) const noexcept;
     [[nodiscard]] bool IsEntityNameValidUVE(std::string_view name) const noexcept;
@@ -773,6 +771,7 @@ private:
     EditorPlayModeStateUVE m_playModeState = EditorPlayModeStateUVE::Edit;
     std::optional<PlayModeSessionUVE> m_playModeSession;
     Scene::EntityUVE m_viewportCamera = Scene::kInvalidEntityUVE;
+    std::vector<Scene::EntityUVE> m_editorPreviewEntities;
     std::vector<Scene::EntityUVE> m_selectedEntities;
     Scene::EntityUVE m_selectedEntity = Scene::kInvalidEntityUVE;
     std::filesystem::path m_activeScenePath;

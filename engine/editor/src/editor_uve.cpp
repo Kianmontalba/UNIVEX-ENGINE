@@ -26,6 +26,7 @@
 #include "uve/asset/uve_file_envelope_uve.h"
 #include "uve/config/i_config_manager_uve.h"
 #include "uve/physics/raycast_query_uve.h"
+#include "uve/platform/editor_project_package_uve.h"
 #include "uve/scene/components/area_component_uve.h"
 #include "uve/scene/components/camera_component_uve.h"
 #include "uve/scene/components/collider_component_uve.h"
@@ -330,6 +331,7 @@ void EditorUVE::InitUVE() {
 
     m_state = EditorStateUVE::Running;
     LoadSessionSettingsUVE();
+    RefreshEditorPreviewSceneUVE();
 }
 
 void EditorUVE::TickUVE() {
@@ -338,6 +340,9 @@ void EditorUVE::TickUVE() {
     }
 
     PruneSelectionUVE();
+    if (m_playModeState == EditorPlayModeStateUVE::Edit) {
+        RefreshEditorPreviewSceneUVE();
+    }
     if (m_gizmoDrag.axis != EditorTranslateAxisUVE::None &&
         (!HasSingleDocumentSelectionUVE() || !IsDocumentEntityUVE(m_gizmoDrag.entity) ||
          m_gizmoDrag.entity != m_selectedEntity)) {
@@ -361,6 +366,7 @@ bool EditorUVE::EnterPlayModeUVE() {
     }
 
     const std::vector<Scene::EntityUVE> roots = GetDocumentRootsUVE();
+    DestroyEditorPreviewSceneUVE();
     PlayModeSessionUVE session{};
     session.capturedEmptyDocument = roots.empty();
     if (!session.capturedEmptyDocument) {
@@ -454,6 +460,7 @@ bool EditorUVE::StopPlayModeUVE() {
 
     m_playModeSession.reset();
     m_playModeState = EditorPlayModeStateUVE::Edit;
+    RefreshEditorPreviewSceneUVE();
     return true;
 }
 
@@ -1446,64 +1453,6 @@ Scene::EntityUVE EditorUVE::CreateDocumentEntityUVE(const EditorEntityKindUVE ki
     RecordHistoryUVE(CreationHistoryEntryUVE{
         kind, createdName, entity, selectionBefore, CaptureSelectionSnapshotUVE(), dirtyBefore, true});
     return entity;
-}
-
-Scene::EntityUVE EditorUVE::CreateDaylightPreviewSceneUVE() {
-    if (!IsAuthoringCommandAllowedUVE() || !GetDocumentRootsUVE().empty() ||
-        m_gizmoDrag.axis != EditorTranslateAxisUVE::None ||
-        m_viewportNavigationMode != EditorViewportNavigationModeUVE::None) {
-        return Scene::kInvalidEntityUVE;
-    }
-
-    const EditorSelectionSnapshotUVE selectionBefore = CaptureSelectionSnapshotUVE();
-    const bool dirtyBefore = m_sceneDirty;
-    const Scene::EntityUVE root = CreateDocumentEntityInternalUVE(
-        EditorEntityKindUVE::Empty, std::string{"EditorDayPreview"});
-    const Scene::EntityUVE ground = CreateDocumentEntityInternalUVE(
-        EditorEntityKindUVE::Plane, std::string{"PreviewGround"});
-    const Scene::EntityUVE sun = CreateDocumentEntityInternalUVE(
-        EditorEntityKindUVE::DirectionalLight, std::string{"PreviewSun"});
-    const auto cleanup = [this](const Scene::EntityUVE entity) {
-        if (IsDocumentEntityUVE(entity)) {
-            DestroyDocumentSubtreeUVE(entity);
-        }
-    };
-    if (root == Scene::kInvalidEntityUVE || ground == Scene::kInvalidEntityUVE ||
-        sun == Scene::kInvalidEntityUVE) {
-        cleanup(sun);
-        cleanup(ground);
-        cleanup(root);
-        RestoreSelectionUVE(selectionBefore);
-        m_sceneDirty = dirtyBefore;
-        return Scene::kInvalidEntityUVE;
-    }
-
-    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
-    Scene::ISceneGraphUVE& sceneGraph = m_services->GetSceneGraphUVE();
-    sceneGraph.SetParentUVE(entityManager, ground, root);
-    sceneGraph.SetParentUVE(entityManager, sun, root);
-
-    Scene::TransformComponentUVE groundTransform{};
-    groundTransform.localPosition = {0.0F, -0.025F, 0.0F};
-    groundTransform.localScale = {12.0F, 1.0F, 12.0F};
-    sceneGraph.SetLocalTransformUVE(entityManager, ground, groundTransform);
-    Scene::TransformComponentUVE sunTransform{};
-    sunTransform.localPosition = {0.0F, 5.0F, 0.0F};
-    sceneGraph.SetLocalTransformUVE(entityManager, sun, sunTransform);
-
-    const std::optional<Scene::SceneSnapshotUVE> snapshot = CaptureSubtreeUVE(root);
-    if (!snapshot.has_value()) {
-        cleanup(root);
-        RestoreSelectionUVE(selectionBefore);
-        m_sceneDirty = dirtyBefore;
-        return Scene::kInvalidEntityUVE;
-    }
-    SelectEntityUVE(root);
-    m_sceneDirty = true;
-    RecordHistoryUVE(SceneNodeCreationHistoryEntryUVE{
-        *snapshot, Scene::Nodes::SceneNodeKindUVE::Empty, root, selectionBefore,
-        CaptureSelectionSnapshotUVE(), dirtyBefore, true});
-    return root;
 }
 
 Scene::EntityUVE EditorUVE::CreateDocumentSceneNodeUVE(
@@ -2639,7 +2588,10 @@ std::vector<Scene::EntityUVE> EditorUVE::GetDocumentRootsUVE() {
     Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
     std::vector<Scene::EntityUVE> roots =
         m_services->GetSceneGraphUVE().GetChildrenUVE(entityManager, Scene::kInvalidEntityUVE);
-    roots.erase(std::remove(roots.begin(), roots.end(), m_viewportCamera), roots.end());
+    roots.erase(std::remove_if(roots.begin(), roots.end(), [this](const Scene::EntityUVE entity) {
+                    return entity == m_viewportCamera || IsEditorPreviewEntityUVE(entity);
+                }),
+                roots.end());
     return roots;
 }
 
@@ -2717,6 +2669,7 @@ void EditorUVE::ShutdownUVE() {
             m_playModeState = EditorPlayModeStateUVE::Edit;
         }
     }
+    DestroyEditorPreviewSceneUVE();
     if (m_uiInitialized) {
         ImGui_ImplOpenGL3_Shutdown();
         ImGui_ImplGlfw_Shutdown();
@@ -2736,7 +2689,61 @@ void EditorUVE::ShutdownUVE() {
 
 bool EditorUVE::IsDocumentEntityUVE(const Scene::EntityUVE entity) const noexcept {
     return entity != Scene::kInvalidEntityUVE && entity != m_viewportCamera &&
-           m_services->GetEntityManagerUVE().IsAliveUVE(entity);
+           !IsEditorPreviewEntityUVE(entity) && m_services->GetEntityManagerUVE().IsAliveUVE(entity);
+}
+
+bool EditorUVE::IsEditorPreviewEntityUVE(const Scene::EntityUVE entity) const noexcept {
+    return std::find(m_editorPreviewEntities.cbegin(), m_editorPreviewEntities.cend(), entity) !=
+           m_editorPreviewEntities.cend();
+}
+
+void EditorUVE::DestroyEditorPreviewSceneUVE() noexcept {
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    for (const Scene::EntityUVE entity : m_editorPreviewEntities) {
+        if (entityManager.IsAliveUVE(entity)) {
+            entityManager.DestroyEntityUVE(entity);
+        }
+    }
+    m_editorPreviewEntities.clear();
+}
+
+void EditorUVE::RefreshEditorPreviewSceneUVE() {
+    if (m_state != EditorStateUVE::Running || m_playModeState != EditorPlayModeStateUVE::Edit) {
+        return;
+    }
+    const std::vector<Scene::EntityUVE> documentRoots = GetDocumentRootsUVE();
+    if (!documentRoots.empty()) {
+        DestroyEditorPreviewSceneUVE();
+        return;
+    }
+    if (!m_editorPreviewEntities.empty()) {
+        return;
+    }
+
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    const Scene::EntityUVE ground = CreateDocumentEntityInternalUVE(
+        EditorEntityKindUVE::Plane, std::string{"EditorPreviewGround"});
+    const Scene::EntityUVE sun = CreateDocumentEntityInternalUVE(
+        EditorEntityKindUVE::DirectionalLight, std::string{"EditorPreviewSun"});
+    if (ground == Scene::kInvalidEntityUVE || sun == Scene::kInvalidEntityUVE) {
+        if (ground != Scene::kInvalidEntityUVE && entityManager.IsAliveUVE(ground)) {
+            entityManager.DestroyEntityUVE(ground);
+        }
+        if (sun != Scene::kInvalidEntityUVE && entityManager.IsAliveUVE(sun)) {
+            entityManager.DestroyEntityUVE(sun);
+        }
+        return;
+    }
+
+    Scene::ISceneGraphUVE& sceneGraph = m_services->GetSceneGraphUVE();
+    Scene::TransformComponentUVE groundTransform{};
+    groundTransform.localPosition = {0.0F, -0.025F, 0.0F};
+    groundTransform.localScale = {12.0F, 1.0F, 12.0F};
+    sceneGraph.SetLocalTransformUVE(entityManager, ground, groundTransform);
+    Scene::TransformComponentUVE sunTransform{};
+    sunTransform.localPosition = {0.0F, 5.0F, 0.0F};
+    sceneGraph.SetLocalTransformUVE(entityManager, sun, sunTransform);
+    m_editorPreviewEntities = {ground, sun};
 }
 
 bool EditorUVE::HasSceneGraphNodeUVE(const Scene::EntityUVE entity) const noexcept {
@@ -4242,6 +4249,45 @@ void EditorUVE::DrawMenuBarUVE() {
     }
     ImGui::EndDisabled();
     ImGui::SameLine();
+    if (ImGui::SmallButton("Android")) {
+        ImGui::OpenPopup("android-integration-popup");
+    }
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) {
+        ImGui::SetTooltip("Android Integration");
+    }
+    if (ImGui::BeginPopup("android-integration-popup")) {
+        ImGui::TextUnformatted("Android Integration");
+        ImGui::Separator();
+        const std::filesystem::path packagePath =
+            (m_activeScenePath.empty() ? std::filesystem::path{"project.uveditor"}
+                                        : m_activeScenePath.parent_path() / "project.uveditor");
+        ImGui::TextWrapped("Project descriptor: %s", packagePath.generic_string().c_str());
+        std::error_code descriptorError;
+        const bool descriptorExists = std::filesystem::exists(packagePath, descriptorError) && !descriptorError;
+        if (!descriptorExists) {
+            ImGui::TextColored(ImVec4{0.94F, 0.71F, 0.34F, 1.0F}, "Status: descriptor not found");
+            ImGui::TextDisabled("Create or select a valid .uveditor project descriptor before handoff.");
+        } else {
+            const Platform::EditorProjectPackageLoadResultUVE package =
+                Platform::EditorProjectPackageCodecUVE::LoadUVE(packagePath);
+            if (package.IsAcceptedUVE()) {
+                ImGui::TextColored(ImVec4{0.45F, 0.86F, 0.63F, 1.0F}, "Status: project metadata ready");
+                ImGui::Text("Project: %s", package.package->displayName.c_str());
+                ImGui::Text("Revision: %llu", static_cast<unsigned long long>(package.package->revision));
+                ImGui::TextDisabled("Target: Android | Handoff: metadata-only");
+            } else {
+                ImGui::TextColored(ImVec4{0.94F, 0.38F, 0.36F, 1.0F}, "Status: descriptor invalid");
+                ImGui::TextWrapped("%s", package.result.message.c_str());
+            }
+        }
+        ImGui::Separator();
+        ImGui::TextDisabled("Build, package, SDK/device discovery, and deploy adapters are not connected in this boundary.");
+        ImGui::BeginDisabled();
+        static_cast<void>(ImGui::Button("Deploy to Android"));
+        ImGui::EndDisabled();
+        ImGui::EndPopup();
+    }
+    ImGui::SameLine();
     if (ImGui::BeginMenu("View")) {
         ImGui::MenuItem("Scene Panel", nullptr, &m_scenePanelVisible);
         ImGui::MenuItem("Inspector Panel", nullptr, &m_inspectorPanelVisible);
@@ -5655,7 +5701,7 @@ void EditorUVE::DrawViewportPanelUVE() {
         drawList->AddText(ImVec2{contentOrigin.x + contentSize.x - 150.0F, contentOrigin.y + 10.0F},
                           documentStateColor, documentStateLabel);
         if (GetDocumentRootsUVE().empty() && IsAuthoringCommandAllowedUVE()) {
-            const ImVec2 emptyStateSize{310.0F, 76.0F};
+            const ImVec2 emptyStateSize{360.0F, 76.0F};
             const ImVec2 emptyStatePosition{contentOrigin.x + (contentSize.x - emptyStateSize.x) * 0.5F,
                                             contentOrigin.y + (contentSize.y - emptyStateSize.y) * 0.5F};
             drawList->AddRectFilled(emptyStatePosition,
@@ -5666,14 +5712,14 @@ void EditorUVE::DrawViewportPanelUVE() {
                               ImVec2{emptyStatePosition.x + emptyStateSize.x,
                                      emptyStatePosition.y + emptyStateSize.y},
                               IM_COL32(73, 125, 170, 220), 6.0F, 0, 1.0F);
+            const bool previewReady = m_editorPreviewEntities.size() == 2U;
             drawList->AddText(ImVec2{emptyStatePosition.x + 16.0F, emptyStatePosition.y + 12.0F},
-                              IM_COL32(233, 242, 255, 255), "EMPTY SCENE");
-            drawList->AddText(ImVec2{emptyStatePosition.x + 16.0F, emptyStatePosition.y + 32.0F},
-                              IM_COL32(154, 176, 205, 255), "Create an explicit daylight preview to start authoring.");
-            ImGui::SetCursorScreenPos(ImVec2{emptyStatePosition.x + 16.0F, emptyStatePosition.y + 50.0F});
-            if (ImGui::SmallButton("Create Daylight Preview")) {
-                static_cast<void>(CreateDaylightPreviewSceneUVE());
-            }
+                              previewReady ? IM_COL32(151, 229, 173, 255) : IM_COL32(236, 181, 86, 255),
+                              previewReady ? "AUTOMATIC DAYLIGHT PREVIEW" : "EMPTY VIEWPORT");
+            drawList->AddText(ImVec2{emptyStatePosition.x + 16.0F, emptyStatePosition.y + 34.0F},
+                              IM_COL32(154, 176, 205, 255),
+                              previewReady ? "Editor-only ground and sun; authored scene is still empty."
+                                            : "Preview could not be created; check Runtime Diagnostics.");
         }
         if (m_playModeState != EditorPlayModeStateUVE::Edit) {
             const bool paused = m_playModeState == EditorPlayModeStateUVE::Paused;
