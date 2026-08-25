@@ -2,40 +2,26 @@
 
 #pragma once
 
-#include "uve/core/animation_tree_uve.h"
-#include "uve/physics/character_controller_uve.h"
-#include "uve/scene/components/animation_player_component_uve.h"
-#include "uve/scene/components/audio_source_component_uve.h"
-#include "uve/scene/components/camera_component_uve.h"
-#include "uve/scene/components/collider_component_uve.h"
-#include "uve/scene/components/light_component_uve.h"
-#include "uve/scene/components/mesh_component_uve.h"
-#include "uve/scene/components/particle_emitter_component_uve.h"
-#include "uve/scene/components/rigid_body_component_uve.h"
-#include "uve/scene/components/script_component_uve.h"
-#include "uve/scene/components/transform_component_uve.h"
+#include "uve/scene/nodes/animation_player_node_uve.h"
+#include "uve/scene/nodes/animation_tree_node_uve.h"
+#include "uve/scene/nodes/audio_source_3d_node_uve.h"
+#include "uve/scene/nodes/box_mesh_3d_node_uve.h"
+#include "uve/scene/nodes/camera_3d_node_uve.h"
+#include "uve/scene/nodes/character_body_3d_node_uve.h"
+#include "uve/scene/nodes/collision_shape_3d_node_uve.h"
+#include "uve/scene/nodes/empty_node_uve.h"
+#include "uve/scene/nodes/light_3d_node_uve.h"
+#include "uve/scene/nodes/mesh_instance_3d_node_uve.h"
+#include "uve/scene/nodes/particle_emitter_3d_node_uve.h"
+#include "uve/scene/nodes/plane_mesh_3d_node_uve.h"
+#include "uve/scene/nodes/rigid_body_3d_node_uve.h"
+#include "uve/scene/nodes/script_node_uve.h"
+#include "uve/scene/nodes/sphere_mesh_3d_node_uve.h"
+#include "uve/scene/nodes/transform_node_uve.h"
 #include "uve/scene/nodes/scene_node_registry_uve.h"
 
 namespace UVE::Scene::Nodes {
 
-/// User-facing AnimationTree node façade. Core::AnimationTreeUVE remains the owning runtime value.
-using AnimationTreeNodeFacadeUVE = Core::AnimationTreeUVE;
-
-/// User-facing scene animation player façade. The authored component remains the serialized value.
-using AnimationPlayerNodeFacadeUVE = AnimationPlayerComponentUVE;
-
-/// User-facing CharacterBody3D-style façade. Movement remains caller-owned through Physics.
-using CharacterBody3DNodeFacadeUVE = Physics::CharacterControllerInputUVE;
-using CharacterBody3DMoveResultUVE = Physics::CharacterControllerMoveResultUVE;
-
-using Camera3DNodeFacadeUVE = CameraComponentUVE;
-using MeshInstance3DNodeFacadeUVE = MeshComponentUVE;
-using Light3DNodeFacadeUVE = LightComponentUVE;
-using Collider3DNodeFacadeUVE = ColliderComponentUVE;
-using RigidBody3DNodeFacadeUVE = RigidBodyComponentUVE;
-using AudioSource3DNodeFacadeUVE = AudioSourceComponentUVE;
-using ParticleEmitter3DNodeFacadeUVE = ParticleEmitterComponentUVE;
-using ScriptNodeFacadeUVE = ScriptComponentUVE;
-using TransformNodeFacadeUVE = TransformComponentUVE;
-
+// Each concrete user-facing node and its compatibility façade alias is defined by its own
+// discoverable header in this folder; this header remains the aggregate include surface.
 } // namespace UVE::Scene::Nodes

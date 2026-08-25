@@ -7,7 +7,23 @@
 
 #include <gtest/gtest.h>
 
+#include "uve/scene/nodes/animation_player_node_uve.h"
+#include "uve/scene/nodes/animation_tree_node_uve.h"
+#include "uve/scene/nodes/audio_source_3d_node_uve.h"
+#include "uve/scene/nodes/box_mesh_3d_node_uve.h"
+#include "uve/scene/nodes/camera_3d_node_uve.h"
+#include "uve/scene/nodes/character_body_3d_node_uve.h"
+#include "uve/scene/nodes/collision_shape_3d_node_uve.h"
+#include "uve/scene/nodes/empty_node_uve.h"
+#include "uve/scene/nodes/light_3d_node_uve.h"
+#include "uve/scene/nodes/mesh_instance_3d_node_uve.h"
+#include "uve/scene/nodes/particle_emitter_3d_node_uve.h"
+#include "uve/scene/nodes/plane_mesh_3d_node_uve.h"
+#include "uve/scene/nodes/rigid_body_3d_node_uve.h"
 #include "uve/scene/nodes/scene_node_uve.h"
+#include "uve/scene/nodes/sphere_mesh_3d_node_uve.h"
+#include "uve/scene/nodes/script_node_uve.h"
+#include "uve/scene/nodes/transform_node_uve.h"
 
 namespace UVE::Scene::Nodes::Tests {
 namespace {
@@ -36,11 +52,27 @@ TEST(SceneNodeRegistryUVETest, BuiltInDescriptorsUVE_AreStableUniqueAndRuntimeBo
 }
 
 TEST(SceneNodeRegistryUVETest, NodeFacadeAliasesUVE_ExposeExistingRuntimeContracts) {
+    static_assert(std::is_same_v<AnimationTreeNodeUVE, Core::AnimationTreeUVE>);
     static_assert(std::is_same_v<AnimationTreeNodeFacadeUVE, Core::AnimationTreeUVE>);
+    static_assert(std::is_same_v<AnimationPlayerNodeUVE, AnimationPlayerComponentUVE>);
     static_assert(std::is_same_v<AnimationPlayerNodeFacadeUVE, AnimationPlayerComponentUVE>);
+    static_assert(std::is_same_v<Camera3DNodeUVE, CameraComponentUVE>);
     static_assert(std::is_same_v<Camera3DNodeFacadeUVE, CameraComponentUVE>);
+    static_assert(std::is_same_v<CharacterBody3DNodeUVE, Physics::CharacterControllerInputUVE>);
     static_assert(std::is_same_v<CharacterBody3DNodeFacadeUVE, Physics::CharacterControllerInputUVE>);
-    static_assert(std::is_same_v<RigidBody3DNodeFacadeUVE, RigidBodyComponentUVE>);
+    static_assert(std::is_same_v<CollisionShape3DNodeUVE, ColliderComponentUVE>);
+    static_assert(std::is_same_v<Collider3DNodeFacadeUVE, ColliderComponentUVE>);
+    static_assert(std::is_same_v<MeshInstance3DNodeUVE, MeshComponentUVE>);
+    static_assert(std::is_same_v<BoxMesh3DNodeUVE, PrimitiveMeshComponentUVE>);
+    static_assert(std::is_same_v<SphereMesh3DNodeUVE, PrimitiveMeshComponentUVE>);
+    static_assert(std::is_same_v<PlaneMesh3DNodeUVE, PrimitiveMeshComponentUVE>);
+    static_assert(std::is_same_v<Light3DNodeUVE, LightComponentUVE>);
+    static_assert(std::is_same_v<RigidBody3DNodeUVE, RigidBodyComponentUVE>);
+    static_assert(std::is_same_v<AudioSource3DNodeUVE, AudioSourceComponentUVE>);
+    static_assert(std::is_same_v<ParticleEmitter3DNodeUVE, ParticleEmitterComponentUVE>);
+    static_assert(std::is_same_v<ScriptNodeUVE, ScriptComponentUVE>);
+    static_assert(std::is_same_v<TransformNodeUVE, TransformComponentUVE>);
+    static_assert(std::is_same_v<EmptyNodeUVE, EntityUVE>);
     SUCCEED();
 }
 
