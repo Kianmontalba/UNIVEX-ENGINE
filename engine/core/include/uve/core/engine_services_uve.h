@@ -32,6 +32,8 @@
 #include "uve/memory/i_memory_manager_uve.h"
 #include "uve/physics/i_collision_system_uve.h"
 #include "uve/physics/i_physics_system_uve.h"
+#include "uve/physics/i_physics_query_system_uve.h"
+#include "uve/physics/physics_constraint_system_uve.h"
 #include "uve/physics/i_raycast_system_uve.h"
 #include "uve/render/i_camera_system_uve.h"
 #include "uve/render/i_light_system_uve.h"
@@ -59,7 +61,7 @@ namespace UVE::Core {
 /// ProjectChangeWatcher, SceneSerializer, PrefabSystem, HotReload, AssetManager, AssetImporter, AssetImportQueue, AssetBundle,
 /// FileSystem, RenderDevice, ShaderManager, RenderSystem, CameraSystem,
 /// MeshRenderer, LightSystem, Renderer3D, CollisionSystem, PhysicsSystem,
-/// RaycastSystem, InputSystem, AudioDevice, AudioSystem, AudioSourceSystem,
+/// PhysicsQuerySystem, RaycastSystem, PhysicsConstraintSystem, InputSystem, AudioDevice, AudioSystem, AudioSourceSystem,
 /// SaveGameSystem, CheckpointManager, WindowManager), built once
 /// EngineCoreUVE has constructed all thirty-five. Any future subsystem that
 /// needs access to one of these should receive an EngineServicesUVE&
@@ -74,8 +76,8 @@ namespace UVE::Core {
 /// IAssetManagerUVE/IAssetImporterUVE/IAssetImportQueueUVE/IAssetBundleUVE/IFileSystemUVE/
 /// IRenderDeviceUVE/Shader::IShaderManagerUVE/IRenderSystemUVE/
 /// ICameraSystemUVE/IMeshRendererUVE/ILightSystemUVE/
-/// IRenderer3DUVE/ICollisionSystemUVE/IPhysicsSystemUVE/IRaycastSystemUVE/
-/// IInputSystemUVE/IAudioDeviceUVE/IAudioSystemUVE/IAudioSourceSystemUVE/
+/// IRenderer3DUVE/ICollisionSystemUVE/IPhysicsSystemUVE/IPhysicsQuerySystemUVE/
+/// IRaycastSystemUVE/PhysicsConstraintSystemUVE/IInputSystemUVE/IAudioDeviceUVE/IAudioSystemUVE/IAudioSourceSystemUVE/
 /// ISaveGameSystemUVE/ICheckpointManagerUVE/IWindowManagerUVE interfaces,
 /// not the concrete types, so a future substitute implementation of any of
 /// the thirty-five requires no change here.
@@ -113,7 +115,9 @@ public:
                        Render::IRenderer3DUVE& renderer3D,
                        Physics::ICollisionSystemUVE& collisionSystem,
                        Physics::IPhysicsSystemUVE& physicsSystem,
+                       Physics::IPhysicsQuerySystemUVE& physicsQuerySystem,
                        Physics::IRaycastSystemUVE& raycastSystem,
+                       Physics::PhysicsConstraintSystemUVE& physicsConstraintSystem,
                        Input::IInputSystemUVE& inputSystem,
                        Audio::IAudioDeviceUVE& audioDevice,
                        Audio::IAudioSystemUVE& audioSystem,
@@ -152,7 +156,9 @@ public:
     [[nodiscard]] Render::IRenderer3DUVE& GetRenderer3DUVE() const noexcept;
     [[nodiscard]] Physics::ICollisionSystemUVE& GetCollisionSystemUVE() const noexcept;
     [[nodiscard]] Physics::IPhysicsSystemUVE& GetPhysicsSystemUVE() const noexcept;
+    [[nodiscard]] Physics::IPhysicsQuerySystemUVE& GetPhysicsQuerySystemUVE() const noexcept;
     [[nodiscard]] Physics::IRaycastSystemUVE& GetRaycastSystemUVE() const noexcept;
+    [[nodiscard]] Physics::PhysicsConstraintSystemUVE& GetPhysicsConstraintSystemUVE() const noexcept;
     [[nodiscard]] Input::IInputSystemUVE& GetInputSystemUVE() const noexcept;
     [[nodiscard]] Audio::IAudioDeviceUVE& GetAudioDeviceUVE() const noexcept;
     [[nodiscard]] Audio::IAudioSystemUVE& GetAudioSystemUVE() const noexcept;
@@ -192,7 +198,9 @@ private:
     Render::IRenderer3DUVE* m_renderer3D;
     Physics::ICollisionSystemUVE* m_collisionSystem;
     Physics::IPhysicsSystemUVE* m_physicsSystem;
+    Physics::IPhysicsQuerySystemUVE* m_physicsQuerySystem;
     Physics::IRaycastSystemUVE* m_raycastSystem;
+    Physics::PhysicsConstraintSystemUVE* m_physicsConstraintSystem;
     Input::IInputSystemUVE* m_inputSystem;
     Audio::IAudioDeviceUVE* m_audioDevice;
     Audio::IAudioSystemUVE* m_audioSystem;

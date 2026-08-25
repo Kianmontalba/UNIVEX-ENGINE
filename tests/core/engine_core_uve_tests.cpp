@@ -37,6 +37,7 @@
 #include "uve/physics/area_overlap_events_uve.h"
 #include "uve/physics/i_collision_system_uve.h"
 #include "uve/physics/i_physics_system_uve.h"
+#include "uve/physics/physics_constraint_system_uve.h"
 #include "uve/physics/i_raycast_system_uve.h"
 #include "uve/platform/platform_uve.h"
 #include "uve/render/i_camera_system_uve.h"
@@ -889,6 +890,48 @@ TEST(EngineCoreUVETest, PhysicsSystemAndCollisionSystem_ReachableAndFunctionalAf
     const Scene::WorldTransformComponentUVE& world =
         entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(entity);
     EXPECT_LT(world.worldPosition.y, 10.0F);
+
+    engine.Shutdown();
+}
+
+TEST(EngineCoreUVETest, PhysicsConstraints_ComposedAndSolvedThroughNormalFixedStep) {
+    EngineConfigUVE config = MakeTestConfigUVE();
+    config.gravity = {};
+    EngineCoreUVE engine(config);
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    auto& services = engine.GetServicesUVE();
+    auto& entityManager = services.GetEntityManagerUVE();
+    auto& sceneGraph = services.GetSceneGraphUVE();
+
+    const auto makeBody = [&entityManager, &sceneGraph](const Math::Vector3UVE position) {
+        const Scene::EntityUVE entity = entityManager.CreateEntityUVE();
+        Scene::TransformComponentUVE transform;
+        transform.localPosition = position;
+        sceneGraph.AttachTransformUVE(entityManager, entity, transform);
+        sceneGraph.UpdateUVE(entityManager);
+        entityManager.AddComponentUVE<Scene::RigidBodyComponentUVE>(entity,
+                                                                      Scene::RigidBodyComponentUVE{1.0F, false});
+        return entity;
+    };
+
+    const Scene::EntityUVE first = makeBody({0.0F, 0.0F, 0.0F});
+    const Scene::EntityUVE second = makeBody({10.0F, 0.0F, 0.0F});
+    const Physics::PhysicsConstraintMutationResultUVE added =
+        services.GetPhysicsConstraintSystemUVE().AddDistanceConstraintUVE(
+            Physics::DistanceConstraintUVE{first, second, {}, {}, 4.0F});
+    ASSERT_TRUE(added.IsAcceptedUVE());
+
+    ASSERT_TRUE(engine.SetSimulationExecutionModeUVE(SimulationExecutionModeUVE::Paused));
+    ASSERT_TRUE(engine.RequestSingleSimulationStepUVE());
+    engine.TickFrameUVE();
+
+    const float firstX = entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(first).worldPosition.x;
+    const float secondX = entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(second).worldPosition.x;
+    EXPECT_NEAR(secondX - firstX, 4.0F, 1.0e-3F);
+    EXPECT_NEAR(firstX, 3.0F, 1.0e-3F);
+    EXPECT_NEAR(secondX, 7.0F, 1.0e-3F);
 
     engine.Shutdown();
 }
