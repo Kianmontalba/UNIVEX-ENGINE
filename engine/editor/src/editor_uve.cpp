@@ -4143,23 +4143,6 @@ void EditorUVE::DrawMenuBarUVE() {
     ImGui::SameLine();
     ImGui::TextDisabled("|");
     ImGui::SameLine();
-    if (m_activeWorkspace == EditorWorkspaceUVE::Library) {
-        if (ImGui::BeginMenu("Add Node")) {
-            const bool canCreateNode = IsAuthoringCommandAllowedUVE();
-            for (const Scene::Nodes::SceneNodeDescriptorUVE& descriptor :
-                 Scene::Nodes::GetSceneNodeDescriptorsUVE()) {
-                ImGui::BeginDisabled(!canCreateNode || !descriptor.libraryCreatable);
-                if (ImGui::MenuItem(descriptor.displayName.data())) {
-                    static_cast<void>(CreateDocumentSceneNodeUVE(descriptor.kind));
-                }
-                ImGui::EndDisabled();
-            }
-            ImGui::EndMenu();
-        }
-        ImGui::SameLine();
-        ImGui::TextDisabled("|");
-        ImGui::SameLine();
-    }
     if (m_playModeState == EditorPlayModeStateUVE::Edit) {
         if (ImGui::SmallButton(">") && canEnterPlayMode) {
             static_cast<void>(EnterPlayModeUVE());
@@ -4315,10 +4298,47 @@ void EditorUVE::DrawHierarchyPanelUVE() {
     ImGui::Begin("Scene");
     std::array<char, 256> filterBuffer{};
     m_hierarchyFilter.copy(filterBuffer.data(), filterBuffer.size() - 1U);
+    const float addNodeButtonWidth = ImGui::GetFrameHeight();
+    const float filterWidth = std::max(1.0F, ImGui::GetContentRegionAvail().x - addNodeButtonWidth -
+                                                ImGui::GetStyle().ItemSpacing.x);
+    ImGui::SetNextItemWidth(filterWidth);
     if (ImGui::InputTextWithHint("##hierarchy-filter", "Filter entities...", filterBuffer.data(), filterBuffer.size())) {
         m_hierarchyFilter = filterBuffer.data();
         InvalidateHierarchyFilterCacheUVE();
     }
+    ImGui::SameLine(0.0F, ImGui::GetStyle().ItemSpacing.x);
+    const bool canCreateNode = IsAuthoringCommandAllowedUVE();
+    ImGui::PushID("scene-add-node");
+    ImGui::BeginDisabled(!canCreateNode);
+    if (ImGui::Button("+", ImVec2{addNodeButtonWidth, addNodeButtonWidth})) {
+        ImGui::OpenPopup("scene-add-node-popup");
+    }
+    ImGui::EndDisabled();
+    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) {
+        ImGui::SetTooltip("Add Node");
+    }
+    if (ImGui::BeginPopup("scene-add-node-popup")) {
+        ImGui::TextDisabled("Add Node");
+        ImGui::Separator();
+        std::string_view lastCategory;
+        for (const Scene::Nodes::SceneNodeDescriptorUVE& descriptor :
+             Scene::Nodes::GetSceneNodeDescriptorsUVE()) {
+            if (descriptor.category != lastCategory) {
+                if (!lastCategory.empty()) {
+                    ImGui::Separator();
+                }
+                ImGui::TextUnformatted(descriptor.category.data());
+                lastCategory = descriptor.category;
+            }
+            ImGui::BeginDisabled(!descriptor.libraryCreatable);
+            if (ImGui::MenuItem(descriptor.displayName.data())) {
+                static_cast<void>(CreateDocumentSceneNodeUVE(descriptor.kind));
+            }
+            ImGui::EndDisabled();
+        }
+        ImGui::EndPopup();
+    }
+    ImGui::PopID();
     RebuildHierarchyFilterCacheUVE();
     ImGui::BeginDisabled(!IsAuthoringCommandAllowedUVE());
     for (const Scene::EntityUVE root : GetDocumentRootsUVE()) {
