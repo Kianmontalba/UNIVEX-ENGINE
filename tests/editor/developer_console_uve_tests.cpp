@@ -4,7 +4,9 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <stdexcept>
 #include <string>
+#include <vector>
 
 namespace UVE::Editor::Tests {
 
@@ -465,6 +467,68 @@ TEST(DeveloperConsoleUVE, OutputAndHistoryExposeTruncationAndClearIsExplicit) {
     EXPECT_TRUE(console.ClearUVE());
     EXPECT_FALSE(console.ClearUVE());
     EXPECT_TRUE(console.GetSnapshotUVE().output.empty());
+}
+
+TEST(DeveloperConsoleUVE, AuditSinkCapturesCopiedPrincipalAndSecurityTransitions) {
+    DeveloperConsoleUVE console;
+    std::vector<DeveloperConsoleAuditRecordUVE> records;
+    console.SetAuditSinkUVE([&records](const DeveloperConsoleAuditRecordUVE& record) {
+        records.push_back(record);
+    });
+
+    ASSERT_TRUE(console.SetAuditPrincipalUVE({"editor_user", "session_42"}));
+    EXPECT_EQ(console.GetAuditPrincipalUVE(), (DeveloperConsolePrincipalUVE{"editor_user", "session_42"}));
+    ASSERT_TRUE(console.RegisterCVar("r.audit", "0"));
+    ASSERT_TRUE(console.SetCVarUVE("r.audit", "1"));
+    ASSERT_TRUE(console.ExecuteUVE("help"));
+    EXPECT_FALSE(console.ExecuteUVE("missing"));
+    ASSERT_TRUE(console.SetAccessUVE(DeveloperConsoleAccessUVE::ReadOnly));
+    EXPECT_FALSE(console.SetCVarUVE("r.audit", "2"));
+
+    ASSERT_EQ(records.size(), 5U);
+    EXPECT_EQ(records[0].sequence, 1U);
+    EXPECT_EQ(records[0].action, DeveloperConsoleAuditActionUVE::CVarMutation);
+    EXPECT_EQ(records[0].principal.subject, "editor_user");
+    EXPECT_EQ(records[0].principal.session, "session_42");
+    EXPECT_EQ(records[0].target, "r.audit");
+    EXPECT_TRUE(records[0].accepted);
+    EXPECT_EQ(records[1].action, DeveloperConsoleAuditActionUVE::CommandExecution);
+    EXPECT_EQ(records[1].target, "help");
+    EXPECT_TRUE(records[1].accepted);
+    EXPECT_EQ(records[2].action, DeveloperConsoleAuditActionUVE::CommandExecution);
+    EXPECT_EQ(records[2].target, "missing");
+    EXPECT_FALSE(records[2].accepted);
+    EXPECT_EQ(records[3].action, DeveloperConsoleAuditActionUVE::AccessChange);
+    EXPECT_TRUE(records[3].accepted);
+    EXPECT_EQ(records[4].action, DeveloperConsoleAuditActionUVE::CVarMutation);
+    EXPECT_EQ(records[4].target, "r.audit");
+    EXPECT_FALSE(records[4].accepted);
+    for (std::size_t index = 1U; index < records.size(); ++index) {
+        EXPECT_EQ(records[index].sequence, records[index - 1U].sequence + 1U);
+    }
+}
+
+TEST(DeveloperConsoleUVE, AuditPrincipalRejectsUnboundedOrControlLabelsAtomically) {
+    DeveloperConsoleUVE console;
+    ASSERT_TRUE(console.SetAuditPrincipalUVE({"valid_user", "valid_session"}));
+    const DeveloperConsolePrincipalUVE original = console.GetAuditPrincipalUVE();
+
+    EXPECT_FALSE(console.SetAuditPrincipalUVE({"", "session"}));
+    EXPECT_FALSE(console.SetAuditPrincipalUVE({std::string(DeveloperConsoleUVE::kMaximumPrincipalBytesUVE + 1U, 'x'), "session"}));
+    EXPECT_FALSE(console.SetAuditPrincipalUVE({"user\n", "session"}));
+    EXPECT_EQ(console.GetAuditPrincipalUVE(), original);
+}
+
+TEST(DeveloperConsoleUVE, AuditSinkExceptionsDoNotChangeConsoleBehavior) {
+    DeveloperConsoleUVE console;
+    console.SetAuditSinkUVE([](const DeveloperConsoleAuditRecordUVE&) {
+        throw std::runtime_error("caller sink failure");
+    });
+
+    ASSERT_NO_THROW(EXPECT_TRUE(console.RegisterCVar("r.safe", "0")));
+    ASSERT_NO_THROW(EXPECT_TRUE(console.SetCVarUVE("r.safe", "1")));
+    ASSERT_NO_THROW(EXPECT_TRUE(console.ExecuteUVE("help")));
+    EXPECT_EQ(console.GetSnapshotUVE().cvars.front().value, "1");
 }
 
 } // namespace UVE::Editor::Tests
