@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cctype>
 #include <limits>
+#include <new>
 #include <utility>
 
 namespace UVE::Editor {
@@ -52,6 +53,13 @@ bool DeveloperConsoleUVE::IsBoundedValueUVE(const std::string_view value) noexce
            std::all_of(value.begin(), value.end(), [](const char character) { return character != '\n' && character != '\r'; });
 }
 
+bool DeveloperConsoleUVE::IsBoundedPrincipalUVE(const std::string_view value) noexcept {
+    return !value.empty() && value.size() <= kMaximumPrincipalBytesUVE &&
+           std::all_of(value.begin(), value.end(), [](const char character) {
+               return std::iscntrl(static_cast<unsigned char>(character)) == 0;
+           });
+}
+
 std::string DeveloperConsoleUVE::TrimUVE(const std::string_view value) {
     std::size_t first = 0U;
     while (first < value.size() && std::isspace(static_cast<unsigned char>(value[first])) != 0) {
@@ -66,6 +74,52 @@ std::string DeveloperConsoleUVE::TrimUVE(const std::string_view value) {
 
 bool DeveloperConsoleUVE::IsAvailableUVE() const noexcept {
     return m_policy == DeveloperConsoleBuildPolicyUVE::Development;
+}
+
+bool DeveloperConsoleUVE::SetAuditPrincipalUVE(DeveloperConsolePrincipalUVE principal) {
+    if (!IsBoundedPrincipalUVE(principal.subject) || !IsBoundedPrincipalUVE(principal.session)) {
+        return false;
+    }
+    try {
+        m_auditPrincipal = std::move(principal);
+        return true;
+    } catch (const std::bad_alloc&) {
+        return false;
+    }
+}
+
+void DeveloperConsoleUVE::SetAuditSinkUVE(DeveloperConsoleAuditSinkUVE sink) noexcept {
+    m_auditSink = std::move(sink);
+}
+
+DeveloperConsolePrincipalUVE DeveloperConsoleUVE::GetAuditPrincipalUVE() const {
+    return m_auditPrincipal;
+}
+
+void DeveloperConsoleUVE::EmitAuditUVE(const DeveloperConsoleAuditActionUVE action,
+                                       const std::string_view target,
+                                       const std::string_view detail,
+                                       const bool accepted) noexcept {
+    if (!m_auditSink) {
+        return;
+    }
+    try {
+        const std::size_t boundedTargetSize = std::min(target.size(), kMaximumValueBytesUVE);
+        const std::size_t boundedDetailSize = std::min(detail.size(), kMaximumValueBytesUVE);
+        const std::uint64_t sequence = m_auditSequence < std::numeric_limits<std::uint64_t>::max()
+                                           ? ++m_auditSequence
+                                           : m_auditSequence;
+        const DeveloperConsoleAuditRecordUVE record{
+            sequence,
+            action,
+            m_auditPrincipal,
+            std::string(target.substr(0U, boundedTargetSize)),
+            std::string(detail.substr(0U, boundedDetailSize)),
+            accepted};
+        m_auditSink(record);
+    } catch (...) {
+        // Caller-owned auditing must never change console behavior.
+    }
 }
 
 DeveloperConsoleCommandRegistrationResultUVE DeveloperConsoleUVE::RegisterCommandUVE(
@@ -171,16 +225,19 @@ void DeveloperConsoleUVE::AddHistoryUVE(std::string value) {
 
 DeveloperConsoleExecutionResultUVE DeveloperConsoleUVE::ExecuteDetailedUVE(std::string commandLine) {
     if (!IsAvailableUVE()) {
+        EmitAuditUVE(DeveloperConsoleAuditActionUVE::CommandExecution, "", "Shipping policy unavailable", false);
         return {DeveloperConsoleExecutionCodeUVE::Unavailable,
                 "Developer Console execution is unavailable under the Shipping build policy."};
     }
     if (m_access != DeveloperConsoleAccessUVE::Full) {
+        EmitAuditUVE(DeveloperConsoleAuditActionUVE::CommandExecution, "", "Full console authorization required", false);
         return {DeveloperConsoleExecutionCodeUVE::Unauthorized,
                 "Developer Console execution requires Full console authorization."};
     }
     commandLine = TrimUVE(commandLine);
     if (commandLine.empty() || commandLine.size() > kMaximumValueBytesUVE ||
         commandLine.find_first_of("\r\n") != std::string::npos) {
+        EmitAuditUVE(DeveloperConsoleAuditActionUVE::CommandExecution, commandLine, "Invalid command input", false);
         return {DeveloperConsoleExecutionCodeUVE::InvalidInput,
                 "Command input must be non-empty, bounded, and free of line breaks."};
     }
@@ -191,6 +248,7 @@ DeveloperConsoleExecutionResultUVE DeveloperConsoleUVE::ExecuteDetailedUVE(std::
     if (iterator == m_commands.end()) {
         AddHistoryUVE(commandLine);
         AppendUVE(DeveloperConsoleSeverityUVE::Error, "Unknown console command: " + identifier);
+        EmitAuditUVE(DeveloperConsoleAuditActionUVE::CommandExecution, identifier, "Unknown command", false);
         return {DeveloperConsoleExecutionCodeUVE::UnknownCommand, "No command is registered with this identifier."};
     }
 
@@ -198,6 +256,7 @@ DeveloperConsoleExecutionResultUVE DeveloperConsoleUVE::ExecuteDetailedUVE(std::
     AddHistoryUVE(commandLine);
     iterator->second.handler(*this, arguments);
     IncrementGenerationUVE(m_generation);
+    EmitAuditUVE(DeveloperConsoleAuditActionUVE::CommandExecution, identifier, "Command executed", true);
     return {DeveloperConsoleExecutionCodeUVE::Executed, "Command executed."};
 }
 
@@ -230,31 +289,38 @@ bool DeveloperConsoleUVE::ClearUVE() noexcept {
 DeveloperConsoleCVarMutationResultUVE DeveloperConsoleUVE::SetCVarDetailedUVE(const std::string_view name,
                                                                                 const std::string_view value) {
     if (!IsAvailableUVE()) {
+        EmitAuditUVE(DeveloperConsoleAuditActionUVE::CVarMutation, name, "Shipping policy unavailable", false);
         return {DeveloperConsoleCVarMutationCodeUVE::Unavailable,
                 "CVAR mutation is unavailable under the Shipping build policy."};
     }
     if (m_access != DeveloperConsoleAccessUVE::Full) {
+        EmitAuditUVE(DeveloperConsoleAuditActionUVE::CVarMutation, name, "Full console authorization required", false);
         return {DeveloperConsoleCVarMutationCodeUVE::Unauthorized,
                 "CVAR mutation requires Full console authorization."};
     }
     const auto iterator = m_cvars.find(name);
     if (iterator == m_cvars.end()) {
+        EmitAuditUVE(DeveloperConsoleAuditActionUVE::CVarMutation, name, "Unknown CVAR", false);
         return {DeveloperConsoleCVarMutationCodeUVE::UnknownName,
                 "No CVAR is registered with this name."};
     }
     if (iterator->second.readOnly) {
+        EmitAuditUVE(DeveloperConsoleAuditActionUVE::CVarMutation, name, "CVAR is read-only", false);
         return {DeveloperConsoleCVarMutationCodeUVE::ReadOnly,
                 "The registered CVAR is read-only."};
     }
     if (!IsBoundedValueUVE(value)) {
+        EmitAuditUVE(DeveloperConsoleAuditActionUVE::CVarMutation, name, "Invalid CVAR value", false);
         return {DeveloperConsoleCVarMutationCodeUVE::InvalidValue,
                 "CVAR value exceeds the bounded size or contains a line break."};
     }
     if (iterator->second.value == value) {
+        EmitAuditUVE(DeveloperConsoleAuditActionUVE::CVarMutation, name, "CVAR unchanged", true);
         return {DeveloperConsoleCVarMutationCodeUVE::Unchanged, "CVAR value is unchanged."};
     }
     iterator->second.value = std::string(value);
     AppendUVE(DeveloperConsoleSeverityUVE::Info, std::string(name) + " = " + std::string(value));
+    EmitAuditUVE(DeveloperConsoleAuditActionUVE::CVarMutation, name, "CVAR value updated", true);
     return {DeveloperConsoleCVarMutationCodeUVE::Applied, "CVAR value updated."};
 }
 
@@ -281,10 +347,12 @@ bool DeveloperConsoleUVE::ExecuteCVarUVE(const std::string_view arguments) {
 DeveloperConsoleBuildPolicyResultUVE DeveloperConsoleUVE::SetBuildPolicyDetailedUVE(
     const DeveloperConsoleBuildPolicyUVE policy) noexcept {
     if (m_policy == policy) {
+        EmitAuditUVE(DeveloperConsoleAuditActionUVE::BuildPolicyChange, "build_policy", "Build policy unchanged", true);
         return {DeveloperConsoleBuildPolicyCodeUVE::Unchanged, "Build policy is unchanged."};
     }
     if (m_policy == DeveloperConsoleBuildPolicyUVE::Shipping &&
         policy == DeveloperConsoleBuildPolicyUVE::Development) {
+        EmitAuditUVE(DeveloperConsoleAuditActionUVE::BuildPolicyChange, "build_policy", "Shipping policy is monotonic", false);
         return {DeveloperConsoleBuildPolicyCodeUVE::Locked,
                 "Shipping build policy is monotonic and cannot be relaxed at runtime."};
     }
@@ -295,6 +363,7 @@ DeveloperConsoleBuildPolicyResultUVE DeveloperConsoleUVE::SetBuildPolicyDetailed
     m_completionPrefix.clear();
     m_historyCursor = -1;
     IncrementGenerationUVE(m_generation);
+    EmitAuditUVE(DeveloperConsoleAuditActionUVE::BuildPolicyChange, "build_policy", "Build policy updated", true);
     return {DeveloperConsoleBuildPolicyCodeUVE::Applied, "Build policy updated."};
 }
 
@@ -305,18 +374,22 @@ bool DeveloperConsoleUVE::SetBuildPolicyUVE(const DeveloperConsoleBuildPolicyUVE
 DeveloperConsoleAuthorizationResultUVE DeveloperConsoleUVE::SetAccessDetailedUVE(
     const DeveloperConsoleAccessUVE access) noexcept {
     if (!IsAvailableUVE()) {
+        EmitAuditUVE(DeveloperConsoleAuditActionUVE::AccessChange, "console_access", "Shipping policy unavailable", false);
         return {DeveloperConsoleAuthorizationCodeUVE::Unavailable,
                 "Console authorization is unavailable under the Shipping build policy."};
     }
     if (static_cast<std::uint8_t>(access) > static_cast<std::uint8_t>(DeveloperConsoleAccessUVE::Full)) {
+        EmitAuditUVE(DeveloperConsoleAuditActionUVE::AccessChange, "console_access", "Invalid access value", false);
         return {DeveloperConsoleAuthorizationCodeUVE::InvalidAccess,
                 "Console authorization value is outside the supported range."};
     }
     if (m_access == access) {
+        EmitAuditUVE(DeveloperConsoleAuditActionUVE::AccessChange, "console_access", "Access unchanged", true);
         return {DeveloperConsoleAuthorizationCodeUVE::Unchanged, "Console authorization is unchanged."};
     }
     m_access = access;
     IncrementGenerationUVE(m_generation);
+    EmitAuditUVE(DeveloperConsoleAuditActionUVE::AccessChange, "console_access", "Access updated", true);
     return {DeveloperConsoleAuthorizationCodeUVE::Applied, "Console authorization updated."};
 }
 

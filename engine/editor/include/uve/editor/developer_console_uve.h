@@ -213,6 +213,33 @@ struct DeveloperConsoleBuildPolicyResultUVE final {
     }
 };
 
+enum class DeveloperConsoleAuditActionUVE : std::uint8_t {
+    CommandExecution = 0,
+    CVarMutation,
+    AccessChange,
+    BuildPolicyChange,
+};
+
+struct DeveloperConsolePrincipalUVE final {
+    std::string subject = "local";
+    std::string session = "default";
+
+    [[nodiscard]] bool operator==(const DeveloperConsolePrincipalUVE&) const = default;
+};
+
+struct DeveloperConsoleAuditRecordUVE final {
+    std::uint64_t sequence = 0U;
+    DeveloperConsoleAuditActionUVE action = DeveloperConsoleAuditActionUVE::CommandExecution;
+    DeveloperConsolePrincipalUVE principal;
+    std::string target;
+    std::string detail;
+    bool accepted = false;
+
+    [[nodiscard]] bool operator==(const DeveloperConsoleAuditRecordUVE&) const = default;
+};
+
+using DeveloperConsoleAuditSinkUVE = std::function<void(const DeveloperConsoleAuditRecordUVE&)>;
+
 struct DeveloperConsoleCompletionUVE final {
     std::string identifier;
     std::string help;
@@ -260,6 +287,7 @@ public:
     static constexpr std::size_t kMaximumCompletionsUVE = 128U;
     static constexpr std::size_t kMaximumIdentifierBytesUVE = 64U;
     static constexpr std::size_t kMaximumValueBytesUVE = 256U;
+    static constexpr std::size_t kMaximumPrincipalBytesUVE = 64U;
 
     explicit DeveloperConsoleUVE(DeveloperConsoleBuildPolicyUVE policy = DeveloperConsoleBuildPolicyUVE::Development);
     DeveloperConsoleUVE(const DeveloperConsoleUVE&) = delete;
@@ -295,6 +323,12 @@ public:
     [[nodiscard]] bool IsAvailableUVE() const noexcept;
     [[nodiscard]] DeveloperConsoleSnapshotUVE GetSnapshotUVE() const;
 
+    /// Sets a copied caller-owned principal/session label for subsequent audit records.
+    /// This does not authenticate or resolve the principal.
+    [[nodiscard]] bool SetAuditPrincipalUVE(DeveloperConsolePrincipalUVE principal);
+    void SetAuditSinkUVE(DeveloperConsoleAuditSinkUVE sink) noexcept;
+    [[nodiscard]] DeveloperConsolePrincipalUVE GetAuditPrincipalUVE() const;
+
     void AppendUVE(DeveloperConsoleSeverityUVE severity, std::string text);
 
 private:
@@ -305,7 +339,10 @@ private:
 
     [[nodiscard]] static bool IsBoundedIdentifierUVE(std::string_view value) noexcept;
     [[nodiscard]] static bool IsBoundedValueUVE(std::string_view value) noexcept;
+    [[nodiscard]] static bool IsBoundedPrincipalUVE(std::string_view value) noexcept;
     [[nodiscard]] static std::string TrimUVE(std::string_view value);
+    void EmitAuditUVE(DeveloperConsoleAuditActionUVE action, std::string_view target,
+                      std::string_view detail, bool accepted) noexcept;
     void RegisterBuiltInsUVE();
     void AddHistoryUVE(std::string value);
     [[nodiscard]] bool ExecuteCVarUVE(std::string_view arguments);
@@ -323,7 +360,10 @@ private:
     bool m_outputTruncated = false;
     bool m_historyTruncated = false;
     bool m_cvarsTruncated = false;
+    DeveloperConsolePrincipalUVE m_auditPrincipal;
+    DeveloperConsoleAuditSinkUVE m_auditSink;
     std::uint64_t m_generation = 1U;
+    std::uint64_t m_auditSequence = 0U;
 };
 
 } // namespace UVE::Editor
