@@ -50,6 +50,7 @@ add_executable(uve_tests
     physics/trajectory_collision_prediction_uve_tests.cpp
     input/gamepad_input_system_uve_tests.cpp
     input/mobile_gesture_recognizer_uve_tests.cpp
+    input/mobile_gesture_system_uve_tests.cpp
     input/mobile_input_system_uve_tests.cpp
     input/touch_coordinate_transform_uve_tests.cpp
     input/input_system_uve_tests.cpp

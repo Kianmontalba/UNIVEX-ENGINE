@@ -45,7 +45,10 @@
 #include "uve/debug/logger_uve.h"
 #include "uve/debug/logging_macros_uve.h"
 #include "uve/events/event_system_uve.h"
+#include "uve/input/gamepad_input_system_uve.h"
 #include "uve/input/input_system_uve.h"
+#include "uve/input/mobile_gesture_system_uve.h"
+#include "uve/input/mobile_input_system_uve.h"
 #include "uve/physics/area_overlap_events_uve.h"
 #include "uve/math/matrix4x4_uve.h"
 #include "uve/math/quaternion_uve.h"
@@ -346,9 +349,19 @@ void EngineCoreUVE::Init() {
     // authoritative and EngineCore reconciles it before simulation/render extraction.
     m_particleRuntime = std::make_unique<Scene::ParticleRuntimeUVE>();
 
-    // InputSystem twenty-ninth: needs only EventSystem (composed by reference, to queue
-    // InputActionTriggeredEventUVE), already available.
-    m_inputSystem = std::make_unique<Input::InputSystemUVE>(*m_eventSystem);
+    // GamepadInputSystem thirtieth: owns only bounded injectable current/previous snapshots.
+    m_gamepadInputSystem = std::make_unique<Input::GamepadInputSystemUVE>();
+
+    // MobileInputSystem thirty-first: owns only bounded injectable touch/gyroscope snapshots.
+    m_mobileInputSystem = std::make_unique<Input::MobileInputSystemUVE>();
+
+    // MobileGestureSystem thirty-second: borrows MobileInput snapshots and retains only its
+    // bounded recognizer state/latest copied report.
+    m_mobileGestureSystem = std::make_unique<Input::MobileGestureSystemUVE>(*m_mobileInputSystem);
+
+    // InputSystem thirty-third: needs EventSystem and the already-composed gamepad snapshot service
+    // to queue action events and evaluate keyboard/mouse/gamepad bindings.
+    m_inputSystem = std::make_unique<Input::InputSystemUVE>(*m_eventSystem, m_gamepadInputSystem.get());
     m_windowManager->AttachInputSystemUVE(m_inputSystem.get());
 
     // AudioDevice twenty-ninth: no dependencies of its own (a NullAudioDeviceUVE — no real audio
@@ -389,6 +402,7 @@ void EngineCoreUVE::Init() {
                         *m_renderDevice, *m_shaderManager, *m_renderSystem, *m_cameraSystem,
                         *m_meshRenderer, *m_lightSystem, *m_renderer3D, *m_collisionSystem, *m_physicsSystem,
                         *m_physicsQuerySystem, *m_raycastSystem, *m_physicsConstraintSystem, *m_inputSystem,
+                        *m_gamepadInputSystem, *m_mobileInputSystem, *m_mobileGestureSystem,
                         *m_audioDevice, *m_audioSystem,
                         *m_audioSourceSystem, *m_saveGameSystem, *m_checkpointManager,
                         *m_windowManager);
@@ -457,6 +471,9 @@ void EngineCoreUVE::SyncParticleRuntimeUVE() {
 
 void EngineCoreUVE::Update() {
     m_windowManager->PollEventsUVE();
+    m_gamepadInputSystem->UpdateUVE();
+    m_mobileInputSystem->UpdateUVE();
+    m_mobileGestureSystem->UpdateUVE(static_cast<float>(m_timer->GetDeltaTimeUVE()));
     m_inputSystem->UpdateUVE();
     if (m_windowManager->IsCloseRequestedUVE()) {
         RequestQuitUVE();
@@ -612,7 +629,8 @@ void EngineCoreUVE::Shutdown() {
 
     // Exact reverse of Init()'s construction order: ConfigManager, then
     // CheckpointManager, then SaveGameSystem, then AudioSourceSystem, then AudioSystem, then AudioDevice, then
-    // InputSystem, then RaycastSystem, then PhysicsSystem, then CollisionSystem, then Renderer3D, then LightSystem, then MeshRenderer, then CameraSystem, then RenderSystem, then ShaderManager, then RenderDevice
+    // InputSystem, then MobileGestureSystem, then MobileInputSystem, then GamepadInputSystem, then
+    // RaycastSystem, then PhysicsSystem, then CollisionSystem, then Renderer3D, then LightSystem, then MeshRenderer, then CameraSystem, then RenderSystem, then ShaderManager, then RenderDevice
     // (destroying the demo triangle's shader program and vertex buffer first, if windowed rendering
     // was active), then WindowManager,
     // then FileSystem, then AssetBundle, then AssetImporter, then
@@ -630,6 +648,9 @@ void EngineCoreUVE::Shutdown() {
     m_audioSystem.reset();
     m_audioDevice.reset();
     m_inputSystem.reset();
+    m_mobileGestureSystem.reset();
+    m_mobileInputSystem.reset();
+    m_gamepadInputSystem.reset();
     m_raycastSystem.reset();
     m_physicsQuerySystem.reset();
     m_physicsSystem.reset();

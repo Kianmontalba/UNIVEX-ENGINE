@@ -39,7 +39,10 @@
 #include "uve/core/version_uve.h"
 #include "uve/debug/i_logger_uve.h"
 #include "uve/events/i_event_system_uve.h"
+#include "uve/input/i_gamepad_input_system_uve.h"
 #include "uve/input/i_input_system_uve.h"
+#include "uve/input/i_mobile_gesture_system_uve.h"
+#include "uve/input/i_mobile_input_system_uve.h"
 #include "uve/memory/i_memory_manager_uve.h"
 #include "uve/physics/area_overlap_lifecycle_tracker_uve.h"
 #include "uve/physics/i_collision_system_uve.h"
@@ -73,7 +76,7 @@ namespace UVE::Core {
 /// AssetDatabase, ProjectFileIndex, DerivedArtifactCache, ProjectChangeWatcher, SceneSerializer, PrefabSystem,
 /// HotReload, AssetManager, AssetImporter, AssetImportQueue, AssetBundle, FileSystem, WindowManager, RenderDevice, ShaderManager,
 /// RenderSystem, CameraSystem, MeshRenderer, LightSystem, Renderer3D, CollisionSystem, PhysicsSystem,
-/// RaycastSystem, InputSystem, AudioDevice, AudioSystem, AudioSourceSystem,
+/// RaycastSystem, InputSystem, GamepadInputSystem, MobileInputSystem, MobileGestureSystem, AudioDevice, AudioSystem, AudioSourceSystem,
 /// SaveGameSystem, CheckpointManager, ConfigManager) and drives the canonical
 /// engine lifecycle: Init -> Load -> N x (BeginFrame -> Update -> LateUpdate
 /// -> Render -> EndFrame) -> Shutdown. Render() calls Renderer3DUVE::RenderFrameUVE()
@@ -89,11 +92,13 @@ namespace UVE::Core {
 /// needed. RaycastSystemUVE (Increment 16) is a stateless, on-demand query
 /// service — like CameraSystem/MeshRenderer, it has no Update()-loop hook
 /// of its own; callers reach it via GetServicesUVE().GetRaycastSystemUVE().
-/// InputSystemUVE (Increment 17) is stateful and IS driven every frame —
-/// Update()'s very first statement is InputSystemUVE::UpdateUVE(), so this
-/// frame's key/mouse edge state and action-triggered events are settled
-/// before the fixed-timestep accumulator, event dispatch, or physics steps
-/// that follow it in the same call. AudioSourceSystemUVE/AudioSystemUVE
+/// GamepadInputSystemUVE and MobileInputSystemUVE are committed before InputSystemUVE, so its
+/// existing gamepad-aware action bindings read current device snapshots; MobileGestureSystemUVE
+/// consumes the committed mobile snapshot after the mobile service update. All three are
+/// backend-neutral and own no platform APIs. InputSystemUVE (Increment 17) is stateful and is driven
+/// every frame after the device snapshots are committed, so this frame's key/mouse/gamepad edge state
+/// and action-triggered events are settled before the fixed-timestep accumulator, event dispatch, or
+/// physics steps that follow it in the same call. AudioSourceSystemUVE/AudioSystemUVE
 /// (Increment 18) are driven from LateUpdate(): if SetActiveCameraUVE() has
 /// set a valid camera, the audio listener is synced to that camera entity's
 /// WorldTransformComponentUVE first (the spec's "AudioListenerUVE — Attached
@@ -294,8 +299,8 @@ public:
     /// SceneGraph/AssetDatabase/SceneSerializer/PrefabSystem/HotReload/
     /// AssetManager/AssetImporter/AssetBundle/FileSystem/RenderDevice/ShaderManager/
     /// RenderSystem/CameraSystem/MeshRenderer/LightSystem/Renderer3D/CollisionSystem/
-    /// PhysicsSystem/RaycastSystem/InputSystem/AudioDevice/AudioSystem/
-    /// AudioSourceSystem/SaveGameSystem/CheckpointManager/WindowManager references. Valid only
+    /// PhysicsSystem/RaycastSystem/InputSystem/GamepadInputSystem/MobileInputSystem/MobileGestureSystem/
+    /// AudioDevice/AudioSystem/AudioSourceSystem/SaveGameSystem/CheckpointManager/WindowManager references. Valid only
     /// between Init() and Shutdown().
     [[nodiscard]] EngineServicesUVE& GetServicesUVE();
 
@@ -317,8 +322,10 @@ private:
     /// frame's start instant (used by EndFrame() to compute frameTime).
     void BeginFrame();
 
-    /// First calls InputSystemUVE::UpdateUVE() — settling this frame's key/mouse edge state and
-    /// queueing any newly-triggered action's InputActionTriggeredEventUVE — before anything else,
+    /// First commits GamepadInputSystemUVE and MobileInputSystemUVE, consumes the copied mobile
+    /// snapshot through MobileGestureSystemUVE, then calls InputSystemUVE::UpdateUVE — settling this
+    /// frame's key/mouse/gamepad edge state and queueing any newly-triggered action's
+    /// InputActionTriggeredEventUVE — before anything else,
     /// so the event dispatch that follows in this same call delivers it same-frame. Immediately
     /// after, calls IWindowManagerUVE::PollEventsUVE() (a no-op for NullWindowManagerUVE) and, if
     /// IsCloseRequestedUVE() is now true, calls RequestQuitUVE() — so a real window's OS close
@@ -420,6 +427,9 @@ private:
     std::unique_ptr<Scene::ParticleRuntimeUVE> m_particleRuntime;
     Physics::AreaOverlapLifecycleTrackerUVE m_areaOverlapLifecycleTracker;
     std::unique_ptr<Input::IInputSystemUVE> m_inputSystem;
+    std::unique_ptr<Input::IGamepadInputSystemUVE> m_gamepadInputSystem;
+    std::unique_ptr<Input::IMobileInputSystemUVE> m_mobileInputSystem;
+    std::unique_ptr<Input::IMobileGestureSystemUVE> m_mobileGestureSystem;
     std::unique_ptr<Audio::IAudioDeviceUVE> m_audioDevice;
     std::unique_ptr<Audio::IAudioSystemUVE> m_audioSystem;
     std::unique_ptr<Audio::IAudioSourceSystemUVE> m_audioSourceSystem;

@@ -32,7 +32,10 @@
 #include "uve/config/i_config_manager_uve.h"
 #include "uve/debug/i_logger_uve.h"
 #include "uve/events/i_event_system_uve.h"
+#include "uve/input/gamepad_input_system_uve.h"
 #include "uve/input/i_input_system_uve.h"
+#include "uve/input/mobile_gesture_system_uve.h"
+#include "uve/input/mobile_input_system_uve.h"
 #include "uve/math/frustum_uve.h"
 #include "uve/math/matrix4x4_uve.h"
 #include "uve/memory/i_memory_manager_uve.h"
@@ -892,6 +895,9 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     Physics::PhysicsConstraintSystemUVE physicsConstraintSystem;
     FakeRaycastSystemUVE raycastSystem;
     FakeInputSystemUVE inputSystem;
+    Input::GamepadInputSystemUVE gamepadInputSystem;
+    Input::MobileInputSystemUVE mobileInputSystem;
+    Input::MobileGestureSystemUVE mobileGestureSystem(mobileInputSystem);
     FakeAudioDeviceUVE audioDevice;
     FakeAudioSystemUVE audioSystem;
     FakeAudioSourceSystemUVE audioSourceSystem;
@@ -907,7 +913,7 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
                                       renderDevice, shaderManager, renderSystem, cameraSystem,
                                       meshRenderer, lightSystem, renderer3D, collisionSystem, physicsSystem,
                                       physicsQuerySystem, raycastSystem, physicsConstraintSystem, inputSystem,
-                                      audioDevice, audioSystem,
+                                      gamepadInputSystem, mobileInputSystem, mobileGestureSystem, audioDevice, audioSystem,
                                       audioSourceSystem, saveGameSystem, checkpointManager,
                                       windowManager);
 
@@ -944,6 +950,9 @@ TEST(EngineServicesUVETest, Accessors_ReturnExactSameInstancesPassedIn) {
     EXPECT_EQ(&services.GetRaycastSystemUVE(), &raycastSystem);
     EXPECT_EQ(&services.GetPhysicsConstraintSystemUVE(), &physicsConstraintSystem);
     EXPECT_EQ(&services.GetInputSystemUVE(), &inputSystem);
+    EXPECT_EQ(&services.GetGamepadInputSystemUVE(), &gamepadInputSystem);
+    EXPECT_EQ(&services.GetMobileInputSystemUVE(), &mobileInputSystem);
+    EXPECT_EQ(&services.GetMobileGestureSystemUVE(), &mobileGestureSystem);
     EXPECT_EQ(&services.GetAudioDeviceUVE(), &audioDevice);
     EXPECT_EQ(&services.GetAudioSystemUVE(), &audioSystem);
     EXPECT_EQ(&services.GetAudioSourceSystemUVE(), &audioSourceSystem);
@@ -987,6 +996,9 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     Physics::PhysicsConstraintSystemUVE physicsConstraintSystem;
     FakeRaycastSystemUVE raycastSystem;
     FakeInputSystemUVE inputSystem;
+    Input::GamepadInputSystemUVE gamepadInputSystem;
+    Input::MobileInputSystemUVE mobileInputSystem;
+    Input::MobileGestureSystemUVE mobileGestureSystem(mobileInputSystem);
     FakeAudioDeviceUVE audioDevice;
     FakeAudioSystemUVE audioSystem;
     FakeAudioSourceSystemUVE audioSourceSystem;
@@ -1001,7 +1013,7 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
                                       renderDevice, shaderManager, renderSystem, cameraSystem,
                                       meshRenderer, lightSystem, renderer3D, collisionSystem, physicsSystem,
                                       physicsQuerySystem, raycastSystem, physicsConstraintSystem, inputSystem,
-                                      audioDevice, audioSystem,
+                                      gamepadInputSystem, mobileInputSystem, mobileGestureSystem, audioDevice, audioSystem,
                                       audioSourceSystem, saveGameSystem, checkpointManager,
                                       windowManager);
 
@@ -1045,6 +1057,9 @@ TEST(EngineServicesUVETest, Accessors_ProveInterfacesAreGenuinelySubstitutable) 
     renderer3D.diagnostics.primitiveItemsExtracted = 7U;
     EXPECT_EQ(services.GetRenderer3DUVE().GetLastFrameDiagnosticsUVE().primitiveItemsExtracted, 7U);
     static_cast<void>(services.GetRaycastSystemUVE().RaycastUVE(services.GetEntityManagerUVE(), Physics::RaycastQueryUVE{}));
+    services.GetGamepadInputSystemUVE().UpdateUVE();
+    services.GetMobileInputSystemUVE().UpdateUVE();
+    services.GetMobileGestureSystemUVE().UpdateUVE(0.0F);
     services.GetInputSystemUVE().UpdateUVE();
     services.GetAudioSystemUVE().UpdateUVE();
     services.GetAudioSourceSystemUVE().SyncUVE(services.GetEntityManagerUVE(), services.GetAudioSystemUVE());
