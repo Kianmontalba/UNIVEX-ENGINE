@@ -27,6 +27,7 @@ EngineServicesUVE::EngineServicesUVE(Debug::ILoggerUVE& logger, Utilities::ITime
                                       Asset::IProjectChangeWatcherUVE& projectChangeWatcher,
                                       Scene::ISceneSerializerUVE& sceneSerializer,
                                       Scene::IPrefabSystemUVE& prefabSystem,
+                                      Scene::IParticleRuntimeUVE& particleRuntime,
                                       Asset::IHotReloadUVE& hotReload,
                                       Asset::IAssetManagerUVE& assetManager,
                                       Asset::IAssetImporterUVE& assetImporter,
@@ -61,7 +62,8 @@ EngineServicesUVE::EngineServicesUVE(Debug::ILoggerUVE& logger, Utilities::ITime
       m_assetDatabase(&assetDatabase), m_projectFileIndex(&projectFileIndex),
       m_derivedArtifactCache(&derivedArtifactCache), m_projectChangeWatcher(&projectChangeWatcher),
       m_sceneSerializer(&sceneSerializer),
-      m_prefabSystem(&prefabSystem), m_hotReload(&hotReload), m_assetManager(&assetManager),
+      m_prefabSystem(&prefabSystem), m_particleRuntime(&particleRuntime), m_hotReload(&hotReload),
+      m_assetManager(&assetManager),
       m_assetImporter(&assetImporter), m_assetImportQueue(&assetImportQueue), m_assetBundle(&assetBundle),
       m_fileSystem(&fileSystem),
       m_renderDevice(&renderDevice), m_shaderManager(&shaderManager), m_renderSystem(&renderSystem),
@@ -134,6 +136,10 @@ Scene::ISceneSerializerUVE& EngineServicesUVE::GetSceneSerializerUVE() const noe
 
 Scene::IPrefabSystemUVE& EngineServicesUVE::GetPrefabSystemUVE() const noexcept {
     return *m_prefabSystem;
+}
+
+Scene::IParticleRuntimeUVE& EngineServicesUVE::GetParticleRuntimeUVE() const noexcept {
+    return *m_particleRuntime;
 }
 
 Asset::IHotReloadUVE& EngineServicesUVE::GetHotReloadUVE() const noexcept {

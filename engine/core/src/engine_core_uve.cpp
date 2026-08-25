@@ -345,7 +345,7 @@ void EngineCoreUVE::Init() {
     // RaycastSystem twenty-ninth: stateless, no dependencies of its own.
     m_raycastSystem = std::make_unique<Physics::RaycastSystemUVE>();
 
-    // ParticleRuntime twenty-eighth: owns only bounded authored-emitter runtime state; ECS remains
+    // ParticleRuntime fifteenth: owns only bounded authored-emitter runtime state; ECS remains
     // authoritative and EngineCore reconciles it before simulation/render extraction.
     m_particleRuntime = std::make_unique<Scene::ParticleRuntimeUVE>();
 
@@ -403,7 +403,7 @@ void EngineCoreUVE::Init() {
                                                  *m_commandLine, *m_configManager, *m_entityManager, *m_sceneGraph,
                          *m_assetDatabase, *m_projectFileIndex, *m_derivedArtifactCache, *m_projectChangeWatcher,
                          *m_sceneSerializer,
-                         *m_prefabSystem, *m_hotReload, *m_assetManager, *m_assetImporter, *m_assetImportQueue,
+                         *m_prefabSystem, *m_particleRuntime, *m_hotReload, *m_assetManager, *m_assetImporter, *m_assetImportQueue,
                          *m_assetBundle, *m_fileSystem,
 
                         *m_renderDevice, *m_shaderManager, *m_renderSystem, *m_cameraSystem,

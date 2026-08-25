@@ -48,6 +48,7 @@
 #include "uve/save/i_checkpoint_manager_uve.h"
 #include "uve/save/i_save_game_system_uve.h"
 #include "uve/scene/i_entity_manager_uve.h"
+#include "uve/scene/i_particle_runtime_uve.h"
 #include "uve/scene/i_prefab_system_uve.h"
 #include "uve/scene/i_scene_graph_uve.h"
 #include "uve/scene/i_scene_serializer_uve.h"
@@ -65,8 +66,8 @@ namespace UVE::Core {
 /// FileSystem, RenderDevice, ShaderManager, RenderSystem, CameraSystem,
 /// MeshRenderer, LightSystem, Renderer3D, CollisionSystem, PhysicsSystem,
 /// PhysicsQuerySystem, RaycastSystem, PhysicsConstraintSystem, InputSystem, GamepadInputSystem, MobileInputSystem, MobileGestureSystem, AudioDevice, AudioSystem, AudioSourceSystem,
-/// SaveGameSystem, CheckpointManager, WindowManager), built once
-/// EngineCoreUVE has constructed all thirty-eight. Any future subsystem that
+/// SaveGameSystem, CheckpointManager, WindowManager, ParticleRuntime), built once
+/// EngineCoreUVE has constructed all thirty-nine. Any future subsystem that
 /// needs access to one of these should receive an EngineServicesUVE&
 /// (obtained from EngineCoreUVE::GetServicesUVE()) rather than a raw global
 /// pointer — the logging macros' internal active-instance pointer remains
@@ -82,9 +83,9 @@ namespace UVE::Core {
 /// IRenderer3DUVE/ICollisionSystemUVE/IPhysicsSystemUVE/IPhysicsQuerySystemUVE/
 /// IRaycastSystemUVE/PhysicsConstraintSystemUVE/IInputSystemUVE/IGamepadInputSystemUVE/IMobileInputSystemUVE/
 /// IMobileGestureSystemUVE/IAudioDeviceUVE/IAudioSystemUVE/IAudioSourceSystemUVE/
-/// ISaveGameSystemUVE/ICheckpointManagerUVE/IWindowManagerUVE interfaces,
+/// ISaveGameSystemUVE/ICheckpointManagerUVE/IWindowManagerUVE/IParticleRuntimeUVE interfaces,
 /// not the concrete types, so a future substitute implementation of any of
-/// the thirty-eight requires no change here.
+/// the thirty-nine requires no change here.
 /// Thread-safety: EngineServicesUVE itself holds only non-owning pointers
 /// and has no mutable state of its own; the thread-safety of each accessor
 /// is whatever the referenced service documents.
@@ -104,6 +105,7 @@ public:
                        Asset::IProjectChangeWatcherUVE& projectChangeWatcher,
                        Scene::ISceneSerializerUVE& sceneSerializer,
                        Scene::IPrefabSystemUVE& prefabSystem,
+                       Scene::IParticleRuntimeUVE& particleRuntime,
                        Asset::IHotReloadUVE& hotReload,
                        Asset::IAssetManagerUVE& assetManager,
                        Asset::IAssetImporterUVE& assetImporter,
@@ -148,6 +150,7 @@ public:
     [[nodiscard]] Asset::IProjectChangeWatcherUVE& GetProjectChangeWatcherUVE() const noexcept;
     [[nodiscard]] Scene::ISceneSerializerUVE& GetSceneSerializerUVE() const noexcept;
     [[nodiscard]] Scene::IPrefabSystemUVE& GetPrefabSystemUVE() const noexcept;
+    [[nodiscard]] Scene::IParticleRuntimeUVE& GetParticleRuntimeUVE() const noexcept;
     [[nodiscard]] Asset::IHotReloadUVE& GetHotReloadUVE() const noexcept;
     [[nodiscard]] Asset::IAssetManagerUVE& GetAssetManagerUVE() const noexcept;
     [[nodiscard]] Asset::IAssetImporterUVE& GetAssetImporterUVE() const noexcept;
@@ -193,6 +196,7 @@ private:
     Asset::IProjectChangeWatcherUVE* m_projectChangeWatcher;
     Scene::ISceneSerializerUVE* m_sceneSerializer;
     Scene::IPrefabSystemUVE* m_prefabSystem;
+    Scene::IParticleRuntimeUVE* m_particleRuntime;
     Asset::IHotReloadUVE* m_hotReload;
     Asset::IAssetManagerUVE* m_assetManager;
     Asset::IAssetImporterUVE* m_assetImporter;
