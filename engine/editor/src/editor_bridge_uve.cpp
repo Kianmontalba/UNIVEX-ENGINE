@@ -272,6 +272,29 @@ void EditorBridgeUVE::SetMotionQueryReplayFixtureUVE(
     RecordMotionQueryReplayComparisonHistoryUVE();
 }
 
+void EditorBridgeUVE::SetMotionQueryTrajectoryPreviewUVE(
+    Core::TimeSampledTrajectoryUVE trajectory,
+    std::optional<Physics::TrajectoryCollisionPredictionResultUVE> collisionPrediction) {
+    EditorBridgeMotionQueryTrajectoryPreviewUVE preview;
+    const Core::TimeSampledTrajectoryValidationResultUVE validation =
+        Core::ValidateTimeSampledTrajectoryUVE(trajectory);
+    if (!validation.IsValidUVE()) {
+        preview.diagnostic = validation.message;
+    } else if (collisionPrediction.has_value() &&
+               (!collisionPrediction->IsSuccessUVE() ||
+                collisionPrediction->context != trajectory.context ||
+                collisionPrediction->samples.size() != trajectory.samples.size())) {
+        preview.diagnostic = "Motion Query trajectory preview collision prediction does not match the shared trajectory.";
+    } else {
+        preview.available = true;
+        preview.trajectory = std::move(trajectory);
+        preview.collisionPrediction = std::move(collisionPrediction);
+        preview.diagnostic = "Shared Motion Query trajectory preview is available.";
+    }
+    m_motionQueryTrajectoryPreview = std::move(preview);
+    ++m_revision;
+}
+
 void EditorBridgeUVE::SetControlRigAuthoringSessionUVE(
     Core::ControlRigEditorAuthoringSessionUVE* session) noexcept {
     if (m_controlRigAuthoring == session) {
@@ -1339,6 +1362,7 @@ EditorBridgeMotionQuerySnapshotUVE EditorBridgeUVE::CaptureMotionQueryUVE() cons
     snapshot.replayBatchHistory.assign(m_motionQueryReplayBatchHistory.begin(),
                                       m_motionQueryReplayBatchHistory.end());
     snapshot.replaySessionFacts = m_motionQueryReplaySessionFacts;
+    snapshot.trajectoryPreview = m_motionQueryTrajectoryPreview;
 
     const Plugins::Editor::MotionQueryTraceReplayBaselineBatchResultUVE batch =
         Plugins::Editor::CompareMotionQueryLiveDebugSnapshotAgainstAllBaselinesUVE(

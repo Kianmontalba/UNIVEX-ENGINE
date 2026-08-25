@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "uve/core/future_trajectory_contract_uve.h"
 #include "uve/core/time_pose_contract_uve.h"
 
 #include <cstddef>
@@ -11,21 +12,13 @@
 
 namespace UVE::Core {
 
-struct MotionTrajectorySampleUVE final {
-    double offsetSeconds = 0.0;
-    // Position relative to the query root at the current sample; no world-resource ownership.
-    Math::Vector3UVE relativePosition;
-
-    [[nodiscard]] bool operator==(const MotionTrajectorySampleUVE&) const noexcept = default;
-};
-
 // A copied feature vector shared by motion-query consumers; runtime playback remains elsewhere.
 struct MotionQueryUVE final {
     static constexpr std::size_t kMaximumTrajectorySamplesUVE = 32U;
 
     Math::Vector3UVE rootVelocity;
     Math::Vector3UVE facingDirection{0.0F, 0.0F, 1.0F};
-    std::vector<MotionTrajectorySampleUVE> trajectory;
+    TimeSampledTrajectoryUVE trajectory;
     SkeletonDefinitionUVE skeleton;
     PoseBufferUVE pose;
     AnimationEvaluationContextUVE evaluationContext;
@@ -122,7 +115,7 @@ struct MotionMatchingResultUVE final {
 
 [[nodiscard]] bool TryBuildMotionQueryUVE(
     const TransformPoseUVE& previousPose, const TransformPoseUVE& currentPose,
-    double deltaSeconds, const std::vector<MotionTrajectorySampleUVE>& futureTrajectory,
+    double deltaSeconds, const TimeSampledTrajectoryUVE& futureTrajectory,
     MotionQueryUVE& outQuery) noexcept;
 
 [[nodiscard]] MotionMatchingResultUVE FindBestMotionMatchUVE(

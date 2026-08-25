@@ -24,6 +24,7 @@
 #include "uve/plugins/motion_query_trace_replay_regression_uve.h"
 #include "uve/plugins/motion_query_trace_replay_baseline_registry_uve.h"
 #include "uve/plugins/control_rig_editor_uve.h"
+#include "uve/physics/trajectory_collision_prediction_uve.h"
 
 namespace UVE::Editor {
 
@@ -582,6 +583,15 @@ struct EditorBridgeMotionQueryReplayBatchHistoryEntryUVE final {
     [[nodiscard]] bool operator==(const EditorBridgeMotionQueryReplayBatchHistoryEntryUVE&) const = default;
 };
 
+struct EditorBridgeMotionQueryTrajectoryPreviewUVE final {
+    bool available = false;
+    Core::TimeSampledTrajectoryUVE trajectory;
+    std::optional<Physics::TrajectoryCollisionPredictionResultUVE> collisionPrediction;
+    std::string diagnostic;
+
+    [[nodiscard]] bool operator==(const EditorBridgeMotionQueryTrajectoryPreviewUVE&) const = default;
+};
+
 struct EditorBridgeMotionQueryReplaySessionFactsUVE final {
     std::size_t totalIndividualComparisons = 0U;
     std::size_t totalBatchRuns = 0U;
@@ -610,6 +620,7 @@ struct EditorBridgeMotionQuerySnapshotUVE final {
     std::vector<EditorBridgeMotionQueryReplayComparisonHistoryEntryUVE> replayComparisonHistory;
     EditorBridgeMotionQueryReplayWorkflowStatusUVE replayWorkflow;
     EditorBridgeMotionQueryReplayBatchSnapshotUVE replayBatch;
+    EditorBridgeMotionQueryTrajectoryPreviewUVE trajectoryPreview;
     bool replayBatchHistoryTruncated = false;
     std::vector<EditorBridgeMotionQueryReplayBatchHistoryEntryUVE> replayBatchHistory;
     EditorBridgeMotionQueryReplaySessionFactsUVE replaySessionFacts;
@@ -741,6 +752,11 @@ public:
     void SetDataTablePreviewSnapshotUVE(Asset::DataTableSnapshotUVE snapshot);
     void SetMotionQueryReplayFixtureUVE(Plugins::Editor::MotionQueryTraceReplayFixtureUVE fixture);
     void ClearMotionQueryReplayFixtureUVE();
+    /// Publishes copied shared trajectory and optional Physics prediction facts for editor preview.
+    /// The bridge does not own or mutate the source runtime systems.
+    void SetMotionQueryTrajectoryPreviewUVE(
+        Core::TimeSampledTrajectoryUVE trajectory,
+        std::optional<Physics::TrajectoryCollisionPredictionResultUVE> collisionPrediction = std::nullopt);
     /// Attaches a non-owning native Control Rig authoring session for copied read-only snapshots.
     /// The caller retains ownership and must keep the session alive while the bridge uses it.
     void SetControlRigAuthoringSessionUVE(Core::ControlRigEditorAuthoringSessionUVE* session) noexcept;
@@ -826,6 +842,7 @@ private:
     std::optional<Plugins::Editor::MotionQueryTraceReplayFixtureUVE> m_motionQueryReplayFixture;
     std::optional<std::string> m_motionQueryActiveBaselineName;
     Plugins::Editor::MotionQueryTraceReplayBaselineRegistryUVE m_motionQueryReplayBaselineRegistry;
+    EditorBridgeMotionQueryTrajectoryPreviewUVE m_motionQueryTrajectoryPreview;
     Core::ControlRigEditorAuthoringSessionUVE* m_controlRigAuthoring = nullptr;
     std::uint64_t m_revision = 0U;
 };

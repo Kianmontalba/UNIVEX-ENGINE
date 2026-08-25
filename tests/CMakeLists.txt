@@ -46,6 +46,7 @@ add_executable(uve_tests
     physics/physics_material_uve_tests.cpp
     physics/raycast_system_uve_tests.cpp
     physics/shape_cast_system_uve_tests.cpp
+    physics/trajectory_collision_prediction_uve_tests.cpp
     input/gamepad_input_system_uve_tests.cpp
     input/mobile_gesture_recognizer_uve_tests.cpp
     input/mobile_input_system_uve_tests.cpp
@@ -144,6 +145,7 @@ add_executable(uve_tests
     core/version_uve_tests.cpp
     core/type_metadata_uve_tests.cpp
     core/time_pose_contract_uve_tests.cpp
+    core/future_trajectory_contract_uve_tests.cpp
     core/animation_clip_uve_tests.cpp
     core/animation_tree_uve_tests.cpp
     core/animation_state_machine_uve_tests.cpp
@@ -153,6 +155,7 @@ add_executable(uve_tests
     editor/editor_tool_session_uve_tests.cpp
     editor/editor_bridge_stdio_uve_tests.cpp
     editor/editor_bridge_uve_tests.cpp
+    editor/motion_query_trajectory_bridge_uve_tests.cpp
     editor/control_rig_bridge_uve_tests.cpp
     editor/regression_harness_uve_tests.cpp
     editor/developer_console_uve_tests.cpp
@@ -172,6 +175,7 @@ add_executable(uve_tests
     ../engine/plugins/Animation/control_rig/Tests/control_rig_editor_uve_tests.cpp
     ../engine/plugins/Animation/motion_query/Tests/motion_query_plugin_module_uve_tests.cpp
     ../engine/plugins/Animation/motion_query/Tests/motion_query_uve_tests.cpp
+    ../engine/plugins/Animation/motion_query/Tests/motion_query_shared_trajectory_uve_tests.cpp
     ../engine/plugins/Animation/motion_query/Tests/motion_query_database_contract_uve_tests.cpp
     ../engine/plugins/Animation/motion_query/Tests/motion_query_asset_sampling_uve_tests.cpp
     ../engine/plugins/Animation/motion_query/Tests/motion_query_asset_registry_cache_uve_tests.cpp

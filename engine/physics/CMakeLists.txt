@@ -14,9 +14,10 @@ add_library(uve_physics STATIC
     src/physics_system_uve.cpp
     src/raycast_system_uve.cpp
     src/shape_cast_system_uve.cpp
+    src/trajectory_collision_prediction_uve.cpp
     src/shape_narrow_phase_uve.cpp
 )
-target_include_directories(uve_physics PUBLIC include)
+target_include_directories(uve_physics PUBLIC include ${CMAKE_CURRENT_SOURCE_DIR}/../core/include)
 target_link_libraries(uve_physics PUBLIC uve_platform uve_debug uve_math uve_scene)
 target_compile_features(uve_physics PUBLIC cxx_std_20)
 uve_set_warnings(uve_physics)
