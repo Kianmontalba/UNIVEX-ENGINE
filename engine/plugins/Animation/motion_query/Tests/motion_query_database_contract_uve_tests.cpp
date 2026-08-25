@@ -58,6 +58,31 @@ TEST(MotionQueryDatabaseContractUVETest, FactoryUVE_CreatesValidatedDeterministi
               MotionQueryDatabaseContractCodeUVE::Valid);
 }
 
+TEST(MotionQueryDatabaseContractUVETest, FactoryUVE_CreatesValidatedImportedCandidateSet) {
+    MotionQueryDatabaseContractUVE source = MakeContractUVE();
+    MotionMatchingCandidateUVE second = MakeCandidateUVE();
+    second.candidateId = "run_1";
+    second.sourceClipId = "run";
+    second.sampleTimeSeconds = 1.5;
+    second.feature.rootVelocity = {2.0F, 0.0F, 0.0F};
+    source.database.candidates.push_back(second);
+
+    const MotionQueryDatabaseFactoryResultUVE created = CreateMotionQueryDatabaseContractUVE(
+        source.context, source.schema, source.settings, source.database);
+    ASSERT_TRUE(created.IsCreatedUVE()) << created.validation.message;
+    EXPECT_EQ(created.contract.context, source.context);
+    EXPECT_EQ(created.contract.schema, source.schema);
+    EXPECT_EQ(created.contract.settings, source.settings);
+    ASSERT_EQ(created.contract.database.candidates.size(), 2U);
+    EXPECT_EQ(created.contract.database.candidates[1].candidateId, "run_1");
+
+    source.database.candidates[1].candidateId.clear();
+    const MotionQueryDatabaseFactoryResultUVE invalid = CreateMotionQueryDatabaseContractUVE(
+        source.context, source.schema, source.settings, source.database);
+    EXPECT_FALSE(invalid.IsCreatedUVE());
+    EXPECT_EQ(invalid.validation.code, MotionQueryDatabaseContractCodeUVE::DatabaseValidationFailed);
+}
+
 TEST(MotionQueryDatabaseContractUVETest, FactoryUVE_UsesSharedValidationForInvalidInputs) {
     const MotionQueryDatabaseFactoryResultUVE invalidContext =
         CreateDefaultMotionQueryDatabaseContractUVE("", 1U, "locomotion-v1");

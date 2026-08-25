@@ -438,6 +438,7 @@ struct EditorBridgeMotionQueryAuthoringSnapshotUVE final {
     std::optional<Asset::ResourceHandleUVE> selectedResource;
     std::vector<Plugins::Editor::MotionQueryEditorDatabaseRowUVE> databases;
     std::vector<EditorBridgeMotionQueryCommandMetadataUVE> commandMetadata;
+    std::vector<Plugins::Editor::MotionQueryEditorPropertyMetadataUVE> propertyMetadata;
     bool clipboardAvailable = false;
     bool canUndo = false;
     bool canRedo = false;

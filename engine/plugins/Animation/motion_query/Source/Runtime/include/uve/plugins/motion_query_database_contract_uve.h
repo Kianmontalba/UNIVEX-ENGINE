@@ -106,6 +106,10 @@ struct MotionQueryDatabaseFactoryResultUVE final {
     }
 };
 
+[[nodiscard]] MotionQueryDatabaseFactoryResultUVE CreateMotionQueryDatabaseContractUVE(
+    MotionQueryDatabaseContextUVE context, MotionQueryDatabaseSchemaUVE schema,
+    MotionQueryDatabaseSettingsUVE settings, MotionMatchingDatabaseUVE database);
+
 [[nodiscard]] MotionQueryDatabaseFactoryResultUVE CreateDefaultMotionQueryDatabaseContractUVE(
     std::string_view databaseId, std::uint64_t generation, std::string_view schemaId,
     std::size_t maximumCandidates = 4U);

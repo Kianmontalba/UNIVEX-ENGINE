@@ -19,7 +19,7 @@ Counts in this document are **planning units, not additive feature totals**. The
 |---|---:|---|
 | Core Runtime broad PARTIAL families | **9** | The authoritative engine queue: scene components, prefabs, importers, physics, audio, input, save, platform, and networking. |
 | Native C++ Visual Scripting | **COMPLETED** | Closed by Increment 650; it is not included in the nine remaining Core Runtime families. |
-| Motion Query inventory PARTIAL entries | **179** | Separate plugin/file-inventory work; excluded from the Core Runtime count. |
+| Motion Query inventory PARTIAL entries | **178 historical targets** | Reconciled into shared UVE-native authorities by Increment 651; excluded from the Core Runtime count. |
 | Developer Tooling top-level PARTIAL milestones | **0** | The tooling sequence is complete at the documented top-level boundaries; future tooling additions follow normal evidence gates. |
 
 ## Completed foundations
@@ -98,13 +98,13 @@ The ecosystem is not part of the engine completion count. Its eight partial fami
 
 Ecosystem work must not displace the engine critical path or imply that account, payment, cloud, or public-launch contracts exist in the engine.
 
-## Motion Query and Control Rig — separate plugin/future scope
+## Motion Query — COMPLETED UVE-native plugin family; Control Rig remains separate
 
-Motion Query and Control Rig remain organized under the Animation plugin boundary and are **not counted as Core Runtime engine partials**. The retired Motion Query file inventory contained 179 file-level PARTIAL entries across runtime, editor, diagnostics, profiling, build, and validation areas; its UVE-native target naming, dependency order, dispositions, and public-technique authorship rule were summarized into this section before deletion. Motion Query must remain separate from Core Runtime implementation increments unless a direct dependency is demonstrated.
+**Motion Query is COMPLETE as the current UVE-native plugin family in Increment 651.** The whole-family audit reconciled the retired 198-entry inventory—178 historical PARTIAL targets, 15 PLANNED targets, and 5 COMPLETED targets—against 24 plugin headers, 24 implementation sources, 23 Motion Query test sources, the `uve_plugins` target, runtime/editor callers, asset ingestion, derived-data/search-index seams, and the bridge transport. The historical filename rows were target names, not 198 missing physical files: they were fulfilled by 13 shared UVE-native authorities and are now reclassified through implemented or rewritten-native dispositions rather than duplicated as foreign-engine-shaped files.
 
-Control Rig has shared pose and validation foundations, but broader authoring/runtime behavior remains future scope. No speculative plugin edits are implied by completion of Native C++ Visual Scripting.
+Increment 651 completed the remaining concrete family boundary: validated clip-to-motion-library preprocessing with bounded future trajectories, generalized multi-candidate database factory construction, shared editor database-entry validation/factory utilities, stable dynamic property metadata, and native/stdio bridge exposure. The result is covered by 167/167 focused Motion Query tests, the full native suite, managed editor tests, editor probe, and software-GL smoke. Motion Query is no longer an active PARTIAL count in the engine roadmap.
 
-The Motion Query and AAA boundaries are summarized above and remain separate from the engine completion count.
+Optional future capabilities such as learned/neural feature compression remain separate research scope and are not represented as missing current plugin foundations. Control Rig has shared pose and validation foundations, but its broader authoring/runtime behavior remains a separate future plugin family and was not modified by Increment 651. Motion Query and Control Rig remain outside the nine Core Runtime engine PARTIAL families.
 
 ## AAA future capability map
 
