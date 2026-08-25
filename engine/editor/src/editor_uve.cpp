@@ -32,6 +32,7 @@
 #include "uve/scene/components/light_component_uve.h"
 #include "uve/scene/components/name_component_uve.h"
 #include "uve/scene/components/primitive_mesh_component_uve.h"
+#include "uve/scene/components/prefab_instance_component_uve.h"
 #include "uve/scene/components/world_transform_component_uve.h"
 
 namespace UVE::Editor {
@@ -451,6 +452,64 @@ bool EditorUVE::SaveSceneUVE() {
         m_sceneDirty = false;
     }
     return saved;
+}
+
+bool EditorUVE::SaveSelectedPrefabUVE(const std::filesystem::path& path) {
+    if (!IsLifecycleCommandAllowedUVE() || path.empty() || !IsDocumentEntityUVE(m_selectedEntity)) {
+        return false;
+    }
+    const Asset::AssetGuidUVE guid = m_services->GetPrefabSystemUVE().SavePrefabUVE(
+        m_services->GetEntityManagerUVE(), m_services->GetAssetDatabaseUVE(), m_selectedEntity, path);
+    return guid != Asset::kInvalidAssetGuidUVE;
+}
+
+bool EditorUVE::RefreshSelectedPrefabUVE() {
+    if (!IsLifecycleCommandAllowedUVE() || !IsDocumentEntityUVE(m_selectedEntity)) {
+        return false;
+    }
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    if (!entityManager.HasComponentUVE<Scene::PrefabInstanceComponentUVE>(m_selectedEntity)) {
+        return false;
+    }
+    const Scene::PrefabRefreshResultUVE result = m_services->GetPrefabSystemUVE().RefreshInstanceUVE(
+        entityManager, m_services->GetSceneGraphUVE(), m_services->GetAssetDatabaseUVE(), m_selectedEntity);
+    if (!result.IsSuccessUVE()) {
+        return false;
+    }
+    if (result.code == Scene::PrefabRefreshCodeUVE::Refreshed) {
+        SelectEntityUVE(result.rootEntity);
+        m_sceneDirty = true;
+        InvalidateHierarchyFilterCacheUVE();
+    }
+    return true;
+}
+
+bool EditorUVE::DiscardSelectedPrefabOverridesAndRefreshUVE() {
+    if (!IsLifecycleCommandAllowedUVE() || !IsDocumentEntityUVE(m_selectedEntity)) {
+        return false;
+    }
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    if (!entityManager.HasComponentUVE<Scene::PrefabInstanceComponentUVE>(m_selectedEntity)) {
+        return false;
+    }
+    Scene::PrefabInstanceComponentUVE cleared =
+        entityManager.GetComponentUVE<Scene::PrefabInstanceComponentUVE>(m_selectedEntity);
+    if (cleared.overrides.empty()) {
+        return RefreshSelectedPrefabUVE();
+    }
+    cleared.overrides.clear();
+    entityManager.AddComponentUVE<Scene::PrefabInstanceComponentUVE>(m_selectedEntity, cleared);
+    const Scene::PrefabRefreshResultUVE result = m_services->GetPrefabSystemUVE().RefreshInstanceUVE(
+        entityManager, m_services->GetSceneGraphUVE(), m_services->GetAssetDatabaseUVE(), m_selectedEntity, true);
+    if (!result.IsSuccessUVE()) {
+        return false;
+    }
+    if (result.code == Scene::PrefabRefreshCodeUVE::Refreshed) {
+        SelectEntityUVE(result.rootEntity);
+        InvalidateHierarchyFilterCacheUVE();
+    }
+    m_sceneDirty = true;
+    return true;
 }
 
 bool EditorUVE::LoadSceneUVE() {
@@ -4365,6 +4424,14 @@ void EditorUVE::RegisterBuiltInInspectorDrawersUVE() {
     registerComponentDrawer("particle-emitter", EditorSceneComponentKindUVE::ParticleEmitter);
     registerComponentDrawer("script", EditorSceneComponentKindUVE::Script);
     registerComponentDrawer("animation-player", EditorSceneComponentKindUVE::AnimationPlayer);
+    static_cast<void>(m_inspectorDrawerRegistry.RegisterDrawerUVE(InspectorDrawerEntryUVE{
+        "prefab-instance",
+        [this](const Scene::EntityUVE entity) {
+            return IsDocumentEntityUVE(entity) &&
+                   m_services->GetEntityManagerUVE().HasComponentUVE<Scene::PrefabInstanceComponentUVE>(entity);
+        },
+        [this](const Scene::EntityUVE entity) { DrawPrefabInspectorDrawerUVE(entity); },
+    }));
 }
 
 void EditorUVE::DrawNameInspectorDrawerUVE(const Scene::EntityUVE entity) {
@@ -4527,6 +4594,43 @@ void EditorUVE::DrawSceneComponentInspectorDrawerUVE(const Scene::EntityUVE enti
     ImGui::TextDisabled("Authored component state is validated and persisted by EditorUVE.");
     if (ImGui::Button((std::string("Remove ") + title).c_str())) {
         static_cast<void>(RemoveSelectedSceneComponentUVE(kind));
+    }
+}
+
+void EditorUVE::DrawPrefabInspectorDrawerUVE(const Scene::EntityUVE entity) {
+    if (!IsDocumentEntityUVE(entity) || entity != m_selectedEntity) {
+        return;
+    }
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    if (!entityManager.HasComponentUVE<Scene::PrefabInstanceComponentUVE>(entity)) {
+        return;
+    }
+    const Scene::PrefabInstanceComponentUVE& instance =
+        entityManager.GetComponentUVE<Scene::PrefabInstanceComponentUVE>(entity);
+    const std::filesystem::path sourcePath =
+        m_services->GetAssetDatabaseUVE().ResolveUVE(instance.sourcePrefabGuid);
+    const std::optional<std::uint64_t> observedRevision =
+        Scene::ComputePrefabSourceRevisionUVE(sourcePath);
+    ImGui::Separator();
+    ImGui::TextUnformatted("Prefab Instance");
+    ImGui::Text("Source GUID: %llu", static_cast<unsigned long long>(instance.sourcePrefabGuid.value));
+    ImGui::Text("Instance revision: %llu", static_cast<unsigned long long>(instance.instanceRevision));
+    ImGui::Text("Source revision: %s", observedRevision.has_value() ? "available" : "unavailable");
+    ImGui::Text("Local overrides: %zu", instance.overrides.size());
+    if (!instance.overrides.empty()) {
+        ImGui::TextColored(ImVec4{1.0F, 0.72F, 0.25F, 1.0F}, "Merge required before refresh.");
+        if (ImGui::Button("Discard Overrides & Refresh")) {
+            static_cast<void>(DiscardSelectedPrefabOverridesAndRefreshUVE());
+        }
+    } else if (observedRevision.has_value() && *observedRevision != instance.instanceRevision) {
+        if (ImGui::Button("Refresh Prefab")) {
+            static_cast<void>(RefreshSelectedPrefabUVE());
+        }
+    } else {
+        ImGui::TextDisabled("Prefab instance is current.");
+    }
+    if (!sourcePath.empty()) {
+        ImGui::TextDisabled("%s", sourcePath.generic_string().c_str());
     }
 }
 

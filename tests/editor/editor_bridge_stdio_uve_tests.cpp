@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstdint>
+#include <filesystem>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -576,6 +577,54 @@ TEST(EditorBridgeStdioUVETest, ServeUVE_ExposesMotionQueryPropertyMetadataInSnap
         editor.ShutdownUVE();
     }
     engine.Shutdown();
+}
+
+TEST(EditorBridgeStdioUVETest, ServeUVE_SerializesPrefabRevisionSnapshot) {
+    const std::filesystem::path prefabPath = "uve_editor_bridge_stdio_prefab.uveprefab";
+    std::filesystem::remove(prefabPath);
+    Core::EngineCoreUVE engine(MakeBridgeStdioTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_bridge_stdio_prefab.uvescene");
+        editor.InitUVE();
+        Core::EngineServicesUVE& services = engine.GetServicesUVE();
+        Scene::IEntityManagerUVE& entityManager = services.GetEntityManagerUVE();
+        const Scene::EntityUVE source = editor.CreateDocumentEntityUVE(EditorEntityKindUVE::Empty);
+        ASSERT_NE(source, Scene::kInvalidEntityUVE);
+        const Asset::AssetGuidUVE guid = services.GetPrefabSystemUVE().SavePrefabUVE(
+            entityManager, services.GetAssetDatabaseUVE(), source, prefabPath);
+        ASSERT_NE(guid, Asset::kInvalidAssetGuidUVE);
+        const Scene::EntityUVE instance = services.GetPrefabSystemUVE().InstantiateUVE(
+            entityManager, services.GetSceneGraphUVE(), services.GetAssetDatabaseUVE(), guid,
+            Scene::kInvalidEntityUVE);
+        ASSERT_NE(instance, Scene::kInvalidEntityUVE);
+        editor.SelectEntityUVE(instance);
+
+        EditorBridgeUVE bridge(editor);
+        EditorBridgeStdioServerUVE server(bridge);
+        std::stringstream input;
+        std::stringstream output;
+        std::stringstream diagnostics;
+        AppendFrameUVE(input, JsonUVE{{"jsonrpc", "2.0"},
+                                      {"id", 1U},
+                                      {"method", "bridge.hello"},
+                                      {"params", {{"protocolVersion", kEditorBridgeProtocolVersionUVE}}}});
+        ASSERT_EQ(server.ServeUVE(input, output, diagnostics), 0);
+        ASSERT_TRUE(diagnostics.str().empty());
+        const std::vector<JsonUVE> frames = ReadFramesUVE(output);
+        ASSERT_EQ(frames.size(), 1U);
+        const JsonUVE& prefab = frames.front().at("result").at("snapshot").at("inspector").at("prefab");
+        ASSERT_TRUE(prefab.is_object());
+        EXPECT_EQ(prefab.at("sourcePrefabGuid").get<std::uint64_t>(), guid.value);
+        EXPECT_EQ(prefab.at("status").get<std::uint8_t>(), 1U);
+        EXPECT_EQ(prefab.at("overrideCount").get<std::size_t>(), 0U);
+        EXPECT_FALSE(prefab.at("canRefresh").get<bool>());
+
+        editor.ShutdownUVE();
+    }
+    engine.Shutdown();
+    std::filesystem::remove(prefabPath);
 }
 
 } // namespace

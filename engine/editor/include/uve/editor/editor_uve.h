@@ -200,6 +200,18 @@ public:
     /// is cleared only after the scene serializer reports success.
     [[nodiscard]] bool SaveSceneUVE();
 
+    /// Saves the sole selected document subtree as a canonical `.uveprefab` and registers its source
+    /// GUID through the existing PrefabSystemUVE. This command never runs during Play or a viewport gesture.
+    [[nodiscard]] bool SaveSelectedPrefabUVE(const std::filesystem::path& path);
+
+    /// Refreshes the sole selected prefab instance from its current source revision. Dirty instances
+    /// are rejected with merge-required semantics and are never silently overwritten.
+    [[nodiscard]] bool RefreshSelectedPrefabUVE();
+
+    /// Explicitly discards persisted local prefab overrides and refreshes from source. This is a
+    /// destructive authoring command and is rejected outside Edit mode or without a sole selection.
+    [[nodiscard]] bool DiscardSelectedPrefabOverridesAndRefreshUVE();
+
     /// Replaces the editable document scene with the active .uvescene file. A backup scene is
     /// created before destructive mutation and restored if deserialization fails; the editor camera
     /// remains outside the document root set.
@@ -716,6 +728,7 @@ private:
     void DrawPrimitiveMeshInspectorDrawerUVE(Scene::EntityUVE entity);
     void DrawSceneComponentInspectorDrawerUVE(Scene::EntityUVE entity, EditorSceneComponentKindUVE kind);
     void DrawSceneComponentAddPanelUVE();
+    void DrawPrefabInspectorDrawerUVE(Scene::EntityUVE entity);
     void DrawImportQueueMonitorUVE();
     void DrawViewportPanelUVE();
     /// Renders a copied watcher journal as read-only editor feedback. The helper never schedules

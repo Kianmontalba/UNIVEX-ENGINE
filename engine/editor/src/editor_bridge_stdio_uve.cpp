@@ -179,6 +179,17 @@ enum class FrameReadResultUVE : std::uint8_t {
         attachedComponentIds.push_back(identifier);
     }
     JsonUVE assetBinding = JsonUVE(nullptr);
+    JsonUVE prefab = JsonUVE(nullptr);
+    if (snapshot.prefab.has_value()) {
+        prefab = JsonUVE{{"sourcePrefabGuid", snapshot.prefab->sourcePrefabGuid.has_value()
+                                                    ? JsonUVE(*snapshot.prefab->sourcePrefabGuid)
+                                                    : JsonUVE(nullptr)},
+                         {"sourceRevision", snapshot.prefab->sourceRevision},
+                         {"instanceRevision", snapshot.prefab->instanceRevision},
+                         {"overrideCount", snapshot.prefab->overrideCount},
+                         {"status", static_cast<std::uint8_t>(snapshot.prefab->status)},
+                         {"canRefresh", snapshot.prefab->canRefresh}};
+    }
     if (snapshot.assetBinding.has_value()) {
         assetBinding = JsonUVE{{"meshGuid", snapshot.assetBinding->meshGuid.has_value()
                                                    ? JsonUVE(*snapshot.assetBinding->meshGuid)
@@ -197,6 +208,7 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"eligibleDrawerIds", std::move(drawerIds)},
                    {"attachedComponentIds", std::move(attachedComponentIds)},
                    {"assetBinding", std::move(assetBinding)},
+                   {"prefab", std::move(prefab)},
                    {"canEditSelectedName", snapshot.canEditSelectedName}};
 }
 

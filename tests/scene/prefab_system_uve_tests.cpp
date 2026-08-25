@@ -481,8 +481,10 @@ TEST_F(PrefabSystemUVETest, SaveThenInstantiate_ProducesEntityWithSameComponentV
     EXPECT_EQ(entityManager.GetComponentUVE<MeshComponentUVE>(instance).meshGuid, Asset::AssetGuidUVE{11});
     ASSERT_TRUE(entityManager.HasComponentUVE<PrefabInstanceComponentUVE>(instance));
     EXPECT_EQ(entityManager.GetComponentUVE<PrefabInstanceComponentUVE>(instance).sourcePrefabGuid, guid);
-    EXPECT_EQ(entityManager.GetComponentUVE<PrefabInstanceComponentUVE>(instance).sourceRevision, 1U);
-    EXPECT_EQ(entityManager.GetComponentUVE<PrefabInstanceComponentUVE>(instance).instanceRevision, 1U);
+    const std::optional<std::uint64_t> expectedRevision = ComputePrefabSourceRevisionUVE(prefabPath);
+    ASSERT_TRUE(expectedRevision.has_value());
+    EXPECT_EQ(entityManager.GetComponentUVE<PrefabInstanceComponentUVE>(instance).sourceRevision, *expectedRevision);
+    EXPECT_EQ(entityManager.GetComponentUVE<PrefabInstanceComponentUVE>(instance).instanceRevision, *expectedRevision);
 
     std::filesystem::remove(prefabPath);
 }

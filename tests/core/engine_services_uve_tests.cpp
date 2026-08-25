@@ -408,6 +408,11 @@ public:
                                                    Scene::EntityUVE) override {
         return Scene::kInvalidEntityUVE;
     }
+    [[nodiscard]] Scene::PrefabRefreshResultUVE RefreshInstanceUVE(
+        Scene::IEntityManagerUVE&, Scene::ISceneGraphUVE&, Asset::IAssetDatabaseUVE&,
+        Scene::EntityUVE instanceRoot, bool) override {
+        return {Scene::PrefabRefreshCodeUVE::InvalidInstance, instanceRoot, 0U, "fake"};
+    }
 
     int savePrefabCallCount = 0;
 };

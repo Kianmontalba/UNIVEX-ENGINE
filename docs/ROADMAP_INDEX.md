@@ -17,8 +17,8 @@ Counts in this document are **planning units, not additive feature totals**. The
 
 | Metric | Current state | Meaning |
 |---|---:|---|
-| Core Runtime broad PARTIAL families | **8** | The authoritative engine queue after Scene Components Increment 654: prefabs, importers, physics, audio, input, save, platform, and networking. |
-| Native C++ Visual Scripting | **COMPLETED** | Closed by Increment 650; it is not included in the eight remaining Core Runtime families. |
+| Core Runtime broad PARTIAL families | **7** | The authoritative engine queue after Scene Components Increment 654 and Prefab Maturity Increment 655: importers, physics, audio, input, save, platform, and networking. |
+| Native C++ Visual Scripting | **COMPLETED** | Closed by Increment 650; it is not included in the seven remaining Core Runtime families. |
 | Motion Query inventory PARTIAL entries | **178 historical targets** | Reconciled into shared UVE-native authorities by Increment 651; excluded from the Core Runtime count. |
 | Developer Tooling top-level PARTIAL milestones | **0** | The tooling sequence is complete at the documented top-level boundaries; future tooling additions follow normal evidence gates. |
 
@@ -28,14 +28,14 @@ The engine already has a verified foundation across the frame lifecycle, memory,
 
 The **Native C++ Visual Scripting** family is complete as of Increment 650. Its node registry, typed graph validation, IR/bytecode, bounded VM dispatch, per-entity typed ticks, editor/canvas contracts, persistence, debugger, hot reload, and typed value families are integrated. The final compiler boundary is a deterministic bounded Kahn scheduler for validated non-execution data dependencies, including composed/deeper links, valid fan-out, immediate producer-local transfers, deterministic cycle rejection, and preserved flow-dispatch safety.
 
-## Core Runtime — eight remaining broad PARTIAL families
+## Core Runtime — seven remaining broad PARTIAL families
 
 These are the authoritative engine-only families. Each family must be completed as one whole-family increment or a clearly bounded two-to-three-increment closure, not as repeated file-by-file hardening slices.
 
 | Priority | Family | Current boundary and next completion proof |
 |---:|---|---|
 | 1 | **Scene components and user-facing nodes — COMPLETED (Increment 654)** | Delivered typed, validation-first add/update/remove authoring for camera, mesh, light, collider, rigid-body, audio-source, particle emitter, script, and AnimationPlayer components; Mesh GUID asset references; canonical scene persistence; Undo/Redo and Play-mode/failure-atomic guards; stable native Inspector drawers and Add Component UX; copied native/stdio/managed bridge visibility; and EngineCore reconciliation of authored particle emitters through the existing simulation/render path. AnimationPlayer now provides a validated project-relative authored clip identity and deterministic playback settings; clip-format import, clip decoding, skeletal pose application, and advanced particle/VFX depth remain separate future asset/render boundaries. Completed Visual Scripting is not part of this family. |
-| 2 | **Prefab maturity** | Source/instance identity, revisions, bounded overrides, apply/revert, merge, refresh, rollback, and conflict facts exist. Remaining work is nested prefab policy, source mutation/asset revision tracking, and conflict-resolution UX. |
+| 2 | **Prefab maturity — COMPLETED (Increment 655)** | Delivered deterministic source-envelope revision identity, revision-stamped instantiation, clean-instance refresh with parent preservation, explicit Merge Required handling for local overrides, force-refresh discard semantics, canonical `.uveprefab` extension enforcement, nested prefab data preservation without recursive re-instantiation, native save/refresh/discard authoring commands, prefab Inspector conflict facts, native/stdio/managed bridge visibility, and focused persistence/rollback/conflict tests. Existing value-level apply/revert/merge helpers remain the typed property-boundary authority; arbitrary reflection and automatic asset decoding are not claimed. |
 | 3 | **Asset-type importers** | Virtual paths, typed envelopes, importer registration, bounded parsing, failure diagnostics, and generation-aware cache foundations exist. Remaining work is production model, texture, audio, material, animation, shader, and derived-data import workflows with licensing and dependency policy. |
 | 4 | **Physics depth** | Deterministic collision/narrow-phase, rigid-body foundations, queries, constraints, BVH candidate planning, and character-controller slices exist. Remaining work is broader shape/body authoring, trigger and joint depth, CCD/TOI integration, measured simulation, and gameplay integration. |
 | 5 | **Audio depth** | Source/listener ownership, mixer groups, routing, attenuation, multipliers, play-state, and failure-safe binding exist. Remaining work is effects, streaming, music/SFX policy, concrete platform backends, and editor mixer authoring. |
@@ -44,7 +44,7 @@ These are the authoritative engine-only families. Each family must be completed 
 | 8 | **Platform abstraction** | Desktop window/monitor/framebuffer validation, inert invalid-window behavior, and NUL-safe monitor snapshots exist. Remaining work is mobile lifecycle/safe areas, power management, hot-plug policy, and native display-mode application/enumeration breadth. |
 | 9 | **Networking** | Bounded reliable sequence windows, packet/reassembly invariants, and failure-safe primitives exist. Remaining work is reliable UDP channels, replication, ownership/RPC policy, prediction, reconciliation, interpolation, and dedicated-server integration. |
 
-The eight families above are the authoritative Core Runtime queue after Increment 654. The owner-facing metric is **8 engine-only broad PARTIAL families**; Motion Query and Control Rig remain separate completed plugin families.
+The seven families above are the authoritative Core Runtime queue after Increment 655. The owner-facing metric is **7 engine-only broad PARTIAL families**; Motion Query and Control Rig remain separate completed plugin families.
 
 ## Editor and workflow — active partial boundaries
 
