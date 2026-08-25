@@ -1,11 +1,9 @@
 # Copyright (c) 2026 UniVex Studios. All Rights Reserved.
 
-#
-# uve_platform is header-only this increment (compiler/OS macros only), so it
-# is declared as an INTERFACE library: nothing to compile, but consumers still
-# get the include path and can be linked against uniformly like every other
-# uve_* target.
-
-add_library(uve_platform INTERFACE)
-target_include_directories(uve_platform INTERFACE include)
-target_compile_features(uve_platform INTERFACE cxx_std_20)
+add_library(uve_platform STATIC
+    src/editor_project_package_uve.cpp
+)
+target_include_directories(uve_platform PUBLIC include)
+target_link_libraries(uve_platform PRIVATE nlohmann_json::nlohmann_json)
+target_compile_features(uve_platform PUBLIC cxx_std_20)
+uve_set_warnings(uve_platform)
