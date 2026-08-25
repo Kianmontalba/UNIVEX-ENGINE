@@ -1,5 +1,7 @@
 // Copyright (c) 2026 UniVex Studios. All Rights Reserved.
 
+#include <array>
+
 #include <gtest/gtest.h>
 
 #include "uve/core/engine_core_uve.h"
@@ -8,8 +10,10 @@
 #include "uve/scene/components/audio_source_component_uve.h"
 #include "uve/scene/components/camera_component_uve.h"
 #include "uve/scene/components/collider_component_uve.h"
+#include "uve/scene/components/expanded_3d_node_components_uve.h"
 #include "uve/scene/components/light_component_uve.h"
 #include "uve/scene/components/mesh_component_uve.h"
+#include "uve/scene/components/name_component_uve.h"
 #include "uve/scene/components/particle_emitter_component_uve.h"
 #include "uve/scene/components/rigid_body_component_uve.h"
 #include "uve/scene/components/script_component_uve.h"
@@ -84,6 +88,52 @@ TEST(SceneNodeEditorUVETest, CentralizedRegistryCreationUVE_AttachesExpectedAuth
 
         EXPECT_EQ(editor.CreateDocumentSceneNodeUVE(Scene::Nodes::SceneNodeKindUVE::AnimationTree),
                   Scene::kInvalidEntityUVE);
+        editor.ShutdownUVE();
+    }
+    engine.Shutdown();
+}
+
+TEST(SceneNodeEditorUVETest, CentralizedCreationUVE_CreatesEveryExpandedNodeKind) {
+    Core::EngineCoreUVE engine(MakeSceneNodeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_scene_node_editor_expanded_tests.uvescene");
+        editor.InitUVE();
+        Scene::IEntityManagerUVE& entityManager = engine.GetServicesUVE().GetEntityManagerUVE();
+        constexpr std::array<Scene::Nodes::SceneNodeKindUVE, 23U> expandedKinds{
+            Scene::Nodes::SceneNodeKindUVE::Area3D,
+            Scene::Nodes::SceneNodeKindUVE::RayCast3D,
+            Scene::Nodes::SceneNodeKindUVE::StaticBody3D,
+            Scene::Nodes::SceneNodeKindUVE::AnimatableBody3D,
+            Scene::Nodes::SceneNodeKindUVE::NavigationRegion3D,
+            Scene::Nodes::SceneNodeKindUVE::NavigationAgent3D,
+            Scene::Nodes::SceneNodeKindUVE::Skeleton3D,
+            Scene::Nodes::SceneNodeKindUVE::BoneAttachment3D,
+            Scene::Nodes::SceneNodeKindUVE::SpringArm3D,
+            Scene::Nodes::SceneNodeKindUVE::Marker3D,
+            Scene::Nodes::SceneNodeKindUVE::Hitbox3D,
+            Scene::Nodes::SceneNodeKindUVE::Hurtbox3D,
+            Scene::Nodes::SceneNodeKindUVE::Projectile3D,
+            Scene::Nodes::SceneNodeKindUVE::InteractionArea3D,
+            Scene::Nodes::SceneNodeKindUVE::WorldEnvironment3D,
+            Scene::Nodes::SceneNodeKindUVE::ReflectionProbe3D,
+            Scene::Nodes::SceneNodeKindUVE::Decal3D,
+            Scene::Nodes::SceneNodeKindUVE::LODGroup3D,
+            Scene::Nodes::SceneNodeKindUVE::Occluder3D,
+            Scene::Nodes::SceneNodeKindUVE::VisibilityRegion3D,
+            Scene::Nodes::SceneNodeKindUVE::SpawnPoint3D,
+            Scene::Nodes::SceneNodeKindUVE::LevelStreamer3D,
+            Scene::Nodes::SceneNodeKindUVE::WorldPartition3D,
+        };
+        for (const Scene::Nodes::SceneNodeKindUVE kind : expandedKinds) {
+            const Scene::EntityUVE entity = editor.CreateDocumentSceneNodeUVE(kind);
+            ASSERT_NE(entity, Scene::kInvalidEntityUVE);
+            EXPECT_TRUE(entityManager.IsAliveUVE(entity));
+            EXPECT_TRUE(entityManager.HasComponentUVE<Scene::TransformComponentUVE>(entity));
+            EXPECT_TRUE(entityManager.HasComponentUVE<Scene::NameComponentUVE>(entity));
+            EXPECT_GE(entityManager.GetComponentTypesUVE(entity).size(), 4U);
+        }
         editor.ShutdownUVE();
     }
     engine.Shutdown();

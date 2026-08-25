@@ -26,6 +26,7 @@
 #include "uve/scene/components/audio_source_component_uve.h"
 #include "uve/scene/components/camera_component_uve.h"
 #include "uve/scene/components/collider_component_uve.h"
+#include "uve/scene/components/expanded_3d_node_components_uve.h"
 #include "uve/scene/components/hierarchy_component_uve.h"
 #include "uve/scene/components/light_component_uve.h"
 #include "uve/scene/components/mesh_component_uve.h"
@@ -139,6 +140,69 @@ TEST_F(SceneSerializerUVETest, CaptureThenRestore_AllRegisteredComponentTypes_Ro
     entityManager.AddComponentUVE<PrefabInstanceComponentUVE>(source,
                                                                PrefabInstanceComponentUVE{Asset::AssetGuidUVE{9001}, {}});
 
+    AreaComponentUVE area{};
+    area.monitoring = false;
+    area.monitorable = false;
+    entityManager.AddComponentUVE<AreaComponentUVE>(source, area);
+    RayCast3DNodeComponentUVE ray;
+    ray.length = 42.0F;
+    ray.exclusions[0] = 7U;
+    ray.exclusionCount = 1U;
+    entityManager.AddComponentUVE<RayCast3DNodeComponentUVE>(source, ray);
+    entityManager.AddComponentUVE<AnimatableBody3DNodeComponentUVE>(
+        source, AnimatableBody3DNodeComponentUVE{Math::Vector3UVE{1.0F, 0.0F, 0.0F}, 0.75F, true});
+    NavigationRegion3DNodeComponentUVE navigationRegion;
+    navigationRegion.navigationMeshAssetPath = "navigation/courtyard.uvenav";
+    entityManager.AddComponentUVE<NavigationRegion3DNodeComponentUVE>(source, navigationRegion);
+    NavigationAgent3DNodeComponentUVE navigationAgent;
+    navigationAgent.targetPosition = Math::Vector3UVE{8.0F, 0.0F, -4.0F};
+    entityManager.AddComponentUVE<NavigationAgent3DNodeComponentUVE>(source, navigationAgent);
+    Skeleton3DNodeComponentUVE skeleton;
+    skeleton.bones.push_back(SkeletonBoneUVE{"root", -1, {}, {}, {1.0F, 1.0F, 1.0F}});
+    entityManager.AddComponentUVE<Skeleton3DNodeComponentUVE>(source, skeleton);
+    BoneAttachment3DNodeComponentUVE attachment;
+    attachment.boneName = "root";
+    entityManager.AddComponentUVE<BoneAttachment3DNodeComponentUVE>(source, attachment);
+    SpringArm3DNodeComponentUVE springArm;
+    springArm.armLength = 6.0F;
+    springArm.currentLength = 6.0F;
+    entityManager.AddComponentUVE<SpringArm3DNodeComponentUVE>(source, springArm);
+    entityManager.AddComponentUVE<Marker3DNodeComponentUVE>(source, Marker3DNodeComponentUVE{});
+    Hitbox3DNodeComponentUVE hitbox;
+    hitbox.damageChannel = "melee";
+    entityManager.AddComponentUVE<Hitbox3DNodeComponentUVE>(source, hitbox);
+    Hurtbox3DNodeComponentUVE hurtbox;
+    hurtbox.damageChannel = "player";
+    entityManager.AddComponentUVE<Hurtbox3DNodeComponentUVE>(source, hurtbox);
+    Projectile3DNodeComponentUVE projectile;
+    projectile.velocity = Math::Vector3UVE{0.0F, 0.0F, 20.0F};
+    entityManager.AddComponentUVE<Projectile3DNodeComponentUVE>(source, projectile);
+    InteractionArea3DNodeComponentUVE interaction;
+    interaction.interactionTag = "door";
+    entityManager.AddComponentUVE<InteractionArea3DNodeComponentUVE>(source, interaction);
+    WorldEnvironment3DNodeComponentUVE environment;
+    environment.skyAssetPath = "environment/day.uesky";
+    environment.fogEnabled = true;
+    environment.fogDensity = 0.02F;
+    entityManager.AddComponentUVE<WorldEnvironment3DNodeComponentUVE>(source, environment);
+    ReflectionProbe3DNodeComponentUVE probe;
+    probe.updateMode = ReflectionProbeUpdateModeUVE::OnDemand;
+    entityManager.AddComponentUVE<ReflectionProbe3DNodeComponentUVE>(source, probe);
+    Decal3DNodeComponentUVE decal;
+    decal.materialAssetPath = "materials/warning.uemat";
+    entityManager.AddComponentUVE<Decal3DNodeComponentUVE>(source, decal);
+    entityManager.AddComponentUVE<LodGroup3DNodeComponentUVE>(source, LodGroup3DNodeComponentUVE{});
+    entityManager.AddComponentUVE<Occluder3DNodeComponentUVE>(source, Occluder3DNodeComponentUVE{});
+    entityManager.AddComponentUVE<VisibilityRegion3DNodeComponentUVE>(source, VisibilityRegion3DNodeComponentUVE{});
+    SpawnPoint3DNodeComponentUVE spawn;
+    spawn.spawnTag = "player_start";
+    entityManager.AddComponentUVE<SpawnPoint3DNodeComponentUVE>(source, spawn);
+    LevelStreamer3DNodeComponentUVE streamer;
+    streamer.levelPath = "levels/courtyard.uvescene";
+    streamer.enabled = true;
+    entityManager.AddComponentUVE<LevelStreamer3DNodeComponentUVE>(source, streamer);
+    entityManager.AddComponentUVE<WorldPartition3DNodeComponentUVE>(source, WorldPartition3DNodeComponentUVE{});
+
     const std::optional<SceneSnapshotUVE> snapshot =
         serializer.CaptureUVE(entityManager, {source}, SceneAssetTypeUVE::Scene);
     ASSERT_TRUE(snapshot.has_value());
@@ -167,6 +231,33 @@ TEST_F(SceneSerializerUVETest, CaptureThenRestore_AllRegisteredComponentTypes_Ro
     EXPECT_EQ(entityManager.GetComponentUVE<ParticleEmitterComponentUVE>(restored).maxParticles, 128U);
     EXPECT_EQ(entityManager.GetComponentUVE<PrefabInstanceComponentUVE>(restored).sourcePrefabGuid,
               Asset::AssetGuidUVE{9001});
+    EXPECT_FALSE(entityManager.GetComponentUVE<AreaComponentUVE>(restored).monitoring);
+    EXPECT_FALSE(entityManager.GetComponentUVE<AreaComponentUVE>(restored).monitorable);
+    EXPECT_FLOAT_EQ(entityManager.GetComponentUVE<RayCast3DNodeComponentUVE>(restored).length, 42.0F);
+    EXPECT_EQ(entityManager.GetComponentUVE<RayCast3DNodeComponentUVE>(restored).exclusions[0], 7U);
+    EXPECT_EQ(entityManager.GetComponentUVE<NavigationRegion3DNodeComponentUVE>(restored).navigationMeshAssetPath,
+              "navigation/courtyard.uvenav");
+    EXPECT_EQ(entityManager.GetComponentUVE<Skeleton3DNodeComponentUVE>(restored).bones.size(), 1U);
+    EXPECT_EQ(entityManager.GetComponentUVE<Hitbox3DNodeComponentUVE>(restored).damageChannel, "melee");
+    EXPECT_EQ(entityManager.GetComponentUVE<InteractionArea3DNodeComponentUVE>(restored).interactionTag, "door");
+    EXPECT_EQ(entityManager.GetComponentUVE<WorldEnvironment3DNodeComponentUVE>(restored).skyAssetPath,
+              "environment/day.uesky");
+    EXPECT_EQ(entityManager.GetComponentUVE<Decal3DNodeComponentUVE>(restored).materialAssetPath,
+              "materials/warning.uemat");
+    EXPECT_EQ(entityManager.GetComponentUVE<SpawnPoint3DNodeComponentUVE>(restored).spawnTag, "player_start");
+    EXPECT_TRUE(entityManager.GetComponentUVE<LevelStreamer3DNodeComponentUVE>(restored).enabled);
+    EXPECT_TRUE(entityManager.HasComponentUVE<AnimatableBody3DNodeComponentUVE>(restored));
+    EXPECT_TRUE(entityManager.HasComponentUVE<NavigationAgent3DNodeComponentUVE>(restored));
+    EXPECT_TRUE(entityManager.HasComponentUVE<BoneAttachment3DNodeComponentUVE>(restored));
+    EXPECT_TRUE(entityManager.HasComponentUVE<SpringArm3DNodeComponentUVE>(restored));
+    EXPECT_TRUE(entityManager.HasComponentUVE<Marker3DNodeComponentUVE>(restored));
+    EXPECT_TRUE(entityManager.HasComponentUVE<Hurtbox3DNodeComponentUVE>(restored));
+    EXPECT_TRUE(entityManager.HasComponentUVE<Projectile3DNodeComponentUVE>(restored));
+    EXPECT_TRUE(entityManager.HasComponentUVE<ReflectionProbe3DNodeComponentUVE>(restored));
+    EXPECT_TRUE(entityManager.HasComponentUVE<LodGroup3DNodeComponentUVE>(restored));
+    EXPECT_TRUE(entityManager.HasComponentUVE<Occluder3DNodeComponentUVE>(restored));
+    EXPECT_TRUE(entityManager.HasComponentUVE<VisibilityRegion3DNodeComponentUVE>(restored));
+    EXPECT_TRUE(entityManager.HasComponentUVE<WorldPartition3DNodeComponentUVE>(restored));
     EXPECT_TRUE(entityManager.HasComponentUVE<WorldTransformComponentUVE>(restored));
 }
 

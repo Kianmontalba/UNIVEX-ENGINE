@@ -14,8 +14,10 @@ namespace UVE::Scene {
 /// intentionally an axis-aligned box for this increment; shape breadth is a separate contract.
 struct AreaComponentUVE final {
     Math::Vector3UVE halfExtents{0.5F, 0.5F, 0.5F};
-    std::uint32_t collisionLayer = 1U;
+    std::uint32_t collisionLayer = 1;
     std::uint32_t collisionMask = 0xFFFFFFFFU;
+    bool monitoring = true;
+    bool monitorable = true;
 };
 
 [[nodiscard]] inline bool IsAreaComponentValidUVE(const AreaComponentUVE& area) noexcept {

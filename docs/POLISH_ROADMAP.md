@@ -48,7 +48,17 @@ The TypeScript/HTML/CSS layer is a planned Polish implementation boundary. It mu
 | **9** | **Compatibility, Soak, and Production Hardening** | Long-run stability, migration safety, corrupted-content recovery, deterministic validation, sanitizer coverage, and production resilience. | 1–8 |
 | **10** | **Super-Optimized Polish** | End-to-end optimization and refinement across startup, viewport quality, editor interaction, memory, frame pacing, diagnostics, and validated production budgets. | 1–9 |
 
-## 3. Detailed increments
+## 3. Current execution status
+
+### Increment 667 — Production 3D Node Expansion
+
+The owner-requested 3D node expansion is complete at its supported boundary. The increment adds 23 UVE-native node façades, stable registry descriptors, validated bounded component contracts, canonical scene JSON persistence, centralized editor creation, and Area3D monitoring/monitorable behavior through the existing overlap authority. It also hardens new scene references by using portable local-reference tokens instead of serializing process-local entity generations.
+
+The increment does not claim unavailable navigation, skeleton skinning, decal/reflection capture, occlusion, world streaming, or platform backends. Those remain explicit future service-consumer boundaries. It does not generate executables, installers, platform packages, or other release binaries.
+
+**Evidence recorded:** full native CTest, focused contract/registry/serializer/editor/overlap tests, strict native build, managed editor-host tests, editor-host probe, software-GL headless smoke, generated contract inventory check, and final diff review. The next independent visible target remains **Polish 1 — Viewport Daylight Foundation**.
+
+## 4. Detailed increments
 
 ### Polish 1 — Viewport Daylight Foundation
 
