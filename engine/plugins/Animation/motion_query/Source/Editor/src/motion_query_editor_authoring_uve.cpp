@@ -21,6 +21,10 @@ namespace {
     }
     return lhs.generation < rhs.generation;
 }
+
+[[nodiscard]] bool IsValidResourceHandleUVE(const UVE::Asset::ResourceHandleUVE resource) noexcept {
+    return resource.guid.value != 0U && resource.generation != 0U;
+}
 } // namespace
 
 bool IsValidMotionQueryEditorDisplayNameUVE(const std::string_view displayName) noexcept {
@@ -63,6 +67,69 @@ MotionQueryEditorUtilityValidationResultUVE ValidateMotionQueryEditorCandidateId
     }
     return MotionQueryEditorUtilityValidationResultUVE{
         MotionQueryEditorUtilityValidationCodeUVE::Valid, 0U, "valid"};
+}
+
+MotionQueryEditorUtilityValidationResultUVE ValidateMotionQueryEditorDatabaseEntryUVE(
+    const MotionQueryEditorDatabaseEntryUVE& entry) noexcept {
+    if (!IsValidResourceHandleUVE(entry.resource)) {
+        return MotionQueryEditorUtilityValidationResultUVE{
+            MotionQueryEditorUtilityValidationCodeUVE::InvalidResource, 0U,
+            "motion query editor database resource handle is invalid"};
+    }
+    if (!IsValidMotionQueryEditorDisplayNameUVE(entry.displayName)) {
+        return MotionQueryEditorUtilityValidationResultUVE{
+            MotionQueryEditorUtilityValidationCodeUVE::InvalidDisplayName, 0U,
+            "motion query editor database display name is empty or too long"};
+    }
+    const MotionQueryEditorUtilityValidationResultUVE candidateValidation =
+        ValidateMotionQueryEditorCandidateIdentifiersUVE(entry.contract.database.candidates);
+    if (!candidateValidation.IsValidUVE()) {
+        return candidateValidation;
+    }
+    if (!UVE::Core::ValidateMotionQueryDatabaseContractUVE(entry.contract).IsValidUVE()) {
+        return MotionQueryEditorUtilityValidationResultUVE{
+            MotionQueryEditorUtilityValidationCodeUVE::InvalidDatabaseContract, 0U,
+            "motion query editor database contract is invalid"};
+    }
+    return MotionQueryEditorUtilityValidationResultUVE{
+        MotionQueryEditorUtilityValidationCodeUVE::Valid, 0U, "valid"};
+}
+
+MotionQueryEditorDatabaseFactoryResultUVE CreateMotionQueryEditorDatabaseEntryUVE(
+    const UVE::Asset::ResourceHandleUVE resource, const std::string_view displayName,
+    UVE::Core::MotionQueryDatabaseContractUVE contract) {
+    MotionQueryEditorDatabaseFactoryResultUVE result;
+    result.entry.resource = resource;
+    result.entry.displayName = displayName;
+    result.entry.contract = std::move(contract);
+    result.validation = ValidateMotionQueryEditorDatabaseEntryUVE(result.entry);
+    return result;
+}
+
+const std::vector<MotionQueryEditorPropertyMetadataUVE>&
+GetMotionQueryEditorPropertyMetadataUVE() noexcept {
+    static const std::vector<MotionQueryEditorPropertyMetadataUVE> metadata = {
+        {"display_name", "Display Name", MotionQueryEditorPropertyTypeUVE::String, true, true, 0U,
+         kMotionQueryEditorMaximumDisplayNameBytesUVE},
+        {"database_id", "Database ID", MotionQueryEditorPropertyTypeUVE::String, false, true, 0U,
+         UVE::Core::MotionMatchingCandidateUVE::kMaximumIdentifierBytesUVE},
+        {"generation", "Generation", MotionQueryEditorPropertyTypeUVE::UnsignedInteger, false, true,
+         1U, 0U},
+        {"schema_id", "Schema ID", MotionQueryEditorPropertyTypeUVE::String, true, true, 0U,
+         UVE::Core::MotionMatchingCandidateUVE::kMaximumIdentifierBytesUVE},
+        {"schema_version", "Schema Version", MotionQueryEditorPropertyTypeUVE::UnsignedInteger, false,
+         true, 1U, 0U},
+        {"trajectory_offsets", "Trajectory Offsets", MotionQueryEditorPropertyTypeUVE::TrajectoryOffsets,
+         false, true, UVE::Core::MotionQueryUVE::kMaximumTrajectorySamplesUVE, 0U},
+        {"feature_channels", "Feature Channels", MotionQueryEditorPropertyTypeUVE::FeatureChannels,
+         false, true, UVE::Core::kMaximumMotionQueryFeatureChannelsUVE, 0U},
+        {"maximum_candidates", "Maximum Candidates", MotionQueryEditorPropertyTypeUVE::UnsignedInteger,
+         true, true, UVE::Core::MotionMatchingDatabaseUVE::kMaximumCandidatesUVE, 0U},
+        {"candidate_count", "Candidate Count", MotionQueryEditorPropertyTypeUVE::CandidateArray, false,
+         false, UVE::Core::MotionMatchingDatabaseUVE::kMaximumCandidatesUVE, 0U},
+        {"dirty", "Dirty", MotionQueryEditorPropertyTypeUVE::Boolean, false, false, 1U, 0U},
+    };
+    return metadata;
 }
 
 const std::vector<MotionQueryEditorCommandMetadataUVE>&
@@ -147,22 +214,15 @@ MotionQueryEditorResponseUVE MotionQueryEditorAuthoringSessionUVE::DispatchUVE(
     }
 
     if (command.kind == MotionQueryEditorCommandKindUVE::RegisterDatabase) {
-        if (!command.database.has_value() || !IsValidResourceUVE(command.database->resource) ||
-            !IsValidMotionQueryEditorDisplayNameUVE(command.database->displayName)) {
+        if (!command.database.has_value()) {
             return MakeResponseUVE(command, false, MotionQueryEditorResponseCodeUVE::InvalidDatabase,
-                                   "motion query editor database descriptor is invalid");
+                                   "motion query editor database descriptor is missing");
         }
-        const MotionQueryEditorUtilityValidationResultUVE candidateValidation =
-            ValidateMotionQueryEditorCandidateIdentifiersUVE(command.database->contract.database.candidates);
-        if (!candidateValidation.IsValidUVE()) {
+        const MotionQueryEditorUtilityValidationResultUVE entryValidation =
+            ValidateMotionQueryEditorDatabaseEntryUVE(*command.database);
+        if (!entryValidation.IsValidUVE()) {
             return MakeResponseUVE(command, false, MotionQueryEditorResponseCodeUVE::InvalidDatabase,
-                                   candidateValidation.message);
-        }
-        const UVE::Core::MotionQueryDatabaseContractResultUVE validation =
-            UVE::Core::ValidateMotionQueryDatabaseContractUVE(command.database->contract);
-        if (!validation.IsValidUVE()) {
-            return MakeResponseUVE(command, false, MotionQueryEditorResponseCodeUVE::InvalidDatabase,
-                                   validation.message);
+                                   entryValidation.message);
         }
         if (databases_.size() >= kMotionQueryEditorMaximumDatabasesUVE) {
             return MakeResponseUVE(command, false, MotionQueryEditorResponseCodeUVE::InvalidDatabase,
@@ -438,6 +498,7 @@ MotionQueryEditorSnapshotUVE MotionQueryEditorAuthoringSessionUVE::GetSnapshotUV
     snapshot.revision = revision_;
     snapshot.selectedResource = selectedResource_;
     snapshot.commandMetadata = GetMotionQueryEditorCommandMetadataUVE();
+    snapshot.propertyMetadata = GetMotionQueryEditorPropertyMetadataUVE();
     snapshot.clipboardAvailable = clipboard_.has_value();
     snapshot.canUndo = !undoHistory_.empty();
     snapshot.canRedo = !redoHistory_.empty();
@@ -496,7 +557,7 @@ const MotionQueryEditorDatabaseEntryUVE* MotionQueryEditorAuthoringSessionUVE::F
 
 bool MotionQueryEditorAuthoringSessionUVE::IsValidResourceUVE(
     const UVE::Asset::ResourceHandleUVE resource) noexcept {
-    return resource.guid.value != 0U && resource.generation != 0U;
+    return IsValidResourceHandleUVE(resource);
 }
 
 MotionQueryEditorDatabaseRowUVE MotionQueryEditorAuthoringSessionUVE::BuildRowUVE(

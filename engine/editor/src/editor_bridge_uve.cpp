@@ -1231,6 +1231,7 @@ EditorBridgeMotionQuerySnapshotUVE EditorBridgeUVE::CaptureMotionQueryUVE() cons
                 metadata.requiresPayload,
                 metadata.supportsUndo});
     }
+    snapshot.authoring.propertyMetadata = authoring.propertyMetadata;
     for (const auto& row : authoring.databases) {
         if (snapshot.authoring.databases.size() >= kEditorBridgeMaximumPanelEntriesUVE) {
             break;

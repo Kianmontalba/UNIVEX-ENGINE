@@ -62,6 +62,9 @@ enum class MotionQueryEditorUtilityValidationCodeUVE : std::uint8_t {
     Valid = 0,
     InvalidCandidateIdentifier,
     DuplicateCandidateIdentifier,
+    InvalidResource,
+    InvalidDisplayName,
+    InvalidDatabaseContract,
 };
 
 struct MotionQueryEditorUtilityValidationResultUVE final {
@@ -82,6 +85,47 @@ struct MotionQueryEditorUtilityValidationResultUVE final {
 [[nodiscard]] MotionQueryEditorUtilityValidationResultUVE
 ValidateMotionQueryEditorCandidateIdentifiersUVE(
     const std::vector<UVE::Core::MotionMatchingCandidateUVE>& candidates) noexcept;
+
+[[nodiscard]] MotionQueryEditorUtilityValidationResultUVE
+ValidateMotionQueryEditorDatabaseEntryUVE(
+    const MotionQueryEditorDatabaseEntryUVE& entry) noexcept;
+
+struct MotionQueryEditorDatabaseFactoryResultUVE final {
+    MotionQueryEditorDatabaseEntryUVE entry;
+    MotionQueryEditorUtilityValidationResultUVE validation;
+
+    [[nodiscard]] bool IsCreatedUVE() const noexcept {
+        return validation.IsValidUVE();
+    }
+};
+
+[[nodiscard]] MotionQueryEditorDatabaseFactoryResultUVE CreateMotionQueryEditorDatabaseEntryUVE(
+    UVE::Asset::ResourceHandleUVE resource, std::string_view displayName,
+    UVE::Core::MotionQueryDatabaseContractUVE contract);
+
+enum class MotionQueryEditorPropertyTypeUVE : std::uint8_t {
+    String = 0,
+    UnsignedInteger,
+    Boolean,
+    TrajectoryOffsets,
+    FeatureChannels,
+    CandidateArray,
+};
+
+struct MotionQueryEditorPropertyMetadataUVE final {
+    std::string id;
+    std::string label;
+    MotionQueryEditorPropertyTypeUVE type = MotionQueryEditorPropertyTypeUVE::String;
+    bool editable = false;
+    bool required = false;
+    std::size_t maximumItems = 0U;
+    std::size_t maximumBytes = 0U;
+
+    [[nodiscard]] bool operator==(const MotionQueryEditorPropertyMetadataUVE&) const = default;
+};
+
+[[nodiscard]] const std::vector<MotionQueryEditorPropertyMetadataUVE>&
+GetMotionQueryEditorPropertyMetadataUVE() noexcept;
 
 struct MotionQueryEditorCommandMetadataUVE final {
     MotionQueryEditorCommandKindUVE kind = MotionQueryEditorCommandKindUVE::ReadSnapshot;
@@ -135,6 +179,7 @@ struct MotionQueryEditorSnapshotUVE final {
     std::optional<UVE::Asset::ResourceHandleUVE> selectedResource;
     std::vector<MotionQueryEditorDatabaseRowUVE> databases;
     std::vector<MotionQueryEditorCommandMetadataUVE> commandMetadata;
+    std::vector<MotionQueryEditorPropertyMetadataUVE> propertyMetadata;
     bool clipboardAvailable = false;
     bool canUndo = false;
     bool canRedo = false;

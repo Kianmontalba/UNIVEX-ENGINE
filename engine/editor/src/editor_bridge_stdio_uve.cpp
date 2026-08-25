@@ -466,6 +466,17 @@ enum class FrameReadResultUVE : std::uint8_t {
                    {"supportsUndo", metadata.supportsUndo}};
 }
 
+[[nodiscard]] JsonUVE ToJsonUVE(
+    const Plugins::Editor::MotionQueryEditorPropertyMetadataUVE& metadata) {
+    return JsonUVE{{"id", metadata.id},
+                   {"label", metadata.label},
+                   {"type", static_cast<std::uint8_t>(metadata.type)},
+                   {"editable", metadata.editable},
+                   {"required", metadata.required},
+                   {"maximumItems", metadata.maximumItems},
+                   {"maximumBytes", metadata.maximumBytes}};
+}
+
 [[nodiscard]] JsonUVE ToJsonUVE(const EditorBridgeMotionQueryAuthoringSnapshotUVE& snapshot) {
     JsonUVE databases = JsonUVE::array();
     for (const auto& row : snapshot.databases) {
@@ -475,12 +486,17 @@ enum class FrameReadResultUVE : std::uint8_t {
     for (const auto& metadata : snapshot.commandMetadata) {
         commandMetadata.push_back(ToJsonUVE(metadata));
     }
+    JsonUVE propertyMetadata = JsonUVE::array();
+    for (const auto& metadata : snapshot.propertyMetadata) {
+        propertyMetadata.push_back(ToJsonUVE(metadata));
+    }
     return JsonUVE{{"revision", snapshot.revision},
                    {"selectedResource", snapshot.selectedResource.has_value()
                                             ? ToJsonUVE(*snapshot.selectedResource)
                                             : JsonUVE(nullptr)},
                    {"databases", std::move(databases)},
                    {"commandMetadata", std::move(commandMetadata)},
+                   {"propertyMetadata", std::move(propertyMetadata)},
                    {"clipboardAvailable", snapshot.clipboardAvailable},
                    {"canUndo", snapshot.canUndo},
                    {"canRedo", snapshot.canRedo},

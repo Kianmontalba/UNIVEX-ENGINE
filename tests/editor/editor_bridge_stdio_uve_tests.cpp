@@ -531,5 +531,37 @@ TEST(EditorBridgeStdioUVETest, ServeUVE_LoadsAndClearsNamedReplayBaselineThrough
     engine.Shutdown();
 }
 
+TEST(EditorBridgeStdioUVETest, ServeUVE_ExposesMotionQueryPropertyMetadataInSnapshot) {
+    Core::EngineCoreUVE engine(MakeBridgeStdioTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_bridge_stdio_motion_query_metadata.uvescene");
+        editor.InitUVE();
+        EditorBridgeUVE bridge(editor);
+        EditorBridgeStdioServerUVE server(bridge);
+        std::stringstream input;
+        std::stringstream output;
+        std::stringstream diagnostics;
+        AppendFrameUVE(input, JsonUVE{{"jsonrpc", "2.0"},
+                                      {"id", 1U},
+                                      {"method", "bridge.hello"},
+                                      {"params", {{"protocolVersion", kEditorBridgeProtocolVersionUVE}}}});
+        EXPECT_EQ(server.ServeUVE(input, output, diagnostics), 0);
+        EXPECT_TRUE(diagnostics.str().empty());
+        const std::vector<JsonUVE> frames = ReadFramesUVE(output);
+        ASSERT_EQ(frames.size(), 1U);
+        const JsonUVE& properties = frames.front().at("result").at("snapshot")
+                                        .at("motionQuery").at("authoring").at("propertyMetadata");
+        ASSERT_EQ(properties.size(), 10U);
+        EXPECT_EQ(properties.front().at("id").get<std::string>(), "display_name");
+        EXPECT_TRUE(properties.front().at("editable").get<bool>());
+        EXPECT_EQ(properties.at(7U).at("id").get<std::string>(), "maximum_candidates");
+        EXPECT_TRUE(properties.at(7U).at("editable").get<bool>());
+        editor.ShutdownUVE();
+    }
+    engine.Shutdown();
+}
+
 } // namespace
 } // namespace UVE::Editor::Tests

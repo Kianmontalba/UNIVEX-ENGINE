@@ -65,6 +65,51 @@ TEST(MotionQueryEditorAuthoringUVETest, RegisterUVE_ProducesValidCopiedSortedSna
     EXPECT_EQ(response.snapshot.revision, 2U);
 }
 
+TEST(MotionQueryEditorAuthoringUVETest, EditorUtilsUVE_ProvidesPropertyMetadataAndFactoryValidation) {
+    const auto& metadata = GetMotionQueryEditorPropertyMetadataUVE();
+    ASSERT_EQ(metadata.size(), 10U);
+    EXPECT_EQ(metadata.front().id, "display_name");
+    EXPECT_EQ(metadata.front().type, MotionQueryEditorPropertyTypeUVE::String);
+    EXPECT_TRUE(metadata.front().editable);
+    EXPECT_TRUE(metadata.front().required);
+    EXPECT_EQ(metadata.front().maximumBytes, kMotionQueryEditorMaximumDisplayNameBytesUVE);
+    EXPECT_EQ(metadata[1].id, "database_id");
+    EXPECT_FALSE(metadata[1].editable);
+    EXPECT_EQ(metadata[2].id, "generation");
+    EXPECT_EQ(metadata[3].id, "schema_id");
+    EXPECT_TRUE(metadata[3].editable);
+    EXPECT_EQ(metadata[4].id, "schema_version");
+    EXPECT_EQ(metadata[5].id, "trajectory_offsets");
+    EXPECT_EQ(metadata[6].id, "feature_channels");
+    EXPECT_EQ(metadata[7].id, "maximum_candidates");
+    EXPECT_TRUE(metadata[7].editable);
+    EXPECT_EQ(metadata[8].id, "candidate_count");
+    EXPECT_EQ(metadata[9].id, "dirty");
+
+    const MotionQueryEditorDatabaseFactoryResultUVE created = CreateMotionQueryEditorDatabaseEntryUVE(
+        MakeResourceUVE(9U), "Factory Database", MakeContractUVE("factory-db"));
+    ASSERT_TRUE(created.IsCreatedUVE()) << created.validation.message;
+    EXPECT_EQ(created.entry.resource, MakeResourceUVE(9U));
+    EXPECT_EQ(created.entry.displayName, "Factory Database");
+    EXPECT_EQ(created.entry.contract.context.databaseId, "factory-db");
+
+    const MotionQueryEditorDatabaseFactoryResultUVE invalidResource =
+        CreateMotionQueryEditorDatabaseEntryUVE(MakeResourceUVE(0U), "Factory Database",
+                                                MakeContractUVE("factory-db"));
+    EXPECT_FALSE(invalidResource.IsCreatedUVE());
+    EXPECT_EQ(invalidResource.validation.code,
+              MotionQueryEditorUtilityValidationCodeUVE::InvalidResource);
+
+    MotionQueryEditorDatabaseEntryUVE invalidEntry;
+    invalidEntry.resource = MakeResourceUVE(9U);
+    invalidEntry.displayName = "Factory Database";
+    invalidEntry.contract = MakeContractUVE("factory-db");
+    invalidEntry.contract.database.candidates.clear();
+    const auto invalidContract = ValidateMotionQueryEditorDatabaseEntryUVE(invalidEntry);
+    EXPECT_EQ(invalidContract.code,
+              MotionQueryEditorUtilityValidationCodeUVE::InvalidDatabaseContract);
+}
+
 TEST(MotionQueryEditorAuthoringUVETest, EditorUtilsUVE_ValidateNamesNormalizeSchemaIdsAndDetectCandidateDuplicates) {
     EXPECT_TRUE(IsValidMotionQueryEditorDisplayNameUVE("Main"));
     EXPECT_FALSE(IsValidMotionQueryEditorDisplayNameUVE(""));

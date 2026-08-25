@@ -865,6 +865,11 @@ TEST(EditorBridgeUVETest, MotionQueryUVE_ExposesCopiedSnapshotAndRevisionGuarded
         ASSERT_TRUE(replayLoadAdvertised);
         ASSERT_TRUE(replayClearAdvertised);
         ASSERT_EQ(initial.motionQuery.authoring.commandMetadata.size(), 14U);
+        ASSERT_EQ(initial.motionQuery.authoring.propertyMetadata.size(), 10U);
+        EXPECT_EQ(initial.motionQuery.authoring.propertyMetadata.front().id, "display_name");
+        EXPECT_TRUE(initial.motionQuery.authoring.propertyMetadata.front().editable);
+        EXPECT_EQ(initial.motionQuery.authoring.propertyMetadata[7].id, "maximum_candidates");
+        EXPECT_TRUE(initial.motionQuery.authoring.propertyMetadata[7].editable);
         EXPECT_EQ(initial.motionQuery.authoring.commandMetadata.front().name, "read snapshot");
         const auto& registerMetadata = initial.motionQuery.authoring.commandMetadata[1];
         EXPECT_EQ(registerMetadata.label, "Register Database");

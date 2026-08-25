@@ -121,16 +121,30 @@ MotionQueryDatabaseContractResultUVE AppendMotionQueryDatabaseEventUVE(
                                                 "valid"};
 }
 
+MotionQueryDatabaseFactoryResultUVE CreateMotionQueryDatabaseContractUVE(
+    MotionQueryDatabaseContextUVE context, MotionQueryDatabaseSchemaUVE schema,
+    MotionQueryDatabaseSettingsUVE settings, MotionMatchingDatabaseUVE database) {
+    MotionQueryDatabaseFactoryResultUVE result;
+    result.contract.context = std::move(context);
+    result.contract.schema = std::move(schema);
+    result.contract.settings = std::move(settings);
+    result.contract.database = std::move(database);
+    result.validation = ValidateMotionQueryDatabaseContractUVE(result.contract);
+    return result;
+}
+
 MotionQueryDatabaseFactoryResultUVE CreateDefaultMotionQueryDatabaseContractUVE(
     const std::string_view databaseId, const std::uint64_t generation,
     const std::string_view schemaId, const std::size_t maximumCandidates) {
-    MotionQueryDatabaseFactoryResultUVE result;
-    result.contract.context.databaseId = databaseId;
-    result.contract.context.generation = generation;
-    result.contract.schema.schemaId = schemaId;
-    result.contract.schema.trajectoryOffsets = {0.0, 0.25};
-    result.contract.schema.featureChannelIds = {"root_velocity"};
-    result.contract.settings.maximumCandidates = maximumCandidates;
+    MotionQueryDatabaseContextUVE context;
+    context.databaseId = databaseId;
+    context.generation = generation;
+    MotionQueryDatabaseSchemaUVE schema;
+    schema.schemaId = schemaId;
+    schema.trajectoryOffsets = {0.0, 0.25};
+    schema.featureChannelIds = {"root_velocity"};
+    MotionQueryDatabaseSettingsUVE settings;
+    settings.maximumCandidates = maximumCandidates;
 
     MotionMatchingCandidateUVE candidate;
     candidate.candidateId = "default-candidate-0";
@@ -142,9 +156,10 @@ MotionQueryDatabaseFactoryResultUVE CreateDefaultMotionQueryDatabaseContractUVE(
         MotionTrajectorySampleUVE{0.0, {0.0F, 0.0F, 0.0F}},
         MotionTrajectorySampleUVE{0.25, {0.25F, 0.0F, 0.0F}},
     };
-    result.contract.database.candidates.push_back(std::move(candidate));
-    result.validation = ValidateMotionQueryDatabaseContractUVE(result.contract);
-    return result;
+    MotionMatchingDatabaseUVE database;
+    database.candidates.push_back(std::move(candidate));
+    return CreateMotionQueryDatabaseContractUVE(
+        std::move(context), std::move(schema), std::move(settings), std::move(database));
 }
 
 } // namespace UVE::Core
