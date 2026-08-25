@@ -93,7 +93,7 @@ The supported Platform/release boundary is summarized above and remains distinct
 
 ## Polish mode — ten-level production roadmap
 
-The engine completion boundary is closed; the next execution track is the ten-level heavy Polish roadmap in [`docs/POLISH_ROADMAP.md`](POLISH_ROADMAP.md). Polish 1 begins with the missing default viewport day scene and deliberate empty-project state. Polish 10 is the Super-Optimized Polish level, gated by measured performance, visual regression, reliability, diagnostics, and full CI evidence. Polish levels are execution increments, not additional broad PARTIAL families, and remain subject to the same audit, integration, validation, signed-history, and review rules.
+The engine completion boundary is closed; the next execution track is the ten-level heavy Polish roadmap in [`docs/POLISH_ROADMAP.md`](POLISH_ROADMAP.md). Polish 1 begins with the missing default viewport day scene and deliberate empty-project state. Polish 10 is the Super-Optimized Polish level, gated by measured performance, visual regression, reliability, diagnostics, and full CI evidence. The planned Editor UX/UI, Visual Scripting nodes, and 3D-node surfaces will use TypeScript + HTML/CSS + JSON, while C++ remains the runtime authority behind bounded value-only bridge/DTO contracts. Polish levels are execution increments, not additional broad PARTIAL families, and remain subject to the same audit, integration, validation, signed-history, and review rules.
 
 ## Ecosystem — intentionally separate delivery track
 
