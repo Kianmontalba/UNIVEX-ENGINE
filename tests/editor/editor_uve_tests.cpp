@@ -101,6 +101,33 @@ struct EditorUVEAccessUVE final {
     [[nodiscard]] static bool IsScenePanelVisibleUVE(const EditorUVE& editor) noexcept { return editor.m_scenePanelVisible; }
     [[nodiscard]] static bool IsInspectorPanelVisibleUVE(const EditorUVE& editor) noexcept { return editor.m_inspectorPanelVisible; }
     [[nodiscard]] static bool IsBottomDockVisibleUVE(const EditorUVE& editor) noexcept { return editor.m_bottomDockVisible; }
+
+    [[nodiscard]] static bool ProjectWorldPointUVE(const EditorUVE& editor, const EditorViewportRectUVE& viewportRect,
+                                                   const Math::Vector3UVE& worldPoint,
+                                                   Math::Vector2UVE& outScreenPoint) {
+        return editor.ProjectWorldPointUVE(viewportRect, worldPoint, outScreenPoint);
+    }
+
+    [[nodiscard]] static bool GetGizmoAxisWorldVectorUVE(const EditorUVE& editor, const Scene::EntityUVE entity,
+                                                          const EditorTransformAxisUVE axis,
+                                                          Math::Vector3UVE& outAxis) {
+        return editor.GetGizmoAxisWorldVectorUVE(entity, axis, outAxis);
+    }
+
+    [[nodiscard]] static bool BeginGizmoDragUVE(EditorUVE& editor, const EditorViewportRectUVE& viewportRect,
+                                                 const Math::Vector2UVE pointerPosition) {
+        return editor.BeginGizmoDragUVE(viewportRect, pointerPosition);
+    }
+
+    static void UpdateGizmoDragUVE(EditorUVE& editor, const Math::Vector2UVE pointerPosition) {
+        editor.UpdateGizmoDragUVE(pointerPosition);
+    }
+
+    static void CommitGizmoDragUVE(EditorUVE& editor) { editor.CommitGizmoDragUVE(); }
+
+    [[nodiscard]] static EditorTransformAxisUVE GetGizmoDragAxisUVE(const EditorUVE& editor) noexcept {
+        return editor.m_gizmoDrag.axis;
+    }
 };
 
 namespace {
@@ -507,7 +534,7 @@ TEST(EditorUVETest, MultiSelectionUVE_ToggleMaintainsOrderActiveFallbackAndSingl
 
         const Scene::TransformComponentUVE before =
             entityManager.GetComponentUVE<Scene::TransformComponentUVE>(second);
-        EXPECT_FALSE(editor.TranslateSelectedAlongAxisUVE(EditorTranslateAxisUVE::X, 1.0F));
+        EXPECT_FALSE(editor.TranslateSelectedAlongAxisUVE(EditorTransformAxisUVE::X, 1.0F));
         EXPECT_FALSE(editor.DuplicateSelectedEntityUVE() != Scene::kInvalidEntityUVE);
         EXPECT_FALSE(editor.DeleteSelectedEntityUVE());
         EXPECT_EQ(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(second).localPosition,
@@ -1815,7 +1842,7 @@ TEST(EditorUVETest, TranslateSelectedAlongAxis_UpdatesLocalTransformAndConvertsP
         services.GetSceneGraphUVE().UpdateUVE(entityManager);
 
         editor.SelectEntityUVE(child);
-        EXPECT_TRUE(editor.TranslateSelectedAlongAxisUVE(EditorTranslateAxisUVE::X, 2.0F));
+        EXPECT_TRUE(editor.TranslateSelectedAlongAxisUVE(EditorTransformAxisUVE::X, 2.0F));
         const Scene::TransformComponentUVE& translated =
             entityManager.GetComponentUVE<Scene::TransformComponentUVE>(child);
         EXPECT_NEAR(translated.localPosition.x, 2.0F, 0.0001F);
@@ -1828,9 +1855,9 @@ TEST(EditorUVETest, TranslateSelectedAlongAxis_UpdatesLocalTransformAndConvertsP
         ASSERT_TRUE(editor.RedoUVE());
         EXPECT_NEAR(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(child).localPosition.x,
                     2.0F, 0.0001F);
-        EXPECT_FALSE(editor.TranslateSelectedAlongAxisUVE(EditorTranslateAxisUVE::None, 1.0F));
+        EXPECT_FALSE(editor.TranslateSelectedAlongAxisUVE(EditorTransformAxisUVE::None, 1.0F));
         EXPECT_FALSE(editor.TranslateSelectedAlongAxisUVE(
-            EditorTranslateAxisUVE::Y, std::numeric_limits<float>::infinity()));
+            EditorTransformAxisUVE::Y, std::numeric_limits<float>::infinity()));
 
         editor.ShutdownUVE();
     }
@@ -1858,7 +1885,7 @@ TEST(EditorUVETest, RotateSelectedAroundWorldAxis_RotatesRootPreservesOtherLocal
         EXPECT_EQ(editor.GetGizmoModeUVE(), EditorGizmoModeUVE::Translate);
         editor.SetGizmoModeUVE(EditorGizmoModeUVE::Rotate);
         EXPECT_EQ(editor.GetGizmoModeUVE(), EditorGizmoModeUVE::Rotate);
-        ASSERT_TRUE(editor.RotateSelectedAroundWorldAxisUVE(EditorTranslateAxisUVE::Z,
+        ASSERT_TRUE(editor.RotateSelectedAroundWorldAxisUVE(EditorTransformAxisUVE::Z,
                                                             std::numbers::pi_v<float> * 0.5F));
         const Scene::TransformComponentUVE& rotated =
             entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity);
@@ -1915,7 +1942,7 @@ TEST(EditorUVETest, RotateSelectedAroundWorldAxis_ConvertsParentWorldRotationToL
         services.GetSceneGraphUVE().UpdateUVE(entityManager);
 
         editor.SelectEntityUVE(child);
-        ASSERT_TRUE(editor.RotateSelectedAroundWorldAxisUVE(EditorTranslateAxisUVE::X,
+        ASSERT_TRUE(editor.RotateSelectedAroundWorldAxisUVE(EditorTransformAxisUVE::X,
                                                             std::numbers::pi_v<float> * 0.5F));
         services.GetSceneGraphUVE().UpdateUVE(entityManager);
 
@@ -1951,7 +1978,7 @@ TEST(EditorUVETest, RotateSelectedAroundWorldAxis_RejectsInvalidOrUnsafeStateWit
     {
         EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_rotate_safety.uvescene");
         editor.InitUVE();
-        EXPECT_FALSE(editor.RotateSelectedAroundWorldAxisUVE(EditorTranslateAxisUVE::Z, 1.0F));
+        EXPECT_FALSE(editor.RotateSelectedAroundWorldAxisUVE(EditorTransformAxisUVE::Z, 1.0F));
 
         Core::EngineServicesUVE& services = engine.GetServicesUVE();
         Scene::IEntityManagerUVE& entityManager = services.GetEntityManagerUVE();
@@ -1960,8 +1987,8 @@ TEST(EditorUVETest, RotateSelectedAroundWorldAxis_RejectsInvalidOrUnsafeStateWit
         editor.SelectEntityUVE(entity);
         const Scene::TransformComponentUVE before =
             entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity);
-        EXPECT_FALSE(editor.RotateSelectedAroundWorldAxisUVE(EditorTranslateAxisUVE::None, 1.0F));
-        EXPECT_FALSE(editor.RotateSelectedAroundWorldAxisUVE(EditorTranslateAxisUVE::Y,
+        EXPECT_FALSE(editor.RotateSelectedAroundWorldAxisUVE(EditorTransformAxisUVE::None, 1.0F));
+        EXPECT_FALSE(editor.RotateSelectedAroundWorldAxisUVE(EditorTransformAxisUVE::Y,
                                                              std::numeric_limits<float>::infinity()));
         EXPECT_EQ(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity).localRotation,
                   before.localRotation);
@@ -1970,6 +1997,198 @@ TEST(EditorUVETest, RotateSelectedAroundWorldAxis_RejectsInvalidOrUnsafeStateWit
         editor.ShutdownUVE();
     }
 
+    engine.Shutdown();
+}
+
+TEST(EditorUVETest, TransformGizmoSixDof_AppliesAllTranslationAndRotationAxesAsAtomicHistoryEntries) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_gizmo_six_dof.uvescene");
+        editor.InitUVE();
+        Core::EngineServicesUVE& services = engine.GetServicesUVE();
+        Scene::IEntityManagerUVE& entityManager = services.GetEntityManagerUVE();
+        const Scene::EntityUVE entity = entityManager.CreateEntityUVE();
+        Scene::TransformComponentUVE initial{};
+        initial.localPosition = Math::Vector3UVE{1.0F, 2.0F, 3.0F};
+        initial.localScale = Math::Vector3UVE{2.0F, 3.0F, 4.0F};
+        AttachRootUVE(engine, entity, initial);
+        editor.SelectEntityUVE(entity);
+
+        ASSERT_TRUE(editor.TranslateSelectedAlongAxisUVE(EditorTransformAxisUVE::X, 0.5F));
+        ASSERT_TRUE(editor.TranslateSelectedAlongAxisUVE(EditorTransformAxisUVE::Y, -0.25F));
+        ASSERT_TRUE(editor.TranslateSelectedAlongAxisUVE(EditorTransformAxisUVE::Z, 0.75F));
+        const Scene::TransformComponentUVE translated =
+            entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity);
+        EXPECT_NEAR(translated.localPosition.x, 1.5F, 0.0001F);
+        EXPECT_NEAR(translated.localPosition.y, 1.75F, 0.0001F);
+        EXPECT_NEAR(translated.localPosition.z, 3.75F, 0.0001F);
+        EXPECT_EQ(translated.localScale, initial.localScale);
+        EXPECT_EQ(translated.localRotation, initial.localRotation);
+
+        const auto quaternionChanged = [](const Math::QuaternionUVE& before,
+                                           const Math::QuaternionUVE& after) {
+            return std::abs(before.x - after.x) > 0.0001F || std::abs(before.y - after.y) > 0.0001F ||
+                   std::abs(before.z - after.z) > 0.0001F || std::abs(before.w - after.w) > 0.0001F;
+        };
+        const Math::QuaternionUVE rotationBefore = translated.localRotation;
+        const float angle = std::numbers::pi_v<float> * 0.25F;
+        ASSERT_TRUE(editor.RotateSelectedAroundWorldAxisUVE(EditorTransformAxisUVE::X, angle));
+        const Math::QuaternionUVE rotationAfterX =
+            entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity).localRotation;
+        EXPECT_TRUE(quaternionChanged(rotationBefore, rotationAfterX));
+        ASSERT_TRUE(editor.RotateSelectedAroundWorldAxisUVE(EditorTransformAxisUVE::Y, angle));
+        const Math::QuaternionUVE rotationAfterY =
+            entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity).localRotation;
+        EXPECT_TRUE(quaternionChanged(rotationAfterX, rotationAfterY));
+        ASSERT_TRUE(editor.RotateSelectedAroundWorldAxisUVE(EditorTransformAxisUVE::Z, angle));
+        const Math::QuaternionUVE rotationAfterZ =
+            entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity).localRotation;
+        EXPECT_TRUE(quaternionChanged(rotationAfterY, rotationAfterZ));
+
+        const Scene::TransformComponentUVE afterAllSix =
+            entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity);
+        EXPECT_EQ(afterAllSix.localPosition, translated.localPosition);
+        EXPECT_EQ(afterAllSix.localScale, initial.localScale);
+        EXPECT_EQ(editor.GetSelectedEntitiesUVE().size(), 1U);
+
+        ASSERT_TRUE(editor.UndoUVE());
+        ASSERT_TRUE(editor.UndoUVE());
+        ASSERT_TRUE(editor.UndoUVE());
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity).localRotation,
+                  rotationBefore);
+        ASSERT_TRUE(editor.RedoUVE());
+        ASSERT_TRUE(editor.RedoUVE());
+        ASSERT_TRUE(editor.RedoUVE());
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity).localRotation,
+                  rotationAfterZ);
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity).localPosition,
+                  translated.localPosition);
+
+        editor.ShutdownUVE();
+    }
+    engine.Shutdown();
+}
+
+TEST(EditorUVETest, GizmoDragSixDof_HitTestsAndCommitsEveryTranslationAndRotationAxis) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_gizmo_drag_six_dof.uvescene");
+        editor.InitUVE();
+        Core::EngineServicesUVE& services = engine.GetServicesUVE();
+        Scene::IEntityManagerUVE& entityManager = services.GetEntityManagerUVE();
+        const Scene::EntityUVE entity = entityManager.CreateEntityUVE();
+        AttachRootUVE(engine, entity, Scene::TransformComponentUVE{});
+        services.GetSceneGraphUVE().UpdateUVE(entityManager);
+        editor.SelectEntityUVE(entity);
+        ASSERT_TRUE(editor.OrbitViewportUVE(0.37F, 0.18F));
+        services.GetSceneGraphUVE().UpdateUVE(entityManager);
+        const EditorViewportRectUVE viewportRect{{0.0F, 0.0F}, {1024.0F, 768.0F}};
+        const std::array<EditorTransformAxisUVE, 3> axes{
+            EditorTransformAxisUVE::X, EditorTransformAxisUVE::Y, EditorTransformAxisUVE::Z};
+
+        for (const EditorTransformAxisUVE axis : axes) {
+            editor.SetGizmoModeUVE(EditorGizmoModeUVE::Translate);
+            const Scene::WorldTransformComponentUVE& world =
+                entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(entity);
+            Math::Vector2UVE center{};
+            Math::Vector3UVE worldAxis{};
+            ASSERT_TRUE(EditorUVEAccessUVE::ProjectWorldPointUVE(editor, viewportRect, world.worldPosition, center));
+            ASSERT_TRUE(EditorUVEAccessUVE::GetGizmoAxisWorldVectorUVE(editor, entity, axis, worldAxis));
+            Math::Vector2UVE endpoint{};
+            ASSERT_TRUE(EditorUVEAccessUVE::ProjectWorldPointUVE(
+                editor, viewportRect, world.worldPosition + worldAxis * 1.25F, endpoint));
+            ASSERT_TRUE(EditorUVEAccessUVE::BeginGizmoDragUVE(editor, viewportRect, endpoint))
+                << "axis=" << static_cast<int>(axis) << " center=(" << center.x << "," << center.y
+                << ") endpoint=(" << endpoint.x << "," << endpoint.y << ")";
+            EXPECT_EQ(EditorUVEAccessUVE::GetGizmoDragAxisUVE(editor), axis);
+            const Math::Vector2UVE screenDirection{endpoint.x - center.x, endpoint.y - center.y};
+            const float screenLength = std::sqrt((screenDirection.x * screenDirection.x) +
+                                                 (screenDirection.y * screenDirection.y));
+            ASSERT_GT(screenLength, 1.0F);
+            const Scene::TransformComponentUVE before =
+                entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity);
+            const Math::Vector2UVE movedPointer{
+                endpoint.x + (screenDirection.x * 10.0F / screenLength),
+                endpoint.y + (screenDirection.y * 10.0F / screenLength)};
+            EditorUVEAccessUVE::UpdateGizmoDragUVE(editor, movedPointer);
+            EditorUVEAccessUVE::CommitGizmoDragUVE(editor);
+            const Scene::TransformComponentUVE after =
+                entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity);
+            EXPECT_NE(after.localPosition, before.localPosition);
+            EXPECT_EQ(after.localRotation, before.localRotation);
+            EXPECT_EQ(after.localScale, before.localScale);
+            ASSERT_TRUE(editor.UndoUVE());
+            const Scene::TransformComponentUVE restored =
+                entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity);
+            EXPECT_EQ(restored.localPosition, before.localPosition);
+            EXPECT_EQ(restored.localRotation, before.localRotation);
+            EXPECT_EQ(restored.localScale, before.localScale);
+            services.GetSceneGraphUVE().UpdateUVE(entityManager);
+        }
+
+        const auto ringBasis = [](const EditorTransformAxisUVE axis) {
+            switch (axis) {
+                case EditorTransformAxisUVE::X:
+                    return std::array<Math::Vector3UVE, 2>{Math::Vector3UVE{0.0F, 1.0F, 0.0F},
+                                                           Math::Vector3UVE{0.0F, 0.0F, 1.0F}};
+                case EditorTransformAxisUVE::Y:
+                    return std::array<Math::Vector3UVE, 2>{Math::Vector3UVE{1.0F, 0.0F, 0.0F},
+                                                           Math::Vector3UVE{0.0F, 0.0F, 1.0F}};
+                case EditorTransformAxisUVE::Z:
+                    return std::array<Math::Vector3UVE, 2>{Math::Vector3UVE{1.0F, 0.0F, 0.0F},
+                                                           Math::Vector3UVE{0.0F, 1.0F, 0.0F}};
+                case EditorTransformAxisUVE::None:
+                    return std::array<Math::Vector3UVE, 2>{Math::Vector3UVE{}, Math::Vector3UVE{}};
+            }
+            return std::array<Math::Vector3UVE, 2>{Math::Vector3UVE{}, Math::Vector3UVE{}};
+        };
+        const auto quaternionChanged = [](const Math::QuaternionUVE& before,
+                                           const Math::QuaternionUVE& after) {
+            return std::abs(before.x - after.x) > 0.0001F || std::abs(before.y - after.y) > 0.0001F ||
+                   std::abs(before.z - after.z) > 0.0001F || std::abs(before.w - after.w) > 0.0001F;
+        };
+        for (const EditorTransformAxisUVE axis : axes) {
+            editor.SetGizmoModeUVE(EditorGizmoModeUVE::Rotate);
+            const Scene::WorldTransformComponentUVE& world =
+                entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(entity);
+            Math::Vector2UVE center{};
+            ASSERT_TRUE(EditorUVEAccessUVE::ProjectWorldPointUVE(editor, viewportRect, world.worldPosition, center));
+            const auto basis = ringBasis(axis);
+            const float startTurn = 0.37F;
+            Math::Vector2UVE ringStart{};
+            ASSERT_TRUE(EditorUVEAccessUVE::ProjectWorldPointUVE(
+                editor, viewportRect,
+                world.worldPosition + (basis[0] * (std::cos(startTurn) * 1.25F)) +
+                    (basis[1] * (std::sin(startTurn) * 1.25F)),
+                ringStart));
+            ASSERT_TRUE(EditorUVEAccessUVE::BeginGizmoDragUVE(editor, viewportRect, ringStart));
+            EXPECT_EQ(EditorUVEAccessUVE::GetGizmoDragAxisUVE(editor), axis);
+            const float turn = startTurn + 0.5F;
+            const Math::Vector3UVE ringTarget =
+                world.worldPosition + (basis[0] * (std::cos(turn) * 1.25F)) +
+                (basis[1] * (std::sin(turn) * 1.25F));
+            Math::Vector2UVE targetPointer{};
+            ASSERT_TRUE(EditorUVEAccessUVE::ProjectWorldPointUVE(editor, viewportRect, ringTarget, targetPointer));
+            const Math::QuaternionUVE before =
+                entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity).localRotation;
+            EditorUVEAccessUVE::UpdateGizmoDragUVE(editor, targetPointer);
+            EditorUVEAccessUVE::CommitGizmoDragUVE(editor);
+            const Math::QuaternionUVE after =
+                entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity).localRotation;
+            EXPECT_TRUE(quaternionChanged(before, after));
+            ASSERT_TRUE(editor.UndoUVE());
+            EXPECT_EQ(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity).localRotation, before);
+            services.GetSceneGraphUVE().UpdateUVE(entityManager);
+        }
+
+        editor.ShutdownUVE();
+    }
     engine.Shutdown();
 }
 
@@ -1997,7 +2216,7 @@ TEST(EditorUVETest, ScaleSelectedAlongAxis_UpdatesOnlyPositiveLocalScaleAndRepla
         EXPECT_EQ(editor.GetGizmoModeUVE(), EditorGizmoModeUVE::Translate);
         editor.SetGizmoModeUVE(EditorGizmoModeUVE::Scale);
         EXPECT_EQ(editor.GetGizmoModeUVE(), EditorGizmoModeUVE::Scale);
-        ASSERT_TRUE(editor.ScaleSelectedAlongAxisUVE(EditorTranslateAxisUVE::Y, 1.5F));
+        ASSERT_TRUE(editor.ScaleSelectedAlongAxisUVE(EditorTransformAxisUVE::Y, 1.5F));
         const Scene::TransformComponentUVE& scaled =
             entityManager.GetComponentUVE<Scene::TransformComponentUVE>(child);
         EXPECT_EQ(scaled.localPosition, initial.localPosition);
@@ -2026,15 +2245,15 @@ TEST(EditorUVETest, ScaleSelectedAlongAxis_RejectsUnsafeInputWithoutMutation) {
     {
         EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_scale_safety.uvescene");
         editor.InitUVE();
-        EXPECT_FALSE(editor.ScaleSelectedAlongAxisUVE(EditorTranslateAxisUVE::X, 1.0F));
+        EXPECT_FALSE(editor.ScaleSelectedAlongAxisUVE(EditorTransformAxisUVE::X, 1.0F));
         Scene::IEntityManagerUVE& entityManager = engine.GetServicesUVE().GetEntityManagerUVE();
         const Scene::EntityUVE entity = entityManager.CreateEntityUVE();
         AttachRootUVE(engine, entity, Scene::TransformComponentUVE{});
         editor.SelectEntityUVE(entity);
         const Scene::TransformComponentUVE before = entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity);
-        EXPECT_FALSE(editor.ScaleSelectedAlongAxisUVE(EditorTranslateAxisUVE::None, 1.0F));
-        EXPECT_FALSE(editor.ScaleSelectedAlongAxisUVE(EditorTranslateAxisUVE::X, -1.0F));
-        EXPECT_FALSE(editor.ScaleSelectedAlongAxisUVE(EditorTranslateAxisUVE::Z,
+        EXPECT_FALSE(editor.ScaleSelectedAlongAxisUVE(EditorTransformAxisUVE::None, 1.0F));
+        EXPECT_FALSE(editor.ScaleSelectedAlongAxisUVE(EditorTransformAxisUVE::X, -1.0F));
+        EXPECT_FALSE(editor.ScaleSelectedAlongAxisUVE(EditorTransformAxisUVE::Z,
                                                        std::numeric_limits<float>::infinity()));
         EXPECT_EQ(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity).localScale,
                   before.localScale);
@@ -2276,26 +2495,26 @@ TEST(EditorUVETest, TransformSnapping_QuantizesCommandsWithoutHistoryDriftAndRep
 
         ASSERT_TRUE(editor.SetTransformSnappingSettingsUVE(
             EditorTransformSnappingSettingsUVE{true, 0.5F, 15.0F, 0.25F}));
-        EXPECT_FALSE(editor.TranslateSelectedAlongAxisUVE(EditorTranslateAxisUVE::X, 0.1F));
+        EXPECT_FALSE(editor.TranslateSelectedAlongAxisUVE(EditorTransformAxisUVE::X, 0.1F));
         EXPECT_FALSE(editor.IsSceneDirtyUVE());
         EXPECT_FALSE(editor.CanUndoUVE());
 
-        ASSERT_TRUE(editor.TranslateSelectedAlongAxisUVE(EditorTranslateAxisUVE::X, 0.74F));
+        ASSERT_TRUE(editor.TranslateSelectedAlongAxisUVE(EditorTransformAxisUVE::X, 0.74F));
         EXPECT_NEAR(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity).localPosition.x,
                     1.5F, 0.0001F);
-        ASSERT_TRUE(editor.TranslateSelectedAlongAxisUVE(EditorTranslateAxisUVE::X, -0.74F));
+        ASSERT_TRUE(editor.TranslateSelectedAlongAxisUVE(EditorTransformAxisUVE::X, -0.74F));
         EXPECT_NEAR(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity).localPosition.x,
                     initial.localPosition.x, 0.0001F);
 
-        ASSERT_TRUE(editor.ScaleSelectedAlongAxisUVE(EditorTranslateAxisUVE::X, 0.37F));
+        ASSERT_TRUE(editor.ScaleSelectedAlongAxisUVE(EditorTransformAxisUVE::X, 0.37F));
         EXPECT_NEAR(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity).localScale.x,
                     1.25F, 0.0001F);
-        EXPECT_FALSE(editor.ScaleSelectedAlongAxisUVE(EditorTranslateAxisUVE::X, -1.24F));
+        EXPECT_FALSE(editor.ScaleSelectedAlongAxisUVE(EditorTransformAxisUVE::X, -1.24F));
         EXPECT_NEAR(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity).localScale.x,
                     1.25F, 0.0001F);
 
         const float twentyDegreesRadians = (20.0F * std::numbers::pi_v<float>) / 180.0F;
-        ASSERT_TRUE(editor.RotateSelectedAroundWorldAxisUVE(EditorTranslateAxisUVE::Z, twentyDegreesRadians));
+        ASSERT_TRUE(editor.RotateSelectedAroundWorldAxisUVE(EditorTransformAxisUVE::Z, twentyDegreesRadians));
         const Math::Vector3UVE rotatedXAxis = Math::RotateVectorUVE(
             entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity).localRotation,
             Math::Vector3UVE{1.0F, 0.0F, 0.0F});
