@@ -12,6 +12,29 @@ namespace UVE::Scene::Nodes {
 
 enum class SceneNodeKindUVE : std::uint8_t {
     Empty = 0,
+    Area3D,
+    RayCast3D,
+    StaticBody3D,
+    AnimatableBody3D,
+    NavigationRegion3D,
+    NavigationAgent3D,
+    Skeleton3D,
+    BoneAttachment3D,
+    SpringArm3D,
+    Marker3D,
+    Hitbox3D,
+    Hurtbox3D,
+    Projectile3D,
+    InteractionArea3D,
+    WorldEnvironment3D,
+    ReflectionProbe3D,
+    Decal3D,
+    LODGroup3D,
+    Occluder3D,
+    VisibilityRegion3D,
+    SpawnPoint3D,
+    LevelStreamer3D,
+    WorldPartition3D,
     AnimationTree,
     AnimationPlayer,
     CharacterBody3D,
@@ -38,7 +61,7 @@ struct SceneNodeDescriptorUVE final {
     bool libraryCreatable = false;
 };
 
-inline constexpr std::size_t kMaximumSceneNodeDescriptorsUVE = 32U;
+inline constexpr std::size_t kMaximumSceneNodeDescriptorsUVE = 64U;
 
 [[nodiscard]] std::span<const SceneNodeDescriptorUVE> GetSceneNodeDescriptorsUVE() noexcept;
 [[nodiscard]] const SceneNodeDescriptorUVE* FindSceneNodeDescriptorUVE(

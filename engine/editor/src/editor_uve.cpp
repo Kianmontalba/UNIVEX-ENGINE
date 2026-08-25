@@ -26,8 +26,10 @@
 #include "uve/asset/uve_file_envelope_uve.h"
 #include "uve/config/i_config_manager_uve.h"
 #include "uve/physics/raycast_query_uve.h"
+#include "uve/scene/components/area_component_uve.h"
 #include "uve/scene/components/camera_component_uve.h"
 #include "uve/scene/components/collider_component_uve.h"
+#include "uve/scene/components/expanded_3d_node_components_uve.h"
 #include "uve/scene/components/hierarchy_component_uve.h"
 #include "uve/scene/components/light_component_uve.h"
 #include "uve/scene/components/name_component_uve.h"
@@ -1424,6 +1426,14 @@ Scene::EntityUVE EditorUVE::CreateDocumentSceneNodeUVE(
     const bool dirtyBefore = m_sceneDirty;
     Scene::EntityUVE entity = Scene::kInvalidEntityUVE;
     Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    const auto createNodeWithComponent = [this, &entityManager](auto component) {
+        Scene::EntityUVE created = CreateDocumentEntityInternalUVE(EditorEntityKindUVE::Empty, std::nullopt);
+        if (created != Scene::kInvalidEntityUVE) {
+            using Component = std::decay_t<decltype(component)>;
+            entityManager.AddComponentUVE<Component>(created, std::move(component));
+        }
+        return created;
+    };
 
     switch (kind) {
         case Scene::Nodes::SceneNodeKindUVE::Empty:
@@ -1496,6 +1506,83 @@ Scene::EntityUVE EditorUVE::CreateDocumentSceneNodeUVE(
             if (entity != Scene::kInvalidEntityUVE) {
                 entityManager.AddComponentUVE<Scene::ScriptComponentUVE>(entity, Scene::ScriptComponentUVE{});
             }
+            break;
+        case Scene::Nodes::SceneNodeKindUVE::Area3D:
+            entity = createNodeWithComponent(Scene::AreaComponentUVE{});
+            break;
+        case Scene::Nodes::SceneNodeKindUVE::RayCast3D:
+            entity = createNodeWithComponent(Scene::RayCast3DNodeComponentUVE{});
+            break;
+        case Scene::Nodes::SceneNodeKindUVE::StaticBody3D:
+            entity = createNodeWithComponent(Scene::ColliderComponentUVE{});
+            break;
+        case Scene::Nodes::SceneNodeKindUVE::AnimatableBody3D:
+            entity = CreateDocumentEntityInternalUVE(EditorEntityKindUVE::Empty, std::nullopt);
+            if (entity != Scene::kInvalidEntityUVE) {
+                entityManager.AddComponentUVE<Scene::ColliderComponentUVE>(entity, Scene::ColliderComponentUVE{});
+                Scene::RigidBodyComponentUVE body{};
+                body.isKinematic = true;
+                entityManager.AddComponentUVE<Scene::RigidBodyComponentUVE>(entity, body);
+                entityManager.AddComponentUVE<Scene::AnimatableBody3DNodeComponentUVE>(
+                    entity, Scene::AnimatableBody3DNodeComponentUVE{});
+            }
+            break;
+        case Scene::Nodes::SceneNodeKindUVE::NavigationRegion3D:
+            entity = createNodeWithComponent(Scene::NavigationRegion3DNodeComponentUVE{});
+            break;
+        case Scene::Nodes::SceneNodeKindUVE::NavigationAgent3D:
+            entity = createNodeWithComponent(Scene::NavigationAgent3DNodeComponentUVE{});
+            break;
+        case Scene::Nodes::SceneNodeKindUVE::Skeleton3D:
+            entity = createNodeWithComponent(Scene::Skeleton3DNodeComponentUVE{});
+            break;
+        case Scene::Nodes::SceneNodeKindUVE::BoneAttachment3D:
+            entity = createNodeWithComponent(Scene::BoneAttachment3DNodeComponentUVE{});
+            break;
+        case Scene::Nodes::SceneNodeKindUVE::SpringArm3D:
+            entity = createNodeWithComponent(Scene::SpringArm3DNodeComponentUVE{});
+            break;
+        case Scene::Nodes::SceneNodeKindUVE::Marker3D:
+            entity = createNodeWithComponent(Scene::Marker3DNodeComponentUVE{});
+            break;
+        case Scene::Nodes::SceneNodeKindUVE::Hitbox3D:
+            entity = createNodeWithComponent(Scene::Hitbox3DNodeComponentUVE{});
+            break;
+        case Scene::Nodes::SceneNodeKindUVE::Hurtbox3D:
+            entity = createNodeWithComponent(Scene::Hurtbox3DNodeComponentUVE{});
+            break;
+        case Scene::Nodes::SceneNodeKindUVE::Projectile3D:
+            entity = createNodeWithComponent(Scene::Projectile3DNodeComponentUVE{});
+            break;
+        case Scene::Nodes::SceneNodeKindUVE::InteractionArea3D:
+            entity = createNodeWithComponent(Scene::InteractionArea3DNodeComponentUVE{});
+            break;
+        case Scene::Nodes::SceneNodeKindUVE::WorldEnvironment3D:
+            entity = createNodeWithComponent(Scene::WorldEnvironment3DNodeComponentUVE{});
+            break;
+        case Scene::Nodes::SceneNodeKindUVE::ReflectionProbe3D:
+            entity = createNodeWithComponent(Scene::ReflectionProbe3DNodeComponentUVE{});
+            break;
+        case Scene::Nodes::SceneNodeKindUVE::Decal3D:
+            entity = createNodeWithComponent(Scene::Decal3DNodeComponentUVE{});
+            break;
+        case Scene::Nodes::SceneNodeKindUVE::LODGroup3D:
+            entity = createNodeWithComponent(Scene::LodGroup3DNodeComponentUVE{});
+            break;
+        case Scene::Nodes::SceneNodeKindUVE::Occluder3D:
+            entity = createNodeWithComponent(Scene::Occluder3DNodeComponentUVE{});
+            break;
+        case Scene::Nodes::SceneNodeKindUVE::VisibilityRegion3D:
+            entity = createNodeWithComponent(Scene::VisibilityRegion3DNodeComponentUVE{});
+            break;
+        case Scene::Nodes::SceneNodeKindUVE::SpawnPoint3D:
+            entity = createNodeWithComponent(Scene::SpawnPoint3DNodeComponentUVE{});
+            break;
+        case Scene::Nodes::SceneNodeKindUVE::LevelStreamer3D:
+            entity = createNodeWithComponent(Scene::LevelStreamer3DNodeComponentUVE{});
+            break;
+        case Scene::Nodes::SceneNodeKindUVE::WorldPartition3D:
+            entity = createNodeWithComponent(Scene::WorldPartition3DNodeComponentUVE{});
             break;
         case Scene::Nodes::SceneNodeKindUVE::AnimationTree:
             return Scene::kInvalidEntityUVE;

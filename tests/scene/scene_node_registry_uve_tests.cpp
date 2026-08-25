@@ -30,7 +30,7 @@ namespace {
 
 TEST(SceneNodeRegistryUVETest, BuiltInDescriptorsUVE_AreStableUniqueAndRuntimeBound) {
     const std::span<const SceneNodeDescriptorUVE> descriptors = GetSceneNodeDescriptorsUVE();
-    ASSERT_EQ(descriptors.size(), 15U);
+    ASSERT_EQ(descriptors.size(), 38U);
 
     std::unordered_set<std::string_view> ids;
     for (const SceneNodeDescriptorUVE& descriptor : descriptors) {
@@ -72,6 +72,29 @@ TEST(SceneNodeRegistryUVETest, NodeFacadeAliasesUVE_ExposeExistingRuntimeContrac
     static_assert(std::is_same_v<ParticleEmitter3DNodeUVE, ParticleEmitterComponentUVE>);
     static_assert(std::is_same_v<ScriptNodeUVE, ScriptComponentUVE>);
     static_assert(std::is_same_v<TransformNodeUVE, TransformComponentUVE>);
+    static_assert(std::is_same_v<Area3DNodeUVE, AreaComponentUVE>);
+    static_assert(std::is_same_v<RayCast3DNodeUVE, RayCast3DNodeComponentUVE>);
+    static_assert(std::is_same_v<StaticBody3DNodeUVE, ColliderComponentUVE>);
+    static_assert(std::is_same_v<AnimatableBody3DNodeUVE, AnimatableBody3DNodeComponentUVE>);
+    static_assert(std::is_same_v<NavigationRegion3DNodeUVE, NavigationRegion3DNodeComponentUVE>);
+    static_assert(std::is_same_v<NavigationAgent3DNodeUVE, NavigationAgent3DNodeComponentUVE>);
+    static_assert(std::is_same_v<Skeleton3DNodeUVE, Skeleton3DNodeComponentUVE>);
+    static_assert(std::is_same_v<BoneAttachment3DNodeUVE, BoneAttachment3DNodeComponentUVE>);
+    static_assert(std::is_same_v<SpringArm3DNodeUVE, SpringArm3DNodeComponentUVE>);
+    static_assert(std::is_same_v<Marker3DNodeUVE, Marker3DNodeComponentUVE>);
+    static_assert(std::is_same_v<Hitbox3DNodeUVE, Hitbox3DNodeComponentUVE>);
+    static_assert(std::is_same_v<Hurtbox3DNodeUVE, Hurtbox3DNodeComponentUVE>);
+    static_assert(std::is_same_v<Projectile3DNodeUVE, Projectile3DNodeComponentUVE>);
+    static_assert(std::is_same_v<InteractionArea3DNodeUVE, InteractionArea3DNodeComponentUVE>);
+    static_assert(std::is_same_v<WorldEnvironment3DNodeUVE, WorldEnvironment3DNodeComponentUVE>);
+    static_assert(std::is_same_v<ReflectionProbe3DNodeUVE, ReflectionProbe3DNodeComponentUVE>);
+    static_assert(std::is_same_v<Decal3DNodeUVE, Decal3DNodeComponentUVE>);
+    static_assert(std::is_same_v<LODGroup3DNodeUVE, LodGroup3DNodeComponentUVE>);
+    static_assert(std::is_same_v<Occluder3DNodeUVE, Occluder3DNodeComponentUVE>);
+    static_assert(std::is_same_v<VisibilityRegion3DNodeUVE, VisibilityRegion3DNodeComponentUVE>);
+    static_assert(std::is_same_v<SpawnPoint3DNodeUVE, SpawnPoint3DNodeComponentUVE>);
+    static_assert(std::is_same_v<LevelStreamer3DNodeUVE, LevelStreamer3DNodeComponentUVE>);
+    static_assert(std::is_same_v<WorldPartition3DNodeUVE, WorldPartition3DNodeComponentUVE>);
     static_assert(std::is_same_v<EmptyNodeUVE, EntityUVE>);
     SUCCEED();
 }

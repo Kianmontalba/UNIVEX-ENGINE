@@ -151,6 +151,33 @@ TEST_F(AreaOverlapSystemUVETest, QueryUVE_IncompatibleOrOneSidedMaskDoesNotRepor
     EXPECT_FALSE(result.truncated);
 }
 
+TEST_F(AreaOverlapSystemUVETest, QueryUVE_MonitoringAndMonitorableFlagsControlAreaPairs) {
+    const Scene::EntityUVE firstArea = MakeAreaEntityUVE(
+        Math::Vector3UVE{0.0F, 0.0F, 0.0F}, Math::Vector3UVE{1.0F, 1.0F, 1.0F});
+    const Scene::EntityUVE secondArea = MakeAreaEntityUVE(
+        Math::Vector3UVE{0.5F, 0.0F, 0.0F}, Math::Vector3UVE{1.0F, 1.0F, 1.0F});
+    Scene::AreaComponentUVE& first = entityManager.GetComponentUVE<Scene::AreaComponentUVE>(firstArea);
+    Scene::AreaComponentUVE& second = entityManager.GetComponentUVE<Scene::AreaComponentUVE>(secondArea);
+    first.collisionMask = 1U;
+    second.collisionLayer = 1U;
+    first.monitorable = false;
+    second.monitorable = false;
+
+    EXPECT_TRUE(AreaOverlapSystemUVE::QueryUVE(entityManager).overlaps.empty());
+
+    first.monitorable = true;
+    second.monitorable = true;
+    const AreaOverlapQueryResultUVE bidirectional = AreaOverlapSystemUVE::QueryUVE(entityManager);
+    ASSERT_EQ(bidirectional.overlaps.size(), 2U);
+    EXPECT_EQ(bidirectional.overlaps[0].area, firstArea);
+    EXPECT_EQ(bidirectional.overlaps[0].other, secondArea);
+    EXPECT_EQ(bidirectional.overlaps[1].area, secondArea);
+    EXPECT_EQ(bidirectional.overlaps[1].other, firstArea);
+
+    first.monitoring = false;
+    EXPECT_TRUE(AreaOverlapSystemUVE::QueryUVE(entityManager).overlaps.empty());
+}
+
 TEST_F(AreaOverlapSystemUVETest, QueryUVE_HardCapReportsTruncationAndStableFirstPair) {
     const Scene::EntityUVE area = MakeAreaEntityUVE(
         Math::Vector3UVE{0.0F, 0.0F, 0.0F}, Math::Vector3UVE{2.0F, 2.0F, 2.0F});

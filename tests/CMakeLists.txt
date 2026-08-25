@@ -143,6 +143,7 @@ add_executable(uve_tests
     scene/prefab_maturity_uve_tests.cpp
     scene/prefab_revision_policy_uve_tests.cpp
     scene/particle_runtime_uve_tests.cpp
+    scene/expanded_3d_node_components_uve_tests.cpp
     scene/scene_node_registry_uve_tests.cpp
     core/engine_state_uve_tests.cpp
     core/engine_core_uve_tests.cpp

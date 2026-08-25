@@ -32,6 +32,7 @@ struct AreaWorldAabbUVE final {
     Math::AabbUVE worldAabb;
     std::uint32_t collisionLayer;
     std::uint32_t collisionMask;
+    bool monitorable;
 };
 
 struct AreaWorldAabbCacheUVE final {
@@ -46,7 +47,7 @@ struct AreaWorldAabbCacheUVE final {
     entityManager.ForEachUVE<Scene::WorldTransformComponentUVE, Scene::AreaComponentUVE>(
         [&cache](const Scene::EntityUVE entity, const Scene::WorldTransformComponentUVE& worldTransform,
                  const Scene::AreaComponentUVE& area) {
-            if (!Scene::IsAreaComponentValidUVE(area)) {
+            if (!Scene::IsAreaComponentValidUVE(area) || !area.monitoring) {
                 return;
             }
             if (cache.areas.size() >= kMaximumAreaOverlapQueryAreasUVE) {
@@ -58,7 +59,8 @@ struct AreaWorldAabbCacheUVE final {
             if (!IsValidAabbUVE(worldAabb)) {
                 return;
             }
-            cache.areas.push_back(AreaWorldAabbUVE{entity, worldAabb, area.collisionLayer, area.collisionMask});
+            cache.areas.push_back(
+                AreaWorldAabbUVE{entity, worldAabb, area.collisionLayer, area.collisionMask, area.monitorable});
         });
     return cache;
 }
@@ -94,6 +96,13 @@ AreaOverlapQueryResultUVE AreaOverlapSystemUVE::QueryUVE(
     result.inspectedColliders = colliders.size();
     result.truncated = areaCache.truncated;
     result.overlaps.reserve(std::min(resultCap, colliders.size()));
+    const auto appendOverlap = [&result, resultCap](const AreaOverlapPairUVE& overlap) {
+        if (result.overlaps.size() >= resultCap) {
+            result.truncated = true;
+            return;
+        }
+        result.overlaps.push_back(overlap);
+    };
     for (const AreaWorldAabbUVE& area : areaCache.areas) {
         for (const Detail::ColliderWorldAabbUVE& collider : colliders) {
             if ((area.collisionMask & collider.collisionLayer) == 0U ||
@@ -105,11 +114,20 @@ AreaOverlapQueryResultUVE AreaOverlapSystemUVE::QueryUVE(
             if (!penetration.has_value() || !std::isfinite(penetration->depth) || penetration->depth <= 0.0F) {
                 continue;
             }
-            if (result.overlaps.size() >= resultCap) {
-                result.truncated = true;
+            appendOverlap(AreaOverlapPairUVE{area.entity, collider.entity, penetration->depth});
+        }
+        for (const AreaWorldAabbUVE& otherArea : areaCache.areas) {
+            if (area.entity == otherArea.entity || !otherArea.monitorable ||
+                (area.collisionMask & otherArea.collisionLayer) == 0U ||
+                (otherArea.collisionMask & area.collisionLayer) == 0U) {
                 continue;
             }
-            result.overlaps.push_back(AreaOverlapPairUVE{area.entity, collider.entity, penetration->depth});
+            const std::optional<Math::PenetrationUVE> penetration =
+                Math::ComputePenetrationUVE(area.worldAabb, otherArea.worldAabb);
+            if (!penetration.has_value() || !std::isfinite(penetration->depth) || penetration->depth <= 0.0F) {
+                continue;
+            }
+            appendOverlap(AreaOverlapPairUVE{area.entity, otherArea.entity, penetration->depth});
         }
     }
     return result;
