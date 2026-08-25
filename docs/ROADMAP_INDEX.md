@@ -91,6 +91,10 @@ The `.uveditor` file is a metadata/reference contract for future ecosystem impor
 
 The supported Platform/release boundary is summarized above and remains distinct from the ecosystem delivery track.
 
+## Polish mode — ten-level production roadmap
+
+The engine completion boundary is closed; the next execution track is the ten-level heavy Polish roadmap in [`docs/POLISH_ROADMAP.md`](POLISH_ROADMAP.md). Polish 1 begins with the missing default viewport day scene and deliberate empty-project state. Polish 10 is the Super-Optimized Polish level, gated by measured performance, visual regression, reliability, diagnostics, and full CI evidence. Polish levels are execution increments, not additional broad PARTIAL families, and remain subject to the same audit, integration, validation, signed-history, and review rules.
+
 ## Ecosystem — intentionally separate delivery track
 
 The ecosystem is not part of the engine completion count. Its eight partial families are **UniVex Hub**, **project management**, **engine-to-Hub integration**, **account service**, **public website/news**, **cloud/collaboration**, **marketplace/community**, and **closed beta/public launch**. These require independent security, privacy, operational, release-artifact, and support ownership.
