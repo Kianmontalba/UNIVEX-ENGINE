@@ -601,6 +601,263 @@ bool EditorUVE::SetSelectedPrimitiveMeshUVE(const Scene::PrimitiveMeshComponentU
     return true;
 }
 
+bool EditorUVE::IsSceneComponentValueValidUVE(
+    const EditorSceneComponentKindUVE kind, const EditorSceneComponentValueUVE& value) const noexcept {
+    return std::visit(
+        [kind](const auto& typedValue) noexcept {
+            using ValueType = std::decay_t<decltype(typedValue)>;
+            if constexpr (std::is_same_v<ValueType, Scene::CameraComponentUVE>) {
+                return kind == EditorSceneComponentKindUVE::Camera && Scene::IsCameraComponentValidUVE(typedValue);
+            } else if constexpr (std::is_same_v<ValueType, Scene::MeshComponentUVE>) {
+                return kind == EditorSceneComponentKindUVE::Mesh && Scene::IsMeshComponentValidUVE(typedValue);
+            } else if constexpr (std::is_same_v<ValueType, Scene::LightComponentUVE>) {
+                return kind == EditorSceneComponentKindUVE::Light && Scene::IsLightComponentValidUVE(typedValue);
+            } else if constexpr (std::is_same_v<ValueType, Scene::ColliderComponentUVE>) {
+                return kind == EditorSceneComponentKindUVE::Collider && Scene::IsColliderComponentValidUVE(typedValue);
+            } else if constexpr (std::is_same_v<ValueType, Scene::RigidBodyComponentUVE>) {
+                return kind == EditorSceneComponentKindUVE::RigidBody && Scene::IsRigidBodyComponentValidUVE(typedValue);
+            } else if constexpr (std::is_same_v<ValueType, Scene::AudioSourceComponentUVE>) {
+                return kind == EditorSceneComponentKindUVE::AudioSource && Scene::IsAudioSourceComponentValidUVE(typedValue);
+            } else if constexpr (std::is_same_v<ValueType, Scene::ParticleEmitterComponentUVE>) {
+                return kind == EditorSceneComponentKindUVE::ParticleEmitter &&
+                       Scene::IsParticleEmitterComponentValidUVE(typedValue);
+            } else if constexpr (std::is_same_v<ValueType, Scene::ScriptComponentUVE>) {
+                return kind == EditorSceneComponentKindUVE::Script && Scene::IsScriptComponentValidUVE(typedValue);
+            } else if constexpr (std::is_same_v<ValueType, Scene::AnimationPlayerComponentUVE>) {
+                return kind == EditorSceneComponentKindUVE::AnimationPlayer &&
+                       Scene::IsAnimationPlayerComponentValidUVE(typedValue);
+            } else {
+                return false;
+            }
+        },
+        value);
+}
+
+bool EditorUVE::AreSceneComponentValuesEqualUVE(const EditorSceneComponentValueUVE& lhs,
+                                                 const EditorSceneComponentValueUVE& rhs) const noexcept {
+    return std::visit(
+        [](const auto& left, const auto& right) noexcept {
+            using LeftType = std::decay_t<decltype(left)>;
+            using RightType = std::decay_t<decltype(right)>;
+            if constexpr (!std::is_same_v<LeftType, RightType>) {
+                return false;
+            } else if constexpr (std::is_same_v<LeftType, Scene::CameraComponentUVE>) {
+                return left.fieldOfViewDegrees == right.fieldOfViewDegrees && left.nearPlane == right.nearPlane &&
+                       left.farPlane == right.farPlane;
+            } else if constexpr (std::is_same_v<LeftType, Scene::MeshComponentUVE>) {
+                return left.meshGuid == right.meshGuid && left.materialGuid == right.materialGuid;
+            } else if constexpr (std::is_same_v<LeftType, Scene::LightComponentUVE>) {
+                return left.color == right.color && left.intensity == right.intensity && left.type == right.type &&
+                       left.range == right.range && left.spotAngleDegrees == right.spotAngleDegrees;
+            } else if constexpr (std::is_same_v<LeftType, Scene::ColliderComponentUVE>) {
+                return left.halfExtents == right.halfExtents && left.collisionLayer == right.collisionLayer &&
+                       left.collisionMask == right.collisionMask && left.friction == right.friction &&
+                       left.restitution == right.restitution && left.density == right.density &&
+                       left.shapeType == right.shapeType && left.radius == right.radius && left.height == right.height;
+            } else if constexpr (std::is_same_v<LeftType, Scene::RigidBodyComponentUVE>) {
+                return left.mass == right.mass && left.isKinematic == right.isKinematic &&
+                       left.velocity == right.velocity && left.angularVelocity == right.angularVelocity &&
+                       left.torque == right.torque && left.inverseInertia == right.inverseInertia &&
+                       left.drag == right.drag && left.gravityScale == right.gravityScale;
+            } else if constexpr (std::is_same_v<LeftType, Scene::AudioSourceComponentUVE>) {
+                return left.audioAssetPath == right.audioAssetPath && left.mixerGroup == right.mixerGroup &&
+                       left.volume == right.volume && left.looping == right.looping && left.pitch == right.pitch &&
+                       left.spatial == right.spatial && left.minDistance == right.minDistance &&
+                       left.maxDistance == right.maxDistance && left.attenuationCurve == right.attenuationCurve &&
+                       left.playOnAwake == right.playOnAwake;
+            } else if constexpr (std::is_same_v<LeftType, Scene::ParticleEmitterComponentUVE>) {
+                return left.maxParticles == right.maxParticles;
+            } else if constexpr (std::is_same_v<LeftType, Scene::ScriptComponentUVE>) {
+                return left.scriptAssetPath == right.scriptAssetPath;
+            } else if constexpr (std::is_same_v<LeftType, Scene::AnimationPlayerComponentUVE>) {
+                return left.clipAssetPath == right.clipAssetPath && left.playbackSpeed == right.playbackSpeed &&
+                       left.looping == right.looping && left.playOnAwake == right.playOnAwake &&
+                       left.enabled == right.enabled;
+            } else {
+                return false;
+            }
+        },
+        lhs,
+        rhs);
+}
+
+bool EditorUVE::ApplySceneComponentStateUVE(
+    const Scene::EntityUVE entity, const EditorSceneComponentKindUVE kind,
+    const std::optional<EditorSceneComponentValueUVE>& value) {
+    if (!IsDocumentEntityUVE(entity)) {
+        return false;
+    }
+
+    const auto apply = [&]<typename T>() {
+        Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+        if (!value.has_value()) {
+            if (!entityManager.HasComponentUVE<T>(entity)) {
+                return false;
+            }
+            entityManager.RemoveComponentUVE<T>(entity);
+            return true;
+        }
+        const T* const typedValue = std::get_if<T>(&*value);
+        if (typedValue == nullptr) {
+            return false;
+        }
+        if (entityManager.HasComponentUVE<T>(entity)) {
+            entityManager.GetComponentUVE<T>(entity) = *typedValue;
+        } else {
+            entityManager.AddComponentUVE<T>(entity, *typedValue);
+        }
+        return true;
+    };
+
+    switch (kind) {
+        case EditorSceneComponentKindUVE::Camera:
+            return apply.template operator()<Scene::CameraComponentUVE>();
+        case EditorSceneComponentKindUVE::Mesh:
+            return apply.template operator()<Scene::MeshComponentUVE>();
+        case EditorSceneComponentKindUVE::Light:
+            return apply.template operator()<Scene::LightComponentUVE>();
+        case EditorSceneComponentKindUVE::Collider:
+            return apply.template operator()<Scene::ColliderComponentUVE>();
+        case EditorSceneComponentKindUVE::RigidBody:
+            return apply.template operator()<Scene::RigidBodyComponentUVE>();
+        case EditorSceneComponentKindUVE::AudioSource:
+            return apply.template operator()<Scene::AudioSourceComponentUVE>();
+        case EditorSceneComponentKindUVE::ParticleEmitter:
+            return apply.template operator()<Scene::ParticleEmitterComponentUVE>();
+        case EditorSceneComponentKindUVE::Script:
+            return apply.template operator()<Scene::ScriptComponentUVE>();
+        case EditorSceneComponentKindUVE::AnimationPlayer:
+            return apply.template operator()<Scene::AnimationPlayerComponentUVE>();
+    }
+    return false;
+}
+
+bool EditorUVE::SetSelectedSceneComponentUVE(const EditorSceneComponentKindUVE kind,
+                                              const EditorSceneComponentValueUVE& value) {
+    if (!IsAuthoringCommandAllowedUVE() || !HasSingleDocumentSelectionUVE() ||
+        m_gizmoDrag.axis != EditorTranslateAxisUVE::None ||
+        m_viewportNavigationMode != EditorViewportNavigationModeUVE::None ||
+        !IsSceneComponentValueValidUVE(kind, value)) {
+        return false;
+    }
+
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    std::optional<EditorSceneComponentValueUVE> before;
+    switch (kind) {
+        case EditorSceneComponentKindUVE::Camera:
+            if (entityManager.HasComponentUVE<Scene::CameraComponentUVE>(m_selectedEntity)) {
+                before = entityManager.GetComponentUVE<Scene::CameraComponentUVE>(m_selectedEntity);
+            }
+            break;
+        case EditorSceneComponentKindUVE::Mesh:
+            if (entityManager.HasComponentUVE<Scene::MeshComponentUVE>(m_selectedEntity)) {
+                before = entityManager.GetComponentUVE<Scene::MeshComponentUVE>(m_selectedEntity);
+            }
+            break;
+        case EditorSceneComponentKindUVE::Light:
+            if (entityManager.HasComponentUVE<Scene::LightComponentUVE>(m_selectedEntity)) {
+                before = entityManager.GetComponentUVE<Scene::LightComponentUVE>(m_selectedEntity);
+            }
+            break;
+        case EditorSceneComponentKindUVE::Collider:
+            if (entityManager.HasComponentUVE<Scene::ColliderComponentUVE>(m_selectedEntity)) {
+                before = entityManager.GetComponentUVE<Scene::ColliderComponentUVE>(m_selectedEntity);
+            }
+            break;
+        case EditorSceneComponentKindUVE::RigidBody:
+            if (entityManager.HasComponentUVE<Scene::RigidBodyComponentUVE>(m_selectedEntity)) {
+                before = entityManager.GetComponentUVE<Scene::RigidBodyComponentUVE>(m_selectedEntity);
+            }
+            break;
+        case EditorSceneComponentKindUVE::AudioSource:
+            if (entityManager.HasComponentUVE<Scene::AudioSourceComponentUVE>(m_selectedEntity)) {
+                before = entityManager.GetComponentUVE<Scene::AudioSourceComponentUVE>(m_selectedEntity);
+            }
+            break;
+        case EditorSceneComponentKindUVE::ParticleEmitter:
+            if (entityManager.HasComponentUVE<Scene::ParticleEmitterComponentUVE>(m_selectedEntity)) {
+                before = entityManager.GetComponentUVE<Scene::ParticleEmitterComponentUVE>(m_selectedEntity);
+            }
+            break;
+        case EditorSceneComponentKindUVE::Script:
+            if (entityManager.HasComponentUVE<Scene::ScriptComponentUVE>(m_selectedEntity)) {
+                before = entityManager.GetComponentUVE<Scene::ScriptComponentUVE>(m_selectedEntity);
+            }
+            break;
+        case EditorSceneComponentKindUVE::AnimationPlayer:
+            if (entityManager.HasComponentUVE<Scene::AnimationPlayerComponentUVE>(m_selectedEntity)) {
+                before = entityManager.GetComponentUVE<Scene::AnimationPlayerComponentUVE>(m_selectedEntity);
+            }
+            break;
+    }
+    if (before.has_value() && AreSceneComponentValuesEqualUVE(*before, value)) {
+        return false;
+    }
+
+    const EditorSelectionSnapshotUVE selectionBefore = CaptureSelectionSnapshotUVE();
+    const bool dirtyBefore = m_sceneDirty;
+    if (!ApplySceneComponentStateUVE(m_selectedEntity, kind, value)) {
+        return false;
+    }
+    m_sceneDirty = true;
+    RecordHistoryUVE(SceneComponentHistoryEntryUVE{
+        m_selectedEntity, kind, before, value, selectionBefore, CaptureSelectionSnapshotUVE(), dirtyBefore, true});
+    return true;
+}
+
+bool EditorUVE::RemoveSelectedSceneComponentUVE(const EditorSceneComponentKindUVE kind) {
+    if (!IsAuthoringCommandAllowedUVE() || !HasSingleDocumentSelectionUVE() ||
+        m_gizmoDrag.axis != EditorTranslateAxisUVE::None ||
+        m_viewportNavigationMode != EditorViewportNavigationModeUVE::None) {
+        return false;
+    }
+
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    std::optional<EditorSceneComponentValueUVE> before;
+    switch (kind) {
+        case EditorSceneComponentKindUVE::Camera:
+            if (entityManager.HasComponentUVE<Scene::CameraComponentUVE>(m_selectedEntity)) before = entityManager.GetComponentUVE<Scene::CameraComponentUVE>(m_selectedEntity);
+            break;
+        case EditorSceneComponentKindUVE::Mesh:
+            if (entityManager.HasComponentUVE<Scene::MeshComponentUVE>(m_selectedEntity)) before = entityManager.GetComponentUVE<Scene::MeshComponentUVE>(m_selectedEntity);
+            break;
+        case EditorSceneComponentKindUVE::Light:
+            if (entityManager.HasComponentUVE<Scene::LightComponentUVE>(m_selectedEntity)) before = entityManager.GetComponentUVE<Scene::LightComponentUVE>(m_selectedEntity);
+            break;
+        case EditorSceneComponentKindUVE::Collider:
+            if (entityManager.HasComponentUVE<Scene::ColliderComponentUVE>(m_selectedEntity)) before = entityManager.GetComponentUVE<Scene::ColliderComponentUVE>(m_selectedEntity);
+            break;
+        case EditorSceneComponentKindUVE::RigidBody:
+            if (entityManager.HasComponentUVE<Scene::RigidBodyComponentUVE>(m_selectedEntity)) before = entityManager.GetComponentUVE<Scene::RigidBodyComponentUVE>(m_selectedEntity);
+            break;
+        case EditorSceneComponentKindUVE::AudioSource:
+            if (entityManager.HasComponentUVE<Scene::AudioSourceComponentUVE>(m_selectedEntity)) before = entityManager.GetComponentUVE<Scene::AudioSourceComponentUVE>(m_selectedEntity);
+            break;
+        case EditorSceneComponentKindUVE::ParticleEmitter:
+            if (entityManager.HasComponentUVE<Scene::ParticleEmitterComponentUVE>(m_selectedEntity)) before = entityManager.GetComponentUVE<Scene::ParticleEmitterComponentUVE>(m_selectedEntity);
+            break;
+        case EditorSceneComponentKindUVE::Script:
+            if (entityManager.HasComponentUVE<Scene::ScriptComponentUVE>(m_selectedEntity)) before = entityManager.GetComponentUVE<Scene::ScriptComponentUVE>(m_selectedEntity);
+            break;
+        case EditorSceneComponentKindUVE::AnimationPlayer:
+            if (entityManager.HasComponentUVE<Scene::AnimationPlayerComponentUVE>(m_selectedEntity)) before = entityManager.GetComponentUVE<Scene::AnimationPlayerComponentUVE>(m_selectedEntity);
+            break;
+    }
+    if (!before.has_value()) {
+        return false;
+    }
+
+    const EditorSelectionSnapshotUVE selectionBefore = CaptureSelectionSnapshotUVE();
+    const bool dirtyBefore = m_sceneDirty;
+    if (!ApplySceneComponentStateUVE(m_selectedEntity, kind, std::nullopt)) {
+        return false;
+    }
+    m_sceneDirty = true;
+    RecordHistoryUVE(SceneComponentHistoryEntryUVE{
+        m_selectedEntity, kind, before, std::nullopt, selectionBefore, CaptureSelectionSnapshotUVE(), dirtyBefore, true});
+    return true;
+}
+
 bool EditorUVE::SetSelectedEntityNameUVE(std::string name) {
     if (!IsAuthoringCommandAllowedUVE() || !HasSingleDocumentSelectionUVE() ||
         !IsEntityNameValidUVE(name)) {
@@ -1841,6 +2098,13 @@ bool EditorUVE::UndoHistoryEntryUVE(HistoryEntryUVE& entry) {
                 RestoreSelectionUVE(typedEntry.selectionBefore);
                 m_sceneDirty = typedEntry.dirtyBefore;
                 return true;
+            } else if constexpr (std::is_same_v<EntryType, SceneComponentHistoryEntryUVE>) {
+                if (!ApplySceneComponentStateUVE(typedEntry.entity, typedEntry.kind, typedEntry.before)) {
+                    return false;
+                }
+                RestoreSelectionUVE(typedEntry.selectionBefore);
+                m_sceneDirty = typedEntry.dirtyBefore;
+                return true;
             } else if constexpr (std::is_same_v<EntryType, CreationHistoryEntryUVE>) {
                 if (!IsDocumentEntityUVE(typedEntry.activeEntity)) {
                     return false;
@@ -1914,6 +2178,13 @@ bool EditorUVE::RedoHistoryEntryUVE(HistoryEntryUVE& entry) {
                 return true;
             } else if constexpr (std::is_same_v<EntryType, PrimitiveAppearanceHistoryEntryUVE>) {
                 if (!ApplyPrimitiveMeshStateUVE(typedEntry.entity, typedEntry.after)) {
+                    return false;
+                }
+                RestoreSelectionUVE(typedEntry.selectionAfter);
+                m_sceneDirty = typedEntry.dirtyAfter;
+                return true;
+            } else if constexpr (std::is_same_v<EntryType, SceneComponentHistoryEntryUVE>) {
+                if (!ApplySceneComponentStateUVE(typedEntry.entity, typedEntry.kind, typedEntry.after)) {
                     return false;
                 }
                 RestoreSelectionUVE(typedEntry.selectionAfter);
@@ -4017,6 +4288,7 @@ void EditorUVE::DrawInspectorContentUVE() {
     ImGui::Text("%s", GetEntityDisplayLabelUVE(m_selectedEntity).c_str());
     ImGui::TextDisabled("%s", EntityLabelUVE(m_selectedEntity).c_str());
     m_inspectorDrawerRegistry.DrawEligibleUVE(m_selectedEntity);
+    DrawSceneComponentAddPanelUVE();
     if (!m_services->GetEntityManagerUVE().HasComponentUVE<Scene::TransformComponentUVE>(m_selectedEntity)) {
         ImGui::TextUnformatted("No local Transform component.");
     }
@@ -4051,6 +4323,48 @@ void EditorUVE::RegisterBuiltInInspectorDrawersUVE() {
         },
         [this](const Scene::EntityUVE entity) { DrawPrimitiveMeshInspectorDrawerUVE(entity); },
     }));
+    const auto registerComponentDrawer = [this](const char* const id, const EditorSceneComponentKindUVE kind) {
+        static_cast<void>(m_inspectorDrawerRegistry.RegisterDrawerUVE(InspectorDrawerEntryUVE{
+            id,
+            [this, kind](const Scene::EntityUVE entity) {
+                if (!IsDocumentEntityUVE(entity)) {
+                    return false;
+                }
+                const Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+                switch (kind) {
+                    case EditorSceneComponentKindUVE::Camera:
+                        return entityManager.HasComponentUVE<Scene::CameraComponentUVE>(entity);
+                    case EditorSceneComponentKindUVE::Mesh:
+                        return entityManager.HasComponentUVE<Scene::MeshComponentUVE>(entity);
+                    case EditorSceneComponentKindUVE::Light:
+                        return entityManager.HasComponentUVE<Scene::LightComponentUVE>(entity);
+                    case EditorSceneComponentKindUVE::Collider:
+                        return entityManager.HasComponentUVE<Scene::ColliderComponentUVE>(entity);
+                    case EditorSceneComponentKindUVE::RigidBody:
+                        return entityManager.HasComponentUVE<Scene::RigidBodyComponentUVE>(entity);
+                    case EditorSceneComponentKindUVE::AudioSource:
+                        return entityManager.HasComponentUVE<Scene::AudioSourceComponentUVE>(entity);
+                    case EditorSceneComponentKindUVE::ParticleEmitter:
+                        return entityManager.HasComponentUVE<Scene::ParticleEmitterComponentUVE>(entity);
+                    case EditorSceneComponentKindUVE::Script:
+                        return entityManager.HasComponentUVE<Scene::ScriptComponentUVE>(entity);
+                    case EditorSceneComponentKindUVE::AnimationPlayer:
+                        return entityManager.HasComponentUVE<Scene::AnimationPlayerComponentUVE>(entity);
+                }
+                return false;
+            },
+            [this, kind](const Scene::EntityUVE entity) { DrawSceneComponentInspectorDrawerUVE(entity, kind); },
+        }));
+    };
+    registerComponentDrawer("camera", EditorSceneComponentKindUVE::Camera);
+    registerComponentDrawer("mesh", EditorSceneComponentKindUVE::Mesh);
+    registerComponentDrawer("light", EditorSceneComponentKindUVE::Light);
+    registerComponentDrawer("collider", EditorSceneComponentKindUVE::Collider);
+    registerComponentDrawer("rigid-body", EditorSceneComponentKindUVE::RigidBody);
+    registerComponentDrawer("audio-source", EditorSceneComponentKindUVE::AudioSource);
+    registerComponentDrawer("particle-emitter", EditorSceneComponentKindUVE::ParticleEmitter);
+    registerComponentDrawer("script", EditorSceneComponentKindUVE::Script);
+    registerComponentDrawer("animation-player", EditorSceneComponentKindUVE::AnimationPlayer);
 }
 
 void EditorUVE::DrawNameInspectorDrawerUVE(const Scene::EntityUVE entity) {
@@ -4188,6 +4502,74 @@ void EditorUVE::DrawPrimitiveMeshInspectorDrawerUVE(const Scene::EntityUVE entit
         updated.baseColor = Math::Vector3UVE{baseColor[0], baseColor[1], baseColor[2]};
         static_cast<void>(SetSelectedPrimitiveMeshUVE(updated));
     }
+}
+
+void EditorUVE::DrawSceneComponentInspectorDrawerUVE(const Scene::EntityUVE entity,
+                                                        const EditorSceneComponentKindUVE kind) {
+    if (!IsDocumentEntityUVE(entity) || entity != m_selectedEntity) {
+        return;
+    }
+
+    const char* title = "Component";
+    switch (kind) {
+        case EditorSceneComponentKindUVE::Camera: title = "Camera"; break;
+        case EditorSceneComponentKindUVE::Mesh: title = "Mesh"; break;
+        case EditorSceneComponentKindUVE::Light: title = "Light"; break;
+        case EditorSceneComponentKindUVE::Collider: title = "Collider"; break;
+        case EditorSceneComponentKindUVE::RigidBody: title = "Rigid Body"; break;
+        case EditorSceneComponentKindUVE::AudioSource: title = "Audio Source"; break;
+        case EditorSceneComponentKindUVE::ParticleEmitter: title = "Particle Emitter"; break;
+        case EditorSceneComponentKindUVE::Script: title = "Script"; break;
+        case EditorSceneComponentKindUVE::AnimationPlayer: title = "Animation Player"; break;
+    }
+    ImGui::Separator();
+    ImGui::TextUnformatted(title);
+    ImGui::TextDisabled("Authored component state is validated and persisted by EditorUVE.");
+    if (ImGui::Button((std::string("Remove ") + title).c_str())) {
+        static_cast<void>(RemoveSelectedSceneComponentUVE(kind));
+    }
+}
+
+void EditorUVE::DrawSceneComponentAddPanelUVE() {
+    if (!IsDocumentEntityUVE(m_selectedEntity)) {
+        return;
+    }
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    if (!ImGui::CollapsingHeader("Add Component", ImGuiTreeNodeFlags_DefaultOpen)) {
+        return;
+    }
+
+    const auto addIfMissing = [this, &entityManager](const char* label, const EditorSceneComponentKindUVE kind,
+                                                       const EditorSceneComponentValueUVE& value, const bool present) {
+        ImGui::BeginDisabled(present);
+        if (ImGui::Button(label) && !present) {
+            static_cast<void>(SetSelectedSceneComponentUVE(kind, value));
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled(present ? "Attached" : "Available");
+        ImGui::EndDisabled();
+    };
+
+    addIfMissing("Camera", EditorSceneComponentKindUVE::Camera, Scene::CameraComponentUVE{},
+                 entityManager.HasComponentUVE<Scene::CameraComponentUVE>(m_selectedEntity));
+    addIfMissing("Mesh", EditorSceneComponentKindUVE::Mesh, Scene::MeshComponentUVE{},
+                 entityManager.HasComponentUVE<Scene::MeshComponentUVE>(m_selectedEntity));
+    addIfMissing("Light", EditorSceneComponentKindUVE::Light, Scene::LightComponentUVE{},
+                 entityManager.HasComponentUVE<Scene::LightComponentUVE>(m_selectedEntity));
+    addIfMissing("Collider", EditorSceneComponentKindUVE::Collider, Scene::ColliderComponentUVE{},
+                 entityManager.HasComponentUVE<Scene::ColliderComponentUVE>(m_selectedEntity));
+    addIfMissing("Rigid Body", EditorSceneComponentKindUVE::RigidBody, Scene::RigidBodyComponentUVE{},
+                 entityManager.HasComponentUVE<Scene::RigidBodyComponentUVE>(m_selectedEntity));
+    addIfMissing("Audio Source", EditorSceneComponentKindUVE::AudioSource, Scene::AudioSourceComponentUVE{},
+                 entityManager.HasComponentUVE<Scene::AudioSourceComponentUVE>(m_selectedEntity));
+    addIfMissing("Particle Emitter", EditorSceneComponentKindUVE::ParticleEmitter,
+                 Scene::ParticleEmitterComponentUVE{},
+                 entityManager.HasComponentUVE<Scene::ParticleEmitterComponentUVE>(m_selectedEntity));
+    addIfMissing("Script", EditorSceneComponentKindUVE::Script, Scene::ScriptComponentUVE{},
+                 entityManager.HasComponentUVE<Scene::ScriptComponentUVE>(m_selectedEntity));
+    addIfMissing("Animation Player", EditorSceneComponentKindUVE::AnimationPlayer,
+                 Scene::AnimationPlayerComponentUVE{},
+                 entityManager.HasComponentUVE<Scene::AnimationPlayerComponentUVE>(m_selectedEntity));
 }
 
 void EditorUVE::DrawProjectChangeJournalUVE(const Asset::ProjectChangeSnapshotUVE& snapshot) {

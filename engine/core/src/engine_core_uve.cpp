@@ -11,8 +11,10 @@
 
 #include "uve/core/engine_core_uve.h"
 
+#include <algorithm>
 #include <cstddef>
 #include <string>
+#include <vector>
 #include <utility>
 
 #include "uve/asset/asset_bundle_uve.h"
@@ -60,6 +62,7 @@
 #include "uve/render/shader/shader_manager_uve.h"
 #include "uve/save/checkpoint_manager_uve.h"
 #include "uve/save/save_game_system_uve.h"
+#include "uve/scene/components/particle_emitter_component_uve.h"
 #include "uve/scene/components/world_transform_component_uve.h"
 #include "uve/scene/entity_manager_uve.h"
 #include "uve/scene/prefab_system_uve.h"
@@ -322,7 +325,11 @@ void EngineCoreUVE::Init() {
     // RaycastSystem twenty-seventh: stateless, no dependencies of its own.
     m_raycastSystem = std::make_unique<Physics::RaycastSystemUVE>();
 
-    // InputSystem twenty-eighth: needs only EventSystem (composed by reference, to queue
+    // ParticleRuntime twenty-eighth: owns only bounded authored-emitter runtime state; ECS remains
+    // authoritative and EngineCore reconciles it before simulation/render extraction.
+    m_particleRuntime = std::make_unique<Scene::ParticleRuntimeUVE>();
+
+    // InputSystem twenty-ninth: needs only EventSystem (composed by reference, to queue
     // InputActionTriggeredEventUVE), already available.
     m_inputSystem = std::make_unique<Input::InputSystemUVE>(*m_eventSystem);
     m_windowManager->AttachInputSystemUVE(m_inputSystem.get());
@@ -390,6 +397,46 @@ void EngineCoreUVE::BeginFrame() {
     UVE_TRACE("BeginFrame {}", m_frameStats.frameNumber);
 }
 
+void EngineCoreUVE::SyncParticleRuntimeUVE() {
+    if (m_particleRuntime == nullptr) {
+        return;
+    }
+
+    std::vector<Scene::EntityUVE> authoredEmitters;
+    m_entityManager->ForEachUVE<Scene::ParticleEmitterComponentUVE>(
+        [this, &authoredEmitters](const Scene::EntityUVE entity,
+                                  const Scene::ParticleEmitterComponentUVE& component) {
+            authoredEmitters.push_back(entity);
+            const Scene::ParticleRuntimeSnapshotUVE currentSnapshot = m_particleRuntime->GetSnapshotUVE();
+            bool budgetMatches = false;
+            for (const Scene::ParticleRuntimeInstanceSnapshotUVE& instance : currentSnapshot.instances) {
+                if (instance.entity == entity) {
+                    budgetMatches = instance.maxParticles == component.maxParticles;
+                    break;
+                }
+            }
+            if (!m_particleRuntime->HasInstanceUVE(entity)) {
+                static_cast<void>(m_particleRuntime->AttachDetailedUVE(entity, component));
+            } else if (!budgetMatches) {
+                static_cast<void>(m_particleRuntime->DetachDetailedUVE(entity));
+                static_cast<void>(m_particleRuntime->AttachDetailedUVE(entity, component));
+            }
+        });
+
+    const Scene::ParticleRuntimeSnapshotUVE runtimeSnapshot = m_particleRuntime->GetSnapshotUVE();
+    for (const Scene::ParticleRuntimeInstanceSnapshotUVE& instance : runtimeSnapshot.instances) {
+        if (!m_entityManager->IsAliveUVE(instance.entity) ||
+            std::find(authoredEmitters.begin(), authoredEmitters.end(), instance.entity) == authoredEmitters.end()) {
+            static_cast<void>(m_particleRuntime->DetachDetailedUVE(instance.entity));
+        }
+    }
+
+    const float deltaSeconds = static_cast<float>(m_timer->GetDeltaTimeUVE());
+    if (deltaSeconds > 0.0F) {
+        static_cast<void>(m_particleRuntime->SimulateDetailedUVE(deltaSeconds, m_config.gravity));
+    }
+}
+
 void EngineCoreUVE::Update() {
     m_windowManager->PollEventsUVE();
     m_inputSystem->UpdateUVE();
@@ -417,6 +464,7 @@ void EngineCoreUVE::Update() {
     }
 
     m_sceneGraph->UpdateUVE(*m_entityManager);
+    SyncParticleRuntimeUVE();
 
     if (m_config.hotReloadEnabledUVE) {
         m_hotReload->PollUVE(*m_assetManager, *m_assetDatabase, m_timer->GetDeltaTimeUVE());
@@ -485,7 +533,11 @@ void EngineCoreUVE::LateUpdate() {
 
 void EngineCoreUVE::Render() {
     if (m_activeCamera != Scene::kInvalidEntityUVE) {
-        m_renderer3D->RenderFrameUVE(*m_entityManager, m_activeCamera);
+        if (m_particleRuntime != nullptr && m_particleRuntime->GetInstanceCountUVE() > 0U) {
+            m_renderer3D->RenderFrameWithParticleRuntimeUVE(*m_entityManager, m_activeCamera, *m_particleRuntime);
+        } else {
+            m_renderer3D->RenderFrameUVE(*m_entityManager, m_activeCamera);
+        }
     } else {
         UVE_TRACE("Render (no-op)");
     }
@@ -629,6 +681,10 @@ EngineStateUVE EngineCoreUVE::GetStateUVE() const noexcept {
 
 const FrameStatsUVE& EngineCoreUVE::GetFrameStatsUVE() const noexcept {
     return m_frameStats;
+}
+
+Scene::ParticleRuntimeSnapshotUVE EngineCoreUVE::GetParticleRuntimeSnapshotUVE() const {
+    return m_particleRuntime != nullptr ? m_particleRuntime->GetSnapshotUVE() : Scene::ParticleRuntimeSnapshotUVE{};
 }
 
 bool EngineCoreUVE::SetSimulationExecutionModeUVE(const SimulationExecutionModeUVE mode) noexcept {

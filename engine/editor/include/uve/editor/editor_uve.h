@@ -21,7 +21,16 @@
 #include "uve/math/ray_uve.h"
 #include "uve/math/vector2_uve.h"
 #include "uve/math/vector3_uve.h"
+#include "uve/scene/components/animation_player_component_uve.h"
+#include "uve/scene/components/audio_source_component_uve.h"
+#include "uve/scene/components/camera_component_uve.h"
+#include "uve/scene/components/collider_component_uve.h"
+#include "uve/scene/components/light_component_uve.h"
+#include "uve/scene/components/mesh_component_uve.h"
+#include "uve/scene/components/particle_emitter_component_uve.h"
 #include "uve/scene/components/primitive_mesh_component_uve.h"
+#include "uve/scene/components/rigid_body_component_uve.h"
+#include "uve/scene/components/script_component_uve.h"
 #include "uve/scene/components/transform_component_uve.h"
 #include "uve/scene/entity_uve.h"
 #include "uve/scene/i_scene_serializer_uve.h"
@@ -107,6 +116,24 @@ struct EditorSelectionBoundsUVE final {
 
 /// The supported Library workspace archetypes. Each created entity is a document root with a
 /// TransformComponentUVE; specialized kinds add only the named gameplay or built-in primitive component.
+enum class EditorSceneComponentKindUVE : std::uint8_t {
+    Camera,
+    Mesh,
+    Light,
+    Collider,
+    RigidBody,
+    AudioSource,
+    ParticleEmitter,
+    Script,
+    AnimationPlayer,
+};
+
+using EditorSceneComponentValueUVE =
+    std::variant<Scene::CameraComponentUVE, Scene::MeshComponentUVE, Scene::LightComponentUVE,
+                 Scene::ColliderComponentUVE, Scene::RigidBodyComponentUVE, Scene::AudioSourceComponentUVE,
+                 Scene::ParticleEmitterComponentUVE, Scene::ScriptComponentUVE,
+                 Scene::AnimationPlayerComponentUVE>;
+
 enum class EditorEntityKindUVE {
     Empty,
     Camera,
@@ -201,6 +228,16 @@ public:
     /// Returns false without mutation for invalid editor/selection state, an empty or whitespace-only
     /// name, a name longer than the supported editor-entry limit, or an unchanged value.
     [[nodiscard]] bool SetSelectedEntityNameUVE(std::string name);
+
+    /// Adds or replaces one supported scene component on the selected document entity using the
+    /// value variant matching `kind`. Valid changes are one Undo/Redo transaction; invalid, unchanged,
+    /// multi-selected, protected-Play, active-gesture, or mismatched kind/value calls fail atomically.
+    [[nodiscard]] bool SetSelectedSceneComponentUVE(EditorSceneComponentKindUVE kind,
+                                                     const EditorSceneComponentValueUVE& value);
+
+    /// Removes one supported scene component from the selected entity as one Undo/Redo transaction.
+    /// Core identity components such as Transform, Name, and Hierarchy are intentionally excluded.
+    [[nodiscard]] bool RemoveSelectedSceneComponentUVE(EditorSceneComponentKindUVE kind);
 
     /// Replaces the selected primitive's complete authored appearance atomically. Primitive kind
     /// and bounded linear-RGB base color are both editable after creation; one changed valid call
@@ -485,6 +522,17 @@ private:
         bool dirtyAfter = false;
     };
 
+    struct SceneComponentHistoryEntryUVE final {
+        Scene::EntityUVE entity = Scene::kInvalidEntityUVE;
+        EditorSceneComponentKindUVE kind = EditorSceneComponentKindUVE::Camera;
+        std::optional<EditorSceneComponentValueUVE> before;
+        std::optional<EditorSceneComponentValueUVE> after;
+        EditorSelectionSnapshotUVE selectionBefore;
+        EditorSelectionSnapshotUVE selectionAfter;
+        bool dirtyBefore = false;
+        bool dirtyAfter = false;
+    };
+
     struct CreationHistoryEntryUVE final {
         EditorEntityKindUVE kind = EditorEntityKindUVE::Empty;
         std::string name;
@@ -535,7 +583,8 @@ private:
 
     using HistoryEntryUVE =
         std::variant<TransformHistoryEntryUVE, NameHistoryEntryUVE, PrimitiveAppearanceHistoryEntryUVE,
-                     CreationHistoryEntryUVE, DuplicationHistoryEntryUVE, DeletionHistoryEntryUVE,
+                     SceneComponentHistoryEntryUVE, CreationHistoryEntryUVE, DuplicationHistoryEntryUVE,
+                     DeletionHistoryEntryUVE,
                      ReparentHistoryEntryUVE>;
 
     [[nodiscard]] bool IsDocumentEntityUVE(Scene::EntityUVE entity) const noexcept;
@@ -597,6 +646,13 @@ private:
                                                 const std::optional<std::string>& name);
     [[nodiscard]] bool ApplyPrimitiveMeshStateUVE(Scene::EntityUVE entity,
                                                     const Scene::PrimitiveMeshComponentUVE& primitive);
+    [[nodiscard]] bool IsSceneComponentValueValidUVE(EditorSceneComponentKindUVE kind,
+                                                      const EditorSceneComponentValueUVE& value) const noexcept;
+    [[nodiscard]] bool AreSceneComponentValuesEqualUVE(const EditorSceneComponentValueUVE& lhs,
+                                                        const EditorSceneComponentValueUVE& rhs) const noexcept;
+    [[nodiscard]] bool ApplySceneComponentStateUVE(
+        Scene::EntityUVE entity, EditorSceneComponentKindUVE kind,
+        const std::optional<EditorSceneComponentValueUVE>& value);
     [[nodiscard]] bool IsDocumentSubtreeUVE(Scene::EntityUVE root) const;
     [[nodiscard]] bool DoesSubtreeContainEntityUVE(Scene::EntityUVE root,
                                                     Scene::EntityUVE candidate) const;
@@ -658,6 +714,8 @@ private:
     void DrawHierarchyInspectorDrawerUVE(Scene::EntityUVE entity);
     void DrawTransformInspectorDrawerUVE(Scene::EntityUVE entity);
     void DrawPrimitiveMeshInspectorDrawerUVE(Scene::EntityUVE entity);
+    void DrawSceneComponentInspectorDrawerUVE(Scene::EntityUVE entity, EditorSceneComponentKindUVE kind);
+    void DrawSceneComponentAddPanelUVE();
     void DrawImportQueueMonitorUVE();
     void DrawViewportPanelUVE();
     /// Renders a copied watcher journal as read-only editor feedback. The helper never schedules

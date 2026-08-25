@@ -48,6 +48,7 @@
 #include "uve/scene/components/camera_component_uve.h"
 #include "uve/scene/components/collider_component_uve.h"
 #include "uve/scene/components/mesh_component_uve.h"
+#include "uve/scene/components/particle_emitter_component_uve.h"
 #include "uve/scene/components/primitive_mesh_component_uve.h"
 #include "uve/scene/components/rigid_body_component_uve.h"
 #include "uve/scene/components/transform_component_uve.h"
@@ -89,6 +90,35 @@ TEST(EngineCoreUVETest, BuildProfileDefaultsMatchCompiledPolicy) {
 #else
     EXPECT_EQ(UVE_DEBUG, 1);
 #endif
+}
+
+TEST(EngineCoreUVETest, ParticleEmitterComponents_ReconcileWithRuntimeAcrossFrames) {
+    EngineCoreUVE engine(MakeTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    Scene::IEntityManagerUVE& entityManager = engine.GetServicesUVE().GetEntityManagerUVE();
+    const Scene::EntityUVE entity = entityManager.CreateEntityUVE();
+    ASSERT_NE(entity, Scene::kInvalidEntityUVE);
+    entityManager.AddComponentUVE<Scene::ParticleEmitterComponentUVE>(entity,
+                                                                       Scene::ParticleEmitterComponentUVE{32U});
+
+    engine.TickFrameUVE();
+    Scene::ParticleRuntimeSnapshotUVE snapshot = engine.GetParticleRuntimeSnapshotUVE();
+    ASSERT_EQ(snapshot.instanceCount, 1U);
+    ASSERT_EQ(snapshot.instances.size(), 1U);
+    EXPECT_EQ(snapshot.instances.front().entity, entity);
+    EXPECT_EQ(snapshot.instances.front().maxParticles, 32U);
+
+    entityManager.GetComponentUVE<Scene::ParticleEmitterComponentUVE>(entity).maxParticles = 64U;
+    engine.TickFrameUVE();
+    snapshot = engine.GetParticleRuntimeSnapshotUVE();
+    ASSERT_EQ(snapshot.instances.size(), 1U);
+    EXPECT_EQ(snapshot.instances.front().maxParticles, 64U);
+
+    entityManager.RemoveComponentUVE<Scene::ParticleEmitterComponentUVE>(entity);
+    engine.TickFrameUVE();
+    EXPECT_EQ(engine.GetParticleRuntimeSnapshotUVE().instanceCount, 0U);
 }
 
 TEST(EngineCoreUVETest, RunUVE_BoundedFrames_ReachesShutdownWithCorrectFrameCount) {

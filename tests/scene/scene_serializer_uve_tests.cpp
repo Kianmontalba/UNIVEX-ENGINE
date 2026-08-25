@@ -21,6 +21,7 @@
 #include "uve/events/event_system_uve.h"
 #include "uve/math/vector3_uve.h"
 #include "uve/memory/memory_manager_uve.h"
+#include "uve/scene/components/animation_player_component_uve.h"
 #include "uve/scene/components/area_component_uve.h"
 #include "uve/scene/components/audio_source_component_uve.h"
 #include "uve/scene/components/camera_component_uve.h"
@@ -623,6 +624,29 @@ TEST_F(SceneSerializerUVETest, SaveThenLoad_SingleEntityWithMultipleComponents_R
     EXPECT_TRUE(loadedManager.GetComponentUVE<LightComponentUVE>(loaded).color == expectedColor);
     EXPECT_FLOAT_EQ(loadedManager.GetComponentUVE<RigidBodyComponentUVE>(loaded).mass, 5.0F);
     EXPECT_TRUE(loadedManager.GetComponentUVE<RigidBodyComponentUVE>(loaded).isKinematic);
+
+    std::filesystem::remove(path);
+}
+
+TEST_F(SceneSerializerUVETest, SaveThenLoad_AnimationPlayerComponentUVE_RoundTripsExactly) {
+    const EntityUVE entity = entityManager.CreateEntityUVE();
+    const AnimationPlayerComponentUVE animation{"animations/hero_run.uveclip", 1.25F, false, false, true};
+    entityManager.AddComponentUVE<AnimationPlayerComponentUVE>(entity, animation);
+
+    const std::filesystem::path path = "uve_scene_serializer_tests_animation_player.uvescene";
+    std::filesystem::remove(path);
+    ASSERT_TRUE(serializer.SaveUVE(entityManager, {entity}, path, SceneAssetTypeUVE::Scene));
+
+    EntityManagerUVE loadedManager(memoryManager.GetDefaultAllocatorUVE(), eventSystem);
+    const std::vector<EntityUVE> roots = serializer.LoadUVE(loadedManager, path);
+    ASSERT_EQ(roots.size(), 1U);
+    const AnimationPlayerComponentUVE& loaded =
+        loadedManager.GetComponentUVE<AnimationPlayerComponentUVE>(roots[0]);
+    EXPECT_EQ(loaded.clipAssetPath, animation.clipAssetPath);
+    EXPECT_FLOAT_EQ(loaded.playbackSpeed, animation.playbackSpeed);
+    EXPECT_EQ(loaded.looping, animation.looping);
+    EXPECT_EQ(loaded.playOnAwake, animation.playOnAwake);
+    EXPECT_EQ(loaded.enabled, animation.enabled);
 
     std::filesystem::remove(path);
 }

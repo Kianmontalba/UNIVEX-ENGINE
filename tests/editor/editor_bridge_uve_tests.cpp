@@ -562,7 +562,8 @@ TEST(EditorBridgeUVETest, SnapshotUVE_CopiesHierarchyInspectorAndNativePanelSess
         ASSERT_TRUE(snapshot.inspector.parent.has_value());
         EXPECT_TRUE(snapshot.inspector.parent->displayLabel.starts_with("Bridge Root [Cube] (Entity "));
         EXPECT_EQ(snapshot.inspector.eligibleDrawerIds,
-                  (std::vector<std::string>{"name", "hierarchy", "transform", "primitive-mesh"}));
+                  (std::vector<std::string>{"name", "hierarchy", "transform", "primitive-mesh", "mesh", "collider"}));
+        EXPECT_EQ(snapshot.inspector.attachedComponentIds, (std::vector<std::string>{"mesh", "collider"}));
         ASSERT_TRUE(snapshot.inspector.assetBinding.has_value());
         ASSERT_TRUE(snapshot.inspector.assetBinding->meshGuid.has_value());
         ASSERT_TRUE(snapshot.inspector.assetBinding->materialGuid.has_value());

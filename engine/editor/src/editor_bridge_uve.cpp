@@ -1695,7 +1695,12 @@ EditorBridgeInspectorSnapshotUVE EditorBridgeUVE::CaptureInspectorUVE() const {
         if (snapshot.eligibleDrawerIds.size() >= kEditorBridgeMaximumPanelEntriesUVE) {
             break;
         }
-        snapshot.eligibleDrawerIds.push_back(BoundPresentationTextUVE(std::move(identifier)));
+        const std::string boundedIdentifier = BoundPresentationTextUVE(identifier);
+        snapshot.eligibleDrawerIds.push_back(boundedIdentifier);
+        if (identifier != "name" && identifier != "hierarchy" && identifier != "transform" &&
+            identifier != "primitive-mesh") {
+            snapshot.attachedComponentIds.push_back(boundedIdentifier);
+        }
     }
     snapshot.canEditSelectedName = m_editor->IsAuthoringCommandAllowedUVE();
     return snapshot;

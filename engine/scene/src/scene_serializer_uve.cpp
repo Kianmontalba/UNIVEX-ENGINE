@@ -27,6 +27,7 @@
 #include "uve/debug/logging_macros_uve.h"
 #include "uve/math/quaternion_uve.h"
 #include "uve/math/vector3_uve.h"
+#include "uve/scene/components/animation_player_component_uve.h"
 #include "uve/scene/components/area_component_uve.h"
 #include "uve/scene/components/audio_source_component_uve.h"
 #include "uve/scene/components/camera_component_uve.h"
@@ -81,6 +82,14 @@ namespace {
         {"localRotation", ToJsonUVE(component.localRotation)},
         {"localScale", ToJsonUVE(component.localScale)},
     };
+}
+
+[[nodiscard]] nlohmann::json ToJsonUVE(const AnimationPlayerComponentUVE& component) {
+    return {{"clipAssetPath", component.clipAssetPath},
+            {"playbackSpeed", component.playbackSpeed},
+            {"looping", component.looping},
+            {"playOnAwake", component.playOnAwake},
+            {"enabled", component.enabled}};
 }
 
 [[nodiscard]] nlohmann::json ToJsonUVE(const MeshComponentUVE& component) {
@@ -240,6 +249,19 @@ template <typename T, typename FromJsonFunc, typename ValidateFunc>
                           }
                           return transform;
                       }, IsTransformComponentValidUVE));
+        table.emplace("AnimationPlayerComponentUVE",
+                      MakeRegistrationUVE<AnimationPlayerComponentUVE>([](const nlohmann::json& json) {
+                          AnimationPlayerComponentUVE animation;
+                          animation.clipAssetPath = json.value("clipAssetPath", std::string{});
+                          animation.playbackSpeed = json.value("playbackSpeed", 1.0F);
+                          animation.looping = json.value("looping", true);
+                          animation.playOnAwake = json.value("playOnAwake", true);
+                          animation.enabled = json.value("enabled", true);
+                          if (!IsAnimationPlayerComponentValidUVE(animation)) {
+                              throw std::runtime_error("Invalid AnimationPlayerComponentUVE payload");
+                          }
+                          return animation;
+                      }, IsAnimationPlayerComponentValidUVE));
         table.emplace("MeshComponentUVE", MakeRegistrationUVE<MeshComponentUVE>([](const nlohmann::json& json) {
                           const MeshComponentUVE mesh{Asset::AssetGuidUVE{json.at("meshGuid").get<std::uint64_t>()},
                                                      Asset::AssetGuidUVE{json.at("materialGuid").get<std::uint64_t>()}};
