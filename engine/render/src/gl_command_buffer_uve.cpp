@@ -97,10 +97,20 @@ void GlCommandBufferUVE::BeginRenderPassUVE(const RenderPassDescUVE& renderPassD
 
     if (renderPassDesc.colorAttachment == kInvalidTextureHandleUVE &&
         renderPassDesc.depthAttachment == kInvalidTextureHandleUVE) {
-        m_state->gl.glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        m_tempFramebuffer = 0;
+        if (m_state->windowManager == nullptr || !m_state->windowManager->IsValidUVE()) {
+            UVE_ERROR("GlCommandBufferUVE: default framebuffer render pass requires a valid window surface");
+            return;
+        }
         const std::uint32_t width = m_state->windowManager->GetWidthUVE();
         const std::uint32_t height = m_state->windowManager->GetHeightUVE();
+        if (width == 0U || height == 0U ||
+            width > static_cast<std::uint32_t>(std::numeric_limits<GLsizei>::max()) ||
+            height > static_cast<std::uint32_t>(std::numeric_limits<GLsizei>::max())) {
+            UVE_ERROR("GlCommandBufferUVE: default framebuffer dimensions are invalid ({}x{})", width, height);
+            return;
+        }
+        m_state->gl.glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        m_tempFramebuffer = 0;
         glViewport(0, 0, static_cast<GLsizei>(width), static_cast<GLsizei>(height));
     } else {
         const auto colorIt = renderPassDesc.colorAttachment == kInvalidTextureHandleUVE
