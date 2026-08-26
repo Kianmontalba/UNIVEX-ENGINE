@@ -13,6 +13,16 @@ namespace UVE::Render {
 
 namespace {
 
+[[nodiscard]] bool ValidateUniformTypeUVE(
+    const Detail::GlDeviceStateUVE::PipelineRecordUVE::UniformRecordUVE& uniform,
+    ShaderDataTypeUVE expectedType, std::string_view name) noexcept {
+    if (uniform.type == expectedType) {
+        return true;
+    }
+    UVE_ERROR("GlCommandBufferUVE: uniform type mismatch for '{}'", name);
+    return false;
+}
+
 [[nodiscard]] GLint VertexAttributeComponentCountUVE(VertexAttributeFormatUVE format) noexcept {
     switch (format) {
         case VertexAttributeFormatUVE::Float2:
@@ -304,7 +314,7 @@ const GlCommandBufferUVE::UniformRecordUVE* GlCommandBufferUVE::FindUniformUVE(s
 
 void GlCommandBufferUVE::SetUniformFloatUVE(std::string_view name, float value) {
     const UniformRecordUVE* const uniform = FindUniformUVE(name);
-    if (uniform == nullptr) {
+    if (uniform == nullptr || !ValidateUniformTypeUVE(*uniform, ShaderDataTypeUVE::Float, name)) {
         return;
     }
     m_state->gl.glUniform1f(uniform->location, value);
@@ -312,7 +322,7 @@ void GlCommandBufferUVE::SetUniformFloatUVE(std::string_view name, float value) 
 
 void GlCommandBufferUVE::SetUniformIntUVE(std::string_view name, std::int32_t value) {
     const UniformRecordUVE* const uniform = FindUniformUVE(name);
-    if (uniform == nullptr) {
+    if (uniform == nullptr || !ValidateUniformTypeUVE(*uniform, ShaderDataTypeUVE::Int, name)) {
         return;
     }
     m_state->gl.glUniform1i(uniform->location, static_cast<GLint>(value));
@@ -320,7 +330,7 @@ void GlCommandBufferUVE::SetUniformIntUVE(std::string_view name, std::int32_t va
 
 void GlCommandBufferUVE::SetUniformBoolUVE(std::string_view name, bool value) {
     const UniformRecordUVE* const uniform = FindUniformUVE(name);
-    if (uniform == nullptr) {
+    if (uniform == nullptr || !ValidateUniformTypeUVE(*uniform, ShaderDataTypeUVE::Bool, name)) {
         return;
     }
     m_state->gl.glUniform1i(uniform->location, value ? 1 : 0);
@@ -328,7 +338,7 @@ void GlCommandBufferUVE::SetUniformBoolUVE(std::string_view name, bool value) {
 
 void GlCommandBufferUVE::SetUniformVector3UVE(std::string_view name, const Math::Vector3UVE& value) {
     const UniformRecordUVE* const uniform = FindUniformUVE(name);
-    if (uniform == nullptr) {
+    if (uniform == nullptr || !ValidateUniformTypeUVE(*uniform, ShaderDataTypeUVE::Vec3, name)) {
         return;
     }
     m_state->gl.glUniform3fv(uniform->location, 1, &value.x);
@@ -336,7 +346,7 @@ void GlCommandBufferUVE::SetUniformVector3UVE(std::string_view name, const Math:
 
 void GlCommandBufferUVE::SetUniformMatrix4x4UVE(std::string_view name, const Math::Matrix4x4UVE& value) {
     const UniformRecordUVE* const uniform = FindUniformUVE(name);
-    if (uniform == nullptr) {
+    if (uniform == nullptr || !ValidateUniformTypeUVE(*uniform, ShaderDataTypeUVE::Mat4, name)) {
         return;
     }
     // Matrix4x4UVE is row-major storage (docs/CODING_STANDARDS.md, "Matrix convention") while GL's

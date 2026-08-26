@@ -1476,6 +1476,48 @@ TEST_F(GlRenderDeviceUVETest, LitShadowed3DShader_DepthPrepassDarkensOccludedFra
     renderDevice->DestroyShaderUVE(shadowVertexShader);
 }
 
+TEST_F(GlRenderDeviceUVETest, CommandBuffer_SetUniformCalls_RejectReflectedTypeMismatches) {
+    const ShaderHandleUVE vertexShader = renderDevice->CreateShaderUVE(
+        ShaderDescUVE{ShaderStageUVE::Vertex, std::string(kUniformVertexShaderSource)});
+    const ShaderHandleUVE fragmentShader = renderDevice->CreateShaderUVE(
+        ShaderDescUVE{ShaderStageUVE::Fragment, std::string(kUniformFragmentShaderSource)});
+    ASSERT_NE(vertexShader, kInvalidShaderHandleUVE);
+    ASSERT_NE(fragmentShader, kInvalidShaderHandleUVE);
+
+    PipelineDescUVE pipelineDesc;
+    pipelineDesc.vertexShader = vertexShader;
+    pipelineDesc.fragmentShader = fragmentShader;
+    pipelineDesc.vertexLayout = {VertexAttributeUVE{"POSITION", VertexAttributeFormatUVE::Float3, 0}};
+    pipelineDesc.vertexStride = 3U * static_cast<std::uint32_t>(sizeof(float));
+    const PipelineHandleUVE pipeline = renderDevice->CreatePipelineUVE(pipelineDesc);
+    ASSERT_NE(pipeline, kInvalidPipelineHandleUVE);
+
+    std::unique_ptr<ICommandBufferUVE> commandBuffer = renderDevice->CreateCommandBufferUVE();
+    ASSERT_NE(commandBuffer, nullptr);
+    RenderPassDescUVE passDesc;
+    passDesc.colorAttachment = kInvalidTextureHandleUVE;
+    passDesc.colorLoadOp = LoadOpUVE::DontCare;
+    passDesc.depthLoadOp = LoadOpUVE::DontCare;
+    commandBuffer->BeginRenderPassUVE(passDesc);
+    commandBuffer->BindPipelineUVE(pipeline);
+    while (glGetError() != GL_NO_ERROR) {
+    }
+
+    commandBuffer->SetUniformMatrix4x4UVE("uModel", Math::Matrix4x4UVE::IdentityUVE());
+    commandBuffer->SetUniformVector3UVE("uColor", Math::Vector3UVE{1.0F, 0.0F, 0.0F});
+    commandBuffer->SetUniformFloatUVE("uModel", 1.0F);
+    commandBuffer->SetUniformIntUVE("uColor", 1);
+    commandBuffer->SetUniformBoolUVE("uModel", true);
+    commandBuffer->SetUniformMatrix4x4UVE("uColor", Math::Matrix4x4UVE::IdentityUVE());
+    EXPECT_EQ(glGetError(), GL_NO_ERROR);
+
+    commandBuffer->EndRenderPassUVE();
+    renderDevice->SubmitUVE(std::move(commandBuffer));
+    renderDevice->DestroyPipelineUVE(pipeline);
+    renderDevice->DestroyShaderUVE(vertexShader);
+    renderDevice->DestroyShaderUVE(fragmentShader);
+}
+
 TEST_F(GlRenderDeviceUVETest, CommandBuffer_SetUniformCalls_OnBoundPipeline_DoNotCrash) {
     const ShaderHandleUVE vertexShader = renderDevice->CreateShaderUVE(
         ShaderDescUVE{ShaderStageUVE::Vertex, std::string(kUniformVertexShaderSource)});
