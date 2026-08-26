@@ -8,6 +8,7 @@
 #include <functional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "uve/render/texture_handle_uve.h"
@@ -44,13 +45,13 @@ struct RenderGraphPassDescUVE {
 class RenderGraphUVE final {
 public:
     [[nodiscard]] RenderGraphResourceHandleUVE ImportTextureUVE(TextureHandleUVE texture,
-                                                                  std::string debugNameUVE);
+                                                                  std::string_view debugNameUVE);
     void AddPassUVE(RenderGraphPassDescUVE desc);
 
     /// Adds a pass from caller-owned resource-use storage. RenderGraphUVE copies the span into
     /// retained pass storage before returning; the span and callback arguments need only remain
     /// valid for this call. This avoids a temporary descriptor vector for stable per-frame graphs.
-    void AddPassUVE(std::string debugNameUVE, std::span<const RenderGraphResourceUseUVE> resources,
+    void AddPassUVE(std::string_view debugNameUVE, std::span<const RenderGraphResourceUseUVE> resources,
                     std::function<void(ICommandBufferUVE&)> recordCallbackUVE);
 
     /// Reserves storage for a known graph topology. ClearUVE() preserves outer and nested storage

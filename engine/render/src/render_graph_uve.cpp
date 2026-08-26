@@ -10,39 +10,39 @@
 
 namespace UVE::Render {
 
-RenderGraphResourceHandleUVE RenderGraphUVE::ImportTextureUVE(TextureHandleUVE texture, std::string debugNameUVE) {
+RenderGraphResourceHandleUVE RenderGraphUVE::ImportTextureUVE(TextureHandleUVE texture, std::string_view debugNameUVE) {
     if (texture == kInvalidTextureHandleUVE) {
         UVE_ERROR("RenderGraphUVE: cannot import an invalid texture handle");
         return {};
     }
     const auto index = static_cast<std::uint32_t>(m_resourceCount);
     if (m_resourceCount == m_resources.size()) {
-        m_resources.push_back(ImportedResourceUVE{texture, std::move(debugNameUVE)});
+        m_resources.push_back(ImportedResourceUVE{texture, std::string(debugNameUVE)});
     } else {
         ImportedResourceUVE& resource = m_resources[m_resourceCount];
         resource.texture = texture;
-        resource.debugNameUVE = std::move(debugNameUVE);
+        resource.debugNameUVE = debugNameUVE;
     }
     ++m_resourceCount;
     return RenderGraphResourceHandleUVE{index, m_generation};
 }
 
 void RenderGraphUVE::AddPassUVE(RenderGraphPassDescUVE desc) {
-    AddPassUVE(std::move(desc.debugNameUVE), desc.resources, std::move(desc.recordCallbackUVE));
+    AddPassUVE(std::string_view{desc.debugNameUVE}, desc.resources, std::move(desc.recordCallbackUVE));
 }
 
-void RenderGraphUVE::AddPassUVE(std::string debugNameUVE,
+void RenderGraphUVE::AddPassUVE(std::string_view debugNameUVE,
                                 std::span<const RenderGraphResourceUseUVE> resources,
                                 std::function<void(ICommandBufferUVE&)> recordCallbackUVE) {
     if (m_passCount == m_passes.size()) {
         RenderGraphPassDescUVE pass;
-        pass.debugNameUVE = std::move(debugNameUVE);
+        pass.debugNameUVE = debugNameUVE;
         pass.resources.assign(resources.begin(), resources.end());
         pass.recordCallbackUVE = std::move(recordCallbackUVE);
         m_passes.push_back(std::move(pass));
     } else {
         RenderGraphPassDescUVE& pass = m_passes[m_passCount];
-        pass.debugNameUVE = std::move(debugNameUVE);
+        pass.debugNameUVE = debugNameUVE;
         pass.resources.clear();
         pass.resources.reserve(resources.size());
         pass.resources.insert(pass.resources.end(), resources.begin(), resources.end());

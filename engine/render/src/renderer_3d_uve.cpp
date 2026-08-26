@@ -200,6 +200,7 @@ struct RendererUniformNamesUVE {
     std::array<std::string, kShadowCascadeCountUVE> lightSpaceMatrices{};
     std::array<std::string, kShadowCascadeCountUVE> shadowCascadeSplits{};
     std::array<std::string, kShadowCascadeCountUVE> shadowMapTextures{};
+    std::array<std::string, kShadowCascadeCountUVE> shadowPasses{};
 
     RendererUniformNamesUVE() : legacyLightSpaceMatrix("uLightSpaceMatrix") {
         for (std::size_t lightIndex = 0; lightIndex < kMaxLightsUVE; ++lightIndex) {
@@ -213,6 +214,7 @@ struct RendererUniformNamesUVE {
             lightSpaceMatrices[cascadeIndex] = "uLightSpaceMatrices[" + index + "]";
             shadowCascadeSplits[cascadeIndex] = "uShadowCascadeSplits[" + index + "]";
             shadowMapTextures[cascadeIndex] = "uShadowMapTextures[" + index + "]";
+            shadowPasses[cascadeIndex] = "DirectionalShadowCascade" + index;
         }
     }
 };
@@ -1073,7 +1075,7 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
     if (shadowsReady) {
         for (std::size_t cascadeIndex = 0; cascadeIndex < kShadowCascadeCountUVE; ++cascadeIndex) {
             shadowResources[cascadeIndex] = renderGraph.ImportTextureUVE(
-                m_impl->shadowMapTargets[cascadeIndex], "DirectionalShadowCascade" + std::to_string(cascadeIndex));
+                m_impl->shadowMapTargets[cascadeIndex], GetRendererUniformNamesUVE().shadowPasses[cascadeIndex]);
         }
     }
     const RenderGraphResourceHandleUVE colorResource = renderGraph.ImportTextureUVE(m_impl->colorTarget, "MainColor");
@@ -1081,7 +1083,7 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
 
     if (shadowsReady) {
         for (std::size_t cascadeIndex = 0; cascadeIndex < kShadowCascadeCountUVE; ++cascadeIndex) {
-            const std::string passName = "DirectionalShadowCascade" + std::to_string(cascadeIndex);
+            const std::string_view passName = GetRendererUniformNamesUVE().shadowPasses[cascadeIndex];
             const std::array<RenderGraphResourceUseUVE, 1U> shadowPassResources{
                 RenderGraphResourceUseUVE{shadowResources[cascadeIndex], RenderGraphResourceAccessUVE::Write}};
             renderGraph.AddPassUVE(
