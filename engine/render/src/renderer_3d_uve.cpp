@@ -1082,25 +1082,31 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
     if (shadowsReady) {
         for (std::size_t cascadeIndex = 0; cascadeIndex < kShadowCascadeCountUVE; ++cascadeIndex) {
             const std::string passName = "DirectionalShadowCascade" + std::to_string(cascadeIndex);
-        renderGraph.AddPassUVE(RenderGraphPassDescUVE{
-            passName, {{shadowResources[cascadeIndex], RenderGraphResourceAccessUVE::Write}},
-            [this, &lightSpaceMatrices, shadowCaster, cascadeIndex](ICommandBufferUVE& commandBuffer) {
-                m_impl->RecordShadowPassUVE(m_impl->shadowQueues[cascadeIndex].opaqueItems,
-                                            lightSpaceMatrices[cascadeIndex],
-                                            m_impl->shadowMapTargets[cascadeIndex], shadowCaster != nullptr, commandBuffer);
-            }});
+            const std::array<RenderGraphResourceUseUVE, 1U> shadowPassResources{
+                RenderGraphResourceUseUVE{shadowResources[cascadeIndex], RenderGraphResourceAccessUVE::Write}};
+            renderGraph.AddPassUVE(
+                passName, shadowPassResources,
+                [this, &lightSpaceMatrices, shadowCaster, cascadeIndex](ICommandBufferUVE& commandBuffer) {
+                    m_impl->RecordShadowPassUVE(m_impl->shadowQueues[cascadeIndex].opaqueItems,
+                                                lightSpaceMatrices[cascadeIndex],
+                                                m_impl->shadowMapTargets[cascadeIndex], shadowCaster != nullptr,
+                                                commandBuffer);
+                });
         }
     }
 
-    std::vector<RenderGraphResourceUseUVE> mainResources{{colorResource, RenderGraphResourceAccessUVE::Write},
-                                                          {depthResource, RenderGraphResourceAccessUVE::Write}};
+    std::array<RenderGraphResourceUseUVE, kShadowCascadeCountUVE + 2U> mainResources{};
+    mainResources[0] = RenderGraphResourceUseUVE{colorResource, RenderGraphResourceAccessUVE::Write};
+    mainResources[1] = RenderGraphResourceUseUVE{depthResource, RenderGraphResourceAccessUVE::Write};
+    std::size_t mainResourceCount = 2U;
     if (shadowsReady) {
         for (const RenderGraphResourceHandleUVE shadowResource : shadowResources) {
-            mainResources.push_back(RenderGraphResourceUseUVE{shadowResource, RenderGraphResourceAccessUVE::Read});
+            mainResources[mainResourceCount++] =
+                RenderGraphResourceUseUVE{shadowResource, RenderGraphResourceAccessUVE::Read};
         }
     }
-    renderGraph.AddPassUVE(RenderGraphPassDescUVE{
-        "MainColor", std::move(mainResources),
+    renderGraph.AddPassUVE(
+        "MainColor", std::span<const RenderGraphResourceUseUVE>{mainResources.data(), mainResourceCount},
         [this, &queue, &frameUniforms](ICommandBufferUVE& commandBuffer) {
             RenderPassDescUVE passDesc;
             passDesc.colorAttachment = m_impl->colorTarget;
@@ -1125,9 +1131,11 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
                     m_impl->lastFrameDiagnostics.particleDrawCallsRecorded;
             }
             commandBuffer.EndRenderPassUVE();
-        }});
-    renderGraph.AddPassUVE(RenderGraphPassDescUVE{
-        "EditorViewportVisuals", {{colorResource, RenderGraphResourceAccessUVE::Write}},
+        });
+    const std::array<RenderGraphResourceUseUVE, 1U> editorVisualResources{
+        RenderGraphResourceUseUVE{colorResource, RenderGraphResourceAccessUVE::Write}};
+    renderGraph.AddPassUVE(
+        "EditorViewportVisuals", editorVisualResources,
         [this](ICommandBufferUVE& commandBuffer) {
             const EditorViewportVisualStateUVE& state = m_impl->editorVisualState;
             if (!state.enabled || !m_impl->editorViewportVisualsProgram->IsValidUVE()) {
@@ -1150,11 +1158,13 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
             m_impl->editorViewportVisualsProgram->ApplyToUVE(commandBuffer);
             commandBuffer.DrawUVE(3);
             commandBuffer.EndRenderPassUVE();
-        }});
+        });
     // The default framebuffer is an external presentation surface, not a TextureHandleUVE; the
     // scene color input remains explicit in the graph while this pass writes that external output.
-    renderGraph.AddPassUVE(RenderGraphPassDescUVE{
-        "ToneMapping", {{colorResource, RenderGraphResourceAccessUVE::Read}},
+    const std::array<RenderGraphResourceUseUVE, 1U> toneMappingResources{
+        RenderGraphResourceUseUVE{colorResource, RenderGraphResourceAccessUVE::Read}};
+    renderGraph.AddPassUVE(
+        "ToneMapping", toneMappingResources,
         [this](ICommandBufferUVE& commandBuffer) {
             if (!m_impl->toneMappingProgram->IsValidUVE()) {
                 return;
@@ -1169,7 +1179,7 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
             commandBuffer.BindTextureUVE(m_impl->colorTarget, 0U);
             commandBuffer.DrawUVE(3);
             commandBuffer.EndRenderPassUVE();
-        }});
+        });
 
     m_impl->renderSystem.BeginFrameUVE();
     ICommandBufferUVE& commandBuffer = m_impl->renderSystem.GetFrameCommandBufferUVE();

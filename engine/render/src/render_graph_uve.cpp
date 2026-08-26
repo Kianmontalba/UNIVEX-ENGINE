@@ -28,15 +28,25 @@ RenderGraphResourceHandleUVE RenderGraphUVE::ImportTextureUVE(TextureHandleUVE t
 }
 
 void RenderGraphUVE::AddPassUVE(RenderGraphPassDescUVE desc) {
+    AddPassUVE(std::move(desc.debugNameUVE), desc.resources, std::move(desc.recordCallbackUVE));
+}
+
+void RenderGraphUVE::AddPassUVE(std::string debugNameUVE,
+                                std::span<const RenderGraphResourceUseUVE> resources,
+                                std::function<void(ICommandBufferUVE&)> recordCallbackUVE) {
     if (m_passCount == m_passes.size()) {
-        m_passes.push_back(std::move(desc));
+        RenderGraphPassDescUVE pass;
+        pass.debugNameUVE = std::move(debugNameUVE);
+        pass.resources.assign(resources.begin(), resources.end());
+        pass.recordCallbackUVE = std::move(recordCallbackUVE);
+        m_passes.push_back(std::move(pass));
     } else {
         RenderGraphPassDescUVE& pass = m_passes[m_passCount];
-        pass.debugNameUVE = std::move(desc.debugNameUVE);
+        pass.debugNameUVE = std::move(debugNameUVE);
         pass.resources.clear();
-        pass.resources.reserve(desc.resources.size());
-        pass.resources.insert(pass.resources.end(), desc.resources.begin(), desc.resources.end());
-        pass.recordCallbackUVE = std::move(desc.recordCallbackUVE);
+        pass.resources.reserve(resources.size());
+        pass.resources.insert(pass.resources.end(), resources.begin(), resources.end());
+        pass.recordCallbackUVE = std::move(recordCallbackUVE);
     }
     ++m_passCount;
 }
