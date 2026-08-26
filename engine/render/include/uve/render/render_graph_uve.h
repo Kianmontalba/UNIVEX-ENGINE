@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <string>
@@ -43,6 +44,10 @@ public:
     [[nodiscard]] RenderGraphResourceHandleUVE ImportTextureUVE(TextureHandleUVE texture,
                                                                   std::string debugNameUVE);
     void AddPassUVE(RenderGraphPassDescUVE desc);
+
+    /// Reserves storage for a known graph topology. ClearUVE() preserves this capacity so a
+    /// renderer can rebuild its per-frame callbacks without repeatedly reallocating pass/resource arrays.
+    void ReserveUVE(std::size_t resourceCapacity, std::size_t passCapacity);
 
     /// Validates resource declarations then invokes each callback in deterministic insertion order.
     /// Returns false and records no callbacks for invalid declarations.

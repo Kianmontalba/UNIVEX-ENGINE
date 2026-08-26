@@ -4,7 +4,9 @@
 #include "uve/asset/asset_importer_uve.h"
 #include "uve/asset/bmp_importer_uve.h"
 #include "uve/asset/gltf_importer_uve.h"
+#if !defined(__ANDROID__)
 #include "uve/asset/jpeg_importer_uve.h"
+#endif
 #include "uve/asset/mtl_importer_uve.h"
 #include "uve/asset/obj_importer_uve.h"
 #include "uve/asset/shader_source_importer_uve.h"
@@ -240,7 +242,9 @@ AssetImporterUVE::AssetImporterUVE() : m_impl(std::make_unique<ImplUVE>()) {
     RegisterTgaImporterUVE(*this);
     RegisterObjImporterUVE(*this);
     RegisterGltfImporterUVE(*this);
+#if !defined(__ANDROID__)
     RegisterJpegImporterUVE(*this);
+#endif
     RegisterMtlImporterUVE(*this);
     RegisterShaderSourceImporterUVE(*this);
 }

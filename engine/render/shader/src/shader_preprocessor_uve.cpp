@@ -294,8 +294,23 @@ PreprocessResultUVE PreprocessShaderSourceUVE(Asset::IFileSystemUVE& fileSystem,
 
     std::size_t firstContentLineIndex = 0;
     if (!lines.empty() && StartsWithUVE(TrimUVE(lines[0]), "#version")) {
+#ifdef __ANDROID__
+        const std::string_view versionLine = TrimUVE(lines[0]);
+        if (versionLine == "#version 330 core") {
+            // Android's ES 3.0 context cannot compile desktop GLSL 3.30. Keep this adaptation
+            // here so both embedded and project-authored shaders share one backend boundary while
+            // desktop preprocessing and built-in source-parity tests remain unchanged.
+            output += "#version 300 es\n";
+            output += "precision highp float;\n";
+            output += "precision highp int;\n";
+        } else {
+            output += lines[0];
+            output += "\n";
+        }
+#else
         output += lines[0];
         output += "\n";
+#endif
         firstContentLineIndex = 1;
     }
     output += "#line " + std::to_string(firstContentLineIndex + 1) + " 0\n";

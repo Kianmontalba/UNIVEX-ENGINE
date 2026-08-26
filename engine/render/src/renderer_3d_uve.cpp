@@ -183,6 +183,44 @@ constexpr std::uint32_t kShadowCascadeFirstTextureSlotUVE = kShadowMapTextureSlo
 using ShadowCascadeMatricesUVE = std::array<Math::Matrix4x4UVE, kShadowCascadeCountUVE>;
 using ShadowCascadeSplitsUVE = std::array<float, kShadowCascadeCountUVE>;
 
+struct LightUniformNamesUVE {
+    std::string type;
+    std::string position;
+    std::string direction;
+    std::string color;
+    std::string intensity;
+    std::string range;
+    std::string spotAngleDegrees;
+};
+
+struct RendererUniformNamesUVE {
+    std::array<LightUniformNamesUVE, kMaxLightsUVE> lights{};
+    std::string legacyLightSpaceMatrix;
+    std::array<std::string, kShadowCascadeCountUVE> lightSpaceMatrices{};
+    std::array<std::string, kShadowCascadeCountUVE> shadowCascadeSplits{};
+    std::array<std::string, kShadowCascadeCountUVE> shadowMapTextures{};
+
+    RendererUniformNamesUVE() : legacyLightSpaceMatrix("uLightSpaceMatrix") {
+        for (std::size_t lightIndex = 0; lightIndex < kMaxLightsUVE; ++lightIndex) {
+            const std::string prefix = "uLights[" + std::to_string(lightIndex) + "].";
+            lights[lightIndex] = LightUniformNamesUVE{
+                prefix + "type", prefix + "position", prefix + "direction", prefix + "color",
+                prefix + "intensity", prefix + "range", prefix + "spotAngleDegrees"};
+        }
+        for (std::size_t cascadeIndex = 0; cascadeIndex < kShadowCascadeCountUVE; ++cascadeIndex) {
+            const std::string index = std::to_string(cascadeIndex);
+            lightSpaceMatrices[cascadeIndex] = "uLightSpaceMatrices[" + index + "]";
+            shadowCascadeSplits[cascadeIndex] = "uShadowCascadeSplits[" + index + "]";
+            shadowMapTextures[cascadeIndex] = "uShadowMapTextures[" + index + "]";
+        }
+    }
+};
+
+[[nodiscard]] const RendererUniformNamesUVE& GetRendererUniformNamesUVE() {
+    static const RendererUniformNamesUVE names;
+    return names;
+}
+
 [[nodiscard]] ShadowCascadeSplitsUVE ComputeCascadeSplitsUVE(float nearPlane, float farPlane,
                                                               float splitLambda) noexcept {
     ShadowCascadeSplitsUVE splits{};
@@ -290,6 +328,7 @@ struct Renderer3DUVE::ImplUVE {
     Asset::IAssetManagerUVE& assetManager;
     Asset::IAssetDatabaseUVE& assetDatabase;
     Events::IEventSystemUVE& eventSystem;
+    const RendererUniformNamesUVE& uniformNames;
     std::uint32_t targetWidth;
     std::uint32_t targetHeight;
 
@@ -369,6 +408,7 @@ struct Renderer3DUVE::ImplUVE {
     /// AssetGuidUVE — independent of materialCache, so two materials sharing an albedo texture
     /// GUID upload it only once.
     std::unordered_map<Asset::AssetGuidUVE, TextureHandleUVE> textureCache;
+    RenderGraphUVE renderGraph;
 
     Events::EventSubscriptionUVE reloadSubscription;
     const Scene::ParticleRuntimeUVE* particleRuntimeForFrame = nullptr;
@@ -384,7 +424,7 @@ struct Renderer3DUVE::ImplUVE {
         : renderDevice(renderDeviceIn), renderSystem(renderSystemIn), meshRenderer(meshRendererIn),
           cameraSystem(cameraSystemIn), lightSystem(lightSystemIn), shaderManager(shaderManagerIn),
           assetManager(assetManagerIn), assetDatabase(assetDatabaseIn), eventSystem(eventSystemIn),
-          targetWidth(targetWidthIn), targetHeight(targetHeightIn), ambientColor(ambientColorIn),
+          uniformNames(GetRendererUniformNamesUVE()), targetWidth(targetWidthIn), targetHeight(targetHeightIn), ambientColor(ambientColorIn),
           shadowMapResolution(shadowMapResolutionIn), shadowMapHalfExtent(shadowMapHalfExtentIn),
           shadowMapNearPlane(shadowMapNearPlaneIn), shadowMapFarPlane(shadowMapFarPlaneIn),
           shadowFrustumPadding(std::max(shadowFrustumPaddingIn, 0.0F)),
@@ -686,29 +726,30 @@ struct Renderer3DUVE::ImplUVE {
             program->SetVector3UVE("uViewPosition", frameUniforms.viewPosition);
             for (std::size_t lightIndex = 0; lightIndex < kMaxLightsUVE; ++lightIndex) {
                 const LightDataUVE& light = frameUniforms.lights[lightIndex];
-                const std::string prefix = "uLights[" + std::to_string(lightIndex) + "].";
-                program->SetIntUVE(prefix + "type", static_cast<std::int32_t>(light.type));
-                program->SetVector3UVE(prefix + "position", light.position);
-                program->SetVector3UVE(prefix + "direction", light.direction);
-                program->SetVector3UVE(prefix + "color", light.color);
-                program->SetFloatUVE(prefix + "intensity", light.intensity);
-                program->SetFloatUVE(prefix + "range", light.range);
-                program->SetFloatUVE(prefix + "spotAngleDegrees", light.spotAngleDegrees);
+                const LightUniformNamesUVE& names = uniformNames.lights[lightIndex];
+                program->SetIntUVE(names.type, static_cast<std::int32_t>(light.type));
+                program->SetVector3UVE(names.position, light.position);
+                program->SetVector3UVE(names.direction, light.direction);
+                program->SetVector3UVE(names.color, light.color);
+                program->SetFloatUVE(names.intensity, light.intensity);
+                program->SetFloatUVE(names.range, light.range);
+                program->SetFloatUVE(names.spotAngleDegrees, light.spotAngleDegrees);
             }
             // Preserve the Increment 27 single-map names for project-authored legacy shaders;
             // the canonical Increment 30 shader consumes the bounded array uniforms below.
-            program->SetMatrix4x4UVE("uLightSpaceMatrix", frameUniforms.lightSpaceMatrices[0]);
+            program->SetMatrix4x4UVE(uniformNames.legacyLightSpaceMatrix, frameUniforms.lightSpaceMatrices[0]);
             program->SetIntUVE("uShadowMapTexture", static_cast<std::int32_t>(kShadowMapTextureSlotUVE));
             program->SetIntUVE("uShadowCascadeCount", frameUniforms.cascadeCount);
             program->SetFloatUVE("uShadowCascadeBlendRatio", frameUniforms.cascadeBlendRatio);
             for (std::size_t cascadeIndex = 0; cascadeIndex < kShadowCascadeCountUVE; ++cascadeIndex) {
-                const std::string index = std::to_string(cascadeIndex);
                 const std::uint32_t textureSlot = kShadowCascadeFirstTextureSlotUVE +
                                                   static_cast<std::uint32_t>(cascadeIndex);
-                program->SetMatrix4x4UVE("uLightSpaceMatrices[" + index + "]",
+                program->SetMatrix4x4UVE(uniformNames.lightSpaceMatrices[cascadeIndex],
                                          frameUniforms.lightSpaceMatrices[cascadeIndex]);
-                program->SetFloatUVE("uShadowCascadeSplits[" + index + "]", frameUniforms.cascadeSplits[cascadeIndex]);
-                program->SetIntUVE("uShadowMapTextures[" + index + "]", static_cast<std::int32_t>(textureSlot));
+                program->SetFloatUVE(uniformNames.shadowCascadeSplits[cascadeIndex],
+                                     frameUniforms.cascadeSplits[cascadeIndex]);
+                program->SetIntUVE(uniformNames.shadowMapTextures[cascadeIndex],
+                                   static_cast<std::int32_t>(textureSlot));
             }
             program->SetIntUVE("uShadowPcfKernelRadius", shadowPcfKernelRadius);
             program->SetVector3UVE("uAlbedoColor", material->albedoColor);
@@ -987,7 +1028,9 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
     const std::vector<PrimitiveRenderItemUVE> primitiveItems = m_impl->ExtractPrimitiveItemsUVE(entityManager, frustum);
     m_impl->lastFrameDiagnostics.primitiveItemsExtracted = primitiveItems.size();
 
-    RenderGraphUVE renderGraph;
+    RenderGraphUVE& renderGraph = m_impl->renderGraph;
+    renderGraph.ClearUVE();
+    renderGraph.ReserveUVE(kShadowCascadeCountUVE + 2U, kShadowCascadeCountUVE + 3U);
     std::array<RenderGraphResourceHandleUVE, kShadowCascadeCountUVE> shadowResources{};
     for (std::size_t cascadeIndex = 0; cascadeIndex < kShadowCascadeCountUVE; ++cascadeIndex) {
         shadowResources[cascadeIndex] = renderGraph.ImportTextureUVE(

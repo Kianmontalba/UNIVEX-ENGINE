@@ -44,8 +44,17 @@ void GlCommandBufferUVE::BeginRenderPassUVE(const RenderPassDescUVE& renderPassD
         const std::uint32_t height = m_state->windowManager->GetHeightUVE();
         glViewport(0, 0, static_cast<GLsizei>(width), static_cast<GLsizei>(height));
     } else {
+        const std::uint64_t framebufferKey =
+            (static_cast<std::uint64_t>(renderPassDesc.colorAttachment.value) << 32U) |
+            static_cast<std::uint64_t>(renderPassDesc.depthAttachment.value);
         GLuint framebuffer = 0;
-        m_state->gl.glGenFramebuffers(1, &framebuffer);
+        const auto cachedFramebufferIt = m_state->framebufferCache.find(framebufferKey);
+        if (cachedFramebufferIt == m_state->framebufferCache.end()) {
+            m_state->gl.glGenFramebuffers(1, &framebuffer);
+            m_state->framebufferCache.emplace(framebufferKey, framebuffer);
+        } else {
+            framebuffer = cachedFramebufferIt->second;
+        }
         m_state->gl.glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
 
         std::uint32_t attachmentWidth = 0;
@@ -65,11 +74,13 @@ void GlCommandBufferUVE::BeginRenderPassUVE(const RenderPassDescUVE& renderPassD
             // Depth-only pass (e.g. a shadow map's depth pre-pass, Increment 26): a core-profile
             // FBO with no color attachment must explicitly declare it has none, or
             // glCheckFramebufferStatus reports GL_FRAMEBUFFER_INCOMPLETE_DRAW/READ_BUFFER.
-            // glDrawBuffer/glReadBuffer are legacy OpenGL 1.1 entry points <GL/gl.h> already
-            // declares directly (see gl_functions_uve.h's own doc comment) - no loader entry
-            // needed, same as the bare glViewport/glClear calls already used in this function.
+            // Desktop core OpenGL requires an explicit no-color draw/read buffer for a depth-only
+            // FBO. GLES3 has no glDrawBuffer/glReadBuffer entry points; its framebuffer contract
+            // already treats a depth-only FBO as having no color target.
+#if !defined(__ANDROID__)
             glDrawBuffer(GL_NONE);
             glReadBuffer(GL_NONE);
+#endif
         }
 
         if (renderPassDesc.depthAttachment != kInvalidTextureHandleUVE) {
@@ -104,7 +115,11 @@ void GlCommandBufferUVE::BeginRenderPassUVE(const RenderPassDescUVE& renderPassD
         // clear must restore the write mask first or its clear becomes a silent no-op and all
         // same-depth geometry in subsequent frames can fail GL_LESS.
         glDepthMask(GL_TRUE);
+#if defined(__ANDROID__)
+        glClearDepthf(renderPassDesc.clearDepth);
+#else
         glClearDepth(static_cast<GLdouble>(renderPassDesc.clearDepth));
+#endif
         clearMask |= GL_DEPTH_BUFFER_BIT;
     }
     if (clearMask != 0) {
@@ -117,7 +132,6 @@ void GlCommandBufferUVE::BeginRenderPassUVE(const RenderPassDescUVE& renderPassD
 void GlCommandBufferUVE::EndRenderPassUVE() {
     UVE_ASSERT(m_insideRenderPass);
     if (m_tempFramebuffer != 0) {
-        m_state->gl.glDeleteFramebuffers(1, &m_tempFramebuffer);
         m_state->gl.glBindFramebuffer(GL_FRAMEBUFFER, 0);
         m_tempFramebuffer = 0;
     }
@@ -125,6 +139,9 @@ void GlCommandBufferUVE::EndRenderPassUVE() {
 }
 
 void GlCommandBufferUVE::BindPipelineUVE(PipelineHandleUVE pipeline) {
+    if (m_currentPipeline == pipeline) {
+        return;
+    }
     const auto pipelineIt = m_state->pipelines.find(pipeline.value);
     if (pipelineIt == m_state->pipelines.end()) {
         UVE_ERROR("GlCommandBufferUVE: BindPipelineUVE referenced an unknown pipeline handle");
@@ -132,6 +149,9 @@ void GlCommandBufferUVE::BindPipelineUVE(PipelineHandleUVE pipeline) {
     }
     m_currentProgram = pipelineIt->second.glProgram;
     m_currentVao = pipelineIt->second.glVao;
+    m_currentPipeline = pipeline;
+    m_boundVertexBuffer = kInvalidBufferHandleUVE;
+    m_boundIndexBuffer = kInvalidBufferHandleUVE;
     m_currentVertexLayout = &pipelineIt->second.vertexLayout;
     m_currentVertexStride = pipelineIt->second.vertexStride;
     m_currentUniforms = &pipelineIt->second.uniforms;
@@ -157,6 +177,9 @@ void GlCommandBufferUVE::BindVertexBufferUVE(BufferHandleUVE buffer, std::uint32
     static_cast<void>(slot); // This minimal RHI describes one interleaved vertex layout per
                               // pipeline, not a per-slot binding table — every attribute in
                               // vertexLayout is configured against whichever buffer is bound here.
+    if (m_boundVertexBuffer == buffer) {
+        return;
+    }
     const auto bufferIt = m_state->buffers.find(buffer.value);
     if (bufferIt == m_state->buffers.end()) {
         UVE_ERROR("GlCommandBufferUVE: BindVertexBufferUVE referenced an unknown buffer handle");
@@ -177,15 +200,20 @@ void GlCommandBufferUVE::BindVertexBufferUVE(BufferHandleUVE buffer, std::uint32
             reinterpret_cast<const void*>(static_cast<std::uintptr_t>(attribute.offset)));
         m_state->gl.glEnableVertexAttribArray(attributeIndex);
     }
+    m_boundVertexBuffer = buffer;
 }
 
 void GlCommandBufferUVE::BindIndexBufferUVE(BufferHandleUVE buffer) {
+    if (m_boundIndexBuffer == buffer) {
+        return;
+    }
     const auto bufferIt = m_state->buffers.find(buffer.value);
     if (bufferIt == m_state->buffers.end()) {
         UVE_ERROR("GlCommandBufferUVE: BindIndexBufferUVE referenced an unknown buffer handle");
         return;
     }
     m_state->gl.glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, bufferIt->second.glBuffer);
+    m_boundIndexBuffer = buffer;
 }
 
 void GlCommandBufferUVE::BindTextureUVE(TextureHandleUVE texture, std::uint32_t slot) {
@@ -199,8 +227,13 @@ void GlCommandBufferUVE::BindTextureUVE(TextureHandleUVE texture, std::uint32_t 
         UVE_ERROR("GlCommandBufferUVE: BindTextureUVE referenced an unknown texture handle");
         return;
     }
+    const auto boundTextureIt = m_boundTextures.find(slot);
+    if (boundTextureIt != m_boundTextures.end() && boundTextureIt->second == texture) {
+        return;
+    }
     m_state->gl.glActiveTexture(static_cast<GLenum>(GL_TEXTURE0 + slot));
     glBindTexture(GL_TEXTURE_2D, textureIt->second.glTexture);
+    m_boundTextures[slot] = texture;
 }
 
 void GlCommandBufferUVE::BindUniformBufferUVE(BufferHandleUVE buffer, std::uint32_t slot) {
@@ -222,7 +255,7 @@ const GlCommandBufferUVE::UniformRecordUVE* GlCommandBufferUVE::FindUniformUVE(s
         UVE_WARNING("GlCommandBufferUVE: SetUniform*UVE called without a bound pipeline (uniform \"{}\")", name);
         return nullptr;
     }
-    const auto it = m_currentUniforms->find(std::string(name));
+    const auto it = m_currentUniforms->find(name);
     if (it == m_currentUniforms->end()) {
         UVE_WARNING("GlCommandBufferUVE: SetUniform*UVE - \"{}\" is not an active uniform on the bound pipeline",
                      name);

@@ -76,7 +76,11 @@
 #include "uve/threading/thread_pool_uve.h"
 #include "uve/utilities/timer_uve.h"
 #include "uve/window/null_window_manager_uve.h"
+#if defined(__ANDROID__)
+#include "uve/window/android_window_manager_uve.h"
+#else
 #include "uve/window/window_manager_uve.h"
+#endif
 
 namespace UVE::Core {
 
@@ -249,7 +253,18 @@ void EngineCoreUVE::Init() {
         windowDesc.vsyncEnabled = m_config.vsyncEnabledUVE;
         windowDesc.glVersionMajor = m_config.windowGlVersionMajor;
         windowDesc.glVersionMinor = m_config.windowGlVersionMinor;
+#if defined(__ANDROID__)
+        if (m_config.nativeWindowHandleUVE == nullptr) {
+            UVE_FATAL("EngineCoreUVE: Android window handle is required for a windowed run");
+            m_windowManager = std::make_unique<Window::NullWindowManagerUVE>();
+            m_windowCreationFailedUVE = true;
+        } else {
+            m_windowManager = std::make_unique<Window::AndroidWindowManagerUVE>(
+                *m_eventSystem, m_config.nativeWindowHandleUVE, windowDesc);
+        }
+#else
         m_windowManager = std::make_unique<Window::WindowManagerUVE>(*m_eventSystem, windowDesc);
+#endif
         if (!m_windowManager->IsValidUVE()) {
             UVE_FATAL("EngineCoreUVE: window creation failed - this run will not proceed past Load()");
             m_windowCreationFailedUVE = true;

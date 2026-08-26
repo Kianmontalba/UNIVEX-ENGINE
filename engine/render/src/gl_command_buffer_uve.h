@@ -63,9 +63,14 @@ private:
                                    // docs/CODING_STANDARDS.md).
     GLuint m_currentProgram = 0;
     GLuint m_currentVao = 0;
+    PipelineHandleUVE m_currentPipeline = kInvalidPipelineHandleUVE;
+    BufferHandleUVE m_boundVertexBuffer = kInvalidBufferHandleUVE;
+    BufferHandleUVE m_boundIndexBuffer = kInvalidBufferHandleUVE;
     const std::vector<VertexAttributeUVE>* m_currentVertexLayout = nullptr;
     std::uint32_t m_currentVertexStride = 0;
-    const std::unordered_map<std::string, UniformRecordUVE>* m_currentUniforms = nullptr;
+    const std::unordered_map<std::string, UniformRecordUVE, Detail::TransparentStringHashUVE,
+                             Detail::TransparentStringEqualUVE>* m_currentUniforms = nullptr;
+    std::unordered_map<std::uint32_t, TextureHandleUVE> m_boundTextures;
 };
 
 } // namespace UVE::Render

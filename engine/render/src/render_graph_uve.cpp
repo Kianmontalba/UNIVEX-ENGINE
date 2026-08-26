@@ -24,6 +24,11 @@ void RenderGraphUVE::AddPassUVE(RenderGraphPassDescUVE desc) {
     m_passes.push_back(std::move(desc));
 }
 
+void RenderGraphUVE::ReserveUVE(const std::size_t resourceCapacity, const std::size_t passCapacity) {
+    m_resources.reserve(resourceCapacity);
+    m_passes.reserve(passCapacity);
+}
+
 bool RenderGraphUVE::ExecuteUVE(ICommandBufferUVE& commandBuffer) const {
     for (const RenderGraphPassDescUVE& pass : m_passes) {
         if (pass.debugNameUVE.empty() || !pass.recordCallbackUVE) {

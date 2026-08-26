@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <type_traits>
+#include <utility>
 
 #include "uve/debug/logging_macros_uve.h"
 
@@ -19,24 +20,33 @@ std::optional<UniformReflectionUVE> ShaderProgramUVE::FindUniformUVE(std::string
     return *it;
 }
 
+void ShaderProgramUVE::SetPendingUniformUVE(std::string_view name, PendingUniformValueUVE value) {
+    const auto existingIt = m_pendingUniforms.find(name);
+    if (existingIt != m_pendingUniforms.end()) {
+        existingIt->second = std::move(value);
+        return;
+    }
+    m_pendingUniforms.emplace(std::string(name), std::move(value));
+}
+
 void ShaderProgramUVE::SetFloatUVE(std::string_view name, float value) {
-    m_pendingUniforms[std::string(name)] = value;
+    SetPendingUniformUVE(name, value);
 }
 
 void ShaderProgramUVE::SetIntUVE(std::string_view name, std::int32_t value) {
-    m_pendingUniforms[std::string(name)] = value;
+    SetPendingUniformUVE(name, value);
 }
 
 void ShaderProgramUVE::SetBoolUVE(std::string_view name, bool value) {
-    m_pendingUniforms[std::string(name)] = value;
+    SetPendingUniformUVE(name, value);
 }
 
 void ShaderProgramUVE::SetVector3UVE(std::string_view name, const Math::Vector3UVE& value) {
-    m_pendingUniforms[std::string(name)] = value;
+    SetPendingUniformUVE(name, value);
 }
 
 void ShaderProgramUVE::SetMatrix4x4UVE(std::string_view name, const Math::Matrix4x4UVE& value) {
-    m_pendingUniforms[std::string(name)] = value;
+    SetPendingUniformUVE(name, value);
 }
 
 void ShaderProgramUVE::ApplyToUVE(ICommandBufferUVE& commandBuffer) const {
