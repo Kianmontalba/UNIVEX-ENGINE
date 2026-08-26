@@ -80,5 +80,36 @@ TEST_F(RenderQueueUVETest, SortUVE_TransparentItems_SortedBackToFront) {
     EXPECT_FLOAT_EQ(queue.transparentItems[2].sortDepth, 1.0F);
 }
 
+TEST_F(RenderQueueUVETest, ClearUVE_ClearsFrameStateAndPreservesCapacity) {
+    RenderQueueUVE queue;
+    queue.ReserveUVE(8U, 7U, 6U);
+    queue.opaqueItems.push_back(MakeItemUVE(1.0F));
+    queue.transparentItems.push_back(MakeItemUVE(2.0F));
+    queue.particleItems.push_back({{11U, 2U}, Math::Vector3UVE{1.0F, 2.0F, 3.0F}, 1.0F, 4.0F, 1U});
+    queue.particleItemsTruncated = true;
+    queue.invalidAssetReferences = 1U;
+    queue.pendingAssetLoads = 2U;
+    queue.failedAssetLoads = 3U;
+    queue.invalidRenderEligibility = 4U;
+
+    const std::size_t opaqueCapacity = queue.opaqueItems.capacity();
+    const std::size_t transparentCapacity = queue.transparentItems.capacity();
+    const std::size_t particleCapacity = queue.particleItems.capacity();
+
+    queue.ClearUVE();
+
+    EXPECT_TRUE(queue.opaqueItems.empty());
+    EXPECT_TRUE(queue.transparentItems.empty());
+    EXPECT_TRUE(queue.particleItems.empty());
+    EXPECT_FALSE(queue.particleItemsTruncated);
+    EXPECT_EQ(queue.invalidAssetReferences, 0U);
+    EXPECT_EQ(queue.pendingAssetLoads, 0U);
+    EXPECT_EQ(queue.failedAssetLoads, 0U);
+    EXPECT_EQ(queue.invalidRenderEligibility, 0U);
+    EXPECT_EQ(queue.opaqueItems.capacity(), opaqueCapacity);
+    EXPECT_EQ(queue.transparentItems.capacity(), transparentCapacity);
+    EXPECT_EQ(queue.particleItems.capacity(), particleCapacity);
+}
+
 } // namespace
 } // namespace UVE::Render::Tests

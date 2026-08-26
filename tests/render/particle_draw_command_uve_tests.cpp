@@ -105,4 +105,36 @@ TEST(ParticleDrawRecorderUVETest, RecordUVE_ZeroCapProducesNoCommandsAndPreserve
     EXPECT_TRUE(recording.truncated);
 }
 
+TEST(ParticleDrawRecorderUVETest, RecordIntoUVE_MatchesWrapperAndReusesCommandCapacity) {
+    RenderQueueUVE queue;
+    queue.particleItems = {
+        {{1U, 1U}, Math::Vector3UVE{1.0F, 2.0F, 3.0F}, 1.0F, 3.0F, 1U},
+        {{2U, 1U}, Math::Vector3UVE{4.0F, 5.0F, 6.0F}, 0.5F, 2.0F, 2U},
+        {{3U, 1U}, Math::Vector3UVE{7.0F, 8.0F, 9.0F}, 0.25F, 1.0F, 3U},
+    };
+
+    ParticleDrawRecordingUVE recording;
+    recording.commands.reserve(8U);
+    const ParticleDrawRecordingUVE expected = ParticleDrawRecorderUVE::RecordUVE(queue, 2U);
+
+    ParticleDrawRecorderUVE::RecordIntoUVE(queue, 2U, recording);
+
+    EXPECT_EQ(recording.sourceItemCount, expected.sourceItemCount);
+    EXPECT_EQ(recording.commands, expected.commands);
+    EXPECT_EQ(recording.truncated, expected.truncated);
+    const std::size_t retainedCapacity = recording.commands.capacity();
+    EXPECT_GE(retainedCapacity, 8U);
+
+    ParticleDrawRecorderUVE::RecordIntoUVE(queue, queue.particleItems.size(), recording);
+    EXPECT_EQ(recording.commands.size(), queue.particleItems.size());
+    EXPECT_FALSE(recording.truncated);
+    EXPECT_EQ(recording.commands.capacity(), retainedCapacity);
+
+    ParticleDrawRecorderUVE::RecordIntoUVE(queue, 0U, recording);
+    EXPECT_EQ(recording.sourceItemCount, queue.particleItems.size());
+    EXPECT_TRUE(recording.commands.empty());
+    EXPECT_TRUE(recording.truncated);
+    EXPECT_EQ(recording.commands.capacity(), retainedCapacity);
+}
+
 } // namespace UVE::Render::Tests
