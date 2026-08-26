@@ -57,7 +57,7 @@ struct GlTextureFormatUVE {
         case TextureFormatUVE::RGBA8Unorm:
             return {GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE};
         case TextureFormatUVE::RGBA16Float:
-            return {GL_RGBA16F, GL_RGBA, GL_FLOAT};
+            return {GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT};
         case TextureFormatUVE::Depth32Float:
             return {GL_DEPTH_COMPONENT32F, GL_DEPTH_COMPONENT, GL_FLOAT};
     }

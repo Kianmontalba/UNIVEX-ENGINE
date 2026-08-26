@@ -728,6 +728,30 @@ TEST_F(GlRenderDeviceUVETest, CreateThenDestroyTexture_UpdatesLiveResourceCount)
     EXPECT_EQ(renderDevice->GetLiveResourceCountUVE(), 0U);
 }
 
+TEST_F(GlRenderDeviceUVETest, CreateTextureUVE_Rgba16Float_UsesHalfFloatUploadType) {
+    constexpr std::array<std::uint16_t, 16> kPixels{
+        0x3C00U, 0x3800U, 0x0000U, 0x3C00U,
+        0x3400U, 0x3C00U, 0x3800U, 0x3C00U,
+        0x0000U, 0x0000U, 0x3C00U, 0x3C00U,
+        0x3C00U, 0x3400U, 0x3800U, 0x3C00U,
+    };
+    while (glGetError() != GL_NO_ERROR) {
+    }
+
+    const TextureHandleUVE texture = renderDevice->CreateTextureUVE(
+        TextureDescUVE{2U, 2U, TextureFormatUVE::RGBA16Float, 1U},
+        std::as_bytes(std::span(kPixels)));
+    ASSERT_NE(texture, kInvalidTextureHandleUVE);
+    EXPECT_EQ(glGetError(), GL_NO_ERROR);
+
+    std::array<std::uint16_t, kPixels.size()> readback{};
+    glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_HALF_FLOAT, readback.data());
+    EXPECT_EQ(glGetError(), GL_NO_ERROR);
+    EXPECT_EQ(readback, kPixels);
+
+    renderDevice->DestroyTextureUVE(texture);
+}
+
 TEST_F(GlRenderDeviceUVETest, CreateShaderUVE_ValidSource_Succeeds) {
     const ShaderHandleUVE shader =
         renderDevice->CreateShaderUVE(ShaderDescUVE{ShaderStageUVE::Vertex, std::string(kValidVertexShaderSource)});
