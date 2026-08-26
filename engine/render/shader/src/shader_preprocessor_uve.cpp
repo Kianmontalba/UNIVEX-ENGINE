@@ -21,6 +21,7 @@
 #include "shader_preprocessor_uve.h"
 
 #include <cctype>
+#include <optional>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -87,6 +88,84 @@ struct PreprocessContextUVE {
 [[nodiscard]] bool StartsWithUVE(std::string_view text, std::string_view prefix) {
     return text.size() >= prefix.size() && text.substr(0, prefix.size()) == prefix;
 }
+
+[[nodiscard]] std::string_view RemoveUtf8BomUVE(std::string_view text) noexcept {
+    constexpr std::string_view utf8Bom{"\xEF\xBB\xBF"};
+    if (text.size() >= utf8Bom.size() && text.substr(0, utf8Bom.size()) == utf8Bom) {
+        return text.substr(utf8Bom.size());
+    }
+    return text;
+}
+
+[[nodiscard]] bool IsVersionDirectiveUVE(std::string_view text) noexcept {
+    text = TrimUVE(RemoveUtf8BomUVE(text));
+    if (!StartsWithUVE(text, "#version")) {
+        return false;
+    }
+    return text.size() == 8U || std::isspace(static_cast<unsigned char>(text[8])) != 0;
+}
+
+/// Finds a leading GLSL #version line while allowing only blank lines and comments before it. This
+/// keeps generated #line directives behind #version, as required by GLSL, even when authored files
+/// begin with a UTF-8 BOM or a copyright/comment header.
+[[nodiscard]] std::optional<std::size_t> FindLeadingVersionLineUVE(const std::vector<std::string>& lines) {
+    bool insideBlockComment = false;
+    for (std::size_t lineIndex = 0; lineIndex < lines.size(); ++lineIndex) {
+        const std::string_view line = lineIndex == 0U ? RemoveUtf8BomUVE(lines[lineIndex]) : lines[lineIndex];
+        std::size_t cursor = 0U;
+        while (cursor < line.size()) {
+            if (insideBlockComment) {
+                const std::size_t commentEnd = line.find("*/", cursor);
+                if (commentEnd == std::string_view::npos) {
+                    cursor = line.size();
+                    break;
+                }
+                cursor = commentEnd + 2U;
+                insideBlockComment = false;
+                continue;
+            }
+            while (cursor < line.size() && std::isspace(static_cast<unsigned char>(line[cursor])) != 0) {
+                ++cursor;
+            }
+            if (cursor == line.size() ||
+                (cursor + 1U < line.size() && line[cursor] == '/' && line[cursor + 1U] == '/')) {
+                break;
+            }
+            if (cursor + 1U < line.size() && line[cursor] == '/' && line[cursor + 1U] == '*') {
+                cursor += 2U;
+                insideBlockComment = true;
+                continue;
+            }
+            if (IsVersionDirectiveUVE(line.substr(cursor))) {
+                return lineIndex;
+            }
+            return std::nullopt;
+        }
+    }
+    return std::nullopt;
+}
+
+#ifdef __ANDROID__
+[[nodiscard]] bool IsDesktop330CoreVersionUVE(std::string_view versionLine) noexcept {
+    versionLine = TrimUVE(RemoveUtf8BomUVE(versionLine));
+    if (!IsVersionDirectiveUVE(versionLine)) {
+        return false;
+    }
+    std::string_view remainder = TrimUVE(versionLine.substr(8));
+    if (!StartsWithUVE(remainder, "330") ||
+        (remainder.size() > 3U && std::isspace(static_cast<unsigned char>(remainder[3])) == 0)) {
+        return false;
+    }
+    remainder = TrimUVE(remainder.substr(3));
+    if (!StartsWithUVE(remainder, "core") ||
+        (remainder.size() > 4U && remainder[4] != '/' &&
+         std::isspace(static_cast<unsigned char>(remainder[4])) == 0)) {
+        return false;
+    }
+    remainder = TrimUVE(remainder.substr(4));
+    return remainder.empty() || StartsWithUVE(remainder, "//") || StartsWithUVE(remainder, "/*");
+}
+#endif
 
 /// Token-boundary-aware macro substitution: replaces every maximal `[A-Za-z_][A-Za-z0-9_]*`
 /// identifier in `line` that exactly matches a key in `definedFlags` (with a non-empty value —
@@ -293,25 +372,29 @@ PreprocessResultUVE PreprocessShaderSourceUVE(Asset::IFileSystemUVE& fileSystem,
     std::string output;
 
     std::size_t firstContentLineIndex = 0;
-    if (!lines.empty() && StartsWithUVE(TrimUVE(lines[0]), "#version")) {
+    const std::optional<std::size_t> versionLineIndex = FindLeadingVersionLineUVE(lines);
+    if (versionLineIndex.has_value()) {
+        for (std::size_t lineIndex = 0; lineIndex < *versionLineIndex; ++lineIndex) {
+            output += lineIndex == 0U ? RemoveUtf8BomUVE(lines[lineIndex]) : std::string_view(lines[lineIndex]);
+            output += "\n";
+        }
 #ifdef __ANDROID__
-        const std::string_view versionLine = TrimUVE(lines[0]);
-        if (versionLine == "#version 330 core") {
-            // Android's ES 3.0 context cannot compile desktop GLSL 3.30. Keep this adaptation
-            // here so both embedded and project-authored shaders share one backend boundary while
-            // desktop preprocessing and built-in source-parity tests remain unchanged.
+        // Android's ES 3.0 context cannot compile desktop GLSL 3.30. Keep this adaptation at the
+        // backend boundary so embedded and project-authored shaders share the same GLES handling,
+        // including version lines with a trailing comment.
+        if (IsDesktop330CoreVersionUVE(lines[*versionLineIndex])) {
             output += "#version 300 es\n";
             output += "precision highp float;\n";
             output += "precision highp int;\n";
         } else {
-            output += lines[0];
+            output += RemoveUtf8BomUVE(lines[*versionLineIndex]);
             output += "\n";
         }
 #else
-        output += lines[0];
+        output += RemoveUtf8BomUVE(lines[*versionLineIndex]);
         output += "\n";
 #endif
-        firstContentLineIndex = 1;
+        firstContentLineIndex = *versionLineIndex + 1U;
     }
     output += "#line " + std::to_string(firstContentLineIndex + 1) + " 0\n";
 
