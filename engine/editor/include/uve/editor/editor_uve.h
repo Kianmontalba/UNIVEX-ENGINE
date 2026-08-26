@@ -778,7 +778,7 @@ private:
     /// Refreshes the read-only project index after the engine-owned watcher observes a new
     /// filesystem baseline. It never schedules imports or mutates project files.
     void RefreshProjectFileIndexUVE();
-    void DrawConsolePanelUVE();
+    void DrawFolderContentsPanelUVE();
 
     Core::EngineServicesUVE* m_services = nullptr;
     Core::ISimulationControlUVE* m_simulationControl = nullptr;
