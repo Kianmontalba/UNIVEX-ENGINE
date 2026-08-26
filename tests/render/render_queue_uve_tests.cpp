@@ -80,6 +80,41 @@ TEST_F(RenderQueueUVETest, SortUVE_TransparentItems_SortedBackToFront) {
     EXPECT_FLOAT_EQ(queue.transparentItems[2].sortDepth, 1.0F);
 }
 
+TEST_F(RenderQueueUVETest, SortUVE_EqualDepthItems_UseDeterministicAssetTieBreak) {
+    const auto assetLess = [](const RenderItemUVE& lhs, const RenderItemUVE& rhs) {
+        const auto lhsMaterial = lhs.materialHandle.GetGuidUVE().value;
+        const auto rhsMaterial = rhs.materialHandle.GetGuidUVE().value;
+        if (lhsMaterial != rhsMaterial) {
+            return lhsMaterial < rhsMaterial;
+        }
+        return lhs.meshHandle.GetGuidUVE().value < rhs.meshHandle.GetGuidUVE().value;
+    };
+
+    RenderItemUVE opaqueFirst = MakeItemUVE(2.0F);
+    RenderItemUVE opaqueSecond = MakeItemUVE(2.0F);
+    ASSERT_NE(opaqueFirst.materialHandle.GetGuidUVE(), opaqueSecond.materialHandle.GetGuidUVE());
+    RenderQueueUVE opaqueQueue;
+    opaqueQueue.opaqueItems.push_back(std::move(opaqueSecond));
+    opaqueQueue.opaqueItems.push_back(std::move(opaqueFirst));
+    opaqueQueue.SortUVE();
+    ASSERT_EQ(opaqueQueue.opaqueItems.size(), 2U);
+    EXPECT_TRUE(assetLess(opaqueQueue.opaqueItems[0], opaqueQueue.opaqueItems[1]));
+    EXPECT_FLOAT_EQ(opaqueQueue.opaqueItems[0].sortDepth, 2.0F);
+    EXPECT_FLOAT_EQ(opaqueQueue.opaqueItems[1].sortDepth, 2.0F);
+
+    RenderItemUVE transparentFirst = MakeItemUVE(3.0F);
+    RenderItemUVE transparentSecond = MakeItemUVE(3.0F);
+    ASSERT_NE(transparentFirst.materialHandle.GetGuidUVE(), transparentSecond.materialHandle.GetGuidUVE());
+    RenderQueueUVE transparentQueue;
+    transparentQueue.transparentItems.push_back(std::move(transparentSecond));
+    transparentQueue.transparentItems.push_back(std::move(transparentFirst));
+    transparentQueue.SortUVE();
+    ASSERT_EQ(transparentQueue.transparentItems.size(), 2U);
+    EXPECT_TRUE(assetLess(transparentQueue.transparentItems[0], transparentQueue.transparentItems[1]));
+    EXPECT_FLOAT_EQ(transparentQueue.transparentItems[0].sortDepth, 3.0F);
+    EXPECT_FLOAT_EQ(transparentQueue.transparentItems[1].sortDepth, 3.0F);
+}
+
 TEST_F(RenderQueueUVETest, ClearUVE_ClearsFrameStateAndPreservesCapacity) {
     RenderQueueUVE queue;
     queue.ReserveUVE(8U, 7U, 6U);

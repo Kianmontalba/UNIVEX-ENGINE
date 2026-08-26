@@ -6,6 +6,19 @@
 
 namespace UVE::Render {
 
+namespace {
+
+[[nodiscard]] bool RenderItemTieBreakLessUVE(const RenderItemUVE& lhs, const RenderItemUVE& rhs) noexcept {
+    const std::uint64_t lhsMaterialGuid = lhs.materialHandle.GetGuidUVE().value;
+    const std::uint64_t rhsMaterialGuid = rhs.materialHandle.GetGuidUVE().value;
+    if (lhsMaterialGuid != rhsMaterialGuid) {
+        return lhsMaterialGuid < rhsMaterialGuid;
+    }
+    return lhs.meshHandle.GetGuidUVE().value < rhs.meshHandle.GetGuidUVE().value;
+}
+
+} // namespace
+
 void RenderQueueUVE::ClearUVE() noexcept {
     opaqueItems.clear();
     transparentItems.clear();
@@ -25,10 +38,18 @@ void RenderQueueUVE::ReserveUVE(const std::size_t opaqueCapacity, const std::siz
 }
 
 void RenderQueueUVE::SortUVE() {
-    std::sort(opaqueItems.begin(), opaqueItems.end(),
-              [](const RenderItemUVE& lhs, const RenderItemUVE& rhs) { return lhs.sortDepth < rhs.sortDepth; });
-    std::sort(transparentItems.begin(), transparentItems.end(),
-              [](const RenderItemUVE& lhs, const RenderItemUVE& rhs) { return lhs.sortDepth > rhs.sortDepth; });
+    std::sort(opaqueItems.begin(), opaqueItems.end(), [](const RenderItemUVE& lhs, const RenderItemUVE& rhs) {
+        if (lhs.sortDepth != rhs.sortDepth) {
+            return lhs.sortDepth < rhs.sortDepth;
+        }
+        return RenderItemTieBreakLessUVE(lhs, rhs);
+    });
+    std::sort(transparentItems.begin(), transparentItems.end(), [](const RenderItemUVE& lhs, const RenderItemUVE& rhs) {
+        if (lhs.sortDepth != rhs.sortDepth) {
+            return lhs.sortDepth > rhs.sortDepth;
+        }
+        return RenderItemTieBreakLessUVE(lhs, rhs);
+    });
     std::sort(particleItems.begin(), particleItems.end(), [](const ParticleRenderItemUVE& lhs,
                                                              const ParticleRenderItemUVE& rhs) {
         if (lhs.sortDepth != rhs.sortDepth) {
