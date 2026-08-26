@@ -446,6 +446,8 @@ TEST_F(GlRenderDeviceUVETest, BufferUsageAndIndexedCountValidationRejectsUnsafeD
 
     commandBuffer->BindVertexBufferUVE(uniformBuffer);
     commandBuffer->BindIndexBufferUVE(vertexBuffer);
+    commandBuffer->BindUniformBufferUVE(vertexBuffer, 0U);
+    commandBuffer->BindUniformBufferUVE(uniformBuffer, 0U);
     commandBuffer->DrawIndexedUVE(2U);
     EXPECT_EQ(glGetError(), GL_NO_ERROR);
 

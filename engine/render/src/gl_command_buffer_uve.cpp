@@ -295,6 +295,10 @@ void GlCommandBufferUVE::BindUniformBufferUVE(BufferHandleUVE buffer, std::uint3
         UVE_ERROR("GlCommandBufferUVE: BindUniformBufferUVE referenced an unknown buffer handle");
         return;
     }
+    if (bufferIt->second.target != GL_UNIFORM_BUFFER) {
+        UVE_ERROR("GlCommandBufferUVE: BindUniformBufferUVE requires a uniform buffer");
+        return;
+    }
     m_state->gl.glBindBufferBase(GL_UNIFORM_BUFFER, slot, bufferIt->second.glBuffer);
 }
 
