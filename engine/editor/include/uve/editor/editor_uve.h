@@ -71,6 +71,19 @@ struct EditorViewportRectUVE final {
     Math::Vector2UVE size{};
 };
 
+/// Editor-only 2D canvas presentation state for authored screen-space content such as loading
+/// screens. The design surface is not an ECS entity, is never serialized into a scene, and never
+/// changes runtime state. Pan is expressed in desktop pixels relative to the fitted canvas center.
+struct Editor2DCanvasStateUVE final {
+    static constexpr float kDesignWidth = 1920.0F;
+    static constexpr float kDesignHeight = 1080.0F;
+
+    float zoom = 0.36F;
+    Math::Vector2UVE pan{};
+    bool gridVisible = true;
+    bool safeAreaVisible = true;
+};
+
 /// Canonical named axes used by EditorUVE's Translate, Rotate, and Scale gizmos. The active
 /// coordinate space chooses whether their world or selected-entity-local basis is used.
 enum class EditorTransformAxisUVE {
@@ -375,6 +388,12 @@ public:
     [[nodiscard]] Math::Vector3UVE GetViewportFocusPointUVE() const noexcept;
     [[nodiscard]] float GetViewportDistanceUVE() const noexcept;
     [[nodiscard]] EditorViewportNavigationModeUVE GetViewportNavigationModeUVE() const noexcept;
+    /// Returns editor-only 2D canvas state for screen-space authoring. It is not scene data.
+    [[nodiscard]] Editor2DCanvasStateUVE Get2DCanvasStateUVE() const noexcept;
+    /// Validates and updates the editor-only 2D canvas zoom without changing scene state/history.
+    [[nodiscard]] bool Set2DCanvasZoomUVE(float zoom) noexcept;
+    /// Restores the editor-only 2D canvas to its centered loading-screen design view.
+    void Reset2DCanvasViewUVE() noexcept;
     [[nodiscard]] bool IsSceneDirtyUVE() const noexcept;
     /// Read-only transform-tool lifecycle diagnostics. These values expose editor-session evidence
     /// only; they neither alter input routing nor claim any ECS mutation succeeded.
@@ -454,10 +473,11 @@ private:
         Signals,
     };
 
-    /// Selects the editor viewport surface. Game remains unavailable until a runtime presentation
-    /// target is connected; the tab is shown for stable workspace orientation only.
+    /// Selects the editor viewport surface. The 2D tab is an editor-owned screen-space canvas;
+    /// Game remains unavailable until a runtime presentation target is connected.
     enum class EditorViewportTabUVE {
         Scene,
+        TwoD,
         Game,
     };
 
@@ -765,6 +785,7 @@ private:
     void DrawPrefabInspectorDrawerUVE(Scene::EntityUVE entity);
     void DrawImportQueueMonitorUVE();
     void DrawViewportPanelUVE();
+    void Draw2DCanvasUVE(const EditorViewportRectUVE& viewportRect);
     void DrawScriptingWorkspaceUVE();
     [[nodiscard]] static ContentBrowserItemTypeUVE ClassifyContentBrowserEntryUVE(
         const Asset::ProjectFileEntryUVE& entry);
@@ -801,6 +822,10 @@ private:
     float m_viewportPitchRadians = 0.0F;
     float m_viewportDistance = 6.0F;
     EditorViewportNavigationModeUVE m_viewportNavigationMode = EditorViewportNavigationModeUVE::None;
+    Editor2DCanvasStateUVE m_2dCanvasState{};
+    Math::Vector2UVE m_2dCanvasPanStartPointer{};
+    Math::Vector2UVE m_2dCanvasPanStart{};
+    bool m_2dCanvasPanning = false;
     std::deque<HistoryEntryUVE> m_undoHistory;
     std::deque<HistoryEntryUVE> m_redoHistory;
     EditorWorkspaceUVE m_activeWorkspace = EditorWorkspaceUVE::Library;

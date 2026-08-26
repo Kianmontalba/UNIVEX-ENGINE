@@ -77,6 +77,8 @@ constexpr float kMaximumViewportDistanceUVE = 500.0F;
 constexpr float kMaximumViewportPitchRadiansUVE = 1.4835299F; // 85 degrees.
 constexpr float kViewportOrbitRadiansPerPixelUVE = 0.008F;
 constexpr float kViewportZoomExponentPerWheelUnitUVE = 0.16F;
+constexpr float kMinimum2DCanvasZoomUVE = 0.10F;
+constexpr float kMaximum2DCanvasZoomUVE = 4.00F;
 constexpr const char* kHierarchyEntityPayloadUVE = "UVE_SCENE_HIERARCHY_ENTITY";
 
 [[nodiscard]] const char* ScriptValueTypeLabelUVE(const Scripting::ScriptValueTypeUVE type) noexcept {
@@ -496,9 +498,14 @@ void EditorUVE::RenderOverlayUVE() {
 
     ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplGlfw_NewFrame();
-    ImGui::NewFrame();
-
+        ImGui::NewFrame();
+    if (m_viewportTab == EditorViewportTabUVE::TwoD) {
+        // The 2D artboard is an editor-only screen-space surface. Clear any previous 3D visual
+        // composite state so stale selection highlights cannot leak behind the canvas.
+        m_services->GetRenderer3DUVE().SetEditorViewportVisualStateUVE(Render::EditorViewportVisualStateUVE{});
+    }
     DrawMenuBarUVE();
+
     if (m_activeWorkspace == EditorWorkspaceUVE::Scripting) {
         DrawScriptingWorkspaceUVE();
     } else {
@@ -2641,8 +2648,22 @@ float EditorUVE::GetViewportDistanceUVE() const noexcept {
 EditorViewportNavigationModeUVE EditorUVE::GetViewportNavigationModeUVE() const noexcept {
     return m_viewportNavigationMode;
 }
-
+Editor2DCanvasStateUVE EditorUVE::Get2DCanvasStateUVE() const noexcept {
+    return m_2dCanvasState;
+}
+bool EditorUVE::Set2DCanvasZoomUVE(const float zoom) noexcept {
+    if (!std::isfinite(zoom) || zoom < kMinimum2DCanvasZoomUVE || zoom > kMaximum2DCanvasZoomUVE) {
+        return false;
+    }
+    m_2dCanvasState.zoom = zoom;
+    return true;
+}
+void EditorUVE::Reset2DCanvasViewUVE() noexcept {
+    m_2dCanvasState = Editor2DCanvasStateUVE{};
+    m_2dCanvasPanning = false;
+}
 bool EditorUVE::IsSceneDirtyUVE() const noexcept {
+
     return m_sceneDirty;
 }
 
@@ -6043,6 +6064,111 @@ void EditorUVE::DrawScriptingWorkspaceUVE() {
     ImGui::End();
 }
 
+void EditorUVE::Draw2DCanvasUVE(const EditorViewportRectUVE& viewportRect) {
+    const ImVec2 origin{viewportRect.origin.x, viewportRect.origin.y};
+    const ImVec2 size{viewportRect.size.x, viewportRect.size.y};
+    ImGui::SetCursorScreenPos(origin);
+    ImGui::InvisibleButton("##2d-canvas-input", size,
+                           ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight |
+                               ImGuiButtonFlags_MouseButtonMiddle);
+    const bool hovered = ImGui::IsItemHovered();
+    const ImVec2 mouse = ImGui::GetMousePos();
+    const ImVec2 center{origin.x + size.x * 0.5F + m_2dCanvasState.pan.x,
+                        origin.y + size.y * 0.5F + m_2dCanvasState.pan.y};
+    const float zoom = std::clamp(m_2dCanvasState.zoom, kMinimum2DCanvasZoomUVE, kMaximum2DCanvasZoomUVE);
+    const ImVec2 canvasSize{Editor2DCanvasStateUVE::kDesignWidth * zoom,
+                            Editor2DCanvasStateUVE::kDesignHeight * zoom};
+    const ImVec2 canvasMin{center.x - canvasSize.x * 0.5F, center.y - canvasSize.y * 0.5F};
+    const ImVec2 canvasMax{canvasMin.x + canvasSize.x, canvasMin.y + canvasSize.y};
+    ImDrawList* const drawList = ImGui::GetWindowDrawList();
+
+    drawList->AddRectFilled(origin, ImVec2{origin.x + size.x, origin.y + size.y}, IM_COL32(19, 21, 24, 255));
+    drawList->AddRectFilled(canvasMin, canvasMax, IM_COL32(31, 34, 38, 255));
+    drawList->AddRect(canvasMin, canvasMax, IM_COL32(118, 126, 136, 235), 2.0F, 0, 1.5F);
+
+    if (m_2dCanvasState.gridVisible) {
+        constexpr float gridStep = 80.0F;
+        constexpr float majorGridStep = 320.0F;
+        for (float x = 0.0F; x <= Editor2DCanvasStateUVE::kDesignWidth; x += gridStep) {
+            const float screenX = canvasMin.x + x * zoom;
+            const bool major = std::fmod(x, majorGridStep) < 0.01F;
+            drawList->AddLine(ImVec2{screenX, canvasMin.y}, ImVec2{screenX, canvasMax.y},
+                              major ? IM_COL32(78, 84, 92, 180) : IM_COL32(54, 59, 66, 150),
+                              major ? 1.0F : 0.75F);
+        }
+        for (float y = 0.0F; y <= Editor2DCanvasStateUVE::kDesignHeight; y += gridStep) {
+            const float screenY = canvasMin.y + y * zoom;
+            const bool major = std::fmod(y, majorGridStep) < 0.01F;
+            drawList->AddLine(ImVec2{canvasMin.x, screenY}, ImVec2{canvasMax.x, screenY},
+                              major ? IM_COL32(78, 84, 92, 180) : IM_COL32(54, 59, 66, 150),
+                              major ? 1.0F : 0.75F);
+        }
+    }
+
+    if (m_2dCanvasState.safeAreaVisible) {
+        constexpr float safeHorizontal = 96.0F;
+        constexpr float safeVertical = 54.0F;
+        const ImVec2 safeMin{canvasMin.x + safeHorizontal * zoom, canvasMin.y + safeVertical * zoom};
+        const ImVec2 safeMax{canvasMax.x - safeHorizontal * zoom, canvasMax.y - safeVertical * zoom};
+        drawList->AddRect(safeMin, safeMax, IM_COL32(219, 179, 106, 210), 1.0F, 0, 1.0F);
+        const float safeLabelWidth = ImGui::CalcTextSize("SAFE AREA").x;
+        drawList->AddText(ImVec2{safeMax.x - safeLabelWidth - 8.0F, safeMin.y + 6.0F},
+                          IM_COL32(219, 179, 106, 210), "SAFE AREA");
+    }
+
+    const ImVec2 designCenter{canvasMin.x + canvasSize.x * 0.5F, canvasMin.y + canvasSize.y * 0.5F};
+    drawList->AddLine(ImVec2{designCenter.x, canvasMin.y}, ImVec2{designCenter.x, canvasMax.y},
+                      IM_COL32(112, 184, 232, 110), 1.0F);
+    drawList->AddLine(ImVec2{canvasMin.x, designCenter.y}, ImVec2{canvasMax.x, designCenter.y},
+                      IM_COL32(112, 184, 232, 110), 1.0F);
+
+    const ImVec2 loadingTitlePosition{designCenter.x - 86.0F * zoom, designCenter.y - 56.0F * zoom};
+    drawList->AddText(loadingTitlePosition, IM_COL32(220, 225, 232, 215), "LOADING SCREEN");
+    const ImVec2 progressMin{designCenter.x - 240.0F * zoom, designCenter.y + 80.0F * zoom};
+    const ImVec2 progressMax{designCenter.x + 240.0F * zoom, designCenter.y + 98.0F * zoom};
+    drawList->AddRect(progressMin, progressMax, IM_COL32(155, 166, 180, 150), 2.0F, 0, 1.0F);
+    drawList->AddRectFilled(progressMin, ImVec2{progressMin.x + (progressMax.x - progressMin.x) * 0.42F, progressMax.y},
+                            IM_COL32(112, 184, 232, 150), 2.0F);
+    drawList->AddText(ImVec2{progressMin.x, progressMax.y + 8.0F}, IM_COL32(155, 166, 180, 165),
+                      "EDITOR GUIDE - NO AUTHORED 2D NODES");
+    drawList->AddText(ImVec2{origin.x + 12.0F, origin.y + 12.0F}, IM_COL32(190, 198, 208, 235),
+                      "2D CANVAS - LOADING SCREEN");
+    drawList->AddText(ImVec2{origin.x + 12.0F, origin.y + 31.0F}, IM_COL32(126, 136, 148, 210),
+                      "1920 x 1080 - middle-drag pan - wheel zoom");
+
+    if (hovered) {
+        ImGuiIO& io = ImGui::GetIO();
+        if (m_2dCanvasPanning) {
+            if (ImGui::IsMouseDown(ImGuiMouseButton_Middle)) {
+                m_2dCanvasState.pan.x = std::clamp(
+                    m_2dCanvasPanStart.x + mouse.x - m_2dCanvasPanStartPointer.x, -4096.0F, 4096.0F);
+                m_2dCanvasState.pan.y = std::clamp(
+                    m_2dCanvasPanStart.y + mouse.y - m_2dCanvasPanStartPointer.y, -4096.0F, 4096.0F);
+            } else {
+                m_2dCanvasPanning = false;
+            }
+        } else if (ImGui::IsMouseClicked(ImGuiMouseButton_Middle)) {
+            m_2dCanvasPanning = true;
+            m_2dCanvasPanStartPointer = Math::Vector2UVE{mouse.x, mouse.y};
+            m_2dCanvasPanStart = m_2dCanvasState.pan;
+        }
+
+        if (!io.WantTextInput && io.MouseWheel != 0.0F) {
+            const ImVec2 relativeToCenter{mouse.x - (origin.x + size.x * 0.5F),
+                                          mouse.y - (origin.y + size.y * 0.5F)};
+            const ImVec2 designOffset{(relativeToCenter.x - m_2dCanvasState.pan.x) / zoom,
+                                      (relativeToCenter.y - m_2dCanvasState.pan.y) / zoom};
+            const float nextZoom = std::clamp(zoom * std::pow(1.12F, io.MouseWheel),
+                                              kMinimum2DCanvasZoomUVE, kMaximum2DCanvasZoomUVE);
+            m_2dCanvasState.zoom = nextZoom;
+            m_2dCanvasState.pan.x = relativeToCenter.x - designOffset.x * nextZoom;
+            m_2dCanvasState.pan.y = relativeToCenter.y - designOffset.y * nextZoom;
+        }
+    } else if (m_2dCanvasPanning && !ImGui::IsMouseDown(ImGuiMouseButton_Middle)) {
+        m_2dCanvasPanning = false;
+    }
+}
+
 void EditorUVE::DrawViewportPanelUVE() {
     // Renderer3DUVE still presents to the engine window's default framebuffer. This editor window
     // therefore owns only a transparent interactive input rectangle; it does not duplicate render
@@ -6065,21 +6191,9 @@ void EditorUVE::DrawViewportPanelUVE() {
                                        ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoTitleBar;
     ImGui::Begin("Scene##viewport", nullptr, flags);
 
-    if (ImGui::BeginTabBar("##viewport-tabs")) {
-        if (ImGui::BeginTabItem("Scene")) {
-            m_viewportTab = EditorViewportTabUVE::Scene;
-            ImGui::EndTabItem();
-        }
-        ImGui::BeginDisabled();
-        if (ImGui::BeginTabItem("Game")) {
-            m_viewportTab = EditorViewportTabUVE::Game;
-            ImGui::EndTabItem();
-        }
-        ImGui::EndDisabled();
-        ImGui::EndTabBar();
-    }
     const ImVec2 contentOrigin = ImGui::GetCursorScreenPos();
     const ImVec2 contentSize = ImGui::GetContentRegionAvail();
+    ImGui::SetCursorScreenPos(ImVec2{contentOrigin.x, contentOrigin.y + 28.0F});
     const auto drawViewportTool = [this](const char* const label, const EditorGizmoModeUVE mode,
                                          const bool enabled) {
         const bool active = m_gizmoMode == mode;
@@ -6098,43 +6212,85 @@ void EditorUVE::DrawViewportPanelUVE() {
         }
         ImGui::SameLine(0.0F, 4.0F);
     };
-    const bool gizmoModeChangeAllowed = IsAuthoringCommandAllowedUVE() &&
-                                        m_gizmoDrag.axis == EditorTransformAxisUVE::None &&
-                                        m_viewportNavigationMode == EditorViewportNavigationModeUVE::None;
-    ImGui::SetCursorScreenPos(ImVec2{contentOrigin.x + 8.0F, contentOrigin.y + 6.0F});
-    drawViewportTool("Move XYZ", EditorGizmoModeUVE::Translate, gizmoModeChangeAllowed);
-    drawViewportTool("Rotate XYZ", EditorGizmoModeUVE::Rotate, gizmoModeChangeAllowed);
-    drawViewportTool("Scale XYZ", EditorGizmoModeUVE::Scale, gizmoModeChangeAllowed);
-    if (ImGui::SmallButton(m_gizmoCoordinateSpace == EditorGizmoCoordinateSpaceUVE::World ? "Global" : "Local")) {
-        static_cast<void>(SetGizmoCoordinateSpaceUVE(
-            m_gizmoCoordinateSpace == EditorGizmoCoordinateSpaceUVE::World
-                ? EditorGizmoCoordinateSpaceUVE::Local
-                : EditorGizmoCoordinateSpaceUVE::World));
+    if (m_viewportTab == EditorViewportTabUVE::TwoD) {
+        ImGui::SetCursorScreenPos(ImVec2{contentOrigin.x + 8.0F, contentOrigin.y + 28.0F});
+        if (ImGui::SmallButton("Fit")) {
+            Reset2DCanvasViewUVE();
+        }
+        ImGui::SameLine(0.0F, 4.0F);
+        if (ImGui::SmallButton(m_2dCanvasState.gridVisible ? "Grid On" : "Grid")) {
+            m_2dCanvasState.gridVisible = !m_2dCanvasState.gridVisible;
+        }
+        ImGui::SameLine(0.0F, 4.0F);
+        if (ImGui::SmallButton(m_2dCanvasState.safeAreaVisible ? "Safe On" : "Safe")) {
+            m_2dCanvasState.safeAreaVisible = !m_2dCanvasState.safeAreaVisible;
+        }
+        ImGui::SameLine(0.0F, 4.0F);
+        ImGui::TextDisabled("1920 x 1080");
+        ImGui::SetCursorScreenPos(ImVec2{contentOrigin.x + contentSize.x - 116.0F, contentOrigin.y + 28.0F});
+        if (ImGui::SmallButton("Reset View")) {
+            Reset2DCanvasViewUVE();
+        }
+    } else {
+        const bool gizmoModeChangeAllowed = IsAuthoringCommandAllowedUVE() &&
+                                            m_gizmoDrag.axis == EditorTransformAxisUVE::None &&
+                                            m_viewportNavigationMode == EditorViewportNavigationModeUVE::None;
+        ImGui::SetCursorScreenPos(ImVec2{contentOrigin.x + 8.0F, contentOrigin.y + 28.0F});
+        drawViewportTool("Move XYZ", EditorGizmoModeUVE::Translate, gizmoModeChangeAllowed);
+        drawViewportTool("Rotate XYZ", EditorGizmoModeUVE::Rotate, gizmoModeChangeAllowed);
+        drawViewportTool("Scale XYZ", EditorGizmoModeUVE::Scale, gizmoModeChangeAllowed);
+        if (ImGui::SmallButton(m_gizmoCoordinateSpace == EditorGizmoCoordinateSpaceUVE::World ? "Global" : "Local")) {
+            static_cast<void>(SetGizmoCoordinateSpaceUVE(
+                m_gizmoCoordinateSpace == EditorGizmoCoordinateSpaceUVE::World
+                    ? EditorGizmoCoordinateSpaceUVE::Local
+                    : EditorGizmoCoordinateSpaceUVE::World));
+        }
+        ImGui::SameLine(0.0F, 4.0F);
+        if (ImGui::SmallButton(m_transformSnappingSettings.enabled ? "Snap On" : "Snap")) {
+            m_transformSnappingSettings.enabled = !m_transformSnappingSettings.enabled;
+        }
+        ImGui::SetCursorScreenPos(ImVec2{contentOrigin.x + contentSize.x - 222.0F, contentOrigin.y + 28.0F});
+        const bool projectionButton = ImGui::SmallButton("Perspective");
+        if (projectionButton) {
+            ImGui::OpenPopup("viewport-projection-popup");
+        }
+        if (ImGui::BeginPopup("viewport-projection-popup")) {
+            ImGui::TextDisabled("Viewport projection");
+            ImGui::Separator();
+            ImGui::MenuItem("Perspective", nullptr, true, false);
+            ImGui::BeginDisabled();
+            ImGui::MenuItem("Orthographic (not available)", nullptr, false, false);
+            ImGui::EndDisabled();
+            ImGui::EndPopup();
+        }
+    }
+    ImGui::SetCursorScreenPos(ImVec2{contentOrigin.x + 8.0F, contentOrigin.y + 2.0F});
+    if (ImGui::SmallButton("Scene")) {
+        m_viewportTab = EditorViewportTabUVE::Scene;
     }
     ImGui::SameLine(0.0F, 4.0F);
-    if (ImGui::SmallButton(m_transformSnappingSettings.enabled ? "Snap On" : "Snap")) {
-        m_transformSnappingSettings.enabled = !m_transformSnappingSettings.enabled;
+    if (ImGui::SmallButton("2D")) {
+        m_viewportTab = EditorViewportTabUVE::TwoD;
     }
-    ImGui::SetCursorScreenPos(ImVec2{contentOrigin.x + contentSize.x - 222.0F, contentOrigin.y + 6.0F});
-    const bool projectionButton = ImGui::SmallButton("Perspective");
-    if (projectionButton) {
-        ImGui::OpenPopup("viewport-projection-popup");
-    }
-    if (ImGui::BeginPopup("viewport-projection-popup")) {
-        ImGui::TextDisabled("Viewport projection");
-        ImGui::Separator();
-        ImGui::MenuItem("Perspective", nullptr, true, false);
-        ImGui::BeginDisabled();
-        ImGui::MenuItem("Orthographic (not available)", nullptr, false, false);
-        ImGui::EndDisabled();
-        ImGui::EndPopup();
-    }
-    ImGui::SetCursorScreenPos(contentOrigin);
+    ImGui::SameLine(0.0F, 4.0F);
+    ImGui::BeginDisabled();
+    static_cast<void>(ImGui::SmallButton("Game"));
+    ImGui::EndDisabled();
+    const ImVec2 canvasOrigin = m_viewportTab == EditorViewportTabUVE::TwoD
+        ? ImVec2{contentOrigin.x, contentOrigin.y + 52.0F} : contentOrigin;
+    const ImVec2 canvasSize = m_viewportTab == EditorViewportTabUVE::TwoD
+        ? ImVec2{contentSize.x, std::max(0.0F, contentSize.y - 52.0F)} : contentSize;
+    ImGui::SetCursorScreenPos(canvasOrigin);
     const EditorViewportRectUVE viewportRect{
-        Math::Vector2UVE{contentOrigin.x, contentOrigin.y},
-        Math::Vector2UVE{contentSize.x, contentSize.y},
+        Math::Vector2UVE{canvasOrigin.x, canvasOrigin.y},
+        Math::Vector2UVE{canvasSize.x, canvasSize.y},
     };
     if (IsViewportRectValidUVE(viewportRect)) {
+        if (m_viewportTab == EditorViewportTabUVE::TwoD) {
+            Draw2DCanvasUVE(viewportRect);
+            ImGui::End();
+            return;
+        }
         ImGui::InvisibleButton("##viewport-input", contentSize, ImGuiButtonFlags_MouseButtonLeft);
         const bool viewportHovered = ImGui::IsItemHovered();
         const bool viewportClicked = viewportHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left);
