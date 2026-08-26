@@ -18,6 +18,7 @@
 #include "uve/core/i_simulation_control_uve.h"
 #include "uve/editor/editor_tool_session_uve.h"
 #include "uve/editor/developer_console_uve.h"
+#include "uve/editor/editor_ui_assets_uve.h"
 #include "uve/editor/inspector_drawer_registry_uve.h"
 #include "uve/math/ray_uve.h"
 #include "uve/math/vector2_uve.h"
@@ -765,9 +766,6 @@ private:
     void DrawImportQueueMonitorUVE();
     void DrawViewportPanelUVE();
     void DrawScriptingWorkspaceUVE();
-    /// Renders a copied watcher journal as read-only editor feedback. The helper never schedules
-    /// imports, refreshes the project index, or mutates the project filesystem.
-    void DrawProjectChangeJournalUVE(const Asset::ProjectChangeSnapshotUVE& snapshot);
     [[nodiscard]] static ContentBrowserItemTypeUVE ClassifyContentBrowserEntryUVE(
         const Asset::ProjectFileEntryUVE& entry);
     [[nodiscard]] static const char* GetContentBrowserItemTypeLabelUVE(ContentBrowserItemTypeUVE type) noexcept;
@@ -777,6 +775,9 @@ private:
                                                                const std::filesystem::path& directory) const;
     void ReconcileContentBrowserDirectoryUVE(const Asset::ProjectFileSnapshotUVE& snapshot) noexcept;
     void DrawAssetsPanelUVE();
+    /// Refreshes the read-only project index after the engine-owned watcher observes a new
+    /// filesystem baseline. It never schedules imports or mutates project files.
+    void RefreshProjectFileIndexUVE();
     void DrawConsolePanelUVE();
 
     Core::EngineServicesUVE* m_services = nullptr;
@@ -829,11 +830,14 @@ private:
     std::optional<Asset::ProjectFileEntryUVE> m_selectedProjectFile;
     bool m_projectFileSnapshotInitialized = false;
     bool m_projectFileLastRefreshSucceeded = true;
+    std::uint64_t m_projectFileLastObservedChangeSequence = 0U;
+    bool m_projectFileRefreshAttemptedForRescan = false;
     bool m_scenePanelVisible = true;
     bool m_inspectorPanelVisible = true;
     bool m_bottomDockVisible = true;
     bool m_sceneDirty = false;
     bool m_uiInitialized = false;
+    EditorUiAssetsUVE m_uiAssets;
     std::uint32_t m_scriptCanvasDragNodeId = 0U;
     Scripting::ScriptGraphCanvasPointUVE m_scriptCanvasDragStartPosition{};
     Scripting::ScriptGraphCanvasPointUVE m_scriptCanvasDragStartPointer{};

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
+#include <fstream>
 #include <limits>
 #include <numbers>
 #include <string>
@@ -419,6 +420,67 @@ TEST(EditorUVETest, ContentBrowserWorkflowUVE_PersistsFiltersAndSafelyFallsBackW
     }
 
     engine.Shutdown();
+}
+
+TEST(EditorUVETest, ContentBrowserAutoRefreshUVE_RefreshesAfterEngineWatcherSequenceAndAcknowledgesIt) {
+    const std::filesystem::path root = "uve_editor_tests_auto_refresh_content";
+    std::filesystem::remove_all(root);
+    std::filesystem::create_directories(root / "Scenes");
+    {
+        std::ofstream initialFile(root / "Scenes" / "Initial.txt", std::ios::binary | std::ios::trunc);
+        ASSERT_TRUE(initialFile.is_open());
+        initialFile << "initial";
+        ASSERT_TRUE(initialFile.good());
+    }
+
+    Core::EngineConfigUVE config = MakeEditorTestConfigUVE();
+    config.projectContentRootUVE = root;
+    config.projectChangeWatchPollIntervalSecondsUVE = 0.0;
+    config.projectChangeJournalCapacityUVE = 16U;
+    Core::EngineCoreUVE engine(config);
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_content_browser_auto_refresh.uvescene");
+        editor.InitUVE();
+
+        engine.TickFrameUVE();
+        editor.TickUVE();
+        Asset::IProjectFileIndexUVE& projectFileIndex = engine.GetServicesUVE().GetProjectFileIndexUVE();
+        Asset::ProjectFileSnapshotUVE initialSnapshot = projectFileIndex.GetSnapshotUVE();
+        ASSERT_EQ(initialSnapshot.refreshGeneration, 1U);
+        ASSERT_TRUE(std::any_of(initialSnapshot.entries.begin(), initialSnapshot.entries.end(),
+                                [](const Asset::ProjectFileEntryUVE& entry) {
+                                    return entry.relativePath == std::filesystem::path{"Scenes/Initial.txt"};
+                                }));
+        EXPECT_TRUE(engine.GetServicesUVE().GetProjectChangeWatcherUVE().GetSnapshotUVE().changes.empty());
+
+        {
+            std::ofstream newFile(root / "Scenes" / "AutoRefresh.txt", std::ios::binary | std::ios::trunc);
+            ASSERT_TRUE(newFile.is_open());
+            newFile << "created after baseline";
+            ASSERT_TRUE(newFile.good());
+        }
+
+        engine.TickFrameUVE();
+        editor.TickUVE();
+        const Asset::ProjectFileSnapshotUVE refreshedSnapshot = projectFileIndex.GetSnapshotUVE();
+        ASSERT_GT(refreshedSnapshot.refreshGeneration, initialSnapshot.refreshGeneration);
+        EXPECT_TRUE(std::any_of(refreshedSnapshot.entries.begin(), refreshedSnapshot.entries.end(),
+                                [](const Asset::ProjectFileEntryUVE& entry) {
+                                    return entry.relativePath == std::filesystem::path{"Scenes/AutoRefresh.txt"};
+                                }));
+        const Asset::ProjectChangeSnapshotUVE changeSnapshot =
+            engine.GetServicesUVE().GetProjectChangeWatcherUVE().GetSnapshotUVE();
+        EXPECT_TRUE(changeSnapshot.changes.empty());
+        EXPECT_FALSE(changeSnapshot.rescanRequired);
+
+        editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
+    std::filesystem::remove_all(root);
 }
 
 TEST(EditorUVETest, SessionSettingsUVE_MigratesWithoutHiddenWriteAndPreservesDocumentState) {
