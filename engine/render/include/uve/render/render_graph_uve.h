@@ -45,8 +45,9 @@ public:
                                                                   std::string debugNameUVE);
     void AddPassUVE(RenderGraphPassDescUVE desc);
 
-    /// Reserves storage for a known graph topology. ClearUVE() preserves this capacity so a
-    /// renderer can rebuild its per-frame callbacks without repeatedly reallocating pass/resource arrays.
+    /// Reserves storage for a known graph topology. ClearUVE() preserves outer and nested storage
+    /// capacity so a renderer can rebuild its per-frame callbacks without repeatedly reallocating
+    /// pass/resource arrays.
     void ReserveUVE(std::size_t resourceCapacity, std::size_t passCapacity);
 
     /// Validates resource declarations then invokes each callback in deterministic insertion order.
@@ -64,6 +65,8 @@ private:
 
     std::vector<ImportedResourceUVE> m_resources;
     std::vector<RenderGraphPassDescUVE> m_passes;
+    std::size_t m_resourceCount = 0U;
+    std::size_t m_passCount = 0U;
 };
 
 } // namespace UVE::Render
