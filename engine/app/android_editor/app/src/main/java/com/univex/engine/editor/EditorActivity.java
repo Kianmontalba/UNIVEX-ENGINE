@@ -19,11 +19,13 @@ import android.view.WindowManager;
 import android.widget.EditText;
 import android.widget.Toast;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -35,6 +37,7 @@ import java.util.Locale;
 
 public final class EditorActivity extends Activity {
     private static final int OPEN_PROJECT_REQUEST = 42;
+    private static final int OPEN_ASSET_REQUEST = 43;
     private static final long LOADING_DURATION_MS = 900L;
     private static final String PREFS_NAME = "uve_editor_local_state";
     private static final String RECENT_PROJECTS_KEY = "recent_projects";
@@ -45,6 +48,11 @@ public final class EditorActivity extends Activity {
     private Screen screen = Screen.LOADING;
     private String activeProjectName = "";
     private String activeProjectPath = "";
+    private boolean sceneOpen;
+    private boolean playing;
+    private String selectedNode = "";
+    private String inspectorTab = "Inspector";
+    private final List<String> sceneNodes = new ArrayList<>();
 
     private enum Screen {
         LOADING,
@@ -165,9 +173,103 @@ public final class EditorActivity extends Activity {
     private void openProject(String displayName, String packagePath) {
         activeProjectName = displayName;
         activeProjectPath = packagePath;
+        sceneOpen = false;
+        playing = false;
+        selectedNode = "";
+        sceneNodes.clear();
         rememberRecentProject(displayName, packagePath);
+        restoreEditorState();
         screen = Screen.EDITOR;
         editorSurface.invalidate();
+    }
+
+    private void createScene() {
+        sceneOpen = true;
+        playing = false;
+        sceneNodes.clear();
+        sceneNodes.add("Main");
+        selectedNode = "Main";
+        saveEditorState();
+        editorSurface.invalidate();
+    }
+
+    private void saveEditorState() {
+        if (activeProjectPath.isEmpty()) {
+            return;
+        }
+        try {
+            final JSONObject state = new JSONObject();
+            state.put("schemaVersion", 1);
+            state.put("editor", "android");
+            state.put("sceneOpen", sceneOpen);
+            state.put("selectedNode", selectedNode);
+            final JSONArray nodes = new JSONArray();
+            for (String node : sceneNodes) {
+                nodes.put(node);
+            }
+            state.put("sceneNodes", nodes);
+            final File settingsFile = new File(new File(activeProjectPath).getParentFile(), "Settings/editor.json");
+            writeTextFile(settingsFile, state.toString(2) + "\n");
+        } catch (IOException | JSONException exception) {
+            showMessage("Could not save editor state: " + exception.getMessage());
+        }
+    }
+
+    private void restoreEditorState() {
+        final File settingsFile = new File(new File(activeProjectPath).getParentFile(), "Settings/editor.json");
+        if (!settingsFile.isFile()) {
+            return;
+        }
+        try (FileInputStream input = new FileInputStream(settingsFile)) {
+            final ByteArrayOutputStream output = new ByteArrayOutputStream();
+            final byte[] buffer = new byte[4096];
+            int read;
+            while ((read = input.read(buffer)) != -1) {
+                output.write(buffer, 0, read);
+            }
+            final JSONObject state = new JSONObject(output.toString(StandardCharsets.UTF_8.name()));
+            sceneOpen = state.optBoolean("sceneOpen", false);
+            selectedNode = state.optString("selectedNode", "");
+            final JSONArray nodes = state.optJSONArray("sceneNodes");
+            if (nodes != null) {
+                for (int index = 0; index < nodes.length(); index++) {
+                    sceneNodes.add(nodes.optString(index, ""));
+                }
+            }
+            if (sceneOpen && sceneNodes.isEmpty()) {
+                sceneNodes.add("Main");
+                selectedNode = "Main";
+            }
+        } catch (IOException | JSONException exception) {
+            sceneOpen = false;
+            selectedNode = "";
+            sceneNodes.clear();
+        }
+    }
+
+    private void showAddNodeDialog() {
+        if (!sceneOpen) {
+            showMessage("Create a scene before adding nodes.");
+            return;
+        }
+        final String[] nodeTypes = {"Node3D", "Camera3D", "MeshInstance3D", "DirectionalLight3D", "Skeleton3D"};
+        new AlertDialog.Builder(this)
+                .setTitle("Add node")
+                .setItems(nodeTypes, (dialog, which) -> {
+                    sceneNodes.add(nodeTypes[which]);
+                    selectedNode = nodeTypes[which];
+                    saveEditorState();
+                    editorSurface.invalidate();
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+
+    private void importAssetFromEditor() {
+        final Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("*/*");
+        startActivityForResult(intent, OPEN_ASSET_REQUEST);
     }
 
     private void showOpenProjectPicker() {
@@ -180,10 +282,17 @@ public final class EditorActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode != OPEN_PROJECT_REQUEST || resultCode != RESULT_OK || data == null || data.getData() == null) {
+        if (resultCode != RESULT_OK || data == null || data.getData() == null) {
             return;
         }
         final Uri uri = data.getData();
+        if (requestCode == OPEN_ASSET_REQUEST) {
+            importAsset(uri);
+            return;
+        }
+        if (requestCode != OPEN_PROJECT_REQUEST) {
+            return;
+        }
         try {
             final String packageText = readDocument(uri);
             final JSONObject packageJson = new JSONObject(packageText);
@@ -212,6 +321,42 @@ public final class EditorActivity extends Activity {
             openProject(displayName, localPackage.getAbsolutePath());
         } catch (IOException | JSONException exception) {
             showMessage("Could not open project: " + exception.getMessage());
+        }
+    }
+
+    private void importAsset(Uri uri) {
+        if (activeProjectPath.isEmpty()) {
+            showMessage("Open a project before importing assets.");
+            return;
+        }
+        final String rawName = uri.getLastPathSegment() == null ? "asset" : uri.getLastPathSegment();
+        final String safeName = rawName.replaceAll("[^a-zA-Z0-9._-]+", "_");
+        final File projectRoot = new File(activeProjectPath).getParentFile();
+        final File importRoot = new File(projectRoot, "Content/Imported");
+        final File destination = new File(importRoot, safeName.isEmpty() ? "asset" : safeName);
+        try {
+            if (!importRoot.exists() && !importRoot.mkdirs()) {
+                throw new IOException("Unable to create the local import folder.");
+            }
+            try (InputStream input = getContentResolver().openInputStream(uri);
+                 FileOutputStream output = new FileOutputStream(destination)) {
+                if (input == null) {
+                    throw new IOException("The selected asset could not be read.");
+                }
+                final byte[] buffer = new byte[8192];
+                int read;
+                long total = 0L;
+                while ((read = input.read(buffer)) != -1) {
+                    total += read;
+                    if (total > 128L * 1024L * 1024L) {
+                        throw new IOException("The selected asset is larger than 128 MiB.");
+                    }
+                    output.write(buffer, 0, read);
+                }
+            }
+            showMessage("Imported locally: " + destination.getName());
+        } catch (IOException exception) {
+            showMessage("Could not import asset: " + exception.getMessage());
         }
     }
 
@@ -287,6 +432,14 @@ public final class EditorActivity extends Activity {
         private final RectF createButton = new RectF();
         private final RectF openButton = new RectF();
         private final RectF recentButton = new RectF();
+        private final RectF createSceneButton = new RectF();
+        private final RectF addNodeButton = new RectF();
+        private final RectF importAssetButton = new RectF();
+        private final RectF playButton = new RectF();
+        private final RectF stopButton = new RectF();
+        private final RectF viewportRect = new RectF();
+        private final RectF sceneTreeRect = new RectF();
+        private final RectF inspectorRect = new RectF();
         private float density;
         private float loadingPhase;
 
@@ -392,42 +545,197 @@ public final class EditorActivity extends Activity {
         private void drawEditor(Canvas canvas) {
             fill(canvas, Color.rgb(17, 21, 28));
             final float width = getWidth() / density;
-            text(canvas, "UNIVEX EDITOR", 26.0F, 38.0F, 12.0F, Color.rgb(154, 168, 186), true);
-            text(canvas, activeProjectName, 26.0F, 78.0F, 25.0F, Color.rgb(243, 246, 250), true);
-            rounded(canvas, new RectF(dp(26.0F), dp(108.0F), dp(width - 26.0F), dp(108.0F + 1.0F)),
-                    Color.rgb(52, 64, 82), 1.0F);
-            final float panelTop = 144.0F;
-            rounded(canvas, new RectF(dp(26.0F), dp(panelTop), dp(width - 26.0F), dp(380.0F)),
-                    Color.rgb(26, 32, 42), 12.0F);
-            text(canvas, "EDITOR WORKSPACE", 50.0F, 180.0F, 11.0F, Color.rgb(94, 141, 255), true);
-            text(canvas, "Project opened locally", 50.0F, 222.0F, 21.0F, Color.rgb(243, 246, 250), true);
-            text(canvas, "The native scene, importer, and retarget tools will live here.", 50.0F, 252.0F,
-                    13.0F, Color.rgb(154, 168, 186), false);
-            text(canvas, activeProjectPath, 50.0F, 294.0F, 10.0F, Color.rgb(154, 168, 186), false);
-            text(canvas, "Offline project state is ready.", 50.0F, 338.0F, 12.0F, Color.rgb(101, 193, 140), true);
+            final float height = getHeight() / density;
+            final float leftPanel = Math.max(142.0F, width * 0.24F);
+            final float rightPanel = Math.max(156.0F, width * 0.25F);
+            final float centerLeft = leftPanel + 8.0F;
+            final float centerRight = width - rightPanel - 8.0F;
+            final float contentTop = 66.0F;
+
+            rounded(canvas, new RectF(dp(0.0F), dp(0.0F), dp(width), dp(54.0F)),
+                    Color.rgb(26, 32, 42), 0.0F);
+            text(canvas, "UNIVEX", 18.0F, 23.0F, 10.0F, Color.rgb(154, 168, 186), true);
+            text(canvas, activeProjectName, 18.0F, 43.0F, 15.0F, Color.rgb(243, 246, 250), true);
+
+            playButton.set(dp(width / 2.0F - 58.0F), dp(10.0F), dp(width / 2.0F - 6.0F), dp(44.0F));
+            stopButton.set(dp(width / 2.0F + 6.0F), dp(10.0F), dp(width / 2.0F + 58.0F), dp(44.0F));
+            rounded(canvas, playButton, playing ? Color.rgb(101, 193, 140) : Color.rgb(34, 43, 56), 8.0F);
+            rounded(canvas, stopButton, Color.rgb(34, 43, 56), 8.0F);
+            text(canvas, "▶  Play", width / 2.0F - 47.0F, 32.0F, 12.0F,
+                    playing ? Color.rgb(17, 21, 28) : Color.rgb(243, 246, 250), true);
+            text(canvas, "■  Stop", width / 2.0F + 17.0F, 32.0F, 12.0F, Color.rgb(243, 246, 250), true);
+            text(canvas, "⋮", width - 28.0F, 35.0F, 22.0F, Color.rgb(154, 168, 186), false);
+
+            sceneTreeRect.set(dp(12.0F), dp(contentTop), dp(leftPanel), dp(height - 12.0F));
+            viewportRect.set(dp(centerLeft), dp(contentTop), dp(centerRight), dp(height - 12.0F));
+            inspectorRect.set(dp(centerRight + 8.0F), dp(contentTop), dp(width - 12.0F), dp(height - 12.0F));
+            rounded(canvas, sceneTreeRect, Color.rgb(26, 32, 42), 10.0F);
+            rounded(canvas, viewportRect, Color.rgb(14, 18, 24), 10.0F);
+            rounded(canvas, inspectorRect, Color.rgb(26, 32, 42), 10.0F);
+
+            text(canvas, "SCENE", 26.0F, contentTop + 28.0F, 11.0F, Color.rgb(154, 168, 186), true);
+            addNodeButton.set(dp(leftPanel - 42.0F), dp(contentTop + 10.0F), dp(leftPanel - 24.0F), dp(contentTop + 34.0F));
+            text(canvas, "+", leftPanel - 40.0F, contentTop + 29.0F, 19.0F, Color.rgb(94, 141, 255), true);
+            rounded(canvas, new RectF(dp(24.0F), dp(contentTop + 44.0F), dp(leftPanel - 24.0F), dp(contentTop + 78.0F)),
+                    Color.rgb(34, 43, 56), 7.0F);
+            text(canvas, "Search nodes", 36.0F, contentTop + 66.0F, 11.0F, Color.rgb(154, 168, 186), false);
+            if (!sceneOpen) {
+                text(canvas, "No scene open", 26.0F, contentTop + 122.0F, 12.0F, Color.rgb(154, 168, 186), false);
+                text(canvas, "Create a scene to begin.", 26.0F, contentTop + 146.0F, 10.0F, Color.rgb(154, 168, 186), false);
+            } else {
+                float nodeY = contentTop + 112.0F;
+                for (String node : sceneNodes) {
+                    if (node.equals(selectedNode)) {
+                        rounded(canvas, new RectF(dp(20.0F), dp(nodeY - 20.0F), dp(leftPanel - 18.0F), dp(nodeY + 7.0F)),
+                                Color.rgb(52, 73, 108), 5.0F);
+                    }
+                    text(canvas, node.equals("Main") ? "⌄  " + node : "   ↳  " + node, 28.0F, nodeY,
+                            12.0F, Color.rgb(243, 246, 250), node.equals(selectedNode));
+                    nodeY += 31.0F;
+                }
+            }
+
+            text(canvas, "VIEWPORT", centerLeft + 14.0F, contentTop + 27.0F, 11.0F,
+                    Color.rgb(154, 168, 186), true);
+            importAssetButton.set(dp(centerRight - 102.0F), dp(contentTop + 10.0F), dp(centerRight - 18.0F), dp(contentTop + 38.0F));
+            rounded(canvas, importAssetButton, Color.rgb(34, 43, 56), 6.0F);
+            text(canvas, "Import", centerRight - 83.0F, contentTop + 29.0F, 11.0F, Color.rgb(243, 246, 250), true);
+            if (!sceneOpen) {
+                createSceneButton.set(dp(centerLeft + 24.0F), dp(contentTop + 126.0F), dp(centerRight - 24.0F), dp(contentTop + 178.0F));
+                rounded(canvas, createSceneButton, Color.rgb(94, 141, 255), 9.0F);
+                text(canvas, "Create Scene", centerLeft + (centerRight - centerLeft) / 2.0F - 48.0F,
+                        contentTop + 158.0F, 14.0F, Color.WHITE, true);
+                text(canvas, "Empty workspace", centerLeft + (centerRight - centerLeft) / 2.0F - 46.0F,
+                        contentTop + 215.0F, 12.0F, Color.rgb(154, 168, 186), false);
+            } else {
+                drawViewportGrid(canvas, centerLeft, centerRight, contentTop + 42.0F, height - 12.0F);
+                text(canvas, "Perspective", centerLeft + 14.0F, height - 30.0F, 11.0F,
+                        Color.rgb(243, 246, 250), true);
+                text(canvas, "XYZ", centerRight - 44.0F, height - 30.0F, 11.0F, Color.rgb(94, 141, 255), true);
+            }
+
+            text(canvas, "INSPECTOR", centerRight + 16.0F, contentTop + 27.0F, 11.0F,
+                    Color.rgb(154, 168, 186), true);
+            final String[] tabs = {"Inspector", "Import", "Signals"};
+            float tabX = centerRight + 16.0F;
+            for (String tab : tabs) {
+                if (tab.equals(inspectorTab)) {
+                    rounded(canvas, new RectF(dp(tabX - 4.0F), dp(contentTop + 42.0F), dp(tabX + 66.0F), dp(contentTop + 70.0F)),
+                            Color.rgb(52, 73, 108), 5.0F);
+                }
+                text(canvas, tab, tabX, contentTop + 61.0F, 10.0F,
+                        tab.equals(inspectorTab) ? Color.rgb(243, 246, 250) : Color.rgb(154, 168, 186), true);
+                tabX += tab.equals("Inspector") ? 71.0F : 59.0F;
+            }
+            if (selectedNode.isEmpty()) {
+                text(canvas, "Select a node", centerRight + 16.0F, contentTop + 116.0F, 13.0F,
+                        Color.rgb(154, 168, 186), false);
+                text(canvas, "Properties will appear here.", centerRight + 16.0F, contentTop + 140.0F, 10.0F,
+                        Color.rgb(154, 168, 186), false);
+            } else {
+                text(canvas, selectedNode, centerRight + 16.0F, contentTop + 112.0F, 16.0F,
+                        Color.rgb(243, 246, 250), true);
+                text(canvas, "Node3D", centerRight + 16.0F, contentTop + 137.0F, 11.0F,
+                        Color.rgb(94, 141, 255), true);
+                text(canvas, "Transform", centerRight + 16.0F, contentTop + 184.0F, 11.0F,
+                        Color.rgb(154, 168, 186), true);
+                text(canvas, "Position     0     0     0", centerRight + 16.0F, contentTop + 211.0F, 11.0F,
+                        Color.rgb(243, 246, 250), false);
+                text(canvas, "Rotation     0     0     0", centerRight + 16.0F, contentTop + 238.0F, 11.0F,
+                        Color.rgb(243, 246, 250), false);
+                text(canvas, "Scale        1     1     1", centerRight + 16.0F, contentTop + 265.0F, 11.0F,
+                        Color.rgb(243, 246, 250), false);
+            }
+        }
+
+        private void drawViewportGrid(Canvas canvas, float left, float right, float top, float bottom) {
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(dp(1.0F));
+            paint.setColor(Color.rgb(31, 40, 52));
+            for (float x = left + 16.0F; x < right; x += 24.0F) {
+                canvas.drawLine(dp(x), dp(top), dp(x), dp(bottom), paint);
+            }
+            for (float y = top + 16.0F; y < bottom; y += 24.0F) {
+                canvas.drawLine(dp(left), dp(y), dp(right), dp(y), paint);
+            }
+            final float centerX = (left + right) / 2.0F;
+            final float centerY = (top + bottom) / 2.0F;
+            paint.setColor(Color.rgb(208, 87, 87));
+            canvas.drawLine(dp(centerX), dp(centerY), dp(centerX + 54.0F), dp(centerY), paint);
+            paint.setColor(Color.rgb(101, 193, 140));
+            canvas.drawLine(dp(centerX), dp(centerY), dp(centerX), dp(centerY - 54.0F), paint);
+            paint.setColor(Color.rgb(94, 141, 255));
+            canvas.drawLine(dp(centerX), dp(centerY), dp(centerX - 40.0F), dp(centerY + 40.0F), paint);
         }
 
         @Override
         public boolean onTouchEvent(MotionEvent event) {
-            if (event.getAction() != MotionEvent.ACTION_UP || screen != Screen.LOBBY) {
+            if (event.getAction() != MotionEvent.ACTION_UP) {
                 return true;
             }
             final float x = event.getX();
             final float y = event.getY();
-            if (createButton.contains(x, y)) {
-                showCreateProjectDialog();
-            } else if (openButton.contains(x, y)) {
-                showOpenProjectPicker();
-            } else if (recentButton.contains(x, y)) {
-                final List<String> recent = readRecentProjects();
-                if (!recent.isEmpty()) {
-                    final String[] fields = recent.get(0).split("\\t", 2);
-                    if (fields.length == 2 && new File(fields[1]).isFile()) {
-                        openProject(fields[0], fields[1]);
-                    } else {
-                        showMessage("The recent project is no longer available.");
+            if (screen == Screen.LOBBY) {
+                if (createButton.contains(x, y)) {
+                    showCreateProjectDialog();
+                } else if (openButton.contains(x, y)) {
+                    showOpenProjectPicker();
+                } else if (recentButton.contains(x, y)) {
+                    final List<String> recent = readRecentProjects();
+                    if (!recent.isEmpty()) {
+                        final String[] fields = recent.get(0).split("\\t", 2);
+                        if (fields.length == 2 && new File(fields[1]).isFile()) {
+                            openProject(fields[0], fields[1]);
+                        } else {
+                            showMessage("The recent project is no longer available.");
+                        }
                     }
                 }
+                return true;
+            }
+            if (screen != Screen.EDITOR) {
+                return true;
+            }
+            if (!sceneOpen && createSceneButton.contains(x, y)) {
+                createScene();
+            } else if (addNodeButton.contains(x, y)) {
+                showAddNodeDialog();
+            } else if (importAssetButton.contains(x, y)) {
+                importAssetFromEditor();
+            } else if (playButton.contains(x, y)) {
+                if (!sceneOpen) {
+                    showMessage("Create a scene before pressing Play.");
+                } else {
+                    playing = true;
+                    saveEditorState();
+                    invalidate();
+                }
+            } else if (stopButton.contains(x, y)) {
+                playing = false;
+                saveEditorState();
+                invalidate();
+            } else if (sceneOpen && sceneTreeRect.contains(x, y)) {
+                final float logicalY = y / density;
+                final float top = 66.0F + 112.0F;
+                for (int index = 0; index < sceneNodes.size(); index++) {
+                    final float nodeY = top + index * 31.0F;
+                    if (logicalY >= nodeY - 20.0F && logicalY <= nodeY + 7.0F) {
+                        selectedNode = sceneNodes.get(index);
+                        saveEditorState();
+                        invalidate();
+                        break;
+                    }
+                }
+            } else if (inspectorRect.contains(x, y) && y / density >= 108.0F && y / density <= 136.0F) {
+                final float logicalX = x / density;
+                if (logicalX < inspectorRect.left / density + 76.0F) {
+                    inspectorTab = "Inspector";
+                } else if (logicalX < inspectorRect.left / density + 135.0F) {
+                    inspectorTab = "Import";
+                } else {
+                    inspectorTab = "Signals";
+                }
+                invalidate();
             }
             return true;
         }
