@@ -3739,24 +3739,43 @@ void EditorUVE::DrawViewportGridUVE(const EditorViewportRectUVE& viewportRect) {
         return;
     }
 
-    constexpr int kHalfLineCountUVE = 10;
+    constexpr int kHalfLineCountUVE = 18;
     constexpr float kGridSpacingUVE = 1.0F;
     const float span = static_cast<float>(kHalfLineCountUVE) * kGridSpacingUVE;
     const Math::Vector3UVE center{m_viewportFocusPoint.x, 0.0F, m_viewportFocusPoint.z};
     ImDrawList* const drawList = ImGui::GetWindowDrawList();
+    const ImVec2 viewportMinimum{viewportRect.origin.x, viewportRect.origin.y};
+    const ImVec2 viewportMaximum{viewportRect.origin.x + viewportRect.size.x,
+                                 viewportRect.origin.y + viewportRect.size.y};
+    if (GetDocumentRootsUVE().empty()) {
+        // Editor-only preview illumination: it changes no ECS state and is never submitted to the game renderer.
+        const float horizonY = viewportMinimum.y + viewportRect.size.y * 0.58F;
+        const ImVec2 horizonMinimum{viewportMinimum.x, horizonY};
+        const ImVec2 horizonMaximum{viewportMaximum.x, viewportMaximum.y};
+        drawList->AddRectFilledMultiColor(viewportMinimum, horizonMinimum, IM_COL32(25, 30, 36, 255),
+                                          IM_COL32(25, 30, 36, 255), IM_COL32(74, 76, 71, 255),
+                                          IM_COL32(74, 76, 71, 255));
+        drawList->AddRectFilledMultiColor(horizonMinimum, horizonMaximum, IM_COL32(67, 61, 52, 255),
+                                          IM_COL32(67, 61, 52, 255), IM_COL32(25, 27, 29, 255),
+                                          IM_COL32(25, 27, 29, 255));
+        drawList->AddRectFilled(ImVec2{viewportMinimum.x, horizonY - 2.0F},
+                                ImVec2{viewportMaximum.x, horizonY + 2.0F}, IM_COL32(180, 164, 126, 24));
+    }
     for (int lineIndex = -kHalfLineCountUVE; lineIndex <= kHalfLineCountUVE; ++lineIndex) {
         const float offset = static_cast<float>(lineIndex) * kGridSpacingUVE;
         Math::Vector2UVE first{};
         Math::Vector2UVE second{};
         if (ProjectWorldPointUVE(viewportRect, center + Math::Vector3UVE{offset, 0.0F, -span}, first) &&
             ProjectWorldPointUVE(viewportRect, center + Math::Vector3UVE{offset, 0.0F, span}, second)) {
-            const ImU32 color = lineIndex == 0 ? IM_COL32(96, 128, 150, 145) : IM_COL32(78, 90, 102, 90);
-            drawList->AddLine(ImVec2{first.x, first.y}, ImVec2{second.x, second.y}, color, lineIndex == 0 ? 1.5F : 1.0F);
+            const ImU32 color = lineIndex == 0 ? IM_COL32(83, 135, 184, 205) : IM_COL32(133, 139, 139, 112);
+            drawList->AddLine(ImVec2{first.x, first.y}, ImVec2{second.x, second.y}, color,
+                              lineIndex == 0 ? 1.6F : 1.0F);
         }
         if (ProjectWorldPointUVE(viewportRect, center + Math::Vector3UVE{-span, 0.0F, offset}, first) &&
             ProjectWorldPointUVE(viewportRect, center + Math::Vector3UVE{span, 0.0F, offset}, second)) {
-            const ImU32 color = lineIndex == 0 ? IM_COL32(108, 118, 150, 145) : IM_COL32(78, 90, 102, 90);
-            drawList->AddLine(ImVec2{first.x, first.y}, ImVec2{second.x, second.y}, color, lineIndex == 0 ? 1.5F : 1.0F);
+            const ImU32 color = lineIndex == 0 ? IM_COL32(206, 104, 104, 210) : IM_COL32(133, 139, 139, 112);
+            drawList->AddLine(ImVec2{first.x, first.y}, ImVec2{second.x, second.y}, color,
+                              lineIndex == 0 ? 1.6F : 1.0F);
         }
     }
 }
@@ -6316,17 +6335,40 @@ void EditorUVE::DrawViewportPanelUVE() {
             }
         }
         ImDrawList* const drawList = ImGui::GetWindowDrawList();
-        const ImVec2 orientationCenter{contentOrigin.x + contentSize.x - 52.0F, contentOrigin.y + 48.0F};
-        drawList->AddCircleFilled(orientationCenter, 4.0F, IM_COL32(220, 220, 220, 235));
-        drawList->AddLine(orientationCenter, ImVec2{orientationCenter.x, orientationCenter.y - 26.0F},
-                          IM_COL32(116, 196, 142, 245), 2.0F);
-        drawList->AddLine(orientationCenter, ImVec2{orientationCenter.x - 20.0F, orientationCenter.y + 16.0F},
-                          IM_COL32(216, 102, 102, 245), 2.0F);
-        drawList->AddLine(orientationCenter, ImVec2{orientationCenter.x + 20.0F, orientationCenter.y + 16.0F},
-                          IM_COL32(113, 151, 215, 245), 2.0F);
-        drawList->AddText(ImVec2{orientationCenter.x - 4.0F, orientationCenter.y - 40.0F}, IM_COL32(238, 238, 238, 245), "Y");
-        drawList->AddText(ImVec2{orientationCenter.x - 31.0F, orientationCenter.y + 15.0F}, IM_COL32(238, 238, 238, 245), "X");
-        drawList->AddText(ImVec2{orientationCenter.x + 22.0F, orientationCenter.y + 15.0F}, IM_COL32(238, 238, 238, 245), "Z");
+        if (GetDocumentRootsUVE().empty()) {
+            drawList->AddText(ImVec2{contentOrigin.x + 10.0F, contentOrigin.y + 38.0F},
+                              IM_COL32(176, 166, 139, 190), "Preview Light");
+        }
+        const ImVec2 orientationCenter{contentOrigin.x + contentSize.x - 78.0F, contentOrigin.y + 112.0F};
+        const auto drawOrientationArrow = [drawList](const ImVec2 start, const ImVec2 end, const ImU32 color) {
+            drawList->AddLine(start, end, color, 1.8F);
+            const ImVec2 direction{end.x - start.x, end.y - start.y};
+            const float length = std::sqrt(direction.x * direction.x + direction.y * direction.y);
+            if (length <= 0.001F) {
+                return;
+            }
+            const ImVec2 unit{direction.x / length, direction.y / length};
+            const ImVec2 perpendicular{-unit.y, unit.x};
+            const ImVec2 base{end.x - unit.x * 6.0F, end.y - unit.y * 6.0F};
+            drawList->AddTriangleFilled(end, ImVec2{base.x + perpendicular.x * 3.0F, base.y + perpendicular.y * 3.0F},
+                                        ImVec2{base.x - perpendicular.x * 3.0F, base.y - perpendicular.y * 3.0F}, color);
+        };
+        constexpr ImU32 xColor = IM_COL32(216, 102, 102, 245);
+        constexpr ImU32 yColor = IM_COL32(116, 196, 142, 245);
+        constexpr ImU32 zColor = IM_COL32(113, 151, 215, 245);
+        drawOrientationArrow(orientationCenter, ImVec2{orientationCenter.x - 19.0F, orientationCenter.y}, xColor);
+        drawOrientationArrow(orientationCenter, ImVec2{orientationCenter.x + 19.0F, orientationCenter.y}, xColor);
+        drawOrientationArrow(orientationCenter, ImVec2{orientationCenter.x, orientationCenter.y - 19.0F}, yColor);
+        drawOrientationArrow(orientationCenter, ImVec2{orientationCenter.x, orientationCenter.y + 19.0F}, yColor);
+        drawOrientationArrow(orientationCenter, ImVec2{orientationCenter.x - 14.0F, orientationCenter.y - 14.0F}, zColor);
+        drawOrientationArrow(orientationCenter, ImVec2{orientationCenter.x + 14.0F, orientationCenter.y + 14.0F}, zColor);
+        drawList->AddCircleFilled(orientationCenter, 3.0F, IM_COL32(235, 235, 235, 245));
+        drawList->AddText(ImVec2{orientationCenter.x - 13.0F, orientationCenter.y - 34.0F}, yColor, "Y top");
+        drawList->AddText(ImVec2{orientationCenter.x - 18.0F, orientationCenter.y + 23.0F}, yColor, "Y bottom");
+        drawList->AddText(ImVec2{orientationCenter.x - 52.0F, orientationCenter.y - 6.0F}, xColor, "X left");
+        drawList->AddText(ImVec2{orientationCenter.x + 23.0F, orientationCenter.y - 6.0F}, xColor, "X right");
+        drawList->AddText(ImVec2{orientationCenter.x - 61.0F, orientationCenter.y - 27.0F}, zColor, "Z back");
+        drawList->AddText(ImVec2{orientationCenter.x + 18.0F, orientationCenter.y + 17.0F}, zColor, "Z front");
         if (m_playModeState != EditorPlayModeStateUVE::Edit) {
             const bool paused = m_playModeState == EditorPlayModeStateUVE::Paused;
             const char* const playLabel = paused ? "PAUSED" : "PLAYING";
