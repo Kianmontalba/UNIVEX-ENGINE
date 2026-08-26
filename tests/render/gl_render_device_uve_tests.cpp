@@ -764,9 +764,9 @@ void main() {
     ASSERT_NE(depthTarget, kInvalidTextureHandleUVE);
     ASSERT_NE(shadowStyleDepthTarget, kInvalidTextureHandleUVE);
 
-    // Renderer3DUVE always emits bounded depth-only shadow passes before MainColor. Ensure those
-    // core-profile `GL_NONE` draw/read-buffer states cannot prevent a subsequent color+depth pass
-    // from rasterizing its fullscreen source geometry.
+    // A renderer shadow pass may use this depth-only path when a directional caster is present.
+    // Ensure core-profile `GL_NONE` draw/read-buffer states cannot prevent a subsequent color+depth
+    // pass from rasterizing its fullscreen source geometry.
     std::unique_ptr<ICommandBufferUVE> commandBuffer = renderDevice->CreateCommandBufferUVE();
     ASSERT_NE(commandBuffer, nullptr);
     RenderPassDescUVE shadowStylePassDesc;

@@ -628,14 +628,10 @@ struct Renderer3DUVE::ImplUVE {
         return &insertResult.first->second;
     }
 
-    /// Renders the directional-light shadow depth pre-pass (Increment 26) — always exactly one
-    /// BeginRenderPassUVE/EndRenderPassUVE pair every frame, regardless of whether a shadow caster
-    /// exists. When `hasCaster` is false, or shadowProgram hasn't finished compiling yet
-    /// (!IsValidUVE()), the pass still runs but draws nothing, leaving shadowMapTarget cleared to
-    /// 1.0 (far plane) — the same "sentinel via clear-value default" reasoning documented on
-    /// FrameUniformsUVE::lightSpaceMatrix. Draws every opaque item unconditionally (no light-frustum
-    /// culling this increment — a documented known limitation, reusing the camera-frustum-culled
-    /// list the main pass already computed).
+    /// Renders one directional-light shadow depth pass. The caller records it only when a valid
+    /// directional caster and linked shadow program exist; otherwise the main pass receives the
+    /// zero-cascade sentinel and no shadow-map work is submitted. Draws every opaque item in the
+    /// cascade queue (no additional light-frustum culling beyond queue extraction).
     void RecordShadowPassUVE(const std::vector<RenderItemUVE>& items, const Math::Matrix4x4UVE& lightSpaceMatrix,
                               TextureHandleUVE shadowMapTarget, bool hasCaster, ICommandBufferUVE& commandBuffer) {
         RenderPassDescUVE passDesc;
@@ -967,11 +963,12 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
     const LightListUVE lights = m_impl->lightSystem.ExtractActiveLightsUVE(entityManager);
 
     const LightDataUVE* const shadowCaster = FindShadowCasterUVE(lights);
+    const bool shadowsReady = shadowCaster != nullptr && m_impl->shadowProgram->IsValidUVE();
     ShadowCascadeMatricesUVE lightSpaceMatrices{};
     ShadowCascadeSplitsUVE cascadeSplits{};
     std::array<RenderQueueUVE, kShadowCascadeCountUVE> shadowQueues{};
     std::int32_t cascadeCount = 0;
-    if (shadowCaster != nullptr) {
+    if (shadowsReady) {
         const Scene::CameraComponentUVE& camera =
             entityManager.GetComponentUVE<Scene::CameraComponentUVE>(cameraEntity);
         cascadeSplits = ComputeCascadeSplitsUVE(camera.nearPlane, camera.farPlane, m_impl->shadowCascadeSplitLambda);
@@ -1039,14 +1036,16 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
     const RenderGraphResourceHandleUVE colorResource = renderGraph.ImportTextureUVE(m_impl->colorTarget, "MainColor");
     const RenderGraphResourceHandleUVE depthResource = renderGraph.ImportTextureUVE(m_impl->depthTarget, "MainDepth");
 
-    for (std::size_t cascadeIndex = 0; cascadeIndex < kShadowCascadeCountUVE; ++cascadeIndex) {
-        const std::string passName = "DirectionalShadowCascade" + std::to_string(cascadeIndex);
+    if (shadowsReady) {
+        for (std::size_t cascadeIndex = 0; cascadeIndex < kShadowCascadeCountUVE; ++cascadeIndex) {
+            const std::string passName = "DirectionalShadowCascade" + std::to_string(cascadeIndex);
         renderGraph.AddPassUVE(RenderGraphPassDescUVE{
             passName, {{shadowResources[cascadeIndex], RenderGraphResourceAccessUVE::Write}},
             [this, &shadowQueues, &lightSpaceMatrices, shadowCaster, cascadeIndex](ICommandBufferUVE& commandBuffer) {
                 m_impl->RecordShadowPassUVE(shadowQueues[cascadeIndex].opaqueItems, lightSpaceMatrices[cascadeIndex],
                                             m_impl->shadowMapTargets[cascadeIndex], shadowCaster != nullptr, commandBuffer);
             }});
+        }
     }
 
     std::vector<RenderGraphResourceUseUVE> mainResources{{colorResource, RenderGraphResourceAccessUVE::Write},

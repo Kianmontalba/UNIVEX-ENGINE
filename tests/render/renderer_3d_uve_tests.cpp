@@ -281,19 +281,18 @@ protected:
     }
 };
 
-TEST_F(Renderer3DUVETest, RenderFrameUVE_EmptyScene_ShadowAndMainPassesBothBeginAndEndWithNoDraws) {
+TEST_F(Renderer3DUVETest, RenderFrameUVE_EmptyScene_MainPassBeginsAndEndsWithNoDraws) {
     const Scene::EntityUVE cameraEntity = MakeCameraEntityUVE();
 
     renderer3D->RenderFrameUVE(entityManager, cameraEntity);
 
-    // Increment 30 records three bounded cascade depth passes, then the main color pass. All are
-    // empty here because there are no meshes or Directional lights.
+    // No directional caster exists, so the optimized frame contains only the empty main color
+    // pass. Tone mapping has not linked yet in this first frame.
     const std::vector<RecordedCommandUVE>& commands = renderDevice.GetLastSubmittedCommandsUVE();
-    ASSERT_EQ(commands.size(), 8U);
-    for (std::size_t passIndex = 0; passIndex < 4; ++passIndex) {
-        EXPECT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commands[passIndex * 2U]));
-        EXPECT_TRUE(std::holds_alternative<EndRenderPassCommandUVE>(commands[passIndex * 2U + 1U]));
-    }
+    ASSERT_EQ(commands.size(), 2U);
+    ASSERT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commands[0U]));
+    EXPECT_NE(std::get<BeginRenderPassCommandUVE>(commands[0U]).desc.colorAttachment, kInvalidTextureHandleUVE);
+    EXPECT_TRUE(std::holds_alternative<EndRenderPassCommandUVE>(commands[1U]));
 }
 
 TEST_F(Renderer3DUVETest, RenderFrameUVE_VisiblePrimitive_RecordsCanonicalGeometryAndAuthoredColor) {
@@ -432,12 +431,9 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_VisibleMesh_RecordsExpectedCommandSeque
     const std::vector<RecordedCommandUVE>& commands = renderDevice.GetLastSubmittedCommandsUVE();
     // ShaderProgramUVE flushes its pending uniforms from an unordered cache, so insertion order is
     // intentionally not a renderer contract. Assert named effects and pass structure instead.
-    ASSERT_GE(commands.size(), 12U);
-    for (std::size_t cascadeIndex = 0; cascadeIndex < 3; ++cascadeIndex) {
-        EXPECT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commands[cascadeIndex * 2U]));
-        EXPECT_TRUE(std::holds_alternative<EndRenderPassCommandUVE>(commands[cascadeIndex * 2U + 1U]));
-    }
-    EXPECT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commands[6]));
+    ASSERT_GE(commands.size(), 2U);
+    ASSERT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commands[0U]));
+    EXPECT_NE(std::get<BeginRenderPassCommandUVE>(commands[0U]).desc.colorAttachment, kInvalidTextureHandleUVE);
     EXPECT_TRUE(std::any_of(commands.cbegin(), commands.cend(), [](const RecordedCommandUVE& command) {
         return std::holds_alternative<BindPipelineCommandUVE>(command);
     }));
@@ -813,20 +809,20 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_TextureAssetNotYetReady_SkipsItemUntilL
     WaitUntilAssetsReadyUVE(meshGuid, materialGuid);
 
     // The texture load kicked off inside this call is blocked on textureLoadGateUVE, so the item
-    // must be skipped this frame. The three cascade passes and empty main pass still run, then the
-    // ready fullscreen program records the independent tone-mapping output pass.
+    // must be skipped this frame. With no directional light, the optimized renderer records no
+    // shadow passes: the empty main pass is followed by the independent tone-mapping output pass.
     renderer3D->RenderFrameUVE(entityManager, cameraEntity);
-    const std::vector<RecordedCommandUVE>& commandsBeforeReady = renderDevice.GetLastSubmittedCommandsUVE();
-    ASSERT_EQ(commandsBeforeReady.size(), 14U);
-    for (std::size_t passIndex = 0; passIndex < 4; ++passIndex) {
-        EXPECT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commandsBeforeReady[passIndex * 2U]));
-        EXPECT_TRUE(std::holds_alternative<EndRenderPassCommandUVE>(commandsBeforeReady[passIndex * 2U + 1U]));
-    }
-    EXPECT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commandsBeforeReady[8U]));
-    EXPECT_TRUE(std::holds_alternative<DrawCommandUVE>(commandsBeforeReady[12U]));
-    EXPECT_TRUE(std::holds_alternative<EndRenderPassCommandUVE>(commandsBeforeReady[13U]));
-
+    const std::vector<RecordedCommandUVE> commandsBeforeReady = renderDevice.GetLastSubmittedCommandsUVE();
+    // Release the loader before assertions so any failed expectation cannot strand its worker thread.
     textureLoadGateUVE = true;
+    ASSERT_EQ(commandsBeforeReady.size(), 8U);
+    EXPECT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commandsBeforeReady[0U]));
+    EXPECT_TRUE(std::holds_alternative<EndRenderPassCommandUVE>(commandsBeforeReady[1U]));
+    EXPECT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commandsBeforeReady[2U]));
+    EXPECT_TRUE(std::holds_alternative<DrawCommandUVE>(commandsBeforeReady[6U]));
+    EXPECT_TRUE(std::holds_alternative<EndRenderPassCommandUVE>(commandsBeforeReady[7U]));
+
+
     WaitUntilTextureReadyUVE(textureGuid);
     PrimeMaterialProgramUVE(*renderer3D, cameraEntity);
 
@@ -1063,10 +1059,10 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_DirectionalCascadeMatrices_SnapToShadow
                     -2.0F / static_cast<float>(kTestShadowMapResolutionUVE));
 }
 
-TEST_F(Renderer3DUVETest, RenderFrameUVE_NoDirectionalLight_ShadowPassNeverDrawsEvenWithVisibleMesh) {
+TEST_F(Renderer3DUVETest, RenderFrameUVE_NoDirectionalLight_SkipsShadowPassEvenWithVisibleMesh) {
     // A visible, asset-ready mesh exists, and the shadow program has even had the chance to
     // become valid (polled to readiness below) - but with no Directional light entity at all,
-    // FindShadowCasterUVE() finds no caster, so the shadow pass still draws nothing.
+    // FindShadowCasterUVE() finds no caster, so no shadow pass is recorded.
     const Scene::EntityUVE cameraEntity = MakeCameraEntityUVE();
     const Asset::AssetGuidUVE meshGuid = assetDatabase.RegisterUVE("renderer3d_tests_noshadow_mesh.uvemodel");
     const Asset::AssetGuidUVE materialGuid = assetDatabase.RegisterUVE("renderer3d_tests_noshadow_material.uvemat");
@@ -1077,8 +1073,13 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_NoDirectionalLight_ShadowPassNeverDraws
     renderer3D->RenderFrameUVE(entityManager, cameraEntity);
 
     const std::vector<RecordedCommandUVE>& commands = renderDevice.GetLastSubmittedCommandsUVE();
-    EXPECT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commands[0]));
-    EXPECT_TRUE(std::holds_alternative<EndRenderPassCommandUVE>(commands[1]));
+    ASSERT_FALSE(commands.empty());
+    ASSERT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commands[0U]));
+    EXPECT_NE(std::get<BeginRenderPassCommandUVE>(commands[0U]).desc.colorAttachment, kInvalidTextureHandleUVE);
+    const auto mainPassEnd = std::find_if(commands.cbegin(), commands.cend(), [](const RecordedCommandUVE& command) {
+        return std::holds_alternative<EndRenderPassCommandUVE>(command);
+    });
+    ASSERT_NE(mainPassEnd, commands.cend());
 }
 
 TEST_F(Renderer3DUVETest, RenderFrameUVE_FittedLightFrustum_CastsOffCameraOccluderWithoutMainPassDraw) {
