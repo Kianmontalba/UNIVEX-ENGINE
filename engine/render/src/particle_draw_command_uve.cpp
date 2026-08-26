@@ -36,8 +36,15 @@ void ParticleDrawRecorderUVE::RecordIntoUVE(const RenderQueueUVE& queue, const s
             outRecording.truncated = true;
             break;
         }
-        outRecording.commands.push_back(
-            {item.entity, item.position, item.remainingLifetimeSeconds, item.sortDepth, item.sequence});
+        const ParticleDrawCommandUVE command{
+            item.entity, item.position, item.remainingLifetimeSeconds, item.sortDepth, item.sequence};
+        if (!IsValidParticleDrawCommandUVE(command)) {
+            // RenderQueueUVE is intentionally mutable/public, so defend the GPU boundary even when
+            // the normal ParticleRenderBridgeUVE path has already validated its source snapshot.
+            outRecording.truncated = true;
+            continue;
+        }
+        outRecording.commands.push_back(command);
     }
     outRecording.truncated = outRecording.truncated || queue.particleItemsTruncated ||
                              outRecording.commands.size() < outRecording.sourceItemCount;

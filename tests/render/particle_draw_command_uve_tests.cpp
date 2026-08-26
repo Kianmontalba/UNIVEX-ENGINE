@@ -79,6 +79,23 @@ TEST(ParticleDrawRecorderUVETest, PlanParticleGpuUploadUVE_PreservesTruncationAn
     EXPECT_FALSE(PlanParticleGpuUploadUVE(recording, 128U, plan));
 }
 
+TEST(ParticleDrawRecorderUVETest, RecordUVE_DropsInvalidPublicQueueItemsBeforeGpuHandoff) {
+    RenderQueueUVE queue;
+    queue.particleItems = {
+        {{1U, 1U}, Math::Vector3UVE{1.0F, 2.0F, 3.0F}, 1.0F, 3.0F, 1U},
+        {{2U, 1U}, Math::Vector3UVE{std::numeric_limits<float>::quiet_NaN(), 0.0F, 0.0F}, 1.0F, 2.0F, 2U},
+        {{3U, 1U}, Math::Vector3UVE{4.0F, 5.0F, 6.0F}, 1.0F, 1.0F, 0U},
+    };
+
+    const ParticleDrawRecordingUVE recording = ParticleDrawRecorderUVE::RecordUVE(queue);
+
+    EXPECT_EQ(recording.sourceItemCount, 3U);
+    ASSERT_EQ(recording.commands.size(), 1U);
+    EXPECT_TRUE(recording.truncated);
+    EXPECT_TRUE(IsValidParticleDrawCommandUVE(recording.commands.front()));
+    EXPECT_EQ(recording.commands.front().sequence, 1U);
+}
+
 TEST(ParticleDrawRecorderUVETest, RecordUVE_HonorsHardCapAndQueueTruncationFact) {
     RenderQueueUVE queue;
     queue.particleItems = {
