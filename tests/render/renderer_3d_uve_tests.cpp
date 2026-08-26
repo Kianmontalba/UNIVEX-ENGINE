@@ -1093,6 +1093,10 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_NoDirectionalLight_SkipsShadowPassEvenW
 TEST_F(Renderer3DUVETest, RenderFrameUVE_InvalidShadowTargetsSkipShadowPassSafely) {
     const Scene::EntityUVE cameraEntity = MakeCameraEntityUVE();
     MakeLightEntityUVE(Scene::LightComponentUVE{Math::Vector3UVE{1.0F, 1.0F, 1.0F}, 2.0F});
+    const Asset::AssetGuidUVE meshGuid = assetDatabase.RegisterUVE("renderer3d_invalid_shadow_mesh.uvemodel");
+    const Asset::AssetGuidUVE materialGuid = assetDatabase.RegisterUVE("renderer3d_invalid_shadow_material.uvemat");
+    MakeMeshEntityUVE(Math::Vector3UVE{0.0F, 0.0F, -10.0F}, meshGuid, materialGuid);
+    WaitUntilAssetsReadyUVE(meshGuid, materialGuid);
 
     Renderer3DUVE invalidShadowRenderer(
         renderDevice, renderSystem, meshRenderer, cameraSystem, lightSystem, shaderManager, assetManager,
@@ -1100,6 +1104,7 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_InvalidShadowTargetsSkipShadowPassSafel
         kTestShadowMapHalfExtentUVE, kTestShadowMapNearPlaneUVE, kTestShadowMapFarPlaneUVE,
         kTestShadowFrustumPaddingUVE, kTestShadowCascadeSplitLambdaUVE, kTestShadowCascadeBlendRatioUVE,
         kTestShadowPcfKernelRadiusUVE);
+    PrimeMaterialProgramUVE(invalidShadowRenderer, cameraEntity);
     for (int iteration = 0; iteration < kMaxPollIterationsUVE; ++iteration) {
         shaderManager.UpdateUVE(0.0);
         if (shaderManager.GetPendingJobCountUVE() == 0U) {
@@ -1116,6 +1121,16 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_InvalidShadowTargetsSkipShadowPassSafel
     ASSERT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commands.front()));
     EXPECT_NE(std::get<BeginRenderPassCommandUVE>(commands.front()).desc.colorAttachment,
               kInvalidTextureHandleUVE);
+    const auto cascadeCount = std::find_if(commands.cbegin(), commands.cend(), [](const RecordedCommandUVE& command) {
+        return std::holds_alternative<SetUniformIntCommandUVE>(command) &&
+               std::get<SetUniformIntCommandUVE>(command).name == "uShadowCascadeCount";
+    });
+    ASSERT_NE(cascadeCount, commands.cend());
+    EXPECT_EQ(std::get<SetUniformIntCommandUVE>(*cascadeCount).value, 0);
+    EXPECT_FALSE(std::any_of(commands.cbegin(), commands.cend(), [](const RecordedCommandUVE& command) {
+        return std::holds_alternative<BindTextureCommandUVE>(command) &&
+               std::get<BindTextureCommandUVE>(command).slot >= 3U;
+    }));
 }
 
 TEST_F(Renderer3DUVETest, RenderFrameUVE_InvalidMainTargetsSkipFrameSafely) {

@@ -791,10 +791,13 @@ struct Renderer3DUVE::ImplUVE {
             program->SetIntUVE("uNormalTexture", static_cast<std::int32_t>(kNormalTextureSlotUVE));
             program->SetIntUVE("uAOTexture", static_cast<std::int32_t>(kAoTextureSlotUVE));
             program->ApplyToUVE(commandBuffer);
-            commandBuffer.BindTextureUVE(shadowMapTargets[0], kShadowMapTextureSlotUVE);
-            for (std::size_t cascadeIndex = 0; cascadeIndex < kShadowCascadeCountUVE; ++cascadeIndex) {
-                commandBuffer.BindTextureUVE(shadowMapTargets[cascadeIndex],
-                                              kShadowCascadeFirstTextureSlotUVE + static_cast<std::uint32_t>(cascadeIndex));
+            if (frameUniforms.cascadeCount > 0) {
+                commandBuffer.BindTextureUVE(shadowMapTargets[0], kShadowMapTextureSlotUVE);
+                for (std::size_t cascadeIndex = 0; cascadeIndex < kShadowCascadeCountUVE; ++cascadeIndex) {
+                    commandBuffer.BindTextureUVE(
+                        shadowMapTargets[cascadeIndex],
+                        kShadowCascadeFirstTextureSlotUVE + static_cast<std::uint32_t>(cascadeIndex));
+                }
             }
             commandBuffer.BindTextureUVE(materialResources->albedoTexture, kAlbedoTextureSlotUVE);
             commandBuffer.BindTextureUVE(materialResources->normalTexture, kNormalTextureSlotUVE);
