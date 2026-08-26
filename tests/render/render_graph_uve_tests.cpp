@@ -81,6 +81,14 @@ TEST(RenderGraphUVETest, ClearUVE_RebuildsSmallerGraphWithoutExecutingStaleSlots
     EXPECT_EQ(graph.GetPassCountUVE(), 0U);
     executionOrder.clear();
 
+    graph.AddPassUVE(RenderGraphPassDescUVE{"StalePass", {{firstResource, RenderGraphResourceAccessUVE::Read}},
+                                            [&executionOrder](ICommandBufferUVE&) {
+                                                executionOrder.push_back("StalePass");
+                                            }});
+    EXPECT_FALSE(graph.ExecuteUVE(*commandBuffer));
+    EXPECT_TRUE(executionOrder.empty());
+    graph.ClearUVE();
+
     const RenderGraphResourceHandleUVE rebuiltResource = graph.ImportTextureUVE(firstTexture, "Rebuilt");
     graph.AddPassUVE(RenderGraphPassDescUVE{"RebuiltPass", {{rebuiltResource, RenderGraphResourceAccessUVE::Read}},
                                             [&executionOrder](ICommandBufferUVE&) {

@@ -24,7 +24,7 @@ RenderGraphResourceHandleUVE RenderGraphUVE::ImportTextureUVE(TextureHandleUVE t
         resource.debugNameUVE = std::move(debugNameUVE);
     }
     ++m_resourceCount;
-    return RenderGraphResourceHandleUVE{index};
+    return RenderGraphResourceHandleUVE{index, m_generation};
 }
 
 void RenderGraphUVE::AddPassUVE(RenderGraphPassDescUVE desc) {
@@ -58,7 +58,8 @@ bool RenderGraphUVE::ExecuteUVE(ICommandBufferUVE& commandBuffer) const {
             return false;
         }
         for (const RenderGraphResourceUseUVE& use : pass.resources) {
-            if (!use.resource.IsValidUVE() || use.resource.value >= m_resourceCount) {
+            if (!use.resource.IsValidUVE() || use.resource.generation != m_generation ||
+                use.resource.value >= m_resourceCount) {
                 UVE_ERROR("RenderGraphUVE: pass '{}' references an unknown resource", pass.debugNameUVE);
                 return false;
             }
@@ -88,6 +89,7 @@ void RenderGraphUVE::ClearUVE() noexcept {
     }
     m_passCount = 0U;
     m_resourceCount = 0U;
+    ++m_generation;
 }
 
 std::size_t RenderGraphUVE::GetPassCountUVE() const noexcept {

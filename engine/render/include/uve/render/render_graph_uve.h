@@ -19,6 +19,7 @@ class ICommandBufferUVE;
 /// destroys imported textures; Renderer3DUVE remains responsible for their lifetime.
 struct RenderGraphResourceHandleUVE {
     std::uint32_t value = UINT32_MAX;
+    std::uint64_t generation = 0U;
     [[nodiscard]] constexpr bool IsValidUVE() const noexcept { return value != UINT32_MAX; }
     friend constexpr bool operator==(RenderGraphResourceHandleUVE, RenderGraphResourceHandleUVE) = default;
 };
@@ -67,6 +68,7 @@ private:
     std::vector<RenderGraphPassDescUVE> m_passes;
     std::size_t m_resourceCount = 0U;
     std::size_t m_passCount = 0U;
+    std::uint64_t m_generation = 0U;
 };
 
 } // namespace UVE::Render
