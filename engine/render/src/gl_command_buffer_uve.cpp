@@ -72,7 +72,9 @@ void GlCommandBufferUVE::BeginRenderPassUVE(const RenderPassDescUVE& renderPassD
             framebuffer = cachedFramebufferIt->second;
         }
         GLint previousFramebuffer = 0;
-        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previousFramebuffer);
+        if (framebufferCreated) {
+            glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previousFramebuffer);
+        }
         m_state->gl.glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
 
         std::uint32_t attachmentWidth = 0;
