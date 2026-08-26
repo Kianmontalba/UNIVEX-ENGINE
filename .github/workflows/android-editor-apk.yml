@@ -1,0 +1,58 @@
+name: Android Editor APK
+
+on:
+  pull_request:
+    paths:
+      - 'engine/app/android_editor/**'
+      - '.github/workflows/android-editor-apk.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'engine/app/android_editor/**'
+      - '.github/workflows/android-editor-apk.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-android-editor:
+    name: build-offline-editor-apk
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Accept Android SDK licenses
+        run: yes | sdkmanager --licenses > /dev/null || true
+
+      - name: Install Android SDK packages
+        run: sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build debug APK
+        working-directory: engine/app/android_editor
+        run: gradle --no-daemon --stacktrace :app:assembleDebug
+
+      - name: Upload Android editor APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: uve-editor-android-debug
+          path: engine/app/android_editor/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
