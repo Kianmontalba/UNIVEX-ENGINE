@@ -37,6 +37,33 @@ target_compile_features(uve_editor_imgui PUBLIC cxx_std_20)
 # without project-specific diagnostics.
 target_compile_options(uve_editor_imgui PRIVATE $<$<CXX_COMPILER_ID:GNU,Clang>:-w>)
 
+# Editor-private orientation widget. The widget is built against UVE's existing pinned Dear ImGui
+# target; its repository's bundled ImGui submodule is intentionally not fetched.
+FetchContent_Declare(
+    uve_imguizmo
+    GIT_REPOSITORY https://github.com/BrutPitt/imGuIZMO.quat.git
+    GIT_TAG 23c8e689ec6b7d9bbfe5231a8d33ae946e2e65be
+    GIT_SHALLOW TRUE
+)
+FetchContent_GetProperties(uve_imguizmo)
+if(NOT uve_imguizmo_POPULATED)
+    FetchContent_Populate(uve_imguizmo)
+endif()
+add_library(uve_editor_imguizmo STATIC
+    ${uve_imguizmo_SOURCE_DIR}/imguizmo_quat/imGuIZMOquat.cpp
+    src/editor_imguizmo_orientation_uve.cpp
+)
+target_include_directories(uve_editor_imguizmo SYSTEM PUBLIC
+    ${uve_imguizmo_SOURCE_DIR}/imguizmo_quat
+)
+target_include_directories(uve_editor_imguizmo PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+target_compile_definitions(uve_editor_imguizmo PRIVATE IMGUIZMO_IMGUI_FOLDER=)
+target_compile_features(uve_editor_imguizmo PUBLIC cxx_std_20)
+target_compile_options(uve_editor_imguizmo PRIVATE $<$<CXX_COMPILER_ID:GNU,Clang>:-w>)
+target_link_libraries(uve_editor_imguizmo PRIVATE uve_editor_imgui)
+
 add_library(uve_editor STATIC
     src/editor_bridge_stdio_uve.cpp
     src/editor_bridge_uve.cpp
@@ -52,6 +79,6 @@ target_include_directories(uve_editor PUBLIC include)
 target_compile_features(uve_editor PUBLIC cxx_std_20)
 target_link_libraries(uve_editor
     PUBLIC uve_core uve_scripting uve_plugins
-    PRIVATE uve_editor_imgui nlohmann_json::nlohmann_json
+    PRIVATE uve_editor_imgui uve_editor_imguizmo nlohmann_json::nlohmann_json
 )
 uve_set_warnings(uve_editor)
