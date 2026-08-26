@@ -219,5 +219,27 @@ TEST_F(CameraSystemUVETest, GetWorldPositionUVE_EntityWithoutWorldTransform_Asse
 }
 #endif
 
+#if !UVE_DEBUG
+TEST_F(CameraSystemUVETest, InvalidCameraAndAspectInputsReturnFiniteFallbacksInRelease) {
+    Scene::CameraComponentUVE invalidCamera{180.0F, 0.1F, 100.0F};
+    const Scene::EntityUVE cameraEntity =
+        MakeCameraEntityUVE(Math::Vector3UVE{}, Math::QuaternionUVE{}, invalidCamera);
+
+    const Math::Matrix4x4UVE invalidProjection =
+        cameraSystem.ComputeProjectionMatrixUVE(entityManager, cameraEntity, 1.0F);
+    EXPECT_EQ(invalidProjection, Math::Matrix4x4UVE::IdentityUVE());
+
+    const Math::Matrix4x4UVE invalidAspectProjection =
+        cameraSystem.ComputeProjectionMatrixUVE(entityManager, cameraEntity, 0.0F);
+    EXPECT_EQ(invalidAspectProjection, Math::Matrix4x4UVE::IdentityUVE());
+
+    const CameraFrustumCornersUVE invalidCorners =
+        cameraSystem.ComputeFrustumCornersUVE(entityManager, cameraEntity, 1.0F);
+    for (const Math::Vector3UVE corner : invalidCorners) {
+        EXPECT_EQ(corner, Math::Vector3UVE{});
+    }
+}
+#endif
+
 } // namespace
 } // namespace UVE::Render::Tests

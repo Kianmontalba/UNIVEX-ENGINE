@@ -238,8 +238,19 @@ struct RendererUniformNamesUVE {
 
 [[nodiscard]] ShadowCascadeSplitsUVE ComputeCascadeSplitsUVE(float nearPlane, float farPlane,
                                                               float splitLambda) noexcept {
+    const bool validPlanes = std::isfinite(nearPlane) && nearPlane > 0.0F && std::isfinite(farPlane) &&
+                              farPlane > nearPlane;
+    const bool validLambda = std::isfinite(splitLambda);
+    UVE_ASSERT(validPlanes && validLambda);
+    if (!validPlanes) {
+        UVE_ERROR("Renderer3DUVE: ComputeCascadeSplitsUVE received invalid shadow clip planes");
+        return ShadowCascadeSplitsUVE{};
+    }
+    if (!validLambda) {
+        UVE_ERROR("Renderer3DUVE: ComputeCascadeSplitsUVE received a non-finite split lambda; using 0.5");
+    }
     ShadowCascadeSplitsUVE splits{};
-    const float clampedLambda = std::clamp(splitLambda, 0.0F, 1.0F);
+    const float clampedLambda = std::clamp(validLambda ? splitLambda : 0.5F, 0.0F, 1.0F);
     for (std::size_t cascadeIndex = 0; cascadeIndex < kShadowCascadeCountUVE; ++cascadeIndex) {
         const float progress = static_cast<float>(cascadeIndex + 1U) / static_cast<float>(kShadowCascadeCountUVE);
         const float uniformSplit = nearPlane + (farPlane - nearPlane) * progress;
@@ -1045,12 +1056,30 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
     if (m_impl->colorTarget == kInvalidTextureHandleUVE || m_impl->depthTarget == kInvalidTextureHandleUVE) {
         return;
     }
+    const Scene::CameraComponentUVE& camera =
+        entityManager.GetComponentUVE<Scene::CameraComponentUVE>(cameraEntity);
+    const bool cameraValid = Scene::IsCameraComponentValidUVE(camera);
+    UVE_ASSERT(cameraValid);
+    if (!cameraValid) {
+        UVE_ERROR("Renderer3DUVE: RenderFrameUVE received invalid camera parameters");
+        return;
+    }
+    if (m_impl->targetWidth == 0U || m_impl->targetHeight == 0U) {
+        UVE_ERROR("Renderer3DUVE: RenderFrameUVE cannot render to a zero-sized target");
+        return;
+    }
+    const float aspectRatio = static_cast<float>(m_impl->targetWidth) / static_cast<float>(m_impl->targetHeight);
+    const bool aspectRatioValid = std::isfinite(aspectRatio) && aspectRatio > 0.0F;
+    UVE_ASSERT(aspectRatioValid);
+    if (!aspectRatioValid) {
+        UVE_ERROR("Renderer3DUVE: RenderFrameUVE computed an invalid target aspect ratio");
+        return;
+    }
     m_impl->lastFrameDiagnostics.primitiveProgramReady = m_impl->primitiveProgram->IsValidUVE();
     m_impl->lastFrameDiagnostics.particleProgramReady = m_impl->particleProgram->IsValidUVE();
     m_impl->lastFrameDiagnostics.toneMappingProgramReady = m_impl->toneMappingProgram->IsValidUVE();
     m_impl->lastFrameDiagnostics.editorVisualProgramReady = m_impl->editorViewportVisualsProgram->IsValidUVE();
 
-    const float aspectRatio = static_cast<float>(m_impl->targetWidth) / static_cast<float>(m_impl->targetHeight);
     const Math::Matrix4x4UVE viewProjection =
         m_impl->cameraSystem.ComputeViewProjectionUVE(entityManager, cameraEntity, aspectRatio);
     const Math::FrustumUVE frustum = m_impl->cameraSystem.ExtractFrustumUVE(viewProjection);
@@ -1064,8 +1093,6 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
     ShadowCascadeSplitsUVE cascadeSplits{};
     std::int32_t cascadeCount = 0;
     if (shadowsReady) {
-        const Scene::CameraComponentUVE& camera =
-            entityManager.GetComponentUVE<Scene::CameraComponentUVE>(cameraEntity);
         cascadeSplits = ComputeCascadeSplitsUVE(camera.nearPlane, camera.farPlane, m_impl->shadowCascadeSplitLambda);
         const Math::Matrix4x4UVE lightView =
             Math::Matrix4x4UVE::ViewFromPositionAndRotationUVE(shadowCaster->position, shadowCaster->rotation);

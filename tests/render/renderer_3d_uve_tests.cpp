@@ -1304,5 +1304,19 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_DirectionalLightAndReadyShadowProgram_S
     EXPECT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commands[8]));
 }
 
+#if !UVE_DEBUG
+TEST_F(Renderer3DUVETest, RenderFrameUVE_InvalidCameraParametersAreSafeNoOpInRelease) {
+    const Scene::EntityUVE cameraEntity = MakeCameraEntityUVE();
+    Scene::CameraComponentUVE& camera =
+        entityManager.GetComponentUVE<Scene::CameraComponentUVE>(cameraEntity);
+    camera.nearPlane = 0.0F;
+    const std::size_t submittedCommandCountBefore = renderDevice.GetLastSubmittedCommandsUVE().size();
+
+    renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+
+    EXPECT_EQ(renderDevice.GetLastSubmittedCommandsUVE().size(), submittedCommandCountBefore);
+}
+#endif
+
 } // namespace
 } // namespace UVE::Render::Tests

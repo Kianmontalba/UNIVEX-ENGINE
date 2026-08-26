@@ -7,6 +7,7 @@
 #include <numbers>
 
 #include "uve/debug/assert_uve.h"
+#include "uve/debug/logging_macros_uve.h"
 #include "uve/scene/components/camera_component_uve.h"
 #include "uve/scene/components/world_transform_component_uve.h"
 
@@ -23,8 +24,18 @@ Math::Matrix4x4UVE CameraSystemUVE::ComputeProjectionMatrixUVE(const Scene::IEnt
                                                                  Scene::EntityUVE cameraEntity,
                                                                  float aspectRatio) const {
     const Scene::CameraComponentUVE& camera = entityManager.GetComponentUVE<Scene::CameraComponentUVE>(cameraEntity);
-    UVE_ASSERT(Scene::IsCameraComponentValidUVE(camera));
-    UVE_ASSERT(std::isfinite(aspectRatio) && aspectRatio > 0.0F);
+    const bool cameraValid = Scene::IsCameraComponentValidUVE(camera);
+    UVE_ASSERT(cameraValid);
+    if (!cameraValid) {
+        UVE_ERROR("CameraSystemUVE: ComputeProjectionMatrixUVE received invalid camera parameters");
+        return Math::Matrix4x4UVE::IdentityUVE();
+    }
+    const bool aspectRatioValid = std::isfinite(aspectRatio) && aspectRatio > 0.0F;
+    UVE_ASSERT(aspectRatioValid);
+    if (!aspectRatioValid) {
+        UVE_ERROR("CameraSystemUVE: ComputeProjectionMatrixUVE received an invalid aspect ratio");
+        return Math::Matrix4x4UVE::IdentityUVE();
+    }
     const float fovYRadians = camera.fieldOfViewDegrees * (std::numbers::pi_v<float> / 180.0F);
     return Math::Matrix4x4UVE::PerspectiveUVE(fovYRadians, aspectRatio, camera.nearPlane, camera.farPlane);
 }
@@ -46,8 +57,18 @@ CameraFrustumCornersUVE CameraSystemUVE::ComputeFrustumCornersUVE(const Scene::I
     const Scene::WorldTransformComponentUVE& worldTransform =
         entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(cameraEntity);
     const Scene::CameraComponentUVE& camera = entityManager.GetComponentUVE<Scene::CameraComponentUVE>(cameraEntity);
-    UVE_ASSERT(Scene::IsCameraComponentValidUVE(camera));
-    UVE_ASSERT(std::isfinite(aspectRatio) && aspectRatio > 0.0F);
+    const bool cameraValid = Scene::IsCameraComponentValidUVE(camera);
+    UVE_ASSERT(cameraValid);
+    if (!cameraValid) {
+        UVE_ERROR("CameraSystemUVE: ComputeFrustumCornersUVE received invalid camera parameters");
+        return CameraFrustumCornersUVE{};
+    }
+    const bool aspectRatioValid = std::isfinite(aspectRatio) && aspectRatio > 0.0F;
+    UVE_ASSERT(aspectRatioValid);
+    if (!aspectRatioValid) {
+        UVE_ERROR("CameraSystemUVE: ComputeFrustumCornersUVE received an invalid aspect ratio");
+        return CameraFrustumCornersUVE{};
+    }
     const float tangent = std::tan(camera.fieldOfViewDegrees * (std::numbers::pi_v<float> / 360.0F));
     const float nearHalfHeight = camera.nearPlane * tangent;
     const float nearHalfWidth = nearHalfHeight * aspectRatio;
