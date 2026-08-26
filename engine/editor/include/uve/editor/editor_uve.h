@@ -713,6 +713,9 @@ private:
     /// serialized component, dirty-state mutation, or history entry.
     void DrawViewportGridUVE(const EditorViewportRectUVE& viewportRect);
     void DrawSelectionBoundsUVE(const EditorViewportRectUVE& viewportRect);
+    /// Draws all transform handle families around one selection while preserving the existing
+    /// mode-specific drag/commit semantics and editor-only ownership.
+    void DrawUnifiedTransformGizmoUVE(const EditorViewportRectUVE& viewportRect);
     void DrawTranslateGizmoUVE(const EditorViewportRectUVE& viewportRect);
     void DrawRotateGizmoUVE(const EditorViewportRectUVE& viewportRect);
     void DrawScaleGizmoUVE(const EditorViewportRectUVE& viewportRect);

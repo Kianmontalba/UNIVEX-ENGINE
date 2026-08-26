@@ -3780,43 +3780,49 @@ void EditorUVE::DrawViewportGridUVE(const EditorViewportRectUVE& viewportRect) {
     constexpr float kGridSpacingUVE = 1.0F;
     const float span = static_cast<float>(kHalfLineCountUVE) * kGridSpacingUVE;
     const Math::Vector3UVE center{m_viewportFocusPoint.x, 0.0F, m_viewportFocusPoint.z};
-    ImDrawList* const drawList = ImGui::GetWindowDrawList();
+    ImDrawList* const drawList = ImGui::GetForegroundDrawList();
     const ImVec2 viewportMinimum{viewportRect.origin.x, viewportRect.origin.y};
     const ImVec2 viewportMaximum{viewportRect.origin.x + viewportRect.size.x,
                                  viewportRect.origin.y + viewportRect.size.y};
+    // The local Scene/2D/Game controls occupy the first 52 pixels of the viewport surface. Clip
+    // editor-only environment and grid feedback below that row so the backdrop fills the real canvas
+    // without painting over interactive toolbar controls or right/left docks.
+    const ImVec2 environmentMinimum{viewportMinimum.x, viewportMinimum.y + 52.0F};
+    drawList->PushClipRect(environmentMinimum, viewportMaximum, true);
     if (GetDocumentRootsUVE().empty()) {
         // Editor-only environment presentation. It is deliberately not a sun/light entity, mesh,
         // floor, render target, or serialized scene object; the real renderer remains responsible
         // for authored lighting and shadows when a scene contains eligible geometry and lights.
         const float pitchFraction = std::clamp(m_viewportPitchRadians / std::numbers::pi_v<float>, -0.5F, 0.5F);
         const float horizonFraction = std::clamp(0.58F + pitchFraction * 0.18F, 0.42F, 0.76F);
-        const float skyMidY = viewportMinimum.y + viewportRect.size.y * (horizonFraction * 0.58F);
-        const float horizonY = viewportMinimum.y + viewportRect.size.y * horizonFraction;
+        const float environmentHeight = std::max(1.0F, viewportRect.size.y - 52.0F);
+        const float skyMidY = environmentMinimum.y + environmentHeight * (horizonFraction * 0.58F);
+        const float horizonY = environmentMinimum.y + environmentHeight * horizonFraction;
         const float lowerFadeY = horizonY + viewportRect.size.y * 0.24F;
         const ImVec2 skyMidMinimum{viewportMinimum.x, skyMidY};
         const ImVec2 skyMidMaximum{viewportMaximum.x, horizonY};
         const ImVec2 horizonMaximum{viewportMaximum.x, lowerFadeY};
         const ImVec2 lowerMaximum{viewportMaximum.x, viewportMaximum.y};
-        drawList->AddRectFilledMultiColor(viewportMinimum, skyMidMinimum, IM_COL32(22, 45, 77, 255),
-                                          IM_COL32(44, 79, 119, 255), IM_COL32(91, 139, 174, 255),
-                                          IM_COL32(67, 105, 145, 255));
-        drawList->AddRectFilledMultiColor(skyMidMinimum, skyMidMaximum, IM_COL32(91, 139, 174, 255),
-                                          IM_COL32(137, 171, 190, 255), IM_COL32(209, 175, 137, 255),
-                                          IM_COL32(174, 183, 179, 255));
-        drawList->AddRectFilledMultiColor(skyMidMaximum, horizonMaximum, IM_COL32(209, 175, 137, 255),
-                                          IM_COL32(184, 145, 105, 255), IM_COL32(111, 74, 55, 255),
-                                          IM_COL32(132, 91, 63, 255));
-        drawList->AddRectFilledMultiColor(horizonMaximum, lowerMaximum, IM_COL32(111, 74, 55, 255),
-                                          IM_COL32(78, 55, 45, 255), IM_COL32(27, 29, 31, 255),
-                                          IM_COL32(39, 35, 34, 255));
+        drawList->AddRectFilledMultiColor(viewportMinimum, skyMidMinimum, IM_COL32(61, 70, 82, 255),
+                                          IM_COL32(79, 91, 105, 255), IM_COL32(126, 143, 153, 255),
+                                          IM_COL32(101, 119, 134, 255));
+        drawList->AddRectFilledMultiColor(skyMidMinimum, skyMidMaximum, IM_COL32(126, 143, 153, 255),
+                                          IM_COL32(162, 174, 177, 255), IM_COL32(216, 190, 155, 255),
+                                          IM_COL32(188, 181, 167, 255));
+        drawList->AddRectFilledMultiColor(skyMidMaximum, horizonMaximum, IM_COL32(216, 190, 155, 255),
+                                          IM_COL32(187, 151, 116, 255), IM_COL32(121, 82, 61, 255),
+                                          IM_COL32(145, 101, 73, 255));
+        drawList->AddRectFilledMultiColor(horizonMaximum, lowerMaximum, IM_COL32(121, 82, 61, 255),
+                                          IM_COL32(84, 61, 50, 255), IM_COL32(31, 32, 34, 255),
+                                          IM_COL32(45, 40, 38, 255));
         drawList->AddRectFilled(ImVec2{viewportMinimum.x, horizonY - 3.0F},
                                 ImVec2{viewportMaximum.x, horizonY + 3.0F}, IM_COL32(235, 201, 153, 42));
 
         // A restrained editor-only sun cue makes the sky read as lit without ever pretending that
         // the empty document has a cast-shadow source.
-        const float sunX = viewportMinimum.x + viewportRect.size.x *
+        const float sunX = environmentMinimum.x + viewportRect.size.x *
                            std::clamp(0.72F - std::sin(m_viewportYawRadians) * 0.10F, 0.18F, 0.86F);
-        const float sunY = viewportMinimum.y + viewportRect.size.y *
+        const float sunY = environmentMinimum.y + environmentHeight *
                            std::clamp(0.19F + pitchFraction * 0.12F, 0.08F, 0.34F);
         const ImVec2 sunCenter{sunX, sunY};
         drawList->AddCircleFilled(sunCenter, 34.0F, IM_COL32(255, 210, 142, 18), 32);
@@ -3840,6 +3846,7 @@ void EditorUVE::DrawViewportGridUVE(const EditorViewportRectUVE& viewportRect) {
                               lineIndex == 0 ? 1.6F : 1.0F);
         }
     }
+    drawList->PopClipRect();
 }
 
 void EditorUVE::DrawSelectionBoundsUVE(const EditorViewportRectUVE& viewportRect) {
@@ -3895,6 +3902,15 @@ void EditorUVE::DrawSelectionBoundsUVE(const EditorViewportRectUVE& viewportRect
         drawList->AddCircleFilled(ImVec2{projectedCenter.x, projectedCenter.y}, active ? 4.5F : 3.5F,
                                   boundsColor, 12);
     }
+}
+
+void EditorUVE::DrawUnifiedTransformGizmoUVE(const EditorViewportRectUVE& viewportRect) {
+    // The three families remain separate because their hit tests and transform application are
+    // different. Presenting them together gives the editor one all-in-one gizmo without introducing
+    // a second interaction model or fake preview geometry.
+    DrawTranslateGizmoUVE(viewportRect);
+    DrawRotateGizmoUVE(viewportRect);
+    DrawScaleGizmoUVE(viewportRect);
 }
 
 void EditorUVE::DrawTranslateGizmoUVE(const EditorViewportRectUVE& viewportRect) {
@@ -6439,13 +6455,7 @@ void EditorUVE::DrawViewportPanelUVE() {
         DrawViewportGridUVE(viewportRect);
         DrawSelectionBoundsUVE(viewportRect);
         if (IsAuthoringCommandAllowedUVE()) {
-            if (m_gizmoMode == EditorGizmoModeUVE::Translate) {
-                DrawTranslateGizmoUVE(viewportRect);
-            } else if (m_gizmoMode == EditorGizmoModeUVE::Rotate) {
-                DrawRotateGizmoUVE(viewportRect);
-            } else {
-                DrawScaleGizmoUVE(viewportRect);
-            }
+            DrawUnifiedTransformGizmoUVE(viewportRect);
         }
         ImDrawList* const drawList = ImGui::GetWindowDrawList();
         if (GetDocumentRootsUVE().empty()) {
