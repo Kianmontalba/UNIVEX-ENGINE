@@ -1379,6 +1379,47 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_InvalidCameraWorldTransformIsSafeNoOpIn
 
     EXPECT_EQ(renderDevice.GetLastSubmittedCommandsUVE().size(), submittedCommandCountBefore);
 }
+
+TEST_F(Renderer3DUVETest, RenderFrameUVE_NonFiniteShadowTuningUsesFiniteReleaseDefaults) {
+    const Scene::EntityUVE cameraEntity = MakeCameraEntityUVE();
+    MakeLightEntityUVE(Scene::LightComponentUVE{Math::Vector3UVE{1.0F, 1.0F, 1.0F}, 2.0F});
+    const Asset::AssetGuidUVE meshGuid = assetDatabase.RegisterUVE("renderer3d_nonfinite_shadow_tuning_mesh.uvemodel");
+    const Asset::AssetGuidUVE materialGuid =
+        assetDatabase.RegisterUVE("renderer3d_nonfinite_shadow_tuning_material.uvemat");
+    MakeMeshEntityUVE(Math::Vector3UVE{0.0F, 0.0F, -10.0F}, meshGuid, materialGuid);
+    WaitUntilAssetsReadyUVE(meshGuid, materialGuid);
+
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    Renderer3DUVE sanitizedRenderer(
+        renderDevice, renderSystem, meshRenderer, cameraSystem, lightSystem, shaderManager, assetManager,
+        assetDatabase, eventSystem, kTargetWidthUVE, kTargetHeightUVE, kTestAmbientColorUVE,
+        kTestShadowMapResolutionUVE, kTestShadowMapHalfExtentUVE, kTestShadowMapNearPlaneUVE,
+        kTestShadowMapFarPlaneUVE, nan, nan, nan, kTestShadowPcfKernelRadiusUVE);
+    PrimeMaterialProgramUVE(sanitizedRenderer, cameraEntity);
+    for (int iteration = 0; iteration < kMaxPollIterationsUVE; ++iteration) {
+        shaderManager.UpdateUVE(0.0);
+        if (shaderManager.GetPendingJobCountUVE() == 0U) {
+            break;
+        }
+        std::this_thread::yield();
+    }
+    ASSERT_EQ(shaderManager.GetPendingJobCountUVE(), 0U);
+
+    sanitizedRenderer.RenderFrameUVE(entityManager, cameraEntity);
+
+    const std::vector<RecordedCommandUVE>& commands = renderDevice.GetLastSubmittedCommandsUVE();
+    const auto blendRatio = std::find_if(commands.cbegin(), commands.cend(), [](const RecordedCommandUVE& command) {
+        return std::holds_alternative<SetUniformFloatCommandUVE>(command) &&
+               std::get<SetUniformFloatCommandUVE>(command).name == "uShadowCascadeBlendRatio";
+    });
+    ASSERT_NE(blendRatio, commands.cend());
+    EXPECT_EQ(std::get<SetUniformFloatCommandUVE>(*blendRatio).value, 0.0F);
+    for (const RecordedCommandUVE& command : commands) {
+        if (std::holds_alternative<SetUniformFloatCommandUVE>(command)) {
+            EXPECT_TRUE(std::isfinite(std::get<SetUniformFloatCommandUVE>(command).value));
+        }
+    }
+}
 #endif
 
 } // namespace

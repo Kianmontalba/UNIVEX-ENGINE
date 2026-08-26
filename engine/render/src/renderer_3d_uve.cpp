@@ -241,6 +241,27 @@ struct RendererUniformNamesUVE {
     return names;
 }
 
+[[nodiscard]] float SanitizeFiniteNonNegativeUVE(float value, float fallback, std::string_view name) noexcept {
+    const bool finite = std::isfinite(value);
+    UVE_ASSERT(finite);
+    if (!finite) {
+        UVE_ERROR("Renderer3DUVE: {} must be finite; using {}", name, fallback);
+        return fallback;
+    }
+    return std::max(value, 0.0F);
+}
+
+[[nodiscard]] float SanitizeFiniteClampedUVE(float value, float fallback, float minimum, float maximum,
+                                              std::string_view name) noexcept {
+    const bool finite = std::isfinite(value);
+    UVE_ASSERT(finite);
+    if (!finite) {
+        UVE_ERROR("Renderer3DUVE: {} must be finite; using {}", name, fallback);
+        return fallback;
+    }
+    return std::clamp(value, minimum, maximum);
+}
+
 [[nodiscard]] ShadowCascadeSplitsUVE ComputeCascadeSplitsUVE(float nearPlane, float farPlane,
                                                               float splitLambda) noexcept {
     const bool validPlanes = std::isfinite(nearPlane) && nearPlane > 0.0F && std::isfinite(farPlane) &&
@@ -483,9 +504,12 @@ struct Renderer3DUVE::ImplUVE {
           uniformNames(GetRendererUniformNamesUVE()), targetWidth(targetWidthIn), targetHeight(targetHeightIn), ambientColor(ambientColorIn),
           shadowMapResolution(shadowMapResolutionIn), shadowMapHalfExtent(shadowMapHalfExtentIn),
           shadowMapNearPlane(shadowMapNearPlaneIn), shadowMapFarPlane(shadowMapFarPlaneIn),
-          shadowFrustumPadding(std::max(shadowFrustumPaddingIn, 0.0F)),
-          shadowCascadeSplitLambda(std::clamp(shadowCascadeSplitLambdaIn, 0.0F, 1.0F)),
-          shadowCascadeBlendRatio(std::clamp(shadowCascadeBlendRatioIn, 0.0F, 0.25F)),
+          shadowFrustumPadding(SanitizeFiniteNonNegativeUVE(shadowFrustumPaddingIn, 0.0F,
+                                                             "shadowFrustumPadding")),
+          shadowCascadeSplitLambda(SanitizeFiniteClampedUVE(shadowCascadeSplitLambdaIn, 0.5F, 0.0F, 1.0F,
+                                                            "shadowCascadeSplitLambda")),
+          shadowCascadeBlendRatio(SanitizeFiniteClampedUVE(shadowCascadeBlendRatioIn, 0.0F, 0.0F, 0.25F,
+                                                            "shadowCascadeBlendRatio")),
           shadowPcfKernelRadius(static_cast<std::int32_t>(std::min(shadowPcfKernelRadiusIn, 2U))) {}
 
     void EvictUnreferencedTextureCacheEntriesUVE() {
