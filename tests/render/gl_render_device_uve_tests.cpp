@@ -463,6 +463,38 @@ TEST_F(GlRenderDeviceUVETest, BeginRenderPassUVE_UnknownAttachmentDoesNotBindOrC
     renderDevice->DestroyTextureUVE(validColor);
 }
 
+TEST_F(GlRenderDeviceUVETest, BeginRenderPassUVE_IncompleteFramebufferRejectsAndRestoresState) {
+    const TextureHandleUVE validColor = renderDevice->CreateTextureUVE(TextureDescUVE{2U, 2U});
+    const TextureHandleUVE invalidColor = renderDevice->CreateTextureUVE(
+        TextureDescUVE{1U, 1U, TextureFormatUVE::Depth32Float, 1U});
+    ASSERT_NE(validColor, kInvalidTextureHandleUVE);
+    ASSERT_NE(invalidColor, kInvalidTextureHandleUVE);
+    std::unique_ptr<ICommandBufferUVE> commandBuffer = renderDevice->CreateCommandBufferUVE();
+    ASSERT_NE(commandBuffer, nullptr);
+
+    GLint before = 0;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &before);
+    RenderPassDescUVE mismatchedPass;
+    mismatchedPass.colorAttachment = invalidColor;
+    mismatchedPass.depthAttachment = kInvalidTextureHandleUVE;
+    commandBuffer->BeginRenderPassUVE(mismatchedPass);
+    GLint after = 0;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &after);
+    EXPECT_EQ(after, before);
+
+    RenderPassDescUVE validPass;
+    validPass.colorAttachment = validColor;
+    validPass.depthAttachment = kInvalidTextureHandleUVE;
+    commandBuffer->BeginRenderPassUVE(validPass);
+    GLint validFramebuffer = 0;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &validFramebuffer);
+    EXPECT_NE(validFramebuffer, 0);
+    commandBuffer->EndRenderPassUVE();
+
+    renderDevice->DestroyTextureUVE(invalidColor);
+    renderDevice->DestroyTextureUVE(validColor);
+}
+
 TEST_F(GlRenderDeviceUVETest, BindTextureUVE_SlotExceedsGlLimit_DoesNotIssueGlCall) {
     const TextureHandleUVE texture = renderDevice->CreateTextureUVE(TextureDescUVE{1U, 1U});
     ASSERT_NE(texture, kInvalidTextureHandleUVE);

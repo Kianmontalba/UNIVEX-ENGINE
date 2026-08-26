@@ -71,6 +71,8 @@ void GlCommandBufferUVE::BeginRenderPassUVE(const RenderPassDescUVE& renderPassD
         } else {
             framebuffer = cachedFramebufferIt->second;
         }
+        GLint previousFramebuffer = 0;
+        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &previousFramebuffer);
         m_state->gl.glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
 
         std::uint32_t attachmentWidth = 0;
@@ -106,6 +108,10 @@ void GlCommandBufferUVE::BeginRenderPassUVE(const RenderPassDescUVE& renderPassD
             }
             if (m_state->gl.glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
                 UVE_ERROR("GlCommandBufferUVE: BeginRenderPassUVE built an incomplete framebuffer");
+                m_state->gl.glDeleteFramebuffers(1, &framebuffer);
+                m_state->framebufferCache.erase(framebufferKey);
+                m_state->gl.glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(previousFramebuffer));
+                return;
             }
         }
 
