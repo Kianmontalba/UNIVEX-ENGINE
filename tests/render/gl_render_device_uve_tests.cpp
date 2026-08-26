@@ -656,6 +656,18 @@ TEST_F(GlRenderDeviceUVETest, BeginRenderPassUVE_UnknownLoadOp_LeavesStateUntouc
     EXPECT_EQ(glGetError(), GL_NO_ERROR);
 }
 
+TEST_F(GlRenderDeviceUVETest, CreateBufferUVE_ZeroSize_ReturnsInvalidBeforeAllocation) {
+    ASSERT_EQ(renderDevice->GetLiveResourceCountUVE(), 0U);
+    while (glGetError() != GL_NO_ERROR) {
+    }
+
+    const BufferHandleUVE invalid = renderDevice->CreateBufferUVE(BufferDescUVE{0U, BufferUsageUVE::Vertex});
+
+    EXPECT_EQ(invalid, kInvalidBufferHandleUVE);
+    EXPECT_EQ(renderDevice->GetLiveResourceCountUVE(), 0U);
+    EXPECT_EQ(glGetError(), GL_NO_ERROR);
+}
+
 TEST_F(GlRenderDeviceUVETest, CreateBufferUVE_OversizedInitialData_ReturnsInvalidBeforeAllocation) {
     ASSERT_EQ(renderDevice->GetLiveResourceCountUVE(), 0U);
     const std::array<std::byte, 17> initialData{};

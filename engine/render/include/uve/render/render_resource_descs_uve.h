@@ -31,7 +31,8 @@ enum class BufferUsageUVE : std::uint8_t { Vertex, Index, Uniform };
     return false;
 }
 
-/// Describes a GPU buffer to create via IRenderDeviceUVE::CreateBufferUVE().
+/// Describes a GPU buffer to create via IRenderDeviceUVE::CreateBufferUVE(). A buffer must have
+/// positive byte capacity; zero-sized GL buffers are not useful to any supported draw/update path.
 struct BufferDescUVE {
     std::uint64_t sizeBytes = 0;
     BufferUsageUVE usage = BufferUsageUVE::Vertex;
@@ -39,7 +40,7 @@ struct BufferDescUVE {
 
 [[nodiscard]] constexpr bool ValidateBufferUploadUVE(const BufferDescUVE& desc,
                                                        const std::span<const std::byte> initialData) noexcept {
-    return initialData.size() <= desc.sizeBytes;
+    return desc.sizeBytes > 0U && initialData.size() <= desc.sizeBytes;
 }
 
 [[nodiscard]] constexpr bool ValidateBufferUpdateUVE(const std::uint64_t bufferSizeBytes,

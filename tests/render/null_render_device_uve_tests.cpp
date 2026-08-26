@@ -34,6 +34,15 @@ TEST(NullRenderDeviceUVETest, CreateBufferUVE_UnknownUsage_ReturnsInvalidBeforeA
     EXPECT_EQ(valid.value, 1U);
 }
 
+TEST(NullRenderDeviceUVETest, CreateBufferUVE_ZeroSize_ReturnsInvalidBeforeAllocation) {
+    NullRenderDeviceUVE device;
+
+    const BufferHandleUVE invalid = device.CreateBufferUVE(BufferDescUVE{0U, BufferUsageUVE::Vertex});
+
+    EXPECT_EQ(invalid, kInvalidBufferHandleUVE);
+    EXPECT_EQ(device.GetLiveResourceCountUVE(), 0U);
+}
+
 TEST(NullRenderDeviceUVETest, CreateBufferUVE_OversizedInitialData_ReturnsInvalidBeforeAllocation) {
     NullRenderDeviceUVE device;
     const std::array<std::byte, 17> initialData{};
