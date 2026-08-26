@@ -173,10 +173,10 @@ constexpr std::uint32_t kAoTextureSlotUVE = 2;
 /// convention.
 constexpr std::uint32_t kShadowMapTextureSlotUVE = 3U;
 
-// The renderer always clears its HDR scene target. This restrained blue-gray is the intentional
+// The renderer always clears its HDR scene target. This neutral charcoal is the intentional
 // empty-scene environment baseline; it is not an editor overlay and never counts as primitive
 // presentation evidence in the real-GL fixture tests.
-constexpr std::array<float, 4> kDefaultSceneClearColorUVE{0.035F, 0.055F, 0.085F, 1.0F};
+constexpr std::array<float, 4> kDefaultSceneClearColorUVE{0.050F, 0.050F, 0.050F, 1.0F};
 constexpr std::size_t kShadowCascadeCountUVE = 3;
 constexpr std::uint32_t kShadowCascadeFirstTextureSlotUVE = kShadowMapTextureSlotUVE;
 
