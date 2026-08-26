@@ -836,8 +836,6 @@ private:
         const std::string& focus) noexcept;
 
     EditorUVE* m_editor = nullptr;
-    Scripting::ScriptNodeRegistryUVE m_visualScriptRegistry;
-    Scripting::ScriptGraphCanvasUVE m_visualScriptCanvas;
     DeveloperConsoleUVE m_developerConsole;
     const Asset::DataTableRegistryUVE* m_dataTableRegistry = nullptr;
     const Scripting::ScriptDebuggerUVE* m_scriptDebugger = nullptr;

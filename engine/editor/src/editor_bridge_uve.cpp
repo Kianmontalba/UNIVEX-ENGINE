@@ -3,7 +3,6 @@
 #include "uve/editor/editor_bridge_uve.h"
 
 #include "uve/scene/components/prefab_instance_component_uve.h"
-#include "uve/scripting/script_builtin_nodes_uve.h"
 
 #include <algorithm>
 #include <cctype>
@@ -209,14 +208,10 @@ EditorBridgeUVE::EditorBridgeUVE(EditorUVE& editor,
                                    Scripting::ScriptRuntimeUVE* scriptRuntime,
                                    Core::ControlRigEditorAuthoringSessionUVE* controlRigAuthoring)
     : m_editor(&editor),
-      m_visualScriptCanvas(m_visualScriptRegistry),
       m_dataTableRegistry(dataTableRegistry),
       m_scriptDebugger(scriptDebugger),
       m_scriptRuntime(scriptRuntime),
       m_controlRigAuthoring(controlRigAuthoring) {
-    if (!Scripting::RegisterBuiltInScriptNodesUVE(m_visualScriptRegistry)) {
-        throw std::logic_error("Failed to register built-in Visual Scripting nodes.");
-    }
 }
 
 const std::vector<EditorBridgeCapabilityUVE>& EditorBridgeUVE::GetCapabilitiesUVE() noexcept {
@@ -392,7 +387,7 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
         EditorBridgeResponseUVE response = MakeResponseUVE(
             request, false, "bridge.visual_scripting.graph_schema.invalid",
             "The visual-scripting graph schema could not be serialized.");
-        Scripting::ScriptGraphSchemaUVE schema = CaptureGraphSchemaUVE(m_visualScriptCanvas);
+        Scripting::ScriptGraphSchemaUVE schema = CaptureGraphSchemaUVE(m_editor->GetVisualScriptCanvasUVE());
         std::vector<Scripting::ScriptPersistenceDiagnosticUVE> diagnostics;
         if (!Scripting::EncodeScriptGraphSchemaUVE(schema, diagnostics).empty()) {
             response.applied = true;
@@ -743,7 +738,7 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
                                        "AddVisualScriptNodeType requires a bounded type ID and finite position payload.");
             }
             {
-                const auto result = m_visualScriptCanvas.AddNodeTypeUVE(
+                const auto result = m_editor->GetVisualScriptCanvasUVE().AddNodeTypeUVE(
                     *request.visualScriptNodeTypeId, *request.visualScriptPosition, request.expectedRevision);
                 applied = result.IsAppliedUVE();
                 code = result.code == Scripting::ScriptGraphCanvasCommandCodeUVE::StaleRevision
@@ -760,7 +755,7 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
                                        "SetVisualScriptPinDefault requires bounded node, pin, and value payloads.");
             }
             {
-                const auto result = m_visualScriptCanvas.SetPinDefaultValueUVE(
+                const auto result = m_editor->GetVisualScriptCanvasUVE().SetPinDefaultValueUVE(
                     *request.visualScriptNodeId, *request.visualScriptPinName,
                     *request.visualScriptDefaultValue, request.expectedRevision);
                 applied = result.IsAppliedUVE();
@@ -777,7 +772,7 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
                                        "AddVisualScriptNode requires a node and finite position payload.");
             }
             {
-                const auto result = m_visualScriptCanvas.AddNodeUVE(
+                const auto result = m_editor->GetVisualScriptCanvasUVE().AddNodeUVE(
                     *request.visualScriptNode, *request.visualScriptPosition, request.expectedRevision);
                 applied = result.IsAppliedUVE();
                 code = result.code == Scripting::ScriptGraphCanvasCommandCodeUVE::StaleRevision
@@ -791,7 +786,7 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
                                        "RemoveVisualScriptNode requires a node ID.");
             }
             {
-                const auto result = m_visualScriptCanvas.RemoveNodeUVE(
+                const auto result = m_editor->GetVisualScriptCanvasUVE().RemoveNodeUVE(
                     *request.visualScriptNodeId, request.expectedRevision);
                 applied = result.IsAppliedUVE();
                 code = result.code == Scripting::ScriptGraphCanvasCommandCodeUVE::StaleRevision
@@ -805,7 +800,7 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
                                        "MoveVisualScriptNode requires a node ID and finite position payload.");
             }
             {
-                const auto result = m_visualScriptCanvas.MoveNodeUVE(
+                const auto result = m_editor->GetVisualScriptCanvasUVE().MoveNodeUVE(
                     *request.visualScriptNodeId, *request.visualScriptPosition, request.expectedRevision);
                 applied = result.IsAppliedUVE();
                 code = result.code == Scripting::ScriptGraphCanvasCommandCodeUVE::StaleRevision
@@ -819,7 +814,7 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
                                        "AddVisualScriptLink requires a link payload.");
             }
             {
-                const auto result = m_visualScriptCanvas.AddLinkUVE(
+                const auto result = m_editor->GetVisualScriptCanvasUVE().AddLinkUVE(
                     *request.visualScriptLink, request.expectedRevision);
                 applied = result.IsAppliedUVE();
                 code = result.code == Scripting::ScriptGraphCanvasCommandCodeUVE::StaleRevision
@@ -833,7 +828,7 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
                                        "RemoveVisualScriptLink requires a link payload.");
             }
             {
-                const auto result = m_visualScriptCanvas.RemoveLinkUVE(
+                const auto result = m_editor->GetVisualScriptCanvasUVE().RemoveLinkUVE(
                     *request.visualScriptLink, request.expectedRevision);
                 applied = result.IsAppliedUVE();
                 code = result.code == Scripting::ScriptGraphCanvasCommandCodeUVE::StaleRevision
@@ -847,7 +842,7 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
                                        "SetVisualScriptSelection requires a selection payload.");
             }
             {
-                const auto result = m_visualScriptCanvas.SetSelectionUVE(
+                const auto result = m_editor->GetVisualScriptCanvasUVE().SetSelectionUVE(
                     *request.visualScriptSelection, request.expectedRevision);
                 applied = result.IsAppliedUVE();
                 code = result.code == Scripting::ScriptGraphCanvasCommandCodeUVE::StaleRevision
@@ -861,7 +856,7 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
                                        "SetVisualScriptView requires a finite view payload.");
             }
             {
-                const auto result = m_visualScriptCanvas.SetViewUVE(
+                const auto result = m_editor->GetVisualScriptCanvasUVE().SetViewUVE(
                     *request.visualScriptView, request.expectedRevision);
                 applied = result.IsAppliedUVE();
                 code = result.code == Scripting::ScriptGraphCanvasCommandCodeUVE::StaleRevision
@@ -870,7 +865,7 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
             }
             break;
         case EditorBridgeRequestKindUVE::UndoVisualScript: {
-            const auto result = m_visualScriptCanvas.UndoUVE(request.expectedRevision);
+            const auto result = m_editor->GetVisualScriptCanvasUVE().UndoUVE(request.expectedRevision);
             applied = result.IsAppliedUVE();
             code = result.code == Scripting::ScriptGraphCanvasCommandCodeUVE::StaleRevision
                 ? "bridge.snapshot.stale" : applied ? "bridge.command.applied" : "bridge.command.rejected";
@@ -878,7 +873,7 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
             break;
         }
         case EditorBridgeRequestKindUVE::RedoVisualScript: {
-            const auto result = m_visualScriptCanvas.RedoUVE(request.expectedRevision);
+            const auto result = m_editor->GetVisualScriptCanvasUVE().RedoUVE(request.expectedRevision);
             applied = result.IsAppliedUVE();
             code = result.code == Scripting::ScriptGraphCanvasCommandCodeUVE::StaleRevision
                 ? "bridge.snapshot.stale" : applied ? "bridge.command.applied" : "bridge.command.rejected";
@@ -1165,7 +1160,7 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
                                        "The graph schema was rejected before native canvas mutation.");
             }
             const Scripting::ScriptGraphCanvasCommandResultUVE appliedResult =
-                m_visualScriptCanvas.ApplyGraphSchemaUVE(*decoded.schema, request.expectedRevision);
+                m_editor->GetVisualScriptCanvasUVE().ApplyGraphSchemaUVE(*decoded.schema, request.expectedRevision);
             applied = appliedResult.IsAppliedUVE();
             code = applied ? "bridge.visual_scripting.graph_schema.deserialized"
                            : "bridge.visual_scripting.graph_schema.rejected";
@@ -1497,7 +1492,7 @@ EditorBridgeDataTablePreviewSnapshotUVE EditorBridgeUVE::CaptureDataTablePreview
 }
 
 EditorBridgeVisualScriptingSnapshotUVE EditorBridgeUVE::CaptureVisualScriptingUVE() const {
-    const Scripting::ScriptGraphCanvasSnapshotUVE canvas = m_visualScriptCanvas.GetSnapshotUVE();
+    const Scripting::ScriptGraphCanvasSnapshotUVE canvas = m_editor->GetVisualScriptCanvasUVE().GetSnapshotUVE();
     const bool running = m_editor->GetStateUVE() == EditorStateUVE::Running;
     const bool canEdit = running && m_editor->GetPlayModeStateUVE() == EditorPlayModeStateUVE::Edit;
     const std::string reason = !running

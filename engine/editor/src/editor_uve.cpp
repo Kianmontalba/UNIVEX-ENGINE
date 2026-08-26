@@ -14,6 +14,7 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <stdexcept>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -27,6 +28,7 @@
 #include "uve/config/i_config_manager_uve.h"
 #include "uve/physics/raycast_query_uve.h"
 #include "uve/platform/editor_project_package_uve.h"
+#include "uve/scripting/script_builtin_nodes_uve.h"
 #include "uve/scene/components/area_component_uve.h"
 #include "uve/scene/components/camera_component_uve.h"
 #include "uve/scene/components/collider_component_uve.h"
@@ -75,6 +77,61 @@ constexpr float kMaximumViewportPitchRadiansUVE = 1.4835299F; // 85 degrees.
 constexpr float kViewportOrbitRadiansPerPixelUVE = 0.008F;
 constexpr float kViewportZoomExponentPerWheelUnitUVE = 0.16F;
 constexpr const char* kHierarchyEntityPayloadUVE = "UVE_SCENE_HIERARCHY_ENTITY";
+
+[[nodiscard]] const char* ScriptValueTypeLabelUVE(const Scripting::ScriptValueTypeUVE type) noexcept {
+    switch (type) {
+        case Scripting::ScriptValueTypeUVE::Execution: return "Exec";
+        case Scripting::ScriptValueTypeUVE::Boolean: return "Bool";
+        case Scripting::ScriptValueTypeUVE::Number: return "Number";
+        case Scripting::ScriptValueTypeUVE::Vector2: return "Vector2";
+        case Scripting::ScriptValueTypeUVE::Vector3: return "Vector3";
+        case Scripting::ScriptValueTypeUVE::Entity: return "Entity";
+        case Scripting::ScriptValueTypeUVE::Asset: return "Asset";
+        case Scripting::ScriptValueTypeUVE::Component: return "Component";
+        case Scripting::ScriptValueTypeUVE::Rotation: return "Rotation";
+        case Scripting::ScriptValueTypeUVE::Transform: return "Transform";
+        case Scripting::ScriptValueTypeUVE::Array: return "Array";
+        case Scripting::ScriptValueTypeUVE::Map: return "Map";
+        case Scripting::ScriptValueTypeUVE::Set: return "Set";
+        case Scripting::ScriptValueTypeUVE::Struct: return "Struct";
+    }
+    return "Unknown";
+}
+
+[[nodiscard]] ImU32 ScriptPinColorUVE(const Scripting::ScriptPinRoleUVE role,
+                                      const Scripting::ScriptValueTypeUVE type) noexcept {
+    if (role == Scripting::ScriptPinRoleUVE::Execution || type == Scripting::ScriptValueTypeUVE::Execution) {
+        return IM_COL32(230, 230, 230, 255);
+    }
+    switch (type) {
+        case Scripting::ScriptValueTypeUVE::Boolean: return IM_COL32(204, 112, 226, 255);
+        case Scripting::ScriptValueTypeUVE::Number: return IM_COL32(112, 184, 232, 255);
+        case Scripting::ScriptValueTypeUVE::Vector2:
+        case Scripting::ScriptValueTypeUVE::Vector3: return IM_COL32(90, 198, 164, 255);
+        case Scripting::ScriptValueTypeUVE::Entity:
+        case Scripting::ScriptValueTypeUVE::Component: return IM_COL32(232, 166, 82, 255);
+        case Scripting::ScriptValueTypeUVE::Asset: return IM_COL32(242, 132, 132, 255);
+        default: return IM_COL32(180, 180, 180, 255);
+    }
+}
+
+[[nodiscard]] ImU32 ScriptPinColorUVE(const Scripting::ScriptGraphCanvasPinSnapshotUVE& pin) noexcept {
+    return ScriptPinColorUVE(pin.role, pin.type);
+}
+
+[[nodiscard]] ImVec2 ScriptCanvasToScreenUVE(const Scripting::ScriptGraphCanvasPointUVE point,
+                                              const ImVec2 origin,
+                                              const Scripting::ScriptGraphCanvasViewUVE view) noexcept {
+    return ImVec2{origin.x + (point.x - view.pan.x) * view.zoom,
+                   origin.y + (point.y - view.pan.y) * view.zoom};
+}
+
+[[nodiscard]] Scripting::ScriptGraphCanvasPointUVE ScreenToScriptCanvasUVE(
+    const ImVec2 point, const ImVec2 origin, const Scripting::ScriptGraphCanvasViewUVE view) noexcept {
+    return Scripting::ScriptGraphCanvasPointUVE{
+        view.pan.x + (point.x - origin.x) / std::max(view.zoom, 0.0001F),
+        view.pan.y + (point.y - origin.y) / std::max(view.zoom, 0.0001F)};
+}
 
 [[nodiscard]] const char* ImportJobStateLabelUVE(const Asset::AssetImportJobStateUVE state) noexcept {
     switch (state) {
@@ -288,7 +345,11 @@ EditorUVE::EditorUVE(Core::EngineServicesUVE& services, std::filesystem::path ac
     : m_services(&services),
       m_simulationControl(simulationControl),
       m_activeScenePath(std::move(activeScenePath)),
-      m_historyCapacity(std::max<std::size_t>(std::size_t{1U}, historyCapacity)) {
+      m_historyCapacity(std::max<std::size_t>(std::size_t{1U}, historyCapacity)),
+      m_visualScriptCanvas(m_visualScriptRegistry) {
+    if (!Scripting::RegisterBuiltInScriptNodesUVE(m_visualScriptRegistry)) {
+        throw std::logic_error("Failed to register built-in Visual Scripting nodes.");
+    }
     RegisterBuiltInInspectorDrawersUVE();
 }
 
@@ -483,12 +544,15 @@ void EditorUVE::RenderOverlayUVE() {
     ImGui::NewFrame();
 
     DrawMenuBarUVE();
-    DrawViewportPanelUVE();
-    DrawHierarchyPanelUVE();
-    DrawInspectorPanelUVE();
-    DrawBottomDockContentUVE();
-    DrawBottomDockUVE();
-
+    if (m_activeWorkspace == EditorWorkspaceUVE::Scripting) {
+        DrawScriptingWorkspaceUVE();
+    } else {
+        DrawViewportPanelUVE();
+        DrawHierarchyPanelUVE();
+        DrawInspectorPanelUVE();
+        DrawBottomDockContentUVE();
+        DrawBottomDockUVE();
+    }
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
@@ -2658,6 +2722,14 @@ void EditorUVE::SetActiveScenePathUVE(std::filesystem::path path) {
     }
 }
 
+Scripting::ScriptGraphCanvasUVE& EditorUVE::GetVisualScriptCanvasUVE() noexcept {
+    return m_visualScriptCanvas;
+}
+
+const Scripting::ScriptNodeRegistryUVE& EditorUVE::GetVisualScriptRegistryUVE() const noexcept {
+    return m_visualScriptRegistry;
+}
+
 void EditorUVE::ShutdownUVE() {
     if (m_state == EditorStateUVE::Shutdown || m_state == EditorStateUVE::Uninitialized) {
         return;
@@ -4203,7 +4275,15 @@ void EditorUVE::DrawMenuBarUVE() {
     if (beginChrome("##uve-titlebar", 0.0F, kEditorTitleBarHeightUVE)) {
         ImGui::TextUnformatted("UNIVEX ENGINE");
         ImGui::SameLine();
-        ImGui::TextDisabled("| Library");
+        const char* workspaceLabel = "Library";
+        switch (m_activeWorkspace) {
+            case EditorWorkspaceUVE::Library: workspaceLabel = "Library"; break;
+            case EditorWorkspaceUVE::Asset: workspaceLabel = "Asset"; break;
+            case EditorWorkspaceUVE::Scripting: workspaceLabel = "Scripting"; break;
+            case EditorWorkspaceUVE::Debug: workspaceLabel = "Debug"; break;
+            case EditorWorkspaceUVE::Plugin: workspaceLabel = "Plugin"; break;
+        }
+        ImGui::TextDisabled("| %s", workspaceLabel);
         ImGui::SameLine();
         ImGui::TextDisabled("| %s | %zu selected | %s", m_sceneDirty ? "unsaved" : "saved",
                             m_selectedEntities.size(),
@@ -4288,6 +4368,13 @@ void EditorUVE::DrawMenuBarUVE() {
             if (ImGui::MenuItem("Content Review")) {
                 ApplyLayoutPresetUVE(EditorLayoutPresetUVE::ContentReview);
             }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Scene Workspace", nullptr, m_activeWorkspace == EditorWorkspaceUVE::Library)) {
+                m_activeWorkspace = EditorWorkspaceUVE::Library;
+            }
+            if (ImGui::MenuItem("Scripting Workspace", nullptr, m_activeWorkspace == EditorWorkspaceUVE::Scripting)) {
+                m_activeWorkspace = EditorWorkspaceUVE::Scripting;
+            }
             ImGui::EndMenu();
         }
         if (ImGui::BeginMenu("Help")) {
@@ -4319,6 +4406,14 @@ void EditorUVE::DrawMenuBarUVE() {
             ImGui::SameLine();
         };
         ImGui::SmallButton("Hand");
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Scene")) {
+            m_activeWorkspace = EditorWorkspaceUVE::Library;
+        }
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Scripting")) {
+            m_activeWorkspace = EditorWorkspaceUVE::Scripting;
+        }
         ImGui::SameLine();
         drawTool("Move", EditorGizmoModeUVE::Translate);
         drawTool("Rotate", EditorGizmoModeUVE::Rotate);
@@ -5719,6 +5814,381 @@ void EditorUVE::DrawAssetsPanelUVE() {
     } else {
         ImGui::TextUnformatted("Select a cached project file or directory to inspect its content-browser entry.");
     }
+    ImGui::End();
+}
+
+void EditorUVE::DrawScriptingWorkspaceUVE() {
+    const ImGuiViewport* const mainViewport = ImGui::GetMainViewport();
+    const ImVec2 position{mainViewport->WorkPos.x,
+                          mainViewport->WorkPos.y + kEditorTopChromeHeightUVE};
+    const ImVec2 size{mainViewport->WorkSize.x,
+                      std::max(120.0F, mainViewport->WorkSize.y - kEditorTopChromeHeightUVE)};
+    ImGui::SetNextWindowPos(position, ImGuiCond_Always);
+    ImGui::SetNextWindowSize(size, ImGuiCond_Always);
+    constexpr ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove |
+                                               ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar;
+    if (!ImGui::Begin("Scripting Workspace##uve", nullptr, windowFlags)) {
+        ImGui::End();
+        return;
+    }
+
+    const Scripting::ScriptGraphCanvasSnapshotUVE snapshot = m_visualScriptCanvas.GetSnapshotUVE();
+    const auto selectedNode = [&snapshot]() -> const Scripting::ScriptGraphCanvasNodeSnapshotUVE* {
+        if (snapshot.selectedNodeIds.size() != 1U) {
+            return nullptr;
+        }
+        const auto iterator = std::find_if(
+            snapshot.nodes.cbegin(), snapshot.nodes.cend(),
+            [&snapshot](const Scripting::ScriptGraphCanvasNodeSnapshotUVE& node) {
+                return node.id == snapshot.selectedNodeIds.front();
+            });
+        return iterator == snapshot.nodes.cend() ? nullptr : &*iterator;
+    };
+    const auto findNode = [&snapshot](const std::uint32_t nodeId)
+        -> const Scripting::ScriptGraphCanvasNodeSnapshotUVE* {
+        const auto iterator = std::find_if(
+            snapshot.nodes.cbegin(), snapshot.nodes.cend(),
+            [nodeId](const Scripting::ScriptGraphCanvasNodeSnapshotUVE& node) { return node.id == nodeId; });
+        return iterator == snapshot.nodes.cend() ? nullptr : &*iterator;
+    };
+    const auto findPin = [](const Scripting::ScriptGraphCanvasNodeSnapshotUVE& node,
+                            const std::string& name) -> const Scripting::ScriptGraphCanvasPinSnapshotUVE* {
+        const auto iterator = std::find_if(
+            node.pins.cbegin(), node.pins.cend(),
+            [&name](const Scripting::ScriptGraphCanvasPinSnapshotUVE& pin) { return pin.name == name; });
+        return iterator == node.pins.cend() ? nullptr : &*iterator;
+    };
+
+    if (ImGui::BeginChild("##scripting-toolbar", ImVec2{0.0F, 34.0F}, false)) {
+        ImGui::TextUnformatted("Visual Scripting");
+        ImGui::SameLine();
+        ImGui::TextDisabled("Native graph canvas | revision %llu",
+                            static_cast<unsigned long long>(snapshot.revision));
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Undo")) {
+            static_cast<void>(m_visualScriptCanvas.UndoUVE());
+        }
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Redo")) {
+            static_cast<void>(m_visualScriptCanvas.RedoUVE());
+        }
+        ImGui::SameLine();
+        ImGui::TextDisabled("LMB select/drag/link | MMB/RMB pan | wheel zoom | Ctrl+Z/Y canvas history");
+    }
+    ImGui::EndChild();
+
+    const ImVec2 workspaceSize = ImGui::GetContentRegionAvail();
+    if (ImGui::BeginChild("##scripting-layout", workspaceSize, false)) {
+        if (ImGui::BeginChild("##script-palette", ImVec2{238.0F, 0.0F}, true)) {
+            ImGui::TextUnformatted("Node Palette");
+            std::array<char, 257> filterBuffer{};
+            std::strncpy(filterBuffer.data(), m_scriptCanvasPaletteFilter.c_str(), filterBuffer.size() - 1U);
+            if (ImGui::InputText("Filter", filterBuffer.data(), filterBuffer.size())) {
+                m_scriptCanvasPaletteFilter = filterBuffer.data();
+            }
+            ImGui::Separator();
+            std::size_t visiblePaletteEntries = 0U;
+            for (const Scripting::ScriptGraphCanvasPaletteEntryUVE& entry : snapshot.paletteDescriptors) {
+                if (!ContainsCaseInsensitiveUVE(entry.displayName, m_scriptCanvasPaletteFilter) &&
+                    !ContainsCaseInsensitiveUVE(entry.category, m_scriptCanvasPaletteFilter) &&
+                    !ContainsCaseInsensitiveUVE(entry.typeId, m_scriptCanvasPaletteFilter)) {
+                    continue;
+                }
+                ++visiblePaletteEntries;
+                std::string label = entry.displayName.empty() ? entry.typeId : entry.displayName;
+                label += "##palette-";
+                label += entry.typeId;
+                if (ImGui::Selectable(label.c_str(), false)) {
+                    const Scripting::ScriptGraphCanvasPointUVE spawnPosition{
+                        snapshot.view.pan.x + 96.0F / std::max(snapshot.view.zoom, 0.1F),
+                        snapshot.view.pan.y + 96.0F / std::max(snapshot.view.zoom, 0.1F)};
+                    static_cast<void>(m_visualScriptCanvas.AddNodeTypeUVE(entry.typeId, spawnPosition));
+                }
+                ImGui::SameLine(ImGui::GetWindowWidth() - 12.0F);
+                ImGui::TextDisabled("%s", entry.category.c_str());
+            }
+            if (visiblePaletteEntries == 0U) {
+                ImGui::TextDisabled("No matching registered nodes.");
+            }
+            ImGui::Separator();
+            ImGui::TextWrapped("The palette is registry-driven. Node creation goes through native graph validation and history.");
+        }
+        ImGui::EndChild();
+        ImGui::SameLine();
+
+        const float detailsWidth = 276.0F;
+        const float canvasWidth = std::max(180.0F, ImGui::GetContentRegionAvail().x - detailsWidth - ImGui::GetStyle().ItemSpacing.x);
+        if (ImGui::BeginChild("##script-canvas-frame", ImVec2{canvasWidth, 0.0F}, true)) {
+            const ImVec2 canvasOrigin = ImGui::GetCursorScreenPos();
+            const ImVec2 canvasSize = ImGui::GetContentRegionAvail();
+            const Scripting::ScriptGraphCanvasViewUVE view = snapshot.view;
+            ImGui::InvisibleButton("##script-canvas-input", canvasSize,
+                                   ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight |
+                                       ImGuiButtonFlags_MouseButtonMiddle);
+            const bool canvasHovered = ImGui::IsItemHovered();
+            const ImVec2 mouse = ImGui::GetMousePos();
+            const ImVec2 mouseLocal{mouse.x - canvasOrigin.x, mouse.y - canvasOrigin.y};
+            ImDrawList* const drawList = ImGui::GetWindowDrawList();
+            drawList->AddRectFilled(canvasOrigin,
+                                    ImVec2{canvasOrigin.x + canvasSize.x, canvasOrigin.y + canvasSize.y},
+                                    IM_COL32(20, 23, 28, 255));
+            constexpr float gridSpacing = 24.0F;
+            const float gridOffsetX = std::fmod(-view.pan.x * view.zoom, gridSpacing);
+            const float gridOffsetY = std::fmod(-view.pan.y * view.zoom, gridSpacing);
+            for (float x = canvasOrigin.x + gridOffsetX; x < canvasOrigin.x + canvasSize.x; x += gridSpacing) {
+                drawList->AddLine(ImVec2{x, canvasOrigin.y}, ImVec2{x, canvasOrigin.y + canvasSize.y},
+                                  IM_COL32(35, 39, 46, 255));
+            }
+            for (float y = canvasOrigin.y + gridOffsetY; y < canvasOrigin.y + canvasSize.y; y += gridSpacing) {
+                drawList->AddLine(ImVec2{canvasOrigin.x, y}, ImVec2{canvasOrigin.x + canvasSize.x, y},
+                                  IM_COL32(35, 39, 46, 255));
+            }
+
+            const auto nodePosition = [this](const Scripting::ScriptGraphCanvasNodeSnapshotUVE& node) {
+                return m_scriptCanvasDragging && node.id == m_scriptCanvasDragNodeId
+                    ? m_scriptCanvasDragPreviewPosition : node.position;
+            };
+            constexpr float nodeWidth = 228.0F;
+            constexpr float headerHeight = 26.0F;
+            constexpr float pinRowHeight = 19.0F;
+            const auto nodeHeight = [](const Scripting::ScriptGraphCanvasNodeSnapshotUVE& node) {
+                return 38.0F + pinRowHeight * static_cast<float>(std::max<std::size_t>(1U, node.pins.size()));
+            };
+            const auto pinScreenPosition = [&](const Scripting::ScriptGraphCanvasNodeSnapshotUVE& node,
+                                               const Scripting::ScriptGraphCanvasPinSnapshotUVE& pin) {
+                const auto iterator = std::find_if(node.pins.cbegin(), node.pins.cend(),
+                                                   [&pin](const auto& candidate) { return candidate.name == pin.name; });
+                const std::size_t pinIndex = iterator == node.pins.cend()
+                    ? 0U : static_cast<std::size_t>(std::distance(node.pins.cbegin(), iterator));
+                const ImVec2 nodeMin = ScriptCanvasToScreenUVE(nodePosition(node), canvasOrigin, view);
+                const float y = nodeMin.y + headerHeight + 13.0F + pinRowHeight * static_cast<float>(pinIndex);
+                return pin.direction == Scripting::ScriptPinDirectionUVE::Input
+                    ? ImVec2{nodeMin.x + 8.0F, y} : ImVec2{nodeMin.x + nodeWidth - 8.0F, y};
+            };
+
+            for (const Scripting::ScriptGraphCanvasLinkSnapshotUVE& link : snapshot.links) {
+                const auto* const outputNode = findNode(link.link.output.nodeId);
+                const auto* const inputNode = findNode(link.link.input.nodeId);
+                if (outputNode == nullptr || inputNode == nullptr) {
+                    continue;
+                }
+                const auto* const outputPin = findPin(*outputNode, link.link.output.pinName);
+                const auto* const inputPin = findPin(*inputNode, link.link.input.pinName);
+                if (outputPin == nullptr || inputPin == nullptr) {
+                    continue;
+                }
+                const ImVec2 start = pinScreenPosition(*outputNode, *outputPin);
+                const ImVec2 end = pinScreenPosition(*inputNode, *inputPin);
+                const float tangent = std::max(36.0F, std::abs(end.x - start.x) * 0.45F);
+                drawList->AddBezierCubic(start, ImVec2{start.x + tangent, start.y},
+                                         ImVec2{end.x - tangent, end.y}, end,
+                                         IM_COL32(148, 174, 196, 235), 2.0F);
+            }
+
+            for (const Scripting::ScriptGraphCanvasNodeSnapshotUVE& node : snapshot.nodes) {
+                const ImVec2 nodeMin = ScriptCanvasToScreenUVE(nodePosition(node), canvasOrigin, view);
+                const float nodeHeightPixels = nodeHeight(node);
+                const ImVec2 nodeMax{nodeMin.x + nodeWidth, nodeMin.y + nodeHeightPixels};
+                const bool selected = std::find(snapshot.selectedNodeIds.cbegin(), snapshot.selectedNodeIds.cend(), node.id) !=
+                                      snapshot.selectedNodeIds.cend();
+                const ImU32 bodyColor = selected ? IM_COL32(42, 63, 83, 255) : IM_COL32(35, 41, 50, 255);
+                drawList->AddRectFilled(nodeMin, nodeMax, bodyColor, 4.0F);
+                drawList->AddRectFilled(nodeMin, ImVec2{nodeMax.x, nodeMin.y + headerHeight},
+                                        selected ? IM_COL32(48, 108, 154, 255) : IM_COL32(45, 71, 96, 255), 4.0F,
+                                        ImDrawFlags_RoundCornersTop);
+                drawList->AddRect(nodeMin, nodeMax, selected ? IM_COL32(122, 190, 232, 255) : IM_COL32(86, 98, 112, 255),
+                                  4.0F, 0, selected ? 2.0F : 1.0F);
+                const std::string title = node.displayName.empty() ? node.typeId : node.displayName;
+                drawList->AddText(ImVec2{nodeMin.x + 10.0F, nodeMin.y + 6.0F}, IM_COL32(240, 244, 248, 255), title.c_str());
+                for (std::size_t pinIndex = 0U; pinIndex < node.pins.size(); ++pinIndex) {
+                    const auto& pin = node.pins[pinIndex];
+                    const ImVec2 pinPosition = pinScreenPosition(node, pin);
+                    drawList->AddCircleFilled(pinPosition, 5.0F * std::clamp(view.zoom, 0.75F, 1.25F),
+                                              ScriptPinColorUVE(pin));
+                    const float textX = pin.direction == Scripting::ScriptPinDirectionUVE::Input
+                        ? nodeMin.x + 17.0F : nodeMin.x + 14.0F;
+                    const ImVec2 textPosition{pin.direction == Scripting::ScriptPinDirectionUVE::Input
+                                                  ? textX : nodeMin.x + nodeWidth - 14.0F - ImGui::CalcTextSize(pin.name.c_str()).x,
+                                              pinPosition.y - 7.0F};
+                    drawList->AddText(textPosition, IM_COL32(214, 220, 227, 255), pin.name.c_str());
+                }
+            }
+
+            const auto findNodeAt = [&](const ImVec2 point) -> const Scripting::ScriptGraphCanvasNodeSnapshotUVE* {
+                for (auto iterator = snapshot.nodes.crbegin(); iterator != snapshot.nodes.crend(); ++iterator) {
+                    const ImVec2 nodeMin = ScriptCanvasToScreenUVE(nodePosition(*iterator), canvasOrigin, view);
+                    const ImVec2 nodeMax{nodeMin.x + nodeWidth, nodeMin.y + nodeHeight(*iterator)};
+                    if (point.x >= nodeMin.x && point.x <= nodeMax.x && point.y >= nodeMin.y && point.y <= nodeMax.y) {
+                        return &*iterator;
+                    }
+                }
+                return nullptr;
+            };
+            const auto findPinAt = [&](const ImVec2 point, const Scripting::ScriptGraphCanvasNodeSnapshotUVE& node)
+                -> const Scripting::ScriptGraphCanvasPinSnapshotUVE* {
+                for (const auto& pin : node.pins) {
+                    const ImVec2 pinPosition = pinScreenPosition(node, pin);
+                    const float dx = point.x - pinPosition.x;
+                    const float dy = point.y - pinPosition.y;
+                    if ((dx * dx) + (dy * dy) <= 64.0F) {
+                        return &pin;
+                    }
+                }
+                return nullptr;
+            };
+
+            if (m_scriptCanvasDragging) {
+                if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+                    const Scripting::ScriptGraphCanvasPointUVE currentGraphPosition =
+                        ScreenToScriptCanvasUVE(mouse, canvasOrigin, view);
+                    m_scriptCanvasDragPreviewPosition = Scripting::ScriptGraphCanvasPointUVE{
+                        m_scriptCanvasDragStartPosition.x + currentGraphPosition.x - m_scriptCanvasDragStartPointer.x,
+                        m_scriptCanvasDragStartPosition.y + currentGraphPosition.y - m_scriptCanvasDragStartPointer.y};
+                } else {
+                    static_cast<void>(m_visualScriptCanvas.MoveNodeUVE(
+                        m_scriptCanvasDragNodeId, m_scriptCanvasDragPreviewPosition, m_scriptCanvasDragRevision));
+                    m_scriptCanvasDragging = false;
+                    m_scriptCanvasDragNodeId = 0U;
+                }
+            } else if (m_scriptCanvasPanning) {
+                if (ImGui::IsMouseDown(ImGuiMouseButton_Left) || ImGui::IsMouseDown(ImGuiMouseButton_Right) ||
+                    ImGui::IsMouseDown(ImGuiMouseButton_Middle)) {
+                    Scripting::ScriptGraphCanvasViewUVE nextView = m_scriptCanvasPanViewStart;
+                    nextView.pan.x = m_scriptCanvasPanViewStart.pan.x -
+                                     (mouseLocal.x - m_scriptCanvasPanStart.x) / std::max(view.zoom, 0.1F);
+                    nextView.pan.y = m_scriptCanvasPanViewStart.pan.y -
+                                     (mouseLocal.y - m_scriptCanvasPanStart.y) / std::max(view.zoom, 0.1F);
+                    static_cast<void>(m_visualScriptCanvas.SetViewUVE(nextView));
+                } else {
+                    m_scriptCanvasPanning = false;
+                }
+            } else if (canvasHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+                const auto* const node = findNodeAt(mouse);
+                if (node != nullptr) {
+                    const auto* const pin = findPinAt(mouse, *node);
+                    static_cast<void>(m_visualScriptCanvas.SetSelectionUVE({node->id}));
+                    if (pin != nullptr) {
+                        if (pin->direction == Scripting::ScriptPinDirectionUVE::Output) {
+                            m_scriptCanvasLinkSourceNodeId = node->id;
+                            m_scriptCanvasLinkSourcePin = pin->name;
+                        } else if (m_scriptCanvasLinkSourceNodeId != 0U) {
+                            const auto result = m_visualScriptCanvas.AddLinkUVE(
+                                Scripting::ScriptLinkUVE{{m_scriptCanvasLinkSourceNodeId, m_scriptCanvasLinkSourcePin},
+                                                         {node->id, pin->name}});
+                            if (result.IsAppliedUVE()) {
+                                m_scriptCanvasLinkSourceNodeId = 0U;
+                                m_scriptCanvasLinkSourcePin.clear();
+                            }
+                        }
+                    } else {
+                        const Scripting::ScriptGraphCanvasPointUVE graphPosition =
+                            ScreenToScriptCanvasUVE(mouse, canvasOrigin, view);
+                        m_scriptCanvasDragging = true;
+                        m_scriptCanvasDragNodeId = node->id;
+                        m_scriptCanvasDragStartPosition = node->position;
+                        m_scriptCanvasDragStartPointer = graphPosition;
+                        m_scriptCanvasDragPreviewPosition = node->position;
+                        m_scriptCanvasDragRevision = snapshot.revision;
+                    }
+                } else {
+                    static_cast<void>(m_visualScriptCanvas.SetSelectionUVE({}));
+                    m_scriptCanvasLinkSourceNodeId = 0U;
+                    m_scriptCanvasLinkSourcePin.clear();
+                }
+            } else if (canvasHovered &&
+                       (ImGui::IsMouseClicked(ImGuiMouseButton_Left) || ImGui::IsMouseClicked(ImGuiMouseButton_Right) ||
+                        ImGui::IsMouseClicked(ImGuiMouseButton_Middle))) {
+                m_scriptCanvasPanning = true;
+                m_scriptCanvasPanStart = Scripting::ScriptGraphCanvasPointUVE{mouseLocal.x, mouseLocal.y};
+                m_scriptCanvasPanViewStart = view;
+            }
+            if (canvasHovered && ImGui::GetIO().MouseWheel != 0.0F) {
+                const Scripting::ScriptGraphCanvasPointUVE graphUnderPointer =
+                    ScreenToScriptCanvasUVE(mouse, canvasOrigin, view);
+                Scripting::ScriptGraphCanvasViewUVE nextView = view;
+                nextView.zoom = std::clamp(view.zoom * std::pow(1.12F, ImGui::GetIO().MouseWheel),
+                                           Scripting::kMinimumScriptGraphCanvasZoomUVE,
+                                           Scripting::kMaximumScriptGraphCanvasZoomUVE);
+                nextView.pan.x = graphUnderPointer.x - mouseLocal.x / nextView.zoom;
+                nextView.pan.y = graphUnderPointer.y - mouseLocal.y / nextView.zoom;
+                static_cast<void>(m_visualScriptCanvas.SetViewUVE(nextView));
+            }
+            if (m_scriptCanvasLinkSourceNodeId != 0U && !m_scriptCanvasLinkSourcePin.empty()) {
+                const auto* const sourceNode = findNode(m_scriptCanvasLinkSourceNodeId);
+                if (sourceNode != nullptr) {
+                    const auto* const sourcePin = findPin(*sourceNode, m_scriptCanvasLinkSourcePin);
+                    if (sourcePin != nullptr) {
+                        const ImVec2 start = pinScreenPosition(*sourceNode, *sourcePin);
+                        drawList->AddLine(start, mouse, IM_COL32(240, 208, 116, 230), 2.0F);
+                    }
+                }
+            }
+            if (snapshot.nodes.empty()) {
+                drawList->AddText(ImVec2{canvasOrigin.x + 20.0F, canvasOrigin.y + 20.0F},
+                                  IM_COL32(170, 180, 192, 255), "Choose a registered node from the palette.");
+            }
+        }
+        ImGui::EndChild();
+        ImGui::SameLine();
+
+        if (ImGui::BeginChild("##script-details", ImVec2{0.0F, 0.0F}, true)) {
+            ImGui::TextUnformatted("Details");
+            ImGui::Separator();
+            const auto* const node = selectedNode();
+            if (node == nullptr) {
+                ImGui::TextDisabled("Select one node to inspect its pins.");
+            } else {
+                ImGui::TextWrapped("%s", node->displayName.empty() ? node->typeId.c_str() : node->displayName.c_str());
+                ImGui::TextDisabled("Type: %s | Node ID: %u", node->typeId.c_str(), node->id);
+                ImGui::Separator();
+                for (const auto& pin : node->pins) {
+                    const ImU32 color = ScriptPinColorUVE(pin);
+                    const ImVec4 colorFloat{
+                        static_cast<float>((color >> IM_COL32_R_SHIFT) & 0xffU) / 255.0F,
+                        static_cast<float>((color >> IM_COL32_G_SHIFT) & 0xffU) / 255.0F,
+                        static_cast<float>((color >> IM_COL32_B_SHIFT) & 0xffU) / 255.0F, 1.0F};
+                    ImGui::TextColored(colorFloat, "%s %s | %s", pin.direction == Scripting::ScriptPinDirectionUVE::Input ? "IN" : "OUT",
+                                       pin.name.c_str(), ScriptValueTypeLabelUVE(pin.type));
+                    if (pin.direction == Scripting::ScriptPinDirectionUVE::Input && pin.role == Scripting::ScriptPinRoleUVE::Data &&
+                        (pin.type == Scripting::ScriptValueTypeUVE::Number || pin.type == Scripting::ScriptValueTypeUVE::Boolean)) {
+                        if (m_scriptCanvasDefaultEditNodeId != node->id || m_scriptCanvasDefaultEditPin != pin.name) {
+                            m_scriptCanvasDefaultEditNodeId = node->id;
+                            m_scriptCanvasDefaultEditPin = pin.name;
+                            m_scriptCanvasDefaultEditBuffer = pin.defaultValue.value_or("");
+                        }
+                        std::array<char, 257> defaultBuffer{};
+                        std::strncpy(defaultBuffer.data(), m_scriptCanvasDefaultEditBuffer.c_str(), defaultBuffer.size() - 1U);
+                        const std::string inputId = "Default##" + std::to_string(node->id) + "-" + pin.name;
+                        if (ImGui::InputText(inputId.c_str(), defaultBuffer.data(), defaultBuffer.size(),
+                                             ImGuiInputTextFlags_EnterReturnsTrue)) {
+                            m_scriptCanvasDefaultEditBuffer = defaultBuffer.data();
+                            static_cast<void>(m_visualScriptCanvas.SetPinDefaultValueUVE(
+                                node->id, pin.name, m_scriptCanvasDefaultEditBuffer));
+                        } else {
+                            m_scriptCanvasDefaultEditBuffer = defaultBuffer.data();
+                        }
+                    }
+                }
+            }
+            ImGui::Separator();
+            ImGui::TextUnformatted("Validation");
+            if (snapshot.diagnostics.empty()) {
+                ImGui::TextColored(ImVec4{0.45F, 0.86F, 0.63F, 1.0F}, "No graph diagnostics.");
+            } else {
+                for (const auto& diagnostic : snapshot.diagnostics) {
+                    ImGui::TextWrapped("Node %u: %s", diagnostic.nodeId, diagnostic.message.c_str());
+                }
+            }
+            if (!snapshot.selectedNodeIds.empty() && ImGui::SmallButton("Delete selected node")) {
+                for (const std::uint32_t nodeId : snapshot.selectedNodeIds) {
+                    static_cast<void>(m_visualScriptCanvas.RemoveNodeUVE(nodeId));
+                }
+            }
+            ImGui::TextDisabled("Graph edits use native validation, revision checks, and canvas history.");
+        }
+        ImGui::EndChild();
+    }
+    ImGui::EndChild();
     ImGui::End();
 }
 
