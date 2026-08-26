@@ -460,6 +460,63 @@ TEST_F(GlRenderDeviceUVETest, BufferUsageAndIndexedCountValidationRejectsUnsafeD
     renderDevice->DestroyBufferUVE(vertexBuffer);
 }
 
+TEST_F(GlRenderDeviceUVETest, DrawUVE_BoundVertexBufferCapacityIsValidated) {
+    const ShaderHandleUVE vertexShader =
+        renderDevice->CreateShaderUVE(ShaderDescUVE{ShaderStageUVE::Vertex, std::string(kValidVertexShaderSource)});
+    const ShaderHandleUVE fragmentShader = renderDevice->CreateShaderUVE(
+        ShaderDescUVE{ShaderStageUVE::Fragment, std::string(kValidFragmentShaderSource)});
+    ASSERT_NE(vertexShader, kInvalidShaderHandleUVE);
+    ASSERT_NE(fragmentShader, kInvalidShaderHandleUVE);
+
+    PipelineDescUVE pipelineDesc;
+    pipelineDesc.vertexShader = vertexShader;
+    pipelineDesc.fragmentShader = fragmentShader;
+    pipelineDesc.vertexLayout = {VertexAttributeUVE{"POSITION", VertexAttributeFormatUVE::Float3, 0}};
+    pipelineDesc.vertexStride = 3U * static_cast<std::uint32_t>(sizeof(float));
+    const PipelineHandleUVE pipeline = renderDevice->CreatePipelineUVE(pipelineDesc);
+    ASSERT_NE(pipeline, kInvalidPipelineHandleUVE);
+
+    constexpr std::array<float, 3> oneVertex{0.0F, 0.0F, 0.0F};
+    const BufferHandleUVE vertexBuffer = renderDevice->CreateBufferUVE(
+        BufferDescUVE{sizeof(oneVertex), BufferUsageUVE::Vertex}, std::as_bytes(std::span(oneVertex)));
+    ASSERT_NE(vertexBuffer, kInvalidBufferHandleUVE);
+
+    std::unique_ptr<ICommandBufferUVE> commandBuffer = renderDevice->CreateCommandBufferUVE();
+    ASSERT_NE(commandBuffer, nullptr);
+    RenderPassDescUVE passDesc;
+    passDesc.colorAttachment = kInvalidTextureHandleUVE;
+    passDesc.depthLoadOp = LoadOpUVE::DontCare;
+    commandBuffer->BeginRenderPassUVE(passDesc);
+    commandBuffer->BindPipelineUVE(pipeline);
+    commandBuffer->BindVertexBufferUVE(vertexBuffer);
+    while (glGetError() != GL_NO_ERROR) {
+    }
+
+    commandBuffer->DrawUVE(2U);
+    EXPECT_EQ(glGetError(), GL_NO_ERROR);
+    commandBuffer->DrawUVE(1U);
+    EXPECT_EQ(glGetError(), GL_NO_ERROR);
+
+    commandBuffer->EndRenderPassUVE();
+    renderDevice->SubmitUVE(std::move(commandBuffer));
+
+    std::unique_ptr<ICommandBufferUVE> fullscreenCommandBuffer = renderDevice->CreateCommandBufferUVE();
+    ASSERT_NE(fullscreenCommandBuffer, nullptr);
+    fullscreenCommandBuffer->BeginRenderPassUVE(passDesc);
+    fullscreenCommandBuffer->BindPipelineUVE(pipeline);
+    while (glGetError() != GL_NO_ERROR) {
+    }
+    fullscreenCommandBuffer->DrawUVE(3U);
+    EXPECT_EQ(glGetError(), GL_NO_ERROR);
+    fullscreenCommandBuffer->EndRenderPassUVE();
+    renderDevice->SubmitUVE(std::move(fullscreenCommandBuffer));
+
+    renderDevice->DestroyBufferUVE(vertexBuffer);
+    renderDevice->DestroyPipelineUVE(pipeline);
+    renderDevice->DestroyShaderUVE(vertexShader);
+    renderDevice->DestroyShaderUVE(fragmentShader);
+}
+
 TEST_F(GlRenderDeviceUVETest, BeginRenderPassUVE_UnknownAttachmentDoesNotBindOrCacheFramebuffer) {
     const TextureHandleUVE validColor = renderDevice->CreateTextureUVE(TextureDescUVE{1U, 1U});
     ASSERT_NE(validColor, kInvalidTextureHandleUVE);

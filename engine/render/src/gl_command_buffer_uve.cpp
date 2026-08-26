@@ -381,6 +381,19 @@ void GlCommandBufferUVE::DrawIndexedUVE(std::uint32_t indexCount, std::uint32_t 
 }
 
 void GlCommandBufferUVE::DrawUVE(std::uint32_t vertexCount, std::uint32_t instanceCount) {
+    if (m_boundVertexBuffer != kInvalidBufferHandleUVE) {
+        const auto vertexBufferIt = m_state->buffers.find(m_boundVertexBuffer.value);
+        if (vertexBufferIt == m_state->buffers.end() || vertexBufferIt->second.target != GL_ARRAY_BUFFER) {
+            UVE_ERROR("GlCommandBufferUVE: DrawUVE has no valid bound vertex buffer");
+            return;
+        }
+        if (m_currentVertexStride == 0U ||
+            static_cast<std::uint64_t>(vertexCount) >
+                vertexBufferIt->second.sizeBytes / static_cast<std::uint64_t>(m_currentVertexStride)) {
+            UVE_ERROR("GlCommandBufferUVE: DrawUVE vertexCount exceeds the bound vertex buffer");
+            return;
+        }
+    }
     if (vertexCount > static_cast<std::uint32_t>(std::numeric_limits<GLsizei>::max())) {
         UVE_ERROR("GlCommandBufferUVE: DrawUVE vertexCount exceeds the GLsizei range");
         return;
