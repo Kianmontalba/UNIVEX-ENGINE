@@ -122,7 +122,20 @@
       "controls": ["fit", "reset-view", "grid-toggle", "safe-area-toggle"],
       "navigation": ["middle-drag-pan", "wheel-zoom-to-cursor"],
       "ownership": "editor-only; never an ECS entity or serialized scene light/mesh"
+    },
+    "empty3D": {
+      "presentation": ["realistic-sky-gradient", "warm-brown-horizon", "origin-grid", "camera-aligned-six-direction-axis"],
+      "editorOnly": true,
+      "prohibited": ["floor-plane", "preview-mesh", "preview-light-entity", "fake-cast-shadow"],
+      "shadowPolicy": "Only authored geometry and eligible authored lights can produce shadows."
     }
+  },
+  "plugins": {
+    "surface": "floating-window",
+    "tools": ["Control Rig", "Motion Query"],
+    "activation": "checkbox-gates-editor-tool-availability-only",
+    "runtimeMutation": false,
+    "serialization": false
   },
   "gizmo": {
     "modes": ["Move XYZ", "Rotate XYZ", "Scale XYZ"],
@@ -149,6 +162,7 @@
     "filesystem-canvas",
     "debug-canvas",
     "visual-scripting-canvas",
+    "plugin-tools-window",
     "animation",
     "motion-query",
     "diagnostics"
