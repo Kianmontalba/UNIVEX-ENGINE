@@ -3,6 +3,7 @@
 
 #include "gl_command_buffer_uve.h"
 #include <array>
+#include <cmath>
 #include <cstdint>
 #include <limits>
 
@@ -64,6 +65,18 @@ void GlCommandBufferUVE::BeginRenderPassUVE(const RenderPassDescUVE& renderPassD
     }
     if (!IsLoadOpValidUVE(renderPassDesc.colorLoadOp) || !IsLoadOpValidUVE(renderPassDesc.depthLoadOp)) {
         UVE_ERROR("GlCommandBufferUVE: BeginRenderPassUVE received an unknown load operation");
+        return;
+    }
+    if (renderPassDesc.colorLoadOp == LoadOpUVE::Clear) {
+        for (const float clearChannel : renderPassDesc.clearColor) {
+            if (!std::isfinite(clearChannel)) {
+                UVE_ERROR("GlCommandBufferUVE: color clear value must be finite");
+                return;
+            }
+        }
+    }
+    if (renderPassDesc.depthLoadOp == LoadOpUVE::Clear && !std::isfinite(renderPassDesc.clearDepth)) {
+        UVE_ERROR("GlCommandBufferUVE: depth clear value must be finite");
         return;
     }
 

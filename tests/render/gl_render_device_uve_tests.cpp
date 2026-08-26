@@ -598,6 +598,46 @@ TEST_F(GlRenderDeviceUVETest, BeginRenderPassUVE_IncompleteFramebufferRejectsAnd
     renderDevice->DestroyTextureUVE(validColor);
 }
 
+TEST_F(GlRenderDeviceUVETest, BeginRenderPassUVE_NonFiniteClearValuesLeaveStateUntouched) {
+    const TextureHandleUVE color = renderDevice->CreateTextureUVE(TextureDescUVE{2U, 2U});
+    const TextureHandleUVE depth = renderDevice->CreateTextureUVE(
+        TextureDescUVE{2U, 2U, TextureFormatUVE::Depth32Float, 1U});
+    ASSERT_NE(color, kInvalidTextureHandleUVE);
+    ASSERT_NE(depth, kInvalidTextureHandleUVE);
+    std::unique_ptr<ICommandBufferUVE> commandBuffer = renderDevice->CreateCommandBufferUVE();
+    ASSERT_NE(commandBuffer, nullptr);
+
+    GLint before = 0;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &before);
+
+    RenderPassDescUVE invalidColorClear;
+    invalidColorClear.colorAttachment = color;
+    invalidColorClear.depthAttachment = depth;
+    invalidColorClear.clearColor[0] = std::numeric_limits<float>::quiet_NaN();
+    commandBuffer->BeginRenderPassUVE(invalidColorClear);
+
+    GLint afterColorClear = 0;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &afterColorClear);
+    EXPECT_EQ(afterColorClear, before);
+
+    RenderPassDescUVE invalidDepthClear;
+    invalidDepthClear.colorAttachment = kInvalidTextureHandleUVE;
+    invalidDepthClear.depthAttachment = depth;
+    invalidDepthClear.colorLoadOp = LoadOpUVE::DontCare;
+    invalidDepthClear.clearDepth = std::numeric_limits<float>::infinity();
+    commandBuffer->BeginRenderPassUVE(invalidDepthClear);
+
+    GLint afterDepthClear = 0;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &afterDepthClear);
+    EXPECT_EQ(afterDepthClear, before);
+
+    commandBuffer->BeginRenderPassUVE(RenderPassDescUVE{});
+    commandBuffer->EndRenderPassUVE();
+    renderDevice->SubmitUVE(std::move(commandBuffer));
+    renderDevice->DestroyTextureUVE(depth);
+    renderDevice->DestroyTextureUVE(color);
+}
+
 TEST_F(GlRenderDeviceUVETest, BindTextureUVE_SlotExceedsGlLimit_DoesNotIssueGlCall) {
     const TextureHandleUVE texture = renderDevice->CreateTextureUVE(TextureDescUVE{1U, 1U});
     ASSERT_NE(texture, kInvalidTextureHandleUVE);
