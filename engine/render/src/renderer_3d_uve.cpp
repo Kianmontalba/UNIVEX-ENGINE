@@ -644,10 +644,12 @@ struct Renderer3DUVE::ImplUVE {
         commandBuffer.BeginRenderPassUVE(passDesc);
 
         if (hasCaster && shadowProgram->IsValidUVE()) {
+            // The light-space transform is constant for the whole cascade; queue it once and
+            // update only the per-item model matrix inside the caster loop.
+            shadowProgram->SetMatrix4x4UVE("uLightSpaceMatrix", lightSpaceMatrix);
             for (const RenderItemUVE& item : items) {
                 const MeshGpuResourcesUVE& meshResources = ResolveMeshGpuResourcesUVE(item);
                 shadowProgram->SetMatrix4x4UVE("uModel", item.worldMatrix);
-                shadowProgram->SetMatrix4x4UVE("uLightSpaceMatrix", lightSpaceMatrix);
                 shadowProgram->ApplyToUVE(commandBuffer);
                 commandBuffer.BindVertexBufferUVE(meshResources.vertexBuffer);
                 commandBuffer.BindIndexBufferUVE(meshResources.indexBuffer);
