@@ -321,6 +321,14 @@ TextureHandleUVE GlRenderDeviceUVE::CreateTextureUVE(const TextureDescUVE& desc,
     }
 
     const GlTextureFormatUVE glFormat = TextureFormatToGlUVE(desc.format);
+    // Texture creation temporarily binds the object on the current active unit. Preserve both
+    // pieces of caller/command-buffer state so a live GlCommandBufferUVE texture cache cannot
+    // falsely skip a later rebind after a resource is created between draws.
+    GLint previousActiveTexture = GL_TEXTURE0;
+    GLint previousTextureBinding = 0;
+    glGetIntegerv(GL_ACTIVE_TEXTURE, &previousActiveTexture);
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &previousTextureBinding);
+
     GLuint glTexture = 0;
     glGenTextures(1, &glTexture);
     glBindTexture(GL_TEXTURE_2D, glTexture);
@@ -331,6 +339,9 @@ TextureHandleUVE GlRenderDeviceUVE::CreateTextureUVE(const TextureDescUVE& desc,
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    m_impl->state.gl.glActiveTexture(static_cast<GLenum>(previousActiveTexture));
+    glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(previousTextureBinding));
 
     const std::uint32_t handleValue = m_impl->state.nextTextureHandle++;
     m_impl->state.textures.emplace(handleValue, Detail::GlDeviceStateUVE::TextureRecordUVE{glTexture, desc});

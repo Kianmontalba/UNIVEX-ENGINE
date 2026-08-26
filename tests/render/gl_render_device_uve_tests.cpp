@@ -736,6 +736,44 @@ TEST_F(GlRenderDeviceUVETest, CreateThenDestroyTexture_UpdatesLiveResourceCount)
     EXPECT_EQ(renderDevice->GetLiveResourceCountUVE(), 0U);
 }
 
+TEST_F(GlRenderDeviceUVETest, CreateTextureUVE_PreservesActiveUnitBindingForLiveCommandBufferCache) {
+    const TextureHandleUVE firstTexture =
+        renderDevice->CreateTextureUVE(TextureDescUVE{1U, 1U, TextureFormatUVE::RGBA8Unorm, 1U});
+    ASSERT_NE(firstTexture, kInvalidTextureHandleUVE);
+
+    std::unique_ptr<ICommandBufferUVE> commandBuffer = renderDevice->CreateCommandBufferUVE();
+    ASSERT_NE(commandBuffer, nullptr);
+    commandBuffer->BindTextureUVE(firstTexture, 0U);
+
+    GLint activeTextureBefore = 0;
+    GLint bindingBefore = 0;
+    glGetIntegerv(GL_ACTIVE_TEXTURE, &activeTextureBefore);
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &bindingBefore);
+    ASSERT_EQ(activeTextureBefore, static_cast<GLint>(GL_TEXTURE0));
+    ASSERT_NE(bindingBefore, 0);
+
+    const TextureHandleUVE secondTexture =
+        renderDevice->CreateTextureUVE(TextureDescUVE{1U, 1U, TextureFormatUVE::RGBA8Unorm, 1U});
+    ASSERT_NE(secondTexture, kInvalidTextureHandleUVE);
+
+    GLint activeTextureAfterCreate = 0;
+    GLint bindingAfterCreate = 0;
+    glGetIntegerv(GL_ACTIVE_TEXTURE, &activeTextureAfterCreate);
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &bindingAfterCreate);
+    EXPECT_EQ(activeTextureAfterCreate, activeTextureBefore);
+    EXPECT_EQ(bindingAfterCreate, bindingBefore);
+
+    // The command buffer still caches firstTexture at slot 0. If texture creation leaked secondTexture
+    // into the binding, this call would incorrectly skip the bind and leave the wrong GL name active.
+    commandBuffer->BindTextureUVE(firstTexture, 0U);
+    GLint bindingAfterCachedRebind = 0;
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &bindingAfterCachedRebind);
+    EXPECT_EQ(bindingAfterCachedRebind, bindingBefore);
+
+    renderDevice->DestroyTextureUVE(secondTexture);
+    renderDevice->DestroyTextureUVE(firstTexture);
+}
+
 TEST_F(GlRenderDeviceUVETest, CreateTextureUVE_Rgba16Float_UsesHalfFloatUploadType) {
     constexpr std::array<std::uint16_t, 16> kPixels{
         0x3C00U, 0x3800U, 0x0000U, 0x3C00U,
@@ -750,6 +788,11 @@ TEST_F(GlRenderDeviceUVETest, CreateTextureUVE_Rgba16Float_UsesHalfFloatUploadTy
         TextureDescUVE{2U, 2U, TextureFormatUVE::RGBA16Float, 1U},
         std::as_bytes(std::span(kPixels)));
     ASSERT_NE(texture, kInvalidTextureHandleUVE);
+    EXPECT_EQ(glGetError(), GL_NO_ERROR);
+
+    std::unique_ptr<ICommandBufferUVE> commandBuffer = renderDevice->CreateCommandBufferUVE();
+    ASSERT_NE(commandBuffer, nullptr);
+    commandBuffer->BindTextureUVE(texture, 0U);
     EXPECT_EQ(glGetError(), GL_NO_ERROR);
 
     std::array<std::uint16_t, kPixels.size()> readback{};
