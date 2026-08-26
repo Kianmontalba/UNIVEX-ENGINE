@@ -74,6 +74,11 @@ public:
     [[nodiscard]] static ParticleDrawRecordingUVE RecordUVE(
         const RenderQueueUVE& queue,
         std::size_t maximumCommands = kMaximumParticleDrawCommandsUVE);
+
+    /// Fills caller-owned recording storage while preserving command-vector capacity between
+    /// frames. The same hard cap and truncation rules as RecordUVE() apply.
+    static void RecordIntoUVE(const RenderQueueUVE& queue, std::size_t maximumCommands,
+                              ParticleDrawRecordingUVE& outRecording);
 };
 
 } // namespace UVE::Render

@@ -412,7 +412,7 @@ struct Renderer3DUVE::ImplUVE {
     RenderQueueUVE frameQueue;
     std::array<RenderQueueUVE, kShadowCascadeCountUVE> shadowQueues;
     std::vector<PrimitiveRenderItemUVE> primitiveItems;
-
+    ParticleDrawRecordingUVE particleDrawRecording;
     Events::EventSubscriptionUVE reloadSubscription;
     const Scene::ParticleRuntimeUVE* particleRuntimeForFrame = nullptr;
 
@@ -1018,10 +1018,11 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
         m_impl->lastFrameDiagnostics.particleItemsTruncated = particleSnapshot.truncated;
     }
     queue.SortUVE();
-    const ParticleDrawRecordingUVE particleDrawRecording = ParticleDrawRecorderUVE::RecordUVE(queue);
-    m_impl->lastFrameDiagnostics.particleDrawCommandsRecorded = particleDrawRecording.commands.size();
+    ParticleDrawRecorderUVE::RecordIntoUVE(queue, kMaximumParticleGpuDrawCommandsUVE,
+                                            m_impl->particleDrawRecording);
+    m_impl->lastFrameDiagnostics.particleDrawCommandsRecorded = m_impl->particleDrawRecording.commands.size();
     m_impl->lastFrameDiagnostics.particleDrawCommandsSubmissionTruncated =
-        particleDrawRecording.commands.size() > kMaximumParticleGpuDrawCommandsUVE;
+        m_impl->particleDrawRecording.truncated;
     m_impl->lastFrameDiagnostics.meshItemsExtracted = queue.opaqueItems.size() + queue.transparentItems.size();
     m_impl->lastFrameDiagnostics.invalidAssetReferences = queue.invalidAssetReferences;
     m_impl->lastFrameDiagnostics.pendingAssetLoads = queue.pendingAssetLoads;
@@ -1064,7 +1065,7 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
     }
     renderGraph.AddPassUVE(RenderGraphPassDescUVE{
         "MainColor", std::move(mainResources),
-        [this, &queue, &particleDrawRecording, &frameUniforms](ICommandBufferUVE& commandBuffer) {
+        [this, &queue, &frameUniforms](ICommandBufferUVE& commandBuffer) {
             RenderPassDescUVE passDesc;
             passDesc.colorAttachment = m_impl->colorTarget;
             passDesc.depthAttachment = m_impl->depthTarget;
@@ -1076,7 +1077,7 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
             m_impl->lastFrameDiagnostics.meshDrawCallsRecorded +=
                 m_impl->RecordItemsUVE(queue.transparentItems, frameUniforms, commandBuffer);
             m_impl->lastFrameDiagnostics.particleDrawCommandsSubmitted =
-                m_impl->RecordParticleItemsUVE(particleDrawRecording, frameUniforms, commandBuffer);
+                m_impl->RecordParticleItemsUVE(m_impl->particleDrawRecording, frameUniforms, commandBuffer);
             m_impl->lastFrameDiagnostics.particleDrawCallsRecorded =
                 m_impl->lastFrameDiagnostics.particleDrawCommandsSubmitted > 0U ? 1U : 0U;
             m_impl->lastFrameDiagnostics.primitiveDrawCallsRecorded +=
