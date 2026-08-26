@@ -36,6 +36,7 @@
 #include "uve/render/shader/shader_program_desc_uve.h"
 #include "uve/render/shader/shader_program_uve.h"
 #include "uve/scene/components/camera_component_uve.h"
+#include "uve/scene/components/expanded_3d_node_components_uve.h"
 #include "uve/scene/components/primitive_mesh_component_uve.h"
 #include "uve/scene/components/world_transform_component_uve.h"
 
@@ -342,6 +343,28 @@ constexpr std::array<std::uint8_t, 4> kFlatNormalPixelUVE{0x80, 0x80, 0xFF, 0xFF
         }
     }
     return nullptr;
+}
+
+[[nodiscard]] Math::Vector3UVE ResolveWorldEnvironmentAmbientUVE(
+    Scene::IEntityManagerUVE& entityManager, const Math::Vector3UVE fallbackAmbient) noexcept {
+    Math::Vector3UVE ambient = fallbackAmbient;
+    bool environmentFound = false;
+    entityManager.ForEachUVE<Scene::WorldEnvironment3DNodeComponentUVE>(
+        [&ambient, &environmentFound](Scene::EntityUVE,
+                                      const Scene::WorldEnvironment3DNodeComponentUVE& environment) {
+            if (environmentFound || !Scene::IsWorldEnvironment3DNodeComponentValidUVE(environment)) {
+                return;
+            }
+            const Math::Vector3UVE resolved{environment.ambientColor.x * environment.ambientEnergy,
+                                            environment.ambientColor.y * environment.ambientEnergy,
+                                            environment.ambientColor.z * environment.ambientEnergy};
+            if (!IsFiniteVectorUVE(resolved)) {
+                return;
+            }
+            ambient = resolved;
+            environmentFound = true;
+        });
+    return IsFiniteVectorUVE(ambient) ? ambient : Math::Vector3UVE{};
 }
 
 [[nodiscard]] bool AreShadowMapTargetsValidUVE(
@@ -1181,6 +1204,7 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
     const Math::FrustumUVE frustum = m_impl->cameraSystem.ExtractFrustumUVE(viewProjection);
     const Math::Vector3UVE viewPosition = m_impl->cameraSystem.GetWorldPositionUVE(entityManager, cameraEntity);
     const LightListUVE lights = m_impl->lightSystem.ExtractActiveLightsUVE(entityManager);
+    const Math::Vector3UVE ambientColor = ResolveWorldEnvironmentAmbientUVE(entityManager, m_impl->ambientColor);
 
     const LightDataUVE* const shadowCaster = FindShadowCasterUVE(lights);
     bool shadowsReady = shadowCaster != nullptr && m_impl->shadowProgram->IsValidUVE() &&
@@ -1251,7 +1275,7 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
         }
     }
 
-    const FrameUniformsUVE frameUniforms{viewProjection, viewPosition, lights, m_impl->ambientColor,
+    const FrameUniformsUVE frameUniforms{viewProjection, viewPosition, lights, ambientColor,
                                           lightSpaceMatrices, cascadeSplits, cascadeCount,
                                           m_impl->shadowCascadeBlendRatio};
 

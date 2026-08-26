@@ -22,6 +22,7 @@
 #include "uve/scene/components/primitive_mesh_component_uve.h"
 #include "uve/scene/components/transform_component_uve.h"
 #include "uve/scene/components/world_transform_component_uve.h"
+#include "uve/scene/nodes/scene_node_registry_uve.h"
 
 namespace UVE::Editor::Tests {
 
@@ -334,7 +335,7 @@ TEST(EditorUVETest, InspectorDrawerRegistrationUVE_IncludesStableHierarchyDrawer
 
     {
         EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_hierarchy_drawer_registration.uvescene");
-        EXPECT_EQ(EditorUVEAccessUVE::GetInspectorDrawerCountUVE(editor), 14U);
+        EXPECT_EQ(EditorUVEAccessUVE::GetInspectorDrawerCountUVE(editor), 15U);
         EXPECT_TRUE(EditorUVEAccessUVE::HasInspectorDrawerUVE(editor, "name"));
         EXPECT_TRUE(EditorUVEAccessUVE::HasInspectorDrawerUVE(editor, "hierarchy"));
         EXPECT_TRUE(EditorUVEAccessUVE::HasInspectorDrawerUVE(editor, "transform"));
@@ -348,7 +349,56 @@ TEST(EditorUVETest, InspectorDrawerRegistrationUVE_IncludesStableHierarchyDrawer
         EXPECT_TRUE(EditorUVEAccessUVE::HasInspectorDrawerUVE(editor, "particle-emitter"));
         EXPECT_TRUE(EditorUVEAccessUVE::HasInspectorDrawerUVE(editor, "script"));
         EXPECT_TRUE(EditorUVEAccessUVE::HasInspectorDrawerUVE(editor, "animation-player"));
+        EXPECT_TRUE(EditorUVEAccessUVE::HasInspectorDrawerUVE(editor, "world-environment"));
         EXPECT_TRUE(EditorUVEAccessUVE::HasInspectorDrawerUVE(editor, "prefab-instance"));
+        editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
+}
+
+TEST(EditorUVETest, WorldEnvironmentComponentUVE_AttachEditUndoRedoThroughEditorPath) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_world_environment.uvescene");
+        editor.InitUVE();
+        Core::EngineServicesUVE& services = engine.GetServicesUVE();
+        Scene::IEntityManagerUVE& entityManager = services.GetEntityManagerUVE();
+
+        const Scene::EntityUVE entity =
+            editor.CreateDocumentSceneNodeUVE(Scene::Nodes::SceneNodeKindUVE::Empty);
+        ASSERT_NE(entity, Scene::kInvalidEntityUVE);
+        ASSERT_TRUE(entityManager.HasComponentUVE<Scene::TransformComponentUVE>(entity));
+        EXPECT_FALSE(entityManager.HasComponentUVE<Scene::WorldEnvironment3DNodeComponentUVE>(entity));
+
+        Scene::WorldEnvironment3DNodeComponentUVE environment;
+        environment.skyAssetPath = "environments/sunset.uvesky";
+        environment.ambientColor = Math::Vector3UVE{0.15F, 0.25F, 0.40F};
+        environment.ambientEnergy = 1.75F;
+        environment.exposure = 1.25F;
+        environment.fogColor = Math::Vector3UVE{0.30F, 0.35F, 0.45F};
+        environment.fogDensity = 0.02F;
+        environment.fogEnabled = true;
+        environment.postProcessingEnabled = true;
+        ASSERT_TRUE(Scene::IsWorldEnvironment3DNodeComponentValidUVE(environment));
+        ASSERT_TRUE(editor.SetSelectedSceneComponentUVE(EditorSceneComponentKindUVE::WorldEnvironment, environment));
+        ASSERT_TRUE(entityManager.HasComponentUVE<Scene::WorldEnvironment3DNodeComponentUVE>(entity));
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::WorldEnvironment3DNodeComponentUVE>(entity).skyAssetPath,
+                  environment.skyAssetPath);
+        EXPECT_FLOAT_EQ(entityManager.GetComponentUVE<Scene::WorldEnvironment3DNodeComponentUVE>(entity).ambientEnergy,
+                        environment.ambientEnergy);
+        EXPECT_TRUE(editor.CanUndoUVE());
+
+        ASSERT_TRUE(editor.UndoUVE());
+        EXPECT_FALSE(entityManager.HasComponentUVE<Scene::WorldEnvironment3DNodeComponentUVE>(entity));
+        ASSERT_TRUE(editor.RedoUVE());
+        ASSERT_TRUE(entityManager.HasComponentUVE<Scene::WorldEnvironment3DNodeComponentUVE>(entity));
+        EXPECT_EQ(entityManager.GetComponentUVE<Scene::WorldEnvironment3DNodeComponentUVE>(entity).fogEnabled,
+                  environment.fogEnabled);
+
         editor.ShutdownUVE();
     }
 

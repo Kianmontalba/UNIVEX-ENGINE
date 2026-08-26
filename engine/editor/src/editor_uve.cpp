@@ -764,6 +764,9 @@ bool EditorUVE::IsSceneComponentValueValidUVE(
             } else if constexpr (std::is_same_v<ValueType, Scene::AnimationPlayerComponentUVE>) {
                 return kind == EditorSceneComponentKindUVE::AnimationPlayer &&
                        Scene::IsAnimationPlayerComponentValidUVE(typedValue);
+            } else if constexpr (std::is_same_v<ValueType, Scene::WorldEnvironment3DNodeComponentUVE>) {
+                return kind == EditorSceneComponentKindUVE::WorldEnvironment &&
+                       Scene::IsWorldEnvironment3DNodeComponentValidUVE(typedValue);
             } else {
                 return false;
             }
@@ -811,6 +814,12 @@ bool EditorUVE::AreSceneComponentValuesEqualUVE(const EditorSceneComponentValueU
                 return left.clipAssetPath == right.clipAssetPath && left.playbackSpeed == right.playbackSpeed &&
                        left.looping == right.looping && left.playOnAwake == right.playOnAwake &&
                        left.enabled == right.enabled;
+            } else if constexpr (std::is_same_v<LeftType, Scene::WorldEnvironment3DNodeComponentUVE>) {
+                return left.skyAssetPath == right.skyAssetPath && left.ambientColor == right.ambientColor &&
+                       left.fogColor == right.fogColor && left.ambientEnergy == right.ambientEnergy &&
+                       left.exposure == right.exposure && left.fogDensity == right.fogDensity &&
+                       left.fogEnabled == right.fogEnabled &&
+                       left.postProcessingEnabled == right.postProcessingEnabled;
             } else {
                 return false;
             }
@@ -866,6 +875,8 @@ bool EditorUVE::ApplySceneComponentStateUVE(
             return apply.template operator()<Scene::ScriptComponentUVE>();
         case EditorSceneComponentKindUVE::AnimationPlayer:
             return apply.template operator()<Scene::AnimationPlayerComponentUVE>();
+        case EditorSceneComponentKindUVE::WorldEnvironment:
+            return apply.template operator()<Scene::WorldEnvironment3DNodeComponentUVE>();
     }
     return false;
 }
@@ -927,6 +938,11 @@ bool EditorUVE::SetSelectedSceneComponentUVE(const EditorSceneComponentKindUVE k
                 before = entityManager.GetComponentUVE<Scene::AnimationPlayerComponentUVE>(m_selectedEntity);
             }
             break;
+        case EditorSceneComponentKindUVE::WorldEnvironment:
+            if (entityManager.HasComponentUVE<Scene::WorldEnvironment3DNodeComponentUVE>(m_selectedEntity)) {
+                before = entityManager.GetComponentUVE<Scene::WorldEnvironment3DNodeComponentUVE>(m_selectedEntity);
+            }
+            break;
     }
     if (before.has_value() && AreSceneComponentValuesEqualUVE(*before, value)) {
         return false;
@@ -979,6 +995,9 @@ bool EditorUVE::RemoveSelectedSceneComponentUVE(const EditorSceneComponentKindUV
             break;
         case EditorSceneComponentKindUVE::AnimationPlayer:
             if (entityManager.HasComponentUVE<Scene::AnimationPlayerComponentUVE>(m_selectedEntity)) before = entityManager.GetComponentUVE<Scene::AnimationPlayerComponentUVE>(m_selectedEntity);
+            break;
+        case EditorSceneComponentKindUVE::WorldEnvironment:
+            if (entityManager.HasComponentUVE<Scene::WorldEnvironment3DNodeComponentUVE>(m_selectedEntity)) before = entityManager.GetComponentUVE<Scene::WorldEnvironment3DNodeComponentUVE>(m_selectedEntity);
             break;
     }
     if (!before.has_value()) {
@@ -5010,6 +5029,8 @@ void EditorUVE::RegisterBuiltInInspectorDrawersUVE() {
                         return entityManager.HasComponentUVE<Scene::ScriptComponentUVE>(entity);
                     case EditorSceneComponentKindUVE::AnimationPlayer:
                         return entityManager.HasComponentUVE<Scene::AnimationPlayerComponentUVE>(entity);
+                    case EditorSceneComponentKindUVE::WorldEnvironment:
+                        return entityManager.HasComponentUVE<Scene::WorldEnvironment3DNodeComponentUVE>(entity);
                 }
                 return false;
             },
@@ -5025,6 +5046,14 @@ void EditorUVE::RegisterBuiltInInspectorDrawersUVE() {
     registerComponentDrawer("particle-emitter", EditorSceneComponentKindUVE::ParticleEmitter);
     registerComponentDrawer("script", EditorSceneComponentKindUVE::Script);
     registerComponentDrawer("animation-player", EditorSceneComponentKindUVE::AnimationPlayer);
+    static_cast<void>(m_inspectorDrawerRegistry.RegisterDrawerUVE(InspectorDrawerEntryUVE{
+        "world-environment",
+        [this](const Scene::EntityUVE entity) {
+            return IsDocumentEntityUVE(entity) &&
+                   m_services->GetEntityManagerUVE().HasComponentUVE<Scene::WorldEnvironment3DNodeComponentUVE>(entity);
+        },
+        [this](const Scene::EntityUVE entity) { DrawWorldEnvironmentInspectorDrawerUVE(entity); },
+    }));
     static_cast<void>(m_inspectorDrawerRegistry.RegisterDrawerUVE(InspectorDrawerEntryUVE{
         "prefab-instance",
         [this](const Scene::EntityUVE entity) {
@@ -5172,6 +5201,93 @@ void EditorUVE::DrawPrimitiveMeshInspectorDrawerUVE(const Scene::EntityUVE entit
     }
 }
 
+void EditorUVE::DrawWorldEnvironmentInspectorDrawerUVE(const Scene::EntityUVE entity) {
+    if (!IsDocumentEntityUVE(entity) || entity != m_selectedEntity) {
+        return;
+    }
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    if (!entityManager.HasComponentUVE<Scene::WorldEnvironment3DNodeComponentUVE>(entity)) {
+        return;
+    }
+
+    const Scene::WorldEnvironment3DNodeComponentUVE current =
+        entityManager.GetComponentUVE<Scene::WorldEnvironment3DNodeComponentUVE>(entity);
+    Scene::WorldEnvironment3DNodeComponentUVE edited = current;
+    bool changed = false;
+
+    ImGui::Separator();
+    ImGui::TextUnformatted("World Environment");
+    ImGui::TextDisabled("Scene environment settings are authored on this node and persisted in the scene.");
+
+    if (ImGui::CollapsingHeader("Environment", ImGuiTreeNodeFlags_DefaultOpen)) {
+        std::array<char, 257> skyAssetPathBuffer{};
+        current.skyAssetPath.copy(skyAssetPathBuffer.data(), skyAssetPathBuffer.size() - 1U);
+        if (ImGui::InputTextWithHint("Environment Resource", "Optional sky asset path...",
+                                    skyAssetPathBuffer.data(), skyAssetPathBuffer.size())) {
+            edited.skyAssetPath = skyAssetPathBuffer.data();
+            changed = true;
+        }
+        ImGui::TextDisabled("The environment resource path is authored here; runtime sky sampling is not active yet.");
+    }
+
+    if (ImGui::CollapsingHeader("Background", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::TextDisabled(edited.skyAssetPath.empty() ? "Clear color background" : "Sky resource background");
+        ImGui::TextDisabled("Background rendering remains scene-driven; no hidden editor light is created.");
+    }
+
+    if (ImGui::CollapsingHeader("Sky", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::Text("Asset: %s", edited.skyAssetPath.empty() ? "None" : edited.skyAssetPath.c_str());
+        ImGui::TextDisabled("Sky asset assignment is persisted; runtime sky sampling is not active yet.");
+    }
+
+    if (ImGui::CollapsingHeader("Ambient Light", ImGuiTreeNodeFlags_DefaultOpen)) {
+        float ambientColor[3]{edited.ambientColor.x, edited.ambientColor.y, edited.ambientColor.z};
+        const bool colorChanged =
+            ImGui::ColorEdit3("Ambient Color", ambientColor, ImGuiColorEditFlags_Float | ImGuiColorEditFlags_DisplayRGB);
+        float ambientEnergy = edited.ambientEnergy;
+        const bool energyChanged = ImGui::DragFloat("Ambient Energy", &ambientEnergy, 0.05F, 0.0F, 32.0F, "%.3f");
+        if (colorChanged || energyChanged) {
+            edited.ambientColor = Math::Vector3UVE{ambientColor[0], ambientColor[1], ambientColor[2]};
+            edited.ambientEnergy = ambientEnergy;
+            changed = true;
+        }
+    }
+
+    if (ImGui::CollapsingHeader("Reflected Light")) {
+        ImGui::TextDisabled("Reflection probes are authored separately and are not synthesized here.");
+    }
+
+    if (ImGui::CollapsingHeader("Tonemap", ImGuiTreeNodeFlags_DefaultOpen)) {
+        float exposure = edited.exposure;
+        const bool exposureChanged = ImGui::DragFloat("Exposure", &exposure, 0.05F, 0.001F, 32.0F, "%.3f");
+        ImGui::BeginDisabled();
+        ImGui::Checkbox("Post Processing (reserved)", &edited.postProcessingEnabled);
+        ImGui::EndDisabled();
+        if (exposureChanged) {
+            edited.exposure = exposure;
+            changed = true;
+        }
+    }
+
+    if (ImGui::CollapsingHeader("Fog")) {
+        const bool fogEnabledChanged = ImGui::Checkbox("Enabled", &edited.fogEnabled);
+        float fogColor[3]{edited.fogColor.x, edited.fogColor.y, edited.fogColor.z};
+        const bool fogColorChanged =
+            ImGui::ColorEdit3("Fog Color", fogColor, ImGuiColorEditFlags_Float | ImGuiColorEditFlags_DisplayRGB);
+        float fogDensity = edited.fogDensity;
+        const bool fogDensityChanged = ImGui::DragFloat("Density", &fogDensity, 0.001F, 0.0F, 10.0F, "%.4f");
+        if (fogEnabledChanged || fogColorChanged || fogDensityChanged) {
+            edited.fogColor = Math::Vector3UVE{fogColor[0], fogColor[1], fogColor[2]};
+            edited.fogDensity = fogDensity;
+            changed = true;
+        }
+    }
+
+    if (changed && !SetSelectedSceneComponentUVE(EditorSceneComponentKindUVE::WorldEnvironment, edited)) {
+        ImGui::TextDisabled("Input was rejected by the authored-value validator.");
+    }
+}
+
 void EditorUVE::DrawSceneComponentInspectorDrawerUVE(const Scene::EntityUVE entity,
                                                         const EditorSceneComponentKindUVE kind) {
     if (!IsDocumentEntityUVE(entity) || entity != m_selectedEntity) {
@@ -5189,6 +5305,7 @@ void EditorUVE::DrawSceneComponentInspectorDrawerUVE(const Scene::EntityUVE enti
         case EditorSceneComponentKindUVE::ParticleEmitter: title = "Particle Emitter"; break;
         case EditorSceneComponentKindUVE::Script: title = "Script"; break;
         case EditorSceneComponentKindUVE::AnimationPlayer: title = "Animation Player"; break;
+        case EditorSceneComponentKindUVE::WorldEnvironment: title = "World Environment"; break;
     }
     ImGui::Separator();
     ImGui::TextUnformatted(title);
@@ -5280,6 +5397,9 @@ void EditorUVE::DrawSceneComponentAddPanelUVE() {
         addIfMissing("Animation Player", EditorSceneComponentKindUVE::AnimationPlayer,
                      Scene::AnimationPlayerComponentUVE{},
                      entityManager.HasComponentUVE<Scene::AnimationPlayerComponentUVE>(m_selectedEntity));
+        addIfMissing("World Environment", EditorSceneComponentKindUVE::WorldEnvironment,
+                     Scene::WorldEnvironment3DNodeComponentUVE{},
+                     entityManager.HasComponentUVE<Scene::WorldEnvironment3DNodeComponentUVE>(m_selectedEntity));
         ImGui::EndTable();
     }
 }
