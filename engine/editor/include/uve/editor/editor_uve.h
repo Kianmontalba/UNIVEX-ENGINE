@@ -850,6 +850,8 @@ private:
     std::string m_scriptCanvasDefaultEditPin;
     std::string m_scriptCanvasDefaultEditBuffer;
     std::string m_scriptCanvasPaletteFilter;
+    Scripting::ScriptGraphCanvasPointUVE m_scriptCanvasContextMenuPosition{};
+    std::string m_scriptCanvasContextFilter;
     bool m_scriptCanvasPanning = false;
     Scripting::ScriptGraphCanvasPointUVE m_scriptCanvasPanStart{};
     Scripting::ScriptGraphCanvasViewUVE m_scriptCanvasPanViewStart{};

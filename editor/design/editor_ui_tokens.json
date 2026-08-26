@@ -106,8 +106,8 @@
     "disabled": "Reduce contrast without removing the control’s explanation when needed."
   },
   "filesystem": {
-    "header": "FILESYSTEM | N entries | auto",
-    "normalControls": ["breadcrumbs", "folder-filter", "type-filter", "clear-filters"],
+    "header": "entries",
+    "normalControls": ["main-root", "breadcrumbs", "search", "type-filter", "clear-filters"],
     "forbiddenNormalControls": ["review-changes", "manual-refresh"],
     "failureOnlyControls": ["retry"],
     "rowLayout": "icon 18px + name flex + semantic type 64px + metadata 92px",
@@ -122,18 +122,22 @@
       "Y": "#74C48A",
       "Z": "#7197D7"
     },
-    "interaction": ["hover-highlight", "pointer-ray-hit", "drag-preview", "commit", "cancel", "undo"]
+    "interaction": ["hover-highlight", "pointer-ray-hit", "drag-preview", "commit", "cancel", "undo", "viewport-local"]
   },
-  "editorSurfaces": [
+    "editorSurfaces": [
     "title-chrome",
     "menu-bar",
-    "main-toolbar",
-    "scene-hierarchy",
-    "viewport",
-    "details-inspector",
-    "filesystem",
-    "console",
-    "visual-scripting",
+    "workspace-toolbar",
+    "scene-canvas",
+    "node3d-hierarchy",
+    "viewport-canvas",
+    "viewport-local-transform-tools",
+    "inspector-canvas",
+    "import-canvas",
+    "signals-canvas",
+    "filesystem-canvas",
+    "debug-canvas",
+    "visual-scripting-canvas",
     "animation",
     "motion-query",
     "diagnostics"
