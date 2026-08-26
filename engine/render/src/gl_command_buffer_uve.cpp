@@ -2,6 +2,7 @@
 
 
 #include "gl_command_buffer_uve.h"
+#include <array>
 #include <cstdint>
 #include <limits>
 
@@ -353,10 +354,20 @@ void GlCommandBufferUVE::SetUniformMatrix4x4UVE(std::string_view name, const Mat
     if (uniform == nullptr || !ValidateUniformTypeUVE(*uniform, ShaderDataTypeUVE::Mat4, name)) {
         return;
     }
-    // Matrix4x4UVE is row-major storage (docs/CODING_STANDARDS.md, "Matrix convention") while GL's
-    // native layout is column-major - GL_TRUE tells the driver to transpose our data into its own
-    // layout rather than requiring a manual transpose copy here.
+    // Matrix4x4UVE is row-major storage (docs/CODING_STANDARDS.md, "Matrix convention"). Desktop
+    // GL accepts GL_TRUE and performs the transpose, but GLES3 requires transpose == GL_FALSE, so
+    // Android uploads an explicit column-major stack copy instead of issuing an invalid call.
+#if defined(__ANDROID__)
+    std::array<float, 16> columnMajor{};
+    for (std::size_t row = 0; row < 4U; ++row) {
+        for (std::size_t column = 0; column < 4U; ++column) {
+            columnMajor[column * 4U + row] = value.m[row][column];
+        }
+    }
+    m_state->gl.glUniformMatrix4fv(uniform->location, 1, GL_FALSE, columnMajor.data());
+#else
     m_state->gl.glUniformMatrix4fv(uniform->location, 1, GL_TRUE, &value.m[0][0]);
+#endif
 }
 
 void GlCommandBufferUVE::DrawIndexedUVE(std::uint32_t indexCount, std::uint32_t instanceCount) {
