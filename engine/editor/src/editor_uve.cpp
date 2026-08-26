@@ -506,7 +506,6 @@ void EditorUVE::RenderOverlayUVE() {
         DrawHierarchyPanelUVE();
         DrawInspectorPanelUVE();
         DrawBottomDockContentUVE();
-        DrawBottomDockUVE();
     }
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -4363,54 +4362,65 @@ void EditorUVE::DrawMenuBarUVE() {
         };
         drawWorkspace("Scene", EditorWorkspaceUVE::Library);
         drawWorkspace("Scripting", EditorWorkspaceUVE::Scripting);
+        const float playbackGroupWidth = 2.0F * 58.0F + 4.0F;
+        ImGui::SameLine(std::max(ImGui::GetCursorPosX(), (ImGui::GetWindowWidth() - playbackGroupWidth) * 0.5F));
+        const auto drawToolbarPlaybackButton = [](const char* const id, const char* const label, const int iconKind,
+                                                  const bool enabled) {
+            ImGui::BeginDisabled(!enabled);
+            ImGui::PushID(id);
+            const bool pressed = ImGui::Button("##toolbar-playback", ImVec2{58.0F, 22.0F});
+            const ImVec2 minimum = ImGui::GetItemRectMin();
+            const ImVec2 maximum = ImGui::GetItemRectMax();
+            const float centerY = (minimum.y + maximum.y) * 0.5F;
+            ImDrawList* const iconDrawList = ImGui::GetWindowDrawList();
+            const ImU32 iconColor = ImGui::GetColorU32(ImGuiCol_Text);
+            if (iconKind == 0) {
+                iconDrawList->AddTriangleFilled(ImVec2{minimum.x + 7.0F, centerY - 6.0F},
+                                                ImVec2{minimum.x + 7.0F, centerY + 6.0F},
+                                                ImVec2{minimum.x + 17.0F, centerY}, iconColor);
+            } else if (iconKind == 1) {
+                iconDrawList->AddRectFilled(ImVec2{minimum.x + 7.0F, centerY - 6.0F},
+                                            ImVec2{minimum.x + 11.0F, centerY + 6.0F}, iconColor);
+                iconDrawList->AddRectFilled(ImVec2{minimum.x + 13.0F, centerY - 6.0F},
+                                            ImVec2{minimum.x + 17.0F, centerY + 6.0F}, iconColor);
+            } else {
+                iconDrawList->AddRectFilled(ImVec2{minimum.x + 7.0F, centerY - 5.0F},
+                                            ImVec2{minimum.x + 17.0F, centerY + 5.0F}, iconColor);
+            }
+            iconDrawList->AddText(ImVec2{minimum.x + 23.0F, minimum.y + 4.0F}, iconColor, label);
+            ImGui::PopID();
+            ImGui::EndDisabled();
+            return pressed;
+        };
+        const bool toolbarCanEnterPlayMode = m_simulationControl != nullptr &&
+                                             m_playModeState == EditorPlayModeStateUVE::Edit &&
+                                             m_gizmoDrag.axis == EditorTransformAxisUVE::None &&
+                                             m_viewportNavigationMode == EditorViewportNavigationModeUVE::None;
+        const char* const playLabel = m_playModeState == EditorPlayModeStateUVE::Playing ? "Pause" :
+                                      (m_playModeState == EditorPlayModeStateUVE::Paused ? "Resume" : "Play");
+        const int playIconKind = m_playModeState == EditorPlayModeStateUVE::Playing ? 1 : 0;
+        const bool playEnabled = m_playModeState == EditorPlayModeStateUVE::Edit ? toolbarCanEnterPlayMode : true;
+        if (drawToolbarPlaybackButton("##shared-playback-play", playLabel, playIconKind, playEnabled)) {
+            if (m_playModeState == EditorPlayModeStateUVE::Edit) {
+                static_cast<void>(EnterPlayModeUVE());
+            } else if (m_playModeState == EditorPlayModeStateUVE::Playing) {
+                static_cast<void>(PausePlayModeUVE());
+            } else {
+                static_cast<void>(ResumePlayModeUVE());
+            }
+        }
+        ImGui::SameLine(0.0F, 4.0F);
+        if (drawToolbarPlaybackButton("##shared-playback-stop", "Stop", 2,
+                                     m_playModeState != EditorPlayModeStateUVE::Edit)) {
+            static_cast<void>(StopPlayModeUVE());
+        }
         ImGui::End();
     }
 }
 
 void EditorUVE::DrawBottomDockUVE() {
-    if (!m_bottomDockVisible) {
-        return;
-    }
-    const ImGuiViewport* const mainViewport = ImGui::GetMainViewport();
-    ImGui::SetNextWindowPos(
-        ImVec2{mainViewport->WorkPos.x,
-               mainViewport->WorkPos.y + mainViewport->WorkSize.y - kAssetsPanelHeightUVE},
-        ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2{mainViewport->WorkSize.x, kBottomDockTabHeightUVE}, ImGuiCond_Always);
-    constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize |
-                                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse |
-                                       ImGuiWindowFlags_NoTitleBar;
-    ImGui::Begin("##bottom-dock", nullptr, flags);
-    const auto drawDockTab = [this](const char* const label, const EditorBottomDockUVE dock) {
-        const bool active = m_activeBottomDock == dock;
-        if (active) {
-            ImGui::PushStyleColor(ImGuiCol_Header, ImVec4{0.259F, 0.329F, 0.396F, 1.0F});
-            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4{0.345F, 0.439F, 0.522F, 1.0F});
-            ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4{0.396F, 0.510F, 0.604F, 1.0F});
-        }
-        if (ImGui::Selectable(label, active, ImGuiSelectableFlags_DontClosePopups, ImVec2{0.0F, 0.0F})) {
-            m_activeBottomDock = dock;
-        }
-        if (active) {
-            ImGui::PopStyleColor(3);
-        }
-        ImGui::SameLine();
-    };
-    const bool fileSystemActive = m_activeBottomDock == EditorBottomDockUVE::FileSystem;
-    if (fileSystemActive) {
-        ImGui::PushStyleColor(ImGuiCol_Header, ImVec4{0.22F, 0.24F, 0.27F, 1.0F});
-        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4{0.20F, 0.21F, 0.23F, 1.0F});
-        ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4{0.38F, 0.42F, 0.47F, 1.0F});
-    }
-    if (ImGui::Selectable("Filesystem", fileSystemActive, ImGuiSelectableFlags_DontClosePopups, ImVec2{0.0F, 0.0F})) {
-        m_activeBottomDock = EditorBottomDockUVE::FileSystem;
-    }
-    if (fileSystemActive) {
-        ImGui::PopStyleColor(3);
-    }
-    ImGui::SameLine();
-    drawDockTab("Debug", EditorBottomDockUVE::Debugger);
-    ImGui::End();
+    // Filesystem and Debug are rendered as one bottom canvas by DrawBottomDockContentUVE().
+    // Keep this entry point for session/layout compatibility; the old selector strip is intentionally gone.
 }
 
 void EditorUVE::DrawBottomDockContentUVE() {
@@ -4419,12 +4429,12 @@ void EditorUVE::DrawBottomDockContentUVE() {
     }
     if (m_activeBottomDock == EditorBottomDockUVE::FileSystem) {
         DrawAssetsPanelUVE();
-        DrawConsolePanelUVE();
+        DrawFolderContentsPanelUVE();
         return;
     }
 
     const ImGuiViewport* const mainViewport = ImGui::GetMainViewport();
-    const float contentHeight = kAssetsPanelHeightUVE - kBottomDockTabHeightUVE;
+    const float contentHeight = kAssetsPanelHeightUVE;
     ImGui::SetNextWindowPos(
         ImVec2{mainViewport->WorkPos.x, mainViewport->WorkPos.y + mainViewport->WorkSize.y -
                                       kAssetsPanelHeightUVE},
@@ -4452,38 +4462,7 @@ void EditorUVE::DrawBottomDockContentUVE() {
             break;
         }
         case EditorBottomDockUVE::Animator:
-            ImGui::TextUnformatted("Animation");
-            ImGui::TextDisabled("Preview controls share the editor simulation boundary; transient playback is not saved.");
-            ImGui::Text("State: %s", m_playModeState == EditorPlayModeStateUVE::Edit
-                                           ? "Edit"
-                                           : (m_playModeState == EditorPlayModeStateUVE::Paused ? "Paused" : "Playing"));
-            if (m_playModeState == EditorPlayModeStateUVE::Edit) {
-                ImGui::BeginDisabled(m_simulationControl == nullptr);
-                if (ImGui::Button("Play Preview")) {
-                    static_cast<void>(EnterPlayModeUVE());
-                }
-                ImGui::EndDisabled();
-            } else if (m_playModeState == EditorPlayModeStateUVE::Playing) {
-                if (ImGui::Button("Pause Preview")) {
-                    static_cast<void>(PausePlayModeUVE());
-                }
-                ImGui::SameLine();
-                if (ImGui::Button("Stop Preview")) {
-                    static_cast<void>(StopPlayModeUVE());
-                }
-            } else {
-                if (ImGui::Button("Resume Preview")) {
-                    static_cast<void>(ResumePlayModeUVE());
-                }
-                ImGui::SameLine();
-                if (ImGui::Button("Step")) {
-                    static_cast<void>(StepPlayModeUVE());
-                }
-                ImGui::SameLine();
-                if (ImGui::Button("Stop Preview")) {
-                    static_cast<void>(StopPlayModeUVE());
-                }
-            }
+            ImGui::TextDisabled("Animation controls are centered in the Hand / Scene / Scripting canvas.");
             break;
         case EditorBottomDockUVE::AIToolbar:
             ImGui::TextUnformatted("AI Tools");
@@ -5351,78 +5330,84 @@ void EditorUVE::ReconcileContentBrowserDirectoryUVE(const Asset::ProjectFileSnap
     }
 }
 
-void EditorUVE::DrawConsolePanelUVE() {
+void EditorUVE::DrawFolderContentsPanelUVE() {
     const ImGuiViewport* const mainViewport = ImGui::GetMainViewport();
-    const float contentHeight = kAssetsPanelHeightUVE - kBottomDockTabHeightUVE;
+    const float contentHeight = kAssetsPanelHeightUVE;
     const float projectWidth = std::clamp(mainViewport->WorkSize.x * 0.60F, 420.0F, mainViewport->WorkSize.x - 280.0F);
-    const float consoleWidth = std::max(280.0F, mainViewport->WorkSize.x - projectWidth);
+    const float contentsWidth = std::max(280.0F, mainViewport->WorkSize.x - projectWidth);
     ImGui::SetNextWindowPos(
         ImVec2{mainViewport->WorkPos.x + projectWidth,
-               mainViewport->WorkPos.y + mainViewport->WorkSize.y - kAssetsPanelHeightUVE + kBottomDockTabHeightUVE},
+               mainViewport->WorkPos.y + mainViewport->WorkSize.y - kAssetsPanelHeightUVE},
         ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2{consoleWidth, contentHeight}, ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2{contentsWidth, contentHeight}, ImGuiCond_Always);
     constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove |
-                                       ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar |
-                                       ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoTitleBar;
-    ImGui::Begin("##debug-panel", nullptr, flags);
+                                       ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar;
+    ImGui::Begin("##folder-contents-panel", nullptr, flags);
 
-    const DeveloperConsoleSnapshotUVE snapshot = m_developerConsole.GetSnapshotUVE();
-    ImGui::TextDisabled("DEBUG");
+    const Asset::ProjectFileSnapshotUVE snapshot = m_services->GetProjectFileIndexUVE().GetSnapshotUVE();
+    const auto mainDirectoryIt = std::find_if(
+        snapshot.entries.begin(), snapshot.entries.end(), [](const Asset::ProjectFileEntryUVE& entry) {
+            return entry.kind == Asset::ProjectFileEntryKindUVE::Directory && entry.relativePath.parent_path().empty();
+        });
+    const std::filesystem::path mainDirectory = mainDirectoryIt == snapshot.entries.end()
+                                                    ? std::filesystem::path{}
+                                                    : mainDirectoryIt->relativePath;
+    std::filesystem::path selectedDirectory = m_contentBrowserDirectory;
+    if (m_selectedProjectFile.has_value() &&
+        m_selectedProjectFile->kind == Asset::ProjectFileEntryKindUVE::Directory) {
+        selectedDirectory = m_selectedProjectFile->relativePath;
+    }
+    if (selectedDirectory.empty() && !mainDirectory.empty()) {
+        selectedDirectory = mainDirectory;
+    }
+    const std::string directoryLabel = !mainDirectory.empty() && selectedDirectory == mainDirectory
+                                           ? "main"
+                                           : (selectedDirectory.empty() ? "main" : selectedDirectory.generic_string());
+    ImGui::TextDisabled("CONTENTS");
     ImGui::SameLine();
-    ImGui::TextDisabled("%zu entr%s", snapshot.output.size(), snapshot.output.size() == 1U ? "y" : "ies");
+    ImGui::TextUnformatted(directoryLabel.c_str());
     ImGui::Separator();
-    if (ImGui::Button("Clear")) {
-        static_cast<void>(m_developerConsole.ClearUVE());
-    }
-    ImGui::SameLine();
-    int severityIndex = static_cast<int>(snapshot.severityFilter);
-    constexpr const char* kSeverityFilters[] = {"All", "Info", "Warning", "Error"};
-    if (ImGui::Combo("##console-severity", &severityIndex, kSeverityFilters,
-                     static_cast<int>(std::size(kSeverityFilters)))) {
-        static_cast<void>(m_developerConsole.SetSeverityFilterUVE(
-            static_cast<DeveloperConsoleSeverityFilterUVE>(severityIndex)));
-    }
-    ImGui::SameLine();
-    std::array<char, 256> filterBuffer{};
-    m_consoleFilter.copy(filterBuffer.data(), filterBuffer.size() - 1U);
-    ImGui::SetNextItemWidth(std::max(80.0F, ImGui::GetContentRegionAvail().x));
-    if (ImGui::InputTextWithHint("##console-search", "Search", filterBuffer.data(), filterBuffer.size())) {
-        m_consoleFilter = filterBuffer.data();
-    }
 
-    ImGui::BeginChild("##console-output", ImVec2{0.0F, -ImGui::GetFrameHeightWithSpacing()}, true);
-    for (const DeveloperConsoleEntryUVE& entry : snapshot.output) {
-        if (!m_consoleFilter.empty() && !ContainsCaseInsensitiveUVE(entry.text, m_consoleFilter)) {
-            continue;
+    const float contentItemsHeight = std::max(36.0F, ImGui::GetContentRegionAvail().y);
+    if (ImGui::BeginChild("##folder-contents-items", ImVec2{0.0F, contentItemsHeight}, true,
+                           ImGuiWindowFlags_AlwaysVerticalScrollbar)) {
+        std::size_t visibleCount = 0U;
+        for (const Asset::ProjectFileEntryUVE& entry : snapshot.entries) {
+            if (entry.relativePath.parent_path() != selectedDirectory) {
+                continue;
+            }
+            const std::string entryPath = entry.relativePath.generic_string();
+            if (!ContainsCaseInsensitiveUVE(entryPath, m_assetFilter)) {
+                continue;
+            }
+            ++visibleCount;
+            const ContentBrowserItemTypeUVE type = ClassifyContentBrowserEntryUVE(entry);
+            std::string displayLabel = entry.relativePath.filename().generic_string();
+            displayLabel += " [";
+            displayLabel += GetContentBrowserItemTypeLabelUVE(type);
+            displayLabel += "]";
+            const std::string rowId = "folder-content-entry-" + entry.relativePath.generic_string();
+            ImGui::PushID(rowId.c_str());
+            if (ImGui::Selectable(displayLabel.c_str(), m_selectedProjectFile.has_value() &&
+                                                        m_selectedProjectFile->relativePath == entry.relativePath,
+                                  ImGuiSelectableFlags_AllowDoubleClick)) {
+                m_selectedProjectFile = entry;
+                if (entry.registeredAssetGuid.has_value()) {
+                    m_selectedAsset = Asset::AssetRecordUVE{*entry.registeredAssetGuid, snapshot.contentRoot / entry.relativePath};
+                } else {
+                    m_selectedAsset.reset();
+                }
+                if (entry.kind == Asset::ProjectFileEntryKindUVE::Directory &&
+                    ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
+                    m_contentBrowserDirectory = entry.relativePath;
+                }
+            }
+            ImGui::PopID();
         }
-        const char* severity = "INFO";
-        ImVec4 color{0.58F, 0.72F, 0.86F, 1.0F};
-        if (entry.severity == DeveloperConsoleSeverityUVE::Warning) {
-            severity = "WARN";
-            color = ImVec4{0.94F, 0.72F, 0.34F, 1.0F};
-        } else if (entry.severity == DeveloperConsoleSeverityUVE::Error) {
-            severity = "ERROR";
-            color = ImVec4{0.95F, 0.40F, 0.38F, 1.0F};
+        if (visibleCount == 0U) {
+            ImGui::TextDisabled(selectedDirectory.empty() ? "main is empty." : "This folder is empty.");
         }
-        ImGui::TextColored(color, "[%s]", severity);
-        ImGui::SameLine();
-        ImGui::TextWrapped("%s", entry.text.c_str());
-    }
-    if (snapshot.output.empty()) {
-        ImGui::TextDisabled("No debug messages.");
-    }
-    ImGui::EndChild();
-
-    std::array<char, 256> commandBuffer{};
-    m_consoleCommand.copy(commandBuffer.data(), commandBuffer.size() - 1U);
-    ImGui::SetNextItemWidth(-1.0F);
-    if (ImGui::InputTextWithHint("##console-command", "> command", commandBuffer.data(), commandBuffer.size(),
-                                ImGuiInputTextFlags_EnterReturnsTrue)) {
-        m_consoleCommand = commandBuffer.data();
-        if (!m_consoleCommand.empty()) {
-            static_cast<void>(m_developerConsole.ExecuteUVE(m_consoleCommand));
-            m_consoleCommand.clear();
-        }
+        ImGui::EndChild();
     }
     ImGui::End();
 }
@@ -5447,11 +5432,11 @@ void EditorUVE::RefreshProjectFileIndexUVE() {
 
 void EditorUVE::DrawAssetsPanelUVE() {
     const ImGuiViewport* const mainViewport = ImGui::GetMainViewport();
-    const float contentHeight = kAssetsPanelHeightUVE - kBottomDockTabHeightUVE;
+    const float contentHeight = kAssetsPanelHeightUVE;
     const float projectWidth = std::clamp(mainViewport->WorkSize.x * 0.60F, 420.0F, mainViewport->WorkSize.x - 280.0F);
     ImGui::SetNextWindowPos(
         ImVec2{mainViewport->WorkPos.x,
-               mainViewport->WorkPos.y + mainViewport->WorkSize.y - kAssetsPanelHeightUVE + kBottomDockTabHeightUVE},
+               mainViewport->WorkPos.y + mainViewport->WorkSize.y - kAssetsPanelHeightUVE},
         ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2{projectWidth, contentHeight}, ImGuiCond_Always);
     constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove |
@@ -5461,7 +5446,29 @@ void EditorUVE::DrawAssetsPanelUVE() {
     Asset::IProjectFileIndexUVE& projectFileIndex = m_services->GetProjectFileIndexUVE();
     const Asset::ProjectChangeSnapshotUVE changeSnapshot = m_services->GetProjectChangeWatcherUVE().GetSnapshotUVE();
     const Asset::ProjectFileSnapshotUVE snapshot = projectFileIndex.GetSnapshotUVE();
-    ImGui::TextDisabled("%zu entr%s", snapshot.entries.size(), snapshot.entries.size() == 1U ? "y" : "ies");
+    const auto mainDirectoryIt = std::find_if(
+        snapshot.entries.begin(), snapshot.entries.end(), [](const Asset::ProjectFileEntryUVE& entry) {
+            return entry.kind == Asset::ProjectFileEntryKindUVE::Directory && entry.relativePath.parent_path().empty();
+        });
+    const std::filesystem::path mainDirectory = mainDirectoryIt == snapshot.entries.end()
+                                                    ? std::filesystem::path{}
+                                                    : mainDirectoryIt->relativePath;
+    ImGui::TextDisabled("FILESYSTEM");
+    ImGui::SameLine(ImGui::GetContentRegionAvail().x - 18.0F);
+    if (ImGui::SmallButton("...##filesystem-menu")) {
+        ImGui::OpenPopup("filesystem-overflow-menu");
+    }
+    if (ImGui::BeginPopup("filesystem-overflow-menu")) {
+        ImGui::TextDisabled("Filesystem dock");
+        ImGui::Separator();
+        if (ImGui::MenuItem("Debug")) {
+            m_activeBottomDock = EditorBottomDockUVE::Debugger;
+        }
+        if (ImGui::MenuItem("Hide dock")) {
+            m_bottomDockVisible = false;
+        }
+        ImGui::EndPopup();
+    }
     if (!m_projectFileLastRefreshSucceeded) {
         ImGui::SameLine();
         if (ImGui::SmallButton("Retry")) {
@@ -5498,21 +5505,11 @@ void EditorUVE::DrawAssetsPanelUVE() {
         }
     }
 
-    if (ImGui::SmallButton("(main)##content-root")) {
+    ImGui::Separator();
+    if (ImGui::SmallButton("main##content-root")) {
         m_contentBrowserDirectory.clear();
-    }
-    std::filesystem::path breadcrumb;
-    std::size_t breadcrumbIndex = 0U;
-    for (const std::filesystem::path& segment : m_contentBrowserDirectory) {
-        breadcrumb /= segment;
-        ImGui::SameLine();
-        ImGui::TextUnformatted(">");
-        ImGui::SameLine();
-        const std::string segmentLabel = segment.generic_string();
-        const std::string buttonLabel = segmentLabel + "##content-breadcrumb-" + std::to_string(breadcrumbIndex++);
-        if (ImGui::Button(buttonLabel.c_str())) {
-            m_contentBrowserDirectory = breadcrumb;
-        }
+        m_selectedProjectFile.reset();
+        m_selectedAsset.reset();
     }
 
     std::array<char, 256> filterBuffer{};
@@ -5522,34 +5519,7 @@ void EditorUVE::DrawAssetsPanelUVE() {
     if (ImGui::InputTextWithHint("##content-filter", "Search", filterBuffer.data(), filterBuffer.size())) {
         m_assetFilter = filterBuffer.data();
     }
-    ImGui::SameLine();
-    if (ImGui::BeginCombo("Type", GetContentBrowserFocusLabelUVE(m_contentBrowserTypeFocus))) {
-        constexpr std::array<ContentBrowserTypeFocusUVE, 13U> focuses = {
-            ContentBrowserTypeFocusUVE::All,       ContentBrowserTypeFocusUVE::Folders,
-            ContentBrowserTypeFocusUVE::Scene,     ContentBrowserTypeFocusUVE::Prefab,
-            ContentBrowserTypeFocusUVE::Bundle,    ContentBrowserTypeFocusUVE::Mesh,
-            ContentBrowserTypeFocusUVE::Texture,   ContentBrowserTypeFocusUVE::Shader,
-            ContentBrowserTypeFocusUVE::Material,  ContentBrowserTypeFocusUVE::Save,
-            ContentBrowserTypeFocusUVE::MotionQuery, ContentBrowserTypeFocusUVE::Registered,
-            ContentBrowserTypeFocusUVE::OtherFiles,
-        };
-        for (const ContentBrowserTypeFocusUVE focus : focuses) {
-            const bool selected = focus == m_contentBrowserTypeFocus;
-            if (ImGui::Selectable(GetContentBrowserFocusLabelUVE(focus), selected)) {
-                m_contentBrowserTypeFocus = focus;
-            }
-            if (selected) {
-                ImGui::SetItemDefaultFocus();
-            }
-        }
-        ImGui::EndCombo();
-    }
-    const bool hasActiveFilters = !m_assetFilter.empty() || m_contentBrowserTypeFocus != ContentBrowserTypeFocusUVE::All;
-    ImGui::SameLine();
-    if (ImGui::SmallButton("Clear")) {
-        m_assetFilter.clear();
-        m_contentBrowserTypeFocus = ContentBrowserTypeFocusUVE::All;
-    }
+    const bool hasActiveFilters = !m_assetFilter.empty();
 
     const auto selectEntry = [this, &snapshot](const Asset::ProjectFileEntryUVE& entry) {
         m_selectedProjectFile = entry;
@@ -5561,24 +5531,17 @@ void EditorUVE::DrawAssetsPanelUVE() {
     };
 
     std::vector<const Asset::ProjectFileEntryUVE*> visibleEntries;
-    std::size_t directEntryCount = 0U;
     for (const Asset::ProjectFileEntryUVE& entry : snapshot.entries) {
         if (entry.relativePath.parent_path() != m_contentBrowserDirectory) {
             continue;
         }
-        ++directEntryCount;
         const std::string entryPath = entry.relativePath.generic_string();
-        if (ContainsCaseInsensitiveUVE(entryPath, m_assetFilter) && DoesContentBrowserEntryMatchFocusUVE(entry)) {
+        if (ContainsCaseInsensitiveUVE(entryPath, m_assetFilter)) {
             visibleEntries.push_back(&entry);
         }
     }
 
-    ImGui::SameLine();
-    ImGui::TextDisabled("%zu / %zu in %s", visibleEntries.size(), directEntryCount,
-                        m_contentBrowserDirectory.empty() ? "(main)" : m_contentBrowserDirectory.generic_string().c_str());
-
-    const float selectedFactsHeight = ImGui::GetTextLineHeightWithSpacing() + 4.0F;
-    const float itemsHeight = std::max(36.0F, ImGui::GetContentRegionAvail().y - selectedFactsHeight);
+    const float itemsHeight = std::max(36.0F, ImGui::GetContentRegionAvail().y);
     ImGui::BeginChild("##content-browser-items", ImVec2{0.0F, itemsHeight}, true,
                       ImGuiWindowFlags_AlwaysVerticalScrollbar);
     if (!m_projectFileLastRefreshSucceeded && snapshot.refreshGeneration == 0U) {
@@ -5599,10 +5562,15 @@ void EditorUVE::DrawAssetsPanelUVE() {
                                   m_selectedProjectFile->relativePath == entry->relativePath &&
                                   m_selectedProjectFile->kind == entry->kind;
             const ContentBrowserItemTypeUVE type = ClassifyContentBrowserEntryUVE(*entry);
-            std::string displayLabel = entry->relativePath.filename().generic_string();
-            displayLabel += " [";
-            displayLabel += GetContentBrowserItemTypeLabelUVE(type);
-            displayLabel += "]";
+            std::string displayLabel;
+            if (!mainDirectory.empty() && entry->relativePath == mainDirectory) {
+                displayLabel = "main";
+            } else {
+                displayLabel = entry->relativePath.filename().generic_string();
+                displayLabel += " [";
+                displayLabel += GetContentBrowserItemTypeLabelUVE(type);
+                displayLabel += "]";
+            }
             if (entry->registeredAssetGuid.has_value()) {
                 displayLabel += " [Registered]";
             }
@@ -5636,21 +5604,6 @@ void EditorUVE::DrawAssetsPanelUVE() {
     }
     ImGui::EndChild();
 
-    if (m_selectedProjectFile.has_value()) {
-        const std::string selectedPath = m_selectedProjectFile->relativePath.generic_string();
-        const ContentBrowserItemTypeUVE selectedType = ClassifyContentBrowserEntryUVE(*m_selectedProjectFile);
-        ImGui::TextDisabled("Selected: %s | %s", selectedPath.c_str(), GetContentBrowserItemTypeLabelUVE(selectedType));
-        if (m_selectedProjectFile->registeredAssetGuid.has_value()) {
-            ImGui::SameLine();
-            ImGui::TextDisabled("GUID %016llX",
-                                static_cast<unsigned long long>(m_selectedProjectFile->registeredAssetGuid->value));
-        } else if (m_selectedProjectFile->kind == Asset::ProjectFileEntryKindUVE::File) {
-            ImGui::SameLine();
-            ImGui::TextDisabled("unregistered");
-        }
-    } else {
-        ImGui::TextDisabled("FILESYSTEM");
-    }
     ImGui::End();
 }
 
@@ -6145,41 +6098,9 @@ void EditorUVE::DrawViewportPanelUVE() {
         }
         ImGui::SameLine(0.0F, 4.0F);
     };
-    const auto drawViewportPlaybackButton = [](const char* const id, const char* const label, const int iconKind,
-                                                const bool enabled) {
-        ImGui::BeginDisabled(!enabled);
-        ImGui::PushID(id);
-        const bool pressed = ImGui::Button("##playback-button", ImVec2{58.0F, 22.0F});
-        const ImVec2 minimum = ImGui::GetItemRectMin();
-        const ImVec2 maximum = ImGui::GetItemRectMax();
-        const float centerY = (minimum.y + maximum.y) * 0.5F;
-        ImDrawList* const iconDrawList = ImGui::GetWindowDrawList();
-        const ImU32 iconColor = ImGui::GetColorU32(ImGuiCol_Text);
-        if (iconKind == 0) {
-            iconDrawList->AddTriangleFilled(ImVec2{minimum.x + 7.0F, centerY - 6.0F},
-                                            ImVec2{minimum.x + 7.0F, centerY + 6.0F},
-                                            ImVec2{minimum.x + 17.0F, centerY}, iconColor);
-        } else if (iconKind == 1) {
-            iconDrawList->AddRectFilled(ImVec2{minimum.x + 7.0F, centerY - 6.0F},
-                                        ImVec2{minimum.x + 11.0F, centerY + 6.0F}, iconColor);
-            iconDrawList->AddRectFilled(ImVec2{minimum.x + 13.0F, centerY - 6.0F},
-                                        ImVec2{minimum.x + 17.0F, centerY + 6.0F}, iconColor);
-        } else {
-            iconDrawList->AddRectFilled(ImVec2{minimum.x + 7.0F, centerY - 5.0F},
-                                        ImVec2{minimum.x + 17.0F, centerY + 5.0F}, iconColor);
-        }
-        iconDrawList->AddText(ImVec2{minimum.x + 23.0F, minimum.y + 4.0F}, iconColor, label);
-        ImGui::PopID();
-        ImGui::EndDisabled();
-        return pressed;
-    };
     const bool gizmoModeChangeAllowed = IsAuthoringCommandAllowedUVE() &&
                                         m_gizmoDrag.axis == EditorTransformAxisUVE::None &&
                                         m_viewportNavigationMode == EditorViewportNavigationModeUVE::None;
-    const bool canEnterPlayMode = m_simulationControl != nullptr &&
-                                  m_playModeState == EditorPlayModeStateUVE::Edit &&
-                                  m_gizmoDrag.axis == EditorTransformAxisUVE::None &&
-                                  m_viewportNavigationMode == EditorViewportNavigationModeUVE::None;
     ImGui::SetCursorScreenPos(ImVec2{contentOrigin.x + 8.0F, contentOrigin.y + 6.0F});
     drawViewportTool("Move XYZ", EditorGizmoModeUVE::Translate, gizmoModeChangeAllowed);
     drawViewportTool("Rotate XYZ", EditorGizmoModeUVE::Rotate, gizmoModeChangeAllowed);
@@ -6207,36 +6128,6 @@ void EditorUVE::DrawViewportPanelUVE() {
         ImGui::MenuItem("Orthographic (not available)", nullptr, false, false);
         ImGui::EndDisabled();
         ImGui::EndPopup();
-    }
-    ImGui::SameLine(0.0F, 6.0F);
-    if (m_playModeState == EditorPlayModeStateUVE::Edit) {
-        if (drawViewportPlaybackButton("##viewport-play", "Play", 0, canEnterPlayMode)) {
-            static_cast<void>(EnterPlayModeUVE());
-        }
-        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) {
-            ImGui::SetTooltip("Play");
-        }
-    } else if (m_playModeState == EditorPlayModeStateUVE::Playing) {
-        if (drawViewportPlaybackButton("##viewport-pause", "Pause", 1, true)) {
-            static_cast<void>(PausePlayModeUVE());
-        }
-        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) {
-            ImGui::SetTooltip("Pause");
-        }
-    } else {
-        if (drawViewportPlaybackButton("##viewport-resume", "Resume", 0, true)) {
-            static_cast<void>(ResumePlayModeUVE());
-        }
-        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) {
-            ImGui::SetTooltip("Resume");
-        }
-    }
-    ImGui::SameLine(0.0F, 4.0F);
-    if (drawViewportPlaybackButton("##viewport-stop", "Stop", 2, m_playModeState != EditorPlayModeStateUVE::Edit)) {
-        static_cast<void>(StopPlayModeUVE());
-    }
-    if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) {
-        ImGui::SetTooltip("Stop");
     }
     ImGui::SetCursorScreenPos(contentOrigin);
     const EditorViewportRectUVE viewportRect{
@@ -6339,7 +6230,7 @@ void EditorUVE::DrawViewportPanelUVE() {
             drawList->AddText(ImVec2{contentOrigin.x + 10.0F, contentOrigin.y + 38.0F},
                               IM_COL32(176, 166, 139, 190), "Preview Light");
         }
-        const ImVec2 orientationCenter{contentOrigin.x + contentSize.x - 78.0F, contentOrigin.y + 112.0F};
+        const ImVec2 orientationCenter{contentOrigin.x + contentSize.x - 62.0F, contentOrigin.y + 104.0F};
         const auto drawOrientationArrow = [drawList](const ImVec2 start, const ImVec2 end, const ImU32 color) {
             drawList->AddLine(start, end, color, 1.8F);
             const ImVec2 direction{end.x - start.x, end.y - start.y};
@@ -6356,29 +6247,13 @@ void EditorUVE::DrawViewportPanelUVE() {
         constexpr ImU32 xColor = IM_COL32(216, 102, 102, 245);
         constexpr ImU32 yColor = IM_COL32(116, 196, 142, 245);
         constexpr ImU32 zColor = IM_COL32(113, 151, 215, 245);
-        drawOrientationArrow(orientationCenter, ImVec2{orientationCenter.x - 19.0F, orientationCenter.y}, xColor);
-        drawOrientationArrow(orientationCenter, ImVec2{orientationCenter.x + 19.0F, orientationCenter.y}, xColor);
-        drawOrientationArrow(orientationCenter, ImVec2{orientationCenter.x, orientationCenter.y - 19.0F}, yColor);
-        drawOrientationArrow(orientationCenter, ImVec2{orientationCenter.x, orientationCenter.y + 19.0F}, yColor);
-        drawOrientationArrow(orientationCenter, ImVec2{orientationCenter.x - 14.0F, orientationCenter.y - 14.0F}, zColor);
-        drawOrientationArrow(orientationCenter, ImVec2{orientationCenter.x + 14.0F, orientationCenter.y + 14.0F}, zColor);
-        drawList->AddCircleFilled(orientationCenter, 3.0F, IM_COL32(235, 235, 235, 245));
-        drawList->AddText(ImVec2{orientationCenter.x - 13.0F, orientationCenter.y - 34.0F}, yColor, "Y top");
-        drawList->AddText(ImVec2{orientationCenter.x - 18.0F, orientationCenter.y + 23.0F}, yColor, "Y bottom");
-        drawList->AddText(ImVec2{orientationCenter.x - 52.0F, orientationCenter.y - 6.0F}, xColor, "X left");
-        drawList->AddText(ImVec2{orientationCenter.x + 23.0F, orientationCenter.y - 6.0F}, xColor, "X right");
-        drawList->AddText(ImVec2{orientationCenter.x - 61.0F, orientationCenter.y - 27.0F}, zColor, "Z back");
-        drawList->AddText(ImVec2{orientationCenter.x + 18.0F, orientationCenter.y + 17.0F}, zColor, "Z front");
-        if (m_playModeState != EditorPlayModeStateUVE::Edit) {
-            const bool paused = m_playModeState == EditorPlayModeStateUVE::Paused;
-            const char* const playLabel = paused ? "PAUSED" : "PLAYING";
-            const ImU32 badgeColor = paused ? IM_COL32(194, 132, 45, 230) : IM_COL32(24, 148, 181, 230);
-            const ImVec2 badgePosition{contentOrigin.x + 10.0F, contentOrigin.y + 74.0F};
-            drawList->AddRectFilled(badgePosition, ImVec2{badgePosition.x + 82.0F, badgePosition.y + 22.0F},
-                                    badgeColor, 4.0F);
-            drawList->AddText(ImVec2{badgePosition.x + 9.0F, badgePosition.y + 3.0F}, IM_COL32(245, 245, 245, 255),
-                              playLabel);
-        }
+        drawOrientationArrow(orientationCenter, ImVec2{orientationCenter.x + 21.0F, orientationCenter.y}, xColor);
+        drawOrientationArrow(orientationCenter, ImVec2{orientationCenter.x, orientationCenter.y - 21.0F}, yColor);
+        drawList->AddCircle(orientationCenter, 10.0F, zColor, 16, 1.8F);
+        drawList->AddCircleFilled(orientationCenter, 3.0F, zColor);
+        drawList->AddText(ImVec2{orientationCenter.x + 25.0F, orientationCenter.y - 7.0F}, xColor, "XX");
+        drawList->AddText(ImVec2{orientationCenter.x - 7.0F, orientationCenter.y - 37.0F}, yColor, "YY");
+        drawList->AddText(ImVec2{orientationCenter.x + 13.0F, orientationCenter.y + 12.0F}, zColor, "ZZ");
     } else {
         ImGui::TextUnformatted("Viewport is too small for picking.");
     }
