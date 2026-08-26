@@ -210,10 +210,7 @@ void GlCommandBufferUVE::BindPipelineUVE(PipelineHandleUVE pipeline) {
     m_currentPipeline = pipeline;
     m_boundVertexBuffer = kInvalidBufferHandleUVE;
     m_boundIndexBuffer = kInvalidBufferHandleUVE;
-    m_currentVertexLayout = &pipelineIt->second.vertexLayout;
     m_currentVertexStride = pipelineIt->second.vertexStride;
-    m_currentUniforms = &pipelineIt->second.uniforms;
-
     m_state->gl.glUseProgram(m_currentProgram);
     m_state->gl.glBindVertexArray(m_currentVao);
 
@@ -254,14 +251,15 @@ void GlCommandBufferUVE::BindVertexBufferUVE(BufferHandleUVE buffer, std::uint32
         UVE_ERROR("GlCommandBufferUVE: BindVertexBufferUVE requires a vertex buffer");
         return;
     }
-    m_state->gl.glBindBuffer(GL_ARRAY_BUFFER, bufferIt->second.glBuffer);
-
-    if (m_currentVertexLayout == nullptr) {
-        UVE_ERROR("GlCommandBufferUVE: BindVertexBufferUVE called without a bound pipeline");
+    const auto* const pipelineRecord = FindCurrentPipelineUVE();
+    if (pipelineRecord == nullptr) {
+        UVE_ERROR("GlCommandBufferUVE: BindVertexBufferUVE called without a live pipeline");
         return;
     }
-    for (std::size_t index = 0; index < m_currentVertexLayout->size(); ++index) {
-        const VertexAttributeUVE& attribute = (*m_currentVertexLayout)[index];
+    m_state->gl.glBindBuffer(GL_ARRAY_BUFFER, bufferIt->second.glBuffer);
+
+    for (std::size_t index = 0; index < pipelineRecord->vertexLayout.size(); ++index) {
+        const VertexAttributeUVE& attribute = pipelineRecord->vertexLayout[index];
         const auto attributeIndex = static_cast<GLuint>(index);
         m_state->gl.glVertexAttribPointer(
             attributeIndex, VertexAttributeComponentCountUVE(attribute.format), GL_FLOAT, GL_FALSE,
@@ -340,13 +338,25 @@ void GlCommandBufferUVE::BindUniformBufferUVE(BufferHandleUVE buffer, std::uint3
     m_state->gl.glBindBufferBase(GL_UNIFORM_BUFFER, slot, bufferIt->second.glBuffer);
 }
 
-const GlCommandBufferUVE::UniformRecordUVE* GlCommandBufferUVE::FindUniformUVE(std::string_view name) const {
-    if (m_currentUniforms == nullptr) {
-        UVE_WARNING("GlCommandBufferUVE: SetUniform*UVE called without a bound pipeline (uniform \"{}\")", name);
+const Detail::GlDeviceStateUVE::PipelineRecordUVE* GlCommandBufferUVE::FindCurrentPipelineUVE() const {
+    if (m_currentPipeline == kInvalidPipelineHandleUVE) {
         return nullptr;
     }
-    const auto it = m_currentUniforms->find(name);
-    if (it == m_currentUniforms->end()) {
+    const auto pipelineIt = m_state->pipelines.find(m_currentPipeline.value);
+    if (pipelineIt == m_state->pipelines.end()) {
+        return nullptr;
+    }
+    return &pipelineIt->second;
+}
+
+const GlCommandBufferUVE::UniformRecordUVE* GlCommandBufferUVE::FindUniformUVE(std::string_view name) const {
+    const auto* const pipelineRecord = FindCurrentPipelineUVE();
+    if (pipelineRecord == nullptr) {
+        UVE_WARNING("GlCommandBufferUVE: SetUniform*UVE called without a live pipeline (uniform \"{}\")", name);
+        return nullptr;
+    }
+    const auto it = pipelineRecord->uniforms.find(name);
+    if (it == pipelineRecord->uniforms.end()) {
         UVE_WARNING("GlCommandBufferUVE: SetUniform*UVE - \"{}\" is not an active uniform on the bound pipeline",
                      name);
         return nullptr;
@@ -426,6 +436,10 @@ void GlCommandBufferUVE::DrawIndexedUVE(std::uint32_t indexCount, std::uint32_t 
     if (!RequireInsideRenderPassUVE(m_insideRenderPass, "DrawIndexedUVE")) {
         return;
     }
+    if (FindCurrentPipelineUVE() == nullptr) {
+        UVE_ERROR("GlCommandBufferUVE: DrawIndexedUVE called without a live pipeline");
+        return;
+    }
     if (m_boundIndexBuffer == kInvalidBufferHandleUVE) {
         UVE_ERROR("GlCommandBufferUVE: DrawIndexedUVE called without a bound index buffer");
         return;
@@ -452,6 +466,10 @@ void GlCommandBufferUVE::DrawIndexedUVE(std::uint32_t indexCount, std::uint32_t 
 
 void GlCommandBufferUVE::DrawUVE(std::uint32_t vertexCount, std::uint32_t instanceCount) {
     if (!RequireInsideRenderPassUVE(m_insideRenderPass, "DrawUVE")) {
+        return;
+    }
+    if (m_currentPipeline != kInvalidPipelineHandleUVE && FindCurrentPipelineUVE() == nullptr) {
+        UVE_ERROR("GlCommandBufferUVE: DrawUVE called with a destroyed pipeline");
         return;
     }
     if (m_boundVertexBuffer != kInvalidBufferHandleUVE) {

@@ -981,6 +981,54 @@ TEST_F(GlRenderDeviceUVETest, InvalidSentinelBindsAreRejectedWithoutPoisoningVal
     renderDevice->DestroyShaderUVE(fragmentShader);
 }
 
+TEST_F(GlRenderDeviceUVETest, DestroyBoundPipelineWhileRecording_FailsClosed) {
+    const ShaderHandleUVE vertexShader = renderDevice->CreateShaderUVE(
+        ShaderDescUVE{ShaderStageUVE::Vertex, std::string(kUniformVertexShaderSource)});
+    const ShaderHandleUVE fragmentShader = renderDevice->CreateShaderUVE(
+        ShaderDescUVE{ShaderStageUVE::Fragment, std::string(kUniformFragmentShaderSource)});
+    ASSERT_NE(vertexShader, kInvalidShaderHandleUVE);
+    ASSERT_NE(fragmentShader, kInvalidShaderHandleUVE);
+
+    PipelineDescUVE pipelineDesc;
+    pipelineDesc.vertexShader = vertexShader;
+    pipelineDesc.fragmentShader = fragmentShader;
+    pipelineDesc.vertexLayout = {VertexAttributeUVE{"POSITION", VertexAttributeFormatUVE::Float3, 0U}};
+    pipelineDesc.vertexStride = 3U * static_cast<std::uint32_t>(sizeof(float));
+    pipelineDesc.depthTestEnabled = false;
+    pipelineDesc.depthWriteEnabled = false;
+    const PipelineHandleUVE pipeline = renderDevice->CreatePipelineUVE(pipelineDesc);
+    ASSERT_NE(pipeline, kInvalidPipelineHandleUVE);
+
+    constexpr std::array<float, 3> kFirstVertex{0.0F, 0.0F, 0.0F};
+    constexpr std::array<float, 3> kSecondVertex{1.0F, 0.0F, 0.0F};
+    const BufferHandleUVE firstBuffer = renderDevice->CreateBufferUVE(
+        BufferDescUVE{sizeof(kFirstVertex), BufferUsageUVE::Vertex}, std::as_bytes(std::span(kFirstVertex)));
+    const BufferHandleUVE secondBuffer = renderDevice->CreateBufferUVE(
+        BufferDescUVE{sizeof(kSecondVertex), BufferUsageUVE::Vertex}, std::as_bytes(std::span(kSecondVertex)));
+    ASSERT_NE(firstBuffer, kInvalidBufferHandleUVE);
+    ASSERT_NE(secondBuffer, kInvalidBufferHandleUVE);
+
+    std::unique_ptr<ICommandBufferUVE> commandBuffer = renderDevice->CreateCommandBufferUVE();
+    ASSERT_NE(commandBuffer, nullptr);
+    commandBuffer->BeginRenderPassUVE(RenderPassDescUVE{});
+    commandBuffer->BindPipelineUVE(pipeline);
+    commandBuffer->BindVertexBufferUVE(firstBuffer, 0U);
+    renderDevice->DestroyPipelineUVE(pipeline);
+    while (glGetError() != GL_NO_ERROR) {
+    }
+
+    commandBuffer->SetUniformMatrix4x4UVE("uModel", Math::Matrix4x4UVE::IdentityUVE());
+    commandBuffer->BindVertexBufferUVE(secondBuffer, 0U);
+    commandBuffer->DrawUVE(1U);
+    EXPECT_EQ(glGetError(), GL_NO_ERROR);
+
+    commandBuffer->EndRenderPassUVE();
+    renderDevice->DestroyBufferUVE(secondBuffer);
+    renderDevice->DestroyBufferUVE(firstBuffer);
+    renderDevice->DestroyShaderUVE(vertexShader);
+    renderDevice->DestroyShaderUVE(fragmentShader);
+}
+
 TEST_F(GlRenderDeviceUVETest, FullTriangleDrawAndPresent_DoesNotCrash) {
     const ShaderHandleUVE vertexShader =
         renderDevice->CreateShaderUVE(ShaderDescUVE{ShaderStageUVE::Vertex, std::string(kValidVertexShaderSource)});

@@ -45,6 +45,11 @@ public:
 private:
     using UniformRecordUVE = Detail::GlDeviceStateUVE::PipelineRecordUVE::UniformRecordUVE;
 
+    /// Resolves the currently bound pipeline handle against the live device map. The command
+    /// buffer intentionally stores no pointer into a pipeline record because the device may
+    /// destroy a resource while recording is still in progress.
+    [[nodiscard]] const Detail::GlDeviceStateUVE::PipelineRecordUVE* FindCurrentPipelineUVE() const;
+
     /// Looks `name` up in the currently bound pipeline's reflected uniform map (cached at link
     /// time - see GlRenderDeviceUVE::CreatePipelineUVE()'s ReflectPipelineUniformsUVE() call), so
     /// every SetUniform*UVE() call is a plain hash-map lookup, never a per-draw
@@ -64,10 +69,7 @@ private:
     PipelineHandleUVE m_currentPipeline = kInvalidPipelineHandleUVE;
     BufferHandleUVE m_boundVertexBuffer = kInvalidBufferHandleUVE;
     BufferHandleUVE m_boundIndexBuffer = kInvalidBufferHandleUVE;
-    const std::vector<VertexAttributeUVE>* m_currentVertexLayout = nullptr;
     std::uint32_t m_currentVertexStride = 0;
-    const std::unordered_map<std::string, UniformRecordUVE, Detail::TransparentStringHashUVE,
-                             Detail::TransparentStringEqualUVE>* m_currentUniforms = nullptr;
     std::unordered_map<std::uint32_t, TextureHandleUVE> m_boundTextures;
 };
 
