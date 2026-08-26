@@ -1,0 +1,1633 @@
+{
+  "_pose_analysis": {
+    "detected_pose": "A-pose",
+    "left_arm_angle_from_down_deg": 35.2,
+    "method": "bind-pose global position of upperarm -> lowerarm (elbow) vector, angle measured from straight-down (-Z) axis",
+    "right_arm_angle_from_down_deg": 35.2,
+    "thresholds": {
+      "a_pose": "25-55 deg",
+      "relaxed_arms_down": "0-20 deg",
+      "t_pose": "75-95 deg"
+    }
+  },
+  "ankle_bck_l": {
+    "bind_pose_global_position": [
+      14.068,
+      4.452,
+      8.959
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "foot_l"
+  },
+  "ankle_bck_r": {
+    "bind_pose_global_position": [
+      -14.411,
+      5.101,
+      8.892
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "foot_r"
+  },
+  "ankle_fwd_l": {
+    "bind_pose_global_position": [
+      15.038,
+      -3.564,
+      9.872
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "foot_l"
+  },
+  "ankle_fwd_r": {
+    "bind_pose_global_position": [
+      -14.462,
+      -4.18,
+      10.244
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "foot_r"
+  },
+  "attach": {
+    "bind_pose_global_position": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "category": "utility",
+    "generic_name": null,
+    "parent": "root"
+  },
+  "ball_l": {
+    "bind_pose_global_position": [
+      15.778,
+      -13.929,
+      0.751
+    ],
+    "category": "core",
+    "generic_name": "LeftToeBase",
+    "parent": "foot_l"
+  },
+  "ball_r": {
+    "bind_pose_global_position": [
+      -15.778,
+      -13.938,
+      0.751
+    ],
+    "category": "core",
+    "generic_name": "RightToeBase",
+    "parent": "foot_r"
+  },
+  "calf_correctiveRoot_l": {
+    "bind_pose_global_position": [
+      12.332,
+      -2.596,
+      50.266
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "calf_l"
+  },
+  "calf_correctiveRoot_r": {
+    "bind_pose_global_position": [
+      -12.332,
+      -2.605,
+      50.267
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "calf_r"
+  },
+  "calf_kneeBack_l": {
+    "bind_pose_global_position": [
+      11.075,
+      3.034,
+      50.534
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "calf_correctiveRoot_l"
+  },
+  "calf_kneeBack_r": {
+    "bind_pose_global_position": [
+      -11.051,
+      3.026,
+      50.537
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "calf_correctiveRoot_r"
+  },
+  "calf_knee_l": {
+    "bind_pose_global_position": [
+      13.131,
+      -7.753,
+      49.665
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "calf_correctiveRoot_l"
+  },
+  "calf_knee_r": {
+    "bind_pose_global_position": [
+      -13.127,
+      -7.759,
+      49.669
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "calf_correctiveRoot_r"
+  },
+  "calf_l": {
+    "bind_pose_global_position": [
+      12.332,
+      -2.596,
+      50.266
+    ],
+    "category": "core",
+    "generic_name": "LeftLeg",
+    "parent": "thigh_l"
+  },
+  "calf_r": {
+    "bind_pose_global_position": [
+      -12.332,
+      -2.605,
+      50.267
+    ],
+    "category": "core",
+    "generic_name": "RightLeg",
+    "parent": "thigh_r"
+  },
+  "calf_twistCor_02_l": {
+    "bind_pose_global_position": [
+      12.917,
+      -1.399,
+      36.257
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "calf_twist_02_l"
+  },
+  "calf_twistCor_02_r": {
+    "bind_pose_global_position": [
+      -12.955,
+      -1.403,
+      36.259
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "calf_twist_02_r"
+  },
+  "calf_twist_01_l": {
+    "bind_pose_global_position": [
+      13.577,
+      -0.191,
+      22.251
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "calf_l"
+  },
+  "calf_twist_01_r": {
+    "bind_pose_global_position": [
+      -13.577,
+      -0.201,
+      22.252
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "calf_r"
+  },
+  "calf_twist_02_l": {
+    "bind_pose_global_position": [
+      12.917,
+      -1.399,
+      36.257
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "calf_l"
+  },
+  "calf_twist_02_r": {
+    "bind_pose_global_position": [
+      -12.955,
+      -1.403,
+      36.259
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "calf_r"
+  },
+  "center_of_mass": {
+    "bind_pose_global_position": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "category": "utility",
+    "generic_name": null,
+    "parent": "root"
+  },
+  "clavicle_l": {
+    "bind_pose_global_position": [
+      1.428,
+      1.74,
+      146.301
+    ],
+    "category": "core",
+    "generic_name": "LeftShoulder",
+    "parent": "spine_05"
+  },
+  "clavicle_out_l": {
+    "bind_pose_global_position": [
+      14.069,
+      1.86,
+      150.705
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "clavicle_l"
+  },
+  "clavicle_out_r": {
+    "bind_pose_global_position": [
+      -14.3,
+      1.872,
+      150.705
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "clavicle_r"
+  },
+  "clavicle_pec_l": {
+    "bind_pose_global_position": [
+      9.31,
+      -9.716,
+      133.356
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "spine_05"
+  },
+  "clavicle_pec_r": {
+    "bind_pose_global_position": [
+      -9.636,
+      -9.943,
+      133.401
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "spine_05"
+  },
+  "clavicle_r": {
+    "bind_pose_global_position": [
+      -1.428,
+      1.74,
+      146.301
+    ],
+    "category": "core",
+    "generic_name": "RightShoulder",
+    "parent": "spine_05"
+  },
+  "clavicle_scap_l": {
+    "bind_pose_global_position": [
+      10.634,
+      9.761,
+      142.835
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "clavicle_l"
+  },
+  "clavicle_scap_r": {
+    "bind_pose_global_position": [
+      -10.866,
+      9.762,
+      142.835
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "clavicle_r"
+  },
+  "foot_l": {
+    "bind_pose_global_position": [
+      14.088,
+      0.994,
+      8.238
+    ],
+    "category": "core",
+    "generic_name": "LeftFoot",
+    "parent": "calf_l"
+  },
+  "foot_r": {
+    "bind_pose_global_position": [
+      -14.088,
+      0.985,
+      8.238
+    ],
+    "category": "core",
+    "generic_name": "RightFoot",
+    "parent": "calf_r"
+  },
+  "hand_l": {
+    "bind_pose_global_position": [
+      47.769,
+      -15.699,
+      104.467
+    ],
+    "category": "core",
+    "generic_name": "LeftHand",
+    "parent": "lowerarm_l"
+  },
+  "hand_r": {
+    "bind_pose_global_position": [
+      -47.768,
+      -15.699,
+      104.466
+    ],
+    "category": "core",
+    "generic_name": "RightHand",
+    "parent": "lowerarm_r"
+  },
+  "head": {
+    "bind_pose_global_position": [
+      -0.0,
+      -0.663,
+      162.575
+    ],
+    "category": "core",
+    "generic_name": "Head",
+    "parent": "neck_02"
+  },
+  "ik_foot_l": {
+    "bind_pose_global_position": [
+      14.088,
+      0.994,
+      8.238
+    ],
+    "category": "ik",
+    "generic_name": "IK_Foot_L",
+    "parent": "ik_foot_root"
+  },
+  "ik_foot_r": {
+    "bind_pose_global_position": [
+      -14.088,
+      0.985,
+      8.238
+    ],
+    "category": "ik",
+    "generic_name": "IK_Foot_R",
+    "parent": "ik_foot_root"
+  },
+  "ik_foot_root": {
+    "bind_pose_global_position": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "category": "ik",
+    "generic_name": "IK_Foot_Root",
+    "parent": "root"
+  },
+  "ik_hand_gun": {
+    "bind_pose_global_position": [
+      -47.768,
+      -15.699,
+      104.466
+    ],
+    "category": "ik",
+    "generic_name": "IK_Hand_Gun",
+    "parent": "ik_hand_root"
+  },
+  "ik_hand_l": {
+    "bind_pose_global_position": [
+      47.769,
+      -15.699,
+      104.467
+    ],
+    "category": "ik",
+    "generic_name": "IK_Hand_L",
+    "parent": "ik_hand_gun"
+  },
+  "ik_hand_r": {
+    "bind_pose_global_position": [
+      -47.768,
+      -15.699,
+      104.466
+    ],
+    "category": "ik",
+    "generic_name": "IK_Hand_R",
+    "parent": "ik_hand_gun"
+  },
+  "ik_hand_root": {
+    "bind_pose_global_position": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "category": "ik",
+    "generic_name": "IK_Hand_Root",
+    "parent": "root"
+  },
+  "index_01_l": {
+    "bind_pose_global_position": [
+      50.532,
+      -23.732,
+      99.678
+    ],
+    "category": "core",
+    "generic_name": "LeftHandIndex1",
+    "parent": "index_metacarpal_l"
+  },
+  "index_01_r": {
+    "bind_pose_global_position": [
+      -50.532,
+      -23.732,
+      99.678
+    ],
+    "category": "core",
+    "generic_name": "RightHandIndex1",
+    "parent": "index_metacarpal_r"
+  },
+  "index_02_l": {
+    "bind_pose_global_position": [
+      50.992,
+      -25.939,
+      96.278
+    ],
+    "category": "core",
+    "generic_name": "LeftHandIndex2",
+    "parent": "index_01_l"
+  },
+  "index_02_r": {
+    "bind_pose_global_position": [
+      -50.992,
+      -25.939,
+      96.278
+    ],
+    "category": "core",
+    "generic_name": "RightHandIndex2",
+    "parent": "index_01_r"
+  },
+  "index_03_l": {
+    "bind_pose_global_position": [
+      50.806,
+      -26.93,
+      93.887
+    ],
+    "category": "core",
+    "generic_name": "LeftHandIndex3",
+    "parent": "index_02_l"
+  },
+  "index_03_r": {
+    "bind_pose_global_position": [
+      -50.806,
+      -26.93,
+      93.887
+    ],
+    "category": "core",
+    "generic_name": "RightHandIndex3",
+    "parent": "index_02_r"
+  },
+  "index_metacarpal_l": {
+    "bind_pose_global_position": [
+      48.139,
+      -19.7,
+      103.231
+    ],
+    "category": "core",
+    "generic_name": "LeftHandIndex0",
+    "parent": "hand_l"
+  },
+  "index_metacarpal_r": {
+    "bind_pose_global_position": [
+      -48.139,
+      -19.7,
+      103.231
+    ],
+    "category": "core",
+    "generic_name": "RightHandIndex0",
+    "parent": "hand_r"
+  },
+  "interaction": {
+    "bind_pose_global_position": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "category": "utility",
+    "generic_name": null,
+    "parent": "root"
+  },
+  "lowerarm_bck_l": {
+    "bind_pose_global_position": [
+      36.159,
+      5.164,
+      117.144
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "lowerarm_correctiveRoot_l"
+  },
+  "lowerarm_bck_r": {
+    "bind_pose_global_position": [
+      -36.384,
+      5.167,
+      117.143
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "lowerarm_correctiveRoot_r"
+  },
+  "lowerarm_correctiveRoot_l": {
+    "bind_pose_global_position": [
+      35.007,
+      1.907,
+      120.892
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "lowerarm_l"
+  },
+  "lowerarm_correctiveRoot_r": {
+    "bind_pose_global_position": [
+      -35.007,
+      1.907,
+      120.892
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "lowerarm_r"
+  },
+  "lowerarm_fwd_l": {
+    "bind_pose_global_position": [
+      34.191,
+      -2.0,
+      121.612
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "lowerarm_correctiveRoot_l"
+  },
+  "lowerarm_fwd_r": {
+    "bind_pose_global_position": [
+      -34.445,
+      -2.01,
+      121.632
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "lowerarm_correctiveRoot_r"
+  },
+  "lowerarm_in_l": {
+    "bind_pose_global_position": [
+      32.449,
+      1.762,
+      117.67
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "lowerarm_correctiveRoot_l"
+  },
+  "lowerarm_in_r": {
+    "bind_pose_global_position": [
+      -32.683,
+      1.756,
+      117.634
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "lowerarm_correctiveRoot_r"
+  },
+  "lowerarm_l": {
+    "bind_pose_global_position": [
+      35.007,
+      1.907,
+      120.892
+    ],
+    "category": "core",
+    "generic_name": "LeftForeArm",
+    "parent": "upperarm_l"
+  },
+  "lowerarm_out_l": {
+    "bind_pose_global_position": [
+      37.66,
+      2.128,
+      121.886
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "lowerarm_correctiveRoot_l"
+  },
+  "lowerarm_out_r": {
+    "bind_pose_global_position": [
+      -37.897,
+      2.093,
+      121.914
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "lowerarm_correctiveRoot_r"
+  },
+  "lowerarm_r": {
+    "bind_pose_global_position": [
+      -35.007,
+      1.907,
+      120.892
+    ],
+    "category": "core",
+    "generic_name": "RightForeArm",
+    "parent": "upperarm_r"
+  },
+  "lowerarm_twist_01_l": {
+    "bind_pose_global_position": [
+      43.515,
+      -9.83,
+      109.942
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "lowerarm_l"
+  },
+  "lowerarm_twist_01_r": {
+    "bind_pose_global_position": [
+      -43.514,
+      -9.83,
+      109.942
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "lowerarm_r"
+  },
+  "lowerarm_twist_02_l": {
+    "bind_pose_global_position": [
+      39.261,
+      -3.962,
+      115.417
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "lowerarm_l"
+  },
+  "lowerarm_twist_02_r": {
+    "bind_pose_global_position": [
+      -39.261,
+      -3.962,
+      115.417
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "lowerarm_r"
+  },
+  "middle_01_l": {
+    "bind_pose_global_position": [
+      52.646,
+      -21.976,
+      99.222
+    ],
+    "category": "core",
+    "generic_name": "LeftHandMiddle1",
+    "parent": "middle_metacarpal_l"
+  },
+  "middle_01_r": {
+    "bind_pose_global_position": [
+      -52.646,
+      -21.976,
+      99.222
+    ],
+    "category": "core",
+    "generic_name": "RightHandMiddle1",
+    "parent": "middle_metacarpal_r"
+  },
+  "middle_02_l": {
+    "bind_pose_global_position": [
+      52.967,
+      -24.274,
+      94.603
+    ],
+    "category": "core",
+    "generic_name": "LeftHandMiddle2",
+    "parent": "middle_01_l"
+  },
+  "middle_02_r": {
+    "bind_pose_global_position": [
+      -52.967,
+      -24.274,
+      94.603
+    ],
+    "category": "core",
+    "generic_name": "RightHandMiddle2",
+    "parent": "middle_01_r"
+  },
+  "middle_03_l": {
+    "bind_pose_global_position": [
+      52.388,
+      -24.88,
+      92.275
+    ],
+    "category": "core",
+    "generic_name": "LeftHandMiddle3",
+    "parent": "middle_02_l"
+  },
+  "middle_03_r": {
+    "bind_pose_global_position": [
+      -52.388,
+      -24.88,
+      92.275
+    ],
+    "category": "core",
+    "generic_name": "RightHandMiddle3",
+    "parent": "middle_02_r"
+  },
+  "middle_metacarpal_l": {
+    "bind_pose_global_position": [
+      49.689,
+      -18.13,
+      102.917
+    ],
+    "category": "core",
+    "generic_name": "LeftHandMiddle0",
+    "parent": "hand_l"
+  },
+  "middle_metacarpal_r": {
+    "bind_pose_global_position": [
+      -49.689,
+      -18.13,
+      102.917
+    ],
+    "category": "core",
+    "generic_name": "RightHandMiddle0",
+    "parent": "hand_r"
+  },
+  "neck_01": {
+    "bind_pose_global_position": [
+      -0.0,
+      1.567,
+      152.804
+    ],
+    "category": "core",
+    "generic_name": "Neck",
+    "parent": "spine_05"
+  },
+  "neck_02": {
+    "bind_pose_global_position": [
+      -0.0,
+      0.348,
+      157.767
+    ],
+    "category": "core",
+    "generic_name": "Neck1",
+    "parent": "neck_01"
+  },
+  "pelvis": {
+    "bind_pose_global_position": [
+      -0.0,
+      -2.281,
+      95.897
+    ],
+    "category": "core",
+    "generic_name": "Hips",
+    "parent": "root"
+  },
+  "pinky_01_l": {
+    "bind_pose_global_position": [
+      53.54,
+      -17.628,
+      97.969
+    ],
+    "category": "core",
+    "generic_name": "LeftHandPinky1",
+    "parent": "pinky_metacarpal_l"
+  },
+  "pinky_01_r": {
+    "bind_pose_global_position": [
+      -53.54,
+      -17.628,
+      97.968
+    ],
+    "category": "core",
+    "generic_name": "RightHandPinky1",
+    "parent": "pinky_metacarpal_r"
+  },
+  "pinky_02_l": {
+    "bind_pose_global_position": [
+      54.546,
+      -18.761,
+      94.466
+    ],
+    "category": "core",
+    "generic_name": "LeftHandPinky2",
+    "parent": "pinky_01_l"
+  },
+  "pinky_02_r": {
+    "bind_pose_global_position": [
+      -54.546,
+      -18.761,
+      94.466
+    ],
+    "category": "core",
+    "generic_name": "RightHandPinky2",
+    "parent": "pinky_01_r"
+  },
+  "pinky_03_l": {
+    "bind_pose_global_position": [
+      54.357,
+      -19.198,
+      92.482
+    ],
+    "category": "core",
+    "generic_name": "LeftHandPinky3",
+    "parent": "pinky_02_l"
+  },
+  "pinky_03_r": {
+    "bind_pose_global_position": [
+      -54.357,
+      -19.198,
+      92.482
+    ],
+    "category": "core",
+    "generic_name": "RightHandPinky3",
+    "parent": "pinky_02_r"
+  },
+  "pinky_metacarpal_l": {
+    "bind_pose_global_position": [
+      50.945,
+      -16.074,
+      101.904
+    ],
+    "category": "core",
+    "generic_name": "LeftHandPinky0",
+    "parent": "hand_l"
+  },
+  "pinky_metacarpal_r": {
+    "bind_pose_global_position": [
+      -50.945,
+      -16.074,
+      101.904
+    ],
+    "category": "core",
+    "generic_name": "RightHandPinky0",
+    "parent": "hand_r"
+  },
+  "ring_01_l": {
+    "bind_pose_global_position": [
+      53.689,
+      -19.777,
+      98.716
+    ],
+    "category": "core",
+    "generic_name": "LeftHandRing1",
+    "parent": "ring_metacarpal_l"
+  },
+  "ring_01_r": {
+    "bind_pose_global_position": [
+      -53.689,
+      -19.777,
+      98.716
+    ],
+    "category": "core",
+    "generic_name": "RightHandRing1",
+    "parent": "ring_metacarpal_r"
+  },
+  "ring_02_l": {
+    "bind_pose_global_position": [
+      54.466,
+      -21.689,
+      94.187
+    ],
+    "category": "core",
+    "generic_name": "LeftHandRing2",
+    "parent": "ring_01_l"
+  },
+  "ring_02_r": {
+    "bind_pose_global_position": [
+      -54.466,
+      -21.689,
+      94.187
+    ],
+    "category": "core",
+    "generic_name": "RightHandRing2",
+    "parent": "ring_01_r"
+  },
+  "ring_03_l": {
+    "bind_pose_global_position": [
+      54.151,
+      -22.248,
+      92.015
+    ],
+    "category": "core",
+    "generic_name": "LeftHandRing3",
+    "parent": "ring_02_l"
+  },
+  "ring_03_r": {
+    "bind_pose_global_position": [
+      -54.151,
+      -22.248,
+      92.015
+    ],
+    "category": "core",
+    "generic_name": "RightHandRing3",
+    "parent": "ring_02_r"
+  },
+  "ring_metacarpal_l": {
+    "bind_pose_global_position": [
+      50.331,
+      -17.133,
+      102.405
+    ],
+    "category": "core",
+    "generic_name": "LeftHandRing0",
+    "parent": "hand_l"
+  },
+  "ring_metacarpal_r": {
+    "bind_pose_global_position": [
+      -50.331,
+      -17.133,
+      102.405
+    ],
+    "category": "core",
+    "generic_name": "RightHandRing0",
+    "parent": "hand_r"
+  },
+  "root": {
+    "bind_pose_global_position": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "category": "root",
+    "generic_name": "Root",
+    "parent": null
+  },
+  "spine_01": {
+    "bind_pose_global_position": [
+      0.0,
+      -2.048,
+      99.566
+    ],
+    "category": "core",
+    "generic_name": "Spine",
+    "parent": "pelvis"
+  },
+  "spine_02": {
+    "bind_pose_global_position": [
+      0.0,
+      -3.324,
+      106.241
+    ],
+    "category": "core",
+    "generic_name": "Chine1",
+    "parent": "spine_01"
+  },
+  "spine_03": {
+    "bind_pose_global_position": [
+      0.0,
+      -4.251,
+      113.419
+    ],
+    "category": "core",
+    "generic_name": "Spine2",
+    "parent": "spine_02"
+  },
+  "spine_04": {
+    "bind_pose_global_position": [
+      -0.0,
+      -3.718,
+      121.926
+    ],
+    "category": "core",
+    "generic_name": "Spine3",
+    "parent": "spine_03"
+  },
+  "spine_04_latissimus_l": {
+    "bind_pose_global_position": [
+      15.443,
+      2.276,
+      130.482
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "spine_05"
+  },
+  "spine_04_latissimus_r": {
+    "bind_pose_global_position": [
+      -15.455,
+      2.276,
+      130.476
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "spine_05"
+  },
+  "spine_05": {
+    "bind_pose_global_position": [
+      0.0,
+      -0.525,
+      141.102
+    ],
+    "category": "core",
+    "generic_name": "Chest",
+    "parent": "spine_04"
+  },
+  "thigh_bck_l": {
+    "bind_pose_global_position": [
+      6.752,
+      7.195,
+      98.398
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "thigh_correctiveRoot_l"
+  },
+  "thigh_bck_lwr_l": {
+    "bind_pose_global_position": [
+      7.511,
+      7.651,
+      88.089
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "thigh_correctiveRoot_l"
+  },
+  "thigh_bck_lwr_r": {
+    "bind_pose_global_position": [
+      -7.221,
+      7.758,
+      88.096
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "thigh_correctiveRoot_r"
+  },
+  "thigh_bck_r": {
+    "bind_pose_global_position": [
+      -6.725,
+      7.188,
+      98.399
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "thigh_correctiveRoot_r"
+  },
+  "thigh_correctiveRoot_l": {
+    "bind_pose_global_position": [
+      9.969,
+      -2.541,
+      93.543
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "thigh_l"
+  },
+  "thigh_correctiveRoot_r": {
+    "bind_pose_global_position": [
+      -9.969,
+      -2.55,
+      93.543
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "thigh_r"
+  },
+  "thigh_fwd_l": {
+    "bind_pose_global_position": [
+      9.989,
+      -9.345,
+      97.788
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "thigh_correctiveRoot_l"
+  },
+  "thigh_fwd_lwr_l": {
+    "bind_pose_global_position": [
+      10.469,
+      -9.945,
+      92.457
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "thigh_correctiveRoot_l"
+  },
+  "thigh_fwd_lwr_r": {
+    "bind_pose_global_position": [
+      -10.317,
+      -9.483,
+      92.542
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "thigh_correctiveRoot_r"
+  },
+  "thigh_fwd_r": {
+    "bind_pose_global_position": [
+      -9.981,
+      -9.357,
+      97.8
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "thigh_correctiveRoot_r"
+  },
+  "thigh_in_l": {
+    "bind_pose_global_position": [
+      2.232,
+      -4.624,
+      82.238
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "thigh_correctiveRoot_l"
+  },
+  "thigh_in_r": {
+    "bind_pose_global_position": [
+      -2.204,
+      -4.576,
+      82.177
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "thigh_correctiveRoot_r"
+  },
+  "thigh_l": {
+    "bind_pose_global_position": [
+      9.969,
+      -2.541,
+      93.543
+    ],
+    "category": "core",
+    "generic_name": "LeftUpLeg",
+    "parent": "pelvis"
+  },
+  "thigh_out_l": {
+    "bind_pose_global_position": [
+      14.627,
+      -1.204,
+      99.618
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "thigh_correctiveRoot_l"
+  },
+  "thigh_out_r": {
+    "bind_pose_global_position": [
+      -14.612,
+      -1.201,
+      99.62
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "thigh_correctiveRoot_r"
+  },
+  "thigh_r": {
+    "bind_pose_global_position": [
+      -9.969,
+      -2.55,
+      93.543
+    ],
+    "category": "core",
+    "generic_name": "RightUpLeg",
+    "parent": "pelvis"
+  },
+  "thigh_twistCor_01_l": {
+    "bind_pose_global_position": [
+      10.757,
+      -2.559,
+      79.117
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "thigh_twist_01_l"
+  },
+  "thigh_twistCor_01_r": {
+    "bind_pose_global_position": [
+      -10.757,
+      -2.568,
+      79.118
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "thigh_twist_01_r"
+  },
+  "thigh_twistCor_02_l": {
+    "bind_pose_global_position": [
+      11.545,
+      -2.577,
+      64.692
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "thigh_twist_02_l"
+  },
+  "thigh_twistCor_02_r": {
+    "bind_pose_global_position": [
+      -11.545,
+      -2.587,
+      64.692
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "thigh_twist_02_r"
+  },
+  "thigh_twist_01_l": {
+    "bind_pose_global_position": [
+      10.757,
+      -2.559,
+      79.117
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "thigh_l"
+  },
+  "thigh_twist_01_r": {
+    "bind_pose_global_position": [
+      -10.757,
+      -2.568,
+      79.118
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "thigh_r"
+  },
+  "thigh_twist_02_l": {
+    "bind_pose_global_position": [
+      11.545,
+      -2.577,
+      64.692
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "thigh_l"
+  },
+  "thigh_twist_02_r": {
+    "bind_pose_global_position": [
+      -11.545,
+      -2.587,
+      64.692
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "thigh_r"
+  },
+  "thumb_01_l": {
+    "bind_pose_global_position": [
+      46.227,
+      -18.496,
+      102.958
+    ],
+    "category": "core",
+    "generic_name": "LeftThumb1",
+    "parent": "hand_l"
+  },
+  "thumb_01_r": {
+    "bind_pose_global_position": [
+      -46.227,
+      -18.496,
+      102.958
+    ],
+    "category": "core",
+    "generic_name": "RightThumb1",
+    "parent": "hand_r"
+  },
+  "thumb_02_l": {
+    "bind_pose_global_position": [
+      45.19,
+      -22.225,
+      100.912
+    ],
+    "category": "core",
+    "generic_name": "LeftThumb2",
+    "parent": "thumb_01_l"
+  },
+  "thumb_02_r": {
+    "bind_pose_global_position": [
+      -45.19,
+      -22.225,
+      100.912
+    ],
+    "category": "core",
+    "generic_name": "RightThumb2",
+    "parent": "thumb_01_r"
+  },
+  "thumb_03_l": {
+    "bind_pose_global_position": [
+      45.049,
+      -24.226,
+      98.567
+    ],
+    "category": "core",
+    "generic_name": "LeftThumb3",
+    "parent": "thumb_02_l"
+  },
+  "thumb_03_r": {
+    "bind_pose_global_position": [
+      -45.049,
+      -24.226,
+      98.567
+    ],
+    "category": "core",
+    "generic_name": "RightThumb3",
+    "parent": "thumb_02_r"
+  },
+  "upperarm_bck_l": {
+    "bind_pose_global_position": [
+      19.921,
+      10.175,
+      142.212
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "upperarm_correctiveRoot_l"
+  },
+  "upperarm_bck_r": {
+    "bind_pose_global_position": [
+      -20.153,
+      10.176,
+      142.213
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "upperarm_correctiveRoot_r"
+  },
+  "upperarm_bicep_l": {
+    "bind_pose_global_position": [
+      28.747,
+      -2.424,
+      127.101
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "upperarm_twist_02_l"
+  },
+  "upperarm_bicep_r": {
+    "bind_pose_global_position": [
+      -28.978,
+      -2.425,
+      127.118
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "upperarm_twist_02_r"
+  },
+  "upperarm_correctiveRoot_l": {
+    "bind_pose_global_position": [
+      19.01,
+      2.557,
+      143.583
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "upperarm_l"
+  },
+  "upperarm_correctiveRoot_r": {
+    "bind_pose_global_position": [
+      -19.01,
+      2.557,
+      143.583
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "upperarm_r"
+  },
+  "upperarm_fwd_l": {
+    "bind_pose_global_position": [
+      20.294,
+      -6.072,
+      140.752
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "upperarm_correctiveRoot_l"
+  },
+  "upperarm_fwd_r": {
+    "bind_pose_global_position": [
+      -20.525,
+      -6.072,
+      140.752
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "upperarm_correctiveRoot_r"
+  },
+  "upperarm_in_l": {
+    "bind_pose_global_position": [
+      18.831,
+      1.595,
+      135.64
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "upperarm_correctiveRoot_l"
+  },
+  "upperarm_in_r": {
+    "bind_pose_global_position": [
+      -19.079,
+      1.602,
+      135.642
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "upperarm_correctiveRoot_r"
+  },
+  "upperarm_l": {
+    "bind_pose_global_position": [
+      19.01,
+      2.557,
+      143.583
+    ],
+    "category": "core",
+    "generic_name": "LeftArm",
+    "parent": "clavicle_l"
+  },
+  "upperarm_out_l": {
+    "bind_pose_global_position": [
+      23.876,
+      2.931,
+      146.733
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "upperarm_correctiveRoot_l"
+  },
+  "upperarm_out_r": {
+    "bind_pose_global_position": [
+      -24.107,
+      2.931,
+      146.733
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "upperarm_correctiveRoot_r"
+  },
+  "upperarm_r": {
+    "bind_pose_global_position": [
+      -19.01,
+      2.557,
+      143.583
+    ],
+    "category": "core",
+    "generic_name": "RightArm",
+    "parent": "clavicle_r"
+  },
+  "upperarm_tricep_l": {
+    "bind_pose_global_position": [
+      29.719,
+      6.969,
+      127.566
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "upperarm_twist_02_l"
+  },
+  "upperarm_tricep_r": {
+    "bind_pose_global_position": [
+      -29.949,
+      6.968,
+      127.583
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "upperarm_twist_02_r"
+  },
+  "upperarm_twistCor_01_l": {
+    "bind_pose_global_position": [
+      24.342,
+      2.34,
+      136.02
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "upperarm_twist_01_l"
+  },
+  "upperarm_twistCor_01_r": {
+    "bind_pose_global_position": [
+      -24.342,
+      2.341,
+      136.019
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "upperarm_twist_01_r"
+  },
+  "upperarm_twistCor_02_l": {
+    "bind_pose_global_position": [
+      29.675,
+      2.124,
+      128.456
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "upperarm_twist_02_l"
+  },
+  "upperarm_twistCor_02_r": {
+    "bind_pose_global_position": [
+      -29.675,
+      2.124,
+      128.456
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "upperarm_twist_02_r"
+  },
+  "upperarm_twist_01_l": {
+    "bind_pose_global_position": [
+      24.342,
+      2.34,
+      136.02
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "upperarm_l"
+  },
+  "upperarm_twist_01_r": {
+    "bind_pose_global_position": [
+      -24.342,
+      2.341,
+      136.019
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "upperarm_r"
+  },
+  "upperarm_twist_02_l": {
+    "bind_pose_global_position": [
+      29.675,
+      2.124,
+      128.456
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "upperarm_l"
+  },
+  "upperarm_twist_02_r": {
+    "bind_pose_global_position": [
+      -29.675,
+      2.124,
+      128.456
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "upperarm_r"
+  },
+  "weapon_l": {
+    "bind_pose_global_position": [
+      47.769,
+      -15.699,
+      102.634
+    ],
+    "category": "utility",
+    "generic_name": null,
+    "parent": "hand_l"
+  },
+  "weapon_r": {
+    "bind_pose_global_position": [
+      -47.768,
+      -15.699,
+      102.634
+    ],
+    "category": "utility",
+    "generic_name": null,
+    "parent": "hand_r"
+  },
+  "wrist_inner_l": {
+    "bind_pose_global_position": [
+      46.399,
+      -14.804,
+      103.71
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "hand_l"
+  },
+  "wrist_inner_r": {
+    "bind_pose_global_position": [
+      -46.399,
+      -14.804,
+      103.71
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "hand_r"
+  },
+  "wrist_outer_l": {
+    "bind_pose_global_position": [
+      49.147,
+      -16.381,
+      106.098
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "hand_l"
+  },
+  "wrist_outer_r": {
+    "bind_pose_global_position": [
+      -49.147,
+      -16.381,
+      106.098
+    ],
+    "category": "corrective_helper",
+    "generic_name": null,
+    "parent": "hand_r"
+  }
+}

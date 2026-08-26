@@ -239,6 +239,7 @@ target_link_libraries(uve_tests PRIVATE
     GTest::gtest_main
 )
 target_compile_features(uve_tests PRIVATE cxx_std_20)
+target_compile_definitions(uve_tests PRIVATE UVE_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 uve_set_warnings(uve_tests)
 
 # render/shader/shader_preprocessor_uve_tests.cpp and shader_diagnostics_parser_uve_tests.cpp and
