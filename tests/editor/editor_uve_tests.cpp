@@ -216,6 +216,52 @@ TEST(EditorUVETest, InitUVE_DoesNotCreateAutomaticPreviewLighting) {
     engine.Shutdown();
 }
 
+TEST(EditorUVETest, PluginToolGatesUVE_AreEditorOnlyAndDoNotMutateScene) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_plugin_gates.uvescene");
+        editor.InitUVE();
+        Core::EngineServicesUVE& services = engine.GetServicesUVE();
+        Scene::IEntityManagerUVE& entityManager = services.GetEntityManagerUVE();
+
+        EXPECT_FALSE(editor.IsControlRigPluginEnabledUVE());
+        EXPECT_FALSE(editor.IsMotionQueryPluginEnabledUVE());
+        EXPECT_TRUE(editor.GetDocumentRootsUVE().empty());
+        EXPECT_FALSE(editor.IsSceneDirtyUVE());
+
+        editor.SetControlRigPluginEnabledUVE(true);
+        editor.SetMotionQueryPluginEnabledUVE(true);
+        EXPECT_TRUE(editor.IsControlRigPluginEnabledUVE());
+        EXPECT_TRUE(editor.IsMotionQueryPluginEnabledUVE());
+        EXPECT_TRUE(editor.GetDocumentRootsUVE().empty());
+        EXPECT_FALSE(editor.IsSceneDirtyUVE());
+
+        std::size_t lightCount = 0U;
+        entityManager.ForEachUVE<Scene::LightComponentUVE>(
+            [&lightCount](Scene::EntityUVE, Scene::LightComponentUVE&) { ++lightCount; });
+        EXPECT_EQ(lightCount, 0U);
+        std::size_t meshCount = 0U;
+        entityManager.ForEachUVE<Scene::MeshComponentUVE>(
+            [&meshCount](Scene::EntityUVE, Scene::MeshComponentUVE&) { ++meshCount; });
+        entityManager.ForEachUVE<Scene::PrimitiveMeshComponentUVE>(
+            [&meshCount](Scene::EntityUVE, Scene::PrimitiveMeshComponentUVE&) { ++meshCount; });
+        EXPECT_EQ(meshCount, 0U);
+
+        editor.SetControlRigPluginEnabledUVE(false);
+        editor.SetMotionQueryPluginEnabledUVE(false);
+        EXPECT_FALSE(editor.IsControlRigPluginEnabledUVE());
+        EXPECT_FALSE(editor.IsMotionQueryPluginEnabledUVE());
+        EXPECT_FALSE(editor.IsSceneDirtyUVE());
+
+        editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
+}
+
 TEST(EditorUVETest, TwoDCanvasStateUVE_IsEditorOnlyAndValidated) {
     Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
     engine.Init();

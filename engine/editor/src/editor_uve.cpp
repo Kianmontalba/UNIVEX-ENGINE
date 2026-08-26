@@ -505,6 +505,7 @@ void EditorUVE::RenderOverlayUVE() {
         m_services->GetRenderer3DUVE().SetEditorViewportVisualStateUVE(Render::EditorViewportVisualStateUVE{});
     }
     DrawMenuBarUVE();
+    DrawPluginWindowUVE();
 
     if (m_activeWorkspace == EditorWorkspaceUVE::Scripting) {
         DrawScriptingWorkspaceUVE();
@@ -2667,6 +2668,22 @@ bool EditorUVE::IsSceneDirtyUVE() const noexcept {
     return m_sceneDirty;
 }
 
+bool EditorUVE::IsControlRigPluginEnabledUVE() const noexcept {
+    return m_controlRigPluginEnabled;
+}
+
+void EditorUVE::SetControlRigPluginEnabledUVE(const bool enabled) noexcept {
+    m_controlRigPluginEnabled = enabled;
+}
+
+bool EditorUVE::IsMotionQueryPluginEnabledUVE() const noexcept {
+    return m_motionQueryPluginEnabled;
+}
+
+void EditorUVE::SetMotionQueryPluginEnabledUVE(const bool enabled) noexcept {
+    m_motionQueryPluginEnabled = enabled;
+}
+
 EditorToolSessionPhaseUVE EditorUVE::GetToolSessionPhaseUVE() const noexcept {
     return m_toolSession.GetPhaseUVE();
 }
@@ -3768,18 +3785,43 @@ void EditorUVE::DrawViewportGridUVE(const EditorViewportRectUVE& viewportRect) {
     const ImVec2 viewportMaximum{viewportRect.origin.x + viewportRect.size.x,
                                  viewportRect.origin.y + viewportRect.size.y};
     if (GetDocumentRootsUVE().empty()) {
-        // Editor-only preview illumination: it changes no ECS state and is never submitted to the game renderer.
-        const float horizonY = viewportMinimum.y + viewportRect.size.y * 0.58F;
-        const ImVec2 horizonMinimum{viewportMinimum.x, horizonY};
-        const ImVec2 horizonMaximum{viewportMaximum.x, viewportMaximum.y};
-        drawList->AddRectFilledMultiColor(viewportMinimum, horizonMinimum, IM_COL32(25, 30, 36, 255),
-                                          IM_COL32(25, 30, 36, 255), IM_COL32(74, 76, 71, 255),
-                                          IM_COL32(74, 76, 71, 255));
-        drawList->AddRectFilledMultiColor(horizonMinimum, horizonMaximum, IM_COL32(67, 61, 52, 255),
-                                          IM_COL32(67, 61, 52, 255), IM_COL32(25, 27, 29, 255),
-                                          IM_COL32(25, 27, 29, 255));
-        drawList->AddRectFilled(ImVec2{viewportMinimum.x, horizonY - 2.0F},
-                                ImVec2{viewportMaximum.x, horizonY + 2.0F}, IM_COL32(180, 164, 126, 24));
+        // Editor-only environment presentation. It is deliberately not a sun/light entity, mesh,
+        // floor, render target, or serialized scene object; the real renderer remains responsible
+        // for authored lighting and shadows when a scene contains eligible geometry and lights.
+        const float pitchFraction = std::clamp(m_viewportPitchRadians / std::numbers::pi_v<float>, -0.5F, 0.5F);
+        const float horizonFraction = std::clamp(0.58F + pitchFraction * 0.18F, 0.42F, 0.76F);
+        const float skyMidY = viewportMinimum.y + viewportRect.size.y * (horizonFraction * 0.58F);
+        const float horizonY = viewportMinimum.y + viewportRect.size.y * horizonFraction;
+        const float lowerFadeY = horizonY + viewportRect.size.y * 0.24F;
+        const ImVec2 skyMidMinimum{viewportMinimum.x, skyMidY};
+        const ImVec2 skyMidMaximum{viewportMaximum.x, horizonY};
+        const ImVec2 horizonMaximum{viewportMaximum.x, lowerFadeY};
+        const ImVec2 lowerMaximum{viewportMaximum.x, viewportMaximum.y};
+        drawList->AddRectFilledMultiColor(viewportMinimum, skyMidMinimum, IM_COL32(22, 45, 77, 255),
+                                          IM_COL32(44, 79, 119, 255), IM_COL32(91, 139, 174, 255),
+                                          IM_COL32(67, 105, 145, 255));
+        drawList->AddRectFilledMultiColor(skyMidMinimum, skyMidMaximum, IM_COL32(91, 139, 174, 255),
+                                          IM_COL32(137, 171, 190, 255), IM_COL32(209, 175, 137, 255),
+                                          IM_COL32(174, 183, 179, 255));
+        drawList->AddRectFilledMultiColor(skyMidMaximum, horizonMaximum, IM_COL32(209, 175, 137, 255),
+                                          IM_COL32(184, 145, 105, 255), IM_COL32(111, 74, 55, 255),
+                                          IM_COL32(132, 91, 63, 255));
+        drawList->AddRectFilledMultiColor(horizonMaximum, lowerMaximum, IM_COL32(111, 74, 55, 255),
+                                          IM_COL32(78, 55, 45, 255), IM_COL32(27, 29, 31, 255),
+                                          IM_COL32(39, 35, 34, 255));
+        drawList->AddRectFilled(ImVec2{viewportMinimum.x, horizonY - 3.0F},
+                                ImVec2{viewportMaximum.x, horizonY + 3.0F}, IM_COL32(235, 201, 153, 42));
+
+        // A restrained editor-only sun cue makes the sky read as lit without ever pretending that
+        // the empty document has a cast-shadow source.
+        const float sunX = viewportMinimum.x + viewportRect.size.x *
+                           std::clamp(0.72F - std::sin(m_viewportYawRadians) * 0.10F, 0.18F, 0.86F);
+        const float sunY = viewportMinimum.y + viewportRect.size.y *
+                           std::clamp(0.19F + pitchFraction * 0.12F, 0.08F, 0.34F);
+        const ImVec2 sunCenter{sunX, sunY};
+        drawList->AddCircleFilled(sunCenter, 34.0F, IM_COL32(255, 210, 142, 18), 32);
+        drawList->AddCircleFilled(sunCenter, 24.0F, IM_COL32(255, 221, 161, 35), 32);
+        drawList->AddCircleFilled(sunCenter, 12.0F, IM_COL32(255, 235, 190, 210), 24);
     }
     for (int lineIndex = -kHalfLineCountUVE; lineIndex <= kHalfLineCountUVE; ++lineIndex) {
         const float offset = static_cast<float>(lineIndex) * kGridSpacingUVE;
@@ -4319,14 +4361,14 @@ void EditorUVE::DrawMenuBarUVE() {
             ImGui::EndDisabled();
             ImGui::EndMenu();
         }
-        if (ImGui::BeginMenu("Component")) {
-            ImGui::MenuItem("Add Component from Inspector", nullptr, false, false);
-            ImGui::EndMenu();
+        if (ImGui::MenuItem("Plugin")) {
+            m_pluginWindowVisible = true;
         }
         if (ImGui::BeginMenu("Window")) {
             ImGui::MenuItem("Scene", nullptr, &m_scenePanelVisible);
             ImGui::MenuItem("Inspector", nullptr, &m_inspectorPanelVisible);
             ImGui::MenuItem("Filesystem + Debug Dock", nullptr, &m_bottomDockVisible);
+            ImGui::MenuItem("Plugin Tools", nullptr, &m_pluginWindowVisible);
             ImGui::Separator();
             if (ImGui::MenuItem("Default Layout")) {
                 ApplyLayoutPresetUVE(EditorLayoutPresetUVE::Default);
@@ -4437,6 +4479,30 @@ void EditorUVE::DrawMenuBarUVE() {
         }
         ImGui::End();
     }
+}
+
+void EditorUVE::DrawPluginWindowUVE() {
+    if (!m_pluginWindowVisible) {
+        return;
+    }
+
+    ImGui::SetNextWindowSize(ImVec2{340.0F, 0.0F}, ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImVec2{ImGui::GetMainViewport()->WorkPos.x + 260.0F,
+                                   ImGui::GetMainViewport()->WorkPos.y + 104.0F},
+                            ImGuiCond_FirstUseEver);
+    if (ImGui::Begin("Plugin Tools", &m_pluginWindowVisible, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::TextUnformatted("Editor tools");
+        ImGui::Separator();
+        ImGui::Checkbox("Control Rig", &m_controlRigPluginEnabled);
+        ImGui::SameLine();
+        ImGui::TextDisabled(m_controlRigPluginEnabled ? "enabled" : "disabled");
+        ImGui::Checkbox("Motion Query", &m_motionQueryPluginEnabled);
+        ImGui::SameLine();
+        ImGui::TextDisabled(m_motionQueryPluginEnabled ? "enabled" : "disabled");
+        ImGui::Spacing();
+        ImGui::TextWrapped("These switches gate editor tools only. They do not create scene objects, lights, meshes, or runtime systems.");
+    }
+    ImGui::End();
 }
 
 void EditorUVE::DrawBottomDockUVE() {
@@ -6384,32 +6450,61 @@ void EditorUVE::DrawViewportPanelUVE() {
         ImDrawList* const drawList = ImGui::GetWindowDrawList();
         if (GetDocumentRootsUVE().empty()) {
             drawList->AddText(ImVec2{contentOrigin.x + 10.0F, contentOrigin.y + 38.0F},
-                              IM_COL32(176, 166, 139, 190), "Preview Light");
+                              IM_COL32(218, 203, 177, 185), "Editor sky · no scene light");
         }
         const ImVec2 orientationCenter{contentOrigin.x + contentSize.x - 62.0F, contentOrigin.y + 104.0F};
+        const Math::QuaternionUVE viewportOrientation =
+            MakeViewportOrientationUVE(m_viewportYawRadians, m_viewportPitchRadians);
+        const Math::Vector3UVE cameraRight =
+            Math::RotateVectorUVE(viewportOrientation, Math::Vector3UVE{1.0F, 0.0F, 0.0F});
+        const Math::Vector3UVE cameraUp =
+            Math::RotateVectorUVE(viewportOrientation, Math::Vector3UVE{0.0F, 1.0F, 0.0F});
         const auto drawOrientationArrow = [drawList](const ImVec2 start, const ImVec2 end, const ImU32 color) {
-            drawList->AddLine(start, end, color, 1.8F);
             const ImVec2 direction{end.x - start.x, end.y - start.y};
             const float length = std::sqrt(direction.x * direction.x + direction.y * direction.y);
             if (length <= 0.001F) {
                 return;
             }
+            drawList->AddLine(start, end, color, 1.7F);
             const ImVec2 unit{direction.x / length, direction.y / length};
             const ImVec2 perpendicular{-unit.y, unit.x};
             const ImVec2 base{end.x - unit.x * 6.0F, end.y - unit.y * 6.0F};
             drawList->AddTriangleFilled(end, ImVec2{base.x + perpendicular.x * 3.0F, base.y + perpendicular.y * 3.0F},
                                         ImVec2{base.x - perpendicular.x * 3.0F, base.y - perpendicular.y * 3.0F}, color);
         };
+        const auto drawOrientationAxis = [&](const Math::Vector3UVE worldAxis, const ImU32 positiveColor,
+                                             const ImU32 negativeColor, const char* const positiveLabel,
+                                             const char* const negativeLabel) {
+            const float screenX = Math::DotUVE(worldAxis, cameraRight) * 23.0F;
+            const float screenY = -Math::DotUVE(worldAxis, cameraUp) * 23.0F;
+            if (!IsFiniteUVE(screenX) || !IsFiniteUVE(screenY)) {
+                return;
+            }
+            const ImVec2 positiveEnd{orientationCenter.x + screenX, orientationCenter.y + screenY};
+            const ImVec2 negativeEnd{orientationCenter.x - screenX, orientationCenter.y - screenY};
+            const float screenLength = std::sqrt(screenX * screenX + screenY * screenY);
+            drawOrientationArrow(orientationCenter, negativeEnd, negativeColor);
+            drawOrientationArrow(orientationCenter, positiveEnd, positiveColor);
+            if (screenLength > 5.0F) {
+                drawList->AddText(ImVec2{positiveEnd.x + 4.0F, positiveEnd.y - 7.0F}, positiveColor, positiveLabel);
+                drawList->AddText(ImVec2{negativeEnd.x + 4.0F, negativeEnd.y - 7.0F}, negativeColor, negativeLabel);
+            } else {
+                // A world axis aimed directly into/out of the camera is still present. The ring is
+                // the compact depth cue; the labels keep both directions discoverable at front view.
+                drawList->AddCircle(orientationCenter, 8.0F, positiveColor, 16, 1.5F);
+                drawList->AddText(ImVec2{orientationCenter.x + 11.0F, orientationCenter.y - 18.0F},
+                                  positiveColor, positiveLabel);
+                drawList->AddText(ImVec2{orientationCenter.x + 11.0F, orientationCenter.y + 5.0F},
+                                  negativeColor, negativeLabel);
+            }
+        };
         constexpr ImU32 xColor = IM_COL32(216, 102, 102, 245);
         constexpr ImU32 yColor = IM_COL32(116, 196, 142, 245);
         constexpr ImU32 zColor = IM_COL32(113, 151, 215, 245);
-        drawOrientationArrow(orientationCenter, ImVec2{orientationCenter.x + 21.0F, orientationCenter.y}, xColor);
-        drawOrientationArrow(orientationCenter, ImVec2{orientationCenter.x, orientationCenter.y - 21.0F}, yColor);
-        drawList->AddCircle(orientationCenter, 10.0F, zColor, 16, 1.8F);
-        drawList->AddCircleFilled(orientationCenter, 3.0F, zColor);
-        drawList->AddText(ImVec2{orientationCenter.x + 25.0F, orientationCenter.y - 7.0F}, xColor, "XX");
-        drawList->AddText(ImVec2{orientationCenter.x - 7.0F, orientationCenter.y - 37.0F}, yColor, "YY");
-        drawList->AddText(ImVec2{orientationCenter.x + 13.0F, orientationCenter.y + 12.0F}, zColor, "ZZ");
+        drawOrientationAxis(Math::Vector3UVE{1.0F, 0.0F, 0.0F}, xColor, IM_COL32(216, 102, 102, 128), "X+", "X-");
+        drawOrientationAxis(Math::Vector3UVE{0.0F, 1.0F, 0.0F}, yColor, IM_COL32(116, 196, 142, 128), "Y+", "Y-");
+        drawOrientationAxis(Math::Vector3UVE{0.0F, 0.0F, 1.0F}, zColor, IM_COL32(113, 151, 215, 128), "Z+", "Z-");
+        drawList->AddCircleFilled(orientationCenter, 3.0F, IM_COL32(230, 232, 235, 235));
     } else {
         ImGui::TextUnformatted("Viewport is too small for picking.");
     }
