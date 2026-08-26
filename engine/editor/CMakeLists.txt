@@ -43,6 +43,7 @@ add_library(uve_editor STATIC
     src/developer_console_uve.cpp
     src/editor_tool_session_uve.cpp
     src/editor_theme_uve.cpp
+    src/editor_ui_assets_uve.cpp
     src/editor_uve.cpp
     src/inspector_drawer_registry_uve.cpp
     src/regression_harness_uve.cpp
