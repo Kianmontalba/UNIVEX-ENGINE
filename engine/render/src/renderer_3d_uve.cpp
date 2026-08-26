@@ -411,6 +411,7 @@ struct Renderer3DUVE::ImplUVE {
     RenderGraphUVE renderGraph;
     RenderQueueUVE frameQueue;
     std::array<RenderQueueUVE, kShadowCascadeCountUVE> shadowQueues;
+    std::vector<PrimitiveRenderItemUVE> primitiveItems;
 
     Events::EventSubscriptionUVE reloadSubscription;
     const Scene::ParticleRuntimeUVE* particleRuntimeForFrame = nullptr;
@@ -660,9 +661,9 @@ struct Renderer3DUVE::ImplUVE {
         commandBuffer.EndRenderPassUVE();
     }
 
-    [[nodiscard]] std::vector<PrimitiveRenderItemUVE> ExtractPrimitiveItemsUVE(
-        Scene::IEntityManagerUVE& entityManager, const Math::FrustumUVE& frustum) {
-        std::vector<PrimitiveRenderItemUVE> items;
+    void ExtractPrimitiveItemsUVE(Scene::IEntityManagerUVE& entityManager, const Math::FrustumUVE& frustum,
+                                   std::vector<PrimitiveRenderItemUVE>& outItems) {
+        outItems.clear();
         entityManager.ForEachUVE<Scene::WorldTransformComponentUVE, Scene::PrimitiveMeshComponentUVE>(
             [&](Scene::EntityUVE, const Scene::WorldTransformComponentUVE& worldTransform,
                 const Scene::PrimitiveMeshComponentUVE& primitive) {
@@ -695,13 +696,12 @@ struct Renderer3DUVE::ImplUVE {
                 if (!std::isfinite(sortDepth)) {
                     return;
                 }
-                items.push_back(PrimitiveRenderItemUVE{worldMatrix, primitive.kind, primitive.baseColor, sortDepth});
+                outItems.push_back(PrimitiveRenderItemUVE{worldMatrix, primitive.kind, primitive.baseColor, sortDepth});
             });
-        std::sort(items.begin(), items.end(),
+        std::sort(outItems.begin(), outItems.end(),
                   [](const PrimitiveRenderItemUVE& lhs, const PrimitiveRenderItemUVE& rhs) {
                       return lhs.sortDepth < rhs.sortDepth;
                   });
-        return items;
     }
 
     [[nodiscard]] std::size_t RecordItemsUVE(const std::vector<RenderItemUVE>& items,
@@ -1026,8 +1026,8 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
     m_impl->lastFrameDiagnostics.invalidAssetReferences = queue.invalidAssetReferences;
     m_impl->lastFrameDiagnostics.pendingAssetLoads = queue.pendingAssetLoads;
     m_impl->lastFrameDiagnostics.failedAssetLoads = queue.failedAssetLoads;
-    const std::vector<PrimitiveRenderItemUVE> primitiveItems = m_impl->ExtractPrimitiveItemsUVE(entityManager, frustum);
-    m_impl->lastFrameDiagnostics.primitiveItemsExtracted = primitiveItems.size();
+    m_impl->ExtractPrimitiveItemsUVE(entityManager, frustum, m_impl->primitiveItems);
+    m_impl->lastFrameDiagnostics.primitiveItemsExtracted = m_impl->primitiveItems.size();
 
     RenderGraphUVE& renderGraph = m_impl->renderGraph;
     renderGraph.ClearUVE();
@@ -1064,7 +1064,7 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
     }
     renderGraph.AddPassUVE(RenderGraphPassDescUVE{
         "MainColor", std::move(mainResources),
-        [this, &queue, &particleDrawRecording, &primitiveItems, &frameUniforms](ICommandBufferUVE& commandBuffer) {
+        [this, &queue, &particleDrawRecording, &frameUniforms](ICommandBufferUVE& commandBuffer) {
             RenderPassDescUVE passDesc;
             passDesc.colorAttachment = m_impl->colorTarget;
             passDesc.depthAttachment = m_impl->depthTarget;
@@ -1080,7 +1080,7 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
             m_impl->lastFrameDiagnostics.particleDrawCallsRecorded =
                 m_impl->lastFrameDiagnostics.particleDrawCommandsSubmitted > 0U ? 1U : 0U;
             m_impl->lastFrameDiagnostics.primitiveDrawCallsRecorded +=
-                m_impl->RecordPrimitiveItemsUVE(primitiveItems, frameUniforms, commandBuffer);
+                m_impl->RecordPrimitiveItemsUVE(m_impl->primitiveItems, frameUniforms, commandBuffer);
             if (m_impl->renderDevice.GetBackendNameUVE() == "OpenGL") {
                 m_impl->lastFrameDiagnostics.glDrawCallsIssued =
                     m_impl->lastFrameDiagnostics.meshDrawCallsRecorded +
