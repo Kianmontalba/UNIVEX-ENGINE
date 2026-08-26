@@ -776,6 +776,74 @@ TEST_F(GlRenderDeviceUVETest, CreateTextureUVE_PreservesActiveUnitBindingForLive
     renderDevice->DestroyTextureUVE(firstTexture);
 }
 
+TEST_F(GlRenderDeviceUVETest, CreateAndUpdateBufferUVE_PreserveBindingForLiveCommandBufferCache) {
+    const ShaderHandleUVE vertexShader =
+        renderDevice->CreateShaderUVE(ShaderDescUVE{ShaderStageUVE::Vertex, std::string(kValidVertexShaderSource)});
+    const ShaderHandleUVE fragmentShader = renderDevice->CreateShaderUVE(
+        ShaderDescUVE{ShaderStageUVE::Fragment, std::string(kValidFragmentShaderSource)});
+    ASSERT_NE(vertexShader, kInvalidShaderHandleUVE);
+    ASSERT_NE(fragmentShader, kInvalidShaderHandleUVE);
+
+    PipelineDescUVE pipelineDesc;
+    pipelineDesc.vertexShader = vertexShader;
+    pipelineDesc.fragmentShader = fragmentShader;
+    pipelineDesc.vertexLayout = {VertexAttributeUVE{"POSITION", VertexAttributeFormatUVE::Float3, 0U}};
+    pipelineDesc.vertexStride = 3U * static_cast<std::uint32_t>(sizeof(float));
+    pipelineDesc.depthTestEnabled = false;
+    pipelineDesc.depthWriteEnabled = false;
+    const PipelineHandleUVE pipeline = renderDevice->CreatePipelineUVE(pipelineDesc);
+    ASSERT_NE(pipeline, kInvalidPipelineHandleUVE);
+
+    constexpr std::array<float, 3> kFirstVertex{0.0F, 0.0F, 0.0F};
+    const BufferHandleUVE firstBuffer = renderDevice->CreateBufferUVE(
+        BufferDescUVE{sizeof(kFirstVertex), BufferUsageUVE::Vertex}, std::as_bytes(std::span(kFirstVertex)));
+    ASSERT_NE(firstBuffer, kInvalidBufferHandleUVE);
+
+    std::unique_ptr<ICommandBufferUVE> commandBuffer = renderDevice->CreateCommandBufferUVE();
+    ASSERT_NE(commandBuffer, nullptr);
+    commandBuffer->BeginRenderPassUVE(RenderPassDescUVE{});
+    commandBuffer->BindPipelineUVE(pipeline);
+    commandBuffer->BindVertexBufferUVE(firstBuffer, 0U);
+
+    GLint bindingBefore = 0;
+    glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &bindingBefore);
+    ASSERT_NE(bindingBefore, 0);
+
+    constexpr std::array<float, 3> kSecondVertex{1.0F, 0.0F, 0.0F};
+    const BufferHandleUVE secondBuffer = renderDevice->CreateBufferUVE(
+        BufferDescUVE{sizeof(kSecondVertex), BufferUsageUVE::Vertex}, std::as_bytes(std::span(kSecondVertex)));
+    ASSERT_NE(secondBuffer, kInvalidBufferHandleUVE);
+
+    GLint bindingAfterCreate = 0;
+    glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &bindingAfterCreate);
+    EXPECT_EQ(bindingAfterCreate, bindingBefore);
+
+    // The command buffer still caches firstBuffer. If creation leaked secondBuffer into GL, this
+    // call would incorrectly skip the bind and leave the wrong vertex buffer active.
+    commandBuffer->BindVertexBufferUVE(firstBuffer, 0U);
+    GLint bindingAfterCachedCreateRebind = 0;
+    glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &bindingAfterCachedCreateRebind);
+    EXPECT_EQ(bindingAfterCachedCreateRebind, bindingBefore);
+
+    EXPECT_TRUE(renderDevice->UpdateBufferUVE(secondBuffer, std::as_bytes(std::span(kSecondVertex)), 0U));
+    GLint bindingAfterUpdate = 0;
+    glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &bindingAfterUpdate);
+    EXPECT_EQ(bindingAfterUpdate, bindingBefore);
+
+    // UpdateBufferUVE has the same temporary-bind requirement as creation.
+    commandBuffer->BindVertexBufferUVE(firstBuffer, 0U);
+    GLint bindingAfterCachedUpdateRebind = 0;
+    glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &bindingAfterCachedUpdateRebind);
+    EXPECT_EQ(bindingAfterCachedUpdateRebind, bindingBefore);
+
+    commandBuffer->EndRenderPassUVE();
+    renderDevice->DestroyBufferUVE(secondBuffer);
+    renderDevice->DestroyBufferUVE(firstBuffer);
+    renderDevice->DestroyPipelineUVE(pipeline);
+    renderDevice->DestroyShaderUVE(vertexShader);
+    renderDevice->DestroyShaderUVE(fragmentShader);
+}
+
 TEST_F(GlRenderDeviceUVETest, CreateTextureUVE_Rgba16Float_UsesHalfFloatUploadType) {
     constexpr std::array<std::uint16_t, 16> kPixels{
         0x3C00U, 0x3800U, 0x0000U, 0x3C00U,

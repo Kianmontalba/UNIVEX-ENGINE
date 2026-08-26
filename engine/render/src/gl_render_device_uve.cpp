@@ -46,6 +46,19 @@ void* GlfwProcAddressBridgeUVE(const char* name) {
     return GL_ARRAY_BUFFER;
 }
 
+[[nodiscard]] GLenum BufferTargetToBindingQueryUVE(GLenum target) noexcept {
+    switch (target) {
+        case GL_ARRAY_BUFFER:
+            return GL_ARRAY_BUFFER_BINDING;
+        case GL_ELEMENT_ARRAY_BUFFER:
+            return GL_ELEMENT_ARRAY_BUFFER_BINDING;
+        case GL_UNIFORM_BUFFER:
+            return GL_UNIFORM_BUFFER_BINDING;
+        default:
+            return 0U;
+    }
+}
+
 struct GlTextureFormatUVE {
     GLint internalFormat;
     GLenum format;
@@ -263,11 +276,22 @@ BufferHandleUVE GlRenderDeviceUVE::CreateBufferUVE(const BufferDescUVE& desc, st
         return kInvalidBufferHandleUVE;
     }
     const GLenum target = BufferUsageToGlTargetUVE(desc.usage);
+    const GLenum bindingQuery = BufferTargetToBindingQueryUVE(target);
+    if (bindingQuery == 0U) {
+        UVE_ERROR("GlRenderDeviceUVE: CreateBufferUVE resolved an unsupported GL buffer target");
+        return kInvalidBufferHandleUVE;
+    }
+    // Resource creation temporarily binds the object. Preserve the binding because a live
+    // command buffer caches vertex/index handles and may otherwise skip its next required rebind.
+    GLint previousBufferBinding = 0;
+    glGetIntegerv(bindingQuery, &previousBufferBinding);
+
     GLuint glBuffer = 0;
     m_impl->state.gl.glGenBuffers(1, &glBuffer);
     m_impl->state.gl.glBindBuffer(target, glBuffer);
     m_impl->state.gl.glBufferData(target, static_cast<GLsizeiptr>(desc.sizeBytes),
                                     initialData.empty() ? nullptr : initialData.data(), GL_STATIC_DRAW);
+    m_impl->state.gl.glBindBuffer(target, static_cast<GLuint>(previousBufferBinding));
 
     const std::uint32_t handleValue = m_impl->state.nextBufferHandle++;
     m_impl->state.buffers.emplace(handleValue,
@@ -298,9 +322,17 @@ bool GlRenderDeviceUVE::UpdateBufferUVE(BufferHandleUVE buffer, std::span<const 
                    data.size(), offsetBytes, it->second.sizeBytes);
         return false;
     }
+    const GLenum bindingQuery = BufferTargetToBindingQueryUVE(it->second.target);
+    if (bindingQuery == 0U) {
+        UVE_ERROR("GlRenderDeviceUVE: UpdateBufferUVE resolved an unsupported GL buffer target");
+        return false;
+    }
+    GLint previousBufferBinding = 0;
+    glGetIntegerv(bindingQuery, &previousBufferBinding);
     m_impl->state.gl.glBindBuffer(it->second.target, it->second.glBuffer);
     m_impl->state.gl.glBufferSubData(it->second.target, static_cast<GLintptr>(offsetBytes),
                                        static_cast<GLsizeiptr>(data.size()), data.data());
+    m_impl->state.gl.glBindBuffer(it->second.target, static_cast<GLuint>(previousBufferBinding));
     return true;
 }
 
