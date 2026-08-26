@@ -49,7 +49,8 @@ void GlCommandBufferUVE::BeginRenderPassUVE(const RenderPassDescUVE& renderPassD
             static_cast<std::uint64_t>(renderPassDesc.depthAttachment.value);
         GLuint framebuffer = 0;
         const auto cachedFramebufferIt = m_state->framebufferCache.find(framebufferKey);
-        if (cachedFramebufferIt == m_state->framebufferCache.end()) {
+        const bool framebufferCreated = cachedFramebufferIt == m_state->framebufferCache.end();
+        if (framebufferCreated) {
             m_state->gl.glGenFramebuffers(1, &framebuffer);
             m_state->framebufferCache.emplace(framebufferKey, framebuffer);
         } else {
@@ -57,46 +58,55 @@ void GlCommandBufferUVE::BeginRenderPassUVE(const RenderPassDescUVE& renderPassD
         }
         m_state->gl.glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
 
-        std::uint32_t attachmentWidth = 0;
-        std::uint32_t attachmentHeight = 0;
-
-        if (renderPassDesc.colorAttachment != kInvalidTextureHandleUVE) {
-            const auto colorIt = m_state->textures.find(renderPassDesc.colorAttachment.value);
-            if (colorIt == m_state->textures.end()) {
-                UVE_ERROR("GlCommandBufferUVE: BeginRenderPassUVE referenced an unknown colorAttachment handle");
-                return;
-            }
-            m_state->gl.glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
-                                                colorIt->second.glTexture, 0);
-            attachmentWidth = colorIt->second.desc.width;
-            attachmentHeight = colorIt->second.desc.height;
-        } else {
-            // Depth-only pass (e.g. a shadow map's depth pre-pass, Increment 26): a core-profile
-            // FBO with no color attachment must explicitly declare it has none, or
-            // glCheckFramebufferStatus reports GL_FRAMEBUFFER_INCOMPLETE_DRAW/READ_BUFFER.
-            // Desktop core OpenGL requires an explicit no-color draw/read buffer for a depth-only
-            // FBO. GLES3 has no glDrawBuffer/glReadBuffer entry points; its framebuffer contract
-            // already treats a depth-only FBO as having no color target.
-#if !defined(__ANDROID__)
-            glDrawBuffer(GL_NONE);
-            glReadBuffer(GL_NONE);
-#endif
+        const auto colorIt = renderPassDesc.colorAttachment == kInvalidTextureHandleUVE
+                                 ? m_state->textures.end()
+                                 : m_state->textures.find(renderPassDesc.colorAttachment.value);
+        if (renderPassDesc.colorAttachment != kInvalidTextureHandleUVE && colorIt == m_state->textures.end()) {
+            UVE_ERROR("GlCommandBufferUVE: BeginRenderPassUVE referenced an unknown colorAttachment handle");
+            return;
+        }
+        const auto depthIt = renderPassDesc.depthAttachment == kInvalidTextureHandleUVE
+                                 ? m_state->textures.end()
+                                 : m_state->textures.find(renderPassDesc.depthAttachment.value);
+        if (renderPassDesc.depthAttachment != kInvalidTextureHandleUVE && depthIt == m_state->textures.end()) {
+            UVE_ERROR("GlCommandBufferUVE: BeginRenderPassUVE referenced an unknown depthAttachment handle");
+            return;
         }
 
-        if (renderPassDesc.depthAttachment != kInvalidTextureHandleUVE) {
-            const auto depthIt = m_state->textures.find(renderPassDesc.depthAttachment.value);
+        std::uint32_t attachmentWidth = 0;
+        std::uint32_t attachmentHeight = 0;
+        if (colorIt != m_state->textures.end()) {
+            attachmentWidth = colorIt->second.desc.width;
+            attachmentHeight = colorIt->second.desc.height;
+        }
+        if (depthIt != m_state->textures.end() && attachmentWidth == 0) {
+            attachmentWidth = depthIt->second.desc.width;
+            attachmentHeight = depthIt->second.desc.height;
+        }
+
+        if (framebufferCreated) {
+            if (colorIt != m_state->textures.end()) {
+                m_state->gl.glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+                                                    colorIt->second.glTexture, 0);
+            } else {
+                // Depth-only pass (e.g. a shadow map's depth pre-pass, Increment 26): a core-profile
+                // FBO with no color attachment must explicitly declare it has none, or
+                // glCheckFramebufferStatus reports GL_FRAMEBUFFER_INCOMPLETE_DRAW/READ_BUFFER.
+                // Desktop core OpenGL requires an explicit no-color draw/read buffer for a depth-only
+                // FBO. GLES3 has no glDrawBuffer/glReadBuffer entry points; its framebuffer contract
+                // already treats a depth-only FBO as having no color target.
+#if !defined(__ANDROID__)
+                glDrawBuffer(GL_NONE);
+                glReadBuffer(GL_NONE);
+#endif
+            }
             if (depthIt != m_state->textures.end()) {
                 m_state->gl.glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D,
                                                     depthIt->second.glTexture, 0);
-                if (attachmentWidth == 0) {
-                    attachmentWidth = depthIt->second.desc.width;
-                    attachmentHeight = depthIt->second.desc.height;
-                }
             }
-        }
-
-        if (m_state->gl.glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
-            UVE_ERROR("GlCommandBufferUVE: BeginRenderPassUVE built an incomplete framebuffer");
+            if (m_state->gl.glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+                UVE_ERROR("GlCommandBufferUVE: BeginRenderPassUVE built an incomplete framebuffer");
+            }
         }
 
         glViewport(0, 0, static_cast<GLsizei>(attachmentWidth), static_cast<GLsizei>(attachmentHeight));
