@@ -36,6 +36,7 @@
 #include "uve/scene/nodes/scene_node_registry_uve.h"
 #include "uve/scene/entity_uve.h"
 #include "uve/scene/i_scene_serializer_uve.h"
+#include "uve/scripting/script_graph_canvas_uve.h"
 
 namespace UVE::Editor::Tests {
 struct EditorUVEAccessUVE;
@@ -386,6 +387,8 @@ public:
     [[nodiscard]] const std::string& GetAssetFilterUVE() const noexcept;
     [[nodiscard]] const std::filesystem::path& GetActiveScenePathUVE() const noexcept;
     void SetActiveScenePathUVE(std::filesystem::path path);
+    [[nodiscard]] Scripting::ScriptGraphCanvasUVE& GetVisualScriptCanvasUVE() noexcept;
+    [[nodiscard]] const Scripting::ScriptNodeRegistryUVE& GetVisualScriptRegistryUVE() const noexcept;
 
     /// Releases editor-private UI resources and destroys the editor camera while the services are
     /// still alive. Idempotent after the first successful shutdown.
@@ -764,6 +767,7 @@ private:
     void DrawPrefabInspectorDrawerUVE(Scene::EntityUVE entity);
     void DrawImportQueueMonitorUVE();
     void DrawViewportPanelUVE();
+    void DrawScriptingWorkspaceUVE();
     /// Renders a copied watcher journal as read-only editor feedback. The helper never schedules
     /// imports, refreshes the project index, or mutates the project filesystem.
     void DrawProjectChangeJournalUVE(const Asset::ProjectChangeSnapshotUVE& snapshot);
@@ -807,6 +811,8 @@ private:
     EditorRightPanelTabUVE m_activeRightPanelTab = EditorRightPanelTabUVE::Inspector;
     InspectorDrawerRegistryUVE m_inspectorDrawerRegistry;
     DeveloperConsoleUVE m_developerConsole;
+    Scripting::ScriptNodeRegistryUVE m_visualScriptRegistry;
+    Scripting::ScriptGraphCanvasUVE m_visualScriptCanvas;
     EditorBottomDockUVE m_activeBottomDock = EditorBottomDockUVE::FileSystem;
     /// Empty is the ProjectFileIndexUVE content root. This value is session-only and must name a
     /// directory in the latest successful copied snapshot before it is used as a browser location.
@@ -832,6 +838,21 @@ private:
     bool m_bottomDockVisible = true;
     bool m_sceneDirty = false;
     bool m_uiInitialized = false;
+    std::uint32_t m_scriptCanvasDragNodeId = 0U;
+    Scripting::ScriptGraphCanvasPointUVE m_scriptCanvasDragStartPosition{};
+    Scripting::ScriptGraphCanvasPointUVE m_scriptCanvasDragStartPointer{};
+    Scripting::ScriptGraphCanvasPointUVE m_scriptCanvasDragPreviewPosition{};
+    std::uint64_t m_scriptCanvasDragRevision = 0U;
+    bool m_scriptCanvasDragging = false;
+    std::uint32_t m_scriptCanvasLinkSourceNodeId = 0U;
+    std::string m_scriptCanvasLinkSourcePin;
+    std::uint32_t m_scriptCanvasDefaultEditNodeId = 0U;
+    std::string m_scriptCanvasDefaultEditPin;
+    std::string m_scriptCanvasDefaultEditBuffer;
+    std::string m_scriptCanvasPaletteFilter;
+    bool m_scriptCanvasPanning = false;
+    Scripting::ScriptGraphCanvasPointUVE m_scriptCanvasPanStart{};
+    Scripting::ScriptGraphCanvasViewUVE m_scriptCanvasPanViewStart{};
 };
 
 } // namespace UVE::Editor
