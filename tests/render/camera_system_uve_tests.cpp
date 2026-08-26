@@ -12,6 +12,7 @@
 #include "uve/memory/memory_manager_uve.h"
 #include "uve/platform/platform_uve.h"
 #include "uve/scene/components/camera_component_uve.h"
+#include "uve/scene/components/world_transform_component_uve.h"
 #include "uve/scene/entity_manager_uve.h"
 #include "uve/scene/scene_graph_uve.h"
 
@@ -217,6 +218,14 @@ TEST_F(CameraSystemUVETest, GetWorldPositionUVE_EntityWithoutWorldTransform_Asse
     const Scene::EntityUVE entity = entityManager.CreateEntityUVE();
     EXPECT_DEATH({ static_cast<void>(cameraSystem.GetWorldPositionUVE(entityManager, entity)); }, "");
 }
+
+TEST_F(CameraSystemUVETest, ComputeViewMatrixUVE_InvalidWorldTransform_Asserts) {
+    const Scene::EntityUVE entity = MakeCameraEntityUVE(Math::Vector3UVE{}, Math::QuaternionUVE{}, Scene::CameraComponentUVE{});
+    entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(entity).worldPosition.x =
+        std::numeric_limits<float>::quiet_NaN();
+
+    EXPECT_DEATH({ static_cast<void>(cameraSystem.ComputeViewMatrixUVE(entityManager, entity)); }, "");
+}
 #endif
 
 #if !UVE_DEBUG
@@ -236,6 +245,19 @@ TEST_F(CameraSystemUVETest, InvalidCameraAndAspectInputsReturnFiniteFallbacksInR
     const CameraFrustumCornersUVE invalidCorners =
         cameraSystem.ComputeFrustumCornersUVE(entityManager, cameraEntity, 1.0F);
     for (const Math::Vector3UVE corner : invalidCorners) {
+        EXPECT_EQ(corner, Math::Vector3UVE{});
+    }
+}
+
+TEST_F(CameraSystemUVETest, InvalidWorldTransformReturnsFiniteFallbacksInRelease) {
+    const Scene::EntityUVE entity = MakeCameraEntityUVE(Math::Vector3UVE{}, Math::QuaternionUVE{}, Scene::CameraComponentUVE{});
+    entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(entity).worldPosition.x =
+        std::numeric_limits<float>::quiet_NaN();
+
+    EXPECT_EQ(cameraSystem.ComputeViewMatrixUVE(entityManager, entity), Math::Matrix4x4UVE::IdentityUVE());
+    EXPECT_EQ(cameraSystem.GetWorldPositionUVE(entityManager, entity), Math::Vector3UVE{});
+    const CameraFrustumCornersUVE corners = cameraSystem.ComputeFrustumCornersUVE(entityManager, entity, 1.0F);
+    for (const Math::Vector3UVE corner : corners) {
         EXPECT_EQ(corner, Math::Vector3UVE{});
     }
 }

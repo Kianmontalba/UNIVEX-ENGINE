@@ -1096,6 +1096,17 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
         UVE_ERROR("Renderer3DUVE: RenderFrameUVE received invalid camera parameters");
         return;
     }
+    const Scene::WorldTransformComponentUVE& cameraWorldTransform =
+        entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(cameraEntity);
+    Math::QuaternionUVE normalizedCameraRotation;
+    const bool cameraTransformValid =
+        IsFiniteVectorUVE(cameraWorldTransform.worldPosition) &&
+        Math::TryNormalizeUVE(cameraWorldTransform.worldRotation, normalizedCameraRotation);
+    UVE_ASSERT(cameraTransformValid);
+    if (!cameraTransformValid) {
+        UVE_ERROR("Renderer3DUVE: RenderFrameUVE received an invalid camera world transform");
+        return;
+    }
     if (m_impl->targetWidth == 0U || m_impl->targetHeight == 0U) {
         UVE_ERROR("Renderer3DUVE: RenderFrameUVE cannot render to a zero-sized target");
         return;

@@ -4,6 +4,7 @@
 #include "uve/render/camera_system_uve.h"
 
 #include <cmath>
+#include <limits>
 #include <numbers>
 
 #include "uve/debug/assert_uve.h"
@@ -12,12 +13,32 @@
 #include "uve/scene/components/world_transform_component_uve.h"
 
 namespace UVE::Render {
+namespace {
+
+[[nodiscard]] bool IsFiniteVectorUVE(const Math::Vector3UVE& value) noexcept {
+    return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+}
+
+[[nodiscard]] bool TryNormalizeWorldTransformRotationUVE(const Scene::WorldTransformComponentUVE& worldTransform,
+                                                          Math::QuaternionUVE& outRotation) noexcept {
+    return IsFiniteVectorUVE(worldTransform.worldPosition) &&
+           Math::TryNormalizeUVE(worldTransform.worldRotation, outRotation);
+}
+
+} // namespace
 
 Math::Matrix4x4UVE CameraSystemUVE::ComputeViewMatrixUVE(const Scene::IEntityManagerUVE& entityManager,
                                                            Scene::EntityUVE cameraEntity) const {
     const Scene::WorldTransformComponentUVE& worldTransform =
         entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(cameraEntity);
-    return Math::Matrix4x4UVE::ViewFromPositionAndRotationUVE(worldTransform.worldPosition, worldTransform.worldRotation);
+    Math::QuaternionUVE normalizedRotation;
+    const bool validTransform = TryNormalizeWorldTransformRotationUVE(worldTransform, normalizedRotation);
+    UVE_ASSERT(validTransform);
+    if (!validTransform) {
+        UVE_ERROR("CameraSystemUVE: ComputeViewMatrixUVE received an invalid world transform");
+        return Math::Matrix4x4UVE::IdentityUVE();
+    }
+    return Math::Matrix4x4UVE::ViewFromPositionAndRotationUVE(worldTransform.worldPosition, normalizedRotation);
 }
 
 Math::Matrix4x4UVE CameraSystemUVE::ComputeProjectionMatrixUVE(const Scene::IEntityManagerUVE& entityManager,
@@ -56,6 +77,13 @@ CameraFrustumCornersUVE CameraSystemUVE::ComputeFrustumCornersUVE(const Scene::I
                                                                     float aspectRatio) const {
     const Scene::WorldTransformComponentUVE& worldTransform =
         entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(cameraEntity);
+    Math::QuaternionUVE normalizedRotation;
+    const bool transformValid = TryNormalizeWorldTransformRotationUVE(worldTransform, normalizedRotation);
+    UVE_ASSERT(transformValid);
+    if (!transformValid) {
+        UVE_ERROR("CameraSystemUVE: ComputeFrustumCornersUVE received an invalid world transform");
+        return CameraFrustumCornersUVE{};
+    }
     const Scene::CameraComponentUVE& camera = entityManager.GetComponentUVE<Scene::CameraComponentUVE>(cameraEntity);
     const bool cameraValid = Scene::IsCameraComponentValidUVE(camera);
     UVE_ASSERT(cameraValid);
@@ -75,9 +103,9 @@ CameraFrustumCornersUVE CameraSystemUVE::ComputeFrustumCornersUVE(const Scene::I
     const float farHalfHeight = camera.farPlane * tangent;
     const float farHalfWidth = farHalfHeight * aspectRatio;
 
-    const Math::Vector3UVE forward = Math::RotateVectorUVE(worldTransform.worldRotation, {0.0F, 0.0F, -1.0F});
-    const Math::Vector3UVE right = Math::RotateVectorUVE(worldTransform.worldRotation, {1.0F, 0.0F, 0.0F});
-    const Math::Vector3UVE up = Math::RotateVectorUVE(worldTransform.worldRotation, {0.0F, 1.0F, 0.0F});
+    const Math::Vector3UVE forward = Math::RotateVectorUVE(normalizedRotation, {0.0F, 0.0F, -1.0F});
+    const Math::Vector3UVE right = Math::RotateVectorUVE(normalizedRotation, {1.0F, 0.0F, 0.0F});
+    const Math::Vector3UVE up = Math::RotateVectorUVE(normalizedRotation, {0.0F, 1.0F, 0.0F});
     const Math::Vector3UVE nearCenter = worldTransform.worldPosition + forward * camera.nearPlane;
     const Math::Vector3UVE farCenter = worldTransform.worldPosition + forward * camera.farPlane;
 
@@ -139,15 +167,28 @@ CameraFrustumCornersUVE CameraSystemUVE::ComputeFrustumCornersUVE(const Scene::I
     const double farUpX = upX * farHalfHeightWide;
     const double farUpY = upY * farHalfHeightWide;
     const double farUpZ = upZ * farHalfHeightWide;
-    const auto MakeCornerUVE = [](const double centerX, const double centerY, const double centerZ,
-                                  const double rightComponentX, const double rightComponentY,
-                                  const double rightComponentZ, const double upComponentX,
-                                  const double upComponentY, const double upComponentZ,
-                                  const double rightSign, const double upSign) {
+    const auto NarrowFiniteUVE = [](const double value) noexcept {
+        if (std::isnan(value)) {
+            return 0.0F;
+        }
+        const double maximum = static_cast<double>(std::numeric_limits<float>::max());
+        if (value >= maximum) {
+            return std::numeric_limits<float>::max();
+        }
+        if (value <= -maximum) {
+            return -std::numeric_limits<float>::max();
+        }
+        return static_cast<float>(value);
+    };
+    const auto MakeCornerUVE = [NarrowFiniteUVE](const double centerX, const double centerY, const double centerZ,
+                                                  const double rightComponentX, const double rightComponentY,
+                                                  const double rightComponentZ, const double upComponentX,
+                                                  const double upComponentY, const double upComponentZ,
+                                                  const double rightSign, const double upSign) {
         return Math::Vector3UVE{
-            static_cast<float>(centerX + rightSign * rightComponentX + upSign * upComponentX),
-            static_cast<float>(centerY + rightSign * rightComponentY + upSign * upComponentY),
-            static_cast<float>(centerZ + rightSign * rightComponentZ + upSign * upComponentZ),
+            NarrowFiniteUVE(centerX + rightSign * rightComponentX + upSign * upComponentX),
+            NarrowFiniteUVE(centerY + rightSign * rightComponentY + upSign * upComponentY),
+            NarrowFiniteUVE(centerZ + rightSign * rightComponentZ + upSign * upComponentZ),
         };
     };
 
@@ -173,7 +214,16 @@ CameraFrustumCornersUVE CameraSystemUVE::ComputeFrustumCornersUVE(const Scene::I
 
 Math::Vector3UVE CameraSystemUVE::GetWorldPositionUVE(const Scene::IEntityManagerUVE& entityManager,
                                                          Scene::EntityUVE cameraEntity) const {
-    return entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(cameraEntity).worldPosition;
+    const Scene::WorldTransformComponentUVE& worldTransform =
+        entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(cameraEntity);
+    Math::QuaternionUVE normalizedRotation;
+    const bool validTransform = TryNormalizeWorldTransformRotationUVE(worldTransform, normalizedRotation);
+    UVE_ASSERT(validTransform);
+    if (!validTransform) {
+        UVE_ERROR("CameraSystemUVE: GetWorldPositionUVE received an invalid world transform");
+        return Math::Vector3UVE{};
+    }
+    return worldTransform.worldPosition;
 }
 
 } // namespace UVE::Render

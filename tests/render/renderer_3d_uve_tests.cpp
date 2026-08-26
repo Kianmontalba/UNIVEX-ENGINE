@@ -39,6 +39,7 @@
 #include "uve/scene/components/mesh_component_uve.h"
 #include "uve/scene/components/primitive_mesh_component_uve.h"
 #include "uve/scene/components/transform_component_uve.h"
+#include "uve/scene/components/world_transform_component_uve.h"
 #include "uve/scene/entity_manager_uve.h"
 #include "uve/scene/scene_graph_uve.h"
 #include "uve/threading/thread_pool_uve.h"
@@ -1361,6 +1362,17 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_InvalidCameraParametersAreSafeNoOpInRel
     Scene::CameraComponentUVE& camera =
         entityManager.GetComponentUVE<Scene::CameraComponentUVE>(cameraEntity);
     camera.nearPlane = 0.0F;
+    const std::size_t submittedCommandCountBefore = renderDevice.GetLastSubmittedCommandsUVE().size();
+
+    renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+
+    EXPECT_EQ(renderDevice.GetLastSubmittedCommandsUVE().size(), submittedCommandCountBefore);
+}
+
+TEST_F(Renderer3DUVETest, RenderFrameUVE_InvalidCameraWorldTransformIsSafeNoOpInRelease) {
+    const Scene::EntityUVE cameraEntity = MakeCameraEntityUVE();
+    entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(cameraEntity).worldPosition.x =
+        std::numeric_limits<float>::quiet_NaN();
     const std::size_t submittedCommandCountBefore = renderDevice.GetLastSubmittedCommandsUVE().size();
 
     renderer3D->RenderFrameUVE(entityManager, cameraEntity);
