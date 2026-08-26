@@ -281,6 +281,24 @@ constexpr std::array<std::uint8_t, 4> kFlatNormalPixelUVE{0x80, 0x80, 0xFF, 0xFF
     return nullptr;
 }
 
+[[nodiscard]] bool AreShadowMapTargetsValidUVE(
+    const std::array<TextureHandleUVE, kShadowCascadeCountUVE>& shadowMapTargets) noexcept {
+    return std::all_of(shadowMapTargets.cbegin(), shadowMapTargets.cend(),
+                       [](const TextureHandleUVE target) { return target != kInvalidTextureHandleUVE; });
+}
+
+void DestroyTextureIfValidUVE(IRenderDeviceUVE& renderDevice, const TextureHandleUVE texture) {
+    if (texture != kInvalidTextureHandleUVE) {
+        renderDevice.DestroyTextureUVE(texture);
+    }
+}
+
+void DestroyBufferIfValidUVE(IRenderDeviceUVE& renderDevice, const BufferHandleUVE buffer) {
+    if (buffer != kInvalidBufferHandleUVE) {
+        renderDevice.DestroyBufferUVE(buffer);
+    }
+}
+
 /// MeshVertexUVE's binary layout (position, normal, UV, tangent, handedness — see
 /// mesh_asset_uve.h), described once here for CreatePipelineUVE(). MeshVertexUVE is a
 /// standard-layout aggregate of Math::Vector3UVE (itself standard-layout) and floats, so offsetof()
@@ -443,8 +461,8 @@ struct Renderer3DUVE::ImplUVE {
     void OnAssetReloadedUVE(const Asset::AssetReloadedEventUVE& event) {
         const auto meshIt = meshCache.find(event.guid);
         if (meshIt != meshCache.end()) {
-            renderDevice.DestroyBufferUVE(meshIt->second.vertexBuffer);
-            renderDevice.DestroyBufferUVE(meshIt->second.indexBuffer);
+            DestroyBufferIfValidUVE(renderDevice, meshIt->second.vertexBuffer);
+            DestroyBufferIfValidUVE(renderDevice, meshIt->second.indexBuffer);
             meshCache.erase(meshIt);
         }
         // A material asset reload, or a reload of either of its separate shader assets, drops the
@@ -463,7 +481,7 @@ struct Renderer3DUVE::ImplUVE {
         failedTextureGuids.erase(event.guid);
         const auto textureIt = textureCache.find(event.guid);
         if (textureIt != textureCache.end()) {
-            renderDevice.DestroyTextureUVE(textureIt->second);
+            DestroyTextureIfValidUVE(renderDevice, textureIt->second);
             textureCache.erase(textureIt);
 
             // MaterialGpuResourcesUVE doesn't track which texture GUIDs it resolved from, so
@@ -940,27 +958,27 @@ Renderer3DUVE::Renderer3DUVE(IRenderDeviceUVE& renderDevice, IRenderSystemUVE& r
 Renderer3DUVE::~Renderer3DUVE() {
     m_impl->eventSystem.Unsubscribe(m_impl->reloadSubscription);
     for (const auto& [guid, meshResources] : m_impl->meshCache) {
-        m_impl->renderDevice.DestroyBufferUVE(meshResources.vertexBuffer);
-        m_impl->renderDevice.DestroyBufferUVE(meshResources.indexBuffer);
+        DestroyBufferIfValidUVE(m_impl->renderDevice, meshResources.vertexBuffer);
+        DestroyBufferIfValidUVE(m_impl->renderDevice, meshResources.indexBuffer);
     }
     for (const auto& [kind, meshResources] : m_impl->primitiveMeshCache) {
-        m_impl->renderDevice.DestroyBufferUVE(meshResources.vertexBuffer);
-        m_impl->renderDevice.DestroyBufferUVE(meshResources.indexBuffer);
+        DestroyBufferIfValidUVE(m_impl->renderDevice, meshResources.vertexBuffer);
+        DestroyBufferIfValidUVE(m_impl->renderDevice, meshResources.indexBuffer);
     }
     // MaterialGpuResourcesUVE holds shared ShaderProgramUVE references only. Releasing the cache
     // lets ShaderManagerUVE-owned program deleters retire their pipelines exactly once.
     m_impl->materialCache.clear();
     for (const auto& [guid, textureHandle] : m_impl->textureCache) {
-        m_impl->renderDevice.DestroyTextureUVE(textureHandle);
+        DestroyTextureIfValidUVE(m_impl->renderDevice, textureHandle);
     }
-    m_impl->renderDevice.DestroyTextureUVE(m_impl->colorTarget);
-    m_impl->renderDevice.DestroyTextureUVE(m_impl->depthTarget);
-    m_impl->renderDevice.DestroyTextureUVE(m_impl->fallbackWhiteTexture);
-    m_impl->renderDevice.DestroyTextureUVE(m_impl->fallbackNormalTexture);
+    DestroyTextureIfValidUVE(m_impl->renderDevice, m_impl->colorTarget);
+    DestroyTextureIfValidUVE(m_impl->renderDevice, m_impl->depthTarget);
+    DestroyTextureIfValidUVE(m_impl->renderDevice, m_impl->fallbackWhiteTexture);
+    DestroyTextureIfValidUVE(m_impl->renderDevice, m_impl->fallbackNormalTexture);
     for (const TextureHandleUVE shadowMapTarget : m_impl->shadowMapTargets) {
-        m_impl->renderDevice.DestroyTextureUVE(shadowMapTarget);
+        DestroyTextureIfValidUVE(m_impl->renderDevice, shadowMapTarget);
     }
-    m_impl->renderDevice.DestroyBufferUVE(m_impl->particleVertexBuffer);
+    DestroyBufferIfValidUVE(m_impl->renderDevice, m_impl->particleVertexBuffer);
 }
 
 void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scene::EntityUVE cameraEntity) {
@@ -978,7 +996,8 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
     const LightListUVE lights = m_impl->lightSystem.ExtractActiveLightsUVE(entityManager);
 
     const LightDataUVE* const shadowCaster = FindShadowCasterUVE(lights);
-    const bool shadowsReady = shadowCaster != nullptr && m_impl->shadowProgram->IsValidUVE();
+    const bool shadowsReady = shadowCaster != nullptr && m_impl->shadowProgram->IsValidUVE() &&
+                              AreShadowMapTargetsValidUVE(m_impl->shadowMapTargets);
     ShadowCascadeMatricesUVE lightSpaceMatrices{};
     ShadowCascadeSplitsUVE cascadeSplits{};
     std::int32_t cascadeCount = 0;

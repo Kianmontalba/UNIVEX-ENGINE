@@ -1090,6 +1090,34 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_NoDirectionalLight_SkipsShadowPassEvenW
     ASSERT_NE(mainPassEnd, commands.cend());
 }
 
+TEST_F(Renderer3DUVETest, RenderFrameUVE_InvalidShadowTargetsSkipShadowPassSafely) {
+    const Scene::EntityUVE cameraEntity = MakeCameraEntityUVE();
+    MakeLightEntityUVE(Scene::LightComponentUVE{Math::Vector3UVE{1.0F, 1.0F, 1.0F}, 2.0F});
+
+    Renderer3DUVE invalidShadowRenderer(
+        renderDevice, renderSystem, meshRenderer, cameraSystem, lightSystem, shaderManager, assetManager,
+        assetDatabase, eventSystem, kTargetWidthUVE, kTargetHeightUVE, kTestAmbientColorUVE, 0U,
+        kTestShadowMapHalfExtentUVE, kTestShadowMapNearPlaneUVE, kTestShadowMapFarPlaneUVE,
+        kTestShadowFrustumPaddingUVE, kTestShadowCascadeSplitLambdaUVE, kTestShadowCascadeBlendRatioUVE,
+        kTestShadowPcfKernelRadiusUVE);
+    for (int iteration = 0; iteration < kMaxPollIterationsUVE; ++iteration) {
+        shaderManager.UpdateUVE(0.0);
+        if (shaderManager.GetPendingJobCountUVE() == 0U) {
+            break;
+        }
+        std::this_thread::yield();
+    }
+    ASSERT_EQ(shaderManager.GetPendingJobCountUVE(), 0U);
+
+    invalidShadowRenderer.RenderFrameUVE(entityManager, cameraEntity);
+
+    const std::vector<RecordedCommandUVE>& commands = renderDevice.GetLastSubmittedCommandsUVE();
+    ASSERT_FALSE(commands.empty());
+    ASSERT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commands.front()));
+    EXPECT_NE(std::get<BeginRenderPassCommandUVE>(commands.front()).desc.colorAttachment,
+              kInvalidTextureHandleUVE);
+}
+
 TEST_F(Renderer3DUVETest, RenderFrameUVE_FittedLightFrustum_CastsOffCameraOccluderWithoutMainPassDraw) {
     const Scene::EntityUVE cameraEntity = MakeCameraEntityUVE();
     const Asset::AssetGuidUVE visibleMeshGuid = assetDatabase.RegisterUVE("renderer3d_fitted_visible.uvemodel");
