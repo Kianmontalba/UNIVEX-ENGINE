@@ -686,6 +686,23 @@ struct Renderer3DUVE::ImplUVE {
         }
 
         const Asset::TextureAssetUVE* const textureAsset = textureHandle.TryGetUVE();
+        const bool textureAssetPresent = textureAsset != nullptr;
+        UVE_ASSERT(textureAssetPresent);
+        if (!textureAssetPresent) {
+            failedTextureGuids.insert(textureGuid);
+            ++lastFrameDiagnostics.textureFallbacks;
+            UVE_ERROR("Renderer3DUVE: ready texture handle has no payload - falling back to the default texture");
+            return fallbackHandle;
+        }
+        const bool textureFormatValid = textureAsset->format == Asset::TextureFormatUVE::RGBA8Unorm ||
+                                        textureAsset->format == Asset::TextureFormatUVE::RGBA16Float;
+        UVE_ASSERT(textureFormatValid);
+        if (!textureFormatValid) {
+            failedTextureGuids.insert(textureGuid);
+            ++lastFrameDiagnostics.textureFallbacks;
+            UVE_ERROR("Renderer3DUVE: ready texture payload has an unknown format - falling back to the default texture");
+            return fallbackHandle;
+        }
         const TextureDescUVE desc{textureAsset->width, textureAsset->height,
                                    ToRenderTextureFormatUVE(textureAsset->format), 1};
         const TextureHandleUVE handle =

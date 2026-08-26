@@ -756,6 +756,37 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_InvalidReadyMaterialPayloadSkipsGpuDraw
     EXPECT_EQ(diagnostics.meshItemsExtracted, 1U);
     EXPECT_EQ(diagnostics.meshDrawCallsRecorded, 0U);
 }
+
+TEST_F(Renderer3DUVETest, RenderFrameUVE_InvalidReadyTexturePayloadUsesFallbackInRelease) {
+    const Scene::EntityUVE cameraEntity = MakeCameraEntityUVE();
+    const Asset::AssetGuidUVE meshGuid = assetDatabase.RegisterUVE("renderer3d_tests_invalid_texture_mesh.uvemodel");
+    const Asset::AssetGuidUVE materialGuid =
+        assetDatabase.RegisterUVE("renderer3d_tests_invalid_texture_material.uvemat");
+    const Asset::AssetGuidUVE textureGuid = assetDatabase.RegisterUVE("renderer3d_tests_invalid_texture.uvetex");
+    UseAlbedoTextureInMaterialUVE(textureGuid);
+    assetManager.RegisterLoaderUVE<Asset::TextureAssetUVE>(
+        [](const std::filesystem::path&, Asset::TextureAssetUVE& texture) {
+            texture.width = 0U;
+            texture.height = 0U;
+            texture.format = Asset::TextureFormatUVE::RGBA8Unorm;
+            texture.pixels.clear();
+            return true;
+        });
+    MakeMeshEntityUVE(Math::Vector3UVE{0.0F, 0.0F, -2.0F}, meshGuid, materialGuid);
+    WaitUntilAssetsReadyUVE(meshGuid, materialGuid, false);
+    WaitUntilTextureReadyUVE(textureGuid);
+
+    renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+    const Renderer3DFrameDiagnosticsUVE firstDiagnostics = renderer3D->GetLastFrameDiagnosticsUVE();
+    EXPECT_EQ(firstDiagnostics.textureFallbacks, 1U);
+    EXPECT_EQ(firstDiagnostics.meshDrawCallsRecorded, 0U);
+
+    PrimeMaterialProgramUVE(*renderer3D, cameraEntity);
+    renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+    const Renderer3DFrameDiagnosticsUVE secondDiagnostics = renderer3D->GetLastFrameDiagnosticsUVE();
+    EXPECT_EQ(secondDiagnostics.textureFallbacks, 0U);
+    EXPECT_EQ(secondDiagnostics.meshDrawCallsRecorded, 1U);
+}
 #endif
 
 TEST_F(Renderer3DUVETest, RenderFrameUVE_MaterialWithAlbedoTexture_UploadsAndBindsRealTexture) {
