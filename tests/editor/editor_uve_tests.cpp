@@ -47,10 +47,6 @@ struct EditorUVEAccessUVE final {
         return editor.m_inspectorDrawerRegistry.GetDrawerCountUVE();
     }
 
-    [[nodiscard]] static std::size_t GetEditorPreviewEntityCountUVE(const EditorUVE& editor) {
-        return editor.m_editorPreviewEntities.size();
-    }
-
     [[nodiscard]] static std::string GetContentBrowserItemTypeLabelUVE(const Asset::ProjectFileEntryUVE& entry) {
         return EditorUVE::GetContentBrowserItemTypeLabelUVE(EditorUVE::ClassifyContentBrowserEntryUVE(entry));
     }
@@ -175,24 +171,30 @@ TEST(EditorUVETest, InitUVE_CreatesCameraOutsideDocumentRootsAndSupportsHeadless
     engine.Shutdown();
 }
 
-TEST(EditorUVETest, InitUVE_CreatesAutomaticDaylightPreviewOutsideDocumentRoots) {
+TEST(EditorUVETest, InitUVE_DoesNotCreateAutomaticPreviewLighting) {
     Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
     engine.Init();
     ASSERT_TRUE(engine.Load());
 
     {
-        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_daylight_preview.uvescene");
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_no_preview_light.uvescene");
         editor.InitUVE();
+        Core::EngineServicesUVE& services = engine.GetServicesUVE();
+        Scene::IEntityManagerUVE& entityManager = services.GetEntityManagerUVE();
 
-        EXPECT_EQ(editor.GetDocumentRootsUVE().size(), 0U);
-        EXPECT_EQ(EditorUVEAccessUVE::GetEditorPreviewEntityCountUVE(editor), 1U);
+        EXPECT_TRUE(editor.GetDocumentRootsUVE().empty());
+        std::size_t lightCount = 0U;
+        entityManager.ForEachUVE<Scene::LightComponentUVE>(
+            [&lightCount](Scene::EntityUVE, Scene::LightComponentUVE&) { ++lightCount; });
+        EXPECT_EQ(lightCount, 0U);
         EXPECT_FALSE(editor.IsSceneDirtyUVE());
 
-        const Scene::EntityUVE authored = editor.CreateDocumentEntityUVE(EditorEntityKindUVE::Cube);
-        ASSERT_NE(authored, Scene::kInvalidEntityUVE);
         editor.TickUVE();
-        EXPECT_EQ(editor.GetDocumentRootsUVE().size(), 1U);
-        EXPECT_EQ(EditorUVEAccessUVE::GetEditorPreviewEntityCountUVE(editor), 0U);
+        EXPECT_TRUE(editor.GetDocumentRootsUVE().empty());
+        lightCount = 0U;
+        entityManager.ForEachUVE<Scene::LightComponentUVE>(
+            [&lightCount](Scene::EntityUVE, Scene::LightComponentUVE&) { ++lightCount; });
+        EXPECT_EQ(lightCount, 0U);
 
         editor.ShutdownUVE();
     }
@@ -2184,6 +2186,47 @@ TEST(EditorUVETest, GizmoDragSixDof_HitTestsAndCommitsEveryTranslationAndRotatio
             EXPECT_TRUE(quaternionChanged(before, after));
             ASSERT_TRUE(editor.UndoUVE());
             EXPECT_EQ(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity).localRotation, before);
+            services.GetSceneGraphUVE().UpdateUVE(entityManager);
+        }
+
+        for (const EditorTransformAxisUVE axis : axes) {
+            editor.SetGizmoModeUVE(EditorGizmoModeUVE::Scale);
+            const Scene::WorldTransformComponentUVE& world =
+                entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(entity);
+            Math::Vector2UVE center{};
+            ASSERT_TRUE(EditorUVEAccessUVE::ProjectWorldPointUVE(editor, viewportRect, world.worldPosition, center));
+            Math::Vector2UVE endpoint{};
+            Math::Vector3UVE worldAxis{};
+            ASSERT_TRUE(EditorUVEAccessUVE::GetGizmoAxisWorldVectorUVE(editor, entity, axis, worldAxis));
+            ASSERT_TRUE(EditorUVEAccessUVE::ProjectWorldPointUVE(
+                editor, viewportRect, world.worldPosition + worldAxis * 1.25F, endpoint));
+            ASSERT_TRUE(EditorUVEAccessUVE::BeginGizmoDragUVE(editor, viewportRect, endpoint));
+            EXPECT_EQ(EditorUVEAccessUVE::GetGizmoDragAxisUVE(editor), axis);
+            const Math::Vector2UVE screenDirection{endpoint.x - center.x, endpoint.y - center.y};
+            const float screenLength = std::sqrt((screenDirection.x * screenDirection.x) +
+                                                 (screenDirection.y * screenDirection.y));
+            ASSERT_GT(screenLength, 1.0F);
+            const Scene::TransformComponentUVE before =
+                entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity);
+            const Math::Vector2UVE movedPointer{
+                endpoint.x + (screenDirection.x * 10.0F / screenLength),
+                endpoint.y + (screenDirection.y * 10.0F / screenLength)};
+            EditorUVEAccessUVE::UpdateGizmoDragUVE(editor, movedPointer);
+            EditorUVEAccessUVE::CommitGizmoDragUVE(editor);
+            const Scene::TransformComponentUVE after =
+                entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity);
+            const float beforeScale = axis == EditorTransformAxisUVE::X
+                                           ? before.localScale.x
+                                           : (axis == EditorTransformAxisUVE::Y ? before.localScale.y : before.localScale.z);
+            const float afterScale = axis == EditorTransformAxisUVE::X
+                                          ? after.localScale.x
+                                          : (axis == EditorTransformAxisUVE::Y ? after.localScale.y : after.localScale.z);
+            EXPECT_NE(afterScale, beforeScale);
+            EXPECT_EQ(after.localPosition, before.localPosition);
+            EXPECT_EQ(after.localRotation, before.localRotation);
+            ASSERT_TRUE(editor.UndoUVE());
+            EXPECT_EQ(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity).localScale,
+                      before.localScale);
             services.GetSceneGraphUVE().UpdateUVE(entityManager);
         }
 
