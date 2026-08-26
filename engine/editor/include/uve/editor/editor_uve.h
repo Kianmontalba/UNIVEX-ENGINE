@@ -633,9 +633,6 @@ private:
                      ReparentHistoryEntryUVE>;
 
     [[nodiscard]] bool IsDocumentEntityUVE(Scene::EntityUVE entity) const noexcept;
-    [[nodiscard]] bool IsEditorPreviewEntityUVE(Scene::EntityUVE entity) const noexcept;
-    void RefreshEditorPreviewSceneUVE();
-    void DestroyEditorPreviewSceneUVE() noexcept;
     [[nodiscard]] bool HasSceneGraphNodeUVE(Scene::EntityUVE entity) const noexcept;
     [[nodiscard]] bool IsTransformFiniteUVE(const Scene::TransformComponentUVE& transform) const noexcept;
     [[nodiscard]] bool IsEntityNameValidUVE(std::string_view name) const noexcept;
@@ -788,7 +785,6 @@ private:
     EditorPlayModeStateUVE m_playModeState = EditorPlayModeStateUVE::Edit;
     std::optional<PlayModeSessionUVE> m_playModeSession;
     Scene::EntityUVE m_viewportCamera = Scene::kInvalidEntityUVE;
-    std::vector<Scene::EntityUVE> m_editorPreviewEntities;
     std::vector<Scene::EntityUVE> m_selectedEntities;
     Scene::EntityUVE m_selectedEntity = Scene::kInvalidEntityUVE;
     std::filesystem::path m_activeScenePath;
