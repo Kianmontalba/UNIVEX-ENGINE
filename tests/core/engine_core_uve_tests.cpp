@@ -1297,12 +1297,12 @@ TEST(EngineCoreUVETest, WindowedMode_ReachesRunningAndPresentsEmptyRendererScene
     engine.SetPostRenderCallbackUVE({});
     EXPECT_EQ(engine.GetStateUVE(), EngineStateUVE::Running);
 
-    // With no document render items, Renderer3DUVE presents its deterministic blue-gray
+    // With no document render items, Renderer3DUVE presents its deterministic charcoal
     // tone-mapped environment. This is intentionally not a demo-geometry assertion: visible
     // content enters only through ECS extraction into the renderer.
-    EXPECT_EQ(scenePixel[0], 6U);
-    EXPECT_EQ(scenePixel[1], 13U);
-    EXPECT_EQ(scenePixel[2], 25U);
+    EXPECT_EQ(scenePixel[0], 11U);
+    EXPECT_EQ(scenePixel[1], 11U);
+    EXPECT_EQ(scenePixel[2], 11U);
     EXPECT_EQ(postRenderGlError, GL_NO_ERROR);
 
     engine.Shutdown();
