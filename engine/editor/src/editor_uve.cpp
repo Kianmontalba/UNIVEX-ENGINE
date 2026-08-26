@@ -275,38 +275,63 @@ void ApplyEditorVisualThemeUVE() noexcept {
     ImGuiStyle& style = ImGui::GetStyle();
     style.WindowPadding = ImVec2{10.0F, 8.0F};
     style.FramePadding = ImVec2{7.0F, 4.0F};
-    style.ItemSpacing = ImVec2{6.0F, 5.0F};
+    style.ItemSpacing = ImVec2{7.0F, 5.0F};
     style.ItemInnerSpacing = ImVec2{5.0F, 4.0F};
-    style.WindowRounding = 4.0F;
+    style.WindowRounding = 3.0F;
     style.ChildRounding = 3.0F;
     style.FrameRounding = 3.0F;
     style.PopupRounding = 3.0F;
     style.ScrollbarRounding = 4.0F;
     style.GrabRounding = 3.0F;
     style.TabRounding = 3.0F;
+    style.WindowBorderSize = 1.0F;
+    style.ChildBorderSize = 1.0F;
+    style.FrameBorderSize = 1.0F;
+    style.PopupBorderSize = 1.0F;
+    style.TabBorderSize = 1.0F;
+    style.GrabMinSize = 12.0F;
+    style.DisabledAlpha = 0.62F;
 
     ImVec4* const colors = style.Colors;
-    colors[ImGuiCol_Text] = ImVec4{0.93F, 0.96F, 1.0F, 1.0F};
-    colors[ImGuiCol_TextDisabled] = ImVec4{0.52F, 0.59F, 0.70F, 1.0F};
-    colors[ImGuiCol_WindowBg] = ImVec4{0.012F, 0.022F, 0.055F, 0.98F};
-    colors[ImGuiCol_ChildBg] = ImVec4{0.020F, 0.032F, 0.075F, 0.96F};
-    colors[ImGuiCol_PopupBg] = ImVec4{0.025F, 0.040F, 0.085F, 0.99F};
-    colors[ImGuiCol_Border] = ImVec4{0.18F, 0.25F, 0.38F, 0.72F};
-    colors[ImGuiCol_FrameBg] = ImVec4{0.055F, 0.080F, 0.135F, 1.0F};
-    colors[ImGuiCol_FrameBgHovered] = ImVec4{0.09F, 0.15F, 0.24F, 1.0F};
-    colors[ImGuiCol_FrameBgActive] = ImVec4{0.10F, 0.22F, 0.34F, 1.0F};
-    colors[ImGuiCol_Header] = ImVec4{0.08F, 0.14F, 0.23F, 1.0F};
-    colors[ImGuiCol_HeaderHovered] = ImVec4{0.12F, 0.24F, 0.37F, 1.0F};
-    colors[ImGuiCol_HeaderActive] = ImVec4{0.16F, 0.32F, 0.48F, 1.0F};
-    colors[ImGuiCol_Button] = ImVec4{0.06F, 0.12F, 0.20F, 1.0F};
-    colors[ImGuiCol_ButtonHovered] = ImVec4{0.10F, 0.24F, 0.36F, 1.0F};
-    colors[ImGuiCol_ButtonActive] = ImVec4{0.14F, 0.34F, 0.48F, 1.0F};
-    colors[ImGuiCol_CheckMark] = ImVec4{0.32F, 0.82F, 0.62F, 1.0F};
-    colors[ImGuiCol_SliderGrab] = ImVec4{0.25F, 0.62F, 0.84F, 1.0F};
-    colors[ImGuiCol_SliderGrabActive] = ImVec4{0.36F, 0.80F, 0.96F, 1.0F};
-    colors[ImGuiCol_Tab] = ImVec4{0.045F, 0.080F, 0.14F, 1.0F};
-    colors[ImGuiCol_TabHovered] = ImVec4{0.10F, 0.24F, 0.36F, 1.0F};
-    colors[ImGuiCol_TabActive] = ImVec4{0.08F, 0.18F, 0.30F, 1.0F};
+    colors[ImGuiCol_Text] = ImVec4{0.91F, 0.95F, 1.0F, 1.0F};
+    colors[ImGuiCol_TextDisabled] = ImVec4{0.46F, 0.56F, 0.69F, 1.0F};
+    colors[ImGuiCol_WindowBg] = ImVec4{0.014F, 0.034F, 0.078F, 0.99F};
+    colors[ImGuiCol_ChildBg] = ImVec4{0.020F, 0.052F, 0.112F, 0.98F};
+    colors[ImGuiCol_PopupBg] = ImVec4{0.024F, 0.060F, 0.130F, 1.0F};
+    colors[ImGuiCol_MenuBarBg] = ImVec4{0.018F, 0.064F, 0.132F, 1.0F};
+    colors[ImGuiCol_TitleBg] = ImVec4{0.030F, 0.105F, 0.215F, 1.0F};
+    colors[ImGuiCol_TitleBgActive] = ImVec4{0.045F, 0.165F, 0.315F, 1.0F};
+    colors[ImGuiCol_Border] = ImVec4{0.11F, 0.25F, 0.43F, 0.86F};
+    colors[ImGuiCol_BorderShadow] = ImVec4{0.0F, 0.0F, 0.0F, 0.55F};
+    colors[ImGuiCol_FrameBg] = ImVec4{0.028F, 0.065F, 0.125F, 1.0F};
+    colors[ImGuiCol_FrameBgHovered] = ImVec4{0.055F, 0.14F, 0.25F, 1.0F};
+    colors[ImGuiCol_FrameBgActive] = ImVec4{0.075F, 0.20F, 0.34F, 1.0F};
+    colors[ImGuiCol_Header] = ImVec4{0.032F, 0.090F, 0.17F, 1.0F};
+    colors[ImGuiCol_HeaderHovered] = ImVec4{0.055F, 0.17F, 0.30F, 1.0F};
+    colors[ImGuiCol_HeaderActive] = ImVec4{0.075F, 0.24F, 0.40F, 1.0F};
+    colors[ImGuiCol_Button] = ImVec4{0.025F, 0.075F, 0.145F, 1.0F};
+    colors[ImGuiCol_ButtonHovered] = ImVec4{0.045F, 0.16F, 0.27F, 1.0F};
+    colors[ImGuiCol_ButtonActive] = ImVec4{0.065F, 0.24F, 0.38F, 1.0F};
+    colors[ImGuiCol_CheckMark] = ImVec4{0.34F, 0.86F, 0.70F, 1.0F};
+    colors[ImGuiCol_SliderGrab] = ImVec4{0.18F, 0.55F, 0.84F, 1.0F};
+    colors[ImGuiCol_SliderGrabActive] = ImVec4{0.30F, 0.78F, 0.98F, 1.0F};
+    colors[ImGuiCol_Separator] = ImVec4{0.10F, 0.24F, 0.42F, 0.72F};
+    colors[ImGuiCol_SeparatorHovered] = ImVec4{0.22F, 0.55F, 0.78F, 0.84F};
+    colors[ImGuiCol_SeparatorActive] = ImVec4{0.30F, 0.72F, 0.96F, 1.0F};
+    colors[ImGuiCol_Tab] = ImVec4{0.018F, 0.065F, 0.14F, 1.0F};
+    colors[ImGuiCol_TabHovered] = ImVec4{0.065F, 0.21F, 0.38F, 1.0F};
+    colors[ImGuiCol_TabActive] = ImVec4{0.050F, 0.16F, 0.31F, 1.0F};
+    colors[ImGuiCol_TabUnfocused] = ImVec4{0.014F, 0.035F, 0.075F, 1.0F};
+    colors[ImGuiCol_TabUnfocusedActive] = ImVec4{0.024F, 0.075F, 0.14F, 1.0F};
+    colors[ImGuiCol_ResizeGrip] = ImVec4{0.08F, 0.30F, 0.48F, 0.50F};
+    colors[ImGuiCol_ResizeGripHovered] = ImVec4{0.18F, 0.58F, 0.80F, 0.76F};
+    colors[ImGuiCol_ResizeGripActive] = ImVec4{0.30F, 0.76F, 0.96F, 0.96F};
+    colors[ImGuiCol_ScrollbarBg] = ImVec4{0.008F, 0.025F, 0.060F, 1.0F};
+    colors[ImGuiCol_ScrollbarGrab] = ImVec4{0.075F, 0.22F, 0.38F, 1.0F};
+    colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4{0.12F, 0.36F, 0.56F, 1.0F};
+    colors[ImGuiCol_ScrollbarGrabActive] = ImVec4{0.18F, 0.50F, 0.72F, 1.0F};
+    colors[ImGuiCol_TextSelectedBg] = ImVec4{0.08F, 0.30F, 0.52F, 0.72F};
+    colors[ImGuiCol_NavHighlight] = ImVec4{0.18F, 0.62F, 0.88F, 0.86F};
 }
 
 [[nodiscard]] bool GetRingBasisUVE(const EditorTransformAxisUVE axis, Math::Vector3UVE& outFirst,
@@ -4273,6 +4298,12 @@ void EditorUVE::DrawMenuBarUVE() {
     };
 
     if (beginChrome("##uve-titlebar", 0.0F, kEditorTitleBarHeightUVE)) {
+        ImDrawList* const titleDrawList = ImGui::GetWindowDrawList();
+        const ImVec2 titleMin = ImGui::GetWindowPos();
+        const ImVec2 titleMax{titleMin.x + ImGui::GetWindowWidth(), titleMin.y + kEditorTitleBarHeightUVE};
+        titleDrawList->AddRectFilled(titleMin, titleMax, IM_COL32(7, 20, 45, 255));
+        titleDrawList->AddLine(ImVec2{titleMin.x, titleMax.y - 1.0F}, ImVec2{titleMax.x, titleMax.y - 1.0F},
+                               IM_COL32(32, 91, 145, 235), 1.0F);
         ImGui::TextUnformatted("UNIVEX ENGINE");
         ImGui::SameLine();
         const char* workspaceLabel = "Library";
@@ -4301,6 +4332,12 @@ void EditorUVE::DrawMenuBarUVE() {
                                    mainViewport->WorkPos.y + kEditorTitleBarHeightUVE}, ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2{mainViewport->WorkSize.x, kEditorMenuBarHeightUVE}, ImGuiCond_Always);
     if (ImGui::Begin("##uve-menu-row", nullptr, chromeFlags | ImGuiWindowFlags_MenuBar)) {
+        ImDrawList* const menuDrawList = ImGui::GetWindowDrawList();
+        const ImVec2 menuMin = ImGui::GetWindowPos();
+        const ImVec2 menuMax{menuMin.x + ImGui::GetWindowWidth(), menuMin.y + kEditorMenuBarHeightUVE};
+        menuDrawList->AddRectFilled(menuMin, menuMax, IM_COL32(10, 31, 61, 255));
+        menuDrawList->AddLine(ImVec2{menuMin.x, menuMax.y - 1.0F}, ImVec2{menuMax.x, menuMax.y - 1.0F},
+                              IM_COL32(29, 75, 119, 235), 1.0F);
         ImGui::BeginMenuBar();
         if (ImGui::BeginMenu("File")) {
             const bool canSave = IsAuthoringCommandAllowedUVE() && !m_activeScenePath.empty();
@@ -4388,6 +4425,12 @@ void EditorUVE::DrawMenuBarUVE() {
 
     if (beginChrome("##uve-tool-row", kEditorTitleBarHeightUVE + kEditorMenuBarHeightUVE,
                     kEditorToolbarHeightUVE)) {
+        ImDrawList* const toolbarDrawList = ImGui::GetWindowDrawList();
+        const ImVec2 toolbarMin = ImGui::GetWindowPos();
+        const ImVec2 toolbarMax{toolbarMin.x + ImGui::GetWindowWidth(), toolbarMin.y + kEditorToolbarHeightUVE};
+        toolbarDrawList->AddRectFilled(toolbarMin, toolbarMax, IM_COL32(12, 38, 72, 255));
+        toolbarDrawList->AddLine(ImVec2{toolbarMin.x, toolbarMin.y}, ImVec2{toolbarMax.x, toolbarMin.y},
+                                 IM_COL32(42, 112, 170, 235), 1.0F);
         const auto drawTool = [this, gizmoModeChangeAllowed](const char* const label, const EditorGizmoModeUVE mode) {
             const bool active = m_gizmoMode == mode;
             if (active) {
@@ -4407,14 +4450,24 @@ void EditorUVE::DrawMenuBarUVE() {
         };
         ImGui::SmallButton("Hand");
         ImGui::SameLine();
-        if (ImGui::SmallButton("Scene")) {
-            m_activeWorkspace = EditorWorkspaceUVE::Library;
-        }
+        ImGui::TextColored(ImVec4{0.26F, 0.58F, 0.86F, 0.9F}, "|");
         ImGui::SameLine();
-        if (ImGui::SmallButton("Scripting")) {
-            m_activeWorkspace = EditorWorkspaceUVE::Scripting;
-        }
-        ImGui::SameLine();
+        const auto drawWorkspace = [this](const char* const label, const EditorWorkspaceUVE workspace) {
+            const bool active = m_activeWorkspace == workspace;
+            if (active) {
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{0.12F, 0.34F, 0.54F, 1.0F});
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4{0.18F, 0.46F, 0.68F, 1.0F});
+            }
+            if (ImGui::SmallButton(label)) {
+                m_activeWorkspace = workspace;
+            }
+            if (active) {
+                ImGui::PopStyleColor(2);
+            }
+            ImGui::SameLine();
+        };
+        drawWorkspace("Scene", EditorWorkspaceUVE::Library);
+        drawWorkspace("Scripting", EditorWorkspaceUVE::Scripting);
         drawTool("Move", EditorGizmoModeUVE::Translate);
         drawTool("Rotate", EditorGizmoModeUVE::Rotate);
         drawTool("Scale", EditorGizmoModeUVE::Scale);
@@ -4434,7 +4487,6 @@ void EditorUVE::DrawMenuBarUVE() {
         ImGui::BeginDisabled();
         static_cast<void>(ImGui::SmallButton("Gizmos"));
         ImGui::EndDisabled();
-
         ImGui::SameLine(std::max(ImGui::GetCursorPosX(), ImGui::GetWindowWidth() * 0.5F - 90.0F));
         if (m_playModeState == EditorPlayModeStateUVE::Edit) {
             ImGui::BeginDisabled(!canEnterPlayMode);
@@ -4540,14 +4592,30 @@ void EditorUVE::DrawBottomDockUVE() {
     ImGui::Begin("##bottom-dock", nullptr, flags);
     const auto drawDockTab = [this](const char* const label, const EditorBottomDockUVE dock) {
         const bool active = m_activeBottomDock == dock;
+        if (active) {
+            ImGui::PushStyleColor(ImGuiCol_Header, ImVec4{0.08F, 0.24F, 0.40F, 1.0F});
+            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4{0.12F, 0.34F, 0.54F, 1.0F});
+            ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4{0.16F, 0.43F, 0.66F, 1.0F});
+        }
         if (ImGui::Selectable(label, active, ImGuiSelectableFlags_DontClosePopups, ImVec2{0.0F, 0.0F})) {
             m_activeBottomDock = dock;
+        }
+        if (active) {
+            ImGui::PopStyleColor(3);
         }
         ImGui::SameLine();
     };
     const bool fileSystemActive = m_activeBottomDock == EditorBottomDockUVE::FileSystem;
+    if (fileSystemActive) {
+        ImGui::PushStyleColor(ImGuiCol_Header, ImVec4{0.08F, 0.24F, 0.40F, 1.0F});
+        ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4{0.12F, 0.34F, 0.54F, 1.0F});
+        ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4{0.16F, 0.43F, 0.66F, 1.0F});
+    }
     if (ImGui::Selectable("Project", fileSystemActive, ImGuiSelectableFlags_DontClosePopups, ImVec2{0.0F, 0.0F})) {
         m_activeBottomDock = EditorBottomDockUVE::FileSystem;
+    }
+    if (fileSystemActive) {
+        ImGui::PopStyleColor(3);
     }
     ImGui::SameLine();
     drawDockTab("Console", EditorBottomDockUVE::Debugger);
@@ -4707,6 +4775,10 @@ void EditorUVE::DrawHierarchyPanelUVE() {
     const float scenePanelWidth = std::clamp(mainViewport->WorkSize.x * 0.20F, 220.0F, 320.0F);
     ImGui::SetNextWindowSize(ImVec2{scenePanelWidth, workspaceHeight}, ImGuiCond_Always);
     ImGui::Begin("Hierarchy##scene-panel");
+    ImGui::TextColored(ImVec4{0.38F, 0.70F, 0.96F, 1.0F}, "SCENE");
+    ImGui::SameLine();
+    ImGui::TextDisabled("%zu roots | %zu selected", GetDocumentRootsUVE().size(), m_selectedEntities.size());
+    ImGui::Separator();
     if (ImGui::BeginTabBar("##scene-tabs")) {
         if (ImGui::BeginTabItem("Hierarchy")) {
             ImGui::EndTabItem();
@@ -4924,6 +4996,10 @@ void EditorUVE::DrawInspectorPanelUVE() {
         }
         ImGui::SameLine();
     };
+    ImGui::TextColored(ImVec4{0.38F, 0.70F, 0.96F, 1.0F}, "DETAILS");
+    ImGui::SameLine();
+    ImGui::TextDisabled("SELECTION");
+    ImGui::Separator();
     drawRightPanelTab("Inspector", EditorRightPanelTabUVE::Inspector);
     drawRightPanelTab("Import", EditorRightPanelTabUVE::Import);
     const bool signalsActive = m_activeRightPanelTab == EditorRightPanelTabUVE::Signals;
@@ -4987,7 +5063,11 @@ void EditorUVE::DrawImportQueueMonitorUVE() {
 
 void EditorUVE::DrawInspectorContentUVE() {
     if (m_selectedEntities.empty()) {
-        ImGui::TextUnformatted("Select an entity in Scene or Viewport.");
+        ImGui::BeginChild("##inspector-empty-state", ImVec2{0.0F, 92.0F}, true);
+        ImGui::TextColored(ImVec4{0.58F, 0.78F, 0.98F, 1.0F}, "NO ENTITY SELECTED");
+        ImGui::TextWrapped("Select an entity in Scene or Viewport.");
+        ImGui::TextWrapped("Properties and components will appear here.");
+        ImGui::EndChild();
         return;
     }
     if (!HasSingleDocumentSelectionUVE()) {
@@ -5543,10 +5623,14 @@ void EditorUVE::DrawConsolePanelUVE() {
     ImGui::SetNextWindowSize(ImVec2{consoleWidth, contentHeight}, ImGuiCond_Always);
     constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove |
                                        ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoScrollbar |
-                                       ImGuiWindowFlags_NoScrollWithMouse;
-    ImGui::Begin("Console", nullptr, flags);
+                                       ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoTitleBar;
+    ImGui::Begin("##console-panel", nullptr, flags);
 
     const DeveloperConsoleSnapshotUVE snapshot = m_developerConsole.GetSnapshotUVE();
+    ImGui::TextColored(ImVec4{0.38F, 0.70F, 0.96F, 1.0F}, "CONSOLE");
+    ImGui::SameLine();
+    ImGui::TextDisabled("developer output | %zu entr%s", snapshot.output.size(), snapshot.output.size() == 1U ? "y" : "ies");
+    ImGui::Separator();
     if (ImGui::Button("Clear")) {
         static_cast<void>(m_developerConsole.ClearUVE());
     }
@@ -5612,8 +5696,9 @@ void EditorUVE::DrawAssetsPanelUVE() {
                mainViewport->WorkPos.y + mainViewport->WorkSize.y - kAssetsPanelHeightUVE + kBottomDockTabHeightUVE},
         ImGuiCond_Always);
     ImGui::SetNextWindowSize(ImVec2{projectWidth, contentHeight}, ImGuiCond_Always);
-    constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize;
-    ImGui::Begin("Project", nullptr, flags);
+    constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove |
+                                       ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar;
+    ImGui::Begin("##project-panel", nullptr, flags);
 
     Asset::IProjectFileIndexUVE& projectFileIndex = m_services->GetProjectFileIndexUVE();
     Asset::IProjectChangeWatcherUVE& projectChangeWatcher = m_services->GetProjectChangeWatcherUVE();
@@ -5632,6 +5717,10 @@ void EditorUVE::DrawAssetsPanelUVE() {
     }
     const Asset::ProjectFileSnapshotUVE snapshot = projectFileIndex.GetSnapshotUVE();
     const Asset::ProjectChangeSnapshotUVE changeSnapshot = projectChangeWatcher.GetSnapshotUVE();
+    ImGui::TextColored(ImVec4{0.38F, 0.70F, 0.96F, 1.0F}, "PROJECT");
+    ImGui::SameLine();
+    ImGui::TextDisabled("content browser | %zu entr%s", snapshot.entries.size(), snapshot.entries.size() == 1U ? "y" : "ies");
+    ImGui::Separator();
     ReconcileContentBrowserDirectoryUVE(snapshot);
 
     if (m_selectedProjectFile.has_value()) {
@@ -5860,9 +5949,9 @@ void EditorUVE::DrawScriptingWorkspaceUVE() {
     };
 
     if (ImGui::BeginChild("##scripting-toolbar", ImVec2{0.0F, 34.0F}, false)) {
-        ImGui::TextUnformatted("Visual Scripting");
+        ImGui::TextColored(ImVec4{0.38F, 0.70F, 0.96F, 1.0F}, "GRAPH");
         ImGui::SameLine();
-        ImGui::TextDisabled("Native graph canvas | revision %llu",
+        ImGui::TextDisabled("native canvas | revision %llu",
                             static_cast<unsigned long long>(snapshot.revision));
         ImGui::SameLine();
         if (ImGui::SmallButton("Undo")) {
@@ -5880,7 +5969,9 @@ void EditorUVE::DrawScriptingWorkspaceUVE() {
     const ImVec2 workspaceSize = ImGui::GetContentRegionAvail();
     if (ImGui::BeginChild("##scripting-layout", workspaceSize, false)) {
         if (ImGui::BeginChild("##script-palette", ImVec2{238.0F, 0.0F}, true)) {
-            ImGui::TextUnformatted("Node Palette");
+            ImGui::TextColored(ImVec4{0.38F, 0.70F, 0.96F, 1.0F}, "NODE PALETTE");
+            ImGui::SameLine();
+            ImGui::TextDisabled("%zu registered", snapshot.paletteDescriptors.size());
             std::array<char, 257> filterBuffer{};
             std::strncpy(filterBuffer.data(), m_scriptCanvasPaletteFilter.c_str(), filterBuffer.size() - 1U);
             if (ImGui::InputText("Filter", filterBuffer.data(), filterBuffer.size())) {
@@ -5931,17 +6022,19 @@ void EditorUVE::DrawScriptingWorkspaceUVE() {
             ImDrawList* const drawList = ImGui::GetWindowDrawList();
             drawList->AddRectFilled(canvasOrigin,
                                     ImVec2{canvasOrigin.x + canvasSize.x, canvasOrigin.y + canvasSize.y},
-                                    IM_COL32(20, 23, 28, 255));
+                                    IM_COL32(8, 18, 34, 255));
+            drawList->AddText(ImVec2{canvasOrigin.x + 16.0F, canvasOrigin.y + 12.0F},
+                              IM_COL32(104, 168, 220, 235), "GRAPH CANVAS");
             constexpr float gridSpacing = 24.0F;
             const float gridOffsetX = std::fmod(-view.pan.x * view.zoom, gridSpacing);
             const float gridOffsetY = std::fmod(-view.pan.y * view.zoom, gridSpacing);
             for (float x = canvasOrigin.x + gridOffsetX; x < canvasOrigin.x + canvasSize.x; x += gridSpacing) {
                 drawList->AddLine(ImVec2{x, canvasOrigin.y}, ImVec2{x, canvasOrigin.y + canvasSize.y},
-                                  IM_COL32(35, 39, 46, 255));
+                                  IM_COL32(24, 48, 72, 220));
             }
             for (float y = canvasOrigin.y + gridOffsetY; y < canvasOrigin.y + canvasSize.y; y += gridSpacing) {
                 drawList->AddLine(ImVec2{canvasOrigin.x, y}, ImVec2{canvasOrigin.x + canvasSize.x, y},
-                                  IM_COL32(35, 39, 46, 255));
+                                  IM_COL32(24, 48, 72, 220));
             }
 
             const auto nodePosition = [this](const Scripting::ScriptGraphCanvasNodeSnapshotUVE& node) {
@@ -5991,15 +6084,15 @@ void EditorUVE::DrawScriptingWorkspaceUVE() {
                 const ImVec2 nodeMax{nodeMin.x + nodeWidth, nodeMin.y + nodeHeightPixels};
                 const bool selected = std::find(snapshot.selectedNodeIds.cbegin(), snapshot.selectedNodeIds.cend(), node.id) !=
                                       snapshot.selectedNodeIds.cend();
-                const ImU32 bodyColor = selected ? IM_COL32(42, 63, 83, 255) : IM_COL32(35, 41, 50, 255);
+                const ImU32 bodyColor = selected ? IM_COL32(20, 65, 98, 255) : IM_COL32(16, 38, 61, 255);
                 drawList->AddRectFilled(nodeMin, nodeMax, bodyColor, 4.0F);
                 drawList->AddRectFilled(nodeMin, ImVec2{nodeMax.x, nodeMin.y + headerHeight},
-                                        selected ? IM_COL32(48, 108, 154, 255) : IM_COL32(45, 71, 96, 255), 4.0F,
+                                        selected ? IM_COL32(40, 126, 186, 255) : IM_COL32(26, 76, 112, 255), 4.0F,
                                         ImDrawFlags_RoundCornersTop);
                 drawList->AddRect(nodeMin, nodeMax, selected ? IM_COL32(122, 190, 232, 255) : IM_COL32(86, 98, 112, 255),
                                   4.0F, 0, selected ? 2.0F : 1.0F);
                 const std::string title = node.displayName.empty() ? node.typeId : node.displayName;
-                drawList->AddText(ImVec2{nodeMin.x + 10.0F, nodeMin.y + 6.0F}, IM_COL32(240, 244, 248, 255), title.c_str());
+                drawList->AddText(ImVec2{nodeMin.x + 10.0F, nodeMin.y + 6.0F}, IM_COL32(226, 241, 252, 255), title.c_str());
                 for (std::size_t pinIndex = 0U; pinIndex < node.pins.size(); ++pinIndex) {
                     const auto& pin = node.pins[pinIndex];
                     const ImVec2 pinPosition = pinScreenPosition(node, pin);
@@ -6132,7 +6225,9 @@ void EditorUVE::DrawScriptingWorkspaceUVE() {
         ImGui::SameLine();
 
         if (ImGui::BeginChild("##script-details", ImVec2{0.0F, 0.0F}, true)) {
-            ImGui::TextUnformatted("Details");
+            ImGui::TextColored(ImVec4{0.38F, 0.70F, 0.96F, 1.0F}, "DETAILS");
+            ImGui::SameLine();
+            ImGui::TextDisabled("node properties");
             ImGui::Separator();
             const auto* const node = selectedNode();
             if (node == nullptr) {
@@ -6364,30 +6459,39 @@ void EditorUVE::DrawViewportPanelUVE() {
         drawList->AddText(ImVec2{orientationCenter.x - 4.0F, orientationCenter.y - 40.0F}, IM_COL32(238, 238, 238, 245), "Y");
         drawList->AddText(ImVec2{orientationCenter.x - 31.0F, orientationCenter.y + 15.0F}, IM_COL32(238, 238, 238, 245), "X");
         drawList->AddText(ImVec2{orientationCenter.x + 22.0F, orientationCenter.y + 15.0F}, IM_COL32(238, 238, 238, 245), "Z");
+        const bool editorDaylightReady = m_editorPreviewEntities.size() == 1U;
+        const ImVec2 daylightBadgePosition{contentOrigin.x + 10.0F, contentOrigin.y + 80.0F};
+        const ImU32 daylightBadgeColor = editorDaylightReady ? IM_COL32(222, 170, 66, 235) : IM_COL32(130, 145, 164, 185);
+        drawList->AddCircleFilled(ImVec2{daylightBadgePosition.x + 8.0F, daylightBadgePosition.y + 8.0F}, 5.0F,
+                                  daylightBadgeColor);
+        for (int rayIndex = 0; rayIndex < 8; ++rayIndex) {
+            const float rayAngle = static_cast<float>(rayIndex) * (std::numbers::pi_v<float> / 4.0F);
+            const ImVec2 rayStart{daylightBadgePosition.x + 8.0F + std::cos(rayAngle) * 9.0F,
+                                  daylightBadgePosition.y + 8.0F + std::sin(rayAngle) * 9.0F};
+            const ImVec2 rayEnd{daylightBadgePosition.x + 8.0F + std::cos(rayAngle) * 12.0F,
+                                daylightBadgePosition.y + 8.0F + std::sin(rayAngle) * 12.0F};
+            drawList->AddLine(rayStart, rayEnd, daylightBadgeColor, 1.0F);
+        }
+        drawList->AddText(ImVec2{daylightBadgePosition.x + 20.0F, daylightBadgePosition.y + 1.0F}, daylightBadgeColor,
+                          editorDaylightReady ? "DAYLIGHT  AUTO" : "DAYLIGHT  UNAVAILABLE");
         const char* const documentStateLabel = m_sceneDirty ? "UNSAVED CHANGES" : "SCENE SAVED";
         const ImU32 documentStateColor = m_sceneDirty ? IM_COL32(236, 181, 86, 235) : IM_COL32(104, 202, 150, 225);
         drawList->AddText(ImVec2{contentOrigin.x + contentSize.x - 150.0F, contentOrigin.y + 10.0F},
                           documentStateColor, documentStateLabel);
         if (GetDocumentRootsUVE().empty() && IsAuthoringCommandAllowedUVE()) {
-            const ImVec2 emptyStateSize{360.0F, 76.0F};
-            const ImVec2 emptyStatePosition{contentOrigin.x + (contentSize.x - emptyStateSize.x) * 0.5F,
-                                            contentOrigin.y + (contentSize.y - emptyStateSize.y) * 0.5F};
-            drawList->AddRectFilled(emptyStatePosition,
-                                    ImVec2{emptyStatePosition.x + emptyStateSize.x,
-                                           emptyStatePosition.y + emptyStateSize.y},
-                                    IM_COL32(7, 18, 37, 235), 6.0F);
-            drawList->AddRect(emptyStatePosition,
-                              ImVec2{emptyStatePosition.x + emptyStateSize.x,
-                                     emptyStatePosition.y + emptyStateSize.y},
-                              IM_COL32(73, 125, 170, 220), 6.0F, 0, 1.0F);
             const bool previewReady = m_editorPreviewEntities.size() == 1U;
-            drawList->AddText(ImVec2{emptyStatePosition.x + 16.0F, emptyStatePosition.y + 12.0F},
-                              previewReady ? IM_COL32(151, 229, 173, 255) : IM_COL32(236, 181, 86, 255),
-                              previewReady ? "AUTOMATIC DAYLIGHT PREVIEW" : "EMPTY VIEWPORT");
-            drawList->AddText(ImVec2{emptyStatePosition.x + 16.0F, emptyStatePosition.y + 34.0F},
-                              IM_COL32(154, 176, 205, 255),
-                              previewReady ? "Editor-only daylight; authored scene is still empty."
-                                            : "Preview could not be created; check Runtime Diagnostics.");
+            const ImVec2 statusSize{268.0F, 32.0F};
+            const ImVec2 statusPosition{contentOrigin.x + 12.0F, contentOrigin.y + contentSize.y - statusSize.y - 12.0F};
+            const ImU32 statusColor = previewReady ? IM_COL32(222, 170, 66, 235) : IM_COL32(130, 145, 164, 185);
+            drawList->AddRectFilled(statusPosition,
+                                    ImVec2{statusPosition.x + statusSize.x, statusPosition.y + statusSize.y},
+                                    IM_COL32(9, 29, 56, 230), 4.0F);
+            drawList->AddRect(statusPosition,
+                              ImVec2{statusPosition.x + statusSize.x, statusPosition.y + statusSize.y},
+                              IM_COL32(44, 106, 160, 220), 4.0F, 0, 1.0F);
+            drawList->AddCircleFilled(ImVec2{statusPosition.x + 13.0F, statusPosition.y + 16.0F}, 4.0F, statusColor);
+            drawList->AddText(ImVec2{statusPosition.x + 24.0F, statusPosition.y + 8.0F}, statusColor,
+                              previewReady ? "DAYLIGHT PREVIEW  |  EMPTY SCENE" : "DAYLIGHT PREVIEW  |  CHECK DIAGNOSTICS");
         }
         if (m_playModeState != EditorPlayModeStateUVE::Edit) {
             const bool paused = m_playModeState == EditorPlayModeStateUVE::Paused;
