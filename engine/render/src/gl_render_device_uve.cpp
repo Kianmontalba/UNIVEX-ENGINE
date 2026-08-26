@@ -81,13 +81,56 @@ struct GlTextureFormatUVE {
     return GL_VERTEX_SHADER;
 }
 
+[[nodiscard]] bool IsSamplerUniformTypeUVE(GLenum glType) noexcept {
+    switch (glType) {
+        case GL_SAMPLER_2D:
+        case GL_SAMPLER_3D:
+        case GL_SAMPLER_CUBE:
+        case GL_SAMPLER_2D_SHADOW:
+        case GL_SAMPLER_2D_ARRAY:
+        case GL_SAMPLER_2D_ARRAY_SHADOW:
+        case GL_SAMPLER_CUBE_SHADOW:
+        case GL_INT_SAMPLER_2D:
+        case GL_INT_SAMPLER_3D:
+        case GL_INT_SAMPLER_CUBE:
+        case GL_INT_SAMPLER_2D_ARRAY:
+        case GL_UNSIGNED_INT_SAMPLER_2D:
+        case GL_UNSIGNED_INT_SAMPLER_3D:
+        case GL_UNSIGNED_INT_SAMPLER_CUBE:
+        case GL_UNSIGNED_INT_SAMPLER_2D_ARRAY:
+#if defined(GL_SAMPLER_2D_MULTISAMPLE)
+        case GL_SAMPLER_2D_MULTISAMPLE:
+#endif
+#if defined(GL_SAMPLER_2D_MULTISAMPLE_ARRAY)
+        case GL_SAMPLER_2D_MULTISAMPLE_ARRAY:
+#endif
+#if defined(GL_INT_SAMPLER_2D_MULTISAMPLE)
+        case GL_INT_SAMPLER_2D_MULTISAMPLE:
+#endif
+#if defined(GL_INT_SAMPLER_2D_MULTISAMPLE_ARRAY)
+        case GL_INT_SAMPLER_2D_MULTISAMPLE_ARRAY:
+#endif
+#if defined(GL_UNSIGNED_INT_SAMPLER_2D_MULTISAMPLE)
+        case GL_UNSIGNED_INT_SAMPLER_2D_MULTISAMPLE:
+#endif
+#if defined(GL_UNSIGNED_INT_SAMPLER_2D_MULTISAMPLE_ARRAY)
+        case GL_UNSIGNED_INT_SAMPLER_2D_MULTISAMPLE_ARRAY:
+#endif
+            return true;
+        default:
+            return false;
+    }
+}
+
 /// Maps a GLenum uniform type (as reported by glGetActiveUniform) to the engine-native
-/// ShaderDataTypeUVE. Every sampler type (2D, cube, array, ...) reports as Int, since a sampler
-/// uniform is always set the same way as a plain int - the texture unit index (glUniform1i) -
-/// regardless of which concrete sampler type it is; this engine has no per-sampler-type SetUVE
-/// overload to distinguish them anyway (matches basic_3d_textured.glsl's placeholder-only role
-/// this increment - no real texture binding exists yet for this to matter in practice).
+/// ShaderDataTypeUVE. Supported sampler types report as Int, since a sampler uniform receives a
+/// texture-unit index through glUniform1i regardless of its concrete sampler type. Unsupported
+/// shapes remain explicit instead of being silently collapsed into Int, preventing invalid setter
+/// calls such as glUniform1i on uint or vector uniforms.
 [[nodiscard]] ShaderDataTypeUVE GlUniformTypeToShaderDataTypeUVE(GLenum glType) noexcept {
+    if (IsSamplerUniformTypeUVE(glType)) {
+        return ShaderDataTypeUVE::Int;
+    }
     switch (glType) {
         case GL_FLOAT:
             return ShaderDataTypeUVE::Float;
@@ -104,8 +147,9 @@ struct GlTextureFormatUVE {
         case GL_BOOL:
             return ShaderDataTypeUVE::Bool;
         case GL_INT:
-        default:
             return ShaderDataTypeUVE::Int;
+        default:
+            return ShaderDataTypeUVE::Unsupported;
     }
 }
 

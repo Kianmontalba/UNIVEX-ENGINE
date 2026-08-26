@@ -81,6 +81,14 @@ void main() {
     FragColor = vec4(uColor, 1.0);
 }
 )";
+constexpr std::string_view kSamplerAndUnsupportedUniformFragmentShaderSource = R"(#version 330 core
+out vec4 FragColor;
+uniform sampler2D uTexture;
+uniform uint uUnsigned;
+void main() {
+    FragColor = texture(uTexture, vec2(0.5)) * float(uUnsigned);
+}
+)";
 
 [[nodiscard]] std::string WithShaderStageDefineUVE(std::string_view source, std::string_view stageDefine) {
     std::string resolvedSource(source);
@@ -1369,6 +1377,55 @@ TEST_F(GlRenderDeviceUVETest, GetPipelineUniformsUVE_ReflectsDeclaredUniforms) {
     });
     EXPECT_TRUE(foundModel);
     EXPECT_TRUE(foundColor);
+
+    renderDevice->DestroyPipelineUVE(pipeline);
+    renderDevice->DestroyShaderUVE(vertexShader);
+    renderDevice->DestroyShaderUVE(fragmentShader);
+}
+
+TEST_F(GlRenderDeviceUVETest, GetPipelineUniformsUVE_UnsupportedTypeIsExplicitAndSamplerRemainsInt) {
+    const ShaderHandleUVE vertexShader = renderDevice->CreateShaderUVE(
+        ShaderDescUVE{ShaderStageUVE::Vertex, std::string(kValidVertexShaderSource)});
+    const ShaderHandleUVE fragmentShader = renderDevice->CreateShaderUVE(
+        ShaderDescUVE{ShaderStageUVE::Fragment, std::string(kSamplerAndUnsupportedUniformFragmentShaderSource)});
+    ASSERT_NE(vertexShader, kInvalidShaderHandleUVE);
+    ASSERT_NE(fragmentShader, kInvalidShaderHandleUVE);
+
+    PipelineDescUVE pipelineDesc;
+    pipelineDesc.vertexShader = vertexShader;
+    pipelineDesc.fragmentShader = fragmentShader;
+    pipelineDesc.vertexLayout = {VertexAttributeUVE{"POSITION", VertexAttributeFormatUVE::Float3, 0}};
+    pipelineDesc.vertexStride = 3U * static_cast<std::uint32_t>(sizeof(float));
+    const PipelineHandleUVE pipeline = renderDevice->CreatePipelineUVE(pipelineDesc);
+    ASSERT_NE(pipeline, kInvalidPipelineHandleUVE);
+
+    const std::vector<UniformReflectionUVE> uniforms = renderDevice->GetPipelineUniformsUVE(pipeline);
+    const auto samplerIt = std::find_if(uniforms.cbegin(), uniforms.cend(), [](const UniformReflectionUVE& uniform) {
+        return uniform.name == "uTexture";
+    });
+    const auto unsupportedIt = std::find_if(uniforms.cbegin(), uniforms.cend(), [](const UniformReflectionUVE& uniform) {
+        return uniform.name == "uUnsigned";
+    });
+    ASSERT_NE(samplerIt, uniforms.cend());
+    ASSERT_NE(unsupportedIt, uniforms.cend());
+    EXPECT_EQ(samplerIt->type, ShaderDataTypeUVE::Int);
+    EXPECT_EQ(unsupportedIt->type, ShaderDataTypeUVE::Unsupported);
+
+    std::unique_ptr<ICommandBufferUVE> commandBuffer = renderDevice->CreateCommandBufferUVE();
+    ASSERT_NE(commandBuffer, nullptr);
+    RenderPassDescUVE passDesc;
+    passDesc.colorAttachment = kInvalidTextureHandleUVE;
+    passDesc.colorLoadOp = LoadOpUVE::DontCare;
+    passDesc.depthLoadOp = LoadOpUVE::DontCare;
+    commandBuffer->BeginRenderPassUVE(passDesc);
+    commandBuffer->BindPipelineUVE(pipeline);
+    while (glGetError() != GL_NO_ERROR) {
+    }
+    commandBuffer->SetUniformIntUVE("uTexture", 0);
+    commandBuffer->SetUniformIntUVE("uUnsigned", 1);
+    EXPECT_EQ(glGetError(), GL_NO_ERROR);
+    commandBuffer->EndRenderPassUVE();
+    renderDevice->SubmitUVE(std::move(commandBuffer));
 
     renderDevice->DestroyPipelineUVE(pipeline);
     renderDevice->DestroyShaderUVE(vertexShader);
