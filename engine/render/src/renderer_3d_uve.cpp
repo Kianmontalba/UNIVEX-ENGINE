@@ -886,6 +886,9 @@ Renderer3DUVE::Renderer3DUVE(IRenderDeviceUVE& renderDevice, IRenderSystemUVE& r
         TextureDescUVE{targetWidth, targetHeight, TextureFormatUVE::RGBA16Float, 1});
     m_impl->depthTarget = renderDevice.CreateTextureUVE(
         TextureDescUVE{targetWidth, targetHeight, TextureFormatUVE::Depth32Float, 1});
+    if (m_impl->colorTarget == kInvalidTextureHandleUVE || m_impl->depthTarget == kInvalidTextureHandleUVE) {
+        UVE_ERROR("Renderer3DUVE: main render target creation failed; frame rendering will be skipped");
+    }
     m_impl->fallbackWhiteTexture = renderDevice.CreateTextureUVE(
         TextureDescUVE{1, 1, TextureFormatUVE::RGBA8Unorm, 1}, std::as_bytes(std::span(kWhitePixelUVE)));
     m_impl->fallbackNormalTexture = renderDevice.CreateTextureUVE(
@@ -983,6 +986,9 @@ Renderer3DUVE::~Renderer3DUVE() {
 
 void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scene::EntityUVE cameraEntity) {
     m_impl->lastFrameDiagnostics = Renderer3DFrameDiagnosticsUVE{};
+    if (m_impl->colorTarget == kInvalidTextureHandleUVE || m_impl->depthTarget == kInvalidTextureHandleUVE) {
+        return;
+    }
     m_impl->lastFrameDiagnostics.primitiveProgramReady = m_impl->primitiveProgram->IsValidUVE();
     m_impl->lastFrameDiagnostics.particleProgramReady = m_impl->particleProgram->IsValidUVE();
     m_impl->lastFrameDiagnostics.toneMappingProgramReady = m_impl->toneMappingProgram->IsValidUVE();

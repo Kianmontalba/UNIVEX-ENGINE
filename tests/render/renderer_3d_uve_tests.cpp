@@ -1118,6 +1118,24 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_InvalidShadowTargetsSkipShadowPassSafel
               kInvalidTextureHandleUVE);
 }
 
+TEST_F(Renderer3DUVETest, RenderFrameUVE_InvalidMainTargetsSkipFrameSafely) {
+    const Scene::EntityUVE cameraEntity = MakeCameraEntityUVE();
+    Renderer3DUVE invalidMainRenderer(
+        renderDevice, renderSystem, meshRenderer, cameraSystem, lightSystem, shaderManager, assetManager,
+        assetDatabase, eventSystem, 0U, kTargetHeightUVE, kTestAmbientColorUVE, kTestShadowMapResolutionUVE,
+        kTestShadowMapHalfExtentUVE, kTestShadowMapNearPlaneUVE, kTestShadowMapFarPlaneUVE,
+        kTestShadowFrustumPaddingUVE, kTestShadowCascadeSplitLambdaUVE, kTestShadowCascadeBlendRatioUVE,
+        kTestShadowPcfKernelRadiusUVE);
+
+    invalidMainRenderer.RenderFrameUVE(entityManager, cameraEntity);
+
+    const Renderer3DFrameDiagnosticsUVE diagnostics = invalidMainRenderer.GetLastFrameDiagnosticsUVE();
+    EXPECT_EQ(diagnostics.meshItemsExtracted, 0U);
+    EXPECT_EQ(diagnostics.primitiveItemsExtracted, 0U);
+    EXPECT_FALSE(diagnostics.mainPassRecorded);
+    EXPECT_FALSE(diagnostics.toneMappingPassRecorded);
+}
+
 TEST_F(Renderer3DUVETest, RenderFrameUVE_FittedLightFrustum_CastsOffCameraOccluderWithoutMainPassDraw) {
     const Scene::EntityUVE cameraEntity = MakeCameraEntityUVE();
     const Asset::AssetGuidUVE visibleMeshGuid = assetDatabase.RegisterUVE("renderer3d_fitted_visible.uvemodel");
