@@ -787,6 +787,38 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_InvalidReadyTexturePayloadUsesFallbackI
     EXPECT_EQ(secondDiagnostics.textureFallbacks, 0U);
     EXPECT_EQ(secondDiagnostics.meshDrawCallsRecorded, 1U);
 }
+
+TEST_F(Renderer3DUVETest, RenderFrameUVE_OverflowedCascadeSplitsDisableShadowPassInRelease) {
+    const Scene::EntityUVE cameraEntity = MakeCameraEntityUVE();
+    Scene::CameraComponentUVE& camera = entityManager.GetComponentUVE<Scene::CameraComponentUVE>(cameraEntity);
+    camera.nearPlane = std::numeric_limits<float>::min();
+    camera.farPlane = std::numeric_limits<float>::max();
+    const Asset::AssetGuidUVE meshGuid = assetDatabase.RegisterUVE("renderer3d_overflowed_cascade_mesh.uvemodel");
+    const Asset::AssetGuidUVE materialGuid =
+        assetDatabase.RegisterUVE("renderer3d_overflowed_cascade_material.uvemat");
+    MakeMeshEntityUVE(Math::Vector3UVE{0.0F, 0.0F, -10.0F}, meshGuid, materialGuid);
+    MakeLightEntityUVE(Scene::LightComponentUVE{Math::Vector3UVE{1.0F, 1.0F, 1.0F}, 2.0F});
+    WaitUntilAssetsReadyUVE(meshGuid, materialGuid);
+    WaitUntilShadowProgramReadyUVE();
+
+    renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+
+    const std::vector<RecordedCommandUVE>& commands = renderDevice.GetLastSubmittedCommandsUVE();
+    const auto cascadeCount = std::find_if(commands.cbegin(), commands.cend(), [](const RecordedCommandUVE& command) {
+        return std::holds_alternative<SetUniformIntCommandUVE>(command) &&
+               std::get<SetUniformIntCommandUVE>(command).name == "uShadowCascadeCount";
+    });
+    ASSERT_NE(cascadeCount, commands.cend());
+    EXPECT_EQ(std::get<SetUniformIntCommandUVE>(*cascadeCount).value, 0);
+    EXPECT_FALSE(std::any_of(commands.cbegin(), commands.cend(), [](const RecordedCommandUVE& command) {
+        if (!std::holds_alternative<BeginRenderPassCommandUVE>(command)) {
+            return false;
+        }
+        const RenderPassDescUVE& desc = std::get<BeginRenderPassCommandUVE>(command).desc;
+        return desc.colorAttachment == kInvalidTextureHandleUVE &&
+               desc.depthAttachment != kInvalidTextureHandleUVE;
+    }));
+}
 #endif
 
 TEST_F(Renderer3DUVETest, RenderFrameUVE_MaterialWithAlbedoTexture_UploadsAndBindsRealTexture) {

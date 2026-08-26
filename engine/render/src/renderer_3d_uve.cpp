@@ -286,6 +286,18 @@ struct RendererUniformNamesUVE {
     return splits;
 }
 
+[[nodiscard]] bool AreCascadeSplitsValidUVE(const ShadowCascadeSplitsUVE& splits, float nearPlane,
+                                             float farPlane) noexcept {
+    float previousSplit = nearPlane;
+    for (const float split : splits) {
+        if (!std::isfinite(split) || split <= previousSplit || split > farPlane) {
+            return false;
+        }
+        previousSplit = split;
+    }
+    return true;
+}
+
 [[nodiscard]] CameraFrustumCornersUVE ComputeCascadeFrustumCornersUVE(
     const CameraFrustumCornersUVE& fullCameraCorners, float nearRatio, float farRatio) noexcept {
     CameraFrustumCornersUVE cascadeCorners{};
@@ -1171,19 +1183,25 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
     const LightListUVE lights = m_impl->lightSystem.ExtractActiveLightsUVE(entityManager);
 
     const LightDataUVE* const shadowCaster = FindShadowCasterUVE(lights);
-    const bool shadowsReady = shadowCaster != nullptr && m_impl->shadowProgram->IsValidUVE() &&
-                              AreShadowMapTargetsValidUVE(m_impl->shadowMapTargets);
+    bool shadowsReady = shadowCaster != nullptr && m_impl->shadowProgram->IsValidUVE() &&
+                        AreShadowMapTargetsValidUVE(m_impl->shadowMapTargets);
     ShadowCascadeMatricesUVE lightSpaceMatrices{};
     ShadowCascadeSplitsUVE cascadeSplits{};
     std::int32_t cascadeCount = 0;
     if (shadowsReady) {
         cascadeSplits = ComputeCascadeSplitsUVE(camera.nearPlane, camera.farPlane, m_impl->shadowCascadeSplitLambda);
-        const Math::Matrix4x4UVE lightView =
-            Math::Matrix4x4UVE::ViewFromPositionAndRotationUVE(shadowCaster->position, shadowCaster->rotation);
-        const CameraFrustumCornersUVE cameraCorners =
-            m_impl->cameraSystem.ComputeFrustumCornersUVE(entityManager, cameraEntity, aspectRatio);
-        float cascadeNearPlane = camera.nearPlane;
-        for (std::size_t cascadeIndex = 0; cascadeIndex < kShadowCascadeCountUVE; ++cascadeIndex) {
+        const bool cascadeSplitsValid = AreCascadeSplitsValidUVE(cascadeSplits, camera.nearPlane, camera.farPlane);
+        UVE_ASSERT(cascadeSplitsValid);
+        if (!cascadeSplitsValid) {
+            UVE_ERROR("Renderer3DUVE: shadow cascade split math produced invalid output; skipping shadow cascades");
+            shadowsReady = false;
+        } else {
+            const Math::Matrix4x4UVE lightView =
+                Math::Matrix4x4UVE::ViewFromPositionAndRotationUVE(shadowCaster->position, shadowCaster->rotation);
+            const CameraFrustumCornersUVE cameraCorners =
+                m_impl->cameraSystem.ComputeFrustumCornersUVE(entityManager, cameraEntity, aspectRatio);
+            float cascadeNearPlane = camera.nearPlane;
+            for (std::size_t cascadeIndex = 0; cascadeIndex < kShadowCascadeCountUVE; ++cascadeIndex) {
             const float cascadeFarPlane = cascadeSplits[cascadeIndex];
             const float nearRatio = (cascadeNearPlane - camera.nearPlane) / (camera.farPlane - camera.nearPlane);
             const float farRatio = (cascadeFarPlane - camera.nearPlane) / (camera.farPlane - camera.nearPlane);
@@ -1201,9 +1219,10 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
             m_impl->meshRenderer.ExtractRenderQueueIntoUVE(entityManager, m_impl->assetManager, m_impl->assetDatabase,
                                                             lightFrustum, m_impl->shadowQueues[cascadeIndex]);
             m_impl->shadowQueues[cascadeIndex].SortUVE();
-            cascadeNearPlane = cascadeFarPlane;
+                cascadeNearPlane = cascadeFarPlane;
+            }
+            cascadeCount = static_cast<std::int32_t>(kShadowCascadeCountUVE);
         }
-        cascadeCount = static_cast<std::int32_t>(kShadowCascadeCountUVE);
     }
 
     const FrameUniformsUVE frameUniforms{viewProjection, viewPosition, lights, m_impl->ambientColor,
