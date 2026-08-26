@@ -440,6 +440,13 @@ ShaderHandleUVE GlRenderDeviceUVE::CreateShaderUVE(const ShaderDescUVE& desc, st
         return kInvalidShaderHandleUVE;
     }
 #endif
+    if (desc.sourceCode.size() > static_cast<std::size_t>(std::numeric_limits<GLint>::max())) {
+        if (outInfoLog != nullptr) {
+            *outInfoLog = "Shader source exceeds the GLsizei length range.";
+        }
+        UVE_ERROR("GlRenderDeviceUVE: shader source exceeds the GLsizei length range");
+        return kInvalidShaderHandleUVE;
+    }
     const GLenum stage = ShaderStageToGlUVE(desc.stage);
     const GLuint glShader = m_impl->state.gl.glCreateShader(stage);
 
