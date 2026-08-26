@@ -139,6 +139,7 @@
   },
   "gizmo": {
     "modes": ["Move XYZ", "Rotate XYZ", "Scale XYZ"],
+    "presentation": "all-in-one; Move, Rotate, and Scale handles share one selection-centered gizmo",
     "axes": ["X", "Y", "Z"],
     "colors": {
       "X": "#D86666",
