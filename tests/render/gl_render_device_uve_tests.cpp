@@ -427,6 +427,39 @@ TEST_F(GlRenderDeviceUVETest, DrawIndexedUVE_CountExceedsGlsizei_DoesNotIssueGlC
     renderDevice->SubmitUVE(std::move(commandBuffer));
 }
 
+TEST_F(GlRenderDeviceUVETest, BufferUsageAndIndexedCountValidationRejectsUnsafeDraws) {
+    const BufferHandleUVE vertexBuffer = renderDevice->CreateBufferUVE(BufferDescUVE{16U, BufferUsageUVE::Vertex});
+    const BufferHandleUVE indexBuffer = renderDevice->CreateBufferUVE(BufferDescUVE{4U, BufferUsageUVE::Index});
+    const BufferHandleUVE uniformBuffer = renderDevice->CreateBufferUVE(BufferDescUVE{16U, BufferUsageUVE::Uniform});
+    ASSERT_NE(vertexBuffer, kInvalidBufferHandleUVE);
+    ASSERT_NE(indexBuffer, kInvalidBufferHandleUVE);
+    ASSERT_NE(uniformBuffer, kInvalidBufferHandleUVE);
+
+    std::unique_ptr<ICommandBufferUVE> commandBuffer = renderDevice->CreateCommandBufferUVE();
+    ASSERT_NE(commandBuffer, nullptr);
+    RenderPassDescUVE passDesc;
+    passDesc.colorAttachment = kInvalidTextureHandleUVE;
+    passDesc.depthLoadOp = LoadOpUVE::DontCare;
+    commandBuffer->BeginRenderPassUVE(passDesc);
+    while (glGetError() != GL_NO_ERROR) {
+    }
+
+    commandBuffer->BindVertexBufferUVE(uniformBuffer);
+    commandBuffer->BindIndexBufferUVE(vertexBuffer);
+    commandBuffer->DrawIndexedUVE(2U);
+    EXPECT_EQ(glGetError(), GL_NO_ERROR);
+
+    commandBuffer->BindIndexBufferUVE(indexBuffer);
+    commandBuffer->DrawIndexedUVE(2U);
+    EXPECT_EQ(glGetError(), GL_NO_ERROR);
+
+    commandBuffer->EndRenderPassUVE();
+    renderDevice->SubmitUVE(std::move(commandBuffer));
+    renderDevice->DestroyBufferUVE(uniformBuffer);
+    renderDevice->DestroyBufferUVE(indexBuffer);
+    renderDevice->DestroyBufferUVE(vertexBuffer);
+}
+
 TEST_F(GlRenderDeviceUVETest, BeginRenderPassUVE_UnknownAttachmentDoesNotBindOrCacheFramebuffer) {
     const TextureHandleUVE validColor = renderDevice->CreateTextureUVE(TextureDescUVE{1U, 1U});
     ASSERT_NE(validColor, kInvalidTextureHandleUVE);

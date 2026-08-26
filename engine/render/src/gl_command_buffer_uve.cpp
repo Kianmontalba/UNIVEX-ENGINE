@@ -211,6 +211,10 @@ void GlCommandBufferUVE::BindVertexBufferUVE(BufferHandleUVE buffer, std::uint32
         UVE_ERROR("GlCommandBufferUVE: BindVertexBufferUVE referenced an unknown buffer handle");
         return;
     }
+    if (bufferIt->second.target != GL_ARRAY_BUFFER) {
+        UVE_ERROR("GlCommandBufferUVE: BindVertexBufferUVE requires a vertex buffer");
+        return;
+    }
     m_state->gl.glBindBuffer(GL_ARRAY_BUFFER, bufferIt->second.glBuffer);
 
     if (m_currentVertexLayout == nullptr) {
@@ -240,6 +244,10 @@ void GlCommandBufferUVE::BindIndexBufferUVE(BufferHandleUVE buffer) {
     const auto bufferIt = m_state->buffers.find(buffer.value);
     if (bufferIt == m_state->buffers.end()) {
         UVE_ERROR("GlCommandBufferUVE: BindIndexBufferUVE referenced an unknown buffer handle");
+        return;
+    }
+    if (bufferIt->second.target != GL_ELEMENT_ARRAY_BUFFER) {
+        UVE_ERROR("GlCommandBufferUVE: BindIndexBufferUVE requires an index buffer");
         return;
     }
     m_state->gl.glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, bufferIt->second.glBuffer);
@@ -338,6 +346,20 @@ void GlCommandBufferUVE::SetUniformMatrix4x4UVE(std::string_view name, const Mat
 }
 
 void GlCommandBufferUVE::DrawIndexedUVE(std::uint32_t indexCount, std::uint32_t instanceCount) {
+    if (m_boundIndexBuffer == kInvalidBufferHandleUVE) {
+        UVE_ERROR("GlCommandBufferUVE: DrawIndexedUVE called without a bound index buffer");
+        return;
+    }
+    const auto indexBufferIt = m_state->buffers.find(m_boundIndexBuffer.value);
+    if (indexBufferIt == m_state->buffers.end() || indexBufferIt->second.target != GL_ELEMENT_ARRAY_BUFFER) {
+        UVE_ERROR("GlCommandBufferUVE: DrawIndexedUVE has no valid bound index buffer");
+        return;
+    }
+    const std::uint64_t indexCapacity = indexBufferIt->second.sizeBytes / sizeof(std::uint32_t);
+    if (static_cast<std::uint64_t>(indexCount) > indexCapacity) {
+        UVE_ERROR("GlCommandBufferUVE: DrawIndexedUVE indexCount exceeds the bound index buffer");
+        return;
+    }
     if (indexCount > static_cast<std::uint32_t>(std::numeric_limits<GLsizei>::max())) {
         UVE_ERROR("GlCommandBufferUVE: DrawIndexedUVE indexCount exceeds the GLsizei range");
         return;
