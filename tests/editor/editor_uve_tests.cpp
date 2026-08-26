@@ -17,6 +17,7 @@
 #include "uve/scene/components/camera_component_uve.h"
 #include "uve/scene/components/collider_component_uve.h"
 #include "uve/scene/components/light_component_uve.h"
+#include "uve/scene/components/mesh_component_uve.h"
 #include "uve/scene/components/name_component_uve.h"
 #include "uve/scene/components/primitive_mesh_component_uve.h"
 #include "uve/scene/components/transform_component_uve.h"
@@ -188,6 +189,12 @@ TEST(EditorUVETest, InitUVE_DoesNotCreateAutomaticPreviewLighting) {
         entityManager.ForEachUVE<Scene::LightComponentUVE>(
             [&lightCount](Scene::EntityUVE, Scene::LightComponentUVE&) { ++lightCount; });
         EXPECT_EQ(lightCount, 0U);
+        std::size_t meshCount = 0U;
+        entityManager.ForEachUVE<Scene::MeshComponentUVE>(
+            [&meshCount](Scene::EntityUVE, Scene::MeshComponentUVE&) { ++meshCount; });
+        entityManager.ForEachUVE<Scene::PrimitiveMeshComponentUVE>(
+            [&meshCount](Scene::EntityUVE, Scene::PrimitiveMeshComponentUVE&) { ++meshCount; });
+        EXPECT_EQ(meshCount, 0U);
         EXPECT_FALSE(editor.IsSceneDirtyUVE());
 
         editor.TickUVE();
@@ -196,6 +203,12 @@ TEST(EditorUVETest, InitUVE_DoesNotCreateAutomaticPreviewLighting) {
         entityManager.ForEachUVE<Scene::LightComponentUVE>(
             [&lightCount](Scene::EntityUVE, Scene::LightComponentUVE&) { ++lightCount; });
         EXPECT_EQ(lightCount, 0U);
+        meshCount = 0U;
+        entityManager.ForEachUVE<Scene::MeshComponentUVE>(
+            [&meshCount](Scene::EntityUVE, Scene::MeshComponentUVE&) { ++meshCount; });
+        entityManager.ForEachUVE<Scene::PrimitiveMeshComponentUVE>(
+            [&meshCount](Scene::EntityUVE, Scene::PrimitiveMeshComponentUVE&) { ++meshCount; });
+        EXPECT_EQ(meshCount, 0U);
 
         editor.ShutdownUVE();
     }
