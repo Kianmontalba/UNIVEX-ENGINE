@@ -1031,9 +1031,11 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
     renderGraph.ClearUVE();
     renderGraph.ReserveUVE(kShadowCascadeCountUVE + 2U, kShadowCascadeCountUVE + 3U);
     std::array<RenderGraphResourceHandleUVE, kShadowCascadeCountUVE> shadowResources{};
-    for (std::size_t cascadeIndex = 0; cascadeIndex < kShadowCascadeCountUVE; ++cascadeIndex) {
-        shadowResources[cascadeIndex] = renderGraph.ImportTextureUVE(
-            m_impl->shadowMapTargets[cascadeIndex], "DirectionalShadowCascade" + std::to_string(cascadeIndex));
+    if (shadowsReady) {
+        for (std::size_t cascadeIndex = 0; cascadeIndex < kShadowCascadeCountUVE; ++cascadeIndex) {
+            shadowResources[cascadeIndex] = renderGraph.ImportTextureUVE(
+                m_impl->shadowMapTargets[cascadeIndex], "DirectionalShadowCascade" + std::to_string(cascadeIndex));
+        }
     }
     const RenderGraphResourceHandleUVE colorResource = renderGraph.ImportTextureUVE(m_impl->colorTarget, "MainColor");
     const RenderGraphResourceHandleUVE depthResource = renderGraph.ImportTextureUVE(m_impl->depthTarget, "MainDepth");
@@ -1053,8 +1055,10 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
 
     std::vector<RenderGraphResourceUseUVE> mainResources{{colorResource, RenderGraphResourceAccessUVE::Write},
                                                           {depthResource, RenderGraphResourceAccessUVE::Write}};
-    for (const RenderGraphResourceHandleUVE shadowResource : shadowResources) {
-        mainResources.push_back(RenderGraphResourceUseUVE{shadowResource, RenderGraphResourceAccessUVE::Read});
+    if (shadowsReady) {
+        for (const RenderGraphResourceHandleUVE shadowResource : shadowResources) {
+            mainResources.push_back(RenderGraphResourceUseUVE{shadowResource, RenderGraphResourceAccessUVE::Read});
+        }
     }
     renderGraph.AddPassUVE(RenderGraphPassDescUVE{
         "MainColor", std::move(mainResources),
