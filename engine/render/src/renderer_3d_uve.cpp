@@ -174,10 +174,19 @@ constexpr std::uint32_t kAoTextureSlotUVE = 2;
 /// convention.
 constexpr std::uint32_t kShadowMapTextureSlotUVE = 3U;
 
-// The renderer always clears its HDR scene target. This neutral charcoal is the intentional
-// empty-scene environment baseline; it is not an editor overlay and never counts as primitive
-// presentation evidence in the real-GL fixture tests.
+// The renderer always clears its scene target. Desktop uses HDR RGBA16F while Android uses the
+// GLES3-safe RGBA8 variant below. This neutral charcoal is the intentional empty-scene environment
+// baseline; it is not an editor overlay and never counts as primitive presentation evidence in the
+// real-GL fixture tests.
 constexpr std::array<float, 4> kDefaultSceneClearColorUVE{0.050F, 0.050F, 0.050F, 1.0F};
+// GLES3 devices do not universally expose float color-buffer renderability as a core guarantee.
+// Keep desktop's HDR scene target, but use the core RGBA8 color-renderable format on Android so
+// the real NativeActivity viewport remains valid without requiring an optional extension.
+#if defined(__ANDROID__)
+constexpr TextureFormatUVE kSceneColorTargetFormatUVE = TextureFormatUVE::RGBA8Unorm;
+#else
+constexpr TextureFormatUVE kSceneColorTargetFormatUVE = TextureFormatUVE::RGBA16Float;
+#endif
 constexpr std::size_t kShadowCascadeCountUVE = 3;
 constexpr std::uint32_t kShadowCascadeFirstTextureSlotUVE = kShadowMapTextureSlotUVE;
 
@@ -885,10 +894,11 @@ Renderer3DUVE::Renderer3DUVE(IRenderDeviceUVE& renderDevice, IRenderSystemUVE& r
                                         targetHeight, ambientColor, shadowMapResolution, shadowMapHalfExtent,
                                         shadowMapNearPlane, shadowMapFarPlane, shadowFrustumPadding,
                                         shadowCascadeSplitLambda, shadowCascadeBlendRatio, shadowPcfKernelRadius)) {
-    // The scene is rendered to HDR first; the final fullscreen graph pass tone-maps it to the
-    // default framebuffer's LDR presentation surface.
+    // The scene is rendered to the offscreen color target first; desktop keeps HDR RGBA16F while
+    // Android uses the GLES3-safe RGBA8 target, and the final fullscreen graph pass tone-maps it
+    // to the default framebuffer's LDR presentation surface.
     m_impl->colorTarget = renderDevice.CreateTextureUVE(
-        TextureDescUVE{targetWidth, targetHeight, TextureFormatUVE::RGBA16Float, 1});
+        TextureDescUVE{targetWidth, targetHeight, kSceneColorTargetFormatUVE, 1});
     m_impl->depthTarget = renderDevice.CreateTextureUVE(
         TextureDescUVE{targetWidth, targetHeight, TextureFormatUVE::Depth32Float, 1});
     if (m_impl->colorTarget == kInvalidTextureHandleUVE || m_impl->depthTarget == kInvalidTextureHandleUVE) {
