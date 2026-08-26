@@ -44,20 +44,6 @@ void GlCommandBufferUVE::BeginRenderPassUVE(const RenderPassDescUVE& renderPassD
         const std::uint32_t height = m_state->windowManager->GetHeightUVE();
         glViewport(0, 0, static_cast<GLsizei>(width), static_cast<GLsizei>(height));
     } else {
-        const std::uint64_t framebufferKey =
-            (static_cast<std::uint64_t>(renderPassDesc.colorAttachment.value) << 32U) |
-            static_cast<std::uint64_t>(renderPassDesc.depthAttachment.value);
-        GLuint framebuffer = 0;
-        const auto cachedFramebufferIt = m_state->framebufferCache.find(framebufferKey);
-        const bool framebufferCreated = cachedFramebufferIt == m_state->framebufferCache.end();
-        if (framebufferCreated) {
-            m_state->gl.glGenFramebuffers(1, &framebuffer);
-            m_state->framebufferCache.emplace(framebufferKey, framebuffer);
-        } else {
-            framebuffer = cachedFramebufferIt->second;
-        }
-        m_state->gl.glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
-
         const auto colorIt = renderPassDesc.colorAttachment == kInvalidTextureHandleUVE
                                  ? m_state->textures.end()
                                  : m_state->textures.find(renderPassDesc.colorAttachment.value);
@@ -72,6 +58,20 @@ void GlCommandBufferUVE::BeginRenderPassUVE(const RenderPassDescUVE& renderPassD
             UVE_ERROR("GlCommandBufferUVE: BeginRenderPassUVE referenced an unknown depthAttachment handle");
             return;
         }
+
+        const std::uint64_t framebufferKey =
+            (static_cast<std::uint64_t>(renderPassDesc.colorAttachment.value) << 32U) |
+            static_cast<std::uint64_t>(renderPassDesc.depthAttachment.value);
+        GLuint framebuffer = 0;
+        const auto cachedFramebufferIt = m_state->framebufferCache.find(framebufferKey);
+        const bool framebufferCreated = cachedFramebufferIt == m_state->framebufferCache.end();
+        if (framebufferCreated) {
+            m_state->gl.glGenFramebuffers(1, &framebuffer);
+            m_state->framebufferCache.emplace(framebufferKey, framebuffer);
+        } else {
+            framebuffer = cachedFramebufferIt->second;
+        }
+        m_state->gl.glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
 
         std::uint32_t attachmentWidth = 0;
         std::uint32_t attachmentHeight = 0;

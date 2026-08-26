@@ -427,6 +427,42 @@ TEST_F(GlRenderDeviceUVETest, DrawIndexedUVE_CountExceedsGlsizei_DoesNotIssueGlC
     renderDevice->SubmitUVE(std::move(commandBuffer));
 }
 
+TEST_F(GlRenderDeviceUVETest, BeginRenderPassUVE_UnknownAttachmentDoesNotBindOrCacheFramebuffer) {
+    const TextureHandleUVE validColor = renderDevice->CreateTextureUVE(TextureDescUVE{1U, 1U});
+    ASSERT_NE(validColor, kInvalidTextureHandleUVE);
+    std::unique_ptr<ICommandBufferUVE> commandBuffer = renderDevice->CreateCommandBufferUVE();
+    ASSERT_NE(commandBuffer, nullptr);
+
+    const auto assertFramebufferUnchanged = [&commandBuffer](const RenderPassDescUVE& passDesc) {
+        GLint before = 0;
+        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &before);
+        commandBuffer->BeginRenderPassUVE(passDesc);
+        GLint after = 0;
+        glGetIntegerv(GL_FRAMEBUFFER_BINDING, &after);
+        EXPECT_EQ(after, before);
+    };
+
+    RenderPassDescUVE unknownColor;
+    unknownColor.colorAttachment = TextureHandleUVE{0xFFFF'FFFEU};
+    unknownColor.depthAttachment = kInvalidTextureHandleUVE;
+    assertFramebufferUnchanged(unknownColor);
+
+    RenderPassDescUVE unknownDepth;
+    unknownDepth.colorAttachment = validColor;
+    unknownDepth.depthAttachment = TextureHandleUVE{0xFFFF'FFFDU};
+    assertFramebufferUnchanged(unknownDepth);
+
+    RenderPassDescUVE validPass;
+    validPass.colorAttachment = validColor;
+    validPass.depthAttachment = kInvalidTextureHandleUVE;
+    commandBuffer->BeginRenderPassUVE(validPass);
+    GLint validFramebuffer = 0;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &validFramebuffer);
+    EXPECT_NE(validFramebuffer, 0);
+    commandBuffer->EndRenderPassUVE();
+    renderDevice->DestroyTextureUVE(validColor);
+}
+
 TEST_F(GlRenderDeviceUVETest, BindTextureUVE_SlotExceedsGlLimit_DoesNotIssueGlCall) {
     const TextureHandleUVE texture = renderDevice->CreateTextureUVE(TextureDescUVE{1U, 1U});
     ASSERT_NE(texture, kInvalidTextureHandleUVE);
