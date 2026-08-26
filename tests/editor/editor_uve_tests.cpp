@@ -216,6 +216,44 @@ TEST(EditorUVETest, InitUVE_DoesNotCreateAutomaticPreviewLighting) {
     engine.Shutdown();
 }
 
+TEST(EditorUVETest, TwoDCanvasStateUVE_IsEditorOnlyAndValidated) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_2d_canvas.uvescene");
+        editor.InitUVE();
+        const Editor2DCanvasStateUVE initial = editor.Get2DCanvasStateUVE();
+        EXPECT_FLOAT_EQ(initial.zoom, 0.36F);
+        EXPECT_FLOAT_EQ(initial.pan.x, 0.0F);
+        EXPECT_FLOAT_EQ(initial.pan.y, 0.0F);
+        EXPECT_TRUE(initial.gridVisible);
+        EXPECT_TRUE(initial.safeAreaVisible);
+        EXPECT_TRUE(editor.GetDocumentRootsUVE().empty());
+        EXPECT_FALSE(editor.IsSceneDirtyUVE());
+
+        EXPECT_TRUE(editor.Set2DCanvasZoomUVE(1.25F));
+        EXPECT_FLOAT_EQ(editor.Get2DCanvasStateUVE().zoom, 1.25F);
+        EXPECT_FALSE(editor.Set2DCanvasZoomUVE(0.0F));
+        EXPECT_FALSE(editor.Set2DCanvasZoomUVE(5.0F));
+        EXPECT_FALSE(editor.Set2DCanvasZoomUVE(std::numeric_limits<float>::quiet_NaN()));
+        EXPECT_FLOAT_EQ(editor.Get2DCanvasStateUVE().zoom, 1.25F);
+
+        editor.Reset2DCanvasViewUVE();
+        const Editor2DCanvasStateUVE reset = editor.Get2DCanvasStateUVE();
+        EXPECT_FLOAT_EQ(reset.zoom, 0.36F);
+        EXPECT_FLOAT_EQ(reset.pan.x, 0.0F);
+        EXPECT_FLOAT_EQ(reset.pan.y, 0.0F);
+        EXPECT_TRUE(editor.GetDocumentRootsUVE().empty());
+        EXPECT_FALSE(editor.IsSceneDirtyUVE());
+
+        editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
+}
+
 TEST(EditorUVETest, RenderOverlayUVE_HeadlessWorkspaceCompositionDoesNotMutateEditorState) {
     Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
     engine.Init();

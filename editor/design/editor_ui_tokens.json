@@ -106,13 +106,23 @@
     "disabled": "Reduce contrast without removing the control’s explanation when needed."
   },
   "filesystem": {
-    "header": "entries",
-    "normalControls": ["main-root", "breadcrumbs", "search", "type-filter", "clear-filters"],
+    "header": "FILESYSTEM",
+    "normalControls": ["main-root", "search", "scrollable-hierarchy", "selected-folder-contents", "overflow-menu"],
     "forbiddenNormalControls": ["review-changes", "manual-refresh"],
     "failureOnlyControls": ["retry"],
     "rowLayout": "icon 18px + name flex + semantic type 64px + metadata 92px",
     "maxVisibleRowsBeforeScroll": 7,
     "preserveExactArtwork": true
+  },
+  "viewport": {
+    "tabs": ["Scene", "2D", "Game"],
+    "twoD": {
+      "purpose": "Loading-screen and screen-space content authoring surface",
+      "designResolution": [1920, 1080],
+      "controls": ["fit", "reset-view", "grid-toggle", "safe-area-toggle"],
+      "navigation": ["middle-drag-pan", "wheel-zoom-to-cursor"],
+      "ownership": "editor-only; never an ECS entity or serialized scene light/mesh"
+    }
   },
   "gizmo": {
     "modes": ["Move XYZ", "Rotate XYZ", "Scale XYZ"],
@@ -131,6 +141,7 @@
     "scene-canvas",
     "node3d-hierarchy",
     "viewport-canvas",
+    "2d-canvas",
     "viewport-local-transform-tools",
     "inspector-canvas",
     "import-canvas",
