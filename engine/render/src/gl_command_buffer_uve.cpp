@@ -89,6 +89,20 @@ void GlCommandBufferUVE::BeginRenderPassUVE(const RenderPassDescUVE& renderPassD
             UVE_ERROR("GlCommandBufferUVE: BeginRenderPassUVE referenced an unknown depthAttachment handle");
             return;
         }
+        if (colorIt != m_state->textures.end() && colorIt->second.desc.format == TextureFormatUVE::Depth32Float) {
+            UVE_ERROR("GlCommandBufferUVE: colorAttachment must use a color texture format");
+            return;
+        }
+        if (depthIt != m_state->textures.end() && depthIt->second.desc.format != TextureFormatUVE::Depth32Float) {
+            UVE_ERROR("GlCommandBufferUVE: depthAttachment must use TextureFormatUVE::Depth32Float");
+            return;
+        }
+        if (colorIt != m_state->textures.end() && depthIt != m_state->textures.end() &&
+            (colorIt->second.desc.width != depthIt->second.desc.width ||
+             colorIt->second.desc.height != depthIt->second.desc.height)) {
+            UVE_ERROR("GlCommandBufferUVE: colorAttachment and depthAttachment dimensions must match");
+            return;
+        }
 
         const std::uint64_t framebufferKey =
             (static_cast<std::uint64_t>(renderPassDesc.colorAttachment.value) << 32U) |
