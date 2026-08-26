@@ -157,6 +157,10 @@ void GlCommandBufferUVE::EndRenderPassUVE() {
 }
 
 void GlCommandBufferUVE::BindPipelineUVE(PipelineHandleUVE pipeline) {
+    if (pipeline == kInvalidPipelineHandleUVE) {
+        UVE_ERROR("GlCommandBufferUVE: BindPipelineUVE referenced an invalid pipeline handle");
+        return;
+    }
     if (m_currentPipeline == pipeline) {
         return;
     }
@@ -195,6 +199,10 @@ void GlCommandBufferUVE::BindVertexBufferUVE(BufferHandleUVE buffer, std::uint32
     static_cast<void>(slot); // This minimal RHI describes one interleaved vertex layout per
                               // pipeline, not a per-slot binding table — every attribute in
                               // vertexLayout is configured against whichever buffer is bound here.
+    if (buffer == kInvalidBufferHandleUVE) {
+        UVE_ERROR("GlCommandBufferUVE: BindVertexBufferUVE referenced an invalid buffer handle");
+        return;
+    }
     if (m_boundVertexBuffer == buffer) {
         return;
     }
@@ -222,6 +230,10 @@ void GlCommandBufferUVE::BindVertexBufferUVE(BufferHandleUVE buffer, std::uint32
 }
 
 void GlCommandBufferUVE::BindIndexBufferUVE(BufferHandleUVE buffer) {
+    if (buffer == kInvalidBufferHandleUVE) {
+        UVE_ERROR("GlCommandBufferUVE: BindIndexBufferUVE referenced an invalid buffer handle");
+        return;
+    }
     if (m_boundIndexBuffer == buffer) {
         return;
     }
