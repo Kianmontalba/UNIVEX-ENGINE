@@ -905,6 +905,44 @@ TEST_F(Renderer3DUVETest, AssetReloadedEventUVE_ForCachedTexture_EvictsTextureAn
     EXPECT_GT(liveResourcesAfterRerender, liveResourcesAfterReload);
 }
 
+TEST_F(Renderer3DUVETest, AssetReloadedEventUVE_ForMaterialTextureSwap_EvictsOldTextureCacheEntry) {
+    const Scene::EntityUVE cameraEntity = MakeCameraEntityUVE();
+    const Asset::AssetGuidUVE meshGuid = assetDatabase.RegisterUVE("renderer3d_tests_material_swap_mesh.uvemodel");
+    const Asset::AssetGuidUVE materialGuid = assetDatabase.RegisterUVE("renderer3d_tests_material_swap_material.uvemat");
+    const Asset::AssetGuidUVE textureAGuid = assetDatabase.RegisterUVE("renderer3d_tests_material_swap_a.uvetex");
+    const Asset::AssetGuidUVE textureBGuid = assetDatabase.RegisterUVE("renderer3d_tests_material_swap_b.uvetex");
+    UseAlbedoTextureInMaterialUVE(textureAGuid);
+
+    MakeMeshEntityUVE(Math::Vector3UVE{0.0F, 0.0F, -10.0F}, meshGuid, materialGuid);
+    WaitUntilAssetsReadyUVE(meshGuid, materialGuid);
+    WaitUntilTextureReadyUVE(textureAGuid);
+    WaitUntilTextureReadyUVE(textureBGuid);
+    PrimeMaterialProgramUVE(*renderer3D, cameraEntity);
+
+    renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+    const std::size_t liveResourcesBeforeMaterialReload = renderDevice.GetLiveResourceCountUVE();
+
+    Asset::AssetHandleUVE<Asset::MaterialAssetUVE> materialHandle =
+        assetManager.LoadUVE<Asset::MaterialAssetUVE>(materialGuid, assetDatabase);
+    ASSERT_TRUE(materialHandle.IsReadyUVE());
+    materialHandle.TryGetUVE()->albedoTexture = textureBGuid;
+    eventSystem.Publish(Asset::AssetReloadedEventUVE{materialGuid});
+
+    // Material eviction must retire texture A even though the material GUID is unchanged and the
+    // replacement texture is only referenced by the newly loaded CPU material payload. Releasing
+    // the material cache may also retire its manager-owned pipeline, so assert a strict decrease
+    // rather than assuming exactly one resource disappears.
+    const std::size_t liveResourcesAfterMaterialReload = renderDevice.GetLiveResourceCountUVE();
+    EXPECT_LT(liveResourcesAfterMaterialReload, liveResourcesBeforeMaterialReload);
+
+    // The replacement material program is asynchronous; drain it before comparing the steady-state
+    // resource count so the comparison isolates cache lifetime rather than link timing.
+    PrimeMaterialProgramUVE(*renderer3D, cameraEntity);
+    renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+    const std::size_t liveResourcesAfterReplacementFrame = renderDevice.GetLiveResourceCountUVE();
+    EXPECT_EQ(liveResourcesAfterReplacementFrame, liveResourcesBeforeMaterialReload);
+}
+
 TEST_F(Renderer3DUVETest, RenderFrameUVE_ParticleRuntimeInput_ExtractsCopiedItemsAndDoesNotLeakAcrossFrames) {
     const Scene::EntityUVE cameraEntity = MakeCameraEntityUVE();
     Scene::ParticleRuntimeUVE particleRuntime;

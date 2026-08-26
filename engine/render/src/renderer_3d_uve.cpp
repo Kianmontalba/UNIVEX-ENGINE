@@ -154,6 +154,9 @@ struct MaterialGpuResourcesUVE {
     std::shared_ptr<Shader::ShaderProgramUVE> program;
     Asset::AssetGuidUVE vertexShaderGuid;
     Asset::AssetGuidUVE fragmentShaderGuid;
+    Asset::AssetGuidUVE albedoTextureGuid;
+    Asset::AssetGuidUVE normalTextureGuid;
+    Asset::AssetGuidUVE aoTextureGuid;
     TextureHandleUVE albedoTexture;
     TextureHandleUVE normalTexture;
     TextureHandleUVE aoTexture;
@@ -469,6 +472,30 @@ struct Renderer3DUVE::ImplUVE {
           shadowCascadeBlendRatio(std::clamp(shadowCascadeBlendRatioIn, 0.0F, 0.25F)),
           shadowPcfKernelRadius(static_cast<std::int32_t>(std::min(shadowPcfKernelRadiusIn, 2U))) {}
 
+    void EvictUnreferencedTextureCacheEntriesUVE() {
+        std::unordered_set<Asset::AssetGuidUVE> referencedTextureGuids;
+        for (const auto& [materialGuid, resources] : materialCache) {
+            static_cast<void>(materialGuid);
+            if (resources.albedoTextureGuid != Asset::kInvalidAssetGuidUVE) {
+                referencedTextureGuids.insert(resources.albedoTextureGuid);
+            }
+            if (resources.normalTextureGuid != Asset::kInvalidAssetGuidUVE) {
+                referencedTextureGuids.insert(resources.normalTextureGuid);
+            }
+            if (resources.aoTextureGuid != Asset::kInvalidAssetGuidUVE) {
+                referencedTextureGuids.insert(resources.aoTextureGuid);
+            }
+        }
+        for (auto textureIt = textureCache.begin(); textureIt != textureCache.end();) {
+            if (!referencedTextureGuids.contains(textureIt->first)) {
+                DestroyTextureIfValidUVE(renderDevice, textureIt->second);
+                textureIt = textureCache.erase(textureIt);
+            } else {
+                ++textureIt;
+            }
+        }
+    }
+
     void OnAssetReloadedUVE(const Asset::AssetReloadedEventUVE& event) {
         const auto meshIt = meshCache.find(event.guid);
         if (meshIt != meshCache.end()) {
@@ -478,11 +505,14 @@ struct Renderer3DUVE::ImplUVE {
         }
         // A material asset reload, or a reload of either of its separate shader assets, drops the
         // renderer cache entry. The shared managed program then releases naturally; ShaderManagerUVE
-        // remains the sole owner of the linked pipeline lifecycle.
+        // remains the sole owner of the linked pipeline lifecycle. Texture source GUIDs are retained
+        // in each record so entries no longer referenced by a reloaded material can be retired.
+        bool materialAssetReloaded = false;
         for (auto materialIt = materialCache.begin(); materialIt != materialCache.end();) {
             const MaterialGpuResourcesUVE& resources = materialIt->second;
             if (materialIt->first == event.guid || resources.vertexShaderGuid == event.guid ||
                 resources.fragmentShaderGuid == event.guid) {
+                materialAssetReloaded = materialAssetReloaded || materialIt->first == event.guid;
                 materialIt = materialCache.erase(materialIt);
             } else {
                 ++materialIt;
@@ -503,6 +533,10 @@ struct Renderer3DUVE::ImplUVE {
             // codebase's existing preference for whole-unit invalidation over fine-grained
             // dependency tracking (compare ShaderManagerUVE's own hot-reload).
             materialCache.clear();
+        } else if (materialAssetReloaded) {
+            // Shader reloads intentionally retain valid texture uploads; only a material payload
+            // swap can make a previously cached texture definitively unreferenced here.
+            EvictUnreferencedTextureCacheEntriesUVE();
         }
     }
 
@@ -666,8 +700,9 @@ struct Renderer3DUVE::ImplUVE {
         const std::shared_ptr<Shader::ShaderProgramUVE> program = shaderManager.CreateProgramFromStagesUVE(programDesc);
 
         const auto insertResult = materialCache.emplace(
-            guid, MaterialGpuResourcesUVE{program, material->vertexShader, material->fragmentShader, *albedoTexture,
-                                          *normalTexture, *aoTexture});
+            guid, MaterialGpuResourcesUVE{program, material->vertexShader, material->fragmentShader,
+                                          material->albedoTexture, material->normalTexture, material->aoTexture,
+                                          *albedoTexture, *normalTexture, *aoTexture});
         return &insertResult.first->second;
     }
 
