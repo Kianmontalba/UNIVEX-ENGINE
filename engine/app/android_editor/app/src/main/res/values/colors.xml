@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="uve_background">#11151C</color>
+    <color name="uve_surface">#1A202A</color>
+    <color name="uve_surface_raised">#222B38</color>
+    <color name="uve_border">#344052</color>
+    <color name="uve_text">#F3F6FA</color>
+    <color name="uve_text_muted">#9AA8BA</color>
+    <color name="uve_accent">#5E8DFF</color>
+    <color name="uve_accent_pressed">#7DA4FF</color>
+    <color name="uve_success">#65C18C</color>
+    <color name="uve_warning">#E9B15E</color>
+    <color name="uve_error">#EC7777</color>
+</resources>
