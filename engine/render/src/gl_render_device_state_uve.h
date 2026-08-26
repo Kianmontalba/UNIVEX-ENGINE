@@ -3,8 +3,11 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -14,6 +17,23 @@
 #include "uve/window/i_window_manager_uve.h"
 
 namespace UVE::Render::Detail {
+
+struct TransparentStringHashUVE {
+    using is_transparent = void;
+
+    [[nodiscard]] std::size_t operator()(std::string_view value) const noexcept {
+        return std::hash<std::string_view>{}(value);
+    }
+    [[nodiscard]] std::size_t operator()(const std::string& value) const noexcept {
+        return std::hash<std::string_view>{}(value);
+    }
+};
+
+struct TransparentStringEqualUVE {
+    using is_transparent = void;
+
+    [[nodiscard]] bool operator()(std::string_view lhs, std::string_view rhs) const noexcept { return lhs == rhs; }
+};
 
 /// The GL resource maps and function table shared between GlRenderDeviceUVE and
 /// GlCommandBufferUVE (module-private — never under include/). GlRenderDeviceUVE owns exactly one
@@ -43,6 +63,11 @@ struct GlDeviceStateUVE {
     std::unordered_map<std::uint32_t, TextureRecordUVE> textures;
     std::uint32_t nextTextureHandle = 1;
 
+    /// Cached FBO names keyed by the pair of UVE texture handles attached to them. The render
+    /// device invalidates entries when a dependent texture is destroyed; the cache itself owns no
+    /// texture lifetime and is released while the GL context is still current.
+    std::unordered_map<std::uint64_t, GLuint> framebufferCache;
+
     struct ShaderRecordUVE {
         GLuint glShader = 0;
     };
@@ -71,7 +96,7 @@ struct GlDeviceStateUVE {
             GLint location = -1;
             std::uint32_t arraySize = 1;
         };
-        std::unordered_map<std::string, UniformRecordUVE> uniforms;
+        std::unordered_map<std::string, UniformRecordUVE, TransparentStringHashUVE, TransparentStringEqualUVE> uniforms;
     };
     std::unordered_map<std::uint32_t, PipelineRecordUVE> pipelines;
     std::uint32_t nextPipelineHandle = 1;

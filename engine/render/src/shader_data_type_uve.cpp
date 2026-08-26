@@ -25,6 +25,8 @@ std::size_t GetShaderDataTypeSizeBytesUVE(ShaderDataTypeUVE type) noexcept {
             return 4U;
         case ShaderDataTypeUVE::Bool:
             return 4U;
+        case ShaderDataTypeUVE::Unsupported:
+            return 0U;
     }
     UVE_ASSERT(false && "Unhandled ShaderDataTypeUVE");
     return 0U;

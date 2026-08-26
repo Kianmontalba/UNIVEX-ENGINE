@@ -254,6 +254,11 @@ struct EngineConfigUVE {
     /// directory where the source tree isn't reachable.
     std::string shaderSourceMountPrefixUVE = "shaders";
     std::filesystem::path shaderSourceRealDirectoryUVE = "engine/render/shader/built_in/";
+
+    /// Optional borrowed native window handle for platform backends. Android uses this as an
+    /// ANativeWindow* supplied by NativeActivity; the engine never takes ownership or destroys it.
+    /// Desktop callers leave it null and continue through the GLFW WindowManagerUVE path.
+    void* nativeWindowHandleUVE = nullptr;
 };
 
 } // namespace UVE::Core

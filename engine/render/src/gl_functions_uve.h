@@ -8,8 +8,13 @@
 // here doesn't pull in GLEW/GLAD or any other loader library. Module-private (engine/render/src/
 // only) — no public header under include/ ever includes a GL header, matching this codebase's
 // established third-party-header confinement discipline.
+#if defined(__ANDROID__)
+#include <GLES3/gl3.h>
+#include <GLES2/gl2ext.h>
+#else
 #include <GL/gl.h>
 #include <GL/glext.h>
+#endif
 
 namespace UVE::Render::Detail {
 

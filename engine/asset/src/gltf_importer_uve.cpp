@@ -208,13 +208,25 @@ struct BufferViewDefinitionUVE final {
     return outBuffer.size() >= *byteLength;
 }
 
-[[nodiscard]] std::optional<BufferViewDefinitionUVE> ReadBufferViewUVE(const nlohmann::json& document,
-                                                                       const std::uint64_t index) {
-    if (!document.contains("bufferViews") || !document.at("bufferViews").is_array() ||
-        index >= document.at("bufferViews").size() || !document.at("bufferViews").at(index).is_object()) {
+[[nodiscard]] std::optional<nlohmann::json::size_type> CheckedJsonArrayIndexUVE(
+    const nlohmann::json& array, const std::uint64_t index) {
+    if (!array.is_array() || index > static_cast<std::uint64_t>(std::numeric_limits<nlohmann::json::size_type>::max()) ||
+        index >= array.size()) {
         return std::nullopt;
     }
-    const auto& value = document.at("bufferViews").at(index);
+    return static_cast<nlohmann::json::size_type>(index);
+}
+
+[[nodiscard]] std::optional<BufferViewDefinitionUVE> ReadBufferViewUVE(const nlohmann::json& document,
+                                                                       const std::uint64_t index) {
+    if (!document.contains("bufferViews")) {
+        return std::nullopt;
+    }
+    const auto bufferViewsIndex = CheckedJsonArrayIndexUVE(document.at("bufferViews"), index);
+    if (!bufferViewsIndex || !document.at("bufferViews").at(*bufferViewsIndex).is_object()) {
+        return std::nullopt;
+    }
+    const auto& value = document.at("bufferViews").at(*bufferViewsIndex);
     const auto buffer = ReadJsonUintUVE(value, "buffer", true);
     const auto byteOffset = ReadJsonUintUVE(value, "byteOffset", false);
     const auto byteLength = ReadJsonUintUVE(value, "byteLength", true);
@@ -227,11 +239,14 @@ struct BufferViewDefinitionUVE final {
 
 [[nodiscard]] std::optional<AccessorDefinitionUVE> ReadAccessorUVE(const nlohmann::json& document,
                                                                    const std::uint64_t index) {
-    if (!document.contains("accessors") || !document.at("accessors").is_array() ||
-        index >= document.at("accessors").size() || !document.at("accessors").at(index).is_object()) {
+    if (!document.contains("accessors")) {
         return std::nullopt;
     }
-    const auto& value = document.at("accessors").at(index);
+    const auto accessorsIndex = CheckedJsonArrayIndexUVE(document.at("accessors"), index);
+    if (!accessorsIndex || !document.at("accessors").at(*accessorsIndex).is_object()) {
+        return std::nullopt;
+    }
+    const auto& value = document.at("accessors").at(*accessorsIndex);
     const auto bufferView = ReadJsonUintUVE(value, "bufferView", true);
     const auto byteOffset = ReadJsonUintUVE(value, "byteOffset", false);
     const auto count = ReadJsonUintUVE(value, "count", true);

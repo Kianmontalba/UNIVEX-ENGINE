@@ -51,6 +51,23 @@ public:
     std::unordered_map<std::string, std::string> files;
 };
 
+TEST(ShaderPreprocessorUVETest, LeadingBomAndComments_PreserveVersionOrderAndSourceLineMapping) {
+    FakeFileSystemUVE fileSystem;
+    const std::string source = "\xEF\xBB\xBF// Copyright header\n\n/* module header */\n#version 330 core // authored version\nvoid main() {}\n";
+
+    const PreprocessResultUVE result =
+        PreprocessShaderSourceUVE(fileSystem, "shaders/versioned.glsl", source, {});
+
+    ASSERT_TRUE(result.success);
+    EXPECT_EQ(result.resolvedSource.find(std::string("\xEF\xBB\xBF")), std::string::npos);
+    const std::size_t versionOffset = result.resolvedSource.find("#version 330 core // authored version");
+    const std::size_t lineDirectiveOffset = result.resolvedSource.find("#line 5 0");
+    ASSERT_NE(versionOffset, std::string::npos);
+    ASSERT_NE(lineDirectiveOffset, std::string::npos);
+    EXPECT_LT(versionOffset, lineDirectiveOffset);
+    EXPECT_NE(result.resolvedSource.find("void main() {}"), std::string::npos);
+}
+
 TEST(ShaderPreprocessorUVETest, NoFileOnDisk_UsesEmbeddedFallback) {
     FakeFileSystemUVE fileSystem;
     const PreprocessResultUVE result =

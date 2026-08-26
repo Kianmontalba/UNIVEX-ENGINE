@@ -6,7 +6,8 @@
 #include <algorithm>
 #include <cstddef>
 #include <fstream>
-#include <mutex>
+#include <iterator>
+#include <limits>
 #include <optional>
 #include <system_error>
 #include <utility>
@@ -102,9 +103,12 @@ struct MountRecordUVE {
     }
     file.seekg(0, std::ios::beg);
 
+    if (size > static_cast<std::streamoff>(std::numeric_limits<std::streamsize>::max())) {
+        return std::nullopt;
+    }
     std::vector<std::byte> data(static_cast<std::size_t>(size));
     if (!data.empty()) {
-        file.read(reinterpret_cast<char*>(data.data()), size);
+        file.read(reinterpret_cast<char*>(data.data()), static_cast<std::streamsize>(size));
         if (!file) {
             return std::nullopt;
         }

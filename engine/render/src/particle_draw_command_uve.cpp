@@ -16,24 +16,38 @@ bool IsValidParticleDrawCommandUVE(const ParticleDrawCommandUVE& command) noexce
 ParticleDrawRecordingUVE ParticleDrawRecorderUVE::RecordUVE(const RenderQueueUVE& queue,
                                                              const std::size_t maximumCommands) {
     ParticleDrawRecordingUVE recording;
-    recording.sourceItemCount = queue.particleItems.size();
+    RecordIntoUVE(queue, maximumCommands, recording);
+    return recording;
+}
+
+void ParticleDrawRecorderUVE::RecordIntoUVE(const RenderQueueUVE& queue, const std::size_t maximumCommands,
+                                            ParticleDrawRecordingUVE& outRecording) {
+    outRecording.sourceItemCount = queue.particleItems.size();
+    outRecording.truncated = false;
+    outRecording.commands.clear();
     if (maximumCommands == 0U) {
-        recording.truncated = recording.sourceItemCount != 0U;
-        return recording;
+        outRecording.truncated = outRecording.sourceItemCount != 0U;
+        return;
     }
 
-    recording.commands.reserve(std::min(queue.particleItems.size(), maximumCommands));
+    outRecording.commands.reserve(std::min(queue.particleItems.size(), maximumCommands));
     for (const ParticleRenderItemUVE& item : queue.particleItems) {
-        if (recording.commands.size() >= maximumCommands) {
-            recording.truncated = true;
+        if (outRecording.commands.size() >= maximumCommands) {
+            outRecording.truncated = true;
             break;
         }
-        recording.commands.push_back(
-            {item.entity, item.position, item.remainingLifetimeSeconds, item.sortDepth, item.sequence});
+        const ParticleDrawCommandUVE command{
+            item.entity, item.position, item.remainingLifetimeSeconds, item.sortDepth, item.sequence};
+        if (!IsValidParticleDrawCommandUVE(command)) {
+            // RenderQueueUVE is intentionally mutable/public, so defend the GPU boundary even when
+            // the normal ParticleRenderBridgeUVE path has already validated its source snapshot.
+            outRecording.truncated = true;
+            continue;
+        }
+        outRecording.commands.push_back(command);
     }
-    recording.truncated = recording.truncated || queue.particleItemsTruncated ||
-                          recording.commands.size() < recording.sourceItemCount;
-    return recording;
+    outRecording.truncated = outRecording.truncated || queue.particleItemsTruncated ||
+                             outRecording.commands.size() < outRecording.sourceItemCount;
 }
 
 } // namespace UVE::Render

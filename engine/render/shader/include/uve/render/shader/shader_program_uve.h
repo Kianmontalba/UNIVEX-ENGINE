@@ -4,6 +4,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <optional>
 #include <span>
 #include <string>
@@ -65,13 +66,35 @@ private:
 
     using PendingUniformValueUVE = std::variant<float, std::int32_t, bool, Math::Vector3UVE, Math::Matrix4x4UVE>;
 
+    struct TransparentStringHashUVE {
+        using is_transparent = void;
+
+        [[nodiscard]] std::size_t operator()(std::string_view value) const noexcept {
+            return std::hash<std::string_view>{}(value);
+        }
+        [[nodiscard]] std::size_t operator()(const std::string& value) const noexcept {
+            return std::hash<std::string_view>{}(value);
+        }
+    };
+
+    struct TransparentStringEqualUVE {
+        using is_transparent = void;
+
+        [[nodiscard]] bool operator()(std::string_view lhs, std::string_view rhs) const noexcept {
+            return lhs == rhs;
+        }
+    };
+
+    void SetPendingUniformUVE(std::string_view name, PendingUniformValueUVE value);
+
     PipelineHandleUVE m_pipeline = kInvalidPipelineHandleUVE;
     bool m_ready = false;
     bool m_valid = false;
     ShaderCompileDiagnosticsUVE m_diagnostics;
     std::vector<UniformReflectionUVE> m_uniforms;
     std::uint64_t m_contentHash = 0;
-    std::unordered_map<std::string, PendingUniformValueUVE> m_pendingUniforms;
+    std::unordered_map<std::string, PendingUniformValueUVE, TransparentStringHashUVE, TransparentStringEqualUVE>
+        m_pendingUniforms;
 };
 
 } // namespace UVE::Render::Shader

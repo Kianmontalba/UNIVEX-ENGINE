@@ -39,6 +39,7 @@
 #include "uve/scene/components/mesh_component_uve.h"
 #include "uve/scene/components/primitive_mesh_component_uve.h"
 #include "uve/scene/components/transform_component_uve.h"
+#include "uve/scene/components/world_transform_component_uve.h"
 #include "uve/scene/entity_manager_uve.h"
 #include "uve/scene/scene_graph_uve.h"
 #include "uve/threading/thread_pool_uve.h"
@@ -281,19 +282,18 @@ protected:
     }
 };
 
-TEST_F(Renderer3DUVETest, RenderFrameUVE_EmptyScene_ShadowAndMainPassesBothBeginAndEndWithNoDraws) {
+TEST_F(Renderer3DUVETest, RenderFrameUVE_EmptyScene_MainPassBeginsAndEndsWithNoDraws) {
     const Scene::EntityUVE cameraEntity = MakeCameraEntityUVE();
 
     renderer3D->RenderFrameUVE(entityManager, cameraEntity);
 
-    // Increment 30 records three bounded cascade depth passes, then the main color pass. All are
-    // empty here because there are no meshes or Directional lights.
+    // No directional caster exists, so the optimized frame contains only the empty main color
+    // pass. Tone mapping has not linked yet in this first frame.
     const std::vector<RecordedCommandUVE>& commands = renderDevice.GetLastSubmittedCommandsUVE();
-    ASSERT_EQ(commands.size(), 8U);
-    for (std::size_t passIndex = 0; passIndex < 4; ++passIndex) {
-        EXPECT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commands[passIndex * 2U]));
-        EXPECT_TRUE(std::holds_alternative<EndRenderPassCommandUVE>(commands[passIndex * 2U + 1U]));
-    }
+    ASSERT_EQ(commands.size(), 2U);
+    ASSERT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commands[0U]));
+    EXPECT_NE(std::get<BeginRenderPassCommandUVE>(commands[0U]).desc.colorAttachment, kInvalidTextureHandleUVE);
+    EXPECT_TRUE(std::holds_alternative<EndRenderPassCommandUVE>(commands[1U]));
 }
 
 TEST_F(Renderer3DUVETest, RenderFrameUVE_VisiblePrimitive_RecordsCanonicalGeometryAndAuthoredColor) {
@@ -432,12 +432,9 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_VisibleMesh_RecordsExpectedCommandSeque
     const std::vector<RecordedCommandUVE>& commands = renderDevice.GetLastSubmittedCommandsUVE();
     // ShaderProgramUVE flushes its pending uniforms from an unordered cache, so insertion order is
     // intentionally not a renderer contract. Assert named effects and pass structure instead.
-    ASSERT_GE(commands.size(), 12U);
-    for (std::size_t cascadeIndex = 0; cascadeIndex < 3; ++cascadeIndex) {
-        EXPECT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commands[cascadeIndex * 2U]));
-        EXPECT_TRUE(std::holds_alternative<EndRenderPassCommandUVE>(commands[cascadeIndex * 2U + 1U]));
-    }
-    EXPECT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commands[6]));
+    ASSERT_GE(commands.size(), 2U);
+    ASSERT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commands[0U]));
+    EXPECT_NE(std::get<BeginRenderPassCommandUVE>(commands[0U]).desc.colorAttachment, kInvalidTextureHandleUVE);
     EXPECT_TRUE(std::any_of(commands.cbegin(), commands.cend(), [](const RecordedCommandUVE& command) {
         return std::holds_alternative<BindPipelineCommandUVE>(command);
     }));
@@ -710,6 +707,120 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_MaterialWithoutTextures_UsesFallbackTex
     EXPECT_NE(textureBinds[1].texture, kInvalidTextureHandleUVE);
 }
 
+TEST_F(Renderer3DUVETest, RenderFrameUVE_ReadyEmptyMeshSkipsInvalidGpuBuffers) {
+    assetManager.RegisterLoaderUVE<Asset::MeshAssetUVE>(
+        [](const std::filesystem::path&, Asset::MeshAssetUVE& mesh) {
+            mesh.vertices.clear();
+            mesh.indices.clear();
+            mesh.localBounds = Math::AabbUVE::FromCenterExtentsUVE(Math::Vector3UVE{}, Math::Vector3UVE{});
+            return true;
+        });
+
+    const Scene::EntityUVE cameraEntity = MakeCameraEntityUVE();
+    const Asset::AssetGuidUVE meshGuid = assetDatabase.RegisterUVE("renderer3d_tests_empty_mesh.uvemodel");
+    const Asset::AssetGuidUVE materialGuid = assetDatabase.RegisterUVE("renderer3d_tests_empty_mesh.uvemat");
+    MakeMeshEntityUVE(Math::Vector3UVE{0.0F, 0.0F, -2.0F}, meshGuid, materialGuid);
+    WaitUntilAssetsReadyUVE(meshGuid, materialGuid);
+
+    renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+    const Renderer3DFrameDiagnosticsUVE firstDiagnostics = renderer3D->GetLastFrameDiagnosticsUVE();
+    EXPECT_EQ(firstDiagnostics.meshItemsExtracted, 1U);
+    EXPECT_EQ(firstDiagnostics.meshDrawCallsRecorded, 0U);
+
+    renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+    const Renderer3DFrameDiagnosticsUVE secondDiagnostics = renderer3D->GetLastFrameDiagnosticsUVE();
+    EXPECT_EQ(secondDiagnostics.meshItemsExtracted, 1U);
+    EXPECT_EQ(secondDiagnostics.meshDrawCallsRecorded, 0U);
+}
+
+#if !UVE_DEBUG
+TEST_F(Renderer3DUVETest, RenderFrameUVE_InvalidReadyMaterialPayloadSkipsGpuDrawInRelease) {
+    assetManager.RegisterLoaderUVE<Asset::MaterialAssetUVE>(
+        [vertexGuid = vertexShaderGuid, fragmentGuid = fragmentShaderGuid](const std::filesystem::path&,
+                                                                             Asset::MaterialAssetUVE& material) {
+            material.vertexShader = vertexGuid;
+            material.fragmentShader = fragmentGuid;
+            material.metallic = std::numeric_limits<float>::quiet_NaN();
+            return true;
+        });
+
+    const Scene::EntityUVE cameraEntity = MakeCameraEntityUVE();
+    const Asset::AssetGuidUVE meshGuid = assetDatabase.RegisterUVE("renderer3d_tests_invalid_material_mesh.uvemodel");
+    const Asset::AssetGuidUVE materialGuid =
+        assetDatabase.RegisterUVE("renderer3d_tests_invalid_material_payload.uvemat");
+    MakeMeshEntityUVE(Math::Vector3UVE{0.0F, 0.0F, -2.0F}, meshGuid, materialGuid);
+    WaitUntilAssetsReadyUVE(meshGuid, materialGuid);
+
+    renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+    const Renderer3DFrameDiagnosticsUVE diagnostics = renderer3D->GetLastFrameDiagnosticsUVE();
+    EXPECT_EQ(diagnostics.meshItemsExtracted, 1U);
+    EXPECT_EQ(diagnostics.meshDrawCallsRecorded, 0U);
+}
+
+TEST_F(Renderer3DUVETest, RenderFrameUVE_InvalidReadyTexturePayloadUsesFallbackInRelease) {
+    const Scene::EntityUVE cameraEntity = MakeCameraEntityUVE();
+    const Asset::AssetGuidUVE meshGuid = assetDatabase.RegisterUVE("renderer3d_tests_invalid_texture_mesh.uvemodel");
+    const Asset::AssetGuidUVE materialGuid =
+        assetDatabase.RegisterUVE("renderer3d_tests_invalid_texture_material.uvemat");
+    const Asset::AssetGuidUVE textureGuid = assetDatabase.RegisterUVE("renderer3d_tests_invalid_texture.uvetex");
+    UseAlbedoTextureInMaterialUVE(textureGuid);
+    assetManager.RegisterLoaderUVE<Asset::TextureAssetUVE>(
+        [](const std::filesystem::path&, Asset::TextureAssetUVE& texture) {
+            texture.width = 0U;
+            texture.height = 0U;
+            texture.format = Asset::TextureFormatUVE::RGBA8Unorm;
+            texture.pixels.clear();
+            return true;
+        });
+    MakeMeshEntityUVE(Math::Vector3UVE{0.0F, 0.0F, -2.0F}, meshGuid, materialGuid);
+    WaitUntilAssetsReadyUVE(meshGuid, materialGuid, false);
+    WaitUntilTextureReadyUVE(textureGuid);
+
+    renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+    const Renderer3DFrameDiagnosticsUVE firstDiagnostics = renderer3D->GetLastFrameDiagnosticsUVE();
+    EXPECT_EQ(firstDiagnostics.textureFallbacks, 1U);
+    EXPECT_EQ(firstDiagnostics.meshDrawCallsRecorded, 0U);
+
+    PrimeMaterialProgramUVE(*renderer3D, cameraEntity);
+    renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+    const Renderer3DFrameDiagnosticsUVE secondDiagnostics = renderer3D->GetLastFrameDiagnosticsUVE();
+    EXPECT_EQ(secondDiagnostics.textureFallbacks, 0U);
+    EXPECT_EQ(secondDiagnostics.meshDrawCallsRecorded, 1U);
+}
+
+TEST_F(Renderer3DUVETest, RenderFrameUVE_OverflowedCascadeSplitsDisableShadowPassInRelease) {
+    const Scene::EntityUVE cameraEntity = MakeCameraEntityUVE();
+    Scene::CameraComponentUVE& camera = entityManager.GetComponentUVE<Scene::CameraComponentUVE>(cameraEntity);
+    camera.nearPlane = std::numeric_limits<float>::min();
+    camera.farPlane = std::numeric_limits<float>::max();
+    const Asset::AssetGuidUVE meshGuid = assetDatabase.RegisterUVE("renderer3d_overflowed_cascade_mesh.uvemodel");
+    const Asset::AssetGuidUVE materialGuid =
+        assetDatabase.RegisterUVE("renderer3d_overflowed_cascade_material.uvemat");
+    MakeMeshEntityUVE(Math::Vector3UVE{0.0F, 0.0F, -10.0F}, meshGuid, materialGuid);
+    MakeLightEntityUVE(Scene::LightComponentUVE{Math::Vector3UVE{1.0F, 1.0F, 1.0F}, 2.0F});
+    WaitUntilAssetsReadyUVE(meshGuid, materialGuid);
+    WaitUntilShadowProgramReadyUVE();
+
+    renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+
+    const std::vector<RecordedCommandUVE>& commands = renderDevice.GetLastSubmittedCommandsUVE();
+    const auto cascadeCount = std::find_if(commands.cbegin(), commands.cend(), [](const RecordedCommandUVE& command) {
+        return std::holds_alternative<SetUniformIntCommandUVE>(command) &&
+               std::get<SetUniformIntCommandUVE>(command).name == "uShadowCascadeCount";
+    });
+    ASSERT_NE(cascadeCount, commands.cend());
+    EXPECT_EQ(std::get<SetUniformIntCommandUVE>(*cascadeCount).value, 0);
+    EXPECT_FALSE(std::any_of(commands.cbegin(), commands.cend(), [](const RecordedCommandUVE& command) {
+        if (!std::holds_alternative<BeginRenderPassCommandUVE>(command)) {
+            return false;
+        }
+        const RenderPassDescUVE& desc = std::get<BeginRenderPassCommandUVE>(command).desc;
+        return desc.colorAttachment == kInvalidTextureHandleUVE &&
+               desc.depthAttachment != kInvalidTextureHandleUVE;
+    }));
+}
+#endif
+
 TEST_F(Renderer3DUVETest, RenderFrameUVE_MaterialWithAlbedoTexture_UploadsAndBindsRealTexture) {
     const std::size_t baselineLiveResources = renderDevice.GetLiveResourceCountUVE();
 
@@ -775,18 +886,63 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_FailedTextureUsesFallbackAndReportsDiag
         [](const std::filesystem::path&, Asset::TextureAssetUVE&) { return false; });
 
     MakeMeshEntityUVE(Math::Vector3UVE{0.0F, 0.0F, -10.0F}, meshGuid, materialGuid);
-    WaitUntilAssetsReadyUVE(meshGuid, materialGuid);
     Asset::AssetHandleUVE<Asset::TextureAssetUVE> textureHandle =
         assetManager.LoadUVE<Asset::TextureAssetUVE>(textureGuid, assetDatabase);
     for (int iteration = 0; iteration < kMaxPollIterationsUVE && !textureHandle.HasFailedUVE(); ++iteration) {
         std::this_thread::yield();
     }
     ASSERT_TRUE(textureHandle.HasFailedUVE());
+    // Settle the permanently failed texture before the first renderer prime; otherwise the helper
+    // can observe a transient pending state and make this diagnostic assertion order-sensitive.
+    WaitUntilAssetsReadyUVE(meshGuid, materialGuid, false);
 
     renderer3D->RenderFrameUVE(entityManager, cameraEntity);
     const Renderer3DFrameDiagnosticsUVE diagnostics = renderer3D->GetLastFrameDiagnosticsUVE();
     EXPECT_EQ(diagnostics.failedAssetLoads, 0U);
     EXPECT_EQ(diagnostics.textureFallbacks, 1U);
+
+    // Rebuilding the material cache must not retry or repeatedly report the same permanent
+    // first-load failure; an explicit texture reload is the only event that clears the memo.
+    eventSystem.Publish(Asset::AssetReloadedEventUVE{materialGuid});
+    renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+    const Renderer3DFrameDiagnosticsUVE afterMaterialEviction = renderer3D->GetLastFrameDiagnosticsUVE();
+    EXPECT_EQ(afterMaterialEviction.failedAssetLoads, 0U);
+    EXPECT_EQ(afterMaterialEviction.textureFallbacks, 1U);
+}
+
+TEST_F(Renderer3DUVETest, RenderFrameUVE_FailedTextureUploadIsMemoizedUntilTextureReload) {
+    const Scene::EntityUVE cameraEntity = MakeCameraEntityUVE();
+    const Asset::AssetGuidUVE meshGuid = assetDatabase.RegisterUVE("renderer3d_tests_upload_failure_mesh.uvemodel");
+    const Asset::AssetGuidUVE materialGuid = assetDatabase.RegisterUVE("renderer3d_tests_upload_failure_material.uvemat");
+    const Asset::AssetGuidUVE textureGuid = assetDatabase.RegisterUVE("renderer3d_tests_upload_failure.uvetex");
+    UseAlbedoTextureInMaterialUVE(textureGuid);
+    assetManager.RegisterLoaderUVE<Asset::TextureAssetUVE>(
+        [](const std::filesystem::path&, Asset::TextureAssetUVE& texture) {
+            // The custom loader returns a ready CPU asset, but the renderer's shared texture
+            // validator rejects zero dimensions before any backend allocation.
+            texture.width = 0U;
+            texture.height = 2U;
+            texture.format = Asset::TextureFormatUVE::RGBA8Unorm;
+            texture.pixels.clear();
+            return true;
+        });
+    MakeMeshEntityUVE(Math::Vector3UVE{0.0F, 0.0F, -10.0F}, meshGuid, materialGuid);
+    WaitUntilAssetsReadyUVE(meshGuid, materialGuid, false);
+    WaitUntilTextureReadyUVE(textureGuid);
+
+    const std::uint64_t initialTextureAttempts = renderDevice.GetTextureCreateAttemptCountUVE();
+    renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+    EXPECT_EQ(renderDevice.GetTextureCreateAttemptCountUVE(), initialTextureAttempts + 1U);
+
+    // Material cache invalidation must not retry the same permanently rejected GPU upload.
+    eventSystem.Publish(Asset::AssetReloadedEventUVE{materialGuid});
+    renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+    EXPECT_EQ(renderDevice.GetTextureCreateAttemptCountUVE(), initialTextureAttempts + 1U);
+
+    // An explicit texture reload clears the memo and permits a deliberate retry.
+    eventSystem.Publish(Asset::AssetReloadedEventUVE{textureGuid});
+    renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+    EXPECT_EQ(renderDevice.GetTextureCreateAttemptCountUVE(), initialTextureAttempts + 2U);
 }
 
 TEST_F(Renderer3DUVETest, RenderFrameUVE_TextureAssetNotYetReady_SkipsItemUntilLoaded) {
@@ -813,20 +969,20 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_TextureAssetNotYetReady_SkipsItemUntilL
     WaitUntilAssetsReadyUVE(meshGuid, materialGuid);
 
     // The texture load kicked off inside this call is blocked on textureLoadGateUVE, so the item
-    // must be skipped this frame. The three cascade passes and empty main pass still run, then the
-    // ready fullscreen program records the independent tone-mapping output pass.
+    // must be skipped this frame. With no directional light, the optimized renderer records no
+    // shadow passes: the empty main pass is followed by the independent tone-mapping output pass.
     renderer3D->RenderFrameUVE(entityManager, cameraEntity);
-    const std::vector<RecordedCommandUVE>& commandsBeforeReady = renderDevice.GetLastSubmittedCommandsUVE();
-    ASSERT_EQ(commandsBeforeReady.size(), 14U);
-    for (std::size_t passIndex = 0; passIndex < 4; ++passIndex) {
-        EXPECT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commandsBeforeReady[passIndex * 2U]));
-        EXPECT_TRUE(std::holds_alternative<EndRenderPassCommandUVE>(commandsBeforeReady[passIndex * 2U + 1U]));
-    }
-    EXPECT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commandsBeforeReady[8U]));
-    EXPECT_TRUE(std::holds_alternative<DrawCommandUVE>(commandsBeforeReady[12U]));
-    EXPECT_TRUE(std::holds_alternative<EndRenderPassCommandUVE>(commandsBeforeReady[13U]));
-
+    const std::vector<RecordedCommandUVE> commandsBeforeReady = renderDevice.GetLastSubmittedCommandsUVE();
+    // Release the loader before assertions so any failed expectation cannot strand its worker thread.
     textureLoadGateUVE = true;
+    ASSERT_EQ(commandsBeforeReady.size(), 8U);
+    EXPECT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commandsBeforeReady[0U]));
+    EXPECT_TRUE(std::holds_alternative<EndRenderPassCommandUVE>(commandsBeforeReady[1U]));
+    EXPECT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commandsBeforeReady[2U]));
+    EXPECT_TRUE(std::holds_alternative<DrawCommandUVE>(commandsBeforeReady[6U]));
+    EXPECT_TRUE(std::holds_alternative<EndRenderPassCommandUVE>(commandsBeforeReady[7U]));
+
+
     WaitUntilTextureReadyUVE(textureGuid);
     PrimeMaterialProgramUVE(*renderer3D, cameraEntity);
 
@@ -899,6 +1055,44 @@ TEST_F(Renderer3DUVETest, AssetReloadedEventUVE_ForCachedTexture_EvictsTextureAn
     renderer3D->RenderFrameUVE(entityManager, cameraEntity);
     const std::size_t liveResourcesAfterRerender = renderDevice.GetLiveResourceCountUVE();
     EXPECT_GT(liveResourcesAfterRerender, liveResourcesAfterReload);
+}
+
+TEST_F(Renderer3DUVETest, AssetReloadedEventUVE_ForMaterialTextureSwap_EvictsOldTextureCacheEntry) {
+    const Scene::EntityUVE cameraEntity = MakeCameraEntityUVE();
+    const Asset::AssetGuidUVE meshGuid = assetDatabase.RegisterUVE("renderer3d_tests_material_swap_mesh.uvemodel");
+    const Asset::AssetGuidUVE materialGuid = assetDatabase.RegisterUVE("renderer3d_tests_material_swap_material.uvemat");
+    const Asset::AssetGuidUVE textureAGuid = assetDatabase.RegisterUVE("renderer3d_tests_material_swap_a.uvetex");
+    const Asset::AssetGuidUVE textureBGuid = assetDatabase.RegisterUVE("renderer3d_tests_material_swap_b.uvetex");
+    UseAlbedoTextureInMaterialUVE(textureAGuid);
+
+    MakeMeshEntityUVE(Math::Vector3UVE{0.0F, 0.0F, -10.0F}, meshGuid, materialGuid);
+    WaitUntilAssetsReadyUVE(meshGuid, materialGuid);
+    WaitUntilTextureReadyUVE(textureAGuid);
+    WaitUntilTextureReadyUVE(textureBGuid);
+    PrimeMaterialProgramUVE(*renderer3D, cameraEntity);
+
+    renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+    const std::size_t liveResourcesBeforeMaterialReload = renderDevice.GetLiveResourceCountUVE();
+
+    Asset::AssetHandleUVE<Asset::MaterialAssetUVE> materialHandle =
+        assetManager.LoadUVE<Asset::MaterialAssetUVE>(materialGuid, assetDatabase);
+    ASSERT_TRUE(materialHandle.IsReadyUVE());
+    materialHandle.TryGetUVE()->albedoTexture = textureBGuid;
+    eventSystem.Publish(Asset::AssetReloadedEventUVE{materialGuid});
+
+    // Material eviction must retire texture A even though the material GUID is unchanged and the
+    // replacement texture is only referenced by the newly loaded CPU material payload. Releasing
+    // the material cache may also retire its manager-owned pipeline, so assert a strict decrease
+    // rather than assuming exactly one resource disappears.
+    const std::size_t liveResourcesAfterMaterialReload = renderDevice.GetLiveResourceCountUVE();
+    EXPECT_LT(liveResourcesAfterMaterialReload, liveResourcesBeforeMaterialReload);
+
+    // The replacement material program is asynchronous; drain it before comparing the steady-state
+    // resource count so the comparison isolates cache lifetime rather than link timing.
+    PrimeMaterialProgramUVE(*renderer3D, cameraEntity);
+    renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+    const std::size_t liveResourcesAfterReplacementFrame = renderDevice.GetLiveResourceCountUVE();
+    EXPECT_EQ(liveResourcesAfterReplacementFrame, liveResourcesBeforeMaterialReload);
 }
 
 TEST_F(Renderer3DUVETest, RenderFrameUVE_ParticleRuntimeInput_ExtractsCopiedItemsAndDoesNotLeakAcrossFrames) {
@@ -1063,10 +1257,10 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_DirectionalCascadeMatrices_SnapToShadow
                     -2.0F / static_cast<float>(kTestShadowMapResolutionUVE));
 }
 
-TEST_F(Renderer3DUVETest, RenderFrameUVE_NoDirectionalLight_ShadowPassNeverDrawsEvenWithVisibleMesh) {
+TEST_F(Renderer3DUVETest, RenderFrameUVE_NoDirectionalLight_SkipsShadowPassEvenWithVisibleMesh) {
     // A visible, asset-ready mesh exists, and the shadow program has even had the chance to
     // become valid (polled to readiness below) - but with no Directional light entity at all,
-    // FindShadowCasterUVE() finds no caster, so the shadow pass still draws nothing.
+    // FindShadowCasterUVE() finds no caster, so no shadow pass is recorded.
     const Scene::EntityUVE cameraEntity = MakeCameraEntityUVE();
     const Asset::AssetGuidUVE meshGuid = assetDatabase.RegisterUVE("renderer3d_tests_noshadow_mesh.uvemodel");
     const Asset::AssetGuidUVE materialGuid = assetDatabase.RegisterUVE("renderer3d_tests_noshadow_material.uvemat");
@@ -1077,8 +1271,74 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_NoDirectionalLight_ShadowPassNeverDraws
     renderer3D->RenderFrameUVE(entityManager, cameraEntity);
 
     const std::vector<RecordedCommandUVE>& commands = renderDevice.GetLastSubmittedCommandsUVE();
-    EXPECT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commands[0]));
-    EXPECT_TRUE(std::holds_alternative<EndRenderPassCommandUVE>(commands[1]));
+    ASSERT_FALSE(commands.empty());
+    ASSERT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commands[0U]));
+    EXPECT_NE(std::get<BeginRenderPassCommandUVE>(commands[0U]).desc.colorAttachment, kInvalidTextureHandleUVE);
+    const auto mainPassEnd = std::find_if(commands.cbegin(), commands.cend(), [](const RecordedCommandUVE& command) {
+        return std::holds_alternative<EndRenderPassCommandUVE>(command);
+    });
+    ASSERT_NE(mainPassEnd, commands.cend());
+}
+
+TEST_F(Renderer3DUVETest, RenderFrameUVE_InvalidShadowTargetsSkipShadowPassSafely) {
+    const Scene::EntityUVE cameraEntity = MakeCameraEntityUVE();
+    MakeLightEntityUVE(Scene::LightComponentUVE{Math::Vector3UVE{1.0F, 1.0F, 1.0F}, 2.0F});
+    const Asset::AssetGuidUVE meshGuid = assetDatabase.RegisterUVE("renderer3d_invalid_shadow_mesh.uvemodel");
+    const Asset::AssetGuidUVE materialGuid = assetDatabase.RegisterUVE("renderer3d_invalid_shadow_material.uvemat");
+    MakeMeshEntityUVE(Math::Vector3UVE{0.0F, 0.0F, -10.0F}, meshGuid, materialGuid);
+    WaitUntilAssetsReadyUVE(meshGuid, materialGuid);
+
+    Renderer3DUVE invalidShadowRenderer(
+        renderDevice, renderSystem, meshRenderer, cameraSystem, lightSystem, shaderManager, assetManager,
+        assetDatabase, eventSystem, kTargetWidthUVE, kTargetHeightUVE, kTestAmbientColorUVE, 0U,
+        kTestShadowMapHalfExtentUVE, kTestShadowMapNearPlaneUVE, kTestShadowMapFarPlaneUVE,
+        kTestShadowFrustumPaddingUVE, kTestShadowCascadeSplitLambdaUVE, kTestShadowCascadeBlendRatioUVE,
+        kTestShadowPcfKernelRadiusUVE);
+    PrimeMaterialProgramUVE(invalidShadowRenderer, cameraEntity);
+    for (int iteration = 0; iteration < kMaxPollIterationsUVE; ++iteration) {
+        shaderManager.UpdateUVE(0.0);
+        if (shaderManager.GetPendingJobCountUVE() == 0U) {
+            break;
+        }
+        std::this_thread::yield();
+    }
+    ASSERT_EQ(shaderManager.GetPendingJobCountUVE(), 0U);
+
+    invalidShadowRenderer.RenderFrameUVE(entityManager, cameraEntity);
+
+    const std::vector<RecordedCommandUVE>& commands = renderDevice.GetLastSubmittedCommandsUVE();
+    ASSERT_FALSE(commands.empty());
+    ASSERT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commands.front()));
+    EXPECT_NE(std::get<BeginRenderPassCommandUVE>(commands.front()).desc.colorAttachment,
+              kInvalidTextureHandleUVE);
+    const auto cascadeCount = std::find_if(commands.cbegin(), commands.cend(), [](const RecordedCommandUVE& command) {
+        return std::holds_alternative<SetUniformIntCommandUVE>(command) &&
+               std::get<SetUniformIntCommandUVE>(command).name == "uShadowCascadeCount";
+    });
+    ASSERT_NE(cascadeCount, commands.cend());
+    EXPECT_EQ(std::get<SetUniformIntCommandUVE>(*cascadeCount).value, 0);
+    EXPECT_FALSE(std::any_of(commands.cbegin(), commands.cend(), [](const RecordedCommandUVE& command) {
+        return std::holds_alternative<BindTextureCommandUVE>(command) &&
+               std::get<BindTextureCommandUVE>(command).slot >= 3U;
+    }));
+}
+
+TEST_F(Renderer3DUVETest, RenderFrameUVE_InvalidMainTargetsSkipFrameSafely) {
+    const Scene::EntityUVE cameraEntity = MakeCameraEntityUVE();
+    Renderer3DUVE invalidMainRenderer(
+        renderDevice, renderSystem, meshRenderer, cameraSystem, lightSystem, shaderManager, assetManager,
+        assetDatabase, eventSystem, 0U, kTargetHeightUVE, kTestAmbientColorUVE, kTestShadowMapResolutionUVE,
+        kTestShadowMapHalfExtentUVE, kTestShadowMapNearPlaneUVE, kTestShadowMapFarPlaneUVE,
+        kTestShadowFrustumPaddingUVE, kTestShadowCascadeSplitLambdaUVE, kTestShadowCascadeBlendRatioUVE,
+        kTestShadowPcfKernelRadiusUVE);
+
+    invalidMainRenderer.RenderFrameUVE(entityManager, cameraEntity);
+
+    const Renderer3DFrameDiagnosticsUVE diagnostics = invalidMainRenderer.GetLastFrameDiagnosticsUVE();
+    EXPECT_EQ(diagnostics.meshItemsExtracted, 0U);
+    EXPECT_EQ(diagnostics.primitiveItemsExtracted, 0U);
+    EXPECT_FALSE(diagnostics.mainPassRecorded);
+    EXPECT_FALSE(diagnostics.toneMappingPassRecorded);
 }
 
 TEST_F(Renderer3DUVETest, RenderFrameUVE_FittedLightFrustum_CastsOffCameraOccluderWithoutMainPassDraw) {
@@ -1158,6 +1418,72 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_DirectionalLightAndReadyShadowProgram_S
     // The main pass follows immediately after the shadow pass ends.
     EXPECT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commands[8]));
 }
+
+#if !UVE_DEBUG
+TEST_F(Renderer3DUVETest, RenderFrameUVE_InvalidCameraParametersAreSafeNoOpInRelease) {
+    const Scene::EntityUVE cameraEntity = MakeCameraEntityUVE();
+    Scene::CameraComponentUVE& camera =
+        entityManager.GetComponentUVE<Scene::CameraComponentUVE>(cameraEntity);
+    camera.nearPlane = 0.0F;
+    const std::size_t submittedCommandCountBefore = renderDevice.GetLastSubmittedCommandsUVE().size();
+
+    renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+
+    EXPECT_EQ(renderDevice.GetLastSubmittedCommandsUVE().size(), submittedCommandCountBefore);
+}
+
+TEST_F(Renderer3DUVETest, RenderFrameUVE_InvalidCameraWorldTransformIsSafeNoOpInRelease) {
+    const Scene::EntityUVE cameraEntity = MakeCameraEntityUVE();
+    entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(cameraEntity).worldPosition.x =
+        std::numeric_limits<float>::quiet_NaN();
+    const std::size_t submittedCommandCountBefore = renderDevice.GetLastSubmittedCommandsUVE().size();
+
+    renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+
+    EXPECT_EQ(renderDevice.GetLastSubmittedCommandsUVE().size(), submittedCommandCountBefore);
+}
+
+TEST_F(Renderer3DUVETest, RenderFrameUVE_NonFiniteShadowTuningUsesFiniteReleaseDefaults) {
+    const Scene::EntityUVE cameraEntity = MakeCameraEntityUVE();
+    MakeLightEntityUVE(Scene::LightComponentUVE{Math::Vector3UVE{1.0F, 1.0F, 1.0F}, 2.0F});
+    const Asset::AssetGuidUVE meshGuid = assetDatabase.RegisterUVE("renderer3d_nonfinite_shadow_tuning_mesh.uvemodel");
+    const Asset::AssetGuidUVE materialGuid =
+        assetDatabase.RegisterUVE("renderer3d_nonfinite_shadow_tuning_material.uvemat");
+    MakeMeshEntityUVE(Math::Vector3UVE{0.0F, 0.0F, -10.0F}, meshGuid, materialGuid);
+    WaitUntilAssetsReadyUVE(meshGuid, materialGuid);
+
+    const float nan = std::numeric_limits<float>::quiet_NaN();
+    Renderer3DUVE sanitizedRenderer(
+        renderDevice, renderSystem, meshRenderer, cameraSystem, lightSystem, shaderManager, assetManager,
+        assetDatabase, eventSystem, kTargetWidthUVE, kTargetHeightUVE, kTestAmbientColorUVE,
+        kTestShadowMapResolutionUVE, kTestShadowMapHalfExtentUVE, kTestShadowMapNearPlaneUVE,
+        kTestShadowMapFarPlaneUVE, nan, nan, nan, kTestShadowPcfKernelRadiusUVE);
+    PrimeMaterialProgramUVE(sanitizedRenderer, cameraEntity);
+    for (int iteration = 0; iteration < kMaxPollIterationsUVE; ++iteration) {
+        shaderManager.UpdateUVE(0.0);
+        if (shaderManager.GetPendingJobCountUVE() == 0U) {
+            break;
+        }
+        std::this_thread::yield();
+    }
+    ASSERT_EQ(shaderManager.GetPendingJobCountUVE(), 0U);
+
+    sanitizedRenderer.RenderFrameUVE(entityManager, cameraEntity);
+
+    const std::vector<RecordedCommandUVE>& commands = renderDevice.GetLastSubmittedCommandsUVE();
+    const auto blendRatio = std::find_if(commands.cbegin(), commands.cend(), [](const RecordedCommandUVE& command) {
+        return std::holds_alternative<SetUniformFloatCommandUVE>(command) &&
+               std::get<SetUniformFloatCommandUVE>(command).name == "uShadowCascadeBlendRatio";
+    });
+    ASSERT_NE(blendRatio, commands.cend());
+    EXPECT_EQ(std::get<SetUniformFloatCommandUVE>(*blendRatio).value, 0.0F);
+    for (const RecordedCommandUVE& command : commands) {
+        if (std::holds_alternative<SetUniformFloatCommandUVE>(command)) {
+            EXPECT_TRUE(std::isfinite(std::get<SetUniformFloatCommandUVE>(command).value));
+        }
+    }
+}
+#endif
 
 } // namespace
 } // namespace UVE::Render::Tests

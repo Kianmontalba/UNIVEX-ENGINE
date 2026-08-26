@@ -26,8 +26,7 @@ bool GlFunctionsUVE::IsCompleteUVE() const noexcept {
            glGenFramebuffers != nullptr && glDeleteFramebuffers != nullptr && glBindFramebuffer != nullptr &&
            glFramebufferTexture2D != nullptr && glCheckFramebufferStatus != nullptr && glActiveTexture != nullptr &&
            glGetUniformLocation != nullptr && glUniform1f != nullptr && glUniform1i != nullptr &&
-           glUniform3fv != nullptr && glUniformMatrix4fv != nullptr && glGetActiveUniform != nullptr &&
-           glGetProgramBinary != nullptr && glProgramBinary != nullptr;
+           glUniform3fv != nullptr && glUniformMatrix4fv != nullptr && glGetActiveUniform != nullptr;
 }
 
 GlFunctionsUVE LoadGlFunctionsUVE(void* (*getProcAddress)(const char*)) {

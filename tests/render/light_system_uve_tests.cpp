@@ -13,6 +13,7 @@
 #include "uve/memory/memory_manager_uve.h"
 #include "uve/scene/components/light_component_uve.h"
 #include "uve/scene/components/mesh_component_uve.h"
+#include "uve/scene/components/world_transform_component_uve.h"
 #include "uve/scene/entity_manager_uve.h"
 #include "uve/scene/scene_graph_uve.h"
 
@@ -219,6 +220,30 @@ TEST_F(LightSystemUVETest, ExtractActiveLightsUVE_InvalidLightParameters_SkipsWi
     Scene::LightComponentUVE invalid = {};
     invalid.intensity = -1.0F;
     static_cast<void>(MakeLightEntityUVE(Math::Vector3UVE{}, Math::QuaternionUVE{}, invalid));
+
+    const LightListUVE result = lightSystem.ExtractActiveLightsUVE(entityManager);
+
+    for (const LightDataUVE& slot : result) {
+        EXPECT_FLOAT_EQ(slot.intensity, 0.0F);
+    }
+}
+#endif
+
+#if UVE_DEBUG
+TEST_F(LightSystemUVETest, ExtractActiveLightsUVE_InvalidWorldTransform_Asserts) {
+    const Scene::EntityUVE entity =
+        MakeLightEntityUVE(Math::Vector3UVE{}, Math::QuaternionUVE{}, Scene::LightComponentUVE{});
+    entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(entity).worldPosition.x =
+        std::numeric_limits<float>::quiet_NaN();
+
+    EXPECT_DEATH({ static_cast<void>(lightSystem.ExtractActiveLightsUVE(entityManager)); }, "");
+}
+#else
+TEST_F(LightSystemUVETest, ExtractActiveLightsUVE_InvalidWorldTransform_SkipsWithoutPublishing) {
+    const Scene::EntityUVE entity =
+        MakeLightEntityUVE(Math::Vector3UVE{}, Math::QuaternionUVE{}, Scene::LightComponentUVE{});
+    entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(entity).worldRotation =
+        Math::QuaternionUVE{0.0F, 0.0F, 0.0F, 0.0F};
 
     const LightListUVE result = lightSystem.ExtractActiveLightsUVE(entityManager);
 

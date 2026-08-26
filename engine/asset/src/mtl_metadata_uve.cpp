@@ -2,9 +2,14 @@
 #include "uve/asset/mtl_metadata_uve.h"
 #include <charconv>
 #include <cctype>
+#if defined(__ANDROID__)
+#include <cerrno>
+#include <cstdlib>
+#endif
 #include <cmath>
 #include <new>
 #include <system_error>
+#include <string>
 #include <utility>
 namespace UVE::Asset { namespace {
 constexpr std::uint32_t kMax = 1'000'000U;
@@ -41,6 +46,17 @@ bool ParseMtlMaterialPropertyUVE(const std::string_view sourceLine, MtlMaterialP
     }
     const auto parseFloat = [](const std::string_view text, float& outValue) noexcept {
         if (text.empty()) return false;
+#if defined(__ANDROID__)
+        std::string copy(text);
+        char* end = nullptr;
+        errno = 0;
+        const float value = std::strtof(copy.c_str(), &end);
+        if (errno == ERANGE || end != copy.c_str() + copy.size() || !std::isfinite(value)) {
+            return false;
+        }
+        outValue = value;
+        return true;
+#else
         float value = 0.0F;
         const auto result = std::from_chars(text.data(), text.data() + text.size(), value,
                                             std::chars_format::general);
@@ -49,6 +65,7 @@ bool ParseMtlMaterialPropertyUVE(const std::string_view sourceLine, MtlMaterialP
         }
         outValue = value;
         return true;
+#endif
     };
     try {
         std::string_view rest = sourceLine;
@@ -82,12 +99,22 @@ bool ParseMtlTextureMapUVE(const std::string_view sourceLine, MtlTextureMapUVE& 
     if (sourceLine.empty() || sourceLine.size() > kMaximumMtlTextureReferenceBytesUVE) return false;
     const auto parseFloat = [](const std::string_view text, float& outValue) noexcept {
         if (text.empty()) return false;
+#if defined(__ANDROID__)
+        std::string copy(text);
+        char* end = nullptr;
+        errno = 0;
+        const float value = std::strtof(copy.c_str(), &end);
+        if (errno == ERANGE || end != copy.c_str() + copy.size() || !std::isfinite(value)) return false;
+        outValue = value;
+        return true;
+#else
         float value = 0.0F;
         const auto result = std::from_chars(text.data(), text.data() + text.size(), value,
                                             std::chars_format::general);
         if (result.ec != std::errc{} || result.ptr != text.data() + text.size() || !std::isfinite(value)) return false;
         outValue = value;
         return true;
+#endif
     };
     try {
         std::string_view rest = sourceLine;

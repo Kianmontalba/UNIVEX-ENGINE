@@ -34,6 +34,12 @@ struct RenderQueueUVE {
     /// Scene/render handoff rejections caused by non-finite transforms or invalid mesh bounds.
     std::size_t invalidRenderEligibility = 0U;
 
+    /// Clears frame items and diagnostics while preserving vector capacity for the next frame.
+    void ClearUVE() noexcept;
+
+    /// Reserves storage for expected opaque, transparent, and particle item counts.
+    void ReserveUVE(std::size_t opaqueCapacity, std::size_t transparentCapacity, std::size_t particleCapacity);
+
     /// Sorts opaqueItems ascending by sortDepth (front-to-back), transparentItems descending by
     /// sortDepth (back-to-front), and particleItems descending by sortDepth with deterministic ties.
     void SortUVE();

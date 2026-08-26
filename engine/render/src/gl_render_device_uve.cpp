@@ -6,8 +6,12 @@
 #include <limits>
 #include <string>
 
+#if !defined(__ANDROID__)
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
+#else
+#include <EGL/egl.h>
+#endif
 
 #include "gl_command_buffer_uve.h"
 #include "gl_render_device_state_uve.h"
@@ -18,15 +22,17 @@ namespace UVE::Render {
 
 namespace {
 
+#if defined(__ANDROID__)
+void* EglProcAddressBridgeUVE(const char* name) {
+    return reinterpret_cast<void*>(eglGetProcAddress(name));
+}
+#else
 // Bridges GLFW's proc-address lookup (GLFWglproc, a void(*)(void)) to gl_functions_uve.h's
 // injected `void* (*)(const char*)` shape, so the loader itself never needs to include GLFW.
-// GlRenderDeviceUVE.cpp is the one place in engine/render that includes GLFW directly (mirroring
-// WindowManagerUVE's own confinement) — it never calls glfwMakeContextCurrent/glfwCreateWindow/
-// glfwDestroyWindow/glfwTerminate itself; WindowManagerUVE already owns that entire lifecycle by
-// the time this constructor runs.
 void* GlfwProcAddressBridgeUVE(const char* name) {
     return reinterpret_cast<void*>(glfwGetProcAddress(name));
 }
+#endif
 
 [[nodiscard]] GLenum BufferUsageToGlTargetUVE(BufferUsageUVE usage) noexcept {
     switch (usage) {
@@ -40,6 +46,19 @@ void* GlfwProcAddressBridgeUVE(const char* name) {
     return GL_ARRAY_BUFFER;
 }
 
+[[nodiscard]] GLenum BufferTargetToBindingQueryUVE(GLenum target) noexcept {
+    switch (target) {
+        case GL_ARRAY_BUFFER:
+            return GL_ARRAY_BUFFER_BINDING;
+        case GL_ELEMENT_ARRAY_BUFFER:
+            return GL_ELEMENT_ARRAY_BUFFER_BINDING;
+        case GL_UNIFORM_BUFFER:
+            return GL_UNIFORM_BUFFER_BINDING;
+        default:
+            return 0U;
+    }
+}
+
 struct GlTextureFormatUVE {
     GLint internalFormat;
     GLenum format;
@@ -51,7 +70,7 @@ struct GlTextureFormatUVE {
         case TextureFormatUVE::RGBA8Unorm:
             return {GL_RGBA8, GL_RGBA, GL_UNSIGNED_BYTE};
         case TextureFormatUVE::RGBA16Float:
-            return {GL_RGBA16F, GL_RGBA, GL_FLOAT};
+            return {GL_RGBA16F, GL_RGBA, GL_HALF_FLOAT};
         case TextureFormatUVE::Depth32Float:
             return {GL_DEPTH_COMPONENT32F, GL_DEPTH_COMPONENT, GL_FLOAT};
     }
@@ -65,20 +84,66 @@ struct GlTextureFormatUVE {
         case ShaderStageUVE::Fragment:
             return GL_FRAGMENT_SHADER;
         case ShaderStageUVE::Compute:
-            return GL_COMPUTE_SHADER;
         case ShaderStageUVE::Geometry:
-            return GL_GEOMETRY_SHADER;
+#if !defined(__ANDROID__)
+            return stage == ShaderStageUVE::Compute ? GL_COMPUTE_SHADER : GL_GEOMETRY_SHADER;
+#else
+            return 0U;
+#endif
     }
     return GL_VERTEX_SHADER;
 }
 
+[[nodiscard]] bool IsSamplerUniformTypeUVE(GLenum glType) noexcept {
+    switch (glType) {
+        case GL_SAMPLER_2D:
+        case GL_SAMPLER_3D:
+        case GL_SAMPLER_CUBE:
+        case GL_SAMPLER_2D_SHADOW:
+        case GL_SAMPLER_2D_ARRAY:
+        case GL_SAMPLER_2D_ARRAY_SHADOW:
+        case GL_SAMPLER_CUBE_SHADOW:
+        case GL_INT_SAMPLER_2D:
+        case GL_INT_SAMPLER_3D:
+        case GL_INT_SAMPLER_CUBE:
+        case GL_INT_SAMPLER_2D_ARRAY:
+        case GL_UNSIGNED_INT_SAMPLER_2D:
+        case GL_UNSIGNED_INT_SAMPLER_3D:
+        case GL_UNSIGNED_INT_SAMPLER_CUBE:
+        case GL_UNSIGNED_INT_SAMPLER_2D_ARRAY:
+#if defined(GL_SAMPLER_2D_MULTISAMPLE)
+        case GL_SAMPLER_2D_MULTISAMPLE:
+#endif
+#if defined(GL_SAMPLER_2D_MULTISAMPLE_ARRAY)
+        case GL_SAMPLER_2D_MULTISAMPLE_ARRAY:
+#endif
+#if defined(GL_INT_SAMPLER_2D_MULTISAMPLE)
+        case GL_INT_SAMPLER_2D_MULTISAMPLE:
+#endif
+#if defined(GL_INT_SAMPLER_2D_MULTISAMPLE_ARRAY)
+        case GL_INT_SAMPLER_2D_MULTISAMPLE_ARRAY:
+#endif
+#if defined(GL_UNSIGNED_INT_SAMPLER_2D_MULTISAMPLE)
+        case GL_UNSIGNED_INT_SAMPLER_2D_MULTISAMPLE:
+#endif
+#if defined(GL_UNSIGNED_INT_SAMPLER_2D_MULTISAMPLE_ARRAY)
+        case GL_UNSIGNED_INT_SAMPLER_2D_MULTISAMPLE_ARRAY:
+#endif
+            return true;
+        default:
+            return false;
+    }
+}
+
 /// Maps a GLenum uniform type (as reported by glGetActiveUniform) to the engine-native
-/// ShaderDataTypeUVE. Every sampler type (2D, cube, array, ...) reports as Int, since a sampler
-/// uniform is always set the same way as a plain int - the texture unit index (glUniform1i) -
-/// regardless of which concrete sampler type it is; this engine has no per-sampler-type SetUVE
-/// overload to distinguish them anyway (matches basic_3d_textured.glsl's placeholder-only role
-/// this increment - no real texture binding exists yet for this to matter in practice).
+/// ShaderDataTypeUVE. Supported sampler types report as Int, since a sampler uniform receives a
+/// texture-unit index through glUniform1i regardless of its concrete sampler type. Unsupported
+/// shapes remain explicit instead of being silently collapsed into Int, preventing invalid setter
+/// calls such as glUniform1i on uint or vector uniforms.
 [[nodiscard]] ShaderDataTypeUVE GlUniformTypeToShaderDataTypeUVE(GLenum glType) noexcept {
+    if (IsSamplerUniformTypeUVE(glType)) {
+        return ShaderDataTypeUVE::Int;
+    }
     switch (glType) {
         case GL_FLOAT:
             return ShaderDataTypeUVE::Float;
@@ -95,8 +160,9 @@ struct GlTextureFormatUVE {
         case GL_BOOL:
             return ShaderDataTypeUVE::Bool;
         case GL_INT:
-        default:
             return ShaderDataTypeUVE::Int;
+        default:
+            return ShaderDataTypeUVE::Unsupported;
     }
 }
 
@@ -105,7 +171,8 @@ struct GlTextureFormatUVE {
 /// array uniform) stripped so callers can address an array uniform by its bare declared name.
 void ReflectPipelineUniformsUVE(
     const Detail::GlFunctionsUVE& gl, GLuint glProgram,
-    std::unordered_map<std::string, Detail::GlDeviceStateUVE::PipelineRecordUVE::UniformRecordUVE>& outUniforms) {
+    std::unordered_map<std::string, Detail::GlDeviceStateUVE::PipelineRecordUVE::UniformRecordUVE,
+                       Detail::TransparentStringHashUVE, Detail::TransparentStringEqualUVE>& outUniforms) {
     outUniforms.clear();
 
     GLint activeUniformCount = 0;
@@ -167,7 +234,11 @@ GlRenderDeviceUVE::GlRenderDeviceUVE(Window::IWindowManagerUVE& windowManager)
     : m_impl(std::make_unique<ImplUVE>()) {
     UVE_ASSERT(windowManager.IsValidUVE());
     m_impl->state.windowManager = &windowManager;
+#if defined(__ANDROID__)
+    m_impl->state.gl = Detail::LoadGlFunctionsUVE(&EglProcAddressBridgeUVE);
+#else
     m_impl->state.gl = Detail::LoadGlFunctionsUVE(&GlfwProcAddressBridgeUVE);
+#endif
 
     if (!m_impl->state.gl.IsCompleteUVE()) {
         UVE_FATAL("GlRenderDeviceUVE: one or more required GL function pointers failed to load");
@@ -180,7 +251,40 @@ GlRenderDeviceUVE::GlRenderDeviceUVE(Window::IWindowManagerUVE& windowManager)
     }
 }
 
-GlRenderDeviceUVE::~GlRenderDeviceUVE() = default;
+GlRenderDeviceUVE::~GlRenderDeviceUVE() {
+    if (m_impl == nullptr || m_impl->state.gl.glDeleteFramebuffers == nullptr) {
+        return;
+    }
+    for (const auto& [key, framebuffer] : m_impl->state.framebufferCache) {
+        static_cast<void>(key);
+        m_impl->state.gl.glDeleteFramebuffers(1, &framebuffer);
+    }
+    m_impl->state.framebufferCache.clear();
+
+    // Release every device-owned GL object while the context is still owned by the window manager.
+    // Relying on context teardown leaks resources when a renderer is recreated within one context.
+    for (const auto& [handle, record] : m_impl->state.pipelines) {
+        static_cast<void>(handle);
+        m_impl->state.gl.glDeleteProgram(record.glProgram);
+        m_impl->state.gl.glDeleteVertexArrays(1, &record.glVao);
+    }
+    m_impl->state.pipelines.clear();
+    for (const auto& [handle, record] : m_impl->state.shaders) {
+        static_cast<void>(handle);
+        m_impl->state.gl.glDeleteShader(record.glShader);
+    }
+    m_impl->state.shaders.clear();
+    for (const auto& [handle, record] : m_impl->state.buffers) {
+        static_cast<void>(handle);
+        m_impl->state.gl.glDeleteBuffers(1, &record.glBuffer);
+    }
+    m_impl->state.buffers.clear();
+    for (const auto& [handle, record] : m_impl->state.textures) {
+        static_cast<void>(handle);
+        glDeleteTextures(1, &record.glTexture);
+    }
+    m_impl->state.textures.clear();
+}
 
 BufferHandleUVE GlRenderDeviceUVE::CreateBufferUVE(const BufferDescUVE& desc, std::span<const std::byte> initialData) {
     if (!ValidateBufferUploadUVE(desc, initialData)) {
@@ -196,11 +300,22 @@ BufferHandleUVE GlRenderDeviceUVE::CreateBufferUVE(const BufferDescUVE& desc, st
         return kInvalidBufferHandleUVE;
     }
     const GLenum target = BufferUsageToGlTargetUVE(desc.usage);
+    const GLenum bindingQuery = BufferTargetToBindingQueryUVE(target);
+    if (bindingQuery == 0U) {
+        UVE_ERROR("GlRenderDeviceUVE: CreateBufferUVE resolved an unsupported GL buffer target");
+        return kInvalidBufferHandleUVE;
+    }
+    // Resource creation temporarily binds the object. Preserve the binding because a live
+    // command buffer caches vertex/index handles and may otherwise skip its next required rebind.
+    GLint previousBufferBinding = 0;
+    glGetIntegerv(bindingQuery, &previousBufferBinding);
+
     GLuint glBuffer = 0;
     m_impl->state.gl.glGenBuffers(1, &glBuffer);
     m_impl->state.gl.glBindBuffer(target, glBuffer);
     m_impl->state.gl.glBufferData(target, static_cast<GLsizeiptr>(desc.sizeBytes),
                                     initialData.empty() ? nullptr : initialData.data(), GL_STATIC_DRAW);
+    m_impl->state.gl.glBindBuffer(target, static_cast<GLuint>(previousBufferBinding));
 
     const std::uint32_t handleValue = m_impl->state.nextBufferHandle++;
     m_impl->state.buffers.emplace(handleValue,
@@ -231,9 +346,17 @@ bool GlRenderDeviceUVE::UpdateBufferUVE(BufferHandleUVE buffer, std::span<const 
                    data.size(), offsetBytes, it->second.sizeBytes);
         return false;
     }
+    const GLenum bindingQuery = BufferTargetToBindingQueryUVE(it->second.target);
+    if (bindingQuery == 0U) {
+        UVE_ERROR("GlRenderDeviceUVE: UpdateBufferUVE resolved an unsupported GL buffer target");
+        return false;
+    }
+    GLint previousBufferBinding = 0;
+    glGetIntegerv(bindingQuery, &previousBufferBinding);
     m_impl->state.gl.glBindBuffer(it->second.target, it->second.glBuffer);
     m_impl->state.gl.glBufferSubData(it->second.target, static_cast<GLintptr>(offsetBytes),
                                        static_cast<GLsizeiptr>(data.size()), data.data());
+    m_impl->state.gl.glBindBuffer(it->second.target, static_cast<GLuint>(previousBufferBinding));
     return true;
 }
 
@@ -254,6 +377,14 @@ TextureHandleUVE GlRenderDeviceUVE::CreateTextureUVE(const TextureDescUVE& desc,
     }
 
     const GlTextureFormatUVE glFormat = TextureFormatToGlUVE(desc.format);
+    // Texture creation temporarily binds the object on the current active unit. Preserve both
+    // pieces of caller/command-buffer state so a live GlCommandBufferUVE texture cache cannot
+    // falsely skip a later rebind after a resource is created between draws.
+    GLint previousActiveTexture = GL_TEXTURE0;
+    GLint previousTextureBinding = 0;
+    glGetIntegerv(GL_ACTIVE_TEXTURE, &previousActiveTexture);
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &previousTextureBinding);
+
     GLuint glTexture = 0;
     glGenTextures(1, &glTexture);
     glBindTexture(GL_TEXTURE_2D, glTexture);
@@ -264,6 +395,9 @@ TextureHandleUVE GlRenderDeviceUVE::CreateTextureUVE(const TextureDescUVE& desc,
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    m_impl->state.gl.glActiveTexture(static_cast<GLenum>(previousActiveTexture));
+    glBindTexture(GL_TEXTURE_2D, static_cast<GLuint>(previousTextureBinding));
 
     const std::uint32_t handleValue = m_impl->state.nextTextureHandle++;
     m_impl->state.textures.emplace(handleValue, Detail::GlDeviceStateUVE::TextureRecordUVE{glTexture, desc});
@@ -278,6 +412,17 @@ void GlRenderDeviceUVE::DestroyTextureUVE(TextureHandleUVE texture) {
         return;
     }
     glDeleteTextures(1, &it->second.glTexture);
+    for (auto framebufferIt = m_impl->state.framebufferCache.begin();
+         framebufferIt != m_impl->state.framebufferCache.end();) {
+        const std::uint32_t colorHandle = static_cast<std::uint32_t>(framebufferIt->first >> 32U);
+        const std::uint32_t depthHandle = static_cast<std::uint32_t>(framebufferIt->first & 0xFFFF'FFFFULL);
+        if (colorHandle == texture.value || depthHandle == texture.value) {
+            m_impl->state.gl.glDeleteFramebuffers(1, &framebufferIt->second);
+            framebufferIt = m_impl->state.framebufferCache.erase(framebufferIt);
+        } else {
+            ++framebufferIt;
+        }
+    }
     m_impl->state.textures.erase(it);
 }
 
@@ -287,6 +432,19 @@ ShaderHandleUVE GlRenderDeviceUVE::CreateShaderUVE(const ShaderDescUVE& desc, st
             *outInfoLog = "Unknown shader stage.";
         }
         UVE_ERROR("GlRenderDeviceUVE: CreateShaderUVE received an unknown shader stage");
+        return kInvalidShaderHandleUVE;
+    }
+#if defined(__ANDROID__)
+    if (desc.stage == ShaderStageUVE::Compute || desc.stage == ShaderStageUVE::Geometry) {
+        UVE_ERROR("GlRenderDeviceUVE: GLES3 does not support requested compute/geometry shader stage");
+        return kInvalidShaderHandleUVE;
+    }
+#endif
+    if (desc.sourceCode.size() > static_cast<std::size_t>(std::numeric_limits<GLint>::max())) {
+        if (outInfoLog != nullptr) {
+            *outInfoLog = "Shader source exceeds the GLsizei length range.";
+        }
+        UVE_ERROR("GlRenderDeviceUVE: shader source exceeds the GLsizei length range");
         return kInvalidShaderHandleUVE;
     }
     const GLenum stage = ShaderStageToGlUVE(desc.stage);
@@ -415,6 +573,10 @@ std::vector<UniformReflectionUVE> GlRenderDeviceUVE::GetPipelineUniformsUVE(Pipe
 
 bool GlRenderDeviceUVE::GetPipelineBinaryUVE(PipelineHandleUVE pipeline, std::vector<std::byte>& outBinary,
                                               std::uint32_t& outFormat) const {
+    if (m_impl->state.gl.glGetProgramBinary == nullptr || m_impl->state.gl.glProgramBinary == nullptr) {
+        UVE_WARNING("GlRenderDeviceUVE: program-binary export is unavailable on this driver; using source compilation");
+        return false;
+    }
     const auto it = m_impl->state.pipelines.find(pipeline.value);
     if (it == m_impl->state.pipelines.end()) {
         UVE_ERROR("GlRenderDeviceUVE: GetPipelineBinaryUVE called with an unknown handle ({})", pipeline.value);
@@ -442,6 +604,10 @@ bool GlRenderDeviceUVE::GetPipelineBinaryUVE(PipelineHandleUVE pipeline, std::ve
 PipelineHandleUVE GlRenderDeviceUVE::CreatePipelineFromBinaryUVE(std::span<const std::byte> binary,
                                                                   std::uint32_t format,
                                                                   const PipelineBinaryDescUVE& desc) {
+    if (m_impl->state.gl.glGetProgramBinary == nullptr || m_impl->state.gl.glProgramBinary == nullptr) {
+        UVE_WARNING("GlRenderDeviceUVE: program-binary import is unavailable on this driver; treating cache as a miss");
+        return kInvalidPipelineHandleUVE;
+    }
     if (!IsVertexLayoutValidUVE(desc.vertexLayout)) {
         UVE_ERROR("GlRenderDeviceUVE: CreatePipelineFromBinaryUVE received an unknown vertex attribute format");
         return kInvalidPipelineHandleUVE;

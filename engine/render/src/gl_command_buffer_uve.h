@@ -45,6 +45,11 @@ public:
 private:
     using UniformRecordUVE = Detail::GlDeviceStateUVE::PipelineRecordUVE::UniformRecordUVE;
 
+    /// Resolves the currently bound pipeline handle against the live device map. The command
+    /// buffer intentionally stores no pointer into a pipeline record because the device may
+    /// destroy a resource while recording is still in progress.
+    [[nodiscard]] const Detail::GlDeviceStateUVE::PipelineRecordUVE* FindCurrentPipelineUVE() const;
+
     /// Looks `name` up in the currently bound pipeline's reflected uniform map (cached at link
     /// time - see GlRenderDeviceUVE::CreatePipelineUVE()'s ReflectPipelineUniformsUVE() call), so
     /// every SetUniform*UVE() call is a plain hash-map lookup, never a per-draw
@@ -55,17 +60,17 @@ private:
 
     Detail::GlDeviceStateUVE* m_state;
     bool m_insideRenderPass = false;
-    GLuint m_tempFramebuffer = 0; // Nonzero while a real-texture-backed pass is active; this pass'
-                                   // FBO is created in BeginRenderPassUVE() and destroyed in
-                                   // EndRenderPassUVE() rather than cached across frames — a
-                                   // deliberate "Foundations"-quality simplification since nothing
-                                   // in this increment is performance-sensitive (see
-                                   // docs/CODING_STANDARDS.md).
+    GLuint m_tempFramebuffer = 0; // Nonzero while a real-texture-backed pass is active; the FBO
+                                   // name comes from GlDeviceStateUVE's attachment-pair cache and
+                                   // is released only when a dependent texture or the device is
+                                   // destroyed.
     GLuint m_currentProgram = 0;
     GLuint m_currentVao = 0;
-    const std::vector<VertexAttributeUVE>* m_currentVertexLayout = nullptr;
+    PipelineHandleUVE m_currentPipeline = kInvalidPipelineHandleUVE;
+    BufferHandleUVE m_boundVertexBuffer = kInvalidBufferHandleUVE;
+    BufferHandleUVE m_boundIndexBuffer = kInvalidBufferHandleUVE;
     std::uint32_t m_currentVertexStride = 0;
-    const std::unordered_map<std::string, UniformRecordUVE>* m_currentUniforms = nullptr;
+    std::unordered_map<std::uint32_t, TextureHandleUVE> m_boundTextures;
 };
 
 } // namespace UVE::Render

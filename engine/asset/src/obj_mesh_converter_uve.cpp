@@ -6,9 +6,14 @@
 #include <algorithm>
 #include <array>
 #include <charconv>
+#if defined(__ANDROID__)
+#include <cerrno>
+#include <cstdlib>
+#endif
 #include <cmath>
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <system_error>
 #include <utility>
@@ -47,6 +52,16 @@ constexpr float kDegenerateTriangleEpsilonSquaredUVE = 0.00000001F;
     if (text.empty()) {
         return std::nullopt;
     }
+#if defined(__ANDROID__)
+    std::string copy(text);
+    char* end = nullptr;
+    errno = 0;
+    const float value = std::strtof(copy.c_str(), &end);
+    if (errno == ERANGE || end != copy.c_str() + copy.size() || !std::isfinite(value)) {
+        return std::nullopt;
+    }
+    return value;
+#else
     float value = 0.0F;
     const auto result = std::from_chars(text.data(), text.data() + text.size(), value,
                                         std::chars_format::general);
@@ -54,6 +69,7 @@ constexpr float kDegenerateTriangleEpsilonSquaredUVE = 0.00000001F;
         return std::nullopt;
     }
     return value;
+#endif
 }
 
 [[nodiscard]] bool ParsePositionUVE(std::string_view rest, Math::Vector3UVE& outPosition) noexcept {

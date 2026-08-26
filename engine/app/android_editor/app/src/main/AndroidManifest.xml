@@ -1,16 +1,19 @@
-<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
         android:allowBackup="false"
         android:icon="@drawable/ic_launcher"
         android:label="UniVex Editor"
         android:supportsRtl="true"
+        android:hasCode="false"
         android:theme="@style/Theme.UniVexEditor">
         <activity
-            android:name=".EditorActivity"
-            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:name="android.app.NativeActivity"
+            android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout"
             android:exported="true"
             android:screenOrientation="landscape">
+            <meta-data
+                android:name="android.app.lib_name"
+                android:value="uve_android_engine" />
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

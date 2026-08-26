@@ -87,5 +87,43 @@ TEST(RenderSystemUVEDeathTest, BeginFrameUVE_WhileFrameAlreadyActive_Asserts) {
 }
 #endif
 
+#if !UVE_DEBUG
+TEST(RenderSystemUVETest, Release_GetFrameCommandBufferUVE_WithoutActiveFrameIsSafe) {
+    NullRenderDeviceUVE device;
+    RenderSystemUVE renderSystem(device);
+
+    ICommandBufferUVE& fallback = renderSystem.GetFrameCommandBufferUVE();
+    fallback.BeginRenderPassUVE(RenderPassDescUVE{});
+    fallback.EndRenderPassUVE();
+
+    EXPECT_TRUE(device.GetLastSubmittedCommandsUVE().empty());
+    EXPECT_EQ(renderSystem.GetFrameIndexUVE(), 0U);
+}
+
+TEST(RenderSystemUVETest, Release_EndFrameUVE_WithoutActiveFrameIsSafeNoOp) {
+    NullRenderDeviceUVE device;
+    RenderSystemUVE renderSystem(device);
+
+    renderSystem.EndFrameUVE();
+
+    EXPECT_TRUE(device.GetLastSubmittedCommandsUVE().empty());
+    EXPECT_EQ(renderSystem.GetFrameIndexUVE(), 0U);
+}
+
+TEST(RenderSystemUVETest, Release_BeginFrameUVE_WhileActivePreservesCurrentFrame) {
+    NullRenderDeviceUVE device;
+    RenderSystemUVE renderSystem(device);
+
+    renderSystem.BeginFrameUVE();
+    ICommandBufferUVE* const firstBuffer = &renderSystem.GetFrameCommandBufferUVE();
+    renderSystem.BeginFrameUVE();
+    ICommandBufferUVE* const preservedBuffer = &renderSystem.GetFrameCommandBufferUVE();
+
+    EXPECT_EQ(preservedBuffer, firstBuffer);
+    renderSystem.EndFrameUVE();
+    EXPECT_EQ(renderSystem.GetFrameIndexUVE(), 1U);
+}
+#endif
+
 } // namespace
 } // namespace UVE::Render::Tests

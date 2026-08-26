@@ -34,6 +34,15 @@ TEST(NullRenderDeviceUVETest, CreateBufferUVE_UnknownUsage_ReturnsInvalidBeforeA
     EXPECT_EQ(valid.value, 1U);
 }
 
+TEST(NullRenderDeviceUVETest, CreateBufferUVE_ZeroSize_ReturnsInvalidBeforeAllocation) {
+    NullRenderDeviceUVE device;
+
+    const BufferHandleUVE invalid = device.CreateBufferUVE(BufferDescUVE{0U, BufferUsageUVE::Vertex});
+
+    EXPECT_EQ(invalid, kInvalidBufferHandleUVE);
+    EXPECT_EQ(device.GetLiveResourceCountUVE(), 0U);
+}
+
 TEST(NullRenderDeviceUVETest, CreateBufferUVE_OversizedInitialData_ReturnsInvalidBeforeAllocation) {
     NullRenderDeviceUVE device;
     const std::array<std::byte, 17> initialData{};
@@ -491,6 +500,37 @@ TEST(NullRenderDeviceUVEDeathTest, CommandBuffer_EndRenderPassWithoutBegin_Asser
     NullRenderDeviceUVE device;
     std::unique_ptr<ICommandBufferUVE> commandBuffer = device.CreateCommandBufferUVE();
     EXPECT_DEATH({ commandBuffer->EndRenderPassUVE(); }, "");
+}
+#endif
+
+#if !UVE_DEBUG
+TEST(NullCommandBufferUVERuntimeTest, CommandBufferLifecycleMisuseIsSafeNoOpInRelease) {
+    NullRenderDeviceUVE device;
+    std::unique_ptr<ICommandBufferUVE> commandBuffer = device.CreateCommandBufferUVE();
+
+    commandBuffer->BeginRenderPassUVE(RenderPassDescUVE{});
+    commandBuffer->BeginRenderPassUVE(RenderPassDescUVE{});
+    commandBuffer->EndRenderPassUVE();
+    commandBuffer->EndRenderPassUVE();
+    commandBuffer->BindPipelineUVE(PipelineHandleUVE{1U});
+    commandBuffer->BindVertexBufferUVE(BufferHandleUVE{1U}, 0U);
+    commandBuffer->BindIndexBufferUVE(BufferHandleUVE{1U});
+    commandBuffer->BindTextureUVE(TextureHandleUVE{1U}, 0U);
+    commandBuffer->BindUniformBufferUVE(BufferHandleUVE{1U}, 0U);
+    commandBuffer->SetUniformFloatUVE("uFloat", 1.0F);
+    commandBuffer->SetUniformIntUVE("uInt", 1);
+    commandBuffer->SetUniformBoolUVE("uBool", true);
+    commandBuffer->SetUniformVector3UVE("uVector", Math::Vector3UVE{});
+    commandBuffer->SetUniformMatrix4x4UVE("uMatrix", Math::Matrix4x4UVE{});
+    commandBuffer->DrawIndexedUVE(3U);
+    commandBuffer->DrawUVE(3U);
+
+    // The valid begin/end pair is the only legal sequence above; every misuse is a release-safe
+    // no-op and must not add a command that a later retained submission could execute.
+    device.SubmitUVE(std::move(commandBuffer));
+    EXPECT_EQ(device.GetLastSubmittedCommandsUVE().size(), 2U);
+    EXPECT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(device.GetLastSubmittedCommandsUVE()[0]));
+    EXPECT_TRUE(std::holds_alternative<EndRenderPassCommandUVE>(device.GetLastSubmittedCommandsUVE()[1]));
 }
 #endif
 

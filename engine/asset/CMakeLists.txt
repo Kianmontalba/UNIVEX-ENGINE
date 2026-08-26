@@ -9,7 +9,9 @@
 # already exist — MeshAssetUVE/MaterialAssetUVE's public headers use Vector3UVE/AabbUVE.
 
 find_package(ZLIB REQUIRED)
-find_package(JPEG REQUIRED)
+if(NOT ANDROID)
+    find_package(JPEG REQUIRED)
+endif()
 
 add_library(uve_asset STATIC
     src/asset_guid_uve.cpp
@@ -41,8 +43,8 @@ add_library(uve_asset STATIC
     src/gltf_metadata_uve.cpp
     src/gltf_mesh_converter_uve.cpp
     src/gltf_importer_uve.cpp
-    src/jpeg_metadata_uve.cpp
-    src/jpeg_importer_uve.cpp
+    $<$<NOT:$<BOOL:${ANDROID}>>:src/jpeg_metadata_uve.cpp>
+    $<$<NOT:$<BOOL:${ANDROID}>>:src/jpeg_importer_uve.cpp>
     src/mtl_metadata_uve.cpp
     src/mtl_material_converter_uve.cpp
     src/mtl_importer_uve.cpp
@@ -62,7 +64,10 @@ add_library(uve_asset STATIC
 target_include_directories(uve_asset PUBLIC include)
 target_link_libraries(uve_asset
     PUBLIC uve_platform uve_debug uve_threading uve_events uve_math
-    PRIVATE nlohmann_json::nlohmann_json ZLIB::ZLIB JPEG::JPEG
+    PRIVATE nlohmann_json::nlohmann_json ZLIB::ZLIB
 )
+if(NOT ANDROID)
+    target_link_libraries(uve_asset PRIVATE JPEG::JPEG)
+endif()
 target_compile_features(uve_asset PUBLIC cxx_std_20)
 uve_set_warnings(uve_asset)
