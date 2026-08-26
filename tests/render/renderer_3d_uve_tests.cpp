@@ -732,6 +732,31 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_ReadyEmptyMeshSkipsInvalidGpuBuffers) {
     EXPECT_EQ(secondDiagnostics.meshDrawCallsRecorded, 0U);
 }
 
+#if !UVE_DEBUG
+TEST_F(Renderer3DUVETest, RenderFrameUVE_InvalidReadyMaterialPayloadSkipsGpuDrawInRelease) {
+    assetManager.RegisterLoaderUVE<Asset::MaterialAssetUVE>(
+        [vertexGuid = vertexShaderGuid, fragmentGuid = fragmentShaderGuid](const std::filesystem::path&,
+                                                                             Asset::MaterialAssetUVE& material) {
+            material.vertexShader = vertexGuid;
+            material.fragmentShader = fragmentGuid;
+            material.metallic = std::numeric_limits<float>::quiet_NaN();
+            return true;
+        });
+
+    const Scene::EntityUVE cameraEntity = MakeCameraEntityUVE();
+    const Asset::AssetGuidUVE meshGuid = assetDatabase.RegisterUVE("renderer3d_tests_invalid_material_mesh.uvemodel");
+    const Asset::AssetGuidUVE materialGuid =
+        assetDatabase.RegisterUVE("renderer3d_tests_invalid_material_payload.uvemat");
+    MakeMeshEntityUVE(Math::Vector3UVE{0.0F, 0.0F, -2.0F}, meshGuid, materialGuid);
+    WaitUntilAssetsReadyUVE(meshGuid, materialGuid);
+
+    renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+    const Renderer3DFrameDiagnosticsUVE diagnostics = renderer3D->GetLastFrameDiagnosticsUVE();
+    EXPECT_EQ(diagnostics.meshItemsExtracted, 1U);
+    EXPECT_EQ(diagnostics.meshDrawCallsRecorded, 0U);
+}
+#endif
+
 TEST_F(Renderer3DUVETest, RenderFrameUVE_MaterialWithAlbedoTexture_UploadsAndBindsRealTexture) {
     const std::size_t baselineLiveResources = renderDevice.GetLiveResourceCountUVE();
 

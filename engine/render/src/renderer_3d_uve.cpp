@@ -690,6 +690,12 @@ struct Renderer3DUVE::ImplUVE {
         }
 
         const Asset::MaterialAssetUVE* const material = item.materialHandle.TryGetUVE();
+        const bool validMaterial = material != nullptr && Asset::IsMaterialAssetValidUVE(*material);
+        UVE_ASSERT(validMaterial);
+        if (!validMaterial) {
+            UVE_ERROR("Renderer3DUVE: invalid material payload skipped before GPU uniform preparation");
+            return nullptr;
+        }
         Asset::AssetHandleUVE<Asset::ShaderAssetUVE> vertexShaderHandle =
             assetManager.LoadUVE<Asset::ShaderAssetUVE>(material->vertexShader, assetDatabase);
         Asset::AssetHandleUVE<Asset::ShaderAssetUVE> fragmentShaderHandle =
