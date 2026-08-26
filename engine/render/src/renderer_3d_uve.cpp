@@ -441,9 +441,9 @@ struct Renderer3DUVE::ImplUVE {
     /// AssetGuidUVE — independent of materialCache, so two materials sharing an albedo texture
     /// GUID upload it only once.
     std::unordered_map<Asset::AssetGuidUVE, TextureHandleUVE> textureCache;
-    /// First-load failures remain on the fallback path until an explicit asset reload event. This
-    /// prevents repeated failed-handle diagnostics after another cache invalidation rebuilds a
-    /// material that still references the same unavailable texture.
+    /// Permanent texture-resolution failures (asset load or GPU upload) remain on the fallback
+    /// path until an explicit texture asset reload event. This prevents repeated failed-handle
+    /// diagnostics and repeated invalid GPU uploads after a material cache rebuild.
     std::unordered_set<Asset::AssetGuidUVE> failedTextureGuids;
     RenderGraphUVE renderGraph;
     RenderQueueUVE frameQueue;
@@ -519,7 +519,7 @@ struct Renderer3DUVE::ImplUVE {
             }
         }
 
-        failedTextureGuids.erase(event.guid);
+        const bool textureFailureMemoErased = failedTextureGuids.erase(event.guid) > 0U;
         const auto textureIt = textureCache.find(event.guid);
         if (textureIt != textureCache.end()) {
             DestroyTextureIfValidUVE(renderDevice, textureIt->second);
@@ -537,6 +537,11 @@ struct Renderer3DUVE::ImplUVE {
             // Shader reloads intentionally retain valid texture uploads; only a material payload
             // swap can make a previously cached texture definitively unreferenced here.
             EvictUnreferencedTextureCacheEntriesUVE();
+        } else if (textureFailureMemoErased) {
+            // A failed upload has no textureCache entry, but a material rebuilt after that failure
+            // can still cache fallback handles. Rebuild it after the explicit texture reload so the
+            // asset gets one deliberate retry instead of remaining on a stale fallback forever.
+            materialCache.clear();
         }
     }
 
@@ -634,6 +639,7 @@ struct Renderer3DUVE::ImplUVE {
         const TextureHandleUVE handle =
             renderDevice.CreateTextureUVE(desc, std::as_bytes(std::span(textureAsset->pixels)));
         if (handle == kInvalidTextureHandleUVE) {
+            failedTextureGuids.insert(textureGuid);
             ++lastFrameDiagnostics.textureFallbacks;
             UVE_ERROR("Renderer3DUVE: texture asset upload failed - falling back to the default texture");
             return fallbackHandle;

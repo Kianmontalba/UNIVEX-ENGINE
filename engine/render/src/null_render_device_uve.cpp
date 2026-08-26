@@ -17,6 +17,7 @@ struct NullRenderDeviceUVE::ImplUVE {
     std::uint32_t nextBufferHandle = 1;
     std::unordered_map<std::uint32_t, TextureDescUVE> textures;
     std::uint32_t nextTextureHandle = 1;
+    std::uint64_t textureCreateAttemptCount = 0;
     std::unordered_map<std::uint32_t, ShaderDescUVE> shaders;
     std::uint32_t nextShaderHandle = 1;
     std::unordered_map<std::uint32_t, PipelineDescUVE> pipelines;
@@ -69,6 +70,7 @@ bool NullRenderDeviceUVE::UpdateBufferUVE(BufferHandleUVE buffer, std::span<cons
 
 TextureHandleUVE NullRenderDeviceUVE::CreateTextureUVE(const TextureDescUVE& desc,
                                                          std::span<const std::byte> initialData) {
+    ++m_impl->textureCreateAttemptCount;
     if (!ValidateTextureUploadUVE(desc, initialData)) {
         UVE_ERROR("NullRenderDeviceUVE: CreateTextureUVE received an invalid descriptor or initial upload");
         return kInvalidTextureHandleUVE;
@@ -203,6 +205,10 @@ const std::vector<RecordedCommandUVE>& NullRenderDeviceUVE::GetLastSubmittedComm
 
 std::size_t NullRenderDeviceUVE::GetLiveResourceCountUVE() const noexcept {
     return m_impl->buffers.size() + m_impl->textures.size() + m_impl->shaders.size() + m_impl->pipelines.size();
+}
+
+std::uint64_t NullRenderDeviceUVE::GetTextureCreateAttemptCountUVE() const noexcept {
+    return m_impl->textureCreateAttemptCount;
 }
 
 std::uint64_t NullRenderDeviceUVE::GetPresentCallCountUVE() const noexcept {

@@ -69,6 +69,11 @@ public:
     /// (created but not yet destroyed) — lets tests confirm cleanup without a GPU to inspect.
     [[nodiscard]] std::size_t GetLiveResourceCountUVE() const noexcept;
 
+    /// Test-only hook: how many CreateTextureUVE() attempts have reached this device, including
+    /// attempts rejected by descriptor validation. It exposes retry behavior without adding a
+    /// production cache or changing the IRenderDeviceUVE contract.
+    [[nodiscard]] std::uint64_t GetTextureCreateAttemptCountUVE() const noexcept;
+
     /// Test-only hook: how many times PresentUVE() has been called since construction.
     [[nodiscard]] std::uint64_t GetPresentCallCountUVE() const noexcept;
 
