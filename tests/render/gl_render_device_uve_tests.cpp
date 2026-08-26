@@ -17,6 +17,9 @@
 #include <string>
 #include <thread>
 
+#ifndef GL_GLEXT_PROTOTYPES
+#define GL_GLEXT_PROTOTYPES 1
+#endif
 #include <GL/gl.h>
 #include <gtest/gtest.h>
 
@@ -873,6 +876,70 @@ TEST_F(GlRenderDeviceUVETest, CreateTextureUVE_Rgba16Float_UsesHalfFloatUploadTy
     EXPECT_EQ(readback, kPixels);
 
     renderDevice->DestroyTextureUVE(texture);
+}
+
+TEST_F(GlRenderDeviceUVETest, DestroyRenderDeviceUVE_ReleasesLiveGlResources) {
+    auto firstDevice = std::make_unique<GlRenderDeviceUVE>(*windowManager);
+    const ShaderHandleUVE vertexShader =
+        firstDevice->CreateShaderUVE(ShaderDescUVE{ShaderStageUVE::Vertex, std::string(kValidVertexShaderSource)});
+    const ShaderHandleUVE fragmentShader = firstDevice->CreateShaderUVE(
+        ShaderDescUVE{ShaderStageUVE::Fragment, std::string(kValidFragmentShaderSource)});
+    ASSERT_NE(vertexShader, kInvalidShaderHandleUVE);
+    ASSERT_NE(fragmentShader, kInvalidShaderHandleUVE);
+
+    PipelineDescUVE pipelineDesc;
+    pipelineDesc.vertexShader = vertexShader;
+    pipelineDesc.fragmentShader = fragmentShader;
+    pipelineDesc.vertexLayout = {VertexAttributeUVE{"POSITION", VertexAttributeFormatUVE::Float3, 0U}};
+    pipelineDesc.vertexStride = 3U * static_cast<std::uint32_t>(sizeof(float));
+    const PipelineHandleUVE pipeline = firstDevice->CreatePipelineUVE(pipelineDesc);
+    ASSERT_NE(pipeline, kInvalidPipelineHandleUVE);
+
+    constexpr std::array<float, 3> kVertex{0.0F, 0.0F, 0.0F};
+    const BufferHandleUVE buffer = firstDevice->CreateBufferUVE(
+        BufferDescUVE{sizeof(kVertex), BufferUsageUVE::Vertex}, std::as_bytes(std::span(kVertex)));
+    const TextureHandleUVE texture = firstDevice->CreateTextureUVE(TextureDescUVE{1U, 1U});
+    ASSERT_NE(buffer, kInvalidBufferHandleUVE);
+    ASSERT_NE(texture, kInvalidTextureHandleUVE);
+    ASSERT_EQ(firstDevice->GetLiveResourceCountUVE(), 5U);
+
+    std::unique_ptr<ICommandBufferUVE> commandBuffer = firstDevice->CreateCommandBufferUVE();
+    ASSERT_NE(commandBuffer, nullptr);
+    commandBuffer->BeginRenderPassUVE(RenderPassDescUVE{});
+    commandBuffer->BindPipelineUVE(pipeline);
+    commandBuffer->BindVertexBufferUVE(buffer, 0U);
+    commandBuffer->BindTextureUVE(texture, 0U);
+
+    GLint bufferName = 0;
+    GLint textureName = 0;
+    GLint programName = 0;
+    GLint vertexArrayName = 0;
+    glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &bufferName);
+    glGetIntegerv(GL_TEXTURE_BINDING_2D, &textureName);
+    glGetIntegerv(GL_CURRENT_PROGRAM, &programName);
+    glGetIntegerv(GL_VERTEX_ARRAY_BINDING, &vertexArrayName);
+    ASSERT_NE(bufferName, 0);
+    ASSERT_NE(textureName, 0);
+    ASSERT_NE(programName, 0);
+    ASSERT_NE(vertexArrayName, 0);
+
+    commandBuffer->EndRenderPassUVE();
+    commandBuffer.reset();
+    firstDevice.reset();
+
+    // Detach state that may legally remain current after object deletion before querying liveness.
+    glUseProgram(0);
+    glBindVertexArray(0);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    EXPECT_FALSE(glIsBuffer(static_cast<GLuint>(bufferName)));
+    EXPECT_FALSE(glIsTexture(static_cast<GLuint>(textureName)));
+    EXPECT_FALSE(glIsProgram(static_cast<GLuint>(programName)));
+    EXPECT_FALSE(glIsVertexArray(static_cast<GLuint>(vertexArrayName)));
+    EXPECT_EQ(glGetError(), GL_NO_ERROR);
+
+    auto secondDevice = std::make_unique<GlRenderDeviceUVE>(*windowManager);
+    EXPECT_EQ(secondDevice->GetLiveResourceCountUVE(), 0U);
 }
 
 TEST_F(GlRenderDeviceUVETest, CreateShaderUVE_ValidSource_Succeeds) {

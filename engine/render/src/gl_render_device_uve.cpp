@@ -260,6 +260,30 @@ GlRenderDeviceUVE::~GlRenderDeviceUVE() {
         m_impl->state.gl.glDeleteFramebuffers(1, &framebuffer);
     }
     m_impl->state.framebufferCache.clear();
+
+    // Release every device-owned GL object while the context is still owned by the window manager.
+    // Relying on context teardown leaks resources when a renderer is recreated within one context.
+    for (const auto& [handle, record] : m_impl->state.pipelines) {
+        static_cast<void>(handle);
+        m_impl->state.gl.glDeleteProgram(record.glProgram);
+        m_impl->state.gl.glDeleteVertexArrays(1, &record.glVao);
+    }
+    m_impl->state.pipelines.clear();
+    for (const auto& [handle, record] : m_impl->state.shaders) {
+        static_cast<void>(handle);
+        m_impl->state.gl.glDeleteShader(record.glShader);
+    }
+    m_impl->state.shaders.clear();
+    for (const auto& [handle, record] : m_impl->state.buffers) {
+        static_cast<void>(handle);
+        m_impl->state.gl.glDeleteBuffers(1, &record.glBuffer);
+    }
+    m_impl->state.buffers.clear();
+    for (const auto& [handle, record] : m_impl->state.textures) {
+        static_cast<void>(handle);
+        glDeleteTextures(1, &record.glTexture);
+    }
+    m_impl->state.textures.clear();
 }
 
 BufferHandleUVE GlRenderDeviceUVE::CreateBufferUVE(const BufferDescUVE& desc, std::span<const std::byte> initialData) {
