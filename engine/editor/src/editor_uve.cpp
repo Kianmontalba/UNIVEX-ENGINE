@@ -2,6 +2,7 @@
 
 #include "uve/editor/editor_uve.h"
 #include "uve/editor/editor_theme_uve.h"
+#include "editor_imguizmo_orientation_uve.h"
 
 #include <algorithm>
 #include <array>
@@ -6462,59 +6463,14 @@ void EditorUVE::DrawViewportPanelUVE() {
             drawList->AddText(ImVec2{contentOrigin.x + 10.0F, contentOrigin.y + 38.0F},
                               IM_COL32(218, 203, 177, 185), "Editor sky · no scene light");
         }
-        const ImVec2 orientationCenter{contentOrigin.x + contentSize.x - 62.0F, contentOrigin.y + 104.0F};
-        const Math::QuaternionUVE viewportOrientation =
-            MakeViewportOrientationUVE(m_viewportYawRadians, m_viewportPitchRadians);
-        const Math::Vector3UVE cameraRight =
-            Math::RotateVectorUVE(viewportOrientation, Math::Vector3UVE{1.0F, 0.0F, 0.0F});
-        const Math::Vector3UVE cameraUp =
-            Math::RotateVectorUVE(viewportOrientation, Math::Vector3UVE{0.0F, 1.0F, 0.0F});
-        const auto drawOrientationArrow = [drawList](const ImVec2 start, const ImVec2 end, const ImU32 color) {
-            const ImVec2 direction{end.x - start.x, end.y - start.y};
-            const float length = std::sqrt(direction.x * direction.x + direction.y * direction.y);
-            if (length <= 0.001F) {
-                return;
-            }
-            drawList->AddLine(start, end, color, 1.7F);
-            const ImVec2 unit{direction.x / length, direction.y / length};
-            const ImVec2 perpendicular{-unit.y, unit.x};
-            const ImVec2 base{end.x - unit.x * 6.0F, end.y - unit.y * 6.0F};
-            drawList->AddTriangleFilled(end, ImVec2{base.x + perpendicular.x * 3.0F, base.y + perpendicular.y * 3.0F},
-                                        ImVec2{base.x - perpendicular.x * 3.0F, base.y - perpendicular.y * 3.0F}, color);
-        };
-        const auto drawOrientationAxis = [&](const Math::Vector3UVE worldAxis, const ImU32 positiveColor,
-                                             const ImU32 negativeColor, const char* const positiveLabel,
-                                             const char* const negativeLabel) {
-            const float screenX = Math::DotUVE(worldAxis, cameraRight) * 23.0F;
-            const float screenY = -Math::DotUVE(worldAxis, cameraUp) * 23.0F;
-            if (!IsFiniteUVE(screenX) || !IsFiniteUVE(screenY)) {
-                return;
-            }
-            const ImVec2 positiveEnd{orientationCenter.x + screenX, orientationCenter.y + screenY};
-            const ImVec2 negativeEnd{orientationCenter.x - screenX, orientationCenter.y - screenY};
-            const float screenLength = std::sqrt(screenX * screenX + screenY * screenY);
-            drawOrientationArrow(orientationCenter, negativeEnd, negativeColor);
-            drawOrientationArrow(orientationCenter, positiveEnd, positiveColor);
-            if (screenLength > 5.0F) {
-                drawList->AddText(ImVec2{positiveEnd.x + 4.0F, positiveEnd.y - 7.0F}, positiveColor, positiveLabel);
-                drawList->AddText(ImVec2{negativeEnd.x + 4.0F, negativeEnd.y - 7.0F}, negativeColor, negativeLabel);
-            } else {
-                // A world axis aimed directly into/out of the camera is still present. The ring is
-                // the compact depth cue; the labels keep both directions discoverable at front view.
-                drawList->AddCircle(orientationCenter, 8.0F, positiveColor, 16, 1.5F);
-                drawList->AddText(ImVec2{orientationCenter.x + 11.0F, orientationCenter.y - 18.0F},
-                                  positiveColor, positiveLabel);
-                drawList->AddText(ImVec2{orientationCenter.x + 11.0F, orientationCenter.y + 5.0F},
-                                  negativeColor, negativeLabel);
-            }
-        };
-        constexpr ImU32 xColor = IM_COL32(216, 102, 102, 245);
-        constexpr ImU32 yColor = IM_COL32(116, 196, 142, 245);
-        constexpr ImU32 zColor = IM_COL32(113, 151, 215, 245);
-        drawOrientationAxis(Math::Vector3UVE{1.0F, 0.0F, 0.0F}, xColor, IM_COL32(216, 102, 102, 128), "X+", "X-");
-        drawOrientationAxis(Math::Vector3UVE{0.0F, 1.0F, 0.0F}, yColor, IM_COL32(116, 196, 142, 128), "Y+", "Y-");
-        drawOrientationAxis(Math::Vector3UVE{0.0F, 0.0F, 1.0F}, zColor, IM_COL32(113, 151, 215, 128), "Z+", "Z-");
-        drawList->AddCircleFilled(orientationCenter, 3.0F, IM_COL32(230, 232, 235, 235));
+        const float orientationWidgetX = contentOrigin.x + contentSize.x - 116.0F;
+        const float orientationWidgetY = contentOrigin.y + 46.0F;
+        if (DrawViewportOrientationWidgetImGuIZMOUVE(orientationWidgetX, orientationWidgetY, 92.0F,
+                                                      m_viewportYawRadians, m_viewportPitchRadians)) {
+            m_viewportPitchRadians = std::clamp(m_viewportPitchRadians, -kMaximumViewportPitchRadiansUVE,
+                                                kMaximumViewportPitchRadiansUVE);
+            static_cast<void>(ApplyViewportCameraUVE());
+        }
     } else {
         ImGui::TextUnformatted("Viewport is too small for picking.");
     }
