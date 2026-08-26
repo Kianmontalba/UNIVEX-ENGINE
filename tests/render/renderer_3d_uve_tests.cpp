@@ -783,6 +783,14 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_FailedTextureUsesFallbackAndReportsDiag
     const Renderer3DFrameDiagnosticsUVE diagnostics = renderer3D->GetLastFrameDiagnosticsUVE();
     EXPECT_EQ(diagnostics.failedAssetLoads, 0U);
     EXPECT_EQ(diagnostics.textureFallbacks, 1U);
+
+    // Rebuilding the material cache must not retry or repeatedly report the same permanent
+    // first-load failure; an explicit texture reload is the only event that clears the memo.
+    eventSystem.Publish(Asset::AssetReloadedEventUVE{materialGuid});
+    renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+    const Renderer3DFrameDiagnosticsUVE afterMaterialEviction = renderer3D->GetLastFrameDiagnosticsUVE();
+    EXPECT_EQ(afterMaterialEviction.failedAssetLoads, 0U);
+    EXPECT_EQ(afterMaterialEviction.textureFallbacks, 1U);
 }
 
 TEST_F(Renderer3DUVETest, RenderFrameUVE_TextureAssetNotYetReady_SkipsItemUntilLoaded) {

@@ -12,6 +12,7 @@
 #include <span>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "uve/asset/asset_reloaded_event_uve.h"
@@ -408,6 +409,10 @@ struct Renderer3DUVE::ImplUVE {
     /// AssetGuidUVE — independent of materialCache, so two materials sharing an albedo texture
     /// GUID upload it only once.
     std::unordered_map<Asset::AssetGuidUVE, TextureHandleUVE> textureCache;
+    /// First-load failures remain on the fallback path until an explicit asset reload event. This
+    /// prevents repeated failed-handle diagnostics after another cache invalidation rebuilds a
+    /// material that still references the same unavailable texture.
+    std::unordered_set<Asset::AssetGuidUVE> failedTextureGuids;
     RenderGraphUVE renderGraph;
     RenderQueueUVE frameQueue;
     std::array<RenderQueueUVE, kShadowCascadeCountUVE> shadowQueues;
@@ -455,6 +460,7 @@ struct Renderer3DUVE::ImplUVE {
             }
         }
 
+        failedTextureGuids.erase(event.guid);
         const auto textureIt = textureCache.find(event.guid);
         if (textureIt != textureCache.end()) {
             renderDevice.DestroyTextureUVE(textureIt->second);
@@ -542,10 +548,15 @@ struct Renderer3DUVE::ImplUVE {
         if (existingIt != textureCache.end()) {
             return existingIt->second;
         }
+        if (failedTextureGuids.contains(textureGuid)) {
+            ++lastFrameDiagnostics.textureFallbacks;
+            return fallbackHandle;
+        }
 
         Asset::AssetHandleUVE<Asset::TextureAssetUVE> textureHandle =
             assetManager.LoadUVE<Asset::TextureAssetUVE>(textureGuid, assetDatabase);
         if (textureHandle.HasFailedUVE()) {
+            failedTextureGuids.insert(textureGuid);
             ++lastFrameDiagnostics.textureFallbacks;
             UVE_WARNING("Renderer3DUVE: texture asset load failed - falling back to the default texture");
             return fallbackHandle;
