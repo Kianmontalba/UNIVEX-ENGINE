@@ -6,6 +6,24 @@
 
 namespace UVE::Render {
 
+void RenderQueueUVE::ClearUVE() noexcept {
+    opaqueItems.clear();
+    transparentItems.clear();
+    particleItems.clear();
+    particleItemsTruncated = false;
+    invalidAssetReferences = 0U;
+    pendingAssetLoads = 0U;
+    failedAssetLoads = 0U;
+    invalidRenderEligibility = 0U;
+}
+
+void RenderQueueUVE::ReserveUVE(const std::size_t opaqueCapacity, const std::size_t transparentCapacity,
+                                const std::size_t particleCapacity) {
+    opaqueItems.reserve(opaqueCapacity);
+    transparentItems.reserve(transparentCapacity);
+    particleItems.reserve(particleCapacity);
+}
+
 void RenderQueueUVE::SortUVE() {
     std::sort(opaqueItems.begin(), opaqueItems.end(),
               [](const RenderItemUVE& lhs, const RenderItemUVE& rhs) { return lhs.sortDepth < rhs.sortDepth; });

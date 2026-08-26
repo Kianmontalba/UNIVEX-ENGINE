@@ -33,6 +33,15 @@ public:
                                                                  Asset::IAssetManagerUVE& assetManager,
                                                                  Asset::IAssetDatabaseUVE& assetDatabase,
                                                                  const Math::FrustumUVE& cullFrustum) const = 0;
+
+    /// Fills caller-owned queue storage. The default preserves compatibility for existing
+    /// implementations/test doubles; MeshRendererUVE overrides it to reuse vector capacity.
+    virtual void ExtractRenderQueueIntoUVE(Scene::IEntityManagerUVE& entityManager,
+                                           Asset::IAssetManagerUVE& assetManager,
+                                           Asset::IAssetDatabaseUVE& assetDatabase,
+                                           const Math::FrustumUVE& cullFrustum, RenderQueueUVE& outQueue) const {
+        outQueue = ExtractRenderQueueUVE(entityManager, assetManager, assetDatabase, cullFrustum);
+    }
 };
 
 } // namespace UVE::Render

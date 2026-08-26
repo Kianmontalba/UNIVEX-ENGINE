@@ -55,12 +55,10 @@ private:
 
     Detail::GlDeviceStateUVE* m_state;
     bool m_insideRenderPass = false;
-    GLuint m_tempFramebuffer = 0; // Nonzero while a real-texture-backed pass is active; this pass'
-                                   // FBO is created in BeginRenderPassUVE() and destroyed in
-                                   // EndRenderPassUVE() rather than cached across frames — a
-                                   // deliberate "Foundations"-quality simplification since nothing
-                                   // in this increment is performance-sensitive (see
-                                   // docs/CODING_STANDARDS.md).
+    GLuint m_tempFramebuffer = 0; // Nonzero while a real-texture-backed pass is active; the FBO
+                                   // name comes from GlDeviceStateUVE's attachment-pair cache and
+                                   // is released only when a dependent texture or the device is
+                                   // destroyed.
     GLuint m_currentProgram = 0;
     GLuint m_currentVao = 0;
     PipelineHandleUVE m_currentPipeline = kInvalidPipelineHandleUVE;

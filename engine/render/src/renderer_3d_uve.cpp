@@ -409,6 +409,8 @@ struct Renderer3DUVE::ImplUVE {
     /// GUID upload it only once.
     std::unordered_map<Asset::AssetGuidUVE, TextureHandleUVE> textureCache;
     RenderGraphUVE renderGraph;
+    RenderQueueUVE frameQueue;
+    std::array<RenderQueueUVE, kShadowCascadeCountUVE> shadowQueues;
 
     Events::EventSubscriptionUVE reloadSubscription;
     const Scene::ParticleRuntimeUVE* particleRuntimeForFrame = nullptr;
@@ -966,7 +968,6 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
     const bool shadowsReady = shadowCaster != nullptr && m_impl->shadowProgram->IsValidUVE();
     ShadowCascadeMatricesUVE lightSpaceMatrices{};
     ShadowCascadeSplitsUVE cascadeSplits{};
-    std::array<RenderQueueUVE, kShadowCascadeCountUVE> shadowQueues{};
     std::int32_t cascadeCount = 0;
     if (shadowsReady) {
         const Scene::CameraComponentUVE& camera =
@@ -992,9 +993,9 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
             lightSpaceMatrices[cascadeIndex] = lightProjection * lightView;
             const Math::FrustumUVE lightFrustum =
                 m_impl->cameraSystem.ExtractFrustumUVE(lightSpaceMatrices[cascadeIndex]);
-            shadowQueues[cascadeIndex] = m_impl->meshRenderer.ExtractRenderQueueUVE(
-                entityManager, m_impl->assetManager, m_impl->assetDatabase, lightFrustum);
-            shadowQueues[cascadeIndex].SortUVE();
+            m_impl->meshRenderer.ExtractRenderQueueIntoUVE(entityManager, m_impl->assetManager, m_impl->assetDatabase,
+                                                            lightFrustum, m_impl->shadowQueues[cascadeIndex]);
+            m_impl->shadowQueues[cascadeIndex].SortUVE();
             cascadeNearPlane = cascadeFarPlane;
         }
         cascadeCount = static_cast<std::int32_t>(kShadowCascadeCountUVE);
@@ -1004,8 +1005,9 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
                                           lightSpaceMatrices, cascadeSplits, cascadeCount,
                                           m_impl->shadowCascadeBlendRatio};
 
-    RenderQueueUVE queue =
-        m_impl->meshRenderer.ExtractRenderQueueUVE(entityManager, m_impl->assetManager, m_impl->assetDatabase, frustum);
+    RenderQueueUVE& queue = m_impl->frameQueue;
+    m_impl->meshRenderer.ExtractRenderQueueIntoUVE(entityManager, m_impl->assetManager, m_impl->assetDatabase,
+                                                   frustum, queue);
     if (m_impl->particleRuntimeForFrame != nullptr) {
         const ParticleRenderSnapshotUVE particleSnapshot =
             ParticleRenderBridgeUVE::ExtractUVE(*m_impl->particleRuntimeForFrame);
@@ -1041,8 +1043,9 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
             const std::string passName = "DirectionalShadowCascade" + std::to_string(cascadeIndex);
         renderGraph.AddPassUVE(RenderGraphPassDescUVE{
             passName, {{shadowResources[cascadeIndex], RenderGraphResourceAccessUVE::Write}},
-            [this, &shadowQueues, &lightSpaceMatrices, shadowCaster, cascadeIndex](ICommandBufferUVE& commandBuffer) {
-                m_impl->RecordShadowPassUVE(shadowQueues[cascadeIndex].opaqueItems, lightSpaceMatrices[cascadeIndex],
+            [this, &lightSpaceMatrices, shadowCaster, cascadeIndex](ICommandBufferUVE& commandBuffer) {
+                m_impl->RecordShadowPassUVE(m_impl->shadowQueues[cascadeIndex].opaqueItems,
+                                            lightSpaceMatrices[cascadeIndex],
                                             m_impl->shadowMapTargets[cascadeIndex], shadowCaster != nullptr, commandBuffer);
             }});
         }

@@ -1,4 +1,3 @@
-// Copyright (c) 2026 UniVex Studios. All Rights Reserved.
 
 
 #include "uve/render/mesh_renderer_uve.h"
@@ -19,16 +18,25 @@ RenderQueueUVE MeshRendererUVE::ExtractRenderQueueUVE(Scene::IEntityManagerUVE& 
                                                         Asset::IAssetDatabaseUVE& assetDatabase,
                                                         const Math::FrustumUVE& cullFrustum) const {
     RenderQueueUVE queue;
+    ExtractRenderQueueIntoUVE(entityManager, assetManager, assetDatabase, cullFrustum, queue);
+    return queue;
+}
+
+void MeshRendererUVE::ExtractRenderQueueIntoUVE(Scene::IEntityManagerUVE& entityManager,
+                                            Asset::IAssetManagerUVE& assetManager,
+                                            Asset::IAssetDatabaseUVE& assetDatabase,
+                                            const Math::FrustumUVE& cullFrustum, RenderQueueUVE& outQueue) const {
+    outQueue.ClearUVE();
 
     entityManager.ForEachUVE<Scene::WorldTransformComponentUVE, Scene::MeshComponentUVE>(
         [&](Scene::EntityUVE, const Scene::WorldTransformComponentUVE& worldTransform,
             const Scene::MeshComponentUVE& meshComponent) {
             UVE_ASSERT(Scene::IsMeshComponentValidUVE(meshComponent));
             if (meshComponent.meshGuid == Asset::kInvalidAssetGuidUVE) {
-                ++queue.invalidAssetReferences;
+                ++outQueue.invalidAssetReferences;
             }
             if (meshComponent.materialGuid == Asset::kInvalidAssetGuidUVE) {
-                ++queue.invalidAssetReferences;
+                ++outQueue.invalidAssetReferences;
             }
             if (meshComponent.meshGuid == Asset::kInvalidAssetGuidUVE ||
                 meshComponent.materialGuid == Asset::kInvalidAssetGuidUVE) {
@@ -41,10 +49,10 @@ RenderQueueUVE MeshRendererUVE::ExtractRenderQueueUVE(Scene::IEntityManagerUVE& 
                 assetManager.LoadUVE<Asset::MaterialAssetUVE>(meshComponent.materialGuid, assetDatabase);
             const bool meshFailed = meshHandle.HasFailedUVE();
             const bool materialFailed = materialHandle.HasFailedUVE();
-            queue.failedAssetLoads += static_cast<std::size_t>(meshFailed) + static_cast<std::size_t>(materialFailed);
+            outQueue.failedAssetLoads += static_cast<std::size_t>(meshFailed) + static_cast<std::size_t>(materialFailed);
             const bool meshPending = !meshFailed && !meshHandle.IsReadyUVE();
             const bool materialPending = !materialFailed && !materialHandle.IsReadyUVE();
-            queue.pendingAssetLoads += static_cast<std::size_t>(meshPending) + static_cast<std::size_t>(materialPending);
+            outQueue.pendingAssetLoads += static_cast<std::size_t>(meshPending) + static_cast<std::size_t>(materialPending);
             if (meshPending || materialPending || meshFailed || materialFailed) {
                 return;
             }
@@ -56,7 +64,7 @@ RenderQueueUVE MeshRendererUVE::ExtractRenderQueueUVE(Scene::IEntityManagerUVE& 
             if (!EvaluateMeshRenderEligibilityUVE(meshComponent, worldTransform, *mesh, cullFrustum, eligibility)) {
                 if (eligibility.reason == MeshRenderEligibilityReasonUVE::InvalidWorldTransform ||
                     eligibility.reason == MeshRenderEligibilityReasonUVE::InvalidLocalBounds) {
-                    ++queue.invalidRenderEligibility;
+                    ++outQueue.invalidRenderEligibility;
                 }
                 return;
             }
@@ -64,13 +72,11 @@ RenderQueueUVE MeshRendererUVE::ExtractRenderQueueUVE(Scene::IEntityManagerUVE& 
             RenderItemUVE item{eligibility.worldMatrix, std::move(meshHandle), std::move(materialHandle),
                                eligibility.sortDepth};
             if (material->isTransparent) {
-                queue.transparentItems.push_back(std::move(item));
+                outQueue.transparentItems.push_back(std::move(item));
             } else {
-                queue.opaqueItems.push_back(std::move(item));
+                outQueue.opaqueItems.push_back(std::move(item));
             }
         });
-
-    return queue;
 }
 
 } // namespace UVE::Render

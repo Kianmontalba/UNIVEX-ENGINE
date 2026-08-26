@@ -17,6 +17,10 @@ public:
                                                          Asset::IAssetManagerUVE& assetManager,
                                                          Asset::IAssetDatabaseUVE& assetDatabase,
                                                          const Math::FrustumUVE& cullFrustum) const override;
+
+    void ExtractRenderQueueIntoUVE(Scene::IEntityManagerUVE& entityManager, Asset::IAssetManagerUVE& assetManager,
+                                   Asset::IAssetDatabaseUVE& assetDatabase, const Math::FrustumUVE& cullFrustum,
+                                   RenderQueueUVE& outQueue) const override;
 };
 
 } // namespace UVE::Render
