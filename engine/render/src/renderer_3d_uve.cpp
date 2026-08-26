@@ -119,6 +119,11 @@ struct MeshGpuResourcesUVE {
     std::uint32_t indexCount = 0;
 };
 
+[[nodiscard]] bool IsValidMeshGpuResourcesUVE(const MeshGpuResourcesUVE& resources) noexcept {
+    return resources.vertexBuffer != kInvalidBufferHandleUVE && resources.indexBuffer != kInvalidBufferHandleUVE &&
+           resources.indexCount > 0U;
+}
+
 /// Renderer-owned primitive draw data. It deliberately contains no AssetHandleUVE: primitive
 /// geometry is immutable renderer cache data, while authored kind/color remain ECS component state.
 struct PrimitiveRenderItemUVE {
@@ -581,9 +586,15 @@ struct Renderer3DUVE::ImplUVE {
             renderDevice.CreateBufferUVE(BufferDescUVE{vertexBytes.size(), BufferUsageUVE::Vertex}, vertexBytes);
         const BufferHandleUVE indexBuffer =
             renderDevice.CreateBufferUVE(BufferDescUVE{indexBytes.size(), BufferUsageUVE::Index}, indexBytes);
+        MeshGpuResourcesUVE resources{vertexBuffer, indexBuffer, static_cast<std::uint32_t>(mesh->indices.size())};
+        if (!IsValidMeshGpuResourcesUVE(resources)) {
+            DestroyBufferIfValidUVE(renderDevice, vertexBuffer);
+            DestroyBufferIfValidUVE(renderDevice, indexBuffer);
+            UVE_ERROR("Renderer3DUVE: mesh GPU buffer allocation failed; caching a no-draw result");
+            resources = MeshGpuResourcesUVE{};
+        }
 
-        const auto insertResult = meshCache.emplace(
-            guid, MeshGpuResourcesUVE{vertexBuffer, indexBuffer, static_cast<std::uint32_t>(mesh->indices.size())});
+        const auto insertResult = meshCache.emplace(guid, resources);
         return insertResult.first->second;
     }
 
@@ -606,8 +617,14 @@ struct Renderer3DUVE::ImplUVE {
             BufferDescUVE{std::as_bytes(vertexSpan).size(), BufferUsageUVE::Vertex}, std::as_bytes(vertexSpan));
         const BufferHandleUVE indexBuffer = renderDevice.CreateBufferUVE(
             BufferDescUVE{std::as_bytes(indexSpan).size(), BufferUsageUVE::Index}, std::as_bytes(indexSpan));
-        const auto insertResult = primitiveMeshCache.emplace(
-            key, MeshGpuResourcesUVE{vertexBuffer, indexBuffer, static_cast<std::uint32_t>(geometry.indices.size())});
+        MeshGpuResourcesUVE resources{vertexBuffer, indexBuffer, static_cast<std::uint32_t>(geometry.indices.size())};
+        if (!IsValidMeshGpuResourcesUVE(resources)) {
+            DestroyBufferIfValidUVE(renderDevice, vertexBuffer);
+            DestroyBufferIfValidUVE(renderDevice, indexBuffer);
+            UVE_ERROR("Renderer3DUVE: primitive GPU buffer allocation failed; caching a no-draw result");
+            resources = MeshGpuResourcesUVE{};
+        }
+        const auto insertResult = primitiveMeshCache.emplace(key, resources);
         return insertResult.first->second;
     }
 
@@ -742,6 +759,9 @@ struct Renderer3DUVE::ImplUVE {
             shadowProgram->SetMatrix4x4UVE("uLightSpaceMatrix", lightSpaceMatrix);
             for (const RenderItemUVE& item : items) {
                 const MeshGpuResourcesUVE& meshResources = ResolveMeshGpuResourcesUVE(item);
+                if (!IsValidMeshGpuResourcesUVE(meshResources)) {
+                    continue;
+                }
                 shadowProgram->SetMatrix4x4UVE("uModel", item.worldMatrix);
                 shadowProgram->ApplyToUVE(commandBuffer);
                 commandBuffer.BindVertexBufferUVE(meshResources.vertexBuffer);
@@ -806,6 +826,9 @@ struct Renderer3DUVE::ImplUVE {
                 continue;
             }
             const MeshGpuResourcesUVE& meshResources = ResolveMeshGpuResourcesUVE(item);
+            if (!IsValidMeshGpuResourcesUVE(meshResources)) {
+                continue;
+            }
             const Asset::MaterialAssetUVE* const material = item.materialHandle.TryGetUVE();
             const std::shared_ptr<Shader::ShaderProgramUVE>& program = materialResources->program;
             if (!program->IsValidUVE()) {
@@ -918,6 +941,9 @@ struct Renderer3DUVE::ImplUVE {
         std::size_t drawCalls = 0U;
         for (const PrimitiveRenderItemUVE& item : items) {
             const MeshGpuResourcesUVE& meshResources = ResolvePrimitiveMeshGpuResourcesUVE(item.kind);
+            if (!IsValidMeshGpuResourcesUVE(meshResources)) {
+                continue;
+            }
             primitiveProgram->SetMatrix4x4UVE("uModel", item.worldMatrix);
             primitiveProgram->SetMatrix4x4UVE("uViewProjection", frameUniforms.viewProjection);
             primitiveProgram->SetVector3UVE("uColor", item.baseColor);

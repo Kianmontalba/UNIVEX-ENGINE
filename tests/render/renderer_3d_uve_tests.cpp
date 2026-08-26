@@ -706,6 +706,32 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_MaterialWithoutTextures_UsesFallbackTex
     EXPECT_NE(textureBinds[1].texture, kInvalidTextureHandleUVE);
 }
 
+TEST_F(Renderer3DUVETest, RenderFrameUVE_ReadyEmptyMeshSkipsInvalidGpuBuffers) {
+    assetManager.RegisterLoaderUVE<Asset::MeshAssetUVE>(
+        [](const std::filesystem::path&, Asset::MeshAssetUVE& mesh) {
+            mesh.vertices.clear();
+            mesh.indices.clear();
+            mesh.localBounds = Math::AabbUVE::FromCenterExtentsUVE(Math::Vector3UVE{}, Math::Vector3UVE{});
+            return true;
+        });
+
+    const Scene::EntityUVE cameraEntity = MakeCameraEntityUVE();
+    const Asset::AssetGuidUVE meshGuid = assetDatabase.RegisterUVE("renderer3d_tests_empty_mesh.uvemodel");
+    const Asset::AssetGuidUVE materialGuid = assetDatabase.RegisterUVE("renderer3d_tests_empty_mesh.uvemat");
+    MakeMeshEntityUVE(Math::Vector3UVE{0.0F, 0.0F, -2.0F}, meshGuid, materialGuid);
+    WaitUntilAssetsReadyUVE(meshGuid, materialGuid);
+
+    renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+    const Renderer3DFrameDiagnosticsUVE firstDiagnostics = renderer3D->GetLastFrameDiagnosticsUVE();
+    EXPECT_EQ(firstDiagnostics.meshItemsExtracted, 1U);
+    EXPECT_EQ(firstDiagnostics.meshDrawCallsRecorded, 0U);
+
+    renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+    const Renderer3DFrameDiagnosticsUVE secondDiagnostics = renderer3D->GetLastFrameDiagnosticsUVE();
+    EXPECT_EQ(secondDiagnostics.meshItemsExtracted, 1U);
+    EXPECT_EQ(secondDiagnostics.meshDrawCallsRecorded, 0U);
+}
+
 TEST_F(Renderer3DUVETest, RenderFrameUVE_MaterialWithAlbedoTexture_UploadsAndBindsRealTexture) {
     const std::size_t baselineLiveResources = renderDevice.GetLiveResourceCountUVE();
 
