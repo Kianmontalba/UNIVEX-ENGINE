@@ -503,5 +503,36 @@ TEST(NullRenderDeviceUVEDeathTest, CommandBuffer_EndRenderPassWithoutBegin_Asser
 }
 #endif
 
+#if !UVE_DEBUG
+TEST(NullCommandBufferUVERuntimeTest, CommandBufferLifecycleMisuseIsSafeNoOpInRelease) {
+    NullRenderDeviceUVE device;
+    std::unique_ptr<ICommandBufferUVE> commandBuffer = device.CreateCommandBufferUVE();
+
+    commandBuffer->BeginRenderPassUVE(RenderPassDescUVE{});
+    commandBuffer->BeginRenderPassUVE(RenderPassDescUVE{});
+    commandBuffer->EndRenderPassUVE();
+    commandBuffer->EndRenderPassUVE();
+    commandBuffer->BindPipelineUVE(PipelineHandleUVE{1U});
+    commandBuffer->BindVertexBufferUVE(BufferHandleUVE{1U}, 0U);
+    commandBuffer->BindIndexBufferUVE(BufferHandleUVE{1U});
+    commandBuffer->BindTextureUVE(TextureHandleUVE{1U}, 0U);
+    commandBuffer->BindUniformBufferUVE(BufferHandleUVE{1U}, 0U);
+    commandBuffer->SetUniformFloatUVE("uFloat", 1.0F);
+    commandBuffer->SetUniformIntUVE("uInt", 1);
+    commandBuffer->SetUniformBoolUVE("uBool", true);
+    commandBuffer->SetUniformVector3UVE("uVector", Math::Vector3UVE{});
+    commandBuffer->SetUniformMatrix4x4UVE("uMatrix", Math::Matrix4x4UVE{});
+    commandBuffer->DrawIndexedUVE(3U);
+    commandBuffer->DrawUVE(3U);
+
+    // The valid begin/end pair is the only legal sequence above; every misuse is a release-safe
+    // no-op and must not add a command that a later retained submission could execute.
+    device.SubmitUVE(std::move(commandBuffer));
+    EXPECT_EQ(device.GetLastSubmittedCommandsUVE().size(), 2U);
+    EXPECT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(device.GetLastSubmittedCommandsUVE()[0]));
+    EXPECT_TRUE(std::holds_alternative<EndRenderPassCommandUVE>(device.GetLastSubmittedCommandsUVE()[1]));
+}
+#endif
+
 } // namespace
 } // namespace UVE::Render::Tests

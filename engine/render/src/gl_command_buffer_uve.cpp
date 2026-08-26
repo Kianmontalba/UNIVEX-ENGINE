@@ -24,6 +24,24 @@ namespace {
     return false;
 }
 
+[[nodiscard]] bool RequireInsideRenderPassUVE(bool insideRenderPass, std::string_view operation) noexcept {
+    UVE_ASSERT(insideRenderPass);
+    if (!insideRenderPass) {
+        UVE_ERROR("GlCommandBufferUVE: {} must be called inside a render pass", operation);
+        return false;
+    }
+    return true;
+}
+
+[[nodiscard]] bool RequireOutsideRenderPassUVE(bool insideRenderPass) noexcept {
+    UVE_ASSERT(!insideRenderPass);
+    if (insideRenderPass) {
+        UVE_ERROR("GlCommandBufferUVE: BeginRenderPassUVE does not support nested render passes");
+        return false;
+    }
+    return true;
+}
+
 [[nodiscard]] GLint VertexAttributeComponentCountUVE(VertexAttributeFormatUVE format) noexcept {
     switch (format) {
         case VertexAttributeFormatUVE::Float2:
@@ -41,7 +59,9 @@ namespace {
 GlCommandBufferUVE::GlCommandBufferUVE(Detail::GlDeviceStateUVE& state) : m_state(&state) {}
 
 void GlCommandBufferUVE::BeginRenderPassUVE(const RenderPassDescUVE& renderPassDesc) {
-    UVE_ASSERT(!m_insideRenderPass);
+    if (!RequireOutsideRenderPassUVE(m_insideRenderPass)) {
+        return;
+    }
     if (!IsLoadOpValidUVE(renderPassDesc.colorLoadOp) || !IsLoadOpValidUVE(renderPassDesc.depthLoadOp)) {
         UVE_ERROR("GlCommandBufferUVE: BeginRenderPassUVE received an unknown load operation");
         return;
@@ -159,7 +179,9 @@ void GlCommandBufferUVE::BeginRenderPassUVE(const RenderPassDescUVE& renderPassD
 }
 
 void GlCommandBufferUVE::EndRenderPassUVE() {
-    UVE_ASSERT(m_insideRenderPass);
+    if (!RequireInsideRenderPassUVE(m_insideRenderPass, "EndRenderPassUVE")) {
+        return;
+    }
     if (m_tempFramebuffer != 0) {
         m_state->gl.glBindFramebuffer(GL_FRAMEBUFFER, 0);
         m_tempFramebuffer = 0;
@@ -168,6 +190,9 @@ void GlCommandBufferUVE::EndRenderPassUVE() {
 }
 
 void GlCommandBufferUVE::BindPipelineUVE(PipelineHandleUVE pipeline) {
+    if (!RequireInsideRenderPassUVE(m_insideRenderPass, "BindPipelineUVE")) {
+        return;
+    }
     if (pipeline == kInvalidPipelineHandleUVE) {
         UVE_ERROR("GlCommandBufferUVE: BindPipelineUVE referenced an invalid pipeline handle");
         return;
@@ -207,6 +232,9 @@ void GlCommandBufferUVE::BindPipelineUVE(PipelineHandleUVE pipeline) {
 }
 
 void GlCommandBufferUVE::BindVertexBufferUVE(BufferHandleUVE buffer, std::uint32_t slot) {
+    if (!RequireInsideRenderPassUVE(m_insideRenderPass, "BindVertexBufferUVE")) {
+        return;
+    }
     static_cast<void>(slot); // This minimal RHI describes one interleaved vertex layout per
                               // pipeline, not a per-slot binding table — every attribute in
                               // vertexLayout is configured against whichever buffer is bound here.
@@ -245,6 +273,9 @@ void GlCommandBufferUVE::BindVertexBufferUVE(BufferHandleUVE buffer, std::uint32
 }
 
 void GlCommandBufferUVE::BindIndexBufferUVE(BufferHandleUVE buffer) {
+    if (!RequireInsideRenderPassUVE(m_insideRenderPass, "BindIndexBufferUVE")) {
+        return;
+    }
     if (buffer == kInvalidBufferHandleUVE) {
         UVE_ERROR("GlCommandBufferUVE: BindIndexBufferUVE referenced an invalid buffer handle");
         return;
@@ -266,6 +297,9 @@ void GlCommandBufferUVE::BindIndexBufferUVE(BufferHandleUVE buffer) {
 }
 
 void GlCommandBufferUVE::BindTextureUVE(TextureHandleUVE texture, std::uint32_t slot) {
+    if (!RequireInsideRenderPassUVE(m_insideRenderPass, "BindTextureUVE")) {
+        return;
+    }
     if (m_state->maxCombinedTextureImageUnits <= 0 ||
         slot >= static_cast<std::uint32_t>(m_state->maxCombinedTextureImageUnits)) {
         UVE_ERROR("GlCommandBufferUVE: BindTextureUVE texture slot exceeds GL texture-unit limits");
@@ -286,6 +320,9 @@ void GlCommandBufferUVE::BindTextureUVE(TextureHandleUVE texture, std::uint32_t 
 }
 
 void GlCommandBufferUVE::BindUniformBufferUVE(BufferHandleUVE buffer, std::uint32_t slot) {
+    if (!RequireInsideRenderPassUVE(m_insideRenderPass, "BindUniformBufferUVE")) {
+        return;
+    }
     if (m_state->maxUniformBufferBindings <= 0 ||
         slot >= static_cast<std::uint32_t>(m_state->maxUniformBufferBindings)) {
         UVE_ERROR("GlCommandBufferUVE: BindUniformBufferUVE slot exceeds GL uniform-buffer limits");
@@ -318,6 +355,9 @@ const GlCommandBufferUVE::UniformRecordUVE* GlCommandBufferUVE::FindUniformUVE(s
 }
 
 void GlCommandBufferUVE::SetUniformFloatUVE(std::string_view name, float value) {
+    if (!RequireInsideRenderPassUVE(m_insideRenderPass, "SetUniformFloatUVE")) {
+        return;
+    }
     const UniformRecordUVE* const uniform = FindUniformUVE(name);
     if (uniform == nullptr || !ValidateUniformTypeUVE(*uniform, ShaderDataTypeUVE::Float, name)) {
         return;
@@ -326,6 +366,9 @@ void GlCommandBufferUVE::SetUniformFloatUVE(std::string_view name, float value) 
 }
 
 void GlCommandBufferUVE::SetUniformIntUVE(std::string_view name, std::int32_t value) {
+    if (!RequireInsideRenderPassUVE(m_insideRenderPass, "SetUniformIntUVE")) {
+        return;
+    }
     const UniformRecordUVE* const uniform = FindUniformUVE(name);
     if (uniform == nullptr || !ValidateUniformTypeUVE(*uniform, ShaderDataTypeUVE::Int, name)) {
         return;
@@ -334,6 +377,9 @@ void GlCommandBufferUVE::SetUniformIntUVE(std::string_view name, std::int32_t va
 }
 
 void GlCommandBufferUVE::SetUniformBoolUVE(std::string_view name, bool value) {
+    if (!RequireInsideRenderPassUVE(m_insideRenderPass, "SetUniformBoolUVE")) {
+        return;
+    }
     const UniformRecordUVE* const uniform = FindUniformUVE(name);
     if (uniform == nullptr || !ValidateUniformTypeUVE(*uniform, ShaderDataTypeUVE::Bool, name)) {
         return;
@@ -342,6 +388,9 @@ void GlCommandBufferUVE::SetUniformBoolUVE(std::string_view name, bool value) {
 }
 
 void GlCommandBufferUVE::SetUniformVector3UVE(std::string_view name, const Math::Vector3UVE& value) {
+    if (!RequireInsideRenderPassUVE(m_insideRenderPass, "SetUniformVector3UVE")) {
+        return;
+    }
     const UniformRecordUVE* const uniform = FindUniformUVE(name);
     if (uniform == nullptr || !ValidateUniformTypeUVE(*uniform, ShaderDataTypeUVE::Vec3, name)) {
         return;
@@ -350,6 +399,9 @@ void GlCommandBufferUVE::SetUniformVector3UVE(std::string_view name, const Math:
 }
 
 void GlCommandBufferUVE::SetUniformMatrix4x4UVE(std::string_view name, const Math::Matrix4x4UVE& value) {
+    if (!RequireInsideRenderPassUVE(m_insideRenderPass, "SetUniformMatrix4x4UVE")) {
+        return;
+    }
     const UniformRecordUVE* const uniform = FindUniformUVE(name);
     if (uniform == nullptr || !ValidateUniformTypeUVE(*uniform, ShaderDataTypeUVE::Mat4, name)) {
         return;
@@ -371,6 +423,9 @@ void GlCommandBufferUVE::SetUniformMatrix4x4UVE(std::string_view name, const Mat
 }
 
 void GlCommandBufferUVE::DrawIndexedUVE(std::uint32_t indexCount, std::uint32_t instanceCount) {
+    if (!RequireInsideRenderPassUVE(m_insideRenderPass, "DrawIndexedUVE")) {
+        return;
+    }
     if (m_boundIndexBuffer == kInvalidBufferHandleUVE) {
         UVE_ERROR("GlCommandBufferUVE: DrawIndexedUVE called without a bound index buffer");
         return;
@@ -396,6 +451,9 @@ void GlCommandBufferUVE::DrawIndexedUVE(std::uint32_t indexCount, std::uint32_t 
 }
 
 void GlCommandBufferUVE::DrawUVE(std::uint32_t vertexCount, std::uint32_t instanceCount) {
+    if (!RequireInsideRenderPassUVE(m_insideRenderPass, "DrawUVE")) {
+        return;
+    }
     if (m_boundVertexBuffer != kInvalidBufferHandleUVE) {
         const auto vertexBufferIt = m_state->buffers.find(m_boundVertexBuffer.value);
         if (vertexBufferIt == m_state->buffers.end() || vertexBufferIt->second.target != GL_ARRAY_BUFFER) {

@@ -743,6 +743,7 @@ TEST_F(GlRenderDeviceUVETest, CreateTextureUVE_PreservesActiveUnitBindingForLive
 
     std::unique_ptr<ICommandBufferUVE> commandBuffer = renderDevice->CreateCommandBufferUVE();
     ASSERT_NE(commandBuffer, nullptr);
+    commandBuffer->BeginRenderPassUVE(RenderPassDescUVE{});
     commandBuffer->BindTextureUVE(firstTexture, 0U);
 
     GLint activeTextureBefore = 0;
@@ -769,6 +770,7 @@ TEST_F(GlRenderDeviceUVETest, CreateTextureUVE_PreservesActiveUnitBindingForLive
     GLint bindingAfterCachedRebind = 0;
     glGetIntegerv(GL_TEXTURE_BINDING_2D, &bindingAfterCachedRebind);
     EXPECT_EQ(bindingAfterCachedRebind, bindingBefore);
+    commandBuffer->EndRenderPassUVE();
 
     renderDevice->DestroyTextureUVE(secondTexture);
     renderDevice->DestroyTextureUVE(firstTexture);
@@ -792,8 +794,10 @@ TEST_F(GlRenderDeviceUVETest, CreateTextureUVE_Rgba16Float_UsesHalfFloatUploadTy
 
     std::unique_ptr<ICommandBufferUVE> commandBuffer = renderDevice->CreateCommandBufferUVE();
     ASSERT_NE(commandBuffer, nullptr);
+    commandBuffer->BeginRenderPassUVE(RenderPassDescUVE{});
     commandBuffer->BindTextureUVE(texture, 0U);
     EXPECT_EQ(glGetError(), GL_NO_ERROR);
+    commandBuffer->EndRenderPassUVE();
 
     std::array<std::uint16_t, kPixels.size()> readback{};
     glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_HALF_FLOAT, readback.data());
