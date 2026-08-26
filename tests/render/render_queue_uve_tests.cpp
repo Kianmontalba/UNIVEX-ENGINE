@@ -3,7 +3,9 @@
 
 #include "uve/render/render_queue_uve.h"
 
+#include <cmath>
 #include <filesystem>
+#include <limits>
 #include <string>
 #include <utility>
 
@@ -113,6 +115,34 @@ TEST_F(RenderQueueUVETest, SortUVE_EqualDepthItems_UseDeterministicAssetTieBreak
     EXPECT_TRUE(assetLess(transparentQueue.transparentItems[0], transparentQueue.transparentItems[1]));
     EXPECT_FLOAT_EQ(transparentQueue.transparentItems[0].sortDepth, 3.0F);
     EXPECT_FLOAT_EQ(transparentQueue.transparentItems[1].sortDepth, 3.0F);
+}
+
+TEST_F(RenderQueueUVETest, SortUVE_NonFiniteDepthsArePlacedAfterFiniteItems) {
+    RenderQueueUVE opaqueQueue;
+    opaqueQueue.opaqueItems.push_back(MakeItemUVE(std::numeric_limits<float>::quiet_NaN()));
+    opaqueQueue.opaqueItems.push_back(MakeItemUVE(1.0F));
+    opaqueQueue.opaqueItems.push_back(MakeItemUVE(std::numeric_limits<float>::infinity()));
+    opaqueQueue.opaqueItems.push_back(MakeItemUVE(3.0F));
+    opaqueQueue.SortUVE();
+
+    ASSERT_EQ(opaqueQueue.opaqueItems.size(), 4U);
+    EXPECT_FLOAT_EQ(opaqueQueue.opaqueItems[0].sortDepth, 1.0F);
+    EXPECT_FLOAT_EQ(opaqueQueue.opaqueItems[1].sortDepth, 3.0F);
+    EXPECT_FALSE(std::isfinite(opaqueQueue.opaqueItems[2].sortDepth));
+    EXPECT_FALSE(std::isfinite(opaqueQueue.opaqueItems[3].sortDepth));
+
+    RenderQueueUVE transparentQueue;
+    transparentQueue.transparentItems.push_back(MakeItemUVE(-std::numeric_limits<float>::infinity()));
+    transparentQueue.transparentItems.push_back(MakeItemUVE(2.0F));
+    transparentQueue.transparentItems.push_back(MakeItemUVE(std::numeric_limits<float>::quiet_NaN()));
+    transparentQueue.transparentItems.push_back(MakeItemUVE(5.0F));
+    transparentQueue.SortUVE();
+
+    ASSERT_EQ(transparentQueue.transparentItems.size(), 4U);
+    EXPECT_FLOAT_EQ(transparentQueue.transparentItems[0].sortDepth, 5.0F);
+    EXPECT_FLOAT_EQ(transparentQueue.transparentItems[1].sortDepth, 2.0F);
+    EXPECT_FALSE(std::isfinite(transparentQueue.transparentItems[2].sortDepth));
+    EXPECT_FALSE(std::isfinite(transparentQueue.transparentItems[3].sortDepth));
 }
 
 TEST_F(RenderQueueUVETest, ClearUVE_ClearsFrameStateAndPreservesCapacity) {

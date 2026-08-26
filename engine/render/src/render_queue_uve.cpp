@@ -3,6 +3,7 @@
 #include "uve/render/render_queue_uve.h"
 
 #include <algorithm>
+#include <cmath>
 
 namespace UVE::Render {
 
@@ -39,13 +40,23 @@ void RenderQueueUVE::ReserveUVE(const std::size_t opaqueCapacity, const std::siz
 
 void RenderQueueUVE::SortUVE() {
     std::sort(opaqueItems.begin(), opaqueItems.end(), [](const RenderItemUVE& lhs, const RenderItemUVE& rhs) {
-        if (lhs.sortDepth != rhs.sortDepth) {
+        const bool lhsFinite = std::isfinite(lhs.sortDepth);
+        const bool rhsFinite = std::isfinite(rhs.sortDepth);
+        if (lhsFinite != rhsFinite) {
+            return lhsFinite;
+        }
+        if (lhsFinite && lhs.sortDepth != rhs.sortDepth) {
             return lhs.sortDepth < rhs.sortDepth;
         }
         return RenderItemTieBreakLessUVE(lhs, rhs);
     });
     std::sort(transparentItems.begin(), transparentItems.end(), [](const RenderItemUVE& lhs, const RenderItemUVE& rhs) {
-        if (lhs.sortDepth != rhs.sortDepth) {
+        const bool lhsFinite = std::isfinite(lhs.sortDepth);
+        const bool rhsFinite = std::isfinite(rhs.sortDepth);
+        if (lhsFinite != rhsFinite) {
+            return lhsFinite;
+        }
+        if (lhsFinite && lhs.sortDepth != rhs.sortDepth) {
             return lhs.sortDepth > rhs.sortDepth;
         }
         return RenderItemTieBreakLessUVE(lhs, rhs);
