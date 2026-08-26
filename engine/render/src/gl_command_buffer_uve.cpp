@@ -55,6 +55,21 @@ namespace {
     return 3;
 }
 
+[[nodiscard]] bool IsFiniteVector3UVE(const Math::Vector3UVE& value) noexcept {
+    return std::isfinite(value.x) && std::isfinite(value.y) && std::isfinite(value.z);
+}
+
+[[nodiscard]] bool IsFiniteMatrix4x4UVE(const Math::Matrix4x4UVE& value) noexcept {
+    for (const auto& row : value.m) {
+        for (const float component : row) {
+            if (!std::isfinite(component)) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 } // namespace
 
 GlCommandBufferUVE::GlCommandBufferUVE(Detail::GlDeviceStateUVE& state) : m_state(&state) {}
@@ -399,6 +414,10 @@ void GlCommandBufferUVE::SetUniformFloatUVE(std::string_view name, float value) 
     if (uniform == nullptr || !ValidateUniformTypeUVE(*uniform, ShaderDataTypeUVE::Float, name)) {
         return;
     }
+    if (!std::isfinite(value)) {
+        UVE_ERROR("GlCommandBufferUVE: float uniform '{}' must be finite", name);
+        return;
+    }
     m_state->gl.glUniform1f(uniform->location, value);
 }
 
@@ -432,6 +451,10 @@ void GlCommandBufferUVE::SetUniformVector3UVE(std::string_view name, const Math:
     if (uniform == nullptr || !ValidateUniformTypeUVE(*uniform, ShaderDataTypeUVE::Vec3, name)) {
         return;
     }
+    if (!IsFiniteVector3UVE(value)) {
+        UVE_ERROR("GlCommandBufferUVE: vector uniform '{}' must be finite", name);
+        return;
+    }
     m_state->gl.glUniform3fv(uniform->location, 1, &value.x);
 }
 
@@ -441,6 +464,10 @@ void GlCommandBufferUVE::SetUniformMatrix4x4UVE(std::string_view name, const Mat
     }
     const UniformRecordUVE* const uniform = FindUniformUVE(name);
     if (uniform == nullptr || !ValidateUniformTypeUVE(*uniform, ShaderDataTypeUVE::Mat4, name)) {
+        return;
+    }
+    if (!IsFiniteMatrix4x4UVE(value)) {
+        UVE_ERROR("GlCommandBufferUVE: matrix uniform '{}' must be finite", name);
         return;
     }
     // Matrix4x4UVE is row-major storage (docs/CODING_STANDARDS.md, "Matrix convention"). Desktop

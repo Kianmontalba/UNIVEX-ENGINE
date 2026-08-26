@@ -84,6 +84,15 @@ void main() {
     FragColor = vec4(uColor, 1.0);
 }
 )";
+
+constexpr std::string_view kFiniteUniformFragmentShaderSource = R"(#version 330 core
+out vec4 FragColor;
+uniform vec3 uColor;
+uniform float uExposure;
+void main() {
+    FragColor = vec4(uColor * uExposure, 1.0);
+}
+)";
 constexpr std::string_view kSamplerAndUnsupportedUniformFragmentShaderSource = R"(#version 330 core
 out vec4 FragColor;
 uniform sampler2D uTexture;
@@ -1938,6 +1947,77 @@ TEST_F(GlRenderDeviceUVETest, CommandBuffer_SetUniformCalls_RejectReflectedTypeM
     renderDevice->DestroyPipelineUVE(pipeline);
     renderDevice->DestroyShaderUVE(vertexShader);
     renderDevice->DestroyShaderUVE(fragmentShader);
+}
+
+TEST_F(GlRenderDeviceUVETest, CommandBuffer_SetUniformCalls_RejectNonFiniteValuesWithoutChangingUniforms) {
+    const ShaderHandleUVE vertexShader = renderDevice->CreateShaderUVE(
+        ShaderDescUVE{ShaderStageUVE::Vertex, std::string(kUniformVertexShaderSource)});
+    const ShaderHandleUVE fragmentShader = renderDevice->CreateShaderUVE(
+        ShaderDescUVE{ShaderStageUVE::Fragment, std::string(kFiniteUniformFragmentShaderSource)});
+    ASSERT_NE(vertexShader, kInvalidShaderHandleUVE);
+    ASSERT_NE(fragmentShader, kInvalidShaderHandleUVE);
+
+    PipelineDescUVE pipelineDesc;
+    pipelineDesc.vertexShader = vertexShader;
+    pipelineDesc.fragmentShader = fragmentShader;
+    pipelineDesc.vertexLayout = {VertexAttributeUVE{"POSITION", VertexAttributeFormatUVE::Float3, 0}};
+    pipelineDesc.vertexStride = 3U * static_cast<std::uint32_t>(sizeof(float));
+    const PipelineHandleUVE pipeline = renderDevice->CreatePipelineUVE(pipelineDesc);
+    ASSERT_NE(pipeline, kInvalidPipelineHandleUVE);
+
+    std::unique_ptr<ICommandBufferUVE> commandBuffer = renderDevice->CreateCommandBufferUVE();
+    ASSERT_NE(commandBuffer, nullptr);
+    RenderPassDescUVE passDesc;
+    passDesc.colorAttachment = kInvalidTextureHandleUVE;
+    passDesc.colorLoadOp = LoadOpUVE::DontCare;
+    passDesc.depthLoadOp = LoadOpUVE::DontCare;
+    commandBuffer->BeginRenderPassUVE(passDesc);
+    commandBuffer->BindPipelineUVE(pipeline);
+
+    GLint currentProgram = 0;
+    glGetIntegerv(GL_CURRENT_PROGRAM, &currentProgram);
+    ASSERT_NE(currentProgram, 0);
+    const GLint exposureLocation = glGetUniformLocation(static_cast<GLuint>(currentProgram), "uExposure");
+    ASSERT_NE(exposureLocation, -1);
+
+    commandBuffer->SetUniformFloatUVE("uExposure", 2.0F);
+    GLfloat exposureBefore = 0.0F;
+    glGetUniformfv(static_cast<GLuint>(currentProgram), exposureLocation, &exposureBefore);
+    EXPECT_FLOAT_EQ(exposureBefore, 2.0F);
+    commandBuffer->SetUniformFloatUVE("uExposure", std::numeric_limits<float>::quiet_NaN());
+    GLfloat exposureAfter = 0.0F;
+    glGetUniformfv(static_cast<GLuint>(currentProgram), exposureLocation, &exposureAfter);
+    EXPECT_FLOAT_EQ(exposureAfter, exposureBefore);
+
+    commandBuffer->SetUniformVector3UVE("uColor", Math::Vector3UVE{0.25F, 0.5F, 0.75F});
+    std::array<GLfloat, 3> colorBefore{};
+    glGetUniformfv(static_cast<GLuint>(currentProgram), glGetUniformLocation(static_cast<GLuint>(currentProgram), "uColor"),
+                   colorBefore.data());
+    commandBuffer->SetUniformVector3UVE("uColor", Math::Vector3UVE{std::numeric_limits<float>::infinity(), 0.0F, 0.0F});
+    std::array<GLfloat, 3> colorAfter{};
+    glGetUniformfv(static_cast<GLuint>(currentProgram), glGetUniformLocation(static_cast<GLuint>(currentProgram), "uColor"),
+                   colorAfter.data());
+    EXPECT_EQ(colorAfter, colorBefore);
+
+    Math::Matrix4x4UVE validMatrix = Math::Matrix4x4UVE::IdentityUVE();
+    validMatrix.m[0][1] = 2.0F;
+    commandBuffer->SetUniformMatrix4x4UVE("uModel", validMatrix);
+    std::array<GLfloat, 16> matrixBefore{};
+    glGetUniformfv(static_cast<GLuint>(currentProgram), glGetUniformLocation(static_cast<GLuint>(currentProgram), "uModel"),
+                   matrixBefore.data());
+    Math::Matrix4x4UVE invalidMatrix = validMatrix;
+    invalidMatrix.m[2][2] = std::numeric_limits<float>::quiet_NaN();
+    commandBuffer->SetUniformMatrix4x4UVE("uModel", invalidMatrix);
+    std::array<GLfloat, 16> matrixAfter{};
+    glGetUniformfv(static_cast<GLuint>(currentProgram), glGetUniformLocation(static_cast<GLuint>(currentProgram), "uModel"),
+                   matrixAfter.data());
+    EXPECT_EQ(matrixAfter, matrixBefore);
+
+    commandBuffer->EndRenderPassUVE();
+    renderDevice->SubmitUVE(std::move(commandBuffer));
+    renderDevice->DestroyPipelineUVE(pipeline);
+    renderDevice->DestroyShaderUVE(fragmentShader);
+    renderDevice->DestroyShaderUVE(vertexShader);
 }
 
 TEST_F(GlRenderDeviceUVETest, CommandBuffer_SetUniformCalls_OnBoundPipeline_DoNotCrash) {
