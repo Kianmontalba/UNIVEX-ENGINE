@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "name": "uve-editor-2026-neutral-charcoal",
+  "version": 1,
+  "intent": "Compact native game-editor design contract. C++/Dear ImGui remains the runtime authority; HTML/CSS is the visual reference layer.",
+  "density": "high",
+  "colors": {
+    "canvas": "#0D0F12",
+    "surface": "#15181D",
+    "surfaceRaised": "#1B2026",
+    "surfaceInset": "#101317",
+    "border": "#303740",
+    "borderSubtle": "#242A31",
+    "text": "#E4E8ED",
+    "textMuted": "#9AA3AD",
+    "textDisabled": "#68717B",
+    "accent": "#8FAFCB",
+    "accentStrong": "#BCD4E8",
+    "selection": "#42566B",
+    "selectionStrong": "#627E98",
+    "success": "#73C89A",
+    "warning": "#D7AD63",
+    "error": "#D87979",
+    "axisX": "#D86666",
+    "axisY": "#74C48A",
+    "axisZ": "#7197D7",
+    "execution": "#E9B768",
+    "vector": "#7FA9D4",
+    "boolean": "#C391D6",
+    "number": "#D5B878",
+    "entity": "#7CC1B4"
+  },
+  "typography": {
+    "fontFamily": "Inter, Segoe UI, sans-serif",
+    "fontSize": {
+      "title": 13,
+      "menu": 12,
+      "body": 12,
+      "small": 11,
+      "micro": 10
+    },
+    "lineHeight": {
+      "body": 1.25,
+      "compact": 1.1
+    },
+    "weight": {
+      "regular": 400,
+      "medium": 500,
+      "strong": 600
+    },
+    "letterSpacing": {
+      "section": "0.08em",
+      "micro": "0.04em"
+    }
+  },
+  "spacing": {
+    "unit": 4,
+    "windowPadding": 8,
+    "panelPadding": 8,
+    "sectionGap": 6,
+    "rowGap": 3,
+    "controlGap": 4,
+    "fieldGap": 5,
+    "headerHeight": 24,
+    "toolbarHeight": 30,
+    "dockTabHeight": 24,
+    "filesystemRowHeight": 20,
+    "filesystemToolbarHeight": 25,
+    "filesystemContentHeight": 148,
+    "gizmoHandleRadius": 7
+  },
+  "shape": {
+    "windowRadius": 2,
+    "panelRadius": 2,
+    "controlRadius": 2,
+    "borderWidth": 1
+  },
+  "layout": {
+    "titleBarHeight": 24,
+    "menuBarHeight": 24,
+    "toolbarHeight": 30,
+    "leftPanelWidthRatio": 0.19,
+    "leftPanelMinWidth": 208,
+    "leftPanelMaxWidth": 292,
+    "rightPanelWidthRatio": 0.22,
+    "rightPanelMinWidth": 264,
+    "rightPanelMaxWidth": 356,
+    "bottomDockExpandedHeight": 176,
+    "bottomDockCollapsedHeight": 24,
+    "viewportMinWidth": 120,
+    "viewportMinHeight": 96
+  },
+  "interaction": {
+    "transitionMs": 120,
+    "focusRing": "#8FAFCB",
+    "activeToolIndicator": "#BCD4E8",
+    "reducedMotion": true,
+    "keyboardFirst": true
+  },
+  "states": {
+    "empty": "Show a compact truthful action row; never create hidden scene content.",
+    "loading": "Show concise state text and preserve the last known good data.",
+    "success": "Use a small semantic indicator near the action that caused it.",
+    "warning": "Use amber text/icon and explain the bounded condition.",
+    "error": "Use red text/icon and provide a real retry or recovery action only when supported.",
+    "disabled": "Reduce contrast without removing the control’s explanation when needed."
+  },
+  "filesystem": {
+    "header": "FILESYSTEM | N entries | auto",
+    "normalControls": ["breadcrumbs", "folder-filter", "type-filter", "clear-filters"],
+    "forbiddenNormalControls": ["review-changes", "manual-refresh"],
+    "failureOnlyControls": ["retry"],
+    "rowLayout": "icon 18px + name flex + semantic type 64px + metadata 92px",
+    "maxVisibleRowsBeforeScroll": 7,
+    "preserveExactArtwork": true
+  },
+  "gizmo": {
+    "modes": ["Move XYZ", "Rotate XYZ", "Scale XYZ"],
+    "axes": ["X", "Y", "Z"],
+    "colors": {
+      "X": "#D86666",
+      "Y": "#74C48A",
+      "Z": "#7197D7"
+    },
+    "interaction": ["hover-highlight", "pointer-ray-hit", "drag-preview", "commit", "cancel", "undo"]
+  },
+  "editorSurfaces": [
+    "title-chrome",
+    "menu-bar",
+    "main-toolbar",
+    "scene-hierarchy",
+    "viewport",
+    "details-inspector",
+    "filesystem",
+    "console",
+    "visual-scripting",
+    "animation",
+    "motion-query",
+    "diagnostics"
+  ]
+}

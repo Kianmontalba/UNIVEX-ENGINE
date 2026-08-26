@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>UniVex Engine Editor — UI Reference</title>
+  <link rel="stylesheet" href="editor_ui.css" />
+</head>
+<body>
+  <main class="uve-shell" aria-label="UniVex Engine Editor">
+    <header class="uve-title">
+      <div class="uve-brand"><img src="../../assets/editor/icons/univex_logo_uve.svg" alt="UVE" /><span>UniVex Engine</span><span class="uve-meta">1.4.3 · ThirdPersonDemo.uve</span></div>
+      <div class="uve-meta"><span class="uve-status-ok">Saved</span> · Project: ThirdPersonDemo · State: In Editor · Layout: Default</div>
+    </header>
+    <nav class="uve-menu" aria-label="Main menu"><button>File</button><button>Edit</button><button>Assets</button><button>GameObject</button><button>Component</button><button>Window</button><button>Help</button></nav>
+    <nav class="uve-toolbar" aria-label="Editor tools">
+      <button>Hand</button><button class="active" aria-pressed="true">Scene</button><button>Scripting</button><button class="active" aria-pressed="true">Move XYZ</button><button>Rotate XYZ</button><button>Scale XYZ</button><button>Local</button><button>Snap</button><span class="spacer"></span><button class="active" aria-pressed="true">Play</button><button>Stop</button><button>Android</button><button>Layout</button>
+    </nav>
+    <section class="uve-workspace">
+      <aside class="uve-panel" aria-label="Scene hierarchy">
+        <div class="uve-panel-header"><span>03</span><span>SCENE</span><span class="uve-meta">6 entities · 1 selected</span></div>
+        <div class="uve-panel-body">
+          <div class="uve-filter-row"><input aria-label="Filter entities" placeholder="Filter entities…" /><button aria-label="Add node">+</button></div>
+          <div class="uve-tree-row"><span>⌄</span><span>◈</span><span>WorldRoot</span><span class="muted">●</span></div>
+          <div class="uve-tree-row"><span>⌄</span><span>◫</span><span>CharacterBody3D</span><span class="muted">●</span></div>
+          <div class="uve-tree-row" style="padding-left: 22px"><span>⌄</span><span>◇</span><span>MeshInstance3D</span><span class="muted">●</span></div>
+          <div class="uve-tree-row" style="padding-left: 38px" aria-selected="true"><span>·</span><span>◇</span><span>PlayerMesh</span><span class="muted">●</span></div>
+          <div class="uve-tree-row" style="padding-left: 38px"><span>·</span><span>◈</span><span>Skeleton3D</span><span class="muted">●</span></div>
+          <div class="uve-tree-row"><span>⌄</span><span>◉</span><span>Lighting</span><span class="muted">●</span></div>
+          <div class="uve-tree-row" style="padding-left: 22px"><span>·</span><span>☼</span><span>Light3D</span><span class="muted">●</span></div>
+        </div>
+      </aside>
+      <section class="uve-viewport" aria-label="Perspective 3D viewport">
+        <div class="uve-viewport-toolbar"><button class="active">Perspective</button><button>Lit</button><button>Show</button><button>Grid</button><button>Snapping</button><span class="uve-meta">Scene View</span></div>
+        <div class="uve-gizmo" aria-label="Move XYZ gizmo"><span class="axis x"></span><span class="axis y"></span><span class="axis z"></span><span class="plane xy"></span><span class="plane xz"></span><span class="plane yz"></span></div>
+      </section>
+      <aside class="uve-panel" aria-label="Details inspector">
+        <div class="uve-panel-header"><span>06</span><span>DETAILS</span><span class="uve-meta">SELECTION</span></div>
+        <div class="uve-panel-body">
+          <div class="uve-meta">MeshInstance3D · Entity 21457</div>
+          <details class="uve-inspector-section" open><summary>Identity</summary><div class="uve-property-row"><span>Name</span><input value="PlayerMesh" /></div><div class="uve-property-row"><span>Type</span><span class="muted">MeshInstance3D</span></div></details>
+          <details class="uve-inspector-section" open><summary>Transform</summary><div class="uve-property-row"><span>Position</span><div class="uve-vector"><input value="0.000" /><input value="0.000" /><input value="0.000" /></div></div><div class="uve-property-row"><span>Rotation</span><div class="uve-vector"><input value="0.000°" /><input value="90.000°" /><input value="0.000°" /></div></div><div class="uve-property-row"><span>Scale</span><div class="uve-vector"><input value="1.000" /><input value="1.000" /><input value="1.000" /></div></div></details>
+          <details class="uve-inspector-section" open><summary>Mesh</summary><div class="uve-property-row"><span>Mesh</span><select><option>PlayerBody_Mesh</option></select></div><div class="uve-property-row"><span>Material</span><select><option>M_PlayerBody</option></select></div></details>
+          <details class="uve-inspector-section"><summary>Components</summary><button>Add Component</button></details>
+        </div>
+      </aside>
+    </section>
+    <nav class="uve-dock-tabs"><button class="active" aria-pressed="true">08 Filesystem</button><button>12 Console</button><span class="spacer"></span><span class="uve-meta">Project status · watcher auto</span></nav>
+    <section class="uve-dock-content">
+      <section class="uve-filesystem" aria-label="Filesystem">
+        <div class="uve-filesystem-toolbar"><span class="uve-panel-header" style="border:0;padding:0;height:auto">08 FILESYSTEM | 68 entries | auto</span><input placeholder="Filter…" /><select aria-label="Asset type"><option>Type: All</option></select><button>Clear</button></div>
+        <div class="uve-filesystem-list">
+          <div class="uve-filesystem-row"><span></span><span class="muted">Assets / Characters / Player</span><span></span><span class="uve-filesystem-meta">auto</span></div>
+          <div class="uve-filesystem-row" aria-selected="true"><img src="../../assets/editor/icons/uve_folder_icon.svg" alt="Folder" /><span>Player</span><span class="uve-filesystem-type">[Folder]</span><span class="uve-filesystem-meta">GUID —</span></div>
+          <div class="uve-filesystem-row"><span></span><span>PlayerCharacter.uve</span><span class="uve-filesystem-type">[Scene]</span><span class="uve-filesystem-meta">Source · Ready</span></div>
+          <div class="uve-filesystem-row"><span></span><span>PlayerBody_Mesh.uve</span><span class="uve-filesystem-type">[Mesh]</span><span class="uve-filesystem-meta">Derived · Ready</span></div>
+          <div class="uve-filesystem-row"><span></span><span>T_PlayerAlbedo.png</span><span class="uve-filesystem-type">[Texture]</span><span class="uve-filesystem-meta">Import · Ready</span></div>
+        </div>
+      </section>
+      <section class="uve-console" aria-label="Console"><div class="uve-panel-header"><span>12</span><span>CONSOLE</span><span class="uve-meta">All · 0 info · 2 warnings · 0 errors</span></div><div class="uve-console-body"><div class="uve-console-row"><span>10:24:55</span><span class="uve-status-warn">Warning</span><span>NavigationRegion3D validation completed.</span></div><div class="uve-console-row"><span>10:24:56</span><span class="uve-status-ok">Info</span><span>Project index refreshed automatically.</span></div></div></section>
+    </section>
+  </main>
+</body>
+</html>
