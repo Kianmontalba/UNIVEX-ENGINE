@@ -1200,8 +1200,19 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
                 Math::Matrix4x4UVE::ViewFromPositionAndRotationUVE(shadowCaster->position, shadowCaster->rotation);
             const CameraFrustumCornersUVE cameraCorners =
                 m_impl->cameraSystem.ComputeFrustumCornersUVE(entityManager, cameraEntity, aspectRatio);
+            const bool shadowViewInputsValid = IsFiniteMatrixUVE(lightView) &&
+                                               std::all_of(cameraCorners.cbegin(), cameraCorners.cend(),
+                                                           [](const Math::Vector3UVE& corner) {
+                                                               return IsFiniteVectorUVE(corner);
+                                                           });
+            UVE_ASSERT(shadowViewInputsValid);
+            if (!shadowViewInputsValid) {
+                UVE_ERROR("Renderer3DUVE: shadow view inputs are non-finite; skipping shadow cascades");
+                shadowsReady = false;
+            }
             float cascadeNearPlane = camera.nearPlane;
-            for (std::size_t cascadeIndex = 0; cascadeIndex < kShadowCascadeCountUVE; ++cascadeIndex) {
+            for (std::size_t cascadeIndex = 0;
+                 cascadeIndex < kShadowCascadeCountUVE && shadowsReady; ++cascadeIndex) {
             const float cascadeFarPlane = cascadeSplits[cascadeIndex];
             const float nearRatio = (cascadeNearPlane - camera.nearPlane) / (camera.farPlane - camera.nearPlane);
             const float farRatio = (cascadeFarPlane - camera.nearPlane) / (camera.farPlane - camera.nearPlane);
@@ -1214,6 +1225,16 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
                 stabilizedBounds.min.x, stabilizedBounds.max.x, stabilizedBounds.min.y, stabilizedBounds.max.y,
                 -stabilizedBounds.max.z, -stabilizedBounds.min.z);
             lightSpaceMatrices[cascadeIndex] = lightProjection * lightView;
+            const bool cascadeBoundsValid = IsOrderedFiniteAabbUVE(fittedBounds) &&
+                                             IsOrderedFiniteAabbUVE(stabilizedBounds) &&
+                                             IsFiniteMatrixUVE(lightProjection) &&
+                                             IsFiniteMatrixUVE(lightSpaceMatrices[cascadeIndex]);
+            UVE_ASSERT(cascadeBoundsValid);
+            if (!cascadeBoundsValid) {
+                UVE_ERROR("Renderer3DUVE: shadow cascade bounds produced non-finite output; skipping cascades");
+                shadowsReady = false;
+                break;
+            }
             const Math::FrustumUVE lightFrustum =
                 m_impl->cameraSystem.ExtractFrustumUVE(lightSpaceMatrices[cascadeIndex]);
             m_impl->meshRenderer.ExtractRenderQueueIntoUVE(entityManager, m_impl->assetManager, m_impl->assetDatabase,
@@ -1221,7 +1242,12 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
             m_impl->shadowQueues[cascadeIndex].SortUVE();
                 cascadeNearPlane = cascadeFarPlane;
             }
-            cascadeCount = static_cast<std::int32_t>(kShadowCascadeCountUVE);
+            if (shadowsReady) {
+                cascadeCount = static_cast<std::int32_t>(kShadowCascadeCountUVE);
+            } else {
+                cascadeSplits = ShadowCascadeSplitsUVE{};
+                lightSpaceMatrices = ShadowCascadeMatricesUVE{};
+            }
         }
     }
 
