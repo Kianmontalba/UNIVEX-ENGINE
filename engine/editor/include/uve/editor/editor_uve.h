@@ -488,11 +488,10 @@ private:
     };
 
     /// Selects the editor viewport surface. The 2D tab is an editor-owned screen-space canvas;
-    /// Game remains unavailable until a runtime presentation target is connected.
+    /// the 3D tab renders the real scene viewport.
     enum class EditorViewportTabUVE {
         Scene,
         TwoD,
-        Game,
     };
 
     /// Selects one docked lower-workspace panel. FileSystem is the safe default and keeps the
@@ -807,6 +806,7 @@ private:
     void DrawSceneComponentAddPanelUVE();
     void DrawPrefabInspectorDrawerUVE(Scene::EntityUVE entity);
     void DrawImportQueueMonitorUVE();
+    void DrawViewportToolCanvasUVE();
     void DrawViewportPanelUVE();
     void Draw2DCanvasUVE(const EditorViewportRectUVE& viewportRect);
     void DrawScriptingWorkspaceUVE();
@@ -823,6 +823,7 @@ private:
     /// filesystem baseline. It never schedules imports or mutates project files.
     void RefreshProjectFileIndexUVE();
     void DrawFolderContentsPanelUVE();
+    void DrawFilesystemContextPopupUVE();
 
     Core::EngineServicesUVE* m_services = nullptr;
     Core::ISimulationControlUVE* m_simulationControl = nullptr;
@@ -884,6 +885,11 @@ private:
     bool m_hierarchyRenameFocusRequested = false;
     std::optional<Asset::AssetRecordUVE> m_selectedAsset;
     std::optional<Asset::ProjectFileEntryUVE> m_selectedProjectFile;
+    std::optional<Asset::ProjectFileEntryUVE> m_filesystemContextEntry;
+    std::string m_filesystemContextFilter;
+    bool m_filesystemContextVisible = false;
+    std::filesystem::path m_filesystemLongPressPath;
+    float m_filesystemLongPressSeconds = 0.0F;
     bool m_projectFileSnapshotInitialized = false;
     bool m_projectFileLastRefreshSucceeded = true;
     std::uint64_t m_projectFileLastObservedChangeSequence = 0U;
