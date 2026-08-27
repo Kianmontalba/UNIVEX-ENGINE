@@ -11,6 +11,8 @@
 #include <GLFW/glfw3.h>
 #else
 #include <EGL/egl.h>
+#include <dlfcn.h>
+#include <android/log.h>
 #endif
 
 #include "gl_command_buffer_uve.h"
@@ -23,8 +25,21 @@ namespace UVE::Render {
 namespace {
 
 #if defined(__ANDROID__)
+constexpr char kAndroidGlLogTagUVE[] = "UVEAndroidGLES";
+
+void LogAndroidGlFailureUVE(const char* operation, const char* detail) noexcept {
+    __android_log_print(ANDROID_LOG_ERROR, kAndroidGlLogTagUVE, "%s: %s", operation, detail);
+}
+
 void* EglProcAddressBridgeUVE(const char* name) {
-    return reinterpret_cast<void*>(eglGetProcAddress(name));
+    void* address = reinterpret_cast<void*>(eglGetProcAddress(name));
+    if (address == nullptr) {
+        // Some Android GLES drivers export core entry points from libGLESv3.so but do not
+        // return every core symbol through eglGetProcAddress. Resolve that second legal path
+        // before declaring the backend unusable and falling back to Null.
+        address = dlsym(RTLD_DEFAULT, name);
+    }
+    return address;
 }
 #else
 // Bridges GLFW's proc-address lookup (GLFWglproc, a void(*)(void)) to gl_functions_uve.h's
@@ -232,8 +247,11 @@ struct GlRenderDeviceUVE::ImplUVE {
 
 GlRenderDeviceUVE::GlRenderDeviceUVE(Window::IWindowManagerUVE& windowManager)
     : m_impl(std::make_unique<ImplUVE>()) {
-    UVE_ASSERT(windowManager.IsValidUVE());
     m_impl->state.windowManager = &windowManager;
+    if (!windowManager.IsValidUVE()) {
+        UVE_WARNING("GlRenderDeviceUVE: window manager has no usable graphics context; backend disabled");
+        return;
+    }
 #if defined(__ANDROID__)
     m_impl->state.gl = Detail::LoadGlFunctionsUVE(&EglProcAddressBridgeUVE);
 #else
@@ -241,7 +259,7 @@ GlRenderDeviceUVE::GlRenderDeviceUVE(Window::IWindowManagerUVE& windowManager)
 #endif
 
     if (!m_impl->state.gl.IsCompleteUVE()) {
-        UVE_FATAL("GlRenderDeviceUVE: one or more required GL function pointers failed to load");
+        UVE_WARNING("GlRenderDeviceUVE: required GL function pointers are unavailable; backend disabled");
     } else {
         glGetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, &m_impl->state.maxCombinedTextureImageUnits);
         glGetIntegerv(GL_MAX_UNIFORM_BUFFER_BINDINGS, &m_impl->state.maxUniformBufferBindings);
@@ -252,7 +270,7 @@ GlRenderDeviceUVE::GlRenderDeviceUVE(Window::IWindowManagerUVE& windowManager)
 }
 
 GlRenderDeviceUVE::~GlRenderDeviceUVE() {
-    if (m_impl == nullptr || m_impl->state.gl.glDeleteFramebuffers == nullptr) {
+    if (!IsUsableUVE()) {
         return;
     }
     for (const auto& [key, framebuffer] : m_impl->state.framebufferCache) {
@@ -464,6 +482,9 @@ ShaderHandleUVE GlRenderDeviceUVE::CreateShaderUVE(const ShaderDescUVE& desc, st
     m_impl->state.gl.glGetShaderiv(glShader, GL_COMPILE_STATUS, &compiled);
     if (compiled == GL_FALSE) {
         UVE_ERROR("GlRenderDeviceUVE: CreateShaderUVE compilation failed: {}", infoLog);
+#if defined(__ANDROID__)
+        LogAndroidGlFailureUVE("shader compile failed", infoLog.empty() ? "<empty driver log>" : infoLog.c_str());
+#endif
         m_impl->state.gl.glDeleteShader(glShader);
         return kInvalidShaderHandleUVE;
     }
@@ -529,6 +550,9 @@ PipelineHandleUVE GlRenderDeviceUVE::CreatePipelineUVE(const PipelineDescUVE& de
     m_impl->state.gl.glGetProgramiv(glProgram, GL_LINK_STATUS, &linked);
     if (linked == GL_FALSE) {
         UVE_ERROR("GlRenderDeviceUVE: CreatePipelineUVE link failed: {}", infoLog);
+#if defined(__ANDROID__)
+        LogAndroidGlFailureUVE("program link failed", infoLog.empty() ? "<empty driver log>" : infoLog.c_str());
+#endif
         m_impl->state.gl.glDeleteProgram(glProgram);
         return kInvalidPipelineHandleUVE;
     }
@@ -680,11 +704,18 @@ void GlRenderDeviceUVE::SubmitUVE(std::unique_ptr<ICommandBufferUVE> commandBuff
 }
 
 void GlRenderDeviceUVE::PresentUVE() {
-    m_impl->state.windowManager->SwapBuffersUVE();
+    if (IsUsableUVE()) {
+        m_impl->state.windowManager->SwapBuffersUVE();
+    }
 }
 
 std::string_view GlRenderDeviceUVE::GetBackendNameUVE() const noexcept {
     return "OpenGL";
+}
+
+bool GlRenderDeviceUVE::IsUsableUVE() const noexcept {
+    return m_impl != nullptr && m_impl->state.windowManager != nullptr &&
+           m_impl->state.windowManager->IsValidUVE() && m_impl->state.gl.IsCompleteUVE();
 }
 
 std::size_t GlRenderDeviceUVE::GetLiveResourceCountUVE() const noexcept {

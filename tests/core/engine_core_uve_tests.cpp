@@ -831,6 +831,44 @@ TEST(EngineCoreUVETest, Renderer3D_ReachableAfterInit_NoActiveCameraStillNoOps) 
     engine.Shutdown();
 }
 
+TEST(EngineCoreUVETest, WindowedMode_NoActiveCameraStillClearsDefaultFramebuffer) {
+    EngineConfigUVE config = MakeTestConfigUVE();
+    config.headlessUVE = false;
+    config.windowWidth = 64;
+    config.windowHeight = 64;
+    config.vsyncEnabledUVE = false;
+    config.windowGlVersionMajor = 4;
+    config.windowGlVersionMinor = 5;
+
+    EngineCoreUVE engine(config);
+    engine.Init();
+    if (!engine.GetServicesUVE().GetWindowManagerUVE().IsValidUVE()) {
+        GTEST_SKIP() << "No display available for windowed EngineCoreUVE - skipping (run under "
+                        "xvfb-run to exercise this test)";
+    }
+    ASSERT_TRUE(engine.Load());
+    EXPECT_EQ(engine.GetActiveCameraUVE(), Scene::kInvalidEntityUVE);
+
+    std::array<unsigned char, 3> emptyScenePixel{};
+    GLenum postRenderGlError = GL_NO_ERROR;
+    engine.SetPostRenderCallbackUVE([&emptyScenePixel, &postRenderGlError] {
+        glFinish();
+        glReadBuffer(GL_BACK);
+        glReadPixels(32, 32, 1, 1, GL_RGB, GL_UNSIGNED_BYTE, emptyScenePixel.data());
+        postRenderGlError = glGetError();
+    });
+
+    engine.TickFrameUVE();
+    engine.SetPostRenderCallbackUVE({});
+
+    EXPECT_EQ(emptyScenePixel[0], 13U);
+    EXPECT_EQ(emptyScenePixel[1], 13U);
+    EXPECT_EQ(emptyScenePixel[2], 13U);
+    EXPECT_EQ(postRenderGlError, GL_NO_ERROR);
+
+    engine.Shutdown();
+}
+
 TEST(EngineCoreUVETest, Renderer3D_ActiveCameraSet_RendersWithoutCrashing) {
     EngineCoreUVE engine(MakeTestConfigUVE());
     engine.Init();
@@ -1296,6 +1334,10 @@ TEST(EngineCoreUVETest, WindowedMode_ReachesRunningAndPresentsEmptyRendererScene
     }
     engine.SetPostRenderCallbackUVE({});
     EXPECT_EQ(engine.GetStateUVE(), EngineStateUVE::Running);
+    const Render::Renderer3DFrameDiagnosticsUVE diagnostics =
+        engine.GetServicesUVE().GetRenderer3DUVE().GetLastFrameDiagnosticsUVE();
+    EXPECT_EQ(diagnostics.renderTargetWidth, 64U);
+    EXPECT_EQ(diagnostics.renderTargetHeight, 64U);
 
     // With no document render items, Renderer3DUVE presents its deterministic charcoal
     // tone-mapped environment. This is intentionally not a demo-geometry assertion: visible

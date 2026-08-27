@@ -31,6 +31,7 @@
 #include "uve/events/event_system_uve.h"
 #include "uve/math/matrix4x4_uve.h"
 #include "uve/math/vector3_uve.h"
+#include "uve/window/null_window_manager_uve.h"
 #include "uve/window/window_manager_uve.h"
 
 namespace UVE::Render::Tests {
@@ -130,6 +131,16 @@ protected:
     std::unique_ptr<Window::WindowManagerUVE> windowManager;
     std::unique_ptr<GlRenderDeviceUVE> renderDevice;
 };
+
+TEST(GlRenderDeviceUnavailableUVETest, InvalidWindowManager_ConstructsAsUnusableWithoutAbort) {
+    Window::NullWindowManagerUVE windowManager;
+    GlRenderDeviceUVE renderDevice(windowManager);
+
+    EXPECT_FALSE(renderDevice.IsUsableUVE());
+    EXPECT_EQ(renderDevice.GetBackendNameUVE(), "OpenGL");
+    EXPECT_EQ(renderDevice.GetLiveResourceCountUVE(), 0U);
+    renderDevice.PresentUVE();
+}
 
 TEST_F(GlRenderDeviceUVETest, GetBackendNameUVE_ReturnsOpenGL) {
     EXPECT_EQ(renderDevice->GetBackendNameUVE(), "OpenGL");

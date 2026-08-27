@@ -7,6 +7,9 @@
 #include <cstdint>
 #include <limits>
 
+#if defined(__ANDROID__)
+#include <android/log.h>
+#endif
 
 #include "uve/debug/assert_uve.h"
 #include "uve/debug/logging_macros_uve.h"
@@ -191,8 +194,16 @@ void GlCommandBufferUVE::BeginRenderPassUVE(const RenderPassDescUVE& renderPassD
                 m_state->gl.glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D,
                                                     depthIt->second.glTexture, 0);
             }
-            if (m_state->gl.glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+            const GLenum framebufferStatus = m_state->gl.glCheckFramebufferStatus(GL_FRAMEBUFFER);
+            if (framebufferStatus != GL_FRAMEBUFFER_COMPLETE) {
                 UVE_ERROR("GlCommandBufferUVE: BeginRenderPassUVE built an incomplete framebuffer");
+#if defined(__ANDROID__)
+                __android_log_print(ANDROID_LOG_ERROR, "UVEAndroidGLES",
+                                    "FBO incomplete: status=0x%04x color=%u depth=%u",
+                                    static_cast<unsigned int>(framebufferStatus),
+                                    colorIt != m_state->textures.end() ? colorIt->second.glTexture : 0U,
+                                    depthIt != m_state->textures.end() ? depthIt->second.glTexture : 0U);
+#endif
                 m_state->gl.glDeleteFramebuffers(1, &framebuffer);
                 m_state->framebufferCache.erase(framebufferKey);
                 m_state->gl.glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(previousFramebuffer));

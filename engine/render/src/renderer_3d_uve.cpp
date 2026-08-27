@@ -547,6 +547,36 @@ struct Renderer3DUVE::ImplUVE {
                                                             "shadowCascadeBlendRatio")),
           shadowPcfKernelRadius(static_cast<std::int32_t>(std::min(shadowPcfKernelRadiusIn, 2U))) {}
 
+    [[nodiscard]] bool ResizeTargetsUVE(const std::uint32_t newWidth, const std::uint32_t newHeight) {
+        if (newWidth == 0U || newHeight == 0U) {
+            return false;
+        }
+        if (targetWidth == newWidth && targetHeight == newHeight) {
+            return true;
+        }
+
+        const TextureHandleUVE newColorTarget = renderDevice.CreateTextureUVE(
+            TextureDescUVE{newWidth, newHeight, kSceneColorTargetFormatUVE, 1});
+        const TextureHandleUVE newDepthTarget = renderDevice.CreateTextureUVE(
+            TextureDescUVE{newWidth, newHeight, TextureFormatUVE::Depth32Float, 1});
+        if (newColorTarget == kInvalidTextureHandleUVE || newDepthTarget == kInvalidTextureHandleUVE) {
+            DestroyTextureIfValidUVE(renderDevice, newColorTarget);
+            DestroyTextureIfValidUVE(renderDevice, newDepthTarget);
+            UVE_WARNING("Renderer3DUVE: adaptive target resize rejected ({}x{}); retaining {}x{}",
+                        newWidth, newHeight, targetWidth, targetHeight);
+            return false;
+        }
+
+        DestroyTextureIfValidUVE(renderDevice, colorTarget);
+        DestroyTextureIfValidUVE(renderDevice, depthTarget);
+        colorTarget = newColorTarget;
+        depthTarget = newDepthTarget;
+        targetWidth = newWidth;
+        targetHeight = newHeight;
+        UVE_INFO("Renderer3DUVE: adaptive targets resized to {}x{}", targetWidth, targetHeight);
+        return true;
+    }
+
     void EvictUnreferencedTextureCacheEntriesUVE() {
         std::unordered_set<Asset::AssetGuidUVE> referencedTextureGuids;
         for (const auto& [materialGuid, resources] : materialCache) {
@@ -1159,8 +1189,14 @@ Renderer3DUVE::~Renderer3DUVE() {
     DestroyBufferIfValidUVE(m_impl->renderDevice, m_impl->particleVertexBuffer);
 }
 
+bool Renderer3DUVE::ResizeTargetsUVE(const std::uint32_t width, const std::uint32_t height) {
+    return m_impl->ResizeTargetsUVE(width, height);
+}
+
 void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scene::EntityUVE cameraEntity) {
     m_impl->lastFrameDiagnostics = Renderer3DFrameDiagnosticsUVE{};
+    m_impl->lastFrameDiagnostics.renderTargetWidth = m_impl->targetWidth;
+    m_impl->lastFrameDiagnostics.renderTargetHeight = m_impl->targetHeight;
     if (m_impl->colorTarget == kInvalidTextureHandleUVE || m_impl->depthTarget == kInvalidTextureHandleUVE) {
         return;
     }

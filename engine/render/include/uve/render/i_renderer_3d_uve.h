@@ -37,6 +37,8 @@ struct EditorViewportVisualStateUVE final {
 /// verification belong to EngineCoreUVE and dedicated real-GL integration tests respectively.
 /// Thread-safety: returned by value; RenderFrameUVE() and this accessor remain main-thread only.
 struct Renderer3DFrameDiagnosticsUVE final {
+    std::uint32_t renderTargetWidth = 0U;
+    std::uint32_t renderTargetHeight = 0U;
     std::size_t meshItemsExtracted = 0U;
     std::size_t invalidAssetReferences = 0U;
     std::size_t pendingAssetLoads = 0U;
@@ -82,6 +84,15 @@ public:
     /// WorldTransformComponentUVE and CameraComponentUVE (the same contract ICameraSystemUVE
     /// already enforces).
     virtual void RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scene::EntityUVE cameraEntity) = 0;
+
+    /// Recreates the owned color/depth targets at a validated adaptive resolution. The default is
+    /// a safe no-op for lightweight renderers and test doubles that do not own offscreen targets.
+    /// Must be called on the main render thread while no frame command buffer is active.
+    [[nodiscard]] virtual bool ResizeTargetsUVE(std::uint32_t width, std::uint32_t height) {
+        static_cast<void>(width);
+        static_cast<void>(height);
+        return false;
+    }
 
     /// Renders the scene while extracting a copied particle snapshot from the caller-owned runtime
     /// into the frame queue. The runtime reference is borrowed for this call only; implementations

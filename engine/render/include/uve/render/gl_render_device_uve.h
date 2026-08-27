@@ -63,6 +63,11 @@ public:
 
     [[nodiscard]] std::string_view GetBackendNameUVE() const noexcept override;
 
+    /// Returns true only when construction found a valid current context and loaded every GL
+    /// entry point required by this device. A false result is a recoverable backend-selection
+    /// outcome; callers must not use the device as an active GL backend in that state.
+    [[nodiscard]] bool IsUsableUVE() const noexcept override;
+
     /// Test-only hook (not part of IRenderDeviceUVE): how many buffer/texture/shader/pipeline
     /// resources are currently alive — mirrors NullRenderDeviceUVE::GetLiveResourceCountUVE()'s
     /// role so tests can confirm cleanup the same way regardless of backend.

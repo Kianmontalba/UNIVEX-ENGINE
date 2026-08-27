@@ -47,6 +47,11 @@ public:
     /// backend; a headless implementation no-ops.
     virtual void SwapBuffersUVE() = 0;
 
+    /// Attempts to recover a temporarily unavailable native presentation surface without changing
+    /// the window manager's ownership model. Desktop and headless backends have no recovery work;
+    /// Android may recreate its EGL window surface while retaining a usable context.
+    [[nodiscard]] virtual bool TryRecoverSurfaceUVE() noexcept { return false; }
+
     /// True iff the user has requested the window be closed (e.g. clicked the OS close button)
     /// since the last ResetCloseRequestedUVE() call, if any. EngineCoreUVE polls this once per
     /// frame to drive its own RequestQuitUVE().

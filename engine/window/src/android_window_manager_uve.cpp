@@ -26,9 +26,13 @@ struct AndroidWindowManagerUVE::ImplUVE final {
     EGLDisplay display = EGL_NO_DISPLAY;
     EGLSurface surface = EGL_NO_SURFACE;
     EGLContext context = EGL_NO_CONTEXT;
+    EGLConfig config = nullptr;
+    EGLint nativeVisualId = 0;
     std::uint32_t width = 0U;
     std::uint32_t height = 0U;
     bool valid = false;
+    bool recoveryFailureLogged = false;
+    bool firstSwapLogged = false;
     bool vsyncEnabled = true;
     bool fullscreen = true;
     bool closeRequested = false;
@@ -64,7 +68,7 @@ AndroidWindowManagerUVE::AndroidWindowManagerUVE(Events::IEventSystemUVE& eventS
         return;
     }
 
-    const EGLint configAttributes[] = {
+    const EGLint strictConfigAttributes[] = {
         EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
         EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT,
         EGL_RED_SIZE, 8,
@@ -75,13 +79,49 @@ AndroidWindowManagerUVE::AndroidWindowManagerUVE(Events::IEventSystemUVE& eventS
         EGL_STENCIL_SIZE, 8,
         EGL_NONE,
     };
+    const EGLint lowDeviceConfigAttributes[] = {
+        EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
+        EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT,
+        EGL_RED_SIZE, 8,
+        EGL_GREEN_SIZE, 8,
+        EGL_BLUE_SIZE, 8,
+        EGL_ALPHA_SIZE, 8,
+        EGL_DEPTH_SIZE, 16,
+        EGL_STENCIL_SIZE, 0,
+        EGL_NONE,
+    };
     EGLConfig config = nullptr;
     EGLint configCount = 0;
-    if (eglChooseConfig(m_impl->display, configAttributes, &config, 1, &configCount) == EGL_FALSE || configCount == 0) {
-        LogEglError("eglChooseConfig");
+    if (eglChooseConfig(m_impl->display, strictConfigAttributes, &config, 1, &configCount) == EGL_FALSE ||
+        configCount == 0) {
+        __android_log_print(ANDROID_LOG_WARN, kLogTag,
+                            "%s", "strict GLES3 depth/stencil config unavailable; retrying low-device config");
+        configCount = 0;
+        if (eglChooseConfig(m_impl->display, lowDeviceConfigAttributes, &config, 1, &configCount) == EGL_FALSE ||
+            configCount == 0) {
+            LogEglError("eglChooseConfig GLES3 low-device fallback");
+            return;
+        }
+    }
+
+    if (eglGetConfigAttrib(m_impl->display, config, EGL_NATIVE_VISUAL_ID, &nativeVisualId) == EGL_FALSE ||
+        nativeVisualId == 0) {
+        LogEglError("eglGetConfigAttrib EGL_NATIVE_VISUAL_ID");
+        return;
+    }
+    // Android's BufferQueue can reject or silently mishandle a surface whose producer format does
+    // not match the EGLConfig selected above. Explicitly negotiate the config's native visual
+    // before creating the EGL window surface; this is especially important on vendor GLES stacks.
+    const int geometryResult = ANativeWindow_setBuffersGeometry(androidWindow, 0, 0, nativeVisualId);
+    if (geometryResult != 0) {
+        __android_log_print(ANDROID_LOG_ERROR, kLogTag,
+                            "ANativeWindow_setBuffersGeometry failed (%d), visual id %d",
+                            geometryResult, nativeVisualId);
         return;
     }
 
+    m_impl->config = config;
+    m_impl->nativeVisualId = nativeVisualId;
     m_impl->surface = eglCreateWindowSurface(m_impl->display, config, androidWindow, nullptr);
     if (m_impl->surface == EGL_NO_SURFACE) {
         LogEglError("eglCreateWindowSurface");
@@ -112,8 +152,16 @@ AndroidWindowManagerUVE::AndroidWindowManagerUVE(Events::IEventSystemUVE& eventS
     eglSwapInterval(m_impl->display, m_impl->vsyncEnabled ? 1 : 0);
     m_impl->valid = true;
 
-    __android_log_print(ANDROID_LOG_INFO, kLogTag, "AndroidWindowManagerUVE: EGL %d.%d, GLES3 surface %ux%u",
-                        majorVersion, minorVersion, m_impl->width, m_impl->height);
+    const char* const vendor = reinterpret_cast<const char*>(glGetString(GL_VENDOR));
+    const char* const renderer = reinterpret_cast<const char*>(glGetString(GL_RENDERER));
+    const char* const version = reinterpret_cast<const char*>(glGetString(GL_VERSION));
+    const char* const shadingLanguageVersion = reinterpret_cast<const char*>(glGetString(GL_SHADING_LANGUAGE_VERSION));
+    __android_log_print(ANDROID_LOG_INFO, kLogTag,
+                        "AndroidWindowManagerUVE: EGL %d.%d, GLES3 surface %ux%u vendor=%s renderer=%s version=%s glsl=%s",
+                        majorVersion, minorVersion, m_impl->width, m_impl->height,
+                        vendor != nullptr ? vendor : "<null>", renderer != nullptr ? renderer : "<null>",
+                        version != nullptr ? version : "<null>",
+                        shadingLanguageVersion != nullptr ? shadingLanguageVersion : "<null>");
 }
 
 AndroidWindowManagerUVE::~AndroidWindowManagerUVE() {
@@ -140,9 +188,83 @@ void AndroidWindowManagerUVE::AttachInputSystemUVE(Input::IInputSystemUVE* input
 
 void AndroidWindowManagerUVE::PollEventsUVE() {}
 
+bool AndroidWindowManagerUVE::TryRecoverSurfaceUVE() noexcept {
+    if (m_impl == nullptr || m_impl->display == EGL_NO_DISPLAY || m_impl->context == EGL_NO_CONTEXT ||
+        m_impl->nativeWindow == nullptr || m_impl->config == nullptr || m_impl->nativeVisualId == 0) {
+        return false;
+    }
+    if (m_impl->valid) {
+        return true;
+    }
+
+    auto logRecoveryFailure = [this](const char* const operation) noexcept {
+        if (!m_impl->recoveryFailureLogged) {
+            LogEglError(operation);
+            m_impl->recoveryFailureLogged = true;
+        }
+        return false;
+    };
+
+    if (m_impl->surface != EGL_NO_SURFACE) {
+        static_cast<void>(eglMakeCurrent(m_impl->display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT));
+        static_cast<void>(eglDestroySurface(m_impl->display, m_impl->surface));
+        m_impl->surface = EGL_NO_SURFACE;
+    }
+
+    ANativeWindow* const androidWindow = static_cast<ANativeWindow*>(m_impl->nativeWindow);
+    if (ANativeWindow_setBuffersGeometry(androidWindow, 0, 0, m_impl->nativeVisualId) != 0) {
+        return logRecoveryFailure("ANativeWindow_setBuffersGeometry during recovery");
+    }
+
+    m_impl->surface = eglCreateWindowSurface(m_impl->display, m_impl->config, androidWindow, nullptr);
+    if (m_impl->surface == EGL_NO_SURFACE) {
+        return logRecoveryFailure("eglCreateWindowSurface during recovery");
+    }
+    if (eglMakeCurrent(m_impl->display, m_impl->surface, m_impl->surface, m_impl->context) == EGL_FALSE) {
+        static_cast<void>(eglDestroySurface(m_impl->display, m_impl->surface));
+        m_impl->surface = EGL_NO_SURFACE;
+        return logRecoveryFailure("eglMakeCurrent during recovery");
+    }
+
+    EGLint recoveredWidth = 0;
+    EGLint recoveredHeight = 0;
+    if (eglQuerySurface(m_impl->display, m_impl->surface, EGL_WIDTH, &recoveredWidth) == EGL_FALSE ||
+        eglQuerySurface(m_impl->display, m_impl->surface, EGL_HEIGHT, &recoveredHeight) == EGL_FALSE ||
+        recoveredWidth <= 0 || recoveredHeight <= 0) {
+        static_cast<void>(eglMakeCurrent(m_impl->display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT));
+        static_cast<void>(eglDestroySurface(m_impl->display, m_impl->surface));
+        m_impl->surface = EGL_NO_SURFACE;
+        return logRecoveryFailure("eglQuerySurface during recovery");
+    }
+
+    m_impl->width = static_cast<std::uint32_t>(recoveredWidth);
+    m_impl->height = static_cast<std::uint32_t>(recoveredHeight);
+    eglSwapInterval(m_impl->display, m_impl->vsyncEnabled ? 1 : 0);
+    m_impl->valid = true;
+    m_impl->recoveryFailureLogged = false;
+    __android_log_print(ANDROID_LOG_INFO, kLogTag,
+                        "AndroidWindowManagerUVE: recovered EGL surface %ux%u",
+                        m_impl->width, m_impl->height);
+    return true;
+}
+
 void AndroidWindowManagerUVE::SwapBuffersUVE() {
-    if (IsValidUVE() && eglSwapBuffers(m_impl->display, m_impl->surface) == EGL_FALSE) {
+    if (!IsValidUVE()) {
+        return;
+    }
+    if (eglSwapBuffers(m_impl->display, m_impl->surface) == EGL_FALSE) {
         LogEglError("eglSwapBuffers");
+        m_impl->valid = false;
+        m_impl->recoveryFailureLogged = false;
+        __android_log_print(ANDROID_LOG_WARN, kLogTag,
+                            "%s", "AndroidWindowManagerUVE: presentation surface lost after eglSwapBuffers");
+        return;
+    }
+    if (!m_impl->firstSwapLogged) {
+        m_impl->firstSwapLogged = true;
+        __android_log_print(ANDROID_LOG_INFO, kLogTag,
+                            "AndroidWindowManagerUVE: first eglSwapBuffers succeeded for %ux%u",
+                            m_impl->width, m_impl->height);
     }
 }
 
@@ -179,9 +301,11 @@ std::uint32_t AndroidWindowManagerUVE::GetWidthUVE() const noexcept {
         return 0U;
     }
     EGLint width = 0;
-    if (eglQuerySurface(m_impl->display, m_impl->surface, EGL_WIDTH, &width) == EGL_TRUE && width > 0) {
-        m_impl->width = static_cast<std::uint32_t>(width);
+    if (eglQuerySurface(m_impl->display, m_impl->surface, EGL_WIDTH, &width) != EGL_TRUE || width <= 0) {
+        m_impl->valid = false;
+        return 0U;
     }
+    m_impl->width = static_cast<std::uint32_t>(width);
     return m_impl->width;
 }
 
@@ -190,9 +314,11 @@ std::uint32_t AndroidWindowManagerUVE::GetHeightUVE() const noexcept {
         return 0U;
     }
     EGLint height = 0;
-    if (eglQuerySurface(m_impl->display, m_impl->surface, EGL_HEIGHT, &height) == EGL_TRUE && height > 0) {
-        m_impl->height = static_cast<std::uint32_t>(height);
+    if (eglQuerySurface(m_impl->display, m_impl->surface, EGL_HEIGHT, &height) != EGL_TRUE || height <= 0) {
+        m_impl->valid = false;
+        return 0U;
     }
+    m_impl->height = static_cast<std::uint32_t>(height);
     return m_impl->height;
 }
 

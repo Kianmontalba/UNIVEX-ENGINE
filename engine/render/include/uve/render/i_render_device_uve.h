@@ -122,6 +122,11 @@ public:
     /// meaningful to do here either.
     virtual void PresentUVE() = 0;
 
+    /// True when the backend can safely accept resource/command calls. A device can become
+    /// unusable after a native surface/context loss; callers must stop issuing work when this
+    /// returns false. NullRenderDeviceUVE always returns true because it is intentionally inert.
+    [[nodiscard]] virtual bool IsUsableUVE() const noexcept = 0;
+
     /// A short human-readable backend name (e.g. `"Null"`), for logging/diagnostics.
     [[nodiscard]] virtual std::string_view GetBackendNameUVE() const noexcept = 0;
 };

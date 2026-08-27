@@ -195,6 +195,10 @@ void NullRenderDeviceUVE::PresentUVE() {
     ++m_impl->presentCallCount;
 }
 
+bool NullRenderDeviceUVE::IsUsableUVE() const noexcept {
+    return true;
+}
+
 std::string_view NullRenderDeviceUVE::GetBackendNameUVE() const noexcept {
     return "Null";
 }

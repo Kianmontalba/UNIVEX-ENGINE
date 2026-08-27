@@ -30,6 +30,7 @@ public:
     void AttachInputSystemUVE(Input::IInputSystemUVE* inputSystem) noexcept override;
     void PollEventsUVE() override;
     void SwapBuffersUVE() override;
+    [[nodiscard]] bool TryRecoverSurfaceUVE() noexcept override;
     [[nodiscard]] bool IsCloseRequestedUVE() const noexcept override;
     void SetVSyncEnabledUVE(bool enabled) override;
     [[nodiscard]] bool IsVSyncEnabledUVE() const noexcept override;

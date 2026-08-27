@@ -75,14 +75,28 @@
 #include "uve/scene/scene_serializer_uve.h"
 #include "uve/threading/thread_pool_uve.h"
 #include "uve/utilities/timer_uve.h"
+#include "uve/window/adaptive_render_resolution_uve.h"
 #include "uve/window/null_window_manager_uve.h"
 #if defined(__ANDROID__)
+#include "uve/window/android_surface_size_uve.h"
 #include "uve/window/android_window_manager_uve.h"
 #else
 #include "uve/window/window_manager_uve.h"
 #endif
 
 namespace UVE::Core {
+
+namespace {
+
+#if defined(__ANDROID__)
+constexpr Window::AdaptiveRenderResolutionLimitsUVE kAdaptiveRenderResolutionLimitsUVE{
+    Window::kMaximumAndroidSurfaceAxisUVE, Window::kMaximumAndroidRenderTargetPixelsUVE};
+#else
+// Keep large desktop displays sharp up to 4K while bounding worst-case offscreen allocations.
+constexpr Window::AdaptiveRenderResolutionLimitsUVE kAdaptiveRenderResolutionLimitsUVE{8192U, 3840ULL * 2160ULL};
+#endif
+
+} // namespace
 
 EngineCoreUVE::EngineCoreUVE(EngineConfigUVE config) : m_config(std::move(config)) {}
 
@@ -241,7 +255,9 @@ void EngineCoreUVE::Init() {
     // that fails to create logs UVE_FATAL and sets m_windowCreationFailedUVE rather than aborting
     // Init() mid-construction — EngineStateUVE's transition table forbids jumping straight from
     // Initializing to ShuttingDown, so every remaining service below still finishes constructing
-    // normally; Load() checks the flag afterward (see Load()'s doc comment).
+    // normally; Load() checks the flag afterward (see Load()'s doc comment). A window that exists
+    // but cannot load the complete GL function table is handled separately below as a recoverable
+    // backend-selection failure and falls back to NullRenderDeviceUVE.
     if (m_config.headlessUVE) {
         m_windowManager = std::make_unique<Window::NullWindowManagerUVE>();
     } else {
@@ -272,15 +288,33 @@ void EngineCoreUVE::Init() {
     }
     m_windowedRenderingActiveUVE = !m_config.headlessUVE && m_windowManager->IsValidUVE();
 
-    // RenderDevice eighteenth: Render::GlRenderDeviceUVE when m_windowedRenderingActiveUVE (a
-    // real, valid window/GL context exists), otherwise Render::NullRenderDeviceUVE — headless
-    // mode, or a real window that failed to create above. Never constructs GlRenderDeviceUVE
-    // against an invalid window (there is no current GL context to build one against).
+    // RenderDevice eighteenth: probe the usable OpenGL backend when a real valid window/context
+    // exists, otherwise use Render::NullRenderDeviceUVE. A context can exist while the required
+    // GL entry points are unavailable on an unusual driver; GlRenderDeviceUVE reports that state
+    // without aborting, and the engine selects NullRenderDeviceUVE before ShaderManager or any
+    // frame code can call a missing function pointer. Vulkan is not a renderer in this build, so
+    // it is never falsely selected as a fallback.
     if (m_windowedRenderingActiveUVE) {
-        m_renderDevice = std::make_unique<Render::GlRenderDeviceUVE>(*m_windowManager);
+        auto glRenderDevice = std::make_unique<Render::GlRenderDeviceUVE>(*m_windowManager);
+        if (glRenderDevice->IsUsableUVE()) {
+            m_renderDevice = std::move(glRenderDevice);
+        } else {
+#if defined(__ANDROID__)
+            // Android currently ships an EGL/GLES implementation only. If that context or its
+            // required entry points are unavailable, do not guess that a Vulkan renderer exists:
+            // this build has no Vulkan RHI. Keep the engine alive on the inert RHI instead of
+            // dereferencing a partial GL function table and crashing during shader/frame startup.
+            UVE_WARNING("EngineCoreUVE: OpenGL ES backend is unavailable; Vulkan RHI is not built, using Null backend");
+#else
+            UVE_WARNING("EngineCoreUVE: OpenGL backend is unavailable; using Null backend");
+#endif
+            m_windowedRenderingActiveUVE = false;
+            m_renderDevice = std::make_unique<Render::NullRenderDeviceUVE>();
+        }
     } else {
         m_renderDevice = std::make_unique<Render::NullRenderDeviceUVE>();
     }
+    m_presentationSurfaceReadyUVE = m_windowedRenderingActiveUVE;
 
     // ShaderManager nineteenth: needs ThreadPool, EventSystem, RenderDevice, and FileSystem — all
     // already constructed by this point. Mounts EngineConfigUVE::shaderSourceRealDirectoryUVE
@@ -491,8 +525,59 @@ void EngineCoreUVE::SyncParticleRuntimeUVE() {
     }
 }
 
+void EngineCoreUVE::SyncAdaptiveRenderResolutionUVE() {
+    if (!m_windowedRenderingActiveUVE || !m_presentationSurfaceReadyUVE || !m_renderDevice->IsUsableUVE()) {
+        return;
+    }
+
+    const std::uint32_t drawableWidth = m_windowManager->GetWidthUVE();
+    const std::uint32_t drawableHeight = m_windowManager->GetHeightUVE();
+    if (drawableWidth == 0U || drawableHeight == 0U) {
+        return;
+    }
+
+    const Window::AdaptiveRenderResolutionUVE desiredResolution =
+        Window::ComputeAdaptiveRenderResolutionUVE(drawableWidth, drawableHeight,
+                                                    kAdaptiveRenderResolutionLimitsUVE);
+    if (desiredResolution.width == 0U || desiredResolution.height == 0U) {
+        return;
+    }
+    if (!m_renderer3D->ResizeTargetsUVE(desiredResolution.width, desiredResolution.height) &&
+        !m_adaptiveResizeFailureLoggedUVE) {
+        UVE_WARNING("EngineCoreUVE: adaptive render-target resize failed; retaining the previous target");
+        m_adaptiveResizeFailureLoggedUVE = true;
+    }
+}
+
 void EngineCoreUVE::Update() {
     m_windowManager->PollEventsUVE();
+    if (!m_windowedRenderingActiveUVE) {
+        m_presentationSurfaceReadyUVE = false;
+    } else {
+        const std::uint32_t drawableWidth = m_windowManager->GetWidthUVE();
+        const std::uint32_t drawableHeight = m_windowManager->GetHeightUVE();
+        m_presentationSurfaceReadyUVE = drawableWidth > 0U && drawableHeight > 0U;
+        if (!m_presentationSurfaceReadyUVE) {
+#if defined(__ANDROID__)
+            // Android may transiently lose its ANativeWindow/EGLSurface between lifecycle commands.
+            // Keep the engine alive and let the backend recreate the surface instead of converting a
+            // recoverable presentation pause into permanent backend loss.
+            m_presentationSurfaceReadyUVE = m_windowManager->TryRecoverSurfaceUVE();
+#else
+            m_windowedRenderingActiveUVE = false;
+#endif
+        }
+        if ((!m_presentationSurfaceReadyUVE && !m_windowedRenderingActiveUVE) ||
+            (m_presentationSurfaceReadyUVE && !m_renderDevice->IsUsableUVE())) {
+            m_windowedRenderingActiveUVE = false;
+            m_presentationSurfaceReadyUVE = false;
+            if (!m_graphicsBackendLossLoggedUVE) {
+                UVE_WARNING("EngineCoreUVE: graphics backend became unusable; rendering is disabled for this run");
+                m_graphicsBackendLossLoggedUVE = true;
+            }
+        }
+    }
+    SyncAdaptiveRenderResolutionUVE();
     m_gamepadInputSystem->UpdateUVE();
     m_mobileInputSystem->UpdateUVE();
     m_mobileGestureSystem->UpdateUVE(static_cast<float>(m_timer->GetDeltaTimeUVE()));
@@ -539,7 +624,9 @@ void EngineCoreUVE::Update() {
     // import worker is introduced by this maintenance seam.
     static_cast<void>(m_assetImportQueue->TickUVE());
 
-    m_shaderManager->UpdateUVE(m_timer->GetDeltaTimeUVE());
+    if (m_renderDevice->IsUsableUVE()) {
+        m_shaderManager->UpdateUVE(m_timer->GetDeltaTimeUVE());
+    }
 
     if (!m_transientSimulationSessionActive) {
         m_checkpointManager->UpdateUVE(
@@ -589,6 +676,10 @@ void EngineCoreUVE::LateUpdate() {
 }
 
 void EngineCoreUVE::Render() {
+    if (!m_renderDevice->IsUsableUVE() ||
+        (m_windowedRenderingActiveUVE && !m_presentationSurfaceReadyUVE)) {
+        return;
+    }
     if (m_activeCamera != Scene::kInvalidEntityUVE) {
         if (m_particleRuntime != nullptr && m_particleRuntime->GetInstanceCountUVE() > 0U) {
             m_renderer3D->RenderFrameWithParticleRuntimeUVE(*m_entityManager, m_activeCamera, *m_particleRuntime);
@@ -597,9 +688,25 @@ void EngineCoreUVE::Render() {
         }
     } else {
         UVE_TRACE("Render (no-op)");
+        if (m_windowedRenderingActiveUVE) {
+            // An empty editor/game window still needs a real presented frame. Clear the
+            // backend's default framebuffer without creating a scene, camera, mesh, or light.
+            // This keeps the no-scene state visible and preserves the empty-scene contract.
+            m_renderSystem->BeginFrameUVE();
+            Render::ICommandBufferUVE& commandBuffer = m_renderSystem->GetFrameCommandBufferUVE();
+            Render::RenderPassDescUVE passDesc;
+            passDesc.colorAttachment = Render::kInvalidTextureHandleUVE;
+            passDesc.depthAttachment = Render::kInvalidTextureHandleUVE;
+            passDesc.colorLoadOp = Render::LoadOpUVE::Clear;
+            passDesc.depthLoadOp = Render::LoadOpUVE::DontCare;
+            passDesc.clearColor = {0.05F, 0.05F, 0.05F, 1.0F};
+            commandBuffer.BeginRenderPassUVE(passDesc);
+            commandBuffer.EndRenderPassUVE();
+            m_renderSystem->EndFrameUVE();
+        }
     }
 
-    if (m_windowedRenderingActiveUVE) {
+    if (m_windowedRenderingActiveUVE && m_presentationSurfaceReadyUVE) {
         if (m_postRenderCallback) {
             m_postRenderCallback();
         }

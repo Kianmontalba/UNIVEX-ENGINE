@@ -4,9 +4,11 @@
 #include <android/native_window.h>
 #include <android_native_app_glue.h>
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstdint>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -16,11 +18,14 @@
 #include "uve/core/engine_core_uve.h"
 #include "uve/core/engine_state_uve.h"
 #include "uve/input/i_mobile_input_system_uve.h"
+#include "uve/window/android_surface_size_uve.h"
 
 namespace {
 
 constexpr char kLogTag[] = "UniVexNativeEngine";
 constexpr std::uint64_t kInvalidAndroidTouchIdentifier = 0U;
+constexpr std::uint32_t kAndroidShadowMapResolutionUVE = 1024U;
+constexpr std::size_t kAndroidWorkerCountUVE = 2U;
 
 std::unique_ptr<UVE::Core::EngineCoreUVE> g_engine;
 std::filesystem::path g_projectRoot;
@@ -81,7 +86,8 @@ void ForwardMotionEvent(AInputEvent* const event) {
     const int32_t actionMasked = action & AMOTION_EVENT_ACTION_MASK;
     const std::size_t actionPointerIndex = static_cast<std::size_t>(
         (action & AMOTION_EVENT_ACTION_POINTER_INDEX_MASK) >> AMOTION_EVENT_ACTION_POINTER_INDEX_SHIFT);
-    const std::size_t pointerCount = static_cast<std::size_t>(AMotionEvent_getPointerCount(event));
+    const std::size_t pointerCount = std::min(
+        static_cast<std::size_t>(AMotionEvent_getPointerCount(event)), g_touchIdentifiers.size());
 
     if (actionMasked == AMOTION_EVENT_ACTION_CANCEL) {
         for (std::size_t slot = 0U; slot < g_touchIdentifiers.size(); ++slot) {
@@ -175,20 +181,38 @@ bool StartNativeEngine(android_app* const app) {
     }
 
     ResetTouchBridge();
-    g_projectRoot = std::filesystem::path(app->activity->internalDataPath) / "projects" / "native_project";
-    if (!WriteInitialProject(g_projectRoot)) {
+    try {
+        g_projectRoot = std::filesystem::path(app->activity->internalDataPath) / "projects" / "native_project";
+        if (!WriteInitialProject(g_projectRoot)) {
+            return false;
+        }
+    } catch (const std::exception& exception) {
+        __android_log_print(ANDROID_LOG_ERROR, kLogTag, "Android project setup exception: %s", exception.what());
+        return false;
+    } catch (...) {
+        LogError("Android project setup failed with an unknown exception.");
+        return false;
+    }
+
+    const UVE::Window::AndroidSurfaceSizeUVE surfaceSize = UVE::Window::ClampAndroidSurfaceSizeUVE(
+        ANativeWindow_getWidth(app->window), ANativeWindow_getHeight(app->window));
+    if (surfaceSize.width == 0U || surfaceSize.height == 0U) {
+        LogError("Android native window has no positive surface size; deferring engine startup.");
         return false;
     }
 
     UVE::Core::EngineConfigUVE config;
     config.nativeWindowHandleUVE = app->window;
     config.windowTitle = "UniVex Editor";
-    config.windowWidth = static_cast<std::uint32_t>(ANativeWindow_getWidth(app->window));
-    config.windowHeight = static_cast<std::uint32_t>(ANativeWindow_getHeight(app->window));
+    config.windowWidth = surfaceSize.width;
+    config.windowHeight = surfaceSize.height;
     config.windowResizableUVE = false;
     config.windowGlVersionMajor = 3;
     config.windowGlVersionMinor = 0;
     config.enableConsoleLogging = false;
+    config.threadPoolWorkerCount = kAndroidWorkerCountUVE;
+    config.hotReloadEnabledUVE = false;
+    config.shaderHotReloadEnabledUVE = false;
     config.logFilePath = g_projectRoot / "Settings/uve_android.log";
     config.settingsFilePath = g_projectRoot / "Settings/editor.json";
     config.assetDatabaseFilePath = g_projectRoot / "Content/.uveassets";
@@ -196,15 +220,30 @@ bool StartNativeEngine(android_app* const app) {
     config.derivedArtifactCacheRootUVE = g_projectRoot / "DerivedData/Import";
     config.shaderCachePath = g_projectRoot / "Settings/shader_cache";
     config.saveDirectoryPath = g_projectRoot / "SaveData";
-    config.renderTargetWidth = config.windowWidth;
-    config.renderTargetHeight = config.windowHeight;
+    config.renderTargetWidth = surfaceSize.width;
+    config.renderTargetHeight = surfaceSize.height;
+    config.shadowMapResolution = kAndroidShadowMapResolutionUVE;
     config.commandLineArgs.clear();
 
-    g_engine = std::make_unique<UVE::Core::EngineCoreUVE>(std::move(config));
-    g_engine->Init();
-    if (!g_engine->Load()) {
-        LogError("EngineCoreUVE failed to load the Android native project.");
-        g_engine->Shutdown();
+    try {
+        g_engine = std::make_unique<UVE::Core::EngineCoreUVE>(std::move(config));
+        g_engine->Init();
+        if (!g_engine->Load()) {
+            LogError("EngineCoreUVE failed to load the Android native project.");
+            if (g_engine->GetStateUVE() == UVE::Core::EngineStateUVE::Running) {
+                g_engine->Shutdown();
+            }
+            g_engine.reset();
+            ResetTouchBridge();
+            return false;
+        }
+    } catch (const std::exception& exception) {
+        __android_log_print(ANDROID_LOG_ERROR, kLogTag, "Android engine startup exception: %s", exception.what());
+        g_engine.reset();
+        ResetTouchBridge();
+        return false;
+    } catch (...) {
+        LogError("Android engine startup failed with an unknown exception.");
         g_engine.reset();
         ResetTouchBridge();
         return false;
@@ -226,15 +265,26 @@ int32_t HandleInput(android_app* const /*app*/, AInputEvent* const event) {
     if (event == nullptr || AInputEvent_getType(event) != AINPUT_EVENT_TYPE_MOTION) {
         return 0;
     }
-    ForwardMotionEvent(event);
+    try {
+        ForwardMotionEvent(event);
+    } catch (const std::exception& exception) {
+        __android_log_print(ANDROID_LOG_ERROR, kLogTag, "Android input exception: %s", exception.what());
+    } catch (...) {
+        LogError("Android input failed with an unknown exception.");
+    }
     return 1;
 }
 
 void HandleAppCommand(android_app* const app, const int32_t command) {
-    switch (command) {
+    if (app == nullptr) {
+        LogError("Android app command received a null app pointer.");
+        return;
+    }
+    try {
+        switch (command) {
         case APP_CMD_INIT_WINDOW:
             if (app->window != nullptr && !StartNativeEngine(app)) {
-                app->destroyRequested = 1;
+                LogError("Android engine startup deferred; waiting for a later window event.");
             }
             break;
         case APP_CMD_TERM_WINDOW:
@@ -243,17 +293,34 @@ void HandleAppCommand(android_app* const app, const int32_t command) {
         case APP_CMD_CONFIG_CHANGED:
             StopNativeEngine();
             if (app->window != nullptr && !StartNativeEngine(app)) {
-                app->destroyRequested = 1;
+                LogError("Android engine restart deferred; waiting for a later window event.");
             }
             break;
         default:
             break;
+        }
+    } catch (const std::exception& exception) {
+        __android_log_print(ANDROID_LOG_ERROR, kLogTag, "Android app-command exception: %s", exception.what());
+        StopNativeEngine();
+    } catch (...) {
+        LogError("Android app command failed with an unknown exception.");
+        StopNativeEngine();
     }
 }
 
 } // namespace
 
 void android_main(android_app* const app) {
+    // Keep the NDK native_app_glue object linked. NativeActivity resolves
+    // ANativeActivity_onCreate from that object before it can call android_main.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    app_dummy();
+#pragma clang diagnostic pop
+    if (app == nullptr) {
+        LogError("NativeActivity delivered a null android_app pointer.");
+        return;
+    }
     app->onAppCmd = &HandleAppCommand;
     app->onInputEvent = &HandleInput;
 
@@ -272,7 +339,15 @@ void android_main(android_app* const app) {
         }
 
         if (g_engine != nullptr && g_engine->GetStateUVE() == UVE::Core::EngineStateUVE::Running) {
-            g_engine->TickFrameUVE();
+            try {
+                g_engine->TickFrameUVE();
+            } catch (const std::exception& exception) {
+                __android_log_print(ANDROID_LOG_ERROR, kLogTag, "Android frame exception: %s", exception.what());
+                StopNativeEngine();
+            } catch (...) {
+                LogError("Android frame failed with an unknown exception.");
+                StopNativeEngine();
+            }
         } else if (g_engine == nullptr) {
             std::this_thread::sleep_for(std::chrono::milliseconds(16));
         }
