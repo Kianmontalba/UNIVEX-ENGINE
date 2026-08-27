@@ -8,7 +8,7 @@ The layout requirements are a central viewport priority, Scene/Hierarchy on the 
 
 ## Uploaded icon package
 
-`uve_node_icons.zip` contains 51 SVG assets: 41 in `3d_node_set/`, six in `component_set/`, and four in `general/`. The node set includes scene-node keys such as `camera_3d`, `mesh_instance_3d`, `world_environment_3d`, `skeleton_3d`, `character_body_3d`, and `collision_shape_3d`; the component set includes `collider`, `hierarchy`, `name`, `prefab_instance`, `primitive_mesh`, and `world_transform`; the general set includes `environment`, `plugin`, `snap`, and `sun`. SVG assets are unchanged source files and are rasterized to deterministic 20x20 RGBA embedded arrays for native OpenGL use.
+`uve_node_icons.zip` contains 51 SVG assets, now stored together directly in `engine/editor/assets/icons/`: 41 node files, six component files, and four general files. Node files retain their supplied names and use the `_node.svg` or `_node_registry.svg` suffix; component files use `_component.svg`; the general files are `environment.svg`, `plugin.svg`, `snap.svg`, and `sun.svg`. SVG assets are unchanged source files and are rasterized to deterministic 20x20 RGBA embedded arrays for native OpenGL use.
 
 ## Current implementation decisions
 

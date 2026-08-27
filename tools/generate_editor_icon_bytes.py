@@ -12,11 +12,18 @@ SOURCE = ROOT / "engine" / "editor" / "assets" / "icons"
 OUTPUT = ROOT / "engine" / "editor" / "src"
 SIZE = 20
 
-GROUPS = {
-    "node": SOURCE / "3d_node_set",
-    "component": SOURCE / "component_set",
-    "general": SOURCE / "general",
-}
+GENERAL_ICON_NAMES = {"environment.svg", "plugin.svg", "snap.svg", "sun.svg"}
+
+
+def classify_icon(source: Path) -> str:
+    filename = source.name
+    if filename in GENERAL_ICON_NAMES:
+        return "general"
+    if filename.endswith("_component.svg"):
+        return "component"
+    if filename.endswith(("_node.svg", "_node_registry.svg")):
+        return "node"
+    raise ValueError(f"cannot classify supplied icon: {source}")
 
 
 def render_svg(source: Path, output: Path) -> bytes:
@@ -48,10 +55,12 @@ def write_group(group: str, sources: list[Path]) -> None:
 
 
 def main() -> None:
-    for group, directory in GROUPS.items():
-        sources = sorted(directory.glob("*.svg"))
+    grouped: dict[str, list[Path]] = {"node": [], "component": [], "general": []}
+    for source in sorted(SOURCE.glob("*.svg")):
+        grouped[classify_icon(source)].append(source)
+    for group, sources in grouped.items():
         if not sources:
-            raise FileNotFoundError(directory)
+            raise FileNotFoundError(f"no {group} SVG icons found in {SOURCE}")
         write_group(group, sources)
 
 
