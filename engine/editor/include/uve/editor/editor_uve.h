@@ -727,9 +727,6 @@ private:
     /// Draws all transform handle families around one selection while preserving the existing
     /// mode-specific drag/commit semantics and editor-only ownership.
     void DrawUnifiedTransformGizmoUVE(const EditorViewportRectUVE& viewportRect);
-    void DrawTranslateGizmoUVE(const EditorViewportRectUVE& viewportRect);
-    void DrawRotateGizmoUVE(const EditorViewportRectUVE& viewportRect);
-    void DrawScaleGizmoUVE(const EditorViewportRectUVE& viewportRect);
     [[nodiscard]] bool ApplyLocalTransformUVE(Scene::EntityUVE entity,
                                                const Scene::TransformComponentUVE& transform);
     [[nodiscard]] bool ApplyEntityNameStateUVE(Scene::EntityUVE entity,
