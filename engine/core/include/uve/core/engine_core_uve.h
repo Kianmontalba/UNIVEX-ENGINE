@@ -462,6 +462,11 @@ private:
     /// exact no-ops when this is false, matching every prior increment's headless behavior.
     bool m_windowedRenderingActiveUVE = false;
 
+    /// True while the native presentation surface is known to be drawable. Android may clear this
+    /// for a transient EGL surface loss and restore it through IWindowManagerUVE recovery without
+    /// tearing down the entire engine or selecting the NullRenderDeviceUVE.
+    bool m_presentationSurfaceReadyUVE = false;
+
     /// Set by Init() if a real (non-headless) window/GL-context creation attempt failed. Checked
     /// by Load(), which fails in that case so RunUVE() shuts the engine down cleanly rather than
     /// proceeding into a broken windowed session.

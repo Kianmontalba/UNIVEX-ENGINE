@@ -65,6 +65,11 @@ TEST_F(WindowManagerUVETest, GetNativeWindowHandleUVE_ReturnsNonNull) {
     EXPECT_NE(windowManager->GetNativeWindowHandleUVE(), nullptr);
 }
 
+TEST_F(WindowManagerUVETest, TryRecoverSurfaceUVE_IsNoOpForDesktop) {
+    EXPECT_FALSE(windowManager->TryRecoverSurfaceUVE());
+    EXPECT_TRUE(windowManager->IsValidUVE());
+}
+
 TEST_F(WindowManagerUVETest, PollEventsWithAttachedInput_CommitsFiniteMouseSnapshot) {
     Input::InputSystemUVE inputSystem(eventSystem);
     windowManager->AttachInputSystemUVE(&inputSystem);

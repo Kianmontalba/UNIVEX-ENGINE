@@ -314,6 +314,7 @@ void EngineCoreUVE::Init() {
     } else {
         m_renderDevice = std::make_unique<Render::NullRenderDeviceUVE>();
     }
+    m_presentationSurfaceReadyUVE = m_windowedRenderingActiveUVE;
 
     // ShaderManager nineteenth: needs ThreadPool, EventSystem, RenderDevice, and FileSystem — all
     // already constructed by this point. Mounts EngineConfigUVE::shaderSourceRealDirectoryUVE
@@ -525,7 +526,7 @@ void EngineCoreUVE::SyncParticleRuntimeUVE() {
 }
 
 void EngineCoreUVE::SyncAdaptiveRenderResolutionUVE() {
-    if (!m_windowedRenderingActiveUVE || !m_renderDevice->IsUsableUVE()) {
+    if (!m_windowedRenderingActiveUVE || !m_presentationSurfaceReadyUVE || !m_renderDevice->IsUsableUVE()) {
         return;
     }
 
@@ -550,14 +551,30 @@ void EngineCoreUVE::SyncAdaptiveRenderResolutionUVE() {
 
 void EngineCoreUVE::Update() {
     m_windowManager->PollEventsUVE();
-    const bool activeSurfaceReady =
-        !m_windowedRenderingActiveUVE ||
-        (m_windowManager->GetWidthUVE() > 0U && m_windowManager->GetHeightUVE() > 0U);
-    if (m_windowedRenderingActiveUVE && (!activeSurfaceReady || !m_renderDevice->IsUsableUVE())) {
-        m_windowedRenderingActiveUVE = false;
-        if (!m_graphicsBackendLossLoggedUVE) {
-            UVE_WARNING("EngineCoreUVE: graphics backend became unusable; rendering is disabled for this run");
-            m_graphicsBackendLossLoggedUVE = true;
+    if (!m_windowedRenderingActiveUVE) {
+        m_presentationSurfaceReadyUVE = false;
+    } else {
+        const std::uint32_t drawableWidth = m_windowManager->GetWidthUVE();
+        const std::uint32_t drawableHeight = m_windowManager->GetHeightUVE();
+        m_presentationSurfaceReadyUVE = drawableWidth > 0U && drawableHeight > 0U;
+        if (!m_presentationSurfaceReadyUVE) {
+#if defined(__ANDROID__)
+            // Android may transiently lose its ANativeWindow/EGLSurface between lifecycle commands.
+            // Keep the engine alive and let the backend recreate the surface instead of converting a
+            // recoverable presentation pause into permanent backend loss.
+            m_presentationSurfaceReadyUVE = m_windowManager->TryRecoverSurfaceUVE();
+#else
+            m_windowedRenderingActiveUVE = false;
+#endif
+        }
+        if ((!m_presentationSurfaceReadyUVE && !m_windowedRenderingActiveUVE) ||
+            (m_presentationSurfaceReadyUVE && !m_renderDevice->IsUsableUVE())) {
+            m_windowedRenderingActiveUVE = false;
+            m_presentationSurfaceReadyUVE = false;
+            if (!m_graphicsBackendLossLoggedUVE) {
+                UVE_WARNING("EngineCoreUVE: graphics backend became unusable; rendering is disabled for this run");
+                m_graphicsBackendLossLoggedUVE = true;
+            }
         }
     }
     SyncAdaptiveRenderResolutionUVE();
@@ -659,7 +676,8 @@ void EngineCoreUVE::LateUpdate() {
 }
 
 void EngineCoreUVE::Render() {
-    if (!m_renderDevice->IsUsableUVE()) {
+    if (!m_renderDevice->IsUsableUVE() ||
+        (m_windowedRenderingActiveUVE && !m_presentationSurfaceReadyUVE)) {
         return;
     }
     if (m_activeCamera != Scene::kInvalidEntityUVE) {
@@ -688,7 +706,7 @@ void EngineCoreUVE::Render() {
         }
     }
 
-    if (m_windowedRenderingActiveUVE) {
+    if (m_windowedRenderingActiveUVE && m_presentationSurfaceReadyUVE) {
         if (m_postRenderCallback) {
             m_postRenderCallback();
         }

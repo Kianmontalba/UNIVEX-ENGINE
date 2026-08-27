@@ -12,6 +12,7 @@
 #else
 #include <EGL/egl.h>
 #include <dlfcn.h>
+#include <android/log.h>
 #endif
 
 #include "gl_command_buffer_uve.h"
@@ -24,6 +25,12 @@ namespace UVE::Render {
 namespace {
 
 #if defined(__ANDROID__)
+constexpr char kAndroidGlLogTagUVE[] = "UVEAndroidGLES";
+
+void LogAndroidGlFailureUVE(const char* operation, const char* detail) noexcept {
+    __android_log_print(ANDROID_LOG_ERROR, kAndroidGlLogTagUVE, "%s: %s", operation, detail);
+}
+
 void* EglProcAddressBridgeUVE(const char* name) {
     void* address = reinterpret_cast<void*>(eglGetProcAddress(name));
     if (address == nullptr) {
@@ -475,6 +482,9 @@ ShaderHandleUVE GlRenderDeviceUVE::CreateShaderUVE(const ShaderDescUVE& desc, st
     m_impl->state.gl.glGetShaderiv(glShader, GL_COMPILE_STATUS, &compiled);
     if (compiled == GL_FALSE) {
         UVE_ERROR("GlRenderDeviceUVE: CreateShaderUVE compilation failed: {}", infoLog);
+#if defined(__ANDROID__)
+        LogAndroidGlFailureUVE("shader compile failed", infoLog.empty() ? "<empty driver log>" : infoLog.c_str());
+#endif
         m_impl->state.gl.glDeleteShader(glShader);
         return kInvalidShaderHandleUVE;
     }
@@ -540,6 +550,9 @@ PipelineHandleUVE GlRenderDeviceUVE::CreatePipelineUVE(const PipelineDescUVE& de
     m_impl->state.gl.glGetProgramiv(glProgram, GL_LINK_STATUS, &linked);
     if (linked == GL_FALSE) {
         UVE_ERROR("GlRenderDeviceUVE: CreatePipelineUVE link failed: {}", infoLog);
+#if defined(__ANDROID__)
+        LogAndroidGlFailureUVE("program link failed", infoLog.empty() ? "<empty driver log>" : infoLog.c_str());
+#endif
         m_impl->state.gl.glDeleteProgram(glProgram);
         return kInvalidPipelineHandleUVE;
     }
