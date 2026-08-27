@@ -631,6 +631,22 @@ void EngineCoreUVE::Render() {
         }
     } else {
         UVE_TRACE("Render (no-op)");
+        if (m_windowedRenderingActiveUVE) {
+            // An empty editor/game window still needs a real presented frame. Clear the
+            // backend's default framebuffer without creating a scene, camera, mesh, or light.
+            // This keeps the no-scene state visible and preserves the empty-scene contract.
+            m_renderSystem->BeginFrameUVE();
+            Render::ICommandBufferUVE& commandBuffer = m_renderSystem->GetFrameCommandBufferUVE();
+            Render::RenderPassDescUVE passDesc;
+            passDesc.colorAttachment = Render::kInvalidTextureHandleUVE;
+            passDesc.depthAttachment = Render::kInvalidTextureHandleUVE;
+            passDesc.colorLoadOp = Render::LoadOpUVE::Clear;
+            passDesc.depthLoadOp = Render::LoadOpUVE::DontCare;
+            passDesc.clearColor = {0.05F, 0.05F, 0.05F, 1.0F};
+            commandBuffer.BeginRenderPassUVE(passDesc);
+            commandBuffer.EndRenderPassUVE();
+            m_renderSystem->EndFrameUVE();
+        }
     }
 
     if (m_windowedRenderingActiveUVE) {
