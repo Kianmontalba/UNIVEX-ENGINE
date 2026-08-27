@@ -1,6 +1,8 @@
 #pragma once
 
+#include <array>
 #include <cstdint>
+#include <string_view>
 
 namespace UVE::Editor {
 
@@ -30,6 +32,9 @@ public:
     [[nodiscard]] std::uintptr_t GetLogoTextureIdUVE() const noexcept;
     [[nodiscard]] std::uintptr_t GetFolderTextureIdUVE() const noexcept;
     [[nodiscard]] std::uintptr_t GetGizmoTextureIdUVE(EditorGizmoIconUVE icon) const noexcept;
+    [[nodiscard]] std::uintptr_t GetNodeIconTextureIdUVE(std::string_view typeId) const noexcept;
+    [[nodiscard]] std::uintptr_t GetComponentIconTextureIdUVE(std::string_view componentId) const noexcept;
+    [[nodiscard]] std::uintptr_t GetGeneralIconTextureIdUVE(std::string_view iconId) const noexcept;
 
 private:
     std::uintptr_t m_logoTextureId = 0U;
@@ -39,6 +44,9 @@ private:
     std::uintptr_t m_scaleGizmoTextureId = 0U;
     std::uintptr_t m_universalGizmoTextureId = 0U;
     std::uintptr_t m_viewNavigationTextureId = 0U;
+    std::array<std::uintptr_t, 41U> m_nodeIconTextureIds{};
+    std::array<std::uintptr_t, 6U> m_componentIconTextureIds{};
+    std::array<std::uintptr_t, 4U> m_generalIconTextureIds{};
 };
 
 } // namespace UVE::Editor

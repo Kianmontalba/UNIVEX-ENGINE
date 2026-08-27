@@ -34,6 +34,8 @@ struct EditorViewportVisualStateUVE final {
     Math::Vector3UVE gridOrigin{0.0F, 0.0F, 0.0F};
     float cameraTanHalfFov = 0.57735026F;
     float gridSpacing = 1.0F;
+    bool orthographic = false;
+    float orthographicScale = 10.0F;
 };
 
 /// A copied, frame-local account of observable Renderer3DUVE work. Each field names evidence that

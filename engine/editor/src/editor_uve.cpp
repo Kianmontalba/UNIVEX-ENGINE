@@ -183,6 +183,149 @@ constexpr const char* kHierarchyEntityPayloadUVE = "UVE_SCENE_HIERARCHY_ENTITY";
     return "Entity " + std::to_string(entity.index) + ":" + std::to_string(entity.generation);
 }
 
+[[nodiscard]] std::string_view GetNodeIconKeyForEntityUVE(
+    const Scene::IEntityManagerUVE& entityManager, const Scene::EntityUVE entity) {
+    if (entityManager.HasComponentUVE<Scene::AnimatableBody3DNodeComponentUVE>(entity)) {
+        return "animatable_body_3d";
+    }
+    if (entityManager.HasComponentUVE<Scene::AreaComponentUVE>(entity)) {
+        return "area_3d";
+    }
+    if (entityManager.HasComponentUVE<Scene::RayCast3DNodeComponentUVE>(entity)) {
+        return "ray_cast_3d";
+    }
+    if (entityManager.HasComponentUVE<Scene::NavigationRegion3DNodeComponentUVE>(entity)) {
+        return "navigation_region_3d";
+    }
+    if (entityManager.HasComponentUVE<Scene::NavigationAgent3DNodeComponentUVE>(entity)) {
+        return "navigation_agent_3d";
+    }
+    if (entityManager.HasComponentUVE<Scene::Skeleton3DNodeComponentUVE>(entity)) {
+        return "skeleton_3d";
+    }
+    if (entityManager.HasComponentUVE<Scene::BoneAttachment3DNodeComponentUVE>(entity)) {
+        return "bone_attachment_3d";
+    }
+    if (entityManager.HasComponentUVE<Scene::SpringArm3DNodeComponentUVE>(entity)) {
+        return "spring_arm_3d";
+    }
+    if (entityManager.HasComponentUVE<Scene::Marker3DNodeComponentUVE>(entity)) {
+        return "marker_3d";
+    }
+    if (entityManager.HasComponentUVE<Scene::Hitbox3DNodeComponentUVE>(entity)) {
+        return "hitbox_3d";
+    }
+    if (entityManager.HasComponentUVE<Scene::Hurtbox3DNodeComponentUVE>(entity)) {
+        return "hurtbox_3d";
+    }
+    if (entityManager.HasComponentUVE<Scene::Projectile3DNodeComponentUVE>(entity)) {
+        return "projectile_3d";
+    }
+    if (entityManager.HasComponentUVE<Scene::InteractionArea3DNodeComponentUVE>(entity)) {
+        return "interaction_area_3d";
+    }
+    if (entityManager.HasComponentUVE<Scene::WorldEnvironment3DNodeComponentUVE>(entity)) {
+        return "world_environment_3d";
+    }
+    if (entityManager.HasComponentUVE<Scene::ReflectionProbe3DNodeComponentUVE>(entity)) {
+        return "reflection_probe_3d";
+    }
+    if (entityManager.HasComponentUVE<Scene::Decal3DNodeComponentUVE>(entity)) {
+        return "decal_3d";
+    }
+    if (entityManager.HasComponentUVE<Scene::LodGroup3DNodeComponentUVE>(entity)) {
+        return "lod_group_3d";
+    }
+    if (entityManager.HasComponentUVE<Scene::Occluder3DNodeComponentUVE>(entity)) {
+        return "occluder_3d";
+    }
+    if (entityManager.HasComponentUVE<Scene::VisibilityRegion3DNodeComponentUVE>(entity)) {
+        return "visibility_region_3d";
+    }
+    if (entityManager.HasComponentUVE<Scene::SpawnPoint3DNodeComponentUVE>(entity)) {
+        return "spawn_point_3d";
+    }
+    if (entityManager.HasComponentUVE<Scene::LevelStreamer3DNodeComponentUVE>(entity)) {
+        return "level_streamer_3d";
+    }
+    if (entityManager.HasComponentUVE<Scene::WorldPartition3DNodeComponentUVE>(entity)) {
+        return "world_partition_3d";
+    }
+    if (entityManager.HasComponentUVE<Scene::AnimationPlayerComponentUVE>(entity)) {
+        return "animation_player";
+    }
+    if (entityManager.HasComponentUVE<Scene::RigidBodyComponentUVE>(entity)) {
+        return "rigid_body_3d";
+    }
+    if (entityManager.HasComponentUVE<Scene::CameraComponentUVE>(entity)) {
+        return "camera_3d";
+    }
+    if (entityManager.HasComponentUVE<Scene::LightComponentUVE>(entity)) {
+        return "light_3d";
+    }
+    if (entityManager.HasComponentUVE<Scene::PrimitiveMeshComponentUVE>(entity)) {
+        switch (entityManager.GetComponentUVE<Scene::PrimitiveMeshComponentUVE>(entity).kind) {
+            case Scene::PrimitiveMeshKindUVE::Cube:
+                return "box_mesh_3d";
+            case Scene::PrimitiveMeshKindUVE::UVSphere:
+                return "sphere_mesh_3d";
+            case Scene::PrimitiveMeshKindUVE::Plane:
+                return "plane_mesh_3d";
+        }
+    }
+    if (entityManager.HasComponentUVE<Scene::MeshComponentUVE>(entity)) {
+        return "mesh_instance_3d";
+    }
+    if (entityManager.HasComponentUVE<Scene::ParticleEmitterComponentUVE>(entity)) {
+        return "particle_emitter_3d";
+    }
+    if (entityManager.HasComponentUVE<Scene::AudioSourceComponentUVE>(entity)) {
+        return "audio_source_3d";
+    }
+    if (entityManager.HasComponentUVE<Scene::ScriptComponentUVE>(entity)) {
+        return "script";
+    }
+    if (entityManager.HasComponentUVE<Scene::ColliderComponentUVE>(entity)) {
+        return "collision_shape_3d";
+    }
+    if (entityManager.HasComponentUVE<Scene::TransformComponentUVE>(entity)) {
+        return "transform";
+    }
+    return "empty";
+}
+[[nodiscard]] std::uintptr_t GetComponentIconTextureIdUVE(const EditorUiAssetsUVE& assets,
+                                                           const EditorSceneComponentKindUVE kind) noexcept {
+    switch (kind) {
+        case EditorSceneComponentKindUVE::Camera:
+            return assets.GetNodeIconTextureIdUVE("camera_3d");
+        case EditorSceneComponentKindUVE::Mesh:
+            return assets.GetComponentIconTextureIdUVE("primitive_mesh");
+        case EditorSceneComponentKindUVE::Light:
+            return assets.GetNodeIconTextureIdUVE("light_3d");
+        case EditorSceneComponentKindUVE::Collider:
+            return assets.GetComponentIconTextureIdUVE("collider");
+        case EditorSceneComponentKindUVE::RigidBody:
+            return assets.GetNodeIconTextureIdUVE("rigid_body_3d");
+        case EditorSceneComponentKindUVE::AudioSource:
+            return assets.GetNodeIconTextureIdUVE("audio_source_3d");
+        case EditorSceneComponentKindUVE::ParticleEmitter:
+            return assets.GetNodeIconTextureIdUVE("particle_emitter_3d");
+        case EditorSceneComponentKindUVE::Script:
+            return assets.GetNodeIconTextureIdUVE("script");
+        case EditorSceneComponentKindUVE::AnimationPlayer:
+            return assets.GetNodeIconTextureIdUVE("animation_player");
+        case EditorSceneComponentKindUVE::WorldEnvironment:
+            return assets.GetNodeIconTextureIdUVE("world_environment_3d");
+    }
+    return 0U;
+}
+void DrawNativeIconLabelUVE(const std::uintptr_t textureId, const char* const label) {
+    if (textureId != 0U) {
+        ImGui::Image(static_cast<ImTextureID>(textureId), ImVec2{16.0F, 16.0F});
+        ImGui::SameLine(0.0F, 5.0F);
+    }
+    ImGui::TextUnformatted(label);
+}
 [[nodiscard]] bool IsWhitespaceOnlyUVE(const std::string_view value) noexcept {
     return std::all_of(value.begin(), value.end(), [](const char character) noexcept {
         return std::isspace(static_cast<unsigned char>(character)) != 0;
@@ -2208,12 +2351,7 @@ std::vector<Scene::EntityUVE> EditorUVE::GetEligibleReparentParentsUVE(const Sce
 }
 
 std::string EditorUVE::GetHierarchyCandidateLabelUVE(const Scene::EntityUVE entity) const {
-    const std::string typeTag = GetOutlinerTypeTagUVE(entity);
-    std::string label = GetEntityDisplayLabelUVE(entity);
-    if (!typeTag.empty()) {
-        label += " [" + typeTag + "]";
-    }
-    return label + " (" + EntityLabelUVE(entity) + ")";
+    return GetEntityDisplayLabelUVE(entity);
 }
 
 bool EditorUVE::IsLifecycleCommandAllowedUVE() const noexcept {
@@ -4708,7 +4846,7 @@ void EditorUVE::DrawPluginWindowUVE() {
                                    ImGui::GetMainViewport()->WorkPos.y + 104.0F},
                             ImGuiCond_FirstUseEver);
     if (ImGui::Begin("Plugin Tools", &m_pluginWindowVisible, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::TextUnformatted("Editor tools");
+        DrawNativeIconLabelUVE(m_uiAssets.GetGeneralIconTextureIdUVE("plugin"), "Editor tools");
         ImGui::Separator();
         ImGui::Checkbox("Control Rig", &m_controlRigPluginEnabled);
         ImGui::SameLine();
@@ -4883,6 +5021,11 @@ void EditorUVE::DrawHierarchyPanelUVE() {
                 lastCategory = descriptor.category;
             }
             ImGui::BeginDisabled(!descriptor.libraryCreatable);
+            const std::uintptr_t iconTextureId = m_uiAssets.GetNodeIconTextureIdUVE(descriptor.typeId);
+            if (iconTextureId != 0U) {
+                ImGui::Image(static_cast<ImTextureID>(iconTextureId), ImVec2{16.0F, 16.0F});
+                ImGui::SameLine(0.0F, 5.0F);
+            }
             if (ImGui::MenuItem(descriptor.displayName.data())) {
                 static_cast<void>(CreateDocumentSceneNodeUVE(descriptor.kind));
             }
@@ -4931,13 +5074,7 @@ void EditorUVE::DrawHierarchyNodeUVE(const Scene::EntityUVE entity) {
     }
 
     const bool renaming = entity == m_hierarchyRenameEntity;
-    std::string visibleLabel = renaming ? "" : GetEntityDisplayLabelUVE(entity);
-    if (!renaming) {
-        const std::string typeTag = GetOutlinerTypeTagUVE(entity);
-        if (!typeTag.empty()) {
-            visibleLabel += " [" + typeTag + "]";
-        }
-    }
+    const std::string visibleLabel = renaming ? "" : "    " + GetEntityDisplayLabelUVE(entity);
     const std::string nodeLabel = visibleLabel + "##entity-" + std::to_string(entity.index) + ":" +
                                   std::to_string(entity.generation);
     if (active) {
@@ -4948,6 +5085,20 @@ void EditorUVE::DrawHierarchyNodeUVE(const Scene::EntityUVE entity) {
     const bool open = ImGui::TreeNodeEx(nodeLabel.c_str(), flags);
     if (active) {
         ImGui::PopStyleColor(3);
+    }
+    if (!renaming) {
+        const std::uintptr_t iconTexture =
+            m_uiAssets.GetNodeIconTextureIdUVE(GetNodeIconKeyForEntityUVE(entityManager, entity));
+        if (iconTexture != 0U) {
+            const ImVec2 itemMin = ImGui::GetItemRectMin();
+            const ImVec2 itemMax = ImGui::GetItemRectMax();
+            const float iconSize = std::min(16.0F, std::max(1.0F, itemMax.y - itemMin.y - 2.0F));
+            const float iconY = itemMin.y + (itemMax.y - itemMin.y - iconSize) * 0.5F;
+            ImGui::GetWindowDrawList()->AddImage(static_cast<ImTextureID>(iconTexture),
+                                                  ImVec2{itemMin.x + ImGui::GetTreeNodeToLabelSpacing(), iconY},
+                                                  ImVec2{itemMin.x + ImGui::GetTreeNodeToLabelSpacing() + iconSize,
+                                                         iconY + iconSize});
+        }
     }
     if (ImGui::IsItemClicked() && !renaming) {
         if (ImGui::GetIO().KeyCtrl) {
@@ -5253,6 +5404,7 @@ void EditorUVE::DrawNameInspectorDrawerUVE(const Scene::EntityUVE entity) {
     }
 
     Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    DrawNativeIconLabelUVE(m_uiAssets.GetComponentIconTextureIdUVE("name"), "Name");
     std::array<char, kMaximumEntityNameBytesUVE + 1U> nameBuffer{};
     if (entityManager.HasComponentUVE<Scene::NameComponentUVE>(entity)) {
         const std::string& currentName = entityManager.GetComponentUVE<Scene::NameComponentUVE>(entity).name;
@@ -5269,7 +5421,7 @@ void EditorUVE::DrawHierarchyInspectorDrawerUVE(const Scene::EntityUVE entity) {
     }
 
     ImGui::Separator();
-    ImGui::TextUnformatted("Hierarchy");
+    DrawNativeIconLabelUVE(m_uiAssets.GetComponentIconTextureIdUVE("hierarchy"), "Hierarchy");
     Scene::EntityUVE currentParent = Scene::kInvalidEntityUVE;
     if (!TryGetDocumentParentUVE(entity, currentParent)) {
         ImGui::TextDisabled("Parent unavailable due to invalid hierarchy state.");
@@ -5340,6 +5492,8 @@ void EditorUVE::DrawTransformInspectorDrawerUVE(const Scene::EntityUVE entity) {
     }
 
     Scene::TransformComponentUVE edited = entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity);
+    ImGui::Separator();
+    DrawNativeIconLabelUVE(m_uiAssets.GetComponentIconTextureIdUVE("world_transform"), "Transform");
     float position[3]{edited.localPosition.x, edited.localPosition.y, edited.localPosition.z};
     float rotation[4]{edited.localRotation.x, edited.localRotation.y, edited.localRotation.z, edited.localRotation.w};
     float scale[3]{edited.localScale.x, edited.localScale.y, edited.localScale.z};
@@ -5366,7 +5520,7 @@ void EditorUVE::DrawPrimitiveMeshInspectorDrawerUVE(const Scene::EntityUVE entit
     }
 
     ImGui::Separator();
-    ImGui::TextUnformatted("Primitive");
+    DrawNativeIconLabelUVE(m_uiAssets.GetComponentIconTextureIdUVE("primitive_mesh"), "Primitive");
     const Scene::PrimitiveMeshComponentUVE current =
         entityManager.GetComponentUVE<Scene::PrimitiveMeshComponentUVE>(entity);
     int kindIndex = static_cast<int>(current.kind);
@@ -5399,7 +5553,7 @@ void EditorUVE::DrawWorldEnvironmentInspectorDrawerUVE(const Scene::EntityUVE en
     bool changed = false;
 
     ImGui::Separator();
-    ImGui::TextUnformatted("World Environment");
+    DrawNativeIconLabelUVE(m_uiAssets.GetGeneralIconTextureIdUVE("environment"), "World Environment");
     ImGui::TextDisabled("Scene environment settings are authored on this node and persisted in the scene.");
 
     if (ImGui::CollapsingHeader("Environment", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -5423,6 +5577,11 @@ void EditorUVE::DrawWorldEnvironmentInspectorDrawerUVE(const Scene::EntityUVE en
         ImGui::TextDisabled("Sky asset assignment is persisted; runtime sky sampling is not active yet.");
     }
 
+    const std::uintptr_t sunIconTextureId = m_uiAssets.GetGeneralIconTextureIdUVE("sun");
+    if (sunIconTextureId != 0U) {
+        ImGui::Image(static_cast<ImTextureID>(sunIconTextureId), ImVec2{16.0F, 16.0F});
+        ImGui::SameLine(0.0F, 5.0F);
+    }
     if (ImGui::CollapsingHeader("Ambient Light", ImGuiTreeNodeFlags_DefaultOpen)) {
         float ambientColor[3]{edited.ambientColor.x, edited.ambientColor.y, edited.ambientColor.z};
         const bool colorChanged =
@@ -5491,7 +5650,7 @@ void EditorUVE::DrawSceneComponentInspectorDrawerUVE(const Scene::EntityUVE enti
         case EditorSceneComponentKindUVE::WorldEnvironment: title = "World Environment"; break;
     }
     ImGui::Separator();
-    ImGui::TextUnformatted(title);
+    DrawNativeIconLabelUVE(GetComponentIconTextureIdUVE(m_uiAssets, kind), title);
     ImGui::TextDisabled("Authored component state is validated and persisted by EditorUVE.");
     if (ImGui::Button((std::string("Remove ") + title).c_str())) {
         static_cast<void>(RemoveSelectedSceneComponentUVE(kind));
@@ -5513,7 +5672,7 @@ void EditorUVE::DrawPrefabInspectorDrawerUVE(const Scene::EntityUVE entity) {
     const std::optional<std::uint64_t> observedRevision =
         Scene::ComputePrefabSourceRevisionUVE(sourcePath);
     ImGui::Separator();
-    ImGui::TextUnformatted("Prefab Instance");
+    DrawNativeIconLabelUVE(m_uiAssets.GetComponentIconTextureIdUVE("prefab_instance"), "Prefab Instance");
     ImGui::Text("Source GUID: %llu", static_cast<unsigned long long>(instance.sourcePrefabGuid.value));
     ImGui::Text("Instance revision: %llu", static_cast<unsigned long long>(instance.instanceRevision));
     ImGui::Text("Source revision: %s", observedRevision.has_value() ? "available" : "unavailable");
@@ -5551,6 +5710,11 @@ void EditorUVE::DrawSceneComponentAddPanelUVE() {
                                                            const EditorSceneComponentValueUVE& value, const bool present) {
             ImGui::TableNextRow();
             ImGui::TableSetColumnIndex(0);
+            const std::uintptr_t iconTextureId = GetComponentIconTextureIdUVE(m_uiAssets, kind);
+            if (iconTextureId != 0U) {
+                ImGui::Image(static_cast<ImTextureID>(iconTextureId), ImVec2{16.0F, 16.0F});
+                ImGui::SameLine(0.0F, 5.0F);
+            }
             ImGui::BeginDisabled(present);
             if (ImGui::SmallButton(label) && !present) {
                 static_cast<void>(SetSelectedSceneComponentUVE(kind, value));
@@ -5814,10 +5978,7 @@ void EditorUVE::DrawFolderContentsPanelUVE() {
             }
             ++visibleCount;
             const ContentBrowserItemTypeUVE type = ClassifyContentBrowserEntryUVE(entry);
-            std::string displayLabel = entry.relativePath.filename().generic_string();
-            displayLabel += " [";
-            displayLabel += GetContentBrowserItemTypeLabelUVE(type);
-            displayLabel += "]";
+            const std::string displayLabel = entry.relativePath.filename().generic_string();
             const std::string rowId = "folder-content-entry-" + entry.relativePath.generic_string();
             ImGui::PushID(rowId.c_str());
             const bool selected = m_selectedProjectFile.has_value() &&
@@ -5825,6 +5986,9 @@ void EditorUVE::DrawFolderContentsPanelUVE() {
             const bool clicked = ImGui::Selectable(displayLabel.c_str(), selected,
                                                    ImGuiSelectableFlags_AllowDoubleClick);
             const bool rowHovered = ImGui::IsItemHovered();
+            if (rowHovered) {
+                ImGui::SetTooltip("Type: %s", GetContentBrowserItemTypeLabelUVE(type));
+            }
             const bool contextClicked = rowHovered &&
                                          (ImGui::IsMouseClicked(ImGuiMouseButton_Right) ||
                                           ImGui::IsMouseReleased(ImGuiMouseButton_Right));
@@ -5921,6 +6085,11 @@ void EditorUVE::DrawFilesystemContextPopupUVE() {
         }
         const bool enabled = IsDocumentEntityUVE(m_selectedEntity) && IsAuthoringCommandAllowedUVE();
         ImGui::BeginDisabled(!enabled);
+        const std::uintptr_t iconTextureId = GetComponentIconTextureIdUVE(m_uiAssets, kind);
+        if (iconTextureId != 0U) {
+            ImGui::Image(static_cast<ImTextureID>(iconTextureId), ImVec2{16.0F, 16.0F});
+            ImGui::SameLine(0.0F, 5.0F);
+        }
         if (ImGui::MenuItem(label)) {
             if (SetSelectedSceneComponentUVE(kind, value)) {
                 m_activeRightPanelTab = EditorRightPanelTabUVE::Inspector;
@@ -6125,18 +6294,9 @@ void EditorUVE::DrawAssetsPanelUVE() {
                                   m_selectedProjectFile->relativePath == entry->relativePath &&
                                   m_selectedProjectFile->kind == entry->kind;
             const ContentBrowserItemTypeUVE type = ClassifyContentBrowserEntryUVE(*entry);
-            std::string displayLabel;
-            if (!mainDirectory.empty() && entry->relativePath == mainDirectory) {
-                displayLabel = "main";
-            } else {
-                displayLabel = entry->relativePath.filename().generic_string();
-                displayLabel += " [";
-                displayLabel += GetContentBrowserItemTypeLabelUVE(type);
-                displayLabel += "]";
-            }
-            if (entry->registeredAssetGuid.has_value()) {
-                displayLabel += " [Registered]";
-            }
+            const std::string displayLabel = !mainDirectory.empty() && entry->relativePath == mainDirectory
+                                                 ? "main"
+                                                 : entry->relativePath.filename().generic_string();
 
             const std::string rowId = "content-browser-entry-" + entry->relativePath.generic_string();
             ImGui::PushID(rowId.c_str());
@@ -6145,6 +6305,10 @@ void EditorUVE::DrawAssetsPanelUVE() {
             const bool clicked = ImGui::Selectable("##entry", selected, ImGuiSelectableFlags_AllowDoubleClick,
                                                    ImVec2{0.0F, rowHeight});
             const bool rowHovered = ImGui::IsItemHovered();
+            if (rowHovered) {
+                const char* const registeredSuffix = entry->registeredAssetGuid.has_value() ? " (Registered)" : "";
+                ImGui::SetTooltip("Type: %s%s", GetContentBrowserItemTypeLabelUVE(type), registeredSuffix);
+            }
             const bool contextClicked = rowHovered &&
                                          (ImGui::IsMouseClicked(ImGuiMouseButton_Right) ||
                                           ImGui::IsMouseReleased(ImGuiMouseButton_Right));
@@ -6804,6 +6968,11 @@ void EditorUVE::DrawViewportToolCanvasUVE() {
         drawViewportTool("Universal", "Universal / T", EditorGizmoModeUVE::Universal,
                          EditorGizmoIconUVE::Universal, gizmoModeChangeAllowed);
         ImGui::SameLine(0.0F, 4.0F);
+        const std::uintptr_t snapIconTextureId = m_uiAssets.GetGeneralIconTextureIdUVE("snap");
+        if (snapIconTextureId != 0U) {
+            ImGui::Image(static_cast<ImTextureID>(snapIconTextureId), ImVec2{16.0F, 16.0F});
+            ImGui::SameLine(0.0F, 5.0F);
+        }
         if (ImGui::SmallButton(m_transformSnappingSettings.enabled ? "Snap On" : "Snap")) {
             m_transformSnappingSettings.enabled = !m_transformSnappingSettings.enabled;
         }
@@ -6933,9 +7102,10 @@ void EditorUVE::DrawViewportPanelUVE() {
         visualState.cameraRight = Math::RotateVectorUVE(viewportOrientation, Math::Vector3UVE{1.0F, 0.0F, 0.0F});
         visualState.cameraUp = Math::RotateVectorUVE(viewportOrientation, Math::Vector3UVE{0.0F, 1.0F, 0.0F});
         visualState.cameraPosition = m_viewportFocusPoint - (visualState.cameraForward * m_viewportDistance);
-        visualState.gridOrigin = m_viewportFocusPoint;
-        const float gridScaleDistance = std::max(m_viewportDistance * 0.25F, 0.25F);
-        visualState.gridSpacing = std::pow(10.0F, std::floor(std::log10(gridScaleDistance)));
+        // The axes and grid are authored in world space. Keep the origin fixed so X/Y/Z always
+        // intersect at (0,0,0); the shader adapts spacing from the camera footprint continuously.
+        visualState.gridOrigin = Math::Vector3UVE{0.0F, 0.0F, 0.0F};
+        visualState.gridSpacing = 1.0F;
         visualState.cameraTanHalfFov = std::tan(30.0F * std::numbers::pi_v<float> / 180.0F);
         if (m_services->GetEntityManagerUVE().IsAliveUVE(m_viewportCamera) &&
             m_services->GetEntityManagerUVE().HasComponentUVE<Scene::CameraComponentUVE>(m_viewportCamera)) {
