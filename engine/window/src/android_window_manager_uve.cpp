@@ -100,6 +100,23 @@ AndroidWindowManagerUVE::AndroidWindowManagerUVE(Events::IEventSystemUVE& eventS
         }
     }
 
+    EGLint nativeVisualId = 0;
+    if (eglGetConfigAttrib(m_impl->display, config, EGL_NATIVE_VISUAL_ID, &nativeVisualId) == EGL_FALSE ||
+        nativeVisualId == 0) {
+        LogEglError("eglGetConfigAttrib EGL_NATIVE_VISUAL_ID");
+        return;
+    }
+    // Android's BufferQueue can reject or silently mishandle a surface whose producer format does
+    // not match the EGLConfig selected above. Explicitly negotiate the config's native visual
+    // before creating the EGL window surface; this is especially important on vendor GLES stacks.
+    const int geometryResult = ANativeWindow_setBuffersGeometry(androidWindow, 0, 0, nativeVisualId);
+    if (geometryResult != 0) {
+        __android_log_print(ANDROID_LOG_ERROR, kLogTag,
+                            "ANativeWindow_setBuffersGeometry failed (%d), visual id %d",
+                            geometryResult, nativeVisualId);
+        return;
+    }
+
     m_impl->surface = eglCreateWindowSurface(m_impl->display, config, androidWindow, nullptr);
     if (m_impl->surface == EGL_NO_SURFACE) {
         LogEglError("eglCreateWindowSurface");
