@@ -465,16 +465,18 @@ uniform float uViewportAspect;
 uniform float uGridSpacing;
 
 float GridLineUVE(vec2 coordinate, float spacing, float width) {
-    vec2 cell = abs(fract(coordinate / spacing - 0.5) - 0.5) / max(fwidth(coordinate / spacing), vec2(0.0001));
-    float line = 1.0 - min(cell.x, cell.y);
-    return 1.0 - smoothstep(width, width + 1.0, line);
+    vec2 scaled = coordinate / max(spacing, 0.001);
+    vec2 cellDistance = min(fract(scaled), 1.0 - fract(scaled));
+    vec2 lineWidth = vec2(clamp(0.012 * max(width, 0.5), 0.006, 0.030));
+    vec2 line = 1.0 - smoothstep(lineWidth, lineWidth + vec2(0.010), cellDistance);
+    return max(line.x, line.y);
 }
 
 void main() {
     vec2 surfaceUv = gl_FragCoord.xy / max(uSurfaceSize.xy, vec2(1.0));
     vec2 viewportExtent = max(uViewportMax.xy - uViewportMin.xy, vec2(0.001));
     vec2 viewportUv = clamp((surfaceUv - uViewportMin.xy) / viewportExtent, vec2(0.0), vec2(1.0));
-    vec2 ndc = vec2(viewportUv.x * 2.0 - 1.0, 1.0 - viewportUv.y * 2.0);
+    vec2 ndc = vec2(viewportUv.x * 2.0 - 1.0, viewportUv.y * 2.0 - 1.0);
     float tanHalfFov = max(uCameraTanHalfFov, 0.57735026);
     float forwardLength = length(uCameraForward);
     vec3 forward = forwardLength > 0.0001 ? uCameraForward / forwardLength : vec3(0.0, 0.0, -1.0);
@@ -507,7 +509,7 @@ void main() {
             float distanceFade = 1.0 - smoothstep(spacing * 12.0, spacing * 180.0, groundDistance);
             float groundHorizon = 1.0 - smoothstep(spacing * 12.0, spacing * 90.0, groundDistance);
             color = mix(groundColor, horizonColor, groundHorizon * 0.70);
-            color += gridColor * (fineGrid * 0.20 + majorGrid * 0.42) * distanceFade;
+            color += gridColor * (fineGrid * 0.34 + majorGrid * 0.72) * distanceFade;
             float axisX = 1.0 - smoothstep(0.018, 0.030, abs(relative.y));
             float axisZ = 1.0 - smoothstep(0.018, 0.030, abs(relative.x));
             color += vec3(0.80, 0.28, 0.26) * axisX * majorGrid * distanceFade;
