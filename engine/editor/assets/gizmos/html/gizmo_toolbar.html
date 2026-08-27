@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>UniVex Gizmo Toolbar</title>
+<style>:root{--bg:#17181b;--panel:#202126;--panel2:#26272d;--border:#34353c;--text:#cfd0d4;--dim:#8a8b91;--active:#ffd933}*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font:12px monospace}nav{width:82px;height:100%;padding:10px 0;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;align-items:center;gap:6px}.tool{width:54px;height:46px;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--dim);display:flex;align-items:center;justify-content:center;position:relative;cursor:pointer}.tool:hover{background:var(--panel2);border-color:var(--border)}.tool.active{background:#2c2b1f;border-color:var(--active);color:var(--text)}.tool.active:after{content:'';position:absolute;left:-10px;top:50%;width:3px;height:18px;transform:translateY(-50%);border-radius:2px;background:var(--active)}.tool span:first-child{font-size:11px}.key{position:absolute;right:5px;bottom:3px;color:var(--dim);font-size:8px}.divider{width:34px;height:1px;background:var(--border);margin:4px 0}.nav{margin-top:auto;width:58px;height:28px;border:1px solid var(--border);border-radius:6px;background:var(--panel2);color:var(--dim);font:9px monospace;cursor:pointer}.nav:hover{border-color:var(--active);color:var(--text)}iframe{position:absolute;left:82px;top:0;width:calc(100% - 82px);height:100%;border:0;background:var(--bg)}</style>
+</head>
+<body><nav>
+<button class="tool active" data-page="move_gizmo.html"><span>MOVE</span><span class="key">W</span></button>
+<button class="tool" data-page="rotate_gizmo.html"><span>ROTATE</span><span class="key">E</span></button>
+<button class="tool" data-page="scale_gizmo.html"><span>SCALE</span><span class="key">R</span></button>
+<div class="divider"></div>
+<button class="tool" data-page="universal_gizmo.html"><span>UNIVERSAL</span><span class="key">T</span></button>
+<button class="nav" data-page="viewport_nav_gizmo.html">VIEW NAV</button>
+</nav><iframe id="preview" title="Gizmo preview" src="move_gizmo.html"></iframe>
+<script>const frame=document.getElementById('preview');document.querySelectorAll('[data-page]').forEach(button=>button.addEventListener('click',()=>{document.querySelectorAll('.tool').forEach(t=>t.classList.remove('active'));if(button.classList.contains('tool'))button.classList.add('active');frame.src=button.dataset.page}));</script>
+</body></html>

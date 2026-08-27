@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>UniVex Move Gizmo</title>
+<style>
+:root{--bg:#17181b;--panel:#202126;--border:#34353c;--text:#cfd0d4;--dim:#8a8b91;--x:#ff5d5d;--y:#4ade80;--z:#3b9cff;--active:#ffd933}
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font:12px monospace}main{width:100%;height:100%;position:relative}canvas{display:block;width:100%;height:100%}header{position:absolute;top:12px;left:16px;color:var(--dim);pointer-events:none}header b{color:var(--text)}
+</style>
+</head>
+<body><main><canvas id="gizmo"></canvas><header>GIZMO <b>MOVE</b> · <span>W</span></header></main>
+<script>
+const canvas=document.getElementById('gizmo'),ctx=canvas.getContext('2d');
+const dpr=Math.min(devicePixelRatio||1,2);let hot=null;
+function resize(){canvas.width=canvas.clientWidth*dpr;canvas.height=canvas.clientHeight*dpr;draw()}addEventListener('resize',resize);
+const colors={X:'#ff5d5d',Y:'#4ade80',Z:'#3b9cff'};
+function arrow(cx,cy,dx,dy,color,key){const l=Math.hypot(dx,dy),ux=dx/l,uy=dy/l,px=-uy,py=ux;const end={x:cx+dx,y:cy+dy};const h=hot===key;ctx.lineCap='round';ctx.lineJoin='round';ctx.strokeStyle='rgba(10,10,12,.65)';ctx.lineWidth=(h?12:10)*dpr;ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(end.x,end.y);ctx.stroke();ctx.strokeStyle=h?'#ffd933':color;ctx.lineWidth=(h?8:6)*dpr;ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(end.x,end.y);ctx.stroke();const s=(h?17:15)*dpr,b={x:end.x-ux*s*.62,y:end.y-uy*s*.62};ctx.beginPath();ctx.moveTo(end.x+ux*s*.35,end.y+uy*s*.35);ctx.lineTo(b.x+px*s*.42,b.y+py*s*.42);ctx.lineTo(b.x-px*s*.42,b.y-py*s*.42);ctx.closePath();ctx.fillStyle=h?'#ffd933':color;ctx.fill();ctx.strokeStyle='rgba(10,10,12,.65)';ctx.lineWidth=2*dpr;ctx.stroke()}
+function draw(){const w=canvas.width,h=canvas.height,cx=w*.5,cy=h*.55,s=Math.min(w,h)*.22;ctx.clearRect(0,0,w,h);ctx.fillStyle='#17181b';ctx.fillRect(0,0,w,h);arrow(cx,cy,-s*.9,s*.58,colors.Z,'Z');arrow(cx,cy,s,s*.34,colors.X,'X');arrow(cx,cy,0,-s,colors.Y,'Y');const q=8*dpr;ctx.fillStyle=hot==='XYZ'?'#ffd933':'#ededed';ctx.fillRect(cx-q/2,cy-q/2,q,q);ctx.strokeStyle='rgba(10,10,12,.75)';ctx.lineWidth=1.5*dpr;ctx.strokeRect(cx-q/2,cy-q/2,q,q)}
+canvas.addEventListener('mousemove',e=>{const r=canvas.getBoundingClientRect(),x=(e.clientX-r.left)*dpr,y=(e.clientY-r.top)*dpr;const cx=canvas.width*.5,cy=canvas.height*.55;hot=Math.hypot(x-cx,y-cy)<14*dpr?'XYZ':null;for(const [key,dx,dy] of [['X',1,.34],['Y',0,-1],['Z',-.9,.58]])if(Math.hypot(x-(cx+dx*Math.min(canvas.width,canvas.height)*.22),y-(cy+dy*Math.min(canvas.width,canvas.height)*.22))<18*dpr)hot=key;draw()});resize();
+</script></body></html>

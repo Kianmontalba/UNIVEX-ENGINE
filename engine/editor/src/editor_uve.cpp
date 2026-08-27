@@ -3964,82 +3964,7 @@ void EditorUVE::CancelGizmoDragUVE() noexcept {
     m_sceneDirty = cancelledSession->baselineDirty;
 }
 
-void EditorUVE::DrawViewportGridUVE(const EditorViewportRectUVE& viewportRect) {
-    if (!IsViewportRectValidUVE(viewportRect)) {
-        return;
-    }
 
-    constexpr int kHalfLineCountUVE = 18;
-    constexpr float kGridSpacingUVE = 1.0F;
-    const float span = static_cast<float>(kHalfLineCountUVE) * kGridSpacingUVE;
-    const Math::Vector3UVE center{m_viewportFocusPoint.x, 0.0F, m_viewportFocusPoint.z};
-    ImDrawList* const drawList = ImGui::GetForegroundDrawList();
-    const ImVec2 viewportMinimum{viewportRect.origin.x, viewportRect.origin.y};
-    const ImVec2 viewportMaximum{viewportRect.origin.x + viewportRect.size.x,
-                                 viewportRect.origin.y + viewportRect.size.y};
-    // Viewport-local tools now live in a separate canvas above this input surface. The full
-    // viewport rect is therefore available for the editor-only environment and grid feedback.
-    const ImVec2 environmentMinimum = viewportMinimum;
-    drawList->PushClipRect(environmentMinimum, viewportMaximum, true);
-    if (GetDocumentRootsUVE().empty()) {
-        // Editor-only environment presentation. It is deliberately not a sun/light entity, mesh,
-        // floor, render target, or serialized scene object; the real renderer remains responsible
-        // for authored lighting and shadows when a scene contains eligible geometry and lights.
-        const float pitchFraction = std::clamp(m_viewportPitchRadians / std::numbers::pi_v<float>, -0.5F, 0.5F);
-        const float horizonFraction = std::clamp(0.58F + pitchFraction * 0.18F, 0.42F, 0.76F);
-        const float environmentHeight = std::max(1.0F, viewportRect.size.y);
-        const float skyMidY = environmentMinimum.y + environmentHeight * (horizonFraction * 0.58F);
-        const float horizonY = environmentMinimum.y + environmentHeight * horizonFraction;
-        const float lowerFadeY = horizonY + viewportRect.size.y * 0.24F;
-        const ImVec2 skyMidMinimum{viewportMinimum.x, skyMidY};
-        const ImVec2 skyMidMaximum{viewportMaximum.x, horizonY};
-        const ImVec2 horizonMaximum{viewportMaximum.x, lowerFadeY};
-        const ImVec2 lowerMaximum{viewportMaximum.x, viewportMaximum.y};
-        drawList->AddRectFilledMultiColor(viewportMinimum, skyMidMinimum, IM_COL32(61, 70, 82, 255),
-                                          IM_COL32(79, 91, 105, 255), IM_COL32(126, 143, 153, 255),
-                                          IM_COL32(101, 119, 134, 255));
-        drawList->AddRectFilledMultiColor(skyMidMinimum, skyMidMaximum, IM_COL32(126, 143, 153, 255),
-                                          IM_COL32(162, 174, 177, 255), IM_COL32(216, 190, 155, 255),
-                                          IM_COL32(188, 181, 167, 255));
-        drawList->AddRectFilledMultiColor(skyMidMaximum, horizonMaximum, IM_COL32(216, 190, 155, 255),
-                                          IM_COL32(187, 151, 116, 255), IM_COL32(121, 82, 61, 255),
-                                          IM_COL32(145, 101, 73, 255));
-        drawList->AddRectFilledMultiColor(horizonMaximum, lowerMaximum, IM_COL32(121, 82, 61, 255),
-                                          IM_COL32(84, 61, 50, 255), IM_COL32(31, 32, 34, 255),
-                                          IM_COL32(45, 40, 38, 255));
-        drawList->AddRectFilled(ImVec2{viewportMinimum.x, horizonY - 3.0F},
-                                ImVec2{viewportMaximum.x, horizonY + 3.0F}, IM_COL32(235, 201, 153, 42));
-
-        // A restrained editor-only sun cue makes the sky read as lit without ever pretending that
-        // the empty document has a cast-shadow source.
-        const float sunX = environmentMinimum.x + viewportRect.size.x *
-                           std::clamp(0.72F - std::sin(m_viewportYawRadians) * 0.10F, 0.18F, 0.86F);
-        const float sunY = environmentMinimum.y + environmentHeight *
-                           std::clamp(0.19F + pitchFraction * 0.12F, 0.08F, 0.34F);
-        const ImVec2 sunCenter{sunX, sunY};
-        drawList->AddCircleFilled(sunCenter, 34.0F, IM_COL32(255, 210, 142, 18), 32);
-        drawList->AddCircleFilled(sunCenter, 24.0F, IM_COL32(255, 221, 161, 35), 32);
-        drawList->AddCircleFilled(sunCenter, 12.0F, IM_COL32(255, 235, 190, 210), 24);
-    }
-    for (int lineIndex = -kHalfLineCountUVE; lineIndex <= kHalfLineCountUVE; ++lineIndex) {
-        const float offset = static_cast<float>(lineIndex) * kGridSpacingUVE;
-        Math::Vector2UVE first{};
-        Math::Vector2UVE second{};
-        if (ProjectWorldPointUVE(viewportRect, center + Math::Vector3UVE{offset, 0.0F, -span}, first) &&
-            ProjectWorldPointUVE(viewportRect, center + Math::Vector3UVE{offset, 0.0F, span}, second)) {
-            const ImU32 color = lineIndex == 0 ? IM_COL32(83, 135, 184, 205) : IM_COL32(133, 139, 139, 112);
-            drawList->AddLine(ImVec2{first.x, first.y}, ImVec2{second.x, second.y}, color,
-                              lineIndex == 0 ? 1.6F : 1.0F);
-        }
-        if (ProjectWorldPointUVE(viewportRect, center + Math::Vector3UVE{-span, 0.0F, offset}, first) &&
-            ProjectWorldPointUVE(viewportRect, center + Math::Vector3UVE{span, 0.0F, offset}, second)) {
-            const ImU32 color = lineIndex == 0 ? IM_COL32(206, 104, 104, 210) : IM_COL32(133, 139, 139, 112);
-            drawList->AddLine(ImVec2{first.x, first.y}, ImVec2{second.x, second.y}, color,
-                              lineIndex == 0 ? 1.6F : 1.0F);
-        }
-    }
-    drawList->PopClipRect();
-}
 
 void EditorUVE::DrawSelectionBoundsUVE(const EditorViewportRectUVE& viewportRect) {
     if (!IsViewportRectValidUVE(viewportRect)) {
@@ -6884,8 +6809,9 @@ void EditorUVE::DrawViewportPanelUVE() {
     ImGui::SetNextWindowPos(desiredPosition, ImGuiCond_Always);
     ImGui::SetNextWindowSize(desiredSize, ImGuiCond_Always);
     ImGui::SetNextWindowBgAlpha(0.0F);
-    constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBringToFrontOnFocus |
-                                       ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_NoScrollbar |
+    constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoCollapse |
+                                       ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus |
+                                       ImGuiWindowFlags_NoScrollbar |
                                        ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoTitleBar;
     ImGui::Begin("Scene##viewport", nullptr, flags);
 
@@ -6969,6 +6895,26 @@ void EditorUVE::DrawViewportPanelUVE() {
         visualState.viewportMinY = std::clamp(1.0F - (contentOrigin.y + contentSize.y - mainViewport->Pos.y) / viewportHeight, 0.0F, 1.0F);
         visualState.viewportMaxY = std::clamp(1.0F - (contentOrigin.y - mainViewport->Pos.y) / viewportHeight, 0.0F, 1.0F);
         visualState.activeGizmoAxis = static_cast<std::int32_t>(m_gizmoDrag.axis);
+        const Math::QuaternionUVE viewportOrientation =
+            MakeViewportOrientationUVE(m_viewportYawRadians, m_viewportPitchRadians);
+        visualState.cameraForward = MakeViewportForwardUVE(m_viewportYawRadians, m_viewportPitchRadians);
+        visualState.cameraRight = Math::RotateVectorUVE(viewportOrientation, Math::Vector3UVE{1.0F, 0.0F, 0.0F});
+        visualState.cameraUp = Math::RotateVectorUVE(viewportOrientation, Math::Vector3UVE{0.0F, 1.0F, 0.0F});
+        visualState.cameraPosition = m_viewportFocusPoint - (visualState.cameraForward * m_viewportDistance);
+        visualState.gridOrigin = m_viewportFocusPoint;
+        const float gridScaleDistance = std::max(m_viewportDistance * 0.25F, 0.25F);
+        visualState.gridSpacing = std::pow(10.0F, std::floor(std::log10(gridScaleDistance)));
+        visualState.cameraTanHalfFov = std::tan(30.0F * std::numbers::pi_v<float> / 180.0F);
+        if (m_services->GetEntityManagerUVE().IsAliveUVE(m_viewportCamera) &&
+            m_services->GetEntityManagerUVE().HasComponentUVE<Scene::CameraComponentUVE>(m_viewportCamera)) {
+            const Scene::CameraComponentUVE& viewportCamera =
+                m_services->GetEntityManagerUVE().GetComponentUVE<Scene::CameraComponentUVE>(m_viewportCamera);
+            const float authoredTanHalfFov =
+                std::tan((viewportCamera.fieldOfViewDegrees * std::numbers::pi_v<float>) / 360.0F);
+            if (IsFiniteUVE(authoredTanHalfFov) && authoredTanHalfFov > 0.0001F) {
+                visualState.cameraTanHalfFov = authoredTanHalfFov;
+            }
+        }
         if (m_selectedEntity != Scene::kInvalidEntityUVE) {
             const std::optional<EditorSelectionBoundsUVE> bounds = TryGetEntityBoundsUVE(m_selectedEntity);
             if (bounds.has_value()) {
@@ -6995,7 +6941,6 @@ void EditorUVE::DrawViewportPanelUVE() {
             }
         }
         m_services->GetRenderer3DUVE().SetEditorViewportVisualStateUVE(visualState);
-        DrawViewportGridUVE(viewportRect);
         DrawSelectionBoundsUVE(viewportRect);
         if (IsAuthoringCommandAllowedUVE()) {
             DrawUnifiedTransformGizmoUVE(viewportRect);

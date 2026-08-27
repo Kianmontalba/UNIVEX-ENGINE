@@ -435,7 +435,8 @@ void main() {
 )GLSLSRC";
 
 
-const std::string_view kEditorViewportVisualsSource = R"GLSLSRC(#version 330 core
+
+const std::string_view kEditorViewportEnvironmentSource = R"GLSLSRC(#version 330 core
 
 #ifdef VERTEX_SHADER
 out vec2 vTexCoord;
@@ -451,86 +452,72 @@ void main() {
 in vec2 vTexCoord;
 out vec4 FragColor;
 
+uniform vec3 uCameraPosition;
+uniform vec3 uCameraForward;
+uniform vec3 uCameraRight;
+uniform vec3 uCameraUp;
 uniform vec3 uViewportMin;
 uniform vec3 uViewportMax;
-uniform vec3 uSelectionMin;
-uniform vec3 uSelectionMax;
-uniform vec3 uCameraForward;
-uniform int uSelectionVisible;
-uniform int uActiveGizmoAxis;
+uniform vec3 uSurfaceSize;
+uniform vec3 uGridOrigin;
+uniform float uCameraTanHalfFov;
+uniform float uViewportAspect;
+uniform float uGridSpacing;
 
-float RectMaskUVE(vec2 point, vec2 minimum, vec2 maximum) {
-    vec2 inside = step(minimum, point) * step(point, maximum);
-    return inside.x * inside.y;
-}
-
-float RectOutlineUVE(vec2 point, vec2 minimum, vec2 maximum, float width) {
-    float outer = RectMaskUVE(point, minimum - vec2(width), maximum + vec2(width));
-    float inner = RectMaskUVE(point, minimum + vec2(width), maximum - vec2(width));
-    return max(outer - inner, 0.0);
-}
-
-float SegmentUVE(vec2 point, vec2 start, vec2 end, float radius) {
-    vec2 direction = end - start;
-    float parameter = clamp(dot(point - start, direction) / max(dot(direction, direction), 0.000001), 0.0, 1.0);
-    return 1.0 - smoothstep(radius, radius * 1.8, length(point - (start + direction * parameter)));
+float GridLineUVE(vec2 coordinate, float spacing, float width) {
+    vec2 cell = abs(fract(coordinate / spacing - 0.5) - 0.5) / max(fwidth(coordinate / spacing), vec2(0.0001));
+    float line = 1.0 - min(cell.x, cell.y);
+    return 1.0 - smoothstep(width, width + 1.0, line);
 }
 
 void main() {
-    vec2 viewportMin = uViewportMin.xy;
-    vec2 viewportMax = uViewportMax.xy;
-    float inViewport = RectMaskUVE(vTexCoord, viewportMin, viewportMax);
-    if (inViewport < 0.5) {
-        discard;
+    vec2 surfaceUv = gl_FragCoord.xy / max(uSurfaceSize.xy, vec2(1.0));
+    vec2 viewportExtent = max(uViewportMax.xy - uViewportMin.xy, vec2(0.001));
+    vec2 viewportUv = clamp((surfaceUv - uViewportMin.xy) / viewportExtent, vec2(0.0), vec2(1.0));
+    vec2 ndc = vec2(viewportUv.x * 2.0 - 1.0, 1.0 - viewportUv.y * 2.0);
+    float tanHalfFov = max(uCameraTanHalfFov, 0.57735026);
+    float forwardLength = length(uCameraForward);
+    vec3 forward = forwardLength > 0.0001 ? uCameraForward / forwardLength : vec3(0.0, 0.0, -1.0);
+    float rightLength = length(uCameraRight);
+    vec3 right = rightLength > 0.0001 ? uCameraRight / rightLength : vec3(1.0, 0.0, 0.0);
+    float upLength = length(uCameraUp);
+    vec3 up = upLength > 0.0001 ? uCameraUp / upLength : vec3(0.0, 1.0, 0.0);
+    vec3 rayDirection = normalize(forward + right * (ndc.x * uViewportAspect * tanHalfFov) +
+                                  up * (ndc.y * tanHalfFov));
+
+    const vec3 skyColor = vec3(0.246, 0.282, 0.322);       // #3F4852
+    const vec3 groundColor = vec3(0.145, 0.165, 0.184);    // #252A2F
+    const vec3 horizonColor = vec3(0.282, 0.322, 0.361);   // #48525C
+    const vec3 gridColor = vec3(0.349, 0.388, 0.427);      // #59636D
+
+    float skyHeight = clamp(rayDirection.y, -1.0, 1.0);
+    float horizonBlend = smoothstep(-0.16, 0.18, skyHeight);
+    vec3 color = mix(groundColor, horizonColor, smoothstep(0.0, 0.35, skyHeight));
+    color = mix(color, skyColor, smoothstep(0.18, 0.72, skyHeight));
+
+    float groundDenominator = rayDirection.y;
+    if (groundDenominator < -0.0001) {
+        float groundDistance = -uCameraPosition.y / groundDenominator;
+        if (groundDistance > 0.0 && groundDistance < 1000000.0) {
+            vec3 groundHit = uCameraPosition + rayDirection * groundDistance;
+            vec2 relative = groundHit.xz - uGridOrigin.xz;
+            float spacing = max(uGridSpacing, 0.01);
+            float fineGrid = GridLineUVE(relative, spacing * 0.1, 0.72);
+            float majorGrid = GridLineUVE(relative, spacing, 0.80);
+            float distanceFade = 1.0 - smoothstep(spacing * 12.0, spacing * 180.0, groundDistance);
+            float groundHorizon = 1.0 - smoothstep(spacing * 12.0, spacing * 90.0, groundDistance);
+            color = mix(groundColor, horizonColor, groundHorizon * 0.70);
+            color += gridColor * (fineGrid * 0.20 + majorGrid * 0.42) * distanceFade;
+            float axisX = 1.0 - smoothstep(0.018, 0.030, abs(relative.y));
+            float axisZ = 1.0 - smoothstep(0.018, 0.030, abs(relative.x));
+            color += vec3(0.80, 0.28, 0.26) * axisX * majorGrid * distanceFade;
+            color += vec3(0.24, 0.55, 0.92) * axisZ * majorGrid * distanceFade;
+        }
     }
 
-    vec2 local = (vTexCoord - viewportMin) / max(viewportMax - viewportMin, vec2(0.0001));
-    float verticalGradient = smoothstep(0.0, 1.0, local.y);
-    vec3 backgroundTop = vec3(0.060, 0.082, 0.108);
-    vec3 backgroundBottom = vec3(0.028, 0.043, 0.060);
-    vec3 color = mix(backgroundBottom, backgroundTop, verticalGradient);
-    float alpha = 0.30;
-
-    vec2 grid = abs(fract((local - 0.5) * 24.0) - 0.5);
-    float fineLine = 1.0 - smoothstep(0.47, 0.50, max(grid.x, grid.y));
-    vec2 majorGrid = abs(fract((local - 0.5) * 4.0) - 0.5);
-    float majorLine = 1.0 - smoothstep(0.455, 0.50, max(majorGrid.x, majorGrid.y));
-    float axisX = 1.0 - smoothstep(0.004, 0.010, abs(local.y - 0.5));
-    float axisZ = 1.0 - smoothstep(0.004, 0.010, abs(local.x - 0.5));
-    color += vec3(0.16, 0.27, 0.37) * fineLine;
-    color += vec3(0.25, 0.43, 0.57) * majorLine;
-    color += vec3(0.10, 0.62, 0.91) * axisX;
-    color += vec3(0.95, 0.48, 0.12) * axisZ;
-    alpha = max(alpha, 0.22 * fineLine + 0.28 * majorLine + 0.42 * max(axisX, axisZ));
-
-    if (uSelectionVisible != 0) {
-        float outline = RectOutlineUVE(vTexCoord, uSelectionMin.xy, uSelectionMax.xy, 0.0025);
-        color = mix(color, vec3(1.0, 0.82, 0.16), outline);
-        alpha = max(alpha, outline * 0.90);
-    }
-
-    vec2 widgetCenter = vec2(0.90, 0.88);
-    float widget = 1.0 - smoothstep(0.095, 0.105, length(local - widgetCenter));
-    if (widget > 0.0) {
-        vec2 direction = normalize(vec2(uCameraForward.x, -uCameraForward.y) + vec2(0.0001));
-        vec2 xEnd = widgetCenter + vec2(0.055, 0.0);
-        vec2 yEnd = widgetCenter + vec2(0.0, 0.055);
-        vec2 zEnd = widgetCenter - direction * 0.050;
-        float xAxis = SegmentUVE(local, widgetCenter, xEnd, 0.006);
-        float yAxis = SegmentUVE(local, widgetCenter, yEnd, 0.006);
-        float zAxis = SegmentUVE(local, widgetCenter, zEnd, 0.006);
-        color += vec3(0.92, 0.22, 0.24) * xAxis + vec3(0.25, 0.78, 0.38) * yAxis + vec3(0.15, 0.52, 0.95) * zAxis;
-        alpha = max(alpha, max(xAxis, max(yAxis, zAxis)) * 0.94 + widget * 0.10);
-    }
-
-    vec3 gizmoColor = uActiveGizmoAxis == 1 ? vec3(0.92, 0.22, 0.24) :
-                      uActiveGizmoAxis == 2 ? vec3(0.25, 0.78, 0.38) :
-                      uActiveGizmoAxis == 3 ? vec3(0.15, 0.52, 0.95) : vec3(0.58, 0.68, 0.76);
-    float gizmoMarker = RectMaskUVE(local, vec2(0.025, 0.88), vec2(0.070, 0.925));
-    color = mix(color, gizmoColor, gizmoMarker);
-    alpha = max(alpha, gizmoMarker * 0.88);
-
-    FragColor = vec4(color, clamp(alpha, 0.0, 0.94));
+    // Keep the transition continuous at grazing angles instead of producing a hard horizon strip.
+    color = mix(color, horizonColor, (1.0 - horizonBlend) * 0.08);
+    FragColor = vec4(color, 1.0);
 }
 #endif
 )GLSLSRC";

@@ -311,8 +311,8 @@ INSTANTIATE_TEST_SUITE_P(
                                                                       BuiltIn::kShadowDepthSource},
                        std::pair<std::string_view, std::string_view>{"lit_shadowed_3d.glsl",
                                                                       BuiltIn::kLitShadowed3DSource},
-                       std::pair<std::string_view, std::string_view>{"editor_viewport_visuals.glsl",
-                                                                      BuiltIn::kEditorViewportVisualsSource},
+                       std::pair<std::string_view, std::string_view>{"editor_viewport_environment.glsl",
+                                                                      BuiltIn::kEditorViewportEnvironmentSource},
                        std::pair<std::string_view, std::string_view>{"particle.glsl", BuiltIn::kParticleSource}));
 
 } // namespace

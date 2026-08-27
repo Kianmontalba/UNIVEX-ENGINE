@@ -719,9 +719,6 @@ private:
     void UpdateGizmoDragUVE(Math::Vector2UVE pointerPosition);
     void CommitGizmoDragUVE();
     void CancelGizmoDragUVE() noexcept;
-    /// Draws editor-only projected XZ grid feedback. It is never an ECS entity, pick target,
-    /// serialized component, dirty-state mutation, or history entry.
-    void DrawViewportGridUVE(const EditorViewportRectUVE& viewportRect);
     void DrawSelectionBoundsUVE(const EditorViewportRectUVE& viewportRect);
     /// Draws all transform handle families around one selection while preserving the existing
     /// mode-specific drag/commit semantics and editor-only ownership.

@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>UniVex Rotate Gizmo</title>
+<style>:root{--bg:#17181b;--text:#cfd0d4;--dim:#8a8b91;--x:#ff5d5d;--y:#4ade80;--z:#3b9cff;--active:#ffd933}*{box-sizing:border-box}html,body,main{margin:0;width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font:12px monospace}main{position:relative}canvas{width:100%;height:100%;display:block}header{position:absolute;top:12px;left:16px;color:var(--dim);pointer-events:none}header b{color:var(--text)}</style>
+</head><body><main><canvas id="gizmo"></canvas><header>GIZMO <b>ROTATE</b> · <span>E</span></header></main>
+<script>
+const c=document.getElementById('gizmo'),x=c.getContext('2d'),d=Math.min(devicePixelRatio||1,2);let hot=null;
+function resize(){c.width=c.clientWidth*d;c.height=c.clientHeight*d;draw()}addEventListener('resize',resize);
+function ring(cx,cy,rx,ry,angle,col,key){x.save();x.translate(cx,cy);x.rotate(angle);x.beginPath();x.ellipse(0,0,rx,ry,0,0,Math.PI*2);x.strokeStyle='rgba(10,10,12,.62)';x.lineWidth=(hot===key?10:7)*d;x.stroke();x.beginPath();x.ellipse(0,0,rx,ry,0,0,Math.PI*2);x.strokeStyle=hot===key?'#ffd933':col;x.lineWidth=(hot===key?6:4.4)*d;x.stroke();x.restore()}
+function draw(){const w=c.width,h=c.height,cx=w*.5,cy=h*.55,r=Math.min(w,h)*.24;x.clearRect(0,0,w,h);x.fillStyle='#17181b';x.fillRect(0,0,w,h);ring(cx,cy,r,r*.58,0,'#ff5d5d','X');ring(cx,cy,r*.58,r,Math.PI/2,'#4ade80','Y');ring(cx,cy,r*.82,r*.82,.6,'#3b9cff','Z');x.beginPath();x.arc(cx,cy,r*1.24,0,Math.PI*2);x.strokeStyle=hot==='ScreenRotate'?'#ffd933':'rgba(220,225,235,.7)';x.lineWidth=(hot==='ScreenRotate'?5:3)*d;x.stroke();x.beginPath();x.arc(cx,cy,5*d,0,Math.PI*2);x.fillStyle='#ededed';x.fill()}
+c.addEventListener('mousemove',e=>{const r=c.getBoundingClientRect(),mx=(e.clientX-r.left)*d,my=(e.clientY-r.top)*d,cx=c.width*.5,cy=c.height*.55,dist=Math.hypot(mx-cx,my-cy),base=Math.min(c.width,c.height)*.24;hot=Math.abs(dist-base)<12*d?'X':Math.abs(dist-base*.58)<12*d?'Y':Math.abs(dist-base*.82)<12*d?'Z':Math.abs(dist-base*1.24)<12*d?'ScreenRotate':null;draw()});resize();
+</script></body></html>

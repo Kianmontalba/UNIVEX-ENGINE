@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>UniVex Scale Gizmo</title>
+<style>:root{--bg:#17181b;--text:#cfd0d4;--dim:#8a8b91;--x:#ff5d5d;--y:#4ade80;--z:#3b9cff;--active:#ffd933}*{box-sizing:border-box}html,body,main{margin:0;width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font:12px monospace}main{position:relative}canvas{width:100%;height:100%;display:block}header{position:absolute;top:12px;left:16px;color:var(--dim);pointer-events:none}header b{color:var(--text)}</style>
+</head><body><main><canvas id="gizmo"></canvas><header>GIZMO <b>SCALE</b> · <span>R</span></header></main>
+<script>
+const c=document.getElementById('gizmo'),x=c.getContext('2d'),d=Math.min(devicePixelRatio||1,2);let hot=null;
+function resize(){c.width=c.clientWidth*d;c.height=c.clientHeight*d;draw()}addEventListener('resize',resize);
+function handle(cx,cy,dx,dy,col,key){const l=Math.hypot(dx,dy),ux=dx/l,uy=dy/l,end={x:cx+dx,y:cy+dy},h=hot===key;x.lineCap='round';x.strokeStyle='rgba(10,10,12,.65)';x.lineWidth=(h?12:10)*d;x.beginPath();x.moveTo(cx,cy);x.lineTo(end.x,end.y);x.stroke();x.strokeStyle=h?'#ffd933':col;x.lineWidth=(h?8:6)*d;x.beginPath();x.moveTo(cx,cy);x.lineTo(end.x,end.y);x.stroke();const s=(h?18:15)*d;x.fillStyle=h?'#ffd933':col;x.fillRect(end.x-s/2,end.y-s/2,s,s);x.strokeStyle='rgba(10,10,12,.7)';x.lineWidth=2*d;x.strokeRect(end.x-s/2,end.y-s/2,s,s)}
+function draw(){const w=c.width,h=c.height,cx=w*.5,cy=h*.55,s=Math.min(w,h)*.22;x.clearRect(0,0,w,h);x.fillStyle='#17181b';x.fillRect(0,0,w,h);handle(cx,cy,-s*.9,s*.58,'#3b9cff','Z');handle(cx,cy,s,s*.34,'#ff5d5d','X');handle(cx,cy,0,-s,'#4ade80','Y');const r=(hot==='XYZ'?13:11)*d;q=r/2;x.fillStyle=hot==='XYZ'?'#ffd933':'#ededed';x.fillRect(cx-q,cy-q,r*2,r*2);x.strokeStyle='rgba(10,10,12,.7)';x.lineWidth=2*d;x.strokeRect(cx-q,cy-q,r*2,r*2)}
+c.addEventListener('mousemove',e=>{const r=c.getBoundingClientRect(),mx=(e.clientX-r.left)*d,my=(e.clientY-r.top)*d,cx=c.width*.5,cy=c.height*.55,s=Math.min(c.width,c.height)*.22;hot=Math.hypot(mx-cx,my-cy)<18*d?'XYZ':null;for(const [key,dx,dy] of [['X',1,.34],['Y',0,-1],['Z',-.9,.58]])if(Math.hypot(mx-(cx+dx*s),my-(cy+dy*s))<20*d)hot=key;draw()});resize();
+</script></body></html>
