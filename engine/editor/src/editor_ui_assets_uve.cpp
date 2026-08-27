@@ -15,9 +15,12 @@ constexpr int kLogoWidthUVE = 24;
 constexpr int kLogoHeightUVE = 24;
 constexpr int kFolderWidthUVE = 18;
 constexpr int kFolderHeightUVE = 16;
+constexpr int kGizmoIconWidthUVE = 24;
+constexpr int kGizmoIconHeightUVE = 24;
 
 #include "univex_logo_uve_display_bytes.inc"
 #include "uve_folder_icon_display_bytes.inc"
+#include "uve_gizmo_icon_display_bytes.inc"
 
 [[nodiscard]] std::uintptr_t UploadTextureUVE(const std::uint8_t* const pixels, const int width,
                                               const int height) noexcept {
@@ -73,10 +76,21 @@ bool EditorUiAssetsUVE::InitializeUVE() noexcept {
 
     m_logoTextureId = UploadTextureUVE(univex_logo_uve_display_rgba.data(), kLogoWidthUVE, kLogoHeightUVE);
     m_folderTextureId = UploadTextureUVE(uve_folder_icon_display_rgba.data(), kFolderWidthUVE, kFolderHeightUVE);
+    m_moveGizmoTextureId = UploadTextureUVE(uve_gizmo_move_rgba.data(), kGizmoIconWidthUVE, kGizmoIconHeightUVE);
+    m_rotateGizmoTextureId = UploadTextureUVE(uve_gizmo_rotate_rgba.data(), kGizmoIconWidthUVE, kGizmoIconHeightUVE);
+    m_scaleGizmoTextureId = UploadTextureUVE(uve_gizmo_scale_rgba.data(), kGizmoIconWidthUVE, kGizmoIconHeightUVE);
+    m_universalGizmoTextureId = UploadTextureUVE(uve_gizmo_universal_rgba.data(), kGizmoIconWidthUVE, kGizmoIconHeightUVE);
+    m_viewNavigationTextureId = UploadTextureUVE(uve_gizmo_viewport_nav_gizmo_rgba.data(), kGizmoIconWidthUVE, kGizmoIconHeightUVE);
     if (!IsReadyUVE()) {
-        DeleteTextureUVE(m_logoTextureId);
-        DeleteTextureUVE(m_folderTextureId);
-        return false;
+            DeleteTextureUVE(m_logoTextureId);
+    DeleteTextureUVE(m_folderTextureId);
+    DeleteTextureUVE(m_moveGizmoTextureId);
+    DeleteTextureUVE(m_rotateGizmoTextureId);
+    DeleteTextureUVE(m_scaleGizmoTextureId);
+    DeleteTextureUVE(m_universalGizmoTextureId);
+    DeleteTextureUVE(m_viewNavigationTextureId);
+    return false;
+
     }
     return true;
 }
@@ -84,6 +98,11 @@ bool EditorUiAssetsUVE::InitializeUVE() noexcept {
 void EditorUiAssetsUVE::ShutdownUVE() noexcept {
     DeleteTextureUVE(m_logoTextureId);
     DeleteTextureUVE(m_folderTextureId);
+    DeleteTextureUVE(m_moveGizmoTextureId);
+    DeleteTextureUVE(m_rotateGizmoTextureId);
+    DeleteTextureUVE(m_scaleGizmoTextureId);
+    DeleteTextureUVE(m_universalGizmoTextureId);
+    DeleteTextureUVE(m_viewNavigationTextureId);
 }
 
 bool EditorUiAssetsUVE::IsReadyUVE() const noexcept {
@@ -96,6 +115,22 @@ std::uintptr_t EditorUiAssetsUVE::GetLogoTextureIdUVE() const noexcept {
 
 std::uintptr_t EditorUiAssetsUVE::GetFolderTextureIdUVE() const noexcept {
     return m_folderTextureId;
+}
+
+std::uintptr_t EditorUiAssetsUVE::GetGizmoTextureIdUVE(const EditorGizmoIconUVE icon) const noexcept {
+    switch (icon) {
+        case EditorGizmoIconUVE::Move:
+            return m_moveGizmoTextureId;
+        case EditorGizmoIconUVE::Rotate:
+            return m_rotateGizmoTextureId;
+        case EditorGizmoIconUVE::Scale:
+            return m_scaleGizmoTextureId;
+        case EditorGizmoIconUVE::Universal:
+            return m_universalGizmoTextureId;
+        case EditorGizmoIconUVE::ViewNavigation:
+            return m_viewNavigationTextureId;
+    }
+    return 0U;
 }
 
 } // namespace UVE::Editor

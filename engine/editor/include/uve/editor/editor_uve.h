@@ -104,6 +104,7 @@ enum class EditorGizmoModeUVE {
     Translate,
     Rotate,
     Scale,
+    Universal,
 };
 
 /// Selects whether transform handles use canonical world axes or the selected entity's derived
@@ -466,6 +467,7 @@ private:
         Axis,
         Plane,
         UniformScaleOffset,
+        ScreenPlaneMove,
         Trackball,
     };
 
@@ -694,10 +696,17 @@ private:
                                                             const Math::Vector3UVE& worldAxis, float radians,
                                                             Math::QuaternionUVE& outLocalRotation) const;
     [[nodiscard]] bool ApplyViewportCameraUVE();
+    [[nodiscard]] bool ApplyViewportPresetUVE(float yawRadians, float pitchRadians) noexcept;
+    void UpdateViewportPresetAnimationUVE();
+    [[nodiscard]] bool HandleViewportNavigationGizmoClickUVE(const EditorViewportRectUVE& viewportRect,
+                                                              Math::Vector2UVE pointerPosition);
     [[nodiscard]] bool IsViewportNavigationFiniteUVE() const noexcept;
     void CancelViewportNavigationUVE() noexcept;
     [[nodiscard]] bool BeginGizmoDragUVE(const EditorViewportRectUVE& viewportRect,
                                           Math::Vector2UVE pointerPosition);
+    [[nodiscard]] bool BeginGizmoDragForModeUVE(const EditorViewportRectUVE& viewportRect,
+                                                 Math::Vector2UVE pointerPosition,
+                                                 EditorGizmoModeUVE mode);
     [[nodiscard]] bool BeginRotateGizmoDragUVE(const EditorViewportRectUVE& viewportRect,
                                                 Math::Vector2UVE pointerPosition);
     [[nodiscard]] bool MapTrackballPointerUVE(Math::Vector2UVE center, float radius,
@@ -838,6 +847,9 @@ private:
     float m_viewportYawRadians = 0.0F;
     float m_viewportPitchRadians = 0.0F;
     float m_viewportDistance = 6.0F;
+    float m_viewportPresetTargetYawRadians = 0.0F;
+    float m_viewportPresetTargetPitchRadians = 0.0F;
+    bool m_viewportPresetAnimating = false;
     EditorViewportNavigationModeUVE m_viewportNavigationMode = EditorViewportNavigationModeUVE::None;
     Editor2DCanvasStateUVE m_2dCanvasState{};
     Math::Vector2UVE m_2dCanvasPanStartPointer{};

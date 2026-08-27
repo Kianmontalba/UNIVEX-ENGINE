@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- UNIVEX Viewport Navigation Gizmo (corner axis compass) -->
+  <defs>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="1" stdDeviation="1.2" flood-color="#000" flood-opacity="0.45"/>
+    </filter>
+  </defs>
+  <circle cx="32" cy="32" r="30" fill="#1c1d21" stroke="#34353c" stroke-width="1.5"/>
+
+  <g filter="url(#soft)" font-family="monospace" font-size="8" font-weight="bold" text-anchor="middle">
+    <!-- Y+ (top) -->
+    <line x1="32" y1="30" x2="32" y2="12" stroke="#4ade80" stroke-width="2.4" stroke-linecap="round"/>
+    <polygon points="32,7 28,14 36,14" fill="#4ade80"/>
+    <text x="32" y="19" fill="#0c0d0f">Y+</text>
+
+    <!-- Y- (bottom) -->
+    <line x1="32" y1="34" x2="32" y2="52" stroke="#4ade80" stroke-width="2.4" stroke-linecap="round" opacity="0.55"/>
+    <circle cx="32" cy="55" r="5.4" fill="none" stroke="#4ade80" stroke-width="2"/>
+    <text x="32" y="57.5" fill="#4ade80" font-size="6.5">Y-</text>
+
+    <!-- X- (left) -->
+    <line x1="30" y1="32" x2="12" y2="32" stroke="#ff5d5d" stroke-width="2.4" stroke-linecap="round"/>
+    <polygon points="7,32 14,28 14,36" fill="#ff5d5d"/>
+    <text x="19" y="29.5" fill="#0c0d0f" font-size="7">X-</text>
+
+    <!-- X+ (right) -->
+    <line x1="34" y1="32" x2="52" y2="32" stroke="#ff5d5d" stroke-width="2.4" stroke-linecap="round"/>
+    <polygon points="57,32 50,28 50,36" fill="#ff5d5d"/>
+    <text x="45.5" y="29.5" fill="#0c0d0f" font-size="7">X+</text>
+
+    <!-- Z+ (diagonal, into view) -->
+    <line x1="34" y1="30" x2="43" y2="21" stroke="#3b9cff" stroke-width="2.2" stroke-linecap="round"/>
+    <polygon points="46,18 40.5,20 43.5,25" fill="#3b9cff"/>
+
+    <!-- Z- (circled, points away from view) -->
+    <circle cx="49" cy="15" r="6" fill="#26272d" stroke="#3b9cff" stroke-width="1.6"/>
+    <text x="49" y="17.5" fill="#3b9cff" font-size="7">Z</text>
+    <line x1="52" y1="20" x2="55" y2="26" stroke="#3b9cff" stroke-width="1.6"/>
+    <line x1="56" y1="24" x2="56" y2="30" stroke="#3b9cff" stroke-width="2"/>
+
+    <!-- center hub -->
+    <rect x="27.5" y="27.5" width="9" height="9" rx="1.5" fill="#e8e9ec" stroke="#8a8b91" stroke-width="1"/>
+  </g>
+</svg>
