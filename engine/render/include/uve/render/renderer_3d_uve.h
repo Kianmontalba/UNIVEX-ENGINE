@@ -27,9 +27,8 @@ namespace UVE::Render {
 /// material GUID -> pipeline) that must persist and be invalidated across frames.
 class Renderer3DUVE final : public IRenderer3DUVE {
 public:
-    /// Constructs the offscreen color+depth render target at `targetWidth` x `targetHeight`
-    /// (fixed for this Renderer3DUVE's lifetime — no WindowManagerUVE exists yet to resize
-    /// against) and subscribes to Asset::AssetReloadedEventUVE for GPU-resource-cache
+    /// Constructs the offscreen color+depth render target at `targetWidth` x `targetHeight` and
+    /// subscribes to Asset::AssetReloadedEventUVE for GPU-resource-cache
     /// invalidation. `ambientColor` is the flat ambient term added to every item's final color
     /// every frame regardless of whether an active light exists (see EngineConfigUVE::ambientColor,
     /// Increment 23). `shaderManager` compiles the built-in shadow-depth program used by the
@@ -57,6 +56,7 @@ public:
     Renderer3DUVE& operator=(const Renderer3DUVE&) = delete;
 
     void RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scene::EntityUVE cameraEntity) override;
+    [[nodiscard]] bool ResizeTargetsUVE(std::uint32_t width, std::uint32_t height) override;
     void RenderFrameWithParticleRuntimeUVE(Scene::IEntityManagerUVE& entityManager, Scene::EntityUVE cameraEntity,
                                            const Scene::ParticleRuntimeUVE& particleRuntime) override;
     void SetEditorViewportVisualStateUVE(const EditorViewportVisualStateUVE& state) override;

@@ -75,14 +75,28 @@
 #include "uve/scene/scene_serializer_uve.h"
 #include "uve/threading/thread_pool_uve.h"
 #include "uve/utilities/timer_uve.h"
+#include "uve/window/adaptive_render_resolution_uve.h"
 #include "uve/window/null_window_manager_uve.h"
 #if defined(__ANDROID__)
+#include "uve/window/android_surface_size_uve.h"
 #include "uve/window/android_window_manager_uve.h"
 #else
 #include "uve/window/window_manager_uve.h"
 #endif
 
 namespace UVE::Core {
+
+namespace {
+
+#if defined(__ANDROID__)
+constexpr Window::AdaptiveRenderResolutionLimitsUVE kAdaptiveRenderResolutionLimitsUVE{
+    Window::kMaximumAndroidSurfaceAxisUVE, Window::kMaximumAndroidRenderTargetPixelsUVE};
+#else
+// Keep large desktop displays sharp up to 4K while bounding worst-case offscreen allocations.
+constexpr Window::AdaptiveRenderResolutionLimitsUVE kAdaptiveRenderResolutionLimitsUVE{8192U, 3840ULL * 2160ULL};
+#endif
+
+} // namespace
 
 EngineCoreUVE::EngineCoreUVE(EngineConfigUVE config) : m_config(std::move(config)) {}
 
@@ -510,6 +524,30 @@ void EngineCoreUVE::SyncParticleRuntimeUVE() {
     }
 }
 
+void EngineCoreUVE::SyncAdaptiveRenderResolutionUVE() {
+    if (!m_windowedRenderingActiveUVE || !m_renderDevice->IsUsableUVE()) {
+        return;
+    }
+
+    const std::uint32_t drawableWidth = m_windowManager->GetWidthUVE();
+    const std::uint32_t drawableHeight = m_windowManager->GetHeightUVE();
+    if (drawableWidth == 0U || drawableHeight == 0U) {
+        return;
+    }
+
+    const Window::AdaptiveRenderResolutionUVE desiredResolution =
+        Window::ComputeAdaptiveRenderResolutionUVE(drawableWidth, drawableHeight,
+                                                    kAdaptiveRenderResolutionLimitsUVE);
+    if (desiredResolution.width == 0U || desiredResolution.height == 0U) {
+        return;
+    }
+    if (!m_renderer3D->ResizeTargetsUVE(desiredResolution.width, desiredResolution.height) &&
+        !m_adaptiveResizeFailureLoggedUVE) {
+        UVE_WARNING("EngineCoreUVE: adaptive render-target resize failed; retaining the previous target");
+        m_adaptiveResizeFailureLoggedUVE = true;
+    }
+}
+
 void EngineCoreUVE::Update() {
     m_windowManager->PollEventsUVE();
     const bool activeSurfaceReady =
@@ -522,6 +560,7 @@ void EngineCoreUVE::Update() {
             m_graphicsBackendLossLoggedUVE = true;
         }
     }
+    SyncAdaptiveRenderResolutionUVE();
     m_gamepadInputSystem->UpdateUVE();
     m_mobileInputSystem->UpdateUVE();
     m_mobileGestureSystem->UpdateUVE(static_cast<float>(m_timer->GetDeltaTimeUVE()));

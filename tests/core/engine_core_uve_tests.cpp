@@ -1334,6 +1334,10 @@ TEST(EngineCoreUVETest, WindowedMode_ReachesRunningAndPresentsEmptyRendererScene
     }
     engine.SetPostRenderCallbackUVE({});
     EXPECT_EQ(engine.GetStateUVE(), EngineStateUVE::Running);
+    const Render::Renderer3DFrameDiagnosticsUVE diagnostics =
+        engine.GetServicesUVE().GetRenderer3DUVE().GetLastFrameDiagnosticsUVE();
+    EXPECT_EQ(diagnostics.renderTargetWidth, 64U);
+    EXPECT_EQ(diagnostics.renderTargetHeight, 64U);
 
     // With no document render items, Renderer3DUVE presents its deterministic charcoal
     // tone-mapped environment. This is intentionally not a demo-geometry assertion: visible

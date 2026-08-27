@@ -82,9 +82,9 @@ namespace UVE::Core {
 /// -> Render -> EndFrame) -> Shutdown. Render() calls Renderer3DUVE::RenderFrameUVE()
 /// (extract -> cull -> sort -> record -> submit) whenever
 /// SetActiveCameraUVE() has set a valid camera entity; with no active camera
-/// set (the default, and every test/sample app predating Increment 14), it
-/// still logs the original no-op trace line, so existing frame-loop
-/// behavior is byte-identical unless a caller opts in. Update() runs zero or
+/// set, headless mode retains the no-op trace behavior while a valid window
+/// receives a real empty-frame clear and present without creating scene content.
+/// Update() runs zero or
 /// more fixed PhysicsSystemUVE steps (via Utilities::FixedStepResultUVE)
 /// before SceneGraphUVE::UpdateUVE() each frame — entirely data-driven off
 /// which entities have a RigidBodyComponentUVE/ColliderComponentUVE, so a
@@ -361,6 +361,10 @@ private:
     /// runtime, simulates one frame under configured gravity, and leaves renderer extraction read-only.
     void SyncParticleRuntimeUVE();
 
+    /// Recomputes the bounded aspect-preserving render target from the live drawable size and
+    /// transactionally resizes Renderer3DUVE before the frame's scene work begins.
+    void SyncAdaptiveRenderResolutionUVE();
+
     /// Queries the bounded area-overlap snapshot, advances the copied lifecycle baseline, and queues
     /// typed Entered/Exited DTOs in the tracker-provided deterministic order. Truncated snapshots
     /// intentionally produce no inferred exits, and this seam does not mutate ECS/physics state.
@@ -378,8 +382,8 @@ private:
     void LateUpdate();
 
     /// Calls Renderer3DUVE::RenderFrameUVE(*m_entityManager, m_activeCamera) when
-    /// m_activeCamera is valid; otherwise logs the original no-op trace line, preserving every
-    /// pre-Increment-14 frame-loop test's behavior unless SetActiveCameraUVE() was called. When a
+    /// m_activeCamera is valid; otherwise logs the no-op trace line and, for a valid window,
+    /// clears the real default framebuffer so an empty scene is visible without fake content. When a
     /// real window/GL device is active (see m_windowedRenderingActiveUVE), invokes the optional
     /// post-render editor callback after the scene tone-mapping pass and then presents exactly once.
     /// If the backend reports unusable, the render path returns before scene/shader/present work.
@@ -398,6 +402,7 @@ private:
     bool m_singleSimulationStepPending = false;
     bool m_transientSimulationSessionActive = false;
     bool m_graphicsBackendLossLoggedUVE = false;
+    bool m_adaptiveResizeFailureLoggedUVE = false;
 
     std::unique_ptr<CommandLine::ICommandLineUVE> m_commandLine;
     std::unique_ptr<Debug::ILoggerUVE> m_logger;
