@@ -194,7 +194,7 @@ bool StartNativeEngine(android_app* const app) {
         return false;
     }
 
-    const AndroidSurfaceSizeUVE surfaceSize = ClampAndroidSurfaceSizeUVE(
+    const UVE::Window::AndroidSurfaceSizeUVE surfaceSize = UVE::Window::ClampAndroidSurfaceSizeUVE(
         ANativeWindow_getWidth(app->window), ANativeWindow_getHeight(app->window));
     if (surfaceSize.width == 0U || surfaceSize.height == 0U) {
         LogError("Android native window has no positive surface size; deferring engine startup.");
@@ -311,6 +311,16 @@ void HandleAppCommand(android_app* const app, const int32_t command) {
 } // namespace
 
 void android_main(android_app* const app) {
+    // Keep the NDK native_app_glue object linked. NativeActivity resolves
+    // ANativeActivity_onCreate from that object before it can call android_main.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    app_dummy();
+#pragma clang diagnostic pop
+    if (app == nullptr) {
+        LogError("NativeActivity delivered a null android_app pointer.");
+        return;
+    }
     app->onAppCmd = &HandleAppCommand;
     app->onInputEvent = &HandleInput;
 
