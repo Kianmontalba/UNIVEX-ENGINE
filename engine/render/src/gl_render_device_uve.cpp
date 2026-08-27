@@ -11,6 +11,7 @@
 #include <GLFW/glfw3.h>
 #else
 #include <EGL/egl.h>
+#include <dlfcn.h>
 #endif
 
 #include "gl_command_buffer_uve.h"
@@ -24,7 +25,14 @@ namespace {
 
 #if defined(__ANDROID__)
 void* EglProcAddressBridgeUVE(const char* name) {
-    return reinterpret_cast<void*>(eglGetProcAddress(name));
+    void* address = reinterpret_cast<void*>(eglGetProcAddress(name));
+    if (address == nullptr) {
+        // Some Android GLES drivers export core entry points from libGLESv3.so but do not
+        // return every core symbol through eglGetProcAddress. Resolve that second legal path
+        // before declaring the backend unusable and falling back to Null.
+        address = dlsym(RTLD_DEFAULT, name);
+    }
+    return address;
 }
 #else
 // Bridges GLFW's proc-address lookup (GLFWglproc, a void(*)(void)) to gl_functions_uve.h's
