@@ -132,7 +132,7 @@ protected:
     std::unique_ptr<GlRenderDeviceUVE> renderDevice;
 };
 
-TEST(GlRenderDeviceUVETest, InvalidWindowManager_ConstructsAsUnusableWithoutAbort) {
+TEST(GlRenderDeviceUnavailableUVETest, InvalidWindowManager_ConstructsAsUnusableWithoutAbort) {
     Window::NullWindowManagerUVE windowManager;
     GlRenderDeviceUVE renderDevice(windowManager);
 
