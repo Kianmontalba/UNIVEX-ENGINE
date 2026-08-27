@@ -2,7 +2,8 @@
 
 #include "uve/editor/editor_uve.h"
 #include "uve/editor/editor_theme_uve.h"
-
+#include "uve/editor/gizmo_system_uve.h"
+#include "uve/editor/viewport_nav_gizmo_uve.h"
 #include <algorithm>
 #include <array>
 #include <cctype>
@@ -79,6 +80,9 @@ constexpr float kMaximumViewportDistanceUVE = 500.0F;
 constexpr float kMaximumViewportPitchRadiansUVE = 1.4835299F; // 85 degrees.
 constexpr float kViewportOrbitRadiansPerPixelUVE = 0.008F;
 constexpr float kViewportZoomExponentPerWheelUnitUVE = 0.16F;
+constexpr float kViewportNavigationRadiusPixelsUVE = 32.0F;
+constexpr float kViewportNavigationHitRadiusPixelsUVE = 16.0F;
+constexpr float kViewportNavigationPlateRadiusPixelsUVE = 47.0F;
 constexpr float kMinimum2DCanvasZoomUVE = 0.10F;
 constexpr float kMaximum2DCanvasZoomUVE = 4.00F;
 constexpr const char* kHierarchyEntityPayloadUVE = "UVE_SCENE_HIERARCHY_ENTITY";
@@ -2955,47 +2959,21 @@ bool EditorUVE::HandleViewportNavigationGizmoClickUVE(const EditorViewportRectUV
 
     const Math::Vector2UVE center{viewportRect.origin.x + viewportRect.size.x - 62.0F,
                                   viewportRect.origin.y + 104.0F};
-    const Math::QuaternionUVE orientation =
-        MakeViewportOrientationUVE(m_viewportYawRadians, m_viewportPitchRadians);
-    const Math::Vector3UVE cameraRight =
-        Math::RotateVectorUVE(orientation, Math::Vector3UVE{1.0F, 0.0F, 0.0F});
-    const Math::Vector3UVE cameraUp =
-        Math::RotateVectorUVE(orientation, Math::Vector3UVE{0.0F, 1.0F, 0.0F});
-    if (!IsFiniteVectorUVE(cameraRight) || !IsFiniteVectorUVE(cameraUp)) {
-        return false;
-    }
-
-    const Math::Vector2UVE centerOffset{pointerPosition.x - center.x, pointerPosition.y - center.y};
+        const Math::Vector2UVE centerOffset{pointerPosition.x - center.x, pointerPosition.y - center.y};
     if (LengthSquared2UVE(centerOffset) <= 11.0F * 11.0F) {
         return ApplyViewportPresetUVE(0.0F, 0.0F);
     }
-
-    struct PresetUVE final {
-        Math::Vector3UVE direction;
-        float yaw;
-        float pitch;
-    };
-    constexpr float halfPi = std::numbers::pi_v<float> * 0.5F;
-    const std::array<PresetUVE, 6> presets{
-        PresetUVE{Math::Vector3UVE{1.0F, 0.0F, 0.0F}, halfPi, 0.0F},
-        PresetUVE{Math::Vector3UVE{-1.0F, 0.0F, 0.0F}, -halfPi, 0.0F},
-        PresetUVE{Math::Vector3UVE{0.0F, 1.0F, 0.0F}, 0.0F, -kMaximumViewportPitchRadiansUVE},
-        PresetUVE{Math::Vector3UVE{0.0F, -1.0F, 0.0F}, 0.0F, kMaximumViewportPitchRadiansUVE},
-        PresetUVE{Math::Vector3UVE{0.0F, 0.0F, 1.0F}, 0.0F, 0.0F},
-        PresetUVE{Math::Vector3UVE{0.0F, 0.0F, -1.0F}, std::numbers::pi_v<float>, 0.0F},
-    };
-    constexpr float kNavigationRadiusPixelsUVE = 34.0F;
-    constexpr float kNavigationHitRadiusPixelsUVE = 13.0F;
-    for (const PresetUVE& preset : presets) {
-        const float screenX = Math::DotUVE(preset.direction, cameraRight) * kNavigationRadiusPixelsUVE;
-        const float screenY = -Math::DotUVE(preset.direction, cameraUp) * kNavigationRadiusPixelsUVE;
-        const Math::Vector2UVE endpoint{center.x + screenX, center.y + screenY};
-        const Math::Vector2UVE offset{pointerPosition.x - endpoint.x, pointerPosition.y - endpoint.y};
-        if (LengthSquared2UVE(offset) <= kNavigationHitRadiusPixelsUVE * kNavigationHitRadiusPixelsUVE) {
-            return ApplyViewportPresetUVE(preset.yaw, preset.pitch);
-        }
+    Gizmo::ViewportNavGizmoUVE navigationGizmo;
+    navigationGizmo.SetAnchorUVE(center);
+    navigationGizmo.UpdateLayoutUVE(m_viewportYawRadians, m_viewportPitchRadians);
+    Gizmo::ViewportNavPresetUVE preset = Gizmo::ViewportNavPresetUVE::Front;
+    if (!navigationGizmo.HandleClickUVE(pointerPosition, preset)) {
+        return false;
     }
-    return false;
+    float presetYaw = 0.0F;
+    float presetPitch = 0.0F;
+    Gizmo::ViewportNavGizmoUVE::PresetAnglesUVE(preset, presetYaw, presetPitch);
+    return ApplyViewportPresetUVE(presetYaw, presetPitch);
 }
 
 bool EditorUVE::ApplyViewportCameraUVE() {
@@ -3039,9 +3017,23 @@ bool EditorUVE::IsFiniteVectorUVE(const Math::Vector3UVE& vector) const noexcept
 
 bool EditorUVE::GetGizmoAxisWorldVectorUVE(const Scene::EntityUVE entity, const EditorTransformAxisUVE axis,
                                             Math::Vector3UVE& outAxis) const {
-    outAxis = GetAxisVectorUVE(axis);
-    if (axis == EditorTransformAxisUVE::None || m_gizmoCoordinateSpace == EditorGizmoCoordinateSpaceUVE::World) {
-        return axis != EditorTransformAxisUVE::None;
+    Gizmo::GizmoAxisUVE packageAxis = Gizmo::GizmoAxisUVE::None;
+    switch (axis) {
+        case EditorTransformAxisUVE::X:
+            packageAxis = Gizmo::GizmoAxisUVE::X;
+            break;
+        case EditorTransformAxisUVE::Y:
+            packageAxis = Gizmo::GizmoAxisUVE::Y;
+            break;
+        case EditorTransformAxisUVE::Z:
+            packageAxis = Gizmo::GizmoAxisUVE::Z;
+            break;
+        case EditorTransformAxisUVE::None:
+            return false;
+    }
+    if (m_gizmoCoordinateSpace == EditorGizmoCoordinateSpaceUVE::World) {
+        outAxis = Gizmo::GizmoSystemUVE::AxisDirectionUVE(packageAxis, Math::QuaternionUVE{}, Gizmo::GizmoSpaceUVE::World);
+        return IsFiniteVectorUVE(outAxis) && Math::LengthSquaredUVE(outAxis) > kVectorEpsilonUVE;
     }
     if (!IsDocumentEntityUVE(entity)) {
         return false;
@@ -3056,7 +3048,7 @@ bool EditorUVE::GetGizmoAxisWorldVectorUVE(const Scene::EntityUVE entity, const 
     if (world.dirty || !Math::TryNormalizeUVE(world.worldRotation, rotation)) {
         return false;
     }
-    outAxis = Math::RotateVectorUVE(rotation, outAxis);
+    outAxis = Gizmo::GizmoSystemUVE::AxisDirectionUVE(packageAxis, rotation, Gizmo::GizmoSpaceUVE::Local);
     return IsFiniteVectorUVE(outAxis) && Math::LengthSquaredUVE(outAxis) > kVectorEpsilonUVE;
 }
 
@@ -4271,9 +4263,17 @@ void EditorUVE::DrawUnifiedTransformGizmoUVE(const EditorViewportRectUVE& viewpo
         }
     }
     const float screenRadius = std::max(20.0F, *std::max_element(projectedAxisLengths.begin(), projectedAxisLengths.end()) * 1.35F);
-    const bool showMove = m_gizmoMode == EditorGizmoModeUVE::Translate || m_gizmoMode == EditorGizmoModeUVE::Universal;
-    const bool showRotate = m_gizmoMode == EditorGizmoModeUVE::Rotate || m_gizmoMode == EditorGizmoModeUVE::Universal;
-    const bool showScale = m_gizmoMode == EditorGizmoModeUVE::Scale || m_gizmoMode == EditorGizmoModeUVE::Universal;
+    const Gizmo::GizmoModeUVE packageMode =
+        m_gizmoMode == EditorGizmoModeUVE::Translate
+            ? Gizmo::GizmoModeUVE::Move
+            : (m_gizmoMode == EditorGizmoModeUVE::Rotate
+                   ? Gizmo::GizmoModeUVE::Rotate
+                   : (m_gizmoMode == EditorGizmoModeUVE::Scale ? Gizmo::GizmoModeUVE::Scale
+                                                                : Gizmo::GizmoModeUVE::Universal));
+    const Gizmo::GizmoLayerVisibilityUVE packageLayers = Gizmo::GizmoSystemUVE::LayersForUVE(packageMode);
+    const bool showMove = packageLayers.move;
+    const bool showRotate = packageLayers.rotate;
+    const bool showScale = packageLayers.scale;
 
     if (showRotate) {
         for (const EditorTransformAxisUVE axis : axes) {
@@ -6846,25 +6846,6 @@ void EditorUVE::DrawViewportToolCanvasUVE() {
                          EditorGizmoIconUVE::Scale, gizmoModeChangeAllowed);
         drawViewportTool("Universal", "Universal / T", EditorGizmoModeUVE::Universal,
                          EditorGizmoIconUVE::Universal, gizmoModeChangeAllowed);
-        const std::uintptr_t spaceTexture = m_uiAssets.GetGizmoTextureIdUVE(EditorGizmoIconUVE::Universal);
-        ImGui::BeginDisabled(!gizmoModeChangeAllowed);
-        bool spaceClicked = false;
-        if (spaceTexture != 0U) {
-            spaceClicked = ImGui::ImageButton("##viewport-coordinate-space", static_cast<ImTextureID>(spaceTexture),
-                                              ImVec2{20.0F, 20.0F});
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("%s axes", m_gizmoCoordinateSpace == EditorGizmoCoordinateSpaceUVE::World ? "World" : "Local");
-            }
-        } else {
-            spaceClicked = ImGui::SmallButton("##viewport-coordinate-space");
-        }
-        ImGui::EndDisabled();
-        if (spaceClicked) {
-            static_cast<void>(SetGizmoCoordinateSpaceUVE(
-                m_gizmoCoordinateSpace == EditorGizmoCoordinateSpaceUVE::World
-                    ? EditorGizmoCoordinateSpaceUVE::Local
-                    : EditorGizmoCoordinateSpaceUVE::World));
-        }
         ImGui::SameLine(0.0F, 4.0F);
         if (ImGui::SmallButton(m_transformSnappingSettings.enabled ? "Snap On" : "Snap")) {
             m_transformSnappingSettings.enabled = !m_transformSnappingSettings.enabled;
@@ -7025,58 +7006,58 @@ void EditorUVE::DrawViewportPanelUVE() {
                               IM_COL32(218, 203, 177, 185), "Editor sky · no scene light");
         }
         const ImVec2 orientationCenter{contentOrigin.x + contentSize.x - 62.0F, contentOrigin.y + 104.0F};
-        const Math::QuaternionUVE viewportOrientation =
-            MakeViewportOrientationUVE(m_viewportYawRadians, m_viewportPitchRadians);
-        const Math::Vector3UVE cameraRight =
-            Math::RotateVectorUVE(viewportOrientation, Math::Vector3UVE{1.0F, 0.0F, 0.0F});
-        const Math::Vector3UVE cameraUp =
-            Math::RotateVectorUVE(viewportOrientation, Math::Vector3UVE{0.0F, 1.0F, 0.0F});
-        const auto drawOrientationArrow = [drawList](const ImVec2 start, const ImVec2 end, const ImU32 color) {
+        const ImVec2 navigationMousePosition = ImGui::GetMousePos();
+        const auto isHovered = [navigationMousePosition](const ImVec2 point) {
+            const ImVec2 offset{navigationMousePosition.x - point.x, navigationMousePosition.y - point.y};
+            return (offset.x * offset.x + offset.y * offset.y) <= 16.0F * 16.0F;
+        };
+        const auto drawNavigationArrow = [drawList, &isHovered](const ImVec2 start, const ImVec2 end,
+                                                                  const ImU32 baseColor, const char* const label) {
             const ImVec2 direction{end.x - start.x, end.y - start.y};
             const float length = std::sqrt(direction.x * direction.x + direction.y * direction.y);
             if (length <= 0.001F) {
                 return;
             }
-            drawList->AddLine(start, end, color, 1.7F);
             const ImVec2 unit{direction.x / length, direction.y / length};
             const ImVec2 perpendicular{-unit.y, unit.x};
-            const ImVec2 base{end.x - unit.x * 6.0F, end.y - unit.y * 6.0F};
-            drawList->AddTriangleFilled(end, ImVec2{base.x + perpendicular.x * 3.0F, base.y + perpendicular.y * 3.0F},
-                                        ImVec2{base.x - perpendicular.x * 3.0F, base.y - perpendicular.y * 3.0F}, color);
+            const bool hovered = isHovered(end);
+            const ImU32 fillColor = hovered ? IM_COL32(245, 248, 252, 255) : baseColor;
+            const ImU32 outlineColor = IM_COL32(16, 20, 25, 245);
+            const ImVec2 shaftEnd{end.x - unit.x * 8.0F, end.y - unit.y * 8.0F};
+            drawList->AddLine(start, shaftEnd, outlineColor, 6.0F);
+            drawList->AddLine(start, shaftEnd, fillColor, 3.2F);
+            const ImVec2 base{end.x - unit.x * 12.0F, end.y - unit.y * 12.0F};
+            const ImVec2 left{base.x + perpendicular.x * 6.0F, base.y + perpendicular.y * 6.0F};
+            const ImVec2 right{base.x - perpendicular.x * 6.0F, base.y - perpendicular.y * 6.0F};
+            drawList->AddTriangleFilled(end, left, right, outlineColor);
+            drawList->AddTriangleFilled(ImVec2{end.x - unit.x * 2.0F, end.y - unit.y * 2.0F},
+                                        ImVec2{left.x + unit.x * 3.0F, left.y + unit.y * 3.0F},
+                                        ImVec2{right.x + unit.x * 3.0F, right.y + unit.y * 3.0F}, fillColor);
+            drawList->AddText(ImVec2{end.x + 5.0F, end.y - 7.0F}, fillColor, label);
         };
-        const auto drawOrientationAxis = [&](const Math::Vector3UVE worldAxis, const ImU32 positiveColor,
-                                             const ImU32 negativeColor, const char* const positiveLabel,
-                                             const char* const negativeLabel) {
-            const float screenX = Math::DotUVE(worldAxis, cameraRight) * 23.0F;
-            const float screenY = -Math::DotUVE(worldAxis, cameraUp) * 23.0F;
-            if (!IsFiniteUVE(screenX) || !IsFiniteUVE(screenY)) {
-                return;
-            }
-            const ImVec2 positiveEnd{orientationCenter.x + screenX, orientationCenter.y + screenY};
-            const ImVec2 negativeEnd{orientationCenter.x - screenX, orientationCenter.y - screenY};
-            const float screenLength = std::sqrt(screenX * screenX + screenY * screenY);
-            drawOrientationArrow(orientationCenter, negativeEnd, negativeColor);
-            drawOrientationArrow(orientationCenter, positiveEnd, positiveColor);
-            if (screenLength > 5.0F) {
-                drawList->AddText(ImVec2{positiveEnd.x + 4.0F, positiveEnd.y - 7.0F}, positiveColor, positiveLabel);
-                drawList->AddText(ImVec2{negativeEnd.x + 4.0F, negativeEnd.y - 7.0F}, negativeColor, negativeLabel);
+        Gizmo::ViewportNavGizmoUVE navigationGizmo;
+        navigationGizmo.SetAnchorUVE(Math::Vector2UVE{orientationCenter.x, orientationCenter.y});
+        navigationGizmo.UpdateLayoutUVE(m_viewportYawRadians, m_viewportPitchRadians);
+        navigationGizmo.UpdateHoverUVE(Math::Vector2UVE{navigationMousePosition.x, navigationMousePosition.y});
+        constexpr ImU32 plateFill = IM_COL32(25, 30, 36, 232);
+        constexpr ImU32 plateOutline = IM_COL32(100, 112, 126, 235);
+        drawList->AddCircleFilled(orientationCenter, navigationGizmo.GetPlateRadiusUVE(), plateFill, 32);
+        drawList->AddCircle(orientationCenter, navigationGizmo.GetPlateRadiusUVE(), plateOutline, 32, 1.6F);
+        for (const Gizmo::ViewportNavButtonUVE& button : navigationGizmo.GetButtonsUVE()) {
+            const ImU32 color = static_cast<ImU32>(Gizmo::ViewportNavGizmoUVE::AxisColorUVE(
+                button.axis, button.positive, button.hovered));
+            const ImVec2 endpoint{button.screenPosition.x, button.screenPosition.y};
+            if (button.degenerate) {
+                drawList->AddCircleFilled(orientationCenter, 9.0F, color, 20);
+                drawList->AddCircle(orientationCenter, 9.0F, IM_COL32(16, 20, 25, 245), 20, 2.0F);
+                drawList->AddCircle(orientationCenter, 5.0F, color, 16, 1.6F);
             } else {
-                // A world axis aimed directly into/out of the camera is still present. The ring is
-                // the compact depth cue; the labels keep both directions discoverable at front view.
-                drawList->AddCircle(orientationCenter, 8.0F, positiveColor, 16, 1.5F);
-                drawList->AddText(ImVec2{orientationCenter.x + 11.0F, orientationCenter.y - 18.0F},
-                                  positiveColor, positiveLabel);
-                drawList->AddText(ImVec2{orientationCenter.x + 11.0F, orientationCenter.y + 5.0F},
-                                  negativeColor, negativeLabel);
+                drawNavigationArrow(orientationCenter, endpoint, color,
+                                    Gizmo::ViewportNavGizmoUVE::AxisLabelUVE(button.axis, button.positive));
             }
-        };
-        constexpr ImU32 xColor = IM_COL32(216, 102, 102, 245);
-        constexpr ImU32 yColor = IM_COL32(116, 196, 142, 245);
-        constexpr ImU32 zColor = IM_COL32(113, 151, 215, 245);
-        drawOrientationAxis(Math::Vector3UVE{1.0F, 0.0F, 0.0F}, xColor, IM_COL32(216, 102, 102, 128), "X+", "X-");
-        drawOrientationAxis(Math::Vector3UVE{0.0F, 1.0F, 0.0F}, yColor, IM_COL32(116, 196, 142, 128), "Y+", "Y-");
-        drawOrientationAxis(Math::Vector3UVE{0.0F, 0.0F, 1.0F}, zColor, IM_COL32(113, 151, 215, 128), "Z+", "Z-");
-        drawList->AddCircleFilled(orientationCenter, 3.0F, IM_COL32(230, 232, 235, 235));
+        }
+        drawList->AddCircleFilled(orientationCenter, 5.0F, IM_COL32(230, 235, 242, 255), 20);
+        drawList->AddCircle(orientationCenter, 5.0F, IM_COL32(16, 20, 25, 245), 20, 1.6F);
     } else {
         ImGui::TextUnformatted("Viewport is too small for picking.");
     }

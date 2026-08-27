@@ -14,6 +14,8 @@
 
 #include "uve/core/engine_core_uve.h"
 #include "uve/editor/editor_uve.h"
+#include "uve/editor/gizmo_system_uve.h"
+#include "uve/editor/viewport_nav_gizmo_uve.h"
 #include "uve/scene/components/camera_component_uve.h"
 #include "uve/scene/components/collider_component_uve.h"
 #include "uve/scene/components/light_component_uve.h"
@@ -3048,3 +3050,46 @@ TEST(EditorUVETest, GizmoCoordinateSpaceUVE_DefaultsToWorldAndRejectsSandboxChan
 
 } // namespace
 } // namespace UVE::Editor::Tests
+
+
+TEST(GizmoSystemUVETest, PackageLayerCompositionAndNativeAxisSpace) {
+    const UVE::Editor::Gizmo::GizmoLayerVisibilityUVE move =
+        UVE::Editor::Gizmo::GizmoSystemUVE::LayersForUVE(UVE::Editor::Gizmo::GizmoModeUVE::Move);
+    EXPECT_TRUE(move.move);
+    EXPECT_FALSE(move.rotate);
+    EXPECT_FALSE(move.scale);
+
+    const UVE::Editor::Gizmo::GizmoLayerVisibilityUVE universal =
+        UVE::Editor::Gizmo::GizmoSystemUVE::LayersForUVE(UVE::Editor::Gizmo::GizmoModeUVE::Universal);
+    EXPECT_TRUE(universal.move);
+    EXPECT_TRUE(universal.rotate);
+    EXPECT_TRUE(universal.scale);
+
+    const UVE::Math::QuaternionUVE identity{1.0F, 0.0F, 0.0F, 0.0F};
+    const UVE::Math::Vector3UVE worldX = UVE::Editor::Gizmo::GizmoSystemUVE::AxisDirectionUVE(
+        UVE::Editor::Gizmo::GizmoAxisUVE::X, identity, UVE::Editor::Gizmo::GizmoSpaceUVE::World);
+    EXPECT_NEAR(worldX.x, 1.0F, 0.0001F);
+    EXPECT_NEAR(worldX.y, 0.0F, 0.0001F);
+    EXPECT_NEAR(worldX.z, 0.0F, 0.0001F);
+}
+
+TEST(ViewportNavGizmoUVETest, PackageSixButtonLayoutAndPresetMapping) {
+    UVE::Editor::Gizmo::ViewportNavGizmoUVE navigation;
+    navigation.SetAnchorUVE(UVE::Math::Vector2UVE{100.0F, 100.0F});
+    navigation.UpdateLayoutUVE(0.0F, 0.0F);
+    ASSERT_EQ(navigation.GetButtonsUVE().size(), 6U);
+    EXPECT_NEAR(navigation.GetButtonsUVE()[0].screenPosition.x, 132.0F, 0.001F);
+    EXPECT_NEAR(navigation.GetButtonsUVE()[0].screenPosition.y, 100.0F, 0.001F);
+    EXPECT_TRUE(navigation.GetButtonsUVE()[4].degenerate);
+    EXPECT_TRUE(navigation.GetButtonsUVE()[5].degenerate);
+    EXPECT_TRUE(navigation.HitTestPlateUVE(UVE::Math::Vector2UVE{100.0F, 100.0F}));
+
+    UVE::Editor::Gizmo::ViewportNavPresetUVE preset = UVE::Editor::Gizmo::ViewportNavPresetUVE::Front;
+    ASSERT_TRUE(navigation.HandleClickUVE(UVE::Math::Vector2UVE{132.0F, 100.0F}, preset));
+    EXPECT_EQ(preset, UVE::Editor::Gizmo::ViewportNavPresetUVE::Right);
+    float yaw = 0.0F;
+    float pitch = 0.0F;
+    UVE::Editor::Gizmo::ViewportNavGizmoUVE::PresetAnglesUVE(preset, yaw, pitch);
+    EXPECT_NEAR(yaw, std::numbers::pi_v<float> * 0.5F, 0.0001F);
+    EXPECT_NEAR(pitch, 0.0F, 0.0001F);
+}
