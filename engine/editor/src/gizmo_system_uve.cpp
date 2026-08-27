@@ -74,15 +74,15 @@ float GizmoSystemUVE::ScaleRadiusMultiplierUVE() noexcept {
 
 Math::Vector3UVE GizmoSystemUVE::AxisColorUVE(const GizmoAxisUVE axis, const bool hovered) noexcept {
     if (hovered) {
-        return {1.0F, 0.85F, 0.20F};
+        return {1.0F, 0.851F, 0.20F}; // #FFD933
     }
     switch (axis) {
         case GizmoAxisUVE::X:
-            return {0.90F, 0.25F, 0.30F};
+            return {1.0F, 0.365F, 0.365F}; // #FF5D5D
         case GizmoAxisUVE::Y:
-            return {0.30F, 0.80F, 0.45F};
+            return {0.290F, 0.871F, 0.502F}; // #4ADE80
         case GizmoAxisUVE::Z:
-            return {0.25F, 0.55F, 1.00F};
+            return {0.231F, 0.612F, 1.0F}; // #3B9CFF
         case GizmoAxisUVE::XY:
             return {0.60F, 0.525F, 0.375F};
         case GizmoAxisUVE::YZ:

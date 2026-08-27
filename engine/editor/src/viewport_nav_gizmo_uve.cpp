@@ -196,15 +196,15 @@ const char* ViewportNavGizmoUVE::AxisLabelUVE(const ViewportNavAxisUVE axis, con
 std::uint32_t ViewportNavGizmoUVE::AxisColorUVE(const ViewportNavAxisUVE axis, const bool positive,
                                                  const bool hovered) noexcept {
     if (hovered) {
-        return 0xFF46D9FF;
+        return 0xFF33D9FF; // #FFD933, encoded as IM_COL32(R,G,B,A)
     }
     switch (axis) {
         case ViewportNavAxisUVE::X:
-            return positive ? 0xFF5C5CDC : 0xA05C5CDC;
+            return positive ? 0xFF5D5DFF : 0xA05D5DFF; // #FF5D5D
         case ViewportNavAxisUVE::Y:
-            return positive ? 0xFF8BCD6E : 0xA08BCD6E;
+            return positive ? 0xFF80DE4A : 0xA080DE4A; // #4ADE80
         case ViewportNavAxisUVE::Z:
-            return positive ? 0xFFE09B67 : 0xA0E09B67;
+            return positive ? 0xFFFF9C3B : 0xA0FF9C3B; // #3B9CFF
     }
     return 0xFFE5E5E5;
 }

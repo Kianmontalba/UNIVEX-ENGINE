@@ -256,14 +256,17 @@ constexpr const char* kHierarchyEntityPayloadUVE = "UVE_SCENE_HIERARCHY_ENTITY";
 }
 
 [[nodiscard]] ImU32 GizmoAxisColorUVE(const EditorTransformAxisUVE axis, const bool active) noexcept {
-    const std::uint8_t alpha = active ? 255U : 210U;
+    if (active) {
+        return IM_COL32(255, 217, 51, 255); // #FFD933
+    }
+    constexpr std::uint8_t alpha = 255U;
     switch (axis) {
         case EditorTransformAxisUVE::X:
-            return IM_COL32(224, 83, 83, alpha);
+            return IM_COL32(255, 93, 93, alpha); // #FF5D5D
         case EditorTransformAxisUVE::Y:
-            return IM_COL32(97, 196, 111, alpha);
+            return IM_COL32(74, 222, 128, alpha); // #4ADE80
         case EditorTransformAxisUVE::Z:
-            return IM_COL32(87, 139, 231, alpha);
+            return IM_COL32(59, 156, 255, alpha); // #3B9CFF
         case EditorTransformAxisUVE::None:
             return IM_COL32(190, 190, 190, alpha);
     }
@@ -4046,6 +4049,20 @@ void EditorUVE::DrawUnifiedTransformGizmoUVE(const EditorViewportRectUVE& viewpo
 
     ImDrawList* const drawList = ImGui::GetForegroundDrawList();
     const ImVec2 centerPoint{center.x, center.y};
+    const ImVec2 mousePosition = ImGui::GetMousePos();
+    const auto distanceSquaredToSegment = [](const ImVec2 point, const ImVec2 start, const ImVec2 end) {
+        const ImVec2 segment{end.x - start.x, end.y - start.y};
+        const float lengthSquared = (segment.x * segment.x) + (segment.y * segment.y);
+        if (lengthSquared <= 0.0001F) {
+            const ImVec2 delta{point.x - start.x, point.y - start.y};
+            return (delta.x * delta.x) + (delta.y * delta.y);
+        }
+        const ImVec2 offset{point.x - start.x, point.y - start.y};
+        const float parameter = std::clamp((offset.x * segment.x + offset.y * segment.y) / lengthSquared, 0.0F, 1.0F);
+        const ImVec2 closest{start.x + segment.x * parameter, start.y + segment.y * parameter};
+        const ImVec2 delta{point.x - closest.x, point.y - closest.y};
+        return (delta.x * delta.x) + (delta.y * delta.y);
+    };
     constexpr std::array<EditorTransformAxisUVE, 3> axes{
         EditorTransformAxisUVE::X,
         EditorTransformAxisUVE::Y,
@@ -4076,26 +4093,31 @@ void EditorUVE::DrawUnifiedTransformGizmoUVE(const EditorViewportRectUVE& viewpo
         }
         const ImVec2 direction{delta.x / length, delta.y / length};
         const ImVec2 perpendicular{-direction.y, direction.x};
-        const ImU32 color = GizmoAxisColorUVE(axis, active);
+        const bool hovered = distanceSquaredToSegment(mousePosition, centerPoint, end) <= 14.0F * 14.0F;
+        const bool highlighted = active || hovered;
+        const ImU32 color = GizmoAxisColorUVE(axis, highlighted);
         const float shaftEnd = std::max(0.0F, length - std::clamp(length * 0.16F, 10.0F, 19.0F));
         const ImVec2 shaft{centerPoint.x + direction.x * shaftEnd, centerPoint.y + direction.y * shaftEnd};
-        drawOutlinedLine(centerPoint, shaft, color, active ? 5.0F : 3.5F);
+        drawOutlinedLine(centerPoint, shaft, color, highlighted ? 7.0F : 5.0F);
         const float headLength = length - shaftEnd;
-        const float headWidth = std::clamp(headLength * 0.62F, 5.0F, 10.0F);
+        const float headWidth = std::clamp(headLength * 0.62F, highlighted ? 6.0F : 5.0F, highlighted ? 11.0F : 10.0F);
         const ImVec2 left{shaft.x + perpendicular.x * headWidth, shaft.y + perpendicular.y * headWidth};
         const ImVec2 right{shaft.x - perpendicular.x * headWidth, shaft.y - perpendicular.y * headWidth};
         drawList->AddTriangleFilled(ImVec2{end.x - direction.x * 1.5F, end.y - direction.y * 1.5F}, left, right,
                                     color);
         drawList->AddTriangle(ImVec2{end.x - direction.x * 1.5F, end.y - direction.y * 1.5F}, left, right,
-                               IM_COL32(14, 16, 21, 235), active ? 2.0F : 1.5F);
+                               IM_COL32(14, 16, 21, 235), highlighted ? 2.0F : 1.5F);
     };
     const auto drawBoxAtAxis = [&](const EditorTransformAxisUVE axis, const float distance, const bool active) {
         Math::Vector2UVE endpoint{};
         if (!projectAxisPoint(axis, distance, endpoint)) {
             return;
         }
-        const ImU32 color = GizmoAxisColorUVE(axis, active);
-        const float halfSize = active ? 7.0F : 5.5F;
+        const bool hovered = distanceSquaredToSegment(mousePosition, centerPoint,
+                                                       ImVec2{endpoint.x, endpoint.y}) <= 14.0F * 14.0F;
+        const bool highlighted = active || hovered;
+        const ImU32 color = GizmoAxisColorUVE(axis, highlighted);
+        const float halfSize = highlighted ? 7.5F : 6.0F;
         drawList->AddRectFilled(ImVec2{endpoint.x - halfSize, endpoint.y - halfSize},
                                 ImVec2{endpoint.x + halfSize, endpoint.y + halfSize}, color);
         drawList->AddRect(ImVec2{endpoint.x - halfSize, endpoint.y - halfSize},
@@ -4159,7 +4181,6 @@ void EditorUVE::DrawUnifiedTransformGizmoUVE(const EditorViewportRectUVE& viewpo
         }
         constexpr int segmentCount = 64;
         const float step = (std::numbers::pi_v<float> * 2.0F) / static_cast<float>(segmentCount);
-        const ImU32 color = GizmoAxisColorUVE(axis, active);
         for (int segment = 0; segment < segmentCount; ++segment) {
             const float a = static_cast<float>(segment) * step;
             const float b = a + step;
@@ -4173,8 +4194,12 @@ void EditorUVE::DrawUnifiedTransformGizmoUVE(const EditorViewportRectUVE& viewpo
                 !ProjectWorldPointUVE(viewportRect, secondWorld, secondScreen)) {
                 continue;
             }
-            drawOutlinedLine(ImVec2{firstScreen.x, firstScreen.y}, ImVec2{secondScreen.x, secondScreen.y}, color,
-                             active ? 4.0F : 2.5F);
+            const bool hovered = distanceSquaredToSegment(
+                                     mousePosition, ImVec2{firstScreen.x, firstScreen.y}, ImVec2{secondScreen.x, secondScreen.y}) <=
+                                 12.0F * 12.0F;
+            const bool highlighted = active || hovered;
+            drawOutlinedLine(ImVec2{firstScreen.x, firstScreen.y}, ImVec2{secondScreen.x, secondScreen.y},
+                             GizmoAxisColorUVE(axis, highlighted), highlighted ? 6.0F : 4.0F);
         }
     };
 
@@ -4208,11 +4233,14 @@ void EditorUVE::DrawUnifiedTransformGizmoUVE(const EditorViewportRectUVE& viewpo
         }
         const bool screenRotateActive = m_gizmoDrag.mode == EditorGizmoModeUVE::Rotate &&
                                         m_gizmoDrag.handleKind == GizmoHandleKindUVE::Trackball;
+        const float pointerDistance = std::hypot(mousePosition.x - centerPoint.x, mousePosition.y - centerPoint.y);
+        const bool screenRotateHovered = std::abs(pointerDistance - screenRadius) <= 12.0F;
+        const bool screenRotateHighlighted = screenRotateActive || screenRotateHovered;
         drawList->AddCircle(centerPoint, screenRadius, IM_COL32(14, 16, 21, 210), 64,
-                            screenRotateActive ? 5.0F : 3.0F);
-        drawList->AddCircle(centerPoint, screenRadius, screenRotateActive ? IM_COL32(235, 235, 235, 235)
-                                                                            : IM_COL32(210, 220, 235, 145),
-                            64, screenRotateActive ? 3.0F : 1.5F);
+                            screenRotateHighlighted ? 8.0F : 6.0F);
+        drawList->AddCircle(centerPoint, screenRadius,
+                            screenRotateHighlighted ? IM_COL32(255, 217, 51, 255) : IM_COL32(210, 220, 235, 190),
+                            64, screenRotateHighlighted ? 5.0F : 3.5F);
     }
 
     if (showMove) {
@@ -4229,7 +4257,9 @@ void EditorUVE::DrawUnifiedTransformGizmoUVE(const EditorViewportRectUVE& viewpo
         }
         const bool active = m_gizmoDrag.mode == EditorGizmoModeUVE::Translate &&
                             m_gizmoDrag.handleKind == GizmoHandleKindUVE::ScreenPlaneMove;
-        const ImU32 centerColor = active ? IM_COL32(255, 217, 70, 255) : IM_COL32(235, 235, 235, 235);
+        const bool hovered = distanceSquaredToSegment(mousePosition, centerPoint, centerPoint) <= 14.0F * 14.0F;
+        const bool highlighted = active || hovered;
+        const ImU32 centerColor = highlighted ? IM_COL32(255, 217, 51, 255) : IM_COL32(237, 237, 237, 255);
         drawList->AddRectFilled(ImVec2{center.x - 8.0F, center.y - 8.0F}, ImVec2{center.x + 8.0F, center.y + 8.0F},
                                 centerColor);
         drawList->AddRect(ImVec2{center.x - 8.0F, center.y - 8.0F}, ImVec2{center.x + 8.0F, center.y + 8.0F},
@@ -4245,7 +4275,9 @@ void EditorUVE::DrawUnifiedTransformGizmoUVE(const EditorViewportRectUVE& viewpo
         }
         const bool active = m_gizmoDrag.mode == EditorGizmoModeUVE::Scale &&
                             m_gizmoDrag.handleKind == GizmoHandleKindUVE::UniformScaleOffset;
-        const ImU32 centerColor = active ? IM_COL32(255, 230, 90, 255) : IM_COL32(235, 235, 235, 235);
+        const bool hovered = distanceSquaredToSegment(mousePosition, centerPoint, centerPoint) <= 14.0F * 14.0F;
+        const bool highlighted = active || hovered;
+        const ImU32 centerColor = highlighted ? IM_COL32(255, 217, 51, 255) : IM_COL32(237, 237, 237, 255);
         drawList->AddRectFilled(ImVec2{center.x - 9.0F, center.y - 9.0F}, ImVec2{center.x + 9.0F, center.y + 9.0F},
                                 centerColor);
         drawList->AddRect(ImVec2{center.x - 9.0F, center.y - 9.0F}, ImVec2{center.x + 9.0F, center.y + 9.0F},
@@ -6956,38 +6988,38 @@ void EditorUVE::DrawViewportPanelUVE() {
             const ImVec2 offset{navigationMousePosition.x - point.x, navigationMousePosition.y - point.y};
             return (offset.x * offset.x + offset.y * offset.y) <= 16.0F * 16.0F;
         };
-        const auto drawNavigationArrow = [drawList, &isHovered](const ImVec2 start, const ImVec2 end,
-                                                                  const ImU32 baseColor, const char* const label) {
+        const auto drawNavigationEndpoint = [drawList, &isHovered](const ImVec2 start, const ImVec2 end,
+                                                                      const ImU32 baseColor, const char* const label,
+                                                                      const bool positive) {
             const ImVec2 direction{end.x - start.x, end.y - start.y};
             const float length = std::sqrt(direction.x * direction.x + direction.y * direction.y);
             if (length <= 0.001F) {
                 return;
             }
             const ImVec2 unit{direction.x / length, direction.y / length};
-            const ImVec2 perpendicular{-unit.y, unit.x};
             const bool hovered = isHovered(end);
-            const ImU32 fillColor = hovered ? IM_COL32(245, 248, 252, 255) : baseColor;
             const ImU32 outlineColor = IM_COL32(16, 20, 25, 245);
-            const ImVec2 shaftEnd{end.x - unit.x * 8.0F, end.y - unit.y * 8.0F};
-            drawList->AddLine(start, shaftEnd, outlineColor, 6.0F);
-            drawList->AddLine(start, shaftEnd, fillColor, 3.2F);
-            const ImVec2 base{end.x - unit.x * 12.0F, end.y - unit.y * 12.0F};
-            const ImVec2 left{base.x + perpendicular.x * 6.0F, base.y + perpendicular.y * 6.0F};
-            const ImVec2 right{base.x - perpendicular.x * 6.0F, base.y - perpendicular.y * 6.0F};
-            drawList->AddTriangleFilled(end, left, right, outlineColor);
-            drawList->AddTriangleFilled(ImVec2{end.x - unit.x * 2.0F, end.y - unit.y * 2.0F},
-                                        ImVec2{left.x + unit.x * 3.0F, left.y + unit.y * 3.0F},
-                                        ImVec2{right.x + unit.x * 3.0F, right.y + unit.y * 3.0F}, fillColor);
-            drawList->AddText(ImVec2{end.x + 5.0F, end.y - 7.0F}, fillColor, label);
+            drawList->AddLine(start, ImVec2{end.x - unit.x * 8.5F, end.y - unit.y * 8.5F}, outlineColor, 6.0F);
+            drawList->AddLine(start, ImVec2{end.x - unit.x * 8.5F, end.y - unit.y * 8.5F}, baseColor, 3.2F);
+            const float radius = hovered ? 12.0F : 9.5F;
+            const ImU32 fillColor = hovered ? IM_COL32(255, 217, 51, 255)
+                                            : (positive ? IM_COL32(245, 248, 252, 255) : IM_COL32(28, 29, 33, 255));
+            const ImU32 textColor = positive || hovered ? IM_COL32(20, 22, 26, 255) : baseColor;
+            drawList->AddCircleFilled(end, radius, fillColor, 24);
+            drawList->AddCircle(end, radius, outlineColor, 24, 2.0F);
+            drawList->AddCircle(end, std::max(2.0F, radius - 2.0F), baseColor, 24, hovered ? 2.0F : 1.6F);
+            const ImVec2 textSize = ImGui::CalcTextSize(label);
+            drawList->AddText(ImVec2{end.x - textSize.x * 0.5F, end.y - textSize.y * 0.5F}, textColor, label);
         };
         Gizmo::ViewportNavGizmoUVE navigationGizmo;
         navigationGizmo.SetAnchorUVE(Math::Vector2UVE{orientationCenter.x, orientationCenter.y});
         navigationGizmo.UpdateLayoutUVE(m_viewportYawRadians, m_viewportPitchRadians);
         navigationGizmo.UpdateHoverUVE(Math::Vector2UVE{navigationMousePosition.x, navigationMousePosition.y});
-        constexpr ImU32 plateFill = IM_COL32(25, 30, 36, 232);
-        constexpr ImU32 plateOutline = IM_COL32(100, 112, 126, 235);
-        drawList->AddCircleFilled(orientationCenter, navigationGizmo.GetPlateRadiusUVE(), plateFill, 32);
-        drawList->AddCircle(orientationCenter, navigationGizmo.GetPlateRadiusUVE(), plateOutline, 32, 1.6F);
+        const float plateRadius = navigationGizmo.GetPlateRadiusUVE();
+        drawList->AddCircleFilled(orientationCenter, plateRadius + 4.0F, IM_COL32(5, 7, 10, 105), 40);
+        drawList->AddCircleFilled(orientationCenter, plateRadius, IM_COL32(25, 28, 34, 242), 40);
+        drawList->AddCircle(orientationCenter, plateRadius, IM_COL32(100, 112, 126, 235), 40, 1.6F);
+        drawList->AddCircle(orientationCenter, plateRadius - 3.0F, IM_COL32(8, 10, 14, 170), 40, 1.0F);
         for (const Gizmo::ViewportNavButtonUVE& button : navigationGizmo.GetButtonsUVE()) {
             const ImU32 color = static_cast<ImU32>(Gizmo::ViewportNavGizmoUVE::AxisColorUVE(
                 button.axis, button.positive, button.hovered));
@@ -6997,8 +7029,9 @@ void EditorUVE::DrawViewportPanelUVE() {
                 drawList->AddCircle(orientationCenter, 9.0F, IM_COL32(16, 20, 25, 245), 20, 2.0F);
                 drawList->AddCircle(orientationCenter, 5.0F, color, 16, 1.6F);
             } else {
-                drawNavigationArrow(orientationCenter, endpoint, color,
-                                    Gizmo::ViewportNavGizmoUVE::AxisLabelUVE(button.axis, button.positive));
+                const char* const fullLabel = Gizmo::ViewportNavGizmoUVE::AxisLabelUVE(button.axis, button.positive);
+                const char axisLabel[2]{fullLabel[0], '\0'};
+                drawNavigationEndpoint(orientationCenter, endpoint, color, axisLabel, button.positive);
             }
         }
         drawList->AddCircleFilled(orientationCenter, 5.0F, IM_COL32(230, 235, 242, 255), 20);

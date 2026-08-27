@@ -3073,6 +3073,38 @@ TEST(GizmoSystemUVETest, PackageLayerCompositionAndNativeAxisSpace) {
     EXPECT_NEAR(worldX.z, 0.0F, 0.0001F);
 }
 
+TEST(GizmoSystemUVETest, HtmlReferencePalette) {
+    using UVE::Editor::Gizmo::GizmoAxisUVE;
+    using UVE::Editor::Gizmo::GizmoSystemUVE;
+    const auto x = GizmoSystemUVE::AxisColorUVE(GizmoAxisUVE::X, false);
+    const auto y = GizmoSystemUVE::AxisColorUVE(GizmoAxisUVE::Y, false);
+    const auto z = GizmoSystemUVE::AxisColorUVE(GizmoAxisUVE::Z, false);
+    const auto hover = GizmoSystemUVE::AxisColorUVE(GizmoAxisUVE::X, true);
+    EXPECT_NEAR(x.x, 1.0F, 0.001F);
+    EXPECT_NEAR(x.y, 93.0F / 255.0F, 0.001F);
+    EXPECT_NEAR(x.z, 93.0F / 255.0F, 0.001F);
+    EXPECT_NEAR(y.x, 74.0F / 255.0F, 0.001F);
+    EXPECT_NEAR(y.y, 222.0F / 255.0F, 0.001F);
+    EXPECT_NEAR(y.z, 128.0F / 255.0F, 0.001F);
+    EXPECT_NEAR(z.x, 59.0F / 255.0F, 0.001F);
+    EXPECT_NEAR(z.y, 156.0F / 255.0F, 0.001F);
+    EXPECT_NEAR(z.z, 1.0F, 0.001F);
+    EXPECT_NEAR(hover.x, 1.0F, 0.001F);
+    EXPECT_NEAR(hover.y, 217.0F / 255.0F, 0.001F);
+    EXPECT_NEAR(hover.z, 51.0F / 255.0F, 0.001F);
+}
+
+TEST(ViewportNavGizmoUVETest, HtmlReferencePaletteAndLabels) {
+    using UVE::Editor::Gizmo::ViewportNavAxisUVE;
+    using UVE::Editor::Gizmo::ViewportNavGizmoUVE;
+    EXPECT_EQ(ViewportNavGizmoUVE::AxisColorUVE(ViewportNavAxisUVE::X, true, false), 0xFF5D5DFFU);
+    EXPECT_EQ(ViewportNavGizmoUVE::AxisColorUVE(ViewportNavAxisUVE::Y, true, false), 0xFF80DE4AU);
+    EXPECT_EQ(ViewportNavGizmoUVE::AxisColorUVE(ViewportNavAxisUVE::Z, true, false), 0xFFFF9C3BU);
+    EXPECT_EQ(ViewportNavGizmoUVE::AxisColorUVE(ViewportNavAxisUVE::X, true, true), 0xFF33D9FFU);
+    EXPECT_STREQ(ViewportNavGizmoUVE::AxisLabelUVE(ViewportNavAxisUVE::X, true), "X+");
+    EXPECT_STREQ(ViewportNavGizmoUVE::AxisLabelUVE(ViewportNavAxisUVE::Z, false), "Z-");
+}
+
 TEST(ViewportNavGizmoUVETest, PackageSixButtonLayoutAndPresetMapping) {
     UVE::Editor::Gizmo::ViewportNavGizmoUVE navigation;
     navigation.SetAnchorUVE(UVE::Math::Vector2UVE{100.0F, 100.0F});
