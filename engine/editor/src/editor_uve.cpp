@@ -4103,15 +4103,9 @@ void EditorUVE::DrawSelectionBoundsUVE(const EditorViewportRectUVE& viewportRect
 }
 
 void EditorUVE::DrawUnifiedTransformGizmoUVE(const EditorViewportRectUVE& viewportRect) {
-    // The three families remain separate because their hit tests and transform application are
-    // different. Presenting them together gives the editor one all-in-one gizmo without introducing
-    // a second interaction model or fake preview geometry.
-    DrawTranslateGizmoUVE(viewportRect);
-    DrawRotateGizmoUVE(viewportRect);
-    DrawScaleGizmoUVE(viewportRect);
-}
-
-void EditorUVE::DrawTranslateGizmoUVE(const EditorViewportRectUVE& viewportRect) {
+    // Package-aligned screen-space renderer. The interaction/history path remains UniVex-native;
+    // this overlay intentionally replaces the former thin-line three-pass presentation with one
+    // ordered widget: outer rotate rings, move arrows/planes/omni box, then inner scale handles.
     if (!HasSingleDocumentSelectionUVE() || !IsViewportRectValidUVE(viewportRect)) {
         return;
     }
@@ -4120,7 +4114,6 @@ void EditorUVE::DrawTranslateGizmoUVE(const EditorViewportRectUVE& viewportRect)
     if (!entityManager.HasComponentUVE<Scene::WorldTransformComponentUVE>(m_selectedEntity)) {
         return;
     }
-
     const Scene::WorldTransformComponentUVE& selectedWorld =
         entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(m_selectedEntity);
     if (selectedWorld.dirty || !IsFiniteVectorUVE(selectedWorld.worldPosition)) {
@@ -4134,183 +4127,202 @@ void EditorUVE::DrawTranslateGizmoUVE(const EditorViewportRectUVE& viewportRect)
 
     ImDrawList* const drawList = ImGui::GetForegroundDrawList();
     const ImVec2 centerPoint{center.x, center.y};
-    const bool screenPlaneActive = m_gizmoDrag.handleKind == GizmoHandleKindUVE::ScreenPlaneMove;
-    const ImU32 centerHandleColor = screenPlaneActive ? IM_COL32(255, 217, 70, 245) : IM_COL32(235, 235, 235, 220);
-    drawList->AddRectFilled(ImVec2{center.x - 6.0F, center.y - 6.0F},
-                            ImVec2{center.x + 6.0F, center.y + 6.0F}, centerHandleColor);
-    drawList->AddRect(ImVec2{center.x - 6.0F, center.y - 6.0F},
-                      ImVec2{center.x + 6.0F, center.y + 6.0F}, IM_COL32(35, 38, 43, 235), 1.0F, 0, 1.0F);
+    constexpr std::array<EditorTransformAxisUVE, 3> axes{
+        EditorTransformAxisUVE::X,
+        EditorTransformAxisUVE::Y,
+        EditorTransformAxisUVE::Z,
+    };
 
-    constexpr std::array<EditorTranslatePlaneUVE, 3> planes{
-        EditorTranslatePlaneUVE::XY, EditorTranslatePlaneUVE::XZ, EditorTranslatePlaneUVE::YZ};
-    for (const EditorTranslatePlaneUVE plane : planes) {
-        const EditorTransformAxisUVE axisA = plane == EditorTranslatePlaneUVE::YZ ? EditorTransformAxisUVE::Y : EditorTransformAxisUVE::X;
-        const EditorTransformAxisUVE axisB = plane == EditorTranslatePlaneUVE::XY ? EditorTransformAxisUVE::Y : EditorTransformAxisUVE::Z;
+    const auto drawOutlinedLine = [drawList](const ImVec2 start, const ImVec2 end, const ImU32 color,
+                                              const float thickness) {
+        drawList->AddLine(start, end, IM_COL32(14, 16, 21, 235), thickness + 3.0F);
+        drawList->AddLine(start, end, color, thickness);
+    };
+    const auto projectAxisPoint = [&](const EditorTransformAxisUVE axis, const float distance,
+                                      Math::Vector2UVE& outPoint) {
+        Math::Vector3UVE worldAxis{};
+        return GetGizmoAxisWorldVectorUVE(m_selectedEntity, axis, worldAxis) &&
+               ProjectWorldPointUVE(viewportRect, selectedWorld.worldPosition + worldAxis * distance, outPoint);
+    };
+    const auto drawArrow = [&](const EditorTransformAxisUVE axis, const float distance, const bool active) {
+        Math::Vector2UVE endpoint{};
+        if (!projectAxisPoint(axis, distance, endpoint)) {
+            return;
+        }
+        const ImVec2 end{endpoint.x, endpoint.y};
+        const ImVec2 delta{end.x - centerPoint.x, end.y - centerPoint.y};
+        const float length = std::sqrt((delta.x * delta.x) + (delta.y * delta.y));
+        if (!IsFiniteUVE(length) || length <= 8.0F) {
+            return;
+        }
+        const ImVec2 direction{delta.x / length, delta.y / length};
+        const ImVec2 perpendicular{-direction.y, direction.x};
+        const ImU32 color = GizmoAxisColorUVE(axis, active);
+        const float shaftEnd = std::max(0.0F, length - std::clamp(length * 0.16F, 10.0F, 19.0F));
+        const ImVec2 shaft{centerPoint.x + direction.x * shaftEnd, centerPoint.y + direction.y * shaftEnd};
+        drawOutlinedLine(centerPoint, shaft, color, active ? 5.0F : 3.5F);
+        const float headLength = length - shaftEnd;
+        const float headWidth = std::clamp(headLength * 0.62F, 5.0F, 10.0F);
+        const ImVec2 left{shaft.x + perpendicular.x * headWidth, shaft.y + perpendicular.y * headWidth};
+        const ImVec2 right{shaft.x - perpendicular.x * headWidth, shaft.y - perpendicular.y * headWidth};
+        drawList->AddTriangleFilled(ImVec2{end.x - direction.x * 1.5F, end.y - direction.y * 1.5F}, left, right,
+                                    color);
+        drawList->AddTriangle(ImVec2{end.x - direction.x * 1.5F, end.y - direction.y * 1.5F}, left, right,
+                               IM_COL32(14, 16, 21, 235), active ? 2.0F : 1.5F);
+    };
+    const auto drawBoxAtAxis = [&](const EditorTransformAxisUVE axis, const float distance, const bool active) {
+        Math::Vector2UVE endpoint{};
+        if (!projectAxisPoint(axis, distance, endpoint)) {
+            return;
+        }
+        const ImU32 color = GizmoAxisColorUVE(axis, active);
+        const float halfSize = active ? 7.0F : 5.5F;
+        drawList->AddRectFilled(ImVec2{endpoint.x - halfSize, endpoint.y - halfSize},
+                                ImVec2{endpoint.x + halfSize, endpoint.y + halfSize}, color);
+        drawList->AddRect(ImVec2{endpoint.x - halfSize, endpoint.y - halfSize},
+                          ImVec2{endpoint.x + halfSize, endpoint.y + halfSize}, IM_COL32(14, 16, 21, 235),
+                          1.5F, 0, active ? 2.0F : 1.5F);
+    };
+    const auto drawPlane = [&](const EditorTranslatePlaneUVE plane, const bool active) {
+        const EditorTransformAxisUVE axisA = plane == EditorTranslatePlaneUVE::YZ
+                                                 ? EditorTransformAxisUVE::Y
+                                                 : EditorTransformAxisUVE::X;
+        const EditorTransformAxisUVE axisB = plane == EditorTranslatePlaneUVE::XY
+                                                 ? EditorTransformAxisUVE::Y
+                                                 : EditorTransformAxisUVE::Z;
         Math::Vector3UVE worldAxisA{};
         Math::Vector3UVE worldAxisB{};
         if (!GetGizmoAxisWorldVectorUVE(m_selectedEntity, axisA, worldAxisA) ||
             !GetGizmoAxisWorldVectorUVE(m_selectedEntity, axisB, worldAxisB)) {
-            continue;
+            return;
         }
+        constexpr float minimum = 0.25F;
+        constexpr float maximum = 0.45F;
         std::array<Math::Vector2UVE, 4> corners{};
         const std::array<Math::Vector3UVE, 4> worldCorners{
-            selectedWorld.worldPosition + worldAxisA * (0.20F * kGizmoAxisLengthUVE) + worldAxisB * (0.20F * kGizmoAxisLengthUVE),
-            selectedWorld.worldPosition + worldAxisA * (0.60F * kGizmoAxisLengthUVE) + worldAxisB * (0.20F * kGizmoAxisLengthUVE),
-            selectedWorld.worldPosition + worldAxisA * (0.60F * kGizmoAxisLengthUVE) + worldAxisB * (0.60F * kGizmoAxisLengthUVE),
-            selectedWorld.worldPosition + worldAxisA * (0.20F * kGizmoAxisLengthUVE) + worldAxisB * (0.60F * kGizmoAxisLengthUVE)};
-        if (!ProjectWorldPointUVE(viewportRect, worldCorners[0], corners[0]) ||
-            !ProjectWorldPointUVE(viewportRect, worldCorners[1], corners[1]) ||
-            !ProjectWorldPointUVE(viewportRect, worldCorners[2], corners[2]) ||
-            !ProjectWorldPointUVE(viewportRect, worldCorners[3], corners[3])) {
-            continue;
+            selectedWorld.worldPosition + worldAxisA * minimum * kGizmoAxisLengthUVE + worldAxisB * minimum * kGizmoAxisLengthUVE,
+            selectedWorld.worldPosition + worldAxisA * maximum * kGizmoAxisLengthUVE + worldAxisB * minimum * kGizmoAxisLengthUVE,
+            selectedWorld.worldPosition + worldAxisA * maximum * kGizmoAxisLengthUVE + worldAxisB * maximum * kGizmoAxisLengthUVE,
+            selectedWorld.worldPosition + worldAxisA * minimum * kGizmoAxisLengthUVE + worldAxisB * maximum * kGizmoAxisLengthUVE,
+        };
+        for (std::size_t index = 0U; index < corners.size(); ++index) {
+            if (!ProjectWorldPointUVE(viewportRect, worldCorners[index], corners[index])) {
+                return;
+            }
         }
-        const ImU32 fill = plane == EditorTranslatePlaneUVE::XY ? IM_COL32(116, 196, 142, 48) :
-                           plane == EditorTranslatePlaneUVE::XZ ? IM_COL32(113, 151, 215, 48) : IM_COL32(216, 102, 102, 48);
+        const ImU32 fill = plane == EditorTranslatePlaneUVE::XY
+                                ? IM_COL32(116, 196, 142, active ? 118 : 72)
+                                : plane == EditorTranslatePlaneUVE::YZ
+                                      ? IM_COL32(216, 102, 102, active ? 118 : 72)
+                                      : IM_COL32(113, 151, 215, active ? 118 : 72);
         drawList->AddQuadFilled(ImVec2{corners[0].x, corners[0].y}, ImVec2{corners[1].x, corners[1].y},
                                 ImVec2{corners[2].x, corners[2].y}, ImVec2{corners[3].x, corners[3].y}, fill);
-    }
-
-    constexpr std::array<EditorTransformAxisUVE, 3> axes{
-        EditorTransformAxisUVE::X,
-        EditorTransformAxisUVE::Y,
-        EditorTransformAxisUVE::Z,
+        const std::array<ImVec2, 5> outline{
+            ImVec2{corners[0].x, corners[0].y}, ImVec2{corners[1].x, corners[1].y},
+            ImVec2{corners[2].x, corners[2].y}, ImVec2{corners[3].x, corners[3].y},
+            ImVec2{corners[0].x, corners[0].y}};
+        drawList->AddPolyline(outline.data(), static_cast<int>(outline.size()), IM_COL32(14, 16, 21, 210),
+                              ImDrawFlags_None, active ? 2.0F : 1.0F);
     };
-    for (const EditorTransformAxisUVE axis : axes) {
-        Math::Vector3UVE worldAxis{};
-        Math::Vector2UVE endpoint{};
-        if (!GetGizmoAxisWorldVectorUVE(m_selectedEntity, axis, worldAxis) ||
-            !ProjectWorldPointUVE(viewportRect, selectedWorld.worldPosition + worldAxis * kGizmoAxisLengthUVE, endpoint)) {
-            continue;
-        }
-        const bool active = m_gizmoDrag.axis == axis;
-        const ImU32 color = GizmoAxisColorUVE(axis, active);
-        const ImVec2 endpointPoint{endpoint.x, endpoint.y};
-        drawList->AddLine(centerPoint, endpointPoint, color, active ? 4.0F : 2.5F);
-        drawList->AddCircleFilled(endpointPoint, active ? 6.5F : 5.0F, color, 12);
-    }
-}
-
-void EditorUVE::DrawScaleGizmoUVE(const EditorViewportRectUVE& viewportRect) {
-    if (!HasSingleDocumentSelectionUVE() || !IsViewportRectValidUVE(viewportRect)) {
-        return;
-    }
-
-    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
-    if (!entityManager.HasComponentUVE<Scene::WorldTransformComponentUVE>(m_selectedEntity)) {
-        return;
-    }
-    const Scene::WorldTransformComponentUVE& selectedWorld =
-        entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(m_selectedEntity);
-    if (selectedWorld.dirty || !IsFiniteVectorUVE(selectedWorld.worldPosition)) {
-        return;
-    }
-
-    Math::Vector2UVE center{};
-    if (!ProjectWorldPointUVE(viewportRect, selectedWorld.worldPosition, center)) {
-        return;
-    }
-
-    constexpr std::array<EditorTransformAxisUVE, 3> axes{
-        EditorTransformAxisUVE::X,
-        EditorTransformAxisUVE::Y,
-        EditorTransformAxisUVE::Z,
-    };
-    ImDrawList* const drawList = ImGui::GetForegroundDrawList();
-    const ImVec2 centerPoint{center.x, center.y};
-    const bool uniformActive = m_gizmoDrag.mode == EditorGizmoModeUVE::Scale &&
-                               m_gizmoDrag.handleKind == GizmoHandleKindUVE::UniformScaleOffset;
-    const float uniformHalfSize = uniformActive ? 6.5F : 4.0F;
-    drawList->AddRectFilled(ImVec2{center.x - uniformHalfSize, center.y - uniformHalfSize},
-                            ImVec2{center.x + uniformHalfSize, center.y + uniformHalfSize},
-                            uniformActive ? IM_COL32(255, 230, 90, 245) : IM_COL32(235, 235, 235, 220));
-    for (const EditorTransformAxisUVE axis : axes) {
-        Math::Vector3UVE worldAxis{};
-        Math::Vector2UVE endpoint{};
-        if (!GetGizmoAxisWorldVectorUVE(m_selectedEntity, axis, worldAxis) ||
-            !ProjectWorldPointUVE(viewportRect, selectedWorld.worldPosition + worldAxis * kGizmoAxisLengthUVE, endpoint)) {
-            continue;
-        }
-        const bool active = m_gizmoDrag.mode == EditorGizmoModeUVE::Scale &&
-                            m_gizmoDrag.handleKind == GizmoHandleKindUVE::Axis && m_gizmoDrag.axis == axis;
-        const ImU32 color = GizmoAxisColorUVE(axis, active);
-        const ImVec2 endpointPoint{endpoint.x, endpoint.y};
-        const float halfSize = active ? 6.5F : 5.0F;
-        drawList->AddLine(centerPoint, endpointPoint, color, active ? 4.0F : 2.5F);
-        drawList->AddRectFilled(ImVec2{endpoint.x - halfSize, endpoint.y - halfSize},
-                                ImVec2{endpoint.x + halfSize, endpoint.y + halfSize}, color);
-    }
-}
-
-void EditorUVE::DrawRotateGizmoUVE(const EditorViewportRectUVE& viewportRect) {
-    if (!HasSingleDocumentSelectionUVE() || !IsViewportRectValidUVE(viewportRect)) {
-        return;
-    }
-
-    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
-    if (!entityManager.HasComponentUVE<Scene::WorldTransformComponentUVE>(m_selectedEntity)) {
-        return;
-    }
-    const Scene::WorldTransformComponentUVE& selectedWorld =
-        entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(m_selectedEntity);
-    if (selectedWorld.dirty || !IsFiniteVectorUVE(selectedWorld.worldPosition)) {
-        return;
-    }
-    Math::Vector2UVE center{};
-    if (!ProjectWorldPointUVE(viewportRect, selectedWorld.worldPosition, center)) {
-        return;
-    }
-
-    constexpr std::array<EditorTransformAxisUVE, 3> axes{
-        EditorTransformAxisUVE::X,
-        EditorTransformAxisUVE::Y,
-        EditorTransformAxisUVE::Z,
-    };
-    constexpr int kRingSegmentCountUVE = 64;
-    constexpr float kFullTurnRadiansUVE = std::numbers::pi_v<float> * 2.0F;
-    const float segmentRadians = kFullTurnRadiansUVE / static_cast<float>(kRingSegmentCountUVE);
-    ImDrawList* const drawList = ImGui::GetForegroundDrawList();
-    const bool trackballActive = m_gizmoDrag.mode == EditorGizmoModeUVE::Rotate &&
-                                 m_gizmoDrag.handleKind == GizmoHandleKindUVE::Trackball;
-    drawList->AddCircleFilled(ImVec2{center.x, center.y}, kTrackballRadiusPixelsUVE,
-                              trackballActive ? IM_COL32(255, 232, 110, 64) : IM_COL32(210, 220, 235, 35), 32);
-    drawList->AddCircle(ImVec2{center.x, center.y}, kTrackballRadiusPixelsUVE,
-                        trackballActive ? IM_COL32(255, 232, 110, 235) : IM_COL32(210, 220, 235, 145), 32,
-                        trackballActive ? 2.5F : 1.25F);
-
-    for (const EditorTransformAxisUVE axis : axes) {
+    const auto drawAxisRing = [&](const EditorTransformAxisUVE axis, const float radius, const bool active) {
         Math::Vector3UVE first{};
         Math::Vector3UVE second{};
         if (!GetRingBasisUVE(axis, first, second)) {
-            continue;
+            return;
         }
         if (m_gizmoCoordinateSpace == EditorGizmoCoordinateSpaceUVE::Local) {
             Math::QuaternionUVE rotation{};
             if (!Math::TryNormalizeUVE(selectedWorld.worldRotation, rotation)) {
-                continue;
+                return;
             }
             first = Math::RotateVectorUVE(rotation, first);
             second = Math::RotateVectorUVE(rotation, second);
         }
-
-        const bool active = m_gizmoDrag.mode == EditorGizmoModeUVE::Rotate &&
-                            m_gizmoDrag.handleKind == GizmoHandleKindUVE::Axis && m_gizmoDrag.axis == axis;
+        constexpr int segmentCount = 64;
+        const float step = (std::numbers::pi_v<float> * 2.0F) / static_cast<float>(segmentCount);
         const ImU32 color = GizmoAxisColorUVE(axis, active);
-        for (int segment = 0; segment < kRingSegmentCountUVE; ++segment) {
-            const float startParameter = static_cast<float>(segment) * segmentRadians;
-            Math::Vector2UVE start{};
-            Math::Vector2UVE end{};
-            if (!ProjectWorldPointUVE(
-                    viewportRect,
-                    MakeRingPointUVE(selectedWorld.worldPosition, first, second, startParameter), start) ||
-                !ProjectWorldPointUVE(
-                    viewportRect,
-                    MakeRingPointUVE(selectedWorld.worldPosition, first, second,
-                                     startParameter + segmentRadians),
-                    end)) {
+        for (int segment = 0; segment < segmentCount; ++segment) {
+            const float a = static_cast<float>(segment) * step;
+            const float b = a + step;
+            const Math::Vector3UVE firstWorld = selectedWorld.worldPosition +
+                first * (std::cos(a) * radius) + second * (std::sin(a) * radius);
+            const Math::Vector3UVE secondWorld = selectedWorld.worldPosition +
+                first * (std::cos(b) * radius) + second * (std::sin(b) * radius);
+            Math::Vector2UVE firstScreen{};
+            Math::Vector2UVE secondScreen{};
+            if (!ProjectWorldPointUVE(viewportRect, firstWorld, firstScreen) ||
+                !ProjectWorldPointUVE(viewportRect, secondWorld, secondScreen)) {
                 continue;
             }
-            drawList->AddLine(ImVec2{start.x, start.y}, ImVec2{end.x, end.y}, color, active ? 4.0F : 2.5F);
+            drawOutlinedLine(ImVec2{firstScreen.x, firstScreen.y}, ImVec2{secondScreen.x, secondScreen.y}, color,
+                             active ? 4.0F : 2.5F);
         }
+    };
+
+    std::array<float, 3> projectedAxisLengths{};
+    for (std::size_t index = 0U; index < axes.size(); ++index) {
+        Math::Vector2UVE endpoint{};
+        if (projectAxisPoint(axes[index], kGizmoAxisLengthUVE, endpoint)) {
+            const float dx = endpoint.x - center.x;
+            const float dy = endpoint.y - center.y;
+            projectedAxisLengths[index] = std::sqrt((dx * dx) + (dy * dy));
+        }
+    }
+    const float screenRadius = std::max(20.0F, *std::max_element(projectedAxisLengths.begin(), projectedAxisLengths.end()) * 1.35F);
+    const bool showMove = m_gizmoMode == EditorGizmoModeUVE::Translate || m_gizmoMode == EditorGizmoModeUVE::Universal;
+    const bool showRotate = m_gizmoMode == EditorGizmoModeUVE::Rotate || m_gizmoMode == EditorGizmoModeUVE::Universal;
+    const bool showScale = m_gizmoMode == EditorGizmoModeUVE::Scale || m_gizmoMode == EditorGizmoModeUVE::Universal;
+
+    if (showRotate) {
+        for (const EditorTransformAxisUVE axis : axes) {
+            const bool active = m_gizmoDrag.mode == EditorGizmoModeUVE::Rotate &&
+                                m_gizmoDrag.handleKind == GizmoHandleKindUVE::Axis && m_gizmoDrag.axis == axis;
+            drawAxisRing(axis, kGizmoAxisLengthUVE * 1.35F, active);
+        }
+        const bool screenRotateActive = m_gizmoDrag.mode == EditorGizmoModeUVE::Rotate &&
+                                        m_gizmoDrag.handleKind == GizmoHandleKindUVE::Trackball;
+        drawList->AddCircle(centerPoint, screenRadius, IM_COL32(14, 16, 21, 210), 64,
+                            screenRotateActive ? 5.0F : 3.0F);
+        drawList->AddCircle(centerPoint, screenRadius, screenRotateActive ? IM_COL32(235, 235, 235, 235)
+                                                                            : IM_COL32(210, 220, 235, 145),
+                            64, screenRotateActive ? 3.0F : 1.5F);
+    }
+
+    if (showMove) {
+        for (const EditorTransformAxisUVE axis : axes) {
+            const bool active = m_gizmoDrag.mode == EditorGizmoModeUVE::Translate &&
+                                m_gizmoDrag.handleKind == GizmoHandleKindUVE::Axis && m_gizmoDrag.axis == axis;
+            drawArrow(axis, kGizmoAxisLengthUVE, active);
+        }
+        for (const EditorTranslatePlaneUVE plane : {EditorTranslatePlaneUVE::XY, EditorTranslatePlaneUVE::YZ,
+                                                    EditorTranslatePlaneUVE::XZ}) {
+            const bool active = m_gizmoDrag.mode == EditorGizmoModeUVE::Translate &&
+                                m_gizmoDrag.handleKind == GizmoHandleKindUVE::Plane && m_gizmoDrag.plane == plane;
+            drawPlane(plane, active);
+        }
+        const bool active = m_gizmoDrag.mode == EditorGizmoModeUVE::Translate &&
+                            m_gizmoDrag.handleKind == GizmoHandleKindUVE::ScreenPlaneMove;
+        const ImU32 centerColor = active ? IM_COL32(255, 217, 70, 255) : IM_COL32(235, 235, 235, 235);
+        drawList->AddRectFilled(ImVec2{center.x - 8.0F, center.y - 8.0F}, ImVec2{center.x + 8.0F, center.y + 8.0F},
+                                centerColor);
+        drawList->AddRect(ImVec2{center.x - 8.0F, center.y - 8.0F}, ImVec2{center.x + 8.0F, center.y + 8.0F},
+                          IM_COL32(14, 16, 21, 235), 1.5F, 0, active ? 2.0F : 1.5F);
+    }
+
+    if (showScale) {
+        for (const EditorTransformAxisUVE axis : axes) {
+            const bool active = m_gizmoDrag.mode == EditorGizmoModeUVE::Scale &&
+                                m_gizmoDrag.handleKind == GizmoHandleKindUVE::Axis && m_gizmoDrag.axis == axis;
+            drawArrow(axis, kGizmoAxisLengthUVE * 0.65F, active);
+            drawBoxAtAxis(axis, kGizmoAxisLengthUVE * 0.65F, active);
+        }
+        const bool active = m_gizmoDrag.mode == EditorGizmoModeUVE::Scale &&
+                            m_gizmoDrag.handleKind == GizmoHandleKindUVE::UniformScaleOffset;
+        const ImU32 centerColor = active ? IM_COL32(255, 230, 90, 255) : IM_COL32(235, 235, 235, 235);
+        drawList->AddRectFilled(ImVec2{center.x - 9.0F, center.y - 9.0F}, ImVec2{center.x + 9.0F, center.y + 9.0F},
+                                centerColor);
+        drawList->AddRect(ImVec2{center.x - 9.0F, center.y - 9.0F}, ImVec2{center.x + 9.0F, center.y + 9.0F},
+                          IM_COL32(14, 16, 21, 235), 1.5F, 0, active ? 2.0F : 1.5F);
     }
 }
 
