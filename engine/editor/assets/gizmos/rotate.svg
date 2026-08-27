@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
+  <!-- UNIVEX Gizmo Icon: ROTATE (XYZ rings) -->
+  <g fill="none" stroke-linecap="round">
+    <!-- ring around X axis -->
+    <ellipse cx="16" cy="17" rx="6.5" ry="12" transform="rotate(90 16 17)" stroke="#FF5D5D" stroke-width="2"/>
+    <!-- ring around Y axis -->
+    <ellipse cx="16" cy="17" rx="12" ry="5" stroke="#4ADE80" stroke-width="2"/>
+    <!-- ring around Z axis -->
+    <ellipse cx="16" cy="17" rx="9.5" ry="9.5" transform="rotate(35 16 17)" stroke="#3B9CFF" stroke-width="2" stroke-dasharray="1 3.2"/>
+    <circle cx="16" cy="17" r="1.8" fill="#EDEDED"/>
+  </g>
+</svg>

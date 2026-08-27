@@ -200,6 +200,8 @@ constexpr const char* kHierarchyEntityPayloadUVE = "UVE_SCENE_HIERARCHY_ENTITY";
             return EditorToolSessionModeUVE::Rotate;
         case EditorGizmoModeUVE::Scale:
             return EditorToolSessionModeUVE::Scale;
+        case EditorGizmoModeUVE::Universal:
+            return EditorToolSessionModeUVE::Translate;
     }
     return EditorToolSessionModeUVE::Translate;
 }
@@ -380,6 +382,7 @@ void EditorUVE::TickUVE() {
          m_viewportNavigationMode != EditorViewportNavigationModeUVE::None)) {
         CancelHierarchyRenameUVE();
     }
+    UpdateViewportPresetAnimationUVE();
 }
 
 bool EditorUVE::EnterPlayModeUVE() {
@@ -1389,6 +1392,7 @@ bool EditorUVE::FocusSelectedEntityUVE() {
 
     const Math::Vector3UVE previousFocus = m_viewportFocusPoint;
     const float previousDistance = m_viewportDistance;
+    m_viewportPresetAnimating = false;
     m_viewportFocusPoint = selectedWorld.worldPosition;
     m_viewportDistance = std::clamp(m_viewportDistance, kMinimumViewportDistanceUVE, kMaximumViewportDistanceUVE);
     if (ApplyViewportCameraUVE()) {
@@ -1407,6 +1411,7 @@ bool EditorUVE::OrbitViewportUVE(const float yawDeltaRadians, const float pitchD
 
     const float previousYaw = m_viewportYawRadians;
     const float previousPitch = m_viewportPitchRadians;
+    m_viewportPresetAnimating = false;
     m_viewportYawRadians += yawDeltaRadians;
     m_viewportPitchRadians = std::clamp(m_viewportPitchRadians + pitchDeltaRadians,
                                         -kMaximumViewportPitchRadiansUVE,
@@ -1449,6 +1454,7 @@ bool EditorUVE::PanViewportUVE(const Math::Vector2UVE pixelDelta, const EditorVi
     }
 
     const Math::Vector3UVE previousFocus = m_viewportFocusPoint;
+    m_viewportPresetAnimating = false;
     m_viewportFocusPoint += right * (-pixelDelta.x * worldUnitsPerPixel);
     m_viewportFocusPoint += up * (pixelDelta.y * worldUnitsPerPixel);
     if (ApplyViewportCameraUVE()) {
@@ -1465,6 +1471,7 @@ bool EditorUVE::ZoomViewportUVE(const float wheelDelta) {
     }
 
     const float previousDistance = m_viewportDistance;
+    m_viewportPresetAnimating = false;
     const float zoomFactor = std::exp(-wheelDelta * kViewportZoomExponentPerWheelUnitUVE);
     if (!IsFiniteUVE(zoomFactor) || zoomFactor <= 0.0F) {
         return false;
@@ -2891,6 +2898,103 @@ bool EditorUVE::IsViewportNavigationFiniteUVE() const noexcept {
            m_viewportDistance <= kMaximumViewportDistanceUVE;
 }
 
+bool EditorUVE::ApplyViewportPresetUVE(const float yawRadians, const float pitchRadians) noexcept {
+    if (m_state != EditorStateUVE::Running || !IsFiniteUVE(yawRadians) || !IsFiniteUVE(pitchRadians) ||
+        std::abs(pitchRadians) > kMaximumViewportPitchRadiansUVE) {
+        return false;
+    }
+    m_viewportPresetTargetYawRadians = yawRadians;
+    m_viewportPresetTargetPitchRadians = pitchRadians;
+    m_viewportPresetAnimating = true;
+    return true;
+}
+
+void EditorUVE::UpdateViewportPresetAnimationUVE() {
+    if (!m_viewportPresetAnimating || m_viewportNavigationMode != EditorViewportNavigationModeUVE::None ||
+        m_gizmoDrag.axis != EditorTransformAxisUVE::None) {
+        return;
+    }
+    const float yawDelta = std::remainder(m_viewportPresetTargetYawRadians - m_viewportYawRadians,
+                                          std::numbers::pi_v<float> * 2.0F);
+    const float pitchDelta = m_viewportPresetTargetPitchRadians - m_viewportPitchRadians;
+    if (!IsFiniteUVE(yawDelta) || !IsFiniteUVE(pitchDelta)) {
+        m_viewportPresetAnimating = false;
+        return;
+    }
+    const float previousYaw = m_viewportYawRadians;
+    const float previousPitch = m_viewportPitchRadians;
+    constexpr float kPresetLerpFactorUVE = 0.15F;
+    if (std::abs(yawDelta) <= 0.001F && std::abs(pitchDelta) <= 0.001F) {
+        m_viewportYawRadians = m_viewportPresetTargetYawRadians;
+        m_viewportPitchRadians = m_viewportPresetTargetPitchRadians;
+        m_viewportPresetAnimating = false;
+    } else {
+        m_viewportYawRadians += yawDelta * kPresetLerpFactorUVE;
+        m_viewportPitchRadians += pitchDelta * kPresetLerpFactorUVE;
+    }
+    if (!ApplyViewportCameraUVE()) {
+        m_viewportYawRadians = previousYaw;
+        m_viewportPitchRadians = previousPitch;
+        m_viewportPresetAnimating = false;
+    }
+}
+
+bool EditorUVE::HandleViewportNavigationGizmoClickUVE(const EditorViewportRectUVE& viewportRect,
+                                                       const Math::Vector2UVE pointerPosition) {
+    if (!IsViewportRectValidUVE(viewportRect) || !IsFiniteUVE(pointerPosition.x) || !IsFiniteUVE(pointerPosition.y) ||
+        pointerPosition.x < viewportRect.origin.x || pointerPosition.y < viewportRect.origin.y ||
+        pointerPosition.x > viewportRect.origin.x + viewportRect.size.x ||
+        pointerPosition.y > viewportRect.origin.y + viewportRect.size.y ||
+        m_viewportNavigationMode != EditorViewportNavigationModeUVE::None ||
+        m_gizmoDrag.axis != EditorTransformAxisUVE::None) {
+        return false;
+    }
+
+    const Math::Vector2UVE center{viewportRect.origin.x + viewportRect.size.x - 62.0F,
+                                  viewportRect.origin.y + 104.0F};
+    const Math::QuaternionUVE orientation =
+        MakeViewportOrientationUVE(m_viewportYawRadians, m_viewportPitchRadians);
+    const Math::Vector3UVE cameraRight =
+        Math::RotateVectorUVE(orientation, Math::Vector3UVE{1.0F, 0.0F, 0.0F});
+    const Math::Vector3UVE cameraUp =
+        Math::RotateVectorUVE(orientation, Math::Vector3UVE{0.0F, 1.0F, 0.0F});
+    if (!IsFiniteVectorUVE(cameraRight) || !IsFiniteVectorUVE(cameraUp)) {
+        return false;
+    }
+
+    const Math::Vector2UVE centerOffset{pointerPosition.x - center.x, pointerPosition.y - center.y};
+    if (LengthSquared2UVE(centerOffset) <= 11.0F * 11.0F) {
+        return ApplyViewportPresetUVE(0.0F, 0.0F);
+    }
+
+    struct PresetUVE final {
+        Math::Vector3UVE direction;
+        float yaw;
+        float pitch;
+    };
+    constexpr float halfPi = std::numbers::pi_v<float> * 0.5F;
+    const std::array<PresetUVE, 6> presets{
+        PresetUVE{Math::Vector3UVE{1.0F, 0.0F, 0.0F}, halfPi, 0.0F},
+        PresetUVE{Math::Vector3UVE{-1.0F, 0.0F, 0.0F}, -halfPi, 0.0F},
+        PresetUVE{Math::Vector3UVE{0.0F, 1.0F, 0.0F}, 0.0F, -kMaximumViewportPitchRadiansUVE},
+        PresetUVE{Math::Vector3UVE{0.0F, -1.0F, 0.0F}, 0.0F, kMaximumViewportPitchRadiansUVE},
+        PresetUVE{Math::Vector3UVE{0.0F, 0.0F, 1.0F}, 0.0F, 0.0F},
+        PresetUVE{Math::Vector3UVE{0.0F, 0.0F, -1.0F}, std::numbers::pi_v<float>, 0.0F},
+    };
+    constexpr float kNavigationRadiusPixelsUVE = 34.0F;
+    constexpr float kNavigationHitRadiusPixelsUVE = 13.0F;
+    for (const PresetUVE& preset : presets) {
+        const float screenX = Math::DotUVE(preset.direction, cameraRight) * kNavigationRadiusPixelsUVE;
+        const float screenY = -Math::DotUVE(preset.direction, cameraUp) * kNavigationRadiusPixelsUVE;
+        const Math::Vector2UVE endpoint{center.x + screenX, center.y + screenY};
+        const Math::Vector2UVE offset{pointerPosition.x - endpoint.x, pointerPosition.y - endpoint.y};
+        if (LengthSquared2UVE(offset) <= kNavigationHitRadiusPixelsUVE * kNavigationHitRadiusPixelsUVE) {
+            return ApplyViewportPresetUVE(preset.yaw, preset.pitch);
+        }
+    }
+    return false;
+}
+
 bool EditorUVE::ApplyViewportCameraUVE() {
     if (m_state != EditorStateUVE::Running || !IsViewportNavigationFiniteUVE()) {
         return false;
@@ -3117,11 +3221,22 @@ bool EditorUVE::ComputeLocalDeltaForWorldDeltaUVE(const Scene::EntityUVE entity,
 
 bool EditorUVE::BeginGizmoDragUVE(const EditorViewportRectUVE& viewportRect,
                                   const Math::Vector2UVE pointerPosition) {
+    if (m_gizmoMode == EditorGizmoModeUVE::Universal) {
+        return BeginGizmoDragForModeUVE(viewportRect, pointerPosition, EditorGizmoModeUVE::Scale) ||
+               BeginGizmoDragForModeUVE(viewportRect, pointerPosition, EditorGizmoModeUVE::Translate) ||
+               BeginGizmoDragForModeUVE(viewportRect, pointerPosition, EditorGizmoModeUVE::Rotate);
+    }
+    return BeginGizmoDragForModeUVE(viewportRect, pointerPosition, m_gizmoMode);
+}
+
+bool EditorUVE::BeginGizmoDragForModeUVE(const EditorViewportRectUVE& viewportRect,
+                                         const Math::Vector2UVE pointerPosition,
+                                         const EditorGizmoModeUVE mode) {
     if (!IsAuthoringCommandAllowedUVE() ||
         m_toolSession.GetPhaseUVE() == EditorToolSessionPhaseUVE::Previewing) {
         return false;
     }
-    if (m_gizmoMode == EditorGizmoModeUVE::Rotate) {
+    if (mode == EditorGizmoModeUVE::Rotate) {
         return BeginRotateGizmoDragUVE(viewportRect, pointerPosition);
     }
     if (!HasSingleDocumentSelectionUVE() || !IsViewportRectValidUVE(viewportRect)) {
@@ -3176,7 +3291,12 @@ bool EditorUVE::BeginGizmoDragUVE(const EditorViewportRectUVE& viewportRect,
         ++uniformPixelsPerWorldUnitCount;
         const Math::Vector2UVE pointerOffset{pointerPosition.x - center.x, pointerPosition.y - center.y};
         const float along = std::clamp(Dot2UVE(pointerOffset, screenAxis) / axisLengthSquared, 0.0F, 1.0F);
-        const Math::Vector2UVE closestPoint = m_gizmoMode == EditorGizmoModeUVE::Scale
+        // Keep the pivot center reserved for the plane/omni handle. Axis handles still retain
+        // their full endpoint and shaft hit regions beyond this inner dead zone.
+        if (mode == EditorGizmoModeUVE::Translate && along < 0.15F) {
+            continue;
+        }
+        const Math::Vector2UVE closestPoint = mode == EditorGizmoModeUVE::Scale
                                                   ? endpoint
                                                   : Math::Vector2UVE{center.x + screenAxis.x * along,
                                                                      center.y + screenAxis.y * along};
@@ -3186,7 +3306,7 @@ bool EditorUVE::BeginGizmoDragUVE(const EditorViewportRectUVE& viewportRect,
             distanceSquared >= bestDistanceSquared) {
             continue;
         }
-        candidate.mode = m_gizmoMode;
+        candidate.mode = mode;
         candidate.axis = axis;
         candidate.entity = m_selectedEntity;
         candidate.initialPointer = pointerPosition;
@@ -3197,8 +3317,8 @@ bool EditorUVE::BeginGizmoDragUVE(const EditorViewportRectUVE& viewportRect,
     }
 
     // Axis/endpoint candidates win deterministically. The Scale center is a fallback only after every axis hit.
-    if (candidate.axis == EditorTransformAxisUVE::None && m_gizmoMode == EditorGizmoModeUVE::Scale &&
-        uniformPixelsPerWorldUnitCount > 0U) {
+    if (candidate.axis == EditorTransformAxisUVE::None && mode == EditorGizmoModeUVE::Scale &&
+        m_gizmoMode != EditorGizmoModeUVE::Universal && uniformPixelsPerWorldUnitCount > 0U) {
         const Math::Vector2UVE centerOffset{pointerPosition.x - center.x, pointerPosition.y - center.y};
         const float centerDistanceSquared = LengthSquared2UVE(centerOffset);
         if (centerDistanceSquared <= (kGizmoHandleRadiusPixelsUVE * kGizmoHandleRadiusPixelsUVE)) {
@@ -3213,9 +3333,44 @@ bool EditorUVE::BeginGizmoDragUVE(const EditorViewportRectUVE& viewportRect,
             }
     }
 
+    // The center omni handle translates on the camera-facing plane, matching the package's XYZ
+    // behavior without inventing a world-axis constraint.
+    if (candidate.axis == EditorTransformAxisUVE::None && mode == EditorGizmoModeUVE::Translate) {
+        const Math::Vector2UVE centerOffset{pointerPosition.x - center.x, pointerPosition.y - center.y};
+        const float centerDistanceSquared = LengthSquared2UVE(centerOffset);
+        if (centerDistanceSquared <= (kGizmoHandleRadiusPixelsUVE * kGizmoHandleRadiusPixelsUVE)) {
+            Scene::IEntityManagerUVE& cameraEntityManager = m_services->GetEntityManagerUVE();
+            if (cameraEntityManager.IsAliveUVE(m_viewportCamera) &&
+                cameraEntityManager.HasComponentUVE<Scene::CameraComponentUVE>(m_viewportCamera)) {
+                const Scene::CameraComponentUVE& camera =
+                    cameraEntityManager.GetComponentUVE<Scene::CameraComponentUVE>(m_viewportCamera);
+                const float tanHalfFov = std::tan((camera.fieldOfViewDegrees * std::numbers::pi_v<float>) / 360.0F);
+                const float worldUnitsPerPixel =
+                    (2.0F * m_viewportDistance * tanHalfFov) / viewportRect.size.y;
+                const Math::QuaternionUVE orientation =
+                    MakeViewportOrientationUVE(m_viewportYawRadians, m_viewportPitchRadians);
+                const Math::Vector3UVE cameraRight =
+                    Math::RotateVectorUVE(orientation, Math::Vector3UVE{1.0F, 0.0F, 0.0F});
+                const Math::Vector3UVE cameraUp =
+                    Math::RotateVectorUVE(orientation, Math::Vector3UVE{0.0F, 1.0F, 0.0F});
+                if (IsFiniteUVE(worldUnitsPerPixel) && worldUnitsPerPixel > kVectorEpsilonUVE &&
+                    IsFiniteVectorUVE(cameraRight) && IsFiniteVectorUVE(cameraUp)) {
+                    candidate.mode = EditorGizmoModeUVE::Translate;
+                    candidate.handleKind = GizmoHandleKindUVE::ScreenPlaneMove;
+                    candidate.axis = EditorTransformAxisUVE::X;
+                    candidate.entity = m_selectedEntity;
+                    candidate.initialPointer = pointerPosition;
+                    candidate.worldAxisA = cameraRight;
+                    candidate.worldAxisB = cameraUp;
+                    candidate.pixelsPerWorldUnit = 1.0F / worldUnitsPerPixel;
+                }
+            }
+        }
+    }
+
     // Axis/endpoint candidates win deterministically. Plane handles are considered only when no axis hit exists.
     if (candidate.axis == EditorTransformAxisUVE::None && candidate.handleKind != GizmoHandleKindUVE::UniformScaleOffset &&
-        m_gizmoMode == EditorGizmoModeUVE::Translate) {
+        candidate.handleKind != GizmoHandleKindUVE::ScreenPlaneMove && mode == EditorGizmoModeUVE::Translate) {
         constexpr std::array<EditorTranslatePlaneUVE, 3> planes{
             EditorTranslatePlaneUVE::XY, EditorTranslatePlaneUVE::XZ, EditorTranslatePlaneUVE::YZ};
         for (const EditorTranslatePlaneUVE plane : planes) {
@@ -3607,6 +3762,30 @@ void EditorUVE::UpdateGizmoDragUVE(const Math::Vector2UVE pointerPosition) {
         return;
     }
 
+    if (m_gizmoDrag.handleKind == GizmoHandleKindUVE::ScreenPlaneMove) {
+        const Math::Vector2UVE pointerDelta{pointerPosition.x - m_gizmoDrag.initialPointer.x,
+                                             pointerPosition.y - m_gizmoDrag.initialPointer.y};
+        const float worldPerPixel = 1.0F / m_gizmoDrag.pixelsPerWorldUnit;
+        const Math::Vector3UVE worldDelta =
+            (m_gizmoDrag.worldAxisA * (pointerDelta.x * worldPerPixel)) -
+            (m_gizmoDrag.worldAxisB * (pointerDelta.y * worldPerPixel));
+        Math::Vector3UVE localDelta{};
+        if (!IsFiniteUVE(worldPerPixel) || !IsFiniteVectorUVE(worldDelta) ||
+            !ComputeLocalDeltaForWorldDeltaUVE(m_gizmoDrag.entity, worldDelta, localDelta)) {
+            CancelGizmoDragUVE();
+            return;
+        }
+        Scene::TransformComponentUVE updated = sessionSnapshot.baselineTransform;
+        updated.localPosition += localDelta;
+        if (!ApplyLocalTransformUVE(m_gizmoDrag.entity, updated) ||
+            !m_toolSession.RecordPreviewAppliedUVE(updated)) {
+            CancelGizmoDragUVE();
+            return;
+        }
+        m_sceneDirty = true;
+        return;
+    }
+
     if (m_gizmoDrag.handleKind == GizmoHandleKindUVE::Plane) {
         const Math::Vector2UVE pointerDelta{pointerPosition.x - m_gizmoDrag.initialPointer.x,
                                              pointerPosition.y - m_gizmoDrag.initialPointer.y};
@@ -3955,7 +4134,12 @@ void EditorUVE::DrawTranslateGizmoUVE(const EditorViewportRectUVE& viewportRect)
 
     ImDrawList* const drawList = ImGui::GetForegroundDrawList();
     const ImVec2 centerPoint{center.x, center.y};
-    drawList->AddCircle(centerPoint, 7.0F, IM_COL32(235, 235, 235, 220), 16, 1.5F);
+    const bool screenPlaneActive = m_gizmoDrag.handleKind == GizmoHandleKindUVE::ScreenPlaneMove;
+    const ImU32 centerHandleColor = screenPlaneActive ? IM_COL32(255, 217, 70, 245) : IM_COL32(235, 235, 235, 220);
+    drawList->AddRectFilled(ImVec2{center.x - 6.0F, center.y - 6.0F},
+                            ImVec2{center.x + 6.0F, center.y + 6.0F}, centerHandleColor);
+    drawList->AddRect(ImVec2{center.x - 6.0F, center.y - 6.0F},
+                      ImVec2{center.x + 6.0F, center.y + 6.0F}, IM_COL32(35, 38, 43, 235), 1.0F, 0, 1.0F);
 
     constexpr std::array<EditorTranslatePlaneUVE, 3> planes{
         EditorTranslatePlaneUVE::XY, EditorTranslatePlaneUVE::XZ, EditorTranslatePlaneUVE::YZ};
@@ -4191,7 +4375,7 @@ void EditorUVE::LoadSessionSettingsUVE() {
     m_activeWorkspace = static_cast<EditorWorkspaceUVE>(getEnum("editor.workspace.active", 0, 4));
     m_activeRightPanelTab = static_cast<EditorRightPanelTabUVE>(getEnum("editor.rightPanel.activeTab", 0, 2));
     m_activeBottomDock = static_cast<EditorBottomDockUVE>(getEnum("editor.bottomDock.active", 3, 3));
-    m_gizmoMode = static_cast<EditorGizmoModeUVE>(getEnum("editor.viewport.gizmoMode", 0, 2));
+    m_gizmoMode = static_cast<EditorGizmoModeUVE>(getEnum("editor.viewport.gizmoMode", 0, 3));
     m_gizmoCoordinateSpace = static_cast<EditorGizmoCoordinateSpaceUVE>(getEnum("editor.viewport.coordinateSpace", 0, 1));
     EditorTransformSnappingSettingsUVE snapping{};
     const auto getPositiveSnapValue = [&config](const std::string_view key, const float fallback) {
@@ -4217,6 +4401,9 @@ void EditorUVE::LoadSessionSettingsUVE() {
         m_viewportYawRadians = yaw;
         m_viewportPitchRadians = pitch;
         m_viewportDistance = distance;
+        m_viewportPresetTargetYawRadians = yaw;
+        m_viewportPresetTargetPitchRadians = pitch;
+        m_viewportPresetAnimating = false;
         static_cast<void>(ApplyViewportCameraUVE());
     }
 }
@@ -4281,6 +4468,8 @@ void EditorUVE::DrawMenuBarUVE() {
         static_cast<void>(SetGizmoModeUVE(EditorGizmoModeUVE::Rotate));
     } else if (!io.WantTextInput && gizmoModeChangeAllowed && ImGui::IsKeyPressed(ImGuiKey_R, false)) {
         static_cast<void>(SetGizmoModeUVE(EditorGizmoModeUVE::Scale));
+    } else if (!io.WantTextInput && gizmoModeChangeAllowed && ImGui::IsKeyPressed(ImGuiKey_T, false)) {
+        static_cast<void>(SetGizmoModeUVE(EditorGizmoModeUVE::Universal));
     } else if (!io.WantTextInput && io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Z, false)) {
         static_cast<void>(io.KeyShift ? RedoUVE() : UndoUVE());
     } else if (!io.WantTextInput && io.KeyCtrl && ImGui::IsKeyPressed(ImGuiKey_Y, false)) {
@@ -6396,7 +6585,8 @@ void EditorUVE::DrawViewportPanelUVE() {
     const ImVec2 contentOrigin = ImGui::GetCursorScreenPos();
     const ImVec2 contentSize = ImGui::GetContentRegionAvail();
     ImGui::SetCursorScreenPos(ImVec2{contentOrigin.x, contentOrigin.y + 28.0F});
-    const auto drawViewportTool = [this](const char* const label, const EditorGizmoModeUVE mode,
+    const auto drawViewportTool = [this](const char* const label, const char* const tooltip,
+                                         const EditorGizmoModeUVE mode, const EditorGizmoIconUVE icon,
                                          const bool enabled) {
         const bool active = m_gizmoMode == mode;
         if (active) {
@@ -6405,12 +6595,23 @@ void EditorUVE::DrawViewportPanelUVE() {
             ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4{0.396F, 0.510F, 0.604F, 1.0F});
         }
         ImGui::BeginDisabled(!enabled);
-        if (ImGui::SmallButton(label)) {
-            static_cast<void>(SetGizmoModeUVE(mode));
+        const std::uintptr_t iconTexture = m_uiAssets.GetGizmoTextureIdUVE(icon);
+        bool clicked = false;
+        if (iconTexture != 0U) {
+            const std::string buttonId = std::string("##gizmo-") + label;
+            clicked = ImGui::ImageButton(buttonId.c_str(), static_cast<ImTextureID>(iconTexture), ImVec2{20.0F, 20.0F});
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("%s", tooltip);
+            }
+        } else {
+            clicked = ImGui::SmallButton(label);
         }
         ImGui::EndDisabled();
         if (active) {
             ImGui::PopStyleColor(3);
+        }
+        if (clicked) {
+            static_cast<void>(SetGizmoModeUVE(mode));
         }
         ImGui::SameLine(0.0F, 4.0F);
     };
@@ -6438,9 +6639,14 @@ void EditorUVE::DrawViewportPanelUVE() {
                                             m_gizmoDrag.axis == EditorTransformAxisUVE::None &&
                                             m_viewportNavigationMode == EditorViewportNavigationModeUVE::None;
         ImGui::SetCursorScreenPos(ImVec2{contentOrigin.x + 8.0F, contentOrigin.y + 28.0F});
-        drawViewportTool("Move XYZ", EditorGizmoModeUVE::Translate, gizmoModeChangeAllowed);
-        drawViewportTool("Rotate XYZ", EditorGizmoModeUVE::Rotate, gizmoModeChangeAllowed);
-        drawViewportTool("Scale XYZ", EditorGizmoModeUVE::Scale, gizmoModeChangeAllowed);
+        drawViewportTool("Move XYZ", "Move / W", EditorGizmoModeUVE::Translate,
+                         EditorGizmoIconUVE::Move, gizmoModeChangeAllowed);
+        drawViewportTool("Rotate XYZ", "Rotate / E", EditorGizmoModeUVE::Rotate,
+                         EditorGizmoIconUVE::Rotate, gizmoModeChangeAllowed);
+        drawViewportTool("Scale XYZ", "Scale / R", EditorGizmoModeUVE::Scale,
+                         EditorGizmoIconUVE::Scale, gizmoModeChangeAllowed);
+        drawViewportTool("Universal", "Universal / T", EditorGizmoModeUVE::Universal,
+                         EditorGizmoIconUVE::Universal, gizmoModeChangeAllowed);
         if (ImGui::SmallButton(m_gizmoCoordinateSpace == EditorGizmoCoordinateSpaceUVE::World ? "Global" : "Local")) {
             static_cast<void>(SetGizmoCoordinateSpaceUVE(
                 m_gizmoCoordinateSpace == EditorGizmoCoordinateSpaceUVE::World
@@ -6520,6 +6726,17 @@ void EditorUVE::DrawViewportPanelUVE() {
                 static_cast<void>(PanViewportUVE(Math::Vector2UVE{io.MouseDelta.x, io.MouseDelta.y}, viewportRect));
             }
         } else {
+            if (viewportHovered && !io.WantTextInput) {
+                if (ImGui::IsKeyPressed(ImGuiKey_W, false)) {
+                    SetGizmoModeUVE(EditorGizmoModeUVE::Translate);
+                } else if (ImGui::IsKeyPressed(ImGuiKey_E, false)) {
+                    SetGizmoModeUVE(EditorGizmoModeUVE::Rotate);
+                } else if (ImGui::IsKeyPressed(ImGuiKey_R, false)) {
+                    SetGizmoModeUVE(EditorGizmoModeUVE::Scale);
+                } else if (ImGui::IsKeyPressed(ImGuiKey_T, false)) {
+                    SetGizmoModeUVE(EditorGizmoModeUVE::Universal);
+                }
+            }
             if (viewportHovered && !io.WantTextInput && ImGui::IsKeyPressed(ImGuiKey_F, false)) {
                 static_cast<void>(FocusSelectedEntityUVE());
             }
@@ -6531,7 +6748,8 @@ void EditorUVE::DrawViewportPanelUVE() {
             } else if (viewportHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Middle)) {
                 m_viewportNavigationMode = EditorViewportNavigationModeUVE::Pan;
             } else if (viewportClicked) {
-                if (!BeginGizmoDragUVE(viewportRect, pointerPosition)) {
+                if (!HandleViewportNavigationGizmoClickUVE(viewportRect, pointerPosition) &&
+                    !BeginGizmoDragUVE(viewportRect, pointerPosition)) {
                     static_cast<void>(PickViewportUVE(viewportRect, pointerPosition, io.KeyCtrl));
                 }
             }

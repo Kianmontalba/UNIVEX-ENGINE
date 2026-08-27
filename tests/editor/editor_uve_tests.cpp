@@ -127,6 +127,21 @@ struct EditorUVEAccessUVE final {
     [[nodiscard]] static EditorTransformAxisUVE GetGizmoDragAxisUVE(const EditorUVE& editor) noexcept {
         return editor.m_gizmoDrag.axis;
     }
+
+    [[nodiscard]] static bool IsGizmoDragHandleKindUVE(const EditorUVE& editor,
+                                                        const int expectedKind) noexcept {
+        return static_cast<int>(editor.m_gizmoDrag.handleKind) == expectedKind;
+    }
+
+    [[nodiscard]] static bool ClickViewportNavigationGizmoUVE(EditorUVE& editor,
+                                                               const EditorViewportRectUVE& viewportRect,
+                                                               const Math::Vector2UVE pointerPosition) {
+        return editor.HandleViewportNavigationGizmoClickUVE(viewportRect, pointerPosition);
+    }
+
+    [[nodiscard]] static float GetViewportYawUVE(const EditorUVE& editor) noexcept {
+        return editor.m_viewportYawRadians;
+    }
 };
 
 namespace {
@@ -2438,6 +2453,94 @@ TEST(EditorUVETest, GizmoDragSixDof_HitTestsAndCommitsEveryTranslationAndRotatio
                       before.localScale);
             services.GetSceneGraphUVE().UpdateUVE(entityManager);
         }
+
+        editor.ShutdownUVE();
+    }
+    engine.Shutdown();
+}
+
+TEST(EditorUVETest, ViewportNavigationGizmo_XPositiveStartsCameraPresetOrbit) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_view_nav_gizmo.uvescene");
+        editor.InitUVE();
+        const EditorViewportRectUVE viewportRect{{0.0F, 0.0F}, {1024.0F, 768.0F}};
+        const Math::Vector2UVE widgetCenter{962.0F, 104.0F};
+        ASSERT_TRUE(EditorUVEAccessUVE::ClickViewportNavigationGizmoUVE(
+            editor, viewportRect, Math::Vector2UVE{widgetCenter.x + 34.0F, widgetCenter.y}));
+        editor.TickUVE();
+        EXPECT_GT(EditorUVEAccessUVE::GetViewportYawUVE(editor), 0.0F);
+        for (int frame = 0; frame < 80; ++frame) {
+            editor.TickUVE();
+        }
+        EXPECT_NEAR(EditorUVEAccessUVE::GetViewportYawUVE(editor),
+                    std::numbers::pi_v<float> * 0.5F, 0.02F);
+        editor.ShutdownUVE();
+    }
+    engine.Shutdown();
+}
+
+TEST(EditorUVETest, UniversalGizmo_PrioritizesScaleEndpointAndUsesScreenPlanePivotMove) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_universal_gizmo.uvescene");
+        editor.InitUVE();
+        Core::EngineServicesUVE& services = engine.GetServicesUVE();
+        Scene::IEntityManagerUVE& entityManager = services.GetEntityManagerUVE();
+        const Scene::EntityUVE entity = entityManager.CreateEntityUVE();
+        AttachRootUVE(engine, entity, Scene::TransformComponentUVE{});
+        services.GetSceneGraphUVE().UpdateUVE(entityManager);
+        editor.SelectEntityUVE(entity);
+        editor.SetGizmoModeUVE(EditorGizmoModeUVE::Universal);
+        const EditorViewportRectUVE viewportRect{{0.0F, 0.0F}, {1024.0F, 768.0F}};
+
+        const Scene::WorldTransformComponentUVE& world =
+            entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(entity);
+        Math::Vector2UVE center{};
+        ASSERT_TRUE(EditorUVEAccessUVE::ProjectWorldPointUVE(editor, viewportRect, world.worldPosition, center));
+        ASSERT_TRUE(EditorUVEAccessUVE::BeginGizmoDragUVE(editor, viewportRect, center));
+        EXPECT_TRUE(EditorUVEAccessUVE::IsGizmoDragHandleKindUVE(editor, 3));
+        const Scene::TransformComponentUVE beforeMove =
+            entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity);
+        EditorUVEAccessUVE::UpdateGizmoDragUVE(editor, Math::Vector2UVE{center.x + 18.0F, center.y - 10.0F});
+        EditorUVEAccessUVE::CommitGizmoDragUVE(editor);
+        const Scene::TransformComponentUVE afterMove =
+            entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity);
+        EXPECT_NE(afterMove.localPosition, beforeMove.localPosition);
+        EXPECT_EQ(afterMove.localRotation, beforeMove.localRotation);
+        EXPECT_EQ(afterMove.localScale, beforeMove.localScale);
+        ASSERT_TRUE(editor.UndoUVE());
+        services.GetSceneGraphUVE().UpdateUVE(entityManager);
+
+        const Scene::WorldTransformComponentUVE& resetWorld =
+            entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(entity);
+        Math::Vector3UVE xAxis{};
+        ASSERT_TRUE(EditorUVEAccessUVE::GetGizmoAxisWorldVectorUVE(editor, entity, EditorTransformAxisUVE::X, xAxis));
+        Math::Vector2UVE endpoint{};
+        ASSERT_TRUE(EditorUVEAccessUVE::ProjectWorldPointUVE(
+            editor, viewportRect, resetWorld.worldPosition + xAxis * 1.25F, endpoint));
+        ASSERT_TRUE(EditorUVEAccessUVE::BeginGizmoDragUVE(editor, viewportRect, endpoint));
+        EXPECT_EQ(EditorUVEAccessUVE::GetGizmoDragAxisUVE(editor), EditorTransformAxisUVE::X);
+        const Scene::TransformComponentUVE beforeScale =
+            entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity);
+        const Math::Vector2UVE screenDirection{endpoint.x - center.x, endpoint.y - center.y};
+        const float screenLength = std::sqrt((screenDirection.x * screenDirection.x) +
+                                             (screenDirection.y * screenDirection.y));
+        ASSERT_GT(screenLength, 1.0F);
+        EditorUVEAccessUVE::UpdateGizmoDragUVE(
+            editor, Math::Vector2UVE{endpoint.x + screenDirection.x * 10.0F / screenLength,
+                                    endpoint.y + screenDirection.y * 10.0F / screenLength});
+        EditorUVEAccessUVE::CommitGizmoDragUVE(editor);
+        const Scene::TransformComponentUVE afterScale =
+            entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity);
+        EXPECT_NE(afterScale.localScale.x, beforeScale.localScale.x);
+        EXPECT_EQ(afterScale.localPosition, beforeScale.localPosition);
+        EXPECT_EQ(afterScale.localRotation, beforeScale.localRotation);
 
         editor.ShutdownUVE();
     }
