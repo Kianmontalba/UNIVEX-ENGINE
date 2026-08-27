@@ -64,7 +64,7 @@ AndroidWindowManagerUVE::AndroidWindowManagerUVE(Events::IEventSystemUVE& eventS
         return;
     }
 
-    const EGLint configAttributes[] = {
+    const EGLint strictConfigAttributes[] = {
         EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
         EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT,
         EGL_RED_SIZE, 8,
@@ -75,11 +75,29 @@ AndroidWindowManagerUVE::AndroidWindowManagerUVE(Events::IEventSystemUVE& eventS
         EGL_STENCIL_SIZE, 8,
         EGL_NONE,
     };
+    const EGLint lowDeviceConfigAttributes[] = {
+        EGL_SURFACE_TYPE, EGL_WINDOW_BIT,
+        EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT,
+        EGL_RED_SIZE, 8,
+        EGL_GREEN_SIZE, 8,
+        EGL_BLUE_SIZE, 8,
+        EGL_ALPHA_SIZE, 8,
+        EGL_DEPTH_SIZE, 16,
+        EGL_STENCIL_SIZE, 0,
+        EGL_NONE,
+    };
     EGLConfig config = nullptr;
     EGLint configCount = 0;
-    if (eglChooseConfig(m_impl->display, configAttributes, &config, 1, &configCount) == EGL_FALSE || configCount == 0) {
-        LogEglError("eglChooseConfig");
-        return;
+    if (eglChooseConfig(m_impl->display, strictConfigAttributes, &config, 1, &configCount) == EGL_FALSE ||
+        configCount == 0) {
+        __android_log_print(ANDROID_LOG_WARN, kLogTag,
+                            "%s", "strict GLES3 depth/stencil config unavailable; retrying low-device config");
+        configCount = 0;
+        if (eglChooseConfig(m_impl->display, lowDeviceConfigAttributes, &config, 1, &configCount) == EGL_FALSE ||
+            configCount == 0) {
+            LogEglError("eglChooseConfig GLES3 low-device fallback");
+            return;
+        }
     }
 
     m_impl->surface = eglCreateWindowSurface(m_impl->display, config, androidWindow, nullptr);
@@ -141,8 +159,12 @@ void AndroidWindowManagerUVE::AttachInputSystemUVE(Input::IInputSystemUVE* input
 void AndroidWindowManagerUVE::PollEventsUVE() {}
 
 void AndroidWindowManagerUVE::SwapBuffersUVE() {
-    if (IsValidUVE() && eglSwapBuffers(m_impl->display, m_impl->surface) == EGL_FALSE) {
+    if (!IsValidUVE()) {
+        return;
+    }
+    if (eglSwapBuffers(m_impl->display, m_impl->surface) == EGL_FALSE) {
         LogEglError("eglSwapBuffers");
+        m_impl->valid = false;
     }
 }
 
@@ -179,9 +201,11 @@ std::uint32_t AndroidWindowManagerUVE::GetWidthUVE() const noexcept {
         return 0U;
     }
     EGLint width = 0;
-    if (eglQuerySurface(m_impl->display, m_impl->surface, EGL_WIDTH, &width) == EGL_TRUE && width > 0) {
-        m_impl->width = static_cast<std::uint32_t>(width);
+    if (eglQuerySurface(m_impl->display, m_impl->surface, EGL_WIDTH, &width) != EGL_TRUE || width <= 0) {
+        m_impl->valid = false;
+        return 0U;
     }
+    m_impl->width = static_cast<std::uint32_t>(width);
     return m_impl->width;
 }
 
@@ -190,9 +214,11 @@ std::uint32_t AndroidWindowManagerUVE::GetHeightUVE() const noexcept {
         return 0U;
     }
     EGLint height = 0;
-    if (eglQuerySurface(m_impl->display, m_impl->surface, EGL_HEIGHT, &height) == EGL_TRUE && height > 0) {
-        m_impl->height = static_cast<std::uint32_t>(height);
+    if (eglQuerySurface(m_impl->display, m_impl->surface, EGL_HEIGHT, &height) != EGL_TRUE || height <= 0) {
+        m_impl->valid = false;
+        return 0U;
     }
+    m_impl->height = static_cast<std::uint32_t>(height);
     return m_impl->height;
 }
 

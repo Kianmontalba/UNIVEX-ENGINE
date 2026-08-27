@@ -59,6 +59,7 @@ public:
     void SubmitUVE(std::unique_ptr<ICommandBufferUVE> commandBuffer) override;
     void PresentUVE() override;
 
+    [[nodiscard]] bool IsUsableUVE() const noexcept override;
     [[nodiscard]] std::string_view GetBackendNameUVE() const noexcept override;
 
     /// Test-only hook (not part of IRenderDeviceUVE): the command list from the most recently

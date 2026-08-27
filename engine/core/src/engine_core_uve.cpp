@@ -512,6 +512,16 @@ void EngineCoreUVE::SyncParticleRuntimeUVE() {
 
 void EngineCoreUVE::Update() {
     m_windowManager->PollEventsUVE();
+    const bool activeSurfaceReady =
+        !m_windowedRenderingActiveUVE ||
+        (m_windowManager->GetWidthUVE() > 0U && m_windowManager->GetHeightUVE() > 0U);
+    if (m_windowedRenderingActiveUVE && (!activeSurfaceReady || !m_renderDevice->IsUsableUVE())) {
+        m_windowedRenderingActiveUVE = false;
+        if (!m_graphicsBackendLossLoggedUVE) {
+            UVE_WARNING("EngineCoreUVE: graphics backend became unusable; rendering is disabled for this run");
+            m_graphicsBackendLossLoggedUVE = true;
+        }
+    }
     m_gamepadInputSystem->UpdateUVE();
     m_mobileInputSystem->UpdateUVE();
     m_mobileGestureSystem->UpdateUVE(static_cast<float>(m_timer->GetDeltaTimeUVE()));
@@ -558,7 +568,9 @@ void EngineCoreUVE::Update() {
     // import worker is introduced by this maintenance seam.
     static_cast<void>(m_assetImportQueue->TickUVE());
 
-    m_shaderManager->UpdateUVE(m_timer->GetDeltaTimeUVE());
+    if (m_renderDevice->IsUsableUVE()) {
+        m_shaderManager->UpdateUVE(m_timer->GetDeltaTimeUVE());
+    }
 
     if (!m_transientSimulationSessionActive) {
         m_checkpointManager->UpdateUVE(
@@ -608,6 +620,9 @@ void EngineCoreUVE::LateUpdate() {
 }
 
 void EngineCoreUVE::Render() {
+    if (!m_renderDevice->IsUsableUVE()) {
+        return;
+    }
     if (m_activeCamera != Scene::kInvalidEntityUVE) {
         if (m_particleRuntime != nullptr && m_particleRuntime->GetInstanceCountUVE() > 0U) {
             m_renderer3D->RenderFrameWithParticleRuntimeUVE(*m_entityManager, m_activeCamera, *m_particleRuntime);

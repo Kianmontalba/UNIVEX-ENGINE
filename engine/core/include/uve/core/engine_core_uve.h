@@ -353,7 +353,9 @@ private:
     /// state, not last frame's. Also calls ShaderManagerUVE::UpdateUVE() (Increment 21) alongside
     /// the existing HotReloadUVE::PollUVE()/AssetManagerUVE::CollectGarbageUVE() maintenance
     /// calls, draining any completed background shader preprocessing, compiling/linking on this
-    /// (the main) thread, and polling hot-reload-tracked programs for on-disk changes.
+    /// (the main) thread, and polling hot-reload-tracked programs for on-disk changes. If a real
+    /// graphics backend loses its native surface/context, shader maintenance is skipped after the
+    /// backend reports unusable so no follow-up GL call is issued.
     void Update();
     /// Reconciles authored ParticleEmitterComponentUVE values with the existing bounded particle
     /// runtime, simulates one frame under configured gravity, and leaves renderer extraction read-only.
@@ -380,6 +382,7 @@ private:
     /// pre-Increment-14 frame-loop test's behavior unless SetActiveCameraUVE() was called. When a
     /// real window/GL device is active (see m_windowedRenderingActiveUVE), invokes the optional
     /// post-render editor callback after the scene tone-mapping pass and then presents exactly once.
+    /// If the backend reports unusable, the render path returns before scene/shader/present work.
     void Render();
 
     /// Computes this frame's wall-clock frameTimeSeconds and records it
@@ -394,6 +397,7 @@ private:
     SimulationExecutionModeUVE m_simulationExecutionMode = SimulationExecutionModeUVE::Running;
     bool m_singleSimulationStepPending = false;
     bool m_transientSimulationSessionActive = false;
+    bool m_graphicsBackendLossLoggedUVE = false;
 
     std::unique_ptr<CommandLine::ICommandLineUVE> m_commandLine;
     std::unique_ptr<Debug::ILoggerUVE> m_logger;

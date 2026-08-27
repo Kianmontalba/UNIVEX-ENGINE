@@ -621,6 +621,7 @@ public:
     [[nodiscard]] std::unique_ptr<Render::ICommandBufferUVE> CreateCommandBufferUVE() override { return nullptr; }
     void SubmitUVE(std::unique_ptr<Render::ICommandBufferUVE>) override {}
     void PresentUVE() override { ++presentCallCount; }
+    [[nodiscard]] bool IsUsableUVE() const noexcept override { return true; }
     [[nodiscard]] std::string_view GetBackendNameUVE() const noexcept override { return "Fake"; }
 
     int createBufferCallCount = 0;
