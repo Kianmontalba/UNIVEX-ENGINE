@@ -292,4 +292,13 @@ bool AreScriptPinTypesCompatibleUVE(const ScriptValueTypeUVE output,
     return output == input;
 }
 
+bool IsScriptExecutionActionDescriptorUVE(const ScriptNodeTypeDescriptorUVE& descriptor) noexcept {
+    if (descriptor.typeId.rfind("flow.", 0U) == 0U) {
+        return false;
+    }
+    return std::any_of(descriptor.pins.cbegin(), descriptor.pins.cend(), [](const ScriptPinDescriptorUVE& pin) {
+        return pin.direction == ScriptPinDirectionUVE::Input && pin.role == ScriptPinRoleUVE::Execution;
+    });
+}
+
 } // namespace UVE::Scripting

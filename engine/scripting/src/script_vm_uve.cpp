@@ -2506,6 +2506,66 @@ namespace {
     return true;
 }
 
+[[nodiscard]] ScriptVmExecutionResultUVE ExecuteExecutionActionNodeUVE(
+    const ScriptIrInstructionUVE& instruction, const std::size_t instructionIndex,
+    ScriptVmExecutionContextUVE& context, const ScriptVmExecutionOptionsUVE options) {
+    const bool isEntityNode = instruction.nodeTypeId.rfind("entity.", 0U) == 0U;
+    const bool isCameraNode = instruction.nodeTypeId.rfind("camera.", 0U) == 0U;
+    const bool isAnimationNode = instruction.nodeTypeId.rfind("animation.", 0U) == 0U;
+    const bool isMotionQueryNode = instruction.nodeTypeId.rfind("motion.query.", 0U) == 0U;
+    const bool isPhysicsNode = instruction.nodeTypeId.rfind("physics.", 0U) == 0U;
+    const bool isAudioNode = instruction.nodeTypeId.rfind("audio.", 0U) == 0U;
+    const bool isEngineLogNode = instruction.nodeTypeId == "engine.log";
+    const bool isDebugPrintNode = instruction.nodeTypeId == "debug.print";
+    const bool isDebugWarningNode = instruction.nodeTypeId == "debug.warning";
+    const bool isDebugErrorNode = instruction.nodeTypeId == "debug.error";
+    const bool hasRequiredInputs =
+        (isEntityNode && HasRequiredEntityNodeInputsUVE(instruction, context)) ||
+        (isCameraNode && HasRequiredCameraNodeInputsUVE(instruction, context)) ||
+        (isAnimationNode && HasRequiredAnimationNodeInputsUVE(instruction, context)) ||
+        (isMotionQueryNode && HasRequiredMotionQueryNodeInputsUVE(instruction, context)) ||
+        (isPhysicsNode && HasRequiredPhysicsNodeInputsUVE(instruction, context)) ||
+        (isAudioNode && HasRequiredAudioNodeInputsUVE(instruction, context)) ||
+        ((isEngineLogNode || isDebugPrintNode || isDebugWarningNode || isDebugErrorNode) &&
+         FindNumberInputUVE(context, instruction.sourceNodeId, "Value") != nullptr);
+    if (!hasRequiredInputs) {
+        return MakeNodeFailureUVE(instructionIndex,
+                                  "Powered action could not resolve its required typed inputs.");
+    }
+
+    if (isEntityNode) {
+        return ExecuteEntityNodeUVE(instruction, instructionIndex, context, options.engineCallBindings);
+    }
+    if (isCameraNode) {
+        return ExecuteCameraNodeUVE(instruction, instructionIndex, context, options.engineCallBindings);
+    }
+    if (isAnimationNode) {
+        return ExecuteAnimationNodeUVE(instruction, instructionIndex, context, options.engineCallBindings);
+    }
+    if (isMotionQueryNode) {
+        return ExecuteMotionQueryNodeUVE(instruction, instructionIndex, context, options.engineCallBindings);
+    }
+    if (isPhysicsNode) {
+        return ExecutePhysicsNodeUVE(instruction, instructionIndex, context, options.engineCallBindings);
+    }
+    if (isAudioNode) {
+        return ExecuteAudioNodeUVE(instruction, instructionIndex, context, options.engineCallBindings);
+    }
+    if (isEngineLogNode) {
+        return ExecuteEngineLogNodeUVE(instruction, instructionIndex, context, options.engineCallBindings);
+    }
+    if (isDebugPrintNode) {
+        return ExecuteEngineLogNodeUVE(instruction, instructionIndex, context, options.engineCallBindings);
+    }
+    if (isDebugWarningNode) {
+        return ExecuteDebugWarningNodeUVE(instruction, instructionIndex, context, options.engineCallBindings);
+    }
+    if (isDebugErrorNode) {
+        return ExecuteDebugErrorNodeUVE(instruction, instructionIndex, context, options.engineCallBindings);
+    }
+    return MakeNodeFailureUVE(instructionIndex, "Unknown execution-powered action node.");
+}
+
 [[nodiscard]] bool ContainsControlFlowUVE(const ScriptBytecodeProgramUVE& program) noexcept {
     return std::any_of(program.instructions.begin(), program.instructions.end(), [](const ScriptIrInstructionUVE& instruction) {
         return instruction.kind == ScriptIrInstructionKindUVE::ConditionalJump ||
@@ -2520,6 +2580,7 @@ namespace {
     ScriptVmExecutionResultUVE result;
     std::size_t instructionIndex = 0U;
     std::optional<std::size_t> sequenceContinuation;
+    bool executionPowered = false;
     while (instructionIndex < program.instructions.size()) {
         if (result.instructionsExecuted >= options.instructionBudget) {
             result.status = ScriptVmStatusUVE::InstructionBudgetExceeded;
@@ -2564,6 +2625,12 @@ namespace {
             }
 
             const std::string& sourcePinName = instruction.sourcePinName;
+            const bool isExecutionAction = sourcePinName == "In" &&
+                                           instruction.nodeTypeId.rfind("flow.", 0U) != 0U;
+            if (!isExecutionAction) {
+                executionPowered = true;
+            }
+            bool skippedAction = false;
             std::size_t target = instruction.defaultTargetInstructionIndex;
             std::string message;
             const auto flowFailure = [&](std::string failureMessage) {
@@ -2726,6 +2793,23 @@ namespace {
                     target = instruction.trueTargetInstructionIndex;
                     message = "Delay dispatched Then.";
                 }
+            } else if (isExecutionAction) {
+                if (!executionPowered) {
+                    target = program.instructions.size();
+                    skippedAction = true;
+                    message = "Action skipped because no execution wire powered this node.";
+                } else {
+                    const ScriptVmExecutionResultUVE actionResult =
+                        ExecuteExecutionActionNodeUVE(instruction, instructionIndex, context, options);
+                    if (!actionResult.IsSuccessUVE()) {
+                        ScriptVmExecutionResultUVE failure = actionResult;
+                        failure.instructionsExecuted = result.instructionsExecuted;
+                        failure.PrependTraceEventsUVE(std::move(result.trace), result.traceTruncated);
+                        return failure;
+                    }
+                    target = instruction.trueTargetInstructionIndex;
+                    message = "Action executed and dispatched Then.";
+                }
             } else {
                 ScriptVmExecutionResultUVE failure = MakeNodeFailureUVE(
                     instructionIndex, "Unknown FlowControlDispatch node type.");
@@ -2734,7 +2818,8 @@ namespace {
                 return failure;
             }
             ++result.instructionsExecuted;
-            result.AppendTraceEventUVE({ScriptVmTraceEventKindUVE::NodeExecuted,
+            result.AppendTraceEventUVE({skippedAction ? ScriptVmTraceEventKindUVE::NodeSkipped
+                                                       : ScriptVmTraceEventKindUVE::NodeExecuted,
                                          Scene::kInvalidEntityUVE, instructionIndex,
                                          instruction.sourceNodeId, instruction.targetNodeId,
                                          instruction.nodeTypeId, std::move(message)});

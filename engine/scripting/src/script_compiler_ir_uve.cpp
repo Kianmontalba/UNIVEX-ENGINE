@@ -166,6 +166,10 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
         }
         return std::nullopt;
     };
+    const auto isExecutionActionNodeUVE = [&](const ScriptNodeUVE& node) noexcept {
+        const ScriptNodeTypeDescriptorUVE* descriptor = registry.FindNodeTypeUVE(node.typeId);
+        return descriptor != nullptr && descriptor->executionRequired;
+    };
 
     std::vector<std::vector<std::size_t>> dataDependents(nodes.size());
     std::vector<std::size_t> dataIndegrees(nodes.size(), 0U);
@@ -193,7 +197,17 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
     std::vector<ScriptNodeUVE> instructionNodes;
     instructionNodes.reserve(nodes.size());
     while (!readyNodeIndices.empty()) {
-        const auto readyIterator = std::min_element(readyNodeIndices.begin(), readyNodeIndices.end());
+        const auto readyIterator = std::min_element(
+            readyNodeIndices.begin(), readyNodeIndices.end(), [&](const std::size_t lhs, const std::size_t rhs) {
+                const ScriptNodeUVE& left = nodes[lhs];
+                const ScriptNodeUVE& right = nodes[rhs];
+                const bool leftIsControl = isExecutionActionNodeUVE(left);
+                const bool rightIsControl = isExecutionActionNodeUVE(right);
+                if (leftIsControl != rightIsControl) {
+                    return !leftIsControl;
+                }
+                return left.id < right.id;
+            });
         const std::size_t nodeIndex = *readyIterator;
         readyNodeIndices.erase(readyIterator);
         instructionNodes.push_back(nodes[nodeIndex]);
@@ -426,6 +440,10 @@ ScriptIrCompileResultUVE CompileScriptGraphToIrUVE(const ScriptGraphUVE& graph,
             appendFlowControlEntry(node, "In", resolveExecutionTarget(node.id, "Then"),
                                    static_cast<std::uint32_t>(stagedInstructionCount),
                                    resolveExecutionTarget(node.id, "Then"));
+        } else if (isExecutionActionNodeUVE(node)) {
+            appendFlowControlEntry(node, "In", resolveExecutionTarget(node.id, "Then"),
+                                   static_cast<std::uint32_t>(stagedInstructionCount),
+                                   static_cast<std::uint32_t>(stagedInstructionCount));
         } else {
             program.instructions.push_back(ScriptIrInstructionUVE{
                 ScriptIrInstructionKindUVE::ExecuteNode,

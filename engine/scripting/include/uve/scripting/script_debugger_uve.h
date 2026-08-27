@@ -69,6 +69,7 @@ private:
     bool m_skipCurrentBreakpoint = false;
     std::optional<std::size_t> m_sequenceContinuationTarget;
     std::optional<ScriptVmExecutionContextUVE> m_context;
+    bool m_executionPowered = false;
 };
 
 } // namespace UVE::Scripting

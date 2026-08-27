@@ -175,6 +175,7 @@ enum class ScriptVmTraceEventKindUVE : std::uint8_t {
     Completed,
     Failed,
     StagedValueTransferred,
+    NodeSkipped,
 };
 
 struct ScriptVmTraceEventUVE final {

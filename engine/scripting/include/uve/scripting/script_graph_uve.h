@@ -95,6 +95,7 @@ struct ScriptNodeTypeDescriptorUVE final {
     std::string iconId = "node.default";
     std::uint32_t displayOrder = 0U;
     std::uint32_t presentationFlags = kScriptNodePresentationFlagNoneUVE;
+    bool executionRequired = false;
 
     ScriptNodeTypeDescriptorUVE() = default;
     ScriptNodeTypeDescriptorUVE(std::string nodeTypeId, std::string nodeDisplayName,
@@ -102,10 +103,11 @@ struct ScriptNodeTypeDescriptorUVE final {
                                std::string nodeCategory = "Uncategorized",
                                std::string nodeIconId = "node.default",
                                const std::uint32_t nodeDisplayOrder = 0U,
-                               const std::uint32_t nodePresentationFlags = kScriptNodePresentationFlagNoneUVE)
+                               const std::uint32_t nodePresentationFlags = kScriptNodePresentationFlagNoneUVE,
+                               const bool nodeExecutionRequired = false)
         : typeId(std::move(nodeTypeId)), displayName(std::move(nodeDisplayName)), pins(std::move(nodePins)),
           category(std::move(nodeCategory)), iconId(std::move(nodeIconId)), displayOrder(nodeDisplayOrder),
-          presentationFlags(nodePresentationFlags) {}
+          presentationFlags(nodePresentationFlags), executionRequired(nodeExecutionRequired) {}
 };
 
 struct ScriptNodeUVE final {
@@ -191,5 +193,8 @@ private:
 
 [[nodiscard]] bool AreScriptPinTypesCompatibleUVE(ScriptValueTypeUVE output,
                                                     ScriptValueTypeUVE input) noexcept;
+
+/// Returns true when a registered node descriptor represents an action that must be reached by execution flow.
+[[nodiscard]] bool IsScriptExecutionActionDescriptorUVE(const ScriptNodeTypeDescriptorUVE& descriptor) noexcept;
 
 } // namespace UVE::Scripting

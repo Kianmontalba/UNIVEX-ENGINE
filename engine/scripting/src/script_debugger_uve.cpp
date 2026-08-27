@@ -35,6 +35,7 @@ bool ScriptDebuggerUVE::AttachProgramUVE(ScriptBytecodeProgramUVE program) {
     m_pauseReason.clear();
     m_skipCurrentBreakpoint = false;
     m_sequenceContinuationTarget.reset();
+    m_executionPowered = false;
     m_state = ScriptDebuggerStateUVE::Running;
     return true;
 }
@@ -49,6 +50,7 @@ void ScriptDebuggerUVE::DetachUVE() noexcept {
     m_skipCurrentBreakpoint = false;
     m_sequenceContinuationTarget.reset();
     m_context.reset();
+    m_executionPowered = false;
     m_state = ScriptDebuggerStateUVE::Detached;
 }
 
@@ -154,6 +156,11 @@ bool ScriptDebuggerUVE::ExecuteOneUVE() {
                                  instruction.nodeTypeId, m_pauseReason});
             return false;
         };
+        const bool isExecutionAction = instruction.sourcePinName == "In" &&
+                                       instruction.nodeTypeId.rfind("flow.", 0U) != 0U;
+        if (!isExecutionAction) {
+            m_executionPowered = true;
+        }
         const bool isContextFreeNode = instruction.nodeTypeId == "flow.return" || instruction.nodeTypeId == "flow.event";
         if (!isContextFreeNode && !m_context.has_value()) {
             return failFlow("FlowControlDispatch node requires an attached execution context.");
@@ -300,12 +307,22 @@ bool ScriptDebuggerUVE::ExecuteOneUVE() {
                 target = instruction.trueTargetInstructionIndex;
                 message = "Delay dispatched Then.";
             }
+        } else if (isExecutionAction) {
+            if (!m_executionPowered) {
+                target = m_program.instructions.size();
+                message = "Action skipped because no execution wire powered this node.";
+            } else {
+                target = instruction.trueTargetInstructionIndex;
+                message = "Action executed and dispatched Then.";
+            }
         } else {
             return failFlow("Unknown FlowControlDispatch node type.");
         }
         m_instructionIndex = target;
         ++m_executedInstructions;
-        AppendTraceEventUVE({ScriptVmTraceEventKindUVE::NodeExecuted,
+        AppendTraceEventUVE({(!isExecutionAction || m_executionPowered)
+                                 ? ScriptVmTraceEventKindUVE::NodeExecuted
+                                 : ScriptVmTraceEventKindUVE::NodeSkipped,
                              Scene::kInvalidEntityUVE, instructionIndex, instruction.sourceNodeId,
                              instruction.targetNodeId, instruction.nodeTypeId, std::move(message)});
         return true;
