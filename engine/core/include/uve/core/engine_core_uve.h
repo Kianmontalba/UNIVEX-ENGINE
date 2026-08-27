@@ -117,7 +117,11 @@ namespace UVE::Core {
 /// docs/CODING_STANDARDS.md for the full rendering-evolution roadmap this triangle is the first
 /// milestone of). If real window/context creation fails, Init() logs UVE_FATAL and falls back to
 /// NullWindowManagerUVE/NullRenderDeviceUVE for the rest of this run, and Load() reports failure
-/// so RunUVE() shuts down cleanly instead of proceeding into a broken windowed session.
+/// so RunUVE() shuts down cleanly instead of proceeding into a broken windowed session. If a
+/// context exists but the required OpenGL entry points cannot be loaded, Init() treats that as a
+/// recoverable backend-selection failure and selects NullRenderDeviceUVE before shader/frame code
+/// runs; this build does not claim an automatic Vulkan renderer fallback because no Vulkan RHI is
+/// compiled yet.
 /// CheckpointManagerUVE (Increment 19) is driven from Update()'s final statement:
 /// UpdateUVE(deltaTime, entityManager, every SceneGraphUVE::GetChildrenUVE(kInvalidEntityUVE)
 /// root) accumulates elapsed time and, once the configured

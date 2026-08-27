@@ -241,7 +241,9 @@ void EngineCoreUVE::Init() {
     // that fails to create logs UVE_FATAL and sets m_windowCreationFailedUVE rather than aborting
     // Init() mid-construction — EngineStateUVE's transition table forbids jumping straight from
     // Initializing to ShuttingDown, so every remaining service below still finishes constructing
-    // normally; Load() checks the flag afterward (see Load()'s doc comment).
+    // normally; Load() checks the flag afterward (see Load()'s doc comment). A window that exists
+    // but cannot load the complete GL function table is handled separately below as a recoverable
+    // backend-selection failure and falls back to NullRenderDeviceUVE.
     if (m_config.headlessUVE) {
         m_windowManager = std::make_unique<Window::NullWindowManagerUVE>();
     } else {
@@ -272,12 +274,29 @@ void EngineCoreUVE::Init() {
     }
     m_windowedRenderingActiveUVE = !m_config.headlessUVE && m_windowManager->IsValidUVE();
 
-    // RenderDevice eighteenth: Render::GlRenderDeviceUVE when m_windowedRenderingActiveUVE (a
-    // real, valid window/GL context exists), otherwise Render::NullRenderDeviceUVE — headless
-    // mode, or a real window that failed to create above. Never constructs GlRenderDeviceUVE
-    // against an invalid window (there is no current GL context to build one against).
+    // RenderDevice eighteenth: probe the usable OpenGL backend when a real valid window/context
+    // exists, otherwise use Render::NullRenderDeviceUVE. A context can exist while the required
+    // GL entry points are unavailable on an unusual driver; GlRenderDeviceUVE reports that state
+    // without aborting, and the engine selects NullRenderDeviceUVE before ShaderManager or any
+    // frame code can call a missing function pointer. Vulkan is not a renderer in this build, so
+    // it is never falsely selected as a fallback.
     if (m_windowedRenderingActiveUVE) {
-        m_renderDevice = std::make_unique<Render::GlRenderDeviceUVE>(*m_windowManager);
+        auto glRenderDevice = std::make_unique<Render::GlRenderDeviceUVE>(*m_windowManager);
+        if (glRenderDevice->IsUsableUVE()) {
+            m_renderDevice = std::move(glRenderDevice);
+        } else {
+#if defined(__ANDROID__)
+            // Android currently ships an EGL/GLES implementation only. If that context or its
+            // required entry points are unavailable, do not guess that a Vulkan renderer exists:
+            // this build has no Vulkan RHI. Keep the engine alive on the inert RHI instead of
+            // dereferencing a partial GL function table and crashing during shader/frame startup.
+            UVE_WARNING("EngineCoreUVE: OpenGL ES backend is unavailable; Vulkan RHI is not built, using Null backend");
+#else
+            UVE_WARNING("EngineCoreUVE: OpenGL backend is unavailable; using Null backend");
+#endif
+            m_windowedRenderingActiveUVE = false;
+            m_renderDevice = std::make_unique<Render::NullRenderDeviceUVE>();
+        }
     } else {
         m_renderDevice = std::make_unique<Render::NullRenderDeviceUVE>();
     }
