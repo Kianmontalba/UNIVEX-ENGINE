@@ -176,6 +176,10 @@ public:
     [[nodiscard]] const ScriptGraphUVE& GetGraphUVE() const noexcept;
     [[nodiscard]] ScriptGraphCanvasCommandResultUVE ApplyGraphSchemaUVE(
         ScriptGraphSchemaUVE schema, std::uint64_t expectedRevision = 0U);
+    /// Replaces one branch from trusted, already-decoded persistence data. This is not an authoring
+    /// edit: it resets transient history and dirty state, then restores graph, layout, and view.
+    [[nodiscard]] ScriptGraphCanvasCommandResultUVE RestorePersistenceUVE(
+        ScriptGraphSchemaUVE schema, ScriptGraphCanvasLayoutSnapshotUVE layout);
     [[nodiscard]] ScriptGraphCanvasLayoutSnapshotUVE GetLayoutSnapshotUVE() const;
     [[nodiscard]] ScriptGraphCanvasCommandResultUVE ApplyLayoutUVE(
         ScriptGraphCanvasLayoutSnapshotUVE layout, std::uint64_t expectedRevision = 0U);

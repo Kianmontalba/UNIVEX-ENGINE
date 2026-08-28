@@ -6,8 +6,8 @@
 namespace UVE::Scripting {
 
 /// Registers the engine-owned node descriptors exposed to the editor palette.
-/// This catalog defines graph/pin contracts only; node execution remains owned by later
-/// compiler/runtime increments.
+/// This catalog defines graph/pin contracts and identifies action nodes that require execution power;
+/// pure value nodes remain data-driven and execution-independent.
 [[nodiscard]] bool RegisterBuiltInScriptNodesUVE(ScriptNodeRegistryUVE& registry);
 
 } // namespace UVE::Scripting

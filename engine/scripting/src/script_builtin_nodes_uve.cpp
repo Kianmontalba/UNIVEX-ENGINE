@@ -15,10 +15,11 @@ struct BuiltInNodeDefinitionUVE final {
     std::string_view category;
     std::string_view iconId;
     std::uint32_t displayOrder;
+    bool executionRequired = false;
 };
 
 [[nodiscard]] std::array<BuiltInNodeDefinitionUVE, 171U> MakeBuiltInDefinitionsUVE() {
-    return {
+    auto definitions = std::array<BuiltInNodeDefinitionUVE, 171U>{
         BuiltInNodeDefinitionUVE{
             "flow.sequence", "Sequence",
             {ScriptPinDescriptorUVE{"In", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Execution},
@@ -1055,6 +1056,36 @@ struct BuiltInNodeDefinitionUVE final {
              ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
             "Debug", "node.debug", 1202U},
     };
+    const auto isExecutionActionTypeUVE = [](const std::string_view typeId) noexcept {
+        return typeId == "engine.log" || typeId == "debug.print" || typeId == "debug.warning" ||
+               typeId == "debug.error" || typeId == "entity.spawn" || typeId == "entity.destroy" ||
+               typeId == "entity.add_component" || typeId == "entity.remove_component" ||
+               typeId == "camera.set_position" || typeId == "camera.set_rotation" || typeId == "camera.look_at" ||
+               typeId == "camera.set_fov" || typeId == "camera.shake" || typeId == "camera.set_active" ||
+               typeId == "animation.play" || typeId == "animation.stop" || typeId == "animation.pause" ||
+               typeId == "animation.blend" || typeId == "animation.blend_space" ||
+               typeId == "animation.set_speed" || typeId == "animation.set_weight" || typeId == "animation.montage" ||
+               typeId == "motion.query.set_trajectory" || typeId == "motion.query.set_pose" ||
+               typeId == "motion.query.set_velocity" || typeId == "motion.query.set_facing" ||
+               typeId == "motion.query.set_yaw" || typeId == "motion.query.transition" ||
+               typeId == "motion.query.motion_warp" || typeId == "physics.apply_force" ||
+               typeId == "physics.apply_impulse" || typeId == "physics.set_velocity" ||
+               typeId == "physics.enable_gravity" || typeId == "audio.set_volume" ||
+               typeId == "audio.set_pitch" || typeId == "audio.set_3d_position" ||
+               typeId == "audio.play_sound" || typeId == "audio.stop_sound" ||
+               typeId == "audio.set_attenuation";
+    };
+    for (BuiltInNodeDefinitionUVE& definition : definitions) {
+        if (!isExecutionActionTypeUVE(definition.typeId)) {
+            continue;
+        }
+        definition.pins.insert(definition.pins.cbegin(),
+                                ScriptPinDescriptorUVE{"In", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Execution});
+        definition.pins.push_back(
+            ScriptPinDescriptorUVE{"Then", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Execution});
+        definition.executionRequired = true;
+    }
+    return definitions;
 }
 
 } // namespace
@@ -1067,10 +1098,12 @@ bool RegisterBuiltInScriptNodesUVE(ScriptNodeRegistryUVE& registry) {
         }
     }
     for (BuiltInNodeDefinitionUVE& definition : definitions) {
-        if (!registry.RegisterNodeTypeUVE(ScriptNodeTypeDescriptorUVE{
-                std::string{definition.typeId}, std::string{definition.displayName}, std::move(definition.pins),
-                std::string{definition.category}, std::string{definition.iconId}, definition.displayOrder,
-                kScriptNodePresentationFlagNoneUVE})) {
+        ScriptNodeTypeDescriptorUVE descriptor{
+            std::string{definition.typeId}, std::string{definition.displayName}, std::move(definition.pins),
+            std::string{definition.category}, std::string{definition.iconId}, definition.displayOrder,
+            kScriptNodePresentationFlagNoneUVE};
+        descriptor.executionRequired = definition.executionRequired;
+        if (!registry.RegisterNodeTypeUVE(std::move(descriptor))) {
             return false;
         }
     }

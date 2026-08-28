@@ -17,6 +17,8 @@ namespace UVE::Render {
 /// their feature instead of requesting undefined GPU work. Thread-safety: main render thread only.
 struct EditorViewportVisualStateUVE final {
     bool enabled = false;
+    bool environmentPreviewEnabled = true;
+    bool sunPreviewEnabled = true;
     float viewportMinX = 0.0F;
     float viewportMinY = 0.0F;
     float viewportMaxX = 1.0F;
@@ -27,7 +29,15 @@ struct EditorViewportVisualStateUVE final {
     float selectionMaxX = 0.0F;
     float selectionMaxY = 0.0F;
     std::int32_t activeGizmoAxis = 0;
+    Math::Vector3UVE cameraPosition{0.0F, 0.0F, 0.0F};
     Math::Vector3UVE cameraForward{0.0F, 0.0F, -1.0F};
+    Math::Vector3UVE cameraRight{1.0F, 0.0F, 0.0F};
+    Math::Vector3UVE cameraUp{0.0F, 1.0F, 0.0F};
+    Math::Vector3UVE gridOrigin{0.0F, 0.0F, 0.0F};
+    float cameraTanHalfFov = 0.57735026F;
+    float gridSpacing = 1.0F;
+    bool orthographic = false;
+    float orthographicScale = 10.0F;
 };
 
 /// A copied, frame-local account of observable Renderer3DUVE work. Each field names evidence that

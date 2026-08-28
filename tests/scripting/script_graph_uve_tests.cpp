@@ -496,22 +496,36 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
 
     const ScriptNodeTypeDescriptorUVE* entitySpawn = registry.FindNodeTypeUVE("entity.spawn");
     ASSERT_NE(entitySpawn, nullptr);
-    ASSERT_EQ(entitySpawn->pins.size(), 1U);
+    ASSERT_EQ(entitySpawn->pins.size(), 3U);
+    EXPECT_TRUE(entitySpawn->executionRequired);
     EXPECT_EQ(entitySpawn->category, "Entity");
     EXPECT_EQ(entitySpawn->iconId, "node.entity");
-    EXPECT_EQ(entitySpawn->pins[0].name, "Result");
-    EXPECT_EQ(entitySpawn->pins[0].direction, ScriptPinDirectionUVE::Output);
-    EXPECT_EQ(entitySpawn->pins[0].type, ScriptValueTypeUVE::Entity);
+    EXPECT_EQ(entitySpawn->pins[0].name, "In");
+    EXPECT_EQ(entitySpawn->pins[0].direction, ScriptPinDirectionUVE::Input);
+    EXPECT_EQ(entitySpawn->pins[0].type, ScriptValueTypeUVE::Execution);
+    EXPECT_EQ(entitySpawn->pins[1].name, "Result");
+    EXPECT_EQ(entitySpawn->pins[1].direction, ScriptPinDirectionUVE::Output);
+    EXPECT_EQ(entitySpawn->pins[1].type, ScriptValueTypeUVE::Entity);
+    EXPECT_EQ(entitySpawn->pins[2].name, "Then");
+    EXPECT_EQ(entitySpawn->pins[2].direction, ScriptPinDirectionUVE::Output);
+    EXPECT_EQ(entitySpawn->pins[2].type, ScriptValueTypeUVE::Execution);
 
     const ScriptNodeTypeDescriptorUVE* entityDestroy = registry.FindNodeTypeUVE("entity.destroy");
     ASSERT_NE(entityDestroy, nullptr);
-    ASSERT_EQ(entityDestroy->pins.size(), 2U);
-    EXPECT_EQ(entityDestroy->pins[0].name, "Entity");
+    ASSERT_EQ(entityDestroy->pins.size(), 4U);
+    EXPECT_TRUE(entityDestroy->executionRequired);
+    EXPECT_EQ(entityDestroy->pins[0].name, "In");
     EXPECT_EQ(entityDestroy->pins[0].direction, ScriptPinDirectionUVE::Input);
-    EXPECT_EQ(entityDestroy->pins[0].type, ScriptValueTypeUVE::Entity);
-    EXPECT_EQ(entityDestroy->pins[1].name, "Result");
-    EXPECT_EQ(entityDestroy->pins[1].direction, ScriptPinDirectionUVE::Output);
-    EXPECT_EQ(entityDestroy->pins[1].type, ScriptValueTypeUVE::Boolean);
+    EXPECT_EQ(entityDestroy->pins[0].type, ScriptValueTypeUVE::Execution);
+    EXPECT_EQ(entityDestroy->pins[1].name, "Entity");
+    EXPECT_EQ(entityDestroy->pins[1].direction, ScriptPinDirectionUVE::Input);
+    EXPECT_EQ(entityDestroy->pins[1].type, ScriptValueTypeUVE::Entity);
+    EXPECT_EQ(entityDestroy->pins[2].name, "Result");
+    EXPECT_EQ(entityDestroy->pins[2].direction, ScriptPinDirectionUVE::Output);
+    EXPECT_EQ(entityDestroy->pins[2].type, ScriptValueTypeUVE::Boolean);
+    EXPECT_EQ(entityDestroy->pins[3].name, "Then");
+    EXPECT_EQ(entityDestroy->pins[3].direction, ScriptPinDirectionUVE::Output);
+    EXPECT_EQ(entityDestroy->pins[3].type, ScriptValueTypeUVE::Execution);
 
     const ScriptNodeTypeDescriptorUVE* entityFind = registry.FindNodeTypeUVE("entity.find");
     ASSERT_NE(entityFind, nullptr);
@@ -532,15 +546,20 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
     for (const char* typeId : {"entity.add_component", "entity.remove_component"}) {
         const ScriptNodeTypeDescriptorUVE* mutation = registry.FindNodeTypeUVE(typeId);
         ASSERT_NE(mutation, nullptr);
-        ASSERT_EQ(mutation->pins.size(), 3U);
+        ASSERT_EQ(mutation->pins.size(), 5U);
+        EXPECT_TRUE(mutation->executionRequired);
         EXPECT_EQ(mutation->category, "Entity");
         EXPECT_EQ(mutation->iconId, "node.entity");
-        EXPECT_EQ(mutation->pins[0].name, "Entity");
-        EXPECT_EQ(mutation->pins[0].type, ScriptValueTypeUVE::Entity);
-        EXPECT_EQ(mutation->pins[1].name, "Component");
-        EXPECT_EQ(mutation->pins[1].type, ScriptValueTypeUVE::Component);
-        EXPECT_EQ(mutation->pins[2].name, "Result");
-        EXPECT_EQ(mutation->pins[2].type, ScriptValueTypeUVE::Boolean);
+        EXPECT_EQ(mutation->pins[0].name, "In");
+        EXPECT_EQ(mutation->pins[0].type, ScriptValueTypeUVE::Execution);
+        EXPECT_EQ(mutation->pins[1].name, "Entity");
+        EXPECT_EQ(mutation->pins[1].type, ScriptValueTypeUVE::Entity);
+        EXPECT_EQ(mutation->pins[2].name, "Component");
+        EXPECT_EQ(mutation->pins[2].type, ScriptValueTypeUVE::Component);
+        EXPECT_EQ(mutation->pins[3].name, "Result");
+        EXPECT_EQ(mutation->pins[3].type, ScriptValueTypeUVE::Boolean);
+        EXPECT_EQ(mutation->pins[4].name, "Then");
+        EXPECT_EQ(mutation->pins[4].type, ScriptValueTypeUVE::Execution);
     }
 
     const ScriptNodeTypeDescriptorUVE* keyPressed = registry.FindNodeTypeUVE("input.key_pressed");
@@ -574,46 +593,73 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
                                "camera.shake", "camera.set_active"}) {
         const ScriptNodeTypeDescriptorUVE* camera = registry.FindNodeTypeUVE(typeId);
         ASSERT_NE(camera, nullptr);
+        EXPECT_TRUE(camera->executionRequired);
         EXPECT_EQ(camera->category, "Camera");
         EXPECT_EQ(camera->iconId, "node.camera");
-        ASSERT_GE(camera->pins.size(), 3U);
-        EXPECT_EQ(camera->pins.front().name, "Camera");
-        EXPECT_EQ(camera->pins.front().type, ScriptValueTypeUVE::Entity);
-        EXPECT_EQ(camera->pins.back().name, "Result");
-        EXPECT_EQ(camera->pins.back().type, ScriptValueTypeUVE::Boolean);
+        ASSERT_GE(camera->pins.size(), 5U);
+        EXPECT_EQ(camera->pins.front().name, "In");
+        EXPECT_EQ(camera->pins.front().type, ScriptValueTypeUVE::Execution);
+        EXPECT_EQ(camera->pins[1].name, "Camera");
+        EXPECT_EQ(camera->pins[1].type, ScriptValueTypeUVE::Entity);
+        EXPECT_EQ(camera->pins.back().name, "Then");
+        EXPECT_EQ(camera->pins.back().type, ScriptValueTypeUVE::Execution);
     }
 
     const ScriptNodeTypeDescriptorUVE* animationPlay = registry.FindNodeTypeUVE("animation.play");
     ASSERT_NE(animationPlay, nullptr);
-    ASSERT_EQ(animationPlay->pins.size(), 4U);
-    EXPECT_EQ(animationPlay->pins[0].type, ScriptValueTypeUVE::Entity);
-    EXPECT_EQ(animationPlay->pins[1].name, "Clip");
-    EXPECT_EQ(animationPlay->pins[1].type, ScriptValueTypeUVE::Number);
-    EXPECT_EQ(animationPlay->pins[3].type, ScriptValueTypeUVE::Boolean);
+    ASSERT_EQ(animationPlay->pins.size(), 6U);
+    EXPECT_TRUE(animationPlay->executionRequired);
+    EXPECT_EQ(animationPlay->pins[0].name, "In");
+    EXPECT_EQ(animationPlay->pins[0].type, ScriptValueTypeUVE::Execution);
+    EXPECT_EQ(animationPlay->pins[1].type, ScriptValueTypeUVE::Entity);
+    EXPECT_EQ(animationPlay->pins[2].name, "Clip");
+    EXPECT_EQ(animationPlay->pins[2].type, ScriptValueTypeUVE::Number);
+    EXPECT_EQ(animationPlay->pins[4].type, ScriptValueTypeUVE::Boolean);
+    EXPECT_EQ(animationPlay->pins[5].name, "Then");
     for (const char* typeId : {"animation.stop", "animation.pause", "animation.blend", "animation.blend_space",
-                               "animation.set_speed", "animation.set_weight", "animation.montage",
-                               "animation.get_current_animation", "animation.is_playing"}) {
+                               "animation.set_speed", "animation.set_weight", "animation.montage"}) {
         const ScriptNodeTypeDescriptorUVE* animation = registry.FindNodeTypeUVE(typeId);
         ASSERT_NE(animation, nullptr);
+        EXPECT_TRUE(animation->executionRequired);
         EXPECT_EQ(animation->category, "Animation");
         EXPECT_EQ(animation->iconId, "node.animation");
+        EXPECT_EQ(animation->pins.front().name, "In");
+        EXPECT_EQ(animation->pins.front().type, ScriptValueTypeUVE::Execution);
+        EXPECT_EQ(animation->pins[1].type, ScriptValueTypeUVE::Entity);
+        EXPECT_EQ(animation->pins.back().name, "Then");
+        EXPECT_EQ(animation->pins.back().type, ScriptValueTypeUVE::Execution);
+    }
+    for (const char* typeId : {"animation.get_current_animation", "animation.is_playing"}) {
+        const ScriptNodeTypeDescriptorUVE* animation = registry.FindNodeTypeUVE(typeId);
+        ASSERT_NE(animation, nullptr);
+        EXPECT_FALSE(animation->executionRequired);
         EXPECT_EQ(animation->pins.front().type, ScriptValueTypeUVE::Entity);
     }
     const ScriptNodeTypeDescriptorUVE* motionBuild = registry.FindNodeTypeUVE("motion.query.build");
     ASSERT_NE(motionBuild, nullptr);
     ASSERT_EQ(motionBuild->pins.size(), 5U);
+    EXPECT_FALSE(motionBuild->executionRequired);
     EXPECT_EQ(motionBuild->pins[0].type, ScriptValueTypeUVE::Entity);
     EXPECT_EQ(motionBuild->pins[1].type, ScriptValueTypeUVE::Vector3);
     EXPECT_EQ(motionBuild->pins[2].type, ScriptValueTypeUVE::Vector3);
     EXPECT_EQ(motionBuild->pins[4].type, ScriptValueTypeUVE::Boolean);
-    for (const char* typeId : {"motion.query.search", "motion.query.get_best_match", "motion.query.set_trajectory",
-                               "motion.query.set_pose", "motion.query.set_velocity", "motion.query.set_facing",
-                               "motion.query.set_yaw", "motion.query.transition", "motion.query.motion_warp"}) {
+    for (const char* typeId : {"motion.query.search", "motion.query.get_best_match"}) {
         const ScriptNodeTypeDescriptorUVE* motion = registry.FindNodeTypeUVE(typeId);
         ASSERT_NE(motion, nullptr);
+        EXPECT_FALSE(motion->executionRequired);
+        EXPECT_EQ(motion->pins.front().type, ScriptValueTypeUVE::Entity);
+    }
+    for (const char* typeId : {"motion.query.set_trajectory", "motion.query.set_pose", "motion.query.set_velocity",
+                               "motion.query.set_facing", "motion.query.set_yaw", "motion.query.transition",
+                               "motion.query.motion_warp"}) {
+        const ScriptNodeTypeDescriptorUVE* motion = registry.FindNodeTypeUVE(typeId);
+        ASSERT_NE(motion, nullptr);
+        EXPECT_TRUE(motion->executionRequired);
         EXPECT_EQ(motion->category, "Motion Query");
         EXPECT_EQ(motion->iconId, "node.motion_query");
-        EXPECT_EQ(motion->pins.front().type, ScriptValueTypeUVE::Entity);
+        EXPECT_EQ(motion->pins.front().name, "In");
+        EXPECT_EQ(motion->pins[1].type, ScriptValueTypeUVE::Entity);
+        EXPECT_EQ(motion->pins.back().name, "Then");
     }
 
     const ScriptNodeTypeDescriptorUVE* physicsRaycast = registry.FindNodeTypeUVE("physics.raycast");
@@ -633,10 +679,15 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
     EXPECT_EQ(physicsOverlap->pins[3].type, ScriptValueTypeUVE::Number);
     const ScriptNodeTypeDescriptorUVE* physicsApplyForce = registry.FindNodeTypeUVE("physics.apply_force");
     ASSERT_NE(physicsApplyForce, nullptr);
-    ASSERT_EQ(physicsApplyForce->pins.size(), 3U);
-    EXPECT_EQ(physicsApplyForce->pins[0].type, ScriptValueTypeUVE::Entity);
-    EXPECT_EQ(physicsApplyForce->pins[1].type, ScriptValueTypeUVE::Vector3);
-    EXPECT_EQ(physicsApplyForce->pins[2].type, ScriptValueTypeUVE::Boolean);
+    ASSERT_EQ(physicsApplyForce->pins.size(), 5U);
+    EXPECT_TRUE(physicsApplyForce->executionRequired);
+    EXPECT_EQ(physicsApplyForce->pins[0].name, "In");
+    EXPECT_EQ(physicsApplyForce->pins[0].type, ScriptValueTypeUVE::Execution);
+    EXPECT_EQ(physicsApplyForce->pins[1].type, ScriptValueTypeUVE::Entity);
+    EXPECT_EQ(physicsApplyForce->pins[2].type, ScriptValueTypeUVE::Vector3);
+    EXPECT_EQ(physicsApplyForce->pins[3].type, ScriptValueTypeUVE::Boolean);
+    EXPECT_EQ(physicsApplyForce->pins[4].name, "Then");
+    EXPECT_EQ(physicsApplyForce->pins[4].type, ScriptValueTypeUVE::Execution);
     const ScriptNodeTypeDescriptorUVE* physicsGetVelocity = registry.FindNodeTypeUVE("physics.get_velocity");
     ASSERT_NE(physicsGetVelocity, nullptr);
     ASSERT_EQ(physicsGetVelocity->pins.size(), 2U);
@@ -646,11 +697,16 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
 
     const ScriptNodeTypeDescriptorUVE* engineLog = registry.FindNodeTypeUVE("engine.log");
     ASSERT_NE(engineLog, nullptr);
-    ASSERT_EQ(engineLog->pins.size(), 1U);
+    ASSERT_EQ(engineLog->pins.size(), 3U);
+    EXPECT_TRUE(engineLog->executionRequired);
     EXPECT_EQ(engineLog->category, "Engine");
     EXPECT_EQ(engineLog->iconId, "node.engine");
-    EXPECT_EQ(engineLog->pins[0].name, "Value");
-    EXPECT_EQ(engineLog->pins[0].type, ScriptValueTypeUVE::Number);
+    EXPECT_EQ(engineLog->pins[0].name, "In");
+    EXPECT_EQ(engineLog->pins[0].type, ScriptValueTypeUVE::Execution);
+    EXPECT_EQ(engineLog->pins[1].name, "Value");
+    EXPECT_EQ(engineLog->pins[1].type, ScriptValueTypeUVE::Number);
+    EXPECT_EQ(engineLog->pins[2].name, "Then");
+    EXPECT_EQ(engineLog->pins[2].type, ScriptValueTypeUVE::Execution);
 
     const ScriptNodeTypeDescriptorUVE* engineGetTime = registry.FindNodeTypeUVE("engine.get_time");
     ASSERT_NE(engineGetTime, nullptr);
@@ -1037,12 +1093,14 @@ TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_PreservesEngineLogBindin
     const ScriptIrCompileResultUVE result = CompileScriptGraphToIrUVE(graph, registry);
     ASSERT_TRUE(result.IsSuccessUVE());
     ASSERT_EQ(result.program->instructions.size(), 1U);
-    EXPECT_EQ(result.program->instructions.front().kind, ScriptIrInstructionKindUVE::ExecuteNode);
+        EXPECT_EQ(result.program->instructions.front().kind, ScriptIrInstructionKindUVE::FlowControlDispatch);
     EXPECT_EQ(result.program->instructions.front().sourceNodeId, 70U);
     EXPECT_EQ(result.program->instructions.front().nodeTypeId, "engine.log");
+    EXPECT_EQ(result.program->instructions.front().sourcePinName, "In");
+    EXPECT_EQ(result.program->instructions.front().trueTargetInstructionIndex, 1U);
 }
-
 TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_PreservesEngineGetTimeBindingNode) {
+
     ScriptNodeRegistryUVE registry;
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
     ScriptGraphUVE graph;
@@ -4495,6 +4553,64 @@ TEST(ScriptGraphCanvasPersistenceUVETest, DecodeLayout_RejectsMalformedVersionDu
     EXPECT_EQ(diagnostics[0].code, ScriptPersistenceDiagnosticCodeUVE::LimitExceeded);
 }
 
+TEST(ScriptGraphWorkspacePersistenceUVETest, EncodeDecodeRoundTripsNamedBranchesAndViewState) {
+    ScriptNodeRegistryUVE registry;
+    RegisterTestNodesUVE(registry);
+    ScriptGraphCanvasUVE canvas(registry);
+    ASSERT_TRUE(canvas.AddNodeUVE({1U, "test.source"}, {10.0F, 20.0F}).IsAppliedUVE());
+    ASSERT_TRUE(canvas.SetViewUVE({{12.0F, -4.0F}, 2.0F}).IsAppliedUVE());
+    const ScriptGraphCanvasLayoutSnapshotUVE layout = canvas.GetLayoutSnapshotUVE();
+    ScriptGraphSchemaUVE graphSchema{};
+    graphSchema.graph = canvas.GetGraphUVE();
+    for (const auto& entry : layout.entries) {
+        graphSchema.layout.push_back({entry.nodeId, entry.position.x, entry.position.y});
+    }
+    ScriptGraphWorkspaceSchemaUVE workspace{};
+    workspace.branches.push_back({"Type 1 Scene", graphSchema,
+                                  {layout.view.pan.x, layout.view.pan.y, layout.view.zoom}});
+    workspace.branches.push_back({"Type 2 Scene", ScriptGraphSchemaUVE{}, {0.0F, 0.0F, 1.0F}});
+    std::vector<ScriptPersistenceDiagnosticUVE> diagnostics;
+    const std::string encoded = EncodeScriptGraphWorkspaceUVE(workspace, diagnostics);
+    ASSERT_TRUE(diagnostics.empty());
+    const ScriptGraphWorkspaceDecodeResultUVE decoded = DecodeScriptGraphWorkspaceUVE(encoded);
+    ASSERT_TRUE(decoded.IsSuccessUVE());
+    ASSERT_EQ(decoded.workspace->branches.size(), 2U);
+    EXPECT_EQ(decoded.workspace->branches[0].name, "Type 1 Scene");
+    EXPECT_EQ(decoded.workspace->branches[0].schema.graph.GetNodesUVE().size(), 1U);
+    EXPECT_EQ(decoded.workspace->branches[0].schema.layout[0].x, 10.0F);
+    EXPECT_EQ(decoded.workspace->branches[0].view, (ScriptGraphWorkspaceViewUVE{12.0F, -4.0F, 2.0F}));
+    EXPECT_EQ(decoded.workspace->branches[1].name, "Type 2 Scene");
+}
+
+TEST(ScriptGraphWorkspacePersistenceUVETest, DecodeRejectsDuplicateBranchNames) {
+    const ScriptGraphWorkspaceDecodeResultUVE duplicate = DecodeScriptGraphWorkspaceUVE(
+        R"({"schemaVersion":1,"branches":[{"name":"Type 1 Scene","view":{"panX":0,"panY":0,"zoom":1},"graph":{"schemaVersion":1,"nodes":[],"links":[],"layout":[],"metadata":{}}},{"name":"Type 1 Scene","view":{"panX":0,"panY":0,"zoom":1},"graph":{"schemaVersion":1,"nodes":[],"links":[],"layout":[],"metadata":{}}}]})");
+    ASSERT_FALSE(duplicate.IsSuccessUVE());
+    ASSERT_FALSE(duplicate.diagnostics.empty());
+    EXPECT_EQ(duplicate.diagnostics.front().code, ScriptPersistenceDiagnosticCodeUVE::DuplicateEntry);
+}
+
+TEST(ScriptGraphWorkspacePersistenceUVETest, CanvasRestoreUsesNativeValidationAndClearsTransientHistory) {
+    ScriptNodeRegistryUVE registry;
+    RegisterTestNodesUVE(registry);
+    ScriptGraphCanvasUVE canvas(registry);
+    ASSERT_TRUE(canvas.AddNodeUVE({1U, "test.source"}, {4.0F, 8.0F}).IsAppliedUVE());
+    const ScriptGraphCanvasLayoutSnapshotUVE persistedLayout = canvas.GetLayoutSnapshotUVE();
+    ScriptGraphSchemaUVE persistedSchema{};
+    persistedSchema.graph = canvas.GetGraphUVE();
+    for (const auto& entry : persistedLayout.entries) {
+        persistedSchema.layout.push_back({entry.nodeId, entry.position.x, entry.position.y});
+    }
+    ASSERT_TRUE(canvas.AddNodeUVE({2U, "test.sink"}, {20.0F, 30.0F}).IsAppliedUVE());
+    ASSERT_GT(canvas.GetUndoCountUVE(), 0U);
+    auto restoreResult = canvas.RestorePersistenceUVE(std::move(persistedSchema), persistedLayout);
+    ASSERT_TRUE(restoreResult.IsAppliedUVE());
+    EXPECT_EQ(canvas.GetSnapshotUVE().nodes.size(), 1U);
+    EXPECT_EQ(canvas.GetLayoutSnapshotUVE(), persistedLayout);
+    EXPECT_EQ(canvas.GetUndoCountUVE(), 0U);
+    EXPECT_EQ(canvas.GetRedoCountUVE(), 0U);
+}
+
 TEST(ScriptGraphCanvasUVETest, CommandsRejectStaleRevisionAndInvalidSelectionWithoutMutation) {
     ScriptNodeRegistryUVE registry;
     RegisterTestNodesUVE(registry);
@@ -6625,121 +6741,46 @@ namespace {
 TEST(ScriptBuiltInNodeUVETest, RegisterBuiltInScriptNodesUVE_ContainsAudioSetVolumeDescriptor) {
     ScriptNodeRegistryUVE registry;
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
-    const ScriptNodeTypeDescriptorUVE* descriptor = registry.FindNodeTypeUVE("audio.set_volume");
-    ASSERT_NE(descriptor, nullptr);
-    EXPECT_EQ(descriptor->displayName, "Set Volume");
-    EXPECT_EQ(descriptor->category, "Audio");
-    ASSERT_EQ(descriptor->pins.size(), 3U);
-    EXPECT_EQ(descriptor->pins[0].name, "Source");
-    EXPECT_EQ(descriptor->pins[0].type, ScriptValueTypeUVE::Entity);
-    EXPECT_EQ(descriptor->pins[1].name, "Volume");
-    EXPECT_EQ(descriptor->pins[1].type, ScriptValueTypeUVE::Number);
-    EXPECT_EQ(descriptor->pins[2].name, "Result");
-    EXPECT_EQ(descriptor->pins[2].type, ScriptValueTypeUVE::Boolean);
 
-    const ScriptNodeTypeDescriptorUVE* pitchDescriptor = registry.FindNodeTypeUVE("audio.set_pitch");
-    ASSERT_NE(pitchDescriptor, nullptr);
-    EXPECT_EQ(pitchDescriptor->displayName, "Set Pitch");
-    EXPECT_EQ(pitchDescriptor->category, "Audio");
-    ASSERT_EQ(pitchDescriptor->pins.size(), 3U);
-    EXPECT_EQ(pitchDescriptor->pins[0].name, "Source");
-    EXPECT_EQ(pitchDescriptor->pins[0].type, ScriptValueTypeUVE::Entity);
-    EXPECT_EQ(pitchDescriptor->pins[1].name, "Pitch");
-    EXPECT_EQ(pitchDescriptor->pins[1].type, ScriptValueTypeUVE::Number);
-    EXPECT_EQ(pitchDescriptor->pins[2].name, "Result");
-    EXPECT_EQ(pitchDescriptor->pins[2].type, ScriptValueTypeUVE::Boolean);
+    struct ActionExpectationUVE final {
+        const char* typeId;
+        std::vector<const char*> pinNames;
+    };
+    const std::array<ActionExpectationUVE, 8U> expectations{{
+        {"audio.set_volume", {"In", "Source", "Volume", "Result", "Then"}},
+        {"audio.set_pitch", {"In", "Source", "Pitch", "Result", "Then"}},
+        {"audio.set_3d_position", {"In", "Source", "Position", "Result", "Then"}},
+        {"audio.play_sound", {"In", "Source", "Result", "Then"}},
+        {"audio.stop_sound", {"In", "Source", "Result", "Then"}},
+        {"audio.set_attenuation", {"In", "Source", "Min Distance", "Max Distance", "Model", "Result", "Then"}},
+        {"debug.print", {"In", "Value", "Then"}},
+        {"debug.warning", {"In", "Value", "Result", "Then"}},
+    }};
+    for (const ActionExpectationUVE& expectation : expectations) {
+        const ScriptNodeTypeDescriptorUVE* descriptor = registry.FindNodeTypeUVE(expectation.typeId);
+        ASSERT_NE(descriptor, nullptr);
+        EXPECT_TRUE(descriptor->executionRequired);
+        ASSERT_EQ(descriptor->pins.size(), expectation.pinNames.size());
+        for (std::size_t index = 0U; index < expectation.pinNames.size(); ++index) {
+            EXPECT_EQ(descriptor->pins[index].name, expectation.pinNames[index]);
+        }
+        EXPECT_EQ(descriptor->pins.front().role, ScriptPinRoleUVE::Execution);
+        EXPECT_EQ(descriptor->pins.back().role, ScriptPinRoleUVE::Execution);
+    }
 
-    const ScriptNodeTypeDescriptorUVE* positionDescriptor = registry.FindNodeTypeUVE("audio.set_3d_position");
-    ASSERT_NE(positionDescriptor, nullptr);
-    EXPECT_EQ(positionDescriptor->displayName, "Set 3D Position");
-    EXPECT_EQ(positionDescriptor->category, "Audio");
-    ASSERT_EQ(positionDescriptor->pins.size(), 3U);
-    EXPECT_EQ(positionDescriptor->pins[0].name, "Source");
-    EXPECT_EQ(positionDescriptor->pins[0].type, ScriptValueTypeUVE::Entity);
-    EXPECT_EQ(positionDescriptor->pins[1].name, "Position");
-    EXPECT_EQ(positionDescriptor->pins[1].type, ScriptValueTypeUVE::Vector3);
-    EXPECT_EQ(positionDescriptor->pins[2].name, "Result");
-    EXPECT_EQ(positionDescriptor->pins[2].type, ScriptValueTypeUVE::Boolean);
+    const ScriptNodeTypeDescriptorUVE* errorDescriptor = registry.FindNodeTypeUVE("debug.error");
+    ASSERT_NE(errorDescriptor, nullptr);
+    EXPECT_TRUE(errorDescriptor->executionRequired);
+    ASSERT_EQ(errorDescriptor->pins.size(), 4U);
+    EXPECT_EQ(errorDescriptor->pins[0].name, "In");
+    EXPECT_EQ(errorDescriptor->pins[1].name, "Value");
+    EXPECT_EQ(errorDescriptor->pins[2].name, "Result");
+    EXPECT_EQ(errorDescriptor->pins[3].name, "Then");
 
-    const ScriptNodeTypeDescriptorUVE* playDescriptor = registry.FindNodeTypeUVE("audio.play_sound");
-    ASSERT_NE(playDescriptor, nullptr);
-    EXPECT_EQ(playDescriptor->displayName, "Play Sound");
-    EXPECT_EQ(playDescriptor->category, "Audio");
-    ASSERT_EQ(playDescriptor->pins.size(), 2U);
-    EXPECT_EQ(playDescriptor->pins[0].name, "Source");
-    EXPECT_EQ(playDescriptor->pins[0].type, ScriptValueTypeUVE::Entity);
-    EXPECT_EQ(playDescriptor->pins[1].name, "Result");
-    EXPECT_EQ(playDescriptor->pins[1].type, ScriptValueTypeUVE::Boolean);
-
-    const ScriptNodeTypeDescriptorUVE* stopDescriptor = registry.FindNodeTypeUVE("audio.stop_sound");
-    ASSERT_NE(stopDescriptor, nullptr);
-    EXPECT_EQ(stopDescriptor->displayName, "Stop Sound");
-    EXPECT_EQ(stopDescriptor->category, "Audio");
-    ASSERT_EQ(stopDescriptor->pins.size(), 2U);
-    EXPECT_EQ(stopDescriptor->pins[0].name, "Source");
-    EXPECT_EQ(stopDescriptor->pins[0].type, ScriptValueTypeUVE::Entity);
-    EXPECT_EQ(stopDescriptor->pins[1].name, "Result");
-    EXPECT_EQ(stopDescriptor->pins[1].type, ScriptValueTypeUVE::Boolean);
-
-    const ScriptNodeTypeDescriptorUVE* playingDescriptor = registry.FindNodeTypeUVE("audio.is_playing");
-    ASSERT_NE(playingDescriptor, nullptr);
-    EXPECT_EQ(playingDescriptor->displayName, "Is Playing");
-    EXPECT_EQ(playingDescriptor->category, "Audio");
-    ASSERT_EQ(playingDescriptor->pins.size(), 2U);
-    EXPECT_EQ(playingDescriptor->pins[0].name, "Source");
-    EXPECT_EQ(playingDescriptor->pins[0].type, ScriptValueTypeUVE::Entity);
-    EXPECT_EQ(playingDescriptor->pins[1].name, "Result");
-    EXPECT_EQ(playingDescriptor->pins[1].type, ScriptValueTypeUVE::Boolean);
-
-    const ScriptNodeTypeDescriptorUVE* attenuationDescriptor = registry.FindNodeTypeUVE("audio.set_attenuation");
-    ASSERT_NE(attenuationDescriptor, nullptr);
-    EXPECT_EQ(attenuationDescriptor->displayName, "Set Attenuation");
-    EXPECT_EQ(attenuationDescriptor->category, "Audio");
-    ASSERT_EQ(attenuationDescriptor->pins.size(), 5U);
-    EXPECT_EQ(attenuationDescriptor->pins[0].name, "Source");
-    EXPECT_EQ(attenuationDescriptor->pins[0].type, ScriptValueTypeUVE::Entity);
-    EXPECT_EQ(attenuationDescriptor->pins[1].name, "Min Distance");
-    EXPECT_EQ(attenuationDescriptor->pins[1].type, ScriptValueTypeUVE::Number);
-    EXPECT_EQ(attenuationDescriptor->pins[2].name, "Max Distance");
-    EXPECT_EQ(attenuationDescriptor->pins[2].type, ScriptValueTypeUVE::Number);
-    EXPECT_EQ(attenuationDescriptor->pins[3].name, "Model");
-    EXPECT_EQ(attenuationDescriptor->pins[3].type, ScriptValueTypeUVE::Number);
-    EXPECT_EQ(attenuationDescriptor->pins[4].name, "Result");
-    EXPECT_EQ(attenuationDescriptor->pins[4].type, ScriptValueTypeUVE::Boolean);
-
-    const ScriptNodeTypeDescriptorUVE* debugPrintDescriptor = registry.FindNodeTypeUVE("debug.print");
-    ASSERT_NE(debugPrintDescriptor, nullptr);
-    EXPECT_EQ(debugPrintDescriptor->displayName, "Print Number");
-    EXPECT_EQ(debugPrintDescriptor->category, "Debug");
-    EXPECT_EQ(debugPrintDescriptor->iconId, "node.debug");
-    ASSERT_EQ(debugPrintDescriptor->pins.size(), 1U);
-    EXPECT_EQ(debugPrintDescriptor->pins[0].name, "Value");
-    EXPECT_EQ(debugPrintDescriptor->pins[0].direction, ScriptPinDirectionUVE::Input);
-    EXPECT_EQ(debugPrintDescriptor->pins[0].type, ScriptValueTypeUVE::Number);
-
-    const ScriptNodeTypeDescriptorUVE* debugWarningDescriptor = registry.FindNodeTypeUVE("debug.warning");
-    ASSERT_NE(debugWarningDescriptor, nullptr);
-    EXPECT_EQ(debugWarningDescriptor->displayName, "Warning Number");
-    EXPECT_EQ(debugWarningDescriptor->category, "Debug");
-    EXPECT_EQ(debugWarningDescriptor->iconId, "node.debug");
-    ASSERT_EQ(debugWarningDescriptor->pins.size(), 2U);
-    EXPECT_EQ(debugWarningDescriptor->pins[0].name, "Value");
-    EXPECT_EQ(debugWarningDescriptor->pins[0].direction, ScriptPinDirectionUVE::Input);
-    EXPECT_EQ(debugWarningDescriptor->pins[0].type, ScriptValueTypeUVE::Number);
-    EXPECT_EQ(debugWarningDescriptor->pins[1].name, "Result");
-    EXPECT_EQ(debugWarningDescriptor->pins[1].direction, ScriptPinDirectionUVE::Output);
-    EXPECT_EQ(debugWarningDescriptor->pins[1].type, ScriptValueTypeUVE::Boolean);
-
-    const ScriptNodeTypeDescriptorUVE* debugErrorDescriptor = registry.FindNodeTypeUVE("debug.error");
-    ASSERT_NE(debugErrorDescriptor, nullptr);
-    EXPECT_EQ(debugErrorDescriptor->displayName, "Error Number");
-    EXPECT_EQ(debugErrorDescriptor->category, "Debug");
-    EXPECT_EQ(debugErrorDescriptor->iconId, "node.debug");
-    ASSERT_EQ(debugErrorDescriptor->pins.size(), 2U);
-    EXPECT_EQ(debugErrorDescriptor->pins[0].name, "Value");
-    EXPECT_EQ(debugErrorDescriptor->pins[0].type, ScriptValueTypeUVE::Number);
-    EXPECT_EQ(debugErrorDescriptor->pins[1].name, "Result");
-    EXPECT_EQ(debugErrorDescriptor->pins[1].type, ScriptValueTypeUVE::Boolean);
+    const ScriptNodeTypeDescriptorUVE* queryDescriptor = registry.FindNodeTypeUVE("audio.is_playing");
+    ASSERT_NE(queryDescriptor, nullptr);
+    EXPECT_FALSE(queryDescriptor->executionRequired);
+    EXPECT_EQ(queryDescriptor->pins.size(), 2U);
 }
 
 TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesEntityBeforeAudioSetVolume) {
@@ -7581,6 +7622,92 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_SchedulesReversedMultiHopVector3F
     EXPECT_EQ(*subtractResult, (ScriptVector3ValueUVE{{0.5F, 1.0F, 2.0F}}));
     ASSERT_TRUE(context.FindOutputUVE(20U, "Length").has_value());
     EXPECT_NEAR(std::get<float>(*context.FindOutputUVE(20U, "Length")), std::sqrt(29.0F), 1.0e-5F);
+}
+
+} // namespace UVE::Scripting
+
+namespace UVE::Scripting {
+
+TEST(ScriptNodeRegistryUVETest, BuiltInActionDescriptorsRequireExecutionPower) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+
+    const ScriptNodeTypeDescriptorUVE* log = registry.FindNodeTypeUVE("engine.log");
+    ASSERT_NE(log, nullptr);
+    ASSERT_TRUE(log->executionRequired);
+    ASSERT_EQ(log->pins.size(), 3U);
+    EXPECT_EQ(log->pins[0].name, "In");
+    EXPECT_EQ(log->pins[0].role, ScriptPinRoleUVE::Execution);
+    EXPECT_EQ(log->pins[1].name, "Value");
+    EXPECT_EQ(log->pins[1].role, ScriptPinRoleUVE::Data);
+    EXPECT_EQ(log->pins[2].name, "Then");
+    EXPECT_EQ(log->pins[2].role, ScriptPinRoleUVE::Execution);
+
+    const ScriptNodeTypeDescriptorUVE* add = registry.FindNodeTypeUVE("math.float.add");
+    ASSERT_NE(add, nullptr);
+    EXPECT_FALSE(add->executionRequired);
+    EXPECT_EQ(add->pins.size(), 3U);
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_SkipsUnpoweredActionWithoutCallback) {
+    ScriptBytecodeProgramUVE program;
+    program.instructions.push_back({ScriptIrInstructionKindUVE::FlowControlDispatch, 1U, 0U,
+                                    "engine.log", "In", {}, 1U, 1U, 0U, 0U, false, 1U});
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(1U, "Value", 42.0F));
+    EngineLogCaptureUVE capture;
+    ScriptEngineCallBindingsUVE bindings{};
+    bindings.userData = &capture;
+    bindings.log = CaptureEngineLogUVE;
+    ScriptVmExecutionOptionsUVE options;
+    options.engineCallBindings = &bindings;
+
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(program, context, options);
+    ASSERT_TRUE(result.IsSuccessUVE());
+    EXPECT_EQ(capture.callCount, 0U);
+    ASSERT_GE(result.trace.size(), 2U);
+    EXPECT_EQ(result.trace[0].kind, ScriptVmTraceEventKindUVE::NodeSkipped);
+    EXPECT_EQ(result.trace[0].message, "Action skipped because no execution wire powered this node.");
+}
+
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_EventPowersLogAndReturnChain) {
+    ScriptNodeRegistryUVE registry;
+    ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
+    ScriptGraphUVE graph;
+    ASSERT_TRUE(graph.AddNodeUVE({1U, "flow.event"}));
+    ASSERT_TRUE(graph.AddNodeUVE({2U, "engine.log"}));
+    ASSERT_TRUE(graph.AddNodeUVE({3U, "flow.return"}));
+    ASSERT_TRUE(graph.AddLinkUVE({{1U, "Then"}, {2U, "In"}}));
+    ASSERT_TRUE(graph.AddLinkUVE({{2U, "Then"}, {3U, "In"}}));
+
+    const ScriptIrCompileResultUVE compiled = CompileScriptGraphToIrUVE(graph, registry);
+    ASSERT_TRUE(compiled.IsSuccessUVE());
+    std::vector<ScriptBytecodeDiagnosticUVE> diagnostics;
+    const std::optional<ScriptBytecodeProgramUVE> bytecode =
+        LowerIrToBytecodeUVE(*compiled.program, diagnostics);
+    ASSERT_TRUE(bytecode.has_value());
+    ASSERT_TRUE(diagnostics.empty());
+
+    ScriptVmExecutionContextUVE context;
+    ASSERT_TRUE(context.SetInputUVE(2U, "Value", 3.5F));
+    EngineLogCaptureUVE capture;
+    ScriptEngineCallBindingsUVE bindings{};
+    bindings.userData = &capture;
+    bindings.log = CaptureEngineLogUVE;
+    ScriptVmExecutionOptionsUVE options;
+    options.engineCallBindings = &bindings;
+
+    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(*bytecode, context, options);
+    ASSERT_TRUE(result.IsSuccessUVE());
+    EXPECT_EQ(result.instructionsExecuted, 3U);
+    EXPECT_EQ(capture.callCount, 1U);
+    EXPECT_FLOAT_EQ(capture.lastValue, 3.5F);
+    ASSERT_EQ(result.trace.size(), 4U);
+    EXPECT_EQ(result.trace[0].nodeTypeId, "flow.event");
+    EXPECT_EQ(result.trace[1].nodeTypeId, "engine.log");
+    EXPECT_EQ(result.trace[1].kind, ScriptVmTraceEventKindUVE::NodeExecuted);
+    EXPECT_EQ(result.trace[2].nodeTypeId, "flow.return");
+    EXPECT_EQ(result.trace[3].kind, ScriptVmTraceEventKindUVE::Completed);
 }
 
 } // namespace UVE::Scripting

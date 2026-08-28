@@ -435,102 +435,156 @@ void main() {
 )GLSLSRC";
 
 
-const std::string_view kEditorViewportVisualsSource = R"GLSLSRC(#version 330 core
+
+const std::string_view kEditorViewportEnvironmentSource = R"GLSLSRC(#version 330 core
 
 #ifdef VERTEX_SHADER
-out vec2 vTexCoord;
-
 void main() {
     vec2 position = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2);
-    vTexCoord = position * 0.5;
     gl_Position = vec4(position * 2.0 - 1.0, 0.0, 1.0);
 }
 #endif
 
 #ifdef FRAGMENT_SHADER
-in vec2 vTexCoord;
 out vec4 FragColor;
 
+uniform vec3 uCameraPosition;
+uniform vec3 uCameraForward;
+uniform vec3 uCameraRight;
+uniform vec3 uCameraUp;
 uniform vec3 uViewportMin;
 uniform vec3 uViewportMax;
-uniform vec3 uSelectionMin;
-uniform vec3 uSelectionMax;
-uniform vec3 uCameraForward;
-uniform int uSelectionVisible;
-uniform int uActiveGizmoAxis;
+uniform vec3 uSurfaceSize;
+uniform vec3 uGridOrigin;
+uniform float uCameraTanHalfFov;
+uniform float uViewportAspect;
+uniform float uGridSpacing;
+uniform int uProjectionMode;
+uniform float uOrthographicScale;
+uniform int uEnvironmentPreviewEnabled;
+uniform int uSunPreviewEnabled;
 
-float RectMaskUVE(vec2 point, vec2 minimum, vec2 maximum) {
-    vec2 inside = step(minimum, point) * step(point, maximum);
-    return inside.x * inside.y;
+float GridLineCoverageUVE(vec2 coordinate, float spacing) {
+    vec2 scaled = coordinate / max(spacing, 0.000001);
+    vec2 distanceToLine = abs(fract(scaled + 0.5) - 0.5);
+    vec2 antiAlias = clamp(fwidth(scaled) * 0.35, vec2(0.004), vec2(0.055));
+    vec2 line = 1.0 - smoothstep(vec2(0.0), antiAlias, distanceToLine);
+    return max(line.x, line.y);
 }
 
-float RectOutlineUVE(vec2 point, vec2 minimum, vec2 maximum, float width) {
-    float outer = RectMaskUVE(point, minimum - vec2(width), maximum + vec2(width));
-    float inner = RectMaskUVE(point, minimum + vec2(width), maximum - vec2(width));
-    return max(outer - inner, 0.0);
-}
-
-float SegmentUVE(vec2 point, vec2 start, vec2 end, float radius) {
-    vec2 direction = end - start;
-    float parameter = clamp(dot(point - start, direction) / max(dot(direction, direction), 0.000001), 0.0, 1.0);
-    return 1.0 - smoothstep(radius, radius * 1.8, length(point - (start + direction * parameter)));
+float SafeLog10UVE(float value) {
+    return log(max(value, 0.000001)) / log(10.0);
 }
 
 void main() {
-    vec2 viewportMin = uViewportMin.xy;
-    vec2 viewportMax = uViewportMax.xy;
-    float inViewport = RectMaskUVE(vTexCoord, viewportMin, viewportMax);
-    if (inViewport < 0.5) {
-        discard;
+    vec2 surfaceUv = gl_FragCoord.xy / max(uSurfaceSize.xy, vec2(1.0));
+    vec2 viewportExtent = max(uViewportMax.xy - uViewportMin.xy, vec2(0.001));
+    vec2 viewportUv = clamp((surfaceUv - uViewportMin.xy) / viewportExtent, vec2(0.0), vec2(1.0));
+    vec2 ndc = vec2(viewportUv.x * 2.0 - 1.0, viewportUv.y * 2.0 - 1.0);
+
+    float tanHalfFov = max(uCameraTanHalfFov, 0.0001);
+    float forwardLength = length(uCameraForward);
+    vec3 forward = forwardLength > 0.0001 ? uCameraForward / forwardLength : vec3(0.0, 0.0, -1.0);
+    float rightLength = length(uCameraRight);
+    vec3 right = rightLength > 0.0001 ? uCameraRight / rightLength : vec3(1.0, 0.0, 0.0);
+    float upLength = length(uCameraUp);
+    vec3 up = upLength > 0.0001 ? uCameraUp / upLength : vec3(0.0, 1.0, 0.0);
+
+    vec3 rayOrigin = uCameraPosition;
+    vec3 rayDirection = forward;
+    float orthographicScale = max(uOrthographicScale, 0.0001);
+    if (uProjectionMode != 0) {
+        rayOrigin += right * (ndc.x * uViewportAspect * orthographicScale) + up * (ndc.y * orthographicScale);
+    } else {
+        rayDirection = normalize(forward + right * (ndc.x * uViewportAspect * tanHalfFov) + up * (ndc.y * tanHalfFov));
     }
 
-    vec2 local = (vTexCoord - viewportMin) / max(viewportMax - viewportMin, vec2(0.0001));
-    float verticalGradient = smoothstep(0.0, 1.0, local.y);
-    vec3 backgroundTop = vec3(0.060, 0.082, 0.108);
-    vec3 backgroundBottom = vec3(0.028, 0.043, 0.060);
-    vec3 color = mix(backgroundBottom, backgroundTop, verticalGradient);
-    float alpha = 0.30;
+    const vec3 skyColor = vec3(0.246, 0.282, 0.322);       // #3F4852
+    const vec3 groundColor = vec3(0.145, 0.165, 0.184);    // #252A2F
+    const vec3 horizonColor = vec3(0.282, 0.322, 0.361);   // #48525C
+    const vec3 gridColor = vec3(0.349, 0.388, 0.427);      // #59636D
+    const vec3 axisXColor = vec3(1.0, 0.365, 0.365);       // Navigation Gizmo X #FF5D5D
+    const vec3 axisYColor = vec3(0.290, 0.871, 0.502);      // Navigation Gizmo Y #4ADE80
+    const vec3 axisZColor = vec3(0.231, 0.612, 1.0);       // Navigation Gizmo Z #3B9CFF
 
-    vec2 grid = abs(fract((local - 0.5) * 24.0) - 0.5);
-    float fineLine = 1.0 - smoothstep(0.47, 0.50, max(grid.x, grid.y));
-    vec2 majorGrid = abs(fract((local - 0.5) * 4.0) - 0.5);
-    float majorLine = 1.0 - smoothstep(0.455, 0.50, max(majorGrid.x, majorGrid.y));
-    float axisX = 1.0 - smoothstep(0.004, 0.010, abs(local.y - 0.5));
-    float axisZ = 1.0 - smoothstep(0.004, 0.010, abs(local.x - 0.5));
-    color += vec3(0.16, 0.27, 0.37) * fineLine;
-    color += vec3(0.25, 0.43, 0.57) * majorLine;
-    color += vec3(0.10, 0.62, 0.91) * axisX;
-    color += vec3(0.95, 0.48, 0.12) * axisZ;
-    alpha = max(alpha, 0.22 * fineLine + 0.28 * majorLine + 0.42 * max(axisX, axisZ));
-
-    if (uSelectionVisible != 0) {
-        float outline = RectOutlineUVE(vTexCoord, uSelectionMin.xy, uSelectionMax.xy, 0.0025);
-        color = mix(color, vec3(1.0, 0.82, 0.16), outline);
-        alpha = max(alpha, outline * 0.90);
+    float skyHeight = clamp(rayDirection.y, -1.0, 1.0);
+    float horizonBlend = smoothstep(-0.16, 0.18, skyHeight);
+    vec3 color = vec3(0.355, 0.365, 0.380); // neutral preview-off gray
+    if (uEnvironmentPreviewEnabled != 0) {
+        color = mix(groundColor, horizonColor, smoothstep(0.0, 0.35, skyHeight));
+        color = mix(color, skyColor, smoothstep(0.18, 0.72, skyHeight));
+    }
+    if (uSunPreviewEnabled != 0) {
+        const vec3 sunDirection = normalize(vec3(-0.38, 0.82, 0.30));
+        float sunDisc = pow(max(dot(rayDirection, sunDirection), 0.0), 256.0);
+        color += vec3(1.0, 0.83, 0.55) * sunDisc * 0.82;
     }
 
-    vec2 widgetCenter = vec2(0.90, 0.88);
-    float widget = 1.0 - smoothstep(0.095, 0.105, length(local - widgetCenter));
-    if (widget > 0.0) {
-        vec2 direction = normalize(vec2(uCameraForward.x, -uCameraForward.y) + vec2(0.0001));
-        vec2 xEnd = widgetCenter + vec2(0.055, 0.0);
-        vec2 yEnd = widgetCenter + vec2(0.0, 0.055);
-        vec2 zEnd = widgetCenter - direction * 0.050;
-        float xAxis = SegmentUVE(local, widgetCenter, xEnd, 0.006);
-        float yAxis = SegmentUVE(local, widgetCenter, yEnd, 0.006);
-        float zAxis = SegmentUVE(local, widgetCenter, zEnd, 0.006);
-        color += vec3(0.92, 0.22, 0.24) * xAxis + vec3(0.25, 0.78, 0.38) * yAxis + vec3(0.15, 0.52, 0.95) * zAxis;
-        alpha = max(alpha, max(xAxis, max(yAxis, zAxis)) * 0.94 + widget * 0.10);
+    float groundDenominator = rayDirection.y;
+    if (groundDenominator < -0.0001) {
+        float groundDistance = -rayOrigin.y / groundDenominator;
+        if (groundDistance > 0.0 && groundDistance < 1000000.0) {
+            vec3 groundHit = rayOrigin + rayDirection * groundDistance;
+            vec2 relative = groundHit.xz - uGridOrigin.xz;
+
+            float viewportPixelHeight = max(viewportExtent.y * uSurfaceSize.y, 1.0);
+            float worldUnitsPerPixel = uProjectionMode != 0
+                                           ? (2.0 * orthographicScale) / viewportPixelHeight
+                                           : (groundDistance * 2.0 * tanHalfFov) / viewportPixelHeight;
+            worldUnitsPerPixel = max(worldUnitsPerPixel, 0.000001);
+
+            // Select the decade whose major cells remain comfortably readable. The 1/10 minor
+            // level is about eight pixels at the crossover, and the logarithmic fraction blends
+            // adjacent major levels continuously while zooming.
+            float baseSpacing = max(uGridSpacing, 0.000001);
+            float desiredMajorSpacing = max(worldUnitsPerPixel * 80.0, baseSpacing * 0.01);
+            float decade = floor(SafeLog10UVE(desiredMajorSpacing / baseSpacing));
+            float decadeFraction = fract(SafeLog10UVE(desiredMajorSpacing / baseSpacing));
+            float majorSpacing = baseSpacing * pow(10.0, decade);
+            float nextMajorSpacing = majorSpacing * 10.0;
+            float majorTransition = smoothstep(0.18, 0.82, decadeFraction);
+
+            float currentMinor = GridLineCoverageUVE(relative, majorSpacing * 0.1);
+            float currentMajor = GridLineCoverageUVE(relative, majorSpacing);
+            float nextMajor = GridLineCoverageUVE(relative, nextMajorSpacing);
+            float minorWeight = (1.0 - majorTransition) * 0.42;
+            float majorWeight = (1.0 - majorTransition) * 0.74 + majorTransition * 0.66;
+            float gridFade = 1.0 - smoothstep(majorSpacing * 12.0, majorSpacing * 240.0, groundDistance);
+            float gridCoverage = (currentMinor * minorWeight + currentMajor * majorWeight +
+                                  nextMajor * majorTransition * 0.74) * gridFade;
+            color = mix(color, gridColor, clamp(gridCoverage * 0.52, 0.0, 0.52));
+
+            // X and Z are world-space ground axes and therefore must pass through the real origin.
+            // The small width is antialiased in world units, so the axes stay stronger than the
+            // grid without turning into a thick overlay.
+            float axisWidth = clamp(max(worldUnitsPerPixel * 1.6, majorSpacing * 0.008),
+                                    majorSpacing * 0.006, majorSpacing * 0.045);
+            float axisX = 1.0 - smoothstep(axisWidth, axisWidth * 2.0, abs(relative.y));
+            float axisZ = 1.0 - smoothstep(axisWidth, axisWidth * 2.0, abs(relative.x));
+            float axisFade = gridFade * (0.62 + 0.38 * (1.0 - majorTransition));
+            color = mix(color, axisXColor, clamp(axisX * axisFade * 0.72, 0.0, 0.78));
+            color = mix(color, axisZColor, clamp(axisZ * axisFade * 0.72, 0.0, 0.78));
+
+            // Project the world Y axis into the same camera ray. This is a line in XZ at the
+            // origin, not a screen-space decoration, and naturally disappears when edge-on.
+            vec2 horizontalRay = rayDirection.xz;
+            float horizontalLengthSquared = dot(horizontalRay, horizontalRay);
+            if (horizontalLengthSquared > 0.000001) {
+                float axisParameter = -dot(rayOrigin.xz - uGridOrigin.xz, horizontalRay) /
+                                      horizontalLengthSquared;
+                if (axisParameter > 0.0) {
+                    vec3 closestAxisPoint = rayOrigin + rayDirection * axisParameter;
+                    float yAxisDistance = length(closestAxisPoint.xz - uGridOrigin.xz);
+                    float yAxis = 1.0 - smoothstep(axisWidth, axisWidth * 2.0, yAxisDistance);
+                    color = mix(color, axisYColor, clamp(yAxis * axisFade * 0.72, 0.0, 0.78));
+                }
+            }
+        }
     }
 
-    vec3 gizmoColor = uActiveGizmoAxis == 1 ? vec3(0.92, 0.22, 0.24) :
-                      uActiveGizmoAxis == 2 ? vec3(0.25, 0.78, 0.38) :
-                      uActiveGizmoAxis == 3 ? vec3(0.15, 0.52, 0.95) : vec3(0.58, 0.68, 0.76);
-    float gizmoMarker = RectMaskUVE(local, vec2(0.025, 0.88), vec2(0.070, 0.925));
-    color = mix(color, gizmoColor, gizmoMarker);
-    alpha = max(alpha, gizmoMarker * 0.88);
-
-    FragColor = vec4(color, clamp(alpha, 0.0, 0.94));
+    // Keep the transition continuous at grazing angles instead of producing a hard horizon strip.
+    color = mix(color, horizonColor, (1.0 - horizonBlend) * 0.08);
+    FragColor = vec4(color, 1.0);
 }
 #endif
 )GLSLSRC";

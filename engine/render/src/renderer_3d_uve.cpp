@@ -479,7 +479,7 @@ struct Renderer3DUVE::ImplUVE {
     /// before every use, exactly like RenderDemoTriangleUVE() does.
     std::shared_ptr<Shader::ShaderProgramUVE> shadowProgram;
     std::shared_ptr<Shader::ShaderProgramUVE> toneMappingProgram;
-    std::shared_ptr<Shader::ShaderProgramUVE> editorViewportVisualsProgram;
+    std::shared_ptr<Shader::ShaderProgramUVE> editorViewportEnvironmentProgram;
 
     /// Minimal built-in particle program and reusable CPU-expanded vertex buffer. ShaderManagerUVE
     /// owns the linked pipeline lifetime; Renderer3DUVE owns only the buffer and releases it in its
@@ -1121,14 +1121,15 @@ Renderer3DUVE::Renderer3DUVE(IRenderDeviceUVE& renderDevice, IRenderSystemUVE& r
     toneMappingProgramDesc.debugNameUVE = "ToneMapping";
     m_impl->toneMappingProgram = shaderManager.CreateProgramUVE(toneMappingProgramDesc);
 
-    Shader::ShaderProgramDescUVE editorViewportVisualsProgramDesc;
-    editorViewportVisualsProgramDesc.virtualFilePath = std::string(Shader::BuiltIn::kEditorViewportVisualsVirtualPath);
-    editorViewportVisualsProgramDesc.embeddedFallbackSourceCode = std::string(Shader::BuiltIn::kEditorViewportVisualsSource);
-    editorViewportVisualsProgramDesc.depthTestEnabled = false;
-    editorViewportVisualsProgramDesc.depthWriteEnabled = false;
-    editorViewportVisualsProgramDesc.blendMode = PipelineBlendModeUVE::SourceAlphaOver;
-    editorViewportVisualsProgramDesc.debugNameUVE = "EditorViewportVisuals";
-    m_impl->editorViewportVisualsProgram = shaderManager.CreateProgramUVE(editorViewportVisualsProgramDesc);
+    Shader::ShaderProgramDescUVE editorViewportEnvironmentProgramDesc;
+    editorViewportEnvironmentProgramDesc.virtualFilePath =
+        std::string(Shader::BuiltIn::kEditorViewportEnvironmentVirtualPath);
+    editorViewportEnvironmentProgramDesc.embeddedFallbackSourceCode =
+        std::string(Shader::BuiltIn::kEditorViewportEnvironmentSource);
+    editorViewportEnvironmentProgramDesc.depthTestEnabled = false;
+    editorViewportEnvironmentProgramDesc.depthWriteEnabled = false;
+    editorViewportEnvironmentProgramDesc.debugNameUVE = "EditorViewportEnvironment";
+    m_impl->editorViewportEnvironmentProgram = shaderManager.CreateProgramUVE(editorViewportEnvironmentProgramDesc);
 
     Shader::ShaderProgramDescUVE particleProgramDesc;
     particleProgramDesc.virtualFilePath = std::string(Shader::BuiltIn::kParticleVirtualPath);
@@ -1233,7 +1234,7 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
     m_impl->lastFrameDiagnostics.primitiveProgramReady = m_impl->primitiveProgram->IsValidUVE();
     m_impl->lastFrameDiagnostics.particleProgramReady = m_impl->particleProgram->IsValidUVE();
     m_impl->lastFrameDiagnostics.toneMappingProgramReady = m_impl->toneMappingProgram->IsValidUVE();
-    m_impl->lastFrameDiagnostics.editorVisualProgramReady = m_impl->editorViewportVisualsProgram->IsValidUVE();
+    m_impl->lastFrameDiagnostics.editorVisualProgramReady = m_impl->editorViewportEnvironmentProgram->IsValidUVE();
 
     const Math::Matrix4x4UVE viewProjection =
         m_impl->cameraSystem.ComputeViewProjectionUVE(entityManager, cameraEntity, aspectRatio);
@@ -1377,12 +1378,52 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
                 RenderGraphResourceUseUVE{shadowResource, RenderGraphResourceAccessUVE::Read};
         }
     }
+    const std::array<RenderGraphResourceUseUVE, 1U> environmentResources{
+        RenderGraphResourceUseUVE{colorResource, RenderGraphResourceAccessUVE::Write}};
+    renderGraph.AddPassUVE(
+        "EditorViewportEnvironment", environmentResources,
+        [this](ICommandBufferUVE& commandBuffer) {
+            const EditorViewportVisualStateUVE& state = m_impl->editorVisualState;
+            if (!state.enabled || !m_impl->editorViewportEnvironmentProgram->IsValidUVE()) {
+                return;
+            }
+            RenderPassDescUVE passDesc;
+            passDesc.colorAttachment = m_impl->colorTarget;
+            passDesc.depthAttachment = kInvalidTextureHandleUVE;
+            passDesc.colorLoadOp = LoadOpUVE::Clear;
+            passDesc.depthLoadOp = LoadOpUVE::DontCare;
+            passDesc.clearColor = {0.145F, 0.165F, 0.184F, 1.0F};
+            m_impl->lastFrameDiagnostics.editorVisualPassRecorded = true;
+            commandBuffer.BeginRenderPassUVE(passDesc);
+            m_impl->editorViewportEnvironmentProgram->SetVector3UVE("uCameraPosition", state.cameraPosition);
+            m_impl->editorViewportEnvironmentProgram->SetVector3UVE("uCameraForward", state.cameraForward);
+            m_impl->editorViewportEnvironmentProgram->SetVector3UVE("uCameraRight", state.cameraRight);
+            m_impl->editorViewportEnvironmentProgram->SetVector3UVE("uCameraUp", state.cameraUp);
+            m_impl->editorViewportEnvironmentProgram->SetVector3UVE("uViewportMin", Math::Vector3UVE{state.viewportMinX, state.viewportMinY, 0.0F});
+            m_impl->editorViewportEnvironmentProgram->SetVector3UVE("uViewportMax", Math::Vector3UVE{state.viewportMaxX, state.viewportMaxY, 0.0F});
+            m_impl->editorViewportEnvironmentProgram->SetVector3UVE("uSurfaceSize", Math::Vector3UVE{static_cast<float>(m_impl->targetWidth), static_cast<float>(m_impl->targetHeight), 0.0F});
+            m_impl->editorViewportEnvironmentProgram->SetVector3UVE("uGridOrigin", state.gridOrigin);
+            m_impl->editorViewportEnvironmentProgram->SetFloatUVE("uCameraTanHalfFov", state.cameraTanHalfFov);
+            m_impl->editorViewportEnvironmentProgram->SetFloatUVE("uViewportAspect",
+                                                               std::max(0.001F, state.viewportMaxX - state.viewportMinX) /
+                                                                   std::max(0.001F, state.viewportMaxY - state.viewportMinY));
+            m_impl->editorViewportEnvironmentProgram->SetFloatUVE("uGridSpacing", state.gridSpacing);
+            m_impl->editorViewportEnvironmentProgram->SetIntUVE("uProjectionMode", state.orthographic ? 1 : 0);
+            m_impl->editorViewportEnvironmentProgram->SetFloatUVE("uOrthographicScale", state.orthographicScale);
+            m_impl->editorViewportEnvironmentProgram->SetIntUVE("uEnvironmentPreviewEnabled",
+                                                                  state.environmentPreviewEnabled ? 1 : 0);
+            m_impl->editorViewportEnvironmentProgram->SetIntUVE("uSunPreviewEnabled", state.sunPreviewEnabled ? 1 : 0);
+            m_impl->editorViewportEnvironmentProgram->ApplyToUVE(commandBuffer);
+            commandBuffer.DrawUVE(3);
+            commandBuffer.EndRenderPassUVE();
+        });
     renderGraph.AddPassUVE(
         "MainColor", std::span<const RenderGraphResourceUseUVE>{mainResources.data(), mainResourceCount},
         [this, &queue, &frameUniforms](ICommandBufferUVE& commandBuffer) {
             RenderPassDescUVE passDesc;
             passDesc.colorAttachment = m_impl->colorTarget;
             passDesc.depthAttachment = m_impl->depthTarget;
+            passDesc.colorLoadOp = m_impl->editorVisualState.enabled ? LoadOpUVE::Load : LoadOpUVE::Clear;
             passDesc.clearColor = kDefaultSceneClearColorUVE;
             m_impl->lastFrameDiagnostics.mainPassRecorded = true;
             commandBuffer.BeginRenderPassUVE(passDesc);
@@ -1402,33 +1443,6 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
                     m_impl->lastFrameDiagnostics.primitiveDrawCallsRecorded +
                     m_impl->lastFrameDiagnostics.particleDrawCallsRecorded;
             }
-            commandBuffer.EndRenderPassUVE();
-        });
-    const std::array<RenderGraphResourceUseUVE, 1U> editorVisualResources{
-        RenderGraphResourceUseUVE{colorResource, RenderGraphResourceAccessUVE::Write}};
-    renderGraph.AddPassUVE(
-        "EditorViewportVisuals", editorVisualResources,
-        [this](ICommandBufferUVE& commandBuffer) {
-            const EditorViewportVisualStateUVE& state = m_impl->editorVisualState;
-            if (!state.enabled || !m_impl->editorViewportVisualsProgram->IsValidUVE()) {
-                return;
-            }
-            RenderPassDescUVE passDesc;
-            passDesc.colorAttachment = m_impl->colorTarget;
-            passDesc.depthAttachment = kInvalidTextureHandleUVE;
-            passDesc.colorLoadOp = LoadOpUVE::Load;
-            passDesc.depthLoadOp = LoadOpUVE::DontCare;
-            m_impl->lastFrameDiagnostics.editorVisualPassRecorded = true;
-            commandBuffer.BeginRenderPassUVE(passDesc);
-            m_impl->editorViewportVisualsProgram->SetVector3UVE("uViewportMin", Math::Vector3UVE{state.viewportMinX, state.viewportMinY, 0.0F});
-            m_impl->editorViewportVisualsProgram->SetVector3UVE("uViewportMax", Math::Vector3UVE{state.viewportMaxX, state.viewportMaxY, 0.0F});
-            m_impl->editorViewportVisualsProgram->SetVector3UVE("uSelectionMin", Math::Vector3UVE{state.selectionMinX, state.selectionMinY, 0.0F});
-            m_impl->editorViewportVisualsProgram->SetVector3UVE("uSelectionMax", Math::Vector3UVE{state.selectionMaxX, state.selectionMaxY, 0.0F});
-            m_impl->editorViewportVisualsProgram->SetVector3UVE("uCameraForward", state.cameraForward);
-            m_impl->editorViewportVisualsProgram->SetIntUVE("uSelectionVisible", state.activeSelectionVisible ? 1 : 0);
-            m_impl->editorViewportVisualsProgram->SetIntUVE("uActiveGizmoAxis", state.activeGizmoAxis);
-            m_impl->editorViewportVisualsProgram->ApplyToUVE(commandBuffer);
-            commandBuffer.DrawUVE(3);
             commandBuffer.EndRenderPassUVE();
         });
     // The default framebuffer is an external presentation surface, not a TextureHandleUVE; the

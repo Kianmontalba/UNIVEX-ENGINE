@@ -397,27 +397,59 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_VisiblePrimitive_ReportsEvidenceSpecifi
     EXPECT_TRUE(afterProgramReady.editorVisualPassRecorded);
     EXPECT_EQ(afterProgramReady.glDrawCallsIssued, 0U);
 
-    bool selectionUniformPublished = false;
-    bool gizmoAxisUniformPublished = false;
+    bool cameraPositionUniformPublished = false;
     bool cameraForwardUniformPublished = false;
+    bool gridSpacingUniformPublished = false;
+    bool projectionModeUniformPublished = false;
+    bool orthographicScaleUniformPublished = false;
     for (const RecordedCommandUVE& command : renderDevice.GetLastSubmittedCommandsUVE()) {
-        if (const auto* integerUniform = std::get_if<SetUniformIntCommandUVE>(&command)) {
-            if (integerUniform->name == "uSelectionVisible") {
-                selectionUniformPublished = integerUniform->value == 1;
-            } else if (integerUniform->name == "uActiveGizmoAxis") {
-                gizmoAxisUniformPublished = integerUniform->value == 3;
+        if (const auto* floatUniform = std::get_if<SetUniformFloatCommandUVE>(&command)) {
+            if (floatUniform->name == "uGridSpacing") {
+                gridSpacingUniformPublished = floatUniform->value > 0.0F;
+            } else if (floatUniform->name == "uOrthographicScale") {
+                orthographicScaleUniformPublished = floatUniform->value > 0.0F;
             }
         } else if (const auto* vectorUniform = std::get_if<SetUniformVector3CommandUVE>(&command)) {
-            if (vectorUniform->name == "uCameraForward") {
+            if (vectorUniform->name == "uCameraPosition") {
+                cameraPositionUniformPublished = std::isfinite(vectorUniform->value.x) &&
+                                                 std::isfinite(vectorUniform->value.y) &&
+                                                 std::isfinite(vectorUniform->value.z);
+            } else if (vectorUniform->name == "uCameraForward") {
                 cameraForwardUniformPublished = vectorUniform->value.x == 0.0F &&
                                                vectorUniform->value.y == 0.0F &&
                                                vectorUniform->value.z == -1.0F;
             }
+        } else if (const auto* intUniform = std::get_if<SetUniformIntCommandUVE>(&command)) {
+            if (intUniform->name == "uProjectionMode") {
+                projectionModeUniformPublished = intUniform->value == 0;
+            }
         }
     }
-    EXPECT_TRUE(selectionUniformPublished);
-    EXPECT_TRUE(gizmoAxisUniformPublished);
+    EXPECT_TRUE(cameraPositionUniformPublished);
     EXPECT_TRUE(cameraForwardUniformPublished);
+    EXPECT_TRUE(gridSpacingUniformPublished);
+    EXPECT_TRUE(projectionModeUniformPublished);
+    EXPECT_TRUE(orthographicScaleUniformPublished);
+
+    editorVisualState.orthographic = true;
+    editorVisualState.orthographicScale = 8.0F;
+    renderer3D->SetEditorViewportVisualStateUVE(editorVisualState);
+    renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+    bool orthographicModePublished = false;
+    bool orthographicScalePublished = false;
+    for (const RecordedCommandUVE& command : renderDevice.GetLastSubmittedCommandsUVE()) {
+        if (const auto* intUniform = std::get_if<SetUniformIntCommandUVE>(&command)) {
+            if (intUniform->name == "uProjectionMode") {
+                orthographicModePublished = intUniform->value == 1;
+            }
+        } else if (const auto* floatUniform = std::get_if<SetUniformFloatCommandUVE>(&command)) {
+            if (floatUniform->name == "uOrthographicScale") {
+                orthographicScalePublished = std::abs(floatUniform->value - 8.0F) <= 0.0001F;
+            }
+        }
+    }
+    EXPECT_TRUE(orthographicModePublished);
+    EXPECT_TRUE(orthographicScalePublished);
 }
 
 TEST_F(Renderer3DUVETest, RenderFrameUVE_VisibleMesh_RecordsExpectedCommandSequence) {

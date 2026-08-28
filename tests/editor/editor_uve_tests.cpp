@@ -14,6 +14,8 @@
 
 #include "uve/core/engine_core_uve.h"
 #include "uve/editor/editor_uve.h"
+#include "uve/editor/gizmo_system_uve.h"
+#include "uve/editor/viewport_nav_gizmo_uve.h"
 #include "uve/scene/components/camera_component_uve.h"
 #include "uve/scene/components/collider_component_uve.h"
 #include "uve/scene/components/light_component_uve.h"
@@ -142,6 +144,22 @@ struct EditorUVEAccessUVE final {
     [[nodiscard]] static float GetViewportYawUVE(const EditorUVE& editor) noexcept {
         return editor.m_viewportYawRadians;
     }
+
+    static void CompileVisualScriptUVE(EditorUVE& editor) { editor.CompileVisualScriptUVE(); }
+
+    [[nodiscard]] static bool IsVisualScriptCompileSuccessfulUVE(const EditorUVE& editor) noexcept {
+        return editor.m_scriptCompileSucceeded;
+    }
+
+    [[nodiscard]] static std::uint64_t GetLastCompiledVisualScriptGraphRevisionUVE(
+        const EditorUVE& editor) noexcept {
+        return editor.m_scriptLastCompiledGraphRevision;
+    }
+
+    [[nodiscard]] static std::size_t GetVisualScriptCompileInstructionCountUVE(
+        const EditorUVE& editor) noexcept {
+        return editor.m_scriptCompileInstructionCount;
+    }
 };
 
 namespace {
@@ -187,6 +205,50 @@ TEST(EditorUVETest, InitUVE_CreatesCameraOutsideDocumentRootsAndSupportsHeadless
     }
 
     engine.Shutdown();
+}
+
+TEST(EditorUVETest, VisualScriptBranchesAndViewportPreviewAreEditorOnlyAndPersisted) {
+    const std::filesystem::path scenePath = "uve_editor_tests_script_branches.uvescene";
+    const std::filesystem::path scriptPath = scenePath.parent_path() /
+                                             (scenePath.stem().string() + ".scripting");
+    std::error_code error;
+    std::filesystem::remove(scriptPath, error);
+
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+    {
+        EditorUVE editor(engine.GetServicesUVE(), scenePath);
+        editor.InitUVE();
+        ASSERT_EQ(editor.GetVisualScriptBranchNamesUVE(), (std::vector<std::string>{"Type 1 Scene"}));
+        EXPECT_TRUE(editor.IsViewportEnvironmentPreviewEnabledUVE());
+        EXPECT_TRUE(editor.IsViewportSunPreviewEnabledUVE());
+        editor.SetViewportEnvironmentPreviewEnabledUVE(false);
+        editor.SetViewportSunPreviewEnabledUVE(false);
+        EXPECT_FALSE(editor.IsViewportEnvironmentPreviewEnabledUVE());
+        EXPECT_FALSE(editor.IsViewportSunPreviewEnabledUVE());
+
+        ASSERT_TRUE(editor.GetVisualScriptCanvasUVE().AddNodeTypeUVE("engine.log", {8.0F, 12.0F}).IsAppliedUVE());
+        ASSERT_TRUE(editor.CreateVisualScriptBranchUVE("Type 2 Scene"));
+        ASSERT_EQ(editor.GetActiveVisualScriptBranchNameUVE(), "Type 2 Scene");
+        EXPECT_TRUE(editor.GetVisualScriptCanvasUVE().GetSnapshotUVE().nodes.empty());
+        ASSERT_TRUE(editor.RenameActiveVisualScriptBranchUVE("Boss Scene"));
+        ASSERT_TRUE(editor.SelectVisualScriptBranchUVE("Type 1 Scene"));
+        EXPECT_EQ(editor.GetVisualScriptCanvasUVE().GetSnapshotUVE().nodes.size(), 1U);
+        ASSERT_TRUE(editor.SaveVisualScriptWorkspaceUVE());
+        editor.ShutdownUVE();
+    }
+    {
+        EditorUVE restored(engine.GetServicesUVE(), scenePath);
+        restored.InitUVE();
+        EXPECT_EQ(restored.GetVisualScriptBranchNamesUVE(),
+                  (std::vector<std::string>{"Type 1 Scene", "Boss Scene"}));
+        ASSERT_TRUE(restored.SelectVisualScriptBranchUVE("Boss Scene"));
+        EXPECT_TRUE(restored.GetVisualScriptCanvasUVE().GetSnapshotUVE().nodes.empty());
+        restored.ShutdownUVE();
+    }
+    engine.Shutdown();
+    std::filesystem::remove(scriptPath, error);
 }
 
 TEST(EditorUVETest, InitUVE_DoesNotCreateAutomaticPreviewLighting) {
@@ -3046,5 +3108,114 @@ TEST(EditorUVETest, GizmoCoordinateSpaceUVE_DefaultsToWorldAndRejectsSandboxChan
     engine.Shutdown();
 }
 
+TEST(EditorUVETest, VisualScriptSearchInsertionPreservesPositionAndCompilerUsesNativeGraph) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_scripting_workspace.uvescene");
+        editor.InitUVE();
+        Scripting::ScriptGraphCanvasUVE& canvas = editor.GetVisualScriptCanvasUVE();
+        const Scripting::ScriptGraphCanvasSnapshotUVE before = canvas.GetSnapshotUVE();
+        ASSERT_TRUE(std::any_of(
+            before.paletteDescriptors.cbegin(), before.paletteDescriptors.cend(),
+            [](const Scripting::ScriptGraphCanvasPaletteEntryUVE& entry) { return entry.typeId == "engine.log"; }));
+
+        const Scripting::ScriptGraphCanvasPointUVE insertionPosition{-37.5F, 82.25F};
+        const auto addResult = canvas.AddNodeTypeUVE("engine.log", insertionPosition, before.revision);
+        ASSERT_TRUE(addResult.IsAppliedUVE());
+        const Scripting::ScriptGraphCanvasSnapshotUVE after = canvas.GetSnapshotUVE();
+        ASSERT_EQ(after.nodes.size(), 1U);
+        EXPECT_EQ(after.nodes.front().typeId, "engine.log");
+        EXPECT_EQ(after.nodes.front().position, insertionPosition);
+        EXPECT_EQ(after.revision, addResult.revision);
+
+        EditorUVEAccessUVE::CompileVisualScriptUVE(editor);
+        EXPECT_TRUE(EditorUVEAccessUVE::IsVisualScriptCompileSuccessfulUVE(editor));
+        EXPECT_EQ(EditorUVEAccessUVE::GetLastCompiledVisualScriptGraphRevisionUVE(editor), after.graphRevision);
+        EXPECT_GT(EditorUVEAccessUVE::GetVisualScriptCompileInstructionCountUVE(editor), 0U);
+
+        editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
+}
+
 } // namespace
 } // namespace UVE::Editor::Tests
+
+
+TEST(GizmoSystemUVETest, PackageLayerCompositionAndNativeAxisSpace) {
+    const UVE::Editor::Gizmo::GizmoLayerVisibilityUVE move =
+        UVE::Editor::Gizmo::GizmoSystemUVE::LayersForUVE(UVE::Editor::Gizmo::GizmoModeUVE::Move);
+    EXPECT_TRUE(move.move);
+    EXPECT_FALSE(move.rotate);
+    EXPECT_FALSE(move.scale);
+
+    const UVE::Editor::Gizmo::GizmoLayerVisibilityUVE universal =
+        UVE::Editor::Gizmo::GizmoSystemUVE::LayersForUVE(UVE::Editor::Gizmo::GizmoModeUVE::Universal);
+    EXPECT_TRUE(universal.move);
+    EXPECT_TRUE(universal.rotate);
+    EXPECT_TRUE(universal.scale);
+
+    const UVE::Math::QuaternionUVE identity{1.0F, 0.0F, 0.0F, 0.0F};
+    const UVE::Math::Vector3UVE worldX = UVE::Editor::Gizmo::GizmoSystemUVE::AxisDirectionUVE(
+        UVE::Editor::Gizmo::GizmoAxisUVE::X, identity, UVE::Editor::Gizmo::GizmoSpaceUVE::World);
+    EXPECT_NEAR(worldX.x, 1.0F, 0.0001F);
+    EXPECT_NEAR(worldX.y, 0.0F, 0.0001F);
+    EXPECT_NEAR(worldX.z, 0.0F, 0.0001F);
+}
+
+TEST(GizmoSystemUVETest, HtmlReferencePalette) {
+    using UVE::Editor::Gizmo::GizmoAxisUVE;
+    using UVE::Editor::Gizmo::GizmoSystemUVE;
+    const auto x = GizmoSystemUVE::AxisColorUVE(GizmoAxisUVE::X, false);
+    const auto y = GizmoSystemUVE::AxisColorUVE(GizmoAxisUVE::Y, false);
+    const auto z = GizmoSystemUVE::AxisColorUVE(GizmoAxisUVE::Z, false);
+    const auto hover = GizmoSystemUVE::AxisColorUVE(GizmoAxisUVE::X, true);
+    EXPECT_NEAR(x.x, 1.0F, 0.001F);
+    EXPECT_NEAR(x.y, 93.0F / 255.0F, 0.001F);
+    EXPECT_NEAR(x.z, 93.0F / 255.0F, 0.001F);
+    EXPECT_NEAR(y.x, 74.0F / 255.0F, 0.001F);
+    EXPECT_NEAR(y.y, 222.0F / 255.0F, 0.001F);
+    EXPECT_NEAR(y.z, 128.0F / 255.0F, 0.001F);
+    EXPECT_NEAR(z.x, 59.0F / 255.0F, 0.001F);
+    EXPECT_NEAR(z.y, 156.0F / 255.0F, 0.001F);
+    EXPECT_NEAR(z.z, 1.0F, 0.001F);
+    EXPECT_NEAR(hover.x, 1.0F, 0.001F);
+    EXPECT_NEAR(hover.y, 217.0F / 255.0F, 0.001F);
+    EXPECT_NEAR(hover.z, 51.0F / 255.0F, 0.001F);
+}
+
+TEST(ViewportNavGizmoUVETest, HtmlReferencePaletteAndLabels) {
+    using UVE::Editor::Gizmo::ViewportNavAxisUVE;
+    using UVE::Editor::Gizmo::ViewportNavGizmoUVE;
+    EXPECT_EQ(ViewportNavGizmoUVE::AxisColorUVE(ViewportNavAxisUVE::X, true, false), 0xFF5D5DFFU);
+    EXPECT_EQ(ViewportNavGizmoUVE::AxisColorUVE(ViewportNavAxisUVE::Y, true, false), 0xFF80DE4AU);
+    EXPECT_EQ(ViewportNavGizmoUVE::AxisColorUVE(ViewportNavAxisUVE::Z, true, false), 0xFFFF9C3BU);
+    EXPECT_EQ(ViewportNavGizmoUVE::AxisColorUVE(ViewportNavAxisUVE::X, true, true), 0xFF33D9FFU);
+    EXPECT_STREQ(ViewportNavGizmoUVE::AxisLabelUVE(ViewportNavAxisUVE::X, true), "X+");
+    EXPECT_STREQ(ViewportNavGizmoUVE::AxisLabelUVE(ViewportNavAxisUVE::Z, false), "Z-");
+}
+
+TEST(ViewportNavGizmoUVETest, PackageSixButtonLayoutAndPresetMapping) {
+    UVE::Editor::Gizmo::ViewportNavGizmoUVE navigation;
+    navigation.SetAnchorUVE(UVE::Math::Vector2UVE{100.0F, 100.0F});
+    navigation.UpdateLayoutUVE(0.0F, 0.0F);
+    ASSERT_EQ(navigation.GetButtonsUVE().size(), 6U);
+    EXPECT_NEAR(navigation.GetButtonsUVE()[0].screenPosition.x, 132.0F, 0.001F);
+    EXPECT_NEAR(navigation.GetButtonsUVE()[0].screenPosition.y, 100.0F, 0.001F);
+    EXPECT_TRUE(navigation.GetButtonsUVE()[4].degenerate);
+    EXPECT_TRUE(navigation.GetButtonsUVE()[5].degenerate);
+    EXPECT_TRUE(navigation.HitTestPlateUVE(UVE::Math::Vector2UVE{100.0F, 100.0F}));
+
+    UVE::Editor::Gizmo::ViewportNavPresetUVE preset = UVE::Editor::Gizmo::ViewportNavPresetUVE::Front;
+    ASSERT_TRUE(navigation.HandleClickUVE(UVE::Math::Vector2UVE{132.0F, 100.0F}, preset));
+    EXPECT_EQ(preset, UVE::Editor::Gizmo::ViewportNavPresetUVE::Right);
+    float yaw = 0.0F;
+    float pitch = 0.0F;
+    UVE::Editor::Gizmo::ViewportNavGizmoUVE::PresetAnglesUVE(preset, yaw, pitch);
+    EXPECT_NEAR(yaw, std::numbers::pi_v<float> * 0.5F, 0.0001F);
+    EXPECT_NEAR(pitch, 0.0F, 0.0001F);
+}

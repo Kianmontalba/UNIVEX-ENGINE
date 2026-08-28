@@ -466,6 +466,45 @@ ScriptGraphCanvasCommandResultUVE ScriptGraphCanvasUVE::ApplyGraphSchemaUVE(
                          "The graph schema was applied through the native canvas history path.");
 }
 
+ScriptGraphCanvasCommandResultUVE ScriptGraphCanvasUVE::RestorePersistenceUVE(
+    ScriptGraphSchemaUVE schema, ScriptGraphCanvasLayoutSnapshotUVE layout) {
+    if (schema.schemaVersion != kScriptGraphSchemaVersionUVE) {
+        return MakeResultUVE(ScriptGraphCanvasCommandCodeUVE::Rejected,
+                             "The persisted graph schema version is not supported.");
+    }
+    const std::vector<ScriptValidationDiagnosticUVE> diagnostics = schema.graph.ValidateUVE(*m_registry);
+    if (!diagnostics.empty() || layout.entries.size() != schema.graph.GetNodesUVE().size() ||
+        layout.entries.size() > kMaximumScriptGraphCanvasEntriesUVE || !IsValidViewUVE(layout.view)) {
+        return MakeResultUVE(ScriptGraphCanvasCommandCodeUVE::Rejected,
+                             "Persisted graph data failed native validation.");
+    }
+    std::vector<std::uint32_t> nodeIds;
+    nodeIds.reserve(layout.entries.size());
+    for (const ScriptGraphCanvasLayoutEntryUVE& entry : layout.entries) {
+        const bool live = std::find_if(schema.graph.GetNodesUVE().begin(), schema.graph.GetNodesUVE().end(),
+                                       [&entry](const ScriptNodeUVE& node) { return node.id == entry.nodeId; }) !=
+                          schema.graph.GetNodesUVE().end();
+        if (entry.nodeId == 0U || !live || !IsFinitePointUVE(entry.position) ||
+            ContainsIdUVE(nodeIds, entry.nodeId)) {
+            return MakeResultUVE(ScriptGraphCanvasCommandCodeUVE::Rejected,
+                                 "Persisted graph layout contains invalid or duplicate node IDs.");
+        }
+        nodeIds.push_back(entry.nodeId);
+    }
+    m_backend.RestoreGraphUVE(std::move(schema.graph));
+    m_view = layout.view;
+    m_layout = std::move(layout.entries);
+    m_selection.clear();
+    m_pinDefaultOverrides.clear();
+    m_undo.clear();
+    m_redo.clear();
+    ++m_revision;
+    ++m_graphRevision;
+    m_dirty = false;
+    return MakeResultUVE(ScriptGraphCanvasCommandCodeUVE::Applied,
+                         "Persisted graph data was restored through the native canvas.");
+}
+
 ScriptGraphCanvasLayoutSnapshotUVE ScriptGraphCanvasUVE::GetLayoutSnapshotUVE() const {
     ScriptGraphCanvasLayoutSnapshotUVE snapshot{};
     snapshot.view = m_view;
