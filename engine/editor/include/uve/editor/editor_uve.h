@@ -807,6 +807,7 @@ private:
     void DrawViewportPanelUVE();
     void Draw2DCanvasUVE(const EditorViewportRectUVE& viewportRect);
     void DrawScriptingWorkspaceUVE();
+    void CompileVisualScriptUVE();
     [[nodiscard]] static ContentBrowserItemTypeUVE ClassifyContentBrowserEntryUVE(
         const Asset::ProjectFileEntryUVE& entry);
     [[nodiscard]] static const char* GetContentBrowserItemTypeLabelUVE(ContentBrowserItemTypeUVE type) noexcept;
@@ -908,9 +909,16 @@ private:
     std::uint32_t m_scriptCanvasDefaultEditNodeId = 0U;
     std::string m_scriptCanvasDefaultEditPin;
     std::string m_scriptCanvasDefaultEditBuffer;
-    std::string m_scriptCanvasPaletteFilter;
     Scripting::ScriptGraphCanvasPointUVE m_scriptCanvasContextMenuPosition{};
     std::string m_scriptCanvasContextFilter;
+    bool m_scriptCanvasLongPressPending = false;
+    float m_scriptCanvasLongPressSeconds = 0.0F;
+    Scripting::ScriptGraphCanvasPointUVE m_scriptCanvasLongPressStartPointer{};
+    bool m_scriptCompileAttempted = false;
+    bool m_scriptCompileSucceeded = false;
+    std::uint64_t m_scriptLastCompiledGraphRevision = 0U;
+    std::size_t m_scriptCompileInstructionCount = 0U;
+    std::string m_scriptCompileMessage;
     bool m_scriptCanvasPanning = false;
     Scripting::ScriptGraphCanvasPointUVE m_scriptCanvasPanStart{};
     Scripting::ScriptGraphCanvasViewUVE m_scriptCanvasPanViewStart{};

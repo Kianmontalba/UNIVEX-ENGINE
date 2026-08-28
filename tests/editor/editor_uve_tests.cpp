@@ -144,6 +144,22 @@ struct EditorUVEAccessUVE final {
     [[nodiscard]] static float GetViewportYawUVE(const EditorUVE& editor) noexcept {
         return editor.m_viewportYawRadians;
     }
+
+    static void CompileVisualScriptUVE(EditorUVE& editor) { editor.CompileVisualScriptUVE(); }
+
+    [[nodiscard]] static bool IsVisualScriptCompileSuccessfulUVE(const EditorUVE& editor) noexcept {
+        return editor.m_scriptCompileSucceeded;
+    }
+
+    [[nodiscard]] static std::uint64_t GetLastCompiledVisualScriptGraphRevisionUVE(
+        const EditorUVE& editor) noexcept {
+        return editor.m_scriptLastCompiledGraphRevision;
+    }
+
+    [[nodiscard]] static std::size_t GetVisualScriptCompileInstructionCountUVE(
+        const EditorUVE& editor) noexcept {
+        return editor.m_scriptCompileInstructionCount;
+    }
 };
 
 namespace {
@@ -3042,6 +3058,40 @@ TEST(EditorUVETest, GizmoCoordinateSpaceUVE_DefaultsToWorldAndRejectsSandboxChan
         EXPECT_FALSE(editor.SetGizmoCoordinateSpaceUVE(EditorGizmoCoordinateSpaceUVE::Local));
         ASSERT_TRUE(editor.StopPlayModeUVE());
         EXPECT_TRUE(editor.SetGizmoCoordinateSpaceUVE(EditorGizmoCoordinateSpaceUVE::Local));
+        editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
+}
+
+TEST(EditorUVETest, VisualScriptSearchInsertionPreservesPositionAndCompilerUsesNativeGraph) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_scripting_workspace.uvescene");
+        editor.InitUVE();
+        Scripting::ScriptGraphCanvasUVE& canvas = editor.GetVisualScriptCanvasUVE();
+        const Scripting::ScriptGraphCanvasSnapshotUVE before = canvas.GetSnapshotUVE();
+        ASSERT_TRUE(std::any_of(
+            before.paletteDescriptors.cbegin(), before.paletteDescriptors.cend(),
+            [](const Scripting::ScriptGraphCanvasPaletteEntryUVE& entry) { return entry.typeId == "engine.log"; }));
+
+        const Scripting::ScriptGraphCanvasPointUVE insertionPosition{-37.5F, 82.25F};
+        const auto addResult = canvas.AddNodeTypeUVE("engine.log", insertionPosition, before.revision);
+        ASSERT_TRUE(addResult.IsAppliedUVE());
+        const Scripting::ScriptGraphCanvasSnapshotUVE after = canvas.GetSnapshotUVE();
+        ASSERT_EQ(after.nodes.size(), 1U);
+        EXPECT_EQ(after.nodes.front().typeId, "engine.log");
+        EXPECT_EQ(after.nodes.front().position, insertionPosition);
+        EXPECT_EQ(after.revision, addResult.revision);
+
+        EditorUVEAccessUVE::CompileVisualScriptUVE(editor);
+        EXPECT_TRUE(EditorUVEAccessUVE::IsVisualScriptCompileSuccessfulUVE(editor));
+        EXPECT_EQ(EditorUVEAccessUVE::GetLastCompiledVisualScriptGraphRevisionUVE(editor), after.graphRevision);
+        EXPECT_GT(EditorUVEAccessUVE::GetVisualScriptCompileInstructionCountUVE(editor), 0U);
+
         editor.ShutdownUVE();
     }
 

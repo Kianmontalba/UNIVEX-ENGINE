@@ -31,6 +31,8 @@
 #include "uve/physics/raycast_query_uve.h"
 #include "uve/platform/editor_project_package_uve.h"
 #include "uve/scripting/script_builtin_nodes_uve.h"
+#include "uve/scripting/script_bytecode_uve.h"
+#include "uve/scripting/script_compiler_ir_uve.h"
 #include "uve/scene/components/area_component_uve.h"
 #include "uve/scene/components/camera_component_uve.h"
 #include "uve/scene/components/collider_component_uve.h"
@@ -72,6 +74,8 @@ constexpr float kEditorMenuBarHeightUVE = 24.0F;
 constexpr float kEditorToolbarHeightUVE = 30.0F;
 constexpr float kEditorViewportToolCanvasHeightUVE = 30.0F;
 constexpr float kFilesystemLongPressThresholdSecondsUVE = 0.60F;
+constexpr float kScriptCanvasLongPressThresholdSecondsUVE = 0.55F;
+constexpr float kScriptCanvasLongPressMaxMovementPixelsUVE = 8.0F;
 constexpr float kEditorTopChromeHeightUVE =
     kEditorTitleBarHeightUVE + kEditorMenuBarHeightUVE + kEditorToolbarHeightUVE;
 constexpr std::size_t kMaximumEntityNameBytesUVE = 96U;
@@ -6344,6 +6348,46 @@ void EditorUVE::DrawAssetsPanelUVE() {
     ImGui::End();
 }
 
+void EditorUVE::CompileVisualScriptUVE() {
+    const Scripting::ScriptGraphCanvasSnapshotUVE snapshot = m_visualScriptCanvas.GetSnapshotUVE();
+    m_scriptCompileAttempted = true;
+    m_scriptCompileSucceeded = false;
+    m_scriptLastCompiledGraphRevision = snapshot.graphRevision;
+    m_scriptCompileInstructionCount = 0U;
+    m_scriptCompileMessage.clear();
+
+    const Scripting::ScriptIrCompileResultUVE compiled =
+        Scripting::CompileScriptGraphToIrUVE(m_visualScriptCanvas.GetGraphUVE(), m_visualScriptRegistry);
+    if (!compiled.IsSuccessUVE()) {
+        if (compiled.diagnostics.empty()) {
+            m_scriptCompileMessage = "Graph compilation was rejected without a diagnostic.";
+        } else {
+            const auto& diagnostic = compiled.diagnostics.front();
+            m_scriptCompileMessage = "Node " + std::to_string(diagnostic.nodeId) + ": " + diagnostic.message;
+            if (!diagnostic.pinName.empty()) {
+                m_scriptCompileMessage += " (" + diagnostic.pinName + ")";
+            }
+        }
+        return;
+    }
+
+    std::vector<Scripting::ScriptBytecodeDiagnosticUVE> loweringDiagnostics;
+    const std::optional<Scripting::ScriptBytecodeProgramUVE> bytecode =
+        Scripting::LowerIrToBytecodeUVE(*compiled.program, loweringDiagnostics);
+    if (!bytecode.has_value() || !loweringDiagnostics.empty()) {
+        if (loweringDiagnostics.empty()) {
+            m_scriptCompileMessage = "Bytecode lowering was rejected without a diagnostic.";
+        } else {
+            m_scriptCompileMessage = "Bytecode lowering: " + loweringDiagnostics.front().message;
+        }
+        return;
+    }
+
+    m_scriptCompileSucceeded = true;
+    m_scriptCompileInstructionCount = bytecode->instructions.size();
+    m_scriptCompileMessage = "Compiled " + std::to_string(m_scriptCompileInstructionCount) + " instructions.";
+}
+
 void EditorUVE::DrawScriptingWorkspaceUVE() {
     const ImGuiViewport* const mainViewport = ImGui::GetMainViewport();
     const ImVec2 position{mainViewport->WorkPos.x,
@@ -6396,11 +6440,15 @@ void EditorUVE::DrawScriptingWorkspaceUVE() {
             static_cast<void>(m_visualScriptCanvas.UndoUVE());
         }
         ImGui::SameLine();
+        if (ImGui::SmallButton("Compiler")) {
+            CompileVisualScriptUVE();
+        }
+        ImGui::SameLine();
         if (ImGui::SmallButton("Redo")) {
             static_cast<void>(m_visualScriptCanvas.RedoUVE());
         }
         ImGui::SameLine();
-        ImGui::TextDisabled("LMB select/drag/link | MMB/RMB pan | wheel zoom");
+        ImGui::TextDisabled("LMB select/drag/link | RMB/MMB pan | long-press search | wheel zoom");
     }
     ImGui::EndChild();
 
@@ -6415,44 +6463,6 @@ void EditorUVE::DrawScriptingWorkspaceUVE() {
                 DrawHierarchyNodeUVE(root);
             }
             ImGui::EndDisabled();
-        }
-        ImGui::EndChild();
-        ImGui::SameLine();
-        if (ImGui::BeginChild("##script-palette", ImVec2{238.0F, 0.0F}, true)) {
-            ImGui::TextColored(ImVec4{0.70F, 0.72F, 0.76F, 1.0F}, "NODE PALETTE");
-            ImGui::SameLine();
-            ImGui::TextDisabled("%zu registered", snapshot.paletteDescriptors.size());
-            std::array<char, 257> filterBuffer{};
-            std::strncpy(filterBuffer.data(), m_scriptCanvasPaletteFilter.c_str(), filterBuffer.size() - 1U);
-            if (ImGui::InputText("Filter", filterBuffer.data(), filterBuffer.size())) {
-                m_scriptCanvasPaletteFilter = filterBuffer.data();
-            }
-            ImGui::Separator();
-            std::size_t visiblePaletteEntries = 0U;
-            for (const Scripting::ScriptGraphCanvasPaletteEntryUVE& entry : snapshot.paletteDescriptors) {
-                if (!ContainsCaseInsensitiveUVE(entry.displayName, m_scriptCanvasPaletteFilter) &&
-                    !ContainsCaseInsensitiveUVE(entry.category, m_scriptCanvasPaletteFilter) &&
-                    !ContainsCaseInsensitiveUVE(entry.typeId, m_scriptCanvasPaletteFilter)) {
-                    continue;
-                }
-                ++visiblePaletteEntries;
-                std::string label = entry.displayName.empty() ? entry.typeId : entry.displayName;
-                label += "##palette-";
-                label += entry.typeId;
-                if (ImGui::Selectable(label.c_str(), false)) {
-                    const Scripting::ScriptGraphCanvasPointUVE spawnPosition{
-                        snapshot.view.pan.x + 96.0F / std::max(snapshot.view.zoom, 0.1F),
-                        snapshot.view.pan.y + 96.0F / std::max(snapshot.view.zoom, 0.1F)};
-                    static_cast<void>(m_visualScriptCanvas.AddNodeTypeUVE(entry.typeId, spawnPosition));
-                }
-                ImGui::SameLine(ImGui::GetWindowWidth() - 12.0F);
-                ImGui::TextDisabled("%s", entry.category.c_str());
-            }
-            if (visiblePaletteEntries == 0U) {
-                ImGui::TextDisabled("No matching registered nodes.");
-            }
-            ImGui::Separator();
-            ImGui::TextWrapped("The palette is registry-driven. Node creation goes through native graph validation and history.");
         }
         ImGui::EndChild();
         ImGui::SameLine();
@@ -6580,6 +6590,39 @@ void EditorUVE::DrawScriptingWorkspaceUVE() {
                 return nullptr;
             };
 
+            if (canvasHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && findNodeAt(mouse) == nullptr) {
+                m_scriptCanvasLongPressPending = true;
+                m_scriptCanvasLongPressSeconds = 0.0F;
+                m_scriptCanvasLongPressStartPointer =
+                    Scripting::ScriptGraphCanvasPointUVE{mouseLocal.x, mouseLocal.y};
+            }
+            bool openedLongPressPopup = false;
+            if (m_scriptCanvasLongPressPending) {
+                const float dx = mouseLocal.x - m_scriptCanvasLongPressStartPointer.x;
+                const float dy = mouseLocal.y - m_scriptCanvasLongPressStartPointer.y;
+                const bool movedTooFar = (dx * dx) + (dy * dy) >
+                                         kScriptCanvasLongPressMaxMovementPixelsUVE *
+                                             kScriptCanvasLongPressMaxMovementPixelsUVE;
+                if (!ImGui::IsMouseDown(ImGuiMouseButton_Left) || movedTooFar ||
+                    ImGui::IsMouseDown(ImGuiMouseButton_Right) || ImGui::IsMouseDown(ImGuiMouseButton_Middle) ||
+                    m_scriptCanvasPanning || m_scriptCanvasLinkSourceNodeId != 0U) {
+                    m_scriptCanvasLongPressPending = false;
+                    m_scriptCanvasLongPressSeconds = 0.0F;
+                } else {
+                    m_scriptCanvasLongPressSeconds += ImGui::GetIO().DeltaTime;
+                    if (m_scriptCanvasLongPressSeconds >= kScriptCanvasLongPressThresholdSecondsUVE) {
+                        const ImVec2 pressScreen{canvasOrigin.x + m_scriptCanvasLongPressStartPointer.x,
+                                                canvasOrigin.y + m_scriptCanvasLongPressStartPointer.y};
+                        m_scriptCanvasContextMenuPosition = ScreenToScriptCanvasUVE(pressScreen, canvasOrigin, view);
+                        m_scriptCanvasContextFilter.clear();
+                        ImGui::OpenPopup("script-node-search-popup");
+                        m_scriptCanvasLongPressPending = false;
+                        m_scriptCanvasLongPressSeconds = 0.0F;
+                        openedLongPressPopup = true;
+                    }
+                }
+            }
+
             if (m_scriptCanvasDragging) {
                 if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
                     const Scripting::ScriptGraphCanvasPointUVE currentGraphPosition =
@@ -6638,7 +6681,7 @@ void EditorUVE::DrawScriptingWorkspaceUVE() {
                     m_scriptCanvasLinkSourceNodeId = 0U;
                     m_scriptCanvasLinkSourcePin.clear();
                 }
-            } else if (canvasHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
+            } else if (!openedLongPressPopup && canvasHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
                 if (findNodeAt(mouse) == nullptr) {
                     m_scriptCanvasContextMenuPosition = ScreenToScriptCanvasUVE(mouse, canvasOrigin, view);
                     m_scriptCanvasContextFilter.clear();
@@ -6677,44 +6720,47 @@ void EditorUVE::DrawScriptingWorkspaceUVE() {
             }
             if (snapshot.nodes.empty()) {
                 drawList->AddText(ImVec2{canvasOrigin.x + 20.0F, canvasOrigin.y + 20.0F},
-                                  IM_COL32(184, 184, 188, 255), "Right-click to search and add a registered node.");
+                                  IM_COL32(184, 184, 188, 255),
+                                  "Right-click or long-press to search and add a registered node.");
+            }
+            if (ImGui::BeginPopup("script-node-search-popup")) {
+                std::array<char, 257> contextFilterBuffer{};
+                std::strncpy(contextFilterBuffer.data(), m_scriptCanvasContextFilter.c_str(),
+                             contextFilterBuffer.size() - 1U);
+                ImGui::SetNextItemWidth(280.0F);
+                if (ImGui::InputTextWithHint("##script-context-search", "Search registered nodes", contextFilterBuffer.data(),
+                                             contextFilterBuffer.size())) {
+                    m_scriptCanvasContextFilter = contextFilterBuffer.data();
+                }
+                ImGui::BeginChild("##script-context-results", ImVec2{280.0F, 220.0F}, false);
+                std::size_t visibleContextNodes = 0U;
+                for (const Scripting::ScriptGraphCanvasPaletteEntryUVE& entry : snapshot.paletteDescriptors) {
+                    if (!ContainsCaseInsensitiveUVE(entry.displayName, m_scriptCanvasContextFilter) &&
+                        !ContainsCaseInsensitiveUVE(entry.category, m_scriptCanvasContextFilter) &&
+                        !ContainsCaseInsensitiveUVE(entry.typeId, m_scriptCanvasContextFilter)) {
+                        continue;
+                    }
+                    ++visibleContextNodes;
+                    const std::string label = (entry.displayName.empty() ? entry.typeId : entry.displayName) +
+                                              "##context-node-" + entry.typeId;
+                    if (ImGui::Selectable(label.c_str())) {
+                        static_cast<void>(m_visualScriptCanvas.AddNodeTypeUVE(
+                            entry.typeId, m_scriptCanvasContextMenuPosition, snapshot.revision));
+                        ImGui::CloseCurrentPopup();
+                    }
+                    ImGui::SameLine(ImGui::GetWindowWidth() - 76.0F);
+                    ImGui::TextDisabled("%s", entry.category.c_str());
+                }
+                if (visibleContextNodes == 0U) {
+                    ImGui::TextDisabled(m_scriptCanvasContextFilter.empty()
+                        ? "No registered nodes are available."
+                        : "No results. Try a node name or category.");
+                }
+                ImGui::EndChild();
+                ImGui::EndPopup();
             }
         }
         ImGui::EndChild();
-        ImGui::SameLine();
-        if (ImGui::BeginPopup("script-node-search-popup")) {
-            ImGui::TextDisabled("Search Nodes");
-            std::array<char, 257> contextFilterBuffer{};
-            std::strncpy(contextFilterBuffer.data(), m_scriptCanvasContextFilter.c_str(),
-                         contextFilterBuffer.size() - 1U);
-            ImGui::SetNextItemWidth(260.0F);
-            if (ImGui::InputTextWithHint("##script-context-search", "Search registered nodes", contextFilterBuffer.data(),
-                                         contextFilterBuffer.size())) {
-                m_scriptCanvasContextFilter = contextFilterBuffer.data();
-            }
-            ImGui::BeginChild("##script-context-results", ImVec2{280.0F, 220.0F}, true);
-            std::size_t visibleContextNodes = 0U;
-            for (const Scripting::ScriptGraphCanvasPaletteEntryUVE& entry : snapshot.paletteDescriptors) {
-                if (!ContainsCaseInsensitiveUVE(entry.displayName, m_scriptCanvasContextFilter) &&
-                    !ContainsCaseInsensitiveUVE(entry.category, m_scriptCanvasContextFilter) &&
-                    !ContainsCaseInsensitiveUVE(entry.typeId, m_scriptCanvasContextFilter)) {
-                    continue;
-                }
-                ++visibleContextNodes;
-                const std::string label = (entry.displayName.empty() ? entry.typeId : entry.displayName) +
-                                          "##context-node-" + entry.typeId;
-                if (ImGui::Selectable(label.c_str())) {
-                    static_cast<void>(m_visualScriptCanvas.AddNodeTypeUVE(
-                        entry.typeId, m_scriptCanvasContextMenuPosition, snapshot.revision));
-                    ImGui::CloseCurrentPopup();
-                }
-            }
-            if (visibleContextNodes == 0U) {
-                ImGui::TextDisabled("No registered nodes match the search.");
-            }
-            ImGui::EndChild();
-            ImGui::EndPopup();
-        }
         ImGui::SameLine();
 
         if (ImGui::BeginChild("##script-details", ImVec2{0.0F, 0.0F}, true)) {
@@ -6766,6 +6812,19 @@ void EditorUVE::DrawScriptingWorkspaceUVE() {
                 for (const auto& diagnostic : snapshot.diagnostics) {
                     ImGui::TextWrapped("Node %u: %s", diagnostic.nodeId, diagnostic.message.c_str());
                 }
+            }
+            ImGui::Separator();
+            ImGui::TextUnformatted("Compiler");
+            if (!m_scriptCompileAttempted) {
+                ImGui::TextDisabled("Not compiled yet.");
+            } else if (m_scriptLastCompiledGraphRevision != snapshot.graphRevision) {
+                ImGui::TextColored(ImVec4{0.93F, 0.72F, 0.35F, 1.0F},
+                                   "Graph changed since the last compile.");
+            } else {
+                const ImVec4 statusColor = m_scriptCompileSucceeded
+                    ? ImVec4{0.45F, 0.86F, 0.63F, 1.0F}
+                    : ImVec4{0.96F, 0.43F, 0.43F, 1.0F};
+                ImGui::TextColored(statusColor, "%s", m_scriptCompileMessage.c_str());
             }
             if (!snapshot.selectedNodeIds.empty() && ImGui::SmallButton("Delete selected node")) {
                 for (const std::uint32_t nodeId : snapshot.selectedNodeIds) {
