@@ -207,6 +207,50 @@ TEST(EditorUVETest, InitUVE_CreatesCameraOutsideDocumentRootsAndSupportsHeadless
     engine.Shutdown();
 }
 
+TEST(EditorUVETest, VisualScriptBranchesAndViewportPreviewAreEditorOnlyAndPersisted) {
+    const std::filesystem::path scenePath = "uve_editor_tests_script_branches.uvescene";
+    const std::filesystem::path scriptPath = scenePath.parent_path() /
+                                             (scenePath.stem().string() + ".scripting");
+    std::error_code error;
+    std::filesystem::remove(scriptPath, error);
+
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+    {
+        EditorUVE editor(engine.GetServicesUVE(), scenePath);
+        editor.InitUVE();
+        ASSERT_EQ(editor.GetVisualScriptBranchNamesUVE(), (std::vector<std::string>{"Type 1 Scene"}));
+        EXPECT_TRUE(editor.IsViewportEnvironmentPreviewEnabledUVE());
+        EXPECT_TRUE(editor.IsViewportSunPreviewEnabledUVE());
+        editor.SetViewportEnvironmentPreviewEnabledUVE(false);
+        editor.SetViewportSunPreviewEnabledUVE(false);
+        EXPECT_FALSE(editor.IsViewportEnvironmentPreviewEnabledUVE());
+        EXPECT_FALSE(editor.IsViewportSunPreviewEnabledUVE());
+
+        ASSERT_TRUE(editor.GetVisualScriptCanvasUVE().AddNodeTypeUVE("engine.log", {8.0F, 12.0F}).IsAppliedUVE());
+        ASSERT_TRUE(editor.CreateVisualScriptBranchUVE("Type 2 Scene"));
+        ASSERT_EQ(editor.GetActiveVisualScriptBranchNameUVE(), "Type 2 Scene");
+        EXPECT_TRUE(editor.GetVisualScriptCanvasUVE().GetSnapshotUVE().nodes.empty());
+        ASSERT_TRUE(editor.RenameActiveVisualScriptBranchUVE("Boss Scene"));
+        ASSERT_TRUE(editor.SelectVisualScriptBranchUVE("Type 1 Scene"));
+        EXPECT_EQ(editor.GetVisualScriptCanvasUVE().GetSnapshotUVE().nodes.size(), 1U);
+        ASSERT_TRUE(editor.SaveVisualScriptWorkspaceUVE());
+        editor.ShutdownUVE();
+    }
+    {
+        EditorUVE restored(engine.GetServicesUVE(), scenePath);
+        restored.InitUVE();
+        EXPECT_EQ(restored.GetVisualScriptBranchNamesUVE(),
+                  (std::vector<std::string>{"Type 1 Scene", "Boss Scene"}));
+        ASSERT_TRUE(restored.SelectVisualScriptBranchUVE("Boss Scene"));
+        EXPECT_TRUE(restored.GetVisualScriptCanvasUVE().GetSnapshotUVE().nodes.empty());
+        restored.ShutdownUVE();
+    }
+    engine.Shutdown();
+    std::filesystem::remove(scriptPath, error);
+}
+
 TEST(EditorUVETest, InitUVE_DoesNotCreateAutomaticPreviewLighting) {
     Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
     engine.Init();

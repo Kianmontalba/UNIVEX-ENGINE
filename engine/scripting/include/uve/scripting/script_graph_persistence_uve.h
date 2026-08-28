@@ -77,6 +77,56 @@ struct ScriptGraphSchemaDecodeResultUVE final {
     }
 };
 
+inline constexpr std::uint32_t kScriptGraphWorkspaceSchemaVersionUVE = 1U;
+
+struct ScriptGraphWorkspaceViewUVE final {
+    float panX = 0.0F;
+    float panY = 0.0F;
+    float zoom = 1.0F;
+
+    [[nodiscard]] bool operator==(const ScriptGraphWorkspaceViewUVE&) const noexcept = default;
+};
+
+struct ScriptGraphWorkspaceBranchUVE final {
+    std::string name;
+    ScriptGraphSchemaUVE schema;
+    ScriptGraphWorkspaceViewUVE view{};
+
+    [[nodiscard]] bool operator==(const ScriptGraphWorkspaceBranchUVE&) const = default;
+};
+
+struct ScriptGraphWorkspaceSchemaUVE final {
+    std::uint32_t schemaVersion = kScriptGraphWorkspaceSchemaVersionUVE;
+    std::vector<ScriptGraphWorkspaceBranchUVE> branches;
+
+    [[nodiscard]] bool operator==(const ScriptGraphWorkspaceSchemaUVE&) const = default;
+};
+
+struct ScriptGraphWorkspacePersistenceLimitsUVE final {
+    std::size_t maximumBranches = 64U;
+    std::size_t maximumBranchNameBytes = 96U;
+    ScriptGraphPersistenceLimitsUVE graphLimits{};
+    std::size_t maximumTextBytes = 8U << 20U;
+};
+
+struct ScriptGraphWorkspaceDecodeResultUVE final {
+    std::optional<ScriptGraphWorkspaceSchemaUVE> workspace;
+    std::vector<ScriptPersistenceDiagnosticUVE> diagnostics;
+
+    [[nodiscard]] bool IsSuccessUVE() const noexcept {
+        return workspace.has_value() && diagnostics.empty();
+    }
+};
+
+[[nodiscard]] std::string EncodeScriptGraphWorkspaceUVE(
+    const ScriptGraphWorkspaceSchemaUVE& workspace,
+    std::vector<ScriptPersistenceDiagnosticUVE>& diagnostics,
+    ScriptGraphWorkspacePersistenceLimitsUVE limits = {});
+
+[[nodiscard]] ScriptGraphWorkspaceDecodeResultUVE DecodeScriptGraphWorkspaceUVE(
+    const std::string& text,
+    ScriptGraphWorkspacePersistenceLimitsUVE limits = {});
+
 /// Compatibility result retained for graph-only callers from the initial persistence seam.
 struct ScriptGraphDecodeResultUVE final {
     std::optional<ScriptGraphUVE> graph;

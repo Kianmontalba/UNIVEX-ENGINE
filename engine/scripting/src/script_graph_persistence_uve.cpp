@@ -331,4 +331,118 @@ ScriptGraphDecodeResultUVE DecodeScriptGraphUVE(const std::string& text,
     return result;
 }
 
+std::string EncodeScriptGraphWorkspaceUVE(
+    const ScriptGraphWorkspaceSchemaUVE& workspace,
+    std::vector<ScriptPersistenceDiagnosticUVE>& diagnostics,
+    const ScriptGraphWorkspacePersistenceLimitsUVE limits) {
+    if (workspace.schemaVersion != kScriptGraphWorkspaceSchemaVersionUVE) {
+        AddDiagnosticUVE(diagnostics, ScriptPersistenceDiagnosticCodeUVE::UnsupportedVersion,
+                         "Only visual script workspace schema version 1 can be encoded.");
+        return {};
+    }
+    if (workspace.branches.empty() || workspace.branches.size() > limits.maximumBranches) {
+        AddDiagnosticUVE(diagnostics, ScriptPersistenceDiagnosticCodeUVE::LimitExceeded,
+                         "Script workspace must contain between one and the configured maximum branches.");
+        return {};
+    }
+    JsonUVE root;
+    root["schemaVersion"] = workspace.schemaVersion;
+    root["branches"] = JsonUVE::array();
+    std::unordered_set<std::string> names;
+    for (const ScriptGraphWorkspaceBranchUVE& branch : workspace.branches) {
+        if (branch.name.empty() || branch.name.size() > limits.maximumBranchNameBytes ||
+            !names.insert(branch.name).second) {
+            AddDiagnosticUVE(diagnostics, ScriptPersistenceDiagnosticCodeUVE::DuplicateEntry,
+                             "Script workspace contains an empty, oversized, or duplicate branch name.");
+            return {};
+        }
+        std::vector<ScriptPersistenceDiagnosticUVE> graphDiagnostics;
+        const std::string graphText = EncodeScriptGraphSchemaUVE(branch.schema, graphDiagnostics, limits.graphLimits);
+        if (!graphDiagnostics.empty()) {
+            diagnostics.insert(diagnostics.end(), graphDiagnostics.begin(), graphDiagnostics.end());
+            return {};
+        }
+        root["branches"].push_back({{"name", branch.name},
+                                      {"view", {{"panX", branch.view.panX}, {"panY", branch.view.panY},
+                                                  {"zoom", branch.view.zoom}}},
+                                      {"graph", JsonUVE::parse(graphText)}});
+    }
+    const std::string encoded = root.dump();
+    if (encoded.size() > limits.maximumTextBytes) {
+        AddDiagnosticUVE(diagnostics, ScriptPersistenceDiagnosticCodeUVE::LimitExceeded,
+                         "Encoded script workspace exceeds text-size limit.");
+        return {};
+    }
+    return encoded;
+}
+
+ScriptGraphWorkspaceDecodeResultUVE DecodeScriptGraphWorkspaceUVE(
+    const std::string& text,
+    const ScriptGraphWorkspacePersistenceLimitsUVE limits) {
+    ScriptGraphWorkspaceDecodeResultUVE result;
+    if (text.size() > limits.maximumTextBytes) {
+        AddDiagnosticUVE(result.diagnostics, ScriptPersistenceDiagnosticCodeUVE::LimitExceeded,
+                         "Script workspace text exceeds persistence limit.");
+        return result;
+    }
+    try {
+        const JsonUVE root = JsonUVE::parse(text);
+        if (!root.is_object() || !root.contains("schemaVersion") ||
+            !root.at("schemaVersion").is_number_unsigned() ||
+            root.at("schemaVersion").get<std::uint32_t>() != kScriptGraphWorkspaceSchemaVersionUVE) {
+            AddDiagnosticUVE(result.diagnostics, ScriptPersistenceDiagnosticCodeUVE::UnsupportedVersion,
+                             "Unsupported or missing script workspace schema version.");
+            return result;
+        }
+        if (!root.contains("branches") || !root.at("branches").is_array() ||
+            root.at("branches").empty() || root.at("branches").size() > limits.maximumBranches) {
+            AddDiagnosticUVE(result.diagnostics, ScriptPersistenceDiagnosticCodeUVE::LimitExceeded,
+                             "Script workspace branches are missing or exceed the configured limit.");
+            return result;
+        }
+        ScriptGraphWorkspaceSchemaUVE workspace{};
+        workspace.schemaVersion = kScriptGraphWorkspaceSchemaVersionUVE;
+        std::unordered_set<std::string> names;
+        for (const JsonUVE& branchJson : root.at("branches")) {
+            if (!branchJson.is_object() || !branchJson.contains("name") ||
+                !branchJson.at("name").is_string() || !branchJson.contains("view") ||
+                !branchJson.at("view").is_object() || !branchJson.contains("graph") ||
+                !branchJson.at("graph").is_object()) {
+                AddDiagnosticUVE(result.diagnostics, ScriptPersistenceDiagnosticCodeUVE::MissingField,
+                                 "Each script workspace branch requires a name, view, and graph object.");
+                return result;
+            }
+            const std::string& name = branchJson.at("name").get_ref<const std::string&>();
+            if (name.empty() || name.size() > limits.maximumBranchNameBytes || !names.insert(name).second) {
+                AddDiagnosticUVE(result.diagnostics, ScriptPersistenceDiagnosticCodeUVE::DuplicateEntry,
+                                 "Script workspace contains an empty, oversized, or duplicate branch name.");
+                return result;
+            }
+            ScriptGraphWorkspaceViewUVE view{};
+            const JsonUVE& viewJson = branchJson.at("view");
+            if (!ReadFiniteFloatUVE(viewJson, "panX", view.panX) ||
+                !ReadFiniteFloatUVE(viewJson, "panY", view.panY) ||
+                !ReadFiniteFloatUVE(viewJson, "zoom", view.zoom) ||
+                !std::isfinite(view.zoom) || view.zoom < 0.1F || view.zoom > 8.0F) {
+                AddDiagnosticUVE(result.diagnostics, ScriptPersistenceDiagnosticCodeUVE::InvalidField,
+                                 "Script workspace branch view contains invalid pan or zoom values.");
+                return result;
+            }
+            const ScriptGraphSchemaDecodeResultUVE graphResult =
+                DecodeScriptGraphSchemaUVE(branchJson.at("graph").dump(), limits.graphLimits);
+            if (!graphResult.IsSuccessUVE()) {
+                result.diagnostics.insert(result.diagnostics.end(), graphResult.diagnostics.begin(),
+                                          graphResult.diagnostics.end());
+                return result;
+            }
+            workspace.branches.push_back(ScriptGraphWorkspaceBranchUVE{name, *graphResult.schema, view});
+        }
+        result.workspace = std::move(workspace);
+    } catch (const nlohmann::json::exception&) {
+        AddDiagnosticUVE(result.diagnostics, ScriptPersistenceDiagnosticCodeUVE::InvalidJson,
+                         "Script workspace text is not valid JSON.");
+    }
+    return result;
+}
+
 } // namespace UVE::Scripting

@@ -23,6 +23,8 @@ uniform float uViewportAspect;
 uniform float uGridSpacing;
 uniform int uProjectionMode;
 uniform float uOrthographicScale;
+uniform int uEnvironmentPreviewEnabled;
+uniform int uSunPreviewEnabled;
 
 float GridLineCoverageUVE(vec2 coordinate, float spacing) {
     vec2 scaled = coordinate / max(spacing, 0.000001);
@@ -69,8 +71,16 @@ void main() {
 
     float skyHeight = clamp(rayDirection.y, -1.0, 1.0);
     float horizonBlend = smoothstep(-0.16, 0.18, skyHeight);
-    vec3 color = mix(groundColor, horizonColor, smoothstep(0.0, 0.35, skyHeight));
-    color = mix(color, skyColor, smoothstep(0.18, 0.72, skyHeight));
+    vec3 color = vec3(0.355, 0.365, 0.380); // neutral preview-off gray
+    if (uEnvironmentPreviewEnabled != 0) {
+        color = mix(groundColor, horizonColor, smoothstep(0.0, 0.35, skyHeight));
+        color = mix(color, skyColor, smoothstep(0.18, 0.72, skyHeight));
+    }
+    if (uSunPreviewEnabled != 0) {
+        const vec3 sunDirection = normalize(vec3(-0.38, 0.82, 0.30));
+        float sunDisc = pow(max(dot(rayDirection, sunDirection), 0.0), 256.0);
+        color += vec3(1.0, 0.83, 0.55) * sunDisc * 0.82;
+    }
 
     float groundDenominator = rayDirection.y;
     if (groundDenominator < -0.0001) {

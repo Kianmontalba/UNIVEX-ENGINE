@@ -1410,6 +1410,9 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
             m_impl->editorViewportEnvironmentProgram->SetFloatUVE("uGridSpacing", state.gridSpacing);
             m_impl->editorViewportEnvironmentProgram->SetIntUVE("uProjectionMode", state.orthographic ? 1 : 0);
             m_impl->editorViewportEnvironmentProgram->SetFloatUVE("uOrthographicScale", state.orthographicScale);
+            m_impl->editorViewportEnvironmentProgram->SetIntUVE("uEnvironmentPreviewEnabled",
+                                                                  state.environmentPreviewEnabled ? 1 : 0);
+            m_impl->editorViewportEnvironmentProgram->SetIntUVE("uSunPreviewEnabled", state.sunPreviewEnabled ? 1 : 0);
             m_impl->editorViewportEnvironmentProgram->ApplyToUVE(commandBuffer);
             commandBuffer.DrawUVE(3);
             commandBuffer.EndRenderPassUVE();

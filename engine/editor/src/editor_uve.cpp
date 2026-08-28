@@ -10,6 +10,8 @@
 #include <cmath>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
+#include <sstream>
 #include <functional>
 #include <limits>
 #include <numbers>
@@ -456,11 +458,13 @@ EditorUVE::EditorUVE(Core::EngineServicesUVE& services, std::filesystem::path ac
     : m_services(&services),
       m_simulationControl(simulationControl),
       m_activeScenePath(std::move(activeScenePath)),
-      m_historyCapacity(std::max<std::size_t>(std::size_t{1U}, historyCapacity)),
-      m_visualScriptCanvas(m_visualScriptRegistry) {
+      m_historyCapacity(std::max<std::size_t>(std::size_t{1U}, historyCapacity)) {
     if (!Scripting::RegisterBuiltInScriptNodesUVE(m_visualScriptRegistry)) {
         throw std::logic_error("Failed to register built-in Visual Scripting nodes.");
     }
+    m_visualScriptBranches.push_back(
+        ScriptBranchUVE{"Type 1 Scene", std::make_unique<Scripting::ScriptGraphCanvasUVE>(
+                             m_visualScriptRegistry, m_historyCapacity)});
     RegisterBuiltInInspectorDrawersUVE();
 }
 
@@ -509,6 +513,7 @@ void EditorUVE::InitUVE() {
 
     m_state = EditorStateUVE::Running;
     LoadSessionSettingsUVE();
+    static_cast<void>(LoadVisualScriptWorkspaceUVE());
 }
 
 void EditorUVE::TickUVE() {
@@ -2827,6 +2832,22 @@ float EditorUVE::GetViewportDistanceUVE() const noexcept {
 EditorViewportNavigationModeUVE EditorUVE::GetViewportNavigationModeUVE() const noexcept {
     return m_viewportNavigationMode;
 }
+
+bool EditorUVE::IsViewportEnvironmentPreviewEnabledUVE() const noexcept {
+    return m_viewportEnvironmentPreviewEnabled;
+}
+
+void EditorUVE::SetViewportEnvironmentPreviewEnabledUVE(const bool enabled) noexcept {
+    m_viewportEnvironmentPreviewEnabled = enabled;
+}
+
+bool EditorUVE::IsViewportSunPreviewEnabledUVE() const noexcept {
+    return m_viewportSunPreviewEnabled;
+}
+
+void EditorUVE::SetViewportSunPreviewEnabledUVE(const bool enabled) noexcept {
+    m_viewportSunPreviewEnabled = enabled;
+}
 Editor2DCanvasStateUVE EditorUVE::Get2DCanvasStateUVE() const noexcept {
     return m_2dCanvasState;
 }
@@ -2893,7 +2914,231 @@ void EditorUVE::SetActiveScenePathUVE(std::filesystem::path path) {
 }
 
 Scripting::ScriptGraphCanvasUVE& EditorUVE::GetVisualScriptCanvasUVE() noexcept {
-    return m_visualScriptCanvas;
+    return ActiveVisualScriptCanvasUVE();
+}
+
+Scripting::ScriptGraphCanvasUVE& EditorUVE::ActiveVisualScriptCanvasUVE() noexcept {
+    return *m_visualScriptBranches[m_activeVisualScriptBranch].canvas;
+}
+
+const Scripting::ScriptGraphCanvasUVE& EditorUVE::ActiveVisualScriptCanvasUVE() const noexcept {
+    return *m_visualScriptBranches[m_activeVisualScriptBranch].canvas;
+}
+
+std::vector<std::string> EditorUVE::GetVisualScriptBranchNamesUVE() const {
+    std::vector<std::string> names;
+    names.reserve(m_visualScriptBranches.size());
+    for (const ScriptBranchUVE& branch : m_visualScriptBranches) {
+        names.push_back(branch.name);
+    }
+    return names;
+}
+
+const std::string& EditorUVE::GetActiveVisualScriptBranchNameUVE() const noexcept {
+    return m_visualScriptBranches[m_activeVisualScriptBranch].name;
+}
+
+bool EditorUVE::CreateVisualScriptBranchUVE(std::string name) {
+    const auto invalidName = [&name] {
+        return name.empty() || name.size() > 96U ||
+               std::any_of(name.begin(), name.end(), [](const char value) {
+                   return std::iscntrl(static_cast<unsigned char>(value)) != 0 || value == '/' || value == 0x5c;
+               });
+    };
+    if (m_state != EditorStateUVE::Running || invalidName() ||
+        std::any_of(m_visualScriptBranches.begin(), m_visualScriptBranches.end(),
+                    [&name](const ScriptBranchUVE& branch) { return branch.name == name; })) {
+        return false;
+    }
+    m_visualScriptBranches.push_back(
+        ScriptBranchUVE{std::move(name), std::make_unique<Scripting::ScriptGraphCanvasUVE>(
+                            m_visualScriptRegistry, m_historyCapacity)});
+    m_activeVisualScriptBranch = m_visualScriptBranches.size() - 1U;
+    return true;
+}
+
+bool EditorUVE::SelectVisualScriptBranchUVE(std::string name) {
+    if (m_state != EditorStateUVE::Running) {
+        return false;
+    }
+    const auto iterator = std::find_if(m_visualScriptBranches.begin(), m_visualScriptBranches.end(),
+                                       [&name](const ScriptBranchUVE& branch) { return branch.name == name; });
+    if (iterator == m_visualScriptBranches.end()) {
+        return false;
+    }
+    m_activeVisualScriptBranch = static_cast<std::size_t>(std::distance(m_visualScriptBranches.begin(), iterator));
+    return true;
+}
+
+bool EditorUVE::RenameActiveVisualScriptBranchUVE(std::string name) {
+    const auto invalidName = [&name] {
+        return name.empty() || name.size() > 96U ||
+               std::any_of(name.begin(), name.end(), [](const char value) {
+                   return std::iscntrl(static_cast<unsigned char>(value)) != 0 || value == '/' || value == 0x5c;
+               });
+    };
+    if (m_state != EditorStateUVE::Running || invalidName() ||
+        std::any_of(m_visualScriptBranches.begin(), m_visualScriptBranches.end(),
+                    [this, &name](const ScriptBranchUVE& branch) {
+                        return &branch != &m_visualScriptBranches[m_activeVisualScriptBranch] && branch.name == name;
+                    })) {
+        return false;
+    }
+    m_visualScriptBranches[m_activeVisualScriptBranch].name = std::move(name);
+    return true;
+}
+
+std::filesystem::path ScriptWorkspacePathUVE(const std::filesystem::path& scenePath) {
+    std::filesystem::path path = scenePath;
+    path.replace_extension(".scripting");
+    return path.empty() ? std::filesystem::path{"main.scripting"} : path;
+}
+
+bool EditorUVE::SaveVisualScriptWorkspaceUVE() {
+    if (m_state != EditorStateUVE::Running || m_visualScriptBranches.empty()) {
+        return false;
+    }
+    Scripting::ScriptGraphWorkspaceSchemaUVE workspace{};
+    workspace.branches.reserve(m_visualScriptBranches.size());
+    for (const ScriptBranchUVE& branch : m_visualScriptBranches) {
+        const Scripting::ScriptGraphCanvasLayoutSnapshotUVE layout = branch.canvas->GetLayoutSnapshotUVE();
+        Scripting::ScriptGraphSchemaUVE schema{};
+        schema.graph = branch.canvas->GetGraphUVE();
+        schema.layout.reserve(layout.entries.size());
+        for (const auto& entry : layout.entries) {
+            schema.layout.push_back(Scripting::ScriptGraphLayoutEntryUVE{
+                entry.nodeId, entry.position.x, entry.position.y});
+        }
+        workspace.branches.push_back(Scripting::ScriptGraphWorkspaceBranchUVE{
+            branch.name, std::move(schema), {layout.view.pan.x, layout.view.pan.y, layout.view.zoom}});
+    }
+    std::vector<Scripting::ScriptPersistenceDiagnosticUVE> diagnostics;
+    const std::string encoded = Scripting::EncodeScriptGraphWorkspaceUVE(workspace, diagnostics);
+    if (encoded.empty() || !diagnostics.empty()) {
+        return false;
+    }
+    const std::filesystem::path path = ScriptWorkspacePathUVE(m_activeScenePath);
+    const std::string virtualPath = path.generic_string();
+    Asset::IFileSystemUVE& fileSystem = m_services->GetFileSystemUVE();
+    const std::filesystem::path resolvedPath = fileSystem.ResolveRealPathUVE(virtualPath);
+    if (!resolvedPath.empty()) {
+        const std::filesystem::path temporaryPath = resolvedPath.string() + ".tmp";
+        std::error_code error;
+        if (!resolvedPath.parent_path().empty()) {
+            std::filesystem::create_directories(resolvedPath.parent_path(), error);
+        }
+        std::ofstream output(temporaryPath, std::ios::binary | std::ios::trunc);
+        if (!output.is_open()) {
+            return false;
+        }
+        output.write(encoded.data(), static_cast<std::streamsize>(encoded.size()));
+        output.flush();
+        const bool outputGood = output.good();
+        output.close();
+        if (!outputGood) {
+            std::filesystem::remove(temporaryPath, error);
+            return false;
+        }
+        std::filesystem::rename(temporaryPath, resolvedPath, error);
+        if (error) {
+            std::filesystem::remove(resolvedPath, error);
+            error.clear();
+            std::filesystem::rename(temporaryPath, resolvedPath, error);
+        }
+        if (error) {
+            std::filesystem::remove(temporaryPath, error);
+            return false;
+        }
+        return true;
+    }
+    std::vector<std::byte> bytes(encoded.size());
+    if (!encoded.empty()) {
+        std::memcpy(bytes.data(), encoded.data(), encoded.size());
+    }
+    if (fileSystem.WriteFileUVE(virtualPath, bytes)) {
+        return true;
+    }
+    // Some editor test/legacy configurations have no mounted project directory. Preserve the
+    // established raw-path behavior as a compatibility fallback after the native VFS attempt.
+    const std::filesystem::path temporaryPath = path.string() + ".tmp";
+    std::error_code error;
+    if (!path.parent_path().empty()) {
+        std::filesystem::create_directories(path.parent_path(), error);
+    }
+    std::ofstream output(temporaryPath, std::ios::binary | std::ios::trunc);
+    if (!output.is_open()) {
+        return false;
+    }
+    output.write(encoded.data(), static_cast<std::streamsize>(encoded.size()));
+    output.flush();
+    const bool outputGood = output.good();
+    output.close();
+    if (!outputGood) {
+        std::filesystem::remove(temporaryPath, error);
+        return false;
+    }
+    std::filesystem::rename(temporaryPath, path, error);
+    if (error) {
+        std::filesystem::remove(path, error);
+        error.clear();
+        std::filesystem::rename(temporaryPath, path, error);
+    }
+    if (error) {
+        std::filesystem::remove(temporaryPath, error);
+        return false;
+    }
+    return true;
+}
+
+bool EditorUVE::LoadVisualScriptWorkspaceUVE() {
+    if (m_state != EditorStateUVE::Running) {
+        return false;
+    }
+    const std::filesystem::path path = ScriptWorkspacePathUVE(m_activeScenePath);
+    const std::string virtualPath = path.generic_string();
+    std::string text;
+    if (const std::optional<std::vector<std::byte>> bytes = m_services->GetFileSystemUVE().ReadFileUVE(virtualPath);
+        bytes.has_value()) {
+        text.assign(reinterpret_cast<const char*>(bytes->data()), bytes->size());
+    } else {
+        if (!std::filesystem::exists(path)) {
+            return false;
+        }
+        std::ifstream input(path, std::ios::binary);
+        if (!input.is_open()) {
+            return false;
+        }
+        std::ostringstream buffer;
+        buffer << input.rdbuf();
+        text = buffer.str();
+    }
+    const Scripting::ScriptGraphWorkspaceDecodeResultUVE decoded =
+        Scripting::DecodeScriptGraphWorkspaceUVE(text);
+    if (!decoded.IsSuccessUVE()) {
+        return false;
+    }
+    std::vector<ScriptBranchUVE> loaded;
+    loaded.reserve(decoded.workspace->branches.size());
+    for (const auto& branch : decoded.workspace->branches) {
+        auto canvas = std::make_unique<Scripting::ScriptGraphCanvasUVE>(m_visualScriptRegistry, m_historyCapacity);
+        Scripting::ScriptGraphCanvasLayoutSnapshotUVE layout{};
+        layout.view = {branch.view.panX, branch.view.panY, branch.view.zoom};
+        layout.entries.reserve(branch.schema.layout.size());
+        for (const auto& entry : branch.schema.layout) {
+            layout.entries.push_back(Scripting::ScriptGraphCanvasLayoutEntryUVE{
+                entry.nodeId, {entry.x, entry.y}});
+        }
+        if (!canvas->RestorePersistenceUVE(branch.schema, std::move(layout)).IsAppliedUVE()) {
+            return false;
+        }
+        loaded.push_back(ScriptBranchUVE{branch.name, std::move(canvas)});
+    }
+    if (loaded.empty()) {
+        return false;
+    }
+    m_visualScriptBranches = std::move(loaded);
+    m_activeVisualScriptBranch = 0U;
+    return true;
 }
 
 const Scripting::ScriptNodeRegistryUVE& EditorUVE::GetVisualScriptRegistryUVE() const noexcept {
@@ -4501,6 +4746,10 @@ void EditorUVE::LoadSessionSettingsUVE() {
         getPositiveSnapValue("editor.viewport.snap.rotateStepDegrees", snapping.rotateStepDegrees);
     snapping.scaleStep = getPositiveSnapValue("editor.viewport.snap.scaleStep", snapping.scaleStep);
     m_transformSnappingSettings = snapping;
+    m_viewportEnvironmentPreviewEnabled = config.GetBoolUVE(
+        "editor.viewport.preview.environment", m_viewportEnvironmentPreviewEnabled);
+    m_viewportSunPreviewEnabled = config.GetBoolUVE(
+        "editor.viewport.preview.sun", m_viewportSunPreviewEnabled);
     const Math::Vector3UVE focus{static_cast<float>(config.GetDoubleUVE("editor.viewport.camera.focusX", m_viewportFocusPoint.x)),
                                  static_cast<float>(config.GetDoubleUVE("editor.viewport.camera.focusY", m_viewportFocusPoint.y)),
                                  static_cast<float>(config.GetDoubleUVE("editor.viewport.camera.focusZ", m_viewportFocusPoint.z))};
@@ -4538,6 +4787,8 @@ bool EditorUVE::SaveSessionSettingsUVE() {
     config.SetIntUVE("editor.viewport.gizmoMode", static_cast<std::int64_t>(m_gizmoMode));
     config.SetIntUVE("editor.viewport.coordinateSpace", static_cast<std::int64_t>(m_gizmoCoordinateSpace));
     config.SetBoolUVE("editor.viewport.snap.enabled", m_transformSnappingSettings.enabled);
+    config.SetBoolUVE("editor.viewport.preview.environment", m_viewportEnvironmentPreviewEnabled);
+    config.SetBoolUVE("editor.viewport.preview.sun", m_viewportSunPreviewEnabled);
     config.SetDoubleUVE("editor.viewport.snap.translateStep", m_transformSnappingSettings.translateStep);
     config.SetDoubleUVE("editor.viewport.snap.rotateStepDegrees", m_transformSnappingSettings.rotateStepDegrees);
     config.SetDoubleUVE("editor.viewport.snap.scaleStep", m_transformSnappingSettings.scaleStep);
@@ -5006,10 +5257,36 @@ void EditorUVE::DrawHierarchyPanelUVE() {
         ImGui::SetTooltip("Add Node");
     }
     ImGui::SameLine(0.0F, ImGui::GetStyle().ItemSpacing.x);
-    ImGui::SetNextItemWidth(std::max(1.0F, ImGui::GetContentRegionAvail().x));
+    const bool hasSelectedScriptTarget = HasSingleDocumentSelectionUVE() && IsDocumentEntityUVE(m_selectedEntity);
+    const float scriptButtonWidth = hasSelectedScriptTarget ? ImGui::GetFrameHeight() : 0.0F;
+    ImGui::SetNextItemWidth(std::max(1.0F, ImGui::GetContentRegionAvail().x - scriptButtonWidth -
+                                               (hasSelectedScriptTarget ? ImGui::GetStyle().ItemSpacing.x : 0.0F)));
     if (ImGui::InputTextWithHint("##hierarchy-filter", "Search Nodes", filterBuffer.data(), filterBuffer.size())) {
         m_hierarchyFilter = filterBuffer.data();
         InvalidateHierarchyFilterCacheUVE();
+    }
+    bool scriptButtonClicked = false;
+    if (hasSelectedScriptTarget) {
+        ImGui::SameLine(0.0F, ImGui::GetStyle().ItemSpacing.x);
+        ImGui::BeginDisabled(!IsAuthoringCommandAllowedUVE());
+        const std::uintptr_t scriptIconTextureId = m_uiAssets.GetNodeIconTextureIdUVE("script");
+        if (scriptIconTextureId != 0U) {
+            scriptButtonClicked = ImGui::ImageButton("##scene-attach-script", static_cast<ImTextureID>(scriptIconTextureId),
+                                                     ImVec2{ImGui::GetFrameHeight(), ImGui::GetFrameHeight()});
+        } else {
+            scriptButtonClicked = ImGui::SmallButton("Script");
+        }
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) {
+            ImGui::SetTooltip("Open or create script branch for selected Node3D");
+        }
+    }
+    if (scriptButtonClicked && hasSelectedScriptTarget) {
+        const std::string branchName = GetEntityDisplayLabelUVE(m_selectedEntity);
+        if (!SelectVisualScriptBranchUVE(branchName)) {
+            static_cast<void>(CreateVisualScriptBranchUVE(branchName));
+        }
+        m_activeWorkspace = EditorWorkspaceUVE::Scripting;
     }
     if (ImGui::BeginPopup("scene-add-node-popup")) {
         ImGui::TextDisabled("Add Node");
@@ -6349,7 +6626,7 @@ void EditorUVE::DrawAssetsPanelUVE() {
 }
 
 void EditorUVE::CompileVisualScriptUVE() {
-    const Scripting::ScriptGraphCanvasSnapshotUVE snapshot = m_visualScriptCanvas.GetSnapshotUVE();
+    const Scripting::ScriptGraphCanvasSnapshotUVE snapshot = ActiveVisualScriptCanvasUVE().GetSnapshotUVE();
     m_scriptCompileAttempted = true;
     m_scriptCompileSucceeded = false;
     m_scriptLastCompiledGraphRevision = snapshot.graphRevision;
@@ -6357,7 +6634,7 @@ void EditorUVE::CompileVisualScriptUVE() {
     m_scriptCompileMessage.clear();
 
     const Scripting::ScriptIrCompileResultUVE compiled =
-        Scripting::CompileScriptGraphToIrUVE(m_visualScriptCanvas.GetGraphUVE(), m_visualScriptRegistry);
+        Scripting::CompileScriptGraphToIrUVE(ActiveVisualScriptCanvasUVE().GetGraphUVE(), m_visualScriptRegistry);
     if (!compiled.IsSuccessUVE()) {
         if (compiled.diagnostics.empty()) {
             m_scriptCompileMessage = "Graph compilation was rejected without a diagnostic.";
@@ -6403,7 +6680,7 @@ void EditorUVE::DrawScriptingWorkspaceUVE() {
         return;
     }
 
-    const Scripting::ScriptGraphCanvasSnapshotUVE snapshot = m_visualScriptCanvas.GetSnapshotUVE();
+    const Scripting::ScriptGraphCanvasSnapshotUVE snapshot = ActiveVisualScriptCanvasUVE().GetSnapshotUVE();
     const auto selectedNode = [&snapshot]() -> const Scripting::ScriptGraphCanvasNodeSnapshotUVE* {
         if (snapshot.selectedNodeIds.size() != 1U) {
             return nullptr;
@@ -6433,11 +6710,46 @@ void EditorUVE::DrawScriptingWorkspaceUVE() {
     if (ImGui::BeginChild("##scripting-toolbar", ImVec2{0.0F, 28.0F}, false)) {
         ImGui::TextColored(ImVec4{0.70F, 0.72F, 0.76F, 1.0F}, "GRAPH");
         ImGui::SameLine();
-        ImGui::TextDisabled("native canvas | revision %llu",
+        ImGui::TextDisabled("native canvas | branch %s | revision %llu",
+                            GetActiveVisualScriptBranchNameUVE().c_str(),
                             static_cast<unsigned long long>(snapshot.revision));
         ImGui::SameLine();
+        if (ImGui::BeginCombo("##script-branch-combo", GetActiveVisualScriptBranchNameUVE().c_str(),
+                              ImGuiComboFlags_HeightSmall)) {
+            for (const std::string& branchName : GetVisualScriptBranchNamesUVE()) {
+                const bool selected = branchName == GetActiveVisualScriptBranchNameUVE();
+                if (ImGui::Selectable(branchName.c_str(), selected)) {
+                    static_cast<void>(SelectVisualScriptBranchUVE(branchName));
+                }
+                if (selected) {
+                    ImGui::SetItemDefaultFocus();
+                }
+            }
+            ImGui::EndCombo();
+        }
+        ImGui::SameLine();
+        if (ImGui::SmallButton("+ Branch")) {
+            m_scriptBranchDialogBuffer = "Type 2 Scene";
+            m_scriptBranchDialogRenaming = false;
+            ImGui::OpenPopup("script-branch-name-popup");
+        }
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Rename")) {
+            m_scriptBranchDialogBuffer = GetActiveVisualScriptBranchNameUVE();
+            m_scriptBranchDialogRenaming = true;
+            ImGui::OpenPopup("script-branch-name-popup");
+        }
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Save .scripting")) {
+            static_cast<void>(SaveVisualScriptWorkspaceUVE());
+        }
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Load .scripting")) {
+            static_cast<void>(LoadVisualScriptWorkspaceUVE());
+        }
+        ImGui::SameLine();
         if (ImGui::SmallButton("Undo")) {
-            static_cast<void>(m_visualScriptCanvas.UndoUVE());
+            static_cast<void>(ActiveVisualScriptCanvasUVE().UndoUVE());
         }
         ImGui::SameLine();
         if (ImGui::SmallButton("Compiler")) {
@@ -6445,10 +6757,32 @@ void EditorUVE::DrawScriptingWorkspaceUVE() {
         }
         ImGui::SameLine();
         if (ImGui::SmallButton("Redo")) {
-            static_cast<void>(m_visualScriptCanvas.RedoUVE());
+            static_cast<void>(ActiveVisualScriptCanvasUVE().RedoUVE());
         }
         ImGui::SameLine();
         ImGui::TextDisabled("LMB select/drag/link | RMB/MMB pan | long-press search | wheel zoom");
+        if (ImGui::BeginPopup("script-branch-name-popup")) {
+            ImGui::TextUnformatted(m_scriptBranchDialogRenaming ? "Rename script branch" : "Create script branch");
+            ImGui::Separator();
+            std::array<char, 97> nameBuffer{};
+            std::strncpy(nameBuffer.data(), m_scriptBranchDialogBuffer.c_str(), nameBuffer.size() - 1U);
+            const bool submitted = ImGui::InputText("Name", nameBuffer.data(), nameBuffer.size(),
+                                                    ImGuiInputTextFlags_EnterReturnsTrue);
+            m_scriptBranchDialogBuffer = nameBuffer.data();
+            if (submitted || ImGui::Button(m_scriptBranchDialogRenaming ? "Rename" : "Create")) {
+                const bool applied = m_scriptBranchDialogRenaming
+                    ? RenameActiveVisualScriptBranchUVE(m_scriptBranchDialogBuffer)
+                    : CreateVisualScriptBranchUVE(m_scriptBranchDialogBuffer);
+                if (applied) {
+                    ImGui::CloseCurrentPopup();
+                }
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel")) {
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
+        }
     }
     ImGui::EndChild();
 
@@ -6631,7 +6965,7 @@ void EditorUVE::DrawScriptingWorkspaceUVE() {
                         m_scriptCanvasDragStartPosition.x + currentGraphPosition.x - m_scriptCanvasDragStartPointer.x,
                         m_scriptCanvasDragStartPosition.y + currentGraphPosition.y - m_scriptCanvasDragStartPointer.y};
                 } else {
-                    static_cast<void>(m_visualScriptCanvas.MoveNodeUVE(
+                    static_cast<void>(ActiveVisualScriptCanvasUVE().MoveNodeUVE(
                         m_scriptCanvasDragNodeId, m_scriptCanvasDragPreviewPosition, m_scriptCanvasDragRevision));
                     m_scriptCanvasDragging = false;
                     m_scriptCanvasDragNodeId = 0U;
@@ -6644,7 +6978,7 @@ void EditorUVE::DrawScriptingWorkspaceUVE() {
                                      (mouseLocal.x - m_scriptCanvasPanStart.x) / std::max(view.zoom, 0.1F);
                     nextView.pan.y = m_scriptCanvasPanViewStart.pan.y -
                                      (mouseLocal.y - m_scriptCanvasPanStart.y) / std::max(view.zoom, 0.1F);
-                    static_cast<void>(m_visualScriptCanvas.SetViewUVE(nextView));
+                    static_cast<void>(ActiveVisualScriptCanvasUVE().SetViewUVE(nextView));
                 } else {
                     m_scriptCanvasPanning = false;
                 }
@@ -6652,13 +6986,13 @@ void EditorUVE::DrawScriptingWorkspaceUVE() {
                 const auto* const node = findNodeAt(mouse);
                 if (node != nullptr) {
                     const auto* const pin = findPinAt(mouse, *node);
-                    static_cast<void>(m_visualScriptCanvas.SetSelectionUVE({node->id}));
+                    static_cast<void>(ActiveVisualScriptCanvasUVE().SetSelectionUVE({node->id}));
                     if (pin != nullptr) {
                         if (pin->direction == Scripting::ScriptPinDirectionUVE::Output) {
                             m_scriptCanvasLinkSourceNodeId = node->id;
                             m_scriptCanvasLinkSourcePin = pin->name;
                         } else if (m_scriptCanvasLinkSourceNodeId != 0U) {
-                            const auto result = m_visualScriptCanvas.AddLinkUVE(
+                            const auto result = ActiveVisualScriptCanvasUVE().AddLinkUVE(
                                 Scripting::ScriptLinkUVE{{m_scriptCanvasLinkSourceNodeId, m_scriptCanvasLinkSourcePin},
                                                          {node->id, pin->name}});
                             if (result.IsAppliedUVE()) {
@@ -6677,7 +7011,7 @@ void EditorUVE::DrawScriptingWorkspaceUVE() {
                         m_scriptCanvasDragRevision = snapshot.revision;
                     }
                 } else {
-                    static_cast<void>(m_visualScriptCanvas.SetSelectionUVE({}));
+                    static_cast<void>(ActiveVisualScriptCanvasUVE().SetSelectionUVE({}));
                     m_scriptCanvasLinkSourceNodeId = 0U;
                     m_scriptCanvasLinkSourcePin.clear();
                 }
@@ -6706,7 +7040,7 @@ void EditorUVE::DrawScriptingWorkspaceUVE() {
                                            Scripting::kMaximumScriptGraphCanvasZoomUVE);
                 nextView.pan.x = graphUnderPointer.x - mouseLocal.x / nextView.zoom;
                 nextView.pan.y = graphUnderPointer.y - mouseLocal.y / nextView.zoom;
-                static_cast<void>(m_visualScriptCanvas.SetViewUVE(nextView));
+                static_cast<void>(ActiveVisualScriptCanvasUVE().SetViewUVE(nextView));
             }
             if (m_scriptCanvasLinkSourceNodeId != 0U && !m_scriptCanvasLinkSourcePin.empty()) {
                 const auto* const sourceNode = findNode(m_scriptCanvasLinkSourceNodeId);
@@ -6744,7 +7078,7 @@ void EditorUVE::DrawScriptingWorkspaceUVE() {
                     const std::string label = (entry.displayName.empty() ? entry.typeId : entry.displayName) +
                                               "##context-node-" + entry.typeId;
                     if (ImGui::Selectable(label.c_str())) {
-                        static_cast<void>(m_visualScriptCanvas.AddNodeTypeUVE(
+                        static_cast<void>(ActiveVisualScriptCanvasUVE().AddNodeTypeUVE(
                             entry.typeId, m_scriptCanvasContextMenuPosition, snapshot.revision));
                         ImGui::CloseCurrentPopup();
                     }
@@ -6796,7 +7130,7 @@ void EditorUVE::DrawScriptingWorkspaceUVE() {
                         if (ImGui::InputText(inputId.c_str(), defaultBuffer.data(), defaultBuffer.size(),
                                              ImGuiInputTextFlags_EnterReturnsTrue)) {
                             m_scriptCanvasDefaultEditBuffer = defaultBuffer.data();
-                            static_cast<void>(m_visualScriptCanvas.SetPinDefaultValueUVE(
+                            static_cast<void>(ActiveVisualScriptCanvasUVE().SetPinDefaultValueUVE(
                                 node->id, pin.name, m_scriptCanvasDefaultEditBuffer));
                         } else {
                             m_scriptCanvasDefaultEditBuffer = defaultBuffer.data();
@@ -6828,7 +7162,7 @@ void EditorUVE::DrawScriptingWorkspaceUVE() {
             }
             if (!snapshot.selectedNodeIds.empty() && ImGui::SmallButton("Delete selected node")) {
                 for (const std::uint32_t nodeId : snapshot.selectedNodeIds) {
-                    static_cast<void>(m_visualScriptCanvas.RemoveNodeUVE(nodeId));
+                    static_cast<void>(ActiveVisualScriptCanvasUVE().RemoveNodeUVE(nodeId));
                 }
             }
             ImGui::TextDisabled("Graph edits use native validation, revision checks, and canvas history.");
@@ -7039,6 +7373,14 @@ void EditorUVE::DrawViewportToolCanvasUVE() {
         if (ImGui::SmallButton("Perspective")) {
             ImGui::OpenPopup("viewport-projection-popup");
         }
+        ImGui::SameLine(0.0F, 8.0F);
+        if (ImGui::SmallButton(m_viewportEnvironmentPreviewEnabled ? "Environment On" : "Environment")) {
+            m_viewportEnvironmentPreviewEnabled = !m_viewportEnvironmentPreviewEnabled;
+        }
+        ImGui::SameLine(0.0F, 4.0F);
+        if (ImGui::SmallButton(m_viewportSunPreviewEnabled ? "Sun On" : "Sun")) {
+            m_viewportSunPreviewEnabled = !m_viewportSunPreviewEnabled;
+        }
         if (ImGui::BeginPopup("viewport-projection-popup")) {
             ImGui::TextDisabled("Viewport projection");
             ImGui::Separator();
@@ -7148,6 +7490,8 @@ void EditorUVE::DrawViewportPanelUVE() {
 
         Render::EditorViewportVisualStateUVE visualState{};
         visualState.enabled = true;
+        visualState.environmentPreviewEnabled = m_viewportEnvironmentPreviewEnabled;
+        visualState.sunPreviewEnabled = m_viewportSunPreviewEnabled;
         const float viewportWidth = std::max(mainViewport->Size.x, 1.0F);
         const float viewportHeight = std::max(mainViewport->Size.y, 1.0F);
         visualState.viewportMinX = std::clamp((contentOrigin.x - mainViewport->Pos.x) / viewportWidth, 0.0F, 1.0F);
@@ -7208,8 +7552,10 @@ void EditorUVE::DrawViewportPanelUVE() {
         }
         ImDrawList* const drawList = ImGui::GetWindowDrawList();
         if (GetDocumentRootsUVE().empty()) {
+            const char* const previewLabel = m_viewportEnvironmentPreviewEnabled
+                ? "Editor environment preview · scene is empty" : "Environment preview off · neutral gray grid";
             drawList->AddText(ImVec2{contentOrigin.x + 10.0F, contentOrigin.y + 38.0F},
-                              IM_COL32(218, 203, 177, 185), "Editor sky · no scene light");
+                              IM_COL32(190, 196, 204, 185), previewLabel);
         }
         const ImVec2 orientationCenter{contentOrigin.x + contentSize.x - 62.0F, contentOrigin.y + 104.0F};
         const ImVec2 navigationMousePosition = ImGui::GetMousePos();

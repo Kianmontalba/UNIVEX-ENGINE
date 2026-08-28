@@ -2,7 +2,8 @@
 
 #pragma once
 
-#include <array>
+#include <map>
+#include <memory>
 #include <cstddef>
 #include <deque>
 #include <filesystem>
@@ -391,6 +392,10 @@ public:
     [[nodiscard]] Math::Vector3UVE GetViewportFocusPointUVE() const noexcept;
     [[nodiscard]] float GetViewportDistanceUVE() const noexcept;
     [[nodiscard]] EditorViewportNavigationModeUVE GetViewportNavigationModeUVE() const noexcept;
+    [[nodiscard]] bool IsViewportEnvironmentPreviewEnabledUVE() const noexcept;
+    void SetViewportEnvironmentPreviewEnabledUVE(bool enabled) noexcept;
+    [[nodiscard]] bool IsViewportSunPreviewEnabledUVE() const noexcept;
+    void SetViewportSunPreviewEnabledUVE(bool enabled) noexcept;
     /// Returns editor-only 2D canvas state for screen-space authoring. It is not scene data.
     [[nodiscard]] Editor2DCanvasStateUVE Get2DCanvasStateUVE() const noexcept;
     /// Validates and updates the editor-only 2D canvas zoom without changing scene state/history.
@@ -422,6 +427,13 @@ public:
     void SetActiveScenePathUVE(std::filesystem::path path);
     [[nodiscard]] Scripting::ScriptGraphCanvasUVE& GetVisualScriptCanvasUVE() noexcept;
     [[nodiscard]] const Scripting::ScriptNodeRegistryUVE& GetVisualScriptRegistryUVE() const noexcept;
+    [[nodiscard]] std::vector<std::string> GetVisualScriptBranchNamesUVE() const;
+    [[nodiscard]] const std::string& GetActiveVisualScriptBranchNameUVE() const noexcept;
+    [[nodiscard]] bool CreateVisualScriptBranchUVE(std::string name);
+    [[nodiscard]] bool SelectVisualScriptBranchUVE(std::string name);
+    [[nodiscard]] bool RenameActiveVisualScriptBranchUVE(std::string name);
+    [[nodiscard]] bool SaveVisualScriptWorkspaceUVE();
+    [[nodiscard]] bool LoadVisualScriptWorkspaceUVE();
 
     /// Releases editor-private UI resources and destroys the editor camera while the services are
     /// still alive. Idempotent after the first successful shutdown.
@@ -447,6 +459,11 @@ private:
     struct EditorSelectionPathsUVE final {
         std::vector<EditorSelectionPathUVE> entityPaths;
         std::optional<EditorSelectionPathUVE> activePath;
+    };
+
+    struct ScriptBranchUVE final {
+        std::string name;
+        std::unique_ptr<Scripting::ScriptGraphCanvasUVE> canvas;
     };
 
     struct PlayModeSessionUVE final {
@@ -822,6 +839,8 @@ private:
     void RefreshProjectFileIndexUVE();
     void DrawFolderContentsPanelUVE();
     void DrawFilesystemContextPopupUVE();
+    [[nodiscard]] Scripting::ScriptGraphCanvasUVE& ActiveVisualScriptCanvasUVE() noexcept;
+    [[nodiscard]] const Scripting::ScriptGraphCanvasUVE& ActiveVisualScriptCanvasUVE() const noexcept;
 
     Core::EngineServicesUVE* m_services = nullptr;
     Core::ISimulationControlUVE* m_simulationControl = nullptr;
@@ -843,6 +862,8 @@ private:
     float m_viewportYawRadians = 0.0F;
     float m_viewportPitchRadians = 0.0F;
     float m_viewportDistance = 6.0F;
+    bool m_viewportEnvironmentPreviewEnabled = true;
+    bool m_viewportSunPreviewEnabled = true;
     float m_viewportPresetTargetYawRadians = 0.0F;
     float m_viewportPresetTargetPitchRadians = 0.0F;
     bool m_viewportPresetAnimating = false;
@@ -864,7 +885,10 @@ private:
     InspectorDrawerRegistryUVE m_inspectorDrawerRegistry;
     DeveloperConsoleUVE m_developerConsole;
     Scripting::ScriptNodeRegistryUVE m_visualScriptRegistry;
-    Scripting::ScriptGraphCanvasUVE m_visualScriptCanvas;
+    std::vector<ScriptBranchUVE> m_visualScriptBranches;
+    std::size_t m_activeVisualScriptBranch = 0U;
+    std::string m_scriptBranchDialogBuffer;
+    bool m_scriptBranchDialogRenaming = false;
     EditorBottomDockUVE m_activeBottomDock = EditorBottomDockUVE::FileSystem;
     /// Empty is the ProjectFileIndexUVE content root. This value is session-only and must name a
     /// directory in the latest successful copied snapshot before it is used as a browser location.

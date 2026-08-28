@@ -4553,6 +4553,64 @@ TEST(ScriptGraphCanvasPersistenceUVETest, DecodeLayout_RejectsMalformedVersionDu
     EXPECT_EQ(diagnostics[0].code, ScriptPersistenceDiagnosticCodeUVE::LimitExceeded);
 }
 
+TEST(ScriptGraphWorkspacePersistenceUVETest, EncodeDecodeRoundTripsNamedBranchesAndViewState) {
+    ScriptNodeRegistryUVE registry;
+    RegisterTestNodesUVE(registry);
+    ScriptGraphCanvasUVE canvas(registry);
+    ASSERT_TRUE(canvas.AddNodeUVE({1U, "test.source"}, {10.0F, 20.0F}).IsAppliedUVE());
+    ASSERT_TRUE(canvas.SetViewUVE({{12.0F, -4.0F}, 2.0F}).IsAppliedUVE());
+    const ScriptGraphCanvasLayoutSnapshotUVE layout = canvas.GetLayoutSnapshotUVE();
+    ScriptGraphSchemaUVE graphSchema{};
+    graphSchema.graph = canvas.GetGraphUVE();
+    for (const auto& entry : layout.entries) {
+        graphSchema.layout.push_back({entry.nodeId, entry.position.x, entry.position.y});
+    }
+    ScriptGraphWorkspaceSchemaUVE workspace{};
+    workspace.branches.push_back({"Type 1 Scene", graphSchema,
+                                  {layout.view.pan.x, layout.view.pan.y, layout.view.zoom}});
+    workspace.branches.push_back({"Type 2 Scene", ScriptGraphSchemaUVE{}, {0.0F, 0.0F, 1.0F}});
+    std::vector<ScriptPersistenceDiagnosticUVE> diagnostics;
+    const std::string encoded = EncodeScriptGraphWorkspaceUVE(workspace, diagnostics);
+    ASSERT_TRUE(diagnostics.empty());
+    const ScriptGraphWorkspaceDecodeResultUVE decoded = DecodeScriptGraphWorkspaceUVE(encoded);
+    ASSERT_TRUE(decoded.IsSuccessUVE());
+    ASSERT_EQ(decoded.workspace->branches.size(), 2U);
+    EXPECT_EQ(decoded.workspace->branches[0].name, "Type 1 Scene");
+    EXPECT_EQ(decoded.workspace->branches[0].schema.graph.GetNodesUVE().size(), 1U);
+    EXPECT_EQ(decoded.workspace->branches[0].schema.layout[0].x, 10.0F);
+    EXPECT_EQ(decoded.workspace->branches[0].view, (ScriptGraphWorkspaceViewUVE{12.0F, -4.0F, 2.0F}));
+    EXPECT_EQ(decoded.workspace->branches[1].name, "Type 2 Scene");
+}
+
+TEST(ScriptGraphWorkspacePersistenceUVETest, DecodeRejectsDuplicateBranchNames) {
+    const ScriptGraphWorkspaceDecodeResultUVE duplicate = DecodeScriptGraphWorkspaceUVE(
+        R"({"schemaVersion":1,"branches":[{"name":"Type 1 Scene","view":{"panX":0,"panY":0,"zoom":1},"graph":{"schemaVersion":1,"nodes":[],"links":[],"layout":[],"metadata":{}}},{"name":"Type 1 Scene","view":{"panX":0,"panY":0,"zoom":1},"graph":{"schemaVersion":1,"nodes":[],"links":[],"layout":[],"metadata":{}}}]})");
+    ASSERT_FALSE(duplicate.IsSuccessUVE());
+    ASSERT_FALSE(duplicate.diagnostics.empty());
+    EXPECT_EQ(duplicate.diagnostics.front().code, ScriptPersistenceDiagnosticCodeUVE::DuplicateEntry);
+}
+
+TEST(ScriptGraphWorkspacePersistenceUVETest, CanvasRestoreUsesNativeValidationAndClearsTransientHistory) {
+    ScriptNodeRegistryUVE registry;
+    RegisterTestNodesUVE(registry);
+    ScriptGraphCanvasUVE canvas(registry);
+    ASSERT_TRUE(canvas.AddNodeUVE({1U, "test.source"}, {4.0F, 8.0F}).IsAppliedUVE());
+    const ScriptGraphCanvasLayoutSnapshotUVE persistedLayout = canvas.GetLayoutSnapshotUVE();
+    ScriptGraphSchemaUVE persistedSchema{};
+    persistedSchema.graph = canvas.GetGraphUVE();
+    for (const auto& entry : persistedLayout.entries) {
+        persistedSchema.layout.push_back({entry.nodeId, entry.position.x, entry.position.y});
+    }
+    ASSERT_TRUE(canvas.AddNodeUVE({2U, "test.sink"}, {20.0F, 30.0F}).IsAppliedUVE());
+    ASSERT_GT(canvas.GetUndoCountUVE(), 0U);
+    auto restoreResult = canvas.RestorePersistenceUVE(std::move(persistedSchema), persistedLayout);
+    ASSERT_TRUE(restoreResult.IsAppliedUVE());
+    EXPECT_EQ(canvas.GetSnapshotUVE().nodes.size(), 1U);
+    EXPECT_EQ(canvas.GetLayoutSnapshotUVE(), persistedLayout);
+    EXPECT_EQ(canvas.GetUndoCountUVE(), 0U);
+    EXPECT_EQ(canvas.GetRedoCountUVE(), 0U);
+}
+
 TEST(ScriptGraphCanvasUVETest, CommandsRejectStaleRevisionAndInvalidSelectionWithoutMutation) {
     ScriptNodeRegistryUVE registry;
     RegisterTestNodesUVE(registry);

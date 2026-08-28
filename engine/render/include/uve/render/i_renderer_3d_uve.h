@@ -17,6 +17,8 @@ namespace UVE::Render {
 /// their feature instead of requesting undefined GPU work. Thread-safety: main render thread only.
 struct EditorViewportVisualStateUVE final {
     bool enabled = false;
+    bool environmentPreviewEnabled = true;
+    bool sunPreviewEnabled = true;
     float viewportMinX = 0.0F;
     float viewportMinY = 0.0F;
     float viewportMaxX = 1.0F;
