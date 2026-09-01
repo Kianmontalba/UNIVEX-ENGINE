@@ -54,6 +54,6 @@ target_include_directories(uve_editor PUBLIC include)
 target_compile_features(uve_editor PUBLIC cxx_std_20)
 target_link_libraries(uve_editor
     PUBLIC uve_core uve_scripting uve_plugins
-    PRIVATE uve_editor_imgui nlohmann_json::nlohmann_json
+    PRIVATE uve_editor_imgui nlohmann_json::nlohmann_json glfw
 )
 uve_set_warnings(uve_editor)
