@@ -1,4 +1,4 @@
-#version 330 core
+#version 450 core
 
 #ifdef VERTEX_SHADER
 // Fullscreen triangle via the vertex-ID trick: no vertex buffer is required.

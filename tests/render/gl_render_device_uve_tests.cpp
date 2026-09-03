@@ -1870,6 +1870,10 @@ TEST_F(GlRenderDeviceUVETest, LitShadowed3DShader_DepthPrepassDarkensOccludedFra
     colorCommandBuffer->BeginRenderPassUVE(colorPassDesc);
     colorCommandBuffer->BindPipelineUVE(litPipeline);
     colorCommandBuffer->SetUniformMatrix4x4UVE("uModel", Math::Matrix4x4UVE::IdentityUVE());
+    // lit_shadowed_3d's normal transform now reads uNormalMatrix instead of uModel (Phase 2c) -
+    // identity either way here, but a real caller (Renderer3DUVE::RecordItemsUVE) always sets it
+    // alongside uModel, so this direct-GL-API test must too or vWorldNormal comes out zero.
+    colorCommandBuffer->SetUniformMatrix4x4UVE("uNormalMatrix", Math::Matrix4x4UVE::IdentityUVE());
     colorCommandBuffer->SetUniformMatrix4x4UVE("uViewProjection", Math::Matrix4x4UVE::IdentityUVE());
     colorCommandBuffer->SetUniformMatrix4x4UVE("uLightSpaceMatrix", Math::Matrix4x4UVE::IdentityUVE());
     colorCommandBuffer->SetUniformVector3UVE("uAmbientColor", Math::Vector3UVE{0.0F, 0.0F, 0.0F});

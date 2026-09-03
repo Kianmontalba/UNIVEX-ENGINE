@@ -11,7 +11,7 @@
 
 namespace UVE::Render::Shader::BuiltIn {
 
-const std::string_view kBasic2DSource = R"GLSLSRC(#version 330 core
+const std::string_view kBasic2DSource = R"GLSLSRC(#version 450 core
 
 #ifdef VERTEX_SHADER
 layout(location = 0) in vec2 aPosition;
@@ -40,7 +40,7 @@ void main() {
 #endif
 )GLSLSRC";
 
-const std::string_view kBasic3DSource = R"GLSLSRC(#version 330 core
+const std::string_view kBasic3DSource = R"GLSLSRC(#version 450 core
 
 #ifdef VERTEX_SHADER
 layout(location = 0) in vec3 aPosition;
@@ -64,7 +64,7 @@ void main() {
 #endif
 )GLSLSRC";
 
-const std::string_view kBasic3DTexturedSource = R"GLSLSRC(#version 330 core
+const std::string_view kBasic3DTexturedSource = R"GLSLSRC(#version 450 core
 
 #ifdef VERTEX_SHADER
 layout(location = 0) in vec3 aPosition;
@@ -95,7 +95,7 @@ void main() {
 #endif
 )GLSLSRC";
 
-const std::string_view kFullscreenQuadSource = R"GLSLSRC(#version 330 core
+const std::string_view kFullscreenQuadSource = R"GLSLSRC(#version 450 core
 
 #ifdef VERTEX_SHADER
 // Fullscreen triangle via the vertex-ID trick: no vertex buffer is required.
@@ -130,7 +130,7 @@ void main() {
 #endif
 )GLSLSRC";
 
-const std::string_view kShadowDepthSource = R"GLSLSRC(#version 330 core
+const std::string_view kShadowDepthSource = R"GLSLSRC(#version 450 core
 
 #ifdef VERTEX_SHADER
 layout(location = 0) in vec3 aPosition;
@@ -150,7 +150,7 @@ void main() {
 #endif
 )GLSLSRC";
 
-const std::string_view kLitShadowed3DSource = R"GLSLSRC(#version 330 core
+const std::string_view kLitShadowed3DSource = R"GLSLSRC(#version 450 core
 
 #ifdef VERTEX_SHADER
 layout(location = 0) in vec3 aPosition;
@@ -441,7 +441,7 @@ void main() {
 
 
 
-const std::string_view kEditorViewportEnvironmentSource = R"GLSLSRC(#version 330 core
+const std::string_view kEditorViewportEnvironmentSource = R"GLSLSRC(#version 450 core
 
 #ifdef VERTEX_SHADER
 void main() {
@@ -594,7 +594,7 @@ void main() {
 #endif
 )GLSLSRC";
 
-const std::string_view kParticleSource = R"GLSLSRC(#version 330 core
+const std::string_view kParticleSource = R"GLSLSRC(#version 450 core
 
 #ifdef VERTEX_SHADER
 layout(location = 0) in vec3 aPosition;

@@ -264,6 +264,16 @@ GlRenderDeviceUVE::GlRenderDeviceUVE(Window::IWindowManagerUVE& windowManager)
         glGetIntegerv(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS, &m_impl->state.maxCombinedTextureImageUnits);
         glGetIntegerv(GL_MAX_UNIFORM_BUFFER_BINDINGS, &m_impl->state.maxUniformBufferBindings);
         glGetIntegerv(GL_MAX_VERTEX_ATTRIBS, &m_impl->state.maxVertexAttribs);
+#if !defined(__ANDROID__)
+        // GL_MAJOR_VERSION/GL_MINOR_VERSION are valid integer queries from GL 3.0 onward, which
+        // this engine's desktop baseline already requires - safe to call unconditionally here.
+        GLint contextMajorVersion = 0;
+        GLint contextMinorVersion = 0;
+        glGetIntegerv(GL_MAJOR_VERSION, &contextMajorVersion);
+        glGetIntegerv(GL_MINOR_VERSION, &contextMinorVersion);
+        m_impl->state.supportsComputeShadersUVE =
+            contextMajorVersion > 4 || (contextMajorVersion == 4 && contextMinorVersion >= 3);
+#endif
         UVE_INFO("GlRenderDeviceUVE: initialized, backend GL_VERSION={}",
                   reinterpret_cast<const char*>(glGetString(GL_VERSION)));
     }
@@ -455,6 +465,15 @@ ShaderHandleUVE GlRenderDeviceUVE::CreateShaderUVE(const ShaderDescUVE& desc, st
 #if defined(__ANDROID__)
     if (desc.stage == ShaderStageUVE::Compute || desc.stage == ShaderStageUVE::Geometry) {
         UVE_ERROR("GlRenderDeviceUVE: GLES3 does not support requested compute/geometry shader stage");
+        return kInvalidShaderHandleUVE;
+    }
+#else
+    // Geometry shaders are core since GL 3.2, below this engine's desktop baseline, so no gate is
+    // needed there - but compute shaders are GL 4.3+ only (Phase 2a), and the negotiated context
+    // is not guaranteed to have cleared that bar just because this isn't Android.
+    if (desc.stage == ShaderStageUVE::Compute && !m_impl->state.supportsComputeShadersUVE) {
+        UVE_ERROR("GlRenderDeviceUVE: compute shaders require an OpenGL 4.3+ context; the negotiated "
+                  "context does not support them");
         return kInvalidShaderHandleUVE;
     }
 #endif
