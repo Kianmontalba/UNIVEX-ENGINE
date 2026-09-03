@@ -203,6 +203,42 @@ TEST(DataTableUVE, AssetEnvelopeRejectsInvalidInputWithoutReplacingDestination) 
     EXPECT_EQ(table.GetSnapshotUVE().rows, before.rows);
 }
 
+TEST(DataTableUVE, DeserializeUVERejectsFiveKeyEnvelopeWithWrongKeyNamesInsteadOfThrowing) {
+    DataTableUVE table("stable");
+    ASSERT_TRUE(table.DefineColumnUVE("value", DataTableColumnTypeUVE::Integer));
+    ASSERT_TRUE(table.AddRowUVE("one", {std::int64_t{1}}));
+    const DataTableSnapshotUVE before = table.GetSnapshotUVE();
+
+    // Exactly 5 top-level keys (matching envelope.size() != 5U), but "name"/"columns"/"rows" are
+    // absent - before the fix, envelope.at("name") throws nlohmann::json::out_of_range uncaught.
+    EXPECT_FALSE(DataTableAssetSerializerUVE::DeserializeUVE(
+        R"({"format":"uve.data_table","version":1,"title":"x","cols":[],"data":[]})", table));
+    EXPECT_EQ(table.GetSnapshotUVE().columns, before.columns);
+    EXPECT_EQ(table.GetSnapshotUVE().rows, before.rows);
+}
+
+TEST(DataTableUVE, DeserializeUVENeverThrowsOnMalformedOrTypeMismatchedDocuments) {
+    DataTableUVE table("stable");
+
+    const std::vector<std::string> malformedDocuments{
+        "",
+        "not json at all",
+        "{",
+        "[]",
+        "null",
+        R"({"format":"uve.data_table","version":1,"name":123,"columns":[],"rows":[]})",
+        R"({"format":"uve.data_table","version":1,"name":"n","columns":"nope","rows":[]})",
+        R"({"format":"uve.data_table","version":1,"name":"n","columns":[],"rows":"nope"})",
+        R"({"format":"uve.data_table","version":1,"name":"n","columns":[1,2,3],"rows":[]})",
+        R"({"format":"uve.data_table","version":1,"name":"n","columns":[{"name":"a"}],"rows":[]})",
+        R"({"format":"uve.data_table","version":1,"name":"n","columns":[{"name":"a","type":"integer"}],"rows":[{"id":1,"values":[]}]})",
+        R"({"format":"uve.data_table","version":1,"name":"n","columns":[{"name":"a","type":"integer"}],"rows":[{"id":"r","values":[{"type":42,"value":1}]}]})",
+    };
+    for (const std::string& document : malformedDocuments) {
+        EXPECT_FALSE(DataTableAssetSerializerUVE::DeserializeUVE(document, table)) << "document: " << document;
+    }
+}
+
 TEST(DataTableUVE, CatalogSnapshotIsSortedCopiedAndGenerationCounted) {
     DataTableUVE zebra("zebra");
     ASSERT_TRUE(zebra.DefineColumnUVE("value", DataTableColumnTypeUVE::Integer));
