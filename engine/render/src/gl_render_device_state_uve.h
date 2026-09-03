@@ -48,6 +48,14 @@ struct GlDeviceStateUVE {
     GLint maxUniformBufferBindings = 0;
     GLint maxVertexAttribs = 0;
 
+    /// True only once the negotiated context is queried and found to be desktop OpenGL 4.3+
+    /// (GL_COMPUTE_SHADER's minimum core version) - GLES contexts (compute needs ES 3.1, this
+    /// engine's Android baseline is a fixed ES 3.0) are never true. Phase 2a capability gate:
+    /// requesting a desktop GL context version (e.g. via --gl-version) is no guarantee the driver
+    /// grants it or that it clears the compute-shader threshold, so CreateShaderUVE() must check
+    /// this cached fact rather than assume "not Android" means compute is always available.
+    bool supportsComputeShadersUVE = false;
+
     struct BufferRecordUVE {
         GLuint glBuffer = 0;
         GLenum target = 0;

@@ -558,7 +558,7 @@ void EditorUVE::InitUVE() {
         // remain active. Engine input remains a separate service-level abstraction; overlay clicks
         // consume ImGui pointer state and never leak into runtime action mappings.
         const bool glfwInitialized = ImGui_ImplGlfw_InitForOpenGL(nativeWindow, true);
-        const bool openglInitialized = glfwInitialized && ImGui_ImplOpenGL3_Init("#version 330 core");
+        const bool openglInitialized = glfwInitialized && ImGui_ImplOpenGL3_Init("#version 450 core");
         if (openglInitialized) {
             static_cast<void>(m_uiAssets.InitializeUVE());
             m_uiInitialized = true;

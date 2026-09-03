@@ -146,17 +146,29 @@ struct PreprocessContextUVE {
 }
 
 #ifdef __ANDROID__
-[[nodiscard]] bool IsDesktop330CoreVersionUVE(std::string_view versionLine) noexcept {
+/// Matches any `#version <digits> core` line, not a single hardcoded number - this project's
+/// desktop baseline has already moved once (330 -> 450, Phase 2a) and this Android translation
+/// must not need a matching edit every time the desktop number changes again. It intentionally
+/// does not distinguish *which* desktop version was requested: every desktop-authored built-in
+/// and project shader in this engine sticks to GLSL syntax that is also valid under GLSL ES 3.00
+/// (no 4.x-only language features are actually used yet - see the Phase 2a capability-gating note
+/// on compute shaders in gl_render_device_uve.cpp), so any desktop `core` version line maps to the
+/// same fixed "#version 300 es" target regardless of the specific number on it.
+[[nodiscard]] bool IsDesktopCoreVersionUVE(std::string_view versionLine) noexcept {
     versionLine = TrimUVE(RemoveUtf8BomUVE(versionLine));
     if (!IsVersionDirectiveUVE(versionLine)) {
         return false;
     }
     std::string_view remainder = TrimUVE(versionLine.substr(8));
-    if (!StartsWithUVE(remainder, "330") ||
-        (remainder.size() > 3U && std::isspace(static_cast<unsigned char>(remainder[3])) == 0)) {
+    std::size_t digitCount = 0U;
+    while (digitCount < remainder.size() && std::isdigit(static_cast<unsigned char>(remainder[digitCount])) != 0) {
+        ++digitCount;
+    }
+    if (digitCount == 0U ||
+        (remainder.size() > digitCount && std::isspace(static_cast<unsigned char>(remainder[digitCount])) == 0)) {
         return false;
     }
-    remainder = TrimUVE(remainder.substr(3));
+    remainder = TrimUVE(remainder.substr(digitCount));
     if (!StartsWithUVE(remainder, "core") ||
         (remainder.size() > 4U && remainder[4] != '/' &&
          std::isspace(static_cast<unsigned char>(remainder[4])) == 0)) {
@@ -382,7 +394,7 @@ PreprocessResultUVE PreprocessShaderSourceUVE(Asset::IFileSystemUVE& fileSystem,
         // Android's ES 3.0 context cannot compile desktop GLSL 3.30. Keep this adaptation at the
         // backend boundary so embedded and project-authored shaders share the same GLES handling,
         // including version lines with a trailing comment.
-        if (IsDesktop330CoreVersionUVE(lines[*versionLineIndex])) {
+        if (IsDesktopCoreVersionUVE(lines[*versionLineIndex])) {
             output += "#version 300 es\n";
             output += "precision highp float;\n";
             output += "precision highp int;\n";
