@@ -4,6 +4,7 @@
 #include "uve/memory/stack_allocator_uve.h"
 
 #include <cstddef>
+#include <new>
 #include <string_view>
 #include <vector>
 
@@ -62,6 +63,13 @@ TEST(StackAllocatorUVEDeathTest, StaleMarkerBeyondCurrentOffset_Asserts) {
 
     stack.RewindToMarkerUVE(earlyMarker); // current offset now back before lateMarker's position
     EXPECT_DEATH({ stack.RewindToMarkerUVE(lateMarker); }, "");
+}
+#else
+TEST(StackAllocatorUVETest, ExhaustingCapacity_ThrowsBadAllocInsteadOfOverrunningBuffer) {
+    StackAllocatorUVE stack(16);
+    EXPECT_THROW({ (void)stack.AllocateUVE(1024, 8, __FILE__, __LINE__); }, std::bad_alloc);
+    // The failed allocation must not have moved the offset forward.
+    EXPECT_EQ(stack.GetAllocatedBytesUVE(), 0U);
 }
 #endif
 

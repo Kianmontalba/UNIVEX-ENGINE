@@ -34,7 +34,10 @@ public:
 
     /// Decrements the pending-job count and wakes any thread blocked in WaitUVE(). UVE_ASSERTs
     /// the count was greater than zero beforehand — a call without a matching prior
-    /// IncrementUVE() is a programming error, not a condition to silently tolerate.
+    /// IncrementUVE() is a programming error, not a condition to silently tolerate. In Release,
+    /// an extra call is logged as an error and ignored (the count is not decremented past zero)
+    /// rather than underflowing and leaving a permanently non-zero count that would hang every
+    /// future WaitUVE() on this counter.
     void DecrementAndNotifyUVE();
 
     /// Blocks the calling thread until the pending-job count reaches zero. Returns immediately

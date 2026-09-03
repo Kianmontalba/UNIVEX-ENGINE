@@ -57,6 +57,17 @@ TEST(JobCounterUVEDeathTest, DecrementWithoutIncrement_Asserts) {
     JobCounterUVE counter;
     EXPECT_DEATH({ counter.DecrementAndNotifyUVE(); }, "");
 }
+#else
+TEST(JobCounterUVETest, DecrementWithoutIncrement_IgnoresExtraDecrementInsteadOfUnderflowing) {
+    JobCounterUVE counter;
+    EXPECT_NO_FATAL_FAILURE(counter.DecrementAndNotifyUVE());
+    counter.WaitUVE(); // must not hang: the ignored extra decrement must not have gone negative
+
+    // A legitimate subsequent increment/decrement pair still works correctly afterward.
+    counter.IncrementUVE();
+    counter.DecrementAndNotifyUVE();
+    counter.WaitUVE();
+}
 #endif
 
 } // namespace

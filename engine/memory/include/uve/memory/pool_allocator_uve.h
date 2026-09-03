@@ -37,9 +37,11 @@ public:
     PoolAllocatorUVE& operator=(const PoolAllocatorUVE&) = delete;
 
     /// `sizeBytes` must be <= the pool's configured block size and `alignment` must be <= the
-    /// pool's configured block alignment (UVE_ASSERTs otherwise) — every returned block is
-    /// exactly one pool block regardless of the exact requested size. UVE_ASSERTs if the pool
-    /// is exhausted (fixed-capacity — never grows).
+    /// pool's configured block alignment (UVE_ASSERTs otherwise, and throws
+    /// `std::invalid_argument` in Release) — every returned block is exactly one pool block
+    /// regardless of the exact requested size. UVE_ASSERTs if the pool is exhausted
+    /// (fixed-capacity — never grows), and throws `std::bad_alloc` in Release, so AllocateUVE()
+    /// never returns without a valid block.
     [[nodiscard]] void* AllocateUVE(std::size_t sizeBytes, std::size_t alignment,
                                      const char* sourceFile, int sourceLine) override;
 

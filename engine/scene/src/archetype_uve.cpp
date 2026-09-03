@@ -37,6 +37,11 @@ ArchetypeUVE::LocationUVE ArchetypeUVE::ReserveEntityUVE(EntityUVE entity) {
 
 EntityUVE ArchetypeUVE::DestroyEntityAtUVE(LocationUVE location) {
     UVE_ASSERT(location.chunkIndex < m_chunks.size());
+    if (location.chunkIndex >= m_chunks.size()) {
+        UVE_ERROR("ArchetypeUVE: DestroyEntityAtUVE received an out-of-range chunkIndex ({} >= {})",
+                   location.chunkIndex, m_chunks.size());
+        return kInvalidEntityUVE;
+    }
     ChunkUVE& chunk = *m_chunks[location.chunkIndex];
     chunk.DestroyAllColumnsUVE(location.row);
     return chunk.VacateRowUVE(location.row);
@@ -44,17 +49,22 @@ EntityUVE ArchetypeUVE::DestroyEntityAtUVE(LocationUVE location) {
 
 EntityUVE ArchetypeUVE::VacateWithoutDestroyUVE(LocationUVE location) {
     UVE_ASSERT(location.chunkIndex < m_chunks.size());
+    if (location.chunkIndex >= m_chunks.size()) {
+        UVE_ERROR("ArchetypeUVE: VacateWithoutDestroyUVE received an out-of-range chunkIndex ({} >= {})",
+                   location.chunkIndex, m_chunks.size());
+        return kInvalidEntityUVE;
+    }
     return m_chunks[location.chunkIndex]->VacateRowUVE(location.row);
 }
 
 ChunkUVE& ArchetypeUVE::GetChunkUVE(std::size_t chunkIndex) {
     UVE_ASSERT(chunkIndex < m_chunks.size());
-    return *m_chunks[chunkIndex];
+    return *m_chunks.at(chunkIndex); // throws std::out_of_range in Release if chunkIndex is invalid
 }
 
 const ChunkUVE& ArchetypeUVE::GetChunkUVE(std::size_t chunkIndex) const {
     UVE_ASSERT(chunkIndex < m_chunks.size());
-    return *m_chunks[chunkIndex];
+    return *m_chunks.at(chunkIndex); // throws std::out_of_range in Release if chunkIndex is invalid
 }
 
 } // namespace UVE::Scene::Detail

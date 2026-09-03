@@ -1470,6 +1470,16 @@ TEST(EngineCoreUVEDeathTest, ShutdownBeforeInit_TriggersInvalidTransitionAssert)
     EngineCoreUVE engine(MakeTestConfigUVE());
     EXPECT_DEATH({ engine.Shutdown(); }, "");
 }
+
+TEST(EngineCoreUVEDeathTest, GetServicesUVEBeforeInit_Asserts) {
+    EngineCoreUVE engine(MakeTestConfigUVE());
+    EXPECT_DEATH({ static_cast<void>(engine.GetServicesUVE()); }, "");
+}
+#else
+TEST(EngineCoreUVETest, GetServicesUVEBeforeInit_ThrowsBadOptionalAccessInsteadOfDereferencingEmptyOptional) {
+    EngineCoreUVE engine(MakeTestConfigUVE());
+    EXPECT_THROW({ static_cast<void>(engine.GetServicesUVE()); }, std::bad_optional_access);
+}
 #endif
 
 } // namespace

@@ -51,7 +51,10 @@ public:
     StackAllocatorUVE& operator=(const StackAllocatorUVE&) = delete;
 
     /// UVE_ASSERTs if the stack does not have room for `sizeBytes` plus alignment padding plus
-    /// the per-allocation header (fixed-capacity — never grows).
+    /// the per-allocation header (fixed-capacity — never grows). Also throws `std::bad_alloc` in
+    /// that case (Release builds included — UVE_ASSERT is compiled out there, but capacity
+    /// exhaustion is a real runtime condition this allocator must still refuse safely), so
+    /// AllocateUVE() never returns without a valid, capacity-backed pointer.
     [[nodiscard]] void* AllocateUVE(std::size_t sizeBytes, std::size_t alignment,
                                      const char* sourceFile, int sourceLine) override;
 

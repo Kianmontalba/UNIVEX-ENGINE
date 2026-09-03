@@ -34,6 +34,10 @@ public:
 
     [[nodiscard]] void* AllocateUVE(std::size_t sizeBytes, std::size_t alignment,
                                      const char* sourceFile, int sourceLine) override;
+    /// `pointer` must have been returned by AllocateUVE() on this same instance and not yet
+    /// freed — UVE_ASSERTs on a pointer this allocator never allocated (double-free or
+    /// wrong-allocator bug), and logs an error and safely no-ops in Release rather than
+    /// dereferencing bookkeeping this allocator never recorded.
     void DeallocateUVE(void* pointer) override;
     [[nodiscard]] std::size_t GetAllocatedBytesUVE() const override;
 

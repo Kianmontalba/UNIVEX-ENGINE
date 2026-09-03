@@ -35,6 +35,11 @@ void HeapAllocatorUVE::DeallocateUVE(void* pointer) {
 
     const auto outstandingIt = m_outstandingAllocations.find(pointer);
     UVE_ASSERT(outstandingIt != m_outstandingAllocations.end());
+    if (outstandingIt == m_outstandingAllocations.end()) {
+        UVE_ERROR("HeapAllocatorUVE: DeallocateUVE called with a pointer this allocator never allocated "
+                   "(double-free or wrong-allocator bug)");
+        return;
+    }
 
     const OutstandingAllocationUVE metadata = outstandingIt->second;
     m_outstandingAllocations.erase(outstandingIt);

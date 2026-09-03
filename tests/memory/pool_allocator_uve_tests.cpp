@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <limits>
 #include <new>
+#include <stdexcept>
 #include <unordered_set>
 #include <vector>
 
@@ -52,6 +53,24 @@ TEST(PoolAllocatorUVEDeathTest, DeallocateForeignPointer_Asserts) {
     PoolAllocatorUVE pool(32, 8, 2);
     int foreign = 0;
     EXPECT_DEATH({ pool.DeallocateUVE(&foreign); }, "");
+}
+
+TEST(PoolAllocatorUVEDeathTest, AllocateExceedingBlockContract_Asserts) {
+    PoolAllocatorUVE pool(16, 8, 2);
+    EXPECT_DEATH({ (void)pool.AllocateUVE(64, 8, __FILE__, __LINE__); }, "");
+}
+#else
+TEST(PoolAllocatorUVETest, AllocateBeyondCapacity_ThrowsBadAllocInsteadOfCorruptingFreeList) {
+    PoolAllocatorUVE pool(32, 8, 1);
+    (void)pool.AllocateUVE(32, 8, __FILE__, __LINE__);
+    EXPECT_THROW({ (void)pool.AllocateUVE(32, 8, __FILE__, __LINE__); }, std::bad_alloc);
+    EXPECT_EQ(pool.GetUsedBlocksUVE(), 1U);
+}
+
+TEST(PoolAllocatorUVETest, AllocateExceedingBlockContract_ThrowsInvalidArgument) {
+    PoolAllocatorUVE pool(16, 8, 2);
+    EXPECT_THROW({ (void)pool.AllocateUVE(64, 8, __FILE__, __LINE__); }, std::invalid_argument);
+    EXPECT_EQ(pool.GetUsedBlocksUVE(), 0U);
 }
 #endif
 
