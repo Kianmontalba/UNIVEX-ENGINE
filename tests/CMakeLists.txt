@@ -138,6 +138,8 @@ add_executable(uve_tests
     render/shader/shader_binary_cache_uve_tests.cpp
     render/shader/shader_program_uve_tests.cpp
     render/shader/shader_manager_uve_tests.cpp
+    scene/archetype_uve_tests.cpp
+    scene/chunk_uve_tests.cpp
     scene/entity_manager_uve_tests.cpp
     scene/scene_graph_uve_tests.cpp
     scene/scene_serializer_uve_tests.cpp
@@ -250,6 +252,12 @@ uve_set_warnings(uve_tests)
 # "independently unit-testable") - this include path exposes only those module-private headers,
 # never anything from engine/render/shader/src as part of uve_render's own public interface.
 target_include_directories(uve_tests PRIVATE ${CMAKE_SOURCE_DIR}/engine/render/shader/src)
+
+# scene/archetype_uve_tests.cpp and scene/chunk_uve_tests.cpp unit-test the module-private
+# ArchetypeUVE/ChunkUVE Detail:: classes directly, the same way the render/shader tests above do -
+# this include path exposes only those module-private headers, never anything from
+# engine/scene/src as part of uve_scene's own public interface.
+target_include_directories(uve_tests PRIVATE ${CMAKE_SOURCE_DIR}/engine/scene/src)
 
 include(GoogleTest)
 gtest_discover_tests(uve_tests)

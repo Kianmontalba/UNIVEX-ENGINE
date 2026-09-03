@@ -907,7 +907,7 @@ void EngineCoreUVE::SetPostRenderCallbackUVE(std::function<void()> callback) {
 
 EngineServicesUVE& EngineCoreUVE::GetServicesUVE() {
     UVE_ASSERT(m_services.has_value());
-    return *m_services;
+    return m_services.value(); // throws std::bad_optional_access in Release if called before Init()
 }
 
 VersionUVE EngineCoreUVE::GetEngineVersionUVE() noexcept {

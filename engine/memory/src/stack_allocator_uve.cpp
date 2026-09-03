@@ -66,6 +66,11 @@ void* StackAllocatorUVE::AllocateUVE(std::size_t sizeBytes, std::size_t alignmen
     const std::size_t headerOffset = userPointerOffset + sizeBytes;
     const std::size_t newOffset = headerOffset + sizeof(StackBlockHeaderUVE);
     UVE_ASSERT(newOffset <= m_capacityBytes);
+    if (newOffset > m_capacityBytes) {
+        UVE_ERROR("StackAllocatorUVE: allocation of {} bytes exceeds remaining capacity ({} of {} bytes used)",
+                   sizeBytes, m_currentOffset, m_capacityBytes);
+        throw std::bad_alloc{};
+    }
 
     void* const userPointer = BufferBytesUVE() + userPointerOffset;
     WriteHeaderUVE(BufferBytesUVE() + headerOffset, StackBlockHeaderUVE{blockStartOffset, sizeBytes});

@@ -45,14 +45,18 @@ public:
 
     /// Destroys every column's data at `location`, then compacts (swap-remove). Returns the
     /// entity that moved into `location` (kInvalidEntityUVE if none) — the caller must patch
-    /// that entity's record to point at `location`.
+    /// that entity's record to point at `location`. UVE_ASSERTs `location.chunkIndex` is in
+    /// range; also returns kInvalidEntityUVE and logs an error in Release on an out-of-range
+    /// index, rather than indexing past m_chunks.
     [[nodiscard]] EntityUVE DestroyEntityAtUVE(LocationUVE location);
 
     /// Compacts (swap-remove) at `location` WITHOUT destroying anything first — used by
     /// archetype-migration callers that have already moved/destroyed every column themselves.
-    /// Same return-value contract as DestroyEntityAtUVE().
+    /// Same return-value contract as DestroyEntityAtUVE(), including the out-of-range behavior.
     [[nodiscard]] EntityUVE VacateWithoutDestroyUVE(LocationUVE location);
 
+    /// UVE_ASSERTs `chunkIndex` is in range; also throws std::out_of_range in Release on an
+    /// out-of-range index (via std::vector::at()), rather than indexing past m_chunks.
     [[nodiscard]] ChunkUVE& GetChunkUVE(std::size_t chunkIndex);
     [[nodiscard]] const ChunkUVE& GetChunkUVE(std::size_t chunkIndex) const;
 

@@ -11,6 +11,8 @@
 
 #include <gtest/gtest.h>
 
+#include "uve/platform/platform_uve.h"
+
 namespace UVE::Memory::Tests {
 namespace {
 
@@ -77,6 +79,28 @@ TEST(HeapAllocatorUVETest, Tracker_ReceivesMatchingAllocationAndDeallocationCall
     ASSERT_EQ(tracker.deallocatedPointers.size(), 1U);
     EXPECT_EQ(tracker.deallocatedPointers[0], pointer);
 }
+
+#if UVE_DEBUG
+TEST(HeapAllocatorUVEDeathTest, DeallocateForeignOrDoubleFreedPointer_Asserts) {
+    HeapAllocatorUVE allocator;
+    int foreign = 0;
+    EXPECT_DEATH({ allocator.DeallocateUVE(&foreign); }, "");
+}
+#else
+TEST(HeapAllocatorUVETest, DeallocateForeignOrDoubleFreedPointer_LogsAndNoOpsInsteadOfCorruptingBookkeeping) {
+    HeapAllocatorUVE allocator;
+    void* const pointer = allocator.AllocateUVE(32, 8, __FILE__, __LINE__);
+    allocator.DeallocateUVE(pointer);
+    const std::size_t bytesAfterFirstFree = allocator.GetAllocatedBytesUVE();
+
+    // A second free of the same (now-foreign) pointer must not touch bookkeeping again.
+    EXPECT_NO_FATAL_FAILURE(allocator.DeallocateUVE(pointer));
+    EXPECT_EQ(allocator.GetAllocatedBytesUVE(), bytesAfterFirstFree);
+
+    int foreign = 0;
+    EXPECT_NO_FATAL_FAILURE(allocator.DeallocateUVE(&foreign));
+}
+#endif
 
 } // namespace
 } // namespace UVE::Memory::Tests

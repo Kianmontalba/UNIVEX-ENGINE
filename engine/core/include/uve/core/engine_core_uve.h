@@ -305,7 +305,9 @@ public:
     /// RenderSystem/CameraSystem/MeshRenderer/LightSystem/Renderer3D/CollisionSystem/
     /// PhysicsSystem/RaycastSystem/InputSystem/GamepadInputSystem/MobileInputSystem/MobileGestureSystem/
     /// AudioDevice/AudioSystem/AudioSourceSystem/SaveGameSystem/CheckpointManager/WindowManager references. Valid only
-    /// between Init() and Shutdown().
+    /// between Init() and Shutdown(). UVE_ASSERTs the services exist; also throws
+    /// std::bad_optional_access in Release if called before Init() (or after Shutdown()) rather
+    /// than dereferencing an empty std::optional.
     [[nodiscard]] EngineServicesUVE& GetServicesUVE();
 
     /// Returns this build's engine version — the single source of truth

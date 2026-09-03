@@ -7,6 +7,7 @@
 #include <cstring>
 #include <limits>
 #include <new>
+#include <stdexcept>
 
 #include "uve/debug/assert_uve.h"
 #include "uve/memory/alignment_utils_uve.h"
@@ -79,6 +80,15 @@ void* PoolAllocatorUVE::AllocateUVE(std::size_t sizeBytes, std::size_t alignment
     UVE_ASSERT(sizeBytes <= m_blockSizeBytes);
     UVE_ASSERT(alignment <= m_blockAlignment);
     UVE_ASSERT(m_freeListHead != nullptr);
+    if (sizeBytes > m_blockSizeBytes || alignment > m_blockAlignment) {
+        UVE_ERROR("PoolAllocatorUVE: request (size={}, align={}) exceeds this pool's block contract (size={}, align={})",
+                   sizeBytes, alignment, m_blockSizeBytes, m_blockAlignment);
+        throw std::invalid_argument("PoolAllocatorUVE::AllocateUVE: request exceeds block contract");
+    }
+    if (m_freeListHead == nullptr) {
+        UVE_ERROR("PoolAllocatorUVE: pool exhausted ({} of {} blocks in use)", m_usedBlockCount, m_blockCount);
+        throw std::bad_alloc{};
+    }
 
     void* const block = m_freeListHead;
     m_freeListHead = ReadNextPointerUVE(block);

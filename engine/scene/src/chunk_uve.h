@@ -19,6 +19,10 @@ namespace UVE::Scene::Detail {
 /// optimization, not needed for correctness now).
 inline constexpr std::size_t kChunkCapacityUVE = 512;
 
+/// Sentinel row returned by ReserveRowUVE() if called on a full chunk (Release-build backstop —
+/// no valid row is ever this value, since row indices are always < kChunkCapacityUVE).
+inline constexpr std::size_t kInvalidRowUVE = static_cast<std::size_t>(-1);
+
 /// ChunkUVE is one fixed-capacity (kChunkCapacityUVE-entity) block of an ArchetypeUVE's row
 /// storage. Each component type in the owning archetype's signature gets its own separately-
 /// allocated array of `size * kChunkCapacityUVE` bytes (simpler than interleaving multiple
@@ -54,7 +58,9 @@ public:
     [[nodiscard]] bool HasColumnUVE(std::type_index componentType) const;
 
     /// Reserves the next free row for `entity`. Every column's memory at that row is raw and
-    /// uninitialized until the caller constructs it (see class doc comment).
+    /// uninitialized until the caller constructs it (see class doc comment). UVE_ASSERTs the
+    /// chunk is not already full; also returns kInvalidRowUVE and logs an error in Release on a
+    /// full chunk, rather than writing past m_entitiesInChunk's capacity.
     [[nodiscard]] std::size_t ReserveRowUVE(EntityUVE entity);
 
     /// Default-constructs `componentType`'s data at `row`.
@@ -69,9 +75,13 @@ public:
     /// Compacts the chunk after `row`'s data has already been fully destroyed/moved-out by the
     /// caller: if `row` wasn't the last occupied row, move-constructs the last row's data into
     /// `row` and returns the entity that moved (kInvalidEntityUVE if no move was needed).
+    /// UVE_ASSERTs `row` is in range; also returns kInvalidEntityUVE and logs an error in
+    /// Release on an out-of-range row, rather than reading/writing past m_count.
     [[nodiscard]] EntityUVE VacateRowUVE(std::size_t row);
 
     [[nodiscard]] void* GetComponentPointerUVE(std::type_index componentType, std::size_t row) const;
+    /// UVE_ASSERTs `row` is in range; also returns kInvalidEntityUVE and logs an error in
+    /// Release on an out-of-range row.
     [[nodiscard]] EntityUVE GetEntityAtRowUVE(std::size_t row) const;
 
     /// Moves `componentType`'s data from this chunk's `sourceRow` into `destination`'s
