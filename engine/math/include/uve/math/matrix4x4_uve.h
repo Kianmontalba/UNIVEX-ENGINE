@@ -91,4 +91,18 @@ struct Matrix4x4UVE {
 /// Formats `matrix` as four `"(row0; row1; row2; row3)"`-style rows, for logging/debugging.
 [[nodiscard]] std::string ToStringUVE(const Matrix4x4UVE& matrix);
 
+/// Returns `matrix` transposed (`result.m[row][col] == matrix.m[col][row]`). Always succeeds -
+/// unlike TryInverseUVE(), transposition has no degenerate case.
+[[nodiscard]] Matrix4x4UVE TransposeUVE(const Matrix4x4UVE& matrix) noexcept;
+
+/// Attempts a general 4x4 matrix inverse via Gauss-Jordan elimination with partial pivoting.
+/// Returns false (leaving `outInverse` unspecified) if `matrix` is non-finite or numerically
+/// singular, matching the TryInverseUVE()/TryNormalizeUVE() convention used elsewhere in this
+/// module - callers must check the return value rather than assume a result. Handles the general
+/// case (any invertible 4x4, not just affine TRS matrices), since the primary use case - deriving
+/// a normal matrix as TransposeUVE(inverse) for correct lighting under non-uniform scale - only
+/// needs the upper-left 3x3 of the result, but a full 4x4 inverse is no more expensive to compute
+/// and stays reusable for future non-affine cases.
+[[nodiscard]] bool TryInverseUVE(const Matrix4x4UVE& matrix, Matrix4x4UVE& outInverse) noexcept;
+
 } // namespace UVE::Math

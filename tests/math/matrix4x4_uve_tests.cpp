@@ -300,5 +300,112 @@ TEST(Matrix4x4UVETest, ToStringUVE_FormatsAllFourRows) {
     EXPECT_NE(text.find(";"), std::string::npos);
 }
 
+TEST(Matrix4x4UVETest, TransposeUVE_Identity_IsUnchanged) {
+    constexpr Matrix4x4UVE identity = Matrix4x4UVE::IdentityUVE();
+
+    EXPECT_EQ(TransposeUVE(identity), identity);
+}
+
+TEST(Matrix4x4UVETest, TransposeUVE_SwapsRowsAndColumns) {
+    Matrix4x4UVE matrix = Matrix4x4UVE::IdentityUVE();
+    matrix.m[0][3] = 5.0F;
+    matrix.m[1][2] = 7.0F;
+
+    const Matrix4x4UVE transposed = TransposeUVE(matrix);
+
+    EXPECT_FLOAT_EQ(transposed.m[3][0], 5.0F);
+    EXPECT_FLOAT_EQ(transposed.m[2][1], 7.0F);
+    EXPECT_FLOAT_EQ(transposed.m[0][3], 0.0F);
+    EXPECT_FLOAT_EQ(transposed.m[1][2], 0.0F);
+}
+
+TEST(Matrix4x4UVETest, TransposeUVE_AppliedTwice_RestoresOriginal) {
+    const Matrix4x4UVE matrix = Matrix4x4UVE::ComposeTrsUVE(
+        Vector3UVE{1.0F, -2.0F, 3.5F}, QuaternionUVE{}, Vector3UVE{2.0F, 3.0F, 4.0F});
+
+    const Matrix4x4UVE roundTripped = TransposeUVE(TransposeUVE(matrix));
+
+    EXPECT_EQ(roundTripped, matrix);
+}
+
+TEST(Matrix4x4UVETest, TryInverseUVE_Identity_ReturnsIdentity) {
+    constexpr Matrix4x4UVE identity = Matrix4x4UVE::IdentityUVE();
+    Matrix4x4UVE inverse{};
+
+    ASSERT_TRUE(TryInverseUVE(identity, inverse));
+    EXPECT_EQ(inverse, identity);
+}
+
+TEST(Matrix4x4UVETest, TryInverseUVE_UniformScaleTrs_MultipliesBackToIdentity) {
+    const Matrix4x4UVE matrix = Matrix4x4UVE::ComposeTrsUVE(
+        Vector3UVE{3.0F, -4.0F, 5.0F}, QuaternionUVE{0.0F, 0.0F, std::numbers::sqrt2_v<float> / 2.0F,
+                                                        std::numbers::sqrt2_v<float> / 2.0F},
+        Vector3UVE{2.0F, 2.0F, 2.0F});
+    Matrix4x4UVE inverse{};
+
+    ASSERT_TRUE(TryInverseUVE(matrix, inverse));
+    const Matrix4x4UVE roundTripped = matrix * inverse;
+    for (int row = 0; row < 4; ++row) {
+        for (int col = 0; col < 4; ++col) {
+            EXPECT_NEAR(roundTripped.m[row][col], Matrix4x4UVE::IdentityUVE().m[row][col], kEpsilon);
+        }
+    }
+}
+
+TEST(Matrix4x4UVETest, TryInverseUVE_NonUniformScaleTrs_MultipliesBackToIdentity) {
+    const Matrix4x4UVE matrix = Matrix4x4UVE::ComposeTrsUVE(
+        Vector3UVE{-1.0F, 2.0F, -3.0F}, QuaternionUVE{}, Vector3UVE{2.0F, 0.5F, 4.0F});
+    Matrix4x4UVE inverse{};
+
+    ASSERT_TRUE(TryInverseUVE(matrix, inverse));
+    const Matrix4x4UVE roundTripped = matrix * inverse;
+    for (int row = 0; row < 4; ++row) {
+        for (int col = 0; col < 4; ++col) {
+            EXPECT_NEAR(roundTripped.m[row][col], Matrix4x4UVE::IdentityUVE().m[row][col], kEpsilon);
+        }
+    }
+}
+
+TEST(Matrix4x4UVETest, TryInverseUVE_SingularMatrix_ReturnsFalse) {
+    Matrix4x4UVE singular{};
+    singular.m[0][0] = 0.0F;
+    singular.m[1][1] = 0.0F;
+    singular.m[2][2] = 0.0F;
+    singular.m[3][3] = 0.0F;
+    Matrix4x4UVE inverse{};
+
+    EXPECT_FALSE(TryInverseUVE(singular, inverse));
+}
+
+TEST(Matrix4x4UVETest, TryInverseUVE_NonFiniteMatrix_ReturnsFalse) {
+    Matrix4x4UVE matrix = Matrix4x4UVE::IdentityUVE();
+    matrix.m[1][2] = std::numeric_limits<float>::infinity();
+    Matrix4x4UVE inverse{};
+
+    EXPECT_FALSE(TryInverseUVE(matrix, inverse));
+}
+
+TEST(Matrix4x4UVETest, TryInverseUVE_NonUniformScale_NormalMatrixTransformsNormalPerpendicularToSurface) {
+    // Regression for the normal-matrix bug: a plane through the origin with normal +Y, scaled 4x
+    // along X. The tangent-plane vectors (+X, +Z) get carried by the model matrix directly; the
+    // transformed normal must stay perpendicular to both, which mat3(model) alone would not
+    // guarantee for a non-uniform scale in the direction perpendicular to the normal it's applied to.
+    const Matrix4x4UVE model = Matrix4x4UVE::ComposeTrsUVE(Vector3UVE{0.0F, 0.0F, 0.0F}, QuaternionUVE{},
+                                                             Vector3UVE{4.0F, 1.0F, 1.0F});
+    Matrix4x4UVE inverse{};
+    ASSERT_TRUE(TryInverseUVE(model, inverse));
+    const Matrix4x4UVE normalMatrix = TransposeUVE(inverse);
+
+    const Vector3UVE tangentX = TransformPointUVE(model, Vector3UVE{1.0F, 0.0F, 0.0F}) -
+                                TransformPointUVE(model, Vector3UVE{0.0F, 0.0F, 0.0F});
+    const Vector3UVE tangentZ = TransformPointUVE(model, Vector3UVE{0.0F, 0.0F, 1.0F}) -
+                                TransformPointUVE(model, Vector3UVE{0.0F, 0.0F, 0.0F});
+    const Vector3UVE transformedNormal = TransformPointUVE(normalMatrix, Vector3UVE{0.0F, 1.0F, 0.0F}) -
+                                         TransformPointUVE(normalMatrix, Vector3UVE{0.0F, 0.0F, 0.0F});
+
+    EXPECT_NEAR(DotUVE(transformedNormal, tangentX), 0.0F, kEpsilon);
+    EXPECT_NEAR(DotUVE(transformedNormal, tangentZ), 0.0F, kEpsilon);
+}
+
 } // namespace
 } // namespace UVE::Math::Tests

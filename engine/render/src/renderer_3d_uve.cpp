@@ -948,6 +948,18 @@ struct Renderer3DUVE::ImplUVE {
             }
 
             program->SetMatrix4x4UVE("uModel", item.worldMatrix);
+            // Normal matrix = transpose(inverse(model)): using uModel directly to transform
+            // normals (as lit_shadowed_3d.glsl previously did) only preserves normal direction
+            // under uniform scale / rigid transforms - it produces non-perpendicular, incorrectly
+            // shaded normals under non-uniform scale. Falls back to uModel itself (a no-op change
+            // for uniform-scale items) when the matrix is singular, since a singular world matrix
+            // means the item wouldn't project to visible geometry anyway.
+            Math::Matrix4x4UVE normalMatrix = item.worldMatrix;
+            Math::Matrix4x4UVE inverseWorldMatrix{};
+            if (Math::TryInverseUVE(item.worldMatrix, inverseWorldMatrix)) {
+                normalMatrix = Math::TransposeUVE(inverseWorldMatrix);
+            }
+            program->SetMatrix4x4UVE("uNormalMatrix", normalMatrix);
             program->SetMatrix4x4UVE("uViewProjection", frameUniforms.viewProjection);
             program->SetVector3UVE("uAmbientColor", frameUniforms.ambientColor);
             program->SetVector3UVE("uViewPosition", frameUniforms.viewPosition);
