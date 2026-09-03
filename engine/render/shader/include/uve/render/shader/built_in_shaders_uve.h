@@ -40,4 +40,16 @@ extern const std::string_view kEditorViewportEnvironmentSource;
 inline constexpr std::string_view kParticleVirtualPath = "shaders/particle.glsl";
 extern const std::string_view kParticleSource;
 
+inline constexpr std::string_view kBloomBrightPassVirtualPath = "shaders/bloom_bright_pass.glsl";
+extern const std::string_view kBloomBrightPassSource;
+
+inline constexpr std::string_view kBloomBlurVirtualPath = "shaders/bloom_blur.glsl";
+extern const std::string_view kBloomBlurSource;
+
+inline constexpr std::string_view kFullscreenCopyVirtualPath = "shaders/fullscreen_copy.glsl";
+extern const std::string_view kFullscreenCopySource;
+
+inline constexpr std::string_view kSsaoVirtualPath = "shaders/ssao.glsl";
+extern const std::string_view kSsaoSource;
+
 } // namespace UVE::Render::Shader::BuiltIn

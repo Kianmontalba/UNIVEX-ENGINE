@@ -40,6 +40,15 @@ struct EditorViewportVisualStateUVE final {
     float orthographicScale = 10.0F;
 };
 
+/// Phase 2b post-process quality-tier toggles. Both default to enabled, matching this project's
+/// "on unless a low-end tier opts out" precedent already set by shadow mapping; each is checked
+/// independently when Renderer3DUVE builds its per-frame render graph, so disabling one skips that
+/// pass's GPU work entirely rather than merely hiding its visual contribution.
+struct PostProcessSettingsUVE final {
+    bool bloomEnabledUVE = true;
+    bool ssaoEnabledUVE = true;
+};
+
 /// A copied, frame-local account of observable Renderer3DUVE work. Each field names evidence that
 /// the renderer actually has: extraction and recorded-pass/draw counts are CPU-side facts;
 /// `glDrawCallsIssued` means a draw call was dispatched through the immediate OpenGL backend, not
@@ -72,6 +81,13 @@ struct Renderer3DFrameDiagnosticsUVE final {
     bool editorVisualPassRecorded = false;
     bool particleItemsTruncated = false;
     bool particleDrawCommandsSubmissionTruncated = false;
+    /// True only when SSAO was enabled (PostProcessSettingsUVE), its post-process targets and
+    /// programs were valid, and the camera's projection matrix was invertible this frame - not
+    /// merely that SSAO was requested.
+    bool ssaoPassRecorded = false;
+    /// True only when bloom was enabled (PostProcessSettingsUVE) and its post-process targets and
+    /// programs were valid this frame - not merely that bloom was requested.
+    bool bloomPassRecorded = false;
 };
 
 /// IRenderer3DUVE is the engine's final per-frame render orchestrator (the spec's `Renderer3DUVE`,
@@ -118,6 +134,13 @@ public:
     /// implementation is intentionally a no-op so non-Renderer3D test doubles need not own editor state.
     virtual void SetEditorViewportVisualStateUVE(const EditorViewportVisualStateUVE& state) {
         static_cast<void>(state);
+    }
+
+    /// Updates the Phase 2b post-process quality-tier toggles for later render frames. The default
+    /// implementation is intentionally a no-op so non-Renderer3D test doubles need not own
+    /// post-process state.
+    virtual void SetPostProcessSettingsUVE(const PostProcessSettingsUVE& settings) {
+        static_cast<void>(settings);
     }
 
     /// Returns the last frame's copied renderer evidence snapshot. The snapshot intentionally does

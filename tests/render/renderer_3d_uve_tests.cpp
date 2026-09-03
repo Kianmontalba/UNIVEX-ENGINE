@@ -715,8 +715,10 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_MaterialWithoutTextures_UsesFallbackTex
 
     const std::vector<RecordedCommandUVE>& commands = renderDevice.GetLastSubmittedCommandsUVE();
     // Slot 3 (the shadow map, bound once per item in the main pass regardless of material) is
-    // excluded here. The final slot-0 bind is the HDR scene color consumed by the fullscreen
-    // tone-mapping pass; the first six remain the two items' material fallback bindings.
+    // excluded here. The first six remain the two items' material fallback bindings, recorded
+    // during the MainColor pass before any of the slot-0 fullscreen post-process binds that
+    // follow it (Phase 2b SSAO + SSAOComposite + BloomBrightPass + BloomBlurH + BloomBlurV +
+    // BloomComposite, six single-texture passes, then finally ToneMapping's source bind).
     std::vector<BindTextureCommandUVE> textureBinds;
     for (const RecordedCommandUVE& command : commands) {
         if (const auto* const bindTexture = std::get_if<BindTextureCommandUVE>(&command)) {
@@ -725,7 +727,8 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_MaterialWithoutTextures_UsesFallbackTex
             }
         }
     }
-    ASSERT_EQ(textureBinds.size(), 7U); // 2 items x 3 material texture slots, then tone-map source
+    // 2 items x 3 material texture slots, then 6 Phase 2b post-process passes, then tone-map source.
+    ASSERT_EQ(textureBinds.size(), 13U);
 
     // Group by slot: item1's slot-N handle must equal item2's slot-N handle (fallback reuse
     // across two independently-resolved materials), and the albedo/AO slots (both default to the
@@ -1001,18 +1004,22 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_TextureAssetNotYetReady_SkipsItemUntilL
     WaitUntilAssetsReadyUVE(meshGuid, materialGuid);
 
     // The texture load kicked off inside this call is blocked on textureLoadGateUVE, so the item
-    // must be skipped this frame. With no directional light, the optimized renderer records no
-    // shadow passes: the empty main pass is followed by the independent tone-mapping output pass.
+    // must be skipped this frame - checked below via the absence of any indexed draw, which is
+    // what a real mesh item would need to have produced. Fixed command indices/counts are
+    // deliberately avoided here: how many Phase 2b post-process passes (SSAO, bloom) execute
+    // between the main pass and tone-mapping isn't this test's concern, and hardcoding them made
+    // this assertion brittle to changes entirely unrelated to texture-readiness skipping.
     renderer3D->RenderFrameUVE(entityManager, cameraEntity);
     const std::vector<RecordedCommandUVE> commandsBeforeReady = renderDevice.GetLastSubmittedCommandsUVE();
     // Release the loader before assertions so any failed expectation cannot strand its worker thread.
     textureLoadGateUVE = true;
-    ASSERT_EQ(commandsBeforeReady.size(), 8U);
-    EXPECT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commandsBeforeReady[0U]));
-    EXPECT_TRUE(std::holds_alternative<EndRenderPassCommandUVE>(commandsBeforeReady[1U]));
-    EXPECT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commandsBeforeReady[2U]));
-    EXPECT_TRUE(std::holds_alternative<DrawCommandUVE>(commandsBeforeReady[6U]));
-    EXPECT_TRUE(std::holds_alternative<EndRenderPassCommandUVE>(commandsBeforeReady[7U]));
+    ASSERT_FALSE(commandsBeforeReady.empty());
+    EXPECT_FALSE(std::any_of(commandsBeforeReady.cbegin(), commandsBeforeReady.cend(),
+                              [](const RecordedCommandUVE& command) {
+                                  return std::holds_alternative<DrawIndexedCommandUVE>(command);
+                              }));
+    EXPECT_TRUE(std::holds_alternative<BeginRenderPassCommandUVE>(commandsBeforeReady.front()));
+    EXPECT_TRUE(std::holds_alternative<EndRenderPassCommandUVE>(commandsBeforeReady.back()));
 
 
     WaitUntilTextureReadyUVE(textureGuid);

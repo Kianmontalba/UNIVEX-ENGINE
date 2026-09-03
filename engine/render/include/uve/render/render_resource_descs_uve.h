@@ -190,14 +190,19 @@ enum class PrimitiveTopologyUVE : std::uint8_t { Triangles };
 }
 
 /// Explicit color blending policy for a pipeline. SourceAlphaOver is the conventional premultiplied-
-/// independent source-alpha composite used by editor-only visual overlays; it remains opt-in so
-/// ordinary scene and tone-mapping pipelines preserve their existing opaque behavior.
-enum class PipelineBlendModeUVE : std::uint8_t { Opaque, SourceAlphaOver };
+/// independent source-alpha composite used by editor-only visual overlays; Additive (destination +=
+/// source, `glBlendFunc(GL_ONE, GL_ONE)`) composites the Phase 2b bloom blur result onto the HDR
+/// scene color; Multiply (destination *= source, `glBlendFunc(GL_DST_COLOR, GL_ZERO)`) composites
+/// the Phase 2b SSAO occlusion term the same way. All three remain opt-in so ordinary scene and
+/// tone-mapping pipelines preserve their existing opaque behavior.
+enum class PipelineBlendModeUVE : std::uint8_t { Opaque, SourceAlphaOver, Additive, Multiply };
 
 [[nodiscard]] constexpr bool IsPipelineBlendModeValidUVE(const PipelineBlendModeUVE blendMode) noexcept {
     switch (blendMode) {
         case PipelineBlendModeUVE::Opaque:
         case PipelineBlendModeUVE::SourceAlphaOver:
+        case PipelineBlendModeUVE::Additive:
+        case PipelineBlendModeUVE::Multiply:
             return true;
     }
     return false;
