@@ -490,6 +490,10 @@ void EditorUVE::InitUVE() {
     if (windowManager.IsValidUVE() && windowManager.GetNativeWindowHandleUVE() != nullptr) {
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
+        // Docking only - no ImGuiConfigFlags_ViewportsEnable: multi-OS-window docking pulls in a
+        // second GLFW/OpenGL presentation path this editor's single-window WindowManagerUVE
+        // integration was never built for, and nothing in this pass's scope needs it.
+        ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
         ImGui::StyleColorsDark();
         ApplyEditorVisualThemeUVE();
 
@@ -5133,12 +5137,13 @@ void EditorUVE::DrawBottomDockContentUVE() {
 
     const ImGuiViewport* const mainViewport = ImGui::GetMainViewport();
     const float contentHeight = kAssetsPanelHeightUVE;
+    // FirstUseEver, not Always - see DrawHierarchyPanelUVE()'s comment on the same change.
     ImGui::SetNextWindowPos(
         ImVec2{mainViewport->WorkPos.x, mainViewport->WorkPos.y + mainViewport->WorkSize.y -
                                       kAssetsPanelHeightUVE},
-        ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2{mainViewport->WorkSize.x, contentHeight}, ImGuiCond_Always);
-    constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize;
+        ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2{mainViewport->WorkSize.x, contentHeight}, ImGuiCond_FirstUseEver);
+    constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse;
     ImGui::Begin("Debug##lower-workspace", nullptr, flags);
     switch (m_activeBottomDock) {
         case EditorBottomDockUVE::Debugger: {
@@ -5238,10 +5243,14 @@ void EditorUVE::DrawHierarchyPanelUVE() {
     const float menuBarHeight = kEditorTopChromeHeightUVE;
     const float workspaceHeight = std::max(kMinimumViewportHeightUVE,
                                                   mainViewport->WorkSize.y - menuBarHeight - (m_bottomDockVisible ? kAssetsPanelHeightUVE : 0.0F));
+    // ImGuiCond_FirstUseEver, not Always: this is the panel's default floating position/size
+    // (matching the pre-docking layout exactly) for a fresh session with no saved imgui.ini
+    // layout - once docking is enabled, forcing it every frame would fight the user's own
+    // drag/resize/dock placement and ImGui's own persisted layout on subsequent launches.
     ImGui::SetNextWindowPos(ImVec2{mainViewport->WorkPos.x, mainViewport->WorkPos.y + menuBarHeight},
-                            ImGuiCond_Always);
+                            ImGuiCond_FirstUseEver);
     const float scenePanelWidth = std::clamp(mainViewport->WorkSize.x * 0.19F, 208.0F, 292.0F);
-    ImGui::SetNextWindowSize(ImVec2{scenePanelWidth, workspaceHeight}, ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2{scenePanelWidth, workspaceHeight}, ImGuiCond_FirstUseEver);
     ImGui::Begin("Scene##scene-panel");
     std::array<char, 256> filterBuffer{};
     m_hierarchyFilter.copy(filterBuffer.data(), filterBuffer.size() - 1U);
@@ -5467,13 +5476,18 @@ void EditorUVE::DrawInspectorPanelUVE() {
     const float workspaceHeight = std::max(kMinimumViewportHeightUVE,
                                            mainViewport->WorkSize.y - menuBarHeight - (m_bottomDockVisible ? kAssetsPanelHeightUVE : 0.0F));
     const float inspectorPanelWidth = std::clamp(mainViewport->WorkSize.x * 0.22F, 264.0F, 356.0F);
+    // FirstUseEver, not Always - see DrawHierarchyPanelUVE()'s comment on the same change.
     ImGui::SetNextWindowPos(
         ImVec2{mainViewport->WorkPos.x + mainViewport->WorkSize.x - inspectorPanelWidth,
-               mainViewport->WorkPos.y + menuBarHeight}, ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2{inspectorPanelWidth, workspaceHeight}, ImGuiCond_Always);
-    constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove |
-                                       ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar;
-    ImGui::Begin("##right-panel", nullptr, flags);
+               mainViewport->WorkPos.y + menuBarHeight}, ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2{inspectorPanelWidth, workspaceHeight}, ImGuiCond_FirstUseEver);
+    // NoTitleBar dropped (was the only flag actually blocking dragging - dockable/draggable
+    // windows need a title bar as their default drag handle) and given a real title: an internal
+    // Inspector/Import/Signals tab strip already exists below via Selectable(), so the window
+    // title identifies the *panel* to dock/drag by, while that internal strip still switches the
+    // panel's *content* - two different, non-conflicting notions of "tab".
+    constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse;
+    ImGui::Begin("Inspector##right-panel", nullptr, flags);
 
     const auto drawRightPanelTab = [this](const char* const label, const EditorRightPanelTabUVE tab) {
         const bool active = m_activeRightPanelTab == tab;
@@ -6186,14 +6200,15 @@ void EditorUVE::DrawFolderContentsPanelUVE() {
     const float contentHeight = kAssetsPanelHeightUVE;
     const float projectWidth = std::clamp(mainViewport->WorkSize.x * 0.60F, 420.0F, mainViewport->WorkSize.x - 280.0F);
     const float contentsWidth = std::max(280.0F, mainViewport->WorkSize.x - projectWidth);
+    // FirstUseEver, not Always - see DrawHierarchyPanelUVE()'s comment on the same change.
     ImGui::SetNextWindowPos(
         ImVec2{mainViewport->WorkPos.x + projectWidth,
                mainViewport->WorkPos.y + mainViewport->WorkSize.y - kAssetsPanelHeightUVE},
-        ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2{contentsWidth, contentHeight}, ImGuiCond_Always);
-    constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove |
-                                       ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar;
-    ImGui::Begin("##folder-contents-panel", nullptr, flags);
+        ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2{contentsWidth, contentHeight}, ImGuiCond_FirstUseEver);
+    // NoTitleBar dropped (see DrawInspectorPanelUVE()'s comment) and given a real title.
+    constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse;
+    ImGui::Begin("Contents##folder-contents-panel", nullptr, flags);
 
     const Asset::ProjectFileSnapshotUVE snapshot = m_services->GetProjectFileIndexUVE().GetSnapshotUVE();
     const auto mainDirectoryIt = std::find_if(
@@ -6422,14 +6437,17 @@ void EditorUVE::DrawAssetsPanelUVE() {
     const ImGuiViewport* const mainViewport = ImGui::GetMainViewport();
     const float contentHeight = kAssetsPanelHeightUVE;
     const float projectWidth = std::clamp(mainViewport->WorkSize.x * 0.60F, 420.0F, mainViewport->WorkSize.x - 280.0F);
+    // FirstUseEver, not Always - see DrawHierarchyPanelUVE()'s comment on the same change.
     ImGui::SetNextWindowPos(
         ImVec2{mainViewport->WorkPos.x,
                mainViewport->WorkPos.y + mainViewport->WorkSize.y - kAssetsPanelHeightUVE},
-        ImGuiCond_Always);
-    ImGui::SetNextWindowSize(ImVec2{projectWidth, contentHeight}, ImGuiCond_Always);
-    constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoMove |
-                                       ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar;
-    ImGui::Begin("##project-panel", nullptr, flags);
+        ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2{projectWidth, contentHeight}, ImGuiCond_FirstUseEver);
+    // NoTitleBar dropped (see DrawInspectorPanelUVE()'s comment) and given a real title. The
+    // panel's own "FILESYSTEM" text label a few lines below is unrelated in-content chrome, not
+    // this window's identifying title, so both can coexist without looking redundant.
+    constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse;
+    ImGui::Begin("Filesystem##project-panel", nullptr, flags);
 
     Asset::IProjectFileIndexUVE& projectFileIndex = m_services->GetProjectFileIndexUVE();
     const Asset::ProjectChangeSnapshotUVE changeSnapshot = m_services->GetProjectChangeWatcherUVE().GetSnapshotUVE();
@@ -7408,14 +7426,23 @@ void EditorUVE::DrawViewportPanelUVE() {
         std::max(kMinimumViewportWidthUVE, mainViewport->WorkSize.x - leftInset - rightInset),
         std::max(kMinimumViewportHeightUVE, mainViewport->WorkSize.y - menuBarHeight - bottomInset),
     };
-    ImGui::SetNextWindowPos(desiredPosition, ImGuiCond_Always);
-    ImGui::SetNextWindowSize(desiredSize, ImGuiCond_Always);
+    // FirstUseEver, not Always - see DrawHierarchyPanelUVE()'s comment on the same change. This
+    // window carries no visual content of its own (NoBackground - the 3D scene behind it is
+    // presented directly to the window's default framebuffer, not drawn "into" this window); it
+    // exists to own the input hit-test rectangle and, below, to report its own live
+    // position/size back to Renderer3DUVE as a normalized region (visualState.viewportMinX/Y/...)
+    // every frame. That feedback loop is computed fresh from this window's actual geometry each
+    // frame regardless of where the window ends up, so making it draggable/dockable is safe: the
+    // 3D scene keeps tracking wherever the user drags, resizes, or docks this panel to.
+    ImGui::SetNextWindowPos(desiredPosition, ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(desiredSize, ImGuiCond_FirstUseEver);
     ImGui::SetNextWindowBgAlpha(0.0F);
+    // NoTitleBar dropped (see DrawInspectorPanelUVE()'s comment) so a draggable/dockable title
+    // strip renders above the transparent 3D content; every other flag is unchanged.
     constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoCollapse |
                                        ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus |
-                                       ImGuiWindowFlags_NoScrollbar |
-                                       ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoTitleBar;
-    ImGui::Begin("Scene##viewport", nullptr, flags);
+                                       ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
+    ImGui::Begin("Viewport##viewport", nullptr, flags);
 
     const ImVec2 contentOrigin = ImGui::GetCursorScreenPos();
     const ImVec2 contentSize = ImGui::GetContentRegionAvail();

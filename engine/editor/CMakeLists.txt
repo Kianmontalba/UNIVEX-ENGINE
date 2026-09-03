@@ -4,13 +4,20 @@ find_package(OpenGL REQUIRED)
 include(FetchContent)
 
 # Pinned Dear ImGui source, following the repository's established GLFW/GoogleTest FetchContent
-# precedent. v1.91.5 resolves to f401021d5a5d56fe2304056c391e78f81c8d4b8f; ImGui has no target
-# suitable for this engine's restricted backend selection, so the exact required core + GLFW/OpenGL
-# implementation files are assembled below as an editor-private static target.
+# precedent. ImGui has no target suitable for this engine's restricted backend selection, so the
+# exact required core + GLFW/OpenGL implementation files are assembled below as an editor-private
+# static target.
+#
+# `docking` (not a tagged release) rather than a `v1.91.x` tag: the editor's panels need
+# DockSpace/DockBuilder, which do not exist in the non-docking mainline headers the engine
+# previously vendored. Upstream has not folded the docking branch into mainline, so this tracks
+# its HEAD rather than a pinned commit deliberately - re-resolve GIT_SHALLOW's fetched tip to
+# pick up upstream docking-branch fixes; if a specific commit ever needs pinning for
+# reproducibility, replace GIT_TAG's value with that commit hash directly.
 FetchContent_Declare(
     uve_imgui
     GIT_REPOSITORY https://github.com/ocornut/imgui.git
-    GIT_TAG v1.91.5
+    GIT_TAG docking
     GIT_SHALLOW TRUE
 )
 FetchContent_GetProperties(uve_imgui)
