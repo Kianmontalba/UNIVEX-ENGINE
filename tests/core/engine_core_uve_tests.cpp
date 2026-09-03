@@ -9,10 +9,12 @@
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <memory>
 #include <numbers>
 #include <limits>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
@@ -1463,6 +1465,151 @@ TEST(EngineCoreUVETest, PostRenderCallback_HeadlessModeDoesNotInvokeOverlay) {
 
     engine.SetPostRenderCallbackUVE({});
     engine.Shutdown();
+}
+
+// A-1 (P0): RunUVE() is a hard exception boundary - see its doc comment in engine_core_uve.h.
+// TickFrameUVE_UncaughtSubscriberException below proves the underlying mechanism is real (an
+// exception genuinely propagates out of a frame update when nothing catches it) using the real
+// EngineCoreUVE via IEventSystemUVE's public Subscribe()/QueueEvent() API - the same real
+// mechanism RunUVE()'s internal frame loop drives every frame via TickFrameUVE().
+//
+// The three RunUVEExceptionBoundaryHarness tests further down cover all three cases the fix
+// requires (throw during Init(), during Load(), during a frame update) against a small,
+// self-contained harness rather than the real EngineCoreUVE::RunUVE(): EngineCoreUVE constructs
+// roughly 34 concrete subsystems directly in Init(), each already written (per the D-1/SYS-1
+// audits) to avoid throwing wherever avoidable, so there is no deterministic, non-flaky way to
+// make Init() or Load() throw through EngineCoreUVE's public API alone. The harness reuses the
+// real EngineStateUVE/IsValidTransitionUVE/EngineCoreUVE::kUnhandledExceptionExitCodeUVE from
+// production code and reproduces RunUVE()'s documented contract exactly, so it verifies that
+// contract's logic even though it cannot substitute for exercising EngineCoreUVE::Init()/Load()
+// themselves.
+TEST(EngineCoreUVETest, TickFrameUVE_UncaughtSubscriberException_PropagatesInsteadOfBeingSwallowed) {
+    struct BoomEventUVE {};
+
+    EngineCoreUVE engine(MakeTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    engine.GetServicesUVE().GetEventSystemUVE().Subscribe<BoomEventUVE>(
+        [](const BoomEventUVE&) { throw std::runtime_error("subscriber exploded"); });
+    engine.GetServicesUVE().GetEventSystemUVE().QueueEvent(BoomEventUVE{});
+
+    // TickFrameUVE() itself has no exception boundary by design - RunUVE() is the boundary (see
+    // its doc comment), so a caller driving frames directly (this test, and the editor's
+    // hand-rolled loop in engine/app/src/editor/main.cpp) is responsible for its own. Confirms
+    // the exception is genuinely uncaught here, not silently swallowed somewhere internally.
+    EXPECT_THROW(engine.TickFrameUVE(), std::runtime_error);
+    EXPECT_EQ(engine.GetStateUVE(), EngineStateUVE::Running); // still mid-run; clean up explicitly
+    engine.Shutdown();
+}
+
+namespace {
+
+/// Reproduces EngineCoreUVE::RunUVE()'s documented exception-boundary contract in isolation
+/// (see the comment above TickFrameUVE_UncaughtSubscriberException_PropagatesInsteadOfBeingSwallowed
+/// for why): catches any exception thrown by an injected Init()/Load()/frame-update hook, calls a
+/// Shutdown()-equivalent only if state had actually reached Running (an exception during Init()
+/// itself must not force it - see RunUVE()'s doc comment), never lets a second exception from
+/// that Shutdown()-equivalent escape either, and returns EngineCoreUVE::kUnhandledExceptionExitCodeUVE.
+class RunUVEExceptionBoundaryHarnessUVE final {
+public:
+    std::function<void()> onInit;
+    std::function<bool()> onLoad = [] { return true; };
+    std::function<void()> onFrameUpdate;
+
+    int RunUVE(int frameCount) {
+        try {
+            TransitionUVE(EngineStateUVE::Initializing);
+            if (onInit) {
+                onInit();
+            }
+            TransitionUVE(EngineStateUVE::Running);
+            if (onLoad && !onLoad()) {
+                ShutdownUVE();
+                return 1;
+            }
+            for (int frame = 0; frame < frameCount; ++frame) {
+                if (onFrameUpdate) {
+                    onFrameUpdate();
+                }
+            }
+            ShutdownUVE();
+            return 0;
+        } catch (const std::exception&) {
+            // Production logs via UVE_FATAL here; nothing to assert on in this harness.
+        } catch (...) {
+        }
+        if (m_state == EngineStateUVE::Running) {
+            try {
+                ShutdownUVE();
+            } catch (...) {
+                m_shutdownThrew = true;
+            }
+        }
+        return EngineCoreUVE::kUnhandledExceptionExitCodeUVE;
+    }
+
+    [[nodiscard]] bool ShutdownRanUVE() const noexcept { return m_shutdownRan; }
+    [[nodiscard]] bool ShutdownThrewUVE() const noexcept { return m_shutdownThrew; }
+    [[nodiscard]] EngineStateUVE GetStateUVE() const noexcept { return m_state; }
+
+private:
+    void TransitionUVE(EngineStateUVE newState) {
+        // Mirrors EngineCoreUVE::TransitionStateUVE()'s own UVE_ASSERT(IsValidTransitionUVE(...))
+        // guard - a failure here is a bug in this harness's own test-hook wiring, not in the
+        // property under test, so a plain non-fatal EXPECT_TRUE is enough to surface it.
+        EXPECT_TRUE(IsValidTransitionUVE(m_state, newState));
+        m_state = newState;
+    }
+
+    void ShutdownUVE() {
+        TransitionUVE(EngineStateUVE::ShuttingDown);
+        m_shutdownRan = true;
+        TransitionUVE(EngineStateUVE::Shutdown);
+    }
+
+    EngineStateUVE m_state = EngineStateUVE::Uninitialized;
+    bool m_shutdownRan = false;
+    bool m_shutdownThrew = false;
+};
+
+} // namespace
+
+TEST(RunUVEExceptionBoundaryHarnessUVETest, ThrowDuringInit_ReturnsDistinctCodeAndSkipsUnsafeShutdown) {
+    RunUVEExceptionBoundaryHarnessUVE harness;
+    harness.onInit = [] { throw std::runtime_error("boom during init"); };
+
+    EXPECT_EQ(harness.RunUVE(1), EngineCoreUVE::kUnhandledExceptionExitCodeUVE);
+    // State never reached Running - the real EngineCoreUVE::Shutdown() would dereference
+    // subsystems Init() never got to construct, so it must not run here either.
+    EXPECT_FALSE(harness.ShutdownRanUVE());
+    EXPECT_EQ(harness.GetStateUVE(), EngineStateUVE::Initializing);
+}
+
+TEST(RunUVEExceptionBoundaryHarnessUVETest, ThrowDuringLoad_RunsShutdownInNormalOrderAndReturnsDistinctCode) {
+    RunUVEExceptionBoundaryHarnessUVE harness;
+    harness.onLoad = []() -> bool { throw std::runtime_error("boom during load"); };
+
+    EXPECT_EQ(harness.RunUVE(1), EngineCoreUVE::kUnhandledExceptionExitCodeUVE);
+    EXPECT_TRUE(harness.ShutdownRanUVE());
+    EXPECT_FALSE(harness.ShutdownThrewUVE());
+    EXPECT_EQ(harness.GetStateUVE(), EngineStateUVE::Shutdown);
+}
+
+TEST(RunUVEExceptionBoundaryHarnessUVETest, ThrowDuringFrameUpdate_RunsShutdownInNormalOrderAndReturnsDistinctCode) {
+    RunUVEExceptionBoundaryHarnessUVE harness;
+    int framesRun = 0;
+    harness.onFrameUpdate = [&framesRun] {
+        ++framesRun;
+        if (framesRun == 2) {
+            throw std::runtime_error("boom mid-loop");
+        }
+    };
+
+    EXPECT_EQ(harness.RunUVE(5), EngineCoreUVE::kUnhandledExceptionExitCodeUVE);
+    EXPECT_EQ(framesRun, 2); // stopped exactly at the throwing frame, not all 5
+    EXPECT_TRUE(harness.ShutdownRanUVE());
+    EXPECT_EQ(harness.GetStateUVE(), EngineStateUVE::Shutdown);
 }
 
 #if UVE_DEBUG

@@ -147,6 +147,16 @@ namespace UVE::Core {
 /// EngineCoreUVE's own methods are not thread-safe).
 class EngineCoreUVE final : public ISimulationControlUVE {
 public:
+    /// Distinct process exit code RunUVE() returns if an exception (of any type) escaped
+    /// Init(), Load(), or a frame update and was caught at RunUVE()'s own top-level boundary,
+    /// instead of propagating out and terminating the process via std::terminate(). Deliberately
+    /// distinct from 0 (clean success) and 1 (a reported Load() failure), so a caller, CI, or
+    /// crash-reporting tooling can tell "the engine crashed" apart from either of those. Any
+    /// other desktop entry point that drives EngineCoreUVE's lifecycle outside RunUVE() (see
+    /// engine/app/src/editor/main.cpp) returns this same value for the same reason, so the code
+    /// means the same thing everywhere it appears.
+    static constexpr int kUnhandledExceptionExitCodeUVE = 2;
+
     explicit EngineCoreUVE(EngineConfigUVE config = {});
     ~EngineCoreUVE();
 
@@ -232,6 +242,18 @@ public:
     /// >= 0. Returns 0 on success, 1 if Load() failed. Deterministic and
     /// headless-friendly — the mode used by both the uve_runtime executable
     /// and the unit test suite.
+    ///
+    /// RunUVE() is a hard exception boundary: this is the only entry point that guarantees it
+    /// never lets an exception escape, regardless of where in Init()/Load()/a frame update it
+    /// was thrown, or its type — an uncaught exception here would otherwise unwind straight out
+    /// of main() and terminate the process via std::terminate(), skipping Shutdown() entirely
+    /// and every subsystem's teardown (GPU/file/OS handles included). If one escapes, RunUVE()
+    /// logs it via UVE_FATAL, still runs Shutdown() — in its normal order — if the engine had
+    /// already reached EngineStateUVE::Running by then (otherwise Shutdown() itself would
+    /// dereference subsystems Init() never got to construct; RAII cleans up whatever subset did
+    /// construct once this function returns and `this` is destroyed), and returns
+    /// kUnhandledExceptionExitCodeUVE instead of 0 or 1 — never lets that second exception (from
+    /// Shutdown() itself) escape either. Callers do not need their own try/catch around RunUVE().
     int RunUVE(int frameCount);
 
     /// Runs exactly one frame: BeginFrame -> Update -> LateUpdate -> Render

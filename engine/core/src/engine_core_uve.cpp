@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <exception>
 #include <string>
 #include <vector>
 #include <utility>
@@ -733,16 +734,44 @@ void EngineCoreUVE::TickFrameUVE() {
 
 int EngineCoreUVE::RunUVE(int frameCount) {
     UVE_ASSERT(frameCount >= 0);
-    Init();
-    if (!Load()) {
+    try {
+        Init();
+        if (!Load()) {
+            Shutdown();
+            return 1;
+        }
+        for (int frameIndex = 0; frameIndex < frameCount && !m_quitRequested; ++frameIndex) {
+            TickFrameUVE();
+        }
         Shutdown();
-        return 1;
+        return 0;
+    } catch (const std::exception& exception) {
+        UVE_FATAL("EngineCoreUVE: RunUVE() caught an unhandled exception - shutting down: {}", exception.what());
+    } catch (...) {
+        UVE_FATAL("EngineCoreUVE: RunUVE() caught an unhandled non-std::exception - shutting down");
     }
-    for (int frameIndex = 0; frameIndex < frameCount && !m_quitRequested; ++frameIndex) {
-        TickFrameUVE();
+
+    // Reached only via one of the catches above. Shutdown() tears down every subsystem Init()
+    // constructed, in reverse order, and is only safe to call once m_state has actually reached
+    // Running (IsValidTransitionUVE() only allows Running -> ShuttingDown) - an exception thrown
+    // partway through Init() itself leaves m_state at Initializing, where subsystems Init() had
+    // not yet reached are still the null/empty state their declarations default-initialize them
+    // to, so Shutdown()'s unconditional dereferences (e.g. m_eventSystem->Clear()) would
+    // themselves crash. In that case teardown is left to EngineCoreUVE's own destructor, which
+    // runs normally once this function returns and `this` goes out of scope in the caller, and
+    // whose RAII members already know how to unwind whatever subset of construction completed.
+    if (m_state == EngineStateUVE::Running) {
+        try {
+            Shutdown();
+        } catch (const std::exception& exception) {
+            UVE_FATAL("EngineCoreUVE: Shutdown() itself threw while recovering from the exception above: {}",
+                       exception.what());
+        } catch (...) {
+            UVE_FATAL("EngineCoreUVE: Shutdown() itself threw a non-std::exception while recovering from "
+                       "the exception above");
+        }
     }
-    Shutdown();
-    return 0;
+    return kUnhandledExceptionExitCodeUVE;
 }
 
 void EngineCoreUVE::RequestQuitUVE() noexcept {

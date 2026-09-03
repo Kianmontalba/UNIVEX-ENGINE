@@ -2,6 +2,7 @@
 
 #include <charconv>
 #include <cstdint>
+#include <exception>
 #include <filesystem>
 #include <iostream>
 #include <optional>
@@ -10,6 +11,7 @@
 #include <vector>
 
 #include "uve/core/engine_core_uve.h"
+#include "uve/debug/logging_macros_uve.h"
 #include "uve/editor/editor_bridge_stdio_uve.h"
 #include "uve/editor/editor_uve.h"
 
@@ -91,6 +93,15 @@ struct EditorLaunchOptionsUVE final {
 /// `--headless` keeps the editor's non-visual lifecycle usable in CI and defaults to a single frame.
 /// `--bridge-stdio` always implies headless mode and runs a framed JSON-RPC bridge server instead
 /// of constructing native ImGui/GLFW presentation for this process.
+///
+/// The editor drives EngineCoreUVE's lifecycle by hand (Init()/Load()/TickFrameUVE()) rather than
+/// through RunUVE() — the one desktop entry point that does not automatically get RunUVE()'s
+/// built-in exception boundary (see EngineCoreUVE::RunUVE()'s doc comment) — so this function
+/// wraps that entire hand-driven lifecycle in its own boundary below, following the same shape:
+/// log via UVE_FATAL, still run Shutdown() if (and only if) the engine had reached
+/// EngineStateUVE::Running by the time something threw, and return
+/// EngineCoreUVE::kUnhandledExceptionExitCodeUVE instead of letting the exception unwind out of
+/// main() into std::terminate().
 int main(const int argc, char** argv) {
     const EditorLaunchOptionsUVE options = ParseOptionsUVE(argc, argv);
 
@@ -105,42 +116,68 @@ int main(const int argc, char** argv) {
     }
 
     UVE::Core::EngineCoreUVE engine(config);
-    engine.Init();
-    if (!engine.Load()) {
-        engine.Shutdown();
-        return 1;
-    }
+    try {
+        engine.Init();
+        if (!engine.Load()) {
+            engine.Shutdown();
+            return 1;
+        }
 
-    UVE::Editor::EditorUVE editor(engine.GetServicesUVE(), options.scenePath, 100U, &engine);
-    editor.InitUVE();
+        UVE::Editor::EditorUVE editor(engine.GetServicesUVE(), options.scenePath, 100U, &engine);
+        editor.InitUVE();
 
-    if (std::filesystem::exists(options.scenePath)) {
-        static_cast<void>(editor.LoadSceneUVE());
-    }
+        if (std::filesystem::exists(options.scenePath)) {
+            static_cast<void>(editor.LoadSceneUVE());
+        }
 
-    if (options.bridgeStdio) {
-        UVE::Asset::DataTableRegistryUVE dataTableRegistry;
-        UVE::Editor::EditorBridgeUVE bridge(editor, &dataTableRegistry);
-        UVE::Editor::EditorBridgeStdioServerUVE server(bridge);
-        const int result = server.ServeUVE(std::cin, std::cout, std::cerr);
+        if (options.bridgeStdio) {
+            UVE::Asset::DataTableRegistryUVE dataTableRegistry;
+            UVE::Editor::EditorBridgeUVE bridge(editor, &dataTableRegistry);
+            UVE::Editor::EditorBridgeStdioServerUVE server(bridge);
+            const int result = server.ServeUVE(std::cin, std::cout, std::cerr);
+            editor.ShutdownUVE();
+            engine.Shutdown();
+            return result;
+        }
+
+        engine.SetActiveCameraUVE(editor.GetViewportCameraUVE());
+        engine.SetPostRenderCallbackUVE([&editor] { editor.RenderOverlayUVE(); });
+
+        int framesRun = 0;
+        while (!engine.GetServicesUVE().GetWindowManagerUVE().IsCloseRequestedUVE() &&
+               (!options.frameLimit.has_value() || framesRun < *options.frameLimit)) {
+            editor.TickUVE();
+            engine.TickFrameUVE();
+            ++framesRun;
+        }
+
+        engine.SetPostRenderCallbackUVE({});
         editor.ShutdownUVE();
         engine.Shutdown();
-        return result;
+        return 0;
+    } catch (const std::exception& exception) {
+        UVE_FATAL("uve_editor_app: unhandled exception escaped the editor lifecycle - shutting down: {}",
+                   exception.what());
+    } catch (...) {
+        UVE_FATAL("uve_editor_app: unhandled non-std::exception escaped the editor lifecycle - shutting down");
     }
 
-    engine.SetActiveCameraUVE(editor.GetViewportCameraUVE());
-    engine.SetPostRenderCallbackUVE([&editor] { editor.RenderOverlayUVE(); });
-
-    int framesRun = 0;
-    while (!engine.GetServicesUVE().GetWindowManagerUVE().IsCloseRequestedUVE() &&
-           (!options.frameLimit.has_value() || framesRun < *options.frameLimit)) {
-        editor.TickUVE();
-        engine.TickFrameUVE();
-        ++framesRun;
+    // Reached only via one of the catches above. Only safe to call Shutdown() if the engine had
+    // actually reached Running - see EngineCoreUVE::RunUVE()'s doc comment for why an exception
+    // during Init() itself must not force a Shutdown() call. `editor` (and any object declared
+    // inside the try block above) is already out of scope here, having been destroyed normally
+    // during stack unwinding.
+    if (engine.GetStateUVE() == UVE::Core::EngineStateUVE::Running) {
+        try {
+            engine.Shutdown();
+        } catch (const std::exception& exception) {
+            UVE_FATAL("uve_editor_app: engine.Shutdown() itself threw while recovering from the exception "
+                       "above: {}",
+                       exception.what());
+        } catch (...) {
+            UVE_FATAL("uve_editor_app: engine.Shutdown() itself threw a non-std::exception while recovering "
+                       "from the exception above");
+        }
     }
-
-    engine.SetPostRenderCallbackUVE({});
-    editor.ShutdownUVE();
-    engine.Shutdown();
-    return 0;
+    return UVE::Core::EngineCoreUVE::kUnhandledExceptionExitCodeUVE;
 }
