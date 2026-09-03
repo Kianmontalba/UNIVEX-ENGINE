@@ -4,6 +4,7 @@
 #include "uve/math/matrix4x4_uve.h"
 
 #include <cmath>
+#include <utility>
 
 namespace UVE::Math {
 
@@ -153,6 +154,84 @@ Vector3UVE TransformPointUVE(const Matrix4x4UVE& matrix, Vector3UVE point) noexc
         static_cast<float>(transformedY),
         static_cast<float>(transformedZ),
     };
+}
+
+Matrix4x4UVE TransposeUVE(const Matrix4x4UVE& matrix) noexcept {
+    Matrix4x4UVE result{};
+    for (int row = 0; row < 4; ++row) {
+        for (int col = 0; col < 4; ++col) {
+            result.m[row][col] = matrix.m[col][row];
+        }
+    }
+    return result;
+}
+
+bool TryInverseUVE(const Matrix4x4UVE& matrix, Matrix4x4UVE& outInverse) noexcept {
+    // Gauss-Jordan elimination with partial pivoting on an augmented [matrix | identity] in
+    // double precision, following this module's established convention (see operator* and
+    // TransformPointUVE above) of accumulating in double even though the public type is float.
+    double augmented[4][8];
+    for (int row = 0; row < 4; ++row) {
+        for (int col = 0; col < 4; ++col) {
+            const double value = static_cast<double>(matrix.m[row][col]);
+            if (!std::isfinite(value)) {
+                return false;
+            }
+            augmented[row][col] = value;
+            augmented[row][col + 4] = (row == col) ? 1.0 : 0.0;
+        }
+    }
+
+    constexpr double kMinimumPivotUVE = 1e-9;
+    for (int pivotIndex = 0; pivotIndex < 4; ++pivotIndex) {
+        int pivotRow = pivotIndex;
+        double pivotMagnitude = std::abs(augmented[pivotIndex][pivotIndex]);
+        for (int row = pivotIndex + 1; row < 4; ++row) {
+            const double magnitude = std::abs(augmented[row][pivotIndex]);
+            if (magnitude > pivotMagnitude) {
+                pivotMagnitude = magnitude;
+                pivotRow = row;
+            }
+        }
+        if (pivotMagnitude < kMinimumPivotUVE) {
+            return false; // Singular (or numerically indistinguishable from singular).
+        }
+        if (pivotRow != pivotIndex) {
+            for (int col = 0; col < 8; ++col) {
+                std::swap(augmented[pivotIndex][col], augmented[pivotRow][col]);
+            }
+        }
+
+        const double pivot = augmented[pivotIndex][pivotIndex];
+        for (int col = 0; col < 8; ++col) {
+            augmented[pivotIndex][col] /= pivot;
+        }
+        for (int row = 0; row < 4; ++row) {
+            if (row == pivotIndex) {
+                continue;
+            }
+            const double factor = augmented[row][pivotIndex];
+            if (factor == 0.0) {
+                continue;
+            }
+            for (int col = 0; col < 8; ++col) {
+                augmented[row][col] -= factor * augmented[pivotIndex][col];
+            }
+        }
+    }
+
+    Matrix4x4UVE result{};
+    for (int row = 0; row < 4; ++row) {
+        for (int col = 0; col < 4; ++col) {
+            const double value = augmented[row][col + 4];
+            if (!std::isfinite(value)) {
+                return false;
+            }
+            result.m[row][col] = static_cast<float>(value);
+        }
+    }
+    outInverse = result;
+    return true;
 }
 
 std::string ToStringUVE(const Matrix4x4UVE& matrix) {

@@ -15,6 +15,11 @@ out vec4 vLightSpacePosition;
 out vec4 vLightSpacePositions[3];
 
 uniform mat4 uModel;
+// Transpose(inverse(uModel)): correctly transforms normals under non-uniform scale, unlike
+// uModel itself (which only preserves normal direction for uniform scale / rigid transforms).
+// Tangents are still transformed with uModel directly - that IS the correct convention for a
+// surface-parameterization vector, unlike a normal.
+uniform mat4 uNormalMatrix;
 uniform mat4 uViewProjection;
 uniform mat4 uLightSpaceMatrix;
 uniform mat4 uLightSpaceMatrices[3];
@@ -22,7 +27,7 @@ uniform mat4 uLightSpaceMatrices[3];
 void main() {
     vec4 worldPosition = uModel * vec4(aPosition, 1.0);
     vWorldPosition = worldPosition.xyz;
-    vWorldNormal = mat3(uModel) * aNormal;
+    vWorldNormal = mat3(uNormalMatrix) * aNormal;
     vWorldTangent = mat3(uModel) * aTangent.xyz;
     vTangentHandedness = aTangent.w;
     vTexCoord = aTexCoord;
