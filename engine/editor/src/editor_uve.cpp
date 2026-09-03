@@ -53,6 +53,46 @@ namespace {
 constexpr float kVectorEpsilonUVE = 0.00001F;
 constexpr float kMinimumLocalScaleUVE = 0.001F;
 
+// Subsetted Tabler Icons glyphs (MIT licensed; see
+// engine/editor/assets/fonts/THIRD_PARTY_NOTICES.md) merged into the default ImGui font. These
+// back the menu bar and dock-panel titles below: ImGui::BeginMenu()/ImGui::Begin() only accept a
+// plain text label, so an inline ImGui::Image() glyph is not an option there the way it is for the
+// editor's existing RGBA-texture ImageButton icons (gizmo modes, Snap, node/component add popups).
+#include "uve_icon_font_bytes.inc"
+
+constexpr ImWchar kIconFontGlyphRangesUVE[] = {
+    0xEA03, 0xEA03, // Inspector (adjustments)
+    0xEA45, 0xEA45, // Assets (box)
+    0xEA54, 0xEA54, // Viewport (camera)
+    0xEA98, 0xEA98, // Edit
+    0xEAA4, 0xEAA4, // File
+    0xEAAD, 0xEAAD, // Filesystem (folder)
+    0xEBD9, 0xEBD9, // Plugin
+    0xEDBA, 0xEDBA, // Window (layout-grid)
+    0xF91D, 0xF91D, // Help (help-circle)
+    0xFA97, 0xFA97, // GameObject (cube)
+    0xFAF7, 0xFAF7, // Contents (folder-open)
+    0xFAFA, 0xFAFA, // Scene (list-tree)
+    0,
+};
+
+// Full menu/panel labels, icon glyph baked in: ImGui::BeginMenu()/Begin() take a single string
+// literal-shaped argument, so these can't be built from a separate icon constant concatenated at
+// the call site the way adjacent string literals can (kMenuIconFileUVE is a runtime const char*,
+// not a literal token, so " File" adjacency wouldn't compile).
+constexpr const char* kMenuLabelFileUVE = "\xEE\xAA\xA4 File";
+constexpr const char* kMenuLabelEditUVE = "\xEE\xAA\x98 Edit";
+constexpr const char* kMenuLabelAssetsUVE = "\xEE\xA9\x85 Assets";
+constexpr const char* kMenuLabelGameObjectUVE = "\xEF\xAA\x97 GameObject";
+constexpr const char* kMenuLabelPluginUVE = "\xEE\xAF\x99 Plugin";
+constexpr const char* kMenuLabelWindowUVE = "\xEE\xB6\xBA Window";
+constexpr const char* kMenuLabelHelpUVE = "\xEF\xA4\x9D Help";
+constexpr const char* kPanelLabelSceneUVE = "\xEF\xAB\xBA Scene##scene-panel";
+constexpr const char* kPanelLabelInspectorUVE = "\xEE\xA8\x83 Inspector##right-panel";
+constexpr const char* kPanelLabelFilesystemUVE = "\xEE\xAA\xAD Filesystem##project-panel";
+constexpr const char* kPanelLabelContentsUVE = "\xEF\xAB\xB7 Contents##folder-contents-panel";
+constexpr const char* kPanelLabelViewportUVE = "\xEE\xA9\x94 Viewport##viewport";
+
 [[nodiscard]] Math::Vector3UVE PrimitiveColliderHalfExtentsUVE(const Scene::PrimitiveMeshKindUVE kind) noexcept {
     switch (kind) {
         case Scene::PrimitiveMeshKindUVE::Cube:
@@ -496,6 +536,21 @@ void EditorUVE::InitUVE() {
         ImGui::GetIO().ConfigFlags |= ImGuiConfigFlags_DockingEnable;
         ImGui::StyleColorsDark();
         ApplyEditorVisualThemeUVE();
+
+        // Font setup must happen before ImGui_ImplOpenGL3_Init() below: that call builds and
+        // uploads the font atlas texture immediately, so any fonts merged in afterward would be
+        // silently missing from what actually gets rendered.
+        ImGuiIO& io = ImGui::GetIO();
+        io.Fonts->AddFontDefault();
+        ImFontConfig iconFontConfig{};
+        iconFontConfig.MergeMode = true;
+        iconFontConfig.PixelSnapH = true;
+        // The .inc byte array has static storage duration for the life of the process; ImGui must
+        // not take ownership and free() it via its own allocator.
+        iconFontConfig.FontDataOwnedByAtlas = false;
+        io.Fonts->AddFontFromMemoryTTF(const_cast<std::uint8_t*>(uve_icon_font_ttf_bytes.data()),
+                                       static_cast<int>(uve_icon_font_ttf_bytes.size()), 0.0F,
+                                       &iconFontConfig, kIconFontGlyphRangesUVE);
 
         auto* const nativeWindow = static_cast<GLFWwindow*>(windowManager.GetNativeWindowHandleUVE());
         // Install the backend's chained GLFW callbacks so the interactive overlay receives cursor
@@ -4905,7 +4960,7 @@ void EditorUVE::DrawMenuBarUVE() {
         menuDrawList->AddLine(ImVec2{menuMin.x, menuMax.y - 1.0F}, ImVec2{menuMax.x, menuMax.y - 1.0F},
                               IM_COL32(48, 55, 64, 235), 1.0F);
         ImGui::BeginMenuBar();
-        if (ImGui::BeginMenu("File")) {
+        if (ImGui::BeginMenu(kMenuLabelFileUVE)) {
             const bool canSave = IsAuthoringCommandAllowedUVE() && !m_activeScenePath.empty();
             ImGui::BeginDisabled(!canSave);
             if (ImGui::MenuItem("Save Scene")) {
@@ -4921,7 +4976,7 @@ void EditorUVE::DrawMenuBarUVE() {
             }
             ImGui::EndMenu();
         }
-        if (ImGui::BeginMenu("Edit")) {
+        if (ImGui::BeginMenu(kMenuLabelEditUVE)) {
             ImGui::BeginDisabled(!CanUndoUVE());
             if (ImGui::MenuItem("Undo", "Ctrl+Z")) {
                 static_cast<void>(UndoUVE());
@@ -4934,7 +4989,7 @@ void EditorUVE::DrawMenuBarUVE() {
             ImGui::EndDisabled();
             ImGui::EndMenu();
         }
-        if (ImGui::BeginMenu("Assets")) {
+        if (ImGui::BeginMenu(kMenuLabelAssetsUVE)) {
             if (ImGui::MenuItem("Open Project Browser")) {
                 m_activeBottomDock = EditorBottomDockUVE::FileSystem;
                 m_bottomDockVisible = true;
@@ -4942,7 +4997,7 @@ void EditorUVE::DrawMenuBarUVE() {
             ImGui::MenuItem("Import Queue", nullptr, false, false);
             ImGui::EndMenu();
         }
-        if (ImGui::BeginMenu("GameObject")) {
+        if (ImGui::BeginMenu(kMenuLabelGameObjectUVE)) {
             ImGui::BeginDisabled(!IsAuthoringCommandAllowedUVE());
             if (ImGui::MenuItem("Create Empty")) {
                 static_cast<void>(CreateDocumentEntityUVE(EditorEntityKindUVE::Empty));
@@ -4953,10 +5008,10 @@ void EditorUVE::DrawMenuBarUVE() {
             ImGui::EndDisabled();
             ImGui::EndMenu();
         }
-        if (ImGui::MenuItem("Plugin")) {
+        if (ImGui::MenuItem(kMenuLabelPluginUVE)) {
             m_pluginWindowVisible = true;
         }
-        if (ImGui::BeginMenu("Window")) {
+        if (ImGui::BeginMenu(kMenuLabelWindowUVE)) {
             ImGui::MenuItem("Scene", nullptr, &m_scenePanelVisible);
             ImGui::MenuItem("Inspector", nullptr, &m_inspectorPanelVisible);
             ImGui::MenuItem("Filesystem + Debug Dock", nullptr, &m_bottomDockVisible);
@@ -4980,7 +5035,7 @@ void EditorUVE::DrawMenuBarUVE() {
             }
             ImGui::EndMenu();
         }
-        if (ImGui::BeginMenu("Help")) {
+        if (ImGui::BeginMenu(kMenuLabelHelpUVE)) {
             ImGui::MenuItem("UVE Editor Reference", nullptr, false, false);
             ImGui::MenuItem("About UNIVEX Engine", nullptr, false, false);
             ImGui::EndMenu();
@@ -5251,7 +5306,7 @@ void EditorUVE::DrawHierarchyPanelUVE() {
                             ImGuiCond_FirstUseEver);
     const float scenePanelWidth = std::clamp(mainViewport->WorkSize.x * 0.19F, 208.0F, 292.0F);
     ImGui::SetNextWindowSize(ImVec2{scenePanelWidth, workspaceHeight}, ImGuiCond_FirstUseEver);
-    ImGui::Begin("Scene##scene-panel");
+    ImGui::Begin(kPanelLabelSceneUVE);
     std::array<char, 256> filterBuffer{};
     m_hierarchyFilter.copy(filterBuffer.data(), filterBuffer.size() - 1U);
     const float addNodeButtonWidth = ImGui::GetFrameHeight();
@@ -5487,7 +5542,7 @@ void EditorUVE::DrawInspectorPanelUVE() {
     // title identifies the *panel* to dock/drag by, while that internal strip still switches the
     // panel's *content* - two different, non-conflicting notions of "tab".
     constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse;
-    ImGui::Begin("Inspector##right-panel", nullptr, flags);
+    ImGui::Begin(kPanelLabelInspectorUVE, nullptr, flags);
 
     const auto drawRightPanelTab = [this](const char* const label, const EditorRightPanelTabUVE tab) {
         const bool active = m_activeRightPanelTab == tab;
@@ -6208,7 +6263,7 @@ void EditorUVE::DrawFolderContentsPanelUVE() {
     ImGui::SetNextWindowSize(ImVec2{contentsWidth, contentHeight}, ImGuiCond_FirstUseEver);
     // NoTitleBar dropped (see DrawInspectorPanelUVE()'s comment) and given a real title.
     constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse;
-    ImGui::Begin("Contents##folder-contents-panel", nullptr, flags);
+    ImGui::Begin(kPanelLabelContentsUVE, nullptr, flags);
 
     const Asset::ProjectFileSnapshotUVE snapshot = m_services->GetProjectFileIndexUVE().GetSnapshotUVE();
     const auto mainDirectoryIt = std::find_if(
@@ -6447,7 +6502,7 @@ void EditorUVE::DrawAssetsPanelUVE() {
     // panel's own "FILESYSTEM" text label a few lines below is unrelated in-content chrome, not
     // this window's identifying title, so both can coexist without looking redundant.
     constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoCollapse;
-    ImGui::Begin("Filesystem##project-panel", nullptr, flags);
+    ImGui::Begin(kPanelLabelFilesystemUVE, nullptr, flags);
 
     Asset::IProjectFileIndexUVE& projectFileIndex = m_services->GetProjectFileIndexUVE();
     const Asset::ProjectChangeSnapshotUVE changeSnapshot = m_services->GetProjectChangeWatcherUVE().GetSnapshotUVE();
@@ -7391,14 +7446,29 @@ void EditorUVE::DrawViewportToolCanvasUVE() {
         if (ImGui::SmallButton("Perspective")) {
             ImGui::OpenPopup("viewport-projection-popup");
         }
+        const auto drawIconToggle = [this](const char* const textureKey, const char* const label,
+                                           const char* const activeLabel, bool& toggled) {
+            const std::uintptr_t iconTexture = m_uiAssets.GetGeneralIconTextureIdUVE(textureKey);
+            if (iconTexture != 0U) {
+                ImGui::Image(static_cast<ImTextureID>(iconTexture), ImVec2{16.0F, 16.0F});
+                ImGui::SameLine(0.0F, 5.0F);
+            }
+            if (toggled) {
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{0.259F, 0.329F, 0.396F, 1.0F});
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4{0.345F, 0.439F, 0.522F, 1.0F});
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4{0.396F, 0.510F, 0.604F, 1.0F});
+            }
+            if (ImGui::SmallButton(toggled ? activeLabel : label)) {
+                toggled = !toggled;
+            }
+            if (toggled) {
+                ImGui::PopStyleColor(3);
+            }
+        };
         ImGui::SameLine(0.0F, 8.0F);
-        if (ImGui::SmallButton(m_viewportEnvironmentPreviewEnabled ? "Environment On" : "Environment")) {
-            m_viewportEnvironmentPreviewEnabled = !m_viewportEnvironmentPreviewEnabled;
-        }
+        drawIconToggle("environment", "Environment", "Environment On", m_viewportEnvironmentPreviewEnabled);
         ImGui::SameLine(0.0F, 4.0F);
-        if (ImGui::SmallButton(m_viewportSunPreviewEnabled ? "Sun On" : "Sun")) {
-            m_viewportSunPreviewEnabled = !m_viewportSunPreviewEnabled;
-        }
+        drawIconToggle("sun", "Sun", "Sun On", m_viewportSunPreviewEnabled);
         if (ImGui::BeginPopup("viewport-projection-popup")) {
             ImGui::TextDisabled("Viewport projection");
             ImGui::Separator();
@@ -7442,7 +7512,7 @@ void EditorUVE::DrawViewportPanelUVE() {
     constexpr ImGuiWindowFlags flags = ImGuiWindowFlags_NoBackground | ImGuiWindowFlags_NoCollapse |
                                        ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus |
                                        ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;
-    ImGui::Begin("Viewport##viewport", nullptr, flags);
+    ImGui::Begin(kPanelLabelViewportUVE, nullptr, flags);
 
     const ImVec2 contentOrigin = ImGui::GetCursorScreenPos();
     const ImVec2 contentSize = ImGui::GetContentRegionAvail();
