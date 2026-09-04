@@ -398,6 +398,10 @@ void DrawNativeIconLabelUVE(const std::uintptr_t textureId, const char* const la
             return EditorToolSessionModeUVE::Scale;
         case EditorGizmoModeUVE::Universal:
             return EditorToolSessionModeUVE::Translate;
+        case EditorGizmoModeUVE::Select:
+            // Unreachable: BeginGizmoDragUVE returns before constructing a drag candidate whenever
+            // the active mode is Select, so no candidate ever carries this mode here.
+            return EditorToolSessionModeUVE::Translate;
     }
     return EditorToolSessionModeUVE::Translate;
 }
@@ -3690,6 +3694,9 @@ bool EditorUVE::ComputeLocalDeltaForWorldDeltaUVE(const Scene::EntityUVE entity,
 
 bool EditorUVE::BeginGizmoDragUVE(const EditorViewportRectUVE& viewportRect,
                                   const Math::Vector2UVE pointerPosition) {
+    if (m_gizmoMode == EditorGizmoModeUVE::Select) {
+        return false;
+    }
     if (m_gizmoMode == EditorGizmoModeUVE::Universal) {
         return BeginGizmoDragForModeUVE(viewportRect, pointerPosition, EditorGizmoModeUVE::Scale) ||
                BeginGizmoDragForModeUVE(viewportRect, pointerPosition, EditorGizmoModeUVE::Translate) ||
@@ -4858,7 +4865,7 @@ void EditorUVE::LoadSessionSettingsUVE() {
     m_activeWorkspace = static_cast<EditorWorkspaceUVE>(getEnum("editor.workspace.active", 0, 4));
     m_activeRightPanelTab = static_cast<EditorRightPanelTabUVE>(getEnum("editor.rightPanel.activeTab", 0, 2));
     m_activeBottomDock = static_cast<EditorBottomDockUVE>(getEnum("editor.bottomDock.active", 3, 3));
-    m_gizmoMode = static_cast<EditorGizmoModeUVE>(getEnum("editor.viewport.gizmoMode", 0, 3));
+    m_gizmoMode = static_cast<EditorGizmoModeUVE>(getEnum("editor.viewport.gizmoMode", 0, 4));
     m_gizmoCoordinateSpace = static_cast<EditorGizmoCoordinateSpaceUVE>(getEnum("editor.viewport.coordinateSpace", 0, 1));
     EditorTransformSnappingSettingsUVE snapping{};
     const auto getPositiveSnapValue = [&config](const std::string_view key, const float fallback) {
@@ -5171,10 +5178,6 @@ void EditorUVE::DrawMenuBarUVE() {
         toolbarDrawList->AddRectFilled(toolbarMin, toolbarMax, IM_COL32(32, 37, 43, 255));
         toolbarDrawList->AddLine(ImVec2{toolbarMin.x, toolbarMin.y}, ImVec2{toolbarMax.x, toolbarMin.y},
                                  IM_COL32(48, 55, 64, 235), 1.0F);
-        ImGui::SmallButton("Hand");
-        ImGui::SameLine();
-        ImGui::TextColored(ImVec4{0.52F, 0.54F, 0.58F, 0.9F}, "|");
-        ImGui::SameLine();
         const auto drawWorkspace = [this](const char* const label, const EditorWorkspaceUVE workspace) {
             const bool active = m_activeWorkspace == workspace;
             if (active) {
@@ -5191,27 +5194,6 @@ void EditorUVE::DrawMenuBarUVE() {
         };
         drawWorkspace("Scene", EditorWorkspaceUVE::Library);
         drawWorkspace("Scripting", EditorWorkspaceUVE::Scripting);
-        const bool sceneView = m_viewportTab == EditorViewportTabUVE::Scene;
-        if (sceneView) {
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{0.20F, 0.21F, 0.23F, 1.0F});
-        }
-        if (ImGui::SmallButton("3D")) {
-            m_viewportTab = EditorViewportTabUVE::Scene;
-        }
-        if (sceneView) {
-            ImGui::PopStyleColor();
-        }
-        ImGui::SameLine();
-        const bool twoDView = m_viewportTab == EditorViewportTabUVE::TwoD;
-        if (twoDView) {
-            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{0.20F, 0.21F, 0.23F, 1.0F});
-        }
-        if (ImGui::SmallButton("2D")) {
-            m_viewportTab = EditorViewportTabUVE::TwoD;
-        }
-        if (twoDView) {
-            ImGui::PopStyleColor();
-        }
         ImGui::End();
     }
 }
@@ -7475,6 +7457,28 @@ void EditorUVE::DrawViewportToolCanvasUVE() {
     };
 
     ImGui::SetCursorPos(ImVec2{8.0F, 4.0F});
+    const bool sceneView = m_viewportTab == EditorViewportTabUVE::Scene;
+    if (sceneView) {
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{0.20F, 0.21F, 0.23F, 1.0F});
+    }
+    if (ImGui::SmallButton("3D")) {
+        m_viewportTab = EditorViewportTabUVE::Scene;
+    }
+    if (sceneView) {
+        ImGui::PopStyleColor();
+    }
+    ImGui::SameLine(0.0F, 4.0F);
+    const bool twoDView = m_viewportTab == EditorViewportTabUVE::TwoD;
+    if (twoDView) {
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{0.20F, 0.21F, 0.23F, 1.0F});
+    }
+    if (ImGui::SmallButton("2D")) {
+        m_viewportTab = EditorViewportTabUVE::TwoD;
+    }
+    if (twoDView) {
+        ImGui::PopStyleColor();
+    }
+    ImGui::SameLine(0.0F, 12.0F);
     if (m_viewportTab == EditorViewportTabUVE::TwoD) {
         if (ImGui::SmallButton("Fit")) {
             Reset2DCanvasViewUVE();
@@ -7491,6 +7495,24 @@ void EditorUVE::DrawViewportToolCanvasUVE() {
         const bool gizmoModeChangeAllowed = IsAuthoringCommandAllowedUVE() &&
                                             m_gizmoDrag.axis == EditorTransformAxisUVE::None &&
                                             m_viewportNavigationMode == EditorViewportNavigationModeUVE::None;
+        const bool handActive = m_gizmoMode == EditorGizmoModeUVE::Select;
+        if (handActive) {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{0.259F, 0.329F, 0.396F, 1.0F});
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4{0.345F, 0.439F, 0.522F, 1.0F});
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4{0.396F, 0.510F, 0.604F, 1.0F});
+        }
+        ImGui::BeginDisabled(!gizmoModeChangeAllowed);
+        if (ImGui::SmallButton("Hand")) {
+            static_cast<void>(SetGizmoModeUVE(EditorGizmoModeUVE::Select));
+        }
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip("Select / Q");
+        }
+        ImGui::EndDisabled();
+        if (handActive) {
+            ImGui::PopStyleColor(3);
+        }
+        ImGui::SameLine(0.0F, 4.0F);
         drawViewportTool("Move XYZ", "Move / W", EditorGizmoModeUVE::Translate,
                          EditorGizmoIconUVE::Move, gizmoModeChangeAllowed);
         drawViewportTool("Rotate XYZ", "Rotate / E", EditorGizmoModeUVE::Rotate,
@@ -7662,7 +7684,9 @@ void EditorUVE::DrawViewportPanelUVE() {
             }
         } else {
             if (viewportHovered && !io.WantTextInput) {
-                if (ImGui::IsKeyPressed(ImGuiKey_W, false)) {
+                if (ImGui::IsKeyPressed(ImGuiKey_Q, false)) {
+                    SetGizmoModeUVE(EditorGizmoModeUVE::Select);
+                } else if (ImGui::IsKeyPressed(ImGuiKey_W, false)) {
                     SetGizmoModeUVE(EditorGizmoModeUVE::Translate);
                 } else if (ImGui::IsKeyPressed(ImGuiKey_E, false)) {
                     SetGizmoModeUVE(EditorGizmoModeUVE::Rotate);
@@ -7761,7 +7785,7 @@ void EditorUVE::DrawViewportPanelUVE() {
         }
         m_services->GetRenderer3DUVE().SetEditorViewportVisualStateUVE(visualState);
         DrawSelectionBoundsUVE(viewportRect);
-        if (IsAuthoringCommandAllowedUVE()) {
+        if (IsAuthoringCommandAllowedUVE() && m_gizmoMode != EditorGizmoModeUVE::Select) {
             DrawUnifiedTransformGizmoUVE(viewportRect);
         } else {
             m_services->GetRenderer3DUVE().SetEditorGizmoOverlayItemsUVE({});

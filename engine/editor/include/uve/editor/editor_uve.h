@@ -100,13 +100,16 @@ enum class EditorTransformAxisUVE {
 /// transform-wide name because the same axis contract is shared by Translate, Rotate, and Scale.
 using EditorTranslateAxisUVE = EditorTransformAxisUVE;
 
-/// Selects the active transform-gizmo handle family. Handles use the session-local World or Local
-/// coordinate space; negative and proportional/multiplicative scale remain future work.
+/// Selects the active transform-gizmo handle family, or Select for the plain pick/pan tool that
+/// shows no gizmo at all. Handles use the session-local World or Local coordinate space; negative
+/// and proportional/multiplicative scale remain future work. Select is appended last so existing
+/// serialized session values for Translate..Universal keep their ordinals.
 enum class EditorGizmoModeUVE {
     Translate,
     Rotate,
     Scale,
     Universal,
+    Select,
 };
 
 /// Selects whether transform handles use canonical world axes or the selected entity's derived

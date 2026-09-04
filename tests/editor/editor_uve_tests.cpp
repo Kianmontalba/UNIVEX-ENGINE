@@ -2521,6 +2521,49 @@ TEST(EditorUVETest, GizmoDragSixDof_HitTestsAndCommitsEveryTranslationAndRotatio
     engine.Shutdown();
 }
 
+TEST(EditorUVETest, GizmoModeSelect_SuppressesGizmoDragEvenOnAHitTestingHandle) {
+    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_gizmo_mode_select.uvescene");
+        editor.InitUVE();
+        Core::EngineServicesUVE& services = engine.GetServicesUVE();
+        Scene::IEntityManagerUVE& entityManager = services.GetEntityManagerUVE();
+        const Scene::EntityUVE entity = entityManager.CreateEntityUVE();
+        AttachRootUVE(engine, entity, Scene::TransformComponentUVE{});
+        services.GetSceneGraphUVE().UpdateUVE(entityManager);
+        editor.SelectEntityUVE(entity);
+        ASSERT_TRUE(editor.OrbitViewportUVE(0.37F, 0.18F));
+        services.GetSceneGraphUVE().UpdateUVE(entityManager);
+        const EditorViewportRectUVE viewportRect{{0.0F, 0.0F}, {1024.0F, 768.0F}};
+
+        // Find a screen point that would begin a Translate-X drag, so the Select-mode assertion
+        // below proves the mode guard itself suppresses the drag - not merely that nothing was
+        // under the pointer.
+        editor.SetGizmoModeUVE(EditorGizmoModeUVE::Translate);
+        const Scene::WorldTransformComponentUVE& world =
+            entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(entity);
+        Math::Vector3UVE worldAxis{};
+        ASSERT_TRUE(EditorUVEAccessUVE::GetGizmoAxisWorldVectorUVE(editor, entity, EditorTransformAxisUVE::X, worldAxis));
+        Math::Vector2UVE endpoint{};
+        ASSERT_TRUE(EditorUVEAccessUVE::ProjectWorldPointUVE(
+            editor, viewportRect, world.worldPosition + worldAxis * 1.25F, endpoint));
+        ASSERT_TRUE(EditorUVEAccessUVE::BeginGizmoDragUVE(editor, viewportRect, endpoint));
+        EXPECT_EQ(EditorUVEAccessUVE::GetGizmoDragAxisUVE(editor), EditorTransformAxisUVE::X);
+        EditorUVEAccessUVE::CommitGizmoDragUVE(editor);
+
+        editor.SetGizmoModeUVE(EditorGizmoModeUVE::Select);
+        EXPECT_EQ(editor.GetGizmoModeUVE(), EditorGizmoModeUVE::Select);
+        EXPECT_FALSE(EditorUVEAccessUVE::BeginGizmoDragUVE(editor, viewportRect, endpoint));
+        EXPECT_EQ(EditorUVEAccessUVE::GetGizmoDragAxisUVE(editor), EditorTransformAxisUVE::None);
+
+        editor.ShutdownUVE();
+    }
+    engine.Shutdown();
+}
+
 TEST(EditorUVETest, ViewportNavigationGizmo_XPositiveStartsCameraPresetOrbit) {
     Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
     engine.Init();
