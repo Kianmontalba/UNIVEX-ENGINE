@@ -7742,10 +7742,15 @@ void EditorUVE::DrawViewportPanelUVE() {
         navigationGizmo.UpdateLayoutUVE(m_viewportYawRadians, m_viewportPitchRadians);
         navigationGizmo.UpdateHoverUVE(Math::Vector2UVE{navigationMousePosition.x, navigationMousePosition.y});
         const float plateRadius = navigationGizmo.GetPlateRadiusUVE();
-        drawList->AddCircleFilled(orientationCenter, plateRadius + 4.0F, IM_COL32(5, 7, 10, 105), 40);
-        drawList->AddCircleFilled(orientationCenter, plateRadius, IM_COL32(25, 28, 34, 242), 40);
-        drawList->AddCircle(orientationCenter, plateRadius, IM_COL32(100, 112, 126, 235), 40, 1.6F);
-        drawList->AddCircle(orientationCenter, plateRadius - 3.0F, IM_COL32(8, 10, 14, 170), 40, 1.0F);
+        // A near-opaque backing plate hides the 3D scene behind the gizmo, which no mainstream
+        // engine's orientation gizmo does (Unreal, Unity, Blender, and Godot all float their axis
+        // widgets directly over the viewport with at most a soft low-alpha shadow, never a solid
+        // disc) - so this stays a faint, mostly see-through backdrop: enough to keep the axis
+        // labels legible over busy scene content, not enough to read as an opaque UI panel.
+        drawList->AddCircleFilled(orientationCenter, plateRadius + 4.0F, IM_COL32(5, 7, 10, 40), 40);
+        drawList->AddCircleFilled(orientationCenter, plateRadius, IM_COL32(25, 28, 34, 60), 40);
+        drawList->AddCircle(orientationCenter, plateRadius, IM_COL32(100, 112, 126, 120), 40, 1.4F);
+        drawList->AddCircle(orientationCenter, plateRadius - 3.0F, IM_COL32(8, 10, 14, 60), 40, 1.0F);
         for (const Gizmo::ViewportNavButtonUVE& button : navigationGizmo.GetButtonsUVE()) {
             const ImU32 color = static_cast<ImU32>(Gizmo::ViewportNavGizmoUVE::AxisColorUVE(
                 button.axis, button.positive, button.hovered));
