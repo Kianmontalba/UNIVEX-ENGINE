@@ -1451,6 +1451,124 @@ TEST(EngineCoreUVETest, WindowedMode_PresentsDeterministicPrimitiveFixtureToDefa
     engine.Shutdown();
 }
 
+// Gap A audit coverage: verifies the render target/framebuffer dimensions (audit checkpoint #2)
+// actually track SetEditorViewportRegionUVE()'s region - not the window - and cleanly revert once
+// the region is cleared. Real windowed GLFW/GL backend under Xvfb, matching every other
+// WindowedMode_* test's verification method in this file (not NullRenderDeviceUVE, since this
+// exercises the real adaptive-resolution/window-manager code path SyncAdaptiveRenderResolutionUVE()
+// only takes when m_windowedRenderingActiveUVE is true).
+TEST(EngineCoreUVETest, SetEditorViewportRegionUVE_DrivesRenderTargetToRegionNotWindow) {
+    EngineConfigUVE config = MakeTestConfigUVE();
+    config.headlessUVE = false;
+    config.windowWidth = 200U;
+    config.windowHeight = 150U;
+    config.vsyncEnabledUVE = false;
+    config.windowGlVersionMajor = 4U;
+    config.windowGlVersionMinor = 5U;
+
+    EngineCoreUVE engine(config);
+    engine.Init();
+    if (!engine.GetServicesUVE().GetWindowManagerUVE().IsValidUVE()) {
+        GTEST_SKIP() << "No display available for windowed EngineCoreUVE - skipping (run under "
+                        "xvfb-run to exercise this test)";
+    }
+    ASSERT_TRUE(engine.Load());
+
+    EngineServicesUVE& services = engine.GetServicesUVE();
+    Scene::IEntityManagerUVE& entityManager = services.GetEntityManagerUVE();
+    Scene::ISceneGraphUVE& sceneGraph = services.GetSceneGraphUVE();
+    const Scene::EntityUVE camera = entityManager.CreateEntityUVE();
+    sceneGraph.AttachTransformUVE(entityManager, camera, Scene::TransformComponentUVE{});
+    entityManager.AddComponentUVE<Scene::CameraComponentUVE>(camera);
+    engine.SetActiveCameraUVE(camera);
+
+    auto memorySink = std::make_unique<Debug::MemorySinkUVE>();
+    Debug::MemorySinkUVE* const memorySinkPtr = memorySink.get();
+    services.GetLoggerUVE().AddSink(std::move(memorySink));
+
+    // Baseline: no region set yet, so the target tracks the 200x150 window as before this fix.
+    engine.TickFrameUVE();
+    const Render::Renderer3DFrameDiagnosticsUVE windowDrivenDiagnostics =
+        services.GetRenderer3DUVE().GetLastFrameDiagnosticsUVE();
+    EXPECT_EQ(windowDrivenDiagnostics.renderTargetWidth, 200U);
+    EXPECT_EQ(windowDrivenDiagnostics.renderTargetHeight, 150U);
+
+    // A region clearly smaller than, and offset within, the window - proves the target tracks the
+    // region's own dimensions ("very narrow"/"resized side panels" editor layouts), not the window.
+    engine.SetEditorViewportRegionUVE(Render::ViewportRectUVE{20U, 10U, 90U, 60U});
+    engine.TickFrameUVE();
+    const Render::Renderer3DFrameDiagnosticsUVE regionDrivenDiagnostics =
+        services.GetRenderer3DUVE().GetLastFrameDiagnosticsUVE();
+    EXPECT_EQ(regionDrivenDiagnostics.renderTargetWidth, 90U);
+    EXPECT_EQ(regionDrivenDiagnostics.renderTargetHeight, 60U);
+
+    // Clearing the region reverts to window-driven sizing - proves no stale state leaks into a
+    // frame the editor no longer wants confined (e.g. switching back to a full/maximized layout).
+    engine.SetEditorViewportRegionUVE(std::nullopt);
+    engine.TickFrameUVE();
+    const Render::Renderer3DFrameDiagnosticsUVE revertedDiagnostics =
+        services.GetRenderer3DUVE().GetLastFrameDiagnosticsUVE();
+    EXPECT_EQ(revertedDiagnostics.renderTargetWidth, 200U);
+    EXPECT_EQ(revertedDiagnostics.renderTargetHeight, 150U);
+
+    const std::vector<Debug::LogMessageUVE> messages = memorySinkPtr->GetMessagesUVE();
+    const bool foundViewportRejection =
+        std::any_of(messages.begin(), messages.end(), [](const Debug::LogMessageUVE& message) {
+            return message.message.find("does not fit within") != std::string::npos;
+        });
+    EXPECT_FALSE(foundViewportRejection);
+
+    engine.Shutdown();
+}
+
+// A region whose on-screen destination sub-rect is a THIN SLICE of the window (very narrow and
+// very wide/short cases) - the two extreme "editor layout" shapes the audit specifically asked to
+// be exercised, beyond the more moderate rect above.
+TEST(EngineCoreUVETest, SetEditorViewportRegionUVE_HandlesVeryNarrowAndVeryWideRegions) {
+    EngineConfigUVE config = MakeTestConfigUVE();
+    config.headlessUVE = false;
+    config.windowWidth = 200U;
+    config.windowHeight = 150U;
+    config.vsyncEnabledUVE = false;
+    config.windowGlVersionMajor = 4U;
+    config.windowGlVersionMinor = 5U;
+
+    EngineCoreUVE engine(config);
+    engine.Init();
+    if (!engine.GetServicesUVE().GetWindowManagerUVE().IsValidUVE()) {
+        GTEST_SKIP() << "No display available for windowed EngineCoreUVE - skipping (run under "
+                        "xvfb-run to exercise this test)";
+    }
+    ASSERT_TRUE(engine.Load());
+
+    EngineServicesUVE& services = engine.GetServicesUVE();
+    Scene::IEntityManagerUVE& entityManager = services.GetEntityManagerUVE();
+    Scene::ISceneGraphUVE& sceneGraph = services.GetSceneGraphUVE();
+    const Scene::EntityUVE camera = entityManager.CreateEntityUVE();
+    sceneGraph.AttachTransformUVE(entityManager, camera, Scene::TransformComponentUVE{});
+    entityManager.AddComponentUVE<Scene::CameraComponentUVE>(camera);
+    engine.SetActiveCameraUVE(camera);
+
+    // Very narrow: a 10px-wide sliver on the right (e.g. a Scene panel dragged nearly closed).
+    engine.SetEditorViewportRegionUVE(Render::ViewportRectUVE{180U, 0U, 10U, 150U});
+    engine.TickFrameUVE();
+    const Render::Renderer3DFrameDiagnosticsUVE narrowDiagnostics =
+        services.GetRenderer3DUVE().GetLastFrameDiagnosticsUVE();
+    EXPECT_EQ(narrowDiagnostics.renderTargetWidth, 10U);
+    EXPECT_EQ(narrowDiagnostics.renderTargetHeight, 150U);
+
+    // Very wide/short: the full width, a thin 8px strip in height (e.g. a bottom dock nearly
+    // maximized over the viewport).
+    engine.SetEditorViewportRegionUVE(Render::ViewportRectUVE{0U, 0U, 200U, 8U});
+    engine.TickFrameUVE();
+    const Render::Renderer3DFrameDiagnosticsUVE wideDiagnostics =
+        services.GetRenderer3DUVE().GetLastFrameDiagnosticsUVE();
+    EXPECT_EQ(wideDiagnostics.renderTargetWidth, 200U);
+    EXPECT_EQ(wideDiagnostics.renderTargetHeight, 8U);
+
+    engine.Shutdown();
+}
+
 TEST(EngineCoreUVETest, PostRenderCallback_HeadlessModeDoesNotInvokeOverlay) {
     EngineConfigUVE config = MakeTestConfigUVE();
     config.headlessUVE = true;

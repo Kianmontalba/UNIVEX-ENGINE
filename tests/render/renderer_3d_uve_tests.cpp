@@ -10,7 +10,9 @@
 #include <cstdint>
 #include <memory>
 #include <limits>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 
@@ -450,6 +452,110 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_VisiblePrimitive_ReportsEvidenceSpecifi
     }
     EXPECT_TRUE(orthographicModePublished);
     EXPECT_TRUE(orthographicScalePublished);
+}
+
+// A dedicated fixture for aspect-ratio verification: needs a non-square render target
+// (kTargetWidthUVE/kTargetHeightUVE above are both 64, so targetWidth/targetHeight == 1.0 and
+// can't distinguish the correct pixel-aspect formula from the naive fraction-delta-only formula
+// it replaced - see EffectiveCameraAspectRatioUVE's doc comment in renderer_3d_uve.cpp).
+class Renderer3DEditorViewportAspectUVETest : public Renderer3DUVETest {
+protected:
+    // Primes the ToneMapping/EditorViewportEnvironment built-in programs exactly like
+    // RenderFrameUVE_VisiblePrimitive_ReportsEvidenceSpecificDiagnostics above does, so the
+    // EditorViewportEnvironment pass actually records (and its uViewportAspect uniform with it)
+    // instead of skipping on !IsValidUVE().
+    void PrimeEditorViewportProgramsUVE(const Scene::EntityUVE cameraEntity) {
+        renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+        for (int iteration = 0; iteration < kMaxPollIterationsUVE; ++iteration) {
+            shaderManager.UpdateUVE(0.0);
+            if (shaderManager.GetPendingJobCountUVE() == 0U) {
+                return;
+            }
+            std::this_thread::yield();
+        }
+        ADD_FAILURE() << "Timed out waiting for editor viewport program compilation";
+    }
+
+    [[nodiscard]] static std::optional<float> FindUniformFloatUVE(const std::vector<RecordedCommandUVE>& commands,
+                                                                    const std::string_view name) {
+        for (const RecordedCommandUVE& command : commands) {
+            if (const auto* floatUniform = std::get_if<SetUniformFloatCommandUVE>(&command)) {
+                if (floatUniform->name == name) {
+                    return floatUniform->value;
+                }
+            }
+        }
+        return std::nullopt;
+    }
+};
+
+// Regression coverage for the Gap A fix (aspect-ratio/render-target-sizing audit): a sub-rect's
+// TRUE on-screen pixel aspect is targetAspect * (fractionWidth/fractionHeight), not the fraction
+// ratio alone - see EffectiveCameraAspectRatioUVE's doc comment. These three cases exercise a full
+// viewport, a very narrow sub-rect, and a very wide/tall sub-rect against a deliberately non-square
+// (200x100, 2:1) target, standing in for "full viewport", "very narrow", and "very wide" editor
+// panel layouts per the explicit multi-layout verification request.
+TEST_F(Renderer3DEditorViewportAspectUVETest, FullViewport_UsesPlainTargetAspect) {
+    ASSERT_TRUE(renderer3D->ResizeTargetsUVE(200U, 100U));
+    const Scene::EntityUVE cameraEntity = MakeCameraEntityUVE();
+    PrimeEditorViewportProgramsUVE(cameraEntity);
+
+    EditorViewportVisualStateUVE state;
+    state.enabled = true;
+    state.viewportMinX = 0.0F;
+    state.viewportMaxX = 1.0F;
+    state.viewportMinY = 0.0F;
+    state.viewportMaxY = 1.0F;
+    state.cameraForward = Math::Vector3UVE{0.0F, 0.0F, -1.0F};
+    renderer3D->SetEditorViewportVisualStateUVE(state);
+    renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+
+    const std::optional<float> aspect = FindUniformFloatUVE(renderDevice.GetLastSubmittedCommandsUVE(), "uViewportAspect");
+    ASSERT_TRUE(aspect.has_value());
+    EXPECT_NEAR(*aspect, 2.0F, 0.001F); // 200/100
+}
+
+TEST_F(Renderer3DEditorViewportAspectUVETest, VeryNarrowSubRect_ScalesTargetAspectByFraction) {
+    ASSERT_TRUE(renderer3D->ResizeTargetsUVE(200U, 100U));
+    const Scene::EntityUVE cameraEntity = MakeCameraEntityUVE();
+    PrimeEditorViewportProgramsUVE(cameraEntity);
+
+    // Right 15% of the target's width, full height: true pixel size is 30x100 (aspect 0.3), not
+    // the raw fraction ratio 0.15/1.0=0.15 the pre-fix formula would have produced.
+    EditorViewportVisualStateUVE state;
+    state.enabled = true;
+    state.viewportMinX = 0.85F;
+    state.viewportMaxX = 1.00F;
+    state.viewportMinY = 0.0F;
+    state.viewportMaxY = 1.0F;
+    state.cameraForward = Math::Vector3UVE{0.0F, 0.0F, -1.0F};
+    renderer3D->SetEditorViewportVisualStateUVE(state);
+    renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+
+    const std::optional<float> aspect = FindUniformFloatUVE(renderDevice.GetLastSubmittedCommandsUVE(), "uViewportAspect");
+    ASSERT_TRUE(aspect.has_value());
+    EXPECT_NEAR(*aspect, 0.3F, 0.001F); // (200*0.15) / (100*1.0)
+}
+
+TEST_F(Renderer3DEditorViewportAspectUVETest, VeryWideSubRect_ScalesTargetAspectByFraction) {
+    ASSERT_TRUE(renderer3D->ResizeTargetsUVE(200U, 100U));
+    const Scene::EntityUVE cameraEntity = MakeCameraEntityUVE();
+    PrimeEditorViewportProgramsUVE(cameraEntity);
+
+    // Full width, top 10% of the target's height: true pixel size is 200x10 (aspect 20.0).
+    EditorViewportVisualStateUVE state;
+    state.enabled = true;
+    state.viewportMinX = 0.0F;
+    state.viewportMaxX = 1.0F;
+    state.viewportMinY = 0.90F;
+    state.viewportMaxY = 1.00F;
+    state.cameraForward = Math::Vector3UVE{0.0F, 0.0F, -1.0F};
+    renderer3D->SetEditorViewportVisualStateUVE(state);
+    renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+
+    const std::optional<float> aspect = FindUniformFloatUVE(renderDevice.GetLastSubmittedCommandsUVE(), "uViewportAspect");
+    ASSERT_TRUE(aspect.has_value());
+    EXPECT_NEAR(*aspect, 20.0F, 0.01F); // 200 / (100*0.10)
 }
 
 TEST_F(Renderer3DUVETest, RenderFrameUVE_VisibleMesh_RecordsExpectedCommandSequence) {

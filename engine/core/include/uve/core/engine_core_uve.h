@@ -33,6 +33,7 @@
 #include "uve/config/i_config_manager_uve.h"
 #include "uve/core/engine_config_uve.h"
 #include "uve/core/engine_services_uve.h"
+#include "uve/core/i_editor_viewport_host_uve.h"
 #include "uve/core/i_simulation_control_uve.h"
 #include "uve/core/engine_state_uve.h"
 #include "uve/core/frame_stats_uve.h"
@@ -145,7 +146,7 @@ namespace UVE::Core {
 /// each document their own thread-safety contract independently (e.g.
 /// LoggerUVE is safe to log to from other threads even though
 /// EngineCoreUVE's own methods are not thread-safe).
-class EngineCoreUVE final : public ISimulationControlUVE {
+class EngineCoreUVE final : public ISimulationControlUVE, public IEditorViewportHostUVE {
 public:
     /// Distinct process exit code RunUVE() returns if an exception (of any type) escaped
     /// Init(), Load(), or a frame update and was caught at RunUVE()'s own top-level boundary,
@@ -314,6 +315,17 @@ public:
     /// never called.
     [[nodiscard]] Scene::EntityUVE GetActiveCameraUVE() const noexcept;
 
+    /// Tells Render()/SyncAdaptiveRenderResolutionUVE() to size and present the active camera's
+    /// frame for `region` (a pixel sub-rect of the presentation surface, GL bottom-left origin -
+    /// see Render::ViewportRectUVE's own convention) instead of the full window. This is how an
+    /// embedding editor - which draws its own docked panels around a 3D viewport that is only part
+    /// of the window - keeps the render target's aspect ratio, resolution, and on-screen placement
+    /// tracking that viewport panel's actual pixel footprint rather than the window's, every frame.
+    /// std::nullopt (the default) restores ordinary full-window behavior; every standalone
+    /// runtime/test path that never calls this is unaffected. Set (or cleared) once per frame,
+    /// before TickFrameUVE() - see EditorUVE::DrawViewportPanelUVE()'s own per-frame call.
+    void SetEditorViewportRegionUVE(std::optional<Render::ViewportRectUVE> region) noexcept override;
+
     /// Registers a non-owning callback invoked after the renderer has submitted the frame's scene
     /// work but immediately before the window back buffer is presented. This is a generic
     /// application-overlay seam: callers own all callback captures and must clear it before their
@@ -427,6 +439,7 @@ private:
     bool m_transientSimulationSessionActive = false;
     bool m_graphicsBackendLossLoggedUVE = false;
     bool m_adaptiveResizeFailureLoggedUVE = false;
+    std::optional<Render::ViewportRectUVE> m_editorViewportRegionUVE;
 
     std::unique_ptr<CommandLine::ICommandLineUVE> m_commandLine;
     std::unique_ptr<Debug::ILoggerUVE> m_logger;

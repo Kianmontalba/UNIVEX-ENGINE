@@ -16,6 +16,7 @@
 #include "uve/asset/i_project_file_index_uve.h"
 #include "uve/asset/i_project_change_watcher_uve.h"
 #include "uve/core/engine_services_uve.h"
+#include "uve/core/i_editor_viewport_host_uve.h"
 #include "uve/core/i_simulation_control_uve.h"
 #include "uve/editor/editor_tool_session_uve.h"
 #include "uve/editor/developer_console_uve.h"
@@ -193,7 +194,8 @@ public:
     explicit EditorUVE(Core::EngineServicesUVE& services,
                        std::filesystem::path activeScenePath = "editor_scene.uvescene",
                        std::size_t historyCapacity = 100U,
-                       Core::ISimulationControlUVE* simulationControl = nullptr);
+                       Core::ISimulationControlUVE* simulationControl = nullptr,
+                       Core::IEditorViewportHostUVE* viewportHost = nullptr);
     ~EditorUVE();
 
     EditorUVE(const EditorUVE&) = delete;
@@ -844,6 +846,7 @@ private:
 
     Core::EngineServicesUVE* m_services = nullptr;
     Core::ISimulationControlUVE* m_simulationControl = nullptr;
+    Core::IEditorViewportHostUVE* m_viewportHost = nullptr;
     EditorStateUVE m_state = EditorStateUVE::Uninitialized;
     EditorPlayModeStateUVE m_playModeState = EditorPlayModeStateUVE::Edit;
     std::optional<PlayModeSessionUVE> m_playModeSession;

@@ -60,7 +60,8 @@ public:
     void RenderFrameWithParticleRuntimeUVE(Scene::IEntityManagerUVE& entityManager, Scene::EntityUVE cameraEntity,
                                            const Scene::ParticleRuntimeUVE& particleRuntime) override;
     void RenderFrameToRegionUVE(Scene::IEntityManagerUVE& entityManager, Scene::EntityUVE cameraEntity,
-                                const ViewportRectUVE& region) override;
+                                const ViewportRectUVE& region,
+                                const Scene::ParticleRuntimeUVE* particleRuntime = nullptr) override;
     void SetEditorViewportVisualStateUVE(const EditorViewportVisualStateUVE& state) override;
     void SetPostProcessSettingsUVE(const PostProcessSettingsUVE& settings) override;
     [[nodiscard]] Renderer3DFrameDiagnosticsUVE GetLastFrameDiagnosticsUVE() const noexcept override;

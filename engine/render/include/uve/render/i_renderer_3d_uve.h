@@ -133,15 +133,21 @@ public:
 
     /// Renders exactly like RenderFrameUVE(), except the final presentation write targets `region`
     /// (a pixel sub-rect of the presentation surface) instead of its entire area - Phase 3's
-    /// ViewportManagerUVE split-view support. The default implementation ignores `region` and
-    /// falls back to a full-surface RenderFrameUVE(), matching this interface's existing
-    /// safe-no-op-default convention for test doubles/lightweight renderers that don't own a
-    /// resizable offscreen target (see ResizeTargetsUVE()'s own default above) - such a renderer
-    /// has no sub-region concept to honor, so a full render is the closest correct behavior rather
-    /// than silently dropping the frame.
+    /// ViewportManagerUVE split-view support. `particleRuntime`, when non-null, extracts particles
+    /// into this frame exactly like RenderFrameWithParticleRuntimeUVE() would (an editor viewport
+    /// composing both capabilities at once - e.g. rendering a scene's authored particle emitters
+    /// into its own on-screen sub-rect - needs both together, not a choice between them). The
+    /// default implementation ignores both `region` and `particleRuntime` and falls back to a
+    /// full-surface RenderFrameUVE(), matching this interface's existing safe-no-op-default
+    /// convention for test doubles/lightweight renderers that don't own a resizable offscreen
+    /// target (see ResizeTargetsUVE()'s own default above) - such a renderer has no sub-region
+    /// concept to honor, so a full render is the closest correct behavior rather than silently
+    /// dropping the frame.
     virtual void RenderFrameToRegionUVE(Scene::IEntityManagerUVE& entityManager, Scene::EntityUVE cameraEntity,
-                                        const ViewportRectUVE& region) {
+                                        const ViewportRectUVE& region,
+                                        const Scene::ParticleRuntimeUVE* particleRuntime = nullptr) {
         static_cast<void>(region);
+        static_cast<void>(particleRuntime);
         RenderFrameUVE(entityManager, cameraEntity);
     }
 

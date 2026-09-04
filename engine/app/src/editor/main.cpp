@@ -123,7 +123,7 @@ int main(const int argc, char** argv) {
             return 1;
         }
 
-        UVE::Editor::EditorUVE editor(engine.GetServicesUVE(), options.scenePath, 100U, &engine);
+        UVE::Editor::EditorUVE editor(engine.GetServicesUVE(), options.scenePath, 100U, &engine, &engine);
         editor.InitUVE();
 
         if (std::filesystem::exists(options.scenePath)) {
