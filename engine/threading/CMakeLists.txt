@@ -9,6 +9,7 @@ find_package(Threads REQUIRED)
 
 add_library(uve_threading STATIC
     src/job_counter_uve.cpp
+    src/job_graph_uve.cpp
     src/thread_pool_uve.cpp
 )
 target_include_directories(uve_threading PUBLIC include)

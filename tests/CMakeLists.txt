@@ -23,6 +23,7 @@ add_executable(uve_tests
     memory/allocator_utils_uve_tests.cpp
     memory/memory_alignment_uve_tests.cpp
     threading/job_counter_uve_tests.cpp
+    threading/job_graph_uve_tests.cpp
     threading/thread_pool_uve_tests.cpp
     commandline/command_line_uve_tests.cpp
     config/config_manager_uve_tests.cpp
