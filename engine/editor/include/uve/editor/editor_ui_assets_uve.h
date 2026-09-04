@@ -35,6 +35,10 @@ public:
     [[nodiscard]] std::uintptr_t GetNodeIconTextureIdUVE(std::string_view typeId) const noexcept;
     [[nodiscard]] std::uintptr_t GetComponentIconTextureIdUVE(std::string_view componentId) const noexcept;
     [[nodiscard]] std::uintptr_t GetGeneralIconTextureIdUVE(std::string_view iconId) const noexcept;
+    /// Looks up a Content Browser per-type badge icon by its ContentBrowserItemTypeUVE label
+    /// (editor_uve.h), e.g. "Mesh" or "Material". Returns 0 for "Folder" (which uses
+    /// GetFolderTextureIdUVE() instead) or any unrecognized key.
+    [[nodiscard]] std::uintptr_t GetContentTypeIconTextureIdUVE(std::string_view typeId) const noexcept;
 
 private:
     std::uintptr_t m_logoTextureId = 0U;
@@ -47,6 +51,7 @@ private:
     std::array<std::uintptr_t, 41U> m_nodeIconTextureIds{};
     std::array<std::uintptr_t, 6U> m_componentIconTextureIds{};
     std::array<std::uintptr_t, 4U> m_generalIconTextureIds{};
+    std::array<std::uintptr_t, 10U> m_contentTypeIconTextureIds{};
 };
 
 } // namespace UVE::Editor

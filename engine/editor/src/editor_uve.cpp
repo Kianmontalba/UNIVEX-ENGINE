@@ -6385,9 +6385,29 @@ void EditorUVE::DrawFolderContentsPanelUVE() {
         }
     };
 
+    constexpr float kCardWidthUVE = 76.0F;
+    constexpr float kCardHeightUVE = 82.0F;
+    constexpr float kCardIconSizeUVE = 44.0F;
+    constexpr float kCardPaddingUVE = 4.0F;
+    const auto truncateLabelUVE = [](const std::string& label, const float maxWidth) {
+        if (ImGui::CalcTextSize(label.c_str()).x <= maxWidth) {
+            return label;
+        }
+        std::string truncated = label;
+        while (!truncated.empty() &&
+               ImGui::CalcTextSize((truncated + "...").c_str()).x > maxWidth) {
+            truncated.pop_back();
+        }
+        return truncated.empty() ? truncated : truncated + "...";
+    };
+
     const float contentItemsHeight = std::max(36.0F, ImGui::GetContentRegionAvail().y);
     if (ImGui::BeginChild("##folder-contents-items", ImVec2{0.0F, contentItemsHeight}, true,
                            ImGuiWindowFlags_AlwaysVerticalScrollbar)) {
+        const float availableWidth = std::max(kCardWidthUVE, ImGui::GetContentRegionAvail().x);
+        const int columns = std::max(1, static_cast<int>(availableWidth / kCardWidthUVE));
+        const ImVec2 gridOrigin = ImGui::GetCursorPos();
+        ImDrawList* const gridDrawList = ImGui::GetWindowDrawList();
         std::size_t visibleCount = 0U;
         for (const Asset::ProjectFileEntryUVE& entry : snapshot.entries) {
             if (entry.relativePath.parent_path() != selectedDirectory) {
@@ -6397,19 +6417,38 @@ void EditorUVE::DrawFolderContentsPanelUVE() {
             if (!ContainsCaseInsensitiveUVE(entryPath, m_assetFilter)) {
                 continue;
             }
+            const int column = static_cast<int>(visibleCount) % columns;
+            const int row = static_cast<int>(visibleCount) / columns;
             ++visibleCount;
             const ContentBrowserItemTypeUVE type = ClassifyContentBrowserEntryUVE(entry);
             const std::string displayLabel = entry.relativePath.filename().generic_string();
             const std::string rowId = "folder-content-entry-" + entry.relativePath.generic_string();
             ImGui::PushID(rowId.c_str());
+            ImGui::SetCursorPos(ImVec2{gridOrigin.x + static_cast<float>(column) * kCardWidthUVE,
+                                       gridOrigin.y + static_cast<float>(row) * kCardHeightUVE});
+            const ImVec2 cardMin = ImGui::GetCursorScreenPos();
             const bool selected = m_selectedProjectFile.has_value() &&
                                   m_selectedProjectFile->relativePath == entry.relativePath;
-            const bool clicked = ImGui::Selectable(displayLabel.c_str(), selected,
-                                                   ImGuiSelectableFlags_AllowDoubleClick);
+            const bool clicked = ImGui::Selectable("##card", selected, ImGuiSelectableFlags_AllowDoubleClick,
+                                                   ImVec2{kCardWidthUVE - kCardPaddingUVE, kCardHeightUVE - kCardPaddingUVE});
             const bool rowHovered = ImGui::IsItemHovered();
             if (rowHovered) {
-                ImGui::SetTooltip("Type: %s", GetContentBrowserItemTypeLabelUVE(type));
+                ImGui::SetTooltip("%s\nType: %s", displayLabel.c_str(), GetContentBrowserItemTypeLabelUVE(type));
             }
+            const std::uintptr_t iconTexture = type == ContentBrowserItemTypeUVE::Folder
+                                                   ? m_uiAssets.GetFolderTextureIdUVE()
+                                                   : m_uiAssets.GetContentTypeIconTextureIdUVE(
+                                                         GetContentBrowserItemTypeLabelUVE(type));
+            if (iconTexture != 0U) {
+                const float iconX = cardMin.x + (kCardWidthUVE - kCardIconSizeUVE) * 0.5F;
+                gridDrawList->AddImage(static_cast<ImTextureID>(iconTexture), ImVec2{iconX, cardMin.y + 4.0F},
+                                       ImVec2{iconX + kCardIconSizeUVE, cardMin.y + 4.0F + kCardIconSizeUVE});
+            }
+            const std::string truncatedLabel = truncateLabelUVE(displayLabel, kCardWidthUVE - kCardPaddingUVE);
+            const float labelWidth = ImGui::CalcTextSize(truncatedLabel.c_str()).x;
+            const float labelX = cardMin.x + std::max(0.0F, (kCardWidthUVE - labelWidth) * 0.5F);
+            gridDrawList->AddText(ImVec2{labelX, cardMin.y + kCardIconSizeUVE + 8.0F},
+                                 ImGui::GetColorU32(ImGuiCol_Text), truncatedLabel.c_str());
             const bool contextClicked = rowHovered &&
                                          (ImGui::IsMouseClicked(ImGuiMouseButton_Right) ||
                                           ImGui::IsMouseReleased(ImGuiMouseButton_Right));
@@ -6441,7 +6480,13 @@ void EditorUVE::DrawFolderContentsPanelUVE() {
             }
         }
         if (visibleCount == 0U) {
+            ImGui::SetCursorPos(gridOrigin);
             ImGui::TextDisabled(selectedDirectory.empty() ? "main is empty." : "This folder is empty.");
+        } else {
+            const int totalRows = (static_cast<int>(visibleCount) + columns - 1) / columns;
+            ImGui::SetCursorPos(
+                ImVec2{gridOrigin.x, gridOrigin.y + static_cast<float>(totalRows) * kCardHeightUVE});
+            ImGui::Dummy(ImVec2{0.0F, 0.0F});
         }
         ImGui::EndChild();
     }
@@ -6766,12 +6811,17 @@ void EditorUVE::DrawAssetsPanelUVE() {
                                          (ImGui::IsMouseClicked(ImGuiMouseButton_Right) ||
                                           ImGui::IsMouseReleased(ImGuiMouseButton_Right));
             ImDrawList* const rowDrawList = ImGui::GetWindowDrawList();
-            const bool hasFolderImage = type == ContentBrowserItemTypeUVE::Folder && m_uiAssets.IsReadyUVE();
-            const float textOffset = hasFolderImage ? 27.0F : 4.0F;
-            if (hasFolderImage) {
+            const std::uintptr_t rowIconTexture =
+                m_uiAssets.IsReadyUVE() ? (type == ContentBrowserItemTypeUVE::Folder
+                                               ? m_uiAssets.GetFolderTextureIdUVE()
+                                               : m_uiAssets.GetContentTypeIconTextureIdUVE(
+                                                     GetContentBrowserItemTypeLabelUVE(type)))
+                                        : 0U;
+            const float textOffset = rowIconTexture != 0U ? 27.0F : 4.0F;
+            if (rowIconTexture != 0U) {
                 const float iconY = rowMin.y + std::max(0.0F, (rowHeight - 16.0F) * 0.5F);
-                rowDrawList->AddImage(static_cast<ImTextureID>(m_uiAssets.GetFolderTextureIdUVE()),
-                                      ImVec2{rowMin.x + 4.0F, iconY}, ImVec2{rowMin.x + 22.0F, iconY + 16.0F});
+                rowDrawList->AddImage(static_cast<ImTextureID>(rowIconTexture), ImVec2{rowMin.x + 4.0F, iconY},
+                                      ImVec2{rowMin.x + 22.0F, iconY + 16.0F});
             }
             const float textY = rowMin.y + std::max(0.0F, (rowHeight - ImGui::GetTextLineHeight()) * 0.5F);
             rowDrawList->AddText(ImVec2{rowMin.x + textOffset, textY}, ImGui::GetColorU32(ImGuiCol_Text),
