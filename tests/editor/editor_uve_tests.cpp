@@ -102,6 +102,13 @@ struct EditorUVEAccessUVE final {
     [[nodiscard]] static bool IsScenePanelVisibleUVE(const EditorUVE& editor) noexcept { return editor.m_scenePanelVisible; }
     [[nodiscard]] static bool IsInspectorPanelVisibleUVE(const EditorUVE& editor) noexcept { return editor.m_inspectorPanelVisible; }
     [[nodiscard]] static bool IsBottomDockVisibleUVE(const EditorUVE& editor) noexcept { return editor.m_bottomDockVisible; }
+    [[nodiscard]] static bool IsProjectPathFavoritedUVE(const EditorUVE& editor,
+                                                         const std::filesystem::path& relativePath) {
+        return editor.IsProjectPathFavoritedUVE(relativePath);
+    }
+    static void ToggleProjectPathFavoriteUVE(EditorUVE& editor, const std::filesystem::path& relativePath) {
+        editor.ToggleProjectPathFavoriteUVE(relativePath);
+    }
 
     [[nodiscard]] static bool ProjectWorldPointUVE(const EditorUVE& editor, const EditorViewportRectUVE& viewportRect,
                                                    const Math::Vector3UVE& worldPoint,
@@ -751,6 +758,48 @@ TEST(EditorUVETest, SessionSettingsUVE_MigratesWithoutHiddenWriteAndPreservesDoc
         EXPECT_EQ(settings.GetIntUVE("editor.sessionSettingsVersion", -1), 1);
         EXPECT_TRUE(settings.HasKeyUVE("editor.workspace.active"));
         EXPECT_FALSE(editor.IsSceneDirtyUVE());
+        editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
+    std::filesystem::remove(config.settingsFilePath);
+}
+
+TEST(EditorUVETest, FavoritesUVE_ToggleReflectsImmediatelyAndPersistsAcrossSessionReload) {
+    const Core::EngineConfigUVE config = MakeEditorTestConfigUVE();
+    std::filesystem::remove(config.settingsFilePath);
+    Core::EngineCoreUVE engine(config);
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    const std::filesystem::path firstFavorite{"editor"};
+    const std::filesystem::path secondFavorite{"retarget/UNIVEX_bone_retarget_map.json"};
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_favorites.uvescene");
+        editor.InitUVE();
+        EXPECT_FALSE(EditorUVEAccessUVE::IsProjectPathFavoritedUVE(editor, firstFavorite));
+
+        EditorUVEAccessUVE::ToggleProjectPathFavoriteUVE(editor, firstFavorite);
+        EXPECT_TRUE(EditorUVEAccessUVE::IsProjectPathFavoritedUVE(editor, firstFavorite));
+        EditorUVEAccessUVE::ToggleProjectPathFavoriteUVE(editor, secondFavorite);
+        EXPECT_TRUE(EditorUVEAccessUVE::IsProjectPathFavoritedUVE(editor, secondFavorite));
+
+        EditorUVEAccessUVE::ToggleProjectPathFavoriteUVE(editor, firstFavorite);
+        EXPECT_FALSE(EditorUVEAccessUVE::IsProjectPathFavoritedUVE(editor, firstFavorite))
+            << "toggling twice must remove the favorite again";
+
+        EditorUVEAccessUVE::ToggleProjectPathFavoriteUVE(editor, firstFavorite);
+        ASSERT_TRUE(EditorUVEAccessUVE::SaveSessionSettingsUVE(editor));
+        editor.ShutdownUVE();
+    }
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_favorites_reload.uvescene");
+        editor.InitUVE();
+        EXPECT_TRUE(EditorUVEAccessUVE::IsProjectPathFavoritedUVE(editor, firstFavorite))
+            << "a favorite saved before shutdown must survive LoadSessionSettingsUVE on the next InitUVE()";
+        EXPECT_TRUE(EditorUVEAccessUVE::IsProjectPathFavoritedUVE(editor, secondFavorite));
+        EXPECT_FALSE(EditorUVEAccessUVE::IsProjectPathFavoritedUVE(editor, std::filesystem::path{"never-favorited"}));
         editor.ShutdownUVE();
     }
 

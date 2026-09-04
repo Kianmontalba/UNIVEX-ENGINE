@@ -68,6 +68,7 @@ constexpr ImWchar kIconFontGlyphRangesUVE[] = {
     0xEA98, 0xEA98, // Edit
     0xEAA4, 0xEAA4, // File
     0xEAAD, 0xEAAD, // Filesystem (folder)
+    0xEB2E, 0xEB2E, // Favorites (star)
     0xEBD9, 0xEBD9, // Plugin
     0xEDBA, 0xEDBA, // Window (layout-grid)
     0xF91D, 0xF91D, // Help (help-circle)
@@ -93,6 +94,7 @@ constexpr const char* kPanelLabelInspectorUVE = "\xEE\xA8\x83 Inspector##right-p
 constexpr const char* kPanelLabelFilesystemUVE = "\xEE\xAA\xAD Filesystem##project-panel";
 constexpr const char* kPanelLabelContentsUVE = "\xEF\xAB\xB7 Contents##folder-contents-panel";
 constexpr const char* kPanelLabelViewportUVE = "\xEE\xA9\x94 Viewport##viewport";
+constexpr const char* kIconStarUVE = "\xEE\xAC\xAE";
 
 [[nodiscard]] Math::Vector3UVE PrimitiveColliderHalfExtentsUVE(const Scene::PrimitiveMeshKindUVE kind) noexcept {
     switch (kind) {
@@ -4900,6 +4902,17 @@ void EditorUVE::LoadSessionSettingsUVE() {
         m_viewportPresetAnimating = false;
         static_cast<void>(ApplyViewportCameraUVE());
     }
+    constexpr std::int64_t kMaxPersistedFavoritesUVE = 128;
+    const std::int64_t favoritesCount =
+        std::clamp(config.GetIntUVE("editor.favorites.count", 0), std::int64_t{0}, kMaxPersistedFavoritesUVE);
+    m_favoriteProjectPaths.clear();
+    m_favoriteProjectPaths.reserve(static_cast<std::size_t>(favoritesCount));
+    for (std::int64_t index = 0; index < favoritesCount; ++index) {
+        const std::string stored = config.GetStringUVE("editor.favorites." + std::to_string(index), "");
+        if (!stored.empty()) {
+            m_favoriteProjectPaths.emplace_back(stored);
+        }
+    }
 }
 
 bool EditorUVE::SaveSessionSettingsUVE() {
@@ -4930,6 +4943,13 @@ bool EditorUVE::SaveSessionSettingsUVE() {
     config.SetDoubleUVE("editor.viewport.camera.yawRadians", m_viewportYawRadians);
     config.SetDoubleUVE("editor.viewport.camera.pitchRadians", m_viewportPitchRadians);
     config.SetDoubleUVE("editor.viewport.camera.distance", m_viewportDistance);
+    constexpr std::size_t kMaxPersistedFavoritesUVE = 128U;
+    const std::size_t favoritesToPersist = std::min(m_favoriteProjectPaths.size(), kMaxPersistedFavoritesUVE);
+    config.SetIntUVE("editor.favorites.count", static_cast<std::int64_t>(favoritesToPersist));
+    for (std::size_t index = 0U; index < favoritesToPersist; ++index) {
+        config.SetStringUVE("editor.favorites." + std::to_string(index),
+                             m_favoriteProjectPaths[index].generic_string());
+    }
     return config.SaveUVE();
 }
 
@@ -6298,6 +6318,20 @@ void EditorUVE::ReconcileContentBrowserDirectoryUVE(const Asset::ProjectFileSnap
     }
 }
 
+bool EditorUVE::IsProjectPathFavoritedUVE(const std::filesystem::path& relativePath) const {
+    return std::find(m_favoriteProjectPaths.begin(), m_favoriteProjectPaths.end(), relativePath) !=
+           m_favoriteProjectPaths.end();
+}
+
+void EditorUVE::ToggleProjectPathFavoriteUVE(const std::filesystem::path& relativePath) {
+    const auto it = std::find(m_favoriteProjectPaths.begin(), m_favoriteProjectPaths.end(), relativePath);
+    if (it != m_favoriteProjectPaths.end()) {
+        m_favoriteProjectPaths.erase(it);
+    } else {
+        m_favoriteProjectPaths.push_back(relativePath);
+    }
+}
+
 void EditorUVE::DrawFolderContentsPanelUVE() {
     const ImGuiViewport* const mainViewport = ImGui::GetMainViewport();
     const float contentHeight = kAssetsPanelHeightUVE;
@@ -6314,24 +6348,12 @@ void EditorUVE::DrawFolderContentsPanelUVE() {
     ImGui::Begin(kPanelLabelContentsUVE, nullptr, flags);
 
     const Asset::ProjectFileSnapshotUVE snapshot = m_services->GetProjectFileIndexUVE().GetSnapshotUVE();
-    const auto mainDirectoryIt = std::find_if(
-        snapshot.entries.begin(), snapshot.entries.end(), [](const Asset::ProjectFileEntryUVE& entry) {
-            return entry.kind == Asset::ProjectFileEntryKindUVE::Directory && entry.relativePath.parent_path().empty();
-        });
-    const std::filesystem::path mainDirectory = mainDirectoryIt == snapshot.entries.end()
-                                                    ? std::filesystem::path{}
-                                                    : mainDirectoryIt->relativePath;
     std::filesystem::path selectedDirectory = m_contentBrowserDirectory;
     if (m_selectedProjectFile.has_value() &&
         m_selectedProjectFile->kind == Asset::ProjectFileEntryKindUVE::Directory) {
         selectedDirectory = m_selectedProjectFile->relativePath;
     }
-    if (selectedDirectory.empty() && !mainDirectory.empty()) {
-        selectedDirectory = mainDirectory;
-    }
-    const std::string directoryLabel = !mainDirectory.empty() && selectedDirectory == mainDirectory
-                                           ? "main"
-                                           : (selectedDirectory.empty() ? "main" : selectedDirectory.generic_string());
+    const std::string directoryLabel = selectedDirectory.empty() ? "main" : selectedDirectory.generic_string();
     ImGui::TextDisabled("CONTENTS");
     ImGui::SameLine();
     ImGui::TextUnformatted(directoryLabel.c_str());
@@ -6401,6 +6423,7 @@ void EditorUVE::DrawFolderContentsPanelUVE() {
                 if (entry.kind == Asset::ProjectFileEntryKindUVE::Directory &&
                     ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
                     m_contentBrowserDirectory = entry.relativePath;
+                    m_contentBrowserShowingFavorites = false;
                 }
             }
             ImGui::PopID();
@@ -6459,9 +6482,19 @@ void EditorUVE::DrawFilesystemContextPopupUVE() {
     const auto matches = [this](const std::string_view label) {
         return ContainsCaseInsensitiveUVE(label, m_filesystemContextFilter);
     };
+    const bool contextEntryFavorited = IsProjectPathFavoritedUVE(contextEntry.relativePath);
+    const char* const favoriteActionText = contextEntryFavorited ? "Remove from Favorites" : "Add to Favorites";
+    if (matches(favoriteActionText)) {
+        const std::string favoriteMenuLabel = std::string(kIconStarUVE) + " " + favoriteActionText;
+        if (ImGui::MenuItem(favoriteMenuLabel.c_str())) {
+            ToggleProjectPathFavoriteUVE(contextEntry.relativePath);
+            m_filesystemContextVisible = false;
+        }
+    }
     if (contextEntry.kind == Asset::ProjectFileEntryKindUVE::Directory && matches("Open folder")) {
         if (ImGui::MenuItem("Open folder")) {
             m_contentBrowserDirectory = contextEntry.relativePath;
+            m_contentBrowserShowingFavorites = false;
             m_selectedProjectFile = contextEntry;
             m_selectedAsset.reset();
             m_filesystemContextVisible = false;
@@ -6555,13 +6588,6 @@ void EditorUVE::DrawAssetsPanelUVE() {
     Asset::IProjectFileIndexUVE& projectFileIndex = m_services->GetProjectFileIndexUVE();
     const Asset::ProjectChangeSnapshotUVE changeSnapshot = m_services->GetProjectChangeWatcherUVE().GetSnapshotUVE();
     const Asset::ProjectFileSnapshotUVE snapshot = projectFileIndex.GetSnapshotUVE();
-    const auto mainDirectoryIt = std::find_if(
-        snapshot.entries.begin(), snapshot.entries.end(), [](const Asset::ProjectFileEntryUVE& entry) {
-            return entry.kind == Asset::ProjectFileEntryKindUVE::Directory && entry.relativePath.parent_path().empty();
-        });
-    const std::filesystem::path mainDirectory = mainDirectoryIt == snapshot.entries.end()
-                                                    ? std::filesystem::path{}
-                                                    : mainDirectoryIt->relativePath;
     ImGui::TextDisabled("FILESYSTEM");
     ImGui::SameLine(ImGui::GetContentRegionAvail().x - 18.0F);
     if (ImGui::SmallButton("...##filesystem-menu")) {
@@ -6615,10 +6641,31 @@ void EditorUVE::DrawAssetsPanelUVE() {
     }
 
     ImGui::Separator();
+    const bool showingMainRoot = !m_contentBrowserShowingFavorites && m_contentBrowserDirectory.empty();
+    if (showingMainRoot) {
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{0.20F, 0.21F, 0.23F, 1.0F});
+    }
     if (ImGui::SmallButton("main##content-root")) {
+        m_contentBrowserShowingFavorites = false;
         m_contentBrowserDirectory.clear();
         m_selectedProjectFile.reset();
         m_selectedAsset.reset();
+    }
+    if (showingMainRoot) {
+        ImGui::PopStyleColor();
+    }
+    ImGui::SameLine();
+    if (m_contentBrowserShowingFavorites) {
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4{0.20F, 0.21F, 0.23F, 1.0F});
+    }
+    const std::string favoritesButtonLabel = std::string(kIconStarUVE) + " Favorites##favorites-root";
+    if (ImGui::SmallButton(favoritesButtonLabel.c_str())) {
+        m_contentBrowserShowingFavorites = true;
+        m_selectedProjectFile.reset();
+        m_selectedAsset.reset();
+    }
+    if (m_contentBrowserShowingFavorites) {
+        ImGui::PopStyleColor();
     }
 
     std::array<char, 256> filterBuffer{};
@@ -6666,7 +6713,11 @@ void EditorUVE::DrawAssetsPanelUVE() {
 
     std::vector<const Asset::ProjectFileEntryUVE*> visibleEntries;
     for (const Asset::ProjectFileEntryUVE& entry : snapshot.entries) {
-        if (entry.relativePath.parent_path() != m_contentBrowserDirectory) {
+        if (m_contentBrowserShowingFavorites) {
+            if (!IsProjectPathFavoritedUVE(entry.relativePath)) {
+                continue;
+            }
+        } else if (entry.relativePath.parent_path() != m_contentBrowserDirectory) {
             continue;
         }
         const std::string entryPath = entry.relativePath.generic_string();
@@ -6685,7 +6736,9 @@ void EditorUVE::DrawAssetsPanelUVE() {
     } else if (snapshot.entries.empty()) {
         ImGui::TextUnformatted("Project content root is empty.");
     } else if (visibleEntries.empty()) {
-        if (hasActiveFilters) {
+        if (m_contentBrowserShowingFavorites) {
+            ImGui::TextUnformatted("No favorites yet. Right-click a file or folder and choose \"Add to Favorites\".");
+        } else if (hasActiveFilters) {
             ImGui::TextUnformatted("No entries in this folder match the active filters.");
         } else {
             ImGui::TextUnformatted("This folder has no direct entries.");
@@ -6696,9 +6749,7 @@ void EditorUVE::DrawAssetsPanelUVE() {
                                   m_selectedProjectFile->relativePath == entry->relativePath &&
                                   m_selectedProjectFile->kind == entry->kind;
             const ContentBrowserItemTypeUVE type = ClassifyContentBrowserEntryUVE(*entry);
-            const std::string displayLabel = !mainDirectory.empty() && entry->relativePath == mainDirectory
-                                                 ? "main"
-                                                 : entry->relativePath.filename().generic_string();
+            const std::string displayLabel = entry->relativePath.filename().generic_string();
 
             const std::string rowId = "content-browser-entry-" + entry->relativePath.generic_string();
             ImGui::PushID(rowId.c_str());
@@ -6731,6 +6782,7 @@ void EditorUVE::DrawAssetsPanelUVE() {
                 if (entry->kind == Asset::ProjectFileEntryKindUVE::Directory &&
                     ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
                     m_contentBrowserDirectory = entry->relativePath;
+                    m_contentBrowserShowingFavorites = false;
                 }
             }
             if (contextClicked) {

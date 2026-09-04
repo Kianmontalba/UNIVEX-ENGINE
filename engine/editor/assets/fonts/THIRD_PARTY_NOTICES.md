@@ -7,14 +7,14 @@ the `@tabler/icons-webfont` npm package (version `3.46.0`,
 `https://registry.npmjs.org/@tabler/icons-webfont/-/icons-webfont-3.46.0.tgz`).
 Upstream project: <https://github.com/tabler/tabler-icons>.
 
-Only the 12 glyphs the editor chrome actually uses are kept, to avoid
-vendoring a multi-megabyte font for a dozen icons. The subset was produced
+Only the 13 glyphs the editor chrome actually uses are kept, to avoid
+vendoring a multi-megabyte font for a dozen-odd icons. The subset was produced
 with `fonttools`'s `pyftsubset`:
 
 ```
 pyftsubset tabler-icons.ttf \
     --output-file=tabler-icons-subset.ttf \
-    --unicodes=EA03,EA45,EA54,EA98,EAA4,EAAD,EBD9,EDBA,F91D,FA97,FAF7,FAFA \
+    --unicodes=EA03,EA45,EA54,EA98,EAA4,EAAD,EB2E,EBD9,EDBA,F91D,FA97,FAF7,FAFA \
     --glyph-names --layout-features='*' --no-hinting --desubroutinize
 ```
 
