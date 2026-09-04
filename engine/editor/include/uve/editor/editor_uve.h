@@ -838,6 +838,8 @@ private:
     [[nodiscard]] bool IsContentBrowserDirectoryInSnapshotUVE(const Asset::ProjectFileSnapshotUVE& snapshot,
                                                                const std::filesystem::path& directory) const;
     void ReconcileContentBrowserDirectoryUVE(const Asset::ProjectFileSnapshotUVE& snapshot) noexcept;
+    [[nodiscard]] bool IsProjectPathFavoritedUVE(const std::filesystem::path& relativePath) const;
+    void ToggleProjectPathFavoriteUVE(const std::filesystem::path& relativePath);
     void DrawAssetsPanelUVE();
     /// Refreshes the read-only project index after the engine-owned watcher observes a new
     /// filesystem baseline. It never schedules imports or mutates project files.
@@ -899,6 +901,14 @@ private:
     /// Empty is the ProjectFileIndexUVE content root. This value is session-only and must name a
     /// directory in the latest successful copied snapshot before it is used as a browser location.
     std::filesystem::path m_contentBrowserDirectory;
+    /// User-curated shortcuts into the project tree, as project-relative generic paths; both
+    /// directories and files may be favorited. Persisted across sessions (see
+    /// Save/LoadSessionSettingsUVE). An entry no longer present in the latest snapshot is simply
+    /// not shown, never pruned from storage here, so a not-yet-scanned favorite is not lost.
+    std::vector<std::filesystem::path> m_favoriteProjectPaths;
+    /// True while the Filesystem panel shows the flattened Favorites list instead of the direct
+    /// children of m_contentBrowserDirectory.
+    bool m_contentBrowserShowingFavorites = false;
     ContentBrowserTypeFocusUVE m_contentBrowserTypeFocus = ContentBrowserTypeFocusUVE::All;
     std::string m_assetFilter;
     std::string m_inspectorFilter;
