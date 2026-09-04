@@ -481,6 +481,38 @@ float SafeLog10UVE(float value) {
     return log(max(value, 0.000001)) / log(10.0);
 }
 
+// Cheap hash-based value noise + 4-octave FBM for the cloud layer. Real-time engines
+// (mobile/indie/AA titles alike) commonly build a "good enough" sky cloud layer this way -
+// a direction-mapped noise field, not a placeholder - rather than volumetric ray-marching,
+// which is out of scope for an editor viewport backdrop.
+float HashUVE(vec2 p) {
+    p = fract(p * vec2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
+}
+
+float ValueNoiseUVE(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    float a = HashUVE(i);
+    float b = HashUVE(i + vec2(1.0, 0.0));
+    float c = HashUVE(i + vec2(0.0, 1.0));
+    float d = HashUVE(i + vec2(1.0, 1.0));
+    vec2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+float CloudFbmUVE(vec2 p) {
+    float value = 0.0;
+    float amplitude = 0.5;
+    for (int octave = 0; octave < 4; ++octave) {
+        value += amplitude * ValueNoiseUVE(p);
+        p *= 2.02;
+        amplitude *= 0.5;
+    }
+    return value;
+}
+
 void main() {
     vec2 surfaceUv = gl_FragCoord.xy / max(uSurfaceSize.xy, vec2(1.0));
     vec2 viewportExtent = max(uViewportMax.xy - uViewportMin.xy, vec2(0.001));
@@ -504,25 +536,49 @@ void main() {
         rayDirection = normalize(forward + right * (ndc.x * uViewportAspect * tanHalfFov) + up * (ndc.y * tanHalfFov));
     }
 
-    const vec3 skyColor = vec3(0.246, 0.282, 0.322);       // #3F4852
-    const vec3 groundColor = vec3(0.145, 0.165, 0.184);    // #252A2F
-    const vec3 horizonColor = vec3(0.282, 0.322, 0.361);   // #48525C
+    // Atmospheric editor sky: deep blue zenith fading through a pale, warm-tinted horizon band,
+    // with a soft ground tone below it (this remains an editor grid backdrop, not a lit ground
+    // plane, so the ground stays a plain neutral dark rather than trying to fake terrain).
+    const vec3 zenithColor = vec3(0.153, 0.322, 0.612);    // deep sky blue
+    const vec3 upperSkyColor = vec3(0.361, 0.541, 0.792);  // mid sky blue
+    const vec3 horizonColor = vec3(0.784, 0.831, 0.871);   // pale, slightly warm haze
+    const vec3 groundColor = vec3(0.114, 0.122, 0.137);
     const vec3 gridColor = vec3(0.349, 0.388, 0.427);      // #59636D
     const vec3 axisXColor = vec3(1.0, 0.365, 0.365);       // Navigation Gizmo X #FF5D5D
     const vec3 axisYColor = vec3(0.290, 0.871, 0.502);      // Navigation Gizmo Y #4ADE80
     const vec3 axisZColor = vec3(0.231, 0.612, 1.0);       // Navigation Gizmo Z #3B9CFF
+    const vec3 sunDirection = normalize(vec3(-0.38, 0.82, 0.30));
 
     float skyHeight = clamp(rayDirection.y, -1.0, 1.0);
     float horizonBlend = smoothstep(-0.16, 0.18, skyHeight);
     vec3 color = vec3(0.355, 0.365, 0.380); // neutral preview-off gray
     if (uEnvironmentPreviewEnabled != 0) {
         color = mix(groundColor, horizonColor, smoothstep(0.0, 0.35, skyHeight));
-        color = mix(color, skyColor, smoothstep(0.18, 0.72, skyHeight));
+        color = mix(color, upperSkyColor, smoothstep(0.08, 0.55, skyHeight));
+        color = mix(color, zenithColor, smoothstep(0.45, 1.0, skyHeight));
+
+        // Sun-side warmth: even without drawing the sun disc itself, the sky around it should
+        // read warmer, the way real Rayleigh/Mie scattering biases the sky near the sun.
+        float sunProximity = clamp(dot(rayDirection, sunDirection), 0.0, 1.0);
+        color = mix(color, vec3(0.92, 0.78, 0.58), pow(sunProximity, 6.0) * 0.35 * smoothstep(-0.05, 0.2, skyHeight));
+
+        // Cloud layer: only above the horizon, fading out near the horizon and thinning toward
+        // the zenith, sampled by direction so it doesn't swim as the camera orbits in place.
+        if (skyHeight > -0.02) {
+            vec2 cloudUv = rayDirection.xz / (abs(rayDirection.y) + 0.18) * 1.35;
+            float cloudDensity = CloudFbmUVE(cloudUv + vec2(3.1, 7.7));
+            float cloudMask = smoothstep(0.52, 0.78, cloudDensity);
+            float cloudBandFade = smoothstep(-0.02, 0.12, skyHeight) * (1.0 - smoothstep(0.55, 1.0, skyHeight));
+            vec3 cloudColor = mix(vec3(0.78, 0.80, 0.84), vec3(1.0, 0.99, 0.97), smoothstep(0.55, 0.9, cloudDensity));
+            color = mix(color, cloudColor, cloudMask * cloudBandFade * 0.85);
+        }
     }
     if (uSunPreviewEnabled != 0) {
-        const vec3 sunDirection = normalize(vec3(-0.38, 0.82, 0.30));
-        float sunDisc = pow(max(dot(rayDirection, sunDirection), 0.0), 256.0);
-        color += vec3(1.0, 0.83, 0.55) * sunDisc * 0.82;
+        float sunAlignment = max(dot(rayDirection, sunDirection), 0.0);
+        float sunGlow = pow(sunAlignment, 24.0);
+        float sunDisc = pow(sunAlignment, 800.0);
+        color += vec3(1.0, 0.87, 0.62) * sunGlow * 0.45;
+        color += vec3(1.0, 0.96, 0.88) * sunDisc * 1.4;
     }
 
     float groundDenominator = rayDirection.y;
