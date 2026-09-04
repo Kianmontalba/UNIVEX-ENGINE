@@ -11,6 +11,7 @@
 #include <android/log.h>
 #endif
 
+#include "gl_error_check_uve.h"
 #include "uve/debug/assert_uve.h"
 #include "uve/debug/logging_macros_uve.h"
 
@@ -548,6 +549,7 @@ void GlCommandBufferUVE::DrawIndexedUVE(std::uint32_t indexCount, std::uint32_t 
         UVE_WARNING("GlCommandBufferUVE: DrawIndexedUVE instanceCount > 1 is not yet supported - drawing once");
     }
     glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(indexCount), GL_UNSIGNED_INT, nullptr);
+    UVE_GL_CHECK_ERROR_UVE("DrawIndexedUVE");
 }
 
 void GlCommandBufferUVE::DrawUVE(std::uint32_t vertexCount, std::uint32_t instanceCount) {
@@ -579,6 +581,7 @@ void GlCommandBufferUVE::DrawUVE(std::uint32_t vertexCount, std::uint32_t instan
         UVE_WARNING("GlCommandBufferUVE: DrawUVE instanceCount > 1 is not yet supported - drawing once");
     }
     glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(vertexCount));
+    UVE_GL_CHECK_ERROR_UVE("DrawUVE");
 }
 
 } // namespace UVE::Render

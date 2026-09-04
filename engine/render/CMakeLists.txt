@@ -21,6 +21,7 @@ add_library(uve_render STATIC
     src/light_system_uve.cpp
     src/renderer_3d_uve.cpp
     src/gl_functions_uve.cpp
+    src/gl_error_check_uve.cpp
     src/gl_command_buffer_uve.cpp
     src/gl_render_device_uve.cpp
     src/shader_data_type_uve.cpp
