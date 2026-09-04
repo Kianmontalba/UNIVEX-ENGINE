@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <limits>
+#include <optional>
 #include <span>
 #include <string>
 #include <vector>
@@ -259,6 +260,18 @@ enum class LoadOpUVE : std::uint8_t { Clear, Load, DontCare };
 /// backend's default framebuffer" (the window's back buffer) rather than an offscreen texture —
 /// a backend-specific meaning `GlRenderDeviceUVE` acts on (binding GL framebuffer object `0`);
 /// `NullRenderDeviceUVE` ignores it like every other field it bookkeeps without interpreting.
+/// A pixel-space sub-rectangle of a render pass's target (attachment or, for the default
+/// framebuffer, the window). Introduced for Phase 3's ViewportManagerUVE, where multiple panes
+/// render into different regions of the same window in a single frame - but it's a general
+/// RenderPassDescUVE capability, not split-view-specific, since any caller may want to render into
+/// less than the full attachment.
+struct ViewportRectUVE {
+    std::uint32_t x = 0;
+    std::uint32_t y = 0;
+    std::uint32_t width = 0;
+    std::uint32_t height = 0;
+};
+
 struct RenderPassDescUVE {
     TextureHandleUVE colorAttachment;
     TextureHandleUVE depthAttachment;
@@ -266,6 +279,12 @@ struct RenderPassDescUVE {
     std::array<float, 4> clearColor{0.0F, 0.0F, 0.0F, 1.0F};
     LoadOpUVE depthLoadOp = LoadOpUVE::Clear;
     float clearDepth = 1.0F;
+    /// When set, the pass's GL viewport is this pixel rect instead of the full attachment/window
+    /// size. Must fit entirely within the target: `x + width` and `y + height` must not exceed the
+    /// attachment's (or, for the default framebuffer, the window's) dimensions. A backend rejects
+    /// an out-of-bounds rect the same way it rejects any other malformed pass descriptor, rather
+    /// than silently clamping it.
+    std::optional<ViewportRectUVE> viewportOverride;
 };
 
 } // namespace UVE::Render

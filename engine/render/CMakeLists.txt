@@ -20,6 +20,7 @@ add_library(uve_render STATIC
     src/primitive_geometry_uve.cpp
     src/light_system_uve.cpp
     src/renderer_3d_uve.cpp
+    src/viewport_manager_uve.cpp
     src/gl_functions_uve.cpp
     src/gl_error_check_uve.cpp
     src/gl_command_buffer_uve.cpp

@@ -565,6 +565,12 @@ struct Renderer3DUVE::ImplUVE {
     Events::EventSubscriptionUVE reloadSubscription;
     const Scene::ParticleRuntimeUVE* particleRuntimeForFrame = nullptr;
 
+    /// Set only for the duration of a RenderFrameToRegionUVE() call (Phase 3's ViewportManagerUVE
+    /// split-view support), mirroring particleRuntimeForFrame's own scoped-field pattern just
+    /// above. The ToneMapping pass reads this when building its RenderPassDescUVE, so a full-frame
+    /// RenderFrameUVE() call (this field left nullopt) is unaffected.
+    std::optional<ViewportRectUVE> destinationViewportOverride;
+
     ImplUVE(IRenderDeviceUVE& renderDeviceIn, IRenderSystemUVE& renderSystemIn, IMeshRendererUVE& meshRendererIn,
             ICameraSystemUVE& cameraSystemIn, ILightSystemUVE& lightSystemIn,
             Shader::IShaderManagerUVE& shaderManagerIn, Asset::IAssetManagerUVE& assetManagerIn,
@@ -1777,6 +1783,7 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
             RenderPassDescUVE passDesc;
             passDesc.colorAttachment = kInvalidTextureHandleUVE;
             passDesc.depthAttachment = kInvalidTextureHandleUVE;
+            passDesc.viewportOverride = m_impl->destinationViewportOverride;
             commandBuffer.BeginRenderPassUVE(passDesc);
             m_impl->toneMappingProgram->SetIntUVE("uSourceTexture", 0);
             m_impl->toneMappingProgram->ApplyToUVE(commandBuffer);
@@ -1802,6 +1809,18 @@ void Renderer3DUVE::RenderFrameWithParticleRuntimeUVE(Scene::IEntityManagerUVE& 
         const Scene::ParticleRuntimeUVE* previous;
         ~RuntimeFrameScopeUVE() { slot = previous; }
     } scope{m_impl->particleRuntimeForFrame, previousRuntime};
+    RenderFrameUVE(entityManager, cameraEntity);
+}
+
+void Renderer3DUVE::RenderFrameToRegionUVE(Scene::IEntityManagerUVE& entityManager, Scene::EntityUVE cameraEntity,
+                                            const ViewportRectUVE& region) {
+    const std::optional<ViewportRectUVE> previousOverride = m_impl->destinationViewportOverride;
+    m_impl->destinationViewportOverride = region;
+    struct RegionScopeUVE final {
+        std::optional<ViewportRectUVE>& slot;
+        std::optional<ViewportRectUVE> previous;
+        ~RegionScopeUVE() { slot = previous; }
+    } scope{m_impl->destinationViewportOverride, previousOverride};
     RenderFrameUVE(entityManager, cameraEntity);
 }
 
