@@ -75,9 +75,9 @@ TEST_F(ProjectCheckerUVETest, RunUVE_ResolvesRelativeAssetDatabasePathFromProjec
 
 TEST_F(ProjectCheckerUVETest, RunUVE_IsolatesCorruptFilesAndAggregatesIndependentDiagnostics) {
     static_cast<void>(WriteEnvelopeUVE("good.uvescene", Asset::AssetKindUVE::Scene));
-    static_cast<void>(WriteEnvelopeUVE("wrong.uvemesh", Asset::AssetKindUVE::Blob));
+    static_cast<void>(WriteEnvelopeUVE("wrong.uvemodel", Asset::AssetKindUVE::Blob));
     {
-        std::ofstream corrupt(m_root / "broken.uvemesh", std::ios::binary);
+        std::ofstream corrupt(m_root / "broken.uvemodel", std::ios::binary);
         corrupt << "not-a-uve-envelope";
     }
 
@@ -88,9 +88,9 @@ TEST_F(ProjectCheckerUVETest, RunUVE_IsolatesCorruptFilesAndAggregatesIndependen
     bool foundWrongUnregistered = false;
     bool foundGoodUnregistered = false;
     for (const ProjectCheckDiagnosticUVE& diagnostic : report.diagnostics) {
-        foundDecodeFailure |= diagnostic.code == "envelope.decode.failed" && diagnostic.path.filename() == "broken.uvemesh";
-        foundKindMismatch |= diagnostic.code == "envelope.kind.mismatch" && diagnostic.path.filename() == "wrong.uvemesh";
-        foundWrongUnregistered |= diagnostic.code == "registry.file.unregistered" && diagnostic.path.filename() == "wrong.uvemesh";
+        foundDecodeFailure |= diagnostic.code == "envelope.decode.failed" && diagnostic.path.filename() == "broken.uvemodel";
+        foundKindMismatch |= diagnostic.code == "envelope.kind.mismatch" && diagnostic.path.filename() == "wrong.uvemodel";
+        foundWrongUnregistered |= diagnostic.code == "registry.file.unregistered" && diagnostic.path.filename() == "wrong.uvemodel";
         foundGoodUnregistered |= diagnostic.code == "registry.file.unregistered" && diagnostic.path.filename() == "good.uvescene";
     }
     EXPECT_TRUE(foundDecodeFailure);

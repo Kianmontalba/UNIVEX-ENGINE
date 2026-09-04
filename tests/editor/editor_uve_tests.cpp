@@ -12,6 +12,7 @@
 
 #include <gtest/gtest.h>
 
+#include "uve/asset/texture_asset_uve.h"
 #include "uve/core/engine_core_uve.h"
 #include "uve/editor/editor_uve.h"
 #include "uve/editor/gizmo_system_uve.h"
@@ -108,6 +109,13 @@ struct EditorUVEAccessUVE final {
     }
     static void ToggleProjectPathFavoriteUVE(EditorUVE& editor, const std::filesystem::path& relativePath) {
         editor.ToggleProjectPathFavoriteUVE(relativePath);
+    }
+    [[nodiscard]] static std::uintptr_t GetTextureThumbnailUVE(EditorUVE& editor,
+                                                                const std::filesystem::path& relativePath) {
+        return editor.GetTextureThumbnailUVE(relativePath);
+    }
+    [[nodiscard]] static std::size_t GetTextureThumbnailCacheSizeUVE(const EditorUVE& editor) noexcept {
+        return editor.m_textureThumbnailCache.size();
     }
 
     [[nodiscard]] static bool ProjectWorldPointUVE(const EditorUVE& editor, const EditorViewportRectUVE& viewportRect,
@@ -576,7 +584,7 @@ TEST(EditorUVETest, ContentBrowserWorkflowUVE_UsesPrimaryExtensionTagAndIndepend
     {
         EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_content_browser_tags.uvescene");
         Asset::ProjectFileEntryUVE registeredMesh;
-        registeredMesh.relativePath = "Characters/Hero.UVEMESH";
+        registeredMesh.relativePath = "Characters/Hero.UVEMODEL";
         registeredMesh.kind = Asset::ProjectFileEntryKindUVE::File;
         registeredMesh.registeredAssetGuid = Asset::AssetGuidUVE{42U};
 
@@ -706,6 +714,55 @@ TEST(EditorUVETest, ContentBrowserAutoRefreshUVE_RefreshesAfterEngineWatcherSequ
             engine.GetServicesUVE().GetProjectChangeWatcherUVE().GetSnapshotUVE();
         EXPECT_TRUE(changeSnapshot.changes.empty());
         EXPECT_FALSE(changeSnapshot.rescanRequired);
+
+        editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
+    std::filesystem::remove_all(root);
+}
+
+TEST(EditorUVETest, TextureThumbnailUVE_GracefullyReturnsZeroForMissingCorruptOrUnsupportedFormat) {
+    const std::filesystem::path root = "uve_editor_tests_texture_thumbnail_content";
+    std::filesystem::remove_all(root);
+    ASSERT_TRUE(std::filesystem::create_directories(root));
+
+    {
+        std::ofstream corrupt(root / "corrupt.uvetex", std::ios::binary | std::ios::trunc);
+        ASSERT_TRUE(corrupt.is_open());
+        corrupt << "not-a-uve-envelope";
+    }
+    {
+        // A structurally valid envelope declaring an unsupported pixel format for thumbnails
+        // (RGBA16Float): LoadTextureAssetUVE succeeds, but GetTextureThumbnailUVE must still
+        // decline to upload it rather than misinterpreting the byte layout as RGBA8Unorm.
+        Asset::TextureAssetUVE unsupported;
+        unsupported.width = 1U;
+        unsupported.height = 1U;
+        unsupported.format = Asset::TextureFormatUVE::RGBA16Float;
+        unsupported.pixels.resize(Asset::BytesPerPixelUVE(Asset::TextureFormatUVE::RGBA16Float));
+        ASSERT_TRUE(Asset::SaveTextureAssetUVE(unsupported, root / "unsupported.uvetex"));
+    }
+
+    Core::EngineConfigUVE config = MakeEditorTestConfigUVE();
+    config.projectContentRootUVE = root;
+    Core::EngineCoreUVE engine(config);
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_texture_thumbnail.uvescene");
+        editor.InitUVE();
+        engine.TickFrameUVE();
+        editor.TickUVE();
+
+        EXPECT_EQ(EditorUVEAccessUVE::GetTextureThumbnailUVE(editor, "missing.uvetex"), 0U);
+        EXPECT_EQ(EditorUVEAccessUVE::GetTextureThumbnailUVE(editor, "corrupt.uvetex"), 0U);
+        EXPECT_EQ(EditorUVEAccessUVE::GetTextureThumbnailUVE(editor, "unsupported.uvetex"), 0U);
+        // All three attempts are cached (as failures) rather than retried every call.
+        EXPECT_EQ(EditorUVEAccessUVE::GetTextureThumbnailCacheSizeUVE(editor), 3U);
+        EXPECT_EQ(EditorUVEAccessUVE::GetTextureThumbnailUVE(editor, "missing.uvetex"), 0U);
+        EXPECT_EQ(EditorUVEAccessUVE::GetTextureThumbnailCacheSizeUVE(editor), 3U);
 
         editor.ShutdownUVE();
     }

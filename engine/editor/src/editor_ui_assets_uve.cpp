@@ -283,4 +283,13 @@ std::uintptr_t EditorUiAssetsUVE::GetContentTypeIconTextureIdUVE(const std::stri
     return FindTextureIdUVE(kContentTypeIconSourcesUVE, m_contentTypeIconTextureIds, typeId);
 }
 
+std::uintptr_t EditorUiAssetsUVE::UploadDynamicTextureUVE(const std::uint8_t* const pixels, const int width,
+                                                           const int height) noexcept {
+    return UploadTextureUVE(pixels, width, height);
+}
+
+void EditorUiAssetsUVE::DeleteDynamicTextureUVE(std::uintptr_t& textureId) noexcept {
+    DeleteTextureUVE(textureId);
+}
+
 } // namespace UVE::Editor

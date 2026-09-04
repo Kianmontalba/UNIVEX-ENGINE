@@ -28,6 +28,7 @@
 #include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_opengl3.h>
 
+#include "uve/asset/texture_asset_uve.h"
 #include "uve/asset/uve_file_envelope_uve.h"
 #include "uve/config/i_config_manager_uve.h"
 #include "uve/physics/raycast_query_uve.h"
@@ -3252,6 +3253,7 @@ void EditorUVE::ShutdownUVE() {
         }
     }
     if (m_uiInitialized) {
+        ClearTextureThumbnailCacheUVE();
         m_uiAssets.ShutdownUVE();
         ImGui_ImplOpenGL3_Shutdown();
         ImGui_ImplGlfw_Shutdown();
@@ -6188,16 +6190,16 @@ EditorUVE::ContentBrowserItemTypeUVE EditorUVE::ClassifyContentBrowserEntryUVE(
     if (extension == ".uvebundle") {
         return ContentBrowserItemTypeUVE::Bundle;
     }
-    if (extension == ".uvemesh") {
+    if (extension == ".uvemodel") {
         return ContentBrowserItemTypeUVE::Mesh;
     }
-    if (extension == ".uvetexture") {
+    if (extension == ".uvetex") {
         return ContentBrowserItemTypeUVE::Texture;
     }
     if (extension == ".uveshader") {
         return ContentBrowserItemTypeUVE::Shader;
     }
-    if (extension == ".uvematerial") {
+    if (extension == ".uvemat") {
         return ContentBrowserItemTypeUVE::Material;
     }
     if (extension == ".uvesave") {
@@ -6332,6 +6334,33 @@ void EditorUVE::ToggleProjectPathFavoriteUVE(const std::filesystem::path& relati
     }
 }
 
+std::uintptr_t EditorUVE::GetTextureThumbnailUVE(const std::filesystem::path& relativePath) {
+    const std::string cacheKey = relativePath.generic_string();
+    const auto cachedIt = m_textureThumbnailCache.find(cacheKey);
+    if (cachedIt != m_textureThumbnailCache.end()) {
+        return cachedIt->second;
+    }
+    const Asset::ProjectFileSnapshotUVE snapshot = m_services->GetProjectFileIndexUVE().GetSnapshotUVE();
+    const std::filesystem::path absolutePath = snapshot.contentRoot / relativePath;
+    Asset::TextureAssetUVE texture;
+    std::uintptr_t textureId = 0U;
+    if (Asset::LoadTextureAssetUVE(absolutePath, texture) && texture.width > 0U && texture.height > 0U &&
+        texture.format == Asset::TextureFormatUVE::RGBA8Unorm) {
+        textureId = EditorUiAssetsUVE::UploadDynamicTextureUVE(reinterpret_cast<const std::uint8_t*>(texture.pixels.data()),
+                                                                static_cast<int>(texture.width),
+                                                                static_cast<int>(texture.height));
+    }
+    m_textureThumbnailCache.emplace(cacheKey, textureId);
+    return textureId;
+}
+
+void EditorUVE::ClearTextureThumbnailCacheUVE() noexcept {
+    for (auto& [path, textureId] : m_textureThumbnailCache) {
+        EditorUiAssetsUVE::DeleteDynamicTextureUVE(textureId);
+    }
+    m_textureThumbnailCache.clear();
+}
+
 void EditorUVE::DrawFolderContentsPanelUVE() {
     const ImGuiViewport* const mainViewport = ImGui::GetMainViewport();
     const float contentHeight = kAssetsPanelHeightUVE;
@@ -6435,10 +6464,13 @@ void EditorUVE::DrawFolderContentsPanelUVE() {
             if (rowHovered) {
                 ImGui::SetTooltip("%s\nType: %s", displayLabel.c_str(), GetContentBrowserItemTypeLabelUVE(type));
             }
-            const std::uintptr_t iconTexture = type == ContentBrowserItemTypeUVE::Folder
-                                                   ? m_uiAssets.GetFolderTextureIdUVE()
-                                                   : m_uiAssets.GetContentTypeIconTextureIdUVE(
-                                                         GetContentBrowserItemTypeLabelUVE(type));
+            const std::uintptr_t textureThumbnail =
+                type == ContentBrowserItemTypeUVE::Texture ? GetTextureThumbnailUVE(entry.relativePath) : 0U;
+            const std::uintptr_t iconTexture =
+                textureThumbnail != 0U ? textureThumbnail
+                : type == ContentBrowserItemTypeUVE::Folder
+                    ? m_uiAssets.GetFolderTextureIdUVE()
+                    : m_uiAssets.GetContentTypeIconTextureIdUVE(GetContentBrowserItemTypeLabelUVE(type));
             if (iconTexture != 0U) {
                 const float iconX = cardMin.x + (kCardWidthUVE - kCardIconSizeUVE) * 0.5F;
                 gridDrawList->AddImage(static_cast<ImTextureID>(iconTexture), ImVec2{iconX, cardMin.y + 4.0F},
@@ -6609,6 +6641,8 @@ void EditorUVE::RefreshProjectFileIndexUVE() {
             // A successful full index refresh is the explicit boundary that safely clears watcher overflow.
             projectChangeWatcher.AcknowledgeRescanUVE();
         }
+        // On-disk content may have changed since these were cached; re-decode lazily on next display.
+        ClearTextureThumbnailCacheUVE();
     } else {
         m_projectFileRefreshAttemptedForRescan = changesBeforeRefresh.rescanRequired;
     }
