@@ -39,10 +39,10 @@ namespace {
     if (extension == ".uvescene") return Asset::AssetKindUVE::Scene;
     if (extension == ".uveprefab") return Asset::AssetKindUVE::Prefab;
     if (extension == ".uvebundle") return Asset::AssetKindUVE::Bundle;
-    if (extension == ".uvemesh") return Asset::AssetKindUVE::Mesh;
-    if (extension == ".uvetexture") return Asset::AssetKindUVE::Texture;
+    if (extension == ".uvemodel") return Asset::AssetKindUVE::Mesh;
+    if (extension == ".uvetex") return Asset::AssetKindUVE::Texture;
     if (extension == ".uveshader") return Asset::AssetKindUVE::Shader;
-    if (extension == ".uvematerial") return Asset::AssetKindUVE::Material;
+    if (extension == ".uvemat") return Asset::AssetKindUVE::Material;
     if (extension == ".uvesave") return Asset::AssetKindUVE::Save;
     return std::nullopt;
 }

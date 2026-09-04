@@ -40,6 +40,16 @@ public:
     /// GetFolderTextureIdUVE() instead) or any unrecognized key.
     [[nodiscard]] std::uintptr_t GetContentTypeIconTextureIdUVE(std::string_view typeId) const noexcept;
 
+    /// Uploads an arbitrary RGBA8 image (e.g. a decoded Asset::TextureAssetUVE) as a standalone GL
+    /// texture, for editor-owned dynamic content the fixed baked-icon set above doesn't cover
+    /// (e.g. Content Browser thumbnails). Returns 0 on failure. Does not depend on instance state:
+    /// callers manage the returned id's lifetime themselves via DeleteDynamicTextureUVE().
+    [[nodiscard]] static std::uintptr_t UploadDynamicTextureUVE(const std::uint8_t* pixels, int width,
+                                                                 int height) noexcept;
+    /// Releases a texture previously returned by UploadDynamicTextureUVE() and zeroes it. Safe to
+    /// call with an already-zero id.
+    static void DeleteDynamicTextureUVE(std::uintptr_t& textureId) noexcept;
+
 private:
     std::uintptr_t m_logoTextureId = 0U;
     std::uintptr_t m_folderTextureId = 0U;

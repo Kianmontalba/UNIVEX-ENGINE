@@ -544,7 +544,7 @@ private:
     };
 
     /// A file's primary presentation type. Registry correlation is deliberately a separate badge:
-    /// one registered `.uvemesh` row therefore remains Mesh + Registered, never an ambiguous tag.
+    /// one registered `.uvemodel` row therefore remains Mesh + Registered, never an ambiguous tag.
     enum class ContentBrowserItemTypeUVE {
         Folder,
         Scene,
@@ -840,6 +840,12 @@ private:
     void ReconcileContentBrowserDirectoryUVE(const Asset::ProjectFileSnapshotUVE& snapshot) noexcept;
     [[nodiscard]] bool IsProjectPathFavoritedUVE(const std::filesystem::path& relativePath) const;
     void ToggleProjectPathFavoriteUVE(const std::filesystem::path& relativePath);
+    /// Returns a GL texture id showing relativePath's own decoded image content, loading and
+    /// uploading it on first request and caching the result thereafter. Returns 0 if the file
+    /// cannot be loaded as a texture asset (not a texture, corrupt, or an unsupported pixel
+    /// format) - callers should fall back to the generic per-type icon in that case.
+    [[nodiscard]] std::uintptr_t GetTextureThumbnailUVE(const std::filesystem::path& relativePath);
+    void ClearTextureThumbnailCacheUVE() noexcept;
     void DrawAssetsPanelUVE();
     /// Refreshes the read-only project index after the engine-owned watcher observes a new
     /// filesystem baseline. It never schedules imports or mutates project files.
@@ -909,6 +915,12 @@ private:
     /// True while the Filesystem panel shows the flattened Favorites list instead of the direct
     /// children of m_contentBrowserDirectory.
     bool m_contentBrowserShowingFavorites = false;
+    /// Content-derived thumbnail textures for Content Browser entries (currently texture assets
+    /// only), keyed by project-relative generic path. A cached 0 means a prior load attempt
+    /// failed (not a texture, corrupt, or unsupported format) and callers should fall back to the
+    /// generic per-type icon rather than retrying every frame. Cleared whenever the project file
+    /// index is successfully refreshed, since on-disk content may have changed.
+    std::map<std::string, std::uintptr_t> m_textureThumbnailCache;
     ContentBrowserTypeFocusUVE m_contentBrowserTypeFocus = ContentBrowserTypeFocusUVE::All;
     std::string m_assetFilter;
     std::string m_inspectorFilter;
