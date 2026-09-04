@@ -16,6 +16,7 @@
 #endif
 
 #include "gl_command_buffer_uve.h"
+#include "gl_error_check_uve.h"
 #include "gl_render_device_state_uve.h"
 #include "uve/debug/assert_uve.h"
 #include "uve/debug/logging_macros_uve.h"
@@ -274,6 +275,7 @@ GlRenderDeviceUVE::GlRenderDeviceUVE(Window::IWindowManagerUVE& windowManager)
         m_impl->state.supportsComputeShadersUVE =
             contextMajorVersion > 4 || (contextMajorVersion == 4 && contextMinorVersion >= 3);
 #endif
+        Detail::RegisterGlDebugCallbackUVE(m_impl->state.gl);
         UVE_INFO("GlRenderDeviceUVE: initialized, backend GL_VERSION={}",
                   reinterpret_cast<const char*>(glGetString(GL_VERSION)));
     }
@@ -343,6 +345,7 @@ BufferHandleUVE GlRenderDeviceUVE::CreateBufferUVE(const BufferDescUVE& desc, st
     m_impl->state.gl.glBindBuffer(target, glBuffer);
     m_impl->state.gl.glBufferData(target, static_cast<GLsizeiptr>(desc.sizeBytes),
                                     initialData.empty() ? nullptr : initialData.data(), GL_STATIC_DRAW);
+    UVE_GL_CHECK_ERROR_UVE("CreateBufferUVE");
     m_impl->state.gl.glBindBuffer(target, static_cast<GLuint>(previousBufferBinding));
 
     const std::uint32_t handleValue = m_impl->state.nextBufferHandle++;
@@ -384,6 +387,7 @@ bool GlRenderDeviceUVE::UpdateBufferUVE(BufferHandleUVE buffer, std::span<const 
     m_impl->state.gl.glBindBuffer(it->second.target, it->second.glBuffer);
     m_impl->state.gl.glBufferSubData(it->second.target, static_cast<GLintptr>(offsetBytes),
                                        static_cast<GLsizeiptr>(data.size()), data.data());
+    UVE_GL_CHECK_ERROR_UVE("UpdateBufferUVE");
     m_impl->state.gl.glBindBuffer(it->second.target, static_cast<GLuint>(previousBufferBinding));
     return true;
 }
@@ -419,6 +423,7 @@ TextureHandleUVE GlRenderDeviceUVE::CreateTextureUVE(const TextureDescUVE& desc,
     glTexImage2D(GL_TEXTURE_2D, 0, glFormat.internalFormat, static_cast<GLsizei>(desc.width),
                  static_cast<GLsizei>(desc.height), 0, glFormat.format, glFormat.type,
                  initialData.empty() ? nullptr : initialData.data());
+    UVE_GL_CHECK_ERROR_UVE("CreateTextureUVE");
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);

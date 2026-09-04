@@ -73,6 +73,15 @@ struct GlFunctionsUVE {
     PFNGLGETPROGRAMBINARYPROC glGetProgramBinary = nullptr;
     PFNGLPROGRAMBINARYPROC glProgramBinary = nullptr;
 
+    // GL_KHR_debug (core since desktop GL 4.3; a common but not universally guaranteed GLES
+    // extension - this engine's Android baseline is a fixed GLES 3.0 context, so this is expected
+    // to stay null there). Deliberately excluded from IsCompleteUVE() below, matching
+    // glGetProgramBinary/glProgramBinary's precedent immediately above: an optional capability a
+    // caller checks for null before using, not a hard requirement for a usable render device. See
+    // gl_error_check_uve.h for the manual glGetError()-polling fallback this engine relies on when
+    // this pointer isn't available (Phase 2e GL error checking).
+    PFNGLDEBUGMESSAGECALLBACKPROC glDebugMessageCallback = nullptr;
+
     /// True iff every function pointer above loaded successfully (non-null).
     [[nodiscard]] bool IsCompleteUVE() const noexcept;
 };
