@@ -74,6 +74,41 @@ namespace {
     return true;
 }
 
+/// Resolves and applies the pass's GL viewport: the full `targetWidth`x`targetHeight` by default,
+/// or `renderPassDesc.viewportOverride` if set (Phase 3's ViewportManagerUVE split-view support -
+/// see RenderPassDescUVE's doc comment). Returns false without calling glViewport() if an override
+/// is present but does not fit within the target, matching this function's existing "reject a
+/// malformed pass descriptor" convention rather than silently clamping it.
+///
+/// Also arms (or disarms) GL_SCISSOR_TEST to match: glViewport alone does not confine a clear -
+/// glClear ignores the viewport and always affects the whole framebuffer unless the scissor test
+/// is also enabled with a matching rect. Without this, a second pane's Clear-load-op pass would
+/// wipe out a first pane already drawn into the same default framebuffer. Explicitly setting this
+/// on every call (both branches) rather than only when an override is present means no scissor
+/// state can leak from a previous pass into one that doesn't ask for it.
+[[nodiscard]] bool ApplyViewportUVE(const RenderPassDescUVE& renderPassDesc, const std::uint32_t targetWidth,
+                                     const std::uint32_t targetHeight) noexcept {
+    if (!renderPassDesc.viewportOverride.has_value()) {
+        glViewport(0, 0, static_cast<GLsizei>(targetWidth), static_cast<GLsizei>(targetHeight));
+        glDisable(GL_SCISSOR_TEST);
+        return true;
+    }
+    const ViewportRectUVE& rect = *renderPassDesc.viewportOverride;
+    if (rect.width == 0U || rect.height == 0U || rect.x + rect.width > targetWidth ||
+        rect.y + rect.height > targetHeight) {
+        UVE_ERROR("GlCommandBufferUVE: BeginRenderPassUVE viewportOverride ({}, {}, {}x{}) does not fit within "
+                  "the {}x{} target",
+                  rect.x, rect.y, rect.width, rect.height, targetWidth, targetHeight);
+        return false;
+    }
+    glEnable(GL_SCISSOR_TEST);
+    glScissor(static_cast<GLint>(rect.x), static_cast<GLint>(rect.y), static_cast<GLsizei>(rect.width),
+              static_cast<GLsizei>(rect.height));
+    glViewport(static_cast<GLint>(rect.x), static_cast<GLint>(rect.y), static_cast<GLsizei>(rect.width),
+               static_cast<GLsizei>(rect.height));
+    return true;
+}
+
 } // namespace
 
 GlCommandBufferUVE::GlCommandBufferUVE(Detail::GlDeviceStateUVE& state) : m_state(&state) {}
@@ -115,7 +150,9 @@ void GlCommandBufferUVE::BeginRenderPassUVE(const RenderPassDescUVE& renderPassD
         }
         m_state->gl.glBindFramebuffer(GL_FRAMEBUFFER, 0);
         m_tempFramebuffer = 0;
-        glViewport(0, 0, static_cast<GLsizei>(width), static_cast<GLsizei>(height));
+        if (!ApplyViewportUVE(renderPassDesc, width, height)) {
+            return;
+        }
     } else {
         const auto colorIt = renderPassDesc.colorAttachment == kInvalidTextureHandleUVE
                                  ? m_state->textures.end()
@@ -212,7 +249,14 @@ void GlCommandBufferUVE::BeginRenderPassUVE(const RenderPassDescUVE& renderPassD
             }
         }
 
-        glViewport(0, 0, static_cast<GLsizei>(attachmentWidth), static_cast<GLsizei>(attachmentHeight));
+        if (!ApplyViewportUVE(renderPassDesc, attachmentWidth, attachmentHeight)) {
+            if (framebufferCreated) {
+                m_state->gl.glDeleteFramebuffers(1, &framebuffer);
+                m_state->framebufferCache.erase(framebufferKey);
+                m_state->gl.glBindFramebuffer(GL_FRAMEBUFFER, static_cast<GLuint>(previousFramebuffer));
+            }
+            return;
+        }
         m_tempFramebuffer = framebuffer;
     }
 

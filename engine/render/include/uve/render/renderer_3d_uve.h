@@ -59,6 +59,8 @@ public:
     [[nodiscard]] bool ResizeTargetsUVE(std::uint32_t width, std::uint32_t height) override;
     void RenderFrameWithParticleRuntimeUVE(Scene::IEntityManagerUVE& entityManager, Scene::EntityUVE cameraEntity,
                                            const Scene::ParticleRuntimeUVE& particleRuntime) override;
+    void RenderFrameToRegionUVE(Scene::IEntityManagerUVE& entityManager, Scene::EntityUVE cameraEntity,
+                                const ViewportRectUVE& region) override;
     void SetEditorViewportVisualStateUVE(const EditorViewportVisualStateUVE& state) override;
     void SetPostProcessSettingsUVE(const PostProcessSettingsUVE& settings) override;
     [[nodiscard]] Renderer3DFrameDiagnosticsUVE GetLastFrameDiagnosticsUVE() const noexcept override;

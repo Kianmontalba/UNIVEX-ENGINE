@@ -109,6 +109,7 @@ add_executable(uve_tests
     render/primitive_geometry_uve_tests.cpp
     render/light_system_uve_tests.cpp
     render/renderer_3d_uve_tests.cpp
+    render/viewport_manager_uve_tests.cpp
     audio/audio_attenuation_model_uve_tests.cpp
     audio/audio_mixer_group_uve_tests.cpp
     audio/null_audio_device_uve_tests.cpp

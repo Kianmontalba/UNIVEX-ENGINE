@@ -2070,5 +2070,85 @@ TEST_F(GlRenderDeviceUVETest, CommandBuffer_SetUniformCalls_OnBoundPipeline_DoNo
     SUCCEED();
 }
 
+// Phase 3 (ViewportManagerUVE): BeginRenderPassUVE's viewportOverride must isolate each pane via
+// GL_SCISSOR_TEST, not just glViewport - glClear() ignores glViewport() but respects the scissor
+// rect. Without that scissor-test pairing (see ApplyViewportUVE in gl_command_buffer_uve.cpp),
+// clearing the second pane would silently wipe out the first pane already drawn to the shared
+// default framebuffer. This test renders two flat-colored fullscreen-triangle passes into two
+// disjoint viewportOverride rects on the default framebuffer and reads back a pixel from each
+// half to confirm neither pane's Clear touched the other's pixels.
+TEST_F(GlRenderDeviceUVETest, BeginRenderPassUVE_ViewportOverride_IsolatesPanesViaScissor) {
+    constexpr std::string_view kFullscreenVertexSource = R"(#version 330 core
+void main() {
+    vec2 position = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2);
+    gl_Position = vec4(position * 2.0 - 1.0, 0.0, 1.0);
+}
+)";
+    constexpr std::string_view kFlatColorFragmentSource = R"(#version 330 core
+out vec4 FragColor;
+uniform vec3 uColor;
+void main() {
+    FragColor = vec4(uColor, 1.0);
+}
+)";
+    const ShaderHandleUVE vertexShader =
+        renderDevice->CreateShaderUVE(ShaderDescUVE{ShaderStageUVE::Vertex, std::string(kFullscreenVertexSource)});
+    const ShaderHandleUVE fragmentShader = renderDevice->CreateShaderUVE(
+        ShaderDescUVE{ShaderStageUVE::Fragment, std::string(kFlatColorFragmentSource)});
+    ASSERT_NE(vertexShader, kInvalidShaderHandleUVE);
+    ASSERT_NE(fragmentShader, kInvalidShaderHandleUVE);
+
+    PipelineDescUVE pipelineDesc;
+    pipelineDesc.vertexShader = vertexShader;
+    pipelineDesc.fragmentShader = fragmentShader;
+    pipelineDesc.depthTestEnabled = false;
+    pipelineDesc.depthWriteEnabled = false;
+    const PipelineHandleUVE pipeline = renderDevice->CreatePipelineUVE(pipelineDesc);
+    ASSERT_NE(pipeline, kInvalidPipelineHandleUVE);
+
+    std::unique_ptr<ICommandBufferUVE> commandBuffer = renderDevice->CreateCommandBufferUVE();
+    ASSERT_NE(commandBuffer, nullptr);
+
+    // The window is 64x64 (MakeTestWindowDescUVE()) - left pane occupies x in [0, 32), right pane
+    // x in [32, 64), each pane's full height.
+    RenderPassDescUVE leftPassDesc;
+    leftPassDesc.colorAttachment = kInvalidTextureHandleUVE;
+    leftPassDesc.colorLoadOp = LoadOpUVE::Clear;
+    leftPassDesc.clearColor = {0.0F, 0.0F, 0.0F, 1.0F};
+    leftPassDesc.depthLoadOp = LoadOpUVE::DontCare;
+    leftPassDesc.viewportOverride = ViewportRectUVE{0U, 0U, 32U, 64U};
+    commandBuffer->BeginRenderPassUVE(leftPassDesc);
+    commandBuffer->BindPipelineUVE(pipeline);
+    commandBuffer->SetUniformVector3UVE("uColor", Math::Vector3UVE{0.9F, 0.05F, 0.05F});
+    commandBuffer->DrawUVE(3U);
+    commandBuffer->EndRenderPassUVE();
+
+    RenderPassDescUVE rightPassDesc = leftPassDesc;
+    rightPassDesc.viewportOverride = ViewportRectUVE{32U, 0U, 32U, 64U};
+    commandBuffer->BeginRenderPassUVE(rightPassDesc);
+    commandBuffer->BindPipelineUVE(pipeline);
+    commandBuffer->SetUniformVector3UVE("uColor", Math::Vector3UVE{0.05F, 0.05F, 0.9F});
+    commandBuffer->DrawUVE(3U);
+    commandBuffer->EndRenderPassUVE();
+
+    renderDevice->SubmitUVE(std::move(commandBuffer));
+
+    std::array<std::uint8_t, 3> leftPixel{};
+    glReadPixels(16, 32, 1, 1, GL_RGB, GL_UNSIGNED_BYTE, leftPixel.data());
+    std::array<std::uint8_t, 3> rightPixel{};
+    glReadPixels(48, 32, 1, 1, GL_RGB, GL_UNSIGNED_BYTE, rightPixel.data());
+    EXPECT_EQ(glGetError(), GL_NO_ERROR);
+
+    // Left pane must still be red - the right pane's Clear must not have bled across the scissor
+    // boundary and wiped it back to black.
+    EXPECT_GT(leftPixel[0], static_cast<std::uint8_t>(leftPixel[2] + 64U));
+    // Right pane must be blue.
+    EXPECT_GT(rightPixel[2], static_cast<std::uint8_t>(rightPixel[0] + 64U));
+
+    renderDevice->DestroyPipelineUVE(pipeline);
+    renderDevice->DestroyShaderUVE(vertexShader);
+    renderDevice->DestroyShaderUVE(fragmentShader);
+}
+
 } // namespace
 } // namespace UVE::Render::Tests
