@@ -107,6 +107,7 @@ add_executable(uve_tests
     render/particle_draw_command_uve_tests.cpp
     render/mesh_renderer_uve_tests.cpp
     render/mesh_render_eligibility_uve_tests.cpp
+    render/gizmo_overlay_geometry_uve_tests.cpp
     render/primitive_geometry_uve_tests.cpp
     render/light_system_uve_tests.cpp
     render/renderer_3d_uve_tests.cpp

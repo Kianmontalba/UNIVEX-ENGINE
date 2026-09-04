@@ -28,6 +28,7 @@
 #include "uve/math/quaternion_uve.h"
 #include "uve/render/i_light_system_uve.h"
 #include "uve/render/render_graph_uve.h"
+#include "uve/render/gizmo_overlay_geometry_uve.h"
 #include "uve/render/primitive_geometry_uve.h"
 #include "uve/render/particle_render_bridge_uve.h"
 #include "uve/render/particle_draw_command_uve.h"
@@ -482,6 +483,11 @@ struct Renderer3DUVE::ImplUVE {
     Renderer3DFrameDiagnosticsUVE lastFrameDiagnostics;
     EditorViewportVisualStateUVE editorVisualState{};
 
+    /// This frame's real 3D translate-gizmo arrows (SetEditorGizmoOverlayItemsUVE()) - copied
+    /// facts, not a retained scene object; replaced wholesale on every call, matching
+    /// editorVisualState's own convention.
+    std::vector<GizmoOverlayItemUVE> gizmoOverlayItems{};
+
     /// Flat ambient term added to every rendered item every frame, regardless of whether an
     /// active light exists this frame (see EngineConfigUVE::ambientColor, Increment 23).
     Math::Vector3UVE ambientColor;
@@ -559,6 +565,13 @@ struct Renderer3DUVE::ImplUVE {
     /// view-projection, and authored base-color uniforms; primitives intentionally do not bind
     /// material, texture, light, or shadow state.
     std::shared_ptr<Shader::ShaderProgramUVE> primitiveProgram;
+
+    /// Real 3D translate-gizmo arrow program (engine/render/shader/built_in/gizmo_lit_3d.glsl) and
+    /// its one-time-uploaded GPU mesh (GetGizmoArrowGeometryUVE(), never invalidated - unlike
+    /// meshCache/primitiveMeshCache, this is not asset-hot-reload-driven, so there is nothing to
+    /// key it by; the constructor uploads it exactly once and the destructor frees it).
+    std::shared_ptr<Shader::ShaderProgramUVE> gizmoOverlayProgram;
+    MeshGpuResourcesUVE gizmoArrowMeshResources{};
 
     /// A 1x1 opaque-white texture, used whenever a material leaves albedoTexture/aoTexture unset
     /// (kInvalidAssetGuidUVE) — sampling it always yields {1,1,1,1}, so
@@ -1194,6 +1207,36 @@ struct Renderer3DUVE::ImplUVE {
         }
         return drawCalls;
     }
+
+    /// Draws every submitted GizmoOverlayItemUVE with the one shared arrow mesh, depth-tested (and
+    /// depth-written) against the already-recorded MainColor pass's own depth buffer so the gizmo
+    /// is correctly occluded by real scene geometry in front of it, and so the three arrows
+    /// (drawn as three separate draw calls in submission order) correctly occlude each other too.
+    [[nodiscard]] std::size_t RecordGizmoOverlayItemsUVE(const std::vector<GizmoOverlayItemUVE>& items,
+                                                          const FrameUniformsUVE& frameUniforms,
+                                                          ICommandBufferUVE& commandBuffer) {
+        if (!gizmoOverlayProgram->IsValidUVE() || !IsValidMeshGpuResourcesUVE(gizmoArrowMeshResources)) {
+            return 0U;
+        }
+        // A fixed, camera-independent key light direction: a real light rig is unnecessary
+        // overhead for a small always-legible editor widget, and a fixed direction keeps the
+        // gizmo's shading stable as the user orbits the viewport (mirroring how EditorUVE's own
+        // nav-gizmo axis colors are similarly viewpoint-independent).
+        constexpr Math::Vector3UVE kGizmoLightDirectionUVE{-0.4F, -0.7F, -0.3F};
+        std::size_t drawCalls = 0U;
+        for (const GizmoOverlayItemUVE& item : items) {
+            gizmoOverlayProgram->SetMatrix4x4UVE("uModel", item.worldMatrix);
+            gizmoOverlayProgram->SetMatrix4x4UVE("uViewProjection", frameUniforms.viewProjection);
+            gizmoOverlayProgram->SetVector3UVE("uColor", item.color);
+            gizmoOverlayProgram->SetVector3UVE("uLightDirection", kGizmoLightDirectionUVE);
+            gizmoOverlayProgram->ApplyToUVE(commandBuffer);
+            commandBuffer.BindVertexBufferUVE(gizmoArrowMeshResources.vertexBuffer);
+            commandBuffer.BindIndexBufferUVE(gizmoArrowMeshResources.indexBuffer);
+            commandBuffer.DrawIndexedUVE(gizmoArrowMeshResources.indexCount);
+            ++drawCalls;
+        }
+        return drawCalls;
+    }
 };
 
 Renderer3DUVE::Renderer3DUVE(IRenderDeviceUVE& renderDevice, IRenderSystemUVE& renderSystem,
@@ -1342,6 +1385,37 @@ Renderer3DUVE::Renderer3DUVE(IRenderDeviceUVE& renderDevice, IRenderSystemUVE& r
     primitiveProgramDesc.debugNameUVE = "BuiltInPrimitiveVisual";
     m_impl->primitiveProgram = shaderManager.CreateProgramUVE(primitiveProgramDesc);
 
+    Shader::ShaderProgramDescUVE gizmoOverlayProgramDesc;
+    gizmoOverlayProgramDesc.virtualFilePath = std::string(Shader::BuiltIn::kGizmoLit3DVirtualPath);
+    gizmoOverlayProgramDesc.embeddedFallbackSourceCode = std::string(Shader::BuiltIn::kGizmoLit3DSource);
+    gizmoOverlayProgramDesc.vertexLayout = MeshVertexLayoutUVE();
+    gizmoOverlayProgramDesc.vertexStride = static_cast<std::uint32_t>(sizeof(Asset::MeshVertexUVE));
+    gizmoOverlayProgramDesc.depthTestEnabled = true;
+    gizmoOverlayProgramDesc.depthWriteEnabled = true;
+    gizmoOverlayProgramDesc.debugNameUVE = "EditorGizmoOverlay";
+    m_impl->gizmoOverlayProgram = shaderManager.CreateProgramUVE(gizmoOverlayProgramDesc);
+
+    {
+        // One-time upload of the translate-gizmo arrow mesh - unlike primitiveMeshCache, this has
+        // no per-kind cache key: there is exactly one gizmo arrow mesh, ever.
+        const PrimitiveGeometryUVE& arrowGeometry = GetGizmoArrowGeometryUVE();
+        const std::span<const Asset::MeshVertexUVE> vertexSpan(arrowGeometry.vertices);
+        const std::span<const std::uint32_t> indexSpan(arrowGeometry.indices);
+        const BufferHandleUVE vertexBuffer = renderDevice.CreateBufferUVE(
+            BufferDescUVE{std::as_bytes(vertexSpan).size(), BufferUsageUVE::Vertex}, std::as_bytes(vertexSpan));
+        const BufferHandleUVE indexBuffer = renderDevice.CreateBufferUVE(
+            BufferDescUVE{std::as_bytes(indexSpan).size(), BufferUsageUVE::Index}, std::as_bytes(indexSpan));
+        MeshGpuResourcesUVE resources{vertexBuffer, indexBuffer,
+                                       static_cast<std::uint32_t>(arrowGeometry.indices.size())};
+        if (!IsValidMeshGpuResourcesUVE(resources)) {
+            DestroyBufferIfValidUVE(renderDevice, vertexBuffer);
+            DestroyBufferIfValidUVE(renderDevice, indexBuffer);
+            UVE_ERROR("Renderer3DUVE: gizmo arrow GPU buffer allocation failed; overlay will not draw");
+            resources = MeshGpuResourcesUVE{};
+        }
+        m_impl->gizmoArrowMeshResources = resources;
+    }
+
     ImplUVE* const implPtr = m_impl.get();
     m_impl->reloadSubscription = eventSystem.Subscribe<Asset::AssetReloadedEventUVE>(
         [implPtr](const Asset::AssetReloadedEventUVE& event) { implPtr->OnAssetReloadedUVE(event); });
@@ -1357,6 +1431,8 @@ Renderer3DUVE::~Renderer3DUVE() {
         DestroyBufferIfValidUVE(m_impl->renderDevice, meshResources.vertexBuffer);
         DestroyBufferIfValidUVE(m_impl->renderDevice, meshResources.indexBuffer);
     }
+    DestroyBufferIfValidUVE(m_impl->renderDevice, m_impl->gizmoArrowMeshResources.vertexBuffer);
+    DestroyBufferIfValidUVE(m_impl->renderDevice, m_impl->gizmoArrowMeshResources.indexBuffer);
     // MaterialGpuResourcesUVE holds shared ShaderProgramUVE references only. Releasing the cache
     // lets ShaderManagerUVE-owned program deleters retire their pipelines exactly once.
     m_impl->materialCache.clear();
@@ -1537,9 +1613,11 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
     RenderGraphUVE& renderGraph = m_impl->renderGraph;
     renderGraph.ClearUVE();
     // +6 resources beyond the shadow cascades: color, depth, SSAO, bloom bright-pass, and the two
-    // bloom blur ping-pong targets. +9 passes: EditorViewportEnvironment, MainColor, SSAO,
-    // SSAOComposite, BloomBrightPass, BloomBlurH, BloomBlurV, BloomComposite, ToneMapping.
-    renderGraph.ReserveUVE(kShadowCascadeCountUVE + 6U, kShadowCascadeCountUVE + 9U);
+    // bloom blur ping-pong targets. +10 passes: EditorViewportEnvironment, MainColor, SSAO,
+    // SSAOComposite, BloomBrightPass, BloomBlurH, BloomBlurV, BloomComposite, EditorGizmoOverlay,
+    // ToneMapping (EditorGizmoOverlay is conditional on gizmoOverlayItems being non-empty, so this
+    // undercounts by one on frames with none - a reserve() hint, not a hard capacity).
+    renderGraph.ReserveUVE(kShadowCascadeCountUVE + 6U, kShadowCascadeCountUVE + 10U);
     std::array<RenderGraphResourceHandleUVE, kShadowCascadeCountUVE> shadowResources{};
     if (shadowsReady) {
         for (std::size_t cascadeIndex = 0; cascadeIndex < kShadowCascadeCountUVE; ++cascadeIndex) {
@@ -1796,6 +1874,28 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
             });
     }
 
+    if (!m_impl->gizmoOverlayItems.empty()) {
+        m_impl->lastFrameDiagnostics.gizmoOverlayItemsSubmitted = m_impl->gizmoOverlayItems.size();
+        m_impl->lastFrameDiagnostics.gizmoOverlayProgramReady = m_impl->gizmoOverlayProgram->IsValidUVE();
+        const std::array<RenderGraphResourceUseUVE, 2U> gizmoOverlayResources{
+            RenderGraphResourceUseUVE{colorResource, RenderGraphResourceAccessUVE::Write},
+            RenderGraphResourceUseUVE{depthResource, RenderGraphResourceAccessUVE::Read}};
+        renderGraph.AddPassUVE(
+            "EditorGizmoOverlay", gizmoOverlayResources,
+            [this, &frameUniforms](ICommandBufferUVE& commandBuffer) {
+                RenderPassDescUVE passDesc;
+                passDesc.colorAttachment = m_impl->colorTarget;
+                passDesc.depthAttachment = m_impl->depthTarget;
+                passDesc.colorLoadOp = LoadOpUVE::Load;
+                passDesc.depthLoadOp = LoadOpUVE::Load;
+                m_impl->lastFrameDiagnostics.gizmoOverlayPassRecorded = true;
+                commandBuffer.BeginRenderPassUVE(passDesc);
+                m_impl->lastFrameDiagnostics.gizmoOverlayDrawCallsRecorded =
+                    m_impl->RecordGizmoOverlayItemsUVE(m_impl->gizmoOverlayItems, frameUniforms, commandBuffer);
+                commandBuffer.EndRenderPassUVE();
+            });
+    }
+
     // The default framebuffer is an external presentation surface, not a TextureHandleUVE; the
     // scene color input remains explicit in the graph while this pass writes that external output.
     const std::array<RenderGraphResourceUseUVE, 1U> toneMappingResources{
@@ -1863,6 +1963,10 @@ void Renderer3DUVE::RenderFrameToRegionUVE(Scene::IEntityManagerUVE& entityManag
 
 void Renderer3DUVE::SetEditorViewportVisualStateUVE(const EditorViewportVisualStateUVE& state) {
     m_impl->editorVisualState = state;
+}
+
+void Renderer3DUVE::SetEditorGizmoOverlayItemsUVE(const std::span<const GizmoOverlayItemUVE> items) {
+    m_impl->gizmoOverlayItems.assign(items.begin(), items.end());
 }
 
 void Renderer3DUVE::SetPostProcessSettingsUVE(const PostProcessSettingsUVE& settings) {

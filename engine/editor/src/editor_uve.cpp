@@ -463,6 +463,28 @@ void DrawNativeIconLabelUVE(const std::uintptr_t textureId, const char* const la
     return IM_COL32(190, 190, 190, alpha);
 }
 
+/// Same palette as GizmoAxisColorUVE() above, as a normalized (0..1) Vector3UVE for the real 3D
+/// gizmo overlay's uColor uniform - kept as a separate function (not a shared conversion) since
+/// ImU32's 0-255 IM_COL32 literals and this shader's 0..1 float uniform are different unit
+/// systems with their own natural authoring form; deriving one from the other would obscure both.
+[[nodiscard]] Math::Vector3UVE GizmoAxisColorVector3UVE(const EditorTransformAxisUVE axis,
+                                                        const bool active) noexcept {
+    if (active) {
+        return Math::Vector3UVE{1.0F, 0.851F, 0.2F}; // #FFD933
+    }
+    switch (axis) {
+        case EditorTransformAxisUVE::X:
+            return Math::Vector3UVE{1.0F, 0.365F, 0.365F}; // #FF5D5D
+        case EditorTransformAxisUVE::Y:
+            return Math::Vector3UVE{0.290F, 0.871F, 0.502F}; // #4ADE80
+        case EditorTransformAxisUVE::Z:
+            return Math::Vector3UVE{0.231F, 0.612F, 1.0F}; // #3B9CFF
+        case EditorTransformAxisUVE::None:
+            return Math::Vector3UVE{0.745F, 0.745F, 0.745F};
+    }
+    return Math::Vector3UVE{0.745F, 0.745F, 0.745F};
+}
+
 [[nodiscard]] bool GetRingBasisUVE(const EditorTransformAxisUVE axis, Math::Vector3UVE& outFirst,
                                    Math::Vector3UVE& outSecond) noexcept {
     switch (axis) {
@@ -4477,6 +4499,11 @@ void EditorUVE::DrawUnifiedTransformGizmoUVE(const EditorViewportRectUVE& viewpo
     // Package-aligned screen-space renderer. The interaction/history path remains UniVex-native;
     // this overlay intentionally replaces the former thin-line three-pass presentation with one
     // ordered widget: outer rotate rings, move arrows/planes/omni box, then inner scale handles.
+    // The move axes are the one part drawn as real 3D GPU geometry (see the Move block below)
+    // instead of a 2D ImGui projection, so every one of this function's early-return paths must
+    // also clear whatever real 3D items a previous frame submitted - cleared unconditionally here,
+    // re-populated later only if a Move-mode selection is actually drawn this frame.
+    m_services->GetRenderer3DUVE().SetEditorGizmoOverlayItemsUVE({});
     if (!HasSingleDocumentSelectionUVE() || !IsViewportRectValidUVE(viewportRect)) {
         return;
     }
@@ -4529,21 +4556,28 @@ void EditorUVE::DrawUnifiedTransformGizmoUVE(const EditorViewportRectUVE& viewpo
         return GetGizmoAxisWorldVectorUVE(m_selectedEntity, axis, worldAxis) &&
                ProjectWorldPointUVE(viewportRect, selectedWorld.worldPosition + worldAxis * distance, outPoint);
     };
-    const auto drawArrow = [&](const EditorTransformAxisUVE axis, const float distance, const bool active) {
+    // Returns whether the axis ended up highlighted (active or hovered) - callers that draw the
+    // arrow themselves with real 3D geometry instead (see the Move block below) still need this
+    // hover computation, just not the 2D ImGui line-and-triangle presentation, hence `draw2D`.
+    const auto drawArrow = [&](const EditorTransformAxisUVE axis, const float distance, const bool active,
+                               const bool draw2D = true) {
         Math::Vector2UVE endpoint{};
         if (!projectAxisPoint(axis, distance, endpoint)) {
-            return;
+            return false;
         }
         const ImVec2 end{endpoint.x, endpoint.y};
         const ImVec2 delta{end.x - centerPoint.x, end.y - centerPoint.y};
         const float length = std::sqrt((delta.x * delta.x) + (delta.y * delta.y));
         if (!IsFiniteUVE(length) || length <= 8.0F) {
-            return;
+            return false;
+        }
+        const bool hovered = distanceSquaredToSegment(mousePosition, centerPoint, end) <= 14.0F * 14.0F;
+        const bool highlighted = active || hovered;
+        if (!draw2D) {
+            return highlighted;
         }
         const ImVec2 direction{delta.x / length, delta.y / length};
         const ImVec2 perpendicular{-direction.y, direction.x};
-        const bool hovered = distanceSquaredToSegment(mousePosition, centerPoint, end) <= 14.0F * 14.0F;
-        const bool highlighted = active || hovered;
         const ImU32 color = GizmoAxisColorUVE(axis, highlighted);
         const float shaftEnd = std::max(0.0F, length - std::clamp(length * 0.16F, 10.0F, 19.0F));
         const ImVec2 shaft{centerPoint.x + direction.x * shaftEnd, centerPoint.y + direction.y * shaftEnd};
@@ -4556,6 +4590,7 @@ void EditorUVE::DrawUnifiedTransformGizmoUVE(const EditorViewportRectUVE& viewpo
                                     color);
         drawList->AddTriangle(ImVec2{end.x - direction.x * 1.5F, end.y - direction.y * 1.5F}, left, right,
                                IM_COL32(14, 16, 21, 235), highlighted ? 2.0F : 1.5F);
+        return highlighted;
     };
     const auto drawBoxAtAxis = [&](const EditorTransformAxisUVE axis, const float distance, const bool active) {
         Math::Vector2UVE endpoint{};
@@ -4693,11 +4728,39 @@ void EditorUVE::DrawUnifiedTransformGizmoUVE(const EditorViewportRectUVE& viewpo
     }
 
     if (showMove) {
+        std::vector<Render::GizmoOverlayItemUVE> gizmoOverlayItems;
+        gizmoOverlayItems.reserve(axes.size());
         for (const EditorTransformAxisUVE axis : axes) {
             const bool active = m_gizmoDrag.mode == EditorGizmoModeUVE::Translate &&
                                 m_gizmoDrag.handleKind == GizmoHandleKindUVE::Axis && m_gizmoDrag.axis == axis;
-            drawArrow(axis, kGizmoAxisLengthUVE, active);
+            // The Move axes alone are drawn as real 3D GPU geometry (see GetGizmoArrowGeometryUVE())
+            // instead of a 2D ImGui projection - drawArrow(..., /*draw2D=*/false) still does its
+            // usual hover computation (so click/hover behavior is byte-for-byte unchanged from the
+            // 2D path), it just skips the 2D presentation this real mesh now replaces.
+            const bool highlighted = drawArrow(axis, kGizmoAxisLengthUVE, active, false);
+            Math::Vector3UVE worldAxis{};
+            if (!GetGizmoAxisWorldVectorUVE(m_selectedEntity, axis, worldAxis)) {
+                continue;
+            }
+            // TryMakeLookAtUVE() degenerates when `direction` is parallel to `up` (their cross
+            // product is then zero) - which happens for exactly the Y-axis arrow under the default
+            // world-up reference, so fall back to a reference that is never parallel to any single
+            // world/local axis direction this loop can produce.
+            const Math::Vector3UVE upReference = std::abs(worldAxis.y) > 0.999F
+                                                      ? Math::Vector3UVE{1.0F, 0.0F, 0.0F}
+                                                      : Math::Vector3UVE{0.0F, 1.0F, 0.0F};
+            Math::QuaternionUVE arrowRotation{};
+            if (!Math::TryMakeLookAtUVE(worldAxis, upReference, arrowRotation)) {
+                continue;
+            }
+            Render::GizmoOverlayItemUVE item;
+            item.worldMatrix = Math::Matrix4x4UVE::ComposeTrsUVE(
+                selectedWorld.worldPosition, arrowRotation,
+                Math::Vector3UVE{kGizmoAxisLengthUVE, kGizmoAxisLengthUVE, kGizmoAxisLengthUVE});
+            item.color = GizmoAxisColorVector3UVE(axis, highlighted);
+            gizmoOverlayItems.push_back(item);
         }
+        m_services->GetRenderer3DUVE().SetEditorGizmoOverlayItemsUVE(gizmoOverlayItems);
         for (const EditorTranslatePlaneUVE plane : {EditorTranslatePlaneUVE::XY, EditorTranslatePlaneUVE::YZ,
                                                     EditorTranslatePlaneUVE::XZ}) {
             const bool active = m_gizmoDrag.mode == EditorGizmoModeUVE::Translate &&
@@ -7700,6 +7763,8 @@ void EditorUVE::DrawViewportPanelUVE() {
         DrawSelectionBoundsUVE(viewportRect);
         if (IsAuthoringCommandAllowedUVE()) {
             DrawUnifiedTransformGizmoUVE(viewportRect);
+        } else {
+            m_services->GetRenderer3DUVE().SetEditorGizmoOverlayItemsUVE({});
         }
         ImDrawList* const drawList = ImGui::GetWindowDrawList();
         if (GetDocumentRootsUVE().empty()) {

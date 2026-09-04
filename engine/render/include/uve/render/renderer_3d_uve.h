@@ -63,6 +63,7 @@ public:
                                 const ViewportRectUVE& region,
                                 const Scene::ParticleRuntimeUVE* particleRuntime = nullptr) override;
     void SetEditorViewportVisualStateUVE(const EditorViewportVisualStateUVE& state) override;
+    void SetEditorGizmoOverlayItemsUVE(std::span<const GizmoOverlayItemUVE> items) override;
     void SetPostProcessSettingsUVE(const PostProcessSettingsUVE& settings) override;
     [[nodiscard]] Renderer3DFrameDiagnosticsUVE GetLastFrameDiagnosticsUVE() const noexcept override;
 

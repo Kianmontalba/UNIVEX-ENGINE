@@ -454,6 +454,66 @@ TEST_F(Renderer3DUVETest, RenderFrameUVE_VisiblePrimitive_ReportsEvidenceSpecifi
     EXPECT_TRUE(orthographicScalePublished);
 }
 
+TEST_F(Renderer3DUVETest, SetEditorGizmoOverlayItemsUVE_SubmittedItems_RecordOneDrawCallEach) {
+    const Scene::EntityUVE cameraEntity = MakeCameraEntityUVE();
+    renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+    const Renderer3DFrameDiagnosticsUVE beforeAnyItems = renderer3D->GetLastFrameDiagnosticsUVE();
+    EXPECT_EQ(beforeAnyItems.gizmoOverlayItemsSubmitted, 0U);
+    EXPECT_FALSE(beforeAnyItems.gizmoOverlayPassRecorded);
+
+    for (int iteration = 0; iteration < kMaxPollIterationsUVE; ++iteration) {
+        shaderManager.UpdateUVE(0.0);
+        if (shaderManager.GetPendingJobCountUVE() == 0U) {
+            break;
+        }
+        std::this_thread::yield();
+    }
+    ASSERT_EQ(shaderManager.GetPendingJobCountUVE(), 0U);
+
+    const std::array<GizmoOverlayItemUVE, 3> items{
+        GizmoOverlayItemUVE{Math::Matrix4x4UVE::ComposeTrsUVE(Math::Vector3UVE{0.0F, 0.0F, -10.0F},
+                                                                Math::QuaternionUVE{}, Math::Vector3UVE{1.0F, 1.0F, 1.0F}),
+                            Math::Vector3UVE{1.0F, 0.0F, 0.0F}},
+        GizmoOverlayItemUVE{Math::Matrix4x4UVE::ComposeTrsUVE(Math::Vector3UVE{0.2F, 0.0F, -10.0F},
+                                                                Math::QuaternionUVE{}, Math::Vector3UVE{1.0F, 1.0F, 1.0F}),
+                            Math::Vector3UVE{0.0F, 1.0F, 0.0F}},
+        GizmoOverlayItemUVE{Math::Matrix4x4UVE::ComposeTrsUVE(Math::Vector3UVE{0.0F, 0.2F, -10.0F},
+                                                                Math::QuaternionUVE{}, Math::Vector3UVE{1.0F, 1.0F, 1.0F}),
+                            Math::Vector3UVE{0.0F, 0.0F, 1.0F}},
+    };
+    renderer3D->SetEditorGizmoOverlayItemsUVE(items);
+    renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+    const Renderer3DFrameDiagnosticsUVE withItems = renderer3D->GetLastFrameDiagnosticsUVE();
+    EXPECT_EQ(withItems.gizmoOverlayItemsSubmitted, 3U);
+    EXPECT_TRUE(withItems.gizmoOverlayProgramReady);
+    EXPECT_TRUE(withItems.gizmoOverlayPassRecorded);
+    EXPECT_EQ(withItems.gizmoOverlayDrawCallsRecorded, 3U);
+
+    bool modelUniformPublished = false;
+    bool colorUniformPublished = false;
+    for (const RecordedCommandUVE& command : renderDevice.GetLastSubmittedCommandsUVE()) {
+        if (const auto* vectorUniform = std::get_if<SetUniformVector3CommandUVE>(&command)) {
+            if (vectorUniform->name == "uColor" && vectorUniform->value == Math::Vector3UVE{1.0F, 0.0F, 0.0F}) {
+                colorUniformPublished = true;
+            }
+        } else if (std::holds_alternative<SetUniformMatrix4x4CommandUVE>(command) &&
+                   std::get<SetUniformMatrix4x4CommandUVE>(command).name == "uModel") {
+            modelUniformPublished = true;
+        }
+    }
+    EXPECT_TRUE(modelUniformPublished);
+    EXPECT_TRUE(colorUniformPublished);
+
+    // Replacing with an empty span (a deselected entity, or a non-Move gizmo mode) must clear the
+    // previous frame's items rather than leaving them to draw again - SetEditorGizmoOverlayItemsUVE
+    // is documented as "this frame's complete set," not an accumulating submission list.
+    renderer3D->SetEditorGizmoOverlayItemsUVE({});
+    renderer3D->RenderFrameUVE(entityManager, cameraEntity);
+    const Renderer3DFrameDiagnosticsUVE afterClear = renderer3D->GetLastFrameDiagnosticsUVE();
+    EXPECT_EQ(afterClear.gizmoOverlayItemsSubmitted, 0U);
+    EXPECT_FALSE(afterClear.gizmoOverlayPassRecorded);
+}
+
 // A dedicated fixture for aspect-ratio verification: needs a non-square render target
 // (kTargetWidthUVE/kTargetHeightUVE above are both 64, so targetWidth/targetHeight == 1.0 and
 // can't distinguish the correct pixel-aspect formula from the naive fraction-delta-only formula

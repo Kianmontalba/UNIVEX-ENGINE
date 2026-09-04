@@ -17,6 +17,7 @@ add_library(uve_render STATIC
     src/particle_draw_command_uve.cpp
     src/mesh_renderer_uve.cpp
     src/mesh_render_eligibility_uve.cpp
+    src/gizmo_overlay_geometry_uve.cpp
     src/primitive_geometry_uve.cpp
     src/light_system_uve.cpp
     src/renderer_3d_uve.cpp
