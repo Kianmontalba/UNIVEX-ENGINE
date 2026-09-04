@@ -52,4 +52,7 @@ extern const std::string_view kFullscreenCopySource;
 inline constexpr std::string_view kSsaoVirtualPath = "shaders/ssao.glsl";
 extern const std::string_view kSsaoSource;
 
+inline constexpr std::string_view kGizmoLit3DVirtualPath = "shaders/gizmo_lit_3d.glsl";
+extern const std::string_view kGizmoLit3DSource;
+
 } // namespace UVE::Render::Shader::BuiltIn

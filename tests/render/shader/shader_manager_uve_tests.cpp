@@ -313,7 +313,9 @@ INSTANTIATE_TEST_SUITE_P(
                                                                       BuiltIn::kLitShadowed3DSource},
                        std::pair<std::string_view, std::string_view>{"editor_viewport_environment.glsl",
                                                                       BuiltIn::kEditorViewportEnvironmentSource},
-                       std::pair<std::string_view, std::string_view>{"particle.glsl", BuiltIn::kParticleSource}));
+                       std::pair<std::string_view, std::string_view>{"particle.glsl", BuiltIn::kParticleSource},
+                       std::pair<std::string_view, std::string_view>{"gizmo_lit_3d.glsl",
+                                                                      BuiltIn::kGizmoLit3DSource}));
 
 } // namespace
 } // namespace UVE::Render::Shader::Tests
