@@ -283,11 +283,22 @@ void GlCommandBufferUVE::BindPipelineUVE(PipelineHandleUVE pipeline) {
         glDisable(GL_DEPTH_TEST);
     }
     glDepthMask(pipelineIt->second.depthWriteEnabled ? GL_TRUE : GL_FALSE);
-    if (pipelineIt->second.blendMode == PipelineBlendModeUVE::SourceAlphaOver) {
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    } else {
-        glDisable(GL_BLEND);
+    switch (pipelineIt->second.blendMode) {
+        case PipelineBlendModeUVE::SourceAlphaOver:
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            break;
+        case PipelineBlendModeUVE::Additive:
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_ONE, GL_ONE);
+            break;
+        case PipelineBlendModeUVE::Multiply:
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_DST_COLOR, GL_ZERO);
+            break;
+        case PipelineBlendModeUVE::Opaque:
+            glDisable(GL_BLEND);
+            break;
     }
 }
 
