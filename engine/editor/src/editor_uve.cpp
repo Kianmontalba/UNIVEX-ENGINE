@@ -31,6 +31,7 @@
 #include "uve/asset/uve_file_envelope_uve.h"
 #include "uve/config/i_config_manager_uve.h"
 #include "uve/physics/raycast_query_uve.h"
+#include "uve/render/render_resource_descs_uve.h"
 #include "uve/platform/editor_project_package_uve.h"
 #include "uve/scripting/script_builtin_nodes_uve.h"
 #include "uve/scripting/script_bytecode_uve.h"
@@ -494,9 +495,11 @@ void DrawNativeIconLabelUVE(const std::uintptr_t textureId, const char* const la
 } // namespace
 
 EditorUVE::EditorUVE(Core::EngineServicesUVE& services, std::filesystem::path activeScenePath,
-                     const std::size_t historyCapacity, Core::ISimulationControlUVE* const simulationControl)
+                     const std::size_t historyCapacity, Core::ISimulationControlUVE* const simulationControl,
+                     Core::IEditorViewportHostUVE* const viewportHost)
     : m_services(&services),
       m_simulationControl(simulationControl),
+      m_viewportHost(viewportHost),
       m_activeScenePath(std::move(activeScenePath)),
       m_historyCapacity(std::max<std::size_t>(std::size_t{1U}, historyCapacity)) {
     if (!Scripting::RegisterBuiltInScriptNodesUVE(m_visualScriptRegistry)) {
@@ -7524,6 +7527,45 @@ void EditorUVE::DrawViewportPanelUVE() {
         Math::Vector2UVE{canvasSize.x, canvasSize.y},
     };
     if (IsViewportRectValidUVE(viewportRect)) {
+        // Tells EngineCoreUVE (via IEditorViewportHostUVE) to size and place the 3D render target
+        // for THIS window's actual physical footprint - not the whole window - every frame, before
+        // TickFrameUVE() renders it. Recomputed fresh from live ImGui geometry regardless of
+        // viewport tab: the 3D scene renders every frame independent of which tab is shown (the 2D
+        // tab draws its own canvas over it), so a stale region from a previous frame's panel size
+        // would otherwise persist. Same top-left-to-GL-bottom-left conversion and rounding-overflow
+        // clamp as ViewportManagerUVE::RenderAllPanesUVE() (Phase 3) - this is the same
+        // Render::ViewportRectUVE contract, just for the editor's own single always-on viewport
+        // rather than a caller-managed set of split-view panes.
+        // Tracks whether a host-sized region was actually applied this frame: when it was, the
+        // render target now exactly equals this panel (see below, visualState.viewportMinX/Max),
+        // and RenderFrameUVE()'s own aspect-ratio computation (renderer_3d_uve.cpp's
+        // EffectiveCameraAspectRatioUVE) no longer needs a sub-rect fraction at all. When it
+        // wasn't (no host wired up - most tests construct EditorUVE without one - or a degenerate
+        // rect), the target remains full-window-sized as before, so the window-relative-fraction
+        // computation below stays the correct one to keep using.
+        bool appliedHostSizedViewportRegionUVE = false;
+        if (m_viewportHost != nullptr) {
+            const std::uint32_t windowWidth = static_cast<std::uint32_t>(std::max(1.0F, mainViewport->Size.x));
+            const std::uint32_t windowHeight = static_cast<std::uint32_t>(std::max(1.0F, mainViewport->Size.y));
+            const auto pixelX = static_cast<std::uint32_t>(
+                std::max(0.0F, canvasOrigin.x - mainViewport->Pos.x));
+            const auto pixelYFromTop = static_cast<std::uint32_t>(
+                std::max(0.0F, canvasOrigin.y - mainViewport->Pos.y));
+            const auto pixelWidth = static_cast<std::uint32_t>(std::max(1.0F, canvasSize.x));
+            const auto pixelHeight = static_cast<std::uint32_t>(std::max(1.0F, canvasSize.y));
+            const std::uint32_t clampedWidth = std::min(pixelWidth, windowWidth - std::min(pixelX, windowWidth));
+            const std::uint32_t clampedHeight =
+                std::min(pixelHeight, windowHeight - std::min(pixelYFromTop, windowHeight));
+            if (clampedWidth == 0U || clampedHeight == 0U) {
+                m_viewportHost->SetEditorViewportRegionUVE(std::nullopt);
+            } else {
+                const std::uint32_t pixelYFromBottom = windowHeight - pixelYFromTop - clampedHeight;
+                m_viewportHost->SetEditorViewportRegionUVE(
+                    Render::ViewportRectUVE{pixelX, pixelYFromBottom, clampedWidth, clampedHeight});
+                appliedHostSizedViewportRegionUVE = true;
+            }
+        }
+
         if (m_viewportTab == EditorViewportTabUVE::TwoD) {
             Draw2DCanvasUVE(viewportRect);
             ImGui::End();
@@ -7589,12 +7631,24 @@ void EditorUVE::DrawViewportPanelUVE() {
         visualState.enabled = true;
         visualState.environmentPreviewEnabled = m_viewportEnvironmentPreviewEnabled;
         visualState.sunPreviewEnabled = m_viewportSunPreviewEnabled;
+        // Window-relative fractions - still needed below regardless of appliedHostSizedViewportRegionUVE
+        // for the selection-bounds screen mapping, which stays a window-relative overlay concern
+        // independent of how the 3D render target itself is sized.
         const float viewportWidth = std::max(mainViewport->Size.x, 1.0F);
         const float viewportHeight = std::max(mainViewport->Size.y, 1.0F);
-        visualState.viewportMinX = std::clamp((contentOrigin.x - mainViewport->Pos.x) / viewportWidth, 0.0F, 1.0F);
-        visualState.viewportMaxX = std::clamp((contentOrigin.x + contentSize.x - mainViewport->Pos.x) / viewportWidth, 0.0F, 1.0F);
-        visualState.viewportMinY = std::clamp(1.0F - (contentOrigin.y + contentSize.y - mainViewport->Pos.y) / viewportHeight, 0.0F, 1.0F);
-        visualState.viewportMaxY = std::clamp(1.0F - (contentOrigin.y - mainViewport->Pos.y) / viewportHeight, 0.0F, 1.0F);
+        if (appliedHostSizedViewportRegionUVE) {
+            // The render target now exactly equals this panel (IEditorViewportHostUVE resized it
+            // for us), so the whole target IS the viewport - no sub-rect fraction to compute.
+            visualState.viewportMinX = 0.0F;
+            visualState.viewportMinY = 0.0F;
+            visualState.viewportMaxX = 1.0F;
+            visualState.viewportMaxY = 1.0F;
+        } else {
+            visualState.viewportMinX = std::clamp((contentOrigin.x - mainViewport->Pos.x) / viewportWidth, 0.0F, 1.0F);
+            visualState.viewportMaxX = std::clamp((contentOrigin.x + contentSize.x - mainViewport->Pos.x) / viewportWidth, 0.0F, 1.0F);
+            visualState.viewportMinY = std::clamp(1.0F - (contentOrigin.y + contentSize.y - mainViewport->Pos.y) / viewportHeight, 0.0F, 1.0F);
+            visualState.viewportMaxY = std::clamp(1.0F - (contentOrigin.y - mainViewport->Pos.y) / viewportHeight, 0.0F, 1.0F);
+        }
         visualState.activeGizmoAxis = static_cast<std::int32_t>(m_gizmoDrag.axis);
         const Math::QuaternionUVE viewportOrientation =
             MakeViewportOrientationUVE(m_viewportYawRadians, m_viewportPitchRadians);
@@ -7710,6 +7764,9 @@ void EditorUVE::DrawViewportPanelUVE() {
         drawList->AddCircle(orientationCenter, 5.0F, IM_COL32(16, 20, 25, 245), 20, 1.6F);
     } else {
         ImGui::TextUnformatted("Viewport is too small for picking.");
+        if (m_viewportHost != nullptr) {
+            m_viewportHost->SetEditorViewportRegionUVE(std::nullopt);
+        }
     }
     ImGui::End();
 }

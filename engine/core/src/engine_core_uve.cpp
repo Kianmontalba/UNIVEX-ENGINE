@@ -531,8 +531,15 @@ void EngineCoreUVE::SyncAdaptiveRenderResolutionUVE() {
         return;
     }
 
-    const std::uint32_t drawableWidth = m_windowManager->GetWidthUVE();
-    const std::uint32_t drawableHeight = m_windowManager->GetHeightUVE();
+    // An active editor viewport region means the render target should track that panel's own
+    // pixel footprint - not the full window - so its aspect ratio, resolution, and downstream
+    // adaptive-resolution scaling all match what will actually be displayed there (see
+    // SetEditorViewportRegionUVE()'s own doc comment). Absent one (every standalone runtime/test
+    // path), this is exactly the previous full-window behavior.
+    const std::uint32_t drawableWidth =
+        m_editorViewportRegionUVE.has_value() ? m_editorViewportRegionUVE->width : m_windowManager->GetWidthUVE();
+    const std::uint32_t drawableHeight =
+        m_editorViewportRegionUVE.has_value() ? m_editorViewportRegionUVE->height : m_windowManager->GetHeightUVE();
     if (drawableWidth == 0U || drawableHeight == 0U) {
         return;
     }
@@ -682,7 +689,11 @@ void EngineCoreUVE::Render() {
         return;
     }
     if (m_activeCamera != Scene::kInvalidEntityUVE) {
-        if (m_particleRuntime != nullptr && m_particleRuntime->GetInstanceCountUVE() > 0U) {
+        const bool hasParticles = m_particleRuntime != nullptr && m_particleRuntime->GetInstanceCountUVE() > 0U;
+        if (m_editorViewportRegionUVE.has_value()) {
+            m_renderer3D->RenderFrameToRegionUVE(*m_entityManager, m_activeCamera, *m_editorViewportRegionUVE,
+                                                  hasParticles ? m_particleRuntime.get() : nullptr);
+        } else if (hasParticles) {
             m_renderer3D->RenderFrameWithParticleRuntimeUVE(*m_entityManager, m_activeCamera, *m_particleRuntime);
         } else {
             m_renderer3D->RenderFrameUVE(*m_entityManager, m_activeCamera);
@@ -693,6 +704,8 @@ void EngineCoreUVE::Render() {
             // An empty editor/game window still needs a real presented frame. Clear the
             // backend's default framebuffer without creating a scene, camera, mesh, or light.
             // This keeps the no-scene state visible and preserves the empty-scene contract.
+            // Confined to the editor viewport region (when set) so an empty-scene editor window
+            // clears only its own 3D viewport panel, matching every other render path this frame.
             m_renderSystem->BeginFrameUVE();
             Render::ICommandBufferUVE& commandBuffer = m_renderSystem->GetFrameCommandBufferUVE();
             Render::RenderPassDescUVE passDesc;
@@ -701,6 +714,7 @@ void EngineCoreUVE::Render() {
             passDesc.colorLoadOp = Render::LoadOpUVE::Clear;
             passDesc.depthLoadOp = Render::LoadOpUVE::DontCare;
             passDesc.clearColor = {0.05F, 0.05F, 0.05F, 1.0F};
+            passDesc.viewportOverride = m_editorViewportRegionUVE;
             commandBuffer.BeginRenderPassUVE(passDesc);
             commandBuffer.EndRenderPassUVE();
             m_renderSystem->EndFrameUVE();
@@ -928,6 +942,10 @@ void EngineCoreUVE::SetActiveCameraUVE(Scene::EntityUVE cameraEntity) noexcept {
 
 Scene::EntityUVE EngineCoreUVE::GetActiveCameraUVE() const noexcept {
     return m_activeCamera;
+}
+
+void EngineCoreUVE::SetEditorViewportRegionUVE(std::optional<Render::ViewportRectUVE> region) noexcept {
+    m_editorViewportRegionUVE = region;
 }
 
 void EngineCoreUVE::SetPostRenderCallbackUVE(std::function<void()> callback) {

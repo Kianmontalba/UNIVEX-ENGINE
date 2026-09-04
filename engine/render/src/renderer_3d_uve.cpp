@@ -59,6 +59,33 @@ namespace {
     return true;
 }
 
+/// The camera aspect ratio a frame should actually project with. Ordinarily that is just the
+/// render target's own width/height (the standalone runtime path - EditorViewportVisualStateUVE
+/// stays default-disabled there, so this always returns targetAspect unchanged). When the editor
+/// is presenting into a sub-rect of the target (`state.enabled`, set once per frame by
+/// EditorUVE::DrawViewportPanelUVE() via SetEditorViewportVisualStateUVE()), that sub-rect's own
+/// on-screen pixel aspect is almost never targetAspect - side docks (Scene/Inspector panels) eat
+/// width the raw target dimensions know nothing about. Using targetAspect there stretches every
+/// rendered mesh relative to what the viewport panel actually displays. `viewportMinX/MaxX/MinY/
+/// MaxY` are fractions of the SAME render target this frame uses, so the panel's true pixel size
+/// is (fraction * target dimension) per axis, and the aspect of that is targetAspect scaled by the
+/// fractions' own ratio - not the fractions' ratio alone (a common near-miss: for a non-square
+/// target, `(maxX-minX)/(maxY-minY)` on its own is off by exactly the target's own aspect factor).
+[[nodiscard]] float EffectiveCameraAspectRatioUVE(const EditorViewportVisualStateUVE& state,
+                                                   const std::uint32_t targetWidth,
+                                                   const std::uint32_t targetHeight) noexcept {
+    const float targetAspect = static_cast<float>(targetWidth) / static_cast<float>(targetHeight);
+    if (!state.enabled) {
+        return targetAspect;
+    }
+    const float fractionWidth = state.viewportMaxX - state.viewportMinX;
+    const float fractionHeight = state.viewportMaxY - state.viewportMinY;
+    if (!(fractionWidth > 0.0001F) || !(fractionHeight > 0.0001F)) {
+        return targetAspect;
+    }
+    return targetAspect * (fractionWidth / fractionHeight);
+}
+
 [[nodiscard]] bool IsOrderedFiniteAabbUVE(const Math::AabbUVE& bounds) noexcept {
     return IsFiniteVectorUVE(bounds.min) && IsFiniteVectorUVE(bounds.max) && bounds.min.x <= bounds.max.x &&
            bounds.min.y <= bounds.max.y && bounds.min.z <= bounds.max.z;
@@ -1384,7 +1411,8 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
         UVE_ERROR("Renderer3DUVE: RenderFrameUVE cannot render to a zero-sized target");
         return;
     }
-    const float aspectRatio = static_cast<float>(m_impl->targetWidth) / static_cast<float>(m_impl->targetHeight);
+    const float aspectRatio =
+        EffectiveCameraAspectRatioUVE(m_impl->editorVisualState, m_impl->targetWidth, m_impl->targetHeight);
     const bool aspectRatioValid = std::isfinite(aspectRatio) && aspectRatio > 0.0F;
     UVE_ASSERT(aspectRatioValid);
     if (!aspectRatioValid) {
@@ -1574,9 +1602,8 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
             m_impl->editorViewportEnvironmentProgram->SetVector3UVE("uSurfaceSize", Math::Vector3UVE{static_cast<float>(m_impl->targetWidth), static_cast<float>(m_impl->targetHeight), 0.0F});
             m_impl->editorViewportEnvironmentProgram->SetVector3UVE("uGridOrigin", state.gridOrigin);
             m_impl->editorViewportEnvironmentProgram->SetFloatUVE("uCameraTanHalfFov", state.cameraTanHalfFov);
-            m_impl->editorViewportEnvironmentProgram->SetFloatUVE("uViewportAspect",
-                                                               std::max(0.001F, state.viewportMaxX - state.viewportMinX) /
-                                                                   std::max(0.001F, state.viewportMaxY - state.viewportMinY));
+            m_impl->editorViewportEnvironmentProgram->SetFloatUVE(
+                "uViewportAspect", EffectiveCameraAspectRatioUVE(state, m_impl->targetWidth, m_impl->targetHeight));
             m_impl->editorViewportEnvironmentProgram->SetFloatUVE("uGridSpacing", state.gridSpacing);
             m_impl->editorViewportEnvironmentProgram->SetIntUVE("uProjectionMode", state.orthographic ? 1 : 0);
             m_impl->editorViewportEnvironmentProgram->SetFloatUVE("uOrthographicScale", state.orthographicScale);
@@ -1813,14 +1840,24 @@ void Renderer3DUVE::RenderFrameWithParticleRuntimeUVE(Scene::IEntityManagerUVE& 
 }
 
 void Renderer3DUVE::RenderFrameToRegionUVE(Scene::IEntityManagerUVE& entityManager, Scene::EntityUVE cameraEntity,
-                                            const ViewportRectUVE& region) {
+                                            const ViewportRectUVE& region,
+                                            const Scene::ParticleRuntimeUVE* const particleRuntime) {
     const std::optional<ViewportRectUVE> previousOverride = m_impl->destinationViewportOverride;
     m_impl->destinationViewportOverride = region;
     struct RegionScopeUVE final {
         std::optional<ViewportRectUVE>& slot;
         std::optional<ViewportRectUVE> previous;
         ~RegionScopeUVE() { slot = previous; }
-    } scope{m_impl->destinationViewportOverride, previousOverride};
+    } regionScope{m_impl->destinationViewportOverride, previousOverride};
+
+    const Scene::ParticleRuntimeUVE* const previousRuntime = m_impl->particleRuntimeForFrame;
+    m_impl->particleRuntimeForFrame = particleRuntime;
+    struct RuntimeFrameScopeUVE final {
+        const Scene::ParticleRuntimeUVE*& slot;
+        const Scene::ParticleRuntimeUVE* previous;
+        ~RuntimeFrameScopeUVE() { slot = previous; }
+    } runtimeScope{m_impl->particleRuntimeForFrame, previousRuntime};
+
     RenderFrameUVE(entityManager, cameraEntity);
 }
 
