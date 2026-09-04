@@ -21,6 +21,8 @@ constexpr int kGizmoIconWidthUVE = 24;
 constexpr int kGizmoIconHeightUVE = 24;
 constexpr int kEditorIconWidthUVE = 20;
 constexpr int kEditorIconHeightUVE = 20;
+constexpr int kContentTypeIconWidthUVE = 64;
+constexpr int kContentTypeIconHeightUVE = 64;
 
 #include "univex_logo_uve_display_bytes.inc"
 #include "uve_folder_icon_display_bytes.inc"
@@ -28,6 +30,7 @@ constexpr int kEditorIconHeightUVE = 20;
 #include "uve_node_icon_bytes.inc"
 #include "uve_component_icon_bytes.inc"
 #include "uve_general_icon_bytes.inc"
+#include "uve_content_type_icon_bytes.inc"
 
 struct IconSourceUVE final {
     std::string_view key;
@@ -93,6 +96,21 @@ constexpr std::array<IconSourceUVE, 4U> kGeneralIconSourcesUVE{{
     {"plugin", uve_general_icon_plugin_rgba.data()},
     {"snap", uve_general_icon_snap_rgba.data()},
     {"sun", uve_general_icon_sun_rgba.data()},
+}};
+
+// Keyed by the exact GetContentBrowserItemTypeLabelUVE() strings (editor_uve.cpp), excluding
+// "Folder" (which uses GetFolderTextureIdUVE() instead).
+constexpr std::array<IconSourceUVE, 10U> kContentTypeIconSourcesUVE{{
+    {"Scene", uve_content_type_icon_scene_content_type_rgba.data()},
+    {"Prefab", uve_content_type_icon_prefab_content_type_rgba.data()},
+    {"Bundle", uve_content_type_icon_bundle_content_type_rgba.data()},
+    {"Mesh", uve_content_type_icon_mesh_content_type_rgba.data()},
+    {"Texture", uve_content_type_icon_texture_content_type_rgba.data()},
+    {"Shader", uve_content_type_icon_shader_content_type_rgba.data()},
+    {"Material", uve_content_type_icon_material_content_type_rgba.data()},
+    {"Save", uve_content_type_icon_save_content_type_rgba.data()},
+    {"Motion Query", uve_content_type_icon_motion_query_content_type_rgba.data()},
+    {"File", uve_content_type_icon_file_content_type_rgba.data()},
 }};
 
 [[nodiscard]] std::uintptr_t UploadTextureUVE(const std::uint8_t* const pixels, const int width,
@@ -185,6 +203,10 @@ bool EditorUiAssetsUVE::InitializeUVE() noexcept {
         m_generalIconTextureIds[index] = UploadTextureUVE(kGeneralIconSourcesUVE[index].pixels,
                                                            kEditorIconWidthUVE, kEditorIconHeightUVE);
     }
+    for (std::size_t index = 0U; index < kContentTypeIconSourcesUVE.size(); ++index) {
+        m_contentTypeIconTextureIds[index] = UploadTextureUVE(
+            kContentTypeIconSourcesUVE[index].pixels, kContentTypeIconWidthUVE, kContentTypeIconHeightUVE);
+    }
 
     if (!IsReadyUVE()) {
         ShutdownUVE();
@@ -204,6 +226,7 @@ void EditorUiAssetsUVE::ShutdownUVE() noexcept {
     DeleteTextureSetUVE(m_nodeIconTextureIds);
     DeleteTextureSetUVE(m_componentIconTextureIds);
     DeleteTextureSetUVE(m_generalIconTextureIds);
+    DeleteTextureSetUVE(m_contentTypeIconTextureIds);
 }
 
 bool EditorUiAssetsUVE::IsReadyUVE() const noexcept {
@@ -215,6 +238,8 @@ bool EditorUiAssetsUVE::IsReadyUVE() const noexcept {
            std::all_of(m_componentIconTextureIds.cbegin(), m_componentIconTextureIds.cend(),
                        [](const std::uintptr_t textureId) { return textureId != 0U; }) &&
            std::all_of(m_generalIconTextureIds.cbegin(), m_generalIconTextureIds.cend(),
+                       [](const std::uintptr_t textureId) { return textureId != 0U; }) &&
+           std::all_of(m_contentTypeIconTextureIds.cbegin(), m_contentTypeIconTextureIds.cend(),
                        [](const std::uintptr_t textureId) { return textureId != 0U; });
 }
 
@@ -252,6 +277,10 @@ std::uintptr_t EditorUiAssetsUVE::GetComponentIconTextureIdUVE(const std::string
 
 std::uintptr_t EditorUiAssetsUVE::GetGeneralIconTextureIdUVE(const std::string_view iconId) const noexcept {
     return FindTextureIdUVE(kGeneralIconSourcesUVE, m_generalIconTextureIds, iconId);
+}
+
+std::uintptr_t EditorUiAssetsUVE::GetContentTypeIconTextureIdUVE(const std::string_view typeId) const noexcept {
+    return FindTextureIdUVE(kContentTypeIconSourcesUVE, m_contentTypeIconTextureIds, typeId);
 }
 
 } // namespace UVE::Editor
