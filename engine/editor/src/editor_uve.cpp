@@ -28,6 +28,7 @@
 #include <backends/imgui_impl_glfw.h>
 #include <backends/imgui_impl_opengl3.h>
 
+#include "uve/asset/mesh_asset_uve.h"
 #include "uve/asset/texture_asset_uve.h"
 #include "uve/asset/uve_file_envelope_uve.h"
 #include "uve/config/i_config_manager_uve.h"
@@ -120,6 +121,11 @@ constexpr float kEditorMenuBarHeightUVE = 24.0F;
 constexpr float kEditorToolbarHeightUVE = 30.0F;
 constexpr float kEditorViewportToolCanvasHeightUVE = 30.0F;
 constexpr float kFilesystemLongPressThresholdSecondsUVE = 0.60F;
+/// Square resolution rendered for each Content Browser mesh thumbnail (see
+/// EditorUVE::GetMeshThumbnailUVE). Matches the content-type badge icons' own baked resolution
+/// (uve_content_type_icon_bytes.inc) - plenty of detail at the grid card's much smaller display
+/// size without being wasteful to render per mesh.
+constexpr int kMeshThumbnailSizeUVE = 64;
 constexpr float kScriptCanvasLongPressThresholdSecondsUVE = 0.55F;
 constexpr float kScriptCanvasLongPressMaxMovementPixelsUVE = 8.0F;
 constexpr float kEditorTopChromeHeightUVE =
@@ -593,6 +599,7 @@ void EditorUVE::InitUVE() {
         const bool openglInitialized = glfwInitialized && ImGui_ImplOpenGL3_Init("#version 450 core");
         if (openglInitialized) {
             static_cast<void>(m_uiAssets.InitializeUVE());
+            m_meshThumbnailRenderer.InitializeUVE();
             m_uiInitialized = true;
         } else {
             if (glfwInitialized) {
@@ -3254,6 +3261,8 @@ void EditorUVE::ShutdownUVE() {
     }
     if (m_uiInitialized) {
         ClearTextureThumbnailCacheUVE();
+        ClearMeshThumbnailCacheUVE();
+        m_meshThumbnailRenderer.ShutdownUVE();
         m_uiAssets.ShutdownUVE();
         ImGui_ImplOpenGL3_Shutdown();
         ImGui_ImplGlfw_Shutdown();
@@ -6361,6 +6370,30 @@ void EditorUVE::ClearTextureThumbnailCacheUVE() noexcept {
     m_textureThumbnailCache.clear();
 }
 
+std::uintptr_t EditorUVE::GetMeshThumbnailUVE(const std::filesystem::path& relativePath) {
+    const std::string cacheKey = relativePath.generic_string();
+    const auto cachedIt = m_meshThumbnailCache.find(cacheKey);
+    if (cachedIt != m_meshThumbnailCache.end()) {
+        return cachedIt->second;
+    }
+    const Asset::ProjectFileSnapshotUVE snapshot = m_services->GetProjectFileIndexUVE().GetSnapshotUVE();
+    const std::filesystem::path absolutePath = snapshot.contentRoot / relativePath;
+    Asset::MeshAssetUVE mesh;
+    std::uintptr_t textureId = 0U;
+    if (Asset::LoadMeshAssetUVE(absolutePath, mesh)) {
+        textureId = m_meshThumbnailRenderer.RenderThumbnailUVE(mesh, kMeshThumbnailSizeUVE, kMeshThumbnailSizeUVE);
+    }
+    m_meshThumbnailCache.emplace(cacheKey, textureId);
+    return textureId;
+}
+
+void EditorUVE::ClearMeshThumbnailCacheUVE() noexcept {
+    for (auto& [path, textureId] : m_meshThumbnailCache) {
+        EditorUiAssetsUVE::DeleteDynamicTextureUVE(textureId);
+    }
+    m_meshThumbnailCache.clear();
+}
+
 void EditorUVE::DrawFolderContentsPanelUVE() {
     const ImGuiViewport* const mainViewport = ImGui::GetMainViewport();
     const float contentHeight = kAssetsPanelHeightUVE;
@@ -6464,10 +6497,12 @@ void EditorUVE::DrawFolderContentsPanelUVE() {
             if (rowHovered) {
                 ImGui::SetTooltip("%s\nType: %s", displayLabel.c_str(), GetContentBrowserItemTypeLabelUVE(type));
             }
-            const std::uintptr_t textureThumbnail =
-                type == ContentBrowserItemTypeUVE::Texture ? GetTextureThumbnailUVE(entry.relativePath) : 0U;
+            const std::uintptr_t contentThumbnail =
+                type == ContentBrowserItemTypeUVE::Texture ? GetTextureThumbnailUVE(entry.relativePath)
+                : type == ContentBrowserItemTypeUVE::Mesh  ? GetMeshThumbnailUVE(entry.relativePath)
+                                                            : 0U;
             const std::uintptr_t iconTexture =
-                textureThumbnail != 0U ? textureThumbnail
+                contentThumbnail != 0U ? contentThumbnail
                 : type == ContentBrowserItemTypeUVE::Folder
                     ? m_uiAssets.GetFolderTextureIdUVE()
                     : m_uiAssets.GetContentTypeIconTextureIdUVE(GetContentBrowserItemTypeLabelUVE(type));
@@ -6643,6 +6678,7 @@ void EditorUVE::RefreshProjectFileIndexUVE() {
         }
         // On-disk content may have changed since these were cached; re-decode lazily on next display.
         ClearTextureThumbnailCacheUVE();
+        ClearMeshThumbnailCacheUVE();
     } else {
         m_projectFileRefreshAttemptedForRescan = changesBeforeRefresh.rescanRequired;
     }
