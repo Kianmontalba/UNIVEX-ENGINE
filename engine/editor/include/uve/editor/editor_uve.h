@@ -22,6 +22,7 @@
 #include "uve/editor/developer_console_uve.h"
 #include "uve/editor/editor_ui_assets_uve.h"
 #include "uve/editor/inspector_drawer_registry_uve.h"
+#include "uve/editor/mesh_thumbnail_renderer_uve.h"
 #include "uve/math/ray_uve.h"
 #include "uve/math/vector2_uve.h"
 #include "uve/math/vector3_uve.h"
@@ -846,6 +847,12 @@ private:
     /// format) - callers should fall back to the generic per-type icon in that case.
     [[nodiscard]] std::uintptr_t GetTextureThumbnailUVE(const std::filesystem::path& relativePath);
     void ClearTextureThumbnailCacheUVE() noexcept;
+    /// Returns a GL texture id previewing relativePath's own mesh geometry (fixed camera angle,
+    /// no material), rendering and caching it on first request. Returns 0 if the file cannot be
+    /// loaded as a mesh asset or has no vertices/indices - callers should fall back to the
+    /// generic per-type icon in that case.
+    [[nodiscard]] std::uintptr_t GetMeshThumbnailUVE(const std::filesystem::path& relativePath);
+    void ClearMeshThumbnailCacheUVE() noexcept;
     void DrawAssetsPanelUVE();
     /// Refreshes the read-only project index after the engine-owned watcher observes a new
     /// filesystem baseline. It never schedules imports or mutates project files.
@@ -921,6 +928,10 @@ private:
     /// generic per-type icon rather than retrying every frame. Cleared whenever the project file
     /// index is successfully refreshed, since on-disk content may have changed.
     std::map<std::string, std::uintptr_t> m_textureThumbnailCache;
+    /// Content-derived thumbnail textures for Content Browser mesh entries, rendered on demand by
+    /// m_meshThumbnailRenderer. Same caching/invalidation contract as m_textureThumbnailCache.
+    std::map<std::string, std::uintptr_t> m_meshThumbnailCache;
+    MeshThumbnailRendererUVE m_meshThumbnailRenderer;
     ContentBrowserTypeFocusUVE m_contentBrowserTypeFocus = ContentBrowserTypeFocusUVE::All;
     std::string m_assetFilter;
     std::string m_inspectorFilter;

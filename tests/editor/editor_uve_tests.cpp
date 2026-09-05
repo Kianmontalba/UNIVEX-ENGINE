@@ -12,6 +12,7 @@
 
 #include <gtest/gtest.h>
 
+#include "uve/asset/mesh_asset_uve.h"
 #include "uve/asset/texture_asset_uve.h"
 #include "uve/core/engine_core_uve.h"
 #include "uve/editor/editor_uve.h"
@@ -116,6 +117,13 @@ struct EditorUVEAccessUVE final {
     }
     [[nodiscard]] static std::size_t GetTextureThumbnailCacheSizeUVE(const EditorUVE& editor) noexcept {
         return editor.m_textureThumbnailCache.size();
+    }
+    [[nodiscard]] static std::uintptr_t GetMeshThumbnailUVE(EditorUVE& editor,
+                                                             const std::filesystem::path& relativePath) {
+        return editor.GetMeshThumbnailUVE(relativePath);
+    }
+    [[nodiscard]] static std::size_t GetMeshThumbnailCacheSizeUVE(const EditorUVE& editor) noexcept {
+        return editor.m_meshThumbnailCache.size();
     }
 
     [[nodiscard]] static bool ProjectWorldPointUVE(const EditorUVE& editor, const EditorViewportRectUVE& viewportRect,
@@ -763,6 +771,51 @@ TEST(EditorUVETest, TextureThumbnailUVE_GracefullyReturnsZeroForMissingCorruptOr
         EXPECT_EQ(EditorUVEAccessUVE::GetTextureThumbnailCacheSizeUVE(editor), 3U);
         EXPECT_EQ(EditorUVEAccessUVE::GetTextureThumbnailUVE(editor, "missing.uvetex"), 0U);
         EXPECT_EQ(EditorUVEAccessUVE::GetTextureThumbnailCacheSizeUVE(editor), 3U);
+
+        editor.ShutdownUVE();
+    }
+
+    engine.Shutdown();
+    std::filesystem::remove_all(root);
+}
+
+TEST(EditorUVETest, MeshThumbnailUVE_GracefullyReturnsZeroForMissingCorruptOrEmptyMesh) {
+    const std::filesystem::path root = "uve_editor_tests_mesh_thumbnail_content";
+    std::filesystem::remove_all(root);
+    ASSERT_TRUE(std::filesystem::create_directories(root));
+
+    {
+        std::ofstream corrupt(root / "corrupt.uvemodel", std::ios::binary | std::ios::trunc);
+        ASSERT_TRUE(corrupt.is_open());
+        corrupt << "not-a-uve-envelope";
+    }
+    {
+        // A structurally valid mesh envelope with no geometry: LoadMeshAssetUVE succeeds, but
+        // RenderThumbnailUVE has nothing to draw and must decline rather than issuing an empty
+        // draw call.
+        const Asset::MeshAssetUVE empty;
+        ASSERT_TRUE(Asset::SaveMeshAssetUVE(empty, root / "empty.uvemodel"));
+    }
+
+    Core::EngineConfigUVE config = MakeEditorTestConfigUVE();
+    config.projectContentRootUVE = root;
+    Core::EngineCoreUVE engine(config);
+    engine.Init();
+    ASSERT_TRUE(engine.Load());
+
+    {
+        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_mesh_thumbnail.uvescene");
+        editor.InitUVE();
+        engine.TickFrameUVE();
+        editor.TickUVE();
+
+        EXPECT_EQ(EditorUVEAccessUVE::GetMeshThumbnailUVE(editor, "missing.uvemodel"), 0U);
+        EXPECT_EQ(EditorUVEAccessUVE::GetMeshThumbnailUVE(editor, "corrupt.uvemodel"), 0U);
+        EXPECT_EQ(EditorUVEAccessUVE::GetMeshThumbnailUVE(editor, "empty.uvemodel"), 0U);
+        // All three attempts are cached (as failures) rather than retried every call.
+        EXPECT_EQ(EditorUVEAccessUVE::GetMeshThumbnailCacheSizeUVE(editor), 3U);
+        EXPECT_EQ(EditorUVEAccessUVE::GetMeshThumbnailUVE(editor, "missing.uvemodel"), 0U);
+        EXPECT_EQ(EditorUVEAccessUVE::GetMeshThumbnailCacheSizeUVE(editor), 3U);
 
         editor.ShutdownUVE();
     }
