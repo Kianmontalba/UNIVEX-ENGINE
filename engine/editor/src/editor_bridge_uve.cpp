@@ -98,13 +98,6 @@ namespace {
         EditorBridgeCapabilityUVE::DeserializeVisualScriptGraph,
         EditorBridgeCapabilityUVE::AddVisualScriptNodeType,
         EditorBridgeCapabilityUVE::SetVisualScriptPinDefault,
-        EditorBridgeCapabilityUVE::ReadMotionQuery,
-        EditorBridgeCapabilityUVE::ReadControlRig,
-        EditorBridgeCapabilityUVE::DispatchMotionQueryCommand,
-        EditorBridgeCapabilityUVE::DispatchMotionQueryDebugCommand,
-        EditorBridgeCapabilityUVE::LoadMotionQueryReplayBaseline,
-        EditorBridgeCapabilityUVE::ClearMotionQueryReplayBaseline,
-        EditorBridgeCapabilityUVE::RunMotionQueryReplayBaselineBatch,
     };
     return capabilities;
 }
@@ -117,10 +110,7 @@ namespace {
            kind != EditorBridgeRequestKindUVE::ReadDeveloperConsole &&
            kind != EditorBridgeRequestKindUVE::ReadScriptRuntime &&
            kind != EditorBridgeRequestKindUVE::ReadScriptRuntimeTickDiagnostics &&
-           kind != EditorBridgeRequestKindUVE::SerializeVisualScriptGraph &&
-           kind != EditorBridgeRequestKindUVE::ReadMotionQuery &&
-           kind != EditorBridgeRequestKindUVE::ReadControlRig &&
-           kind != EditorBridgeRequestKindUVE::RunMotionQueryReplayBaselineBatch;
+           kind != EditorBridgeRequestKindUVE::SerializeVisualScriptGraph;
 }
 
 [[nodiscard]] bool IsVisualScriptMutationRequestUVE(const EditorBridgeRequestKindUVE kind) noexcept {
@@ -205,13 +195,11 @@ namespace {
 EditorBridgeUVE::EditorBridgeUVE(EditorUVE& editor,
                                    const Asset::DataTableRegistryUVE* dataTableRegistry,
                                    const Scripting::ScriptDebuggerUVE* scriptDebugger,
-                                   Scripting::ScriptRuntimeUVE* scriptRuntime,
-                                   Core::ControlRigEditorAuthoringSessionUVE* controlRigAuthoring)
+                                   Scripting::ScriptRuntimeUVE* scriptRuntime)
     : m_editor(&editor),
       m_dataTableRegistry(dataTableRegistry),
       m_scriptDebugger(scriptDebugger),
-      m_scriptRuntime(scriptRuntime),
-      m_controlRigAuthoring(controlRigAuthoring) {
+      m_scriptRuntime(scriptRuntime) {
 }
 
 const std::vector<EditorBridgeCapabilityUVE>& EditorBridgeUVE::GetCapabilitiesUVE() noexcept {
@@ -258,100 +246,6 @@ void EditorBridgeUVE::SetDataTablePreviewSnapshotUVE(Asset::DataTableSnapshotUVE
     }
 }
 
-void EditorBridgeUVE::SetMotionQueryReplayFixtureUVE(
-    Plugins::Editor::MotionQueryTraceReplayFixtureUVE fixture) {
-    if (m_motionQueryReplayFixture == fixture && !m_motionQueryActiveBaselineName.has_value()) {
-        return;
-    }
-    m_motionQueryReplayFixture = std::move(fixture);
-    m_motionQueryActiveBaselineName.reset();
-    if (m_lastObservedState.has_value()) {
-        SynchronizeRevisionUVE();
-    }
-    RecordMotionQueryReplayComparisonHistoryUVE();
-}
-
-void EditorBridgeUVE::SetMotionQueryTrajectoryPreviewUVE(
-    Core::TimeSampledTrajectoryUVE trajectory,
-    std::optional<Physics::TrajectoryCollisionPredictionResultUVE> collisionPrediction) {
-    EditorBridgeMotionQueryTrajectoryPreviewUVE preview;
-    const Core::TimeSampledTrajectoryValidationResultUVE validation =
-        Core::ValidateTimeSampledTrajectoryUVE(trajectory);
-    if (!validation.IsValidUVE()) {
-        preview.diagnostic = validation.message;
-    } else if (collisionPrediction.has_value() &&
-               (!collisionPrediction->IsSuccessUVE() ||
-                collisionPrediction->context != trajectory.context ||
-                collisionPrediction->samples.size() != trajectory.samples.size())) {
-        preview.diagnostic = "Motion Query trajectory preview collision prediction does not match the shared trajectory.";
-    } else {
-        preview.available = true;
-        preview.trajectory = std::move(trajectory);
-        preview.collisionPrediction = std::move(collisionPrediction);
-        preview.diagnostic = "Shared Motion Query trajectory preview is available.";
-    }
-    m_motionQueryTrajectoryPreview = std::move(preview);
-    ++m_revision;
-}
-
-void EditorBridgeUVE::SetControlRigAuthoringSessionUVE(
-    Core::ControlRigEditorAuthoringSessionUVE* session) noexcept {
-    if (m_controlRigAuthoring == session) {
-        return;
-    }
-    m_controlRigAuthoring = session;
-    if (m_lastObservedState.has_value()) {
-        SynchronizeRevisionUVE();
-    }
-}
-
-void EditorBridgeUVE::ClearMotionQueryReplayFixtureUVE() {
-    if (!m_motionQueryReplayFixture.has_value()) {
-        return;
-    }
-    m_motionQueryReplayFixture.reset();
-    m_motionQueryActiveBaselineName.reset();
-    if (m_lastObservedState.has_value()) {
-        SynchronizeRevisionUVE();
-    }
-    RecordMotionQueryReplayComparisonHistoryUVE();
-}
-
-void EditorBridgeUVE::RecordMotionQueryReplayComparisonHistoryUVE(const std::string_view baselineNameOverride) {
-    const EditorBridgeMotionQuerySnapshotUVE snapshot = CaptureMotionQueryUVE();
-    const EditorBridgeMotionQueryReplayComparisonUVE& comparison = snapshot.replayComparison;
-    const std::string baselineName = baselineNameOverride.empty() && m_motionQueryActiveBaselineName.has_value()
-                                         ? *m_motionQueryActiveBaselineName
-                                         : std::string{baselineNameOverride};
-    if (m_motionQueryReplayComparisonHistory.size() >= kEditorBridgeMaximumMotionQueryReplayHistoryUVE) {
-        m_motionQueryReplayComparisonHistory.pop_front();
-        m_motionQueryReplayComparisonHistoryTruncated = true;
-    }
-    m_motionQueryReplayComparisonHistory.push_back(
-        EditorBridgeMotionQueryReplayComparisonHistoryEntryUVE{
-            m_nextMotionQueryReplayHistorySequence++, baselineName,
-            snapshot.replayBaselines.generation, comparison.comparisonCode,
-            comparison.comparedEventCount, comparison.mismatchIndex,
-            comparison.mismatchFieldMask, comparison.diagnosticSummary});
-    m_motionQueryReplaySessionFacts.totalIndividualComparisons++;
-}
-
-void EditorBridgeUVE::RecordMotionQueryReplayBatchHistoryUVE(
-    const EditorBridgeMotionQueryReplayBatchSnapshotUVE& batch) {
-    if (m_motionQueryReplayBatchHistory.size() >= kEditorBridgeMaximumMotionQueryReplayHistoryUVE) {
-        m_motionQueryReplayBatchHistory.pop_front();
-        m_motionQueryReplayBatchHistoryTruncated = true;
-    }
-    m_motionQueryReplayBatchHistory.push_back(
-        EditorBridgeMotionQueryReplayBatchHistoryEntryUVE{
-            m_nextMotionQueryReplayBatchSequence++, batch.registryGeneration,
-            batch.code, batch.evaluatedBaselineCount,
-            batch.matchCount, batch.mismatchCount, batch.message});
-    m_motionQueryReplaySessionFacts.totalBatchRuns++;
-    m_motionQueryReplaySessionFacts.totalBaselinesEvaluated += batch.evaluatedBaselineCount;
-    m_motionQueryReplaySessionFacts.totalMatchesFound += batch.matchCount;
-    m_motionQueryReplaySessionFacts.totalMismatchesFound += batch.mismatchCount;
-}
 
 EditorBridgeSnapshotUVE EditorBridgeUVE::GetSnapshotUVE() {
     SynchronizeRevisionUVE();
@@ -366,14 +260,6 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
     }
     if (request.kind == EditorBridgeRequestKindUVE::ReadSnapshot) {
         return MakeResponseUVE(request, true, "bridge.snapshot.read", "Bridge-visible editor state was copied.");
-    }
-    if (request.kind == EditorBridgeRequestKindUVE::ReadControlRig) {
-        return MakeResponseUVE(request, m_controlRigAuthoring != nullptr,
-                               m_controlRigAuthoring == nullptr ? "bridge.control_rig.unavailable"
-                                                                 : "bridge.control_rig.snapshot.read",
-                               m_controlRigAuthoring == nullptr
-                                   ? "No native Control Rig authoring session is attached."
-                                   : "The native Control Rig authoring snapshot was copied.");
     }
     if (request.kind == EditorBridgeRequestKindUVE::ReadVisualScriptCanvas) {
         return MakeResponseUVE(request, true, "bridge.visual_scripting.snapshot.read",
@@ -439,10 +325,6 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
                                                           m_scriptRuntimeTickHistory.end());
         return response;
     }
-    if (request.kind == EditorBridgeRequestKindUVE::ReadMotionQuery) {
-        return MakeResponseUVE(request, true, "bridge.motion_query.snapshot.read",
-                               "The copied Motion Query authoring, debugger, and trace snapshot was returned.");
-    }
     if (m_editor->GetStateUVE() != EditorStateUVE::Running) {
         return MakeResponseUVE(request, false, "bridge.editor.not_running",
                                "The editor is not in a running state and cannot accept bridge commands.");
@@ -463,8 +345,6 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
     std::optional<EditorBridgeEntityRefUVE> createdEntity;
     std::optional<std::uint64_t> responseContentImportJobId;
     std::optional<Scripting::ScriptGraphSchemaUVE> responseSchema;
-    std::optional<std::string> responseEnvelopePayload;
-    std::optional<std::string> responseLiveDebugTracePayload;
     switch (request.kind) {
         case EditorBridgeRequestKindUVE::SelectEntity: {
             if (!request.entity.has_value() || !request.entity->IsValidUVE() ||
@@ -968,181 +848,6 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
             code = "bridge.script_runtime.tick.completed";
             message = "The native ScriptRuntime diagnostic tick completed and its counters were copied.";
             break;
-        case EditorBridgeRequestKindUVE::DispatchMotionQueryCommand: {
-            if (!request.motionQueryCommand.has_value()) {
-                return MakeResponseUVE(request, false, "bridge.motion_query.command.invalid",
-                                       "DispatchMotionQueryCommand requires a value-only Motion Query command payload.");
-            }
-            const Plugins::Editor::MotionQueryEditorResponseUVE commandResponse =
-                m_motionQueryAuthoring.DispatchUVE(*request.motionQueryCommand);
-            applied = commandResponse.applied;
-            code = applied ? "bridge.motion_query.command.applied" : "bridge.motion_query.command.rejected";
-            message = commandResponse.message;
-            if (applied) {
-                ++m_revision;
-            }
-            break;
-        }
-        case EditorBridgeRequestKindUVE::DispatchMotionQueryDebugCommand: {
-            if (!request.motionQueryDebugCommand.has_value()) {
-                return MakeResponseUVE(request, false, "bridge.motion_query.debug.command.invalid",
-                                       "DispatchMotionQueryDebugCommand requires a value-only debug command payload.");
-            }
-            const Plugins::Editor::MotionQueryLiveDebugResponseUVE debugResponse =
-                m_motionQueryLiveDebugSession.DispatchUVE(*request.motionQueryDebugCommand, m_motionQueryAuthoring);
-            applied = debugResponse.applied;
-            code = applied ? "bridge.motion_query.debug.command.applied"
-                           : "bridge.motion_query.debug.command.rejected";
-            message = debugResponse.message;
-            if (applied) {
-                responseLiveDebugTracePayload = debugResponse.payload;
-                ++m_revision;
-            }
-            break;
-        }
-        case EditorBridgeRequestKindUVE::LoadMotionQueryReplayBaseline: {
-            if (!request.motionQueryReplayBaselineName.has_value() ||
-                !request.motionQueryReplayFixturePayload.has_value() ||
-                request.motionQueryReplayBaselineName->empty() ||
-                request.motionQueryReplayBaselineName->size() >
-                    Plugins::Editor::kMotionQueryMaximumReplayBaselineNameBytesUVE) {
-                return MakeResponseUVE(request, false, "bridge.motion_query.replay.baseline.request.invalid",
-                                       "LoadMotionQueryReplayBaseline requires a bounded baseline name and payload.");
-            }
-            const Plugins::Editor::MotionQueryTraceReplayDeserializationResultUVE decoded =
-                Plugins::Editor::DeserializeMotionQueryTraceReplayFixtureUVE(
-                    *request.motionQueryReplayFixturePayload);
-            if (!decoded.IsAcceptedUVE()) {
-                return MakeResponseUVE(request, false, "bridge.motion_query.replay.baseline.invalid",
-                                       decoded.message);
-            }
-            const Plugins::Editor::MotionQueryTraceReplayBaselineResultUVE registered =
-                m_motionQueryReplayBaselineRegistry.RegisterUVE(*request.motionQueryReplayBaselineName,
-                                                                *decoded.fixture);
-            if (!registered.IsAcceptedUVE()) {
-                return MakeResponseUVE(request, false, "bridge.motion_query.replay.baseline.rejected",
-                                       registered.message);
-            }
-            const Plugins::Editor::MotionQueryTraceReplayBaselineSelectionUVE selected =
-                m_motionQueryReplayBaselineRegistry.SelectUVE(*request.motionQueryReplayBaselineName,
-                                                              registered.registryGeneration);
-            if (!selected.IsAcceptedUVE()) {
-                return MakeResponseUVE(request, false, "bridge.motion_query.replay.baseline.selection.failed",
-                                       selected.message);
-            }
-            m_motionQueryReplayFixture = std::move(selected.fixture);
-            m_motionQueryActiveBaselineName = *request.motionQueryReplayBaselineName;
-            applied = true;
-            code = "bridge.motion_query.replay.baseline.loaded";
-            message = "The native replay baseline was validated, registered, and selected.";
-            ++m_revision;
-            RecordMotionQueryReplayComparisonHistoryUVE();
-            break;
-        }
-        case EditorBridgeRequestKindUVE::ClearMotionQueryReplayBaseline: {
-            if (!request.motionQueryReplayBaselineName.has_value() ||
-                request.motionQueryReplayBaselineName->empty() ||
-                request.motionQueryReplayBaselineName->size() >
-                    Plugins::Editor::kMotionQueryMaximumReplayBaselineNameBytesUVE) {
-                return MakeResponseUVE(request, false, "bridge.motion_query.replay.baseline.request.invalid",
-                                       "ClearMotionQueryReplayBaseline requires a bounded baseline name.");
-            }
-            const std::string clearedBaselineName = *request.motionQueryReplayBaselineName;
-            const Plugins::Editor::MotionQueryTraceReplayBaselineResultUVE removed =
-                m_motionQueryReplayBaselineRegistry.RemoveUVE(clearedBaselineName);
-            if (!removed.IsAcceptedUVE()) {
-                return MakeResponseUVE(request, false, "bridge.motion_query.replay.baseline.rejected",
-                                       removed.message);
-            }
-            if (m_motionQueryActiveBaselineName == request.motionQueryReplayBaselineName) {
-                m_motionQueryReplayFixture.reset();
-                m_motionQueryActiveBaselineName.reset();
-            }
-            applied = true;
-            code = "bridge.motion_query.replay.baseline.cleared";
-            message = "The named native replay baseline was cleared.";
-            ++m_revision;
-            RecordMotionQueryReplayComparisonHistoryUVE(clearedBaselineName);
-            break;
-        }
-        case EditorBridgeRequestKindUVE::RunMotionQueryReplayBaselineBatch: {
-            const EditorBridgeMotionQuerySnapshotUVE mqSnapshot = CaptureMotionQueryUVE();
-            RecordMotionQueryReplayBatchHistoryUVE(mqSnapshot.replayBatch);
-            code = "bridge.motion_query.replay.baseline.batch.read";
-            message = "The bounded native replay baseline batch result was copied without mutation.";
-            break;
-        }
-        case EditorBridgeRequestKindUVE::ExportMotionQueryReplayBaselineRegistry: {
-            const Plugins::Editor::MotionQueryTraceReplayBaselineEnvelopeSerializationResultUVE result =
-                m_motionQueryReplayBaselineRegistry.SerializeEnvelopeUVE();
-            applied = result.IsAcceptedUVE();
-            code = applied ? "bridge.motion_query.replay.baseline.registry.exported"
-                           : "bridge.motion_query.replay.baseline.registry.rejected";
-            message = result.message;
-            if (applied) {
-                responseEnvelopePayload = result.payload;
-            }
-            break;
-        }
-        case EditorBridgeRequestKindUVE::ImportMotionQueryReplayBaselineRegistry: {
-            if (!request.motionQueryReplayBaselineEnvelopePayload.has_value()) {
-                return MakeResponseUVE(request, false, "bridge.motion_query.replay.baseline.registry.invalid",
-                                       "ImportMotionQueryReplayBaselineRegistry requires a bounded envelope payload.");
-            }
-            const Plugins::Editor::MotionQueryTraceReplayBaselineEnvelopeDeserializationResultUVE result =
-                m_motionQueryReplayBaselineRegistry.DeserializeEnvelopeUVE(*request.motionQueryReplayBaselineEnvelopePayload);
-            applied = result.IsAcceptedUVE();
-            code = applied ? "bridge.motion_query.replay.baseline.registry.imported"
-                           : "bridge.motion_query.replay.baseline.registry.rejected";
-            message = result.message;
-            if (applied) {
-                ++m_revision;
-            }
-            break;
-        }
-        case EditorBridgeRequestKindUVE::RenameMotionQueryReplayBaseline: {
-            if (!request.motionQueryReplayBaselineName.has_value() ||
-                !request.motionQueryReplayBaselineNewName.has_value()) {
-                return MakeResponseUVE(request, false, "bridge.motion_query.replay.baseline.invalid",
-                                       "RenameMotionQueryReplayBaseline requires source and target baseline names.");
-            }
-            const Plugins::Editor::MotionQueryTraceReplayBaselineResultUVE result =
-                m_motionQueryReplayBaselineRegistry.RenameUVE(*request.motionQueryReplayBaselineName,
-                                                              *request.motionQueryReplayBaselineNewName);
-            applied = result.IsAcceptedUVE();
-            code = applied ? "bridge.motion_query.replay.baseline.renamed"
-                           : "bridge.motion_query.replay.baseline.rejected";
-            message = result.message;
-            if (applied) {
-                if (m_motionQueryActiveBaselineName == request.motionQueryReplayBaselineName) {
-                    m_motionQueryActiveBaselineName = request.motionQueryReplayBaselineNewName;
-                }
-                ++m_revision;
-            }
-            break;
-        }
-        case EditorBridgeRequestKindUVE::ExportMotionQueryReplayEvidence: {
-            const Plugins::Editor::MotionQueryLiveDebugSnapshotUVE liveDebug =
-                m_motionQueryLiveDebugSession.GetSnapshotUVE();
-            const Plugins::Editor::MotionQueryTraceSnapshotUVE traceSnapshot{
-                liveDebug.generation, liveDebug.traceTruncated, liveDebug.traceEvents};
-            const Plugins::Editor::MotionQueryTraceReplayFixtureUVE fixture =
-                Plugins::Editor::BuildMotionQueryTraceReplayFixtureUVE(traceSnapshot);
-            const Plugins::Editor::MotionQueryTraceReplaySerializationResultUVE result =
-                Plugins::Editor::SerializeMotionQueryTraceReplayFixtureUVE(fixture);
-            applied = result.IsAcceptedUVE();
-            code = applied ? "bridge.motion_query.replay.evidence.exported"
-                           : "bridge.motion_query.replay.evidence.rejected";
-            message = result.message;
-            if (applied) {
-                responseEnvelopePayload = result.payload;
-            }
-            break;
-        }
-        case EditorBridgeRequestKindUVE::ReadMotionQuery:
-            code = "bridge.motion_query.snapshot.read";
-            message = "The copied Motion Query authoring, debugger, and trace snapshot was returned.";
-            break;
         case EditorBridgeRequestKindUVE::SerializeVisualScriptGraph:
             code = "bridge.visual_scripting.graph_schema.serialized";
             message = "The native visual-scripting graph schema was copied in deterministic order.";
@@ -1172,7 +877,6 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
             break;
         }
         case EditorBridgeRequestKindUVE::ReadSnapshot:
-        case EditorBridgeRequestKindUVE::ReadControlRig:
             break;
     }
 
@@ -1181,8 +885,6 @@ EditorBridgeResponseUVE EditorBridgeUVE::DispatchUVE(const EditorBridgeRequestUV
     response.createdEntity = createdEntity;
     response.contentImportJobId = responseContentImportJobId;
     response.visualScriptGraphSchema = std::move(responseSchema);
-    response.motionQueryReplayBaselineEnvelopePayload = std::move(responseEnvelopePayload);
-    response.motionQueryLiveDebugTracePayload = std::move(responseLiveDebugTracePayload);
     return response;
 }
 
@@ -1217,14 +919,7 @@ EditorBridgeUVE::ObservedStateUVE EditorBridgeUVE::CaptureObservedStateUVE() {
     observed.scriptRuntime = CaptureScriptRuntimeUVE();
     observed.dataTableCatalog = CaptureDataTableCatalogUVE();
     observed.dataTablePreview = CaptureDataTablePreviewUVE();
-    observed.controlRig = CaptureControlRigUVE();
     return observed;
-}
-
-Core::ControlRigAuthoringSnapshotUVE EditorBridgeUVE::CaptureControlRigUVE() const {
-    return m_controlRigAuthoring == nullptr
-        ? Core::ControlRigAuthoringSnapshotUVE{}
-        : m_controlRigAuthoring->CaptureSnapshotUVE();
 }
 
 EditorBridgeScriptRuntimeSnapshotUVE EditorBridgeUVE::CaptureScriptRuntimeUVE() const {
@@ -1253,164 +948,6 @@ EditorBridgeScriptRuntimeSnapshotUVE EditorBridgeUVE::CaptureScriptRuntimeUVE() 
             instance.stateValueCount,
             instance.stateLocalVariableCount,
             instance.enabled});
-    }
-    return snapshot;
-}
-
-EditorBridgeMotionQuerySnapshotUVE EditorBridgeUVE::CaptureMotionQueryUVE() const {
-    const Plugins::Editor::MotionQueryEditorSnapshotUVE authoring = m_motionQueryAuthoring.GetSnapshotUVE();
-    const Plugins::Editor::MotionQueryLiveDebugSnapshotUVE liveDebug =
-        m_motionQueryLiveDebugSession.GetSnapshotUVE();
-    const Plugins::Editor::MotionQueryDebuggerSnapshotUVE debugger = liveDebug.debugger;
-    const Plugins::Editor::MotionQueryTraceSnapshotUVE trace{
-        liveDebug.generation, liveDebug.traceTruncated, liveDebug.traceEvents};
-    EditorBridgeMotionQuerySnapshotUVE snapshot{};
-    snapshot.authoring.revision = authoring.revision;
-    snapshot.authoring.selectedResource = authoring.selectedResource;
-    snapshot.authoring.clipboardAvailable = authoring.clipboardAvailable;
-    snapshot.authoring.canUndo = authoring.canUndo;
-    snapshot.authoring.canRedo = authoring.canRedo;
-    snapshot.authoring.diagnostic = authoring.diagnostic;
-    snapshot.authoring.commandMetadata.reserve(authoring.commandMetadata.size());
-    for (const auto& metadata : authoring.commandMetadata) {
-        snapshot.authoring.commandMetadata.push_back(
-            EditorBridgeMotionQueryCommandMetadataUVE{
-                static_cast<std::uint8_t>(metadata.kind),
-                static_cast<std::uint8_t>(metadata.payloadKind),
-                metadata.name,
-                metadata.label,
-                metadata.mutatesAuthoring,
-                metadata.requiresResource,
-                metadata.requiresPayload,
-                metadata.supportsUndo});
-    }
-    snapshot.authoring.propertyMetadata = authoring.propertyMetadata;
-    for (const auto& row : authoring.databases) {
-        if (snapshot.authoring.databases.size() >= kEditorBridgeMaximumPanelEntriesUVE) {
-            break;
-        }
-        snapshot.authoring.databases.push_back(row);
-    }
-    snapshot.debugger.attached = debugger.attached;
-    snapshot.debugger.generation = debugger.generation;
-    snapshot.debugger.database = debugger.database;
-    snapshot.debugger.selectedCandidateIndex = debugger.selectedCandidateIndex;
-    snapshot.debugger.candidateCount = debugger.candidateCount;
-    snapshot.debugger.candidatesEvaluated = debugger.candidatesEvaluated;
-    snapshot.debugger.selectedCost = debugger.selectedCost;
-    snapshot.debugger.selectedCandidateId = debugger.selectedCandidateId;
-    snapshot.debugger.selectedSourceClipId = debugger.selectedSourceClipId;
-    snapshot.debugger.qualityTier = debugger.qualityTier;
-    snapshot.debugger.continuityCode = debugger.continuityCode;
-    snapshot.debugger.continuityApplied = debugger.continuityApplied;
-    snapshot.debugger.transitionCode = debugger.transitionCode;
-    snapshot.debugger.transitionHeldPrevious = debugger.transitionHeldPrevious;
-    snapshot.debugger.telemetryCode = debugger.telemetryCode;
-    snapshot.debugger.telemetryIndexEntryCount = debugger.telemetryIndexEntryCount;
-    snapshot.debugger.telemetryCandidatesConsidered = debugger.telemetryCandidatesConsidered;
-    snapshot.debugger.telemetryBudgetSaturated = debugger.telemetryBudgetSaturated;
-    snapshot.debugger.provenance = debugger.provenance;
-    snapshot.debugger.message = debugger.message;
-    snapshot.trace.generation = trace.generation;
-    snapshot.trace.truncated = trace.truncated || trace.events.size() > kEditorBridgeMaximumPanelEntriesUVE;
-    const std::size_t firstEvent = trace.events.size() > kEditorBridgeMaximumPanelEntriesUVE
-        ? trace.events.size() - kEditorBridgeMaximumPanelEntriesUVE : 0U;
-    snapshot.trace.events.assign(trace.events.begin() + static_cast<std::ptrdiff_t>(firstEvent), trace.events.end());
-    snapshot.liveDebugActive = liveDebug.active;
-    snapshot.liveDebugGeneration = liveDebug.generation;
-    snapshot.liveDebugDatabase = liveDebug.database;
-    snapshot.liveDebugFilter = liveDebug.filter;
-    snapshot.liveDebugTotalTraceEventCount = liveDebug.totalTraceEventCount;
-    snapshot.liveDebugVisibleTraceEventCount = liveDebug.visibleTraceEventCount;
-    snapshot.liveDebugTraceTruncated = liveDebug.traceTruncated;
-    snapshot.liveDebugDiagnostic = liveDebug.diagnostic;
-    const Plugins::Editor::MotionQueryTraceReplayBaselineSnapshotUVE baselineSnapshot =
-        m_motionQueryReplayBaselineRegistry.GetSnapshotUVE();
-    snapshot.replayBaselines.generation = baselineSnapshot.generation;
-    snapshot.replayBaselines.truncated = baselineSnapshot.truncated;
-    snapshot.replayBaselines.entries.reserve(baselineSnapshot.entries.size());
-    for (const Plugins::Editor::MotionQueryTraceReplayBaselineEntryUVE& entry : baselineSnapshot.entries) {
-        snapshot.replayBaselines.entries.push_back(
-            EditorBridgeMotionQueryReplayBaselineEntryUVE{
-                entry.name, entry.sourceGeneration, entry.eventCount, entry.truncated});
-    }
-    snapshot.replayComparisonHistoryTruncated = m_motionQueryReplayComparisonHistoryTruncated;
-    snapshot.replayComparisonHistory.assign(m_motionQueryReplayComparisonHistory.begin(),
-                                             m_motionQueryReplayComparisonHistory.end());
-    snapshot.replayWorkflow.registryGeneration = baselineSnapshot.generation;
-    snapshot.replayWorkflow.baselineCount = baselineSnapshot.entries.size();
-    snapshot.replayWorkflow.activeBaselineSelected = m_motionQueryActiveBaselineName.has_value();
-    snapshot.replayWorkflow.activeFixtureAvailable = m_motionQueryReplayFixture.has_value();
-    snapshot.replayWorkflow.historyTruncated = m_motionQueryReplayComparisonHistoryTruncated || m_motionQueryReplayBatchHistoryTruncated;
-    if (!snapshot.replayWorkflow.activeBaselineSelected) {
-        snapshot.replayWorkflow.diagnostic = "no named replay baseline is selected";
-    } else if (!snapshot.replayWorkflow.activeFixtureAvailable) {
-        snapshot.replayWorkflow.diagnostic = "the selected replay baseline has no active copied fixture";
-    } else if (!liveDebug.active) {
-        snapshot.replayWorkflow.diagnostic = "live debug is not active for replay comparison";
-    } else if (!liveDebug.filter.empty() ||
-               liveDebug.totalTraceEventCount != liveDebug.visibleTraceEventCount) {
-        snapshot.replayWorkflow.diagnostic = "live debug evidence is filtered for replay comparison";
-    } else if (liveDebug.visibleTraceEventCount == 0U) {
-        snapshot.replayWorkflow.diagnostic = "live debug contains no trace events for replay comparison";
-    } else {
-        snapshot.replayWorkflow.readyForComparison = true;
-        snapshot.replayWorkflow.diagnostic = "replay workflow is ready for deterministic comparison";
-    }
-    snapshot.replayBatchHistoryTruncated = m_motionQueryReplayBatchHistoryTruncated;
-    snapshot.replayBatchHistory.assign(m_motionQueryReplayBatchHistory.begin(),
-                                      m_motionQueryReplayBatchHistory.end());
-    snapshot.replaySessionFacts = m_motionQueryReplaySessionFacts;
-    snapshot.trajectoryPreview = m_motionQueryTrajectoryPreview;
-
-    const Plugins::Editor::MotionQueryTraceReplayBaselineBatchResultUVE batch =
-        Plugins::Editor::CompareMotionQueryLiveDebugSnapshotAgainstAllBaselinesUVE(
-            m_motionQueryReplayBaselineRegistry, liveDebug);
-    snapshot.replayBatch.available = true;
-    snapshot.replayBatch.code = static_cast<std::uint8_t>(batch.code);
-    snapshot.replayBatch.registryGeneration = batch.registryGeneration;
-    snapshot.replayBatch.evaluatedBaselineCount = batch.evaluatedBaselineCount;
-    snapshot.replayBatch.matchCount = batch.matchCount;
-    snapshot.replayBatch.mismatchCount = batch.mismatchCount;
-    snapshot.replayBatch.truncated = batch.truncated;
-    snapshot.replayBatch.message = batch.message;
-    snapshot.replayBatch.results.reserve(batch.results.size());
-    for (const Plugins::Editor::MotionQueryTraceReplayBaselineRegressionResultUVE& result : batch.results) {
-        EditorBridgeMotionQueryReplayBatchEntryUVE entry;
-        entry.baselineName = result.baselineName;
-        entry.regressionCode = static_cast<std::uint8_t>(result.code);
-        if (result.comparison.has_value()) {
-            entry.comparisonCode = static_cast<std::uint8_t>(result.comparison->code);
-            entry.comparedEventCount = result.comparison->comparedEventCount;
-            entry.mismatchIndex = result.comparison->mismatchIndex;
-            entry.mismatchFieldMask = result.comparison->mismatchFieldMask;
-            entry.diagnosticSummary = result.comparison->diagnosticSummary;
-            entry.compatibilityMismatchMask = result.comparison->compatibilityMismatchMask;
-            entry.compatibilityDiagnosticSummary = result.comparison->compatibilityDiagnosticSummary;
-        }
-        snapshot.replayBatch.results.push_back(std::move(entry));
-    }
-    if (m_motionQueryReplayFixture.has_value()) {
-        const Plugins::Editor::MotionQueryTraceReplayRegressionResultUVE comparison =
-            Plugins::Editor::CompareMotionQueryLiveDebugSnapshotAgainstFixtureUVE(
-                *m_motionQueryReplayFixture, liveDebug);
-        snapshot.replayComparison.available = true;
-        snapshot.replayComparison.code = static_cast<std::uint8_t>(comparison.code);
-        snapshot.replayComparison.message = comparison.message;
-        if (comparison.comparison.has_value()) {
-            snapshot.replayComparison.comparisonCode =
-                static_cast<std::uint8_t>(comparison.comparison->code);
-            snapshot.replayComparison.comparedEventCount = comparison.comparison->comparedEventCount;
-            snapshot.replayComparison.mismatchIndex = comparison.comparison->mismatchIndex;
-            snapshot.replayComparison.fixtureTruncated = comparison.comparison->fixtureTruncated;
-            snapshot.replayComparison.snapshotTruncated = comparison.comparison->snapshotTruncated;
-            snapshot.replayComparison.mismatchFieldMask = comparison.comparison->mismatchFieldMask;
-            snapshot.replayComparison.diagnosticSummary = comparison.comparison->diagnosticSummary;
-            snapshot.replayComparison.compatibilityMismatchMask = comparison.comparison->compatibilityMismatchMask;
-            snapshot.replayComparison.compatibilityDiagnosticSummary =
-                comparison.comparison->compatibilityDiagnosticSummary;
-
-        }
     }
     return snapshot;
 }
@@ -1552,8 +1089,6 @@ EditorBridgeSnapshotUVE EditorBridgeUVE::BuildSnapshotUVE() const {
     snapshot.scriptRuntimeTickHistory.assign(m_scriptRuntimeTickHistory.begin(), m_scriptRuntimeTickHistory.end());
     snapshot.dataTableCatalog = observed.dataTableCatalog;
     snapshot.dataTablePreview = observed.dataTablePreview;
-    snapshot.motionQuery = CaptureMotionQueryUVE();
-    snapshot.controlRig = CaptureControlRigUVE();
     snapshot.capabilities = GetCapabilitiesUVE();
     return snapshot;
 }
@@ -1562,7 +1097,7 @@ EditorBridgeResponseUVE EditorBridgeUVE::MakeResponseUVE(const EditorBridgeReque
                                                            std::string code, std::string message) const {
     return EditorBridgeResponseUVE{kEditorBridgeProtocolVersionUVE, request.requestId, applied,
                                    std::move(code), std::move(message), BuildSnapshotUVE(), std::nullopt,
-                                   std::nullopt, std::nullopt, std::nullopt, std::nullopt};
+                                   std::nullopt, std::nullopt};
 }
 
 Scene::EntityUVE EditorBridgeUVE::ToEntityUVE(const EditorBridgeEntityRefUVE entity) noexcept {

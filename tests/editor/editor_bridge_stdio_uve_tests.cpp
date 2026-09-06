@@ -89,10 +89,6 @@ TEST(EditorBridgeStdioUVETest, ServeUVE_HandshakesAndRoutesExistingBridgeDispatc
         runtimeProgram.instructions.resize(2U);
         ASSERT_TRUE(runtime.AttachUVE(runtimeEntity, std::move(runtimeProgram)));
         EditorBridgeUVE bridge(editor, nullptr, &debugger, &runtime);
-        Core::TimeSampledTrajectoryUVE trajectoryPreview;
-        trajectoryPreview.context = Core::AnimationMotionContextUVE::Slide;
-        trajectoryPreview.samples = {{0.0, {0.0F, 0.0F, 0.0F}, {}, {0.0F, 0.0F, 1.0F}, 0.4F, 0.9F}};
-        bridge.SetMotionQueryTrajectoryPreviewUVE(std::move(trajectoryPreview));
         Asset::DataTableUVE previewTable("weapons");
         ASSERT_TRUE(previewTable.DefineColumnUVE("damage", Asset::DataTableColumnTypeUVE::Integer));
         ASSERT_TRUE(previewTable.AddRowUVE("pistol", {std::int64_t{25}}));
@@ -226,37 +222,6 @@ TEST(EditorBridgeStdioUVETest, ServeUVE_HandshakesAndRoutesExistingBridgeDispatc
         EXPECT_EQ(handshakeSnapshot.at("dataTablePreview").at("columns").front().at("name").get<std::string>(), "damage");
         ASSERT_EQ(handshakeSnapshot.at("dataTablePreview").at("rows").size(), 1U);
         EXPECT_EQ(handshakeSnapshot.at("dataTablePreview").at("rows").front().at("values").front().get<std::string>(), "25");
-        ASSERT_TRUE(handshakeSnapshot.at("motionQuery").is_object());
-        ASSERT_TRUE(handshakeSnapshot.at("motionQuery").at("authoring").is_object());
-        EXPECT_TRUE(handshakeSnapshot.at("motionQuery").at("authoring").at("databases").is_array());
-        ASSERT_TRUE(handshakeSnapshot.at("motionQuery").at("debugger").is_object());
-        EXPECT_FALSE(handshakeSnapshot.at("motionQuery").at("debugger").at("attached").get<bool>());
-        ASSERT_TRUE(handshakeSnapshot.at("motionQuery").at("trace").is_object());
-        EXPECT_TRUE(handshakeSnapshot.at("motionQuery").at("trace").at("events").is_array());
-        ASSERT_TRUE(handshakeSnapshot.at("motionQuery").at("replayComparison").is_object());
-        EXPECT_TRUE(handshakeSnapshot.at("motionQuery").at("replayComparison").at("mismatchFieldMask").is_number_unsigned());
-        EXPECT_TRUE(handshakeSnapshot.at("motionQuery").at("replayComparison").at("diagnosticSummary").is_string());
-        EXPECT_TRUE(handshakeSnapshot.at("motionQuery").at("replayComparison").at("compatibilityMismatchMask").is_number_unsigned());
-        EXPECT_TRUE(handshakeSnapshot.at("motionQuery").at("replayComparison").at("compatibilityDiagnosticSummary").is_string());
-        ASSERT_TRUE(handshakeSnapshot.at("motionQuery").at("replayBaselines").is_object());
-        EXPECT_EQ(handshakeSnapshot.at("motionQuery").at("replayBaselines").at("generation").get<std::uint64_t>(), 0U);
-        EXPECT_TRUE(handshakeSnapshot.at("motionQuery").at("replayBaselines").at("entries").is_array());
-        EXPECT_FALSE(handshakeSnapshot.at("motionQuery").at("replayComparisonHistoryTruncated").get<bool>());
-        EXPECT_TRUE(handshakeSnapshot.at("motionQuery").at("replayComparisonHistory").is_array());
-        ASSERT_TRUE(handshakeSnapshot.at("motionQuery").at("replayWorkflow").is_object());
-        EXPECT_EQ(handshakeSnapshot.at("motionQuery").at("replayWorkflow").at("baselineCount").get<std::uint64_t>(), 0U);
-        EXPECT_FALSE(handshakeSnapshot.at("motionQuery").at("replayWorkflow").at("readyForComparison").get<bool>());
-        ASSERT_TRUE(handshakeSnapshot.at("motionQuery").at("trajectoryPreview").is_object());
-        EXPECT_TRUE(handshakeSnapshot.at("motionQuery").at("trajectoryPreview").at("available").get<bool>());
-        EXPECT_EQ(handshakeSnapshot.at("motionQuery").at("trajectoryPreview").at("trajectory").at("context").get<std::uint8_t>(),
-                  static_cast<std::uint8_t>(Core::AnimationMotionContextUVE::Slide));
-        ASSERT_EQ(handshakeSnapshot.at("motionQuery").at("trajectoryPreview").at("trajectory").at("samples").size(), 1U);
-        EXPECT_FLOAT_EQ(handshakeSnapshot.at("motionQuery").at("trajectoryPreview").at("trajectory").at("samples").front().at("capsuleRadius").get<float>(), 0.4F);
-        EXPECT_TRUE(handshakeSnapshot.at("motionQuery").at("trajectoryPreview").at("collisionPrediction").is_null());
-        ASSERT_TRUE(handshakeSnapshot.at("motionQuery").at("replayBatch").is_object());
-        EXPECT_TRUE(handshakeSnapshot.at("motionQuery").at("replayBatch").at("available").get<bool>());
-        EXPECT_EQ(handshakeSnapshot.at("motionQuery").at("replayBatch").at("evaluatedBaselineCount").get<std::size_t>(), 0U);
-        EXPECT_TRUE(handshakeSnapshot.at("motionQuery").at("replayBatch").at("results").is_array());
         EXPECT_TRUE(frames[1U].at("result").at("applied").get<bool>());
         EXPECT_EQ(frames[1U].at("result").at("code").get<std::string>(), "bridge.command.applied");
         EXPECT_TRUE(frames[2U].at("result").at("applied").get<bool>());
@@ -478,102 +443,6 @@ TEST(EditorBridgeStdioUVETest, ServeUVE_ClassifiesTruncatedAndOversizedFramesBef
         oversizedFrame.append(oversizedHeader.data(), oversizedHeader.size());
         verifyMalformedFrame(oversizedFrame, "bridge.transport.frame.oversized");
 
-        editor.ShutdownUVE();
-    }
-    engine.Shutdown();
-}
-
-TEST(EditorBridgeStdioUVETest, ServeUVE_LoadsAndClearsNamedReplayBaselineThroughFramedContract) {
-    Core::EngineCoreUVE engine(MakeBridgeStdioTestConfigUVE());
-    engine.Init();
-    ASSERT_TRUE(engine.Load());
-    {
-        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_bridge_stdio_replay_baseline.uvescene");
-        editor.InitUVE();
-        EditorBridgeUVE bridge(editor);
-        EditorBridgeStdioServerUVE server(bridge);
-        const Plugins::Editor::MotionQueryTraceReplayFixtureUVE fixture;
-        const Plugins::Editor::MotionQueryTraceReplaySerializationResultUVE serialized =
-            Plugins::Editor::SerializeMotionQueryTraceReplayFixtureUVE(fixture);
-        ASSERT_TRUE(serialized.IsAcceptedUVE());
-
-        std::stringstream loadInput;
-        std::stringstream loadOutput;
-        std::stringstream loadDiagnostics;
-        AppendFrameUVE(loadInput, JsonUVE{{"jsonrpc", "2.0"},
-                                         {"id", 1U},
-                                         {"method", "bridge.hello"},
-                                         {"params", {{"protocolVersion", kEditorBridgeProtocolVersionUVE}}}});
-        AppendFrameUVE(loadInput, JsonUVE{{"jsonrpc", "2.0"},
-                                         {"id", 2U},
-                                         {"method", "bridge.dispatch"},
-                                         {"params", {{"protocolVersion", kEditorBridgeProtocolVersionUVE},
-                                                     {"requestId", 91U},
-                                                     {"expectedRevision", bridge.GetSnapshotUVE().revision},
-                                                     {"kind", "loadMotionQueryReplayBaseline"},
-                                                     {"motionQueryReplayBaselineName", "stdio.fixture"},
-                                                     {"motionQueryReplayFixturePayload", serialized.payload}}}});
-        EXPECT_EQ(server.ServeUVE(loadInput, loadOutput, loadDiagnostics), 0);
-        EXPECT_TRUE(loadDiagnostics.str().empty());
-        const std::vector<JsonUVE> loadFrames = ReadFramesUVE(loadOutput);
-        ASSERT_EQ(loadFrames.size(), 2U);
-        const JsonUVE& loadResult = loadFrames[1U].at("result");
-        EXPECT_TRUE(loadResult.at("applied").get<bool>());
-        EXPECT_EQ(loadResult.at("code").get<std::string>(), "bridge.motion_query.replay.baseline.loaded");
-        const std::uint64_t loadedRevision = loadResult.at("snapshot").at("revision").get<std::uint64_t>();
-
-        std::stringstream clearInput;
-        std::stringstream clearOutput;
-        std::stringstream clearDiagnostics;
-        AppendFrameUVE(clearInput, JsonUVE{{"jsonrpc", "2.0"},
-                                          {"id", 3U},
-                                          {"method", "bridge.dispatch"},
-                                          {"params", {{"protocolVersion", kEditorBridgeProtocolVersionUVE},
-                                                      {"requestId", 92U},
-                                                      {"expectedRevision", loadedRevision},
-                                                      {"kind", "clearMotionQueryReplayBaseline"},
-                                                      {"motionQueryReplayBaselineName", "stdio.fixture"}}}});
-        EXPECT_EQ(server.ServeUVE(clearInput, clearOutput, clearDiagnostics), 0);
-        EXPECT_TRUE(clearDiagnostics.str().empty());
-        const std::vector<JsonUVE> clearFrames = ReadFramesUVE(clearOutput);
-        ASSERT_EQ(clearFrames.size(), 1U);
-        const JsonUVE& clearResult = clearFrames.front().at("result");
-        EXPECT_TRUE(clearResult.at("applied").get<bool>());
-        EXPECT_EQ(clearResult.at("code").get<std::string>(), "bridge.motion_query.replay.baseline.cleared");
-        EXPECT_FALSE(clearResult.at("snapshot").at("motionQuery").at("replayComparison").at("available").get<bool>());
-
-        editor.ShutdownUVE();
-    }
-    engine.Shutdown();
-}
-
-TEST(EditorBridgeStdioUVETest, ServeUVE_ExposesMotionQueryPropertyMetadataInSnapshot) {
-    Core::EngineCoreUVE engine(MakeBridgeStdioTestConfigUVE());
-    engine.Init();
-    ASSERT_TRUE(engine.Load());
-    {
-        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_bridge_stdio_motion_query_metadata.uvescene");
-        editor.InitUVE();
-        EditorBridgeUVE bridge(editor);
-        EditorBridgeStdioServerUVE server(bridge);
-        std::stringstream input;
-        std::stringstream output;
-        std::stringstream diagnostics;
-        AppendFrameUVE(input, JsonUVE{{"jsonrpc", "2.0"},
-                                      {"id", 1U},
-                                      {"method", "bridge.hello"},
-                                      {"params", {{"protocolVersion", kEditorBridgeProtocolVersionUVE}}}});
-        EXPECT_EQ(server.ServeUVE(input, output, diagnostics), 0);
-        EXPECT_TRUE(diagnostics.str().empty());
-        const std::vector<JsonUVE> frames = ReadFramesUVE(output);
-        ASSERT_EQ(frames.size(), 1U);
-        const JsonUVE& properties = frames.front().at("result").at("snapshot")
-                                        .at("motionQuery").at("authoring").at("propertyMetadata");
-        ASSERT_EQ(properties.size(), 10U);
-        EXPECT_EQ(properties.front().at("id").get<std::string>(), "display_name");
-        EXPECT_TRUE(properties.front().at("editable").get<bool>());
-        EXPECT_EQ(properties.at(7U).at("id").get<std::string>(), "maximum_candidates");
-        EXPECT_TRUE(properties.at(7U).at("editable").get<bool>());
         editor.ShutdownUVE();
     }
     engine.Shutdown();

@@ -218,10 +218,10 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
 
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
     EXPECT_FALSE(RegisterBuiltInScriptNodesUVE(registry));
-    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 171U);
+    EXPECT_EQ(registry.GetNodeTypeCountUVE(), 161U);
 
     const std::vector<ScriptNodeTypeDescriptorUVE> descriptors = registry.GetNodeTypeDescriptorsUVE();
-    ASSERT_EQ(descriptors.size(), 171U);
+    ASSERT_EQ(descriptors.size(), 161U);
     const std::vector<std::string> expectedIds{
         "flow.sequence", "flow.branch", "flow.return", "flow.do_once", "flow.gate", "flow.switch",
         "flow.event", "flow.loop", "flow.for_loop", "flow.while_loop", "flow.delay",
@@ -259,9 +259,7 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
         "camera.shake", "camera.set_active",
         "animation.play", "animation.stop", "animation.pause", "animation.blend", "animation.blend_space",
         "animation.set_speed", "animation.set_weight", "animation.montage", "animation.get_current_animation",
-        "animation.is_playing", "motion.query.build", "motion.query.search", "motion.query.get_best_match",
-        "motion.query.set_trajectory", "motion.query.set_pose", "motion.query.set_velocity", "motion.query.set_facing",
-        "motion.query.set_yaw", "motion.query.transition", "motion.query.motion_warp",
+        "animation.is_playing",
         "physics.raycast", "physics.sphere_cast", "physics.box_cast", "physics.capsule_cast", "physics.overlap",
         "physics.apply_force", "physics.apply_impulse", "physics.set_velocity", "physics.get_velocity",
         "physics.enable_gravity", "physics.is_colliding", "audio.set_volume", "audio.set_pitch",
@@ -331,19 +329,15 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
         EXPECT_EQ(descriptors[index].category, "Animation");
         EXPECT_EQ(descriptors[index].iconId, "node.animation");
     }
-    for (std::size_t index = 140U; index < 150U; ++index) {
-        EXPECT_EQ(descriptors[index].category, "Motion Query");
-        EXPECT_EQ(descriptors[index].iconId, "node.motion_query");
-    }
-    for (std::size_t index = 150U; index < 161U; ++index) {
+    for (std::size_t index = 140U; index < 151U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Physics");
         EXPECT_EQ(descriptors[index].iconId, "node.physics");
     }
-    for (std::size_t index = 161U; index < 168U; ++index) {
+    for (std::size_t index = 151U; index < 158U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Audio");
         EXPECT_EQ(descriptors[index].iconId, "node.audio");
     }
-    for (std::size_t index = 168U; index < 171U; ++index) {
+    for (std::size_t index = 158U; index < 161U; ++index) {
         EXPECT_EQ(descriptors[index].category, "Debug");
         EXPECT_EQ(descriptors[index].iconId, "node.debug");
     }
@@ -635,33 +629,6 @@ TEST(ScriptNodeRegistryUVETest, BuiltInVector3Catalog_RegistersDeterministicDesc
         EXPECT_FALSE(animation->executionRequired);
         EXPECT_EQ(animation->pins.front().type, ScriptValueTypeUVE::Entity);
     }
-    const ScriptNodeTypeDescriptorUVE* motionBuild = registry.FindNodeTypeUVE("motion.query.build");
-    ASSERT_NE(motionBuild, nullptr);
-    ASSERT_EQ(motionBuild->pins.size(), 5U);
-    EXPECT_FALSE(motionBuild->executionRequired);
-    EXPECT_EQ(motionBuild->pins[0].type, ScriptValueTypeUVE::Entity);
-    EXPECT_EQ(motionBuild->pins[1].type, ScriptValueTypeUVE::Vector3);
-    EXPECT_EQ(motionBuild->pins[2].type, ScriptValueTypeUVE::Vector3);
-    EXPECT_EQ(motionBuild->pins[4].type, ScriptValueTypeUVE::Boolean);
-    for (const char* typeId : {"motion.query.search", "motion.query.get_best_match"}) {
-        const ScriptNodeTypeDescriptorUVE* motion = registry.FindNodeTypeUVE(typeId);
-        ASSERT_NE(motion, nullptr);
-        EXPECT_FALSE(motion->executionRequired);
-        EXPECT_EQ(motion->pins.front().type, ScriptValueTypeUVE::Entity);
-    }
-    for (const char* typeId : {"motion.query.set_trajectory", "motion.query.set_pose", "motion.query.set_velocity",
-                               "motion.query.set_facing", "motion.query.set_yaw", "motion.query.transition",
-                               "motion.query.motion_warp"}) {
-        const ScriptNodeTypeDescriptorUVE* motion = registry.FindNodeTypeUVE(typeId);
-        ASSERT_NE(motion, nullptr);
-        EXPECT_TRUE(motion->executionRequired);
-        EXPECT_EQ(motion->category, "Motion Query");
-        EXPECT_EQ(motion->iconId, "node.motion_query");
-        EXPECT_EQ(motion->pins.front().name, "In");
-        EXPECT_EQ(motion->pins[1].type, ScriptValueTypeUVE::Entity);
-        EXPECT_EQ(motion->pins.back().name, "Then");
-    }
-
     const ScriptNodeTypeDescriptorUVE* physicsRaycast = registry.FindNodeTypeUVE("physics.raycast");
     ASSERT_NE(physicsRaycast, nullptr);
     ASSERT_EQ(physicsRaycast->pins.size(), 10U);
@@ -5917,16 +5884,6 @@ struct AnimationMotionCaptureUVE final {
     std::size_t animationMontageCount = 0U;
     std::size_t animationCurrentCount = 0U;
     std::size_t animationPlayingCount = 0U;
-    std::size_t motionBuildCount = 0U;
-    std::size_t motionSearchCount = 0U;
-    std::size_t motionBestMatchCount = 0U;
-    std::size_t motionTrajectoryCount = 0U;
-    std::size_t motionPoseCount = 0U;
-    std::size_t motionVectorCount = 0U;
-    std::size_t motionYawCount = 0U;
-    std::size_t motionTransitionCount = 0U;
-    std::size_t motionWarpCount = 0U;
-    float lastCandidateIndex = 0.0F;
     Scene::EntityUVE actor{9U, 1U};
 };
 
@@ -6014,92 +5971,6 @@ bool CaptureAnimationPlayingUVE(void* userData, Scene::EntityUVE actor, float cl
     return true;
 }
 
-bool CaptureMotionBuildUVE(void* userData, Scene::EntityUVE actor, const ScriptVector3ValueUVE& velocity,
-                           const ScriptVector3ValueUVE& facing, float deltaSeconds, bool* outResult) noexcept {
-    auto* capture = static_cast<AnimationMotionCaptureUVE*>(userData);
-    if (capture == nullptr || outResult == nullptr || actor != capture->actor ||
-        !std::isfinite(velocity.value.x) || !std::isfinite(facing.value.z) || !std::isfinite(deltaSeconds)) return false;
-    ++capture->motionBuildCount;
-    *outResult = true;
-    return true;
-}
-
-bool CaptureMotionSearchUVE(void* userData, Scene::EntityUVE actor, float maximumResults,
-                            bool* outResult) noexcept {
-    auto* capture = static_cast<AnimationMotionCaptureUVE*>(userData);
-    if (capture == nullptr || outResult == nullptr || actor != capture->actor || !std::isfinite(maximumResults)) return false;
-    ++capture->motionSearchCount;
-    *outResult = true;
-    return true;
-}
-
-bool CaptureMotionBestMatchUVE(void* userData, Scene::EntityUVE actor, float* outCandidateIndex) noexcept {
-    auto* capture = static_cast<AnimationMotionCaptureUVE*>(userData);
-    if (capture == nullptr || outCandidateIndex == nullptr || actor != capture->actor) return false;
-    ++capture->motionBestMatchCount;
-    capture->lastCandidateIndex = 12.0F;
-    *outCandidateIndex = capture->lastCandidateIndex;
-    return true;
-}
-
-bool CaptureMotionTrajectoryUVE(void* userData, Scene::EntityUVE actor, const ScriptVector3ValueUVE& sample,
-                               float offsetSeconds, bool* outResult) noexcept {
-    auto* capture = static_cast<AnimationMotionCaptureUVE*>(userData);
-    if (capture == nullptr || outResult == nullptr || actor != capture->actor ||
-        !std::isfinite(sample.value.x) || !std::isfinite(offsetSeconds)) return false;
-    ++capture->motionTrajectoryCount;
-    *outResult = true;
-    return true;
-}
-
-bool CaptureMotionPoseUVE(void* userData, Scene::EntityUVE actor, const ScriptTransformValueUVE& pose,
-                          bool* outResult) noexcept {
-    auto* capture = static_cast<AnimationMotionCaptureUVE*>(userData);
-    if (capture == nullptr || outResult == nullptr || actor != capture->actor ||
-        !std::isfinite(pose.position.value.x)) return false;
-    ++capture->motionPoseCount;
-    *outResult = true;
-    return true;
-}
-
-bool CaptureMotionVectorUVE(void* userData, Scene::EntityUVE actor, const ScriptVector3ValueUVE& value,
-                           bool* outResult) noexcept {
-    auto* capture = static_cast<AnimationMotionCaptureUVE*>(userData);
-    if (capture == nullptr || outResult == nullptr || actor != capture->actor || !std::isfinite(value.value.y)) return false;
-    ++capture->motionVectorCount;
-    *outResult = true;
-    return true;
-}
-
-bool CaptureMotionYawUVE(void* userData, Scene::EntityUVE actor, float yawDegrees,
-                        bool* outResult) noexcept {
-    auto* capture = static_cast<AnimationMotionCaptureUVE*>(userData);
-    if (capture == nullptr || outResult == nullptr || actor != capture->actor || !std::isfinite(yawDegrees)) return false;
-    ++capture->motionYawCount;
-    *outResult = true;
-    return true;
-}
-
-bool CaptureMotionTransitionUVE(void* userData, Scene::EntityUVE actor, float targetToken, float durationSeconds,
-                                bool* outResult) noexcept {
-    auto* capture = static_cast<AnimationMotionCaptureUVE*>(userData);
-    if (capture == nullptr || outResult == nullptr || actor != capture->actor ||
-        !std::isfinite(targetToken) || !std::isfinite(durationSeconds)) return false;
-    ++capture->motionTransitionCount;
-    *outResult = true;
-    return true;
-}
-
-bool CaptureMotionWarpUVE(void* userData, Scene::EntityUVE actor, const ScriptVector3ValueUVE& target,
-                          float weight, bool* outResult) noexcept {
-    auto* capture = static_cast<AnimationMotionCaptureUVE*>(userData);
-    if (capture == nullptr || outResult == nullptr || actor != capture->actor ||
-        !std::isfinite(target.value.z) || !std::isfinite(weight)) return false;
-    ++capture->motionWarpCount;
-    *outResult = true;
-    return true;
-}
-
 ScriptEngineCallBindingsUVE MakeAnimationMotionBindingsUVE(AnimationMotionCaptureUVE& capture) {
     ScriptEngineCallBindingsUVE bindings{};
     bindings.userData = &capture;
@@ -6113,16 +5984,6 @@ ScriptEngineCallBindingsUVE MakeAnimationMotionBindingsUVE(AnimationMotionCaptur
     bindings.animationMontage = CaptureAnimationMontageUVE;
     bindings.animationGetCurrent = CaptureAnimationCurrentUVE;
     bindings.animationIsPlaying = CaptureAnimationPlayingUVE;
-    bindings.motionQueryBuild = CaptureMotionBuildUVE;
-    bindings.motionQuerySearch = CaptureMotionSearchUVE;
-    bindings.motionQueryBestMatch = CaptureMotionBestMatchUVE;
-    bindings.motionQuerySetTrajectory = CaptureMotionTrajectoryUVE;
-    bindings.motionQuerySetPose = CaptureMotionPoseUVE;
-    bindings.motionQuerySetVelocity = CaptureMotionVectorUVE;
-    bindings.motionQuerySetFacing = CaptureMotionVectorUVE;
-    bindings.motionQuerySetYaw = CaptureMotionYawUVE;
-    bindings.motionQueryTransition = CaptureMotionTransitionUVE;
-    bindings.motionQueryMotionWarp = CaptureMotionWarpUVE;
     return bindings;
 }
 
@@ -6174,13 +6035,11 @@ TEST(ScriptVmUVETest, CallbackBackedAnimationNodesRejectOutputCapacityBeforeCall
     EXPECT_FALSE(currentContext.FindOutputUVE(1U, "Result").has_value());
 }
 
-TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_ExecutesAnimationAndMotionQueryFamiliesWithCopiedValues) {
-    const std::array<const char*, 20U> nodeTypes{
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_ExecutesAnimationFamilyWithCopiedValues) {
+    const std::array<const char*, 10U> nodeTypes{
         "animation.play", "animation.stop", "animation.pause", "animation.blend", "animation.blend_space",
         "animation.set_speed", "animation.set_weight", "animation.montage", "animation.get_current_animation",
-        "animation.is_playing", "motion.query.build", "motion.query.search", "motion.query.get_best_match",
-        "motion.query.set_trajectory", "motion.query.set_pose", "motion.query.set_velocity", "motion.query.set_facing",
-        "motion.query.set_yaw", "motion.query.transition", "motion.query.motion_warp"};
+        "animation.is_playing"};
     ScriptBytecodeProgramUVE program;
     ScriptVmExecutionContextUVE context;
     const Scene::EntityUVE actor{9U, 1U};
@@ -6204,24 +6063,6 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_ExecutesAnimationAndMotionQueryFa
     ASSERT_TRUE(context.SetInputUVE(8U, "Montage", 3.0F));
     ASSERT_TRUE(context.SetInputUVE(8U, "Weight", 0.5F));
     ASSERT_TRUE(context.SetInputUVE(10U, "Clip", 1.0F));
-    ASSERT_TRUE(context.SetInputUVE(11U, "Velocity", ScriptVector3ValueUVE{{1.0F, 0.0F, 0.0F}}));
-    ASSERT_TRUE(context.SetInputUVE(11U, "Facing", ScriptVector3ValueUVE{{0.0F, 0.0F, 1.0F}}));
-    ASSERT_TRUE(context.SetInputUVE(11U, "Delta", 0.016F));
-    ASSERT_TRUE(context.SetInputUVE(12U, "Max Results", 16.0F));
-    ASSERT_TRUE(context.SetInputUVE(14U, "Sample", ScriptVector3ValueUVE{{2.0F, 0.0F, 1.0F}}));
-    ASSERT_TRUE(context.SetInputUVE(14U, "Offset", 0.25F));
-    ScriptTransformValueUVE pose{};
-    pose.position = ScriptVector3ValueUVE{{1.0F, 2.0F, 3.0F}};
-    pose.rotation = ScriptRotationValueUVE{{0.0F, 0.0F, 0.0F, 1.0F}};
-    pose.scale = ScriptVector3ValueUVE{{1.0F, 1.0F, 1.0F}};
-    ASSERT_TRUE(context.SetInputUVE(15U, "Pose", pose));
-    ASSERT_TRUE(context.SetInputUVE(16U, "Velocity", ScriptVector3ValueUVE{{1.0F, 2.0F, 3.0F}}));
-    ASSERT_TRUE(context.SetInputUVE(17U, "Facing", ScriptVector3ValueUVE{{0.0F, 0.0F, 1.0F}}));
-    ASSERT_TRUE(context.SetInputUVE(18U, "Yaw", 90.0F));
-    ASSERT_TRUE(context.SetInputUVE(19U, "Target", 4.0F));
-    ASSERT_TRUE(context.SetInputUVE(19U, "Duration", 0.3F));
-    ASSERT_TRUE(context.SetInputUVE(20U, "Target", ScriptVector3ValueUVE{{4.0F, 0.0F, 2.0F}}));
-    ASSERT_TRUE(context.SetInputUVE(20U, "Weight", 0.8F));
 
     AnimationMotionCaptureUVE capture;
     ScriptEngineCallBindingsUVE bindings = MakeAnimationMotionBindingsUVE(capture);
@@ -6230,7 +6071,7 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_ExecutesAnimationAndMotionQueryFa
     const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(program, context, options);
 
     ASSERT_TRUE(result.IsSuccessUVE());
-    EXPECT_EQ(result.instructionsExecuted, 20U);
+    EXPECT_EQ(result.instructionsExecuted, 10U);
     EXPECT_EQ(capture.animationClipCount, 2U);
     EXPECT_EQ(capture.animationPauseCount, 1U);
     EXPECT_EQ(capture.animationBlendCount, 1U);
@@ -6239,44 +6080,14 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_ExecutesAnimationAndMotionQueryFa
     EXPECT_EQ(capture.animationMontageCount, 1U);
     EXPECT_EQ(capture.animationCurrentCount, 1U);
     EXPECT_EQ(capture.animationPlayingCount, 1U);
-    EXPECT_EQ(capture.motionBuildCount, 1U);
-    EXPECT_EQ(capture.motionSearchCount, 1U);
-    EXPECT_EQ(capture.motionBestMatchCount, 1U);
-    EXPECT_EQ(capture.motionTrajectoryCount, 1U);
-    EXPECT_EQ(capture.motionPoseCount, 1U);
-    EXPECT_EQ(capture.motionVectorCount, 2U);
-    EXPECT_EQ(capture.motionYawCount, 1U);
-    EXPECT_EQ(capture.motionTransitionCount, 1U);
-    EXPECT_EQ(capture.motionWarpCount, 1U);
     EXPECT_FLOAT_EQ(std::get<float>(*context.FindOutputUVE(9U, "Result")), 8.0F);
-    EXPECT_FLOAT_EQ(std::get<float>(*context.FindOutputUVE(13U, "Result")), 12.0F);
-    EXPECT_TRUE(std::get<bool>(*context.FindOutputUVE(20U, "Result")));
 }
 
-TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_AnimationMotionQuerySchedulerUsesCopiedContext) {
-    ScriptBytecodeProgramUVE program;
-    program.instructions.push_back({ScriptIrInstructionKindUVE::ExecuteNode, 1U, 0U,
-                                    "motion.query.get_best_match", {}, {}});
-    ScriptVmExecutionContextUVE context;
-    SetActorInputUVE(context, 1U, Scene::EntityUVE{9U, 1U});
-    AnimationMotionCaptureUVE capture;
-    ScriptEngineCallBindingsUVE bindings = MakeAnimationMotionBindingsUVE(capture);
-    ScriptVmExecutionOptionsUVE options;
-    options.engineCallBindings = &bindings;
-    const ScriptVmExecutionResultUVE result = ExecuteScriptBytecodeUVE(program, context, options);
-    EXPECT_TRUE(result.IsSuccessUVE());
-    EXPECT_EQ(result.instructionsExecuted, 1U);
-    EXPECT_EQ(capture.motionBestMatchCount, 1U);
-    EXPECT_FLOAT_EQ(std::get<float>(*context.FindOutputUVE(1U, "Result")), 12.0F);
-}
-
-TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_AnimationMotionQueryNodesFailClosedWithoutBindings) {
-    const std::array<const char*, 20U> nodeTypes{
+TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_AnimationNodesFailClosedWithoutBindings) {
+    const std::array<const char*, 10U> nodeTypes{
         "animation.play", "animation.stop", "animation.pause", "animation.blend", "animation.blend_space",
         "animation.set_speed", "animation.set_weight", "animation.montage", "animation.get_current_animation",
-        "animation.is_playing", "motion.query.build", "motion.query.search", "motion.query.get_best_match",
-        "motion.query.set_trajectory", "motion.query.set_pose", "motion.query.set_velocity", "motion.query.set_facing",
-        "motion.query.set_yaw", "motion.query.transition", "motion.query.motion_warp"};
+        "animation.is_playing"};
     const Scene::EntityUVE actor{9U, 1U};
     for (std::size_t index = 0U; index < nodeTypes.size(); ++index) {
         const std::uint32_t nodeId = static_cast<std::uint32_t>(index + 1U);
@@ -6303,30 +6114,6 @@ TEST(ScriptVmUVETest, ExecuteScriptBytecodeUVE_AnimationMotionQueryNodesFailClos
             ASSERT_TRUE(context.SetInputUVE(nodeId, "Weight", 0.5F));
         } else if (index == 7U) {
             ASSERT_TRUE(context.SetInputUVE(nodeId, "Montage", 1.0F));
-            ASSERT_TRUE(context.SetInputUVE(nodeId, "Weight", 0.5F));
-        } else if (index == 10U) {
-            ASSERT_TRUE(context.SetInputUVE(nodeId, "Velocity", ScriptVector3ValueUVE{{1.0F, 0.0F, 0.0F}}));
-            ASSERT_TRUE(context.SetInputUVE(nodeId, "Facing", ScriptVector3ValueUVE{{0.0F, 0.0F, 1.0F}}));
-            ASSERT_TRUE(context.SetInputUVE(nodeId, "Delta", 0.016F));
-        } else if (index == 11U) {
-            ASSERT_TRUE(context.SetInputUVE(nodeId, "Max Results", 4.0F));
-        } else if (index == 13U) {
-            ASSERT_TRUE(context.SetInputUVE(nodeId, "Sample", ScriptVector3ValueUVE{{1.0F, 0.0F, 0.0F}}));
-            ASSERT_TRUE(context.SetInputUVE(nodeId, "Offset", 0.1F));
-        } else if (index == 14U) {
-            ScriptTransformValueUVE pose{};
-            pose.scale = ScriptVector3ValueUVE{{1.0F, 1.0F, 1.0F}};
-            ASSERT_TRUE(context.SetInputUVE(nodeId, "Pose", pose));
-        } else if (index == 15U || index == 16U) {
-            ASSERT_TRUE(context.SetInputUVE(nodeId, index == 15U ? "Velocity" : "Facing",
-                                            ScriptVector3ValueUVE{{1.0F, 0.0F, 0.0F}}));
-        } else if (index == 17U) {
-            ASSERT_TRUE(context.SetInputUVE(nodeId, "Yaw", 0.0F));
-        } else if (index == 18U) {
-            ASSERT_TRUE(context.SetInputUVE(nodeId, "Target", 1.0F));
-            ASSERT_TRUE(context.SetInputUVE(nodeId, "Duration", 0.1F));
-        } else if (index == 19U) {
-            ASSERT_TRUE(context.SetInputUVE(nodeId, "Target", ScriptVector3ValueUVE{{1.0F, 0.0F, 0.0F}}));
             ASSERT_TRUE(context.SetInputUVE(nodeId, "Weight", 0.5F));
         }
         EXPECT_EQ(ExecuteScriptBytecodeUVE(program, context).status, ScriptVmStatusUVE::NodeExecutionFailed)
@@ -6361,7 +6148,7 @@ TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesEntityProducerForM
     EXPECT_EQ(compiled.program->instructions[4].nodeTypeId, "audio.play_sound");
 }
 
-TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesEntityProducerBeforeAnimationAndMotionQuery) {
+TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesEntityProducerBeforeAnimationAndPhysics) {
     ScriptNodeRegistryUVE registry;
     ASSERT_TRUE(RegisterBuiltInScriptNodesUVE(registry));
     const auto expectStaged = [](const ScriptIrCompileResultUVE& result, const char* consumer,
@@ -6379,11 +6166,6 @@ TEST(ScriptCompilerIRUVETest, CompileScriptGraphToIrUVE_StagesEntityProducerBefo
     ASSERT_TRUE(animationGraph.AddNodeUVE({20U, "animation.set_speed"}));
     ASSERT_TRUE(animationGraph.AddLinkUVE({{10U, "Result"}, {20U, "Actor"}}));
     expectStaged(CompileScriptGraphToIrUVE(animationGraph, registry), "animation.set_speed", 10U, 20U);
-    ScriptGraphUVE motionGraph;
-    ASSERT_TRUE(motionGraph.AddNodeUVE({30U, "entity.spawn"}));
-    ASSERT_TRUE(motionGraph.AddNodeUVE({40U, "motion.query.search"}));
-    ASSERT_TRUE(motionGraph.AddLinkUVE({{30U, "Result"}, {40U, "Actor"}}));
-    expectStaged(CompileScriptGraphToIrUVE(motionGraph, registry), "motion.query.search", 30U, 40U);
     ScriptGraphUVE physicsGraph;
     ASSERT_TRUE(physicsGraph.AddNodeUVE({50U, "entity.spawn"}));
     ASSERT_TRUE(physicsGraph.AddNodeUVE({60U, "physics.apply_force"}));

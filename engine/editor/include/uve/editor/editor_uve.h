@@ -409,16 +409,6 @@ public:
     /// Restores the editor-only 2D canvas to its centered loading-screen design view.
     void Reset2DCanvasViewUVE() noexcept;
     [[nodiscard]] bool IsSceneDirtyUVE() const noexcept;
-    /// Returns whether the editor-only Control Rig tool gate is enabled. This state never creates
-    /// runtime entities, changes authored scene data, or serializes into a project.
-    [[nodiscard]] bool IsControlRigPluginEnabledUVE() const noexcept;
-    /// Updates the editor-only Control Rig tool gate without touching ECS or scene history.
-    void SetControlRigPluginEnabledUVE(bool enabled) noexcept;
-    /// Returns whether the editor-only Motion Query tool gate is enabled. This state never creates
-    /// runtime entities, changes authored scene data, or serializes into a project.
-    [[nodiscard]] bool IsMotionQueryPluginEnabledUVE() const noexcept;
-    /// Updates the editor-only Motion Query tool gate without touching ECS or scene history.
-    void SetMotionQueryPluginEnabledUVE(bool enabled) noexcept;
     /// Read-only transform-tool lifecycle diagnostics. These values expose editor-session evidence
     /// only; they neither alter input routing nor claim any ECS mutation succeeded.
     [[nodiscard]] EditorToolSessionPhaseUVE GetToolSessionPhaseUVE() const noexcept;
@@ -900,8 +890,6 @@ private:
     /// Transient Plugin window/tool gates. These are editor-session state only and never become ECS
     /// components, serialized scene data, or runtime/plugin activation side effects.
     bool m_pluginWindowVisible = false;
-    bool m_controlRigPluginEnabled = false;
-    bool m_motionQueryPluginEnabled = false;
     EditorRightPanelTabUVE m_activeRightPanelTab = EditorRightPanelTabUVE::Inspector;
     InspectorDrawerRegistryUVE m_inspectorDrawerRegistry;
     DeveloperConsoleUVE m_developerConsole;

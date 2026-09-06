@@ -2965,22 +2965,6 @@ bool EditorUVE::IsSceneDirtyUVE() const noexcept {
     return m_sceneDirty;
 }
 
-bool EditorUVE::IsControlRigPluginEnabledUVE() const noexcept {
-    return m_controlRigPluginEnabled;
-}
-
-void EditorUVE::SetControlRigPluginEnabledUVE(const bool enabled) noexcept {
-    m_controlRigPluginEnabled = enabled;
-}
-
-bool EditorUVE::IsMotionQueryPluginEnabledUVE() const noexcept {
-    return m_motionQueryPluginEnabled;
-}
-
-void EditorUVE::SetMotionQueryPluginEnabledUVE(const bool enabled) noexcept {
-    m_motionQueryPluginEnabled = enabled;
-}
-
 EditorToolSessionPhaseUVE EditorUVE::GetToolSessionPhaseUVE() const noexcept {
     return m_toolSession.GetPhaseUVE();
 }
@@ -5241,14 +5225,7 @@ void EditorUVE::DrawPluginWindowUVE() {
     if (ImGui::Begin("Plugin Tools", &m_pluginWindowVisible, ImGuiWindowFlags_AlwaysAutoResize)) {
         DrawNativeIconLabelUVE(m_uiAssets.GetGeneralIconTextureIdUVE("plugin"), "Editor tools");
         ImGui::Separator();
-        ImGui::Checkbox("Control Rig", &m_controlRigPluginEnabled);
-        ImGui::SameLine();
-        ImGui::TextDisabled(m_controlRigPluginEnabled ? "enabled" : "disabled");
-        ImGui::Checkbox("Motion Query", &m_motionQueryPluginEnabled);
-        ImGui::SameLine();
-        ImGui::TextDisabled(m_motionQueryPluginEnabled ? "enabled" : "disabled");
-        ImGui::Spacing();
-        ImGui::TextWrapped("These switches gate editor tools only. They do not create scene objects, lights, meshes, or runtime systems.");
+        ImGui::TextDisabled("No editor plugins are currently installed.");
     }
     ImGui::End();
 }
@@ -6611,13 +6588,6 @@ void EditorUVE::DrawFilesystemContextPopupUVE() {
             m_selectedAsset.reset();
             m_filesystemContextVisible = false;
         }
-    }
-
-    if (matches("Control Rig")) {
-        ImGui::Checkbox("Control Rig", &m_controlRigPluginEnabled);
-    }
-    if (matches("Motion Query")) {
-        ImGui::Checkbox("Motion Query", &m_motionQueryPluginEnabled);
     }
 
     ImGui::Separator();

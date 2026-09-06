@@ -18,18 +18,10 @@
 #include "uve/scripting/script_graph_canvas_uve.h"
 #include "uve/scripting/script_runtime_uve.h"
 #include "uve/editor/developer_console_uve.h"
-#include "uve/plugins/motion_query_debugging_uve.h"
-#include "uve/plugins/motion_query_editor_authoring_uve.h"
-#include "uve/plugins/motion_query_live_debug_session_uve.h"
-#include "uve/plugins/motion_query_trace_replay_regression_uve.h"
-#include "uve/plugins/motion_query_trace_replay_baseline_registry_uve.h"
-#include "uve/plugins/control_rig_editor_uve.h"
-#include "uve/physics/trajectory_collision_prediction_uve.h"
 
 namespace UVE::Editor {
 
 inline constexpr std::uint32_t kEditorBridgeProtocolVersionUVE = 1U;
-inline constexpr std::size_t kEditorBridgeMaximumMotionQueryReplayHistoryUVE = 16U;
 
 /// Copy-only identity suitable for protocol DTOs. It intentionally mirrors a generational entity
 /// handle without exposing entity-manager memory or behavior across a future managed boundary.
@@ -89,17 +81,6 @@ enum class EditorBridgeCapabilityUVE : std::uint8_t {
     DeserializeVisualScriptGraph,
     AddVisualScriptNodeType,
     SetVisualScriptPinDefault,
-    ReadMotionQuery,
-    DispatchMotionQueryCommand,
-    DispatchMotionQueryDebugCommand,
-    LoadMotionQueryReplayBaseline,
-    ClearMotionQueryReplayBaseline,
-    RunMotionQueryReplayBaselineBatch,
-    ExportMotionQueryReplayBaselineRegistry,
-    ImportMotionQueryReplayBaselineRegistry,
-    RenameMotionQueryReplayBaseline,
-    ExportMotionQueryReplayEvidence,
-    ReadControlRig,
 };
 
 /// The deliberately small v1 request vocabulary. No generic command string is accepted because
@@ -145,17 +126,6 @@ enum class EditorBridgeRequestKindUVE : std::uint8_t {
     DeserializeVisualScriptGraph,
     AddVisualScriptNodeType,
     SetVisualScriptPinDefault,
-    ReadMotionQuery,
-    DispatchMotionQueryCommand,
-    DispatchMotionQueryDebugCommand,
-    LoadMotionQueryReplayBaseline,
-    ClearMotionQueryReplayBaseline,
-    RunMotionQueryReplayBaselineBatch,
-    ExportMotionQueryReplayBaselineRegistry,
-    ImportMotionQueryReplayBaselineRegistry,
-    RenameMotionQueryReplayBaseline,
-    ExportMotionQueryReplayEvidence,
-    ReadControlRig,
 };
 
 /// Explicitly describes whether this bridge session has a native-owned viewport surface. No raw
@@ -444,210 +414,6 @@ struct EditorBridgeDataTablePreviewSnapshotUVE final {
     [[nodiscard]] bool operator==(const EditorBridgeDataTablePreviewSnapshotUVE&) const = default;
 };
 
-struct EditorBridgeMotionQueryCommandMetadataUVE final {
-    std::uint8_t kind = 0U;
-    std::uint8_t payloadKind = 0U;
-    std::string name;
-    std::string label;
-    bool mutatesAuthoring = false;
-    bool requiresResource = false;
-    bool requiresPayload = false;
-    bool supportsUndo = false;
-
-    [[nodiscard]] bool operator==(const EditorBridgeMotionQueryCommandMetadataUVE&) const = default;
-};
-
-struct EditorBridgeMotionQueryAuthoringSnapshotUVE final {
-    std::uint64_t revision = 0U;
-    std::optional<Asset::ResourceHandleUVE> selectedResource;
-    std::vector<Plugins::Editor::MotionQueryEditorDatabaseRowUVE> databases;
-    std::vector<EditorBridgeMotionQueryCommandMetadataUVE> commandMetadata;
-    std::vector<Plugins::Editor::MotionQueryEditorPropertyMetadataUVE> propertyMetadata;
-    bool clipboardAvailable = false;
-    bool canUndo = false;
-    bool canRedo = false;
-    std::string diagnostic;
-
-    [[nodiscard]] bool operator==(const EditorBridgeMotionQueryAuthoringSnapshotUVE&) const = default;
-};
-
-struct EditorBridgeMotionQueryDebuggerSnapshotUVE final {
-    bool attached = false;
-    std::uint64_t generation = 0U;
-    std::optional<Asset::ResourceHandleUVE> database;
-    std::optional<std::size_t> selectedCandidateIndex;
-    std::size_t candidateCount = 0U;
-    std::size_t candidatesEvaluated = 0U;
-    float selectedCost = 0.0F;
-    std::string selectedCandidateId;
-    std::string selectedSourceClipId;
-    std::uint8_t qualityTier = 0U;
-    std::uint8_t continuityCode = 0U;
-    bool continuityApplied = false;
-    std::uint8_t transitionCode = 0U;
-    bool transitionHeldPrevious = false;
-    std::uint8_t telemetryCode = 0U;
-    std::size_t telemetryIndexEntryCount = 0U;
-    std::size_t telemetryCandidatesConsidered = 0U;
-    bool telemetryBudgetSaturated = false;
-    std::string provenance;
-    std::string message;
-
-    [[nodiscard]] bool operator==(const EditorBridgeMotionQueryDebuggerSnapshotUVE&) const = default;
-};
-
-struct EditorBridgeMotionQueryTraceSnapshotUVE final {
-    std::uint64_t generation = 0U;
-    bool truncated = false;
-    std::vector<Plugins::Editor::MotionQueryTraceEventUVE> events;
-
-    [[nodiscard]] bool operator==(const EditorBridgeMotionQueryTraceSnapshotUVE&) const = default;
-};
-
-struct EditorBridgeMotionQueryReplayComparisonUVE final {
-    bool available = false;
-    std::uint8_t code = 0U;
-    std::uint8_t comparisonCode = 0U;
-    std::size_t comparedEventCount = 0U;
-    std::size_t mismatchIndex = 0U;
-    bool fixtureTruncated = false;
-    bool snapshotTruncated = false;
-    std::uint32_t mismatchFieldMask = 0U;
-    std::string message;
-    std::string diagnosticSummary;
-    std::uint32_t compatibilityMismatchMask = 0U;
-    std::string compatibilityDiagnosticSummary;
-
-    [[nodiscard]] bool operator==(const EditorBridgeMotionQueryReplayComparisonUVE&) const = default;
-};
-
-struct EditorBridgeMotionQueryReplayBaselineEntryUVE final {
-    std::string name;
-    std::uint64_t sourceGeneration = 0U;
-    std::size_t eventCount = 0U;
-    bool truncated = false;
-
-    [[nodiscard]] bool operator==(const EditorBridgeMotionQueryReplayBaselineEntryUVE&) const = default;
-};
-
-struct EditorBridgeMotionQueryReplayBaselineSnapshotUVE final {
-    std::uint64_t generation = 0U;
-    bool truncated = false;
-    std::vector<EditorBridgeMotionQueryReplayBaselineEntryUVE> entries;
-
-    [[nodiscard]] bool operator==(const EditorBridgeMotionQueryReplayBaselineSnapshotUVE&) const = default;
-};
-
-struct EditorBridgeMotionQueryReplayComparisonHistoryEntryUVE final {
-    std::uint64_t sequence = 0U;
-    std::string baselineName;
-    std::uint64_t registryGeneration = 0U;
-    std::uint8_t comparisonCode = 0U;
-    std::size_t comparedEventCount = 0U;
-    std::size_t mismatchIndex = 0U;
-    std::uint32_t mismatchFieldMask = 0U;
-    std::string diagnosticSummary;
-
-    [[nodiscard]] bool operator==(const EditorBridgeMotionQueryReplayComparisonHistoryEntryUVE&) const = default;
-};
-
-struct EditorBridgeMotionQueryReplayWorkflowStatusUVE final {
-    std::uint64_t registryGeneration = 0U;
-    std::size_t baselineCount = 0U;
-    bool activeBaselineSelected = false;
-    bool activeFixtureAvailable = false;
-    bool historyTruncated = false;
-    bool readyForComparison = false;
-    std::string diagnostic;
-
-    [[nodiscard]] bool operator==(const EditorBridgeMotionQueryReplayWorkflowStatusUVE&) const = default;
-};
-
-struct EditorBridgeMotionQueryReplayBatchEntryUVE final {
-    std::string baselineName;
-    std::uint8_t regressionCode = 0U;
-    std::uint8_t comparisonCode = 0U;
-    std::size_t comparedEventCount = 0U;
-    std::size_t mismatchIndex = 0U;
-    std::uint32_t mismatchFieldMask = 0U;
-    std::string diagnosticSummary;
-    std::uint32_t compatibilityMismatchMask = 0U;
-    std::string compatibilityDiagnosticSummary;
-
-    [[nodiscard]] bool operator==(const EditorBridgeMotionQueryReplayBatchEntryUVE&) const = default;
-};
-
-struct EditorBridgeMotionQueryReplayBatchSnapshotUVE final {
-    bool available = false;
-    std::uint8_t code = 0U;
-    std::uint64_t registryGeneration = 0U;
-    std::size_t evaluatedBaselineCount = 0U;
-    std::size_t matchCount = 0U;
-    std::size_t mismatchCount = 0U;
-    bool truncated = false;
-    std::string message;
-    std::vector<EditorBridgeMotionQueryReplayBatchEntryUVE> results;
-
-    [[nodiscard]] bool operator==(const EditorBridgeMotionQueryReplayBatchSnapshotUVE&) const = default;
-};
-
-struct EditorBridgeMotionQueryReplayBatchHistoryEntryUVE final {
-    std::uint64_t sequence = 0U;
-    std::uint64_t registryGeneration = 0U;
-    std::uint8_t code = 0U;
-    std::size_t evaluatedBaselineCount = 0U;
-    std::size_t matchCount = 0U;
-    std::size_t mismatchCount = 0U;
-    std::string message;
-
-    [[nodiscard]] bool operator==(const EditorBridgeMotionQueryReplayBatchHistoryEntryUVE&) const = default;
-};
-
-struct EditorBridgeMotionQueryTrajectoryPreviewUVE final {
-    bool available = false;
-    Core::TimeSampledTrajectoryUVE trajectory;
-    std::optional<Physics::TrajectoryCollisionPredictionResultUVE> collisionPrediction;
-    std::string diagnostic;
-
-    [[nodiscard]] bool operator==(const EditorBridgeMotionQueryTrajectoryPreviewUVE&) const = default;
-};
-
-struct EditorBridgeMotionQueryReplaySessionFactsUVE final {
-    std::size_t totalIndividualComparisons = 0U;
-    std::size_t totalBatchRuns = 0U;
-    std::size_t totalBaselinesEvaluated = 0U;
-    std::size_t totalMatchesFound = 0U;
-    std::size_t totalMismatchesFound = 0U;
-
-    [[nodiscard]] bool operator==(const EditorBridgeMotionQueryReplaySessionFactsUVE&) const = default;
-};
-
-struct EditorBridgeMotionQuerySnapshotUVE final {
-    EditorBridgeMotionQueryAuthoringSnapshotUVE authoring;
-    EditorBridgeMotionQueryDebuggerSnapshotUVE debugger;
-    EditorBridgeMotionQueryTraceSnapshotUVE trace;
-    bool liveDebugActive = false;
-    std::uint64_t liveDebugGeneration = 0U;
-    std::optional<Asset::ResourceHandleUVE> liveDebugDatabase;
-    std::string liveDebugFilter;
-    std::size_t liveDebugTotalTraceEventCount = 0U;
-    std::size_t liveDebugVisibleTraceEventCount = 0U;
-    bool liveDebugTraceTruncated = false;
-    std::string liveDebugDiagnostic;
-    EditorBridgeMotionQueryReplayComparisonUVE replayComparison;
-    EditorBridgeMotionQueryReplayBaselineSnapshotUVE replayBaselines;
-    bool replayComparisonHistoryTruncated = false;
-    std::vector<EditorBridgeMotionQueryReplayComparisonHistoryEntryUVE> replayComparisonHistory;
-    EditorBridgeMotionQueryReplayWorkflowStatusUVE replayWorkflow;
-    EditorBridgeMotionQueryReplayBatchSnapshotUVE replayBatch;
-    EditorBridgeMotionQueryTrajectoryPreviewUVE trajectoryPreview;
-    bool replayBatchHistoryTruncated = false;
-    std::vector<EditorBridgeMotionQueryReplayBatchHistoryEntryUVE> replayBatchHistory;
-    EditorBridgeMotionQueryReplaySessionFactsUVE replaySessionFacts;
-
-    [[nodiscard]] bool operator==(const EditorBridgeMotionQuerySnapshotUVE&) const = default;
-};
-
 struct EditorBridgeSnapshotUVE final {
     std::uint32_t protocolVersion = kEditorBridgeProtocolVersionUVE;
     std::uint64_t revision = 0U;
@@ -672,8 +438,6 @@ struct EditorBridgeSnapshotUVE final {
     std::vector<EditorBridgeScriptRuntimeTickHistoryEntryUVE> scriptRuntimeTickHistory;
     EditorBridgeDataTableCatalogSnapshotUVE dataTableCatalog;
     EditorBridgeDataTablePreviewSnapshotUVE dataTablePreview;
-    EditorBridgeMotionQuerySnapshotUVE motionQuery;
-    Core::ControlRigAuthoringSnapshotUVE controlRig;
     std::vector<EditorBridgeCapabilityUVE> capabilities;
 };
 
@@ -708,12 +472,6 @@ struct EditorBridgeRequestUVE final {
     std::optional<std::int32_t> developerConsoleHistoryDelta;
     std::optional<std::string> visualScriptPinName;
     std::optional<std::string> visualScriptDefaultValue;
-    std::optional<Plugins::Editor::MotionQueryEditorCommandUVE> motionQueryCommand;
-    std::optional<Plugins::Editor::MotionQueryLiveDebugCommandUVE> motionQueryDebugCommand;
-    std::optional<std::string> motionQueryReplayBaselineName;
-    std::optional<std::string> motionQueryReplayFixturePayload;
-    std::optional<std::string> motionQueryReplayBaselineEnvelopePayload;
-    std::optional<std::string> motionQueryReplayBaselineNewName;
 
     EditorBridgeRequestUVE() = default;
 
@@ -745,8 +503,6 @@ struct EditorBridgeResponseUVE final {
     std::optional<EditorBridgeEntityRefUVE> createdEntity;
     std::optional<std::uint64_t> contentImportJobId;
     std::optional<Scripting::ScriptGraphSchemaUVE> visualScriptGraphSchema;
-    std::optional<std::string> motionQueryReplayBaselineEnvelopePayload;
-    std::optional<std::string> motionQueryLiveDebugTracePayload;
 };
 
 /// Main-thread adapter over EditorUVE. It supports coexistence with the native ImGui editor: every
@@ -760,8 +516,7 @@ public:
     explicit EditorBridgeUVE(EditorUVE& editor,
                              const Asset::DataTableRegistryUVE* dataTableRegistry = nullptr,
                              const Scripting::ScriptDebuggerUVE* scriptDebugger = nullptr,
-                             Scripting::ScriptRuntimeUVE* scriptRuntime = nullptr,
-                             Core::ControlRigEditorAuthoringSessionUVE* controlRigAuthoring = nullptr);
+                             Scripting::ScriptRuntimeUVE* scriptRuntime = nullptr);
 
     [[nodiscard]] EditorBridgeSnapshotUVE GetSnapshotUVE();
     [[nodiscard]] EditorBridgeResponseUVE DispatchUVE(const EditorBridgeRequestUVE& request);
@@ -770,16 +525,6 @@ public:
     [[nodiscard]] bool SetPreviewTableUVE(std::string_view name);
     void SetDataTableCatalogSnapshotUVE(Asset::DataTableCatalogSnapshotUVE snapshot);
     void SetDataTablePreviewSnapshotUVE(Asset::DataTableSnapshotUVE snapshot);
-    void SetMotionQueryReplayFixtureUVE(Plugins::Editor::MotionQueryTraceReplayFixtureUVE fixture);
-    void ClearMotionQueryReplayFixtureUVE();
-    /// Publishes copied shared trajectory and optional Physics prediction facts for editor preview.
-    /// The bridge does not own or mutate the source runtime systems.
-    void SetMotionQueryTrajectoryPreviewUVE(
-        Core::TimeSampledTrajectoryUVE trajectory,
-        std::optional<Physics::TrajectoryCollisionPredictionResultUVE> collisionPrediction = std::nullopt);
-    /// Attaches a non-owning native Control Rig authoring session for copied read-only snapshots.
-    /// The caller retains ownership and must keep the session alive while the bridge uses it.
-    void SetControlRigAuthoringSessionUVE(Core::ControlRigEditorAuthoringSessionUVE* session) noexcept;
 
     [[nodiscard]] static const std::vector<EditorBridgeCapabilityUVE>& GetCapabilitiesUVE() noexcept;
 
@@ -803,7 +548,6 @@ private:
         EditorBridgeScriptRuntimeSnapshotUVE scriptRuntime;
         EditorBridgeDataTableCatalogSnapshotUVE dataTableCatalog;
         EditorBridgeDataTablePreviewSnapshotUVE dataTablePreview;
-        Core::ControlRigAuthoringSnapshotUVE controlRig;
 
         [[nodiscard]] bool operator==(const ObservedStateUVE&) const = default;
     };
@@ -823,10 +567,6 @@ private:
     [[nodiscard]] EditorBridgeDeveloperConsoleSnapshotUVE CaptureDeveloperConsoleUVE() const;
     [[nodiscard]] EditorBridgeDataTableCatalogSnapshotUVE CaptureDataTableCatalogUVE() const;
     [[nodiscard]] EditorBridgeDataTablePreviewSnapshotUVE CaptureDataTablePreviewUVE() const;
-    [[nodiscard]] EditorBridgeMotionQuerySnapshotUVE CaptureMotionQueryUVE() const;
-    [[nodiscard]] Core::ControlRigAuthoringSnapshotUVE CaptureControlRigUVE() const;
-    void RecordMotionQueryReplayComparisonHistoryUVE(std::string_view baselineNameOverride = {});
-    void RecordMotionQueryReplayBatchHistoryUVE(const EditorBridgeMotionQueryReplayBatchSnapshotUVE& batch);
     [[nodiscard]] EditorBridgeHierarchySnapshotUVE CaptureHierarchyUVE();
     [[nodiscard]] EditorBridgeInspectorSnapshotUVE CaptureInspectorUVE() const;
     [[nodiscard]] EditorBridgeContentBrowserSnapshotUVE CaptureContentBrowserUVE();
@@ -848,20 +588,6 @@ private:
     std::deque<EditorBridgeScriptRuntimeTickHistoryEntryUVE> m_scriptRuntimeTickHistory;
     bool m_scriptRuntimeTickHistoryTruncated = false;
     std::uint64_t m_nextScriptRuntimeTickSequence = 1U;
-    std::deque<EditorBridgeMotionQueryReplayComparisonHistoryEntryUVE> m_motionQueryReplayComparisonHistory;
-    bool m_motionQueryReplayComparisonHistoryTruncated = false;
-    std::uint64_t m_nextMotionQueryReplayHistorySequence = 1U;
-    std::deque<EditorBridgeMotionQueryReplayBatchHistoryEntryUVE> m_motionQueryReplayBatchHistory;
-    bool m_motionQueryReplayBatchHistoryTruncated = false;
-    std::uint64_t m_nextMotionQueryReplayBatchSequence = 1U;
-    EditorBridgeMotionQueryReplaySessionFactsUVE m_motionQueryReplaySessionFacts{};
-    Plugins::Editor::MotionQueryEditorAuthoringSessionUVE m_motionQueryAuthoring;
-    Plugins::Editor::MotionQueryLiveDebugSessionUVE m_motionQueryLiveDebugSession;
-    std::optional<Plugins::Editor::MotionQueryTraceReplayFixtureUVE> m_motionQueryReplayFixture;
-    std::optional<std::string> m_motionQueryActiveBaselineName;
-    Plugins::Editor::MotionQueryTraceReplayBaselineRegistryUVE m_motionQueryReplayBaselineRegistry;
-    EditorBridgeMotionQueryTrajectoryPreviewUVE m_motionQueryTrajectoryPreview;
-    Core::ControlRigEditorAuthoringSessionUVE* m_controlRigAuthoring = nullptr;
     std::uint64_t m_revision = 0U;
 };
 
