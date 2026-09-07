@@ -52,8 +52,6 @@ add_library(uve_editor STATIC
     src/editor_theme_uve.cpp
     src/editor_ui_assets_uve.cpp
     src/mesh_thumbnail_renderer_uve.cpp
-    src/gizmo_system_uve.cpp
-    src/viewport_nav_gizmo_uve.cpp
     src/editor_uve.cpp
     src/inspector_drawer_registry_uve.cpp
     src/regression_harness_uve.cpp

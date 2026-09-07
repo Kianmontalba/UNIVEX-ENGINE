@@ -19,10 +19,6 @@ def classify_icon(source: Path) -> str:
     filename = source.name
     if filename in GENERAL_ICON_NAMES:
         return "general"
-    if filename.endswith("_component.svg"):
-        return "component"
-    if filename.endswith(("_node.svg", "_node_registry.svg")):
-        return "node"
     raise ValueError(f"cannot classify supplied icon: {source}")
 
 
@@ -55,7 +51,7 @@ def write_group(group: str, sources: list[Path]) -> None:
 
 
 def main() -> None:
-    grouped: dict[str, list[Path]] = {"node": [], "component": [], "general": []}
+    grouped: dict[str, list[Path]] = {"general": []}
     for source in sorted(SOURCE.glob("*.svg")):
         grouped[classify_icon(source)].append(source)
     for group, sources in grouped.items():
