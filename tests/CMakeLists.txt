@@ -177,6 +177,9 @@ add_executable(uve_tests
     editor/scene_node_editor_uve_tests.cpp
     editor/prefab_maturity_editor_uve_tests.cpp
     editor/inspector_drawer_registry_uve_tests.cpp
+    editor/viewport/editor_viewport_camera_uve_tests.cpp
+    editor/viewport/editor_gizmo_geometry_uve_tests.cpp
+    editor/viewport/editor_nav_gizmo_uve_tests.cpp
     scripting/script_graph_uve_tests.cpp
     scripting/script_asset_loader_uve_tests.cpp
     scripting/script_vector3_value_uve_tests.cpp
