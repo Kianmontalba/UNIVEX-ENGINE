@@ -16,12 +16,17 @@
 #include "uve/asset/i_project_file_index_uve.h"
 #include "uve/asset/i_project_change_watcher_uve.h"
 #include "uve/core/engine_services_uve.h"
+#include "uve/core/i_editor_viewport_host_uve.h"
 #include "uve/core/i_simulation_control_uve.h"
 #include "uve/editor/editor_tool_session_uve.h"
 #include "uve/editor/developer_console_uve.h"
 #include "uve/editor/editor_ui_assets_uve.h"
 #include "uve/editor/inspector_drawer_registry_uve.h"
 #include "uve/editor/mesh_thumbnail_renderer_uve.h"
+#include "uve/editor/viewport/editor_gizmo_style_uve.h"
+#include "uve/editor/viewport/editor_nav_gizmo_uve.h"
+#include "uve/editor/viewport/editor_viewport_camera_uve.h"
+#include "uve/editor/viewport/editor_viewport_types_uve.h"
 #include "uve/math/vector2_uve.h"
 #include "uve/math/vector3_uve.h"
 #include "uve/scene/components/animation_player_component_uve.h"
@@ -161,7 +166,8 @@ public:
     explicit EditorUVE(Core::EngineServicesUVE& services,
                        std::filesystem::path activeScenePath = "editor_scene.uvescene",
                        std::size_t historyCapacity = 100U,
-                       Core::ISimulationControlUVE* simulationControl = nullptr);
+                       Core::ISimulationControlUVE* simulationControl = nullptr,
+                       Core::IEditorViewportHostUVE* viewportHost = nullptr);
     ~EditorUVE();
 
     EditorUVE(const EditorUVE&) = delete;
@@ -324,6 +330,39 @@ public:
     [[nodiscard]] std::vector<Scene::EntityUVE> GetDocumentRootsUVE();
     [[nodiscard]] EditorStateUVE GetStateUVE() const noexcept;
     [[nodiscard]] Scene::EntityUVE GetSelectedEntityUVE() const noexcept;
+
+    // ---- viewport ------------------------------------------------------------------------------
+
+    /// The editor-owned camera entity the engine renders the viewport from. It is created by
+    /// InitUVE(), carries a real CameraComponentUVE so ICameraSystemUVE/Renderer3DUVE can consume
+    /// it exactly like any other camera, and is deliberately excluded from GetDocumentRootsUVE(),
+    /// IsDocumentEntityUVE() and scene serialization: it is editor presentation, not document
+    /// data. Returns the invalid entity before InitUVE() and after ShutdownUVE().
+    [[nodiscard]] Scene::EntityUVE GetViewportCameraUVE() const noexcept;
+
+    /// Read/write access to the orbit camera driving that entity. The editor pushes its eye and
+    /// orientation onto the entity every tick, so mutating this is what actually moves the view.
+    [[nodiscard]] EditorViewportCameraUVE& GetViewportCameraControllerUVE() noexcept;
+    [[nodiscard]] const EditorViewportCameraUVE& GetViewportCameraControllerUVE() const noexcept;
+
+    [[nodiscard]] const EditorViewportSettingsUVE& GetViewportSettingsUVE() const noexcept;
+
+    /// Switches the viewport projection. This is a real projection change - the camera's
+    /// projection matrix and the ECS camera entity both follow - not a relabelled button. Camera
+    /// orientation, pivot, distance and the current selection are all preserved across the switch.
+    void SetViewportProjectionUVE(EditorViewportProjectionModeUVE projection) noexcept;
+    void SetViewportDisplayModeUVE(EditorViewportDisplayModeUVE display) noexcept;
+
+    /// Snaps the view to a standard axis view. With `autoOrthographic` on this also switches to
+    /// orthographic, because an axis view in perspective is almost never what "Front" means.
+    void SetStandardViewUVE(EditorStandardViewUVE view) noexcept;
+
+    [[nodiscard]] EditorGizmoModeUVE GetGizmoModeUVE() const noexcept;
+    void SetGizmoModeUVE(EditorGizmoModeUVE mode) noexcept;
+
+    /// Frames the current selection, or the world origin when nothing is selected. Never changes
+    /// selection, dirty state, or history.
+    void FocusViewportOnSelectionUVE() noexcept;
     /// Returns editor-only 2D canvas state for screen-space authoring. It is not scene data.
     [[nodiscard]] Editor2DCanvasStateUVE Get2DCanvasStateUVE() const noexcept;
     /// Validates and updates the editor-only 2D canvas zoom without changing scene state/history.
@@ -658,6 +697,36 @@ private:
     void DrawSceneComponentAddPanelUVE();
     void DrawPrefabInspectorDrawerUVE(Scene::EntityUVE entity);
     void DrawImportQueueMonitorUVE();
+    /// Draws the 3D viewport panel: the header toolbar, the transparent scene region the engine
+    /// renders into, and the orientation gizmo overlay. The panel keeps a transparent background
+    /// over its scene region because the engine has already drawn the 3D frame there by the time
+    /// this runs - see RenderOverlayUVE()'s doc comment.
+    void DrawViewportPanelUVE();
+
+    /// The viewport header: projection, shading and Show menus on the left, the transform tool
+    /// group and viewport toggles on the right.
+    void DrawViewportToolbarUVE();
+
+    /// Draws the orientation gizmo into the viewport's top-right corner and answers its two
+    /// gestures - drag to orbit freely, click a ball to ease-snap to that axis. Which one happened
+    /// is decided at release by whether the pointer moved past a few pixels, so a click never
+    /// jerks the view and a drag never snaps at the end.
+    void DrawNavGizmoOverlayUVE(const Math::Vector2UVE& viewportOrigin,
+                                const Math::Vector2UVE& viewportSize);
+
+    /// Orbit/pan/dolly from pointer and wheel input over the scene region.
+    void HandleViewportNavigationInputUVE(const Math::Vector2UVE& viewportSize);
+
+    /// Copies the orbit camera's eye and orientation onto the editor camera entity and keeps its
+    /// CameraComponentUVE clip planes in step, so the engine's own render agrees with the
+    /// overlays. A no-op when the camera entity is not alive.
+    void SyncViewportCameraEntityUVE();
+
+    /// Reports the viewport panel's pixel sub-rect to Core through the viewport host, so render
+    /// target sizing, projection aspect and on-screen placement track the panel rather than the
+    /// whole window. Passing std::nullopt restores full-window rendering.
+    void PublishViewportRegionUVE(const std::optional<Render::ViewportRectUVE>& region);
+
     void DrawScriptingWorkspaceUVE();
     void CompileVisualScriptUVE();
     [[nodiscard]] static ContentBrowserItemTypeUVE ClassifyContentBrowserEntryUVE(
@@ -693,7 +762,22 @@ private:
 
     Core::EngineServicesUVE* m_services = nullptr;
     Core::ISimulationControlUVE* m_simulationControl = nullptr;
+    Core::IEditorViewportHostUVE* m_viewportHost = nullptr;
     EditorStateUVE m_state = EditorStateUVE::Uninitialized;
+
+    // ---- viewport (editor presentation only; never document data) ------------------------------
+    Scene::EntityUVE m_viewportCamera = Scene::kInvalidEntityUVE;
+    EditorViewportCameraUVE m_viewportCameraController{};
+    EditorViewportSettingsUVE m_viewportSettings{};
+    EditorGizmoStyleUVE m_gizmoStyle{};
+    EditorGizmoModeUVE m_gizmoMode = EditorGizmoModeUVE::Universal;
+    /// Set while a nav-gizmo press is in flight, with the press position and whether the pointer
+    /// has travelled far enough to count as a drag rather than a click.
+    bool m_navGizmoPressed = false;
+    bool m_navGizmoDragged = false;
+    Math::Vector2UVE m_navGizmoPressPosition{};
+    /// The region most recently published to Core, so an unchanged rect is not re-sent every frame.
+    std::optional<Render::ViewportRectUVE> m_publishedViewportRegion;
     EditorPlayModeStateUVE m_playModeState = EditorPlayModeStateUVE::Edit;
     std::optional<PlayModeSessionUVE> m_playModeSession;
     std::vector<Scene::EntityUVE> m_selectedEntities;

@@ -1,6 +1,8 @@
 // Copyright (c) 2026 UniVex Studios. All Rights Reserved.
 
 #include "uve/editor/editor_uve.h"
+
+#include "viewport/editor_viewport_widgets_uve.h"
 #include "uve/editor/editor_theme_uve.h"
 #include <algorithm>
 #include <array>
@@ -276,9 +278,11 @@ void DrawNativeIconLabelUVE(const std::uintptr_t textureId, const char* const la
 } // namespace
 
 EditorUVE::EditorUVE(Core::EngineServicesUVE& services, std::filesystem::path activeScenePath,
-                     const std::size_t historyCapacity, Core::ISimulationControlUVE* const simulationControl)
+                     const std::size_t historyCapacity, Core::ISimulationControlUVE* const simulationControl,
+                     Core::IEditorViewportHostUVE* const viewportHost)
     : m_services(&services),
       m_simulationControl(simulationControl),
+      m_viewportHost(viewportHost),
       m_activeScenePath(std::move(activeScenePath)),
       m_historyCapacity(std::max<std::size_t>(std::size_t{1U}, historyCapacity)) {
     if (!Scripting::RegisterBuiltInScriptNodesUVE(m_visualScriptRegistry)) {
@@ -344,6 +348,23 @@ void EditorUVE::InitUVE() {
         }
     }
 
+    // The editor camera is a real ECS entity so ICameraSystemUVE and Renderer3DUVE can consume it
+    // exactly like any other camera - there is no parallel editor-camera abstraction. It is
+    // deliberately never attached to the scene graph as a document root, so it stays out of the
+    // hierarchy, out of GetDocumentRootsUVE(), and out of every save.
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    m_viewportCamera = entityManager.CreateEntityUVE();
+    entityManager.AddComponentUVE<Scene::TransformComponentUVE>(m_viewportCamera);
+    entityManager.AddComponentUVE<Scene::WorldTransformComponentUVE>(m_viewportCamera);
+    Scene::CameraComponentUVE viewportCameraComponent{};
+    viewportCameraComponent.fieldOfViewDegrees =
+        m_viewportCameraController.GetSettingsUVE().fieldOfViewYRadians * 180.0F /
+        std::numbers::pi_v<float>;
+    viewportCameraComponent.nearPlane = m_viewportCameraController.GetNearPlaneUVE();
+    viewportCameraComponent.farPlane = m_viewportCameraController.GetFarPlaneUVE();
+    entityManager.AddComponentUVE<Scene::CameraComponentUVE>(m_viewportCamera, viewportCameraComponent);
+    SyncViewportCameraEntityUVE();
+
     m_state = EditorStateUVE::Running;
     LoadSessionSettingsUVE();
     static_cast<void>(LoadVisualScriptWorkspaceUVE());
@@ -369,6 +390,12 @@ void EditorUVE::TickUVE() {
          !IsDocumentEntityUVE(m_hierarchyRenameEntity) || m_hierarchyRenameEntity != m_selectedEntity)) {
         CancelHierarchyRenameUVE();
     }
+
+    // Advance any in-flight nav-gizmo or standard-view snap, then push the result onto the camera
+    // entity so the engine's own render for this frame sees the updated view.
+    static_cast<void>(
+        m_viewportCameraController.UpdateUVE(m_services->GetTimerUVE().GetDeltaTimeFloatUVE()));
+    SyncViewportCameraEntityUVE();
 }
 
 bool EditorUVE::EnterPlayModeUVE() {
@@ -493,6 +520,7 @@ void EditorUVE::RenderOverlayUVE() {
         DrawScriptingWorkspaceUVE();
     } else {
         DrawHierarchyPanelUVE();
+        DrawViewportPanelUVE();
         DrawInspectorPanelUVE();
         DrawBottomDockContentUVE();
     }
@@ -2362,7 +2390,13 @@ bool EditorUVE::RedoHistoryEntryUVE(HistoryEntryUVE& entry) {
 
 std::vector<Scene::EntityUVE> EditorUVE::GetDocumentRootsUVE() {
     Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
-    return m_services->GetSceneGraphUVE().GetChildrenUVE(entityManager, Scene::kInvalidEntityUVE);
+    std::vector<Scene::EntityUVE> roots =
+        m_services->GetSceneGraphUVE().GetChildrenUVE(entityManager, Scene::kInvalidEntityUVE);
+    // The editor camera is never attached as a scene-graph root, so it should not appear here at
+    // all; the erase is a cheap guarantee rather than an expected code path, and it is what stops
+    // an editor-owned entity from reaching the hierarchy panel or a scene save.
+    roots.erase(std::remove(roots.begin(), roots.end(), m_viewportCamera), roots.end());
+    return roots;
 }
 
 EditorStateUVE EditorUVE::GetStateUVE() const noexcept {
@@ -2371,6 +2405,135 @@ EditorStateUVE EditorUVE::GetStateUVE() const noexcept {
 
 Scene::EntityUVE EditorUVE::GetSelectedEntityUVE() const noexcept {
     return m_selectedEntity;
+}
+
+Scene::EntityUVE EditorUVE::GetViewportCameraUVE() const noexcept {
+    return m_viewportCamera;
+}
+
+EditorViewportCameraUVE& EditorUVE::GetViewportCameraControllerUVE() noexcept {
+    return m_viewportCameraController;
+}
+
+const EditorViewportCameraUVE& EditorUVE::GetViewportCameraControllerUVE() const noexcept {
+    return m_viewportCameraController;
+}
+
+const EditorViewportSettingsUVE& EditorUVE::GetViewportSettingsUVE() const noexcept {
+    return m_viewportSettings;
+}
+
+void EditorUVE::SetViewportProjectionUVE(const EditorViewportProjectionModeUVE projection) noexcept {
+    m_viewportSettings.projection = projection;
+    // The orbit camera is the single source of truth for the projection: SyncViewportCameraEntityUVE()
+    // carries it onto the ECS camera entity, so the engine's own render switches with it rather
+    // than the label changing on its own.
+    m_viewportCameraController.SetOrthographicUVE(
+        projection == EditorViewportProjectionModeUVE::Orthographic);
+    SyncViewportCameraEntityUVE();
+}
+
+void EditorUVE::SetViewportDisplayModeUVE(const EditorViewportDisplayModeUVE display) noexcept {
+    m_viewportSettings.display = display;
+}
+
+void EditorUVE::SetStandardViewUVE(const EditorStandardViewUVE view) noexcept {
+    m_viewportSettings.standardView = view;
+    if (view == EditorStandardViewUVE::User) {
+        return;
+    }
+    m_viewportCameraController.SnapToDirectionUVE(GetStandardViewDirectionUVE(view));
+    if (m_viewportSettings.autoOrthographic) {
+        SetViewportProjectionUVE(EditorViewportProjectionModeUVE::Orthographic);
+    }
+}
+
+EditorGizmoModeUVE EditorUVE::GetGizmoModeUVE() const noexcept {
+    return m_gizmoMode;
+}
+
+void EditorUVE::SetGizmoModeUVE(const EditorGizmoModeUVE mode) noexcept {
+    m_gizmoMode = mode;
+}
+
+void EditorUVE::FocusViewportOnSelectionUVE() noexcept {
+    const std::optional<EditorSelectionBoundsUVE> bounds = TryGetSelectedBoundsUVE();
+    if (!bounds.has_value()) {
+        m_viewportCameraController.FocusUVE(Math::Vector3UVE{0.0F, 0.0F, 0.0F}, 0.0F);
+        return;
+    }
+
+    // Frame the selection's world bounds: the centre becomes the pivot and the corner distance
+    // sets how far back the camera has to sit.
+    Math::Vector3UVE centre{0.0F, 0.0F, 0.0F};
+    for (const Math::Vector3UVE& corner : bounds->worldCorners) {
+        centre += corner;
+    }
+    centre *= 1.0F / static_cast<float>(bounds->worldCorners.size());
+
+    float radius = 0.0F;
+    for (const Math::Vector3UVE& corner : bounds->worldCorners) {
+        radius = std::max(radius, Math::LengthUVE(corner - centre));
+    }
+    m_viewportCameraController.FocusUVE(centre, radius);
+}
+
+void EditorUVE::SyncViewportCameraEntityUVE() {
+    if (m_viewportCamera == Scene::kInvalidEntityUVE) {
+        return;
+    }
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    if (!entityManager.IsAliveUVE(m_viewportCamera)) {
+        return;
+    }
+
+    const Math::Vector3UVE eye = m_viewportCameraController.GetEyeUVE();
+    const Math::QuaternionUVE rotation = m_viewportCameraController.GetRotationUVE();
+
+    // Both the authored and derived transforms are written: the camera is not parented to
+    // anything, so its world transform is its local transform, and writing both keeps every
+    // consumer - ICameraSystemUVE, the audio listener sync, frustum culling - reading the same
+    // pose without waiting for a scene-graph update pass this entity never takes part in.
+    if (entityManager.HasComponentUVE<Scene::TransformComponentUVE>(m_viewportCamera)) {
+        Scene::TransformComponentUVE& transform =
+            entityManager.GetComponentUVE<Scene::TransformComponentUVE>(m_viewportCamera);
+        transform.localPosition = eye;
+        transform.localRotation = rotation;
+        transform.localScale = Math::Vector3UVE{1.0F, 1.0F, 1.0F};
+    }
+    if (entityManager.HasComponentUVE<Scene::WorldTransformComponentUVE>(m_viewportCamera)) {
+        Scene::WorldTransformComponentUVE& worldTransform =
+            entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(m_viewportCamera);
+        worldTransform.worldPosition = eye;
+        worldTransform.worldRotation = rotation;
+        worldTransform.worldScale = Math::Vector3UVE{1.0F, 1.0F, 1.0F};
+        worldTransform.dirty = false;
+    }
+    if (entityManager.HasComponentUVE<Scene::CameraComponentUVE>(m_viewportCamera)) {
+        Scene::CameraComponentUVE& camera =
+            entityManager.GetComponentUVE<Scene::CameraComponentUVE>(m_viewportCamera);
+        // Clip planes scale with orbit distance, which is what keeps depth precision usable from
+        // centimetres out to kilometres.
+        camera.nearPlane = m_viewportCameraController.GetNearPlaneUVE();
+        camera.farPlane = m_viewportCameraController.GetFarPlaneUVE();
+    }
+}
+
+void EditorUVE::PublishViewportRegionUVE(const std::optional<Render::ViewportRectUVE>& region) {
+    if (m_viewportHost == nullptr) {
+        return;
+    }
+    const bool unchanged =
+        m_publishedViewportRegion.has_value() == region.has_value() &&
+        (!region.has_value() || (m_publishedViewportRegion->x == region->x &&
+                                 m_publishedViewportRegion->y == region->y &&
+                                 m_publishedViewportRegion->width == region->width &&
+                                 m_publishedViewportRegion->height == region->height));
+    if (unchanged) {
+        return;
+    }
+    m_publishedViewportRegion = region;
+    m_viewportHost->SetEditorViewportRegionUVE(region);
 }
 
 Editor2DCanvasStateUVE EditorUVE::Get2DCanvasStateUVE() const noexcept {
@@ -2681,11 +2844,26 @@ void EditorUVE::ShutdownUVE() {
 
     ClearSelectionUVE();
     ClearHistoryUVE();
+
+    // Hand the whole window back to Core before the panel that owned the sub-rect goes away.
+    PublishViewportRegionUVE(std::nullopt);
+    if (m_viewportCamera != Scene::kInvalidEntityUVE) {
+        Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+        if (entityManager.IsAliveUVE(m_viewportCamera)) {
+            entityManager.DestroyEntityUVE(m_viewportCamera);
+        }
+        m_viewportCamera = Scene::kInvalidEntityUVE;
+    }
+
     m_state = EditorStateUVE::Shutdown;
 }
 
 bool EditorUVE::IsDocumentEntityUVE(const Scene::EntityUVE entity) const noexcept {
-    return entity != Scene::kInvalidEntityUVE && m_services->GetEntityManagerUVE().IsAliveUVE(entity);
+    // The editor camera is a live ECS entity but is not document data: excluding it here is what
+    // keeps it unselectable, unreparentable, undeletable and out of every command path, exactly
+    // as it is kept out of GetDocumentRootsUVE() and out of every save.
+    return entity != Scene::kInvalidEntityUVE && entity != m_viewportCamera &&
+           m_services->GetEntityManagerUVE().IsAliveUVE(entity);
 }
 
 bool EditorUVE::HasSceneGraphNodeUVE(const Scene::EntityUVE entity) const noexcept {
@@ -3383,6 +3561,382 @@ void EditorUVE::RebuildHierarchyFilterCacheUVE() {
     for (const Scene::EntityUVE root : GetDocumentRootsUVE()) {
         static_cast<void>(visit(visit, root));
     }
+}
+
+void EditorUVE::DrawViewportToolbarUVE() {
+    namespace Widgets = ViewportWidgets;
+
+    const ImGuiStyle& style = ImGui::GetStyle();
+    const float iconButton = ImGui::GetFrameHeight();
+    // Captured before anything is drawn: once the left group has been laid out the cursor has
+    // already advanced to the next line, so this is the only point at which the row's own top is
+    // still readable.
+    const float rowTop = ImGui::GetCursorScreenPos().y;
+
+    // ---- left group: the viewport's own menus -----------------------------------------------
+    if (Widgets::ToolIconButtonUVE("viewport-menu", Widgets::ToolIconUVE::Menu, false, iconButton,
+                                   "Viewport Options")) {
+        ImGui::OpenPopup("viewport-options-popup");
+    }
+    if (ImGui::BeginPopup("viewport-options-popup")) {
+        if (ImGui::MenuItem("Focus Selection", "F")) {
+            FocusViewportOnSelectionUVE();
+        }
+        if (ImGui::MenuItem("Reset View", "Home")) {
+            m_viewportCameraController = EditorViewportCameraUVE{};
+            m_viewportSettings.standardView = EditorStandardViewUVE::User;
+            SetViewportProjectionUVE(EditorViewportProjectionModeUVE::Perspective);
+        }
+        ImGui::Separator();
+        for (const EditorStandardViewUVE view :
+             {EditorStandardViewUVE::Top, EditorStandardViewUVE::Bottom, EditorStandardViewUVE::Front,
+              EditorStandardViewUVE::Rear, EditorStandardViewUVE::Left, EditorStandardViewUVE::Right}) {
+            if (ImGui::MenuItem(GetStandardViewNameUVE(view), nullptr,
+                                m_viewportSettings.standardView == view)) {
+                SetStandardViewUVE(view);
+            }
+        }
+        ImGui::EndPopup();
+    }
+
+    ImGui::SameLine(0.0F, style.ItemSpacing.x);
+    // The projection control shows the CURRENT mode as its label and opens the alternative on
+    // click - one control that reports state, not two permanently visible buttons.
+    if (ImGui::Button(GetProjectionModeNameUVE(m_viewportSettings.projection))) {
+        ImGui::OpenPopup("viewport-projection-popup");
+    }
+    if (ImGui::BeginPopup("viewport-projection-popup")) {
+        for (const EditorViewportProjectionModeUVE projection :
+             {EditorViewportProjectionModeUVE::Perspective,
+              EditorViewportProjectionModeUVE::Orthographic}) {
+            if (ImGui::MenuItem(GetProjectionModeNameUVE(projection), nullptr,
+                                m_viewportSettings.projection == projection)) {
+                SetViewportProjectionUVE(projection);
+                // An explicit projection choice is a user decision about the free view, so it must
+                // not be silently undone by the auto-orthographic axis-view rule.
+                m_viewportSettings.standardView = EditorStandardViewUVE::User;
+            }
+        }
+        ImGui::EndPopup();
+    }
+
+    ImGui::SameLine(0.0F, style.ItemSpacing.x);
+    if (ImGui::Button(GetDisplayModeNameUVE(m_viewportSettings.display))) {
+        ImGui::OpenPopup("viewport-display-popup");
+    }
+    if (ImGui::BeginPopup("viewport-display-popup")) {
+        for (const EditorViewportDisplayModeUVE display :
+             {EditorViewportDisplayModeUVE::Normal, EditorViewportDisplayModeUVE::Unshaded,
+              EditorViewportDisplayModeUVE::Wireframe}) {
+            if (ImGui::MenuItem(GetDisplayModeNameUVE(display), nullptr,
+                                m_viewportSettings.display == display)) {
+                SetViewportDisplayModeUVE(display);
+            }
+        }
+        ImGui::EndPopup();
+    }
+
+    ImGui::SameLine(0.0F, style.ItemSpacing.x);
+    if (ImGui::Button("Show")) {
+        ImGui::OpenPopup("viewport-show-popup");
+    }
+    if (ImGui::BeginPopup("viewport-show-popup")) {
+        ImGui::MenuItem("Grid", "G", &m_viewportSettings.showGrid);
+        ImGui::MenuItem("Orientation Gizmo", "N", &m_viewportSettings.showNavGizmo);
+        ImGui::MenuItem("Transform Gizmo", "H", &m_viewportSettings.showTransformGizmo);
+        ImGui::Separator();
+        ImGui::MenuItem("Auto-Orthographic Axis Views", nullptr, &m_viewportSettings.autoOrthographic);
+        ImGui::EndPopup();
+    }
+
+    // ---- right group: the transform tools and viewport toggles --------------------------------
+    // Laid out from the right edge so the row reads as two groups with the viewport between them,
+    // and so it stays correct at any panel width instead of relying on a hardcoded offset.
+    struct ToolEntryUVE final {
+        EditorGizmoModeUVE mode;
+        Widgets::ToolIconUVE icon;
+        const char* id;
+        const char* tooltip;
+    };
+    const std::array<ToolEntryUVE, 5> tools = {{
+        {EditorGizmoModeUVE::Select, Widgets::ToolIconUVE::Select, "tool-select", "Select (Q)"},
+        {EditorGizmoModeUVE::Move, Widgets::ToolIconUVE::Move, "tool-move", "Move (W)"},
+        {EditorGizmoModeUVE::Rotate, Widgets::ToolIconUVE::Rotate, "tool-rotate", "Rotate (E)"},
+        {EditorGizmoModeUVE::Scale, Widgets::ToolIconUVE::Scale, "tool-scale", "Scale (R)"},
+        {EditorGizmoModeUVE::Universal, Widgets::ToolIconUVE::Universal, "tool-universal",
+         "Universal (T)"},
+    }};
+
+    constexpr int kTrailingToggleCountUVE = 3;
+    const auto buttonCount = static_cast<float>(tools.size() + kTrailingToggleCountUVE);
+    const float rightGroupWidth =
+        (buttonCount * iconButton) + ((buttonCount - 1.0F) * style.ItemSpacing.x);
+
+    // Positioned from the panel's right edge in absolute screen coordinates rather than by a
+    // computed SameLine() spacing: the spacing form silently pushes the group outside the window's
+    // clip rect when the arithmetic overshoots by even a pixel, which drops the whole tool row.
+    const float panelRight = ImGui::GetWindowPos().x + ImGui::GetWindowSize().x;
+    const float leftGroupRight = ImGui::GetItemRectMax().x + style.ItemSpacing.x;
+    const float rightGroupLeft =
+        std::max(leftGroupRight, panelRight - style.FramePadding.x - rightGroupWidth);
+    ImGui::SetCursorScreenPos(ImVec2{rightGroupLeft, rowTop});
+
+    for (const ToolEntryUVE& tool : tools) {
+        if (Widgets::ToolIconButtonUVE(tool.id, tool.icon, m_gizmoMode == tool.mode, iconButton,
+                                       tool.tooltip)) {
+            SetGizmoModeUVE(tool.mode);
+        }
+        ImGui::SameLine(0.0F, style.ItemSpacing.x);
+    }
+
+    if (Widgets::ToolIconButtonUVE("viewport-grid", Widgets::ToolIconUVE::Grid,
+                                   m_viewportSettings.showGrid, iconButton, "Show Grid (G)")) {
+        m_viewportSettings.showGrid = !m_viewportSettings.showGrid;
+    }
+    ImGui::SameLine(0.0F, style.ItemSpacing.x);
+    if (Widgets::ToolIconButtonUVE("viewport-snap", Widgets::ToolIconUVE::Snap,
+                                   m_transformSnappingSettings.enabled, iconButton, "Transform Snapping")) {
+        EditorTransformSnappingSettingsUVE snapping = m_transformSnappingSettings;
+        snapping.enabled = !snapping.enabled;
+        static_cast<void>(SetTransformSnappingSettingsUVE(snapping));
+    }
+    ImGui::SameLine(0.0F, style.ItemSpacing.x);
+    if (Widgets::ToolIconButtonUVE("viewport-nav", Widgets::ToolIconUVE::Camera,
+                                   m_viewportSettings.showNavGizmo, iconButton,
+                                   "Orientation Gizmo (N)")) {
+        m_viewportSettings.showNavGizmo = !m_viewportSettings.showNavGizmo;
+    }
+}
+
+void EditorUVE::HandleViewportNavigationInputUVE(const Math::Vector2UVE& viewportSize) {
+    const ImGuiIO& io = ImGui::GetIO();
+    const ImVec2 dragDelta = io.MouseDelta;
+
+    // Left drag orbits, middle/right drag pans, wheel dollies - the standard editor gesture set.
+    // Deltas are handed to the camera unmodified: the turntable convention lives in
+    // EditorViewportCameraUVE and is asserted by its own tests, so negating anything here would
+    // reintroduce exactly the inversion this rebuild set out to fix.
+    if (ImGui::IsMouseDragging(ImGuiMouseButton_Left, 0.0F)) {
+        m_viewportCameraController.OrbitUVE(dragDelta.x, dragDelta.y);
+        m_viewportSettings.standardView = EditorStandardViewUVE::User;
+        if (m_viewportSettings.autoOrthographic &&
+            m_viewportSettings.projection == EditorViewportProjectionModeUVE::Orthographic) {
+            // Orbiting away from an axis view returns to perspective, because a free orbit in
+            // orthographic is almost never what the user was after when they pressed Front.
+            SetViewportProjectionUVE(EditorViewportProjectionModeUVE::Perspective);
+        }
+    } else if (ImGui::IsMouseDragging(ImGuiMouseButton_Middle, 0.0F) ||
+               ImGui::IsMouseDragging(ImGuiMouseButton_Right, 0.0F)) {
+        m_viewportCameraController.PanUVE(dragDelta.x, dragDelta.y,
+                                          static_cast<int>(viewportSize.y));
+    }
+
+    if (std::fabs(io.MouseWheel) > 0.0F) {
+        m_viewportCameraController.DollyUVE(io.MouseWheel);
+    }
+}
+
+void EditorUVE::DrawNavGizmoOverlayUVE(const Math::Vector2UVE& viewportOrigin,
+                                       const Math::Vector2UVE& viewportSize) {
+    const float widgetSize = m_gizmoStyle.navPixelSize;
+    const float margin = m_gizmoStyle.navMarginPx;
+    if (viewportSize.x < (widgetSize + (margin * 2.0F)) ||
+        viewportSize.y < (widgetSize + (margin * 2.0F))) {
+        return;
+    }
+
+    const ImVec2 widgetOrigin{viewportOrigin.x + viewportSize.x - widgetSize - margin,
+                              viewportOrigin.y + margin};
+
+    const Math::Matrix4x4UVE viewRotation = m_viewportCameraController.GetViewMatrixUVE();
+    const Math::Vector3UVE viewDirection = Math::NormalizeUVE(
+        m_viewportCameraController.GetTargetUVE() - m_viewportCameraController.GetEyeUVE());
+    const EditorNavGizmoMeshesUVE meshes = BuildNavGizmoMeshesUVE(m_gizmoStyle, viewDirection);
+
+    ImDrawList* const drawList = ImGui::GetWindowDrawList();
+    const float halfExtent = GetNavViewHalfExtentUVE(m_gizmoStyle);
+    ViewportWidgets::DrawNavGizmoMeshUVE(*drawList, meshes.underlay, viewRotation, widgetOrigin,
+                                         widgetSize, halfExtent);
+    ViewportWidgets::DrawNavGizmoMeshUVE(*drawList, meshes.overlay, viewRotation, widgetOrigin,
+                                         widgetSize, halfExtent);
+
+    // The widget answers two gestures. Which one happened is decided at release by whether the
+    // pointer travelled past a few pixels, so a click never jerks the view and a drag never snaps
+    // at the end of itself.
+    ImGui::SetCursorScreenPos(widgetOrigin);
+    ImGui::InvisibleButton("##viewport-nav-gizmo", ImVec2{widgetSize, widgetSize});
+    const bool hovered = ImGui::IsItemHovered();
+    const ImGuiIO& io = ImGui::GetIO();
+
+    if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+        m_navGizmoPressed = true;
+        m_navGizmoDragged = false;
+        m_navGizmoPressPosition = Math::Vector2UVE{io.MousePos.x, io.MousePos.y};
+    }
+    if (m_navGizmoPressed && ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+        const float travelX = io.MousePos.x - m_navGizmoPressPosition.x;
+        const float travelY = io.MousePos.y - m_navGizmoPressPosition.y;
+        constexpr float kDragThresholdPixelsUVE = 4.0F;
+        if (((travelX * travelX) + (travelY * travelY)) >
+            (kDragThresholdPixelsUVE * kDragThresholdPixelsUVE)) {
+            m_navGizmoDragged = true;
+        }
+        if (m_navGizmoDragged) {
+            m_viewportCameraController.OrbitUVE(io.MouseDelta.x, io.MouseDelta.y);
+            m_viewportSettings.standardView = EditorStandardViewUVE::User;
+        }
+    }
+    if (m_navGizmoPressed && ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
+        if (!m_navGizmoDragged) {
+            const EditorNavPickResultUVE pick =
+                PickNavGizmoUVE(m_gizmoStyle, viewRotation, io.MousePos.x - widgetOrigin.x,
+                                io.MousePos.y - widgetOrigin.y, widgetSize);
+            if (pick.hit) {
+                m_viewportCameraController.SnapToDirectionUVE(pick.direction);
+                if (m_viewportSettings.autoOrthographic) {
+                    SetViewportProjectionUVE(EditorViewportProjectionModeUVE::Orthographic);
+                }
+            }
+        }
+        m_navGizmoPressed = false;
+        m_navGizmoDragged = false;
+    }
+}
+
+void EditorUVE::DrawViewportPanelUVE() {
+    const ImGuiViewport* const mainViewport = ImGui::GetMainViewport();
+    const float menuBarHeight = kEditorTopChromeHeightUVE;
+    const float workspaceHeight =
+        std::max(kMinimumViewportHeightUVE,
+                 mainViewport->WorkSize.y - menuBarHeight -
+                     (m_bottomDockVisible ? kAssetsPanelHeightUVE : 0.0F));
+    const float scenePanelWidth = std::clamp(mainViewport->WorkSize.x * 0.19F, 208.0F, 292.0F);
+    const float inspectorWidth = std::clamp(mainViewport->WorkSize.x * 0.21F, 232.0F, 340.0F);
+
+    ImGui::SetNextWindowPos(
+        ImVec2{mainViewport->WorkPos.x + scenePanelWidth, mainViewport->WorkPos.y + menuBarHeight},
+        ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(
+        ImVec2{std::max(kMinimumViewportHeightUVE,
+                        mainViewport->WorkSize.x - scenePanelWidth - inspectorWidth),
+               workspaceHeight},
+        ImGuiCond_FirstUseEver);
+
+    // The engine has already drawn the 3D frame into this panel's sub-rect by the time the overlay
+    // runs, so the window background must not paint over it. Only the toolbar strip is opaque.
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4{0.0F, 0.0F, 0.0F, 0.0F});
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{0.0F, 0.0F});
+    const bool open = ImGui::Begin(kPanelLabelViewportUVE, nullptr, ImGuiWindowFlags_NoScrollbar |
+                                                                        ImGuiWindowFlags_NoScrollWithMouse);
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor();
+
+    if (!open) {
+        ImGui::End();
+        // A closed or fully collapsed viewport hands the whole window back to Core rather than
+        // leaving the renderer aimed at a stale rectangle.
+        PublishViewportRegionUVE(std::nullopt);
+        return;
+    }
+
+    // ---- header toolbar ------------------------------------------------------------------------
+    const ImVec2 panelOrigin = ImGui::GetCursorScreenPos();
+    const float panelWidth = ImGui::GetContentRegionAvail().x;
+    const ImGuiStyle& style = ImGui::GetStyle();
+    const float toolbarHeight = ImGui::GetFrameHeight() + (style.FramePadding.y * 2.0F);
+
+    ImDrawList* const drawList = ImGui::GetWindowDrawList();
+    drawList->AddRectFilled(panelOrigin, ImVec2{panelOrigin.x + panelWidth, panelOrigin.y + toolbarHeight},
+                            ImGui::GetColorU32(ImGuiCol_MenuBarBg));
+    drawList->AddLine(ImVec2{panelOrigin.x, panelOrigin.y + toolbarHeight},
+                      ImVec2{panelOrigin.x + panelWidth, panelOrigin.y + toolbarHeight},
+                      ImGui::GetColorU32(ImGuiCol_Separator), 1.0F);
+
+    ImGui::SetCursorScreenPos(ImVec2{panelOrigin.x + style.FramePadding.x,
+                                     panelOrigin.y + style.FramePadding.y});
+    ImGui::BeginGroup();
+    DrawViewportToolbarUVE();
+    ImGui::EndGroup();
+
+    // ---- scene region --------------------------------------------------------------------------
+    const ImVec2 sceneOrigin{panelOrigin.x, panelOrigin.y + toolbarHeight};
+    const ImVec2 sceneSize{panelWidth,
+                           std::max(1.0F, ImGui::GetWindowPos().y + ImGui::GetWindowSize().y -
+                                              sceneOrigin.y)};
+
+    ImGui::SetCursorScreenPos(sceneOrigin);
+    ImGui::InvisibleButton("##viewport-scene", sceneSize,
+                           ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight |
+                               ImGuiButtonFlags_MouseButtonMiddle);
+    const bool sceneHovered = ImGui::IsItemHovered();
+    const bool sceneActive = ImGui::IsItemActive();
+    if (sceneHovered || sceneActive) {
+        HandleViewportNavigationInputUVE(Math::Vector2UVE{sceneSize.x, sceneSize.y});
+    }
+
+    // Publish the region in framebuffer pixels with a GL bottom-left origin, which is the
+    // convention Render::ViewportRectUVE and EngineCoreUVE::SetEditorViewportRegionUVE document.
+    const ImGuiIO& io = ImGui::GetIO();
+    const float scaleX = (io.DisplayFramebufferScale.x > 0.0F) ? io.DisplayFramebufferScale.x : 1.0F;
+    const float scaleY = (io.DisplayFramebufferScale.y > 0.0F) ? io.DisplayFramebufferScale.y : 1.0F;
+    const float framebufferHeight = io.DisplaySize.y * scaleY;
+    const float regionTop = (sceneOrigin.y - mainViewport->Pos.y) * scaleY;
+    const float regionHeight = sceneSize.y * scaleY;
+    const float regionLeft = (sceneOrigin.x - mainViewport->Pos.x) * scaleX;
+    const float regionWidth = sceneSize.x * scaleX;
+    if (regionWidth >= 1.0F && regionHeight >= 1.0F) {
+        Render::ViewportRectUVE region{};
+        region.x = static_cast<std::uint32_t>(std::max(0.0F, regionLeft));
+        region.y = static_cast<std::uint32_t>(
+            std::max(0.0F, framebufferHeight - regionTop - regionHeight));
+        region.width = static_cast<std::uint32_t>(regionWidth);
+        region.height = static_cast<std::uint32_t>(regionHeight);
+        PublishViewportRegionUVE(region);
+    }
+
+    // ---- overlays ------------------------------------------------------------------------------
+    const float aspectRatio = (sceneSize.y > 0.0F) ? (sceneSize.x / sceneSize.y) : 1.0F;
+    if (m_viewportSettings.showTransformGizmo && m_gizmoMode != EditorGizmoModeUVE::Select &&
+        IsDocumentEntityUVE(m_selectedEntity)) {
+        ViewportWidgets::ViewportProjectionUVE projection{};
+        projection.viewProjection = m_viewportCameraController.GetViewProjectionUVE(aspectRatio);
+        projection.view = m_viewportCameraController.GetViewMatrixUVE();
+        projection.origin = sceneOrigin;
+        projection.size = sceneSize;
+
+        // The gizmo sits on the selected entity's own transform pivot, never on the viewport
+        // centre, the grid origin, or a bounding-box corner.
+        Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+        if (entityManager.HasComponentUVE<Scene::WorldTransformComponentUVE>(m_selectedEntity)) {
+            const Math::Vector3UVE pivot =
+                entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(m_selectedEntity)
+                    .worldPosition;
+
+            // One gizmo unit in world space, chosen so the widget keeps a constant pixel radius
+            // whether the camera is centimetres or kilometres away.
+            const float distanceToPivot =
+                std::max(0.001F, Math::LengthUVE(pivot - m_viewportCameraController.GetEyeUVE()));
+            const float worldPerPixel =
+                (2.0F * distanceToPivot *
+                 std::tan(m_viewportCameraController.GetSettingsUVE().fieldOfViewYRadians * 0.5F)) /
+                std::max(1.0F, sceneSize.y);
+            const float unitScale = (m_gizmoStyle.gizmoPixelRadius * worldPerPixel) * 0.5F;
+
+            const Math::Vector3UVE viewDirection = Math::NormalizeUVE(
+                pivot - m_viewportCameraController.GetEyeUVE());
+            const float unitsPerPixel = (unitScale > 0.0F) ? (worldPerPixel / unitScale) : 0.0F;
+            const EditorGizmoMeshUVE mesh =
+                BuildGizmoMeshUVE(m_gizmoMode, m_gizmoStyle, viewDirection, unitsPerPixel);
+            ViewportWidgets::DrawGizmoMeshUVE(*drawList, mesh, projection, pivot, unitScale);
+        }
+    }
+
+    if (m_viewportSettings.showNavGizmo) {
+        DrawNavGizmoOverlayUVE(Math::Vector2UVE{sceneOrigin.x, sceneOrigin.y},
+                               Math::Vector2UVE{sceneSize.x, sceneSize.y});
+    }
+
+    ImGui::End();
 }
 
 void EditorUVE::DrawHierarchyPanelUVE() {

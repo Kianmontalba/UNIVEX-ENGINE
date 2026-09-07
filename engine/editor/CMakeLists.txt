@@ -55,11 +55,16 @@ add_library(uve_editor STATIC
     src/viewport/editor_viewport_camera_uve.cpp
     src/viewport/editor_gizmo_geometry_uve.cpp
     src/viewport/editor_nav_gizmo_uve.cpp
+    src/viewport/editor_viewport_widgets_uve.cpp
     src/editor_uve.cpp
     src/inspector_drawer_registry_uve.cpp
     src/regression_harness_uve.cpp
 )
 target_include_directories(uve_editor PUBLIC include)
+# Module-private viewport chrome headers live beside their sources under src/, so that the only
+# headers exposed to consumers stay the ones under include/ - no public header ever sees an ImGui
+# type, matching this module's existing third-party-header confinement discipline.
+target_include_directories(uve_editor PRIVATE src)
 target_compile_features(uve_editor PUBLIC cxx_std_20)
 target_link_libraries(uve_editor
     PUBLIC uve_core uve_scripting uve_plugins

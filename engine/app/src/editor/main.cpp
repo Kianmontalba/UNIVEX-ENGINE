@@ -123,7 +123,10 @@ int main(const int argc, char** argv) {
             return 1;
         }
 
-        UVE::Editor::EditorUVE editor(engine.GetServicesUVE(), options.scenePath, 100U, &engine);
+        // `&engine` is passed twice deliberately: once as ISimulationControlUVE (Play/Pause) and
+        // once as IEditorViewportHostUVE (the viewport panel's pixel sub-rect). They are separate
+        // seams on purpose - the simulation-control contract must not expose renderer layout.
+        UVE::Editor::EditorUVE editor(engine.GetServicesUVE(), options.scenePath, 100U, &engine, &engine);
         editor.InitUVE();
 
         if (std::filesystem::exists(options.scenePath)) {
@@ -140,9 +143,10 @@ int main(const int argc, char** argv) {
             return result;
         }
 
-        // The editor no longer owns a camera (Phase 2 removed the viewport/gizmo layer): with no
-        // active camera set, EngineCoreUVE's documented no-op path clears and presents an empty
-        // frame every tick, which is the intended appearance until the viewport is rebuilt.
+        // The editor owns a non-document camera entity; pointing Core at it is what makes the 3D
+        // scene appear inside the viewport panel. The panel reports its own pixel sub-rect through
+        // the IEditorViewportHostUVE seam above, so the render tracks the panel, not the window.
+        engine.SetActiveCameraUVE(editor.GetViewportCameraUVE());
         engine.SetPostRenderCallbackUVE([&editor] { editor.RenderOverlayUVE(); });
 
         int framesRun = 0;
