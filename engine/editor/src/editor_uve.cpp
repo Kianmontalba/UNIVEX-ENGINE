@@ -396,6 +396,7 @@ void EditorUVE::TickUVE() {
     static_cast<void>(
         m_viewportCameraController.UpdateUVE(m_services->GetTimerUVE().GetDeltaTimeFloatUVE()));
     SyncViewportCameraEntityUVE();
+    PublishGroundGridStateUVE();
 }
 
 bool EditorUVE::EnterPlayModeUVE() {
@@ -2517,6 +2518,22 @@ void EditorUVE::SyncViewportCameraEntityUVE() {
         camera.nearPlane = m_viewportCameraController.GetNearPlaneUVE();
         camera.farPlane = m_viewportCameraController.GetFarPlaneUVE();
     }
+}
+
+void EditorUVE::PublishGroundGridStateUVE() {
+    Render::EditorGroundGridStateUVE grid{};
+    // The grid is world space: its origin is the world origin and its spacing is a world quantity,
+    // so selecting an entity never moves it. Only the fade distances follow the camera, and they
+    // are derived here rather than in the renderer - camera policy is the editor's business.
+    grid.enabled = m_viewportSettings.showGrid && m_state == EditorStateUVE::Running;
+    const float orbitDistance = m_viewportCameraController.GetDistanceUVE();
+    grid.fadeStartDistance = orbitDistance * 12.0F;
+    grid.fadeEndDistance = orbitDistance * 45.0F;
+    // Axis colours are shared with the gizmo's, so world X reads the same red in the grid and on a
+    // transform handle.
+    grid.axisColorX = m_gizmoStyle.axisColorX;
+    grid.axisColorZ = m_gizmoStyle.axisColorZ;
+    m_services->GetRenderer3DUVE().SetEditorGroundGridStateUVE(grid);
 }
 
 void EditorUVE::PublishViewportRegionUVE(const std::optional<Render::ViewportRectUVE>& region) {

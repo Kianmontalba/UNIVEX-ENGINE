@@ -727,6 +727,12 @@ private:
     /// whole window. Passing std::nullopt restores full-window rendering.
     void PublishViewportRegionUVE(const std::optional<Render::ViewportRectUVE>& region);
 
+    /// Pushes this frame's ground-grid facts to the renderer as plain data. The grid stays in world
+    /// space - its origin is the world origin, so selecting an entity never moves it - and only the
+    /// horizon fade tracks the camera, derived here because camera policy is the editor's business,
+    /// not the renderer's.
+    void PublishGroundGridStateUVE();
+
     void DrawScriptingWorkspaceUVE();
     void CompileVisualScriptUVE();
     [[nodiscard]] static ContentBrowserItemTypeUVE ClassifyContentBrowserEntryUVE(

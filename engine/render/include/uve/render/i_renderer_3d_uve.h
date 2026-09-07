@@ -16,6 +16,45 @@
 
 namespace UVE::Render {
 
+/// Copied, value-only facts describing the editor viewport's infinite ground grid for one frame.
+///
+/// This is the renderer's whole knowledge of the grid: plain numbers pushed in through
+/// SetEditorGroundGridStateUVE() and consumed by the next render. The renderer never reaches into
+/// editor code, and the editor never reaches into a render pass - the same "copied facts pushed in
+/// via a Set*() call" idiom PostProcessSettingsUVE already uses. Camera policy stays on the editor
+/// side: the fade distances are absolute world distances the editor derives from its own orbit
+/// distance, so the renderer needs no opinion about how the viewport camera is driven.
+///
+/// Thread-safety: main render thread only, matching IRenderer3DUVE's own contract.
+struct EditorGroundGridStateUVE final {
+    /// Nothing is drawn and no pass is recorded while this is false, which is the default: a
+    /// standalone runtime that never pushes a state renders exactly as it did before.
+    bool enabled = false;
+
+    /// Finest spacing the grid will ever draw, in world units. The LOD only ever multiplies this by
+    /// powers of ten.
+    float baseSpacing = 1.0F;
+    /// Minimum on-screen cell size in pixels before the LOD steps up a decade. Larger is sparser.
+    float targetCellPixels = 24.0F;
+    float lineWidthPixels = 1.25F;
+    float axisWidthPixels = 1.6F;
+
+    Math::Vector3UVE thinColor{0.36F, 0.40F, 0.49F};
+    Math::Vector3UVE midColor{0.55F, 0.60F, 0.70F};
+    Math::Vector3UVE thickColor{0.72F, 0.77F, 0.87F};
+    float thinIntensity = 0.45F;
+    float midIntensity = 0.70F;
+    float thickIntensity = 0.95F;
+
+    Math::Vector3UVE axisColorX{1.000F, 0.365F, 0.365F};
+    Math::Vector3UVE axisColorZ{0.357F, 0.616F, 1.000F};
+
+    /// Absolute world-space ground distances at which the horizon fade begins and completes.
+    float fadeStartDistance = 120.0F;
+    float fadeEndDistance = 450.0F;
+    float opacity = 1.0F;
+};
+
 /// Phase 2b post-process quality-tier toggles. Both default to enabled, matching this project's
 /// "on unless a low-end tier opts out" precedent already set by shadow mapping; each is checked
 /// independently when Renderer3DUVE builds its per-frame render graph, so disabling one skips that
@@ -53,6 +92,8 @@ struct Renderer3DFrameDiagnosticsUVE final {
     bool mainPassRecorded = false;
     bool toneMappingProgramReady = false;
     bool toneMappingPassRecorded = false;
+    bool editorGroundGridProgramReady = false;
+    bool editorGroundGridPassRecorded = false;
     bool particleItemsTruncated = false;
     bool particleDrawCommandsSubmissionTruncated = false;
     /// True only when SSAO was enabled (PostProcessSettingsUVE), its post-process targets and
@@ -122,6 +163,13 @@ public:
         static_cast<void>(region);
         static_cast<void>(particleRuntime);
         RenderFrameUVE(entityManager, cameraEntity);
+    }
+
+    /// Updates the editor ground-grid facts used by later render frames, replacing whatever the
+    /// previous frame set. The default implementation is intentionally a no-op so non-Renderer3D
+    /// test doubles need not own grid state.
+    virtual void SetEditorGroundGridStateUVE(const EditorGroundGridStateUVE& state) {
+        static_cast<void>(state);
     }
 
     /// Updates the Phase 2b post-process quality-tier toggles for later render frames. The default
