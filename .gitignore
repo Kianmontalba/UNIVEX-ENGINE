@@ -24,6 +24,16 @@ imgui.ini
 /shader_cache/
 *.uveshadercache
 
+# Runtime-generated asset-database registry files written by test fixtures
+# (e.g. MakeEditorTestConfigUVE()'s config.assetDatabaseFilePath) when tests
+# are run from the repository root instead of a build/test working directory.
+*_tests_assets.json
+*_tests_settings.json
+
+# Runtime-generated import cache (AssetImportCacheUVE)
+/DerivedData/
+*.uveimportcache
+
 # IDE
 .vs/
 .vscode/
