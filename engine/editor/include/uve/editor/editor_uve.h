@@ -23,6 +23,7 @@
 #include "uve/editor/editor_ui_assets_uve.h"
 #include "uve/editor/inspector_drawer_registry_uve.h"
 #include "uve/editor/mesh_thumbnail_renderer_uve.h"
+#include "uve/editor/viewport/editor_gizmo_interaction_uve.h"
 #include "uve/editor/viewport/editor_gizmo_style_uve.h"
 #include "uve/editor/viewport/editor_nav_gizmo_uve.h"
 #include "uve/editor/viewport/editor_viewport_camera_uve.h"
@@ -81,15 +82,6 @@ struct Editor2DCanvasStateUVE final {
     Math::Vector2UVE pan{};
     bool gridVisible = true;
     bool safeAreaVisible = true;
-};
-
-/// Canonical named axes used by EditorUVE's Translate, Rotate, and Scale gizmos. The active
-/// coordinate space chooses whether their world or selected-entity-local basis is used.
-enum class EditorTransformAxisUVE {
-    None,
-    X,
-    Y,
-    Z,
 };
 
 /// Source-compatible name retained for downstream editor callers; new code should use the
@@ -379,6 +371,32 @@ public:
     /// NOT contain: any selection-derived value. The grid is world space; only the horizon fade
     /// follows the camera.
     [[nodiscard]] Render::EditorGroundGridStateUVE ComputeGroundGridStateUVE() const;
+
+    /// True while a transform-gizmo handle is being dragged. Authoring commands that would fight
+    /// the gesture in progress are refused for its duration, matching how a viewport gesture has
+    /// always gated the lifecycle commands.
+    [[nodiscard]] bool IsGizmoDraggingUVE() const noexcept;
+
+    /// Begins a drag on the handle under `pointer`, if any, for a gizmo drawn at the selected
+    /// entity's pivot with `unitScale` world units per gizmo unit. Returns false - and starts
+    /// nothing - when there is no single live document selection, no handle under the pointer, or
+    /// authoring is not currently allowed.
+    [[nodiscard]] bool BeginGizmoDragUVE(const EditorViewportProjectionUVE& projection,
+                                          float unitScale, Math::Vector2UVE pointer);
+
+    /// Applies the drag's total offset from its start, recomputed from the original transform each
+    /// call rather than accumulated - so a drag is exactly reversible by returning the pointer, and
+    /// float error cannot creep in over a long gesture. Writes the transform directly, without
+    /// touching undo history; CommitGizmoDragUVE() records the whole gesture as one entry.
+    void UpdateGizmoDragUVE(const EditorViewportProjectionUVE& projection, float unitScale,
+                            Math::Vector2UVE pointer);
+
+    /// Ends the drag, recording a single undo entry spanning the entire gesture. A drag that moved
+    /// nothing records nothing.
+    void CommitGizmoDragUVE();
+
+    /// Abandons the drag and restores the transform the entity had when it began.
+    void CancelGizmoDragUVE();
     /// Returns editor-only 2D canvas state for screen-space authoring. It is not scene data.
     [[nodiscard]] Editor2DCanvasStateUVE Get2DCanvasStateUVE() const noexcept;
     /// Validates and updates the editor-only 2D canvas zoom without changing scene state/history.
@@ -798,6 +816,20 @@ private:
     bool m_navGizmoPressed = false;
     bool m_navGizmoDragged = false;
     Math::Vector2UVE m_navGizmoPressPosition{};
+
+    /// One in-flight transform-gizmo gesture. The start transform is kept so every update can be
+    /// recomputed from it rather than accumulated, and so a cancel restores exactly what was there.
+    struct GizmoDragUVE final {
+        bool active = false;
+        EditorGizmoHandleKindUVE kind = EditorGizmoHandleKindUVE::None;
+        EditorTransformAxisUVE axis = EditorTransformAxisUVE::None;
+        Scene::EntityUVE entity = Scene::kInvalidEntityUVE;
+        Scene::TransformComponentUVE startTransform{};
+        Math::Vector3UVE pivotWorld{};
+        Math::Vector2UVE startPointer{};
+        bool changed = false;
+    };
+    GizmoDragUVE m_gizmoDrag{};
     /// The region most recently published to Core, so an unchanged rect is not re-sent every frame.
     std::optional<Render::ViewportRectUVE> m_publishedViewportRegion;
     EditorPlayModeStateUVE m_playModeState = EditorPlayModeStateUVE::Edit;

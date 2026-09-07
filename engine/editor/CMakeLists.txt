@@ -55,6 +55,7 @@ add_library(uve_editor STATIC
     src/viewport/editor_viewport_camera_uve.cpp
     src/viewport/editor_gizmo_geometry_uve.cpp
     src/viewport/editor_nav_gizmo_uve.cpp
+    src/viewport/editor_gizmo_interaction_uve.cpp
     src/viewport/editor_viewport_widgets_uve.cpp
     src/editor_uve.cpp
     src/inspector_drawer_registry_uve.cpp

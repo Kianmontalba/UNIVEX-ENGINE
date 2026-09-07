@@ -2579,6 +2579,185 @@ bool EditorUVE::TryGetGizmoPivotUVE(Math::Vector3UVE& outPivot) const {
     return true;
 }
 
+bool EditorUVE::IsGizmoDraggingUVE() const noexcept {
+    return m_gizmoDrag.active;
+}
+
+bool EditorUVE::BeginGizmoDragUVE(const EditorViewportProjectionUVE& projection, const float unitScale,
+                                  const Math::Vector2UVE pointer) {
+    CancelGizmoDragUVE();
+    if (!IsAuthoringCommandAllowedUVE() || !HasSingleDocumentSelectionUVE() ||
+        m_gizmoMode == EditorGizmoModeUVE::Select) {
+        return false;
+    }
+
+    Math::Vector3UVE pivot{};
+    if (!TryGetGizmoPivotUVE(pivot)) {
+        return false;
+    }
+
+    const EditorGizmoHandleHitUVE hit =
+        PickGizmoHandleUVE(m_gizmoMode, m_gizmoStyle, projection, pivot, unitScale, pointer);
+    if (!hit.IsHitUVE()) {
+        return false;
+    }
+
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    if (!entityManager.HasComponentUVE<Scene::TransformComponentUVE>(m_selectedEntity)) {
+        return false;
+    }
+
+    m_gizmoDrag.active = true;
+    m_gizmoDrag.kind = hit.kind;
+    m_gizmoDrag.axis = hit.axis;
+    m_gizmoDrag.entity = m_selectedEntity;
+    m_gizmoDrag.startTransform =
+        entityManager.GetComponentUVE<Scene::TransformComponentUVE>(m_selectedEntity);
+    // The pivot is frozen at the start of the gesture. Re-reading it every frame would let the
+    // handle chase the object it is moving, which turns a steady drag into a runaway.
+    m_gizmoDrag.pivotWorld = pivot;
+    m_gizmoDrag.startPointer = pointer;
+    m_gizmoDrag.changed = false;
+    return true;
+}
+
+void EditorUVE::UpdateGizmoDragUVE(const EditorViewportProjectionUVE& projection, const float unitScale,
+                                   const Math::Vector2UVE pointer) {
+    if (!m_gizmoDrag.active) {
+        return;
+    }
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    if (!entityManager.IsAliveUVE(m_gizmoDrag.entity) ||
+        !entityManager.HasComponentUVE<Scene::TransformComponentUVE>(m_gizmoDrag.entity)) {
+        CancelGizmoDragUVE();
+        return;
+    }
+
+    const Math::Vector3UVE axisDirection = GetAxisVectorUVE(m_gizmoDrag.axis);
+    // Always rebuilt from the gesture's starting transform, never from the current one: an
+    // accumulated delta drifts, and returning the pointer to where it started would not return the
+    // object to where it started.
+    Scene::TransformComponentUVE updated = m_gizmoDrag.startTransform;
+
+    switch (m_gizmoDrag.kind) {
+        case EditorGizmoHandleKindUVE::TranslateAxis: {
+            float worldDistance = 0.0F;
+            if (!ComputeAxisDragDistanceUVE(projection, m_gizmoDrag.pivotWorld, axisDirection, unitScale,
+                                            m_gizmoDrag.startPointer, pointer, worldDistance)) {
+                return;
+            }
+            if (m_transformSnappingSettings.enabled) {
+                worldDistance = SnapScalarUVE(worldDistance, m_transformSnappingSettings.translateStep);
+            }
+            Math::Vector3UVE localDelta{};
+            if (!ComputeLocalDeltaForWorldDeltaUVE(m_gizmoDrag.entity, axisDirection * worldDistance,
+                                                    localDelta)) {
+                return;
+            }
+            updated.localPosition = m_gizmoDrag.startTransform.localPosition + localDelta;
+            break;
+        }
+        case EditorGizmoHandleKindUVE::RotateAxis: {
+            float radians = 0.0F;
+            if (!ComputeAxisDragAngleUVE(projection, m_gizmoDrag.pivotWorld, axisDirection,
+                                         m_viewportCameraController.GetEyeUVE(), m_gizmoDrag.startPointer,
+                                         pointer, radians)) {
+                return;
+            }
+            if (m_transformSnappingSettings.enabled) {
+                const float stepRadians =
+                    m_transformSnappingSettings.rotateStepDegrees * std::numbers::pi_v<float> / 180.0F;
+                radians = SnapScalarUVE(radians, stepRadians);
+            }
+            Math::QuaternionUVE localRotation{};
+            if (!ComputeLocalRotationForWorldAxisUVE(m_gizmoDrag.entity,
+                                                      m_gizmoDrag.startTransform.localRotation,
+                                                      axisDirection, radians, localRotation)) {
+                return;
+            }
+            updated.localRotation = localRotation;
+            break;
+        }
+        case EditorGizmoHandleKindUVE::ScaleAxis: {
+            float worldDistance = 0.0F;
+            if (!ComputeAxisDragDistanceUVE(projection, m_gizmoDrag.pivotWorld, axisDirection, unitScale,
+                                            m_gizmoDrag.startPointer, pointer, worldDistance)) {
+                return;
+            }
+            if (m_transformSnappingSettings.enabled) {
+                worldDistance = SnapScalarUVE(worldDistance, m_transformSnappingSettings.scaleStep);
+            }
+            // Scale is additive along the axis and floored, matching ScaleSelectedAlongAxisUVE's own
+            // contract: a drag can shrink an object but never through zero into a mirrored one.
+            Math::Vector3UVE scale = m_gizmoDrag.startTransform.localScale;
+            switch (m_gizmoDrag.axis) {
+                case EditorTransformAxisUVE::X:
+                    scale.x = std::max(kMinimumLocalScaleUVE, scale.x + worldDistance);
+                    break;
+                case EditorTransformAxisUVE::Y:
+                    scale.y = std::max(kMinimumLocalScaleUVE, scale.y + worldDistance);
+                    break;
+                case EditorTransformAxisUVE::Z:
+                    scale.z = std::max(kMinimumLocalScaleUVE, scale.z + worldDistance);
+                    break;
+                case EditorTransformAxisUVE::None:
+                    return;
+            }
+            updated.localScale = scale;
+            break;
+        }
+        case EditorGizmoHandleKindUVE::None:
+            return;
+    }
+
+    if (!IsTransformFiniteUVE(updated)) {
+        return;
+    }
+    // Written straight through, with no history entry: the gesture is recorded as a single entry by
+    // CommitGizmoDragUVE(), rather than flooding undo with one step per frame of the drag.
+    if (ApplyLocalTransformUVE(m_gizmoDrag.entity, updated)) {
+        m_gizmoDrag.changed = !AreTransformsEqualUVE(m_gizmoDrag.startTransform, updated);
+    }
+}
+
+void EditorUVE::CommitGizmoDragUVE() {
+    if (!m_gizmoDrag.active) {
+        return;
+    }
+    const GizmoDragUVE drag = m_gizmoDrag;
+    m_gizmoDrag = GizmoDragUVE{};
+
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    if (!drag.changed || !entityManager.IsAliveUVE(drag.entity) ||
+        !entityManager.HasComponentUVE<Scene::TransformComponentUVE>(drag.entity)) {
+        return;
+    }
+
+    // Rewind to the pre-drag transform and re-apply the final one through the ordinary command
+    // path, so the gesture lands in history as one undoable step with the correct before/after
+    // rather than as the hundreds of silent writes the drag actually performed.
+    const Scene::TransformComponentUVE finalTransform =
+        entityManager.GetComponentUVE<Scene::TransformComponentUVE>(drag.entity);
+    if (!ApplyLocalTransformUVE(drag.entity, drag.startTransform)) {
+        return;
+    }
+    static_cast<void>(SetSelectedLocalTransformUVE(finalTransform));
+}
+
+void EditorUVE::CancelGizmoDragUVE() {
+    if (!m_gizmoDrag.active) {
+        return;
+    }
+    const GizmoDragUVE drag = m_gizmoDrag;
+    m_gizmoDrag = GizmoDragUVE{};
+
+    Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    if (drag.changed && entityManager.IsAliveUVE(drag.entity) &&
+        entityManager.HasComponentUVE<Scene::TransformComponentUVE>(drag.entity)) {
+        static_cast<void>(ApplyLocalTransformUVE(drag.entity, drag.startTransform));
+    }
+}
+
 Render::EditorGroundGridStateUVE EditorUVE::ComputeGroundGridStateUVE() const {
     Render::EditorGroundGridStateUVE grid{};
     // The grid is world space: its origin is the world origin and its spacing is a world quantity,
@@ -3951,9 +4130,6 @@ void EditorUVE::DrawViewportPanelUVE() {
                                ImGuiButtonFlags_MouseButtonMiddle);
     const bool sceneHovered = ImGui::IsItemHovered();
     const bool sceneActive = ImGui::IsItemActive();
-    if (sceneHovered || sceneActive) {
-        HandleViewportNavigationInputUVE(Math::Vector2UVE{sceneSize.x, sceneSize.y});
-    }
 
     // Publish the region in framebuffer pixels with a GL bottom-left origin, which is the
     // convention Render::ViewportRectUVE and EngineCoreUVE::SetEditorViewportRegionUVE document.
@@ -4005,7 +4181,32 @@ void EditorUVE::DrawViewportPanelUVE() {
             const EditorGizmoMeshUVE mesh =
                 BuildGizmoMeshUVE(m_gizmoMode, m_gizmoStyle, viewDirection, unitsPerPixel);
             ViewportWidgets::DrawGizmoMeshUVE(*drawList, mesh, projection, pivot, unitScale);
+
+            // ---- handle dragging -------------------------------------------------------------
+            EditorViewportProjectionUVE pickProjection{};
+            pickProjection.viewProjection = projection.viewProjection;
+            pickProjection.origin = Math::Vector2UVE{sceneOrigin.x, sceneOrigin.y};
+            pickProjection.size = Math::Vector2UVE{sceneSize.x, sceneSize.y};
+            const ImGuiIO& gizmoIo = ImGui::GetIO();
+            const Math::Vector2UVE pointer{gizmoIo.MousePos.x, gizmoIo.MousePos.y};
+
+            if (!m_gizmoDrag.active && sceneHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+                static_cast<void>(BeginGizmoDragUVE(pickProjection, unitScale, pointer));
+            }
+            if (m_gizmoDrag.active) {
+                if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+                    UpdateGizmoDragUVE(pickProjection, unitScale, pointer);
+                } else {
+                    CommitGizmoDragUVE();
+                }
+            }
         }
+    }
+
+    // Camera navigation is offered only when a handle is not being dragged, so a drag that strays
+    // off its handle keeps transforming the object instead of suddenly orbiting the view.
+    if ((sceneHovered || sceneActive) && !m_gizmoDrag.active) {
+        HandleViewportNavigationInputUVE(Math::Vector2UVE{sceneSize.x, sceneSize.y});
     }
 
     if (m_viewportSettings.showNavGizmo) {

@@ -37,6 +37,18 @@ enum class EditorStandardViewUVE : std::uint8_t {
     Right,
 };
 
+/// Canonical named axes used by the editor's Translate, Rotate and Scale paths - both the
+/// programmatic API on EditorUVE and the gizmo handles that drive it. Declared here beside the
+/// other viewport enums so the gizmo interaction layer can name an axis without pulling in the
+/// whole editor header; EditorUVE re-exposes it unchanged by including this file, so every existing
+/// call site keeps compiling against the same fully-qualified name.
+enum class EditorTransformAxisUVE {
+    None,
+    X,
+    Y,
+    Z,
+};
+
 /// The active transform-handle family. `Select` is the plain pick tool that draws no handles at
 /// all; `Universal` is the all-in-one widget that carries rotate, move, and scale on every axis
 /// at once.
