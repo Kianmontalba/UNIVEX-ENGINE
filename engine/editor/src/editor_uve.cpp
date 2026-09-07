@@ -62,6 +62,14 @@ constexpr float kMinimumLocalScaleUVE = 0.001F;
 // plain text label, so an inline ImGui::Image() glyph is not an option there the way it is for the
 // editor's existing RGBA-texture ImageButton icons (gizmo modes, Snap, node/component add popups).
 #include "uve_icon_font_bytes.inc"
+#include "uve_ui_font_bytes.inc"
+
+/// One typographic scale for the whole editor. The UI face is loaded at this size and the icon
+/// face is merged just under it, so a label and the glyph beside it share a baseline instead of the
+/// icon riding high the way a same-size merge leaves it.
+constexpr float kEditorUiFontPixelSizeUVE = 15.0F;
+constexpr float kEditorUiIconPixelSizeUVE = 14.0F;
+constexpr float kEditorUiIconBaselineOffsetUVE = 2.0F;
 
 constexpr ImWchar kIconFontGlyphRangesUVE[] = {
     0xEA03, 0xEA03, // Inspector (adjustments)
@@ -115,6 +123,25 @@ constexpr float kTrackballAntipodalDotThresholdUVE = -0.999F;
 constexpr float kMinimumViewportWidthUVE = 64.0F;
 constexpr float kMinimumViewportHeightUVE = 64.0F;
 constexpr float kAssetsPanelHeightUVE = 176.0F;
+
+/// The bottom dock splits into the Filesystem navigation tree and the Contents workspace.
+/// Filesystem is navigation - a project root, folders, Favourites, a search box - so it stays
+/// narrow; Contents is where assets are actually browsed as a thumbnail grid, so it takes the rest
+/// of the row and is always the wider of the two. Both panels derive their geometry from
+/// ComputeFilesystemPanelWidthUVE() below rather than each recomputing a ratio, which is how the
+/// two used to disagree.
+constexpr float kFilesystemPanelWidthRatioUVE = 0.26F;
+constexpr float kFilesystemPanelMinimumWidthUVE = 220.0F;
+constexpr float kFilesystemPanelMaximumWidthUVE = 400.0F;
+
+/// Filesystem's width for a given bottom-dock width, clamped so Contents keeps the majority of the
+/// row at any window size - including the narrow-window case, where the ratio alone would let the
+/// navigation tree grow past the workspace it is meant to feed.
+[[nodiscard]] float ComputeFilesystemPanelWidthUVE(const float dockWidth) noexcept {
+    const float byRatio = dockWidth * kFilesystemPanelWidthRatioUVE;
+    const float widthCeiling = std::min(kFilesystemPanelMaximumWidthUVE, dockWidth * 0.4F);
+    return std::clamp(byRatio, std::min(kFilesystemPanelMinimumWidthUVE, widthCeiling), widthCeiling);
+}
 constexpr float kBottomDockTabHeightUVE = 24.0F;
 constexpr float kEditorTitleBarHeightUVE = 24.0F;
 constexpr float kEditorMenuBarHeightUVE = 24.0F;
@@ -318,16 +345,35 @@ void EditorUVE::InitUVE() {
         // uploads the font atlas texture immediately, so any fonts merged in afterward would be
         // silently missing from what actually gets rendered.
         ImGuiIO& io = ImGui::GetIO();
-        io.Fonts->AddFontDefault();
+
+        // A real proportional UI face rather than ImGui's built-in bitmap font, which is fixed at
+        // one size and reads as a debug overlay rather than as engine chrome. Oversampled
+        // horizontally so stems stay even at this size without the smearing a plain 1x atlas gives.
+        ImFontConfig textFontConfig{};
+        // Every .inc byte array here has static storage duration for the life of the process, so
+        // ImGui must not take ownership and free() it through its own allocator.
+        textFontConfig.FontDataOwnedByAtlas = false;
+        textFontConfig.OversampleH = 3;
+        textFontConfig.OversampleV = 1;
+        textFontConfig.PixelSnapH = false;
+        io.Fonts->AddFontFromMemoryTTF(const_cast<std::uint8_t*>(uve_ui_font_ttf_bytes.data()),
+                                       static_cast<int>(uve_ui_font_ttf_bytes.size()),
+                                       kEditorUiFontPixelSizeUVE, &textFontConfig);
+
         ImFontConfig iconFontConfig{};
         iconFontConfig.MergeMode = true;
         iconFontConfig.PixelSnapH = true;
-        // The .inc byte array has static storage duration for the life of the process; ImGui must
-        // not take ownership and free() it via its own allocator.
         iconFontConfig.FontDataOwnedByAtlas = false;
+        // Icon glyphs are square and sit on their own em box, so merged at the text size they ride
+        // high and read as detached from the label beside them - the misalignment visible on every
+        // menu and panel title. Sizing them slightly under the text and nudging them down onto the
+        // text's optical centre is what actually puts icon and label on one baseline.
+        iconFontConfig.GlyphMinAdvanceX = kEditorUiIconPixelSizeUVE;
+        iconFontConfig.GlyphOffset = ImVec2{0.0F, kEditorUiIconBaselineOffsetUVE};
         io.Fonts->AddFontFromMemoryTTF(const_cast<std::uint8_t*>(uve_icon_font_ttf_bytes.data()),
-                                       static_cast<int>(uve_icon_font_ttf_bytes.size()), 0.0F,
-                                       &iconFontConfig, kIconFontGlyphRangesUVE);
+                                       static_cast<int>(uve_icon_font_ttf_bytes.size()),
+                                       kEditorUiIconPixelSizeUVE, &iconFontConfig,
+                                       kIconFontGlyphRangesUVE);
 
         auto* const nativeWindow = static_cast<GLFWwindow*>(windowManager.GetNativeWindowHandleUVE());
         // Install the backend's chained GLFW callbacks so the interactive overlay receives cursor
@@ -4951,7 +4997,7 @@ void EditorUVE::ClearMeshThumbnailCacheUVE() noexcept {
 void EditorUVE::DrawFolderContentsPanelUVE() {
     const ImGuiViewport* const mainViewport = ImGui::GetMainViewport();
     const float contentHeight = kAssetsPanelHeightUVE;
-    const float projectWidth = std::clamp(mainViewport->WorkSize.x * 0.60F, 420.0F, mainViewport->WorkSize.x - 280.0F);
+    const float projectWidth = ComputeFilesystemPanelWidthUVE(mainViewport->WorkSize.x);
     const float contentsWidth = std::max(280.0F, mainViewport->WorkSize.x - projectWidth);
     // FirstUseEver, not Always - see DrawHierarchyPanelUVE()'s comment on the same change.
     ImGui::SetNextWindowPos(
@@ -5229,7 +5275,7 @@ void EditorUVE::RefreshProjectFileIndexUVE() {
 void EditorUVE::DrawAssetsPanelUVE() {
     const ImGuiViewport* const mainViewport = ImGui::GetMainViewport();
     const float contentHeight = kAssetsPanelHeightUVE;
-    const float projectWidth = std::clamp(mainViewport->WorkSize.x * 0.60F, 420.0F, mainViewport->WorkSize.x - 280.0F);
+    const float projectWidth = ComputeFilesystemPanelWidthUVE(mainViewport->WorkSize.x);
     // FirstUseEver, not Always - see DrawHierarchyPanelUVE()'s comment on the same change.
     ImGui::SetNextWindowPos(
         ImVec2{mainViewport->WorkPos.x,
