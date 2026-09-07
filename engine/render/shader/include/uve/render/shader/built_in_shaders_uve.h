@@ -49,9 +49,4 @@ extern const std::string_view kFullscreenCopySource;
 inline constexpr std::string_view kSsaoVirtualPath = "shaders/ssao.glsl";
 extern const std::string_view kSsaoSource;
 
-/// The editor viewport's infinite ground grid: a ray-cast plane with decade LOD, drawn as a
-/// fullscreen triangle after the main colour pass and depth-tested against scene geometry.
-inline constexpr std::string_view kEditorGroundGridVirtualPath = "shaders/editor_ground_grid.glsl";
-extern const std::string_view kEditorGroundGridSource;
-
 } // namespace UVE::Render::Shader::BuiltIn

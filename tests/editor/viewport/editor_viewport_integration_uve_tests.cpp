@@ -240,7 +240,7 @@ TEST(EditorViewportIntegrationUVETest, GroundGridStaysAtTheWorldOriginWhateverIs
         EditorUVE editor(engine.GetServicesUVE(), "uve_viewport_tests_grid.uvescene");
         editor.InitUVE();
         editor.TickUVE();
-        const Render::EditorGroundGridStateUVE gridBefore = editor.ComputeGroundGridStateUVE();
+        const EditorGridDisplayStateUVE gridBefore = editor.ComputeGroundGridStateUVE();
 
         // The grid is world space and the gizmo follows the selection - two different owners.
         // Selecting and moving an entity must not drag the grid along with it, so the state the
@@ -263,7 +263,7 @@ TEST(EditorViewportIntegrationUVETest, GroundGridStaysAtTheWorldOriginWhateverIs
 
         // ... while the grid state handed to the renderer is byte-for-byte what it was before the
         // selection existed. The grid carries no selection-derived value at all.
-        const Render::EditorGroundGridStateUVE afterSelection = editor.ComputeGroundGridStateUVE();
+        const EditorGridDisplayStateUVE afterSelection = editor.ComputeGroundGridStateUVE();
         EXPECT_TRUE(afterSelection.enabled);
         EXPECT_EQ(afterSelection.baseSpacing, gridBefore.baseSpacing);
         EXPECT_EQ(afterSelection.fadeStartDistance, gridBefore.fadeStartDistance);
@@ -273,7 +273,7 @@ TEST(EditorViewportIntegrationUVETest, GroundGridStaysAtTheWorldOriginWhateverIs
         // where the horizon fade sits so it stays in the same place on screen at any zoom.
         editor.GetViewportCameraControllerUVE().SetDistanceUVE(
             editor.GetViewportCameraControllerUVE().GetDistanceUVE() * 4.0F);
-        const Render::EditorGroundGridStateUVE afterZoom = editor.ComputeGroundGridStateUVE();
+        const EditorGridDisplayStateUVE afterZoom = editor.ComputeGroundGridStateUVE();
         EXPECT_GT(afterZoom.fadeEndDistance, gridBefore.fadeEndDistance);
 
         // Turning the grid off in the Show menu stops the pass being recorded at all rather than

@@ -1,0 +1,20 @@
+// GizmoShaderSources.h — GENERATED FILE, DO NOT EDIT.
+// -----------------------------------------------------------------------
+// CMake embeds the four gizmo shaders into this header at configure time,
+// the same way it does for the grid. The .vert/.frag files under shaders/
+// remain the source of truth and are listed in CMAKE_CONFIGURE_DEPENDS, so
+// editing one and rebuilding re-runs configure automatically.
+// -----------------------------------------------------------------------
+#pragma once
+
+namespace univex::render::shaders {
+
+inline constexpr const char* kGizmoLineVertexSource = R"UNIVEX_GLSL(@UNIVEX_GIZMO_LINE_VERT@)UNIVEX_GLSL";
+
+inline constexpr const char* kGizmoLineFragmentSource = R"UNIVEX_GLSL(@UNIVEX_GIZMO_LINE_FRAG@)UNIVEX_GLSL";
+
+inline constexpr const char* kGizmoSolidVertexSource = R"UNIVEX_GLSL(@UNIVEX_GIZMO_SOLID_VERT@)UNIVEX_GLSL";
+
+inline constexpr const char* kGizmoSolidFragmentSource = R"UNIVEX_GLSL(@UNIVEX_GIZMO_SOLID_FRAG@)UNIVEX_GLSL";
+
+} // namespace univex::render::shaders

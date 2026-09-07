@@ -3,212 +3,213 @@
 
 #include "uve/editor/viewport/editor_viewport_camera_uve.h"
 
-#include <algorithm>
 #include <cmath>
 #include <numbers>
+
+#include "univex/camera/OrbitCamera.h"
+#include "univex/math/Mat4.h"
+#include "univex/math/Vec.h"
 
 namespace UVE::Editor {
 
 namespace {
 
 constexpr float kPiUVE = std::numbers::pi_v<float>;
-constexpr Math::Vector3UVE kWorldUpUVE{0.0F, 1.0F, 0.0F};
 
-/// Shortest signed angular distance, wrapped into `(-pi, pi]`, so a snap always turns the short
-/// way round instead of unwinding past 180 degrees.
-[[nodiscard]] float WrapAngleDeltaUVE(const float delta) noexcept {
-    float wrapped = std::fmod(delta + kPiUVE, 2.0F * kPiUVE);
-    if (wrapped < 0.0F) {
-        wrapped += 2.0F * kPiUVE;
-    }
-    return wrapped - kPiUVE;
+[[nodiscard]] univex::math::Vec3 ToUnivexVec3UVE(const Math::Vector3UVE& v) noexcept {
+    return univex::math::Vec3{v.x, v.y, v.z};
 }
 
-[[nodiscard]] float EaseOutCubicUVE(const float t) noexcept {
-    const float inverse = 1.0F - t;
-    return 1.0F - (inverse * inverse * inverse);
+[[nodiscard]] Math::Vector3UVE ToEngineVector3UVE(const univex::math::Vec3& v) noexcept {
+    return Math::Vector3UVE{v.x, v.y, v.z};
+}
+
+/// `univex::math::Mat4` is column-major (`m[c*4+r]`, i.e. `At(row, col)`); `Math::Matrix4x4UVE` is
+/// row-major (`m[row][col]`). Both represent exactly the same matrix - this is a storage-layout
+/// transcription, not a re-derivation of any value.
+[[nodiscard]] Math::Matrix4x4UVE ToEngineMatrixUVE(const univex::math::Mat4& m) noexcept {
+    Math::Matrix4x4UVE result{};
+    for (int row = 0; row < 4; ++row) {
+        for (int col = 0; col < 4; ++col) {
+            result.m[row][col] = m.At(row, col);
+        }
+    }
+    return result;
+}
+
+[[nodiscard]] univex::camera::OrbitCameraSettings ToUnivexSettingsUVE(
+    const EditorViewportCameraSettingsUVE& settings) noexcept {
+    univex::camera::OrbitCameraSettings result{};
+    result.fovYRadians = settings.fieldOfViewYRadians;
+    result.pitchMin = settings.pitchMinRadians;
+    result.pitchMax = settings.pitchMaxRadians;
+    result.distanceMin = settings.distanceMin;
+    result.distanceMax = settings.distanceMax;
+    result.orbitRadiansPerPixel = settings.orbitRadiansPerPixel;
+    result.dollyPerWheelNotch = settings.dollyPerWheelNotch;
+    result.snapDurationMs = settings.snapDurationMilliseconds;
+    result.nearPlaneScale = settings.nearPlaneScale;
+    result.farPlaneScale = settings.farPlaneScale;
+    result.nearPlaneMin = settings.nearPlaneMin;
+    return result;
 }
 
 } // namespace
+
+struct EditorViewportCameraUVE::CameraImplUVE {
+    univex::camera::OrbitCamera camera;
+};
+
+EditorViewportCameraUVE::EditorViewportCameraUVE()
+    : EditorViewportCameraUVE(EditorViewportCameraSettingsUVE{}) {}
+
+EditorViewportCameraUVE::EditorViewportCameraUVE(const EditorViewportCameraSettingsUVE& settings) noexcept
+    : m_settings(settings), m_camera(std::make_unique<CameraImplUVE>(CameraImplUVE{
+                                 univex::camera::OrbitCamera(ToUnivexSettingsUVE(settings))})) {}
+
+EditorViewportCameraUVE::~EditorViewportCameraUVE() = default;
+EditorViewportCameraUVE::EditorViewportCameraUVE(EditorViewportCameraUVE&&) noexcept = default;
+EditorViewportCameraUVE& EditorViewportCameraUVE::operator=(EditorViewportCameraUVE&&) noexcept = default;
 
 void EditorViewportCameraUVE::OrbitUVE(const float deltaXPixels, const float deltaYPixels) noexcept {
     if (!std::isfinite(deltaXPixels) || !std::isfinite(deltaYPixels)) {
         return;
     }
-    // A manual drag always wins over an in-flight snap.
-    m_animating = false;
-    m_yawRadians += deltaXPixels * m_settings.orbitRadiansPerPixel;
-    m_pitchRadians = std::clamp(m_pitchRadians + (deltaYPixels * m_settings.orbitRadiansPerPixel),
-                                m_settings.pitchMinRadians, m_settings.pitchMaxRadians);
+    m_camera->camera.Orbit(deltaXPixels, deltaYPixels);
 }
 
 void EditorViewportCameraUVE::PanUVE(const float deltaXPixels, const float deltaYPixels,
                                      const int viewportHeightPixels) noexcept {
-    if (viewportHeightPixels <= 0 || !std::isfinite(deltaXPixels) || !std::isfinite(deltaYPixels)) {
+    if (!std::isfinite(deltaXPixels) || !std::isfinite(deltaYPixels)) {
         return;
     }
-
-    // World units covered by one pixel at the pivot's depth.
-    const float worldPerPixel =
-        (2.0F * m_distance * std::tan(m_settings.fieldOfViewYRadians * 0.5F)) /
-        static_cast<float>(viewportHeightPixels);
-
-    const Math::Vector3UVE forward = Math::NormalizeUVE(m_target - GetEyeUVE());
-    const Math::Vector3UVE right = Math::NormalizeUVE(Math::CrossUVE(forward, kWorldUpUVE));
-    const Math::Vector3UVE up = Math::CrossUVE(right, forward);
-
-    m_target += right * (-deltaXPixels * worldPerPixel);
-    m_target += up * (deltaYPixels * worldPerPixel);
+    m_camera->camera.Pan(deltaXPixels, deltaYPixels, viewportHeightPixels);
 }
 
 void EditorViewportCameraUVE::DollyUVE(const float notches) noexcept {
     if (!std::isfinite(notches)) {
         return;
     }
-    SetDistanceUVE(m_distance * std::exp(-notches * m_settings.dollyPerWheelNotch));
+    m_camera->camera.Dolly(notches);
+}
+
+void EditorViewportCameraUVE::SetTargetUVE(const Math::Vector3UVE& target) noexcept {
+    m_camera->camera.SetTarget(ToUnivexVec3UVE(target));
 }
 
 void EditorViewportCameraUVE::SetDistanceUVE(const float distance) noexcept {
-    // Only NaN is rejected. An infinity is a meaningful request here - it is what a very large
-    // dolly-out produces once `exp()` overflows - and clamping it to the range end is exactly the
-    // right answer, whereas ignoring it would silently strand the camera at the opposite bound.
     if (std::isnan(distance)) {
         return;
     }
-    m_distance = std::clamp(distance, m_settings.distanceMin, m_settings.distanceMax);
+    m_camera->camera.SetDistance(distance);
 }
 
 void EditorViewportCameraUVE::SetYawPitchUVE(const float yawRadians, const float pitchRadians) noexcept {
     if (!std::isfinite(yawRadians) || !std::isfinite(pitchRadians)) {
         return;
     }
-    m_yawRadians = yawRadians;
-    m_pitchRadians = std::clamp(pitchRadians, m_settings.pitchMinRadians, m_settings.pitchMaxRadians);
+    m_camera->camera.SetYawPitch(yawRadians, pitchRadians);
 }
+
+Math::Vector3UVE EditorViewportCameraUVE::GetTargetUVE() const noexcept {
+    return ToEngineVector3UVE(m_camera->camera.Target());
+}
+
+float EditorViewportCameraUVE::GetYawUVE() const noexcept { return m_camera->camera.Yaw(); }
+float EditorViewportCameraUVE::GetPitchUVE() const noexcept { return m_camera->camera.Pitch(); }
+float EditorViewportCameraUVE::GetDistanceUVE() const noexcept { return m_camera->camera.Distance(); }
 
 Math::Vector3UVE EditorViewportCameraUVE::GetEyeUVE() const noexcept {
-    const float cosPitch = std::cos(m_pitchRadians);
-    const Math::Vector3UVE offset{
-        std::cos(m_yawRadians) * cosPitch,
-        std::sin(m_pitchRadians),
-        std::sin(m_yawRadians) * cosPitch,
-    };
-    return m_target + (offset * m_distance);
+    return ToEngineVector3UVE(m_camera->camera.Eye());
 }
 
-float EditorViewportCameraUVE::GetNearPlaneUVE() const noexcept {
-    return std::max(m_settings.nearPlaneMin, m_distance * m_settings.nearPlaneScale);
+float EditorViewportCameraUVE::GetNearPlaneUVE() const noexcept { return m_camera->camera.NearPlane(); }
+float EditorViewportCameraUVE::GetFarPlaneUVE() const noexcept { return m_camera->camera.FarPlane(); }
+
+void EditorViewportCameraUVE::SetOrthographicUVE(const bool orthographic) noexcept {
+    m_camera->camera.SetOrthographic(orthographic);
 }
 
-float EditorViewportCameraUVE::GetFarPlaneUVE() const noexcept {
-    return m_distance * m_settings.farPlaneScale;
+bool EditorViewportCameraUVE::IsOrthographicUVE() const noexcept {
+    return m_camera->camera.IsOrthographic();
 }
 
 float EditorViewportCameraUVE::GetOrthographicHalfHeightUVE() const noexcept {
-    return m_distance * std::tan(m_settings.fieldOfViewYRadians * 0.5F);
+    return m_camera->camera.OrthographicHalfHeight();
 }
 
 void EditorViewportCameraUVE::SnapToDirectionUVE(const Math::Vector3UVE& worldDirection) noexcept {
-    const Math::Vector3UVE direction = Math::NormalizeUVE(worldDirection);
-    if (Math::LengthSquaredUVE(direction) <= 0.0F) {
+    if (Math::LengthSquaredUVE(worldDirection) <= 0.0F) {
         return;
     }
-    const float horizontal =
-        std::sqrt((direction.x * direction.x) + (direction.z * direction.z));
-    const float targetYaw = std::atan2(direction.z, direction.x);
-    // atan2(y, horizontal) is +-pi/2 at the poles; the clamp keeps the view basis from
-    // degenerating exactly on-axis for Top and Bottom.
-    const float targetPitch = std::clamp(std::atan2(direction.y, horizontal),
-                                         m_settings.pitchMinRadians, m_settings.pitchMaxRadians);
-    SnapToYawPitchUVE(targetYaw, targetPitch);
+    m_camera->camera.SnapToDirection(ToUnivexVec3UVE(worldDirection));
 }
 
-void EditorViewportCameraUVE::SnapToYawPitchUVE(const float yawRadians,
-                                                const float pitchRadians) noexcept {
+void EditorViewportCameraUVE::SnapToYawPitchUVE(const float yawRadians, const float pitchRadians) noexcept {
     if (!std::isfinite(yawRadians) || !std::isfinite(pitchRadians)) {
         return;
     }
-    m_fromYawRadians = m_yawRadians;
-    m_fromPitchRadians = m_pitchRadians;
-    m_deltaYawRadians = WrapAngleDeltaUVE(yawRadians - m_yawRadians);
-    m_deltaPitchRadians =
-        std::clamp(pitchRadians, m_settings.pitchMinRadians, m_settings.pitchMaxRadians) -
-        m_pitchRadians;
-    m_elapsedSeconds = 0.0F;
-    m_durationSeconds =
-        std::max(0.001F, static_cast<float>(m_settings.snapDurationMilliseconds) / 1000.0F);
-    m_animating = true;
+    m_camera->camera.SnapToYawPitch(yawRadians, pitchRadians);
 }
 
 bool EditorViewportCameraUVE::UpdateUVE(const float deltaSeconds) noexcept {
-    if (!m_animating || !std::isfinite(deltaSeconds)) {
-        return m_animating;
+    if (!std::isfinite(deltaSeconds)) {
+        return m_camera->camera.IsAnimating();
     }
-    m_elapsedSeconds += deltaSeconds;
-    const float t = std::min(1.0F, m_elapsedSeconds / m_durationSeconds);
-    const float eased = EaseOutCubicUVE(t);
-    m_yawRadians = m_fromYawRadians + (m_deltaYawRadians * eased);
-    m_pitchRadians = std::clamp(m_fromPitchRadians + (m_deltaPitchRadians * eased),
-                                m_settings.pitchMinRadians, m_settings.pitchMaxRadians);
-    if (t >= 1.0F) {
-        m_animating = false;
-    }
-    return m_animating;
+    return m_camera->camera.Update(deltaSeconds);
 }
+
+void EditorViewportCameraUVE::CancelAnimationUVE() noexcept { m_camera->camera.CancelAnimation(); }
+bool EditorViewportCameraUVE::IsAnimatingUVE() const noexcept { return m_camera->camera.IsAnimating(); }
 
 void EditorViewportCameraUVE::FocusUVE(const Math::Vector3UVE& point, const float radius) noexcept {
     if (!std::isfinite(point.x) || !std::isfinite(point.y) || !std::isfinite(point.z)) {
         return;
     }
-    m_target = point;
-    if (radius > 0.0F) {
-        // Pull back far enough that a sphere of `radius` fits the vertical FOV.
-        SetDistanceUVE(radius / std::max(0.05F, std::sin(m_settings.fieldOfViewYRadians * 0.5F)));
-    }
+    m_camera->camera.Focus(ToUnivexVec3UVE(point), radius);
 }
 
 Math::QuaternionUVE EditorViewportCameraUVE::GetRotationUVE() const noexcept {
-    // The view basis is a turntable: yaw about world +Y, then pitch about the camera's own right
-    // axis. Solving `R * (0,0,-1) == forward` for the orbit forward direction gives
-    // R = Ry(pi/2 - yaw) * Rx(-pitch), which is what is composed here. Expressed as a rotation so
-    // it can be written straight onto the ECS camera entity's transform.
+    // univex::camera::OrbitCamera has no notion of a quaternion (LookAt needs none) - this engine's
+    // ECS camera representation (Scene::TransformComponentUVE) is position+rotation, so this is the
+    // one place that needs one. Solving `R * (0,0,-1) == forward` for this orbit's forward
+    // direction gives R = Ry(pi/2 - yaw) * Rx(-pitch); this is hand-verified to reproduce
+    // OrbitCamera::Eye()/ViewMatrix()'s own forward vector exactly for every yaw/pitch, so pushing
+    // this quaternion onto the ECS transform reproduces this camera's actual orientation exactly.
+    const float yaw = m_camera->camera.Yaw();
+    const float pitch = m_camera->camera.Pitch();
     Math::QuaternionUVE yawRotation{};
     Math::QuaternionUVE pitchRotation{};
-    if (!Math::TryMakeAxisAngleUVE(Math::Vector3UVE{0.0F, 1.0F, 0.0F},
-                                   (kPiUVE * 0.5F) - m_yawRadians, yawRotation) ||
-        !Math::TryMakeAxisAngleUVE(Math::Vector3UVE{1.0F, 0.0F, 0.0F}, -m_pitchRadians,
-                                   pitchRotation)) {
+    if (!Math::TryMakeAxisAngleUVE(Math::Vector3UVE{0.0F, 1.0F, 0.0F}, (kPiUVE * 0.5F) - yaw, yawRotation) ||
+        !Math::TryMakeAxisAngleUVE(Math::Vector3UVE{1.0F, 0.0F, 0.0F}, -pitch, pitchRotation)) {
         return Math::QuaternionUVE{};
     }
     return Math::MultiplyUVE(yawRotation, pitchRotation);
 }
 
 Math::Matrix4x4UVE EditorViewportCameraUVE::GetViewMatrixUVE() const noexcept {
-    return Math::Matrix4x4UVE::ViewFromPositionAndRotationUVE(GetEyeUVE(), GetRotationUVE());
+    return ToEngineMatrixUVE(m_camera->camera.ViewMatrix());
 }
 
 Math::Matrix4x4UVE EditorViewportCameraUVE::GetProjectionMatrixUVE(const float aspectRatio) const noexcept {
     const float safeAspect = (std::isfinite(aspectRatio) && aspectRatio > 0.0F) ? aspectRatio : 1.0F;
-    if (m_orthographic) {
-        const float halfHeight = GetOrthographicHalfHeightUVE();
-        const float halfWidth = halfHeight * safeAspect;
-        // The ortho volume is centred on the pivot, so half the depth range has to sit behind the
-        // camera for anything nearer than the pivot to survive clipping.
-        const float halfDepth = std::max(m_distance * 4.0F, GetFarPlaneUVE() * 0.5F);
-        return Math::Matrix4x4UVE::OrthographicUVE(-halfWidth, halfWidth, -halfHeight, halfHeight,
-                                                    -halfDepth, halfDepth);
-    }
-    return Math::Matrix4x4UVE::PerspectiveUVE(m_settings.fieldOfViewYRadians, safeAspect,
-                                               GetNearPlaneUVE(), GetFarPlaneUVE());
+    return ToEngineMatrixUVE(m_camera->camera.ProjectionMatrix(safeAspect));
 }
 
 Math::Matrix4x4UVE EditorViewportCameraUVE::GetViewProjectionUVE(const float aspectRatio) const noexcept {
-    return GetProjectionMatrixUVE(aspectRatio) * GetViewMatrixUVE();
+    const float safeAspect = (std::isfinite(aspectRatio) && aspectRatio > 0.0F) ? aspectRatio : 1.0F;
+    return ToEngineMatrixUVE(m_camera->camera.ViewProjection(safeAspect));
 }
 
 bool EditorViewportCameraUVE::TryGetInverseViewProjectionUVE(
     const float aspectRatio, Math::Matrix4x4UVE& outInverse) const noexcept {
-    return Math::TryInverseUVE(GetViewProjectionUVE(aspectRatio), outInverse);
+    const float safeAspect = (std::isfinite(aspectRatio) && aspectRatio > 0.0F) ? aspectRatio : 1.0F;
+    const auto inverse = univex::math::Mat4::Inverse(m_camera->camera.ViewProjection(safeAspect));
+    if (!inverse.has_value()) {
+        return false;
+    }
+    outInverse = ToEngineMatrixUVE(*inverse);
+    return true;
 }
 
 } // namespace UVE::Editor

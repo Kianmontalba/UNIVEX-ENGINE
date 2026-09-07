@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <memory>
+
 #include "uve/editor/viewport/editor_viewport_types_uve.h"
 #include "uve/math/matrix4x4_uve.h"
 #include "uve/math/quaternion_uve.h"
@@ -10,14 +12,10 @@
 
 namespace UVE::Editor {
 
-/// Tunables of the editor viewport's orbit camera.
-///
-/// Dynamic clip planes: near and far are derived from the current orbit distance rather than
-/// fixed. A fixed `near=0.05 / far=20000` pair looks fine at one zoom level and falls apart at
-/// the others - at 4 km out the depth buffer has almost no precision left, and at 5 cm in the
-/// near plane clips through everything. Scaling both with distance keeps the near:far ratio (and
-/// therefore depth precision) roughly constant across the whole zoom range, which is what makes a
-/// viewport spanning centimetres to kilometres usable.
+/// Tunables of the editor viewport's orbit camera. Mirrors
+/// `univex::camera::OrbitCameraSettings` field-for-field (see editor_viewport_camera_uve.cpp) -
+/// kept as this engine's own `Math::` type so no public header here has to include the vendored
+/// module's headers.
 struct EditorViewportCameraSettingsUVE final {
     float fieldOfViewYRadians = 0.8726646F; // 50 degrees
 
@@ -39,28 +37,39 @@ struct EditorViewportCameraSettingsUVE final {
     float nearPlaneMin = 0.001F;
 };
 
-/// The editor viewport's orbit camera: yaw/pitch/distance around a pivot, with a real projection
-/// switch, dynamic clip planes, and eased axis snapping.
+/// The editor viewport's orbit camera. This class is a thin adapter: every field of camera state
+/// and every piece of orbit/pan/dolly/snap/projection math lives in and is computed by
+/// `univex::camera::OrbitCamera` (engine/editor/viewport_foundation/include/univex/camera/
+/// OrbitCamera.h) - the camera from the univex_viewport_gl foundation package, vendored
+/// essentially unmodified. This class exists only to translate at the boundary: `Math::Vector3UVE`
+/// <-> `univex::math::Vec3`, `Math::Matrix4x4UVE` (row-major, `[0, 1]` clip-space z) <->
+/// `univex::math::Mat4` (column-major - the projection z-row is UVE-adapted for the `[0, 1]`
+/// convention in Mat4.cpp, everything else in that module is untouched), and one
+/// yaw/pitch-to-quaternion conversion for `GetRotationUVE()`, needed only because this engine's
+/// ECS camera representation is transform-based (position + rotation) rather than raw-matrix-based
+/// - `univex::camera::OrbitCamera` itself has no notion of a quaternion.
 ///
-/// ORBIT CONVENTION (the fix for the previously inverted viewport, asserted by
-/// `tests/editor/viewport/editor_viewport_camera_uve_tests.cpp`): this is a turntable orbit in
-/// which the scene follows the cursor. Pointer deltas are passed in screen pixels, with `+dy`
-/// meaning the pointer moved DOWN the screen, matching ImGui/GLFW.
+/// ORBIT CONVENTION: a turntable orbit in which the scene follows the cursor. Pointer deltas are
+/// passed in screen pixels, with `+dy` meaning the pointer moved DOWN the screen, matching
+/// ImGui/GLFW.
 ///   - Drag right (`+dx`): world points sweep RIGHT across the screen; the camera orbits left.
 ///   - Drag down  (`+dy`): the camera rises and looks further down onto the scene, so a point
 ///     above the pivot sweeps DOWN the screen.
-/// Both axes therefore move scene content the same way the pointer moves, which is the standard
-/// editor tumble. A caller must not pre-negate its deltas.
 ///
 /// The camera is editor-only presentation state: it owns no document entity, is never serialized
 /// into a `.uvescene`, and never enters the undo/redo history. `GetRotationUVE()` exists so the
-/// editor can push this orientation onto the ECS camera entity the engine renders the scene from
-/// - the one bridge between this class and the scene.
+/// editor can push this orientation onto the ECS camera entity the engine renders the scene from -
+/// the one bridge between this class and the scene.
 class EditorViewportCameraUVE final {
 public:
-    EditorViewportCameraUVE() = default;
-    explicit EditorViewportCameraUVE(const EditorViewportCameraSettingsUVE& settings) noexcept
-        : m_settings(settings) {}
+    EditorViewportCameraUVE();
+    explicit EditorViewportCameraUVE(const EditorViewportCameraSettingsUVE& settings) noexcept;
+    ~EditorViewportCameraUVE();
+
+    EditorViewportCameraUVE(const EditorViewportCameraUVE&) = delete;
+    EditorViewportCameraUVE& operator=(const EditorViewportCameraUVE&) = delete;
+    EditorViewportCameraUVE(EditorViewportCameraUVE&&) noexcept;
+    EditorViewportCameraUVE& operator=(EditorViewportCameraUVE&&) noexcept;
 
     // ---- input ---------------------------------------------------------------------------------
 
@@ -76,16 +85,16 @@ public:
     /// Exponential dolly; `notches` is positive to move closer.
     void DollyUVE(float notches) noexcept;
 
-    void SetTargetUVE(const Math::Vector3UVE& target) noexcept { m_target = target; }
+    void SetTargetUVE(const Math::Vector3UVE& target) noexcept;
     void SetDistanceUVE(float distance) noexcept;
     void SetYawPitchUVE(float yawRadians, float pitchRadians) noexcept;
 
     // ---- state ---------------------------------------------------------------------------------
 
-    [[nodiscard]] Math::Vector3UVE GetTargetUVE() const noexcept { return m_target; }
-    [[nodiscard]] float GetYawUVE() const noexcept { return m_yawRadians; }
-    [[nodiscard]] float GetPitchUVE() const noexcept { return m_pitchRadians; }
-    [[nodiscard]] float GetDistanceUVE() const noexcept { return m_distance; }
+    [[nodiscard]] Math::Vector3UVE GetTargetUVE() const noexcept;
+    [[nodiscard]] float GetYawUVE() const noexcept;
+    [[nodiscard]] float GetPitchUVE() const noexcept;
+    [[nodiscard]] float GetDistanceUVE() const noexcept;
     [[nodiscard]] const EditorViewportCameraSettingsUVE& GetSettingsUVE() const noexcept {
         return m_settings;
     }
@@ -98,8 +107,8 @@ public:
 
     // ---- projection ----------------------------------------------------------------------------
 
-    void SetOrthographicUVE(const bool orthographic) noexcept { m_orthographic = orthographic; }
-    [[nodiscard]] bool IsOrthographicUVE() const noexcept { return m_orthographic; }
+    void SetOrthographicUVE(bool orthographic) noexcept;
+    [[nodiscard]] bool IsOrthographicUVE() const noexcept;
 
     /// Half the vertical extent the orthographic view covers, chosen so a projection toggle does
     /// not change the apparent size of anything at the pivot's depth.
@@ -115,8 +124,8 @@ public:
 
     /// Advances any in-flight snap. Returns true while still animating.
     bool UpdateUVE(float deltaSeconds) noexcept;
-    void CancelAnimationUVE() noexcept { m_animating = false; }
-    [[nodiscard]] bool IsAnimatingUVE() const noexcept { return m_animating; }
+    void CancelAnimationUVE() noexcept;
+    [[nodiscard]] bool IsAnimatingUVE() const noexcept;
 
     /// Frames a point: keeps the current angles, moves the pivot there, and pulls the distance in
     /// to fit a sphere of `radius`. A non-positive radius moves the pivot only.
@@ -131,14 +140,16 @@ public:
     /// matrices exactly.
     [[nodiscard]] Math::QuaternionUVE GetRotationUVE() const noexcept;
 
-    /// World-to-view. Built through ViewFromPositionAndRotationUVE(GetEyeUVE(), GetRotationUVE()),
-    /// so the grid/gizmo overlays and the engine's scene render cannot drift apart.
+    /// World-to-view, converted directly from `univex::camera::OrbitCamera::ViewMatrix()` (its own
+    /// `LookAt`), not re-derived from GetRotationUVE() - the two are algebraically equivalent for
+    /// this orbit formula, but this keeps the actual rendered value tied to the vendored camera's
+    /// own math with no intermediate step.
     [[nodiscard]] Math::Matrix4x4UVE GetViewMatrixUVE() const noexcept;
 
-    /// View-to-clip. A genuinely different matrix per projection mode - perspective uses the
-    /// settings FOV with dynamic clip planes, orthographic uses GetOrthographicHalfHeightUVE()
-    /// with a symmetric depth range centred on the pivot, so geometry nearer than the pivot
-    /// survives clipping. Both are the engine's Y-up, `[0, 1]` depth convention.
+    /// View-to-clip, converted directly from `univex::camera::OrbitCamera::ProjectionMatrix()`. A
+    /// genuinely different matrix per projection mode - perspective uses the settings FOV with
+    /// dynamic clip planes, orthographic uses GetOrthographicHalfHeightUVE() with a symmetric depth
+    /// range centred on the pivot, so geometry nearer than the pivot survives clipping.
     [[nodiscard]] Math::Matrix4x4UVE GetProjectionMatrixUVE(float aspectRatio) const noexcept;
 
     [[nodiscard]] Math::Matrix4x4UVE GetViewProjectionUVE(float aspectRatio) const noexcept;
@@ -151,23 +162,13 @@ public:
 
 private:
     EditorViewportCameraSettingsUVE m_settings{};
-    Math::Vector3UVE m_target{0.0F, 0.0F, 0.0F};
 
-    /// Default framing, preserved exactly from the viewport foundation this camera was ported
-    /// from: a three-quarter view from above where all three axes are visible and none is
-    /// foreshortened into another. Deliberately not recomputed or auto-framed at startup.
-    float m_yawRadians = -0.7553F;
-    float m_pitchRadians = 0.4561F;
-    float m_distance = 11.26F;
-    bool m_orthographic = false;
-
-    bool m_animating = false;
-    float m_fromYawRadians = 0.0F;
-    float m_fromPitchRadians = 0.0F;
-    float m_deltaYawRadians = 0.0F;
-    float m_deltaPitchRadians = 0.0F;
-    float m_elapsedSeconds = 0.0F;
-    float m_durationSeconds = 0.0F;
+    // The vendored univex::camera::OrbitCamera, PIMPL'd so this public header never has to include
+    // engine/editor/viewport_foundation/include/univex/camera/OrbitCamera.h - matching this
+    // module's existing third-party-header confinement discipline (see editor/CMakeLists.txt's
+    // ImGui precedent).
+    struct CameraImplUVE;
+    std::unique_ptr<CameraImplUVE> m_camera;
 };
 
 } // namespace UVE::Editor

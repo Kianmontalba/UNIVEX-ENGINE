@@ -1,5 +1,12 @@
 // Copyright (c) 2026 UniVex Studios. All Rights Reserved.
 
+// Must precede every other include in this translation unit (including glfw3.h, transitively
+// below): GLEW's header hard-errors if <GL/gl.h> was already seen, and it resolves the ground
+// grid's real GL calls (see PublishGroundGridStateUVE()) alongside this engine's own hand-rolled
+// loader in gl_functions_uve.cpp - both are independent function-pointer lookups against the same
+// current context, so the two coexist without conflict.
+#include <GL/glew.h>
+
 #include "uve/editor/editor_uve.h"
 
 #include "viewport/editor_viewport_widgets_uve.h"
@@ -34,6 +41,7 @@
 #include "uve/config/i_config_manager_uve.h"
 #include "uve/physics/raycast_query_uve.h"
 #include "uve/render/render_resource_descs_uve.h"
+#include "univex/render/InfiniteGridRenderer.h"
 #include "uve/platform/editor_project_package_uve.h"
 #include "uve/scripting/script_builtin_nodes_uve.h"
 #include "uve/scripting/script_bytecode_uve.h"
@@ -55,6 +63,22 @@ namespace {
 
 constexpr float kVectorEpsilonUVE = 0.00001F;
 constexpr float kMinimumLocalScaleUVE = 0.001F;
+
+/// `Math::Matrix4x4UVE` is row-major (`m[row][col]`); `univex::math::Mat4` is column-major
+/// (`m[col*4+row]`, i.e. `At(row, col)`/`Set(row, col, v)`). Both represent exactly the same
+/// matrix - a storage-layout transcription, not a re-derivation of any value - needed because the
+/// grid draws from the SAME view-projection the renderer used for mesh rendering this frame (see
+/// Render::EditorOverlayFrameContextUVE's doc comment), not a second one independently computed by
+/// EditorViewportCameraUVE/OrbitCamera.
+[[nodiscard]] univex::math::Mat4 ToUnivexMat4UVE(const Math::Matrix4x4UVE& matrix) noexcept {
+    univex::math::Mat4 result = univex::math::Mat4::Identity();
+    for (int row = 0; row < 4; ++row) {
+        for (int col = 0; col < 4; ++col) {
+            result.Set(row, col, matrix.m[static_cast<std::size_t>(row)][static_cast<std::size_t>(col)]);
+        }
+    }
+    return result;
+}
 
 // Subsetted Tabler Icons glyphs (MIT licensed; see
 // engine/editor/assets/fonts/THIRD_PARTY_NOTICES.md) merged into the default ImGui font. These
@@ -2563,6 +2587,10 @@ void EditorUVE::SyncViewportCameraEntityUVE() {
         // centimetres out to kilometres.
         camera.nearPlane = m_viewportCameraController.GetNearPlaneUVE();
         camera.farPlane = m_viewportCameraController.GetFarPlaneUVE();
+        camera.fieldOfViewDegrees = m_viewportCameraController.GetSettingsUVE().fieldOfViewYRadians *
+                                    (180.0F / std::numbers::pi_v<float>);
+        camera.orthographic = m_viewportCameraController.IsOrthographicUVE();
+        camera.orthographicHalfHeight = m_viewportCameraController.GetOrthographicHalfHeightUVE();
     }
 }
 
@@ -2758,8 +2786,12 @@ void EditorUVE::CancelGizmoDragUVE() {
     }
 }
 
-Render::EditorGroundGridStateUVE EditorUVE::ComputeGroundGridStateUVE() const {
-    Render::EditorGroundGridStateUVE grid{};
+struct EditorUVE::OverlayRendererImplUVE {
+    std::optional<univex::render::InfiniteGridRenderer> grid;
+};
+
+EditorGridDisplayStateUVE EditorUVE::ComputeGroundGridStateUVE() const {
+    EditorGridDisplayStateUVE grid{};
     // The grid is world space: its origin is the world origin and its spacing is a world quantity,
     // so selecting an entity never moves it - there is deliberately no selection input here at all.
     // Only the fade distances follow the camera, and they are derived here rather than in the
@@ -2768,15 +2800,66 @@ Render::EditorGroundGridStateUVE EditorUVE::ComputeGroundGridStateUVE() const {
     const float orbitDistance = m_viewportCameraController.GetDistanceUVE();
     grid.fadeStartDistance = orbitDistance * 12.0F;
     grid.fadeEndDistance = orbitDistance * 45.0F;
-    // Axis colours are shared with the gizmo's, so world X reads the same red in the grid and on a
-    // transform handle.
-    grid.axisColorX = m_gizmoStyle.axisColorX;
-    grid.axisColorZ = m_gizmoStyle.axisColorZ;
+    if (m_overlayRenderer && m_overlayRenderer->grid.has_value()) {
+        grid.baseSpacing = m_overlayRenderer->grid->Settings().baseSpacing;
+    }
     return grid;
 }
 
 void EditorUVE::PublishGroundGridStateUVE() {
-    m_services->GetRenderer3DUVE().SetEditorGroundGridStateUVE(ComputeGroundGridStateUVE());
+    // Lazily constructed: a live GL context is only guaranteed once the engine has actually started
+    // rendering frames, which TickUVE() (this method's one caller) is only ever invoked after.
+    if (m_overlayRenderer == nullptr) {
+        m_overlayRenderer = std::make_unique<OverlayRendererImplUVE>();
+        // GLEW resolves function pointers against whatever GL context is current, exactly like this
+        // engine's own hand-rolled loader (gl_functions_uve.cpp) does - the two coexist because both
+        // are just independent lookups of the same driver entry points for the same context.
+        static bool glewInitialized = false;
+        if (!glewInitialized) {
+            glewExperimental = GL_TRUE;
+            glewInitialized = (glewInit() == GLEW_OK);
+        }
+        if (glewInitialized) {
+            std::string buildError;
+            m_overlayRenderer->grid = univex::render::InfiniteGridRenderer::CreateWithBuiltinShaders(buildError);
+            if (!m_overlayRenderer->grid.has_value()) {
+                UVE_ERROR("EditorUVE: failed to build the vendored ground grid renderer: {}", buildError);
+            }
+        } else {
+            UVE_ERROR("EditorUVE: glewInit() failed; the ground grid will not render");
+        }
+    }
+
+    const EditorGridDisplayStateUVE grid = ComputeGroundGridStateUVE();
+    if (!m_overlayDrawCallbackRegistered) {
+        m_overlayDrawCallbackRegistered = true;
+        m_services->GetRenderer3DUVE().SetEditorOverlayDrawCallbackUVE(
+            [this](const Render::EditorOverlayFrameContextUVE& context) { DrawOverlayUVE(context); });
+    }
+    static_cast<void>(grid);
+}
+
+void EditorUVE::DrawOverlayUVE(const Render::EditorOverlayFrameContextUVE& context) {
+    if (m_overlayRenderer == nullptr || !m_overlayRenderer->grid.has_value() ||
+        !m_overlayRenderer->grid->Valid()) {
+        return;
+    }
+    const EditorGridDisplayStateUVE gridState = ComputeGroundGridStateUVE();
+    if (!gridState.enabled) {
+        return;
+    }
+    univex::render::GridSettings& settings = m_overlayRenderer->grid->Settings();
+    settings.axisColorX = {m_gizmoStyle.axisColorX.x, m_gizmoStyle.axisColorX.y, m_gizmoStyle.axisColorX.z};
+    settings.axisColorZ = {m_gizmoStyle.axisColorZ.x, m_gizmoStyle.axisColorZ.y, m_gizmoStyle.axisColorZ.z};
+    settings.fadeStartDistanceScale = 12.0F;
+    settings.fadeEndDistanceScale = 45.0F;
+
+    univex::render::GridFrameParams frameParams;
+    frameParams.viewProjection = ToUnivexMat4UVE(context.viewProjection);
+    frameParams.inverseViewProjection = ToUnivexMat4UVE(context.inverseViewProjection);
+    frameParams.cameraPosition = {context.cameraPosition.x, context.cameraPosition.y, context.cameraPosition.z};
+    frameParams.referenceDistance = m_viewportCameraController.GetDistanceUVE();
+    m_overlayRenderer->grid->Draw(frameParams);
 }
 
 void EditorUVE::PublishViewportRegionUVE(const std::optional<Render::ViewportRectUVE>& region) {

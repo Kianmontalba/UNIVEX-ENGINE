@@ -492,11 +492,10 @@ struct Renderer3DUVE::ImplUVE {
     std::shared_ptr<Shader::ShaderProgramUVE> shadowProgram;
     std::shared_ptr<Shader::ShaderProgramUVE> toneMappingProgram;
 
-    /// The editor viewport's infinite ground grid: a fullscreen-triangle pass that ray-casts the
-    /// y = 0 plane. Depth-tested against the scene but never depth-writing, so solid geometry in
-    /// front of the ground hides the grid while the grid occludes nothing drawn after it.
-    std::shared_ptr<Shader::ShaderProgramUVE> editorGroundGridProgram;
-    EditorGroundGridStateUVE editorGroundGridState{};
+    /// The editor's overlay draw callback (ground grid, gizmos, ...) - see
+    /// SetEditorOverlayDrawCallbackUVE()'s doc comment. Owned and set by EditorUVE; this renderer
+    /// only knows the narrow EditorOverlayDrawCallbackUVE signature.
+    EditorOverlayDrawCallbackUVE editorOverlayDrawCallback;
 
     /// Phase 2b post-process toggles, consulted while building each frame's render graph (see
     /// RenderFrameUVE()) - disabling either skips that group of passes entirely, not just their
@@ -1240,18 +1239,6 @@ Renderer3DUVE::Renderer3DUVE(IRenderDeviceUVE& renderDevice, IRenderSystemUVE& r
     toneMappingProgramDesc.debugNameUVE = "ToneMapping";
     m_impl->toneMappingProgram = shaderManager.CreateProgramUVE(toneMappingProgramDesc);
 
-    Shader::ShaderProgramDescUVE editorGroundGridProgramDesc;
-    editorGroundGridProgramDesc.virtualFilePath = std::string(Shader::BuiltIn::kEditorGroundGridVirtualPath);
-    editorGroundGridProgramDesc.embeddedFallbackSourceCode =
-        std::string(Shader::BuiltIn::kEditorGroundGridSource);
-    // Depth-tested but not depth-writing, and alpha blended: the grid has to disappear behind
-    // solid geometry while never occluding anything drawn after it.
-    editorGroundGridProgramDesc.depthTestEnabled = true;
-    editorGroundGridProgramDesc.depthWriteEnabled = false;
-    editorGroundGridProgramDesc.blendMode = PipelineBlendModeUVE::SourceAlphaOver;
-    editorGroundGridProgramDesc.debugNameUVE = "EditorGroundGrid";
-    m_impl->editorGroundGridProgram = shaderManager.CreateProgramUVE(editorGroundGridProgramDesc);
-
     Shader::ShaderProgramDescUVE bloomBrightPassProgramDesc;
     bloomBrightPassProgramDesc.virtualFilePath = std::string(Shader::BuiltIn::kBloomBrightPassVirtualPath);
     bloomBrightPassProgramDesc.embeddedFallbackSourceCode = std::string(Shader::BuiltIn::kBloomBrightPassSource);
@@ -1583,54 +1570,34 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
             commandBuffer.EndRenderPassUVE();
         });
 
-    // The editor ground grid sits between the main colour pass and post-process: it needs the
-    // scene's depth buffer intact to be occluded by solid geometry, and it must be in colorTarget
-    // before SSAO/bloom/tone-mapping read it so the grid is graded like everything else rather
-    // than pasted on afterwards in a different colour space.
-    m_impl->lastFrameDiagnostics.editorGroundGridProgramReady =
-        m_impl->editorGroundGridProgram->IsValidUVE();
+    // The editor overlay (ground grid, gizmos - owned by EditorUVE, see
+    // SetEditorOverlayDrawCallbackUVE()) sits between the main colour pass and post-process: it
+    // needs the scene's depth buffer intact to be occluded by solid geometry, and it must be in
+    // colorTarget before SSAO/bloom/tone-mapping read it so it is graded like everything else
+    // rather than pasted on afterwards in a different colour space.
+    m_impl->lastFrameDiagnostics.editorOverlayCallbackSet = static_cast<bool>(m_impl->editorOverlayDrawCallback);
     Math::Matrix4x4UVE inverseViewProjection{};
     const bool viewProjectionInvertible = Math::TryInverseUVE(viewProjection, inverseViewProjection);
-    if (m_impl->editorGroundGridState.enabled && viewProjectionInvertible &&
-        m_impl->editorGroundGridProgram->IsValidUVE()) {
-        const std::array<RenderGraphResourceUseUVE, 2U> gridResources{
+    if (m_impl->editorOverlayDrawCallback && viewProjectionInvertible) {
+        const std::array<RenderGraphResourceUseUVE, 2U> overlayResources{
             RenderGraphResourceUseUVE{colorResource, RenderGraphResourceAccessUVE::Write},
             RenderGraphResourceUseUVE{depthResource, RenderGraphResourceAccessUVE::Read}};
         renderGraph.AddPassUVE(
-            "EditorGroundGrid", gridResources,
+            "EditorOverlay", overlayResources,
             [this, &viewProjection, &inverseViewProjection, &viewPosition](ICommandBufferUVE& commandBuffer) {
-                const EditorGroundGridStateUVE& grid = m_impl->editorGroundGridState;
-                m_impl->lastFrameDiagnostics.editorGroundGridPassRecorded = true;
+                m_impl->lastFrameDiagnostics.editorOverlayPassRecorded = true;
 
                 RenderPassDescUVE passDesc;
                 passDesc.colorAttachment = m_impl->colorTarget;
                 passDesc.depthAttachment = m_impl->depthTarget;
-                // Load, not Clear: the scene this grid composites against was drawn by MainColor.
+                // Load, not Clear: the scene this overlay composites against was drawn by MainColor.
                 passDesc.colorLoadOp = LoadOpUVE::Load;
                 passDesc.depthLoadOp = LoadOpUVE::Load;
                 commandBuffer.BeginRenderPassUVE(passDesc);
 
-                Shader::ShaderProgramUVE& program = *m_impl->editorGroundGridProgram;
-                program.SetMatrix4x4UVE("uViewProjection", viewProjection);
-                program.SetMatrix4x4UVE("uInverseViewProjection", inverseViewProjection);
-                program.SetVector3UVE("uCameraPosition", viewPosition);
-                program.SetFloatUVE("uBaseSpacing", grid.baseSpacing);
-                program.SetFloatUVE("uTargetCellPixels", grid.targetCellPixels);
-                program.SetFloatUVE("uLineWidthPixels", grid.lineWidthPixels);
-                program.SetFloatUVE("uAxisWidthPixels", grid.axisWidthPixels);
-                program.SetVector3UVE("uThinColor", grid.thinColor);
-                program.SetVector3UVE("uMidColor", grid.midColor);
-                program.SetVector3UVE("uThickColor", grid.thickColor);
-                program.SetFloatUVE("uThinIntensity", grid.thinIntensity);
-                program.SetFloatUVE("uMidIntensity", grid.midIntensity);
-                program.SetFloatUVE("uThickIntensity", grid.thickIntensity);
-                program.SetVector3UVE("uAxisColorX", grid.axisColorX);
-                program.SetVector3UVE("uAxisColorZ", grid.axisColorZ);
-                program.SetFloatUVE("uFadeStart", grid.fadeStartDistance);
-                program.SetFloatUVE("uFadeEnd", grid.fadeEndDistance);
-                program.SetFloatUVE("uOpacity", grid.opacity);
-                program.ApplyToUVE(commandBuffer);
-                commandBuffer.DrawUVE(3);
+                m_impl->editorOverlayDrawCallback(
+                    EditorOverlayFrameContextUVE{viewProjection, inverseViewProjection, viewPosition});
+
                 commandBuffer.EndRenderPassUVE();
             });
     }
@@ -1853,8 +1820,8 @@ void Renderer3DUVE::RenderFrameToRegionUVE(Scene::IEntityManagerUVE& entityManag
     RenderFrameUVE(entityManager, cameraEntity);
 }
 
-void Renderer3DUVE::SetEditorGroundGridStateUVE(const EditorGroundGridStateUVE& state) {
-    m_impl->editorGroundGridState = state;
+void Renderer3DUVE::SetEditorOverlayDrawCallbackUVE(EditorOverlayDrawCallbackUVE callback) {
+    m_impl->editorOverlayDrawCallback = std::move(callback);
 }
 
 void Renderer3DUVE::SetPostProcessSettingsUVE(const PostProcessSettingsUVE& settings) {

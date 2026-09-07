@@ -370,7 +370,7 @@ public:
     /// for a viewport HUD reporting the live spacing, and testable without a GPU. Note what it does
     /// NOT contain: any selection-derived value. The grid is world space; only the horizon fade
     /// follows the camera.
-    [[nodiscard]] Render::EditorGroundGridStateUVE ComputeGroundGridStateUVE() const;
+    [[nodiscard]] EditorGridDisplayStateUVE ComputeGroundGridStateUVE() const;
 
     /// True while a transform-gizmo handle is being dragged. Authoring commands that would fight
     /// the gesture in progress are refused for its duration, matching how a viewport gesture has
@@ -766,6 +766,9 @@ private:
     /// horizon fade tracks the camera, derived here because camera policy is the editor's business,
     /// not the renderer's.
     void PublishGroundGridStateUVE();
+    /// The Render::EditorOverlayDrawCallbackUVE body PublishGroundGridStateUVE() registers - draws
+    /// the vendored ground grid renderer with the correct framebuffer/depth target already bound.
+    void DrawOverlayUVE(const Render::EditorOverlayFrameContextUVE& context);
 
     void DrawScriptingWorkspaceUVE();
     void CompileVisualScriptUVE();
@@ -809,6 +812,15 @@ private:
     Scene::EntityUVE m_viewportCamera = Scene::kInvalidEntityUVE;
     EditorViewportCameraUVE m_viewportCameraController{};
     EditorViewportSettingsUVE m_viewportSettings{};
+
+    /// Owns the vendored viewport_foundation module's GL-side objects (currently: the infinite
+    /// ground grid renderer). PIMPL'd so this public header never has to include
+    /// engine/editor/viewport_foundation's headers - see EditorViewportCameraUVE's identical
+    /// precedent. Lazily constructed on first use (see PublishGroundGridStateUVE()), once a live GL
+    /// context is guaranteed to exist.
+    struct OverlayRendererImplUVE;
+    std::unique_ptr<OverlayRendererImplUVE> m_overlayRenderer;
+    bool m_overlayDrawCallbackRegistered = false;
     EditorGizmoStyleUVE m_gizmoStyle{};
     EditorGizmoModeUVE m_gizmoMode = EditorGizmoModeUVE::Universal;
     /// Set while a nav-gizmo press is in flight, with the press position and whether the pointer

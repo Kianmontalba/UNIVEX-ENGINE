@@ -114,6 +114,8 @@ namespace {
         {"fieldOfViewDegrees", component.fieldOfViewDegrees},
         {"nearPlane", component.nearPlane},
         {"farPlane", component.farPlane},
+        {"orthographic", component.orthographic},
+        {"orthographicHalfHeight", component.orthographicHalfHeight},
     };
 }
 
@@ -686,7 +688,9 @@ template <typename T, typename FromJsonFunc, typename ValidateFunc>
         table.emplace("CameraComponentUVE", MakeRegistrationUVE<CameraComponentUVE>([](const nlohmann::json& json) {
                           const CameraComponentUVE camera{json.at("fieldOfViewDegrees").get<float>(),
                                                           json.at("nearPlane").get<float>(),
-                                                          json.at("farPlane").get<float>()};
+                                                          json.at("farPlane").get<float>(),
+                                                          json.value("orthographic", false),
+                                                          json.value("orthographicHalfHeight", 5.0F)};
                           if (!IsCameraComponentValidUVE(camera)) {
                               throw std::runtime_error("Invalid CameraComponentUVE payload");
                           }

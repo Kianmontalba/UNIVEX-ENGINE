@@ -175,4 +175,17 @@ struct EditorViewportSettingsUVE final {
     }
 };
 
+/// The editor's own account of the ground grid's display facts for one frame - used for testing
+/// and introspection. This is NOT what crosses into engine/render any more (see
+/// EditorUVE::PublishGroundGridStateUVE(): the grid now draws via
+/// Render::EditorOverlayDrawCallbackUVE, reading the vendored viewport_foundation module's own
+/// univex::render::GridSettings directly), so this struct only needs to carry what a test wants to
+/// assert on.
+struct EditorGridDisplayStateUVE final {
+    bool enabled = false;
+    float baseSpacing = 1.0F;
+    float fadeStartDistance = 0.0F;
+    float fadeEndDistance = 0.0F;
+};
+
 } // namespace UVE::Editor
