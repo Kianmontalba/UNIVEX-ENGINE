@@ -238,27 +238,6 @@ using ScriptAnimationCurrentClipFunctionUVE = bool (*) (
     void* userData, Scene::EntityUVE actor, float* outClipToken) noexcept;
 using ScriptAnimationPlayingFunctionUVE = bool (*) (
     void* userData, Scene::EntityUVE actor, float clipToken, bool* outResult) noexcept;
-using ScriptMotionQueryBuildFunctionUVE = bool (*) (
-    void* userData, Scene::EntityUVE actor, const ScriptVector3ValueUVE& velocity,
-    const ScriptVector3ValueUVE& facing, float deltaSeconds, bool* outResult) noexcept;
-using ScriptMotionQuerySearchFunctionUVE = bool (*) (
-    void* userData, Scene::EntityUVE actor, float maximumResults, bool* outResult) noexcept;
-using ScriptMotionQueryBestMatchFunctionUVE = bool (*) (
-    void* userData, Scene::EntityUVE actor, float* outCandidateIndex) noexcept;
-using ScriptMotionQueryTrajectoryFunctionUVE = bool (*) (
-    void* userData, Scene::EntityUVE actor, const ScriptVector3ValueUVE& sample, float offsetSeconds,
-    bool* outResult) noexcept;
-using ScriptMotionQueryPoseFunctionUVE = bool (*) (
-    void* userData, Scene::EntityUVE actor, const ScriptTransformValueUVE& pose, bool* outResult) noexcept;
-using ScriptMotionQueryVectorFunctionUVE = bool (*) (
-    void* userData, Scene::EntityUVE actor, const ScriptVector3ValueUVE& value, bool* outResult) noexcept;
-using ScriptMotionQueryYawFunctionUVE = bool (*) (
-    void* userData, Scene::EntityUVE actor, float yawDegrees, bool* outResult) noexcept;
-using ScriptMotionQueryTransitionFunctionUVE = bool (*) (
-    void* userData, Scene::EntityUVE actor, float targetToken, float durationSeconds, bool* outResult) noexcept;
-using ScriptMotionQueryWarpFunctionUVE = bool (*) (
-    void* userData, Scene::EntityUVE actor, const ScriptVector3ValueUVE& target, float weight,
-    bool* outResult) noexcept;
 using ScriptPhysicsRaycastFunctionUVE = bool (*) (
     void* userData, const ScriptVector3ValueUVE& origin, const ScriptVector3ValueUVE& direction,
     float maxDistance, std::uint32_t layerMask, Scene::EntityUVE ignoreEntity, bool* outHit,
@@ -337,16 +316,6 @@ struct ScriptEngineCallBindingsUVE final {
     ScriptAnimationMontageFunctionUVE animationMontage = nullptr;
     ScriptAnimationCurrentClipFunctionUVE animationGetCurrent = nullptr;
     ScriptAnimationPlayingFunctionUVE animationIsPlaying = nullptr;
-    ScriptMotionQueryBuildFunctionUVE motionQueryBuild = nullptr;
-    ScriptMotionQuerySearchFunctionUVE motionQuerySearch = nullptr;
-    ScriptMotionQueryBestMatchFunctionUVE motionQueryBestMatch = nullptr;
-    ScriptMotionQueryTrajectoryFunctionUVE motionQuerySetTrajectory = nullptr;
-    ScriptMotionQueryPoseFunctionUVE motionQuerySetPose = nullptr;
-    ScriptMotionQueryVectorFunctionUVE motionQuerySetVelocity = nullptr;
-    ScriptMotionQueryVectorFunctionUVE motionQuerySetFacing = nullptr;
-    ScriptMotionQueryYawFunctionUVE motionQuerySetYaw = nullptr;
-    ScriptMotionQueryTransitionFunctionUVE motionQueryTransition = nullptr;
-    ScriptMotionQueryWarpFunctionUVE motionQueryMotionWarp = nullptr;
     ScriptPhysicsRaycastFunctionUVE physicsRaycast = nullptr;
     ScriptPhysicsSphereCastFunctionUVE physicsSphereCast = nullptr;
     ScriptPhysicsBoxCastFunctionUVE physicsBoxCast = nullptr;

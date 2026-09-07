@@ -10,7 +10,6 @@
 
 #include "uve/core/engine_core_uve.h"
 #include "uve/editor/editor_bridge_uve.h"
-#include "uve/plugins/motion_query_database_contract_uve.h"
 #include "uve/scene/components/mesh_component_uve.h"
 
 namespace UVE::Editor::Tests {
@@ -634,8 +633,8 @@ TEST(EditorBridgeUVETest, SnapshotUVE_CopiesHierarchyInspectorAndNativePanelSess
         EXPECT_EQ(snapshot.visualScripting.linkCount, 0U);
         EXPECT_EQ(snapshot.visualScripting.canvas.nodes.size(), 0U);
         EXPECT_EQ(snapshot.visualScripting.canvas.links.size(), 0U);
-        ASSERT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds.size(), 171U);
-        ASSERT_EQ(snapshot.visualScripting.canvas.paletteDescriptors.size(), 171U);
+        ASSERT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds.size(), 161U);
+        ASSERT_EQ(snapshot.visualScripting.canvas.paletteDescriptors.size(), 161U);
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[0], "flow.sequence");
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[1], "flow.branch");
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[2], "flow.return");
@@ -757,30 +756,20 @@ TEST(EditorBridgeUVETest, SnapshotUVE_CopiesHierarchyInspectorAndNativePanelSess
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[137], "animation.montage");
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[138], "animation.get_current_animation");
         EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[139], "animation.is_playing");
-        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[140], "motion.query.build");
-        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[141], "motion.query.search");
-        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[142], "motion.query.get_best_match");
-        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[143], "motion.query.set_trajectory");
-        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[144], "motion.query.set_pose");
-        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[145], "motion.query.set_velocity");
-        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[146], "motion.query.set_facing");
-        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[147], "motion.query.set_yaw");
-        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[148], "motion.query.transition");
-        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[149], "motion.query.motion_warp");
-        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[150], "physics.raycast");
-        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[151], "physics.sphere_cast");
-        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[152], "physics.box_cast");
-        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[153], "physics.capsule_cast");
-        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[154], "physics.overlap");
-        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[155], "physics.apply_force");
-        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[156], "physics.apply_impulse");
-        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[157], "physics.set_velocity");
-        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[158], "physics.get_velocity");
-        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[159], "physics.enable_gravity");
-        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[160], "physics.is_colliding");
-        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[168], "debug.print");
-        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[169], "debug.warning");
-        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[170], "debug.error");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[140], "physics.raycast");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[141], "physics.sphere_cast");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[142], "physics.box_cast");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[143], "physics.capsule_cast");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[144], "physics.overlap");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[145], "physics.apply_force");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[146], "physics.apply_impulse");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[147], "physics.set_velocity");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[148], "physics.get_velocity");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[149], "physics.enable_gravity");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[150], "physics.is_colliding");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[158], "debug.print");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[159], "debug.warning");
+        EXPECT_EQ(snapshot.visualScripting.canvas.paletteNodeTypeIds[160], "debug.error");
         EXPECT_FALSE(snapshot.visualScripting.canvas.nodesTruncated);
         EXPECT_FALSE(snapshot.visualScripting.canvas.linksTruncated);
 
@@ -856,271 +845,6 @@ TEST(EditorBridgeUVETest, SnapshotUVE_BoundsCopiedPanelRowsWithoutClaimingDeleti
         const EditorBridgeSnapshotUVE snapshot = bridge.GetSnapshotUVE();
         EXPECT_EQ(snapshot.hierarchy.entries.size(), kEditorBridgeMaximumPanelEntriesUVE);
         EXPECT_TRUE(snapshot.hierarchy.truncated);
-
-        editor.ShutdownUVE();
-    }
-    engine.Shutdown();
-}
-
-TEST(EditorBridgeUVETest, MotionQueryReplayHistoryUVE_IsBoundedAndSequenceOrdered) {
-    Core::EngineCoreUVE engine(MakeBridgeTestConfigUVE());
-    engine.Init();
-    ASSERT_TRUE(engine.Load());
-    {
-        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_bridge_replay_history.uvescene");
-        editor.InitUVE();
-        EditorBridgeUVE bridge(editor);
-        for (std::uint64_t sourceGeneration = 1U;
-             sourceGeneration <= kEditorBridgeMaximumMotionQueryReplayHistoryUVE + 2U;
-             ++sourceGeneration) {
-            Plugins::Editor::MotionQueryTraceReplayFixtureUVE fixture;
-            fixture.compatibility = Plugins::Editor::MotionQueryTraceReplayCompatibilityUVE{
-                1U, 2U, 3U, sourceGeneration};
-            bridge.SetMotionQueryReplayFixtureUVE(std::move(fixture));
-        }
-        const EditorBridgeSnapshotUVE snapshot = bridge.GetSnapshotUVE();
-        ASSERT_EQ(snapshot.motionQuery.replayComparisonHistory.size(),
-                  kEditorBridgeMaximumMotionQueryReplayHistoryUVE);
-        EXPECT_TRUE(snapshot.motionQuery.replayComparisonHistoryTruncated);
-        EXPECT_EQ(snapshot.motionQuery.replayComparisonHistory.front().sequence, 3U);
-        EXPECT_EQ(snapshot.motionQuery.replayComparisonHistory.back().sequence,
-                  kEditorBridgeMaximumMotionQueryReplayHistoryUVE + 2U);
-        editor.ShutdownUVE();
-    }
-    engine.Shutdown();
-}
-
-TEST(EditorBridgeUVETest, MotionQueryUVE_ExposesCopiedSnapshotAndRevisionGuardedNamedAuthoringCommand) {
-    Core::EngineCoreUVE engine(MakeBridgeTestConfigUVE());
-    engine.Init();
-    ASSERT_TRUE(engine.Load());
-    {
-        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_bridge_motion_query.uvescene");
-        editor.InitUVE();
-        EditorBridgeUVE bridge(editor);
-        const EditorBridgeSnapshotUVE initial = bridge.GetSnapshotUVE();
-        bool readAdvertised = false;
-        bool dispatchAdvertised = false;
-        bool replayLoadAdvertised = false;
-        bool replayClearAdvertised = false;
-        for (const EditorBridgeCapabilityUVE capability : initial.capabilities) {
-            readAdvertised = readAdvertised || capability == EditorBridgeCapabilityUVE::ReadMotionQuery;
-            dispatchAdvertised = dispatchAdvertised ||
-                                 capability == EditorBridgeCapabilityUVE::DispatchMotionQueryCommand;
-            replayLoadAdvertised = replayLoadAdvertised ||
-                                   capability == EditorBridgeCapabilityUVE::LoadMotionQueryReplayBaseline;
-            replayClearAdvertised = replayClearAdvertised ||
-                                    capability == EditorBridgeCapabilityUVE::ClearMotionQueryReplayBaseline;
-        }
-        ASSERT_TRUE(readAdvertised);
-        ASSERT_TRUE(dispatchAdvertised);
-        ASSERT_TRUE(replayLoadAdvertised);
-        ASSERT_TRUE(replayClearAdvertised);
-        ASSERT_EQ(initial.motionQuery.authoring.commandMetadata.size(), 14U);
-        ASSERT_EQ(initial.motionQuery.authoring.propertyMetadata.size(), 10U);
-        EXPECT_EQ(initial.motionQuery.authoring.propertyMetadata.front().id, "display_name");
-        EXPECT_TRUE(initial.motionQuery.authoring.propertyMetadata.front().editable);
-        EXPECT_EQ(initial.motionQuery.authoring.propertyMetadata[7].id, "maximum_candidates");
-        EXPECT_TRUE(initial.motionQuery.authoring.propertyMetadata[7].editable);
-        EXPECT_EQ(initial.motionQuery.authoring.commandMetadata.front().name, "read snapshot");
-        const auto& registerMetadata = initial.motionQuery.authoring.commandMetadata[1];
-        EXPECT_EQ(registerMetadata.label, "Register Database");
-        EXPECT_EQ(registerMetadata.kind,
-                  static_cast<std::uint8_t>(Plugins::Editor::MotionQueryEditorCommandKindUVE::RegisterDatabase));
-        EXPECT_EQ(registerMetadata.payloadKind,
-                  static_cast<std::uint8_t>(Plugins::Editor::MotionQueryEditorCommandPayloadKindUVE::Database));
-        EXPECT_TRUE(registerMetadata.mutatesAuthoring);
-        EXPECT_TRUE(registerMetadata.requiresPayload);
-        EXPECT_TRUE(registerMetadata.supportsUndo);
-
-        EditorBridgeRequestUVE readRequest{};
-        readRequest.protocolVersion = kEditorBridgeProtocolVersionUVE;
-        readRequest.requestId = 500U;
-        readRequest.expectedRevision = initial.revision + 100U;
-        readRequest.kind = EditorBridgeRequestKindUVE::ReadMotionQuery;
-        const EditorBridgeResponseUVE readResponse = bridge.DispatchUVE(readRequest);
-        ASSERT_TRUE(readResponse.applied);
-        EXPECT_EQ(readResponse.code, "bridge.motion_query.snapshot.read");
-        EXPECT_TRUE(readResponse.snapshot.motionQuery.authoring.databases.empty());
-
-        const Core::MotionQueryDatabaseFactoryResultUVE factory =
-            Core::CreateDefaultMotionQueryDatabaseContractUVE("bridge-db", 1U, "bridge-schema");
-        ASSERT_TRUE(factory.IsCreatedUVE()) << factory.validation.message;
-        Core::MotionQueryDatabaseContractUVE contract = factory.contract;
-        contract.database.candidates.front().candidateId = "bridge-candidate";
-        Plugins::Editor::MotionQueryEditorDatabaseEntryUVE entry;
-        entry.resource = Asset::ResourceHandleUVE{Asset::AssetGuidUVE{77U}, 1U};
-        entry.displayName = "Bridge Motion Database";
-        entry.contract = contract;
-
-        EditorBridgeRequestUVE dispatchRequest{};
-        dispatchRequest.protocolVersion = kEditorBridgeProtocolVersionUVE;
-        dispatchRequest.requestId = 501U;
-        dispatchRequest.expectedRevision = initial.revision;
-        dispatchRequest.kind = EditorBridgeRequestKindUVE::DispatchMotionQueryCommand;
-        Plugins::Editor::MotionQueryEditorCommandUVE command;
-        command.requestId = 501U;
-        command.expectedRevision = 0U;
-        command.kind = Plugins::Editor::MotionQueryEditorCommandKindUVE::RegisterDatabase;
-        command.database = entry;
-        dispatchRequest.motionQueryCommand = command;
-        const EditorBridgeResponseUVE dispatchResponse = bridge.DispatchUVE(dispatchRequest);
-        ASSERT_TRUE(dispatchResponse.applied) << dispatchResponse.message;
-        EXPECT_EQ(dispatchResponse.code, "bridge.motion_query.command.applied");
-        ASSERT_EQ(dispatchResponse.snapshot.motionQuery.authoring.databases.size(), 1U);
-        EXPECT_EQ(dispatchResponse.snapshot.motionQuery.authoring.databases.front().displayName,
-                  "Bridge Motion Database");
-        EXPECT_EQ(dispatchResponse.snapshot.motionQuery.authoring.revision, 1U);
-        EXPECT_EQ(dispatchResponse.snapshot.revision, initial.revision + 1U);
-
-        EditorBridgeRequestUVE copyRequest{};
-        copyRequest.protocolVersion = kEditorBridgeProtocolVersionUVE;
-        copyRequest.requestId = 502U;
-        copyRequest.expectedRevision = dispatchResponse.snapshot.revision;
-        copyRequest.kind = EditorBridgeRequestKindUVE::DispatchMotionQueryCommand;
-        Plugins::Editor::MotionQueryEditorCommandUVE copyCommand;
-        copyCommand.requestId = 502U;
-        copyCommand.expectedRevision = dispatchResponse.snapshot.motionQuery.authoring.revision;
-        copyCommand.kind = Plugins::Editor::MotionQueryEditorCommandKindUVE::CopyDatabase;
-        copyCommand.resource = entry.resource;
-        copyRequest.motionQueryCommand = copyCommand;
-        const EditorBridgeResponseUVE copyResponse = bridge.DispatchUVE(copyRequest);
-        ASSERT_TRUE(copyResponse.applied) << copyResponse.message;
-        EXPECT_EQ(copyResponse.snapshot.motionQuery.authoring.revision, 2U);
-        EXPECT_EQ(copyResponse.snapshot.revision, dispatchResponse.snapshot.revision + 1U);
-
-        EditorBridgeRequestUVE pasteRequest{};
-        pasteRequest.protocolVersion = kEditorBridgeProtocolVersionUVE;
-        pasteRequest.requestId = 504U;
-        pasteRequest.expectedRevision = copyResponse.snapshot.revision;
-        pasteRequest.kind = EditorBridgeRequestKindUVE::DispatchMotionQueryCommand;
-        Plugins::Editor::MotionQueryEditorCommandUVE pasteCommand;
-        pasteCommand.requestId = 504U;
-        pasteCommand.expectedRevision = copyResponse.snapshot.motionQuery.authoring.revision;
-        pasteCommand.kind = Plugins::Editor::MotionQueryEditorCommandKindUVE::PasteDatabase;
-        pasteCommand.pasteTarget = Plugins::Editor::MotionQueryEditorPasteTargetUVE{
-            Asset::ResourceHandleUVE{Asset::AssetGuidUVE{88U}, 1U},
-            "Pasted Motion Database",
-            Core::MotionQueryDatabaseContextUVE{"bridge-db-copy", 2U}};
-        pasteRequest.motionQueryCommand = pasteCommand;
-        const EditorBridgeResponseUVE pasteResponse = bridge.DispatchUVE(pasteRequest);
-        ASSERT_TRUE(pasteResponse.applied) << pasteResponse.message;
-        ASSERT_EQ(pasteResponse.snapshot.motionQuery.authoring.databases.size(), 2U);
-        EXPECT_EQ(pasteResponse.snapshot.motionQuery.authoring.databases.back().displayName,
-                  "Pasted Motion Database");
-        EXPECT_EQ(pasteResponse.snapshot.motionQuery.authoring.revision, 3U);
-        EXPECT_EQ(pasteResponse.snapshot.revision, copyResponse.snapshot.revision + 1U);
-
-        EditorBridgeRequestUVE debugRequest{};
-        debugRequest.protocolVersion = kEditorBridgeProtocolVersionUVE;
-        debugRequest.requestId = 503U;
-        debugRequest.expectedRevision = pasteResponse.snapshot.revision;
-        debugRequest.kind = EditorBridgeRequestKindUVE::DispatchMotionQueryDebugCommand;
-        Plugins::Editor::MotionQueryLiveDebugCommandUVE attachCommand;
-        attachCommand.requestId = 503U;
-        attachCommand.expectedGeneration = 0U;
-        attachCommand.kind = Plugins::Editor::MotionQueryLiveDebugCommandKindUVE::Attach;
-        attachCommand.database = entry.resource;
-        debugRequest.motionQueryDebugCommand = attachCommand;
-        const EditorBridgeResponseUVE debugResponse = bridge.DispatchUVE(debugRequest);
-        ASSERT_TRUE(debugResponse.applied) << debugResponse.message;
-        EXPECT_TRUE(debugResponse.snapshot.motionQuery.liveDebugActive);
-        EXPECT_EQ(debugResponse.snapshot.motionQuery.liveDebugDatabase, entry.resource);
-        EXPECT_EQ(debugResponse.snapshot.motionQuery.liveDebugGeneration, 1U);
-        EXPECT_EQ(debugResponse.snapshot.revision, pasteResponse.snapshot.revision + 1U);
-
-        Plugins::Editor::MotionQueryTraceReplayFixtureUVE replayFixture;
-        bridge.SetMotionQueryReplayFixtureUVE(replayFixture);
-        const EditorBridgeSnapshotUVE replaySnapshot = bridge.GetSnapshotUVE();
-        EXPECT_TRUE(replaySnapshot.motionQuery.replayComparison.available);
-        EXPECT_EQ(replaySnapshot.motionQuery.replayComparison.code,
-                  static_cast<std::uint8_t>(Plugins::Editor::MotionQueryTraceReplayRegressionCodeUVE::EmptyTrace));
-        EXPECT_FALSE(replaySnapshot.motionQuery.replayComparison.message.empty());
-        bridge.ClearMotionQueryReplayFixtureUVE();
-        EXPECT_FALSE(bridge.GetSnapshotUVE().motionQuery.replayComparison.available);
-
-        Plugins::Editor::MotionQueryTraceReplayFixtureUVE commandFixture;
-        const Plugins::Editor::MotionQueryTraceReplaySerializationResultUVE encodedFixture =
-            Plugins::Editor::SerializeMotionQueryTraceReplayFixtureUVE(commandFixture);
-        ASSERT_TRUE(encodedFixture.IsAcceptedUVE());
-        EditorBridgeRequestUVE loadReplayRequest{};
-        loadReplayRequest.protocolVersion = kEditorBridgeProtocolVersionUVE;
-        loadReplayRequest.requestId = 504U;
-        loadReplayRequest.expectedRevision = bridge.GetSnapshotUVE().revision;
-        loadReplayRequest.kind = EditorBridgeRequestKindUVE::LoadMotionQueryReplayBaseline;
-        loadReplayRequest.motionQueryReplayBaselineName = "bridge-baseline";
-        loadReplayRequest.motionQueryReplayFixturePayload = encodedFixture.payload;
-        const std::size_t historyBeforeLoad = bridge.GetSnapshotUVE().motionQuery.replayComparisonHistory.size();
-        const EditorBridgeResponseUVE loadReplayResponse = bridge.DispatchUVE(loadReplayRequest);
-        ASSERT_TRUE(loadReplayResponse.applied) << loadReplayResponse.message;
-        EXPECT_EQ(loadReplayResponse.code, "bridge.motion_query.replay.baseline.loaded");
-        EXPECT_TRUE(loadReplayResponse.snapshot.motionQuery.replayComparison.available);
-        ASSERT_EQ(loadReplayResponse.snapshot.motionQuery.replayBaselines.entries.size(), 1U);
-        EXPECT_EQ(loadReplayResponse.snapshot.motionQuery.replayBaselines.entries.front().name,
-                  "bridge-baseline");
-        EXPECT_TRUE(loadReplayResponse.snapshot.motionQuery.replayWorkflow.activeBaselineSelected);
-        EXPECT_TRUE(loadReplayResponse.snapshot.motionQuery.replayWorkflow.activeFixtureAvailable);
-        EXPECT_FALSE(loadReplayResponse.snapshot.motionQuery.replayWorkflow.readyForComparison);
-        EXPECT_FALSE(loadReplayResponse.snapshot.motionQuery.replayWorkflow.diagnostic.empty());
-        EXPECT_TRUE(loadReplayResponse.snapshot.motionQuery.replayBatch.available);
-        EXPECT_EQ(loadReplayResponse.snapshot.motionQuery.replayBatch.evaluatedBaselineCount, 1U);
-        ASSERT_EQ(loadReplayResponse.snapshot.motionQuery.replayBatch.results.size(), 1U);
-        EXPECT_EQ(loadReplayResponse.snapshot.motionQuery.replayBatch.results.front().baselineName,
-                  "bridge-baseline");
-        EditorBridgeRequestUVE batchRequest{};
-        batchRequest.protocolVersion = kEditorBridgeProtocolVersionUVE;
-        batchRequest.requestId = 507U;
-        batchRequest.expectedRevision = loadReplayResponse.snapshot.revision;
-        batchRequest.kind = EditorBridgeRequestKindUVE::RunMotionQueryReplayBaselineBatch;
-        const std::size_t batchHistoryBefore = loadReplayResponse.snapshot.motionQuery.replayBatchHistory.size();
-        const std::size_t batchRunsBefore = loadReplayResponse.snapshot.motionQuery.replaySessionFacts.totalBatchRuns;
-        const EditorBridgeResponseUVE batchResponse = bridge.DispatchUVE(batchRequest);
-        EXPECT_FALSE(batchResponse.applied);
-        EXPECT_EQ(batchResponse.code, "bridge.motion_query.replay.baseline.batch.read");
-        EXPECT_EQ(batchResponse.snapshot.revision, loadReplayResponse.snapshot.revision);
-        EXPECT_EQ(batchResponse.snapshot.motionQuery.replayBatch.evaluatedBaselineCount, 1U);
-        ASSERT_EQ(batchResponse.snapshot.motionQuery.replayBatchHistory.size(), batchHistoryBefore + 1U);
-        EXPECT_EQ(batchResponse.snapshot.motionQuery.replayBatchHistory.back().evaluatedBaselineCount, 1U);
-        EXPECT_EQ(batchResponse.snapshot.motionQuery.replaySessionFacts.totalBatchRuns, batchRunsBefore + 1U);
-        ASSERT_EQ(loadReplayResponse.snapshot.motionQuery.replayComparisonHistory.size(), historyBeforeLoad + 1U);
-        EXPECT_EQ(loadReplayResponse.snapshot.motionQuery.replayComparisonHistory.back().baselineName,
-                  "bridge-baseline");
-
-        EditorBridgeRequestUVE staleClearRequest{};
-        staleClearRequest.protocolVersion = kEditorBridgeProtocolVersionUVE;
-        staleClearRequest.requestId = 505U;
-        staleClearRequest.expectedRevision = loadReplayRequest.expectedRevision;
-        staleClearRequest.kind = EditorBridgeRequestKindUVE::ClearMotionQueryReplayBaseline;
-        staleClearRequest.motionQueryReplayBaselineName = "bridge-baseline";
-        EXPECT_EQ(bridge.DispatchUVE(staleClearRequest).code, "bridge.snapshot.stale");
-
-        EditorBridgeRequestUVE clearReplayRequest = staleClearRequest;
-        clearReplayRequest.requestId = 506U;
-        clearReplayRequest.expectedRevision = loadReplayResponse.snapshot.revision;
-        const EditorBridgeResponseUVE clearReplayResponse = bridge.DispatchUVE(clearReplayRequest);
-        ASSERT_TRUE(clearReplayResponse.applied) << clearReplayResponse.message;
-        EXPECT_EQ(clearReplayResponse.code, "bridge.motion_query.replay.baseline.cleared");
-        EXPECT_FALSE(clearReplayResponse.snapshot.motionQuery.replayComparison.available);
-        EXPECT_TRUE(clearReplayResponse.snapshot.motionQuery.replayBaselines.entries.empty());
-        EXPECT_FALSE(clearReplayResponse.snapshot.motionQuery.replayWorkflow.activeBaselineSelected);
-        EXPECT_FALSE(clearReplayResponse.snapshot.motionQuery.replayWorkflow.readyForComparison);
-        EXPECT_TRUE(clearReplayResponse.snapshot.motionQuery.replayBatch.available);
-        EXPECT_EQ(clearReplayResponse.snapshot.motionQuery.replayBatch.evaluatedBaselineCount, 0U);
-        EXPECT_TRUE(clearReplayResponse.snapshot.motionQuery.replayBatch.results.empty());
-        ASSERT_EQ(clearReplayResponse.snapshot.motionQuery.replayComparisonHistory.size(), historyBeforeLoad + 2U);
-        EXPECT_GT(clearReplayResponse.snapshot.motionQuery.replayComparisonHistory.back().sequence,
-                  loadReplayResponse.snapshot.motionQuery.replayComparisonHistory.back().sequence);
-        EXPECT_EQ(clearReplayResponse.snapshot.motionQuery.replayComparisonHistory.back().baselineName,
-                  "bridge-baseline");
-
-        dispatchRequest.requestId = 502U;
-        dispatchRequest.expectedRevision = initial.revision;
-        command.requestId = 502U;
-        command.expectedRevision = 1U;
-        dispatchRequest.motionQueryCommand = command;
-        const EditorBridgeResponseUVE staleBridge = bridge.DispatchUVE(dispatchRequest);
-        EXPECT_FALSE(staleBridge.applied);
-        EXPECT_EQ(staleBridge.code, "bridge.snapshot.stale");
 
         editor.ShutdownUVE();
     }

@@ -16,43 +16,6 @@
 
 namespace UVE::Render {
 
-/// Value-only editor visual facts consumed by the native renderer's optional composite pass.
-/// Coordinates are normalized to the presentation surface; invalid or inverted rectangles disable
-/// their feature instead of requesting undefined GPU work. Thread-safety: main render thread only.
-struct EditorViewportVisualStateUVE final {
-    bool enabled = false;
-    bool environmentPreviewEnabled = true;
-    bool sunPreviewEnabled = true;
-    float viewportMinX = 0.0F;
-    float viewportMinY = 0.0F;
-    float viewportMaxX = 1.0F;
-    float viewportMaxY = 1.0F;
-    bool activeSelectionVisible = false;
-    float selectionMinX = 0.0F;
-    float selectionMinY = 0.0F;
-    float selectionMaxX = 0.0F;
-    float selectionMaxY = 0.0F;
-    std::int32_t activeGizmoAxis = 0;
-    Math::Vector3UVE cameraPosition{0.0F, 0.0F, 0.0F};
-    Math::Vector3UVE cameraForward{0.0F, 0.0F, -1.0F};
-    Math::Vector3UVE cameraRight{1.0F, 0.0F, 0.0F};
-    Math::Vector3UVE cameraUp{0.0F, 1.0F, 0.0F};
-    Math::Vector3UVE gridOrigin{0.0F, 0.0F, 0.0F};
-    float cameraTanHalfFov = 0.57735026F;
-    float gridSpacing = 1.0F;
-    bool orthographic = false;
-    float orthographicScale = 10.0F;
-};
-
-/// One real, GPU-shaded 3D translate-gizmo arrow to draw this frame (GetGizmoArrowGeometryUVE()'s
-/// unit-scale mesh transformed by `worldMatrix`), colored `color`. Editor-owned, per-frame,
-/// value-only - the same "copied facts pushed in via a Set*() call, consumed by the next render"
-/// idiom as EditorViewportVisualStateUVE, not a retained scene object.
-struct GizmoOverlayItemUVE final {
-    Math::Matrix4x4UVE worldMatrix = Math::Matrix4x4UVE::IdentityUVE();
-    Math::Vector3UVE color{1.0F, 1.0F, 1.0F};
-};
-
 /// Phase 2b post-process quality-tier toggles. Both default to enabled, matching this project's
 /// "on unless a low-end tier opts out" precedent already set by shadow mapping; each is checked
 /// independently when Renderer3DUVE builds its per-frame render graph, so disabling one skips that
@@ -90,12 +53,6 @@ struct Renderer3DFrameDiagnosticsUVE final {
     bool mainPassRecorded = false;
     bool toneMappingProgramReady = false;
     bool toneMappingPassRecorded = false;
-    bool editorVisualProgramReady = false;
-    bool editorVisualPassRecorded = false;
-    std::size_t gizmoOverlayItemsSubmitted = 0U;
-    std::size_t gizmoOverlayDrawCallsRecorded = 0U;
-    bool gizmoOverlayProgramReady = false;
-    bool gizmoOverlayPassRecorded = false;
     bool particleItemsTruncated = false;
     bool particleDrawCommandsSubmissionTruncated = false;
     /// True only when SSAO was enabled (PostProcessSettingsUVE), its post-process targets and
@@ -165,21 +122,6 @@ public:
         static_cast<void>(region);
         static_cast<void>(particleRuntime);
         RenderFrameUVE(entityManager, cameraEntity);
-    }
-
-    /// Updates optional copied editor-only visual facts for a later native render frame. The default
-    /// implementation is intentionally a no-op so non-Renderer3D test doubles need not own editor state.
-    virtual void SetEditorViewportVisualStateUVE(const EditorViewportVisualStateUVE& state) {
-        static_cast<void>(state);
-    }
-
-    /// Updates the real 3D translate-gizmo arrows to draw for a later render frame, replacing
-    /// whatever was set for the previous one - this is not an accumulating submission list, it is
-    /// this frame's complete set (an empty span draws nothing). `items` is copied; the caller does
-    /// not need to keep it alive past this call. The default implementation is intentionally a
-    /// no-op so non-Renderer3D test doubles need not own gizmo-overlay state.
-    virtual void SetEditorGizmoOverlayItemsUVE(std::span<const GizmoOverlayItemUVE> items) {
-        static_cast<void>(items);
     }
 
     /// Updates the Phase 2b post-process quality-tier toggles for later render frames. The default

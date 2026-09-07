@@ -16,8 +16,6 @@
 #include "uve/asset/texture_asset_uve.h"
 #include "uve/core/engine_core_uve.h"
 #include "uve/editor/editor_uve.h"
-#include "uve/editor/gizmo_system_uve.h"
-#include "uve/editor/viewport_nav_gizmo_uve.h"
 #include "uve/scene/components/camera_component_uve.h"
 #include "uve/scene/components/collider_component_uve.h"
 #include "uve/scene/components/light_component_uve.h"
@@ -95,9 +93,6 @@ struct EditorUVEAccessUVE final {
 
     static void LoadSessionSettingsUVE(EditorUVE& editor) { editor.LoadSessionSettingsUVE(); }
     [[nodiscard]] static bool SaveSessionSettingsUVE(EditorUVE& editor) { return editor.SaveSessionSettingsUVE(); }
-    static void ApplyFocusViewportPresetUVE(EditorUVE& editor) {
-        editor.ApplyLayoutPresetUVE(EditorUVE::EditorLayoutPresetUVE::FocusViewport);
-    }
     static void ApplyDefaultLayoutPresetUVE(EditorUVE& editor) {
         editor.ApplyLayoutPresetUVE(EditorUVE::EditorLayoutPresetUVE::Default);
     }
@@ -124,48 +119,6 @@ struct EditorUVEAccessUVE final {
     }
     [[nodiscard]] static std::size_t GetMeshThumbnailCacheSizeUVE(const EditorUVE& editor) noexcept {
         return editor.m_meshThumbnailCache.size();
-    }
-
-    [[nodiscard]] static bool ProjectWorldPointUVE(const EditorUVE& editor, const EditorViewportRectUVE& viewportRect,
-                                                   const Math::Vector3UVE& worldPoint,
-                                                   Math::Vector2UVE& outScreenPoint) {
-        return editor.ProjectWorldPointUVE(viewportRect, worldPoint, outScreenPoint);
-    }
-
-    [[nodiscard]] static bool GetGizmoAxisWorldVectorUVE(const EditorUVE& editor, const Scene::EntityUVE entity,
-                                                          const EditorTransformAxisUVE axis,
-                                                          Math::Vector3UVE& outAxis) {
-        return editor.GetGizmoAxisWorldVectorUVE(entity, axis, outAxis);
-    }
-
-    [[nodiscard]] static bool BeginGizmoDragUVE(EditorUVE& editor, const EditorViewportRectUVE& viewportRect,
-                                                 const Math::Vector2UVE pointerPosition) {
-        return editor.BeginGizmoDragUVE(viewportRect, pointerPosition);
-    }
-
-    static void UpdateGizmoDragUVE(EditorUVE& editor, const Math::Vector2UVE pointerPosition) {
-        editor.UpdateGizmoDragUVE(pointerPosition);
-    }
-
-    static void CommitGizmoDragUVE(EditorUVE& editor) { editor.CommitGizmoDragUVE(); }
-
-    [[nodiscard]] static EditorTransformAxisUVE GetGizmoDragAxisUVE(const EditorUVE& editor) noexcept {
-        return editor.m_gizmoDrag.axis;
-    }
-
-    [[nodiscard]] static bool IsGizmoDragHandleKindUVE(const EditorUVE& editor,
-                                                        const int expectedKind) noexcept {
-        return static_cast<int>(editor.m_gizmoDrag.handleKind) == expectedKind;
-    }
-
-    [[nodiscard]] static bool ClickViewportNavigationGizmoUVE(EditorUVE& editor,
-                                                               const EditorViewportRectUVE& viewportRect,
-                                                               const Math::Vector2UVE pointerPosition) {
-        return editor.HandleViewportNavigationGizmoClickUVE(viewportRect, pointerPosition);
-    }
-
-    [[nodiscard]] static float GetViewportYawUVE(const EditorUVE& editor) noexcept {
-        return editor.m_viewportYawRadians;
     }
 
     static void CompileVisualScriptUVE(EditorUVE& editor) { editor.CompileVisualScriptUVE(); }
@@ -210,7 +163,7 @@ struct UnregisteredEditorLifecycleComponentUVE final {
     int value = 0;
 };
 
-TEST(EditorUVETest, InitUVE_CreatesCameraOutsideDocumentRootsAndSupportsHeadlessLifecycle) {
+TEST(EditorUVETest, InitUVE_StartsRunningWithEmptyDocumentRootsAndSupportsHeadlessLifecycle) {
     Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
     engine.Init();
     ASSERT_TRUE(engine.Load());
@@ -220,7 +173,6 @@ TEST(EditorUVETest, InitUVE_CreatesCameraOutsideDocumentRootsAndSupportsHeadless
         editor.InitUVE();
 
         EXPECT_EQ(editor.GetStateUVE(), EditorStateUVE::Running);
-        EXPECT_TRUE(engine.GetServicesUVE().GetEntityManagerUVE().IsAliveUVE(editor.GetViewportCameraUVE()));
         EXPECT_TRUE(editor.GetDocumentRootsUVE().empty());
 
         editor.ShutdownUVE();
@@ -230,7 +182,7 @@ TEST(EditorUVETest, InitUVE_CreatesCameraOutsideDocumentRootsAndSupportsHeadless
     engine.Shutdown();
 }
 
-TEST(EditorUVETest, VisualScriptBranchesAndViewportPreviewAreEditorOnlyAndPersisted) {
+TEST(EditorUVETest, VisualScriptBranchesAreEditorOnlyAndPersisted) {
     const std::filesystem::path scenePath = "uve_editor_tests_script_branches.uvescene";
     const std::filesystem::path scriptPath = scenePath.parent_path() /
                                              (scenePath.stem().string() + ".scripting");
@@ -244,12 +196,6 @@ TEST(EditorUVETest, VisualScriptBranchesAndViewportPreviewAreEditorOnlyAndPersis
         EditorUVE editor(engine.GetServicesUVE(), scenePath);
         editor.InitUVE();
         ASSERT_EQ(editor.GetVisualScriptBranchNamesUVE(), (std::vector<std::string>{"Type 1 Scene"}));
-        EXPECT_TRUE(editor.IsViewportEnvironmentPreviewEnabledUVE());
-        EXPECT_TRUE(editor.IsViewportSunPreviewEnabledUVE());
-        editor.SetViewportEnvironmentPreviewEnabledUVE(false);
-        editor.SetViewportSunPreviewEnabledUVE(false);
-        EXPECT_FALSE(editor.IsViewportEnvironmentPreviewEnabledUVE());
-        EXPECT_FALSE(editor.IsViewportSunPreviewEnabledUVE());
 
         ASSERT_TRUE(editor.GetVisualScriptCanvasUVE().AddNodeTypeUVE("engine.log", {8.0F, 12.0F}).IsAppliedUVE());
         ASSERT_TRUE(editor.CreateVisualScriptBranchUVE("Type 2 Scene"));
@@ -310,52 +256,6 @@ TEST(EditorUVETest, InitUVE_DoesNotCreateAutomaticPreviewLighting) {
         entityManager.ForEachUVE<Scene::PrimitiveMeshComponentUVE>(
             [&meshCount](Scene::EntityUVE, Scene::PrimitiveMeshComponentUVE&) { ++meshCount; });
         EXPECT_EQ(meshCount, 0U);
-
-        editor.ShutdownUVE();
-    }
-
-    engine.Shutdown();
-}
-
-TEST(EditorUVETest, PluginToolGatesUVE_AreEditorOnlyAndDoNotMutateScene) {
-    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
-    engine.Init();
-    ASSERT_TRUE(engine.Load());
-
-    {
-        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_plugin_gates.uvescene");
-        editor.InitUVE();
-        Core::EngineServicesUVE& services = engine.GetServicesUVE();
-        Scene::IEntityManagerUVE& entityManager = services.GetEntityManagerUVE();
-
-        EXPECT_FALSE(editor.IsControlRigPluginEnabledUVE());
-        EXPECT_FALSE(editor.IsMotionQueryPluginEnabledUVE());
-        EXPECT_TRUE(editor.GetDocumentRootsUVE().empty());
-        EXPECT_FALSE(editor.IsSceneDirtyUVE());
-
-        editor.SetControlRigPluginEnabledUVE(true);
-        editor.SetMotionQueryPluginEnabledUVE(true);
-        EXPECT_TRUE(editor.IsControlRigPluginEnabledUVE());
-        EXPECT_TRUE(editor.IsMotionQueryPluginEnabledUVE());
-        EXPECT_TRUE(editor.GetDocumentRootsUVE().empty());
-        EXPECT_FALSE(editor.IsSceneDirtyUVE());
-
-        std::size_t lightCount = 0U;
-        entityManager.ForEachUVE<Scene::LightComponentUVE>(
-            [&lightCount](Scene::EntityUVE, Scene::LightComponentUVE&) { ++lightCount; });
-        EXPECT_EQ(lightCount, 0U);
-        std::size_t meshCount = 0U;
-        entityManager.ForEachUVE<Scene::MeshComponentUVE>(
-            [&meshCount](Scene::EntityUVE, Scene::MeshComponentUVE&) { ++meshCount; });
-        entityManager.ForEachUVE<Scene::PrimitiveMeshComponentUVE>(
-            [&meshCount](Scene::EntityUVE, Scene::PrimitiveMeshComponentUVE&) { ++meshCount; });
-        EXPECT_EQ(meshCount, 0U);
-
-        editor.SetControlRigPluginEnabledUVE(false);
-        editor.SetMotionQueryPluginEnabledUVE(false);
-        EXPECT_FALSE(editor.IsControlRigPluginEnabledUVE());
-        EXPECT_FALSE(editor.IsMotionQueryPluginEnabledUVE());
-        EXPECT_FALSE(editor.IsSceneDirtyUVE());
 
         editor.ShutdownUVE();
     }
@@ -1002,8 +902,6 @@ TEST(EditorUVETest, MultiSelectionUVE_ToggleMaintainsOrderActiveFallbackAndSingl
         EXPECT_EQ(editor.GetSelectedEntityUVE(), Scene::kInvalidEntityUVE);
         EXPECT_FALSE(editor.HasSingleDocumentSelectionUVE());
 
-        editor.ToggleEntitySelectionUVE(editor.GetViewportCameraUVE());
-        EXPECT_TRUE(editor.GetSelectedEntitiesUVE().empty());
         editor.ShutdownUVE();
     }
 
@@ -1134,7 +1032,6 @@ TEST(EditorUVETest, CreateDocumentEntityUVE_CreatesSelectedDirtyRootArchetypes) 
         EXPECT_NE(std::find(roots.begin(), roots.end(), cube), roots.end());
         EXPECT_NE(std::find(roots.begin(), roots.end(), sphere), roots.end());
         EXPECT_NE(std::find(roots.begin(), roots.end(), plane), roots.end());
-        EXPECT_EQ(std::find(roots.begin(), roots.end(), editor.GetViewportCameraUVE()), roots.end());
 
         editor.ShutdownUVE();
     }
@@ -1209,7 +1106,7 @@ TEST(EditorUVETest, CreateDocumentEntityUVE_RejectsInvalidKindsAndNonRunningStat
     engine.Shutdown();
 }
 
-TEST(EditorUVETest, CreateDocumentEntityUVE_AllocatesUniqueNamesAndKeepsEditorCameraOutOfNamespace) {
+TEST(EditorUVETest, CreateDocumentEntityUVE_AllocatesUniqueNames) {
     Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
     engine.Init();
     ASSERT_TRUE(engine.Load());
@@ -1225,7 +1122,6 @@ TEST(EditorUVETest, CreateDocumentEntityUVE_AllocatesUniqueNamesAndKeepsEditorCa
         ASSERT_TRUE(entityManager.HasComponentUVE<Scene::NameComponentUVE>(secondCamera));
         EXPECT_EQ(entityManager.GetComponentUVE<Scene::NameComponentUVE>(firstCamera).name, "Camera");
         EXPECT_EQ(entityManager.GetComponentUVE<Scene::NameComponentUVE>(secondCamera).name, "Camera 2");
-        EXPECT_FALSE(entityManager.HasComponentUVE<Scene::NameComponentUVE>(editor.GetViewportCameraUVE()));
 
         editor.ShutdownUVE();
     }
@@ -1475,7 +1371,6 @@ TEST(EditorUVETest, DuplicateSelectedEntityUVE_RootCreatesNamedSiblingWithCopied
         ASSERT_EQ(roots.size(), 2U);
         EXPECT_NE(std::find(roots.begin(), roots.end(), source), roots.end());
         EXPECT_NE(std::find(roots.begin(), roots.end(), duplicate), roots.end());
-        EXPECT_EQ(std::find(roots.begin(), roots.end(), editor.GetViewportCameraUVE()), roots.end());
 
         editor.ShutdownUVE();
     }
@@ -1704,7 +1599,7 @@ TEST(EditorUVETest, EditorHistoryUVE_NewMutationAfterDuplicateUndoInvalidatesRed
     engine.Shutdown();
 }
 
-TEST(EditorUVETest, EntityLifecycleUVE_RejectsUnselectedCameraStaleNonRunningAndUnsupportedCapture) {
+TEST(EditorUVETest, EntityLifecycleUVE_RejectsUnselectedStaleNonRunningAndUnsupportedCapture) {
     Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
     engine.Init();
     ASSERT_TRUE(engine.Load());
@@ -1714,10 +1609,6 @@ TEST(EditorUVETest, EntityLifecycleUVE_RejectsUnselectedCameraStaleNonRunningAnd
         EXPECT_EQ(editor.DuplicateSelectedEntityUVE(), Scene::kInvalidEntityUVE);
         EXPECT_FALSE(editor.DeleteSelectedEntityUVE());
         editor.InitUVE();
-        EXPECT_EQ(editor.DuplicateSelectedEntityUVE(), Scene::kInvalidEntityUVE);
-        EXPECT_FALSE(editor.DeleteSelectedEntityUVE());
-        editor.SelectEntityUVE(editor.GetViewportCameraUVE());
-        EXPECT_EQ(editor.GetSelectedEntityUVE(), Scene::kInvalidEntityUVE);
         EXPECT_EQ(editor.DuplicateSelectedEntityUVE(), Scene::kInvalidEntityUVE);
         EXPECT_FALSE(editor.DeleteSelectedEntityUVE());
 
@@ -1865,7 +1756,7 @@ TEST(EditorUVETest, EditorHistoryUVE_ReparentUndoRedoRestoresParentsSelectionAnd
     engine.Shutdown();
 }
 
-TEST(EditorUVETest, ReparentSelectedEntityUVE_RejectsCyclesNoOpCameraStaleAndNonRunningStates) {
+TEST(EditorUVETest, ReparentSelectedEntityUVE_RejectsCyclesNoOpNonDocumentStaleAndNonRunningStates) {
     Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
     engine.Init();
     ASSERT_TRUE(engine.Load());
@@ -1887,7 +1778,8 @@ TEST(EditorUVETest, ReparentSelectedEntityUVE_RejectsCyclesNoOpCameraStaleAndNon
         EXPECT_FALSE(editor.ReparentSelectedEntityUVE(Scene::kInvalidEntityUVE));
         editor.SelectEntityUVE(child);
         EXPECT_FALSE(editor.ReparentSelectedEntityUVE(root));
-        editor.SelectEntityUVE(editor.GetViewportCameraUVE());
+        const Scene::EntityUVE nonDocumentEntity = entityManager.CreateEntityUVE();
+        editor.SelectEntityUVE(nonDocumentEntity);
         EXPECT_FALSE(editor.ReparentSelectedEntityUVE(root));
 
         const Scene::EntityUVE staleTarget = entityManager.CreateEntityUVE();
@@ -2068,7 +1960,6 @@ TEST(EditorUVETest, SaveThenLoadScene_RoundTripsDocumentRootsWithoutSerializingE
 
         const std::vector<Scene::EntityUVE> loadedRoots = editor.GetDocumentRootsUVE();
         ASSERT_EQ(loadedRoots.size(), 1U);
-        EXPECT_NE(loadedRoots.front(), editor.GetViewportCameraUVE());
         const Scene::TransformComponentUVE& loadedTransform =
             services.GetEntityManagerUVE().GetComponentUVE<Scene::TransformComponentUVE>(loadedRoots.front());
         EXPECT_EQ(loadedTransform.localPosition, rootTransform.localPosition);
@@ -2082,187 +1973,6 @@ TEST(EditorUVETest, SaveThenLoadScene_RoundTripsDocumentRootsWithoutSerializingE
     engine.Shutdown();
     std::filesystem::remove(scenePath);
     std::filesystem::remove(scenePath.string() + ".editor-recovery");
-}
-
-TEST(EditorUVETest, ViewportNavigationUVE_FocusOrbitPanZoomPreserveDocumentAndHistoryState) {
-    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
-    engine.Init();
-    ASSERT_TRUE(engine.Load());
-
-    {
-        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_navigation.uvescene");
-        editor.InitUVE();
-        Core::EngineServicesUVE& services = engine.GetServicesUVE();
-        Scene::IEntityManagerUVE& entityManager = services.GetEntityManagerUVE();
-        const Scene::EntityUVE root = entityManager.CreateEntityUVE();
-        Scene::TransformComponentUVE rootTransform{};
-        rootTransform.localPosition = Math::Vector3UVE{3.0F, 2.0F, -4.0F};
-        AttachRootUVE(engine, root, rootTransform);
-        services.GetSceneGraphUVE().UpdateUVE(entityManager);
-        editor.SelectEntityUVE(root);
-
-        const Scene::TransformComponentUVE documentBefore =
-            entityManager.GetComponentUVE<Scene::TransformComponentUVE>(root);
-        const Scene::TransformComponentUVE cameraBefore =
-            entityManager.GetComponentUVE<Scene::TransformComponentUVE>(editor.GetViewportCameraUVE());
-        ASSERT_TRUE(editor.FocusSelectedEntityUVE());
-        EXPECT_EQ(editor.GetViewportFocusPointUVE(), rootTransform.localPosition);
-        EXPECT_EQ(editor.GetSelectedEntityUVE(), root);
-        EXPECT_FALSE(editor.IsSceneDirtyUVE());
-        EXPECT_FALSE(editor.CanUndoUVE());
-        EXPECT_FALSE(editor.CanRedoUVE());
-
-        ASSERT_TRUE(editor.OrbitViewportUVE(0.5F, 0.25F));
-        const Scene::TransformComponentUVE cameraAfterOrbit =
-            entityManager.GetComponentUVE<Scene::TransformComponentUVE>(editor.GetViewportCameraUVE());
-        EXPECT_NE(cameraAfterOrbit.localPosition, cameraBefore.localPosition);
-        EXPECT_EQ(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(root).localPosition,
-                  documentBefore.localPosition);
-        EXPECT_FALSE(editor.IsSceneDirtyUVE());
-        EXPECT_FALSE(editor.CanUndoUVE());
-
-        const EditorViewportRectUVE viewportRect{
-            Math::Vector2UVE{0.0F, 0.0F}, Math::Vector2UVE{800.0F, 600.0F}};
-        const Math::Vector3UVE focusBeforePan = editor.GetViewportFocusPointUVE();
-        ASSERT_TRUE(editor.PanViewportUVE(Math::Vector2UVE{120.0F, -40.0F}, viewportRect));
-        EXPECT_NE(editor.GetViewportFocusPointUVE(), focusBeforePan);
-        const float distanceBeforeZoom = editor.GetViewportDistanceUVE();
-        ASSERT_TRUE(editor.ZoomViewportUVE(2.0F));
-        EXPECT_LT(editor.GetViewportDistanceUVE(), distanceBeforeZoom);
-        EXPECT_FALSE(editor.IsSceneDirtyUVE());
-        EXPECT_FALSE(editor.CanUndoUVE());
-        EXPECT_EQ(editor.GetViewportNavigationModeUVE(), EditorViewportNavigationModeUVE::None);
-
-        editor.ShutdownUVE();
-    }
-
-    engine.Shutdown();
-}
-
-TEST(EditorUVETest, ViewportNavigationUVE_ValidatesSelectionInputAndDistanceLimits) {
-    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
-    engine.Init();
-    ASSERT_TRUE(engine.Load());
-
-    {
-        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_navigation_invalid.uvescene");
-        EXPECT_FALSE(editor.FocusSelectedEntityUVE());
-        EXPECT_FALSE(editor.OrbitViewportUVE(0.0F, 0.0F));
-        editor.InitUVE();
-        const EditorViewportRectUVE validViewport{
-            Math::Vector2UVE{0.0F, 0.0F}, Math::Vector2UVE{800.0F, 600.0F}};
-        EXPECT_FALSE(editor.FocusSelectedEntityUVE());
-        EXPECT_FALSE(editor.OrbitViewportUVE(std::numeric_limits<float>::infinity(), 0.0F));
-        EXPECT_FALSE(editor.PanViewportUVE(Math::Vector2UVE{0.0F, 1.0F},
-                                           EditorViewportRectUVE{Math::Vector2UVE{}, Math::Vector2UVE{1.0F, 1.0F}}));
-        EXPECT_FALSE(editor.ZoomViewportUVE(std::numeric_limits<float>::quiet_NaN()));
-
-        ASSERT_TRUE(editor.ZoomViewportUVE(100.0F));
-        EXPECT_GE(editor.GetViewportDistanceUVE(), 0.5F);
-        EXPECT_LE(editor.GetViewportDistanceUVE(), 500.0F);
-        EXPECT_FALSE(editor.ZoomViewportUVE(100.0F));
-        ASSERT_TRUE(editor.ZoomViewportUVE(-100.0F));
-        EXPECT_GE(editor.GetViewportDistanceUVE(), 0.5F);
-        EXPECT_LE(editor.GetViewportDistanceUVE(), 500.0F);
-        EXPECT_FALSE(editor.ZoomViewportUVE(-100.0F));
-        EXPECT_TRUE(editor.PanViewportUVE(Math::Vector2UVE{0.0F, 0.0F}, validViewport));
-
-        editor.ShutdownUVE();
-        EXPECT_FALSE(editor.OrbitViewportUVE(0.1F, 0.1F));
-        EXPECT_FALSE(editor.ZoomViewportUVE(1.0F));
-    }
-
-    engine.Shutdown();
-}
-
-TEST(EditorUVETest, ViewportNavigationUVE_DoesNotInterfereWithDocumentHistory) {
-    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
-    engine.Init();
-    ASSERT_TRUE(engine.Load());
-
-    {
-        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_navigation_history.uvescene");
-        editor.InitUVE();
-        Scene::IEntityManagerUVE& entityManager = engine.GetServicesUVE().GetEntityManagerUVE();
-        const Scene::EntityUVE root = entityManager.CreateEntityUVE();
-        AttachRootUVE(engine, root, Scene::TransformComponentUVE{});
-        editor.SelectEntityUVE(root);
-
-        Scene::TransformComponentUVE edited{};
-        edited.localPosition = Math::Vector3UVE{2.0F, 0.0F, 0.0F};
-        ASSERT_TRUE(editor.SetSelectedLocalTransformUVE(edited));
-        ASSERT_TRUE(editor.CanUndoUVE());
-        ASSERT_TRUE(editor.OrbitViewportUVE(0.3F, -0.2F));
-        ASSERT_TRUE(editor.ZoomViewportUVE(1.0F));
-        EXPECT_TRUE(editor.CanUndoUVE());
-        EXPECT_FALSE(editor.CanRedoUVE());
-        ASSERT_TRUE(editor.UndoUVE());
-        EXPECT_EQ(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(root).localPosition,
-                  Math::Vector3UVE{});
-        EXPECT_FALSE(editor.IsSceneDirtyUVE());
-
-        editor.ShutdownUVE();
-    }
-
-    engine.Shutdown();
-}
-
-TEST(EditorUVETest, ViewportRayAndColliderPicking_SelectClosestDocumentEntityAndClearOnMiss) {
-    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
-    engine.Init();
-    ASSERT_TRUE(engine.Load());
-
-    {
-        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_picking.uvescene");
-        editor.InitUVE();
-        Core::EngineServicesUVE& services = engine.GetServicesUVE();
-        Scene::IEntityManagerUVE& entityManager = services.GetEntityManagerUVE();
-
-        const Scene::EntityUVE nearEntity = entityManager.CreateEntityUVE();
-        Scene::TransformComponentUVE nearTransform{};
-        nearTransform.localPosition = Math::Vector3UVE{0.0F, 1.5F, 2.0F};
-        AttachRootUVE(engine, nearEntity, nearTransform);
-        entityManager.AddComponentUVE<Scene::ColliderComponentUVE>(nearEntity);
-
-        const Scene::EntityUVE farEntity = entityManager.CreateEntityUVE();
-        Scene::TransformComponentUVE farTransform{};
-        farTransform.localPosition = Math::Vector3UVE{0.0F, 1.5F, -2.0F};
-        AttachRootUVE(engine, farEntity, farTransform);
-        entityManager.AddComponentUVE<Scene::ColliderComponentUVE>(farEntity);
-        services.GetSceneGraphUVE().UpdateUVE(entityManager);
-
-        const EditorViewportRectUVE viewportRect{
-            Math::Vector2UVE{0.0F, 0.0F}, Math::Vector2UVE{800.0F, 600.0F}};
-        const std::optional<Math::RayUVE> centerRay =
-            editor.MakeViewportRayUVE(viewportRect, Math::Vector2UVE{400.0F, 300.0F});
-        ASSERT_TRUE(centerRay.has_value());
-        EXPECT_NEAR(centerRay->origin.x, 0.0F, 0.0001F);
-        EXPECT_NEAR(centerRay->origin.y, 1.5F, 0.0001F);
-        EXPECT_NEAR(centerRay->origin.z, 6.0F, 0.0001F);
-        EXPECT_NEAR(centerRay->direction.x, 0.0F, 0.0001F);
-        EXPECT_NEAR(centerRay->direction.y, 0.0F, 0.0001F);
-        EXPECT_NEAR(centerRay->direction.z, -1.0F, 0.0001F);
-        EXPECT_FALSE(editor.MakeViewportRayUVE(viewportRect, Math::Vector2UVE{-1.0F, 300.0F}).has_value());
-
-        EXPECT_TRUE(editor.PickViewportUVE(viewportRect, Math::Vector2UVE{400.0F, 300.0F}));
-        EXPECT_EQ(editor.GetSelectedEntityUVE(), nearEntity);
-        EXPECT_FALSE(editor.PickViewportUVE(viewportRect, Math::Vector2UVE{0.0F, 0.0F}));
-        EXPECT_EQ(editor.GetSelectedEntityUVE(), Scene::kInvalidEntityUVE);
-
-        editor.SelectEntityUVE(farEntity);
-        EXPECT_TRUE(editor.PickViewportUVE(viewportRect, Math::Vector2UVE{400.0F, 300.0F}, true));
-        EXPECT_EQ(editor.GetSelectedEntitiesUVE(), (std::vector<Scene::EntityUVE>{farEntity, nearEntity}));
-        EXPECT_EQ(editor.GetSelectedEntityUVE(), nearEntity);
-        EXPECT_FALSE(editor.PickViewportUVE(viewportRect, Math::Vector2UVE{0.0F, 0.0F}, true));
-        EXPECT_EQ(editor.GetSelectedEntitiesUVE(), (std::vector<Scene::EntityUVE>{farEntity, nearEntity}));
-        EXPECT_TRUE(editor.PickViewportUVE(viewportRect, Math::Vector2UVE{400.0F, 300.0F}, true));
-        EXPECT_EQ(editor.GetSelectedEntitiesUVE(), std::vector<Scene::EntityUVE>{farEntity});
-        EXPECT_EQ(editor.GetSelectedEntityUVE(), farEntity);
-
-        editor.ShutdownUVE();
-    }
-
-    engine.Shutdown();
 }
 
 TEST(EditorUVETest, TranslateSelectedAlongAxis_UpdatesLocalTransformAndConvertsParentScale) {
@@ -2329,9 +2039,6 @@ TEST(EditorUVETest, RotateSelectedAroundWorldAxis_RotatesRootPreservesOtherLocal
         AttachRootUVE(engine, entity, initial);
 
         editor.SelectEntityUVE(entity);
-        EXPECT_EQ(editor.GetGizmoModeUVE(), EditorGizmoModeUVE::Translate);
-        editor.SetGizmoModeUVE(EditorGizmoModeUVE::Rotate);
-        EXPECT_EQ(editor.GetGizmoModeUVE(), EditorGizmoModeUVE::Rotate);
         ASSERT_TRUE(editor.RotateSelectedAroundWorldAxisUVE(EditorTransformAxisUVE::Z,
                                                             std::numbers::pi_v<float> * 0.5F));
         const Scene::TransformComponentUVE& rotated =
@@ -2447,370 +2154,6 @@ TEST(EditorUVETest, RotateSelectedAroundWorldAxis_RejectsInvalidOrUnsafeStateWit
     engine.Shutdown();
 }
 
-TEST(EditorUVETest, TransformGizmoSixDof_AppliesAllTranslationAndRotationAxesAsAtomicHistoryEntries) {
-    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
-    engine.Init();
-    ASSERT_TRUE(engine.Load());
-
-    {
-        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_gizmo_six_dof.uvescene");
-        editor.InitUVE();
-        Core::EngineServicesUVE& services = engine.GetServicesUVE();
-        Scene::IEntityManagerUVE& entityManager = services.GetEntityManagerUVE();
-        const Scene::EntityUVE entity = entityManager.CreateEntityUVE();
-        Scene::TransformComponentUVE initial{};
-        initial.localPosition = Math::Vector3UVE{1.0F, 2.0F, 3.0F};
-        initial.localScale = Math::Vector3UVE{2.0F, 3.0F, 4.0F};
-        AttachRootUVE(engine, entity, initial);
-        editor.SelectEntityUVE(entity);
-
-        ASSERT_TRUE(editor.TranslateSelectedAlongAxisUVE(EditorTransformAxisUVE::X, 0.5F));
-        ASSERT_TRUE(editor.TranslateSelectedAlongAxisUVE(EditorTransformAxisUVE::Y, -0.25F));
-        ASSERT_TRUE(editor.TranslateSelectedAlongAxisUVE(EditorTransformAxisUVE::Z, 0.75F));
-        const Scene::TransformComponentUVE translated =
-            entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity);
-        EXPECT_NEAR(translated.localPosition.x, 1.5F, 0.0001F);
-        EXPECT_NEAR(translated.localPosition.y, 1.75F, 0.0001F);
-        EXPECT_NEAR(translated.localPosition.z, 3.75F, 0.0001F);
-        EXPECT_EQ(translated.localScale, initial.localScale);
-        EXPECT_EQ(translated.localRotation, initial.localRotation);
-
-        const auto quaternionChanged = [](const Math::QuaternionUVE& before,
-                                           const Math::QuaternionUVE& after) {
-            return std::abs(before.x - after.x) > 0.0001F || std::abs(before.y - after.y) > 0.0001F ||
-                   std::abs(before.z - after.z) > 0.0001F || std::abs(before.w - after.w) > 0.0001F;
-        };
-        const Math::QuaternionUVE rotationBefore = translated.localRotation;
-        const float angle = std::numbers::pi_v<float> * 0.25F;
-        ASSERT_TRUE(editor.RotateSelectedAroundWorldAxisUVE(EditorTransformAxisUVE::X, angle));
-        const Math::QuaternionUVE rotationAfterX =
-            entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity).localRotation;
-        EXPECT_TRUE(quaternionChanged(rotationBefore, rotationAfterX));
-        ASSERT_TRUE(editor.RotateSelectedAroundWorldAxisUVE(EditorTransformAxisUVE::Y, angle));
-        const Math::QuaternionUVE rotationAfterY =
-            entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity).localRotation;
-        EXPECT_TRUE(quaternionChanged(rotationAfterX, rotationAfterY));
-        ASSERT_TRUE(editor.RotateSelectedAroundWorldAxisUVE(EditorTransformAxisUVE::Z, angle));
-        const Math::QuaternionUVE rotationAfterZ =
-            entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity).localRotation;
-        EXPECT_TRUE(quaternionChanged(rotationAfterY, rotationAfterZ));
-
-        const Scene::TransformComponentUVE afterAllSix =
-            entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity);
-        EXPECT_EQ(afterAllSix.localPosition, translated.localPosition);
-        EXPECT_EQ(afterAllSix.localScale, initial.localScale);
-        EXPECT_EQ(editor.GetSelectedEntitiesUVE().size(), 1U);
-
-        ASSERT_TRUE(editor.UndoUVE());
-        ASSERT_TRUE(editor.UndoUVE());
-        ASSERT_TRUE(editor.UndoUVE());
-        EXPECT_EQ(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity).localRotation,
-                  rotationBefore);
-        ASSERT_TRUE(editor.RedoUVE());
-        ASSERT_TRUE(editor.RedoUVE());
-        ASSERT_TRUE(editor.RedoUVE());
-        EXPECT_EQ(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity).localRotation,
-                  rotationAfterZ);
-        EXPECT_EQ(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity).localPosition,
-                  translated.localPosition);
-
-        editor.ShutdownUVE();
-    }
-    engine.Shutdown();
-}
-
-TEST(EditorUVETest, GizmoDragSixDof_HitTestsAndCommitsEveryTranslationAndRotationAxis) {
-    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
-    engine.Init();
-    ASSERT_TRUE(engine.Load());
-
-    {
-        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_gizmo_drag_six_dof.uvescene");
-        editor.InitUVE();
-        Core::EngineServicesUVE& services = engine.GetServicesUVE();
-        Scene::IEntityManagerUVE& entityManager = services.GetEntityManagerUVE();
-        const Scene::EntityUVE entity = entityManager.CreateEntityUVE();
-        AttachRootUVE(engine, entity, Scene::TransformComponentUVE{});
-        services.GetSceneGraphUVE().UpdateUVE(entityManager);
-        editor.SelectEntityUVE(entity);
-        ASSERT_TRUE(editor.OrbitViewportUVE(0.37F, 0.18F));
-        services.GetSceneGraphUVE().UpdateUVE(entityManager);
-        const EditorViewportRectUVE viewportRect{{0.0F, 0.0F}, {1024.0F, 768.0F}};
-        const std::array<EditorTransformAxisUVE, 3> axes{
-            EditorTransformAxisUVE::X, EditorTransformAxisUVE::Y, EditorTransformAxisUVE::Z};
-
-        for (const EditorTransformAxisUVE axis : axes) {
-            editor.SetGizmoModeUVE(EditorGizmoModeUVE::Translate);
-            const Scene::WorldTransformComponentUVE& world =
-                entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(entity);
-            Math::Vector2UVE center{};
-            Math::Vector3UVE worldAxis{};
-            ASSERT_TRUE(EditorUVEAccessUVE::ProjectWorldPointUVE(editor, viewportRect, world.worldPosition, center));
-            ASSERT_TRUE(EditorUVEAccessUVE::GetGizmoAxisWorldVectorUVE(editor, entity, axis, worldAxis));
-            Math::Vector2UVE endpoint{};
-            ASSERT_TRUE(EditorUVEAccessUVE::ProjectWorldPointUVE(
-                editor, viewportRect, world.worldPosition + worldAxis * 1.25F, endpoint));
-            ASSERT_TRUE(EditorUVEAccessUVE::BeginGizmoDragUVE(editor, viewportRect, endpoint))
-                << "axis=" << static_cast<int>(axis) << " center=(" << center.x << "," << center.y
-                << ") endpoint=(" << endpoint.x << "," << endpoint.y << ")";
-            EXPECT_EQ(EditorUVEAccessUVE::GetGizmoDragAxisUVE(editor), axis);
-            const Math::Vector2UVE screenDirection{endpoint.x - center.x, endpoint.y - center.y};
-            const float screenLength = std::sqrt((screenDirection.x * screenDirection.x) +
-                                                 (screenDirection.y * screenDirection.y));
-            ASSERT_GT(screenLength, 1.0F);
-            const Scene::TransformComponentUVE before =
-                entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity);
-            const Math::Vector2UVE movedPointer{
-                endpoint.x + (screenDirection.x * 10.0F / screenLength),
-                endpoint.y + (screenDirection.y * 10.0F / screenLength)};
-            EditorUVEAccessUVE::UpdateGizmoDragUVE(editor, movedPointer);
-            EditorUVEAccessUVE::CommitGizmoDragUVE(editor);
-            const Scene::TransformComponentUVE after =
-                entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity);
-            EXPECT_NE(after.localPosition, before.localPosition);
-            EXPECT_EQ(after.localRotation, before.localRotation);
-            EXPECT_EQ(after.localScale, before.localScale);
-            ASSERT_TRUE(editor.UndoUVE());
-            const Scene::TransformComponentUVE restored =
-                entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity);
-            EXPECT_EQ(restored.localPosition, before.localPosition);
-            EXPECT_EQ(restored.localRotation, before.localRotation);
-            EXPECT_EQ(restored.localScale, before.localScale);
-            services.GetSceneGraphUVE().UpdateUVE(entityManager);
-        }
-
-        const auto ringBasis = [](const EditorTransformAxisUVE axis) {
-            switch (axis) {
-                case EditorTransformAxisUVE::X:
-                    return std::array<Math::Vector3UVE, 2>{Math::Vector3UVE{0.0F, 1.0F, 0.0F},
-                                                           Math::Vector3UVE{0.0F, 0.0F, 1.0F}};
-                case EditorTransformAxisUVE::Y:
-                    return std::array<Math::Vector3UVE, 2>{Math::Vector3UVE{1.0F, 0.0F, 0.0F},
-                                                           Math::Vector3UVE{0.0F, 0.0F, 1.0F}};
-                case EditorTransformAxisUVE::Z:
-                    return std::array<Math::Vector3UVE, 2>{Math::Vector3UVE{1.0F, 0.0F, 0.0F},
-                                                           Math::Vector3UVE{0.0F, 1.0F, 0.0F}};
-                case EditorTransformAxisUVE::None:
-                    return std::array<Math::Vector3UVE, 2>{Math::Vector3UVE{}, Math::Vector3UVE{}};
-            }
-            return std::array<Math::Vector3UVE, 2>{Math::Vector3UVE{}, Math::Vector3UVE{}};
-        };
-        const auto quaternionChanged = [](const Math::QuaternionUVE& before,
-                                           const Math::QuaternionUVE& after) {
-            return std::abs(before.x - after.x) > 0.0001F || std::abs(before.y - after.y) > 0.0001F ||
-                   std::abs(before.z - after.z) > 0.0001F || std::abs(before.w - after.w) > 0.0001F;
-        };
-        for (const EditorTransformAxisUVE axis : axes) {
-            editor.SetGizmoModeUVE(EditorGizmoModeUVE::Rotate);
-            const Scene::WorldTransformComponentUVE& world =
-                entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(entity);
-            Math::Vector2UVE center{};
-            ASSERT_TRUE(EditorUVEAccessUVE::ProjectWorldPointUVE(editor, viewportRect, world.worldPosition, center));
-            const auto basis = ringBasis(axis);
-            const float startTurn = 0.37F;
-            Math::Vector2UVE ringStart{};
-            ASSERT_TRUE(EditorUVEAccessUVE::ProjectWorldPointUVE(
-                editor, viewportRect,
-                world.worldPosition + (basis[0] * (std::cos(startTurn) * 1.25F)) +
-                    (basis[1] * (std::sin(startTurn) * 1.25F)),
-                ringStart));
-            ASSERT_TRUE(EditorUVEAccessUVE::BeginGizmoDragUVE(editor, viewportRect, ringStart));
-            EXPECT_EQ(EditorUVEAccessUVE::GetGizmoDragAxisUVE(editor), axis);
-            const float turn = startTurn + 0.5F;
-            const Math::Vector3UVE ringTarget =
-                world.worldPosition + (basis[0] * (std::cos(turn) * 1.25F)) +
-                (basis[1] * (std::sin(turn) * 1.25F));
-            Math::Vector2UVE targetPointer{};
-            ASSERT_TRUE(EditorUVEAccessUVE::ProjectWorldPointUVE(editor, viewportRect, ringTarget, targetPointer));
-            const Math::QuaternionUVE before =
-                entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity).localRotation;
-            EditorUVEAccessUVE::UpdateGizmoDragUVE(editor, targetPointer);
-            EditorUVEAccessUVE::CommitGizmoDragUVE(editor);
-            const Math::QuaternionUVE after =
-                entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity).localRotation;
-            EXPECT_TRUE(quaternionChanged(before, after));
-            ASSERT_TRUE(editor.UndoUVE());
-            EXPECT_EQ(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity).localRotation, before);
-            services.GetSceneGraphUVE().UpdateUVE(entityManager);
-        }
-
-        for (const EditorTransformAxisUVE axis : axes) {
-            editor.SetGizmoModeUVE(EditorGizmoModeUVE::Scale);
-            const Scene::WorldTransformComponentUVE& world =
-                entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(entity);
-            Math::Vector2UVE center{};
-            ASSERT_TRUE(EditorUVEAccessUVE::ProjectWorldPointUVE(editor, viewportRect, world.worldPosition, center));
-            Math::Vector2UVE endpoint{};
-            Math::Vector3UVE worldAxis{};
-            ASSERT_TRUE(EditorUVEAccessUVE::GetGizmoAxisWorldVectorUVE(editor, entity, axis, worldAxis));
-            ASSERT_TRUE(EditorUVEAccessUVE::ProjectWorldPointUVE(
-                editor, viewportRect, world.worldPosition + worldAxis * 1.25F, endpoint));
-            ASSERT_TRUE(EditorUVEAccessUVE::BeginGizmoDragUVE(editor, viewportRect, endpoint));
-            EXPECT_EQ(EditorUVEAccessUVE::GetGizmoDragAxisUVE(editor), axis);
-            const Math::Vector2UVE screenDirection{endpoint.x - center.x, endpoint.y - center.y};
-            const float screenLength = std::sqrt((screenDirection.x * screenDirection.x) +
-                                                 (screenDirection.y * screenDirection.y));
-            ASSERT_GT(screenLength, 1.0F);
-            const Scene::TransformComponentUVE before =
-                entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity);
-            const Math::Vector2UVE movedPointer{
-                endpoint.x + (screenDirection.x * 10.0F / screenLength),
-                endpoint.y + (screenDirection.y * 10.0F / screenLength)};
-            EditorUVEAccessUVE::UpdateGizmoDragUVE(editor, movedPointer);
-            EditorUVEAccessUVE::CommitGizmoDragUVE(editor);
-            const Scene::TransformComponentUVE after =
-                entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity);
-            const float beforeScale = axis == EditorTransformAxisUVE::X
-                                           ? before.localScale.x
-                                           : (axis == EditorTransformAxisUVE::Y ? before.localScale.y : before.localScale.z);
-            const float afterScale = axis == EditorTransformAxisUVE::X
-                                          ? after.localScale.x
-                                          : (axis == EditorTransformAxisUVE::Y ? after.localScale.y : after.localScale.z);
-            EXPECT_NE(afterScale, beforeScale);
-            EXPECT_EQ(after.localPosition, before.localPosition);
-            EXPECT_EQ(after.localRotation, before.localRotation);
-            ASSERT_TRUE(editor.UndoUVE());
-            EXPECT_EQ(entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity).localScale,
-                      before.localScale);
-            services.GetSceneGraphUVE().UpdateUVE(entityManager);
-        }
-
-        editor.ShutdownUVE();
-    }
-    engine.Shutdown();
-}
-
-TEST(EditorUVETest, GizmoModeSelect_SuppressesGizmoDragEvenOnAHitTestingHandle) {
-    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
-    engine.Init();
-    ASSERT_TRUE(engine.Load());
-
-    {
-        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_gizmo_mode_select.uvescene");
-        editor.InitUVE();
-        Core::EngineServicesUVE& services = engine.GetServicesUVE();
-        Scene::IEntityManagerUVE& entityManager = services.GetEntityManagerUVE();
-        const Scene::EntityUVE entity = entityManager.CreateEntityUVE();
-        AttachRootUVE(engine, entity, Scene::TransformComponentUVE{});
-        services.GetSceneGraphUVE().UpdateUVE(entityManager);
-        editor.SelectEntityUVE(entity);
-        ASSERT_TRUE(editor.OrbitViewportUVE(0.37F, 0.18F));
-        services.GetSceneGraphUVE().UpdateUVE(entityManager);
-        const EditorViewportRectUVE viewportRect{{0.0F, 0.0F}, {1024.0F, 768.0F}};
-
-        // Find a screen point that would begin a Translate-X drag, so the Select-mode assertion
-        // below proves the mode guard itself suppresses the drag - not merely that nothing was
-        // under the pointer.
-        editor.SetGizmoModeUVE(EditorGizmoModeUVE::Translate);
-        const Scene::WorldTransformComponentUVE& world =
-            entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(entity);
-        Math::Vector3UVE worldAxis{};
-        ASSERT_TRUE(EditorUVEAccessUVE::GetGizmoAxisWorldVectorUVE(editor, entity, EditorTransformAxisUVE::X, worldAxis));
-        Math::Vector2UVE endpoint{};
-        ASSERT_TRUE(EditorUVEAccessUVE::ProjectWorldPointUVE(
-            editor, viewportRect, world.worldPosition + worldAxis * 1.25F, endpoint));
-        ASSERT_TRUE(EditorUVEAccessUVE::BeginGizmoDragUVE(editor, viewportRect, endpoint));
-        EXPECT_EQ(EditorUVEAccessUVE::GetGizmoDragAxisUVE(editor), EditorTransformAxisUVE::X);
-        EditorUVEAccessUVE::CommitGizmoDragUVE(editor);
-
-        editor.SetGizmoModeUVE(EditorGizmoModeUVE::Select);
-        EXPECT_EQ(editor.GetGizmoModeUVE(), EditorGizmoModeUVE::Select);
-        EXPECT_FALSE(EditorUVEAccessUVE::BeginGizmoDragUVE(editor, viewportRect, endpoint));
-        EXPECT_EQ(EditorUVEAccessUVE::GetGizmoDragAxisUVE(editor), EditorTransformAxisUVE::None);
-
-        editor.ShutdownUVE();
-    }
-    engine.Shutdown();
-}
-
-TEST(EditorUVETest, ViewportNavigationGizmo_XPositiveStartsCameraPresetOrbit) {
-    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
-    engine.Init();
-    ASSERT_TRUE(engine.Load());
-    {
-        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_view_nav_gizmo.uvescene");
-        editor.InitUVE();
-        const EditorViewportRectUVE viewportRect{{0.0F, 0.0F}, {1024.0F, 768.0F}};
-        const Math::Vector2UVE widgetCenter{962.0F, 104.0F};
-        ASSERT_TRUE(EditorUVEAccessUVE::ClickViewportNavigationGizmoUVE(
-            editor, viewportRect, Math::Vector2UVE{widgetCenter.x + 34.0F, widgetCenter.y}));
-        editor.TickUVE();
-        EXPECT_GT(EditorUVEAccessUVE::GetViewportYawUVE(editor), 0.0F);
-        for (int frame = 0; frame < 80; ++frame) {
-            editor.TickUVE();
-        }
-        EXPECT_NEAR(EditorUVEAccessUVE::GetViewportYawUVE(editor),
-                    std::numbers::pi_v<float> * 0.5F, 0.02F);
-        editor.ShutdownUVE();
-    }
-    engine.Shutdown();
-}
-
-TEST(EditorUVETest, UniversalGizmo_PrioritizesScaleEndpointAndUsesScreenPlanePivotMove) {
-    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
-    engine.Init();
-    ASSERT_TRUE(engine.Load());
-
-    {
-        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_universal_gizmo.uvescene");
-        editor.InitUVE();
-        Core::EngineServicesUVE& services = engine.GetServicesUVE();
-        Scene::IEntityManagerUVE& entityManager = services.GetEntityManagerUVE();
-        const Scene::EntityUVE entity = entityManager.CreateEntityUVE();
-        AttachRootUVE(engine, entity, Scene::TransformComponentUVE{});
-        services.GetSceneGraphUVE().UpdateUVE(entityManager);
-        editor.SelectEntityUVE(entity);
-        editor.SetGizmoModeUVE(EditorGizmoModeUVE::Universal);
-        const EditorViewportRectUVE viewportRect{{0.0F, 0.0F}, {1024.0F, 768.0F}};
-
-        const Scene::WorldTransformComponentUVE& world =
-            entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(entity);
-        Math::Vector2UVE center{};
-        ASSERT_TRUE(EditorUVEAccessUVE::ProjectWorldPointUVE(editor, viewportRect, world.worldPosition, center));
-        ASSERT_TRUE(EditorUVEAccessUVE::BeginGizmoDragUVE(editor, viewportRect, center));
-        EXPECT_TRUE(EditorUVEAccessUVE::IsGizmoDragHandleKindUVE(editor, 3));
-        const Scene::TransformComponentUVE beforeMove =
-            entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity);
-        EditorUVEAccessUVE::UpdateGizmoDragUVE(editor, Math::Vector2UVE{center.x + 18.0F, center.y - 10.0F});
-        EditorUVEAccessUVE::CommitGizmoDragUVE(editor);
-        const Scene::TransformComponentUVE afterMove =
-            entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity);
-        EXPECT_NE(afterMove.localPosition, beforeMove.localPosition);
-        EXPECT_EQ(afterMove.localRotation, beforeMove.localRotation);
-        EXPECT_EQ(afterMove.localScale, beforeMove.localScale);
-        ASSERT_TRUE(editor.UndoUVE());
-        services.GetSceneGraphUVE().UpdateUVE(entityManager);
-
-        const Scene::WorldTransformComponentUVE& resetWorld =
-            entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(entity);
-        Math::Vector3UVE xAxis{};
-        ASSERT_TRUE(EditorUVEAccessUVE::GetGizmoAxisWorldVectorUVE(editor, entity, EditorTransformAxisUVE::X, xAxis));
-        Math::Vector2UVE endpoint{};
-        ASSERT_TRUE(EditorUVEAccessUVE::ProjectWorldPointUVE(
-            editor, viewportRect, resetWorld.worldPosition + xAxis * 1.25F, endpoint));
-        ASSERT_TRUE(EditorUVEAccessUVE::BeginGizmoDragUVE(editor, viewportRect, endpoint));
-        EXPECT_EQ(EditorUVEAccessUVE::GetGizmoDragAxisUVE(editor), EditorTransformAxisUVE::X);
-        const Scene::TransformComponentUVE beforeScale =
-            entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity);
-        const Math::Vector2UVE screenDirection{endpoint.x - center.x, endpoint.y - center.y};
-        const float screenLength = std::sqrt((screenDirection.x * screenDirection.x) +
-                                             (screenDirection.y * screenDirection.y));
-        ASSERT_GT(screenLength, 1.0F);
-        EditorUVEAccessUVE::UpdateGizmoDragUVE(
-            editor, Math::Vector2UVE{endpoint.x + screenDirection.x * 10.0F / screenLength,
-                                    endpoint.y + screenDirection.y * 10.0F / screenLength});
-        EditorUVEAccessUVE::CommitGizmoDragUVE(editor);
-        const Scene::TransformComponentUVE afterScale =
-            entityManager.GetComponentUVE<Scene::TransformComponentUVE>(entity);
-        EXPECT_NE(afterScale.localScale.x, beforeScale.localScale.x);
-        EXPECT_EQ(afterScale.localPosition, beforeScale.localPosition);
-        EXPECT_EQ(afterScale.localRotation, beforeScale.localRotation);
-
-        editor.ShutdownUVE();
-    }
-    engine.Shutdown();
-}
-
 TEST(EditorUVETest, ScaleSelectedAlongAxis_UpdatesOnlyPositiveLocalScaleAndReplaysHistory) {
     Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
     engine.Init();
@@ -2832,9 +2175,6 @@ TEST(EditorUVETest, ScaleSelectedAlongAxis_UpdatesOnlyPositiveLocalScaleAndRepla
         services.GetSceneGraphUVE().UpdateUVE(entityManager);
 
         editor.SelectEntityUVE(child);
-        EXPECT_EQ(editor.GetGizmoModeUVE(), EditorGizmoModeUVE::Translate);
-        editor.SetGizmoModeUVE(EditorGizmoModeUVE::Scale);
-        EXPECT_EQ(editor.GetGizmoModeUVE(), EditorGizmoModeUVE::Scale);
         ASSERT_TRUE(editor.ScaleSelectedAlongAxisUVE(EditorTransformAxisUVE::Y, 1.5F));
         const Scene::TransformComponentUVE& scaled =
             entityManager.GetComponentUVE<Scene::TransformComponentUVE>(child);
@@ -3046,7 +2386,8 @@ TEST(EditorUVETest, SelectedBoundsQuery_UsesDerivedParentTransformAndRejectsUnsa
         EXPECT_FALSE(editor.IsSceneDirtyUVE());
         EXPECT_FALSE(editor.CanUndoUVE());
 
-        editor.SelectEntityUVE(editor.GetViewportCameraUVE());
+        const Scene::EntityUVE nonDocumentEntity = entityManager.CreateEntityUVE();
+        editor.SelectEntityUVE(nonDocumentEntity);
         EXPECT_FALSE(editor.TryGetSelectedBoundsUVE().has_value());
 
         editor.ShutdownUVE();
@@ -3285,31 +2626,6 @@ TEST(EditorUVETest, PlayModeSandbox_HandlesEmptyDocumentAndMissingControlSafely)
     engine.Shutdown();
 }
 
-TEST(EditorUVETest, GizmoCoordinateSpaceUVE_DefaultsToWorldAndRejectsSandboxChanges) {
-    Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
-    engine.Init();
-    ASSERT_TRUE(engine.Load());
-
-    {
-        EditorUVE editor(engine.GetServicesUVE(), "uve_editor_tests_coordinate_space.uvescene", 100U, &engine);
-        editor.InitUVE();
-        EXPECT_EQ(editor.GetGizmoCoordinateSpaceUVE(), EditorGizmoCoordinateSpaceUVE::World);
-        EXPECT_TRUE(editor.SetGizmoCoordinateSpaceUVE(EditorGizmoCoordinateSpaceUVE::Local));
-        EXPECT_EQ(editor.GetGizmoCoordinateSpaceUVE(), EditorGizmoCoordinateSpaceUVE::Local);
-        EXPECT_TRUE(editor.SetGizmoCoordinateSpaceUVE(EditorGizmoCoordinateSpaceUVE::World));
-
-        ASSERT_TRUE(editor.EnterPlayModeUVE());
-        EXPECT_FALSE(editor.SetGizmoCoordinateSpaceUVE(EditorGizmoCoordinateSpaceUVE::Local));
-        ASSERT_TRUE(editor.PausePlayModeUVE());
-        EXPECT_FALSE(editor.SetGizmoCoordinateSpaceUVE(EditorGizmoCoordinateSpaceUVE::Local));
-        ASSERT_TRUE(editor.StopPlayModeUVE());
-        EXPECT_TRUE(editor.SetGizmoCoordinateSpaceUVE(EditorGizmoCoordinateSpaceUVE::Local));
-        editor.ShutdownUVE();
-    }
-
-    engine.Shutdown();
-}
-
 TEST(EditorUVETest, VisualScriptSearchInsertionPreservesPositionAndCompilerUsesNativeGraph) {
     Core::EngineCoreUVE engine(MakeEditorTestConfigUVE());
     engine.Init();
@@ -3348,76 +2664,3 @@ TEST(EditorUVETest, VisualScriptSearchInsertionPreservesPositionAndCompilerUsesN
 } // namespace UVE::Editor::Tests
 
 
-TEST(GizmoSystemUVETest, PackageLayerCompositionAndNativeAxisSpace) {
-    const UVE::Editor::Gizmo::GizmoLayerVisibilityUVE move =
-        UVE::Editor::Gizmo::GizmoSystemUVE::LayersForUVE(UVE::Editor::Gizmo::GizmoModeUVE::Move);
-    EXPECT_TRUE(move.move);
-    EXPECT_FALSE(move.rotate);
-    EXPECT_FALSE(move.scale);
-
-    const UVE::Editor::Gizmo::GizmoLayerVisibilityUVE universal =
-        UVE::Editor::Gizmo::GizmoSystemUVE::LayersForUVE(UVE::Editor::Gizmo::GizmoModeUVE::Universal);
-    EXPECT_TRUE(universal.move);
-    EXPECT_TRUE(universal.rotate);
-    EXPECT_TRUE(universal.scale);
-
-    const UVE::Math::QuaternionUVE identity{1.0F, 0.0F, 0.0F, 0.0F};
-    const UVE::Math::Vector3UVE worldX = UVE::Editor::Gizmo::GizmoSystemUVE::AxisDirectionUVE(
-        UVE::Editor::Gizmo::GizmoAxisUVE::X, identity, UVE::Editor::Gizmo::GizmoSpaceUVE::World);
-    EXPECT_NEAR(worldX.x, 1.0F, 0.0001F);
-    EXPECT_NEAR(worldX.y, 0.0F, 0.0001F);
-    EXPECT_NEAR(worldX.z, 0.0F, 0.0001F);
-}
-
-TEST(GizmoSystemUVETest, HtmlReferencePalette) {
-    using UVE::Editor::Gizmo::GizmoAxisUVE;
-    using UVE::Editor::Gizmo::GizmoSystemUVE;
-    const auto x = GizmoSystemUVE::AxisColorUVE(GizmoAxisUVE::X, false);
-    const auto y = GizmoSystemUVE::AxisColorUVE(GizmoAxisUVE::Y, false);
-    const auto z = GizmoSystemUVE::AxisColorUVE(GizmoAxisUVE::Z, false);
-    const auto hover = GizmoSystemUVE::AxisColorUVE(GizmoAxisUVE::X, true);
-    EXPECT_NEAR(x.x, 1.0F, 0.001F);
-    EXPECT_NEAR(x.y, 93.0F / 255.0F, 0.001F);
-    EXPECT_NEAR(x.z, 93.0F / 255.0F, 0.001F);
-    EXPECT_NEAR(y.x, 74.0F / 255.0F, 0.001F);
-    EXPECT_NEAR(y.y, 222.0F / 255.0F, 0.001F);
-    EXPECT_NEAR(y.z, 128.0F / 255.0F, 0.001F);
-    EXPECT_NEAR(z.x, 59.0F / 255.0F, 0.001F);
-    EXPECT_NEAR(z.y, 156.0F / 255.0F, 0.001F);
-    EXPECT_NEAR(z.z, 1.0F, 0.001F);
-    EXPECT_NEAR(hover.x, 1.0F, 0.001F);
-    EXPECT_NEAR(hover.y, 217.0F / 255.0F, 0.001F);
-    EXPECT_NEAR(hover.z, 51.0F / 255.0F, 0.001F);
-}
-
-TEST(ViewportNavGizmoUVETest, HtmlReferencePaletteAndLabels) {
-    using UVE::Editor::Gizmo::ViewportNavAxisUVE;
-    using UVE::Editor::Gizmo::ViewportNavGizmoUVE;
-    EXPECT_EQ(ViewportNavGizmoUVE::AxisColorUVE(ViewportNavAxisUVE::X, true, false), 0xFF5D5DFFU);
-    EXPECT_EQ(ViewportNavGizmoUVE::AxisColorUVE(ViewportNavAxisUVE::Y, true, false), 0xFF80DE4AU);
-    EXPECT_EQ(ViewportNavGizmoUVE::AxisColorUVE(ViewportNavAxisUVE::Z, true, false), 0xFFFF9C3BU);
-    EXPECT_EQ(ViewportNavGizmoUVE::AxisColorUVE(ViewportNavAxisUVE::X, true, true), 0xFF33D9FFU);
-    EXPECT_STREQ(ViewportNavGizmoUVE::AxisLabelUVE(ViewportNavAxisUVE::X, true), "X+");
-    EXPECT_STREQ(ViewportNavGizmoUVE::AxisLabelUVE(ViewportNavAxisUVE::Z, false), "Z-");
-}
-
-TEST(ViewportNavGizmoUVETest, PackageSixButtonLayoutAndPresetMapping) {
-    UVE::Editor::Gizmo::ViewportNavGizmoUVE navigation;
-    navigation.SetAnchorUVE(UVE::Math::Vector2UVE{100.0F, 100.0F});
-    navigation.UpdateLayoutUVE(0.0F, 0.0F);
-    ASSERT_EQ(navigation.GetButtonsUVE().size(), 6U);
-    EXPECT_NEAR(navigation.GetButtonsUVE()[0].screenPosition.x, 132.0F, 0.001F);
-    EXPECT_NEAR(navigation.GetButtonsUVE()[0].screenPosition.y, 100.0F, 0.001F);
-    EXPECT_TRUE(navigation.GetButtonsUVE()[4].degenerate);
-    EXPECT_TRUE(navigation.GetButtonsUVE()[5].degenerate);
-    EXPECT_TRUE(navigation.HitTestPlateUVE(UVE::Math::Vector2UVE{100.0F, 100.0F}));
-
-    UVE::Editor::Gizmo::ViewportNavPresetUVE preset = UVE::Editor::Gizmo::ViewportNavPresetUVE::Front;
-    ASSERT_TRUE(navigation.HandleClickUVE(UVE::Math::Vector2UVE{132.0F, 100.0F}, preset));
-    EXPECT_EQ(preset, UVE::Editor::Gizmo::ViewportNavPresetUVE::Right);
-    float yaw = 0.0F;
-    float pitch = 0.0F;
-    UVE::Editor::Gizmo::ViewportNavGizmoUVE::PresetAnglesUVE(preset, yaw, pitch);
-    EXPECT_NEAR(yaw, std::numbers::pi_v<float> * 0.5F, 0.0001F);
-    EXPECT_NEAR(pitch, 0.0F, 0.0001F);
-}

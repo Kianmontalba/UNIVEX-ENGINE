@@ -123,7 +123,7 @@ int main(const int argc, char** argv) {
             return 1;
         }
 
-        UVE::Editor::EditorUVE editor(engine.GetServicesUVE(), options.scenePath, 100U, &engine, &engine);
+        UVE::Editor::EditorUVE editor(engine.GetServicesUVE(), options.scenePath, 100U, &engine);
         editor.InitUVE();
 
         if (std::filesystem::exists(options.scenePath)) {
@@ -140,7 +140,9 @@ int main(const int argc, char** argv) {
             return result;
         }
 
-        engine.SetActiveCameraUVE(editor.GetViewportCameraUVE());
+        // The editor no longer owns a camera (Phase 2 removed the viewport/gizmo layer): with no
+        // active camera set, EngineCoreUVE's documented no-op path clears and presents an empty
+        // frame every tick, which is the intended appearance until the viewport is rebuilt.
         engine.SetPostRenderCallbackUVE([&editor] { editor.RenderOverlayUVE(); });
 
         int framesRun = 0;

@@ -107,7 +107,6 @@ add_executable(uve_tests
     render/particle_draw_command_uve_tests.cpp
     render/mesh_renderer_uve_tests.cpp
     render/mesh_render_eligibility_uve_tests.cpp
-    render/gizmo_overlay_geometry_uve_tests.cpp
     render/primitive_geometry_uve_tests.cpp
     render/light_system_uve_tests.cpp
     render/renderer_3d_uve_tests.cpp
@@ -169,8 +168,6 @@ add_executable(uve_tests
     editor/editor_tool_session_uve_tests.cpp
     editor/editor_bridge_stdio_uve_tests.cpp
     editor/editor_bridge_uve_tests.cpp
-    editor/motion_query_trajectory_bridge_uve_tests.cpp
-    editor/control_rig_bridge_uve_tests.cpp
     editor/regression_harness_uve_tests.cpp
     editor/developer_console_uve_tests.cpp
     editor/developer_console_bridge_uve_tests.cpp
@@ -187,33 +184,6 @@ add_executable(uve_tests
     scripting/script_transform_value_uve_tests.cpp
     scripting/script_source_mapping_uve_tests.cpp
     plugins/plugin_registry_uve_tests.cpp
-    ../engine/plugins/Animation/control_rig/Tests/control_rig_uve_tests.cpp
-    ../engine/plugins/Animation/control_rig/Tests/control_rig_autorig_uve_tests.cpp
-    ../engine/plugins/Animation/control_rig/Tests/control_rig_editor_uve_tests.cpp
-    ../engine/plugins/Animation/motion_query/Tests/motion_query_plugin_module_uve_tests.cpp
-    ../engine/plugins/Animation/motion_query/Tests/motion_query_uve_tests.cpp
-    ../engine/plugins/Animation/motion_query/Tests/motion_query_shared_trajectory_uve_tests.cpp
-    ../engine/plugins/Animation/motion_query/Tests/motion_query_database_contract_uve_tests.cpp
-    ../engine/plugins/Animation/motion_query/Tests/motion_query_asset_sampling_uve_tests.cpp
-    ../engine/plugins/Animation/motion_query/Tests/motion_query_asset_registry_cache_uve_tests.cpp
-    ../engine/plugins/Animation/motion_query/Tests/motion_query_asset_ingestion_uve_tests.cpp
-    ../engine/plugins/Animation/motion_query/Tests/motion_query_feature_channels_uve_tests.cpp
-    ../engine/plugins/Animation/motion_query/Tests/motion_query_runtime_integration_uve_tests.cpp
-    ../engine/plugins/Animation/motion_query/Tests/motion_query_schema_compatibility_uve_tests.cpp
-    ../engine/plugins/Animation/motion_query/Tests/motion_query_lod_uve_tests.cpp
-    ../engine/plugins/Animation/motion_query/Tests/motion_query_continuity_uve_tests.cpp
-    ../engine/plugins/Animation/motion_query/Tests/motion_query_transition_uve_tests.cpp
-    ../engine/plugins/Animation/motion_query/Tests/motion_query_runtime_telemetry_uve_tests.cpp
-    ../engine/plugins/Animation/motion_query/Tests/motion_query_search_index_uve_tests.cpp
-    ../engine/plugins/Animation/motion_query/Tests/motion_query_animation_node_uve_tests.cpp
-    ../engine/plugins/Animation/motion_query/Tests/motion_query_history_uve_tests.cpp
-    ../engine/plugins/Animation/motion_query/Tests/motion_query_interaction_runtime_uve_tests.cpp
-    ../engine/plugins/Animation/motion_query/Tests/motion_query_editor_authoring_uve_tests.cpp
-    ../engine/plugins/Animation/motion_query/Tests/motion_query_debugging_uve_tests.cpp
-    ../engine/plugins/Animation/motion_query/Tests/motion_query_trace_replay_uve_tests.cpp
-    ../engine/plugins/Animation/motion_query/Tests/motion_query_trace_replay_session_uve_tests.cpp
-    ../engine/plugins/Animation/motion_query/Tests/motion_query_trace_replay_regression_uve_tests.cpp
-    ../engine/plugins/Animation/motion_query/Tests/motion_query_trace_replay_baseline_registry_uve_tests.cpp
     platform/editor_project_package_uve_tests.cpp
     project_check/project_checker_uve_tests.cpp
 )

@@ -16,14 +16,12 @@
 #include "uve/asset/i_project_file_index_uve.h"
 #include "uve/asset/i_project_change_watcher_uve.h"
 #include "uve/core/engine_services_uve.h"
-#include "uve/core/i_editor_viewport_host_uve.h"
 #include "uve/core/i_simulation_control_uve.h"
 #include "uve/editor/editor_tool_session_uve.h"
 #include "uve/editor/developer_console_uve.h"
 #include "uve/editor/editor_ui_assets_uve.h"
 #include "uve/editor/inspector_drawer_registry_uve.h"
 #include "uve/editor/mesh_thumbnail_renderer_uve.h"
-#include "uve/math/ray_uve.h"
 #include "uve/math/vector2_uve.h"
 #include "uve/math/vector3_uve.h"
 #include "uve/scene/components/animation_player_component_uve.h"
@@ -67,14 +65,6 @@ enum class EditorPlayModeStateUVE {
     Paused,
 };
 
-/// A screen-space rectangle used by the editor's transparent viewport overlay. Coordinates are in
-/// the native desktop window's ImGui/GLFW pixel space, with an origin at the top-left. Value type;
-/// safe to copy across editor helper calls.
-struct EditorViewportRectUVE final {
-    Math::Vector2UVE origin{};
-    Math::Vector2UVE size{};
-};
-
 /// Editor-only 2D canvas presentation state for authored screen-space content such as loading
 /// screens. The design surface is not an ECS entity, is never serialized into a scene, and never
 /// changes runtime state. Pan is expressed in desktop pixels relative to the fitted canvas center.
@@ -100,25 +90,6 @@ enum class EditorTransformAxisUVE {
 /// Source-compatible name retained for downstream editor callers; new code should use the
 /// transform-wide name because the same axis contract is shared by Translate, Rotate, and Scale.
 using EditorTranslateAxisUVE = EditorTransformAxisUVE;
-
-/// Selects the active transform-gizmo handle family, or Select for the plain pick/pan tool that
-/// shows no gizmo at all. Handles use the session-local World or Local coordinate space; negative
-/// and proportional/multiplicative scale remain future work. Select is appended last so existing
-/// serialized session values for Translate..Universal keep their ordinals.
-enum class EditorGizmoModeUVE {
-    Translate,
-    Rotate,
-    Scale,
-    Universal,
-    Select,
-};
-
-/// Selects whether transform handles use canonical world axes or the selected entity's derived
-/// world orientation. This editor session preference is never serialized or added to history.
-enum class EditorGizmoCoordinateSpaceUVE {
-    World,
-    Local,
-};
 
 /// Selects whether hierarchy reparenting retains authored local TRS or preserves compatible
 /// captured world TRS. This editor-session preference is never serialized or added to history.
@@ -174,14 +145,6 @@ enum class EditorEntityKindUVE {
     Plane,
 };
 
-/// The active pointer gesture affecting the editor-owned viewport camera. This state never touches
-/// document entities, persistence, or command history.
-enum class EditorViewportNavigationModeUVE {
-    None,
-    Orbit,
-    Pan,
-};
-
 /// EditorUVE composes the existing engine services into a first editor foundation: an editor-owned
 /// camera, deterministic hierarchy and collider-backed viewport selection, a transform inspector
 /// mutation path, world-space Translate, Rotate, and Scale gizmos, scene-document save/load, and an editor-private
@@ -198,8 +161,7 @@ public:
     explicit EditorUVE(Core::EngineServicesUVE& services,
                        std::filesystem::path activeScenePath = "editor_scene.uvescene",
                        std::size_t historyCapacity = 100U,
-                       Core::ISimulationControlUVE* simulationControl = nullptr,
-                       Core::IEditorViewportHostUVE* viewportHost = nullptr);
+                       Core::ISimulationControlUVE* simulationControl = nullptr);
     ~EditorUVE();
 
     EditorUVE(const EditorUVE&) = delete;
@@ -288,20 +250,6 @@ public:
     /// protected-Play, or competing-gesture state returns false without mutation.
     [[nodiscard]] bool SetSelectedPrimitiveMeshUVE(const Scene::PrimitiveMeshComponentUVE& primitive);
 
-    /// Creates a normalized world-space ray from a pointer inside viewportRect. Uses the editor
-    /// camera's derived world transform and perspective settings. Returns std::nullopt for invalid
-    /// editor state, camera data, viewport geometry, or pointer coordinates outside the rectangle.
-    [[nodiscard]] std::optional<Math::RayUVE> MakeViewportRayUVE(const EditorViewportRectUVE& viewportRect,
-                                                                   Math::Vector2UVE pointerPosition) const;
-
-    /// Uses the existing deterministic box-collider raycast system to select the closest live
-    /// document entity under pointerPosition. A valid regular viewport miss clears selection; a
-    /// toggle-selection miss retains it. Entities without ColliderComponentUVE are intentionally
-    /// not selectable in this first picking slice.
-    [[nodiscard]] bool PickViewportUVE(const EditorViewportRectUVE& viewportRect,
-                                        Math::Vector2UVE pointerPosition,
-                                        bool toggleSelection = false);
-
     /// Moves the selected document entity by a finite world-space distance along one unit world
     /// axis. Parent world rotation and scale are converted back to a local position delta before
     /// applying the existing scene-graph transform path. Returns false without mutation if the
@@ -324,13 +272,6 @@ public:
     /// positive scale floor; it never clamps individual components or performs proportional scaling.
     [[nodiscard]] bool ScaleSelectedUniformlyUVE(float localScaleOffset);
 
-    /// Changes the transform handle family. Mode changes are ignored while a gizmo drag or viewport
-    /// navigation gesture is active, preserving the transaction currently in progress.
-    void SetGizmoModeUVE(EditorGizmoModeUVE mode) noexcept;
-    [[nodiscard]] EditorGizmoModeUVE GetGizmoModeUVE() const noexcept;
-    [[nodiscard]] bool SetGizmoCoordinateSpaceUVE(EditorGizmoCoordinateSpaceUVE coordinateSpace);
-    [[nodiscard]] EditorGizmoCoordinateSpaceUVE GetGizmoCoordinateSpaceUVE() const noexcept;
-
     /// Replaces session-local snapping settings only when every increment is finite and strictly
     /// positive and no transform/navigation gesture is active. Returns false without mutation otherwise.
     [[nodiscard]] bool SetTransformSnappingSettingsUVE(const EditorTransformSnappingSettingsUVE& settings);
@@ -340,17 +281,6 @@ public:
     /// It never mutates selection, scene state, dirty state, or Undo/Redo history; unsafe or
     /// unsupported state returns std::nullopt.
     [[nodiscard]] std::optional<EditorSelectionBoundsUVE> TryGetSelectedBoundsUVE() const;
-
-    /// Moves the editor-only focus point to the selected live document entity's derived world position
-    /// and reapplies the current orbit camera state. It never changes selection, dirty state, or history.
-    [[nodiscard]] bool FocusSelectedEntityUVE();
-    /// Applies finite yaw and pitch deltas in radians to the editor-only orbit camera. Pitch remains
-    /// clamped to a safe range around the horizon; document state and history remain unchanged.
-    [[nodiscard]] bool OrbitViewportUVE(float yawDeltaRadians, float pitchDeltaRadians);
-    /// Pans the editor-only focus point from a finite pixel delta inside a valid viewport rectangle.
-    [[nodiscard]] bool PanViewportUVE(Math::Vector2UVE pixelDelta, const EditorViewportRectUVE& viewportRect);
-    /// Applies a finite mouse-wheel dolly delta to the editor-only camera distance with safe clamps.
-    [[nodiscard]] bool ZoomViewportUVE(float wheelDelta);
 
     /// Creates one root-level document entity with a TransformComponentUVE and the specialized
     /// component implied by `kind`, selects it, and marks the document dirty. Returns the invalid
@@ -394,14 +324,6 @@ public:
     [[nodiscard]] std::vector<Scene::EntityUVE> GetDocumentRootsUVE();
     [[nodiscard]] EditorStateUVE GetStateUVE() const noexcept;
     [[nodiscard]] Scene::EntityUVE GetSelectedEntityUVE() const noexcept;
-    [[nodiscard]] Scene::EntityUVE GetViewportCameraUVE() const noexcept;
-    [[nodiscard]] Math::Vector3UVE GetViewportFocusPointUVE() const noexcept;
-    [[nodiscard]] float GetViewportDistanceUVE() const noexcept;
-    [[nodiscard]] EditorViewportNavigationModeUVE GetViewportNavigationModeUVE() const noexcept;
-    [[nodiscard]] bool IsViewportEnvironmentPreviewEnabledUVE() const noexcept;
-    void SetViewportEnvironmentPreviewEnabledUVE(bool enabled) noexcept;
-    [[nodiscard]] bool IsViewportSunPreviewEnabledUVE() const noexcept;
-    void SetViewportSunPreviewEnabledUVE(bool enabled) noexcept;
     /// Returns editor-only 2D canvas state for screen-space authoring. It is not scene data.
     [[nodiscard]] Editor2DCanvasStateUVE Get2DCanvasStateUVE() const noexcept;
     /// Validates and updates the editor-only 2D canvas zoom without changing scene state/history.
@@ -409,16 +331,6 @@ public:
     /// Restores the editor-only 2D canvas to its centered loading-screen design view.
     void Reset2DCanvasViewUVE() noexcept;
     [[nodiscard]] bool IsSceneDirtyUVE() const noexcept;
-    /// Returns whether the editor-only Control Rig tool gate is enabled. This state never creates
-    /// runtime entities, changes authored scene data, or serializes into a project.
-    [[nodiscard]] bool IsControlRigPluginEnabledUVE() const noexcept;
-    /// Updates the editor-only Control Rig tool gate without touching ECS or scene history.
-    void SetControlRigPluginEnabledUVE(bool enabled) noexcept;
-    /// Returns whether the editor-only Motion Query tool gate is enabled. This state never creates
-    /// runtime entities, changes authored scene data, or serializes into a project.
-    [[nodiscard]] bool IsMotionQueryPluginEnabledUVE() const noexcept;
-    /// Updates the editor-only Motion Query tool gate without touching ECS or scene history.
-    void SetMotionQueryPluginEnabledUVE(bool enabled) noexcept;
     /// Read-only transform-tool lifecycle diagnostics. These values expose editor-session evidence
     /// only; they neither alter input routing nor claim any ECS mutation succeeded.
     [[nodiscard]] EditorToolSessionPhaseUVE GetToolSessionPhaseUVE() const noexcept;
@@ -479,21 +391,6 @@ private:
         EditorSelectionPathsUVE selectionBefore;
     };
 
-    enum class EditorTranslatePlaneUVE {
-        None,
-        XY,
-        XZ,
-        YZ,
-    };
-
-    enum class GizmoHandleKindUVE {
-        Axis,
-        Plane,
-        UniformScaleOffset,
-        ScreenPlaneMove,
-        Trackball,
-    };
-
     /// Editor-only workspace labels. They do not alter document data, simulation state, or history.
     enum class EditorWorkspaceUVE {
         Library,
@@ -508,13 +405,6 @@ private:
         Inspector,
         Import,
         Signals,
-    };
-
-    /// Selects the editor viewport surface. The 2D tab is an editor-owned screen-space canvas;
-    /// the 3D tab renders the real scene viewport.
-    enum class EditorViewportTabUVE {
-        Scene,
-        TwoD,
     };
 
     /// Selects one docked lower-workspace panel. FileSystem is the safe default and keeps the
@@ -558,27 +448,6 @@ private:
         Save,
         MotionQuery,
         File,
-    };
-
-    struct GizmoDragUVE final {
-        EditorGizmoModeUVE mode = EditorGizmoModeUVE::Translate;
-        GizmoHandleKindUVE handleKind = GizmoHandleKindUVE::Axis;
-        EditorTransformAxisUVE axis = EditorTransformAxisUVE::None;
-        EditorTranslatePlaneUVE plane = EditorTranslatePlaneUVE::None;
-        Scene::EntityUVE entity = Scene::kInvalidEntityUVE;
-        Math::Vector2UVE initialPointer{};
-        Math::Vector2UVE screenCenter{};
-        Math::Vector2UVE screenAxisDirection{};
-        Math::Vector2UVE screenPlaneAxisA{};
-        Math::Vector2UVE screenPlaneAxisB{};
-        Math::Vector3UVE worldAxisA{};
-        Math::Vector3UVE worldAxisB{};
-        Math::Vector3UVE initialTrackballVector{};
-        Math::QuaternionUVE viewWorldRotation{};
-        EditorViewportRectUVE viewportRect{};
-        float pixelsPerWorldUnit = 0.0F;
-        float trackballRadiusPixels = 0.0F;
-        float initialRingParameterRadians = 0.0F;
     };
 
     struct TransformHistoryEntryUVE final {
@@ -696,20 +565,12 @@ private:
     [[nodiscard]] std::string GetEntityDisplayLabelUVE(Scene::EntityUVE entity) const;
     [[nodiscard]] std::string GetDefaultEntityNameUVE(EditorEntityKindUVE kind) const;
     [[nodiscard]] std::string MakeUniqueDocumentEntityNameUVE(std::string_view baseName) const;
-    [[nodiscard]] bool IsViewportRectValidUVE(const EditorViewportRectUVE& viewportRect) const noexcept;
     [[nodiscard]] bool IsFiniteVectorUVE(const Math::Vector3UVE& vector) const noexcept;
     [[nodiscard]] bool IsQuaternionFiniteUVE(const Math::QuaternionUVE& quaternion) const noexcept;
     [[nodiscard]] bool AreTransformSnappingSettingsValidUVE(
         const EditorTransformSnappingSettingsUVE& settings) const noexcept;
     [[nodiscard]] float SnapScalarUVE(float value, float increment) const noexcept;
     [[nodiscard]] Math::Vector3UVE GetAxisVectorUVE(EditorTransformAxisUVE axis) const noexcept;
-    [[nodiscard]] bool GetGizmoAxisWorldVectorUVE(Scene::EntityUVE entity, EditorTransformAxisUVE axis,
-                                                    Math::Vector3UVE& outAxis) const;
-    [[nodiscard]] bool GetPlaneAxesUVE(EditorTranslatePlaneUVE plane, Math::Vector3UVE& outAxisA,
-                                        Math::Vector3UVE& outAxisB) const noexcept;
-    [[nodiscard]] bool ProjectWorldPointUVE(const EditorViewportRectUVE& viewportRect,
-                                             const Math::Vector3UVE& worldPoint,
-                                             Math::Vector2UVE& outScreenPoint) const;
     [[nodiscard]] bool ComputeLocalDeltaForWorldDeltaUVE(Scene::EntityUVE entity,
                                                            const Math::Vector3UVE& worldDelta,
                                                            Math::Vector3UVE& outLocalDelta) const;
@@ -717,35 +578,6 @@ private:
                                                             const Math::QuaternionUVE& initialLocalRotation,
                                                             const Math::Vector3UVE& worldAxis, float radians,
                                                             Math::QuaternionUVE& outLocalRotation) const;
-    [[nodiscard]] bool ApplyViewportCameraUVE();
-    [[nodiscard]] bool ApplyViewportPresetUVE(float yawRadians, float pitchRadians) noexcept;
-    void UpdateViewportPresetAnimationUVE();
-    [[nodiscard]] bool HandleViewportNavigationGizmoClickUVE(const EditorViewportRectUVE& viewportRect,
-                                                              Math::Vector2UVE pointerPosition);
-    [[nodiscard]] bool IsViewportNavigationFiniteUVE() const noexcept;
-    void CancelViewportNavigationUVE() noexcept;
-    [[nodiscard]] bool BeginGizmoDragUVE(const EditorViewportRectUVE& viewportRect,
-                                          Math::Vector2UVE pointerPosition);
-    [[nodiscard]] bool BeginGizmoDragForModeUVE(const EditorViewportRectUVE& viewportRect,
-                                                 Math::Vector2UVE pointerPosition,
-                                                 EditorGizmoModeUVE mode);
-    [[nodiscard]] bool BeginRotateGizmoDragUVE(const EditorViewportRectUVE& viewportRect,
-                                                Math::Vector2UVE pointerPosition);
-    [[nodiscard]] bool MapTrackballPointerUVE(Math::Vector2UVE center, float radius,
-                                               Math::Vector2UVE pointerPosition,
-                                               Math::Vector3UVE& outVector) const noexcept;
-    [[nodiscard]] bool FindClosestRingParameterUVE(const EditorViewportRectUVE& viewportRect,
-                                                    Scene::EntityUVE entity, EditorTransformAxisUVE axis,
-                                                    Math::Vector2UVE pointerPosition,
-                                                    float& outParameterRadians,
-                                                    float& outDistanceSquared) const;
-    void UpdateGizmoDragUVE(Math::Vector2UVE pointerPosition);
-    void CommitGizmoDragUVE();
-    void CancelGizmoDragUVE() noexcept;
-    void DrawSelectionBoundsUVE(const EditorViewportRectUVE& viewportRect);
-    /// Draws all transform handle families around one selection while preserving the existing
-    /// mode-specific drag/commit semantics and editor-only ownership.
-    void DrawUnifiedTransformGizmoUVE(const EditorViewportRectUVE& viewportRect);
     [[nodiscard]] bool ApplyLocalTransformUVE(Scene::EntityUVE entity,
                                                const Scene::TransformComponentUVE& transform);
     [[nodiscard]] bool ApplyEntityNameStateUVE(Scene::EntityUVE entity,
@@ -826,9 +658,6 @@ private:
     void DrawSceneComponentAddPanelUVE();
     void DrawPrefabInspectorDrawerUVE(Scene::EntityUVE entity);
     void DrawImportQueueMonitorUVE();
-    void DrawViewportToolCanvasUVE();
-    void DrawViewportPanelUVE();
-    void Draw2DCanvasUVE(const EditorViewportRectUVE& viewportRect);
     void DrawScriptingWorkspaceUVE();
     void CompileVisualScriptUVE();
     [[nodiscard]] static ContentBrowserItemTypeUVE ClassifyContentBrowserEntryUVE(
@@ -864,44 +693,24 @@ private:
 
     Core::EngineServicesUVE* m_services = nullptr;
     Core::ISimulationControlUVE* m_simulationControl = nullptr;
-    Core::IEditorViewportHostUVE* m_viewportHost = nullptr;
     EditorStateUVE m_state = EditorStateUVE::Uninitialized;
     EditorPlayModeStateUVE m_playModeState = EditorPlayModeStateUVE::Edit;
     std::optional<PlayModeSessionUVE> m_playModeSession;
-    Scene::EntityUVE m_viewportCamera = Scene::kInvalidEntityUVE;
     std::vector<Scene::EntityUVE> m_selectedEntities;
     Scene::EntityUVE m_selectedEntity = Scene::kInvalidEntityUVE;
     std::filesystem::path m_activeScenePath;
     std::size_t m_historyCapacity = 100U;
-    EditorGizmoModeUVE m_gizmoMode = EditorGizmoModeUVE::Translate;
-    EditorGizmoCoordinateSpaceUVE m_gizmoCoordinateSpace = EditorGizmoCoordinateSpaceUVE::World;
     EditorReparentTransformModeUVE m_reparentTransformMode = EditorReparentTransformModeUVE::KeepLocal;
     EditorTransformSnappingSettingsUVE m_transformSnappingSettings{};
     EditorToolSessionUVE m_toolSession;
-    GizmoDragUVE m_gizmoDrag{};
-    Math::Vector3UVE m_viewportFocusPoint{0.0F, 1.5F, 0.0F};
-    float m_viewportYawRadians = 0.0F;
-    float m_viewportPitchRadians = 0.0F;
-    float m_viewportDistance = 6.0F;
-    bool m_viewportEnvironmentPreviewEnabled = true;
-    bool m_viewportSunPreviewEnabled = true;
-    float m_viewportPresetTargetYawRadians = 0.0F;
-    float m_viewportPresetTargetPitchRadians = 0.0F;
-    bool m_viewportPresetAnimating = false;
-    EditorViewportNavigationModeUVE m_viewportNavigationMode = EditorViewportNavigationModeUVE::None;
     Editor2DCanvasStateUVE m_2dCanvasState{};
-    Math::Vector2UVE m_2dCanvasPanStartPointer{};
-    Math::Vector2UVE m_2dCanvasPanStart{};
     bool m_2dCanvasPanning = false;
     std::deque<HistoryEntryUVE> m_undoHistory;
     std::deque<HistoryEntryUVE> m_redoHistory;
     EditorWorkspaceUVE m_activeWorkspace = EditorWorkspaceUVE::Library;
-    EditorViewportTabUVE m_viewportTab = EditorViewportTabUVE::Scene;
     /// Transient Plugin window/tool gates. These are editor-session state only and never become ECS
     /// components, serialized scene data, or runtime/plugin activation side effects.
     bool m_pluginWindowVisible = false;
-    bool m_controlRigPluginEnabled = false;
-    bool m_motionQueryPluginEnabled = false;
     EditorRightPanelTabUVE m_activeRightPanelTab = EditorRightPanelTabUVE::Inspector;
     InspectorDrawerRegistryUVE m_inspectorDrawerRegistry;
     DeveloperConsoleUVE m_developerConsole;

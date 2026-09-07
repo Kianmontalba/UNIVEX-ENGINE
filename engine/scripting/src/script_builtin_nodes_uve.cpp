@@ -18,8 +18,8 @@ struct BuiltInNodeDefinitionUVE final {
     bool executionRequired = false;
 };
 
-[[nodiscard]] std::array<BuiltInNodeDefinitionUVE, 171U> MakeBuiltInDefinitionsUVE() {
-    auto definitions = std::array<BuiltInNodeDefinitionUVE, 171U>{
+[[nodiscard]] std::array<BuiltInNodeDefinitionUVE, 161U> MakeBuiltInDefinitionsUVE() {
+    auto definitions = std::array<BuiltInNodeDefinitionUVE, 161U>{
         BuiltInNodeDefinitionUVE{
             "flow.sequence", "Sequence",
             {ScriptPinDescriptorUVE{"In", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Execution},
@@ -843,70 +843,6 @@ struct BuiltInNodeDefinitionUVE final {
              ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
             "Animation", "node.animation", 1029U},
         BuiltInNodeDefinitionUVE{
-            "motion.query.build", "Build Motion Query",
-            {ScriptPinDescriptorUVE{"Actor", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
-             ScriptPinDescriptorUVE{"Velocity", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
-             ScriptPinDescriptorUVE{"Facing", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
-             ScriptPinDescriptorUVE{"Delta", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
-             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
-            "Motion Query", "node.motion_query", 1030U},
-        BuiltInNodeDefinitionUVE{
-            "motion.query.search", "Search Motion Query",
-            {ScriptPinDescriptorUVE{"Actor", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
-             ScriptPinDescriptorUVE{"Max Results", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
-             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
-            "Motion Query", "node.motion_query", 1031U},
-        BuiltInNodeDefinitionUVE{
-            "motion.query.get_best_match", "Get Best Motion Match",
-            {ScriptPinDescriptorUVE{"Actor", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
-             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Number}},
-            "Motion Query", "node.motion_query", 1032U},
-        BuiltInNodeDefinitionUVE{
-            "motion.query.set_trajectory", "Set Motion Trajectory",
-            {ScriptPinDescriptorUVE{"Actor", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
-             ScriptPinDescriptorUVE{"Sample", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
-             ScriptPinDescriptorUVE{"Offset", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
-             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
-            "Motion Query", "node.motion_query", 1033U},
-        BuiltInNodeDefinitionUVE{
-            "motion.query.set_pose", "Set Motion Pose",
-            {ScriptPinDescriptorUVE{"Actor", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
-             ScriptPinDescriptorUVE{"Pose", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Transform},
-             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
-            "Motion Query", "node.motion_query", 1034U},
-        BuiltInNodeDefinitionUVE{
-            "motion.query.set_velocity", "Set Motion Velocity",
-            {ScriptPinDescriptorUVE{"Actor", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
-             ScriptPinDescriptorUVE{"Velocity", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
-             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
-            "Motion Query", "node.motion_query", 1035U},
-        BuiltInNodeDefinitionUVE{
-            "motion.query.set_facing", "Set Motion Facing",
-            {ScriptPinDescriptorUVE{"Actor", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
-             ScriptPinDescriptorUVE{"Facing", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
-             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
-            "Motion Query", "node.motion_query", 1036U},
-        BuiltInNodeDefinitionUVE{
-            "motion.query.set_yaw", "Set Motion Yaw",
-            {ScriptPinDescriptorUVE{"Actor", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
-             ScriptPinDescriptorUVE{"Yaw", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
-             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
-            "Motion Query", "node.motion_query", 1037U},
-        BuiltInNodeDefinitionUVE{
-            "motion.query.transition", "Motion Query Transition",
-            {ScriptPinDescriptorUVE{"Actor", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
-             ScriptPinDescriptorUVE{"Target", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
-             ScriptPinDescriptorUVE{"Duration", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
-             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
-            "Motion Query", "node.motion_query", 1038U},
-        BuiltInNodeDefinitionUVE{
-            "motion.query.motion_warp", "Motion Warp",
-            {ScriptPinDescriptorUVE{"Actor", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Entity},
-             ScriptPinDescriptorUVE{"Target", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
-             ScriptPinDescriptorUVE{"Weight", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Number},
-             ScriptPinDescriptorUVE{"Result", ScriptPinDirectionUVE::Output, ScriptValueTypeUVE::Boolean}},
-            "Motion Query", "node.motion_query", 1039U},
-        BuiltInNodeDefinitionUVE{
             "physics.raycast", "Raycast",
             {ScriptPinDescriptorUVE{"Origin", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
              ScriptPinDescriptorUVE{"Direction", ScriptPinDirectionUVE::Input, ScriptValueTypeUVE::Vector3},
@@ -1091,7 +1027,7 @@ struct BuiltInNodeDefinitionUVE final {
 } // namespace
 
 bool RegisterBuiltInScriptNodesUVE(ScriptNodeRegistryUVE& registry) {
-    std::array<BuiltInNodeDefinitionUVE, 171U> definitions = MakeBuiltInDefinitionsUVE();
+    std::array<BuiltInNodeDefinitionUVE, 161U> definitions = MakeBuiltInDefinitionsUVE();
     for (const BuiltInNodeDefinitionUVE& definition : definitions) {
         if (registry.FindNodeTypeUVE(definition.typeId) != nullptr) {
             return false;
