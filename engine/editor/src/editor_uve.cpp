@@ -2566,11 +2566,25 @@ void EditorUVE::SyncViewportCameraEntityUVE() {
     }
 }
 
-void EditorUVE::PublishGroundGridStateUVE() {
+bool EditorUVE::TryGetGizmoPivotUVE(Math::Vector3UVE& outPivot) const {
+    if (!IsDocumentEntityUVE(m_selectedEntity)) {
+        return false;
+    }
+    const Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
+    if (!entityManager.HasComponentUVE<Scene::WorldTransformComponentUVE>(m_selectedEntity)) {
+        return false;
+    }
+    outPivot =
+        entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(m_selectedEntity).worldPosition;
+    return true;
+}
+
+Render::EditorGroundGridStateUVE EditorUVE::ComputeGroundGridStateUVE() const {
     Render::EditorGroundGridStateUVE grid{};
     // The grid is world space: its origin is the world origin and its spacing is a world quantity,
-    // so selecting an entity never moves it. Only the fade distances follow the camera, and they
-    // are derived here rather than in the renderer - camera policy is the editor's business.
+    // so selecting an entity never moves it - there is deliberately no selection input here at all.
+    // Only the fade distances follow the camera, and they are derived here rather than in the
+    // renderer, because camera policy is the editor's business.
     grid.enabled = m_viewportSettings.showGrid && m_state == EditorStateUVE::Running;
     const float orbitDistance = m_viewportCameraController.GetDistanceUVE();
     grid.fadeStartDistance = orbitDistance * 12.0F;
@@ -2579,7 +2593,11 @@ void EditorUVE::PublishGroundGridStateUVE() {
     // transform handle.
     grid.axisColorX = m_gizmoStyle.axisColorX;
     grid.axisColorZ = m_gizmoStyle.axisColorZ;
-    m_services->GetRenderer3DUVE().SetEditorGroundGridStateUVE(grid);
+    return grid;
+}
+
+void EditorUVE::PublishGroundGridStateUVE() {
+    m_services->GetRenderer3DUVE().SetEditorGroundGridStateUVE(ComputeGroundGridStateUVE());
 }
 
 void EditorUVE::PublishViewportRegionUVE(const std::optional<Render::ViewportRectUVE>& region) {
@@ -3969,12 +3987,8 @@ void EditorUVE::DrawViewportPanelUVE() {
 
         // The gizmo sits on the selected entity's own transform pivot, never on the viewport
         // centre, the grid origin, or a bounding-box corner.
-        Scene::IEntityManagerUVE& entityManager = m_services->GetEntityManagerUVE();
-        if (entityManager.HasComponentUVE<Scene::WorldTransformComponentUVE>(m_selectedEntity)) {
-            const Math::Vector3UVE pivot =
-                entityManager.GetComponentUVE<Scene::WorldTransformComponentUVE>(m_selectedEntity)
-                    .worldPosition;
-
+        Math::Vector3UVE pivot{};
+        if (TryGetGizmoPivotUVE(pivot)) {
             // One gizmo unit in world space, chosen so the widget keeps a constant pixel radius
             // whether the camera is centimetres or kilometres away.
             const float distanceToPivot =

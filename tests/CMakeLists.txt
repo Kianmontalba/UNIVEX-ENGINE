@@ -180,6 +180,7 @@ add_executable(uve_tests
     editor/viewport/editor_viewport_camera_uve_tests.cpp
     editor/viewport/editor_gizmo_geometry_uve_tests.cpp
     editor/viewport/editor_nav_gizmo_uve_tests.cpp
+    editor/viewport/editor_viewport_integration_uve_tests.cpp
     scripting/script_graph_uve_tests.cpp
     scripting/script_asset_loader_uve_tests.cpp
     scripting/script_vector3_value_uve_tests.cpp

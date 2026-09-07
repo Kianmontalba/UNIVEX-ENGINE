@@ -363,6 +363,22 @@ public:
     /// Frames the current selection, or the world origin when nothing is selected. Never changes
     /// selection, dirty state, or history.
     void FocusViewportOnSelectionUVE() noexcept;
+
+    /// Where the transform gizmo is drawn: the selected entity's own derived world transform
+    /// position - its pivot - and never the viewport centre, the grid origin, or a corner of its
+    /// bounding box. Returns false (leaving `outPivot` untouched) when there is no single live
+    /// document selection carrying a world transform, which is exactly when no gizmo is drawn.
+    ///
+    /// The grid and the gizmo have deliberately different owners: the grid is world space and
+    /// stays at the world origin however the selection changes, while this follows the selection.
+    [[nodiscard]] bool TryGetGizmoPivotUVE(Math::Vector3UVE& outPivot) const;
+
+    /// This frame's ground-grid description, exactly as it is handed to the renderer. Exposed
+    /// read-only because it is a plain statement of where the grid is and how it is tuned - useful
+    /// for a viewport HUD reporting the live spacing, and testable without a GPU. Note what it does
+    /// NOT contain: any selection-derived value. The grid is world space; only the horizon fade
+    /// follows the camera.
+    [[nodiscard]] Render::EditorGroundGridStateUVE ComputeGroundGridStateUVE() const;
     /// Returns editor-only 2D canvas state for screen-space authoring. It is not scene data.
     [[nodiscard]] Editor2DCanvasStateUVE Get2DCanvasStateUVE() const noexcept;
     /// Validates and updates the editor-only 2D canvas zoom without changing scene state/history.
