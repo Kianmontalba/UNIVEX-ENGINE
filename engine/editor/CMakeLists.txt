@@ -3,6 +3,11 @@
 find_package(OpenGL REQUIRED)
 include(FetchContent)
 
+# The viewport's camera/grid/gizmo core, vendored from the univex_viewport_gl foundation package
+# largely unmodified (see viewport_foundation/CMakeLists.txt's own header comment). Declared before
+# uve_editor below so uve_editor can link univex_viewport_gl directly.
+add_subdirectory(viewport_foundation)
+
 # Pinned Dear ImGui source, following the repository's established GLFW/GoogleTest FetchContent
 # precedent. ImGui has no target suitable for this engine's restricted backend selection, so the
 # exact required core + GLFW/OpenGL implementation files are assembled below as an editor-private
@@ -52,14 +57,23 @@ add_library(uve_editor STATIC
     src/editor_theme_uve.cpp
     src/editor_ui_assets_uve.cpp
     src/mesh_thumbnail_renderer_uve.cpp
+    src/viewport/editor_viewport_camera_uve.cpp
+    src/viewport/editor_gizmo_geometry_uve.cpp
+    src/viewport/editor_nav_gizmo_uve.cpp
+    src/viewport/editor_gizmo_interaction_uve.cpp
+    src/viewport/editor_viewport_widgets_uve.cpp
     src/editor_uve.cpp
     src/inspector_drawer_registry_uve.cpp
     src/regression_harness_uve.cpp
 )
 target_include_directories(uve_editor PUBLIC include)
+# Module-private viewport chrome headers live beside their sources under src/, so that the only
+# headers exposed to consumers stay the ones under include/ - no public header ever sees an ImGui
+# type, matching this module's existing third-party-header confinement discipline.
+target_include_directories(uve_editor PRIVATE src)
 target_compile_features(uve_editor PUBLIC cxx_std_20)
 target_link_libraries(uve_editor
     PUBLIC uve_core uve_scripting uve_plugins
-    PRIVATE uve_editor_imgui nlohmann_json::nlohmann_json glfw
+    PRIVATE uve_editor_imgui nlohmann_json::nlohmann_json glfw univex_viewport_core univex_viewport_gl
 )
 uve_set_warnings(uve_editor)

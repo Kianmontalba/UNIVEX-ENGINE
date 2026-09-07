@@ -492,6 +492,11 @@ struct Renderer3DUVE::ImplUVE {
     std::shared_ptr<Shader::ShaderProgramUVE> shadowProgram;
     std::shared_ptr<Shader::ShaderProgramUVE> toneMappingProgram;
 
+    /// The editor's overlay draw callback (ground grid, gizmos, ...) - see
+    /// SetEditorOverlayDrawCallbackUVE()'s doc comment. Owned and set by EditorUVE; this renderer
+    /// only knows the narrow EditorOverlayDrawCallbackUVE signature.
+    EditorOverlayDrawCallbackUVE editorOverlayDrawCallback;
+
     /// Phase 2b post-process toggles, consulted while building each frame's render graph (see
     /// RenderFrameUVE()) - disabling either skips that group of passes entirely, not just their
     /// visual contribution.
@@ -1565,6 +1570,38 @@ void Renderer3DUVE::RenderFrameUVE(Scene::IEntityManagerUVE& entityManager, Scen
             commandBuffer.EndRenderPassUVE();
         });
 
+    // The editor overlay (ground grid, gizmos - owned by EditorUVE, see
+    // SetEditorOverlayDrawCallbackUVE()) sits between the main colour pass and post-process: it
+    // needs the scene's depth buffer intact to be occluded by solid geometry, and it must be in
+    // colorTarget before SSAO/bloom/tone-mapping read it so it is graded like everything else
+    // rather than pasted on afterwards in a different colour space.
+    m_impl->lastFrameDiagnostics.editorOverlayCallbackSet = static_cast<bool>(m_impl->editorOverlayDrawCallback);
+    Math::Matrix4x4UVE inverseViewProjection{};
+    const bool viewProjectionInvertible = Math::TryInverseUVE(viewProjection, inverseViewProjection);
+    if (m_impl->editorOverlayDrawCallback && viewProjectionInvertible) {
+        const std::array<RenderGraphResourceUseUVE, 2U> overlayResources{
+            RenderGraphResourceUseUVE{colorResource, RenderGraphResourceAccessUVE::Write},
+            RenderGraphResourceUseUVE{depthResource, RenderGraphResourceAccessUVE::Read}};
+        renderGraph.AddPassUVE(
+            "EditorOverlay", overlayResources,
+            [this, &viewProjection, &inverseViewProjection, &viewPosition](ICommandBufferUVE& commandBuffer) {
+                m_impl->lastFrameDiagnostics.editorOverlayPassRecorded = true;
+
+                RenderPassDescUVE passDesc;
+                passDesc.colorAttachment = m_impl->colorTarget;
+                passDesc.depthAttachment = m_impl->depthTarget;
+                // Load, not Clear: the scene this overlay composites against was drawn by MainColor.
+                passDesc.colorLoadOp = LoadOpUVE::Load;
+                passDesc.depthLoadOp = LoadOpUVE::Load;
+                commandBuffer.BeginRenderPassUVE(passDesc);
+
+                m_impl->editorOverlayDrawCallback(
+                    EditorOverlayFrameContextUVE{viewProjection, inverseViewProjection, viewPosition});
+
+                commandBuffer.EndRenderPassUVE();
+            });
+    }
+
     // Phase 2b post-process: SSAO first (darkens colorTarget before bloom's bright-pass threshold
     // reads it, so occluded creases correctly don't bloom), then bloom. Both are pure additions to
     // the existing MainColor -> ToneMapping flow - ToneMapping still just reads colorTarget, now
@@ -1781,6 +1818,10 @@ void Renderer3DUVE::RenderFrameToRegionUVE(Scene::IEntityManagerUVE& entityManag
     } runtimeScope{m_impl->particleRuntimeForFrame, previousRuntime};
 
     RenderFrameUVE(entityManager, cameraEntity);
+}
+
+void Renderer3DUVE::SetEditorOverlayDrawCallbackUVE(EditorOverlayDrawCallbackUVE callback) {
+    m_impl->editorOverlayDrawCallback = std::move(callback);
 }
 
 void Renderer3DUVE::SetPostProcessSettingsUVE(const PostProcessSettingsUVE& settings) {

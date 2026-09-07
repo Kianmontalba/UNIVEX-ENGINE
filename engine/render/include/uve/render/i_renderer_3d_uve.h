@@ -4,6 +4,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <span>
 #include <vector>
 
@@ -15,6 +16,29 @@
 #include "uve/scene/particle_runtime_uve.h"
 
 namespace UVE::Render {
+
+/// Everything one editor-overlay draw call (currently: the infinite ground grid) needs to know
+/// about the current frame's camera. Plain copied facts, matching PostProcessSettingsUVE's
+/// established "Set*() pushes value-only state, consumed by the next render" idiom - the renderer
+/// never reaches into editor code.
+///
+/// This uses the SAME view-projection the renderer computed for mesh rendering this frame (not a
+/// second, independently-derived one), which is what keeps the overlay's depth writes consistent
+/// with every mesh sharing this frame's depth buffer.
+struct EditorOverlayFrameContextUVE final {
+    Math::Matrix4x4UVE viewProjection{};
+    Math::Matrix4x4UVE inverseViewProjection{};
+    Math::Vector3UVE cameraPosition{};
+};
+
+/// Draws one editor-only overlay (the ground grid, gizmos, ...) directly via the currently bound
+/// framebuffer/depth target - called from inside the render graph pass, so whatever this does
+/// composites against the same depth buffer every mesh this frame was drawn into. The renderer
+/// knows nothing about what runs inside this callback (owned and set by EditorUVE, which is the
+/// only thing in this codebase allowed to depend on engine/editor/viewport_foundation); it is
+/// exactly the same kind of narrow seam IEditorViewportHostUVE already is elsewhere in this
+/// codebase for crossing this same render/editor layering boundary.
+using EditorOverlayDrawCallbackUVE = std::function<void(const EditorOverlayFrameContextUVE&)>;
 
 /// Phase 2b post-process quality-tier toggles. Both default to enabled, matching this project's
 /// "on unless a low-end tier opts out" precedent already set by shadow mapping; each is checked
@@ -53,6 +77,8 @@ struct Renderer3DFrameDiagnosticsUVE final {
     bool mainPassRecorded = false;
     bool toneMappingProgramReady = false;
     bool toneMappingPassRecorded = false;
+    bool editorOverlayCallbackSet = false;
+    bool editorOverlayPassRecorded = false;
     bool particleItemsTruncated = false;
     bool particleDrawCommandsSubmissionTruncated = false;
     /// True only when SSAO was enabled (PostProcessSettingsUVE), its post-process targets and
@@ -122,6 +148,14 @@ public:
         static_cast<void>(region);
         static_cast<void>(particleRuntime);
         RenderFrameUVE(entityManager, cameraEntity);
+    }
+
+    /// Sets (or clears, with an empty std::function) the editor-overlay draw callback invoked once
+    /// per frame from inside the render graph, right after opaque scene geometry, with the correct
+    /// framebuffer/depth target already bound. The default implementation is intentionally a no-op
+    /// so non-Renderer3D test doubles need not own overlay state.
+    virtual void SetEditorOverlayDrawCallbackUVE(EditorOverlayDrawCallbackUVE callback) {
+        static_cast<void>(callback);
     }
 
     /// Updates the Phase 2b post-process quality-tier toggles for later render frames. The default

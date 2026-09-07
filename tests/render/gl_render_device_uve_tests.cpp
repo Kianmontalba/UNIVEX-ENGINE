@@ -1813,15 +1813,21 @@ TEST_F(GlRenderDeviceUVETest, LitShadowed3DShader_DepthPrepassDarkensOccludedFra
     const PipelineHandleUVE litPipeline = renderDevice->CreatePipelineUVE(litPipelineDesc);
     ASSERT_NE(litPipeline, kInvalidPipelineHandleUVE);
 
+    // uModel/uLightSpaceMatrix/uViewProjection below are all IdentityUVE(), so each vertex's raw z
+    // here IS the clip-space z GL rasterizes against - it must land in this engine's documented
+    // [0, 1] clip-space convention (docs/CODING_STANDARDS.md, "Matrix convention"; enforced at the
+    // GL level by GlRenderDeviceUVE's glClipControl(GL_ZERO_TO_ONE) call), not the classic OpenGL
+    // [-1, 1] range. The caster sits closer to the light (smaller z) than the receiver so the
+    // shadow comparison still occludes the overlapping region.
     constexpr std::array<float, 9> kShadowCasterVertices{
-        -0.9F, -0.9F, -0.5F,
-        0.9F, -0.9F, -0.5F,
-        0.0F, 0.9F, -0.5F,
+        -0.9F, -0.9F, 0.25F,
+        0.9F, -0.9F, 0.25F,
+        0.0F, 0.9F, 0.25F,
     };
     constexpr std::array<float, 36> kReceiverVertices{
-        -1.0F, -1.0F, 0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 1.0F,
-        3.0F, -1.0F, 0.0F, 0.0F, 0.0F, 1.0F, 2.0F, 0.0F, 1.0F, 0.0F, 0.0F, 1.0F,
-        -1.0F, 3.0F, 0.0F, 0.0F, 0.0F, 1.0F, 0.0F, 2.0F, 1.0F, 0.0F, 0.0F, 1.0F,
+        -1.0F, -1.0F, 0.75F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 1.0F, 0.0F, 0.0F, 1.0F,
+        3.0F, -1.0F, 0.75F, 0.0F, 0.0F, 1.0F, 2.0F, 0.0F, 1.0F, 0.0F, 0.0F, 1.0F,
+        -1.0F, 3.0F, 0.75F, 0.0F, 0.0F, 1.0F, 0.0F, 2.0F, 1.0F, 0.0F, 0.0F, 1.0F,
     };
     constexpr std::array<std::uint8_t, 4> kWhitePixel{255U, 255U, 255U, 255U};
     constexpr std::array<std::uint8_t, 4> kFlatNormalPixel{128U, 128U, 255U, 255U};

@@ -62,6 +62,7 @@ public:
     void RenderFrameToRegionUVE(Scene::IEntityManagerUVE& entityManager, Scene::EntityUVE cameraEntity,
                                 const ViewportRectUVE& region,
                                 const Scene::ParticleRuntimeUVE* particleRuntime = nullptr) override;
+    void SetEditorOverlayDrawCallbackUVE(EditorOverlayDrawCallbackUVE callback) override;
     void SetPostProcessSettingsUVE(const PostProcessSettingsUVE& settings) override;
     [[nodiscard]] Renderer3DFrameDiagnosticsUVE GetLastFrameDiagnosticsUVE() const noexcept override;
 

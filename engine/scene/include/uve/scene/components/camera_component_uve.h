@@ -16,6 +16,14 @@ struct CameraComponentUVE final {
     float fieldOfViewDegrees = 60.0F;
     float nearPlane = 0.1F;
     float farPlane = 1000.0F;
+
+    /// When true, CameraSystemUVE::ComputeProjectionMatrixUVE() builds an orthographic projection
+    /// instead of a perspective one - fieldOfViewDegrees is then unused for the projection itself
+    /// (it still gates validity below) and orthographicHalfHeight determines the view volume.
+    bool orthographic = false;
+    /// Half the vertical extent an orthographic view covers, in world units. Ignored when
+    /// `orthographic` is false.
+    float orthographicHalfHeight = 5.0F;
 };
 
 /// Camera values are validated before scene persistence and runtime projection use. The strict
@@ -25,7 +33,8 @@ struct CameraComponentUVE final {
     return std::isfinite(camera.fieldOfViewDegrees) &&
            camera.fieldOfViewDegrees >= kMinimumCameraFieldOfViewDegreesUVE &&
            camera.fieldOfViewDegrees < 180.0F && std::isfinite(camera.nearPlane) && camera.nearPlane > 0.0F &&
-           std::isfinite(camera.farPlane) && camera.farPlane > camera.nearPlane;
+           std::isfinite(camera.farPlane) && camera.farPlane > camera.nearPlane &&
+           std::isfinite(camera.orthographicHalfHeight) && camera.orthographicHalfHeight > 0.0F;
 }
 
 } // namespace UVE::Scene

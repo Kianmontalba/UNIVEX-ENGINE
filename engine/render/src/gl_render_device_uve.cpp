@@ -276,6 +276,12 @@ GlRenderDeviceUVE::GlRenderDeviceUVE(Window::IWindowManagerUVE& windowManager)
             contextMajorVersion > 4 || (contextMajorVersion == 4 && contextMinorVersion >= 3);
 #endif
         Detail::RegisterGlDebugCallbackUVE(m_impl->state.gl);
+        // Matrix4x4UVE's projection matrices target a [0, 1] clip-space z; without this, OpenGL's
+        // default GL_NEGATIVE_ONE_TO_ONE clip control silently re-squashes every pass's depth into
+        // the back half of the depth buffer (see gl_functions_uve.h's glClipControl doc comment).
+        if (m_impl->state.gl.glClipControl != nullptr) {
+            m_impl->state.gl.glClipControl(GL_LOWER_LEFT, GL_ZERO_TO_ONE);
+        }
         UVE_INFO("GlRenderDeviceUVE: initialized, backend GL_VERSION={}",
                   reinterpret_cast<const char*>(glGetString(GL_VERSION)));
     }

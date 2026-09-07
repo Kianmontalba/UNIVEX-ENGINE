@@ -1,5 +1,24 @@
 # Third-Party Notices — `engine/editor/assets/fonts`
 
+## Instrument Sans (editor UI text face)
+
+`uve-ui-sans.ttf` is Instrument Sans Regular, used for all editor chrome text.
+It replaces Dear ImGui's built-in bitmap font, which is fixed at a single size
+and reads as a debug overlay rather than as engine chrome.
+
+`tools/generate_ui_font_bytes.py` compiles this file into
+`engine/editor/src/uve_ui_font_bytes.inc`, which is what the editor actually
+links against - the same source-asset-plus-generator convention used for the
+Tabler subset above.
+
+### License
+
+Instrument Sans is licensed under the SIL Open Font License, Version 1.1. The
+full license text as shipped with the font is checked in beside it as
+`uve-ui-sans-OFL.txt`. The OFL permits redistribution of the font, bundled
+with other software, provided the license accompanies it - which is why that
+file is checked in rather than summarised here.
+
 ## Tabler Icons (subsetted)
 
 `tabler-icons-subset.ttf` is a subset of the Tabler Icons webfont, built from

@@ -57,6 +57,12 @@ Math::Matrix4x4UVE CameraSystemUVE::ComputeProjectionMatrixUVE(const Scene::IEnt
         UVE_ERROR("CameraSystemUVE: ComputeProjectionMatrixUVE received an invalid aspect ratio");
         return Math::Matrix4x4UVE::IdentityUVE();
     }
+    if (camera.orthographic) {
+        const float halfHeight = camera.orthographicHalfHeight;
+        const float halfWidth = halfHeight * aspectRatio;
+        return Math::Matrix4x4UVE::OrthographicUVE(-halfWidth, halfWidth, -halfHeight, halfHeight,
+                                                    camera.nearPlane, camera.farPlane);
+    }
     const float fovYRadians = camera.fieldOfViewDegrees * (std::numbers::pi_v<float> / 180.0F);
     return Math::Matrix4x4UVE::PerspectiveUVE(fovYRadians, aspectRatio, camera.nearPlane, camera.farPlane);
 }

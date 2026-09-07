@@ -82,6 +82,15 @@ struct GlFunctionsUVE {
     // this pointer isn't available (Phase 2e GL error checking).
     PFNGLDEBUGMESSAGECALLBACKPROC glDebugMessageCallback = nullptr;
 
+    // GL 4.5 core. Matrix4x4UVE::PerspectiveUVE/OrthographicUVE (see docs/CODING_STANDARDS.md,
+    // "Matrix convention") deliberately produce a [0, 1] clip-space z ("Vulkan-style range"), not
+    // the classic OpenGL [-1, 1] NDC range glClipControl's GL_NEGATIVE_ONE_TO_ONE default assumes.
+    // Without this call, every pass in the engine that relies on the fixed-function
+    // clip-to-window depth transform (i.e. anything that doesn't manually write gl_FragDepth) has
+    // its depth silently re-squashed into the back half of the depth buffer. Called once in
+    // GlRenderDeviceUVE's constructor, right after the function table finishes loading.
+    PFNGLCLIPCONTROLPROC glClipControl = nullptr;
+
     /// True iff every function pointer above loaded successfully (non-null).
     [[nodiscard]] bool IsCompleteUVE() const noexcept;
 };

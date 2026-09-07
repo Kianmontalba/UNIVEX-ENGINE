@@ -687,4 +687,5 @@ void main() {
 #endif
 )GLSLSRC";
 
+
 } // namespace UVE::Render::Shader::BuiltIn

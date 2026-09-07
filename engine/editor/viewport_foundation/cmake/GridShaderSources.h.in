@@ -1,0 +1,18 @@
+// GridShaderSources.h — GENERATED FILE, DO NOT EDIT.
+// -----------------------------------------------------------------------
+// CMake embeds shaders/infinite_grid.vert and shaders/infinite_grid.frag
+// into this header at configure time, so the built library carries its own
+// shaders and there is no runtime file path to get wrong when the module
+// is dropped into another project. The .glsl files remain the source of
+// truth — editing either one re-runs CMake automatically (they are listed
+// in CMAKE_CONFIGURE_DEPENDS).
+// -----------------------------------------------------------------------
+#pragma once
+
+namespace univex::render::shaders {
+
+inline constexpr const char* kInfiniteGridVertexSource = R"UNIVEX_GLSL(@UNIVEX_GRID_VERT_SOURCE@)UNIVEX_GLSL";
+
+inline constexpr const char* kInfiniteGridFragmentSource = R"UNIVEX_GLSL(@UNIVEX_GRID_FRAG_SOURCE@)UNIVEX_GLSL";
+
+} // namespace univex::render::shaders
