@@ -32,6 +32,19 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(nlohmann_json)
 
+# Foundation modules restructured into the Engine/Runtime taxonomy (see
+# UNIVEX_Engine_Scratch_Rebuild_Architecture_Prompt). Added here, ahead of
+# add_subdirectory(engine), since the remaining not-yet-restructured engine/*
+# modules link against these targets (uve_platform, uve_debug, uve_utilities,
+# uve_events, uve_memory, uve_threading, uve_math) by name.
+add_subdirectory(Engine/Runtime/Platform)
+add_subdirectory(Engine/Runtime/Core/Logging)
+add_subdirectory(Engine/Runtime/Core/Utilities)
+add_subdirectory(Engine/Runtime/Events)
+add_subdirectory(Engine/Runtime/Core/Memory)
+add_subdirectory(Engine/Runtime/Core/Threading)
+add_subdirectory(Engine/Runtime/Core/Math)
+
 add_subdirectory(engine)
 
 if(UVE_BUILD_TESTS)

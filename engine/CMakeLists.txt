@@ -1,13 +1,11 @@
 # Copyright (c) 2026 UniVex Studios. All Rights Reserved.
 
 
-add_subdirectory(platform)
-add_subdirectory(debug)
-add_subdirectory(utilities)
-add_subdirectory(events)
-add_subdirectory(memory)
-add_subdirectory(threading)
-add_subdirectory(math)
+# platform, debug, utilities, events, memory, threading, math moved to
+# Engine/Runtime/{Platform,Core/Logging,Core/Utilities,Events,Core/Memory,
+# Core/Threading,Core/Math} and added from the root CMakeLists.txt, ahead of
+# add_subdirectory(engine), since modules below still link against their
+# uve_* targets by name.
 add_subdirectory(input)
 add_subdirectory(commandline)
 add_subdirectory(config)

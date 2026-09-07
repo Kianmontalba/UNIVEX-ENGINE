@@ -12,28 +12,28 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(googletest)
 
 add_executable(uve_tests
-    debug/logger_uve_tests.cpp
-    debug/log_format_uve_tests.cpp
-    utilities/timer_uve_tests.cpp
-    events/event_system_uve_tests.cpp
-    memory/heap_allocator_uve_tests.cpp
-    memory/pool_allocator_uve_tests.cpp
-    memory/stack_allocator_uve_tests.cpp
-    memory/memory_manager_uve_tests.cpp
-    memory/allocator_utils_uve_tests.cpp
-    memory/memory_alignment_uve_tests.cpp
-    threading/job_counter_uve_tests.cpp
-    threading/job_graph_uve_tests.cpp
-    threading/thread_pool_uve_tests.cpp
+    ../Test/Core/Logging/logger_uve_tests.cpp
+    ../Test/Core/Logging/log_format_uve_tests.cpp
+    ../Test/Core/Utilities/timer_uve_tests.cpp
+    ../Test/Core/Events/event_system_uve_tests.cpp
+    ../Test/Core/Memory/heap_allocator_uve_tests.cpp
+    ../Test/Core/Memory/pool_allocator_uve_tests.cpp
+    ../Test/Core/Memory/stack_allocator_uve_tests.cpp
+    ../Test/Core/Memory/memory_manager_uve_tests.cpp
+    ../Test/Core/Memory/allocator_utils_uve_tests.cpp
+    ../Test/Core/Memory/memory_alignment_uve_tests.cpp
+    ../Test/Core/Threading/job_counter_uve_tests.cpp
+    ../Test/Core/Threading/job_graph_uve_tests.cpp
+    ../Test/Core/Threading/thread_pool_uve_tests.cpp
     commandline/command_line_uve_tests.cpp
     config/config_manager_uve_tests.cpp
-    math/vector2_uve_tests.cpp
-    math/vector3_uve_tests.cpp
-    math/quaternion_uve_tests.cpp
-    math/matrix4x4_uve_tests.cpp
-    math/aabb_uve_tests.cpp
-    math/plane_uve_tests.cpp
-    math/frustum_uve_tests.cpp
+    ../Test/Math/vector2_uve_tests.cpp
+    ../Test/Math/vector3_uve_tests.cpp
+    ../Test/Math/quaternion_uve_tests.cpp
+    ../Test/Math/matrix4x4_uve_tests.cpp
+    ../Test/Math/aabb_uve_tests.cpp
+    ../Test/Math/plane_uve_tests.cpp
+    ../Test/Math/frustum_uve_tests.cpp
     physics/area_overlap_lifecycle_tracker_uve_tests.cpp
     physics/character_controller_uve_tests.cpp
     physics/collider_shape_uve_tests.cpp
@@ -184,7 +184,7 @@ add_executable(uve_tests
     scripting/script_transform_value_uve_tests.cpp
     scripting/script_source_mapping_uve_tests.cpp
     plugins/plugin_registry_uve_tests.cpp
-    platform/editor_project_package_uve_tests.cpp
+    ../Test/Core/Platform/editor_project_package_uve_tests.cpp
     project_check/project_checker_uve_tests.cpp
 )
 target_link_libraries(uve_tests PRIVATE
